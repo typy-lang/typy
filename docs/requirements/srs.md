@@ -434,7 +434,7 @@ TyPy rejects them (STD-04):
 
 ## 7. Open issues
 
-There are no open issues. A new question gets the next free ID, OI-12.
+There are no open issues. A new question gets the next unused issue number.
 
 ## 8. Resolved issues
 

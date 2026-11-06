@@ -8,7 +8,7 @@ EXEC := $(COMPOSE) exec -T dev
 DIAGRAMS := $(filter-out docs/diagrams/style.puml,$(wildcard docs/diagrams/*.puml))
 MARKDOWN := "**/*.md" "\#.tmp/**" "\#target/**"
 
-.PHONY: dev image shell docs-lint ascii-check diagrams diagrams-check check hooks clean
+.PHONY: dev image shell docs-lint ascii-check traceability diagrams diagrams-check check hooks clean
 
 dev: ## Start the dev service, building its image the first time
 	@$(COMPOSE) up -d --quiet-pull dev 2>/dev/null
@@ -25,13 +25,16 @@ docs-lint: dev ## Lint every Markdown file with markdownlint-cli2
 ascii-check: dev ## Fail on non-ASCII text in sources, documents and scripts
 	@$(EXEC) scripts/check-ascii.sh
 
+traceability: dev ## Fail on requirements without tests and IDs that are not defined
+	@$(EXEC) scripts/check-traceability.sh
+
 diagrams: ## Render every PlantUML source to the SVG next to it
 	@$(COMPOSE) run --rm --quiet-pull diagrams -tsvg -nometadata -failfast2 $(DIAGRAMS)
 
 diagrams-check: diagrams dev ## Fail when an SVG in the index differs from its source
 	@$(EXEC) scripts/check-diagrams.sh
 
-check: docs-lint ascii-check diagrams-check ## Run the whole quality gate
+check: docs-lint ascii-check traceability diagrams-check ## Run the whole quality gate
 
 hooks: ## Use the hooks in .githooks for this clone
 	git config core.hooksPath .githooks

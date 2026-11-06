@@ -13,7 +13,8 @@ before.
 | 4 | [Domain model](modeling/domain-model.md) | Approved |
 | 5 | [Software architecture](architecture/architecture.md) | Approved |
 | 6 | [Architecture decision records](adr/index.md) | Seven records, Accepted |
-| 7 | [Detailed design](design/detailed-design.md) | Draft |
+| 7 | [Detailed design](design/detailed-design.md) | Approved |
+| 8 | [Test plan](testing/test-plan.md) | Draft |
 
 ## Diagrams
 

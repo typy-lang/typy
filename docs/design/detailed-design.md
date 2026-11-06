@@ -3,8 +3,8 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy detailed design |
-| Version | 0.1 |
-| Status | Draft |
+| Version | 1.0 |
+| Status | Approved |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-06 |
 
