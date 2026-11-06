@@ -11,7 +11,8 @@ All notable changes to TyPy are recorded here. The format follows
 - Engineering documents: research, requirements specification, use case
   and domain models, architecture, decision records ADR-0001 to ADR-0008,
   detailed design for 0.1, test plan and development guide.
-- A development container with Rust 1.99.1 and the documentation tools.
+- A development container with Rust 1.99.1, LLVM 23, musl, CPython 3.12 to
+  3.15 for conformance testing, and the documentation tools.
 - A quality gate, `make check`, that lints the documents, checks for
   non-ASCII text, checks that every requirement has a row in the test plan,
   and checks that every diagram is rendered from its source.

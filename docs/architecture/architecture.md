@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy software architecture |
-| Version | 1.1 |
+| Version | 1.2 |
 | Status | Approved |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-06 |
@@ -177,9 +177,10 @@ form a cycle are ever buffered.
 The compiler needs the C toolchain only to link. `typy check`, and
 `typy build --emit` for every stage before `obj`, work without it.
 
-CI runs the conformance suite in one job per platform, with CPython 3.12,
-3.13, 3.14 and 3.15 installed from their official images and nothing else
-added (A-02).
+CI runs the conformance suite in one job per platform, inside the dev
+image, which holds exact builds of CPython 3.12, 3.13, 3.14 and 3.15
+installed with uv and nothing else added (A-02). The suite runs each
+interpreter as a subprocess.
 
 ## 7. Cross-cutting concepts
 

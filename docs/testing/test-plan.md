@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy test plan |
-| Version | 0.1 |
+| Version | 0.2 |
 | Status | Draft |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-06 |
@@ -136,8 +136,8 @@ the test stays, named for the behaviour it checks.
 
 | Environment | Contents | Used by |
 | --- | --- | --- |
-| Dev container | `typy-lang-dev`, Rust 1.99.1, the cargo tools, Node and markdownlint; LLVM 23 from apt.llvm.org and musl are added with the first compiler crate | UT, golden, E2E, local runs of everything |
-| Oracle images | `python:3.12-slim`, `python:3.13-slim`, `python:3.14-slim` and `python:3.15-slim`, each pinned by digest, with nothing installed | Conformance |
+| Dev container | `typy-lang-dev`: Rust 1.99.1, the cargo tools, LLVM 23 from apt.llvm.org, musl, Node and markdownlint | UT, golden, E2E, local runs of everything |
+| Oracle interpreters | CPython 3.12.16, 3.13.18, 3.14.10 and 3.15.2, exact builds installed with uv 0.13.7 in the dev container, as `python3.12` to `python3.15`, with nothing else installed | Conformance |
 | Nightly Rust | One pinned nightly toolchain, for Miri and the sanitizers only | Section 3.5 |
 | Diagrams container | PlantUML 1.2026.8, pinned by digest | Documentation gate |
 

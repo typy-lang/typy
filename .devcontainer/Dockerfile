@@ -100,6 +100,57 @@ RUN case "$(dpkg --print-architecture)" in \
     && npm install --global --no-audit --no-fund \
         "markdownlint-cli2@${MARKDOWNLINT_CLI2_VERSION}" \
     && npm cache clean --force
+
+# LLVM 23 for typy-codegen (ADR-0005) comes from apt.llvm.org, because Debian
+# ships only LLVM 19. The signing key is accepted only with the expected
+# fingerprint. musl-tools provides the static Linux target.
+ARG LLVM_MAJOR=23
+ARG LLVM_KEY_FINGERPRINT=6084F3CF814B57C1CF12EFD515CF4D18AF4F7421
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends gnupg \
+    && curl -fsSL -o /tmp/llvm.asc https://apt.llvm.org/llvm-snapshot.gpg.key \
+    && fingerprint="$(gpg --show-keys --with-colons /tmp/llvm.asc \
+        | awk -F: '/^fpr:/ { print $10; exit }')" \
+    && test "${fingerprint}" = "${LLVM_KEY_FINGERPRINT}" \
+    && mkdir -p /etc/apt/keyrings \
+    && gpg --dearmor -o /etc/apt/keyrings/apt.llvm.org.gpg /tmp/llvm.asc \
+    && echo "deb [signed-by=/etc/apt/keyrings/apt.llvm.org.gpg] https://apt.llvm.org/trixie/ llvm-toolchain-trixie-${LLVM_MAJOR} main" \
+        > /etc/apt/sources.list.d/apt.llvm.org.list \
+    && apt-get update \
+    && apt-get install -y --no-install-recommends \
+        "llvm-${LLVM_MAJOR}-dev" \
+        "libpolly-${LLVM_MAJOR}-dev" \
+        libffi-dev \
+        libxml2-dev \
+        libzstd-dev \
+        musl-tools \
+        zlib1g-dev \
+    && apt-get purge -y gnupg \
+    && apt-get autoremove -y \
+    && rm -rf /var/lib/apt/lists/* /tmp/llvm.asc
+
+ENV LLVM_SYS_231_PREFIX=/usr/lib/llvm-${LLVM_MAJOR}
+
+# The CPython oracles (ADR-0008) are exact builds installed with uv, so the
+# conformance suite can run every version from inside this container.
+ARG UV_VERSION=0.13.7
+ARG UV_SHA256_X64=c5221ff41b7892bfc223543883600125f6a47fe845093e0f5bdff4f359196d83
+ARG UV_SHA256_ARM64=71279f8d3c67241e807b9d8db872d1bf541579fb9f08b7d1eb1682196d1e57dc
+ARG ORACLE_PYTHONS="3.12.16 3.13.18 3.14.10 3.15.2"
+RUN case "$(dpkg --print-architecture)" in \
+        amd64) arch=x86_64; sum="${UV_SHA256_X64}" ;; \
+        arm64) arch=aarch64; sum="${UV_SHA256_ARM64}" ;; \
+        *) echo "unsupported architecture" >&2; exit 1 ;; \
+    esac \
+    && file="uv-${arch}-unknown-linux-gnu.tar.gz" \
+    && curl -fsSL -o "/tmp/${file}" \
+        "https://github.com/astral-sh/uv/releases/download/${UV_VERSION}/${file}" \
+    && echo "${sum}  /tmp/${file}" | sha256sum --check --strict \
+    && tar -xzf "/tmp/${file}" -C /usr/local/bin --strip-components=1 \
+    && rm "/tmp/${file}" \
+    && UV_PYTHON_INSTALL_DIR=/opt/python UV_PYTHON_BIN_DIR=/usr/local/bin \
+        uv python install ${ORACLE_PYTHONS} \
+    && chmod -R a+rX /opt/python
 USER ${USERNAME}
 
 ENV CARGO_TARGET_DIR=/var/cache/typy/target
