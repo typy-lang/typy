@@ -1,6 +1,6 @@
 [workspace]
 resolver = "3"
-members = ["crates/typy-diagnostics"]
+members = ["crates/typy-diagnostics", "crates/typy-source"]
 
 [workspace.package]
 version = "0.0.0"
@@ -11,7 +11,15 @@ authors = ["typy-lang contributors"]
 publish = false
 
 [workspace.dependencies]
+camino = "1"
 proptest = "1"
+tempfile = "3"
+typy-diagnostics = { path = "crates/typy-diagnostics" }
+# The parser has no stability promise, so it is pinned to one exact version
+# and upgraded on purpose (C-02, ADR-0005).
+ruff_python_ast = "=0.0.20"
+ruff_python_parser = "=0.0.20"
+ruff_text_size = "=0.0.20"
 
 [workspace.lints.rust]
 missing_docs = "warn"

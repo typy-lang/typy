@@ -26,6 +26,16 @@ impl Span {
         Some(Self { file, start, end })
     }
 
+    /// Returns the empty span at `at`, which is always valid.
+    #[must_use]
+    pub const fn empty(file: FileId, at: TextOffset) -> Self {
+        Self {
+            file,
+            start: at,
+            end: at,
+        }
+    }
+
     /// Returns the file the span is in.
     #[must_use]
     pub const fn file(&self) -> FileId {
@@ -73,6 +83,13 @@ mod tests {
     #[test]
     fn span_whose_end_is_before_its_start_is_refused() {
         assert_eq!(Span::new(FileId(0), TextOffset(5), TextOffset(4)), None);
+    }
+
+    #[test]
+    fn empty_constructor_gives_a_zero_length_span() {
+        let span = Span::empty(FileId(1), TextOffset(7));
+        assert!(span.is_empty());
+        assert_eq!(span.start(), TextOffset(7));
     }
 
     #[test]

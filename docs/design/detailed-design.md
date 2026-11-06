@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy detailed design |
-| Version | 1.1 |
+| Version | 1.2 |
 | Status | Approved |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-06 |
@@ -190,6 +190,7 @@ it enforces and its status. `typy explain` (0.3) reads the same table.
 | E0102 | Source file is not valid UTF-8 | LEX-01 |
 | E0103 | Python syntax error, or syntax newer than Python 3.12 | STD-01 |
 | E0104 | Imaginary literal | LEX-08 |
+| E0105 | Source file cannot be read | None |
 | E0201 | Feature planned for a later TyPy release | The feature's own rule |
 | E0202 | Feature TyPy cannot compile with CPython's meaning | STD-04 |
 | E0203 | Parameter without a type annotation | TYP-01 |
@@ -239,8 +240,11 @@ and 0.5 (CLI-07, FFI-04, FFI-05).
 
 `SourceFile::read(id, root, path)` refuses a file over 16 MiB with E0101
 before reading it, and a file that is not UTF-8 with E0102 at the offset of
-the first invalid byte. A leading byte order mark is removed, as CPython
-accepts it.
+the first invalid byte. A file that cannot be read gives E0105 with the
+operating system's reason. In each case the file is still registered, with
+empty text, so the diagnostic has a location. A leading byte order mark is
+removed, as CPython accepts it. `LineIndex` treats LF, CRLF and a lone CR
+as line endings, as LR 2.1.2 does.
 
 `ModuleName` wraps a `String` of dotted identifiers, such as `__main__` or
 `builtins`. `ModuleName::new` refuses an empty name and any part that is
@@ -260,12 +264,15 @@ not an identifier.
 | --- | --- | --- | --- |
 | `settings` | `ProjectSettings` | none | Immutable after load |
 | `main` | `ModuleName` | `__main__` | A key of `modules` |
-| `modules` | `BTreeMap<ModuleName, Module>` | none | The main module and `builtins` in 0.1 |
+| `modules` | `BTreeMap<ModuleName, Module>` | none | The main module in 0.1; imported modules from 0.3 |
 | `files` | `Vec<SourceFile>` | none | Indexed by `FileId` |
 
-`Project::load(main_path, settings) -> Result<Project, Diagnostics>` reads
-the main file and the embedded `builtins` module, parses both, and returns
-every diagnostic of every file together. Imports between modules are
+`Project::load(main_path, settings) -> Result<Project, LoadFailure>` reads
+and parses the main file, and returns every diagnostic of every file
+together. `LoadFailure` holds the `Diagnostics` and the files they point
+into, and implements `SourceLookup`, so a failed load can still be
+rendered. The checker reads the declarations of `builtins` from
+`typy-stdlib` (section 6). Imports between modules are
 planned for 0.3 (MOD-01); in 0.1 an `import` statement gives E0201.
 
 ### 5.2 The syntax tree
@@ -273,11 +280,23 @@ planned for 0.3 (MOD-01); in 0.1 an `import` statement gives E0201.
 `SyntaxTree` is TyPy's own copy of the parsed module. Its node types follow
 the names of CPython's `ast` module for Python 3.12, such as `FunctionDef`,
 `AnnAssign`, `BinOp` and `Compare`, so the Language Reference and the `ast`
-documentation describe them. Every node carries a `Span`. No type from
+documentation describe them. Every node carries a `Span`.
+
+A node the current release compiles is converted with all its parts. Any
+other node becomes `Stmt::Other` or `Expr::Other`, holding its `NodeKind`,
+such as `ClassDef` or `ListComp`, and its span, which is what the subset
+checker needs to reject it with E0201 or E0202. Each release converts the
+nodes of the features it adds. `elif` chains become nested `If` nodes, as
+in CPython's `ast`. An integer literal keeps its value as decimal digits,
+so literals of any size survive conversion (DAT-01).
+
+`dump(tree, lines) -> String` writes the tree as indented text with the
+`LINE:COLUMN` of each node, for `--emit=ast` and golden tests. No type from
 `ruff_python_parser` or `ruff_python_ast` appears outside `parse.rs`
 (ADR-0005).
 
-`parse(file: &SourceFile) -> Result<SyntaxTree, Vec<Diagnostic>>` calls
+`parse(file: &SourceFile, floor: PythonFloor) -> Result<SyntaxTree,
+Vec<Diagnostic>>` calls
 `ruff_python_parser::parse_unchecked` with
 `ParseOptions::from(Mode::Module)` and the program's Python floor as the
 target version, 3.12 in 0.1. Each entry of `Parsed::errors()` and

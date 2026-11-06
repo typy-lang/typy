@@ -22,8 +22,8 @@ pub struct CodeInfo {
     pub code: DiagnosticCode,
     /// One line that says what the code means.
     pub summary: &'static str,
-    /// The requirement the code enforces.
-    pub rule: RuleId,
+    /// The requirement the code enforces, if it enforces one.
+    pub rule: Option<RuleId>,
     /// Whether the code is in use.
     pub status: CodeStatus,
 }
@@ -32,7 +32,7 @@ const fn active(number: u16, summary: &'static str, rule: RuleId) -> CodeInfo {
     CodeInfo {
         code: DiagnosticCode::error(number),
         summary,
-        rule,
+        rule: Some(rule),
         status: CodeStatus::Active,
     }
 }
@@ -47,6 +47,12 @@ pub const CODES: &[CodeInfo] = &[
         RuleId::STD_01,
     ),
     active(104, "imaginary literal", RuleId::LEX_08),
+    CodeInfo {
+        code: DiagnosticCode::error(105),
+        summary: "source file cannot be read",
+        rule: None,
+        status: CodeStatus::Active,
+    },
     active(
         201,
         "feature planned for a later TyPy release",

@@ -1,0 +1,23 @@
+[package]
+name = "typy-source"
+description = "Finds, reads and parses the modules of a TyPy program"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+camino.workspace = true
+ruff_python_ast.workspace = true
+ruff_python_parser.workspace = true
+ruff_text_size.workspace = true
+typy-diagnostics.workspace = true
+
+[dev-dependencies]
+proptest.workspace = true
+tempfile.workspace = true
