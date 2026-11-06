@@ -1,0 +1,7 @@
+# The compiler version and components every build uses, in the container and
+# on a host. Raise the channel together with RUST_VERSION in
+# .devcontainer/Dockerfile.
+[toolchain]
+channel = "1.99.1"
+components = ["rustfmt", "clippy", "rust-analyzer", "rust-src", "llvm-tools-preview"]
+profile = "minimal"

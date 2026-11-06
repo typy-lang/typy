@@ -1,0 +1,24 @@
+{
+  "name": "typy-lang",
+  "dockerComposeFile": "compose.yaml",
+  "service": "dev",
+  "workspaceFolder": "/workspaces/typy-lang",
+  "remoteUser": "dev",
+  "updateRemoteUserUID": true,
+  "shutdownAction": "stopCompose",
+  "postCreateCommand": "rustc --version && cargo --version",
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "rust-lang.rust-analyzer",
+        "vadimcn.vscode-lldb",
+        "tamasfe.even-better-toml"
+      ],
+      "settings": {
+        "rust-analyzer.check.command": "clippy",
+        "rust-analyzer.server.path": "/usr/local/cargo/bin/rust-analyzer",
+        "editor.formatOnSave": true
+      }
+    }
+  }
+}

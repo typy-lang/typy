@@ -1,0 +1,49 @@
+# The development container runs as a long-lived service next to the source
+# tree. Other services the project needs later go in this file beside it.
+name: typy-lang
+
+services:
+  dev:
+    build:
+      context: ..
+      dockerfile: .devcontainer/Dockerfile
+      args:
+        USER_UID: ${USER_UID:-1000}
+        USER_GID: ${USER_GID:-1000}
+    image: typy-lang-dev:1.99.1
+    init: true
+    command: ["sleep", "infinity"]
+    volumes:
+      - ..:/workspaces/typy-lang:cached
+      # Caches live in named volumes so a rebuilt image keeps them and the
+      # bind-mounted tree never receives root-owned build output.
+      - cargo-registry:/usr/local/cargo/registry
+      - cargo-git:/usr/local/cargo/git
+      - target:/var/cache/typy/target
+      - bash-history:/home/dev/.history
+    environment:
+      HISTFILE: /home/dev/.history/bash_history
+      CARGO_TERM_COLOR: always
+      RUST_BACKTRACE: "1"
+    # gdb and lldb need ptrace to attach to a running process.
+    cap_add:
+      - SYS_PTRACE
+    security_opt:
+      - seccomp=unconfined
+
+  # Renders the PlantUML diagrams. The image is pinned by digest and runs
+  # without a network, so every machine produces the same SVG bytes.
+  diagrams:
+    image: plantuml/plantuml:1.2026.8@sha256:d08610df482510844382caa4e016ba2bf7e3231f630f02ee12f250f3416c62b1
+    profiles: ["tools"]
+    network_mode: none
+    user: "${USER_UID:-1000}:${USER_GID:-1000}"
+    working_dir: /workspaces/typy-lang
+    volumes:
+      - ..:/workspaces/typy-lang
+
+volumes:
+  cargo-registry:
+  cargo-git:
+  target:
+  bash-history:
