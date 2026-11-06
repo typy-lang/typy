@@ -1,0 +1,53 @@
+@startuml class-design-codegen-and-build
+!include style.puml
+title Design classes of typy_codegen and typy_build
+hide empty members
+skinparam nodesep 25
+
+package "typy_codegen" as CodegenCrate {
+    class CodeGenerator <<struct>> {
+        {field} +generate(module, target, mode) : Result<ObjectFile>
+    }
+    class Target <<struct>> {
+        +triple : TargetTriple
+    }
+    class ObjectFile <<struct>> {
+        +target : Target
+        +bytes : Vec<u8>
+    }
+}
+
+package "typy_build" as BuildCrate {
+    class BuildRequest <<struct>> {
+        +main : Utf8PathBuf
+        +mode : BuildMode
+        +target : Target
+        +emit : Option<EmitStage>
+        +output : Option<Utf8PathBuf>
+        +link : LinkPlan
+        +deny_warnings : bool
+    }
+    enum BuildMode {
+        Debug
+        Release
+        ReleaseSmall
+    }
+    class Linker <<struct>> {
+        {field} +link(object, plan, output) : Result<Artifact>
+    }
+    class Artifact <<struct>> {
+        +path : Utf8PathBuf
+        +kind : ArtifactKind
+    }
+}
+
+class "typy_tyir::TyirModule" as TyirModule <<struct>>
+
+CodeGenerator ..> TyirModule : reads
+CodeGenerator ..> ObjectFile : writes
+ObjectFile --> Target
+BuildRequest --> BuildMode
+BuildRequest --> Target
+Linker ..> ObjectFile : reads
+Linker ..> Artifact : writes
+@enduml

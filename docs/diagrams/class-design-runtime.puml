@@ -1,0 +1,57 @@
+@startuml class-design-runtime
+!include style.puml
+title Design classes of the runtime
+hide empty members
+skinparam nodesep 25
+
+package "typy_runtime" as RuntimeCrate {
+    class ObjectHeader <<repr(C)>> {
+        +reference_count : u32
+        +type_id : u32
+    }
+    class TypeDescriptor <<repr(C)>> {
+        +size : u32
+        +flags : u32
+        +drop : unsafe extern "C" fn
+        +name : *const u8
+    }
+    class Int <<repr(transparent)>> {
+        +word : u64
+    }
+    class BigInt <<repr(C)>> {
+        +header : ObjectHeader
+        +sign_and_length : i32
+        +limbs : [u64]
+    }
+    class Str <<repr(C)>> {
+        +header : ObjectHeader
+        +length : u64
+        +kind : StrKind
+        +data : [u8]
+    }
+    class ExceptionObject <<repr(C)>> {
+        +header : ObjectHeader
+        +message : *mut Str
+        +traceback : TracebackBuffer
+        +cause : *mut ExceptionObject
+    }
+    class TracebackEntry <<repr(C)>> {
+        +function : *const u8
+        +file : *const u8
+        +line : u32
+    }
+    class Allocator <<struct>> {
+        {field} +allocate(size) : *mut u8
+        {field} +reallocate(*mut u8, size) : *mut u8
+        {field} +free(*mut u8)
+    }
+}
+
+BigInt *-- ObjectHeader
+Str *-- ObjectHeader
+ExceptionObject *-- ObjectHeader
+ExceptionObject *-- TracebackEntry
+ObjectHeader --> TypeDescriptor : type_id indexes the type table
+Int ..> BigInt : points to when not inline
+Allocator ..> ObjectHeader : allocates objects that start with
+@enduml

@@ -1,0 +1,47 @@
+@startuml class-design-check
+!include style.puml
+title Design classes of typy_check
+hide empty members
+skinparam nodesep 25
+
+package "typy_check" as CheckCrate {
+    class TypedProgram <<struct>> {
+        +symbols : SymbolTable
+        +functions : Vec<TypedFunction>
+        +entry : FunctionId
+    }
+    class Symbol <<struct>> {
+        +id : SymbolId
+        +name : Name
+        +kind : SymbolKind
+        +ty : Type
+        +span : Span
+    }
+    enum Type {
+        Int
+        Float
+        Bool
+        Str
+        NoneType
+        Never
+        Error
+    }
+    class TypeChecker <<struct>> {
+        {field} +check(&Project) : Result<TypedProgram, Diagnostics>
+    }
+    class SubsetChecker <<struct>> {
+        {field} +check(&Project, Release) : Diagnostics
+    }
+}
+
+class "typy_source::Project" as Project <<struct>>
+class "typy_diagnostics::Diagnostics" as Diagnostics <<struct>>
+
+TypeChecker ..> Project : reads
+TypeChecker ..> TypedProgram : builds
+TypedProgram *-- Symbol
+Symbol --> Type
+SubsetChecker ..> Project : reads
+SubsetChecker ..> Diagnostics : reports
+TypeChecker ..> Diagnostics : reports
+@enduml

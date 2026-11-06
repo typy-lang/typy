@@ -1,0 +1,71 @@
+@startuml class-design-source
+!include style.puml
+title Design classes of typy_diagnostics and typy_source
+hide empty members
+skinparam nodesep 25
+
+package "typy_diagnostics" as DiagnosticsCrate {
+    class Span <<struct>> {
+        +file : FileId
+        +start : TextOffset
+        +end : TextOffset
+    }
+    class Position <<struct>> {
+        +line : u32
+        +column : u32
+    }
+    class Diagnostic <<struct>> {
+        +code : DiagnosticCode
+        +span : Span
+        +message : String
+        +labels : Vec<Label>
+        +fix : Option<Fix>
+        +rule : Option<RuleId>
+    }
+    class DiagnosticCode <<struct>> {
+        +severity : Severity
+        +number : u16
+    }
+    class Diagnostics <<struct>> {
+        {field} +push(Diagnostic)
+        {field} +has_errors() : bool
+        {field} +into_sorted() : Vec<Diagnostic>
+    }
+    interface SourceLookup <<trait>> {
+        {field} +path(FileId) : &str
+        {field} +position(FileId, TextOffset) : Position
+    }
+}
+
+package "typy_source" as SourceCrate {
+    class Project <<struct>> {
+        +settings : ProjectSettings
+        +main : ModuleName
+        +modules : BTreeMap<ModuleName, Module>
+        +files : Vec<SourceFile>
+        {field} +load(&Path, ProjectSettings) : Result<Project, Diagnostics>
+    }
+    class SourceFile <<struct>> {
+        +id : FileId
+        +path : Utf8PathBuf
+        +text : Arc<str>
+        +lines : LineIndex
+    }
+    class Module <<struct>> {
+        +name : ModuleName
+        +file : FileId
+        +syntax : SyntaxTree
+    }
+    class SyntaxTree <<struct>> {
+        +body : Vec<Stmt>
+    }
+}
+
+Project ..|> SourceLookup
+Project *-- SourceFile
+Project *-- Module
+Module *-- SyntaxTree
+Diagnostic *-- Span
+Diagnostic *-- DiagnosticCode
+Diagnostics o-- Diagnostic
+@enduml

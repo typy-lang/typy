@@ -1,0 +1,67 @@
+@startuml class-design-tyir-and-lowering
+!include style.puml
+title Design classes of typy_tyir and typy_lower
+hide empty members
+skinparam nodesep 25
+
+package "typy_lower" as LowerCrate {
+    class Lowering <<struct>> {
+        {field} +lower(&TypedProgram) : Result<TyirModule, Diagnostic>
+    }
+    class RaiseAnalysis <<struct>>
+    class OwnershipAnalysis <<struct>>
+}
+
+package "typy_tyir" as TyirCrate {
+    class TyirModule <<struct>> {
+        +functions : Vec<TyirFunction>
+        +constants : Vec<Constant>
+        +entry : FunctionId
+    }
+    class TyirFunction <<struct>> {
+        +id : FunctionId
+        +symbol : String
+        +parameters : Vec<ValueId>
+        +return_type : TyirType
+        +may_raise : bool
+        +blocks : Vec<BasicBlock>
+        +values : Vec<ValueInfo>
+    }
+    class BasicBlock <<struct>> {
+        +id : BlockId
+        +parameters : Vec<ValueId>
+        +instructions : Vec<Instruction>
+        +terminator : Terminator
+    }
+    class Instruction <<struct>> {
+        +result : Option<ValueId>
+        +operation : Operation
+        +span : Span
+    }
+    enum Terminator {
+        Jump
+        Branch
+        Invoke
+        Return
+        ReturnError
+        Unreachable
+    }
+    enum ValueRepresentation {
+        Inline
+        Stack
+        Heap
+    }
+    class Verifier <<struct>> {
+        {field} +verify(&TyirModule) : Result<(), Diagnostic>
+    }
+}
+
+TyirModule *-- TyirFunction
+TyirFunction *-- BasicBlock
+BasicBlock *-- Instruction
+BasicBlock *-- Terminator
+Lowering ..> TyirModule : builds
+Lowering ..> RaiseAnalysis : runs
+Lowering ..> OwnershipAnalysis : runs
+Lowering ..> Verifier : runs after each pass
+@enduml
