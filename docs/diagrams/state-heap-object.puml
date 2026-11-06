@@ -1,0 +1,28 @@
+@startuml state-heap-object
+!include style.puml
+title Lifecycle of a heap object
+
+[*] --> Live : allocated, count = 1
+
+state Live {
+    [*] --> Referenced
+    Referenced --> Referenced : count + 1 or count - 1, count stays >= 1
+    Referenced --> PossibleRoot : count - 1 and count >= 1\n[type may form a cycle]
+    PossibleRoot --> Referenced : count + 1
+}
+
+Live --> Dropping : count reaches 0
+Live --> Trial : collection starts\n[object is a possible root or reachable from one]
+
+state "Trial deletion" as Trial {
+    [*] --> Gray : internal references subtracted
+    Gray --> White : count from outside = 0
+    Gray --> Black : count from outside > 0
+}
+
+Trial --> Live : Black, counts restored
+Trial --> Dropping : White, part of a garbage cycle
+
+Dropping --> Freed : fields released, memory returned to the Allocator
+Freed --> [*]
+@enduml

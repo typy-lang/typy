@@ -1,0 +1,41 @@
+' Shared style for every TyPy diagram. A white background keeps each
+' diagram readable on both the light and the dark documentation theme.
+skinparam backgroundColor #FFFFFF
+skinparam defaultFontName "DejaVu Sans"
+skinparam defaultFontSize 13
+skinparam shadowing false
+skinparam roundCorner 8
+skinparam ArrowColor #333333
+skinparam ArrowFontSize 11
+skinparam TitleFontSize 16
+skinparam TitleFontStyle bold
+skinparam ActorBorderColor #333333
+skinparam ActorBackgroundColor #F2F2F2
+skinparam UsecaseBorderColor #2F5D8A
+skinparam UsecaseBackgroundColor #EAF1F8
+skinparam RectangleBorderColor #555555
+skinparam RectangleBackgroundColor #FFFFFF
+skinparam ClassBorderColor #2F5D8A
+skinparam ClassBackgroundColor #EAF1F8
+skinparam ComponentBorderColor #2F5D8A
+skinparam ComponentBackgroundColor #EAF1F8
+skinparam NoteBorderColor #8A7A2F
+skinparam NoteBackgroundColor #FBF7E4
+skinparam StateBorderColor #2F5D8A
+skinparam StateBackgroundColor #EAF1F8
+skinparam PackageBorderColor #555555
+skinparam PackageBackgroundColor #FFFFFF
+skinparam ParticipantBorderColor #2F5D8A
+skinparam ParticipantBackgroundColor #EAF1F8
+skinparam SequenceLifeLineBorderColor #555555
+skinparam SequenceGroupBorderColor #555555
+skinparam ActivityBorderColor #2F5D8A
+skinparam ActivityBackgroundColor #EAF1F8
+skinparam ActivityDiamondBorderColor #2F5D8A
+skinparam ActivityDiamondBackgroundColor #FFFFFF
+skinparam NodeBorderColor #555555
+skinparam NodeBackgroundColor #FFFFFF
+skinparam ArtifactBorderColor #2F5D8A
+skinparam ArtifactBackgroundColor #EAF1F8
+skinparam FolderBorderColor #555555
+skinparam FolderBackgroundColor #FFFFFF

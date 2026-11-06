@@ -1,0 +1,29 @@
+@startuml package-context-map
+!include style.puml
+title TyPy bounded contexts and the objects passed between them
+skinparam nodesep 30
+skinparam ranksep 45
+
+package "Source context" as SourceContext {
+}
+package "Checking context" as CheckingContext {
+}
+package "Lowering context" as LoweringContext {
+}
+package "Code generation context" as CodegenContext {
+}
+package "Build context" as BuildContext {
+}
+package "Runtime context" as RuntimeContext {
+}
+package "Conformance context" as ConformanceContext {
+}
+
+SourceContext --> CheckingContext : SyntaxTree per Module
+CheckingContext --> LoweringContext : TypedProgram
+LoweringContext --> CodegenContext : TyirModule
+CodegenContext --> BuildContext : ObjectFile
+BuildContext --> RuntimeContext : links
+CodegenContext ..> RuntimeContext : TypeDescriptor layout
+ConformanceContext --> BuildContext : BuildRequest
+@enduml

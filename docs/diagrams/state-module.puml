@@ -1,0 +1,17 @@
+@startuml state-module
+!include style.puml
+title Lifecycle of a module in the compiler
+
+[*] --> Discovered : named by an import or as the main file
+Discovered --> Parsed : SyntaxTree built
+Parsed --> Resolved : names and imports bound
+Resolved --> Checked : types and subset rules hold
+Checked --> Lowered : TyirFunction for each function
+Lowered --> [*]
+
+Discovered --> Failed : file missing or unreadable
+Parsed --> Failed : syntax errors
+Resolved --> Failed : unknown name or circular import
+Checked --> Failed : type or subset errors
+Failed --> [*] : diagnostics reported
+@enduml

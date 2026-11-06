@@ -1,0 +1,72 @@
+@startuml class-domain-source-and-checking
+!include style.puml
+title Source and checking concepts
+hide empty members
+skinparam nodesep 30
+
+package "Source context" {
+    class Project <<aggregate>>
+    class ProjectSettings <<value object>> {
+        python_floor
+    }
+    class Module <<entity>> {
+        qualified_name
+    }
+    class SourceFile <<value object>> {
+        path
+        text
+    }
+    class Span <<value object>> {
+        start
+        end
+    }
+    class Position <<value object>> {
+        line
+        column
+    }
+    class SyntaxTree <<value object>>
+}
+
+package "Checking context" {
+    class TypedProgram <<aggregate>>
+    class Scope <<entity>>
+    class Symbol <<entity>> {
+        name
+    }
+    class Type <<value object>>
+    class ClassDefinition <<entity>>
+    class FunctionSignature <<value object>>
+    class Diagnostic <<value object>> {
+        severity
+        message
+    }
+    class DiagnosticCode <<value object>>
+    class Rule <<value object>> {
+        id
+    }
+    class TypeChecker <<domain service>>
+    class SubsetChecker <<domain service>>
+}
+
+Project "1" *-- "1" ProjectSettings
+Project "1" *-- "1..*" Module
+Module "1" *-- "1" SourceFile
+Module "1" *-- "1" SyntaxTree
+Span --> "1" SourceFile
+Span *-- "2" Position
+
+TypedProgram "1" o-- "1..*" Module
+TypedProgram "1" *-- "1..*" Scope
+Scope "1" *-- "*" Symbol
+Scope --> "0..1" Scope : parent
+Symbol --> "1" Type
+ClassDefinition --> "0..1" ClassDefinition : base
+ClassDefinition "1" *-- "*" FunctionSignature
+Symbol --> "0..1" ClassDefinition
+Diagnostic --> "1" DiagnosticCode
+Diagnostic --> "1" Span
+Diagnostic --> "0..1" Rule
+TypeChecker ..> Diagnostic : reports
+SubsetChecker ..> Rule : enforces
+TypeChecker ..> TypedProgram : builds
+@enduml

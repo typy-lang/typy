@@ -1,0 +1,51 @@
+@startuml class-domain-runtime
+!include style.puml
+title Runtime and conformance concepts
+hide empty members
+skinparam nodesep 30
+
+package "Runtime context" {
+    class HeapObject <<entity>>
+    class ObjectHeader <<value object>> {
+        reference_count : u32
+        type_id : u32
+    }
+    class TypeDescriptor <<value object>> {
+        size
+        may_form_cycle
+    }
+    class ExceptionObject <<entity>>
+    class TracebackEntry <<value object>> {
+        function
+        line
+    }
+    class Allocator <<domain service>>
+    class CycleCollector <<domain service>>
+}
+
+package "Conformance context" {
+    class ConformanceTest <<entity>> {
+        requirement_ids
+        python_floor
+        expectation
+    }
+    class OracleRun <<value object>> {
+        python_version
+        stdout
+        exit_status
+        last_stderr_line
+    }
+    class Verdict <<value object>>
+}
+
+HeapObject "1" *-- "1" ObjectHeader
+ObjectHeader --> "1" TypeDescriptor
+ExceptionObject --|> HeapObject
+ExceptionObject "1" *-- "*" TracebackEntry
+ExceptionObject --> "0..1" ExceptionObject : cause
+Allocator ..> HeapObject : allocates and frees
+CycleCollector ..> HeapObject : collects cyclic garbage
+
+ConformanceTest "1" *-- "1..4" OracleRun
+ConformanceTest "1" *-- "1" Verdict
+@enduml

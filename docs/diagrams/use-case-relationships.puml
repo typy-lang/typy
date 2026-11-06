@@ -1,0 +1,28 @@
+@startuml use-case-relationships
+!include style.puml
+title How TyPy use cases build on each other
+left to right direction
+skinparam nodesep 25
+skinparam ranksep 90
+
+rectangle "TyPy" {
+    usecase "UC-03 Run a program" as UC03
+    usecase "UC-09 Verify conformance\nagainst CPython" as UC09
+    usecase "UC-05 Inspect a compiler stage" as UC05
+    usecase "UC-06 Call a C library" as UC06
+    usecase "UC-07 Export functions to C" as UC07
+    usecase "UC-08 Cross-compile\nfor another target" as UC08
+    usecase "UC-10 Read diagnostics\nin an editor or CI" as UC10
+    usecase "UC-02 Build an executable" as UC02
+    usecase "UC-01 Check a program" as UC01
+}
+
+UC03 ..> UC02 : <<include>>
+UC09 ..> UC02 : <<include>>
+UC05 ..> UC02 : <<extend>>
+UC06 ..> UC02 : <<extend>>
+UC07 ..> UC02 : <<extend>>
+UC08 ..> UC02 : <<extend>>
+UC02 ..> UC01 : <<include>>
+UC10 ..> UC01 : <<extend>>
+@enduml

@@ -1,0 +1,59 @@
+@startuml class-domain-lowering-and-build
+!include style.puml
+title Lowering, code generation and build concepts
+hide empty members
+skinparam nodesep 30
+
+package "Lowering context" {
+    class TyirModule <<aggregate>>
+    class TyirFunction <<entity>> {
+        may_raise
+    }
+    class BasicBlock <<entity>>
+    class Instruction <<value object>>
+    class ValueRepresentation <<value object>>
+    class RaiseAnalysis <<domain service>>
+    class EscapeAnalysis <<domain service>>
+    class OwnershipAnalysis <<domain service>>
+    class CycleAnalysis <<domain service>>
+}
+
+package "Code generation context" {
+    class ObjectFile <<value object>>
+    class Target <<value object>> {
+        triple
+    }
+}
+
+package "Build context" {
+    class BuildRequest <<value object>>
+    class BuildMode <<value object>>
+    class EmitStage <<value object>>
+    class LinkPlan <<value object>>
+    class ExportSpec <<value object>> {
+        function
+        c_signature
+    }
+    class Artifact <<value object>> {
+        path
+        kind
+    }
+}
+
+TyirModule "1" *-- "1..*" TyirFunction
+TyirFunction "1" *-- "1..*" BasicBlock
+BasicBlock "1" *-- "1..*" Instruction
+Instruction --> "0..1" ValueRepresentation
+RaiseAnalysis ..> TyirFunction : sets may_raise
+EscapeAnalysis ..> ValueRepresentation : chooses
+OwnershipAnalysis ..> Instruction : inserts and removes counts
+CycleAnalysis ..> TyirModule : marks\ncyclic types
+
+BuildRequest --> "1" BuildMode
+BuildRequest --> "1" Target
+BuildRequest --> "0..1" EmitStage
+BuildRequest --> "1" LinkPlan
+LinkPlan "1" *-- "*" ExportSpec
+ObjectFile --> "1" Target
+Artifact ..> ObjectFile : linked\nfrom
+@enduml
