@@ -18,6 +18,10 @@ All notable changes to TyPy are recorded here. The format follows
 - The `typy-source` crate: reading source files with the 16 MiB and UTF-8
   checks, line and column positions, parsing with the program's Python
   floor, and TyPy's own syntax tree with its text dump.
+- The `typy-check` crate: the 0.1 feature table, name resolution with
+  Python's scoping, type inference within a function, definite assignment,
+  and the typing rules for the operators and builtins of 0.1. Every
+  rejection names its rule.
 - A quality gate, `make check`, that checks formatting, runs Clippy and the
   tests with at least 95 percent line coverage, lints the documents, checks for
   non-ASCII text, checks that every requirement has a row in the test plan,

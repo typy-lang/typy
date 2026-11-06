@@ -1,0 +1,19 @@
+[package]
+name = "typy-check"
+description = "Resolves names, checks types and the subset rules of a TyPy program"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+typy-diagnostics.workspace = true
+typy-source.workspace = true
+
+[dev-dependencies]
+camino.workspace = true

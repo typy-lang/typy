@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy detailed design |
-| Version | 1.2 |
+| Version | 1.3 |
 | Status | Approved |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-06 |
@@ -188,7 +188,7 @@ it enforces and its status. `typy explain` (0.3) reads the same table.
 | --- | --- | --- |
 | E0101 | Source file larger than 16 MiB | LEX-09 |
 | E0102 | Source file is not valid UTF-8 | LEX-01 |
-| E0103 | Python syntax error, or syntax newer than Python 3.12 | STD-01 |
+| E0103 | Python syntax error, syntax newer than the Python floor, or `return`, `break` or `continue` out of place | STD-01 |
 | E0104 | Imaginary literal | LEX-08 |
 | E0105 | Source file cannot be read | None |
 | E0201 | Feature planned for a later TyPy release | The feature's own rule |
@@ -308,19 +308,24 @@ there are no errors.
 
 ## 6. typy-stdlib
 
-`typy-stdlib` embeds each module's source with `include_str!` and offers
-`module_source(name) -> Option<&'static str>` and `module_names()`, sorted.
-In 0.1 it holds `builtins.py`, written in the 0.1 subset over the
-primitives that `_typy.pyi` declares, such as
-`_typy.write_stdout(text: str) -> None`. Only modules inside `typy-stdlib`
-can import `_typy` (ADR-0007).
+`typy-stdlib` holds the Python sources of the standard library modules
+TyPy implements (ADR-0007), embedded in the `typy` binary with
+`include_str!`, and the declarations of the private `_typy` module. It is
+created with the first module written in Python, `sys` and `math` in 0.3.
+
+The builtins of 0.1 (LIB-01) are not written in Python. `print`, `min` and
+`max` take any number of arguments, which the 0.1 subset cannot declare
+(EXP-17), so ADR-0007's "written around it" applies: each builtin is a
+`Builtin` value that `typy-check` types from its own table and
+`typy-lower` lowers to runtime calls (section 7.3). A builtin moves to
+`builtins.py` when the features it needs arrive.
 
 ## 7. typy-check
 
 ### 7.1 Types
 
 `Type` is an enum. In 0.1 its variants are `Int`, `Float`, `Bool`, `Str`,
-`NoneType`, `Never` and `Error`. `Error` is the type of an expression that
+`NoneType` and `Error`. `Error` is the type of an expression that
 already has a diagnostic; every check accepts it silently, so one cause
 gives one error (DIA-04). `List`, `Tuple`, `Dict`, `Set`, `Bytes` and
 `Class` are planned for 0.2; `Union`, `TypeParameter` and `Callable` for
@@ -328,8 +333,9 @@ gives one error (DIA-04). `List`, `Tuple`, `Dict`, `Set`, `Bytes` and
 
 | Method | Behaviour |
 | --- | --- |
-| `is_assignable_to(&self, target)` | True when equal, or `Int` to `Float` (TYP-09), or either side is `Error` |
-| `display(&self)` | The Python spelling, such as `int` or `None` |
+| `is_assignable_to(&self, target)` | True when equal, or either side is `Error`. An `Int` is not assignable to `Float` (TYP-09) |
+| `Display` | The Python spelling, such as `int` or `None` |
+| `with_article(&self)` | The spelling with its article, for messages: `an int`, `a str`, `None` |
 
 `Symbol`
 
@@ -390,11 +396,28 @@ each module in name order:
    refuses a later assignment of another type with E0402.
 4. The definite assignment pass follows every path through each function
    and the module body, and refuses a read that some path reaches with the
-   variable unassigned, with E0306 (TYP-12).
-5. Expressions are checked against the rules EXP-01 to EXP-11.
+   variable unassigned, with E0306 (TYP-12). A loop body may run zero
+   times, `while True` ends only through `break`, and `else` runs only when
+   no `break` does. A function whose return type is not `None` and whose
+   end can be reached gets E0405.
+5. Expressions are checked against the rules EXP-01 to EXP-11. An `int`
+   where a `float` is declared is refused (TYP-09), with the certain fix
+   `1.0` for a literal. The arguments of `min` and `max` must have one
+   type, because CPython returns one of them unchanged.
 
-Functions are checked in parallel. Their diagnostics are merged and sorted
-before they are returned (architecture section 7.5).
+Two checks look at the module as a whole. A name may be a function or a
+module variable, not both, because CPython would rebind it. And a
+module-level statement may only reach, through any chain of calls,
+functions whose `def` has already run; otherwise CPython raises
+`NameError`, so TyPy refuses it with E0306.
+
+The subset walker also reports `return` outside a function and `break` or
+`continue` outside a loop as E0103, because CPython's compiler rejects them
+but the parser does not.
+
+In 0.1, functions are checked one after another, and their diagnostics are
+sorted before they are returned. Parallel checking (architecture section
+7.5) is added when the build-time benchmarks of NFR-04 call for it.
 
 The 0.1 feature table accepts: module-level `def` without decorators or
 type parameters; positional and keyword parameters with constant defaults;

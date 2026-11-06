@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy software requirements specification |
-| Version | 1.2 |
+| Version | 1.3 |
 | Status | Approved |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-06 |
@@ -175,7 +175,7 @@ formatter applies; Ruff's formatter is the project's recommendation.
 | TYP-06 | The annotations `list[T]`, `dict[K, V]`, `set[T]`, `tuple[...]` and `T \| None` shall be accepted. | M | 0.2 | 3.3.5 |
 | TYP-07 | A value of type `T \| None` shall narrow to `T` after `is None`, `is not None` and `isinstance` tests, and using it unnarrowed shall be rejected. | M | 0.4 | |
 | TYP-08 | A name annotated `Final` shall not be assigned again. | M | 0.4 | |
-| TYP-09 | `int` shall be accepted where `float` is expected, as PEP 484 allows. | M | 0.1 | |
+| TYP-09 | An `int` value shall be rejected where a `float` is declared, because CPython keeps it an `int`: `x: float = 1` prints `1`. Arithmetic that mixes `int` and `float` gives a `float`, as in Python (EXP-02). | M | 0.1 | |
 | TYP-10 | `typing.Any`, `typing.cast` and unannotated `object` values shall be rejected. | M | 0.1 | |
 | TYP-11 | The type of an expression shall be fixed when the program is compiled, and no run-time type information shall be generated except for classes used with `isinstance` or in `except` clauses. | M | 0.1 | |
 | TYP-12 | A read of a local variable shall be rejected unless the variable is assigned on every path that reaches the read, so `UnboundLocalError` cannot occur. | M | 0.1 | 4.2.2 |
@@ -451,6 +451,7 @@ There are no open issues. A new question gets the next unused issue number.
 | OI-09 | Is EXP-04 too strict for `2 ** n`? | EXP-04 stands. Before 1.0, the programs it rejects in the conformance suite and the benchmark suite are reviewed, and any change goes through a decision record. | 2026-11-05 |
 | OI-10 | Does NFR-02 keep its 32 KB budget? | The core runtime keeps 32 KB. Large-integer arithmetic (DAT-01) and cycle collection (ADR-0001) add an estimated 8 to 15 KB, so the whole runtime gets 48 KB (NFR-02). | 2026-11-05 |
 | OI-11 | How does TyPy support PEP 810 lazy imports, whose `lazy` keyword CPython 3.12 to 3.14 reject? | Each program has a Python floor; a program with floor 3.15 may use `lazy import`, and `__lazy_modules__` works for every floor (ADR-0008). | 2026-11-06 |
+| OI-12 | May an `int` be stored where a `float` is declared, as PEP 484 allows? | No. CPython keeps the value an `int`, so `x: float = 1` prints `1`; TyPy would print `1.0`. TYP-09 rejects it, with the fix `1.0` for a literal. Checked on CPython 3.12 to 3.15. | 2026-11-06 |
 
 ## Appendix A. Disposition of the specification pack
 
