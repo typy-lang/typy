@@ -1,0 +1,40 @@
+@startuml sequence-build-executable
+!include style.puml
+title Building an executable (UC-02)
+autonumber
+
+actor "Application developer" as Developer
+participant "typy-cli" as Cli
+participant "typy-driver" as Driver
+participant "typy-source" as Source
+participant "typy-check" as Check
+participant "typy-lower" as Lower
+participant "typy-codegen" as Codegen
+participant "typy-build" as Build
+participant "C toolchain" as Toolchain
+
+Developer -> Cli : typy build app.py --release
+Cli -> Cli : read typy.toml once,\ncheck every key
+Cli -> Driver : BuildRequest
+Driver -> Source : load Project
+Source --> Driver : SyntaxTree per Module
+Driver -> Check : check modules
+alt errors found
+    Check --> Driver : Diagnostic list
+    Driver --> Cli : failed
+    Cli --> Developer : diagnostics, exit 1
+else no errors
+    Check --> Driver : TypedProgram
+    Driver -> Lower : lower and plan memory
+    Lower --> Driver : TyirModule, verified
+    Driver -> Codegen : generate for Target
+    Codegen --> Driver : ObjectFile
+    Driver -> Build : link with LinkPlan
+    Build -> Toolchain : cc object, runtime archive, libraries
+    Toolchain --> Build : linked file in a temporary path
+    Build -> Build : rename into place
+    Build --> Driver : Artifact
+    Driver --> Cli : done
+    Cli --> Developer : exit 0
+end
+@enduml

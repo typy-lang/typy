@@ -1,0 +1,47 @@
+@startuml component-building-blocks
+!include style.puml
+title TyPy building blocks and their allowed dependencies
+skinparam nodesep 25
+skinparam ranksep 45
+
+component "typy-cli" as Cli
+component "typy-driver" as Driver
+component "typy-source" as Source
+component "typy-check" as Check
+component "typy-tyir" as Tyir
+component "typy-lower" as Lower
+component "typy-codegen" as Codegen
+component "typy-build" as Build
+component "typy-diagnostics" as Diagnostics <<shared kernel>>
+component "typy-stdlib" as Stdlib
+component "typy-runtime" as Runtime <<no_std>>
+component "typy-conformance" as Conformance <<test tool>>
+
+component "ruff_python_parser" as Ruff <<external>>
+component "inkwell and LLVM 23" as Inkwell <<external>>
+
+Cli --> Driver
+Driver --> Source
+Driver --> Check
+Driver --> Lower
+Driver --> Codegen
+Driver --> Build
+Source --> Ruff
+Source --> Stdlib
+Check --> Source
+Lower --> Check
+Lower --> Tyir
+Codegen --> Tyir
+Codegen --> Inkwell
+Build ..> Runtime : links the built archive
+Source --> Diagnostics
+Check --> Diagnostics
+
+note bottom of Diagnostics
+  Every compiler crate may depend on
+  typy-diagnostics; the arrows from
+  typy-tyir, typy-lower, typy-codegen,
+  typy-build and typy-driver are left out.
+end note
+Conformance --> Driver
+@enduml

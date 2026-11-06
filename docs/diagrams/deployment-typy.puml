@@ -1,0 +1,33 @@
+@startuml deployment-typy
+!include style.puml
+title Where TyPy and its output run
+
+node "Developer machine or CI runner" as Host {
+    artifact "typy\n(LLVM 23 linked in,\nstandard library embedded)" as TypyBinary
+    folder "lib/typy/<target>" as LibDir {
+        artifact "libtypy_runtime.a" as RuntimeArchive
+    }
+    node "C toolchain" as Toolchain
+    folder "Build cache" as Cache
+    artifact "Executable" as BuiltExecutable
+}
+
+node "Target machine" as TargetMachine {
+    artifact "Executable" as Executable
+    artifact "libc, or none when static" as Libc
+}
+
+node "CI conformance job" as CiJob {
+    node "CPython 3.12, 3.13,\n3.14 and 3.15" as Oracle
+    artifact "typy-conformance" as Suite
+}
+
+TypyBinary --> RuntimeArchive : passes to the linker
+TypyBinary --> Toolchain : runs
+TypyBinary --> Cache : typy run output
+Toolchain --> BuiltExecutable : writes
+BuiltExecutable ..> Executable : copied
+Executable --> Libc : uses
+Suite --> Oracle : runs tests
+Suite --> TypyBinary : builds tests
+@enduml

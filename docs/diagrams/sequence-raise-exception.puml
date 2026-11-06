@@ -1,0 +1,22 @@
+@startuml sequence-raise-exception
+!include style.puml
+title An exception returned through two frames (ADR-0004)
+autonumber
+
+participant "main module" as Main
+participant "load()" as Load
+participant "parse()" as Parse
+participant "runtime" as Runtime
+
+Main -> Load : call
+Load -> Parse : call
+Parse -> Runtime : allocate ValueError
+Runtime --> Parse : ExceptionObject
+Parse -> Parse : release owned references,\nadd TracebackEntry
+Parse --> Load : error set
+Load -> Load : check error: set,\nno matching except clause
+Load -> Load : run finally block,\nrelease owned references,\nadd TracebackEntry
+Load --> Main : error set
+Main -> Main : check error: set,\nmatching except ValueError
+Main -> Runtime : release ExceptionObject\nat end of handler
+@enduml

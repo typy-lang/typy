@@ -1,0 +1,23 @@
+@startuml component-system-context
+!include style.puml
+title TyPy in its environment
+
+actor "Application developer" as Developer
+actor "Compiler contributor" as Contributor
+actor "Tool integrator" as Integrator
+
+component "typy" as Typy <<system>>
+
+node "C toolchain" as Toolchain
+node "C libraries" as CLibraries
+node "CPython 3.12 to 3.15" as Oracle
+artifact "Executable or library" as Output
+
+Developer --> Typy : check, build, run
+Integrator --> Typy : check with JSON diagnostics
+Contributor --> Oracle : compares TyPy output with
+Contributor --> Typy : emit stage output
+Typy --> Toolchain : link command
+Toolchain --> CLibraries : links
+Toolchain --> Output : writes
+@enduml

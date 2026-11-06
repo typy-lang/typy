@@ -1,0 +1,32 @@
+@startuml activity-cycle-collection
+!include style.puml
+title Collecting reference cycles by trial deletion (ADR-0001)
+
+start
+:Allocation count reaches the collection threshold;
+if (Possible-root buffer empty?) then (yes)
+    :Reset the allocation count;
+    stop
+endif
+partition "Mark" {
+    :For each possible root, colour it gray and
+    subtract one from each object it references,
+    recursively through gray objects;
+}
+partition "Scan" {
+    :For each gray object;
+    if (Count from outside the group > 0?) then (yes)
+        :Colour it black and restore the counts
+        of everything it reaches;
+    else (no)
+        :Colour it white;
+    endif
+}
+partition "Collect" {
+    :Free every white object, releasing references
+    to objects outside the garbage group;
+    :Clear the possible-root buffer;
+}
+:Reset the allocation count;
+stop
+@enduml

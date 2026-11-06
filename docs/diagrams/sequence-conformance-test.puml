@@ -1,0 +1,23 @@
+@startuml sequence-conformance-test
+!include style.puml
+title Running one accepted-program conformance test (UC-09)
+autonumber
+
+participant "typy-conformance" as Suite
+participant "CPython 3.12 to 3.15" as Oracle
+participant "typy-driver" as Driver
+participant "test executable" as Executable
+
+Suite -> Oracle : run test.py with input, once per version
+Oracle --> Suite : OracleRun per version
+alt OracleRun values disagree
+    Suite -> Suite : Verdict invalid (STD-03)
+else OracleRun values agree
+    Suite -> Driver : build debug and release
+    Driver --> Suite : two executables
+    Suite -> Executable : run each with the same input
+    Executable --> Suite : stdout, exit status, last stderr line
+    Suite -> Suite : compare with the oracle and with each other
+    Suite -> Suite : Verdict passed or failed,\nwith requirement IDs
+end
+@enduml
