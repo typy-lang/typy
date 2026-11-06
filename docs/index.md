@@ -15,6 +15,7 @@ before.
 | 6 | [Architecture decision records](adr/index.md) | Seven records, Accepted |
 | 7 | [Detailed design](design/detailed-design.md) | Approved |
 | 8 | [Test plan](testing/test-plan.md) | Draft |
+| 9 | [Development guide](development/development-guide.md) | Draft |
 
 ## Diagrams
 
