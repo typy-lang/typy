@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy detailed design |
-| Version | 1.0 |
+| Version | 1.1 |
 | Status | Approved |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-06 |
@@ -132,6 +132,7 @@ in `docs/requirements/srs.md`.
 | `span` | `Span` | none | The primary location |
 | `message` | `String` | none | One sentence in lower case with no final period (DIA-01) |
 | `labels` | `Vec<Label>` | empty | Secondary spans, each with a short text |
+| `help` | `Option<String>` | `None` | A hint, shown after `help:`, when no fix is certain |
 | `fix` | `Option<Fix>` | `None` | Set only when the fix is certain (DIA-02) |
 | `rule` | `Option<RuleId>` | `None` | Required when the diagnostic rejects valid Python (DIA-03) |
 
@@ -163,14 +164,18 @@ when present, as the corrected line.
 
 ```text
 error[E0402]: `total` was declared as int and is assigned a str
-  --> app.py:4:13
-   |
- 4 |     total = "done"
-   |             ^^^^^^ this is a str
-   |
-   = rule: TYP-03
+ --> app.py:3:13
+  |
+3 |     total = "done"
+  |             ^^^^^^
+  = rule: TYP-03
 help: assign an int, or use a new variable
 ```
+
+The gutter is as wide as the line number. A span that runs past its first
+line is marked to the end of that line. Each label is written as
+`= LINE:COLUMN: text`. A certain fix follows as `help: write it as` and the
+corrected line.
 
 `render_json` is planned for 0.3 (DIA-05).
 

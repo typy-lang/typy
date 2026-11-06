@@ -8,7 +8,8 @@ EXEC := $(COMPOSE) exec -T dev
 DIAGRAMS := $(filter-out docs/diagrams/style.puml,$(wildcard docs/diagrams/*.puml))
 MARKDOWN := "**/*.md" "\#.tmp/**" "\#target/**"
 
-.PHONY: dev image shell docs-lint ascii-check traceability diagrams diagrams-check check hooks clean
+.PHONY: dev image shell fmt fmt-check lint type test coverage docs-lint ascii-check traceability \
+	diagrams diagrams-check check hooks clean
 
 dev: ## Start the dev service, building its image the first time
 	@$(COMPOSE) up -d --quiet-pull dev 2>/dev/null
@@ -18,6 +19,25 @@ image: ## Rebuild the dev image after a change to .devcontainer
 
 shell: dev ## Open a shell in the dev service
 	$(COMPOSE) exec dev bash
+
+fmt: dev ## Format the Rust code
+	@$(EXEC) cargo fmt --all
+
+fmt-check: dev ## Fail when the Rust code is not formatted
+	@$(EXEC) cargo fmt --all --check
+
+lint: dev ## Run Clippy on every crate and test, with warnings as errors
+	@$(EXEC) cargo clippy --workspace --all-targets --locked -- -D warnings
+
+type: dev ## Type check every crate and test
+	@$(EXEC) cargo check --workspace --all-targets --locked
+
+test: dev ## Run the unit tests
+	@$(EXEC) cargo nextest run --workspace --locked
+
+coverage: dev ## Run the tests with coverage; fail below 95 percent of lines (NFR-11)
+	@$(EXEC) cargo llvm-cov nextest --workspace --locked --status-level fail \
+		--final-status-level fail --fail-under-lines 95 --summary-only
 
 docs-lint: dev ## Lint every Markdown file with markdownlint-cli2
 	@$(EXEC) markdownlint-cli2 $(MARKDOWN)
@@ -34,7 +54,7 @@ diagrams: ## Render every PlantUML source to the SVG next to it
 diagrams-check: diagrams dev ## Fail when an SVG in the index differs from its source
 	@$(EXEC) scripts/check-diagrams.sh
 
-check: docs-lint ascii-check traceability diagrams-check ## Run the whole quality gate
+check: fmt-check lint coverage docs-lint ascii-check traceability diagrams-check ## Run the whole quality gate
 
 hooks: ## Use the hooks in .githooks for this clone
 	git config core.hooksPath .githooks

@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy development guide |
-| Version | 0.1 |
+| Version | 0.2 |
 | Status | Draft |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-06 |
@@ -50,7 +50,12 @@ Container". VS Code attaches to the same `dev` service.
 | --- | --- |
 | `make dev` | Starts the `dev` service, building its image the first time |
 | `make shell` | Opens a shell in the `dev` service |
-| `make check` | Runs the whole quality gate: the four checks below |
+| `make check` | Runs the whole quality gate: formatting, Clippy, the tests with coverage, and the four documentation checks below |
+| `make fmt` | Formats the Rust code |
+| `make lint` | Runs Clippy on every crate and test, with warnings as errors |
+| `make type` | Type checks every crate and test |
+| `make test` | Runs the unit tests with `cargo nextest` |
+| `make coverage` | Runs the tests with coverage and fails below 95 percent of lines |
 | `make docs-lint` | Lints every Markdown file with markdownlint-cli2 |
 | `make ascii-check` | Fails on any non-ASCII byte in tracked text files, except rendered SVG |
 | `make traceability` | Fails when a requirement has no row in the test plan's matrix, or a document cites an ID that is not defined |
@@ -59,9 +64,11 @@ Container". VS Code attaches to the same `dev` service.
 | `make image` | Rebuilds the dev image after a change under `.devcontainer/` |
 | `make clean` | Stops the containers and removes `.tmp/preview` |
 
-The targets for the compiler, `fmt`, `lint`, `type`, `test`, `test-int`,
-`test-e2e`, `test-all`, `bench`, `build` and `docs`, are added with the
-first crate, planned for 0.1.
+`cargo llvm-cov` measures branch coverage only on a nightly toolchain, so
+`make coverage` checks lines, and the pinned nightly job of the test plan
+measures branches. The targets `test-int`, `test-e2e`, `test-all`,
+`bench`, `build` and `docs` are added with the crates that need them,
+planned for 0.1.
 
 ## 4. Repository layout
 

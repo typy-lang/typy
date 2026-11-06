@@ -13,6 +13,9 @@ All notable changes to TyPy are recorded here. The format follows
   detailed design for 0.1, test plan and development guide.
 - A development container with Rust 1.99.1, LLVM 23, musl, CPython 3.12 to
   3.15 for conformance testing, and the documentation tools.
-- A quality gate, `make check`, that lints the documents, checks for
+- The `typy-diagnostics` crate: source spans, diagnostic codes, the code
+  registry and text rendering, with unit and property tests.
+- A quality gate, `make check`, that checks formatting, runs Clippy and the
+  tests with at least 95 percent line coverage, lints the documents, checks for
   non-ASCII text, checks that every requirement has a row in the test plan,
   and checks that every diagram is rendered from its source.
