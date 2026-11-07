@@ -29,14 +29,30 @@ These are the goals of TyPy 1.0, as the
 
 ## Status
 
-Release 0.1 is being written. The `typy` command checks, builds and runs
-programs made of module-level functions and statements over `int`, `float`,
-`str`, `bool` and `None`, with `if`, `while`, `for` over `range`, and
-`print`. Programs print what CPython prints, including the last line of an
-uncaught exception. Classes, containers, modules and `ctypes` come in later
-releases.
+TyPy 0.1.0 checks, builds and runs programs made of module-level functions
+and statements over `int`, `float`, `str`, `bool` and `None`, with `if`,
+`while`, `for` over `range`, and `print`. Programs print what CPython
+prints, including the last line of an uncaught exception. Classes,
+containers, modules and `ctypes` come in later releases.
 
 ## Quick start
+
+TyPy runs on x86_64 Linux with glibc 2.39 or later, such as Ubuntu 24.04
+or Debian 13, and needs a C toolchain (`cc`). Download the archive from the
+[0.1.0 release](https://github.com/typy-lang/typy/releases/tag/v0.1.0),
+unpack it, and run a program:
+
+```sh
+tar -xzf typy-0.1.0-x86_64-unknown-linux-gnu.tar.gz
+export PATH="$PWD/typy-0.1.0-x86_64-unknown-linux-gnu/bin:$PATH"
+printf 'print("hello", 1 + 2)\n' > hello.py
+typy run hello.py
+```
+
+`typy build hello.py` writes the executable `hello` beside the file, and
+`typy check hello.py` reports problems without building.
+
+## Building from source
 
 You need Docker with Compose v2, GNU Make and Git. Every other tool runs in
 containers.
@@ -48,13 +64,7 @@ make shell
 ```
 
 `make build` builds the compiler in the dev container, and `make shell`
-opens a shell there. In that shell:
-
-```sh
-printf 'print("hello", 1 + 2)\n' > hello.py
-$CARGO_TARGET_DIR/debug/typy run hello.py
-```
-
+opens a shell there, where `$CARGO_TARGET_DIR/debug/typy` is the compiler.
 `make check` runs the quality gate. The
 [development guide](docs/development/development-guide.md) lists every
 command.

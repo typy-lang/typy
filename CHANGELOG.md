@@ -4,7 +4,15 @@ All notable changes to TyPy are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and TyPy uses
 [semantic versioning](https://semver.org/spec/v2.0.0.html).
 
-## Unreleased
+## [Unreleased]
+
+## [0.1.0] - 2026-11-07
+
+The first release. TyPy 0.1 compiles programs made of module-level
+functions and statements over `int`, `float`, `str`, `bool` and `None` to
+native executables for x86_64 Linux, with glibc or statically with musl.
+Each program it accepts prints what CPython 3.12 to 3.15 prints. The
+compiler needs glibc 2.39 or later and a C toolchain.
 
 ### Added
 
@@ -107,3 +115,6 @@ All notable changes to TyPy are recorded here. The format follows
   tests with at least 95 percent line coverage, lints the documents, checks for
   non-ASCII text, checks that every requirement has a row in the test plan,
   and checks that every diagram is rendered from its source.
+
+[Unreleased]: https://github.com/typy-lang/typy/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/typy-lang/typy/releases/tag/v0.1.0

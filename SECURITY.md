@@ -2,12 +2,12 @@
 
 ## Supported versions
 
-TyPy has not made a release yet. Once it does, the latest minor release
-receives security fixes.
+The latest minor release receives security fixes, and so does `main`.
 
 | Version | Supported |
 | --- | --- |
-| Unreleased `main` | Yes |
+| 0.1.x | Yes |
+| `main` | Yes |
 
 ## Reporting a vulnerability
 
