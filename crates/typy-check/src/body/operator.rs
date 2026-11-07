@@ -8,6 +8,14 @@ use crate::typed::{TypedConstant, TypedExpr, TypedExprKind};
 use crate::types::Type;
 
 impl BodyChecker<'_> {
+    /// Returns true when `left ** right` with a float exponent cannot be complex in CPython: the exponent is an integral literal, or the base is a non-negative literal (EXP-04).
+    fn float_power_is_real(left: &TypedExpr, right: &TypedExpr) -> bool {
+        let integral_exponent = matches!(&right.kind, TypedExprKind::Constant(TypedConstant::Float(value)) if value.fract() == 0.0);
+        let literal_base = matches!(&left.kind, TypedExprKind::Constant(TypedConstant::Int(_)))
+            || matches!(&left.kind, TypedExprKind::Constant(TypedConstant::Float(value)) if *value >= 0.0);
+        integral_exponent || literal_base
+    }
+
     /// Returns the type of a binary operation, with Python's results (EXP-02 to EXP-05).
     pub(super) fn binary_type(
         &mut self,
@@ -53,6 +61,16 @@ impl BodyChecker<'_> {
                         return Error;
                     }
                     Int
+                } else if r == Float && !Self::float_power_is_real(left, right) {
+                    self.diagnostics.push(
+                        Diagnostic::new(
+                            DiagnosticCode::error(302),
+                            right.span,
+                            "a float exponent needs an integral literal or a non-negative literal base, because CPython returns a complex number for a negative base",
+                        )
+                        .with_rule(RuleId::EXP_04),
+                    );
+                    Error
                 } else {
                     Float
                 }

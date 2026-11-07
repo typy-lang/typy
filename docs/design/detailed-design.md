@@ -235,7 +235,7 @@ it enforces and its status. `typy explain` (0.3) reads the same table.
 | E0205 | Name is not defined | STD-04 |
 | E0206 | Import of a module TyPy does not provide | LIB-08 |
 | E0301 | `is` used on values other than `None` or class instances | EXP-08 |
-| E0302 | `int ** int` with an exponent that is not a non-negative literal | EXP-04 |
+| E0302 | `**` whose CPython result could be a `float` for `int ** int`, or `complex` | EXP-04 |
 | E0303 | `and` or `or` with operands of different types | EXP-09 |
 | E0304 | Truth test on a value of an unsupported type | EXP-10 |
 | E0305 | Conditional expression with branches of different types | EXP-11 |

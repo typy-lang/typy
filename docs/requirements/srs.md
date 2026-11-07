@@ -3,10 +3,10 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy software requirements specification |
-| Version | 1.3 |
+| Version | 1.4 |
 | Status | Approved |
 | Owner | typy-lang contributors |
-| Last updated | 2026-11-06 |
+| Last updated | 2026-11-07 |
 
 ## 1. Introduction
 
@@ -204,7 +204,7 @@ formatter applies; Ruff's formatter is the project's recommendation.
 | EXP-01 | Expressions shall evaluate in the order the Language Reference defines. | M | 0.1 | 6.16 |
 | EXP-02 | `+`, `-`, `*`, `/`, `//`, `%` and `**` shall give Python's results for `int` and `float`, including `/` on two `int` values returning `float` and `%` taking the sign of the divisor. | M | 0.1 | 6.7 |
 | EXP-03 | Division or modulo by zero, for `int` and for `float`, shall raise `ZeroDivisionError`. | M | 0.1 | 6.7 |
-| EXP-04 | `int ** int` shall be accepted only when the exponent is a non-negative integer literal, because CPython returns `float` for a negative exponent. Other exponents shall use `float` or `pow()`. | M | 0.1 | 6.5 |
+| EXP-04 | `x ** y` shall be accepted only when CPython's result has one type that TyPy represents: `int ** int` when the exponent is a non-negative integer literal, because CPython returns `float` for a negative exponent; and a `float` exponent only when it is a literal with an integral value or the base is a non-negative literal, because CPython returns `complex` for a negative base and a fractional exponent. | M | 0.1 | 6.5 |
 | EXP-05 | Shifts and bitwise operators shall give Python's results for `int`, and a negative shift count shall raise `ValueError`. | M | 0.1 | 6.8 |
 | EXP-06 | Comparisons shall be accepted between values of the same type, and between `int` and `float`. Chained comparisons shall evaluate each operand once. | M | 0.1 | 6.10 |
 | EXP-07 | `in` and `not in` shall be accepted on `str`, `bytes`, `list`, `tuple`, `dict` and `set`. | M | 0.2 | 6.10.2 |
@@ -452,6 +452,7 @@ There are no open issues. A new question gets the next unused issue number.
 | OI-10 | Does NFR-02 keep its 32 KB budget? | The core runtime keeps 32 KB. Large-integer arithmetic (DAT-01) and cycle collection (ADR-0001) add an estimated 8 to 15 KB, so the whole runtime gets 48 KB (NFR-02). | 2026-11-05 |
 | OI-11 | How does TyPy support PEP 810 lazy imports, whose `lazy` keyword CPython 3.12 to 3.14 reject? | Each program has a Python floor; a program with floor 3.15 may use `lazy import`, and `__lazy_modules__` works for every floor (ADR-0008). | 2026-11-06 |
 | OI-12 | May an `int` be stored where a `float` is declared, as PEP 484 allows? | No. CPython keeps the value an `int`, so `x: float = 1` prints `1`; TyPy would print `1.0`. TYP-09 rejects it, with the fix `1.0` for a literal. Checked on CPython 3.12 to 3.15. | 2026-11-06 |
+| OI-13 | Can `x ** y` with a `float` exponent give a type TyPy does not have? | Yes: `(-8.0) ** 0.5` is `complex` in CPython 3.12 to 3.15. EXP-04 accepts a `float` exponent only when it is an integral literal or the base is a non-negative literal. | 2026-11-07 |
 
 ## Appendix A. Disposition of the specification pack
 

@@ -78,7 +78,7 @@ pub const CODES: &[CodeInfo] = &[
     ),
     active(
         302,
-        "`int ** int` with an exponent that is not a non-negative literal",
+        "`**` whose result in CPython could have another type",
         RuleId::EXP_04,
     ),
     active(
