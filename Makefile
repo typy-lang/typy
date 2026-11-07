@@ -8,7 +8,8 @@ EXEC := $(COMPOSE) exec -T dev
 DIAGRAMS := $(filter-out docs/diagrams/style.puml,$(wildcard docs/diagrams/*.puml))
 MARKDOWN := "**/*.md" "\#.tmp/**" "\#target/**"
 
-.PHONY: dev image shell fmt fmt-check lint type test coverage docs-lint ascii-check traceability \
+
+.PHONY: dev image shell runtime fmt fmt-check lint type test coverage docs-lint ascii-check traceability \
 	diagrams diagrams-check check hooks clean
 
 dev: ## Start the dev service, building its image the first time
@@ -19,6 +20,9 @@ image: ## Rebuild the dev image after a change to .devcontainer
 
 shell: dev ## Open a shell in the dev service
 	$(COMPOSE) exec dev bash
+
+runtime: dev ## Build the runtime archive that programs link: target/runtime/libtypy_runtime.a
+	@$(EXEC) cargo rustc -p typy-runtime --profile runtime --locked --crate-type staticlib
 
 fmt: dev ## Format the Rust code
 	@$(EXEC) cargo fmt --all

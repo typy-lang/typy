@@ -1,0 +1,15 @@
+[package]
+name = "typy-runtime"
+description = "The library linked into every TyPy program: memory, integers, floats, strings, exceptions and output"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+publish.workspace = true
+
+# The archive programs link is built with `make runtime`, as a static library
+# with the `runtime` profile, which aborts on panic (ADR-0006).
+
+[lints]
+workspace = true

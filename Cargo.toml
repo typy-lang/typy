@@ -5,6 +5,7 @@ members = [
     "crates/typy-codegen",
     "crates/typy-diagnostics",
     "crates/typy-lower",
+    "crates/typy-runtime",
     "crates/typy-source",
     "crates/typy-tyir",
 ]
@@ -42,3 +43,12 @@ pedantic = { level = "warn", priority = -1 }
 # Every public item has a one-line docstring; error sections would repeat the
 # Result type, which already names the error.
 missing_errors_doc = "allow"
+
+# The runtime archive is linked into every TyPy program; it aborts on panic and
+# is optimised for size (ADR-0006, NFR-02).
+[profile.runtime]
+inherits = "release"
+panic = "abort"
+opt-level = "z"
+lto = true
+codegen-units = 1

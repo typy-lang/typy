@@ -1,0 +1,64 @@
+//! The library linked into every TyPy program (ADR-0006): memory, integers, floats, strings, exceptions and output.
+//!
+//! The library has no standard library and no `alloc` crate; it calls only `malloc`, `realloc`, `free`, `write`, `abort`,
+//! `getrlimit` and `libm`. Unit tests build it with the standard library, so its logic is tested like any other crate.
+#![cfg_attr(not(test), no_std)]
+#![warn(clippy::undocumented_unsafe_blocks)]
+#![allow(
+    unreachable_pub,
+    reason = "the exported functions form the C interface and are reached by symbol, not by path"
+)]
+
+mod allocator;
+mod cell;
+mod compare;
+mod entry;
+mod exception;
+mod header;
+mod int;
+mod io;
+mod libc;
+mod range;
+mod refcount;
+mod stack;
+mod string;
+mod word;
+
+pub use exception::{ExceptionKind, ExceptionObject};
+pub use header::{BIG_INT_TYPE_ID, EXCEPTION_TYPE_ID, IMMORTAL, ObjectHeader, STR_TYPE_ID};
+pub use int::BigIntObject;
+pub use string::{StrKind, StrObject};
+
+/// A result that may carry an exception, as a function that may raise returns it (detailed design section 10.2).
+#[repr(C)]
+#[derive(Clone, Copy, Debug)]
+pub struct Raising<T> {
+    /// The result, meaningful only when `exception` is null.
+    pub value: T,
+    /// The exception, or null.
+    pub exception: *mut ExceptionObject,
+}
+
+impl<T> Raising<T> {
+    /// Returns a result without an exception.
+    pub const fn ok(value: T) -> Self {
+        Self {
+            value,
+            exception: core::ptr::null_mut(),
+        }
+    }
+
+    /// Returns an exception, with `placeholder` in place of the result.
+    pub const fn error(placeholder: T, exception: *mut ExceptionObject) -> Self {
+        Self {
+            value: placeholder,
+            exception,
+        }
+    }
+}
+
+#[cfg(not(test))]
+#[panic_handler]
+fn panic(_info: &core::panic::PanicInfo<'_>) -> ! {
+    libc::abort_with(b"typy runtime: internal error\n")
+}

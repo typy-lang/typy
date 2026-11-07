@@ -31,6 +31,10 @@ All notable changes to TyPy are recorded here. The format follows
 - The `typy-codegen` crate: turns TyIR into LLVM 23 IR, assembly and object
   code, with static immortal constants and traceback entries on raising
   calls; `--release-small` marks functions `minsize`, as LLVM 23 has no `Oz`.
+- The `typy-runtime` crate, without the standard library: object headers,
+  reference counting, `str` objects and their operations, exceptions with
+  tracebacks and the uncaught-exception report, buffered output, the stack
+  check and `main`. `make runtime` builds the archive programs link.
 - A quality gate, `make check`, that checks formatting, runs Clippy and the
   tests with at least 95 percent line coverage, lints the documents, checks for
   non-ASCII text, checks that every requirement has a row in the test plan,
