@@ -24,6 +24,7 @@ pub enum RuntimeFunction {
     FloatFloorDivide,
     FloatModulo,
     FloatPower,
+    FloatAbsolute,
     FloatToInt,
     FloatToStr,
     FloatFromStr,
@@ -37,6 +38,7 @@ pub enum RuntimeFunction {
     Ord,
     WriteStdout,
     CheckStack,
+    RangeCheckStep,
 }
 
 /// The parameter types, result type and raising behaviour of a runtime function.
@@ -67,7 +69,7 @@ const FLOAT_FLOAT: &[TyirType] = &[TyirType::Float, TyirType::Float];
 
 impl RuntimeFunction {
     /// Every runtime function.
-    pub const ALL: [Self; 28] = [
+    pub const ALL: [Self; 30] = [
         Self::IntFloorDivide,
         Self::IntModulo,
         Self::IntPower,
@@ -83,6 +85,7 @@ impl RuntimeFunction {
         Self::FloatFloorDivide,
         Self::FloatModulo,
         Self::FloatPower,
+        Self::FloatAbsolute,
         Self::FloatToInt,
         Self::FloatToStr,
         Self::FloatFromStr,
@@ -96,6 +99,7 @@ impl RuntimeFunction {
         Self::Ord,
         Self::WriteStdout,
         Self::CheckStack,
+        Self::RangeCheckStep,
     ];
 
     /// Returns the function's signature. Comparisons take the comparison as an `int` operand, numbered as `Comparison::code`.
@@ -112,12 +116,15 @@ impl RuntimeFunction {
             Self::IntTrueDivide => signature(INT_INT, Float, true),
             Self::IntToFloat => signature(&[Int], Float, true),
             Self::IntAbsolute => signature(&[Int], Int, false),
-            Self::IntToStr => signature(&[Int], STR, false),
+            // CPython refuses to convert an int of more than 4300 digits (sys.int_info), and
+            // `chr` refuses a code point outside Unicode.
+            Self::IntToStr | Self::Chr => signature(&[Int], STR, true),
             Self::IntFromStr => signature(&[STR, Int], Int, true),
             Self::CompareIntFloat => signature(&[Int, Float, Int], Bool, false),
             Self::FloatDivide | Self::FloatFloorDivide | Self::FloatModulo | Self::FloatPower => {
                 signature(FLOAT_FLOAT, Float, true)
             }
+            Self::FloatAbsolute => signature(&[Float], Float, false),
             Self::FloatToInt => signature(&[Float], Int, true),
             Self::FloatToStr => signature(&[Float], STR, false),
             Self::FloatFromStr => signature(&[STR], Float, true),
@@ -126,10 +133,10 @@ impl RuntimeFunction {
             Self::StrLength => signature(&[STR], Int, false),
             Self::StrCompare => signature(&[STR, STR, Int], Bool, false),
             Self::StrRepr => signature(&[STR], STR, false),
-            Self::Chr => signature(&[Int], STR, true),
             Self::Ord => signature(&[STR], Int, true),
             Self::WriteStdout => signature(&[STR], Unit, false),
             Self::CheckStack => signature(&[], Unit, true),
+            Self::RangeCheckStep => signature(&[Int], Unit, true),
         }
     }
 
@@ -152,6 +159,7 @@ impl RuntimeFunction {
             Self::FloatFloorDivide => "float_floor_divide",
             Self::FloatModulo => "float_modulo",
             Self::FloatPower => "float_power",
+            Self::FloatAbsolute => "float_absolute",
             Self::FloatToInt => "float_to_int",
             Self::FloatToStr => "float_to_str",
             Self::FloatFromStr => "float_from_str",
@@ -165,6 +173,7 @@ impl RuntimeFunction {
             Self::Ord => "ord",
             Self::WriteStdout => "write_stdout",
             Self::CheckStack => "check_stack",
+            Self::RangeCheckStep => "range_check_step",
         }
     }
 }
@@ -191,18 +200,22 @@ mod tests {
 
     #[test]
     fn operations_that_can_fail_in_python_may_raise() {
-        for function in [
+        let raising = [
             RuntimeFunction::IntFloorDivide,
             RuntimeFunction::StrIndex,
             RuntimeFunction::CheckStack,
-        ] {
+            RuntimeFunction::IntToStr,
+            RuntimeFunction::RangeCheckStep,
+        ];
+        for function in raising {
             assert!(function.signature().may_raise, "{function:?}");
         }
-        for function in [
+        let safe = [
             RuntimeFunction::StrConcat,
             RuntimeFunction::WriteStdout,
-            RuntimeFunction::IntToStr,
-        ] {
+            RuntimeFunction::FloatAbsolute,
+        ];
+        for function in safe {
             assert!(!function.signature().may_raise, "{function:?}");
         }
     }

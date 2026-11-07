@@ -82,6 +82,18 @@ impl FunctionBuilder {
         slot
     }
 
+    /// Returns the type of a slot.
+    #[must_use]
+    pub fn slot_type(&self, slot: SlotId) -> TyirType {
+        self.slots[slot.0 as usize].ty
+    }
+
+    /// Returns the number of slots added so far.
+    #[must_use]
+    pub fn slot_count(&self) -> usize {
+        self.slots.len()
+    }
+
     /// Creates an empty block; code goes into it after `switch_to`.
     pub fn create_block(&mut self) -> BlockId {
         let block = BlockId(index(self.blocks.len()));
@@ -243,6 +255,8 @@ mod tests {
         let mut builder = FunctionBuilder::new(FunctionId(3), "sym", "name", TyirType::Unit);
         let first = builder.add_slot("a", TyirType::Int);
         let second = builder.add_slot("b", TyirType::STR);
+        assert_eq!(builder.slot_type(second), TyirType::STR);
+        assert_eq!(builder.slot_count(), 2);
         let block = builder.create_block();
         let parameter = builder.add_block_parameter(block, TyirType::EXCEPTION);
         builder.set_may_raise(true);
@@ -252,6 +266,7 @@ mod tests {
         let function = builder.finish();
         assert_eq!((first.0, second.0), (0, 1));
         assert_eq!(function.slot(second).name, "b");
+        assert_eq!(function.slots.len(), 2);
         assert_eq!(function.block(block).parameters, [parameter]);
         assert!(function.may_raise);
         assert_eq!(function.symbol, "sym");
