@@ -10,7 +10,7 @@ MARKDOWN := "**/*.md" "\#.tmp/**" "\#target/**"
 
 
 .PHONY: dev image shell runtime fmt fmt-check lint type test coverage docs-lint ascii-check traceability test-int test-e2e test-all \
-	build bless coverage-branches miri fuzz runtime-size diagrams diagrams-check unicode-tables unicode-tables-check check hooks clean
+	build dist bless coverage-branches miri fuzz runtime-size diagrams diagrams-check unicode-tables unicode-tables-check check hooks clean
 
 dev: ## Start the dev service, building its image the first time
 	@$(COMPOSE) up -d --quiet-pull dev 2>/dev/null
@@ -72,6 +72,9 @@ diagrams: ## Render every PlantUML source to the SVG next to it
 diagrams-check: diagrams dev ## Fail when an SVG in the index differs from its source
 	@$(EXEC) scripts/check-diagrams.sh
 
+dist: dev ## Build the release archive of the compiler in dist/, and run a program with it unpacked
+	@$(EXEC) scripts/package-release.sh
+
 bless: dev ## Rewrite the golden files from the current compiler; review the diff before committing
 	@$(EXEC) env TYPY_BLESS=1 cargo test -p typy-driver --test golden --locked
 
@@ -95,6 +98,6 @@ check: fmt-check lint coverage-branches docs-lint ascii-check traceability diagr
 hooks: ## Use the hooks in .githooks for this clone
 	git config core.hooksPath .githooks
 
-clean: ## Stop the containers and remove scratch previews
+clean: ## Stop the containers and remove scratch previews and release archives
 	$(COMPOSE) down
-	rm -rf .tmp/preview
+	rm -rf .tmp/preview dist

@@ -12,6 +12,8 @@ target="${CARGO_TARGET_DIR:-target}"
 coverage="${target}/coverage-branches"
 # The tests find the runtime archives beside the compiler they build.
 mkdir -p "${coverage}"
+# cargo-llvm-cov cleans only a directory that carries the cache directory tag.
+printf 'Signature: 8a477f597d28d172789f06886806bc55\n' > "${coverage}/CACHEDIR.TAG"
 rm -rf "${coverage}/lib"
 cp -r "${target}/lib" "${coverage}/lib"
 report="$(CARGO_LLVM_COV_TARGET_DIR="${coverage}" cargo +nightly-2026-11-05 llvm-cov nextest \

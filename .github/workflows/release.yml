@@ -1,0 +1,73 @@
+# Releases the version a tag `vX.Y.Z` names (development guide section 9).
+# The build job checks the tag against the version and the changelog, runs
+# the quality gate and builds the release archive. The publish job waits for a
+# maintainer to approve the `release` environment, creates the GitHub release
+# from the changelog section with the short-lived workflow token, then
+# downloads the archive back and runs a program with it.
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Check and build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    steps:
+      - name: Free disk space
+        run: sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - name: Check the tag and the changelog
+        run: scripts/check-release.sh "${GITHUB_REF_NAME}" notes.md
+      - name: Start the dev container
+        run: make dev
+      - name: Quality gate
+        run: make check
+      - name: Release archive
+        run: make dist
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release
+          path: |
+            dist/*.tar.gz
+            dist/*.tar.gz.sha256
+            notes.md
+          if-no-files-found: error
+
+  publish:
+    name: Publish
+    needs: build
+    runs-on: ubuntu-24.04
+    environment: release
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: release
+      # A version with a suffix, such as 1.0.0-rc.1, is a release candidate.
+      - name: Create the release
+        run: |
+          prerelease=""
+          if [[ "${GITHUB_REF_NAME}" == *-* ]]; then prerelease="--prerelease"; fi
+          gh release create "${GITHUB_REF_NAME}" --verify-tag ${prerelease} \
+            --title "TyPy ${GITHUB_REF_NAME#v}" --notes-file notes.md \
+            dist/*.tar.gz dist/*.tar.gz.sha256
+      - name: Install the release back and run a program
+        run: |
+          mkdir check && cd check
+          gh release download "${GITHUB_REF_NAME}" --pattern "*.tar.gz*"
+          sha256sum --check ./*.sha256
+          tar -xzf ./*.tar.gz
+          printf 'print("hello", 1 + 2)\n' > hello.py
+          test "$(TYPY_HOME="$PWD/home" ./typy-*/bin/typy run hello.py)" = "hello 3"

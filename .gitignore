@@ -6,3 +6,6 @@
 /fuzz/artifacts/
 /fuzz/coverage/
 /fuzz/target/
+
+# Release archives that `make dist` builds.
+/dist/

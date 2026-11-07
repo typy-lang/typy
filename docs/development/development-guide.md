@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy development guide |
-| Version | 0.9 |
+| Version | 0.10 |
 | Status | Draft |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-07 |
@@ -97,10 +97,15 @@ documentation site.
 | Path | Holds |
 | --- | --- |
 | `.devcontainer/` | The dev image, and the compose file with the `dev` and `diagrams` services |
+| `.github/` | The CI, release and code scanning workflows, Dependabot's settings and the pull request template |
 | `.githooks/` | The pre-commit hook, which runs `make check` |
 | `docs/` | The engineering documents, listed with their status in `docs/index.md` |
 | `docs/diagrams/` | PlantUML sources, the shared `style.puml`, and the rendered SVG of each |
-| `scripts/` | The checks that `make` runs, and the generator of the Unicode tables |
+| `fuzz/` | The fuzz targets, a Cargo workspace of their own that builds with the pinned nightly |
+| `scripts/` | The checks and builds that `make` runs, the release scripts, and the generator of the Unicode tables |
+| `tests/conformance/` | The conformance programs, by requirement area |
+| `tests/golden/` | The golden programs and the expected text of each stage and diagnostic |
+| `dist/` | Release archives that `make dist` builds. Ignored by Git |
 | `rust-toolchain.toml` | The Rust version and components every build uses |
 | `.tmp/` | Scratch files. Ignored by Git and never committed |
 
@@ -168,23 +173,46 @@ installed on the host.
 ## 8. Continuous integration
 
 CI runs the same `make` targets as a working copy, in the same containers,
-so a change that passes `make check` locally passes the documentation jobs.
-The workflow files are added with the first crate, planned for 0.1, with
-these jobs in this order: static checks, the test matrix of the test plan,
-the package check, and the documentation build with the diagram
-comparison. Workflows hold read-only permissions unless a job needs more.
+so a change that passes `make check` locally passes CI. Every workflow holds
+read-only permissions, and only the job that creates a release may write.
+
+| Workflow | Job | Runs on | Does |
+| --- | --- | --- | --- |
+| `ci.yml` | Quality gate and package | Every push to `main` and every pull request | `make check`, then `make dist` |
+| `ci.yml` | Miri and fuzzing | Weekly, and on demand | `make miri`, then `FUZZ_SECONDS=1800 make fuzz`; the inputs that crashed are kept as an artifact |
+| `ci.yml` | Dependency review | Every pull request | Fails on a new dependency with a known vulnerability |
+| `codeql.yml` | Analyze | Every push to `main`, every pull request, and weekly | Code scanning of the Rust sources and the workflows |
+| `release.yml` | Check and build, then Publish | A tag `vX.Y.Z` | Section 9 |
+
+Dependabot proposes updates to the actions and to the Cargo dependencies of
+the workspace and of `fuzz/` each week. The repository's settings protect
+`main`: pull requests only, the quality gate job required, linear history,
+squash merges and no force pushes; and the `release` environment requires a
+maintainer's approval.
 
 ## 9. Releases
 
-1. A commit titled "Prepare X.Y.Z" sets the version and dates the
-   changelog's section for it.
-2. A tag `vX.Y.Z` on that commit starts the release workflow.
-3. The workflow checks that the tag matches the version and the changelog,
-   runs every test level of the test plan, and builds the release.
-4. A maintainer approves the publishing step.
-5. The workflow publishes with trusted publishing and no long-lived token,
-   installs the published version back, and creates the release from the
-   changelog section.
+1. A commit titled "Prepare X.Y.Z" sets the version in `Cargo.toml`,
+   renames the changelog's "Unreleased" section to `[X.Y.Z] - DATE`, and
+   opens a new empty "Unreleased" section above it.
+2. A tag `vX.Y.Z` on that commit starts `release.yml`.
+3. `scripts/check-release.sh` checks that the tag names the version and that
+   the changelog has a dated section for it, whose text becomes the release
+   notes. The job then runs `make check` and `make dist`.
+4. A maintainer approves the `release` environment.
+5. The publish job creates the GitHub release with the archive and its
+   SHA-256, using the workflow's short-lived token and no long-lived one.
+   It then downloads the archive back, checks its SHA-256, unpacks it and
+   runs a program with it.
 
-A release that breaks compatibility goes out as a release candidate first.
-The release workflow is added before 0.1 ships.
+`make dist` builds `dist/typy-X.Y.Z-x86_64-unknown-linux-gnu.tar.gz`: the
+`typy` executable in `bin/` and a runtime archive for each target in
+`lib/typy/<triple>/`, which is the layout of an installation prefix, with
+the licences, README and changelog. The tarball is reproducible, so two
+builds of one commit have the same SHA-256. The executable links LLVM
+statically and needs glibc 2.39 or later, `libffi`, `zlib`, `zstd` and
+`libstdc++`, and a C toolchain to link programs.
+
+A release that breaks compatibility goes out as a release candidate first,
+with a version such as `1.0.0-rc.1`, which the workflow marks as a
+pre-release.

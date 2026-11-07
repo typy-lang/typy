@@ -1,0 +1,12 @@
+# Weekly updates for the actions the workflows use and for the Cargo
+# dependencies of the workspace and of the fuzz targets.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+  - package-ecosystem: cargo
+    directories: ["/", "/fuzz"]
+    schedule:
+      interval: weekly
