@@ -1,16 +1,13 @@
-# Runs the quality gate and the package check on every push to main and every
-# pull request, in the same dev container and through the same make targets as
-# a developer's machine. Once a week it also runs Miri and fuzzes for 30
-# minutes (NFR-09), so a toolchain or dependency change that breaks either is
-# found without slowing every commit.
+# Runs the quality gate and the package check on every pull request, in the
+# same dev container and through the same make targets as a developer's
+# machine. `main` changes only through pull requests that are up to date and
+# pass this job, so a second run after the merge would test the same tree.
+# Run by hand, it also runs Miri and fuzzes for 30 minutes, which a release
+# needs (NFR-09); CI minutes are spent on whole changes, not on a schedule.
 name: CI
 
 on:
-  push:
-    branches: [main]
   pull_request:
-  schedule:
-    - cron: "17 3 * * 1"
   workflow_dispatch:
 
 permissions:
@@ -30,7 +27,7 @@ jobs:
       # than the runner leaves free, so unused preinstalled toolchains go.
       - name: Free disk space
         run: sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
         with:
           persist-credentials: false
       - name: Start the dev container
@@ -42,13 +39,13 @@ jobs:
 
   weekly:
     name: Miri and fuzzing
-    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-24.04
     timeout-minutes: 120
     steps:
       - name: Free disk space
         run: sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
         with:
           persist-credentials: false
       - name: Start the dev container
@@ -59,7 +56,7 @@ jobs:
         run: FUZZ_SECONDS=1800 make fuzz
       - name: Keep the inputs that crashed
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: fuzz-artifacts
           path: fuzz/artifacts/
@@ -70,7 +67,7 @@ jobs:
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
         with:
           persist-credentials: false
-      - uses: actions/dependency-review-action@v4
+      - uses: actions/dependency-review-action@v5
