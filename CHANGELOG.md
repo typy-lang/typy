@@ -22,6 +22,9 @@ All notable changes to TyPy are recorded here. The format follows
   Python's scoping, type inference within a function, definite assignment,
   and the typing rules for the operators and builtins of 0.1. Every
   rejection names its rule.
+- The `typy-tyir` crate: TyIR's types, a function builder, a verifier that
+  checks definitions by dominance and the types of every operation, and the
+  text form for `--emit=tyir`.
 - A quality gate, `make check`, that checks formatting, runs Clippy and the
   tests with at least 95 percent line coverage, lints the documents, checks for
   non-ASCII text, checks that every requirement has a row in the test plan,

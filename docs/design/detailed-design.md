@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy detailed design |
-| Version | 1.4 |
+| Version | 1.5 |
 | Status | Approved |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-06 |
@@ -473,12 +473,19 @@ constants of type `int`, `float`, `str`, `bool` and `None`; and indexing a
 is a 64-bit word: an inline value has its lowest bit set and holds the
 number shifted left by one, so it covers -2^62 to 2^62 - 1; any other value
 is a pointer to a `BigInt` (ADR-0001, DAT-01). `Str` values are
-`Object(TypeId::STR)`.
+`Object(TypeId::STR)` and exceptions `Object(TypeId::EXCEPTION)`. `Int` and
+`Object` values are counted; the others are not.
 
 `ValueInfo` holds a value's `ty: TyirType` and its
 `representation: ValueRepresentation`: `Inline`, `Stack` or `Heap`. In 0.1
 `Int`, `Float`, `Bool` and `Unit` are `Inline` and objects are `Heap`;
 `Stack` is chosen by escape analysis from 0.4 (MEM-03).
+
+A function's locals are `Slot`s, stack variables read with `load` and
+written with `store`, as LLVM's `alloca` is. LLVM's `mem2reg` pass turns
+them into registers, so lowering does not have to build SSA form for
+locals itself. A counted slot starts empty and owns the reference it
+holds.
 
 `TyirFunction`
 
@@ -486,57 +493,81 @@ is a pointer to a `BigInt` (ADR-0001, DAT-01). `Str` values are
 | --- | --- | --- | --- |
 | `id` | `FunctionId` | none | Unique in the module |
 | `symbol` | `String` | none | The mangled name of section 10.3 |
+| `name` | `String` | none | The name tracebacks show, such as `fib` or `<module>` |
 | `parameters` | `Vec<ValueId>` | empty | The entry block's parameters |
 | `return_type` | `TyirType` | none | `Unit` for `-> None` |
 | `may_raise` | `bool` | `false` | Set by `RaiseAnalysis` |
 | `blocks` | `Vec<BasicBlock>` | none | The first is the entry block |
 | `values` | `Vec<ValueInfo>` | empty | Indexed by `ValueId` |
+| `slots` | `Vec<Slot>` | empty | Indexed by `SlotId`; each has a name and a type |
 
 `BasicBlock` has an `id`, its `parameters: Vec<ValueId>`, its
 `instructions: Vec<Instruction>` and one `terminator: Terminator`.
 
 `Instruction` has an optional `result: ValueId`, an `operation: Operation`
 and the `span` of the source it came from, which becomes the line of a
-`TracebackEntry`. `Operation` covers constants, arithmetic and comparison
-on each `TyirType`, calls to runtime functions that cannot raise,
-`Increment(value)` and `Decrement(value)`.
+`TracebackEntry`. An `Operation` cannot raise. It is a constant, a `load`
+or `store`, an `int`, `float` or `bool` operation that cannot raise, a
+comparison or truth test of one `ScalarKind`, a call of a runtime function
+or a program function that cannot raise, or an `Increment` or `Decrement`
+of a counted value.
+
+`RuntimeFunction` lists the runtime's functions, each with its parameter
+types, result type and whether it may raise, such as `int_floor_divide`
+(may raise `ZeroDivisionError`) and `str_concat` (cannot raise). The
+runtime's symbol is `typy_rt_` and the function's name.
 
 `Terminator`
 
 | Variant | Meaning |
 | --- | --- |
-| `Jump { target, arguments }` | Continue in `target` |
-| `Branch { condition, then, otherwise }` | Continue in one of two blocks |
-| `Invoke { callee, arguments, normal, error }` | Call a function that may raise; continue in `normal` with the result, or in `error` with the exception |
-| `Return(value)` | Return normally |
+| `Jump { target, arguments }` | Continue in `target`, passing its parameters |
+| `Branch { condition, then, otherwise }` | Continue in one of two blocks, which take no parameters |
+| `Invoke { callee, arguments, normal, error }` | Call a function that may raise; `normal` takes the result as its one parameter, and `error` the exception |
+| `Return(value)` | Return a value, which the caller then owns; a unit value for `-> None` |
 | `ReturnError(exception)` | Return the exception to the caller (ADR-0004) |
-| `Unreachable` | After a call that cannot return |
+| `Unreachable` | A point no path reaches |
+
+`FunctionBuilder` builds a function one block at a time. Code added after a
+block's terminator goes to a new block with no predecessors, as dead code
+after `return` does.
 
 ### 8.2 Verifier and text form
 
-`Verifier::verify(module) -> Result<(), Diagnostic>` checks that every
-value is defined once and before each use on every path; that block
-arguments match block parameters in number and type; that every operation
-has operands of the types it takes; that `Invoke` is used exactly for
-callees marked `may_raise`; and that a function not marked `may_raise`
-contains no `ReturnError`. A failure is an E9001 diagnostic that names the
-function, the block and the pass that ran last. The verifier runs after
-every pass in every build of the compiler.
+`verify(module) -> Result<(), VerifyError>` checks that every value is
+defined once, and that its definition comes before each use on every path,
+by dominance; that operands, stored values, arguments and results have the
+types their operations take; that a call of a function that may raise is
+an `invoke` and every other call is not; that an `invoke`'s blocks take
+the result and the exception; that branch targets take no parameters; that
+only a function marked `may_raise` returns an exception; and that only
+counted values are counted. A `VerifyError` names the function and the
+block, and the caller reports it as E9001 with the pass that ran last. The
+verifier runs after every pass in every build of the compiler.
 
 `print(module) -> String` writes the deterministic text form used by
 `--emit=tyir` and `--emit=tyir-mem`:
 
 ```text
-fn _TY8__main__3div(v0: int, v1: int) -> int raises {
+string s0 = "hi\n"
+entry fn0
+
+fn _TY8__main__3div(v0: int, v1: int) -> int raises {  # div
+  slot s0 q: int
 b0(v0: int, v1: int):
-  v2 = int.eq v1, 0
-  branch v2, b1, b2
-b1:
-  v3 = call rt.zero_division_error()
-  return_error v3
-b2:
-  v4 = int.floordiv v0, v1
+  v2 = const int 0
+  v3 = cmp.int.ne v1, v2
+  branch v3, b1, b2
+b1():
+  invoke rt.int_floor_divide(v0, v1) to b3 unwind b4
+b2():
+  v6 = int.add v0, v2
+  return v6
+b3(v4: int):
+  store s0, v4
   return v4
+b4(v5: exception):
+  return_error v5
 }
 ```
 

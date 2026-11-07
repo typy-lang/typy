@@ -1,6 +1,11 @@
 [workspace]
 resolver = "3"
-members = ["crates/typy-check", "crates/typy-diagnostics", "crates/typy-source"]
+members = [
+    "crates/typy-check",
+    "crates/typy-diagnostics",
+    "crates/typy-source",
+    "crates/typy-tyir",
+]
 
 [workspace.package]
 version = "0.0.0"
@@ -16,6 +21,7 @@ proptest = "1"
 tempfile = "3"
 typy-diagnostics = { path = "crates/typy-diagnostics" }
 typy-source = { path = "crates/typy-source" }
+typy-tyir = { path = "crates/typy-tyir" }
 # The parser has no stability promise, so it is pinned to one exact version
 # and upgraded on purpose (C-02, ADR-0005).
 ruff_python_ast = "=0.0.20"

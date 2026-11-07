@@ -877,6 +877,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "typy-tyir"
+version = "0.0.0"
+dependencies = [
+ "typy-diagnostics",
+]
+
+[[package]]
 name = "unarray"
 version = "0.1.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
