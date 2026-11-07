@@ -59,7 +59,7 @@ jobs:
         run: FUZZ_SECONDS=1800 make fuzz
       - name: Keep the inputs that crashed
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: fuzz-artifacts
           path: fuzz/artifacts/
