@@ -19,10 +19,12 @@ if [[ -z "${heading}" ]]; then
     echo "check-release: CHANGELOG.md has no section \"## [${version}] - YYYY-MM-DD\"" >&2
     exit 1
 fi
-# The section runs from its heading to the next one at the same level.
+# The section runs from its heading to the next one at the same level, or to
+# the link definitions at the end of the changelog.
+mkdir -p "$(dirname "${notes}")"
 awk -v heading="${heading}" '
     $0 == heading { inside = 1; next }
-    inside && /^## / { exit }
+    inside && (/^## / || /^\[[^]]+\]: /) { exit }
     inside { print }
-' CHANGELOG.md | sed '/./,$!d' > "${notes}"
+' CHANGELOG.md | sed '/./,$!d' | sed -e :a -e '/^\n*$/{$d;N;ba' -e '}' > "${notes}"
 echo "check-release: ${tag} matches ${version}; notes in ${notes}"

@@ -25,7 +25,7 @@ jobs:
         with:
           persist-credentials: false
       - name: Check the tag and the changelog
-        run: scripts/check-release.sh "${GITHUB_REF_NAME}" notes.md
+        run: scripts/check-release.sh "${GITHUB_REF_NAME}" dist/notes.md
       - name: Start the dev container
         run: make dev
       - name: Quality gate
@@ -38,7 +38,7 @@ jobs:
           path: |
             dist/*.tar.gz
             dist/*.tar.gz.sha256
-            notes.md
+            dist/notes.md
           if-no-files-found: error
 
   publish:
@@ -52,16 +52,18 @@ jobs:
       GH_TOKEN: ${{ github.token }}
       GH_REPO: ${{ github.repository }}
     steps:
+      # Every file was uploaded from dist/, which becomes the artifact's root.
       - uses: actions/download-artifact@v8
         with:
           name: release
+          path: dist
       # A version with a suffix, such as 1.0.0-rc.1, is a release candidate.
       - name: Create the release
         run: |
           prerelease=""
           if [[ "${GITHUB_REF_NAME}" == *-* ]]; then prerelease="--prerelease"; fi
           gh release create "${GITHUB_REF_NAME}" --verify-tag ${prerelease} \
-            --title "TyPy ${GITHUB_REF_NAME#v}" --notes-file notes.md \
+            --title "TyPy ${GITHUB_REF_NAME#v}" --notes-file dist/notes.md \
             dist/*.tar.gz dist/*.tar.gz.sha256
       - name: Install the release back and run a program
         run: |
