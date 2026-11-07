@@ -58,7 +58,10 @@ pub unsafe extern "C" fn typy_rt_write_stdout(text: *const StrObject) {
 
 #[cfg(test)]
 mod tests {
-    use super::{CAPACITY, STDOUT_BUFFER, flush_stdout, typy_rt_write_stdout, write_stderr};
+    use super::{
+        CAPACITY, STDOUT_BUFFER, flush_stdout, typy_rt_write_stdout, write_stderr,
+        write_stdout_bytes,
+    };
     use crate::string::from_str;
 
     #[test]
@@ -72,5 +75,15 @@ mod tests {
         unsafe { typy_rt_write_stdout(from_str(&large)) };
         write_stderr(b"");
         assert_eq!(STDOUT_BUFFER.with(|buffer| buffer.used), 0);
+    }
+
+    #[test]
+    fn bytes_larger_than_the_buffer_are_written_at_once() {
+        flush_stdout();
+        write_stdout_bytes(&[b'\n'; CAPACITY + 1]);
+        assert_eq!(STDOUT_BUFFER.with(|buffer| buffer.used), 0);
+        write_stdout_bytes(b"\n");
+        assert_eq!(STDOUT_BUFFER.with(|buffer| buffer.used), 1);
+        flush_stdout();
     }
 }

@@ -74,6 +74,10 @@ All notable changes to TyPy are recorded here. The format follows
   memory access the runtime makes is checked. `make miri` runs the
   runtime's unit tests under Miri, and `make fuzz` fuzzes the source,
   checking and lowering stages.
+- `make check` measures branch coverage as well as line coverage and fails
+  below 95 percent of either (NFR-11); `make coverage-branches` runs that
+  measurement alone, and `make test-int`, `make test-e2e` and
+  `make test-all` run one test level each.
 - Golden tests of every text stage of `--emit` and of rendered
   diagnostics in `tests/golden/`; `make bless` rewrites them.
 - End-to-end tests for a missing or failing C toolchain, an empty program,

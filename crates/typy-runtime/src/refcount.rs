@@ -115,4 +115,18 @@ mod tests {
             typy_rt_int_decrement(7);
         }
     }
+
+    #[test]
+    fn large_int_words_are_counted_like_objects() {
+        let word = crate::int::value::Integer::from_i128(1 << 70).into_word();
+        let object = crate::int::object_of(word);
+        // SAFETY: the integer is live until its last reference is dropped at the end.
+        unsafe {
+            typy_rt_int_increment(word);
+            assert_eq!((*object).header.reference_count, 2);
+            typy_rt_int_decrement(word);
+            assert_eq!((*object).header.reference_count, 1);
+            typy_rt_int_decrement(word);
+        }
+    }
 }

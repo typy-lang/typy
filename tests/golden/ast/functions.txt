@@ -54,35 +54,56 @@ Module
           Call @14:26
             Name str @14:26
             Name n @14:30
-  For @17:1
-    Name i @17:5
-    Call @17:10
-      Name range @17:10
-      UnaryOp USub @17:16
-        Constant Int("1") @17:17
-      Constant Int("3") @17:20
+  FunctionDef report @17:1
+    Parameter n Normal @17:12
+      Name int @17:15
+    returns
+      Constant None @17:23
     body
-      Expr @18:5
-        Call @18:5
-          Name print @18:5
-          Call @18:11
-            Name describe @18:11
-            Name i @18:20
-          Call @18:24
-            Name gcd @18:24
-            BinOp Mult @18:28
-              Name i @18:28
-              Constant Int("18") @18:32
-          keyword sep @18:37
-            Constant Str(": ") @18:41
-  Expr @19:1
-    Call @19:1
-      Name print @19:1
-      BinOp FloorDiv @19:7
-        BinOp Pow @19:7
-          Constant Int("2") @19:7
-          Constant Int("70") @19:12
-        Constant Int("3") @19:18
-      BinOp Div @19:21
-        Constant Int("7") @19:21
-        Constant Int("2") @19:25
+      If @18:5
+        Compare [Gt] @18:8
+          Name n @18:8
+          Constant Int("1") @18:12
+        body
+          Return @19:9
+      Expr @20:5
+        Call @20:5
+          Name print @20:5
+          Constant Str("small") @20:11
+          Name n @20:20
+  For @23:1
+    Name i @23:5
+    Call @23:10
+      Name range @23:10
+      UnaryOp USub @23:16
+        Constant Int("1") @23:17
+      Constant Int("3") @23:20
+    body
+      Expr @24:5
+        Call @24:5
+          Name print @24:5
+          Call @24:11
+            Name describe @24:11
+            Name i @24:20
+          Call @24:24
+            Name gcd @24:24
+            BinOp Mult @24:28
+              Name i @24:28
+              Constant Int("18") @24:32
+          keyword sep @24:37
+            Constant Str(": ") @24:41
+      Expr @25:5
+        Call @25:5
+          Name report @25:5
+          Name i @25:12
+  Expr @26:1
+    Call @26:1
+      Name print @26:1
+      BinOp FloorDiv @26:7
+        BinOp Pow @26:7
+          Constant Int("2") @26:7
+          Constant Int("70") @26:12
+        Constant Int("3") @26:18
+      BinOp Div @26:21
+        Constant Int("7") @26:21
+        Constant Int("2") @26:25

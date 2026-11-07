@@ -131,6 +131,16 @@ mod tests {
     use typy_diagnostics::{FileId, TextOffset};
 
     #[test]
+    fn a_main_file_that_is_a_directory_is_e0105() {
+        let directory = tempfile::tempdir().unwrap();
+        let root = camino::Utf8PathBuf::from_path_buf(directory.path().to_owned()).unwrap();
+        std::fs::create_dir(root.join("app.py")).unwrap();
+        let (file, diagnostic) = SourceFile::read(FileId(0), &root, Utf8Path::new("app.py"));
+        assert_eq!(diagnostic.unwrap().code().to_string(), "E0105");
+        assert_eq!(file.text(), "");
+    }
+
+    #[test]
     fn byte_order_mark_is_removed() {
         let file = SourceFile::from_text(FileId(0), "a.py".into(), "\u{feff}x = 1\n");
         assert_eq!(file.text(), "x = 1\n");

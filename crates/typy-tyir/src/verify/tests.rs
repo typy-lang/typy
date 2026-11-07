@@ -137,6 +137,20 @@ fn a_value_used_on_a_path_its_definition_is_not_on_fails() {
 }
 
 #[test]
+fn a_function_without_an_entry_block_fails() {
+    let mut function = division();
+    function.blocks.clear();
+    assert!(message(&module(function)).contains("has no entry block"));
+}
+
+#[test]
+fn a_definition_of_a_value_without_a_type_fails() {
+    let mut function = division();
+    function.blocks[0].instructions[1].result = Some(ValueId(99));
+    assert!(message(&module(function)).contains("v99 has no type"));
+}
+
+#[test]
 fn a_value_defined_twice_fails() {
     let mut function = division();
     function.blocks[0].instructions[1].result = Some(ValueId(2));

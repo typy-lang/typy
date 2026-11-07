@@ -11,8 +11,12 @@ impl BodyChecker<'_> {
     /// Returns true when `left ** right` with a float exponent cannot be complex in CPython: the exponent is an integral literal, or the base is a non-negative literal (EXP-04).
     fn float_power_is_real(left: &TypedExpr, right: &TypedExpr) -> bool {
         let integral_exponent = matches!(&right.kind, TypedExprKind::Constant(TypedConstant::Float(value)) if value.fract() == 0.0);
-        let literal_base = matches!(&left.kind, TypedExprKind::Constant(TypedConstant::Int(_)))
-            || matches!(&left.kind, TypedExprKind::Constant(TypedConstant::Float(value)) if *value >= 0.0);
+        // A literal is never negative: `-1.5` is the negation of the literal `1.5`, which is an
+        // operation, so a constant base is a non-negative literal.
+        let literal_base = matches!(
+            &left.kind,
+            TypedExprKind::Constant(TypedConstant::Int(_) | TypedConstant::Float(_))
+        );
         integral_exponent || literal_base
     }
 

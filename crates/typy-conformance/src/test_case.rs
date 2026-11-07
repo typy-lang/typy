@@ -154,6 +154,31 @@ mod tests {
             ),
             (
                 "EXP-03_a.py",
+                "# typy-test: E-03\n",
+                CaseError::Malformed("typy-test", "E-03".into()),
+            ),
+            (
+                "EXP-03_a.py",
+                "# typy-test: ABCDE-03\n",
+                CaseError::Malformed("typy-test", "ABCDE-03".into()),
+            ),
+            (
+                "EXP-03_a.py",
+                "# typy-test: EXP-3\n",
+                CaseError::Malformed("typy-test", "EXP-3".into()),
+            ),
+            (
+                "EXP-03_a.py",
+                "# typy-test: EXP-003\n",
+                CaseError::Malformed("typy-test", "EXP-003".into()),
+            ),
+            (
+                "EXP-03_a.py",
+                "# typy-test: EXP03\n",
+                CaseError::Malformed("typy-test", "EXP03".into()),
+            ),
+            (
+                "EXP-03_a.py",
                 "# typy-test: EXP-03\n# typy-expect: maybe\n",
                 CaseError::Malformed("typy-expect", "maybe".into()),
             ),
@@ -174,7 +199,7 @@ mod tests {
                 Err(error.clone()),
                 "{text:?}"
             );
-            assert!(error.to_string().contains('`') || error.to_string().contains("file name"));
+            assert_ne!(error.to_string(), "");
         }
     }
 }

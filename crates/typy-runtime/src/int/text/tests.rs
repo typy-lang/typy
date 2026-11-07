@@ -136,3 +136,23 @@ fn malformed_text_raises_with_the_quoted_input() {
         Err("int() base must be >= 2 and <= 36, or 0".to_owned())
     );
 }
+
+#[test]
+fn a_base_that_is_a_large_int_is_refused() {
+    // SAFETY: the string is live, the base word points to a live large integer, and the
+    // exception is live.
+    unsafe {
+        let result = typy_rt_int_from_str(from_str("10"), word(1 << 70));
+        assert!(text((*result.exception).message).starts_with("int() base must be >= 2 and <= 36"));
+    }
+}
+
+#[test]
+fn text_of_more_than_4300_decimal_digits_is_refused() {
+    let digits = "1".repeat(4301);
+    let refused = parse(&digits, 10).unwrap_err();
+    assert!(
+        refused.starts_with("Exceeds the limit (4300 digits)"),
+        "{refused}"
+    );
+}

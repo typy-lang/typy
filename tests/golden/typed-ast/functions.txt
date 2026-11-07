@@ -1,4 +1,4 @@
-Program entry fn2
+Program entry fn3
 Function fn0 __main__.gcd(a: int, b: int) -> int @1:1
   locals remainder: int
   body
@@ -39,31 +39,46 @@ Function fn1 __main__.describe(n: int) -> str @9:1
         Constant Str("positive ") : str @14:12
         Builtin Str : str @14:26
           Local n : int @14:30
-Function fn2 __main__.<module>() -> None @17:1
+Function fn2 __main__.report(n: int) -> None @17:1
+  body
+    If @18:5
+      Compare [Gt] : bool @18:8
+        Local n : int @18:8
+        Constant Int("1") : int @18:12
+      body
+        Return @19:9
+    Expr @20:5
+      Print sep=false end=false : None @20:5
+        Constant Str("small") : str @20:11
+        Local n : int @20:20
+Function fn3 __main__.<module>() -> None @23:1
   locals i: int
   body
-    ForRange i: int @17:1
-      Unary USub : int @17:16
-        Constant Int("1") : int @17:17
-      Constant Int("3") : int @17:20
-      Constant Int("1") : int @17:10
+    ForRange i: int @23:1
+      Unary USub : int @23:16
+        Constant Int("1") : int @23:17
+      Constant Int("3") : int @23:20
+      Constant Int("1") : int @23:10
       body
-        Expr @18:5
-          Print sep=true end=false : None @18:5
-            Call describe : str @18:11
-              Local i : int @18:20
-            Call gcd : int @18:24
-              Binary Mult : int @18:28
-                Local i : int @18:28
-                Constant Int("18") : int @18:32
-            Constant Str(": ") : str @18:41
-    Expr @19:1
-      Print sep=false end=false : None @19:1
-        Binary FloorDiv : int @19:7
-          Binary Pow : int @19:7
-            Constant Int("2") : int @19:7
-            Constant Int("70") : int @19:12
-          Constant Int("3") : int @19:18
-        Binary Div : float @19:21
-          Constant Int("7") : int @19:21
-          Constant Int("2") : int @19:25
+        Expr @24:5
+          Print sep=true end=false : None @24:5
+            Call describe : str @24:11
+              Local i : int @24:20
+            Call gcd : int @24:24
+              Binary Mult : int @24:28
+                Local i : int @24:28
+                Constant Int("18") : int @24:32
+            Constant Str(": ") : str @24:41
+        Expr @25:5
+          Call report : None @25:5
+            Local i : int @25:12
+    Expr @26:1
+      Print sep=false end=false : None @26:1
+        Binary FloorDiv : int @26:7
+          Binary Pow : int @26:7
+            Constant Int("2") : int @26:7
+            Constant Int("70") : int @26:12
+          Constant Int("3") : int @26:18
+        Binary Div : float @26:21
+          Constant Int("7") : int @26:21
+          Constant Int("2") : int @26:25

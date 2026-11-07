@@ -105,8 +105,16 @@ mod tests {
 
     #[test]
     fn only_int_and_float_are_numeric() {
-        assert!(Type::Int.is_numeric() && Type::Float.is_numeric());
-        assert!(!Type::Bool.is_numeric() && !Type::Str.is_numeric());
+        let numeric: Vec<bool> = [
+            Type::Int,
+            Type::Float,
+            Type::Bool,
+            Type::Str,
+            Type::NoneType,
+        ]
+        .map(Type::is_numeric)
+        .to_vec();
+        assert_eq!(numeric, [true, true, false, false, false]);
     }
 
     #[test]

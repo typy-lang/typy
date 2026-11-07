@@ -174,6 +174,7 @@ fn rejected_programs_give_their_codes() {
         ("x: float = 1\n", &["E0402"]),
         ("def f(x: float) -> None:\n    pass\nf(1)\n", &["E0404"]),
         ("def f() -> float:\n    return 1\n", &["E0405"]),
+        ("def f() -> float:\n    return \"a\"\n", &["E0405"]),
         ("def f(x) -> None:\n    pass\n", &["E0203"]),
         ("def f(x: int):\n    pass\n", &["E0204"]),
         ("def f(x: Any) -> None:\n    pass\n", &["E0403"]),
@@ -485,4 +486,185 @@ Function fn1 __main__.<module>() -> None @5:1
     Pass @13:1
 "#;
     assert_eq!(typy_check::dump(&program, &project), expected.trim_start());
+}
+
+/// Returns the type of `expression` over `i: int`, `f: float`, `s: str`, `b: bool` and
+/// `n: None`, or the codes it is rejected with.
+fn type_of(expression: &str) -> Result<String, Vec<String>> {
+    let source = format!("i = 1\nf = 1.5\ns = \"a\"\nb = True\nn = None\nx = {expression}\n");
+    let program = check(&source)?;
+    let symbol = program
+        .symbols
+        .iter()
+        .find(|symbol| symbol.name == "x")
+        .unwrap();
+    Ok(symbol.ty.to_string())
+}
+
+#[test]
+fn each_operator_gives_python_s_result_type_or_its_diagnostic() {
+    let cases: &[(&str, Result<&str, &[&str]>)] = &[
+        // bool takes only the bitwise operators and `not` (DAT-03).
+        ("b & b", Ok("bool")),
+        ("b | b", Ok("bool")),
+        ("b ^ b", Ok("bool")),
+        ("not b", Ok("bool")),
+        ("b + 1", Err(&["E0406"])),
+        ("1 + b", Err(&["E0406"])),
+        ("-b", Err(&["E0406"])),
+        ("~b", Err(&["E0406"])),
+        ("b & i", Err(&["E0406"])),
+        // str concatenation and repetition.
+        ("s + s", Ok("str")),
+        ("s * i", Ok("str")),
+        ("i * s", Ok("str")),
+        ("s * f", Err(&["E0401"])),
+        ("s - s", Err(&["E0401"])),
+        ("s + i", Err(&["E0401"])),
+        ("s % i", Err(&["E0201"])),
+        // Arithmetic: int with int stays int, anything with float is float (EXP-02).
+        ("i + i", Ok("int")),
+        ("i + f", Ok("float")),
+        ("f - i", Ok("float")),
+        ("i * f", Ok("float")),
+        ("i // f", Ok("float")),
+        ("i % i", Ok("int")),
+        ("f % f", Ok("float")),
+        ("i / i", Ok("float")),
+        ("f / i", Ok("float")),
+        ("i / s", Err(&["E0401"])),
+        ("n % i", Err(&["E0401"])),
+        ("s / i", Err(&["E0401"])),
+        ("s ** i", Err(&["E0401"])),
+        ("i - s", Err(&["E0401"])),
+        ("s // i", Err(&["E0401"])),
+        ("n * i", Err(&["E0401"])),
+        ("i % s", Err(&["E0401"])),
+        ("n - f", Err(&["E0401"])),
+        ("f // s", Err(&["E0401"])),
+        ("s >> i", Err(&["E0401"])),
+        ("i << f", Err(&["E0401"])),
+        ("n ** i", Err(&["E0401"])),
+        ("f / n", Err(&["E0401"])),
+        ("i @ i", Err(&["E0202"])),
+        ("n + i", Err(&["E0401"])),
+        // Powers with one result type (EXP-04).
+        ("i ** 2", Ok("int")),
+        ("i ** i", Err(&["E0302"])),
+        ("i ** s", Err(&["E0401"])),
+        ("i ** 2.0", Ok("float")),
+        ("f ** i", Ok("float")),
+        ("f ** 2.0", Ok("float")),
+        ("2.0 ** f", Ok("float")),
+        ("2 ** f", Ok("float")),
+        ("f ** 0.5", Err(&["E0302"])),
+        ("(-1.5) ** 0.5", Err(&["E0302"])),
+        // Shifts and bitwise operators take two ints (EXP-05).
+        ("i << i", Ok("int")),
+        ("i >> i", Ok("int")),
+        ("i & i", Ok("int")),
+        ("i | i", Ok("int")),
+        ("i ^ i", Ok("int")),
+        ("f << i", Err(&["E0401"])),
+        ("f & f", Err(&["E0401"])),
+        // Unary operators.
+        ("-f", Ok("float")),
+        ("+i", Ok("int")),
+        ("~i", Ok("int")),
+        ("~f", Err(&["E0401"])),
+        ("-s", Err(&["E0401"])),
+        ("+s", Err(&["E0401"])),
+        // Comparisons (EXP-06, EXP-08).
+        ("i == f", Ok("bool")),
+        ("s != s", Ok("bool")),
+        ("n == n", Ok("bool")),
+        ("s == i", Err(&["E0407"])),
+        ("i < f", Ok("bool")),
+        ("s <= s", Ok("bool")),
+        ("n < n", Err(&["E0407"])),
+        ("i > s", Err(&["E0407"])),
+        ("n is None", Ok("bool")),
+        ("i is not n", Ok("bool")),
+        ("s is s", Err(&["E0301"])),
+        // An operand that is already wrong gives no second error (DIA-04).
+        ("missing + 1", Err(&["E0205"])),
+        ("1 - missing", Err(&["E0205"])),
+        ("-missing", Err(&["E0205"])),
+        ("missing < 1", Err(&["E0205"])),
+        ("1 == missing", Err(&["E0205"])),
+    ];
+    let mut wrong = Vec::new();
+    for (expression, expected) in cases {
+        let expected = expected.map(str::to_owned).map_err(|codes| {
+            codes
+                .iter()
+                .map(|code| (*code).to_owned())
+                .collect::<Vec<_>>()
+        });
+        let actual = type_of(expression);
+        if actual != expected {
+            wrong.push(format!(
+                "{expression}: expected {expected:?}, got {actual:?}"
+            ));
+        }
+    }
+    assert!(wrong.is_empty(), "{}", wrong.join("\n"));
+}
+
+#[test]
+fn each_builtin_call_name_and_statement_rule_gives_its_code() {
+    let cases: &[(&str, &[&str])] = &[
+        // An argument that is already wrong gives no second error (DIA-04).
+        ("print(missing)\n", &["E0205"]),
+        ("print(missing[0])\n", &["E0205"]),
+        ("print(\"a\"[missing])\n", &["E0205"]),
+        // Arity of the builtins (LIB-01).
+        ("print(len())\n", &["E0404"]),
+        ("print(ord())\n", &["E0404"]),
+        ("print(chr(1, 2))\n", &["E0404"]),
+        ("print(repr())\n", &["E0404"]),
+        ("print(abs())\n", &["E0404"]),
+        ("print(min(1))\n", &["E0201"]),
+        ("print(max())\n", &["E0404"]),
+        ("print(len(missing))\n", &["E0205"]),
+        ("print(1 and \"a\")\n", &["E0303"]),
+        // Module variables inside functions need `global`, which arrives in 0.3.
+        ("count = 1\ndef f() -> int:\n    return count\n", &["E0201"]),
+        ("count = 1\ndef f() -> None:\n    count()\n", &["E0201"]),
+        // Functions, builtins and exception classes are not values in 0.1.
+        ("x = len\n", &["E0201"]),
+        ("x = BaseException\n", &["E0201"]),
+        ("x = UserWarning\n", &["E0201"]),
+        ("x = ExceptionGroup\n", &["E0201"]),
+        // A return value of another type (TYP-03, TYP-09).
+        ("def f() -> str:\n    return 1\n", &["E0405"]),
+        ("def f() -> float:\n    return 1\n", &["E0405"]),
+        // `for` takes only a call of `range` with one to three positional arguments (CST-02).
+        ("for i in range(1, 2, 3, 4):\n    pass\n", &["E0201"]),
+        ("for i in range(stop=3):\n    pass\n", &["E0201"]),
+        ("for i in len(\"abc\"):\n    pass\n", &["E0201"]),
+        // A default is a constant (EXP-16).
+        ("def f(n: int = 1 + 1) -> int:\n    return n\n", &["E0201"]),
+    ];
+    let mut wrong = Vec::new();
+    for (source, expected) in cases {
+        let actual = rejected(source);
+        if actual != *expected {
+            wrong.push(format!("{source:?}: expected {expected:?}, got {actual:?}"));
+        }
+    }
+    assert!(wrong.is_empty(), "{}", wrong.join("\n"));
+}
+
+#[test]
+fn a_repeated_annotation_of_the_same_type_is_accepted() {
+    accepted("x: int = 1\nx: int = 2\nprint(x)\n");
+}
+
+#[test]
+fn a_variable_read_twice_before_assignment_is_reported_once() {
+    let (_directory, project) = load("b = True\nif b:\n    r = 1\nprint(r)\nprint(r)\n");
+    let diagnostics = TypeChecker::check(&project).unwrap_err();
+    let codes: Vec<String> = diagnostics.iter().map(|d| d.code().to_string()).collect();
+    assert_eq!(codes, ["E0306"]);
 }

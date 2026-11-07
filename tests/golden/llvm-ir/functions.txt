@@ -9,10 +9,12 @@ target triple = "x86_64-unknown-linux-gnu"
 @typy.str.1 = private unnamed_addr constant { i32, i32, i64, i32, i32, [9 x i8] } { i32 -1, i32 1, i64 9, i32 1, i32 0, [9 x i8] c"positive " }
 @typy.cstr.2 = private unnamed_addr constant [9 x i8] c"describe\00"
 @typy.str.2 = private unnamed_addr constant { i32, i32, i64, i32, i32, [4 x i8] } { i32 -1, i32 1, i64 4, i32 1, i32 0, [4 x i8] c"zero" }
-@typy.cstr.3 = private unnamed_addr constant [9 x i8] c"<module>\00"
-@typy.str.3 = private unnamed_addr constant { i32, i32, i64, i32, i32, [2 x i8] } { i32 -1, i32 1, i64 2, i32 1, i32 0, [2 x i8] c": " }
-@typy.str.4 = private unnamed_addr constant { i32, i32, i64, i32, i32, [1 x i8] } { i32 -1, i32 1, i64 1, i32 1, i32 0, [1 x i8] c"\0A" }
-@typy.str.5 = private unnamed_addr constant { i32, i32, i64, i32, i32, [1 x i8] } { i32 -1, i32 1, i64 1, i32 1, i32 0, [1 x i8] c" " }
+@typy.str.3 = private unnamed_addr constant { i32, i32, i64, i32, i32, [5 x i8] } { i32 -1, i32 1, i64 5, i32 1, i32 0, [5 x i8] c"small" }
+@typy.str.4 = private unnamed_addr constant { i32, i32, i64, i32, i32, [1 x i8] } { i32 -1, i32 1, i64 1, i32 1, i32 0, [1 x i8] c" " }
+@typy.cstr.3 = private unnamed_addr constant [7 x i8] c"report\00"
+@typy.str.5 = private unnamed_addr constant { i32, i32, i64, i32, i32, [1 x i8] } { i32 -1, i32 1, i64 1, i32 1, i32 0, [1 x i8] c"\0A" }
+@typy.cstr.4 = private unnamed_addr constant [9 x i8] c"<module>\00"
+@typy.str.6 = private unnamed_addr constant { i32, i32, i64, i32, i32, [2 x i8] } { i32 -1, i32 1, i64 2, i32 1, i32 0, [2 x i8] c": " }
 
 define internal { i64, ptr } @_TY8__main__3gcd(i64 %0, i64 %1) {
 b0:
@@ -172,6 +174,61 @@ traceback:                                        ; preds = %b5
   br label %b11
 }
 
+define internal ptr @_TY8__main__6report(i64 %0) {
+b0:
+  %s0 = alloca i64, align 8
+  call void @typy_rt_int_increment(i64 %0)
+  store i64 %0, ptr %s0, align 8
+  br label %b1
+
+b1:                                               ; preds = %b0
+  %1 = load i64, ptr %s0, align 8
+  %2 = call i8 @typy_rt_int_compare(i64 %1, i64 3, i64 9)
+  %3 = icmp ne i8 %2, 0
+  br label %b2
+
+b2:                                               ; preds = %b1
+  %v1 = phi i1 [ %3, %b1 ]
+  br i1 %v1, label %b3, label %b4
+
+b3:                                               ; preds = %b2
+  %4 = load i64, ptr %s0, align 8
+  call void @typy_rt_int_decrement(i64 %4)
+  ret ptr null
+
+b4:                                               ; preds = %b2
+  br label %b5
+
+b5:                                               ; preds = %b4
+  %5 = load i64, ptr %s0, align 8
+  call void @typy_rt_write_stdout(ptr @typy.str.3)
+  call void @typy_rt_write_stdout(ptr @typy.str.4)
+  %6 = call { ptr, ptr } @typy_rt_int_to_str(i64 %5)
+  %7 = extractvalue { ptr, ptr } %6, 0
+  %8 = extractvalue { ptr, ptr } %6, 1
+  %9 = icmp ne ptr %8, null
+  br i1 %9, label %traceback, label %b6
+
+b6:                                               ; preds = %b5
+  %v12 = phi ptr [ %7, %b5 ]
+  call void @typy_rt_write_stdout(ptr %v12)
+  call void @typy_rt_decrement(ptr %v12)
+  call void @typy_rt_write_stdout(ptr @typy.str.5)
+  %10 = load i64, ptr %s0, align 8
+  call void @typy_rt_int_decrement(i64 %10)
+  ret ptr null
+
+b7:                                               ; preds = %traceback
+  %v13 = phi ptr [ %8, %traceback ]
+  %11 = load i64, ptr %s0, align 8
+  call void @typy_rt_int_decrement(i64 %11)
+  ret ptr %v13
+
+traceback:                                        ; preds = %b5
+  call void @typy_rt_traceback_add(ptr %8, ptr @typy.cstr.3, ptr @typy.cstr.1, i32 20)
+  br label %b7
+}
+
 define ptr @__typy_main() {
 b0:
   %s0 = alloca i64, align 8
@@ -219,7 +276,7 @@ b3:                                               ; preds = %b2
   %14 = icmp ne ptr %13, null
   br i1 %14, label %traceback, label %b7
 
-b4:                                               ; preds = %b11
+b4:                                               ; preds = %b13
   %15 = load i64, ptr %s1, align 8
   %16 = load i64, ptr %s3, align 8
   %17 = call i64 @typy_rt_int_add(i64 %15, i64 %16)
@@ -236,7 +293,7 @@ b6:                                               ; preds = %b5
   %20 = extractvalue { i64, ptr } %19, 0
   %21 = extractvalue { i64, ptr } %19, 1
   %22 = icmp ne ptr %21, null
-  br i1 %22, label %traceback1, label %b13
+  br i1 %22, label %traceback1, label %b15
 
 b7:                                               ; preds = %b3
   %v13 = phi ptr [ %12, %b3 ]
@@ -264,7 +321,7 @@ b9:                                               ; preds = %b7
   %v23 = phi i64 [ %26, %b7 ]
   call void @typy_rt_int_decrement(i64 %24)
   call void @typy_rt_write_stdout(ptr %v13)
-  call void @typy_rt_write_stdout(ptr @typy.str.3)
+  call void @typy_rt_write_stdout(ptr @typy.str.6)
   %33 = call { ptr, ptr } @typy_rt_int_to_str(i64 %v23)
   %34 = extractvalue { ptr, ptr } %33, 0
   %35 = extractvalue { ptr, ptr } %33, 1
@@ -289,148 +346,170 @@ b11:                                              ; preds = %b9
   %v32 = phi ptr [ %34, %b9 ]
   call void @typy_rt_write_stdout(ptr %v32)
   call void @typy_rt_decrement(ptr %v32)
-  call void @typy_rt_write_stdout(ptr @typy.str.4)
+  call void @typy_rt_write_stdout(ptr @typy.str.5)
   call void @typy_rt_int_decrement(i64 %v23)
   call void @typy_rt_decrement(ptr %v13)
-  br label %b4
+  %41 = load i64, ptr %s0, align 8
+  %42 = call ptr @_TY8__main__6report(i64 %41)
+  %43 = icmp ne ptr %42, null
+  br i1 %43, label %traceback4, label %b13
 
 b12:                                              ; preds = %traceback3
   %v33 = phi ptr [ %35, %traceback3 ]
   call void @typy_rt_decrement(ptr %v13)
   call void @typy_rt_int_decrement(i64 %v23)
-  %41 = load i64, ptr %s0, align 8
-  call void @typy_rt_int_decrement(i64 %41)
-  %42 = load i64, ptr %s1, align 8
-  call void @typy_rt_int_decrement(i64 %42)
-  %43 = load i64, ptr %s2, align 8
-  call void @typy_rt_int_decrement(i64 %43)
-  %44 = load i64, ptr %s3, align 8
+  %44 = load i64, ptr %s0, align 8
   call void @typy_rt_int_decrement(i64 %44)
+  %45 = load i64, ptr %s1, align 8
+  call void @typy_rt_int_decrement(i64 %45)
+  %46 = load i64, ptr %s2, align 8
+  call void @typy_rt_int_decrement(i64 %46)
+  %47 = load i64, ptr %s3, align 8
+  call void @typy_rt_int_decrement(i64 %47)
   ret ptr %v33
 
-b13:                                              ; preds = %b6
-  %v48 = phi i64 [ %20, %b6 ]
-  %45 = call { i64, ptr } @typy_rt_int_floor_divide(i64 %v48, i64 7)
-  %46 = extractvalue { i64, ptr } %45, 0
-  %47 = extractvalue { i64, ptr } %45, 1
-  %48 = icmp ne ptr %47, null
-  br i1 %48, label %traceback4, label %b15
+b13:                                              ; preds = %b11
+  br label %b4
 
-b14:                                              ; preds = %traceback1
-  %v49 = phi ptr [ %21, %traceback1 ]
-  %49 = load i64, ptr %s0, align 8
+b14:                                              ; preds = %traceback4
+  %v44 = phi ptr [ %42, %traceback4 ]
+  %48 = load i64, ptr %s0, align 8
+  call void @typy_rt_int_decrement(i64 %48)
+  %49 = load i64, ptr %s1, align 8
   call void @typy_rt_int_decrement(i64 %49)
-  %50 = load i64, ptr %s1, align 8
+  %50 = load i64, ptr %s2, align 8
   call void @typy_rt_int_decrement(i64 %50)
-  %51 = load i64, ptr %s2, align 8
+  %51 = load i64, ptr %s3, align 8
   call void @typy_rt_int_decrement(i64 %51)
-  %52 = load i64, ptr %s3, align 8
-  call void @typy_rt_int_decrement(i64 %52)
-  ret ptr %v49
+  ret ptr %v44
 
-b15:                                              ; preds = %b13
-  %v55 = phi i64 [ %46, %b13 ]
-  call void @typy_rt_int_decrement(i64 %v48)
-  %53 = call { double, ptr } @typy_rt_int_true_divide(i64 15, i64 5)
-  %54 = extractvalue { double, ptr } %53, 0
-  %55 = extractvalue { double, ptr } %53, 1
-  %56 = icmp ne ptr %55, null
-  br i1 %56, label %traceback5, label %b17
+b15:                                              ; preds = %b6
+  %v55 = phi i64 [ %20, %b6 ]
+  %52 = call { i64, ptr } @typy_rt_int_floor_divide(i64 %v55, i64 7)
+  %53 = extractvalue { i64, ptr } %52, 0
+  %54 = extractvalue { i64, ptr } %52, 1
+  %55 = icmp ne ptr %54, null
+  br i1 %55, label %traceback5, label %b17
 
-b16:                                              ; preds = %traceback4
-  %v56 = phi ptr [ %47, %traceback4 ]
-  call void @typy_rt_int_decrement(i64 %v48)
-  %57 = load i64, ptr %s0, align 8
+b16:                                              ; preds = %traceback1
+  %v56 = phi ptr [ %21, %traceback1 ]
+  %56 = load i64, ptr %s0, align 8
+  call void @typy_rt_int_decrement(i64 %56)
+  %57 = load i64, ptr %s1, align 8
   call void @typy_rt_int_decrement(i64 %57)
-  %58 = load i64, ptr %s1, align 8
+  %58 = load i64, ptr %s2, align 8
   call void @typy_rt_int_decrement(i64 %58)
-  %59 = load i64, ptr %s2, align 8
+  %59 = load i64, ptr %s3, align 8
   call void @typy_rt_int_decrement(i64 %59)
-  %60 = load i64, ptr %s3, align 8
-  call void @typy_rt_int_decrement(i64 %60)
   ret ptr %v56
 
 b17:                                              ; preds = %b15
-  %v63 = phi double [ %54, %b15 ]
-  %61 = call { ptr, ptr } @typy_rt_int_to_str(i64 %v55)
-  %62 = extractvalue { ptr, ptr } %61, 0
-  %63 = extractvalue { ptr, ptr } %61, 1
-  %64 = icmp ne ptr %63, null
-  br i1 %64, label %traceback6, label %b19
+  %v62 = phi i64 [ %53, %b15 ]
+  call void @typy_rt_int_decrement(i64 %v55)
+  %60 = call { double, ptr } @typy_rt_int_true_divide(i64 15, i64 5)
+  %61 = extractvalue { double, ptr } %60, 0
+  %62 = extractvalue { double, ptr } %60, 1
+  %63 = icmp ne ptr %62, null
+  br i1 %63, label %traceback6, label %b19
 
 b18:                                              ; preds = %traceback5
-  %v64 = phi ptr [ %55, %traceback5 ]
+  %v63 = phi ptr [ %54, %traceback5 ]
   call void @typy_rt_int_decrement(i64 %v55)
-  %65 = load i64, ptr %s0, align 8
+  %64 = load i64, ptr %s0, align 8
+  call void @typy_rt_int_decrement(i64 %64)
+  %65 = load i64, ptr %s1, align 8
   call void @typy_rt_int_decrement(i64 %65)
-  %66 = load i64, ptr %s1, align 8
+  %66 = load i64, ptr %s2, align 8
   call void @typy_rt_int_decrement(i64 %66)
-  %67 = load i64, ptr %s2, align 8
+  %67 = load i64, ptr %s3, align 8
   call void @typy_rt_int_decrement(i64 %67)
-  %68 = load i64, ptr %s3, align 8
-  call void @typy_rt_int_decrement(i64 %68)
-  ret ptr %v64
+  ret ptr %v63
 
 b19:                                              ; preds = %b17
-  %v70 = phi ptr [ %62, %b17 ]
-  call void @typy_rt_write_stdout(ptr %v70)
-  call void @typy_rt_decrement(ptr %v70)
-  call void @typy_rt_write_stdout(ptr @typy.str.5)
-  %69 = call ptr @typy_rt_float_to_str(double %v63)
-  call void @typy_rt_write_stdout(ptr %69)
-  call void @typy_rt_decrement(ptr %69)
-  call void @typy_rt_write_stdout(ptr @typy.str.4)
-  call void @typy_rt_int_decrement(i64 %v55)
-  %70 = load i64, ptr %s0, align 8
-  call void @typy_rt_int_decrement(i64 %70)
-  %71 = load i64, ptr %s1, align 8
-  call void @typy_rt_int_decrement(i64 %71)
-  %72 = load i64, ptr %s2, align 8
-  call void @typy_rt_int_decrement(i64 %72)
-  %73 = load i64, ptr %s3, align 8
-  call void @typy_rt_int_decrement(i64 %73)
-  ret ptr null
+  %v70 = phi double [ %61, %b17 ]
+  %68 = call { ptr, ptr } @typy_rt_int_to_str(i64 %v62)
+  %69 = extractvalue { ptr, ptr } %68, 0
+  %70 = extractvalue { ptr, ptr } %68, 1
+  %71 = icmp ne ptr %70, null
+  br i1 %71, label %traceback7, label %b21
 
 b20:                                              ; preds = %traceback6
-  %v71 = phi ptr [ %63, %traceback6 ]
-  call void @typy_rt_int_decrement(i64 %v55)
-  %74 = load i64, ptr %s0, align 8
+  %v71 = phi ptr [ %62, %traceback6 ]
+  call void @typy_rt_int_decrement(i64 %v62)
+  %72 = load i64, ptr %s0, align 8
+  call void @typy_rt_int_decrement(i64 %72)
+  %73 = load i64, ptr %s1, align 8
+  call void @typy_rt_int_decrement(i64 %73)
+  %74 = load i64, ptr %s2, align 8
   call void @typy_rt_int_decrement(i64 %74)
-  %75 = load i64, ptr %s1, align 8
+  %75 = load i64, ptr %s3, align 8
   call void @typy_rt_int_decrement(i64 %75)
-  %76 = load i64, ptr %s2, align 8
-  call void @typy_rt_int_decrement(i64 %76)
-  %77 = load i64, ptr %s3, align 8
-  call void @typy_rt_int_decrement(i64 %77)
   ret ptr %v71
 
+b21:                                              ; preds = %b19
+  %v77 = phi ptr [ %69, %b19 ]
+  call void @typy_rt_write_stdout(ptr %v77)
+  call void @typy_rt_decrement(ptr %v77)
+  call void @typy_rt_write_stdout(ptr @typy.str.4)
+  %76 = call ptr @typy_rt_float_to_str(double %v70)
+  call void @typy_rt_write_stdout(ptr %76)
+  call void @typy_rt_decrement(ptr %76)
+  call void @typy_rt_write_stdout(ptr @typy.str.5)
+  call void @typy_rt_int_decrement(i64 %v62)
+  %77 = load i64, ptr %s0, align 8
+  call void @typy_rt_int_decrement(i64 %77)
+  %78 = load i64, ptr %s1, align 8
+  call void @typy_rt_int_decrement(i64 %78)
+  %79 = load i64, ptr %s2, align 8
+  call void @typy_rt_int_decrement(i64 %79)
+  %80 = load i64, ptr %s3, align 8
+  call void @typy_rt_int_decrement(i64 %80)
+  ret ptr null
+
+b22:                                              ; preds = %traceback7
+  %v78 = phi ptr [ %70, %traceback7 ]
+  call void @typy_rt_int_decrement(i64 %v62)
+  %81 = load i64, ptr %s0, align 8
+  call void @typy_rt_int_decrement(i64 %81)
+  %82 = load i64, ptr %s1, align 8
+  call void @typy_rt_int_decrement(i64 %82)
+  %83 = load i64, ptr %s2, align 8
+  call void @typy_rt_int_decrement(i64 %83)
+  %84 = load i64, ptr %s3, align 8
+  call void @typy_rt_int_decrement(i64 %84)
+  ret ptr %v78
+
 traceback:                                        ; preds = %b3
-  call void @typy_rt_traceback_add(ptr %13, ptr @typy.cstr.3, ptr @typy.cstr.1, i32 18)
+  call void @typy_rt_traceback_add(ptr %13, ptr @typy.cstr.4, ptr @typy.cstr.1, i32 24)
   br label %b8
 
 traceback1:                                       ; preds = %b6
-  call void @typy_rt_traceback_add(ptr %21, ptr @typy.cstr.3, ptr @typy.cstr.1, i32 19)
-  br label %b14
+  call void @typy_rt_traceback_add(ptr %21, ptr @typy.cstr.4, ptr @typy.cstr.1, i32 26)
+  br label %b16
 
 traceback2:                                       ; preds = %b7
-  call void @typy_rt_traceback_add(ptr %27, ptr @typy.cstr.3, ptr @typy.cstr.1, i32 18)
+  call void @typy_rt_traceback_add(ptr %27, ptr @typy.cstr.4, ptr @typy.cstr.1, i32 24)
   br label %b10
 
 traceback3:                                       ; preds = %b9
-  call void @typy_rt_traceback_add(ptr %35, ptr @typy.cstr.3, ptr @typy.cstr.1, i32 18)
+  call void @typy_rt_traceback_add(ptr %35, ptr @typy.cstr.4, ptr @typy.cstr.1, i32 24)
   br label %b12
 
-traceback4:                                       ; preds = %b13
-  call void @typy_rt_traceback_add(ptr %47, ptr @typy.cstr.3, ptr @typy.cstr.1, i32 19)
-  br label %b16
+traceback4:                                       ; preds = %b11
+  call void @typy_rt_traceback_add(ptr %42, ptr @typy.cstr.4, ptr @typy.cstr.1, i32 25)
+  br label %b14
 
 traceback5:                                       ; preds = %b15
-  call void @typy_rt_traceback_add(ptr %55, ptr @typy.cstr.3, ptr @typy.cstr.1, i32 19)
+  call void @typy_rt_traceback_add(ptr %54, ptr @typy.cstr.4, ptr @typy.cstr.1, i32 26)
   br label %b18
 
 traceback6:                                       ; preds = %b17
-  call void @typy_rt_traceback_add(ptr %63, ptr @typy.cstr.3, ptr @typy.cstr.1, i32 19)
+  call void @typy_rt_traceback_add(ptr %62, ptr @typy.cstr.4, ptr @typy.cstr.1, i32 26)
   br label %b20
+
+traceback7:                                       ; preds = %b19
+  call void @typy_rt_traceback_add(ptr %70, ptr @typy.cstr.4, ptr @typy.cstr.1, i32 26)
+  br label %b22
 }
 
 declare void @typy_rt_int_increment(i64)
@@ -451,6 +530,8 @@ declare ptr @typy_rt_str_concat(ptr, ptr)
 
 declare void @typy_rt_decrement(ptr)
 
+declare void @typy_rt_write_stdout(ptr)
+
 declare i64 @typy_rt_int_negate(i64)
 
 declare i64 @typy_rt_int_add(i64, i64)
@@ -458,8 +539,6 @@ declare i64 @typy_rt_int_add(i64, i64)
 declare { i64, ptr } @typy_rt_int_power(i64, i64)
 
 declare i64 @typy_rt_int_multiply(i64, i64)
-
-declare void @typy_rt_write_stdout(ptr)
 
 declare { i64, ptr } @typy_rt_int_floor_divide(i64, i64)
 

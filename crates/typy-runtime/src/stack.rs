@@ -53,6 +53,19 @@ mod tests {
     use super::{record_limit, typy_rt_check_stack};
 
     #[test]
+    fn a_stack_past_its_limit_raises_recursion_error() {
+        super::LIMIT.with(|limit| *limit = usize::MAX);
+        let exception = typy_rt_check_stack();
+        super::LIMIT.with(|limit| *limit = 0);
+        assert!(!exception.is_null());
+        // SAFETY: the exception was just raised and nothing else refers to it.
+        unsafe {
+            assert_eq!((*exception).kind, crate::ExceptionKind::RecursionError);
+            crate::refcount::typy_rt_decrement(exception.cast());
+        }
+    }
+
+    #[test]
     #[cfg_attr(miri, ignore = "Miri cannot call `getrlimit`")]
     fn a_shallow_stack_passes_the_check() {
         record_limit();

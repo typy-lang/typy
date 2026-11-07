@@ -9,8 +9,8 @@ DIAGRAMS := $(filter-out docs/diagrams/style.puml,$(wildcard docs/diagrams/*.pum
 MARKDOWN := "**/*.md" "\#.tmp/**" "\#target/**"
 
 
-.PHONY: dev image shell runtime fmt fmt-check lint type test coverage docs-lint ascii-check traceability \
-	build bless miri fuzz runtime-size diagrams diagrams-check unicode-tables unicode-tables-check check hooks clean
+.PHONY: dev image shell runtime fmt fmt-check lint type test coverage docs-lint ascii-check traceability test-int test-e2e test-all \
+	build bless coverage-branches miri fuzz runtime-size diagrams diagrams-check unicode-tables unicode-tables-check check hooks clean
 
 dev: ## Start the dev service, building its image the first time
 	@$(COMPOSE) up -d --quiet-pull dev 2>/dev/null
@@ -42,9 +42,20 @@ type: dev ## Type check every crate and test
 test: runtime ## Run the unit tests
 	@$(EXEC) cargo nextest run --workspace --locked
 
+test-int: runtime ## Run the integration tests: the conformance suite, its sanitizer run, golden files and the pipeline
+	@$(EXEC) cargo nextest run -p typy-conformance -p typy-driver --locked
+
+test-e2e: runtime ## Run the end-to-end tests of the typy executable
+	@$(EXEC) cargo nextest run -p typy-cli --test cli --locked
+
+test-all: test miri ## Run every test level that runs on each commit, and Miri
 coverage: runtime ## Run the tests with coverage; fail below 95 percent of lines (NFR-11)
 	@$(EXEC) cargo llvm-cov nextest --workspace --locked --status-level fail \
-		--final-status-level fail --fail-under-lines 95 --summary-only
+		--final-status-level fail --fail-under-lines 95 --summary-only \
+		--ignore-filename-regex 'typy-conformance/'
+
+coverage-branches: runtime ## Measure line and branch coverage with nightly; fail below 95 percent of either (NFR-11)
+	@$(EXEC) scripts/coverage-branches.sh
 
 docs-lint: dev ## Lint every Markdown file with markdownlint-cli2
 	@$(EXEC) markdownlint-cli2 $(MARKDOWN)
@@ -79,7 +90,7 @@ unicode-tables: dev ## Write the runtime's Unicode tables from CPython 3.15's un
 unicode-tables-check: dev ## Fail when the committed Unicode tables differ from CPython 3.15's
 	@$(EXEC) python3.15 scripts/generate-unicode-tables.py --check
 
-check: fmt-check lint coverage docs-lint ascii-check traceability diagrams-check unicode-tables-check runtime-size ## Run the whole quality gate
+check: fmt-check lint coverage-branches docs-lint ascii-check traceability diagrams-check unicode-tables-check runtime-size ## Run the whole quality gate
 
 hooks: ## Use the hooks in .githooks for this clone
 	git config core.hooksPath .githooks

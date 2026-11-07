@@ -106,3 +106,27 @@ fn shifts_and_bit_lengths_agree_with_u128() {
         );
     }
 }
+
+#[test]
+fn division_cases_that_correct_the_quotient_estimate_satisfy_the_identity() {
+    // The Hacker's Delight test cases for Knuth's algorithm D, scaled to 64-bit limbs: the
+    // first estimates a quotient digit of the base or more, the second must add the divisor
+    // back after subtracting one product too many.
+    let cases: [(&[u64], &[u64]); 3] = [
+        (&[u64::MAX - 1, 0, 1 << 63], &[u64::MAX, 1 << 63]),
+        (&[0, 0, 1 << 63, (1 << 63) - 1], &[1, 0, 1 << 63]),
+        (&[0, 0, 0, u64::MAX], &[1, 0, u64::MAX]),
+    ];
+    for (dividend, divisor) in cases {
+        let (quotient, remainder) = divide(dividend, divisor);
+        assert_eq!(
+            compare(remainder.as_slice(), divisor),
+            core::cmp::Ordering::Less
+        );
+        let rebuilt = add(
+            multiply(quotient.as_slice(), divisor).as_slice(),
+            remainder.as_slice(),
+        );
+        assert_eq!(rebuilt.as_slice(), dividend, "{dividend:?} / {divisor:?}");
+    }
+}

@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy detailed design |
-| Version | 1.16 |
+| Version | 1.17 |
 | Status | Approved |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-07 |
@@ -575,7 +575,8 @@ after `return` does.
 
 ### 8.2 Verifier and text form
 
-`verify(module) -> Result<(), VerifyError>` checks that every value is
+`verify(module) -> Result<(), VerifyError>` checks that the entry
+function exists and every function has an entry block; that every value is
 defined once, and that its definition comes before each use on every path,
 by dominance; that operands, stored values, arguments and results have the
 types their operations take; that a call of a function that may raise is

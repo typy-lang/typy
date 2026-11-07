@@ -213,6 +213,23 @@ help: assign an int, or use a new variable
     }
 
     #[test]
+    fn a_fix_over_several_lines_is_not_shown_as_a_corrected_line() {
+        let diagnostic = Diagnostic::new(DiagnosticCode::error(402), span(4, 22), "wrong")
+            .with_fix(span(4, 22), "x");
+        let text = render_text(&diagnostic, &OneFile(SOURCE));
+        assert!(!text.contains("help: write it as"), "{text}");
+    }
+
+    #[test]
+    fn a_diagnostic_without_location_rule_or_help_is_its_header() {
+        let diagnostic = Diagnostic::without_location(DiagnosticCode::error(702), "link failed");
+        assert_eq!(
+            render_text(&diagnostic, &OneFile(SOURCE)),
+            "error[E0702]: link failed\n"
+        );
+    }
+
+    #[test]
     fn empty_span_gets_one_caret() {
         let diagnostic = Diagnostic::new(DiagnosticCode::error(103), span(0, 0), "unexpected end");
         let text = render_text(&diagnostic, &OneFile(SOURCE));

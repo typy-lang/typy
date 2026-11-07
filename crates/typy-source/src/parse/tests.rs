@@ -555,3 +555,28 @@ fn every_node_reports_the_span_it_was_built_with() {
         .collect();
     assert_eq!(lines, [1, 3, 4, 5, 6, 8, 10, 12, 13, 14, 15]);
 }
+
+#[test]
+fn async_loops_and_with_statements_keep_their_kind() {
+    let source = "async for x in y:\n    pass\nasync with z:\n    pass\n";
+    let kinds: Vec<NodeKind> = body(source)
+        .iter()
+        .map(|statement| match statement {
+            Stmt::Other { kind, .. } => *kind,
+            other => panic!("converted in detail: {other:?}"),
+        })
+        .collect();
+    assert_eq!(kinds, [NodeKind::AsyncFor, NodeKind::AsyncWith]);
+}
+
+#[test]
+fn a_parameter_without_annotation_is_dumped_without_one() {
+    let source = "def f(n):\n    pass\n";
+    let dumped = dump(
+        &parse(&file(source), PythonFloor::V3_12).unwrap(),
+        &file(source),
+    );
+    let expected =
+        "Module\n  FunctionDef f @1:1\n    Parameter n Normal @1:7\n    body\n      Pass @2:5\n";
+    assert_eq!(dumped, expected);
+}

@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy test plan |
-| Version | 0.9 |
+| Version | 0.10 |
 | Status | Draft |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-07 |
@@ -402,7 +402,7 @@ that the specification does not define.
 | NFR-08 | 0.1 | IT | `tests/sanitized.rs`: the conformance suite under LeakSanitizer |
 | NFR-09 | 0.1 | Fuzz | `make fuzz`, target `stages` over parsing, checking and lowering; 30 minutes with zero crashes before a release |
 | NFR-10 | 0.1 | IT | Coverage report of `typy-conformance`: an accepted and a rejected test per requirement |
-| NFR-11 | 0.1 | CI gate | `cargo llvm-cov` over the workspace, with subprocesses, at least 95 percent lines and branches |
+| NFR-11 | 0.1 | CI gate | `make coverage-branches`, run by `make check`: `cargo llvm-cov` with the pinned nightly over the compiler and runtime crates, with subprocesses, at least 95 percent of lines and of branches (97.6 and 95.1 in 0.1) |
 | NFR-12 | 0.2 | UT | `typy-runtime` layout test: `size_of::<ObjectHeader>() == 8` |
 | NFR-13 | 0.2 | Benchmark | `tests/bench/memory`: `list[int]` of one million values within 8.5 MB |
 | NFR-14 | 1.0 | Benchmark | `tests/bench/build_time`: peak memory of the 10,000-line build within 1 GB |

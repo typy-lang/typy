@@ -107,5 +107,21 @@ fn negation_absolute_power_and_comparison() {
             inline(2).unwrap()
         ));
         assert!(typy_rt_int_compare(word(3), word(3), inline(0).unwrap()));
+        assert!(typy_rt_int_compare(
+            word(5),
+            word(1 << 70),
+            inline(2).unwrap()
+        ));
+        assert_eq!(value(typy_rt_int_absolute(word(1 << 70))), 1 << 70);
+    }
+}
+
+#[test]
+fn a_negative_exponent_raises_value_error() {
+    // SAFETY: the words are live `int` words, and the exception is live.
+    unsafe {
+        let result = typy_rt_int_power(word(2), word(-1));
+        assert!(!result.exception.is_null());
+        assert_eq!((*result.exception).kind, crate::ExceptionKind::ValueError);
     }
 }

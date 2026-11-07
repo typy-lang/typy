@@ -14,6 +14,13 @@ def describe(n: int) -> str:
     return "positive " + str(n)
 
 
+def report(n: int) -> None:
+    if n > 1:
+        return
+    print("small", n)
+
+
 for i in range(-1, 3):
     print(describe(i), gcd(i * 18), sep=": ")
+    report(i)
 print(2 ** 70 // 3, 7 / 2)

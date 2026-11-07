@@ -67,8 +67,10 @@ fn floor_division_and_modulo_follow_the_sign_of_the_divisor() {
 #[test]
 #[cfg_attr(miri, ignore = "Miri cannot call the C maths library's `pow`")]
 fn powers_follow_the_special_cases_of_cpython() {
-    let cases: [(f64, f64, f64); 14] = [
+    let cases: [(f64, f64, f64); 16] = [
         (2.0, 10.0, 1024.0),
+        (1.0, 7.0, 1.0),
+        (-1.0, 2.0, 1.0),
         (-2.0, 2.0, 4.0),
         (-2.0, 3.0, -8.0),
         (-1.0, 3.0, -1.0),

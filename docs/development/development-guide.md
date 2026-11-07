@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy development guide |
-| Version | 0.8 |
+| Version | 0.9 |
 | Status | Draft |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-07 |
@@ -56,12 +56,16 @@ Container". VS Code attaches to the same `dev` service.
 | `make miri` | Runs the runtime's unit tests under Miri with the pinned nightly toolchain, in about 8 minutes |
 | `make fuzz` | Fuzzes the source, checking and lowering stages for `FUZZ_SECONDS` seconds, 60 by default; a crash leaves its input in `fuzz/artifacts/` |
 | `make runtime-size` | Fails when a runtime archive is over the size budgets of NFR-02 |
-| `make check` | Runs the whole quality gate: formatting, Clippy, the tests with coverage, the four documentation checks below, the Unicode table check and the runtime size check |
+| `make check` | Runs the whole quality gate: formatting, Clippy, the tests with line and branch coverage, the four documentation checks below, the Unicode table check and the runtime size check |
 | `make fmt` | Formats the Rust code |
 | `make lint` | Runs Clippy on every crate and test, with warnings as errors |
 | `make type` | Type checks every crate and test |
 | `make test` | Runs the unit tests with `cargo nextest` |
-| `make coverage` | Runs the tests with coverage and fails below 95 percent of lines |
+| `make coverage` | Runs the tests with coverage on the stable toolchain and fails below 95 percent of lines |
+| `make coverage-branches` | Runs the tests with coverage on the pinned nightly toolchain and fails below 95 percent of lines or of branches (NFR-11); `make check` runs it |
+| `make test-int` | Runs the integration tests: the conformance suite and its sanitizer run, the golden files and the pipeline |
+| `make test-e2e` | Runs the end-to-end tests of the `typy` executable |
+| `make test-all` | Runs `make test` and `make miri` |
 | `make docs-lint` | Lints every Markdown file with markdownlint-cli2 |
 | `make ascii-check` | Fails on any non-ASCII byte in tracked text files, except rendered SVG |
 | `make traceability` | Fails when a requirement has no row in the test plan's matrix, or a document cites an ID that is not defined |
@@ -79,10 +83,14 @@ AddressSanitizer; every other command uses the stable toolchain of
 their own, so the main workspace never needs nightly.
 
 `cargo llvm-cov` measures branch coverage only on a nightly toolchain, so
-`make coverage` checks lines, and the pinned nightly job of the test plan
-measures branches. The targets `test-int`, `test-e2e`, `test-all`,
-`bench`, `build` and `docs` are added with the crates that need them,
-planned for 0.1.
+`make coverage-branches` uses the pinned nightly in a target directory of
+its own; profiles from the stable build of `make coverage` would not match
+its build. Both leave out `typy-conformance`, which is test code; NFR-11
+covers the compiler and the runtime. The runtime's branches are measured by
+its unit tests, because the programs the other tests build link the runtime
+archive without instrumentation. `make bench` arrives with the build-time
+benchmarks of NFR-04 and NFR-05 in 1.0, and `make docs` with the user
+documentation site.
 
 ## 4. Repository layout
 

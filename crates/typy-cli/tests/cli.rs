@@ -376,3 +376,71 @@ fn nfr_06_two_builds_at_once_into_different_outputs_give_the_same_bytes() {
     let one = std::fs::read(workspace.root.join("one")).unwrap();
     assert_eq!(one, std::fs::read(workspace.root.join("two")).unwrap());
 }
+
+/// Runs `typy` in the workspace with only the environment variables given, `PATH`, and the
+/// `LLVM_*` variables that coverage measurement sets.
+fn typy_with_environment(
+    workspace: &Workspace,
+    arguments: &[&str],
+    variables: &[(&str, &str)],
+) -> Output {
+    Command::new(env!("CARGO_BIN_EXE_typy"))
+        .args(arguments)
+        .current_dir(&workspace.root)
+        .env_clear()
+        .env("PATH", std::env::var("PATH").unwrap())
+        // Coverage of the subprocess is written where these variables say (NFR-11).
+        .envs(std::env::vars().filter(|(name, _)| name.starts_with("LLVM_")))
+        .envs(variables.iter().copied())
+        .output()
+        .unwrap()
+}
+
+#[test]
+fn cli_02_without_typy_home_builds_go_to_the_user_cache_directory() {
+    let workspace = Workspace::new(HELLO);
+    let xdg = workspace.root.join("xdg");
+    let home = workspace.root.join("user");
+    let run = typy_with_environment(
+        &workspace,
+        &["run", "app.py"],
+        &[("XDG_CACHE_HOME", xdg.as_str()), ("HOME", home.as_str())],
+    );
+    assert_eq!(stdout(&run), "hello 3\n");
+    assert!(xdg.join("typy").is_dir() && !home.exists());
+    let run = typy_with_environment(&workspace, &["run", "app.py"], &[("HOME", home.as_str())]);
+    assert_eq!(stdout(&run), "hello 3\n");
+    assert!(home.join(".cache/typy").is_dir());
+}
+
+#[test]
+fn cli_02_a_cache_that_cannot_be_created_is_e0106() {
+    let workspace = Workspace::new(HELLO);
+    let blocked = workspace.root.join("file");
+    std::fs::write(&blocked, "").unwrap();
+    let output = typy_with_environment(
+        &workspace,
+        &["run", "app.py"],
+        &[("TYPY_HOME", blocked.as_str())],
+    );
+    assert_eq!(status(&output), 1);
+    assert!(
+        stderr(&output).starts_with("error[E0106]"),
+        "{}",
+        stderr(&output)
+    );
+}
+
+#[test]
+fn a_c_toolchain_that_cannot_be_started_is_e0702() {
+    let workspace = Workspace::new(HELLO);
+    std::fs::create_dir_all(workspace.root.join("bin/cc")).unwrap();
+    let output = with_cc(&workspace, None);
+    assert_eq!(status(&output), 1);
+    assert!(
+        stderr(&output).starts_with("error[E0702]"),
+        "{}",
+        stderr(&output)
+    );
+    assert!(!workspace.root.join("app").exists());
+}

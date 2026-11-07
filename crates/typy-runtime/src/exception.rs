@@ -122,4 +122,19 @@ mod tests {
             crate::refcount::typy_rt_decrement(exception.cast());
         }
     }
+
+    #[test]
+    fn freeing_an_exception_releases_its_cause() {
+        let cause = raise(ExceptionKind::ZeroDivisionError, "division by zero");
+        let exception = raise(ExceptionKind::ValueError, "bad");
+        // SAFETY: both exceptions are live; the outer one takes a reference to its cause, and
+        // the last references are dropped at the end.
+        unsafe {
+            crate::refcount::typy_rt_increment(cause.cast());
+            (*exception).cause = cause;
+            crate::refcount::typy_rt_decrement(exception.cast());
+            assert_eq!((*cause).header.reference_count, 1);
+            crate::refcount::typy_rt_decrement(cause.cast());
+        }
+    }
 }

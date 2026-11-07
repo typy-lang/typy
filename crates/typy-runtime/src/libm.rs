@@ -65,6 +65,7 @@ mod tests {
         assert_eq!(ldexp(1.0, 1 << 40), f64::INFINITY);
         assert_eq!(absolute(-0.0).to_bits(), 0.0_f64.to_bits());
         assert_eq!(copy_sign(2.0, -0.0).to_bits(), (-2.0_f64).to_bits());
-        assert!(is_sign_negative(-0.0) && !is_sign_negative(0.0));
+        assert!(is_sign_negative(-0.0));
+        assert!(!is_sign_negative(0.0));
     }
 }

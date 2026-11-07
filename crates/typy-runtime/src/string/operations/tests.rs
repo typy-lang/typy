@@ -4,6 +4,7 @@ use super::{
     typy_rt_str_compare, typy_rt_str_concat, typy_rt_str_index, typy_rt_str_length,
     typy_rt_str_repeat,
 };
+use crate::int::value::Integer;
 use crate::string::{StrKind, StrObject, code_point, from_str, length};
 use crate::word::{inline, inline_value};
 
@@ -83,4 +84,60 @@ fn comparison_orders_by_code_point_then_length() {
         let result = unsafe { typy_rt_str_compare(from_str(left), from_str(right), word(code)) };
         assert_eq!(result, expected, "{left:?} {code} {right:?}");
     }
+}
+
+/// Returns the kind and message of the exception `result` raised.
+fn raised<T>(result: &crate::Raising<T>) -> (crate::ExceptionKind, String) {
+    assert!(!result.exception.is_null(), "nothing was raised");
+    // SAFETY: the exception is live; its message is a live string.
+    unsafe { ((*result.exception).kind, text((*result.exception).message)) }
+}
+
+#[test]
+fn repetition_by_a_large_int_repeats_nothing_or_overflows() {
+    let source = from_str("ab");
+    let huge = Integer::from_i128(1 << 70).into_word();
+    let negative = Integer::from_i128(-(1 << 70)).into_word();
+    // SAFETY: the source is live, and both words point to live large integers.
+    unsafe {
+        let none = typy_rt_str_repeat(source, negative);
+        assert!(none.exception.is_null());
+        assert_eq!(text(none.value), "");
+        assert_eq!(
+            raised(&typy_rt_str_repeat(source, huge)),
+            (
+                crate::ExceptionKind::OverflowError,
+                "cannot fit 'int' into an index-sized integer".to_owned()
+            )
+        );
+    }
+}
+
+#[test]
+fn repetition_whose_length_overflows_raises_before_allocating() {
+    let source = from_str("abcde");
+    // SAFETY: the source is live.
+    let result = unsafe { typy_rt_str_repeat(source, word((1 << 62) - 1)) };
+    assert_eq!(
+        raised(&result),
+        (
+            crate::ExceptionKind::OverflowError,
+            "repeated string is too long".to_owned()
+        )
+    );
+}
+
+#[test]
+fn indexing_with_a_large_int_raises_index_error() {
+    let source = from_str("abc");
+    let huge = Integer::from_i128(1 << 70).into_word();
+    // SAFETY: the source is live and the word points to a live large integer.
+    let result = unsafe { typy_rt_str_index(source, huge) };
+    assert_eq!(
+        raised(&result),
+        (
+            crate::ExceptionKind::IndexError,
+            "cannot fit 'int' into an index-sized integer".to_owned()
+        )
+    );
 }

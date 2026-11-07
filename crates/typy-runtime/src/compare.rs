@@ -24,12 +24,20 @@ mod tests {
 
     #[test]
     fn each_code_tests_its_comparison() {
-        let code = |value| inline(value).unwrap();
-        assert!(holds(Ordering::Equal, code(0)) && !holds(Ordering::Less, code(0)));
-        assert!(holds(Ordering::Less, code(1)) && !holds(Ordering::Equal, code(1)));
-        assert!(holds(Ordering::Less, code(2)) && !holds(Ordering::Equal, code(2)));
-        assert!(holds(Ordering::Equal, code(3)) && !holds(Ordering::Greater, code(3)));
-        assert!(holds(Ordering::Greater, code(4)) && !holds(Ordering::Equal, code(4)));
-        assert!(holds(Ordering::Equal, code(5)) && !holds(Ordering::Less, code(5)));
+        use Ordering::{Equal, Greater, Less};
+        // For each code, the orderings it holds for, out of Less, Equal and Greater.
+        let table = [
+            (0, [false, true, false]),
+            (1, [true, false, true]),
+            (2, [true, false, false]),
+            (3, [true, true, false]),
+            (4, [false, false, true]),
+            (5, [false, true, true]),
+        ];
+        for (code, expected) in table {
+            let word = inline(code).unwrap();
+            let actual = [Less, Equal, Greater].map(|ordering| holds(ordering, word));
+            assert_eq!(actual, expected, "code {code}");
+        }
     }
 }

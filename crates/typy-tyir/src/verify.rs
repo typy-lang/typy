@@ -43,6 +43,14 @@ pub fn verify(module: &TyirModule) -> Result<(), VerifyError> {
         });
     }
     for function in &module.functions {
+        // Control enters a function at its first block, so a function without one has no body.
+        if function.blocks.is_empty() {
+            return Err(VerifyError {
+                function: function.symbol.clone(),
+                block: None,
+                message: "the function has no entry block".to_owned(),
+            });
+        }
         definitions::check(function)?;
         typing::check(module, function)?;
     }

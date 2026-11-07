@@ -181,7 +181,7 @@ impl Integer {
 mod tests {
     use super::Integer;
 
-    const SAMPLES: [i128; 12] = [
+    const SAMPLES: [i128; 14] = [
         0,
         1,
         -1,
@@ -194,6 +194,8 @@ mod tests {
         1 << 100,
         -(1 << 100) + 3,
         i128::MAX / 2,
+        i128::MAX,
+        -i128::MAX,
     ];
 
     #[test]
@@ -238,7 +240,8 @@ mod tests {
     #[test]
     fn zero_is_never_negative() {
         let zero = Integer::from_i128(0).negate();
-        assert!(!zero.negative && zero.is_zero());
+        assert!(!zero.negative);
+        assert!(zero.is_zero());
         assert!(
             !Integer::from_i128(5)
                 .subtract(&Integer::from_i128(5))
