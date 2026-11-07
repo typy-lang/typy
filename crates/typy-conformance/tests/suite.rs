@@ -5,7 +5,6 @@ use std::collections::BTreeSet;
 
 use camino::Utf8PathBuf;
 use typy_conformance::{Report, Suite};
-use typy_driver::Pipeline;
 
 /// Requirements whose rejected case cannot be a file in the corpus, and the unit tests in
 /// `typy-source` that cover it instead: a file that is not UTF-8 breaks the repository's ASCII
@@ -19,7 +18,7 @@ fn workspace() -> Utf8PathBuf {
 fn run() -> Report {
     let target = option_env!("CARGO_TARGET_DIR")
         .map_or_else(|| workspace().join("target"), Utf8PathBuf::from);
-    Suite::new(Pipeline::new(target.join("debug/typy")))
+    Suite::new(target.join("debug/typy"))
         .run(&workspace().join("tests/conformance"))
         .unwrap()
 }

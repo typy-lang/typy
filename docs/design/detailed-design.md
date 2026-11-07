@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy detailed design |
-| Version | 1.13 |
+| Version | 1.14 |
 | Status | Approved |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-07 |
@@ -821,6 +821,10 @@ refers to it, so a program's link drops it. The runtime also defines
 name in their unwind tables; the runtime aborts on panic, so it is never
 called.
 
+When the module body returns an exception, `main` reports it and then
+releases it, so a program that ends with an uncaught exception also frees
+all its memory (NFR-08).
+
 The runtime uses no `core::fmt`. Each of its `unsafe` blocks is covered by
 tests under AddressSanitizer and Miri (ADR-0006).
 
@@ -867,11 +871,12 @@ it because the exponent is a variable.
 | `expectation` | `Expectation::Accepted`, or `Rejected` with a `DiagnosticCode`, a line and a column |
 | `observation` | `Observation::of(command)` runs a program with no standard input, reads both pipes on their own threads, and keeps standard output, the exit status and the last line of standard error; a program that runs longer than 10 seconds is stopped |
 | `oracle` | Runs `python3.X -I -X utf8 FILE` in the file's directory for each oracle version from the floor up |
-| `subject` | Builds an accepted test in debug and release mode into a temporary directory and runs each build; checks a rejected test with `Pipeline::check`, which passes when exactly one diagnostic is reported, with that code at that line and column |
+| `subject` | Builds an accepted test in debug and release mode into a temporary directory and runs each build, and with `Suite::with_sanitizers` also links its debug object file with `cc -fsanitize=address` and runs it with leak detection, where a report ends the run with status 86; checks a rejected test with `Pipeline::check`, which passes when exactly one diagnostic is reported, with that code at that line and column |
 | `verdict` | `Pass`, `Fail` with the reason, or `Invalid` when the oracles disagree, an oracle cannot run the file, or the header is not valid (STD-03) |
 | `suite` | `Suite::run(root)` judges every `.py` file under `root`, as many at once as the machine has cores, and returns a `Report` with each verdict and, for each requirement ID, how many accepted and rejected tests name it |
 
-The suite runs as the test `crates/typy-conformance/tests/suite.rs`, so
+The suite runs as the tests `crates/typy-conformance/tests/suite.rs` and,
+with the sanitizers, `tests/sanitized.rs`, so
 `make test` and `make check` run it on every commit. That test fails on any
 verdict but `Pass`, and on any requirement the test plan gives the suite for
 0.1 that lacks an accepted or a rejected test. An accepted test whose floor

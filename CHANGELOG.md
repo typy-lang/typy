@@ -66,6 +66,10 @@ All notable changes to TyPy are recorded here. The format follows
   3.15 and under TyPy in debug and release mode, with the same output,
   exit status and last line of standard error; each rejected program gets
   exactly its diagnostic code at its line and column. `make test` runs it.
+- Every accepted conformance program also runs linked with AddressSanitizer
+  and LeakSanitizer and must show no report. A program that ends with an
+  uncaught exception frees the exception before it exits, so it leaks
+  nothing.
 - The runtime archive is built for musl as well as glibc, and `make check`
   checks its size: 40.3 KB, and 29.8 KB without large integers (NFR-02). A
   hello world built with `--release-small` and linked statically with musl

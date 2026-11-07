@@ -1166,6 +1166,7 @@ dependencies = [
  "camino",
  "tempfile",
  "typy-build",
+ "typy-codegen",
  "typy-diagnostics",
  "typy-driver",
  "typy-source",

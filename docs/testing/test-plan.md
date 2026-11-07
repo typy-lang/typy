@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy test plan |
-| Version | 0.4 |
+| Version | 0.5 |
 | Status | Draft |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-07 |
@@ -129,9 +129,16 @@ Subprocess runs are included in coverage (NFR-11).
 
 ### 3.5 Memory and safety
 
-The whole conformance suite also runs with the program and the runtime
-built under AddressSanitizer and LeakSanitizer (NFR-07, NFR-08). The
-runtime's unit tests run under Miri (ADR-0006).
+The test `crates/typy-conformance/tests/sanitized.rs` builds every accepted
+conformance test once more, links its object file and the runtime archive
+with `cc -fsanitize=address`, and runs it with leak detection on. The run
+must show CPython's results; a sanitizer report ends it with status 86 and
+fails the test (NFR-07, NFR-08). The allocator calls are checked this way:
+a leak at exit, a double free, and a free of a pointer that was never
+allocated. Generated code and the runtime are not instrumented, so a stray
+read or write inside an allocation is not found; instrumenting them, and
+running the runtime's unit tests under Miri (ADR-0006), need a nightly Rust
+toolchain and are open issue OI-16.
 
 ### 3.6 Fuzzing
 

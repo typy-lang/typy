@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy software requirements specification |
-| Version | 1.7 |
+| Version | 1.8 |
 | Status | Approved |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-07 |
@@ -434,7 +434,11 @@ TyPy rejects them (STD-04):
 
 ## 7. Open issues
 
-There are no open issues. A new question gets the next unused issue number.
+| ID | Question | Status |
+| --- | --- | --- |
+| OI-16 | How are generated code and the runtime instrumented with AddressSanitizer, and the runtime's unit tests run under Miri, when both need a nightly Rust toolchain that the dev image does not hold? | Open. In 0.1 the conformance suite links each program with GCC's AddressSanitizer runtime, which checks the allocator calls and reports leaks, without instrumentation (NFR-07, NFR-08). |
+
+A new question gets the next unused issue number.
 
 ## 8. Resolved issues
 

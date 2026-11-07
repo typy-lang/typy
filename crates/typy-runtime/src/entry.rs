@@ -19,8 +19,13 @@ mod program {
         if exception.is_null() {
             0
         } else {
-            // SAFETY: a non-null result is a live exception.
-            unsafe { report_uncaught(exception) };
+            // SAFETY: a non-null result is a live exception that the program no longer holds;
+            // it is released after the report, so the program ends with nothing allocated
+            // (NFR-08).
+            unsafe {
+                report_uncaught(exception);
+                crate::refcount::typy_rt_decrement(exception.cast());
+            }
             1
         }
     }

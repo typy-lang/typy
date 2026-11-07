@@ -11,7 +11,7 @@ use typy_source::PythonFloor;
 
 use crate::expectation::Expectation;
 use crate::oracle::run_oracles;
-use crate::subject::{judge_accepted, judge_rejected};
+use crate::subject::{judge_accepted, judge_rejected, judge_sanitized};
 use crate::test_case::TestCase;
 use crate::verdict::Verdict;
 
@@ -44,17 +44,33 @@ impl Report {
     }
 }
 
-/// Runs conformance tests with one pipeline.
+/// Runs conformance tests with the compiler at one path.
 #[derive(Clone, Debug)]
 pub struct Suite {
+    compiler: Utf8PathBuf,
     pipeline: Pipeline,
+    sanitizers: bool,
 }
 
 impl Suite {
-    /// Returns a suite that builds with `pipeline`.
+    /// Returns a suite that builds with the compiler at `compiler`, whose runtime archive is
+    /// found beside it.
     #[must_use]
-    pub const fn new(pipeline: Pipeline) -> Self {
-        Self { pipeline }
+    pub fn new(compiler: impl Into<Utf8PathBuf>) -> Self {
+        let compiler = compiler.into();
+        Self {
+            pipeline: Pipeline::new(compiler.clone()),
+            compiler,
+            sanitizers: false,
+        }
+    }
+
+    /// Also builds each accepted test with AddressSanitizer and LeakSanitizer, which must show
+    /// the same results with no report (NFR-07, NFR-08).
+    #[must_use]
+    pub fn with_sanitizers(mut self) -> Self {
+        self.sanitizers = true;
+        self
     }
 
     /// Judges every `.py` file under `root`, several at a time, and returns the report.
@@ -148,7 +164,11 @@ impl Suite {
                         version.as_str()
                     ));
                 }
-                judge_accepted(&self.pipeline, case, expected)
+                let verdict = judge_accepted(&self.pipeline, case, expected);
+                if verdict != Verdict::Pass || !self.sanitizers {
+                    return verdict;
+                }
+                judge_sanitized(&self.pipeline, &self.compiler, case, expected)
             }
         }
     }
