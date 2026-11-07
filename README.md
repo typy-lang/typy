@@ -28,8 +28,12 @@ These are the goals of TyPy 1.0, as the
 
 ## Status
 
-TyPy is in design. The engineering documents are complete, and the
-compiler for release 0.1 is being written. Nothing can be compiled yet.
+Release 0.1 is being written. The `typy` command checks, builds and runs
+programs made of module-level functions and statements over `int`, `float`,
+`str`, `bool` and `None`, with `if`, `while`, `for` over `range`, and
+`print`. Programs print what CPython prints, including the last line of an
+uncaught exception. Classes, containers, modules and `ctypes` come in later
+releases.
 
 ## Quick start
 
@@ -38,8 +42,16 @@ containers.
 
 ```sh
 make hooks
-make dev
-make check
+make build
+make shell
+```
+
+`make build` builds the compiler in the dev container, and `make shell`
+opens a shell there. In that shell:
+
+```sh
+printf 'print("hello", 1 + 2)\n' > hello.py
+$CARGO_TARGET_DIR/debug/typy run hello.py
 ```
 
 `make check` runs the quality gate. The

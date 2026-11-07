@@ -10,7 +10,7 @@ MARKDOWN := "**/*.md" "\#.tmp/**" "\#target/**"
 
 
 .PHONY: dev image shell runtime fmt fmt-check lint type test coverage docs-lint ascii-check traceability \
-	diagrams diagrams-check unicode-tables unicode-tables-check check hooks clean
+	build diagrams diagrams-check unicode-tables unicode-tables-check check hooks clean
 
 dev: ## Start the dev service, building its image the first time
 	@$(COMPOSE) up -d --quiet-pull dev 2>/dev/null
@@ -22,12 +22,18 @@ shell: dev ## Open a shell in the dev service
 	$(COMPOSE) exec dev bash
 
 # The archive is staged where a compiler in <target>/debug or <target>/release finds it,
-# <target>/lib/typy/<triple>/, as an installed compiler finds it in <prefix>/lib/typy/<triple>/.
+# <target>/lib/typy/<triple>/, as an installed compiler finds it in <prefix>/lib/typy/<triple>/;
+# the copy under llvm-cov-target serves the compiler that `make coverage` builds there.
 runtime: dev ## Build the runtime archive and stage it where <target>/*/typy finds it
 	@$(EXEC) cargo rustc -p typy-runtime --profile runtime --locked --crate-type staticlib
 	@$(EXEC) bash -c 'target="$${CARGO_TARGET_DIR:-target}"; install -D -m 644 \
 		"$$target/runtime/libtypy_runtime.a" \
-		"$$target/lib/typy/x86_64-unknown-linux-gnu/libtypy_runtime.a"'
+		"$$target/lib/typy/x86_64-unknown-linux-gnu/libtypy_runtime.a"; \
+		install -D -m 644 "$$target/runtime/libtypy_runtime.a" \
+		"$$target/llvm-cov-target/lib/typy/x86_64-unknown-linux-gnu/libtypy_runtime.a"'
+
+build: runtime ## Build the typy compiler, <target>/debug/typy, with its runtime archive staged
+	@$(EXEC) cargo build -p typy-cli --locked
 
 fmt: dev ## Format the Rust code
 	@$(EXEC) cargo fmt --all

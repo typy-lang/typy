@@ -56,6 +56,13 @@ All notable changes to TyPy are recorded here. The format follows
   toolchain program is E0701, a failed link E0702, and a missing runtime
   archive, or one from another TyPy version, E0703.
 - Diagnostics without a source location, such as a failed link.
+- The `typy` command: `typy check FILE`, `typy build FILE` with `--emit`,
+  `-o`, `--release` and `--release-small`, and `typy run FILE -- ARGS`,
+  which keeps each build in a cache under `TYPY_HOME` and runs it again
+  without compiling. Exit status 0 on success, 1 for program errors, 2 for
+  wrong usage and 101 for an internal error, which a panic also becomes.
+- E0106 when an output file cannot be written; the linker reports a
+  directory it cannot write with E0106 instead of E0702.
 - The `typy-driver` crate: runs loading, checking, lowering, code
   generation and linking in order, and stops after the stage `--emit`
   names. `--emit=typed-ast` writes every node with its position and type,

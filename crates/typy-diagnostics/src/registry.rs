@@ -53,6 +53,12 @@ pub const CODES: &[CodeInfo] = &[
         rule: None,
         status: CodeStatus::Active,
     },
+    CodeInfo {
+        code: DiagnosticCode::error(106),
+        summary: "output file cannot be written",
+        rule: None,
+        status: CodeStatus::Active,
+    },
     active(
         201,
         "feature planned for a later TyPy release",

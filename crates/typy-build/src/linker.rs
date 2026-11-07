@@ -67,9 +67,12 @@ impl Linker {
             _ => Utf8PathBuf::from("."),
         };
         let cannot_write = |error: io::Error| {
-            link_failed(
-                format!("cannot write the executable in {directory}: {error}"),
-                "check that the directory exists and is writable".to_owned(),
+            Diagnostics::from(
+                Diagnostic::without_location(
+                    DiagnosticCode::error(106),
+                    format!("cannot write the executable in {directory}: {error}"),
+                )
+                .with_help("check that the directory exists and is writable"),
             )
         };
         let mut object_file = tempfile::Builder::new()
@@ -234,7 +237,7 @@ mod tests {
             .link(&object(), &root.join("absent/app"))
             .unwrap_err();
         let diagnostic = diagnostics.iter().next().unwrap();
-        assert_eq!(diagnostic.code().to_string(), "E0702");
+        assert_eq!(diagnostic.code().to_string(), "E0106");
         assert!(
             diagnostic
                 .message()

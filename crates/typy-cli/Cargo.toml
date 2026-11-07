@@ -1,0 +1,28 @@
+[package]
+name = "typy-cli"
+description = "The typy command: check, build and run Python programs"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+publish.workspace = true
+
+[[bin]]
+name = "typy"
+path = "src/main.rs"
+
+[lints]
+workspace = true
+
+[dependencies]
+camino.workspace = true
+clap.workspace = true
+sha2.workspace = true
+typy-build.workspace = true
+typy-codegen.workspace = true
+typy-diagnostics.workspace = true
+typy-driver.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true

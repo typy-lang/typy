@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy detailed design |
-| Version | 1.11 |
+| Version | 1.12 |
 | Status | Approved |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-07 |
@@ -63,7 +63,8 @@ crates/
                               linker, artifact
   typy-driver/src/            pipeline, emission, outcome, failure,
                               sources
-  typy-cli/src/               main, arguments, output, exit_status, guard
+  typy-cli/src/               main, arguments, command/ (check, build,
+                              run), cache, output, exit_status, guard
   typy-runtime/src/           entry, cell, header, allocator, libc, libm,
                               refcount, word, compare, int, float,
                               string, message, io, exception, range,
@@ -250,6 +251,7 @@ it enforces and its status. `typy explain` (0.3) reads the same table.
 | E0103 | Python syntax error, syntax newer than the Python floor, or `return`, `break` or `continue` out of place | STD-01 |
 | E0104 | Imaginary literal | LEX-08 |
 | E0105 | Source file cannot be read | None |
+| E0106 | Output file cannot be written | None |
 | E0201 | Feature planned for a later TyPy release | The feature's own rule |
 | E0202 | Feature TyPy cannot compile with CPython's meaning | STD-04 |
 | E0203 | Parameter without a type annotation | TYP-01 |
@@ -768,12 +770,16 @@ only when the stages before it found no errors.
 
 | Item | Design |
 | --- | --- |
-| Arguments | Parsed with `clap`; the commands `check`, `build` and `run` in 0.1, `explain` in 0.3 |
-| Logging | `--log-level` sets a `tracing` subscriber for the target `typy`, writing to standard error; off by default |
-| Output | Diagnostics rendered with `render_text` to standard error; `--emit` output to standard output or `-o` |
-| Exit status | `ExitStatus` is `Success = 0`, `ProgramErrors = 1`, `Usage = 2`, `Internal = 101` (CLI-06) |
-| Panic guard | The command runs inside `std::panic::catch_unwind`, with a panic hook that records the location; a panic becomes E9001 and exit status 101 |
-| `typy run` | Builds into `cache/<key>/` under `TYPY_HOME`, where `key` is the SHA-256 of the compiler version, the request and the source texts; then starts the executable with the arguments after `--` and exits with its status |
+| Arguments | Parsed with `clap`; the commands `check FILE`, `build FILE` and `run FILE [-- ARGS]` in 0.1, `explain` in 0.3. `build` takes `--emit=STAGE` and `-o PATH`; `build` and `run` take `--release` or `--release-small`, never both. A main file that is not a `.py` file is wrong usage |
+| Output | Diagnostics are sorted, rendered with `render_text` and written to standard error, with a blank line between two of them. `--emit` output goes to `-o`, or to standard output without it. A file that cannot be written gives E0106 |
+| Exit status | `ExitStatus` is `Success = 0`, `ProgramErrors = 1`, `Usage = 2` and `Internal = 101` (CLI-06); a failure with any `E9xxx` diagnostic is `Internal`. `typy run` exits with the program's status, or 128 plus the signal that ended it |
+| Panic guard | The command runs inside `std::panic::catch_unwind`, with a panic hook that records the location in a thread-local; a panic becomes E9001 with the location and message, and exit status 101 |
+| `typy run` | Builds into `cache/<key>/<name>`, where the cache is `$TYPY_HOME/cache`, else `$XDG_CACHE_HOME/typy` or `~/.cache/typy`, and `key` is the SHA-256 of the compiler version, the mode, the target, the main file's name and its text, each preceded by its length. A build already in the cache is run again without compiling. The executable gets the arguments after `--` and the same standard input, output and error |
+| Logging | `--log-level` arrives in 0.3 with UC-10; the 0.1 compiler has no log events |
+
+The pipeline is created with the path of the running executable, so an
+installed `typy` finds `<prefix>/lib/typy/` and a `typy` in
+`<target>/debug/` finds the archive `make runtime` stages.
 
 ## 14. typy-runtime
 
