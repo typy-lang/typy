@@ -26,7 +26,7 @@ pub struct Fix {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Diagnostic {
     code: DiagnosticCode,
-    span: Span,
+    span: Option<Span>,
     message: String,
     labels: Vec<Label>,
     help: Option<String>,
@@ -38,7 +38,16 @@ impl Diagnostic {
     /// Returns a diagnostic with a code, a primary span and a one-sentence message (DIA-01).
     #[must_use]
     pub fn new(code: DiagnosticCode, span: Span, message: impl Into<String>) -> Self {
-        let message = message.into();
+        Self::located(code, Some(span), message.into())
+    }
+
+    /// Returns a diagnostic about no place in the source, such as a failed link.
+    #[must_use]
+    pub fn without_location(code: DiagnosticCode, message: impl Into<String>) -> Self {
+        Self::located(code, None, message.into())
+    }
+
+    fn located(code: DiagnosticCode, span: Option<Span>, message: String) -> Self {
         debug_assert!(
             !message.ends_with('.'),
             "a diagnostic message has no final period"
@@ -100,9 +109,9 @@ impl Diagnostic {
         self.code.severity()
     }
 
-    /// Returns the primary span.
+    /// Returns the primary span, or `None` for a diagnostic about no place in the source.
     #[must_use]
-    pub fn span(&self) -> Span {
+    pub fn span(&self) -> Option<Span> {
         self.span
     }
 
@@ -161,5 +170,15 @@ mod tests {
             Some("new")
         );
         assert_eq!(diagnostic.rule(), Some(crate::rule::RuleId::TYP_03));
+        assert_eq!(diagnostic.span(), Some(at(0, 0)));
+    }
+
+    #[test]
+    fn a_diagnostic_may_have_no_location() {
+        let diagnostic = Diagnostic::without_location(DiagnosticCode::error(702), "link failed");
+        assert_eq!(
+            (diagnostic.span(), diagnostic.message()),
+            (None, "link failed")
+        );
     }
 }

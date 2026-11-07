@@ -19,5 +19,5 @@ typy-tyir.workspace = true
 [dev-dependencies]
 camino.workspace = true
 typy-check.workspace = true
-typy-lower = { path = "../typy-lower" }
+typy-lower.workspace = true
 typy-source.workspace = true

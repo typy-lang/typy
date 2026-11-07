@@ -25,6 +25,7 @@ mod range;
 mod refcount;
 mod stack;
 mod string;
+mod version;
 mod word;
 
 pub use exception::{ExceptionKind, ExceptionObject};
@@ -59,6 +60,12 @@ impl<T> Raising<T> {
         }
     }
 }
+
+/// The unwinding personality that the precompiled `core` and `compiler_builtins` refer to from
+/// their unwind tables. The runtime aborts on panic, so nothing ever unwinds into it.
+#[cfg(not(test))]
+#[unsafe(no_mangle)]
+extern "C" fn rust_eh_personality() {}
 
 #[cfg(not(test))]
 #[panic_handler]

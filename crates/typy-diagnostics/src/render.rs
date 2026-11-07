@@ -18,7 +18,9 @@ pub trait SourceLookup {
 /// Returns the diagnostic as text: the header, the location, the source line with a marker, and any rule, help and fix.
 #[must_use]
 pub fn render_text(diagnostic: &Diagnostic, lookup: &dyn SourceLookup) -> String {
-    let span = diagnostic.span();
+    let Some(span) = diagnostic.span() else {
+        return render_without_location(diagnostic);
+    };
     let file = span.file();
     let start = lookup.position(file, span.start());
     let end = lookup.position(file, span.end());
@@ -68,6 +70,25 @@ pub fn render_text(diagnostic: &Diagnostic, lookup: &dyn SourceLookup) -> String
             let _ = writeln!(text, "help: write it as");
             let _ = writeln!(text, "{:>gutter$} | {corrected}", fix_start.line);
         }
+    }
+    text
+}
+
+/// Returns a diagnostic about no place in the source: the header, then any rule and help.
+fn render_without_location(diagnostic: &Diagnostic) -> String {
+    let mut text = String::new();
+    let _ = writeln!(
+        text,
+        "{}[{}]: {}",
+        diagnostic.severity().label(),
+        diagnostic.code(),
+        diagnostic.message()
+    );
+    if let Some(rule) = diagnostic.rule() {
+        let _ = writeln!(text, " = rule: {rule}");
+    }
+    if let Some(help) = diagnostic.help() {
+        let _ = writeln!(text, "help: {help}");
     }
     text
 }
@@ -177,6 +198,17 @@ help: assign an int, or use a new variable
         assert!(
             text.ends_with("help: write it as\n3 |     total = 1\n"),
             "{text}"
+        );
+    }
+
+    #[test]
+    fn a_diagnostic_without_location_shows_its_header_rule_and_help() {
+        let diagnostic = Diagnostic::without_location(DiagnosticCode::error(701), "`cc` not found")
+            .with_rule(RuleId::A_01)
+            .with_help("install a C toolchain");
+        assert_eq!(
+            render_text(&diagnostic, &OneFile(SOURCE)),
+            "error[E0701]: `cc` not found\n = rule: A-01\nhelp: install a C toolchain\n"
         );
     }
 

@@ -118,6 +118,12 @@ pub const CODES: &[CodeInfo] = &[
     active(407, "comparison between unsupported types", RuleId::EXP_06),
     active(701, "C toolchain program not found", RuleId::A_01),
     active(702, "link failed", RuleId::A_01),
+    CodeInfo {
+        code: DiagnosticCode::error(703),
+        summary: "runtime archive missing, or from another TyPy version",
+        rule: None,
+        status: CodeStatus::Active,
+    },
     active(9001, "internal compiler error", RuleId::NFR_09),
 ];
 

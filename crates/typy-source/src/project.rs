@@ -184,7 +184,10 @@ mod tests {
         let diagnostics = failure.diagnostics.clone().into_sorted(&failure);
         assert_eq!(diagnostics.len(), 1);
         assert_eq!(diagnostics[0].code().to_string(), "E0105");
-        assert_eq!(failure.path(diagnostics[0].span().file()), "absent.py");
+        assert_eq!(
+            failure.path(diagnostics[0].span().unwrap().file()),
+            "absent.py"
+        );
     }
 
     #[test]

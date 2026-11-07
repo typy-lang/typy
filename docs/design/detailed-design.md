@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy detailed design |
-| Version | 1.9 |
+| Version | 1.10 |
 | Status | Approved |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-07 |
@@ -59,8 +59,8 @@ crates/
                               runtime, function, operation, constant,
                               arithmetic, comparison, call, terminator,
                               emit
-  typy-build/src/             request, mode, emit, link_plan, linker,
-                              artifact
+  typy-build/src/             request, mode, emit_stage, runtime_archive,
+                              linker, artifact
   typy-driver/src/            pipeline
   typy-cli/src/               main, arguments, output, exit_status, guard
   typy-runtime/src/           entry, cell, header, allocator, libc, libm,
@@ -174,12 +174,15 @@ in `docs/requirements/srs.md`.
 | Field | Type | Default | Rule |
 | --- | --- | --- | --- |
 | `code` | `DiagnosticCode` | none | Listed in the registry (section 4.3) |
-| `span` | `Span` | none | The primary location |
+| `span` | `Option<Span>` | none | The primary location; `None` for a diagnostic about no place in the source, such as a failed link |
 | `message` | `String` | none | One sentence in lower case with no final period (DIA-01) |
 | `labels` | `Vec<Label>` | empty | Secondary spans, each with a short text |
 | `help` | `Option<String>` | `None` | A hint, shown after `help:`, when no fix is certain |
 | `fix` | `Option<Fix>` | `None` | Set only when the fix is certain (DIA-02) |
 | `rule` | `Option<RuleId>` | `None` | Required when the diagnostic rejects valid Python (DIA-03) |
+
+`Diagnostic::new(code, span, message)` makes a located diagnostic and
+`Diagnostic::without_location(code, message)` one without a span.
 
 `Fix` holds a `Span` and the `replacement: String` for it. `Label` holds a
 `Span` and a `text: String`.
@@ -190,7 +193,8 @@ in `docs/requirements/srs.md`.
 | --- | --- |
 | `push(diagnostic)` | Adds it, unless one with the same code and span is already present |
 | `has_errors()` | True when any diagnostic has severity `Error` |
-| `into_sorted(lookup)` | Returns them sorted by file path, line, column and code |
+| `iter()` | The diagnostics in the order they were added |
+| `into_sorted(lookup)` | Returns them sorted by file path, line, column and code; those without a location come first |
 
 `SourceLookup` is the trait the renderers use to turn a `Span` into text.
 `typy-source::Project` implements it.
@@ -221,6 +225,15 @@ The gutter is as wide as the line number. A span that runs past its first
 line is marked to the end of that line. Each label is written as
 `= LINE:COLUMN: text`. A certain fix follows as `help: write it as` and the
 corrected line.
+
+A diagnostic without a location is written as its header, then its rule and
+its help:
+
+```text
+error[E0701]: the C toolchain program `cc` was not found
+ = rule: A-01
+help: install `cc`, which TyPy runs to link the program
+```
 
 `render_json` is planned for 0.3 (DIA-05).
 
@@ -257,6 +270,7 @@ it enforces and its status. `typy explain` (0.3) reads the same table.
 | E0407 | Comparison between unsupported types | EXP-06 |
 | E0701 | C toolchain program not found | A-01 |
 | E0702 | Link failed | A-01 |
+| E0703 | Runtime archive missing, or from another TyPy version | None |
 | E9001 | Internal compiler error | NFR-09 |
 
 ## 5. typy-source
@@ -663,35 +677,55 @@ are internal and may change in any release.
 
 ## 11. typy-build
 
-`BuildMode` is `Debug`, `Release` or `ReleaseSmall`. `EmitStage` is `Ast`,
-`TypedAst`, `Tyir`, `TyirMem`, `LlvmIr`, `Asm` or `Obj`; `EmitStage::parse`
-accepts the lower-case names of CLI-04.
+`BuildMode` is `Debug`, `Release` or `ReleaseSmall`, and
+`BuildMode::optimization()` gives the codegen `Optimization` of CLI-05.
+`EmitStage` is `Ast`, `TypedAst`, `Tyir`, `TyirMem`, `LlvmIr`, `Asm` or
+`Obj`; `EmitStage::parse` accepts the lower-case names of CLI-04.
 
 `BuildRequest`
 
 | Field | Type | Default | Rule |
 | --- | --- | --- | --- |
-| `main` | `Utf8PathBuf` | none | A `.py` file that exists |
+| `main` | `Utf8PathBuf` | none | Ends in `.py`, or `BuildRequest::new` returns `RequestError::NotPython`; that the file exists is checked when it is loaded (E0105) |
 | `mode` | `BuildMode` | `Debug` | `--release` and `--release-small` are exclusive |
 | `target` | `Target` | `Target::host()` | Supported (section 10.1) |
 | `emit` | `Option<EmitStage>` | `None` | When set, no executable is written |
-| `output` | `Option<Utf8PathBuf>` | `None` | Defaults to the main file's name without `.py`, next to it |
-| `link` | `LinkPlan` | empty | Libraries and exports, planned for 0.5 |
+| `output` | `Option<Utf8PathBuf>` | `None` | `executable_path()` defaults it to the main file without `.py`, next to it |
 | `deny_warnings` | `bool` | `false` | DIA-07 |
 
-`Linker::link(object, plan, output) -> Result<Artifact, Diagnostic>`
-writes the object to a temporary file, then runs the C toolchain as a
-subprocess with an argument list and no shell:
+Each field has a `with_` method that returns the changed request. The
+libraries to link and the functions to export join the request with CLI-09
+in 0.5.
+
+`RuntimeArchive::beside(executable, triple)` opens
+`<prefix>/lib/typy/<triple>/libtypy_runtime.a` for a compiler at
+`<prefix>/bin/typy`, and `RuntimeArchive::open(path)` opens an archive by
+path. Both read the archive and find the runtime's version marker,
+`typy-runtime-version:` and the version, which must equal the compiler's
+package version. A missing archive, a file without the marker and another
+version each give E0703 with the path. The driver opens the archive before
+it compiles a build that links, so a bad installation fails before any work
+and `typy check` never needs it.
+
+`Linker::new(triple, archive)` picks the C toolchain program.
+`Linker::link(object, output) -> Result<Artifact, Diagnostics>` writes the
+object to a temporary file in the output's directory, then runs the program
+as a subprocess with an argument list and no shell:
 
 | Target | Program | Arguments |
 | --- | --- | --- |
 | `x86_64-unknown-linux-gnu` | `cc` | `-o TEMP OBJECT RUNTIME_ARCHIVE -lm -Wl,--gc-sections` |
-| `x86_64-unknown-linux-musl` | `musl-gcc` | The same, with `-static` |
+| `x86_64-unknown-linux-musl` | `musl-gcc` | `-static`, then the same |
 
-On success it renames the temporary output to `output`, so a failed link
-leaves no file (UC-02, flow 5a). A missing program gives E0701 with the
-program name; a failed link gives E0702 with the arguments and the
-linker's standard error. An `Artifact` holds its `path` and its `kind`.
+`TEMP` is created with mode 0755 less the umask, the mode of a new
+executable. On success it is renamed to `output`, so a failed link leaves no
+file and an existing file is replaced whole (UC-02, flow 5a); both temporary
+files are removed on every path. A missing program gives E0701 with its
+name; a failed run gives E0702 with the command line and the linker's
+standard error in its help; an output directory that cannot be written
+gives E0702 with the directory. None of them has a source location. An
+`Artifact` holds its `path` and its `kind`: `Executable`, `Object` or
+`Text`.
 
 ## 12. typy-driver
 
@@ -744,6 +778,13 @@ suite runs many builds in one process.
 | `io` | Standard output is buffered in 8 KiB and flushed when full, at exit, and before anything is written to standard error |
 | `exception` | Creates the built-in exceptions of EXC-02 with CPython's message for each operation. Where the oracle versions word a message differently, the runtime uses the wording of the newest, CPython 3.15 (OI-14): `division by zero` for every division and modulo of `int` and `float`, and `zero to a negative power` for `0.0 ** -1.0`. A conformance test of such a message compares only the exception type. It adds `TracebackEntry` values, and it prints an uncaught exception as `Traceback (most recent call last):`, one line per entry, then `Type: message`, or `Type` alone when the message is empty, as CPython does (STD-05) |
 | `stack` | The check at the start of recursive functions compares the stack pointer with the recorded limit, which leaves 64 KiB unused, and raises `RecursionError: maximum recursion depth exceeded` |
+
+The archive holds `TYPY_RUNTIME_VERSION`, the bytes `typy-runtime-version:`,
+the package version and a line feed, which `RuntimeArchive` checks; nothing
+refers to it, so a program's link drops it. The runtime also defines
+`rust_eh_personality`, which the precompiled `core` and `compiler_builtins`
+name in their unwind tables; the runtime aborts on panic, so it is never
+called.
 
 The runtime uses no `core::fmt`. Each of its `unsafe` blocks is covered by
 tests under AddressSanitizer and Miri (ADR-0006).

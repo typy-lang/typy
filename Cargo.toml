@@ -1,6 +1,7 @@
 [workspace]
 resolver = "3"
 members = [
+    "crates/typy-build",
     "crates/typy-check",
     "crates/typy-codegen",
     "crates/typy-diagnostics",
@@ -26,6 +27,8 @@ typy-diagnostics = { path = "crates/typy-diagnostics" }
 typy-source = { path = "crates/typy-source" }
 typy-tyir = { path = "crates/typy-tyir" }
 typy-check = { path = "crates/typy-check" }
+typy-codegen = { path = "crates/typy-codegen" }
+typy-lower = { path = "crates/typy-lower" }
 # One LLVM major version per TyPy release (C-03, ADR-0005).
 inkwell = { version = "=0.11.0", default-features = false, features = ["llvm23-1", "target-x86", "target-aarch64"] }
 # The parser has no stability promise, so it is pinned to one exact version

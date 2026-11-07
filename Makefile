@@ -21,8 +21,13 @@ image: ## Rebuild the dev image after a change to .devcontainer
 shell: dev ## Open a shell in the dev service
 	$(COMPOSE) exec dev bash
 
-runtime: dev ## Build the runtime archive that programs link: target/runtime/libtypy_runtime.a
+# The archive is staged where a compiler in <target>/debug or <target>/release finds it,
+# <target>/lib/typy/<triple>/, as an installed compiler finds it in <prefix>/lib/typy/<triple>/.
+runtime: dev ## Build the runtime archive and stage it where <target>/*/typy finds it
 	@$(EXEC) cargo rustc -p typy-runtime --profile runtime --locked --crate-type staticlib
+	@$(EXEC) bash -c 'target="$${CARGO_TARGET_DIR:-target}"; install -D -m 644 \
+		"$$target/runtime/libtypy_runtime.a" \
+		"$$target/lib/typy/x86_64-unknown-linux-gnu/libtypy_runtime.a"'
 
 fmt: dev ## Format the Rust code
 	@$(EXEC) cargo fmt --all
@@ -36,10 +41,10 @@ lint: dev ## Run Clippy on every crate and test, with warnings as errors
 type: dev ## Type check every crate and test
 	@$(EXEC) cargo check --workspace --all-targets --locked
 
-test: dev ## Run the unit tests
+test: runtime ## Run the unit tests
 	@$(EXEC) cargo nextest run --workspace --locked
 
-coverage: dev ## Run the tests with coverage; fail below 95 percent of lines (NFR-11)
+coverage: runtime ## Run the tests with coverage; fail below 95 percent of lines (NFR-11)
 	@$(EXEC) cargo llvm-cov nextest --workspace --locked --status-level fail \
 		--final-status-level fail --fail-under-lines 95 --summary-only
 

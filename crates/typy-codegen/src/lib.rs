@@ -18,9 +18,7 @@ mod statics;
 mod target;
 mod terminator;
 
-use typy_diagnostics::{
-    Diagnostic, DiagnosticCode, Diagnostics, FileId, RuleId, SourceLookup, Span, TextOffset,
-};
+use typy_diagnostics::{Diagnostic, DiagnosticCode, Diagnostics, RuleId, SourceLookup};
 use typy_tyir::TyirModule;
 
 pub use layout::{
@@ -36,9 +34,8 @@ use error::CodegenError;
 
 fn internal(error: &CodegenError) -> Diagnostics {
     Diagnostics::from(
-        Diagnostic::new(
+        Diagnostic::without_location(
             DiagnosticCode::error(9001),
-            Span::empty(FileId(0), TextOffset(0)),
             format!("internal compiler error in code generation: {error}"),
         )
         .with_rule(RuleId::NFR_09)

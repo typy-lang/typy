@@ -1,0 +1,23 @@
+[package]
+name = "typy-build"
+description = "Build requests, and linking object code with the runtime into an executable"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+camino.workspace = true
+tempfile.workspace = true
+typy-codegen.workspace = true
+typy-diagnostics.workspace = true
+
+[dev-dependencies]
+typy-check.workspace = true
+typy-lower.workspace = true
+typy-source.workspace = true

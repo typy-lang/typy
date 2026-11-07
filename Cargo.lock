@@ -932,6 +932,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "typy-build"
+version = "0.0.0"
+dependencies = [
+ "camino",
+ "tempfile",
+ "typy-check",
+ "typy-codegen",
+ "typy-diagnostics",
+ "typy-lower",
+ "typy-source",
+]
+
+[[package]]
 name = "typy-check"
 version = "0.0.0"
 dependencies = [

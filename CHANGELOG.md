@@ -50,6 +50,12 @@ All notable changes to TyPy are recorded here. The format follows
 - `chr` and `ord` in the runtime, with CPython's messages.
 - `int()` and `float()` read decimal digits of every script, such as
   `int("\u0661\u0662")`, which is `12`.
+- The `typy-build` crate: build requests, modes and `--emit` stages, and
+  the link of an object file with the runtime archive through `cc` or
+  `musl-gcc`. The executable appears whole or not at all; a missing
+  toolchain program is E0701, a failed link E0702, and a missing runtime
+  archive, or one from another TyPy version, E0703.
+- Diagnostics without a source location, such as a failed link.
 - A quality gate, `make check`, that checks formatting, runs Clippy and the
   tests with at least 95 percent line coverage, lints the documents, checks for
   non-ASCII text, checks that every requirement has a row in the test plan,

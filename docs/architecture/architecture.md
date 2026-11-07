@@ -3,10 +3,10 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy software architecture |
-| Version | 1.3 |
+| Version | 1.4 |
 | Status | Approved |
 | Owner | typy-lang contributors |
-| Last updated | 2026-11-06 |
+| Last updated | 2026-11-07 |
 
 ## 1. Purpose
 
@@ -170,7 +170,7 @@ form a cycle are ever buffered.
 | Item | Location | Notes |
 | --- | --- | --- |
 | `typy` | `<prefix>/bin/typy` | One executable. LLVM 23 is linked in statically, and the standard library sources are embedded. |
-| Runtime archive | `<prefix>/lib/typy/<target>/libtypy_runtime.a` | One per supported target. `typy` checks at start-up that its version matches. |
+| Runtime archive | `<prefix>/lib/typy/<target>/libtypy_runtime.a` | One per supported target. Before a build that links, `typy` checks that the archive's version is its own (E0703). |
 | Build cache | `$TYPY_HOME/cache`, or the platform's user cache directory when `TYPY_HOME` is not set | Used by `typy run` only. Its location never changes a build's output (CLI-11). |
 | Output | The path given by `-o`, or next to the main file | Written atomically |
 
@@ -241,7 +241,7 @@ with another.
 functions that may raise, and the names and signatures of the runtime
 functions. The contract is internal and may change in any release, so the
 compiler and the runtime archive always come from one build, and `typy`
-refuses an archive with a different version at start-up.
+refuses an archive with a different version before a build that links.
 
 ### 7.7 Security
 

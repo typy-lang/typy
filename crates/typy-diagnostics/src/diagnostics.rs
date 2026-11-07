@@ -43,6 +43,11 @@ impl Diagnostics {
             .any(|item| item.severity() == Severity::Error)
     }
 
+    /// Returns the diagnostics in the order they were added.
+    pub fn iter(&self) -> impl Iterator<Item = &Diagnostic> {
+        self.items.iter()
+    }
+
     /// Returns the number of diagnostics.
     #[must_use]
     pub fn len(&self) -> usize {
@@ -55,13 +60,16 @@ impl Diagnostics {
         self.items.is_empty()
     }
 
-    /// Returns the diagnostics sorted by file path, line, column and code.
+    /// Returns the diagnostics sorted by file path, line, column and code; those without a
+    /// location come first.
     #[must_use]
     pub fn into_sorted(mut self, lookup: &dyn SourceLookup) -> Vec<Diagnostic> {
         self.items.sort_by_cached_key(|item| {
-            let span = item.span();
-            let position = lookup.position(span.file(), span.start());
-            (lookup.path(span.file()).to_owned(), position, item.code())
+            let place = item.span().map(|span| {
+                let position = lookup.position(span.file(), span.start());
+                (lookup.path(span.file()).to_owned(), position)
+            });
+            (place, item.code())
         });
         self.items
     }
@@ -171,6 +179,10 @@ mod tests {
             at(1, 30),
             "a line 4",
         ));
+        diagnostics.push(Diagnostic::without_location(
+            DiagnosticCode::error(702),
+            "no location",
+        ));
         let messages: Vec<String> = diagnostics
             .into_sorted(&Files)
             .iter()
@@ -178,7 +190,13 @@ mod tests {
             .collect();
         assert_eq!(
             messages,
-            ["a line 4", "b line 1 lower code", "b line 1", "b line 3"]
+            [
+                "no location",
+                "a line 4",
+                "b line 1 lower code",
+                "b line 1",
+                "b line 3"
+            ]
         );
     }
 

@@ -171,7 +171,7 @@ mod tests {
         let (_, diagnostic) = read(b"x = 1\n\xff\n");
         let diagnostic = diagnostic.unwrap();
         assert_eq!(diagnostic.code().to_string(), "E0102");
-        assert_eq!(diagnostic.span().start(), TextOffset(6));
+        assert_eq!(diagnostic.span().unwrap().start(), TextOffset(6));
         assert_eq!(
             diagnostic.rule().map(typy_diagnostics::RuleId::as_str),
             Some("LEX-01")
