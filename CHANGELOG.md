@@ -28,6 +28,9 @@ All notable changes to TyPy are recorded here. The format follows
 - The `typy-lower` crate: lowers a checked program to TyIR with reference
   counting, error returns through `invoke`, and the semantics of CPython for
   loops, `and`, `or`, comparison chains and the builtins of 0.1.
+- The `typy-codegen` crate: turns TyIR into LLVM 23 IR, assembly and object
+  code, with static immortal constants and traceback entries on raising
+  calls; `--release-small` marks functions `minsize`, as LLVM 23 has no `Oz`.
 - A quality gate, `make check`, that checks formatting, runs Clippy and the
   tests with at least 95 percent line coverage, lints the documents, checks for
   non-ASCII text, checks that every requirement has a row in the test plan,

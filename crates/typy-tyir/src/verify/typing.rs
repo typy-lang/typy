@@ -254,6 +254,7 @@ impl Checker<'_> {
                 arguments,
                 normal,
                 error,
+                ..
             } => {
                 let (parameters, result, may_raise, name) = self.callee_signature(*callee)?;
                 if !may_raise {

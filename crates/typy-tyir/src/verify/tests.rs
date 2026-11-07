@@ -65,6 +65,7 @@ fn division() -> TyirFunction {
         arguments: vec![a, b],
         normal,
         error: failed,
+        span: span(),
     });
     builder.switch_to(failed);
     builder.terminate(Terminator::ReturnError(exception));
@@ -182,6 +183,7 @@ fn an_invoke_of_a_function_that_cannot_raise_fails() {
         arguments: vec![ValueId(0)],
         normal: BlockId(3),
         error: BlockId(4),
+        span: span(),
     };
     assert!(message(&module(function)).contains("cannot raise"));
 }
@@ -578,6 +580,7 @@ fn terminator_type_errors_are_reported() {
         arguments: vec![ValueId(0), ValueId(1)],
         normal: BlockId(4),
         error: BlockId(4),
+        span: span(),
     };
     broken.functions[0].blocks[1].terminator = wrong_normal;
     assert!(message(&broken).contains("must take the int result"));
@@ -587,6 +590,7 @@ fn terminator_type_errors_are_reported() {
         arguments: vec![ValueId(0), ValueId(1)],
         normal: BlockId(3),
         error: BlockId(3),
+        span: span(),
     };
     assert!(message(&broken).contains("must take the exception"));
     let mut broken = module(division());

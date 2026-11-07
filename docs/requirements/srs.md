@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy software requirements specification |
-| Version | 1.4 |
+| Version | 1.5 |
 | Status | Approved |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-07 |
@@ -137,7 +137,7 @@ oracle needs CPython 3.12 or later.
 | CLI-02 | `typy run FILE [-- ARGS]` shall build and run the program, passing `ARGS` as `sys.argv[1:]`. | M | 0.1 |
 | CLI-03 | `typy check PATH` shall report every diagnostic without generating code. | M | 0.1 |
 | CLI-04 | `typy build --emit=STAGE` shall write the output of one stage as deterministic text, for `ast`, `typed-ast`, `tyir`, `tyir-mem`, `llvm-ir` and `asm`, and as an object file for `obj`. | M | 0.1 |
-| CLI-05 | `typy build` shall offer the modes `debug` (default), `--release` and `--release-small`, with the LLVM levels `-O0`, `-O2` and `-Oz`. | M | 0.1 |
+| CLI-05 | `typy build` shall offer the modes `debug` (default), `--release` and `--release-small`: LLVM's `O0` pipeline, its `O2` pipeline, and its `O2` pipeline with every function marked `minsize`, because LLVM 23 has no `Oz` pipeline. | M | 0.1 |
 | CLI-06 | The exit status of `typy` shall be 0 on success, 1 when the program has errors, 2 on wrong command usage, and 101 on an internal compiler error. | M | 0.1 |
 | CLI-07 | Project settings shall be read from `typy.toml`, and a command line flag shall override the same setting in the file. | S | 0.3 |
 | CLI-08 | `typy build --target TRIPLE` shall cross-compile for every supported target. | S | 0.5 |

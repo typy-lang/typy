@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy software architecture |
-| Version | 1.2 |
+| Version | 1.3 |
 | Status | Approved |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-06 |
@@ -270,7 +270,7 @@ end-to-end tests run the `typy` executable as a subprocess.
 
 | Requirement | How the architecture meets it | Verified by |
 | --- | --- | --- |
-| NFR-01 binary under 100 KB | Small runtime, section garbage collection at link time, `-Oz` in `--release-small` | Size check in CI |
+| NFR-01 binary under 100 KB | Small runtime, section garbage collection at link time, functions marked `minsize` in `--release-small` | Size check in CI |
 | NFR-02 runtime under 48 KB, core under 32 KB | `no_std` runtime without `core::fmt` (ADR-0006); modules in Python, not in the runtime (ADR-0007) | Archive size check in CI |
 | NFR-03 within 1.5 times C | Inline values, stack allocation and count elision (ADR-0001); no unwinding (ADR-0004); LLVM `-O2` | Weekly benchmark run |
 | NFR-04 and NFR-05 build time | Rust compiler, parallel stages (section 7.5), LLVM `-O0` for debug | Build-time benchmarks with budgets |

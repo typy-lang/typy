@@ -24,6 +24,7 @@ impl FunctionLowerer<'_> {
             arguments,
             normal,
             error,
+            span,
         });
         self.builder.switch_to(error);
         self.release_live_temporaries(span);

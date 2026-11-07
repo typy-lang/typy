@@ -1,5 +1,7 @@
 //! The instruction that ends a basic block.
 
+use typy_diagnostics::Span;
+
 use crate::block::BlockId;
 use crate::function::FunctionId;
 use crate::runtime::RuntimeFunction;
@@ -43,6 +45,8 @@ pub enum Terminator {
         normal: BlockId,
         /// Where execution continues with the exception.
         error: BlockId,
+        /// The call in the source; its line is added to the traceback when the call raises (ADR-0004).
+        span: Span,
     },
     /// Returns a value, which the caller then owns.
     Return(ValueId),
@@ -92,6 +96,10 @@ mod tests {
             arguments: vec![ValueId(1), ValueId(2)],
             normal: BlockId(3),
             error: BlockId(4),
+            span: typy_diagnostics::Span::empty(
+                typy_diagnostics::FileId(0),
+                typy_diagnostics::TextOffset(0),
+            ),
         };
         assert_eq!(invoke.successors(), [BlockId(3), BlockId(4)]);
         assert_eq!(invoke.operands(), [ValueId(1), ValueId(2)]);

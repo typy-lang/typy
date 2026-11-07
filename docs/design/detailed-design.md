@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy detailed design |
-| Version | 1.6 |
+| Version | 1.7 |
 | Status | Approved |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-06 |
@@ -55,7 +55,10 @@ crates/
                               statement, expression, arithmetic,
                               comparison, conversion, builtin,
                               call_graph, mangle, strings, types
-  typy-codegen/src/           target, generate, layout, abi
+  typy-codegen/src/           target, optimization, layout, statics, abi,
+                              runtime, function, operation, constant,
+                              arithmetic, comparison, call, terminator,
+                              emit
   typy-build/src/             request, mode, emit, link_plan, linker,
                               artifact
   typy-driver/src/            pipeline
@@ -601,37 +604,60 @@ and `CycleAnalysis` for 1.0.
 
 ## 10. typy-codegen
 
-### 10.1 Types
+### 10.1 Types and functions
 
 `TargetTriple` is one of the supported triples. In 0.1 they are
-`x86_64-unknown-linux-gnu` and `x86_64-unknown-linux-musl`. `Target::host()`
-returns the triple `typy` was built for. Parsing any other triple gives a
-usage error with the list of supported triples.
+`x86_64-unknown-linux-gnu` and `x86_64-unknown-linux-musl`. `Target` holds a
+triple, and `Target::host()` returns the triple `typy` was built for.
 
-`ObjectFile` holds its `target` and its `bytes: Vec<u8>`.
+`Optimization` is `None`, `Speed` or `Size`, for the three build modes.
+LLVM 23 has no `Oz` pipeline, so `Size` runs the `O2` pipeline with every
+function marked `minsize` and `optsize`.
 
-`CodeGenerator::generate(module, target, mode) -> Result<ObjectFile,
-Diagnostic>` creates one LLVM context and module, emits each function in
-the order of `TyirModule::functions`, verifies the LLVM module, runs the
-optimisation pipeline of the mode (`-O0`, `-O2` or `-Oz`) and writes the
-object file to memory. Its only errors are internal, E9001.
+| Function | Returns |
+| --- | --- |
+| `object(module, target, optimization, lookup)` | The `ObjectFile`: its target and its bytes |
+| `llvm_ir(module, target, optimization, lookup)` | The optimised LLVM IR as text, for `--emit=llvm-ir` |
+| `assembly(module, target, optimization, lookup)` | Assembly text, for `--emit=asm` |
+
+Each declares every function first, emits each one, verifies the LLVM
+module, runs the pipeline and writes the output. The target machine uses
+the baseline CPU of the triple, so the output runs on every machine of the
+target and does not depend on the build host (NFR-06). Only the entry
+function is visible outside the object. `lookup` gives the file names and
+lines of traceback entries. Every error is internal, E9001.
+
+The crate has one module per responsibility: the target, the optimisation
+level, the shared layout, static objects, the calling convention, runtime
+declarations, function setup, operation dispatch, constants, arithmetic,
+comparisons, calls and counting, terminators, and emission.
 
 ### 10.2 Contract with the runtime
 
 | Item | Form |
 | --- | --- |
-| Object header | 8 bytes: `reference_count: u32`, then `type_id: u32` |
-| Type table | `__typy_types`, an array of `TypeDescriptor` indexed by `type_id`. The runtime owns IDs 0 to 255; the compiler numbers program types from 256 |
-| A function that may raise | Returns `{ result, *mut ExceptionObject }`; a null pointer means no exception |
+| `int` | A 64-bit word. An inline value has its lowest bit set and holds the number shifted left by one; any other word is the address of a large integer. Every `int` argument of a runtime function is such a word |
+| `float`, `bool`, objects | A double, an `i1`, a pointer. A `bool` returned by the runtime is one byte |
+| Object header | 8 bytes: `reference_count: u32`, then `type_id: u32`. A count of `u32::MAX` marks an immortal object, whose header the runtime never writes |
+| Type IDs | `str` is 1, an exception is 2, a large integer is 3 |
+| `str` object | Header, `length: u64` in code points, `kind: u32` (1, 2 or 4 bytes per code point), 4 bytes of padding, then the code points |
+| Large integer | Header, `sign_and_length: i32`, 4 bytes of padding, then that many `u64` limbs, least significant first |
+| Constants | Strings and large integers are immortal static objects in read-only memory |
+| A function that may raise | Returns `{ result, exception }`, or only the exception when it returns nothing; a null exception means none was raised. The entry function always uses this form |
 | A function that cannot raise | Returns its result directly |
+| `invoke` | When the exception is not null, generated code calls `typy_rt_traceback_add(exception, function, file, line)` with C strings, then takes the error path |
 | Entry | The runtime's `main` calls `__typy_main`, the body of `__main__` |
-| Runtime functions | Named `typy_rt_*`, declared with the C calling convention |
+| Runtime functions | `typy_rt_` and the name from TyIR's `RuntimeFunction`, plus `increment`, `decrement`, `int_increment`, `int_decrement`, `int_add`, `int_subtract`, `int_multiply`, `int_and`, `int_or`, `int_xor`, `int_negate`, `int_invert`, `int_compare` and `traceback_add`, with the C calling convention |
+
+In 0.1 every `int` operation calls the runtime. Inline fast paths for
+inline values come with the benchmarks of NFR-03.
 
 ### 10.3 Symbol names
 
 A TyPy function's symbol is `_TY`, then the length and text of each part of
 its module name, then the length and text of the function name:
-`_TY8__main__3fib`. Symbols are internal and may change in any release.
+`_TY8__main__3fib`. The module body of `__main__` is `__typy_main`. Symbols
+are internal and may change in any release.
 
 ## 11. typy-build
 

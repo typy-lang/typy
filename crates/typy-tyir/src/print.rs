@@ -108,6 +108,7 @@ fn print_block(
             arguments,
             normal,
             error,
+            ..
         } => format!(
             "invoke {}({}) to b{} unwind b{}",
             callee(module, *target),
