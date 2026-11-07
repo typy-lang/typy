@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy development guide |
-| Version | 0.10 |
+| Version | 0.11 |
 | Status | Draft |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-07 |
@@ -178,29 +178,35 @@ read-only permissions, and only the job that creates a release may write.
 
 | Workflow | Job | Runs on | Does |
 | --- | --- | --- | --- |
-| `ci.yml` | Quality gate and package | Every push to `main` and every pull request | `make check`, then `make dist` |
-| `ci.yml` | Miri and fuzzing | Weekly, and on demand | `make miri`, then `FUZZ_SECONDS=1800 make fuzz`; the inputs that crashed are kept as an artifact |
+| `ci.yml` | Quality gate and package | Every pull request | `make check`, then `make dist` |
+| `ci.yml` | Miri and fuzzing | On demand, before a release | `make miri`, then `FUZZ_SECONDS=1800 make fuzz`; the inputs that crashed are kept as an artifact |
 | `ci.yml` | Dependency review | Every pull request | Fails on a new dependency with a known vulnerability |
-| `codeql.yml` | Analyze | Every push to `main`, every pull request, and weekly | Code scanning of the Rust sources and the workflows |
+| `codeql.yml` | Analyze | Every push to `main`, and weekly | Code scanning of the Rust sources and the workflows |
 | `release.yml` | Check and build, then Publish | A tag `vX.Y.Z` | Section 9 |
 
-Dependabot proposes updates to the actions and to the Cargo dependencies of
-the workspace and of `fuzz/` each week. The repository's settings protect
+CI minutes are spent on whole changes. `main` changes only through a pull
+request that is up to date and passes the quality gate, so CI does not run
+again after the merge, and a change is pushed when it is complete, never as a
+series of partial pushes. Dependabot proposes one pull request a month for
+the actions and one for the Cargo dependencies of the workspace and of
+`fuzz/`. The repository's settings protect
 `main`: pull requests only, the quality gate job required, linear history,
 squash merges and no force pushes; and the `release` environment requires a
 maintainer's approval.
 
 ## 9. Releases
 
-1. A commit titled "Prepare X.Y.Z" sets the version in `Cargo.toml`,
+1. `make miri` and `FUZZ_SECONDS=1800 make fuzz` pass, locally or through
+   a run of `ci.yml` started by hand (NFR-07, NFR-09).
+2. A commit titled "Prepare X.Y.Z" sets the version in `Cargo.toml`,
    renames the changelog's "Unreleased" section to `[X.Y.Z] - DATE`, and
    opens a new empty "Unreleased" section above it.
-2. A tag `vX.Y.Z` on that commit starts `release.yml`.
-3. `scripts/check-release.sh` checks that the tag names the version and that
+3. A tag `vX.Y.Z` on that commit starts `release.yml`.
+4. `scripts/check-release.sh` checks that the tag names the version and that
    the changelog has a dated section for it, whose text becomes the release
    notes. The job then runs `make check` and `make dist`.
-4. A maintainer approves the `release` environment.
-5. The publish job creates the GitHub release with the archive and its
+5. A maintainer approves the `release` environment.
+6. The publish job creates the GitHub release with the archive and its
    SHA-256, using the workflow's short-lived token and no long-lived one.
    It then downloads the archive back, checks its SHA-256, unpacks it and
    runs a program with it.

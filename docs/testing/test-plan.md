@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy test plan |
-| Version | 0.10 |
+| Version | 0.11 |
 | Status | Draft |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-07 |
@@ -33,8 +33,8 @@ Each test sits at the lowest level that can prove its behaviour.
 | Integration (IT) | The compiler, runtime and C toolchain together on one program, compared with CPython; the conformance suite | `tests/conformance/<area>/` through `typy-conformance`, which drives `typy-driver` in process | Every commit |
 | End-to-end (E2E) | The `typy` executable as a user runs it: arguments, exit status, files written, and the built program run as a subprocess | `crates/typy-cli/tests/cli.rs` | Every commit |
 | Fuzz | No input crashes the compiler (NFR-09) | `fuzz/` | 30 minutes before each release; 60 seconds on demand |
-| Benchmark | The numbered budgets of NFR-03 to NFR-05, NFR-13 and NFR-14 | `tests/bench/` | Weekly and before a release |
-| Mutation | Tests fail when the code they cover is changed | `cargo-mutants` over the compiler crates | Weekly |
+| Benchmark | The numbered budgets of NFR-03 to NFR-05, NFR-13 and NFR-14 | `tests/bench/` | Before a release, from 1.0 |
+| Mutation | Tests fail when the code they cover is changed | `cargo-mutants` over the compiler crates | Before a release, from 0.2 |
 
 ## 3. Test design
 
@@ -227,7 +227,7 @@ A release ships when all of these hold:
 | Running four oracle versions and two build modes per test makes CI slow | Slow feedback | Oracle results are cached by the hash of the test file and the oracle image digest |
 | Benchmarks vary with machine load | False failures | Budgets are checked on a dedicated runner, as the median of five runs |
 | Miri and the sanitizers need a nightly toolchain | Nightly breakage | One nightly date is pinned and moved on purpose |
-| Fuzzing finds many defects early | Release delay | Each defect gets a test first; fuzz findings are triaged weekly |
+| Fuzzing finds many defects early | Release delay | Each defect gets a test first; fuzz findings are triaged before each release |
 
 ## 8. Traceability matrix
 

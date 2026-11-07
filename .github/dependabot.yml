@@ -1,12 +1,19 @@
-# Weekly updates for the actions the workflows use and for the Cargo
-# dependencies of the workspace and of the fuzz targets.
+# Monthly updates for the actions the workflows use and for the Cargo
+# dependencies of the workspace and of the fuzz targets, each ecosystem in one
+# pull request, so an update costs one CI run.
 version: 2
 updates:
   - package-ecosystem: github-actions
     directory: /
     schedule:
-      interval: weekly
+      interval: monthly
+    groups:
+      actions:
+        patterns: ["*"]
   - package-ecosystem: cargo
     directories: ["/", "/fuzz"]
     schedule:
-      interval: weekly
+      interval: monthly
+    groups:
+      cargo:
+        patterns: ["*"]

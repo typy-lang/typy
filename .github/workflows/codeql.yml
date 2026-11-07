@@ -1,10 +1,10 @@
-# Code scanning of the Rust sources and of the workflows themselves.
+# Code scanning of the Rust sources and of the workflows themselves, on each
+# change to main and once a week for newly published queries.
 name: CodeQL
 
 on:
   push:
     branches: [main]
-  pull_request:
   schedule:
     - cron: "41 4 * * 2"
 
@@ -22,7 +22,7 @@ jobs:
       matrix:
         language: [rust, actions]
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
         with:
           persist-credentials: false
       - uses: github/codeql-action/init@v4

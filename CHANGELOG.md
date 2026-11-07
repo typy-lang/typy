@@ -83,8 +83,9 @@ compiler needs glibc 2.39 or later and a C toolchain.
   runtime's unit tests under Miri, and `make fuzz` fuzzes the source,
   checking and lowering stages.
 - Continuous integration: the quality gate and the release archive on
-  every push and pull request, Miri and 30 minutes of fuzzing weekly, code
-  scanning, dependency review and Dependabot. A tag `vX.Y.Z` releases the
+  every pull request, Miri and 30 minutes of fuzzing on demand before a
+  release, code scanning, dependency review, and monthly grouped Dependabot
+  updates. A tag `vX.Y.Z` releases the
   version after a maintainer approves it.
 - `make dist` builds a reproducible release archive of the compiler and its
   runtime archives, and runs a program with it unpacked.
