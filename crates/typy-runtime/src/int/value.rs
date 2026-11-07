@@ -38,7 +38,7 @@ impl Integer {
         if is_inline(word) {
             return Self::from_i128(i128::from(inline_value(word)));
         }
-        let object = word as *const BigIntObject;
+        let object = super::object_of(word);
         // SAFETY: the word points to a live large integer, whose limbs follow its fixed part.
         unsafe {
             let sign_and_length = (*object).sign_and_length;
@@ -106,7 +106,7 @@ impl Integer {
             let destination = object.cast::<u8>().add(LIMBS_OFFSET).cast::<u64>();
             core::ptr::copy_nonoverlapping(limbs.as_ptr(), destination, limbs.len());
         }
-        object as i64
+        super::word_of(object)
     }
 
     fn signed(negative: bool, magnitude: Limbs) -> Self {

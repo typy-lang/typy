@@ -75,18 +75,20 @@ pub(crate) fn judge_accepted(
     Verdict::Pass
 }
 
-/// Builds the program's object file in debug mode, links it with the runtime and GCC's
-/// AddressSanitizer, which checks every allocation and free and reports leaks at exit, and
-/// compares the run with the oracles. Generated code and the runtime are not instrumented, so
-/// this finds leaks, double frees and frees of pointers never allocated, not stray reads.
+/// Builds the program's object file in debug mode, links it with the runtime built with
+/// AddressSanitizer and with GCC's AddressSanitizer library, and compares the run with the
+/// oracles. Every allocation and free is checked, leaks are reported at exit, and every memory
+/// access of the runtime is checked; generated code is not instrumented (OI-16).
 pub(crate) fn judge_sanitized(
     pipeline: &Pipeline,
     compiler: &Utf8Path,
     case: &TestCase,
     expected: &Observation,
 ) -> Verdict {
-    let Ok(archive) = RuntimeArchive::beside(compiler, typy_codegen_host()) else {
-        return Verdict::Invalid("the runtime archive is missing".to_owned());
+    let Some(archive) = instrumented_archive(compiler) else {
+        return Verdict::Invalid(
+            "the instrumented runtime archive is missing; run `make runtime`".to_owned(),
+        );
     };
     let Ok(directory) = tempfile::tempdir() else {
         return Verdict::Invalid("cannot make a temporary directory".to_owned());
@@ -118,7 +120,7 @@ pub(crate) fn judge_sanitized(
         "-o",
         executable.as_str(),
         object_path.as_str(),
-        archive.path().as_str(),
+        archive.as_str(),
         "-lm",
     ]));
     match linked {
@@ -139,8 +141,17 @@ pub(crate) fn judge_sanitized(
     }
 }
 
-fn typy_codegen_host() -> typy_codegen::TargetTriple {
-    typy_codegen::Target::host().triple
+/// Returns the runtime archive built with AddressSanitizer, which `make runtime` stages in
+/// `<prefix>/lib/typy-asan/<triple>/` beside the plain one, once its version is checked.
+fn instrumented_archive(compiler: &Utf8Path) -> Option<Utf8PathBuf> {
+    let prefix = compiler.parent()?.parent()?;
+    let path = prefix
+        .join("lib/typy-asan")
+        .join(typy_codegen::Target::host().triple.as_str())
+        .join("libtypy_runtime.a");
+    RuntimeArchive::open(&path)
+        .ok()
+        .map(|archive| archive.path().to_owned())
 }
 
 /// Checks the program and passes when TyPy reports exactly `code` at `line:column`.

@@ -70,6 +70,12 @@ All notable changes to TyPy are recorded here. The format follows
   and LeakSanitizer and must show no report. A program that ends with an
   uncaught exception frees the exception before it exits, so it leaks
   nothing.
+- The sanitizer run uses a runtime built with AddressSanitizer, so every
+  memory access the runtime makes is checked. `make miri` runs the
+  runtime's unit tests under Miri, and `make fuzz` fuzzes the source,
+  checking and lowering stages.
+- The stack check reads the stack pointer register, so `RecursionError`
+  is raised in time also when locals do not live on the machine stack.
 - The runtime archive is built for musl as well as glibc, and `make check`
   checks its size: 40.3 KB, and 29.8 KB without large integers (NFR-02). A
   hello world built with `--release-small` and linked statically with musl

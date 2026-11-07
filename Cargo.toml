@@ -1,5 +1,7 @@
 [workspace]
 resolver = "3"
+# The fuzz targets need nightly; they are a workspace of their own (NFR-09).
+exclude = ["fuzz"]
 members = [
     "crates/typy-build",
     "crates/typy-check",

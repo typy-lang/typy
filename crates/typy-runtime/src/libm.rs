@@ -56,6 +56,7 @@ mod tests {
     use super::{absolute, copy_sign, floor, fmod, is_sign_negative, ldexp, pow};
 
     #[test]
+    #[cfg_attr(miri, ignore = "Miri cannot call the C maths library's `pow`")]
     fn the_c_functions_and_sign_operations_agree_with_rust() {
         assert_eq!(floor(-2.5).to_bits(), (-3.0_f64).to_bits());
         assert_eq!(fmod(-7.5, 2.0).to_bits(), (-1.5_f64).to_bits());

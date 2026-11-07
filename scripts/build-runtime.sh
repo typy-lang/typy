@@ -16,3 +16,15 @@ for triple in x86_64-unknown-linux-gnu x86_64-unknown-linux-musl; do
             "${stage}/lib/typy/${triple}/libtypy_runtime.a"
     done
 done
+
+# The runtime instrumented with AddressSanitizer, for the conformance suite's
+# sanitizer run (NFR-07). Rust's sanitizers need the pinned nightly toolchain;
+# programs never link this archive.
+triple=x86_64-unknown-linux-gnu
+cargo +nightly-2026-11-05 rustc -p typy-runtime --profile runtime --locked \
+    --crate-type staticlib --target "${triple}" --target-dir "${target}/asan" \
+    -- -Zsanitizer=address
+for stage in "${target}" "${target}/llvm-cov-target"; do
+    install -D -m 644 "${target}/asan/${triple}/runtime/libtypy_runtime.a" \
+        "${stage}/lib/typy-asan/${triple}/libtypy_runtime.a"
+done

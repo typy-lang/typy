@@ -49,6 +49,10 @@ fn integers_are_written_in_decimal() {
 }
 
 #[test]
+#[cfg_attr(
+    miri,
+    ignore = "building a 4300-digit integer takes hours under Miri; the same code runs in the other tests"
+)]
 fn integers_of_more_than_4300_digits_are_refused() {
     let mut big = Integer::from_i128(1);
     let ten = Integer::from_i128(10);

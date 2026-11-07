@@ -153,6 +153,16 @@ RUN case "$(dpkg --print-architecture)" in \
     && chmod -R a+rX /opt/python
 USER ${USERNAME}
 
+# Fuzzing (NFR-09), Miri and the instrumented sanitizers (OI-16) need one pinned
+# nightly toolchain; stable stays the toolchain of every build. This layer is
+# last, so adding it leaves the cached layers above it unchanged.
+ARG NIGHTLY=nightly-2026-11-05
+ARG CARGO_FUZZ_VERSION=0.13.2
+RUN rustup toolchain install "${NIGHTLY}" --profile minimal --component miri,rust-src \
+    && cargo binstall --no-confirm --locked "cargo-fuzz@${CARGO_FUZZ_VERSION}" \
+    && rm -rf "${CARGO_HOME}/registry" "${CARGO_HOME}/git" \
+    && mkdir -p "${CARGO_HOME}/registry" "${CARGO_HOME}/git"
+
 ENV CARGO_TARGET_DIR=/var/cache/typy/target
 
 WORKDIR /workspaces/typy-lang

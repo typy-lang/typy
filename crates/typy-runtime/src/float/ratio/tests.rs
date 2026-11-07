@@ -23,6 +23,9 @@ fn power_of_ten(count: u32) -> Limbs {
     value
 }
 
+/// Miri interprets every instruction, so it checks a sample of the inputs.
+const SAMPLES: usize = if cfg!(miri) { 40 } else { 2000 };
+
 fn of(numerator: &Limbs, denominator: &Limbs) -> Option<f64> {
     ratio(numerator.as_slice(), denominator.as_slice())
 }
@@ -41,7 +44,7 @@ fn samples() -> impl Iterator<Item = u64> {
 #[test]
 fn ratios_of_exact_doubles_match_ieee_division() {
     let mut values = samples();
-    for _ in 0..2000 {
+    for _ in 0..SAMPLES {
         let numerator = values.next().unwrap() >> 11;
         let denominator = (values.next().unwrap() >> 11).max(1);
         #[allow(
@@ -61,7 +64,7 @@ fn ratios_of_exact_doubles_match_ieee_division() {
 fn integers_round_as_rust_converts_them() {
     let mut values = samples();
     let one = natural(1);
-    for _ in 0..2000 {
+    for _ in 0..SAMPLES {
         let value = (u128::from(values.next().unwrap()) << 64) | u128::from(values.next().unwrap());
         let value = value >> (values.next().unwrap() % 100);
         #[allow(

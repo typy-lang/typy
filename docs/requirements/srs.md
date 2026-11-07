@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy software requirements specification |
-| Version | 1.8 |
+| Version | 1.9 |
 | Status | Approved |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-07 |
@@ -434,11 +434,7 @@ TyPy rejects them (STD-04):
 
 ## 7. Open issues
 
-| ID | Question | Status |
-| --- | --- | --- |
-| OI-16 | How are generated code and the runtime instrumented with AddressSanitizer, and the runtime's unit tests run under Miri, when both need a nightly Rust toolchain that the dev image does not hold? | Open. In 0.1 the conformance suite links each program with GCC's AddressSanitizer runtime, which checks the allocator calls and reports leaks, without instrumentation (NFR-07, NFR-08). |
-
-A new question gets the next unused issue number.
+There are no open issues. A new question gets the next unused issue number.
 
 ## 8. Resolved issues
 
@@ -459,6 +455,7 @@ A new question gets the next unused issue number.
 | OI-13 | Can `x ** y` with a `float` exponent give a type TyPy does not have? | Yes: `(-8.0) ** 0.5` is `complex` in CPython 3.12 to 3.15. EXP-04 accepts a `float` exponent only when it is an integral literal or the base is a non-negative literal. | 2026-11-07 |
 | OI-14 | Which wording does an exception message take when the oracle versions word it differently? | The wording of the newest oracle, CPython 3.15. CPython 3.14 reworded every division by zero to `division by zero` and `0.0 ** -1.0` to `zero to a negative power`, where 3.12 and 3.13 name the operation, and 3.12 and 3.13 differ from each other for `float` modulo. A conformance test of such a message compares only the exception type (STD-03, STD-05). | 2026-11-07 |
 | OI-15 | Which Unicode version decides `repr`, `str.isprintable` and the digits `int()` reads, when CPython 3.12 to 3.15 ship Unicode 15.0 to 17.0? | Unicode 17.0, the version of the newest oracle, as OI-14 decides for messages. A character assigned after Unicode 15.0 is shown unescaped by TyPy and by CPython 3.15 but escaped by older oracles, so a conformance test of such a character is invalid (STD-03). | 2026-11-07 |
+| OI-16 | How are generated code and the runtime instrumented with AddressSanitizer, and the runtime's unit tests run under Miri, when both need a nightly Rust toolchain? | The dev image holds one pinned nightly, `nightly-2026-11-05`, used only for these checks and for fuzzing; every build still uses stable. The runtime is built with `-Zsanitizer=address` for the conformance suite's sanitizer run, and `make miri` runs its unit tests. Instrumenting generated code needs LLVM's AddressSanitizer pass in code generation and is planned for 0.2. | 2026-11-07 |
 
 ## Appendix A. Disposition of the specification pack
 

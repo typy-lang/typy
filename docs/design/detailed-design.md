@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy detailed design |
-| Version | 1.14 |
+| Version | 1.15 |
 | Status | Approved |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-07 |
@@ -812,7 +812,11 @@ installed `typy` finds `<prefix>/lib/typy/` and a `typy` in
 | `message` | Builds an exception message of up to 1024 code points from text, numbers and `repr` of a string, so an error about a long input stays short |
 | `io` | Standard output is buffered in 8 KiB and flushed when full, at exit, and before anything is written to standard error |
 | `exception` | Creates the built-in exceptions of EXC-02 with CPython's message for each operation. Where the oracle versions word a message differently, the runtime uses the wording of the newest, CPython 3.15 (OI-14): `division by zero` for every division and modulo of `int` and `float`, and `zero to a negative power` for `0.0 ** -1.0`. A conformance test of such a message compares only the exception type. It adds `TracebackEntry` values, and it prints an uncaught exception as `Traceback (most recent call last):`, one line per entry, then `Type: message`, or `Type` alone when the message is empty, as CPython does (STD-05) |
-| `stack` | The check at the start of recursive functions compares the stack pointer with the recorded limit, which leaves 64 KiB unused, and raises `RecursionError: maximum recursion depth exceeded` |
+| `stack` | The check at the start of recursive functions reads the stack pointer register and compares it with the recorded limit; the register is read rather than the address of a local, because a sanitizer may keep locals on a separate fake stack. The limit leaves 64 KiB of stack unused; past it the check raises `RecursionError: maximum recursion depth exceeded` |
+
+An `int` word that is not inline is the address of a large integer. The
+runtime makes it with `expose_provenance` and turns it back into a pointer
+with `with_exposed_provenance_mut`, so Miri checks the accesses through it.
 
 The archive holds `TYPY_RUNTIME_VERSION`, the bytes `typy-runtime-version:`,
 the package version and a line feed, which `RuntimeArchive` checks; nothing

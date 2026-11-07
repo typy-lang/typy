@@ -90,7 +90,7 @@ fn check(value: f64) {
 #[test]
 fn digits_are_the_shortest_that_read_back() {
     let mut state = 0x2545_f491_4f6c_dd1d_u64;
-    for _ in 0..20_000 {
+    for _ in 0..if cfg!(miri) { 40 } else { 20_000 } {
         state ^= state << 13;
         state ^= state >> 7;
         state ^= state << 17;

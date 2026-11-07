@@ -81,7 +81,7 @@ fn malformed_text_raises_with_the_quoted_input() {
 #[test]
 fn decimal_text_rounds_as_rust_reads_it() {
     let mut state = 0x853c_49e6_748f_ea9b_u64;
-    for _ in 0..5_000 {
+    for _ in 0..if cfg!(miri) { 20 } else { 5_000 } {
         state ^= state << 13;
         state ^= state >> 7;
         state ^= state << 17;

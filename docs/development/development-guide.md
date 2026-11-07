@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy development guide |
-| Version | 0.7 |
+| Version | 0.8 |
 | Status | Draft |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-07 |
@@ -52,6 +52,8 @@ Container". VS Code attaches to the same `dev` service.
 | `make shell` | Opens a shell in the `dev` service |
 | `make build` | Builds the compiler, `<target>/debug/typy`, after `make runtime` |
 | `make runtime` | Builds the runtime archive for `x86_64-unknown-linux-gnu` and `x86_64-unknown-linux-musl` with `scripts/build-runtime.sh`, and stages each in `<target>/lib/typy/<triple>/`, where a compiler in `<target>/debug` or `<target>/release` finds it; `make test` and `make coverage` run it first |
+| `make miri` | Runs the runtime's unit tests under Miri with the pinned nightly toolchain, in about 8 minutes |
+| `make fuzz` | Fuzzes the source, checking and lowering stages for `FUZZ_SECONDS` seconds, 60 by default; a crash leaves its input in `fuzz/artifacts/` |
 | `make runtime-size` | Fails when a runtime archive is over the size budgets of NFR-02 |
 | `make check` | Runs the whole quality gate: formatting, Clippy, the tests with coverage, the four documentation checks below, the Unicode table check and the runtime size check |
 | `make fmt` | Formats the Rust code |
@@ -68,6 +70,12 @@ Container". VS Code attaches to the same `dev` service.
 | `make unicode-tables-check` | Fails when the committed Unicode tables differ from the ones CPython 3.15 gives |
 | `make image` | Rebuilds the dev image after a change under `.devcontainer/` |
 | `make clean` | Stops the containers and removes `.tmp/preview` |
+
+The dev image holds one pinned nightly toolchain, `nightly-2026-11-05`, for
+`make miri`, `make fuzz` and the runtime archive built with
+AddressSanitizer; every other command uses the stable toolchain of
+`rust-toolchain.toml`. The fuzz targets in `fuzz/` are a Cargo workspace of
+their own, so the main workspace never needs nightly.
 
 `cargo llvm-cov` measures branch coverage only on a nightly toolchain, so
 `make coverage` checks lines, and the pinned nightly job of the test plan

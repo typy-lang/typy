@@ -46,7 +46,7 @@ pub unsafe extern "C" fn typy_rt_decrement(object: *mut ObjectHeader) {
 pub unsafe extern "C" fn typy_rt_int_increment(word: i64) {
     if word & 1 == 0 {
         // SAFETY: a word with its lowest bit clear is the address of a large integer.
-        unsafe { typy_rt_increment(word as *mut ObjectHeader) };
+        unsafe { typy_rt_increment(crate::int::object_of(word).cast()) };
     }
 }
 
@@ -59,7 +59,7 @@ pub unsafe extern "C" fn typy_rt_int_increment(word: i64) {
 pub unsafe extern "C" fn typy_rt_int_decrement(word: i64) {
     if word & 1 == 0 {
         // SAFETY: a word with its lowest bit clear is the address of a large integer.
-        unsafe { typy_rt_decrement(word as *mut ObjectHeader) };
+        unsafe { typy_rt_decrement(crate::int::object_of(word).cast()) };
     }
 }
 

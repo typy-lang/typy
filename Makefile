@@ -10,7 +10,7 @@ MARKDOWN := "**/*.md" "\#.tmp/**" "\#target/**"
 
 
 .PHONY: dev image shell runtime fmt fmt-check lint type test coverage docs-lint ascii-check traceability \
-	build runtime-size diagrams diagrams-check unicode-tables unicode-tables-check check hooks clean
+	build miri fuzz runtime-size diagrams diagrams-check unicode-tables unicode-tables-check check hooks clean
 
 dev: ## Start the dev service, building its image the first time
 	@$(COMPOSE) up -d --quiet-pull dev 2>/dev/null
@@ -60,6 +60,12 @@ diagrams: ## Render every PlantUML source to the SVG next to it
 
 diagrams-check: diagrams dev ## Fail when an SVG in the index differs from its source
 	@$(EXEC) scripts/check-diagrams.sh
+
+miri: dev ## Run the runtime's unit tests under Miri with the pinned nightly toolchain (ADR-0006)
+	@$(EXEC) scripts/miri.sh
+
+fuzz: dev ## Fuzz the source, checking and lowering stages for FUZZ_SECONDS seconds, 60 by default (NFR-09)
+	@$(EXEC) scripts/fuzz.sh
 
 runtime-size: runtime ## Fail when a runtime archive is over the size budgets of NFR-02
 	@$(EXEC) python3 scripts/check-runtime-size.py

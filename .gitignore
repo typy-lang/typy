@@ -1,2 +1,8 @@
 /target/
 .tmp/
+
+# Fuzzing writes its growing corpus, crash inputs and coverage here.
+/fuzz/corpus/
+/fuzz/artifacts/
+/fuzz/coverage/
+/fuzz/target/

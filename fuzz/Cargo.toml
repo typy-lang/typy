@@ -1,0 +1,31 @@
+[package]
+name = "typy-fuzz"
+description = "Fuzz targets for the compiler's source, checking and lowering stages (NFR-09)"
+version = "0.0.0"
+edition = "2024"
+license = "MIT OR Apache-2.0"
+authors = ["typy-lang contributors"]
+repository = "https://github.com/typy-lang/typy"
+publish = false
+
+# cargo-fuzz needs a nightly toolchain, so the targets are a workspace of their
+# own and the main build never needs one.
+[workspace]
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+camino = "1"
+libfuzzer-sys = "0.4"
+tempfile = "3"
+typy-check = { path = "../crates/typy-check" }
+typy-lower = { path = "../crates/typy-lower" }
+typy-source = { path = "../crates/typy-source" }
+
+[[bin]]
+name = "stages"
+path = "fuzz_targets/stages.rs"
+test = false
+doc = false
+bench = false

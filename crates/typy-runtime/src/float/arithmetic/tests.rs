@@ -65,6 +65,7 @@ fn floor_division_and_modulo_follow_the_sign_of_the_divisor() {
 }
 
 #[test]
+#[cfg_attr(miri, ignore = "Miri cannot call the C maths library's `pow`")]
 fn powers_follow_the_special_cases_of_cpython() {
     let cases: [(f64, f64, f64); 14] = [
         (2.0, 10.0, 1024.0),
@@ -94,6 +95,7 @@ fn powers_follow_the_special_cases_of_cpython() {
 }
 
 #[test]
+#[cfg_attr(miri, ignore = "Miri cannot call the C maths library's `pow`")]
 fn powers_out_of_range_raise() {
     assert_eq!(
         message(&typy_rt_float_power(0.0, -1.0)),

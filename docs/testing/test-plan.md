@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy test plan |
-| Version | 0.5 |
+| Version | 0.6 |
 | Status | Draft |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-07 |
@@ -130,22 +130,32 @@ Subprocess runs are included in coverage (NFR-11).
 ### 3.5 Memory and safety
 
 The test `crates/typy-conformance/tests/sanitized.rs` builds every accepted
-conformance test once more, links its object file and the runtime archive
-with `cc -fsanitize=address`, and runs it with leak detection on. The run
-must show CPython's results; a sanitizer report ends it with status 86 and
-fails the test (NFR-07, NFR-08). The allocator calls are checked this way:
-a leak at exit, a double free, and a free of a pointer that was never
-allocated. Generated code and the runtime are not instrumented, so a stray
-read or write inside an allocation is not found; instrumenting them, and
-running the runtime's unit tests under Miri (ADR-0006), need a nightly Rust
-toolchain and are open issue OI-16.
+conformance test once more: its object file is linked with the runtime built
+with AddressSanitizer (`-Zsanitizer=address`, pinned nightly) and with GCC's
+AddressSanitizer library, and run with leak detection on. The run must show
+CPython's results; a sanitizer report ends it with status 86 and fails the
+test (NFR-07, NFR-08). Every allocation and free is checked, leaks are
+reported at exit, and every memory access the runtime makes is checked.
+Generated code is not instrumented; it is checked by the TyIR verifier, and
+instrumenting it is planned for 0.2 (OI-16).
+
+`make miri` runs the runtime's unit tests under Miri (ADR-0006), which
+reports out-of-bounds, misaligned and dangling accesses and reads of
+uninitialised memory. Miri cannot call `pow` or `getrlimit`, so the three
+tests that do are skipped under it, as is the 4300-digit conversion, which
+takes hours there; the long randomised loops check a sample. The unit tests
+do not release the objects they make, so Miri's leak report is off; whole
+programs are checked for leaks by the sanitizer run.
 
 ### 3.6 Fuzzing
 
-Fuzz targets feed generated input to the source, checking and lowering
-stages, starting from the conformance corpus. A crash, a hang over 10
-seconds or a verifier failure is a defect. Each one found becomes a
-regression test named for its behaviour.
+The fuzz target `stages` (`fuzz/fuzz_targets/stages.rs`) feeds generated
+input to the source, checking and lowering stages in turn, starting from the
+conformance corpus. A crash, a hang over 10 seconds, or an internal error
+E9001, which a TyIR verifier failure becomes, is a defect. Each one found
+becomes a regression test named for its behaviour. `make fuzz` runs it for
+`FUZZ_SECONDS` seconds, 60 by default, with libFuzzer and AddressSanitizer;
+the 8-hour run of NFR-09 is `FUZZ_SECONDS=28800 make fuzz`.
 
 ### 3.7 Defects
 
@@ -380,9 +390,9 @@ that the specification does not define.
 | NFR-04 | 1.0 | Benchmark | `tests/bench/build_time`: debug build of the 10,000-line project under 2 s |
 | NFR-05 | 1.0 | Benchmark | `tests/bench/build_time`: release build of the 10,000-line project under 20 s |
 | NFR-06 | 0.1 | E2E | Determinism job: every conformance program built twice, bytes compared |
-| NFR-07 | 0.1 | IT | Conformance suite under AddressSanitizer; runtime under Miri; nightly fuzzing |
-| NFR-08 | 0.1 | IT | Conformance suite under LeakSanitizer |
-| NFR-09 | 0.1 | Fuzz | `fuzz/` targets for parsing, checking and lowering, 8 hours nightly, zero crashes |
+| NFR-07 | 0.1 | IT | `tests/sanitized.rs`: the conformance suite with the runtime under AddressSanitizer; `make miri`; `make fuzz` |
+| NFR-08 | 0.1 | IT | `tests/sanitized.rs`: the conformance suite under LeakSanitizer |
+| NFR-09 | 0.1 | Fuzz | `make fuzz`, target `stages` over parsing, checking and lowering; 8 hours with zero crashes before a release |
 | NFR-10 | 0.1 | IT | Coverage report of `typy-conformance`: an accepted and a rejected test per requirement |
 | NFR-11 | 0.1 | CI gate | `cargo llvm-cov` over the workspace, with subprocesses, at least 95 percent lines and branches |
 | NFR-12 | 0.2 | UT | `typy-runtime` layout test: `size_of::<ObjectHeader>() == 8` |
