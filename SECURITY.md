@@ -12,7 +12,10 @@ receives security fixes.
 ## Reporting a vulnerability
 
 Report a vulnerability privately through the repository's security
-advisory form: open the Security tab and choose "Report a vulnerability".
+advisory form at
+<https://github.com/typy-lang/typy/security/advisories/new>, or open the
+Security tab of <https://github.com/typy-lang/typy> and choose "Report a
+vulnerability".
 Do not open a public issue. You will get an answer within seven days, and a
 fix or a plan with a date within 30 days.
 
