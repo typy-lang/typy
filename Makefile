@@ -6,7 +6,7 @@ COMPOSE := USER_UID=$(shell id -u) USER_GID=$(shell id -g) \
 	docker compose -f .devcontainer/compose.yaml
 EXEC := $(COMPOSE) exec -T dev
 DIAGRAMS := $(filter-out docs/diagrams/style.puml,$(wildcard docs/diagrams/*.puml))
-MARKDOWN := "**/*.md" "\#.tmp/**" "\#target/**"
+MARKDOWN := "**/*.md" "\#.tmp/**" "\#target/**" "\#dist/**"
 
 
 .PHONY: dev image shell runtime fmt fmt-check lint type test coverage docs-lint ascii-check traceability test-int test-e2e test-all \
