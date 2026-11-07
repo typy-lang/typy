@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy detailed design |
-| Version | 1.5 |
+| Version | 1.6 |
 | Status | Approved |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-06 |
@@ -51,7 +51,10 @@ crates/
   typy-check/tests/           checker.rs, through the public API
   typy-tyir/src/              module, function, block, instruction,
                               types, verify, print
-  typy-lower/src/             lower, raise_analysis, ownership_analysis
+  typy-lower/src/             program, function, ownership, invoke,
+                              statement, expression, arithmetic,
+                              comparison, conversion, builtin,
+                              call_graph, mangle, strings, types
   typy-codegen/src/           target, generate, layout, abi
   typy-build/src/             request, mode, emit, link_plan, linker,
                               artifact
@@ -573,18 +576,28 @@ b4(v5: exception):
 
 ## 9. typy-lower
 
-`Lowering::lower(program) -> Result<TyirModule, Diagnostic>` turns each
-`TypedFunction` into a `TyirFunction`, then runs the passes below, with the
-verifier after each one. Its only errors are internal, E9001.
+`lower(program) -> Result<TyirModule, Diagnostics>` turns each
+`TypedFunction` into a `TyirFunction` and verifies the module. Its only
+errors are internal, E9001. The crate has one module per responsibility:
+the function lowerer, ownership, `invoke` and its error path, statements,
+expressions, arithmetic, comparisons, conversions, builtins, the call
+graph, symbol names and the string pool.
 
-| Pass | Behaviour |
+| Concern | Behaviour |
 | --- | --- |
-| Lowering | Statements become blocks; `for` over `range` becomes a counting loop; chained comparisons evaluate each operand once (EXP-06); `and` and `or` become branches (EXP-09) |
-| `RaiseAnalysis` | Marks a function `may_raise` when it contains an operation that may raise, such as integer division (EXP-03) or a `str` index (DAT-11), or calls a function that is marked. It iterates over the call graph until nothing changes. Calls to marked functions become `Invoke` |
-| `OwnershipAnalysis` | Inserts `Increment` and `Decrement` for heap values so that each owned reference is released once on every path, including `error` successors. Parameters are borrowed; the last use of a value moves it (MEM-04) |
-| Stack check | Puts a stack-limit check at the start of each function that is part of a cycle in the call graph (FUN-02) |
+| Locals | Each parameter and local gets a slot. The entry block, written last, stores every parameter and gives every counted slot an immortal value, so every error path can release every slot |
+| Ownership | A lowered value is owned or borrowed. Constants are immortal and borrowed, and so are slot values; results of calls and of `int` arithmetic are owned. A store moves an owned value or counts a borrowed one, then releases the slot's old value. Owned temporaries are tracked until they are released or moved |
+| Raising | A call of a runtime function or program function that may raise is an `invoke`. Its error block releases the live owned temporaries and every slot, then returns the exception (ADR-0004) |
+| `RaiseAnalysis` | A function may raise when its lowered code contains an `invoke`. Lowering runs again until that set of functions stops growing, so the analysis always agrees with the code; the verifier checks it |
+| Statements | `if`, `while` and `for` with `else`; `break` and `continue` jump to the loop's targets. `for` over `range` evaluates its arguments once into hidden slots, raises `ValueError` for a zero step unless the step is a nonzero constant, and keeps its counter apart from the target, as CPython's iterator does |
+| Expressions | `and` and `or` return an operand and stop early (EXP-09); comparison chains evaluate each operand once and stop at the first false link (EXP-06); mixed `int` and `float` arithmetic converts the `int` with an `invoke`, because a large `int` raises `OverflowError`; `int` and `float` compare exactly in the runtime |
+| Builtins | Each builtin of 0.1 becomes runtime calls. `print` evaluates every argument in source order, then converts and writes each value. `min` and `max` keep the first value on a tie, as CPython does |
+| Stack | A function in a cycle of calls invokes the runtime's stack check on entry (FUN-02) |
 
-`EscapeAnalysis` is planned for 0.4 and `CycleAnalysis` for 1.0.
+In 0.1 the counting is correct but not optimised: every store counts and
+every temporary is released. Removing the counts that borrows and moves
+make unnecessary is MEM-04, in 0.2. `EscapeAnalysis` is planned for 0.4
+and `CycleAnalysis` for 1.0.
 
 ## 10. typy-codegen
 

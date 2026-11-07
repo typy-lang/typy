@@ -1,0 +1,21 @@
+[package]
+name = "typy-lower"
+description = "Lowers a checked TyPy program to TyIR, with reference counting and error returns"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+typy-check.workspace = true
+typy-diagnostics.workspace = true
+typy-source.workspace = true
+typy-tyir.workspace = true
+
+[dev-dependencies]
+camino.workspace = true

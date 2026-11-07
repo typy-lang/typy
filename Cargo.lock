@@ -864,6 +864,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "typy-lower"
+version = "0.0.0"
+dependencies = [
+ "camino",
+ "typy-check",
+ "typy-diagnostics",
+ "typy-source",
+ "typy-tyir",
+]
+
+[[package]]
 name = "typy-source"
 version = "0.0.0"
 dependencies = [

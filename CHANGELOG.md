@@ -25,6 +25,9 @@ All notable changes to TyPy are recorded here. The format follows
 - The `typy-tyir` crate: TyIR's types, a function builder, a verifier that
   checks definitions by dominance and the types of every operation, and the
   text form for `--emit=tyir`.
+- The `typy-lower` crate: lowers a checked program to TyIR with reference
+  counting, error returns through `invoke`, and the semantics of CPython for
+  loops, `and`, `or`, comparison chains and the builtins of 0.1.
 - A quality gate, `make check`, that checks formatting, runs Clippy and the
   tests with at least 95 percent line coverage, lints the documents, checks for
   non-ASCII text, checks that every requirement has a row in the test plan,
