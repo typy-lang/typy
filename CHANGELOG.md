@@ -74,6 +74,12 @@ All notable changes to TyPy are recorded here. The format follows
   memory access the runtime makes is checked. `make miri` runs the
   runtime's unit tests under Miri, and `make fuzz` fuzzes the source,
   checking and lowering stages.
+- Golden tests of every text stage of `--emit` and of rendered
+  diagnostics in `tests/golden/`; `make bless` rewrites them.
+- End-to-end tests for a missing or failing C toolchain, an empty program,
+  the 16 MiB limit, a file that is not UTF-8, two builds at once, argument
+  forwarding by `typy run`, and environment variables that must not change
+  the output.
 - The stack check reads the stack pointer register, so `RecursionError`
   is raised in time also when locals do not live on the machine stack.
 - The runtime archive is built for musl as well as glibc, and `make check`

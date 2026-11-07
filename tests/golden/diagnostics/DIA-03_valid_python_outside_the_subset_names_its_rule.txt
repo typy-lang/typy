@@ -1,0 +1,7 @@
+error[E0302]: the exponent of `int ** int` must be a non-negative integer literal, because CPython returns a float for a negative exponent
+ --> DIA-03_valid_python_outside_the_subset_names_its_rule.py:1:12
+  |
+1 | print(2 ** -1)
+  |            ^^
+  = rule: EXP-04
+help: write the base as a float, such as `2.0 ** n`

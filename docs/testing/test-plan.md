@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy test plan |
-| Version | 0.6 |
+| Version | 0.9 |
 | Status | Draft |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-07 |
@@ -29,10 +29,10 @@ Each test sits at the lowest level that can prove its behaviour.
 | Level | What it proves | Where | Runs |
 | --- | --- | --- | --- |
 | Unit (UT) | One function or type in isolation: parsing a code, normalising a union, a large-integer operation | `#[cfg(test)]` modules in each crate | Every commit |
-| Golden | The text of one compiler stage for one input, through `--emit` (CLI-04) | `tests/golden/<stage>/` | Every commit |
+| Golden | The text of one compiler stage for one input, through `--emit` (CLI-04) | `tests/golden/`, run by `crates/typy-driver/tests/golden.rs` | Every commit |
 | Integration (IT) | The compiler, runtime and C toolchain together on one program, compared with CPython; the conformance suite | `tests/conformance/<area>/` through `typy-conformance`, which drives `typy-driver` in process | Every commit |
-| End-to-end (E2E) | The `typy` executable as a user runs it: arguments, exit status, files written, and the built program run as a subprocess | `tests/e2e/` | Every commit |
-| Fuzz | No input crashes the compiler (NFR-09) | `fuzz/` | Nightly, 8 hours |
+| End-to-end (E2E) | The `typy` executable as a user runs it: arguments, exit status, files written, and the built program run as a subprocess | `crates/typy-cli/tests/cli.rs` | Every commit |
+| Fuzz | No input crashes the compiler (NFR-09) | `fuzz/` | 30 minutes before each release; 60 seconds on demand |
 | Benchmark | The numbered budgets of NFR-03 to NFR-05, NFR-13 and NFR-14 | `tests/bench/` | Weekly and before a release |
 | Mutation | Tests fail when the code they cover is changed | `cargo-mutants` over the compiler crates | Weekly |
 
@@ -60,9 +60,15 @@ Each test sits at the lowest level that can prove its behaviour.
 ### 3.2 Golden tests
 
 A golden test is a `.py` input and the expected output of one stage. The
-expected files change only through the `typy-dev bless` command, and the
-diff is reviewed in the same commit. A test never edits its expected file to
-pass.
+programs are in `tests/golden/programs/`, and the text of each stage but
+`obj` is in `tests/golden/<stage>/<program>.txt`. The programs in
+`tests/golden/diagnostics/`, each named for the DIA requirement it shows,
+sit beside the rendered text of their diagnostics. The expected files
+change only through `make bless`, and the diff is reviewed in the same
+commit. A test never edits its expected file to pass, and an expected file
+without its program fails the run. The golden programs are ASCII, so the
+files follow the repository's ASCII rule; Unicode text is tested by the
+conformance suite.
 
 ### 3.3 Conformance tests
 
@@ -155,7 +161,9 @@ conformance corpus. A crash, a hang over 10 seconds, or an internal error
 E9001, which a TyIR verifier failure becomes, is a defect. Each one found
 becomes a regression test named for its behaviour. `make fuzz` runs it for
 `FUZZ_SECONDS` seconds, 60 by default, with libFuzzer and AddressSanitizer;
-the 8-hour run of NFR-09 is `FUZZ_SECONDS=28800 make fuzz`.
+the 30-minute run of NFR-09 is `FUZZ_SECONDS=1800 make fuzz`. The front end
+of 0.1 is small, and a 60-second run already stops finding new code paths
+quickly, so a longer run adds little; the budget grows with the language.
 
 ### 3.7 Defects
 
@@ -197,7 +205,7 @@ A release ships when all of these hold:
    moves it to a later release, saying so.
 3. Line and branch coverage is at least 95 percent (NFR-11).
 4. The sanitizer and Miri runs report nothing (NFR-07, NFR-08).
-5. Nightly fuzzing has run 8 hours with no new crash (NFR-09).
+5. Fuzzing has run 30 minutes with no new crash (NFR-09).
 6. Every numbered non-functional requirement whose release has been reached
    is within its budget.
 7. No defect remains open that breaks a requirement of the release.
@@ -238,18 +246,18 @@ that the specification does not define.
 | STD-05 | 0.3 | IT | `tests/conformance/std/STD-05_*.py` |
 | STD-06 | 0.1 | IT | `tests/conformance/std/STD-06_*.py` |
 | STD-07 | 0.1 | IT | `tests/conformance/std/STD-07_*.py` |
-| CLI-01 | 0.1 | E2E | `tests/e2e/cli.rs`, tests named for CLI-01 |
-| CLI-02 | 0.1 | E2E | `tests/e2e/cli.rs`, tests named for CLI-02 |
-| CLI-03 | 0.1 | E2E | `tests/e2e/cli.rs`, tests named for CLI-03 |
-| CLI-04 | 0.1 | E2E | `tests/e2e/cli.rs`, tests named for CLI-04; stage golden files in `tests/golden/` |
-| CLI-05 | 0.1 | E2E | `tests/e2e/cli.rs`, tests named for CLI-05 |
-| CLI-06 | 0.1 | E2E | `tests/e2e/cli.rs`, tests named for CLI-06 |
-| CLI-07 | 0.3 | E2E | `tests/e2e/cli.rs`, tests named for CLI-07 |
-| CLI-08 | 0.5 | E2E | `tests/e2e/cli.rs`, tests named for CLI-08 |
-| CLI-09 | 0.5 | E2E | `tests/e2e/cli.rs`, tests named for CLI-09 |
-| CLI-10 | 0.3 | E2E | `tests/e2e/cli.rs`, tests named for CLI-10 |
-| CLI-11 | 0.1 | E2E | `tests/e2e/cli.rs`, tests named for CLI-11 |
-| CLI-12 | 0.3 | E2E | `tests/e2e/cli.rs`, tests named for CLI-12 |
+| CLI-01 | 0.1 | E2E | `crates/typy-cli/tests/cli.rs`, tests named for CLI-01 |
+| CLI-02 | 0.1 | E2E | `crates/typy-cli/tests/cli.rs`, tests named for CLI-02 |
+| CLI-03 | 0.1 | E2E | `crates/typy-cli/tests/cli.rs`, tests named for CLI-03 |
+| CLI-04 | 0.1 | E2E, golden | `crates/typy-cli/tests/cli.rs`, tests named for CLI-04; stage golden files in `tests/golden/` |
+| CLI-05 | 0.1 | E2E | `crates/typy-cli/tests/cli.rs`, tests named for CLI-05 |
+| CLI-06 | 0.1 | E2E | `crates/typy-cli/tests/cli.rs`, tests named for CLI-06 |
+| CLI-07 | 0.3 | E2E | `crates/typy-cli/tests/cli.rs`, tests named for CLI-07 |
+| CLI-08 | 0.5 | E2E | `crates/typy-cli/tests/cli.rs`, tests named for CLI-08 |
+| CLI-09 | 0.5 | E2E | `crates/typy-cli/tests/cli.rs`, tests named for CLI-09 |
+| CLI-10 | 0.3 | E2E | `crates/typy-cli/tests/cli.rs`, tests named for CLI-10 |
+| CLI-11 | 0.1 | E2E | `crates/typy-cli/tests/cli.rs`, tests named for CLI-11 |
+| CLI-12 | 0.3 | E2E | `crates/typy-cli/tests/cli.rs`, tests named for CLI-12 |
 | LEX-01 | 0.1 | IT | `tests/conformance/lex/LEX-01_*.py` |
 | LEX-02 | 0.1 | IT | `tests/conformance/lex/LEX-02_*.py` |
 | LEX-03 | 0.1 | IT | `tests/conformance/lex/LEX-03_*.py` |
@@ -382,8 +390,8 @@ that the specification does not define.
 | DIA-03 | 0.1 | UT, IT | `typy-diagnostics` unit tests; `tests/golden/diagnostics/DIA-03_*` |
 | DIA-04 | 0.1 | UT, IT | `typy-diagnostics` unit tests; `tests/golden/diagnostics/DIA-04_*` |
 | DIA-05 | 0.3 | UT, IT | `typy-diagnostics` unit tests; `tests/golden/diagnostics/DIA-05_*` |
-| DIA-06 | 0.1 | UT, IT | `typy-diagnostics` unit tests; `tests/golden/diagnostics/DIA-06_*` |
-| DIA-07 | 0.1 | UT, IT | `typy-diagnostics` unit tests; `tests/golden/diagnostics/DIA-07_*` |
+| DIA-06 | 0.1 | UT | `typy-diagnostics` unit tests of the code registry |
+| DIA-07 | 0.3 | UT, IT | `typy-diagnostics` unit tests; `tests/golden/diagnostics/DIA-07_*` |
 | NFR-01 | 0.1 | IT | `crates/typy-driver/tests/size.rs`: hello world, `--release-small`, linked statically with musl, run, and under 100 KB (75 KB in 0.1, 17 KB stripped) |
 | NFR-02 | 0.1 | Static | `make runtime-size`, `scripts/check-runtime-size.py`: the code and data of the runtime's own object in each archive under 48 KB, and under 32 KB less the large-integer module (40.3 KB and 29.8 KB in 0.1) |
 | NFR-03 | 1.0 | Benchmark | `tests/bench/` suite against its C versions, geometric mean within 1.5 times |
@@ -392,7 +400,7 @@ that the specification does not define.
 | NFR-06 | 0.1 | E2E | Determinism job: every conformance program built twice, bytes compared |
 | NFR-07 | 0.1 | IT | `tests/sanitized.rs`: the conformance suite with the runtime under AddressSanitizer; `make miri`; `make fuzz` |
 | NFR-08 | 0.1 | IT | `tests/sanitized.rs`: the conformance suite under LeakSanitizer |
-| NFR-09 | 0.1 | Fuzz | `make fuzz`, target `stages` over parsing, checking and lowering; 8 hours with zero crashes before a release |
+| NFR-09 | 0.1 | Fuzz | `make fuzz`, target `stages` over parsing, checking and lowering; 30 minutes with zero crashes before a release |
 | NFR-10 | 0.1 | IT | Coverage report of `typy-conformance`: an accepted and a rejected test per requirement |
 | NFR-11 | 0.1 | CI gate | `cargo llvm-cov` over the workspace, with subprocesses, at least 95 percent lines and branches |
 | NFR-12 | 0.2 | UT | `typy-runtime` layout test: `size_of::<ObjectHeader>() == 8` |

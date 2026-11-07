@@ -1,0 +1,320 @@
+string s0 = "negative"
+string s1 = "zero"
+string s2 = "positive "
+string s3 = ": "
+string s4 = "\n"
+string s5 = " "
+entry fn2
+
+fn _TY8__main__3gcd(v0: int, v1: int) -> int raises {  # gcd
+  slot s0 a: int
+  slot s1 b: int
+  slot s2 remainder: int
+b0(v0: int, v1: int):
+  inc v0
+  store s0, v0
+  inc v1
+  store s1, v1
+  v22 = const int 0
+  store s2, v22
+  jump b1()
+b1():
+  jump b2()
+b2():
+  v3 = load s1
+  v4 = const int 0
+  v5 = cmp.int.ne v3, v4
+  jump b6(v5)
+b3():
+  v6 = load s0
+  v7 = load s1
+  invoke rt.int_modulo(v6, v7) to b7 unwind b8
+b4():
+  jump b5()
+b5():
+  v18 = load s0
+  inc v18
+  v19 = load s0
+  dec v19
+  v20 = load s1
+  dec v20
+  v21 = load s2
+  dec v21
+  return v18
+b6(v2: bool):
+  branch v2, b3, b4
+b7(v8: int):
+  v13 = load s2
+  store s2, v8
+  dec v13
+  v14 = load s1
+  inc v14
+  v15 = load s0
+  store s0, v14
+  dec v15
+  v16 = load s2
+  inc v16
+  v17 = load s1
+  store s1, v16
+  dec v17
+  jump b2()
+b8(v9: exception):
+  v10 = load s0
+  dec v10
+  v11 = load s1
+  dec v11
+  v12 = load s2
+  dec v12
+  return_error v9
+}
+
+fn _TY8__main__8describe(v0: int) -> str raises {  # describe
+  slot s0 n: int
+b0(v0: int):
+  inc v0
+  store s0, v0
+  jump b1()
+b1():
+  v2 = load s0
+  v3 = const int 0
+  v4 = cmp.int.lt v2, v3
+  jump b2(v4)
+b2(v1: bool):
+  branch v1, b3, b4
+b3():
+  v5 = const str s0
+  inc v5
+  v6 = load s0
+  dec v6
+  return v5
+b4():
+  v8 = load s0
+  v9 = const int 0
+  v10 = cmp.int.eq v8, v9
+  jump b6(v10)
+b5():
+  v13 = const str s2
+  v14 = load s0
+  invoke rt.int_to_str(v14) to b10 unwind b11
+b6(v7: bool):
+  branch v7, b7, b8
+b7():
+  v11 = const str s1
+  inc v11
+  v12 = load s0
+  dec v12
+  return v11
+b8():
+  jump b9()
+b9():
+  jump b5()
+b10(v15: str):
+  v18 = call rt.str_concat(v13, v15)
+  dec v15
+  v19 = load s0
+  dec v19
+  return v18
+b11(v16: exception):
+  v17 = load s0
+  dec v17
+  return_error v16
+}
+
+fn __typy_main() -> unit raises {  # <module>
+  slot s0 i: int
+  slot s1 $counter: int
+  slot s2 $limit: int
+  slot s3 $stride: int
+b0():
+  v88 = const int 0
+  store s0, v88
+  v89 = const int 0
+  store s1, v89
+  v90 = const int 0
+  store s2, v90
+  v91 = const int 0
+  store s3, v91
+  jump b1()
+b1():
+  v0 = const int 1
+  v1 = int.neg v0
+  v2 = load s1
+  store s1, v1
+  dec v2
+  v3 = const int 3
+  inc v3
+  v4 = load s2
+  store s2, v3
+  dec v4
+  v5 = const int 1
+  inc v5
+  v6 = load s3
+  store s3, v5
+  dec v6
+  jump b2()
+b2():
+  v7 = load s1
+  v8 = load s2
+  v9 = cmp.int.lt v7, v8
+  branch v9, b3, b5
+b3():
+  v10 = load s1
+  inc v10
+  v11 = load s0
+  store s0, v10
+  dec v11
+  v12 = load s0
+  invoke _TY8__main__8describe(v12) to b7 unwind b8
+b4():
+  v42 = load s1
+  v43 = load s3
+  v44 = int.add v42, v43
+  v45 = load s1
+  store s1, v44
+  dec v45
+  jump b2()
+b5():
+  jump b6()
+b6():
+  v46 = const int 2
+  v47 = const int 70
+  invoke rt.int_power(v46, v47) to b13 unwind b14
+b7(v13: str):
+  v19 = load s0
+  v20 = const int 18
+  v21 = int.mul v19, v20
+  v22 = const int 12
+  invoke _TY8__main__3gcd(v21, v22) to b9 unwind b10
+b8(v14: exception):
+  v15 = load s0
+  dec v15
+  v16 = load s1
+  dec v16
+  v17 = load s2
+  dec v17
+  v18 = load s3
+  dec v18
+  return_error v14
+b9(v23: int):
+  dec v21
+  v29 = const str s3
+  call rt.write_stdout(v13)
+  v30 = const unit
+  call rt.write_stdout(v29)
+  v31 = const unit
+  invoke rt.int_to_str(v23) to b11 unwind b12
+b10(v24: exception):
+  dec v13
+  dec v21
+  v25 = load s0
+  dec v25
+  v26 = load s1
+  dec v26
+  v27 = load s2
+  dec v27
+  v28 = load s3
+  dec v28
+  return_error v24
+b11(v32: str):
+  call rt.write_stdout(v32)
+  v38 = const unit
+  dec v32
+  v39 = const str s4
+  call rt.write_stdout(v39)
+  v40 = const unit
+  dec v23
+  dec v13
+  v41 = const unit
+  jump b4()
+b12(v33: exception):
+  dec v13
+  dec v23
+  v34 = load s0
+  dec v34
+  v35 = load s1
+  dec v35
+  v36 = load s2
+  dec v36
+  v37 = load s3
+  dec v37
+  return_error v33
+b13(v48: int):
+  v54 = const int 3
+  invoke rt.int_floor_divide(v48, v54) to b15 unwind b16
+b14(v49: exception):
+  v50 = load s0
+  dec v50
+  v51 = load s1
+  dec v51
+  v52 = load s2
+  dec v52
+  v53 = load s3
+  dec v53
+  return_error v49
+b15(v55: int):
+  dec v48
+  v61 = const int 7
+  v62 = const int 2
+  invoke rt.int_true_divide(v61, v62) to b17 unwind b18
+b16(v56: exception):
+  dec v48
+  v57 = load s0
+  dec v57
+  v58 = load s1
+  dec v58
+  v59 = load s2
+  dec v59
+  v60 = load s3
+  dec v60
+  return_error v56
+b17(v63: float):
+  v69 = const str s5
+  invoke rt.int_to_str(v55) to b19 unwind b20
+b18(v64: exception):
+  dec v55
+  v65 = load s0
+  dec v65
+  v66 = load s1
+  dec v66
+  v67 = load s2
+  dec v67
+  v68 = load s3
+  dec v68
+  return_error v64
+b19(v70: str):
+  call rt.write_stdout(v70)
+  v76 = const unit
+  dec v70
+  call rt.write_stdout(v69)
+  v77 = const unit
+  v78 = call rt.float_to_str(v63)
+  call rt.write_stdout(v78)
+  v79 = const unit
+  dec v78
+  v80 = const str s4
+  call rt.write_stdout(v80)
+  v81 = const unit
+  dec v55
+  v82 = const unit
+  v83 = const unit
+  v84 = load s0
+  dec v84
+  v85 = load s1
+  dec v85
+  v86 = load s2
+  dec v86
+  v87 = load s3
+  dec v87
+  return v83
+b20(v71: exception):
+  dec v55
+  v72 = load s0
+  dec v72
+  v73 = load s1
+  dec v73
+  v74 = load s2
+  dec v74
+  v75 = load s3
+  dec v75
+  return_error v71
+}

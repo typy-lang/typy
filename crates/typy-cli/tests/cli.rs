@@ -50,7 +50,7 @@ fn stderr(output: &Output) -> String {
 const HELLO: &str = "print(\"hello\", 1 + 2)\n";
 
 #[test]
-fn wrong_usage_exits_with_status_2() {
+fn cli_06_wrong_usage_exits_with_status_2() {
     let workspace = Workspace::new(HELLO);
     for arguments in [
         &[][..],
@@ -73,7 +73,7 @@ fn wrong_usage_exits_with_status_2() {
 }
 
 #[test]
-fn check_reports_each_diagnostic_with_its_place() {
+fn cli_03_check_reports_each_diagnostic_with_its_place() {
     let workspace = Workspace::new(HELLO);
     let clean = workspace.typy(&["check", "app.py"]);
     assert_eq!((status(&clean), stderr(&clean).as_str()), (0, ""));
@@ -93,7 +93,7 @@ fn check_reports_each_diagnostic_with_its_place() {
 }
 
 #[test]
-fn build_writes_an_executable_beside_the_main_file_or_at_the_output() {
+fn cli_01_and_cli_05_each_mode_writes_an_executable_beside_the_main_file_or_at_the_output() {
     let workspace = Workspace::new(HELLO);
     for (arguments, path) in [
         (&["build", "app.py"][..], "app"),
@@ -118,7 +118,7 @@ fn build_writes_an_executable_beside_the_main_file_or_at_the_output() {
 }
 
 #[test]
-fn the_same_build_gives_the_same_bytes() {
+fn nfr_06_the_same_build_gives_the_same_bytes() {
     let workspace = Workspace::new(HELLO);
     for output in ["first", "second"] {
         assert_eq!(
@@ -131,7 +131,7 @@ fn the_same_build_gives_the_same_bytes() {
 }
 
 #[test]
-fn emit_writes_one_stage_to_standard_output_or_a_file() {
+fn cli_04_emit_writes_one_stage_to_standard_output_or_a_file() {
     let workspace = Workspace::new(HELLO);
     let tyir = workspace.typy(&["build", "app.py", "--emit=tyir"]);
     assert_eq!(status(&tyir), 0);
@@ -157,7 +157,7 @@ fn emit_writes_one_stage_to_standard_output_or_a_file() {
 }
 
 #[test]
-fn run_builds_once_and_passes_on_the_program_status() {
+fn cli_02_run_builds_once_and_passes_on_the_program_status() {
     let workspace = Workspace::new(HELLO);
     let first = workspace.typy(&["run", "app.py", "--", "an", "argument"]);
     assert_eq!((status(&first), stdout(&first).as_str()), (0, "hello 3\n"));
@@ -181,7 +181,7 @@ fn run_builds_once_and_passes_on_the_program_status() {
 }
 
 #[test]
-fn run_reports_a_program_that_does_not_build() {
+fn cli_02_run_reports_a_program_that_does_not_build() {
     let workspace = Workspace::new("print(undefined)\n");
     let output = workspace.typy(&["run", "app.py"]);
     assert_eq!(status(&output), 1);
@@ -200,7 +200,7 @@ fn run_reports_a_program_that_does_not_build() {
 }
 
 #[test]
-fn a_compiler_without_its_runtime_archive_says_so() {
+fn cli_01_a_compiler_without_its_runtime_archive_says_so() {
     let workspace = Workspace::new(HELLO);
     let compiler = workspace.root.join("bin/typy");
     std::fs::create_dir_all(compiler.parent().unwrap()).unwrap();
@@ -214,4 +214,165 @@ fn a_compiler_without_its_runtime_archive_says_so() {
     );
     let check = workspace.typy_at(&compiler, &["check", "app.py"]);
     assert_eq!(status(&check), 0, "checking needs no archive");
+}
+
+/// CLI-11: environment variables a compiler is often expected to honour change nothing.
+#[test]
+fn cli_11_environment_variables_other_than_typy_home_leave_the_output_unchanged() {
+    let workspace = Workspace::new(HELLO);
+    assert_eq!(
+        status(&workspace.typy(&["build", "app.py", "-o", "plain"])),
+        0
+    );
+    let output = Command::new(env!("CARGO_BIN_EXE_typy"))
+        .args(["build", "app.py", "-o", "varied"])
+        .current_dir(&workspace.root)
+        .env("TYPY_HOME", workspace.root.join("home"))
+        .envs([
+            ("CC", "false"),
+            ("CFLAGS", "-O3 -DNDEBUG"),
+            ("LDFLAGS", "-s"),
+            ("RUSTFLAGS", "-C opt-level=3"),
+            ("LANG", "de_DE.UTF-8"),
+            ("LC_ALL", "C"),
+            ("TZ", "Asia/Kolkata"),
+            ("SOURCE_DATE_EPOCH", "1"),
+            ("PYTHONHASHSEED", "7"),
+            ("PYTHONPATH", "/nowhere"),
+        ])
+        .output()
+        .unwrap();
+    assert_eq!((status(&output), stderr(&output).as_str()), (0, ""));
+    let plain = std::fs::read(workspace.root.join("plain")).unwrap();
+    assert_eq!(plain, std::fs::read(workspace.root.join("varied")).unwrap());
+}
+
+/// CLI-02: the arguments after `--` reach the program. A 0.1 program cannot read them, so the
+/// cached build is replaced with a script that prints its arguments and `typy run` reuses it.
+#[test]
+fn cli_02_run_starts_the_program_with_the_arguments_after_two_dashes() {
+    use std::os::unix::fs::PermissionsExt as _;
+    let workspace = Workspace::new(HELLO);
+    assert_eq!(status(&workspace.typy(&["run", "app.py"])), 0);
+    let build = std::fs::read_dir(workspace.root.join("home/cache"))
+        .unwrap()
+        .next()
+        .unwrap()
+        .unwrap()
+        .path()
+        .join("app");
+    std::fs::write(&build, "#!/bin/sh\nprintf '[%s]' \"$@\"\nexit 3\n").unwrap();
+    std::fs::set_permissions(&build, std::fs::Permissions::from_mode(0o755)).unwrap();
+    let output = workspace.typy(&["run", "app.py", "--", "-x", "two words", "--", ""]);
+    assert_eq!(stdout(&output), "[-x][two words][--][]");
+    assert_eq!(status(&output), 3);
+}
+
+/// A workspace whose `PATH` holds only `bin/`, with `cc` replaced by `script` when given.
+fn with_cc(workspace: &Workspace, script: Option<&str>) -> Output {
+    use std::os::unix::fs::PermissionsExt as _;
+    let bin = workspace.root.join("bin");
+    std::fs::create_dir_all(&bin).unwrap();
+    if let Some(script) = script {
+        std::fs::write(bin.join("cc"), script).unwrap();
+        std::fs::set_permissions(bin.join("cc"), std::fs::Permissions::from_mode(0o755)).unwrap();
+    }
+    Command::new(env!("CARGO_BIN_EXE_typy"))
+        .args(["build", "app.py"])
+        .current_dir(&workspace.root)
+        .env("TYPY_HOME", workspace.root.join("home"))
+        .env("PATH", &bin)
+        .output()
+        .unwrap()
+}
+
+#[test]
+fn a_missing_c_toolchain_is_e0701_and_writes_no_file() {
+    let workspace = Workspace::new(HELLO);
+    let output = with_cc(&workspace, None);
+    assert_eq!(status(&output), 1);
+    assert!(
+        stderr(&output).starts_with("error[E0701]"),
+        "{}",
+        stderr(&output)
+    );
+    assert!(!workspace.root.join("app").exists());
+}
+
+#[test]
+fn a_failing_link_is_e0702_and_writes_no_file() {
+    let workspace = Workspace::new(HELLO);
+    let output = with_cc(
+        &workspace,
+        Some("#!/bin/sh\necho 'ld: cannot link' >&2\nexit 1\n"),
+    );
+    assert_eq!(status(&output), 1);
+    let text = stderr(&output);
+    assert!(text.starts_with("error[E0702]"), "{text}");
+    assert!(text.contains("ld: cannot link"), "{text}");
+    assert!(!workspace.root.join("app").exists());
+}
+
+#[test]
+fn an_empty_program_builds_prints_nothing_and_exits_0() {
+    let workspace = Workspace::new("");
+    let output = workspace.typy(&["run", "app.py"]);
+    assert_eq!(
+        (
+            status(&output),
+            stdout(&output).as_str(),
+            stderr(&output).as_str()
+        ),
+        (0, "", "")
+    );
+}
+
+#[test]
+fn lex_09_a_file_of_16_mib_is_read_and_one_byte_more_is_e0101() {
+    const LIMIT: usize = 16 * 1024 * 1024;
+    let line = "pass\n";
+    let mut source = line.repeat(LIMIT / line.len());
+    source.push_str(&" ".repeat(LIMIT - source.len()));
+    assert_eq!(source.len(), LIMIT);
+    let workspace = Workspace::new(&source);
+    let exact = workspace.typy(&["check", "app.py"]);
+    assert!(!stderr(&exact).contains("E0101"), "{}", stderr(&exact));
+    source.push(' ');
+    std::fs::write(workspace.root.join("app.py"), &source).unwrap();
+    let over = workspace.typy(&["check", "app.py"]);
+    assert_eq!(status(&over), 1);
+    assert!(
+        stderr(&over).starts_with("error[E0101]"),
+        "{}",
+        stderr(&over)
+    );
+}
+
+#[test]
+fn lex_01_source_that_is_not_utf8_is_e0102() {
+    let workspace = Workspace::new("");
+    std::fs::write(workspace.root.join("app.py"), b"x = 1\ny = \"\xff\"\n").unwrap();
+    let output = workspace.typy(&["check", "app.py"]);
+    assert_eq!(status(&output), 1);
+    let text = stderr(&output);
+    assert!(text.starts_with("error[E0102]"), "{text}");
+    assert!(text.contains("app.py:2:"), "{text}");
+}
+
+#[test]
+fn nfr_06_two_builds_at_once_into_different_outputs_give_the_same_bytes() {
+    let workspace = Workspace::new(HELLO);
+    std::thread::scope(|scope| {
+        for output in ["one", "two"] {
+            let workspace = &workspace;
+            scope.spawn(move || {
+                assert_eq!(
+                    status(&workspace.typy(&["build", "app.py", "-o", output])),
+                    0
+                );
+            });
+        }
+    });
+    let one = std::fs::read(workspace.root.join("one")).unwrap();
+    assert_eq!(one, std::fs::read(workspace.root.join("two")).unwrap());
 }

@@ -1,0 +1,66 @@
+Module
+  Assign @1:1
+    Name name @1:1
+    BinOp Add @1:8
+      Constant Str("caf") @1:8
+      Call @1:16
+        Name chr @1:16
+        Constant Int("233") @1:20
+  Assign @2:1
+    Name total @2:1
+    Constant Int("0") @2:9
+  For @3:1
+    Name index @3:5
+    Call @3:14
+      Name range @3:14
+      Call @3:20
+        Name len @3:20
+        Name name @3:24
+    body
+      AugAssign Add @4:5
+        Name total @4:5
+        Call @4:14
+          Name ord @4:14
+          Subscript @4:18
+            Name name @4:18
+            Name index @4:23
+  AnnAssign @5:1
+    Name label @5:1
+    Name str @5:8
+    IfExp @5:14
+      Compare [Gt] @5:28
+        Name total @5:28
+        Constant Int("400") @5:36
+      BinOp Add @5:14
+        Name name @5:14
+        Constant Str("!") @5:21
+      Constant Str("?") @5:45
+  Expr @6:1
+    Call @6:1
+      Name print @6:1
+      Name label @6:7
+      Call @6:14
+        Name repr @6:14
+        Name label @6:19
+      Call @6:27
+        Name len @6:27
+        Name label @6:31
+      keyword end @6:39
+        Constant Str("\n") @6:43
+  Expr @7:1
+    Call @7:1
+      Name print @7:1
+      BoolOp And @7:7
+        Compare [Eq] @7:7
+          Call @7:7
+            Name ord @7:7
+            Subscript @7:11
+              Name name @7:11
+              UnaryOp USub @7:16
+                Constant Int("1") @7:17
+          Constant Int("233") @7:24
+        Compare [Eq] @7:32
+          BinOp Mod @7:32
+            Name total @7:32
+            Constant Int("2") @7:40
+          Constant Int("0") @7:45

@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy detailed design |
-| Version | 1.15 |
+| Version | 1.16 |
 | Status | Approved |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-07 |
@@ -711,11 +711,11 @@ are internal and may change in any release.
 | `target` | `Target` | `Target::host()` | Supported (section 10.1) |
 | `emit` | `Option<EmitStage>` | `None` | When set, no executable is written |
 | `output` | `Option<Utf8PathBuf>` | `None` | `executable_path()` defaults it to the main file without `.py`, next to it |
-| `deny_warnings` | `bool` | `false` | DIA-07 |
 
 Each field has a `with_` method that returns the changed request. The
 libraries to link and the functions to export join the request with CLI-09
-in 0.5.
+in 0.5, and `deny_warnings` with DIA-07 in 0.3, when the first warnings are
+defined.
 
 `RuntimeArchive::beside(executable, triple)` opens
 `<prefix>/lib/typy/<triple>/libtypy_runtime.a` for a compiler at
@@ -965,7 +965,6 @@ that meet it. The test plan traces the same requirements to their tests.
 | DIA-03 | 4.1, 7.2 |
 | DIA-04 | 4.1, 7.1 |
 | DIA-06 | 4.3 |
-| DIA-07 | 11 |
 | NFR-01 | 11, 14.2 |
 | NFR-02 | 14.2 |
 | NFR-06 | 3, 10.1 |

@@ -1,0 +1,54 @@
+Program entry fn0
+Function fn0 __main__.<module>() -> None @1:1
+  locals name: str, total: int, index: int, label: str
+  body
+    Assign name: str @1:1
+      Binary Add : str @1:8
+        Constant Str("caf") : str @1:8
+        Builtin Chr : str @1:16
+          Constant Int("233") : int @1:20
+    Assign total: int @2:1
+      Constant Int("0") : int @2:9
+    ForRange index: int @3:1
+      Constant Int("0") : int @3:14
+      Builtin Len : int @3:20
+        Local name : str @3:24
+      Constant Int("1") : int @3:14
+      body
+        AugAssign Add total: int @4:5
+          Builtin Ord : int @4:14
+            Index : str @4:18
+              Local name : str @4:18
+              Local index : int @4:23
+    Assign label: str @5:1
+      IfExp : str @5:14
+        Compare [Gt] : bool @5:28
+          Local total : int @5:28
+          Constant Int("400") : int @5:36
+        Binary Add : str @5:14
+          Local name : str @5:14
+          Constant Str("!") : str @5:21
+        Constant Str("?") : str @5:45
+    Expr @6:1
+      Print sep=false end=true : None @6:1
+        Local label : str @6:7
+        Builtin Repr : str @6:14
+          Local label : str @6:19
+        Builtin Len : int @6:27
+          Local label : str @6:31
+        Constant Str("\n") : str @6:43
+    Expr @7:1
+      Print sep=false end=false : None @7:1
+        BoolOp And : bool @7:7
+          Compare [Eq] : bool @7:7
+            Builtin Ord : int @7:7
+              Index : str @7:11
+                Local name : str @7:11
+                Unary USub : int @7:16
+                  Constant Int("1") : int @7:17
+            Constant Int("233") : int @7:24
+          Compare [Eq] : bool @7:32
+            Binary Mod : int @7:32
+              Local total : int @7:32
+              Constant Int("2") : int @7:40
+            Constant Int("0") : int @7:45

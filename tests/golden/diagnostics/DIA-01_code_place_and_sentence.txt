@@ -1,0 +1,8 @@
+error[E0402]: `count` was declared as int and is assigned a str
+ --> DIA-01_code_place_and_sentence.py:2:9
+  |
+2 | count = "one"
+  |         ^^^^^
+  = 2:1: the variable
+  = rule: TYP-03
+help: assign an int, or use a new variable

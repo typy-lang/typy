@@ -35,7 +35,8 @@ impl SourceFile {
         }
     }
 
-    /// Reads `root/path`; on failure the file is returned empty, with the diagnostic for it.
+    /// Reads `root/path`; on failure the file is returned empty, or holding the valid text before
+    /// the first byte that is not UTF-8, with the diagnostic for it.
     #[must_use]
     pub fn read(id: FileId, root: &Utf8Path, path: &Utf8Path) -> (Self, Option<Diagnostic>) {
         let empty = Self::from_text(id, path.to_owned(), "");
@@ -70,7 +71,8 @@ impl SourceFile {
         match String::from_utf8(bytes) {
             Ok(text) => (Self::from_text(id, path.to_owned(), &text), None),
             Err(error) => {
-                let at = TextOffset(offset(error.utf8_error().valid_up_to()));
+                let valid = error.utf8_error().valid_up_to();
+                let at = TextOffset(offset(valid));
                 let span = Span::empty(id, at);
                 let diagnostic = Diagnostic::new(
                     DiagnosticCode::error(102),
@@ -78,7 +80,14 @@ impl SourceFile {
                     format!("`{path}` is not valid UTF-8 at byte {}", at.0),
                 )
                 .with_rule(RuleId::LEX_01);
-                (empty, Some(diagnostic))
+                // The bytes before the first invalid one are valid UTF-8; keeping them lets the
+                // diagnostic show its line and column.
+                let bytes = error.into_bytes();
+                let prefix = String::from_utf8_lossy(&bytes[..valid]);
+                (
+                    Self::from_text(id, path.to_owned(), &prefix),
+                    Some(diagnostic),
+                )
             }
         }
     }
@@ -168,10 +177,15 @@ mod tests {
 
     #[test]
     fn invalid_utf8_gives_e0102_at_the_first_invalid_byte() {
-        let (_, diagnostic) = read(b"x = 1\n\xff\n");
+        let (file, diagnostic) = read(b"x = 1\ny = \"\xff\"\n");
         let diagnostic = diagnostic.unwrap();
         assert_eq!(diagnostic.code().to_string(), "E0102");
-        assert_eq!(diagnostic.span().unwrap().start(), TextOffset(6));
+        let at = diagnostic.span().unwrap().start();
+        assert_eq!(at, TextOffset(11));
+        // The valid text before the byte is kept, so the diagnostic shows its line and column.
+        assert_eq!(file.text(), "x = 1\ny = \"");
+        let position = file.position(at);
+        assert_eq!((position.line, position.column), (2, 6));
         assert_eq!(
             diagnostic.rule().map(typy_diagnostics::RuleId::as_str),
             Some("LEX-01")

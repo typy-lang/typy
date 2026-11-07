@@ -1,0 +1,88 @@
+Module
+  FunctionDef gcd @1:1
+    Parameter a Normal @1:9
+      Name int @1:12
+    Parameter b Normal @1:17
+      Name int @1:20
+      default
+        Constant Int("12") @1:26
+    returns
+      Name int @1:33
+    body
+      While @2:5
+        Compare [NotEq] @2:11
+          Name b @2:11
+          Constant Int("0") @2:16
+        body
+          Assign @3:9
+            Name remainder @3:9
+            BinOp Mod @3:21
+              Name a @3:21
+              Name b @3:25
+          Assign @4:9
+            Name a @4:9
+            Name b @4:13
+          Assign @5:9
+            Name b @5:9
+            Name remainder @5:13
+      Return @6:5
+        Name a @6:12
+  FunctionDef describe @9:1
+    Parameter n Normal @9:14
+      Name int @9:17
+    returns
+      Name str @9:25
+    body
+      If @10:5
+        Compare [Lt] @10:8
+          Name n @10:8
+          Constant Int("0") @10:12
+        body
+          Return @11:9
+            Constant Str("negative") @11:16
+        orelse
+          If @12:5
+            Compare [Eq] @12:10
+              Name n @12:10
+              Constant Int("0") @12:15
+            body
+              Return @13:9
+                Constant Str("zero") @13:16
+      Return @14:5
+        BinOp Add @14:12
+          Constant Str("positive ") @14:12
+          Call @14:26
+            Name str @14:26
+            Name n @14:30
+  For @17:1
+    Name i @17:5
+    Call @17:10
+      Name range @17:10
+      UnaryOp USub @17:16
+        Constant Int("1") @17:17
+      Constant Int("3") @17:20
+    body
+      Expr @18:5
+        Call @18:5
+          Name print @18:5
+          Call @18:11
+            Name describe @18:11
+            Name i @18:20
+          Call @18:24
+            Name gcd @18:24
+            BinOp Mult @18:28
+              Name i @18:28
+              Constant Int("18") @18:32
+          keyword sep @18:37
+            Constant Str(": ") @18:41
+  Expr @19:1
+    Call @19:1
+      Name print @19:1
+      BinOp FloorDiv @19:7
+        BinOp Pow @19:7
+          Constant Int("2") @19:7
+          Constant Int("70") @19:12
+        Constant Int("3") @19:18
+      BinOp Div @19:21
+        Constant Int("7") @19:21
+        Constant Int("2") @19:25

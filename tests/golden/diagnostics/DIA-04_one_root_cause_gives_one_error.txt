@@ -1,0 +1,6 @@
+error[E0205]: `missing` is not defined
+ --> DIA-04_one_root_cause_gives_one_error.py:1:9
+  |
+1 | value = missing
+  |         ^^^^^^^
+  = rule: STD-04

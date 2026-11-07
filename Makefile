@@ -10,7 +10,7 @@ MARKDOWN := "**/*.md" "\#.tmp/**" "\#target/**"
 
 
 .PHONY: dev image shell runtime fmt fmt-check lint type test coverage docs-lint ascii-check traceability \
-	build miri fuzz runtime-size diagrams diagrams-check unicode-tables unicode-tables-check check hooks clean
+	build bless miri fuzz runtime-size diagrams diagrams-check unicode-tables unicode-tables-check check hooks clean
 
 dev: ## Start the dev service, building its image the first time
 	@$(COMPOSE) up -d --quiet-pull dev 2>/dev/null
@@ -60,6 +60,9 @@ diagrams: ## Render every PlantUML source to the SVG next to it
 
 diagrams-check: diagrams dev ## Fail when an SVG in the index differs from its source
 	@$(EXEC) scripts/check-diagrams.sh
+
+bless: dev ## Rewrite the golden files from the current compiler; review the diff before committing
+	@$(EXEC) env TYPY_BLESS=1 cargo test -p typy-driver --test golden --locked
 
 miri: dev ## Run the runtime's unit tests under Miri with the pinned nightly toolchain (ADR-0006)
 	@$(EXEC) scripts/miri.sh

@@ -1,0 +1,9 @@
+error[E0402]: `ratio` was declared as float and is assigned an int
+ --> DIA-02_certain_fix_is_shown_as_the_corrected_line.py:1:16
+  |
+1 | ratio: float = 2
+  |                ^
+  = 1:1: the variable
+  = rule: TYP-09
+help: write it as
+1 | ratio: float = 2.0

@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy software requirements specification |
-| Version | 1.9 |
+| Version | 1.12 |
 | Status | Approved |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-07 |
@@ -134,7 +134,7 @@ oracle needs CPython 3.12 or later.
 | ID | Requirement | Priority | Release |
 | --- | --- | --- | --- |
 | CLI-01 | `typy build FILE` shall produce a native executable for the host. | M | 0.1 |
-| CLI-02 | `typy run FILE [-- ARGS]` shall build and run the program, passing `ARGS` as `sys.argv[1:]`. | M | 0.1 |
+| CLI-02 | `typy run FILE [-- ARGS]` shall build and run the program, starting it with `ARGS` as its command-line arguments. A program reads them as `sys.argv[1:]` from 0.3 (LIB-04). | M | 0.1 |
 | CLI-03 | `typy check PATH` shall report every diagnostic without generating code. | M | 0.1 |
 | CLI-04 | `typy build --emit=STAGE` shall write the output of one stage as deterministic text, for `ast`, `typed-ast`, `tyir`, `tyir-mem`, `llvm-ir` and `asm`, and as an object file for `obj`. | M | 0.1 |
 | CLI-05 | `typy build` shall offer the modes `debug` (default), `--release` and `--release-small`: LLVM's `O0` pipeline, its `O2` pipeline, and its `O2` pipeline with every function marked `minsize`, because LLVM 23 has no `Oz` pipeline. | M | 0.1 |
@@ -360,7 +360,7 @@ direct calls and links the library when the program is built.
 | DIA-04 | One root cause shall give one error, and errors that follow from it shall be suppressed. | M | 0.1 |
 | DIA-05 | `--error-format=json` shall write the same diagnostics as JSON, one object per line. | S | 0.3 |
 | DIA-06 | A code shall never be reused, and a retired code shall stay reserved. | M | 0.1 |
-| DIA-07 | Warnings shall not fail a build unless `--deny-warnings` is given. | M | 0.1 |
+| DIA-07 | Warnings shall not fail a build unless `--deny-warnings` is given. | M | 0.3 |
 
 Code ranges follow the pack: `E01xx` lexical, `E02xx` declarations, `E03xx`
 expressions and statements, `E04xx` types, `E05xx` exceptions and control
@@ -382,7 +382,7 @@ cache, unless a row says otherwise.
 | NFR-06 | The same source, flags, target and compiler version shall produce byte-identical output. | 0.1 | Build twice and compare in CI |
 | NFR-07 | Safe code shall have no use after free, double free, null dereference, out-of-bounds access or uninitialised read. | 0.1 | Run tests under AddressSanitizer; fuzzing |
 | NFR-08 | A program without reference cycles shall free all its memory before exit. | 0.1 | Leak checker on every run test |
-| NFR-09 | The compiler shall not crash on any input; an internal error shall be reported as `E9xxx` with a hint to report it. | 0.1 | Nightly fuzzing, 8 hours, zero crashes |
+| NFR-09 | The compiler shall not crash on any input; an internal error shall be reported as `E9xxx` with a hint to report it. | 0.1 | Fuzzing for 30 minutes before each release, zero crashes |
 | NFR-10 | Every requirement in section 3 shall have at least one accepted and one rejected test program, and every run test shall run alike on each oracle version from its Python floor up. | 0.1 | Conformance suite in CI |
 | NFR-11 | Line and branch coverage of the compiler and runtime shall be at least 95 percent. | 0.1 | Coverage gate in CI |
 | NFR-12 | An object header shall take at most 8 bytes. | 0.2 | Layout test |
@@ -396,7 +396,7 @@ cache, unless a row says otherwise.
 | --- | --- | --- |
 | 0.1 | Functions, `int`, `float`, `bool`, `str`, `None`, `if`, `while`, `for` over `range`, operators | `build`, `run`, `check`, `--emit`; runtime; diagnostics; Linux x86_64 |
 | 0.2 | `list`, `tuple`, `dict`, `set`, `bytes`, classes without inheritance, f-strings, comprehensions, slicing | Unboxed values, reference count elision |
-| 0.3 | `try`, `raise`, user exceptions, `with`, `assert`, `del`, `global`, modules and packages, lazy imports | `sys`, `math`, `open`; `typy.toml` with `python-floor`; JSON diagnostics |
+| 0.3 | `try`, `raise`, user exceptions, `with`, `assert`, `del`, `global`, modules and packages, lazy imports | `sys`, `math`, `open`; `typy.toml` with `python-floor`; JSON diagnostics; the first warnings and `--deny-warnings` |
 | 0.4 | Dataclasses, inheritance, protocols, PEP 695 generics, narrowing, `Final`, `type` aliases | Stack allocation |
 | 0.5 | `match`, `:=`, C interoperability through `ctypes` | Libraries and exports; Linux and macOS AArch64; cross-compilation |
 | 1.0 | Closures, `lambda`, `nonlocal`, generators, `*args`, keyword-only parameters | Cycle collection, `weakref`; Windows; performance budgets |

@@ -3,10 +3,10 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy use case model |
-| Version | 1.1 |
+| Version | 1.3 |
 | Status | Approved |
 | Owner | typy-lang contributors |
-| Last updated | 2026-11-06 |
+| Last updated | 2026-11-07 |
 
 ## 1. Purpose
 
@@ -77,7 +77,7 @@ The flows below hold for every use case:
 | Preconditions | The program's `.py` files exist and are readable. |
 | Trigger | The developer runs `typy check PATH`. |
 | Postconditions | Every diagnostic is reported, and no file is written. The exit status is 0 when there are no errors and 1 otherwise. |
-| Requirements | CLI-03, CLI-06, STD-01, STD-04, STD-07, TYP-01 to TYP-11, MOD-01 to MOD-05, LIB-08, DIA-01 to DIA-04, DIA-07 |
+| Requirements | CLI-03, CLI-06, STD-01, STD-04, STD-07, TYP-01 to TYP-11, MOD-01 to MOD-05, LIB-08, DIA-01 to DIA-04, DIA-07 (0.3) |
 
 Main flow:
 
@@ -108,8 +108,9 @@ Alternate flows:
   CPython's meaning, such as `eval` or a metaclass. TyPy reports the
   construct and names the rule it falls outside (DIA-03), then exits with
   status 1.
-- **6a.** TyPy finds warnings but no errors. It reports them and exits with
-  status 0, or with status 1 when `--deny-warnings` is given (DIA-07).
+- **6a.** From 0.3, TyPy finds warnings but no errors. It reports them and
+  exits with status 0, or with status 1 when `--deny-warnings` is given
+  (DIA-07). 0.1 defines no warnings.
 
 ### 4.2 UC-02 Build an executable
 
@@ -160,7 +161,8 @@ Main flow:
 1. The developer runs `typy run FILE -- ARGS`.
 2. TyPy builds the program as in UC-02, in debug mode unless a mode is
    given, into a build directory under `TYPY_HOME`.
-3. TyPy starts the executable with `ARGS` as `sys.argv[1:]`, connected to
+3. TyPy starts the executable with `ARGS` as its arguments, which the
+   program reads as `sys.argv[1:]` from 0.3 (LIB-04), connected to
    the same standard input, output and error.
 4. The program runs its module-level statements in order and ends.
 5. `typy` exits with the program's exit status.

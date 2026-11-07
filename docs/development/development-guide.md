@@ -52,6 +52,7 @@ Container". VS Code attaches to the same `dev` service.
 | `make shell` | Opens a shell in the `dev` service |
 | `make build` | Builds the compiler, `<target>/debug/typy`, after `make runtime` |
 | `make runtime` | Builds the runtime archive for `x86_64-unknown-linux-gnu` and `x86_64-unknown-linux-musl` with `scripts/build-runtime.sh`, and stages each in `<target>/lib/typy/<triple>/`, where a compiler in `<target>/debug` or `<target>/release` finds it; `make test` and `make coverage` run it first |
+| `make bless` | Rewrites the golden files in `tests/golden/` from the current compiler; review the diff before committing |
 | `make miri` | Runs the runtime's unit tests under Miri with the pinned nightly toolchain, in about 8 minutes |
 | `make fuzz` | Fuzzes the source, checking and lowering stages for `FUZZ_SECONDS` seconds, 60 by default; a crash leaves its input in `fuzz/artifacts/` |
 | `make runtime-size` | Fails when a runtime archive is over the size budgets of NFR-02 |

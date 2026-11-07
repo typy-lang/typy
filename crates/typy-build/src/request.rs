@@ -34,7 +34,6 @@ pub struct BuildRequest {
     target: Target,
     emit: Option<EmitStage>,
     output: Option<Utf8PathBuf>,
-    deny_warnings: bool,
 }
 
 impl BuildRequest {
@@ -50,7 +49,6 @@ impl BuildRequest {
             target: Target::host(),
             emit: None,
             output: None,
-            deny_warnings: false,
         })
     }
 
@@ -79,13 +77,6 @@ impl BuildRequest {
     #[must_use]
     pub fn with_output(mut self, output: impl Into<Utf8PathBuf>) -> Self {
         self.output = Some(output.into());
-        self
-    }
-
-    /// Makes every warning fail the build (DIA-07).
-    #[must_use]
-    pub const fn with_deny_warnings(mut self, deny: bool) -> Self {
-        self.deny_warnings = deny;
         self
     }
 
@@ -119,12 +110,6 @@ impl BuildRequest {
         self.output.as_deref()
     }
 
-    /// Returns true when warnings fail the build.
-    #[must_use]
-    pub const fn deny_warnings(&self) -> bool {
-        self.deny_warnings
-    }
-
     /// Returns where the executable goes: the output path, or the main file without `.py`.
     #[must_use]
     pub fn executable_path(&self) -> Utf8PathBuf {
@@ -147,7 +132,6 @@ mod tests {
         assert_eq!(request.mode(), BuildMode::Debug);
         assert_eq!(request.target(), Target::host());
         assert_eq!((request.emit(), request.output()), (None, None));
-        assert!(!request.deny_warnings());
         assert_eq!(request.executable_path(), "src/app");
     }
 
@@ -161,13 +145,11 @@ mod tests {
             .with_mode(BuildMode::ReleaseSmall)
             .with_target(musl)
             .with_emit(EmitStage::Tyir)
-            .with_output("out/app")
-            .with_deny_warnings(true);
+            .with_output("out/app");
         assert_eq!(request.mode(), BuildMode::ReleaseSmall);
         assert_eq!(request.target(), musl);
         assert_eq!(request.emit(), Some(EmitStage::Tyir));
         assert_eq!(request.executable_path(), "out/app");
-        assert!(request.deny_warnings());
     }
 
     #[test]

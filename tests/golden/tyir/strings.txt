@@ -1,0 +1,235 @@
+string s0 = "caf"
+string s1 = "!"
+string s2 = "?"
+string s3 = "\n"
+string s4 = " "
+string s5 = "True"
+string s6 = "False"
+string s7 = ""
+entry fn0
+
+fn __typy_main() -> unit raises {  # <module>
+  slot s0 name: str
+  slot s1 total: int
+  slot s2 index: int
+  slot s3 label: str
+  slot s4 $counter: int
+  slot s5 $limit: int
+  slot s6 $stride: int
+b0():
+  v139 = const str s7
+  store s0, v139
+  v140 = const int 0
+  store s1, v140
+  v141 = const int 0
+  store s2, v141
+  v142 = const str s7
+  store s3, v142
+  v143 = const int 0
+  store s4, v143
+  v144 = const int 0
+  store s5, v144
+  v145 = const int 0
+  store s6, v145
+  jump b1()
+b1():
+  v0 = const str s0
+  v1 = const int 233
+  invoke rt.chr(v1) to b2 unwind b3
+b2(v2: str):
+  v8 = call rt.str_concat(v0, v2)
+  v9 = load s0
+  store s0, v8
+  v10 = const int 0
+  v11 = load s1
+  store s1, v10
+  v12 = const int 0
+  v13 = load s4
+  store s4, v12
+  v14 = load s0
+  v15 = call rt.str_length(v14)
+  v16 = load s5
+  store s5, v15
+  v17 = const int 1
+  v18 = load s6
+  store s6, v17
+  jump b4()
+b3(v3: exception):
+  v4 = load s0
+  v5 = load s1
+  v6 = load s2
+  v7 = load s3
+  return_error v3
+b4():
+  v19 = load s4
+  v20 = load s5
+  v21 = cmp.int.lt v19, v20
+  branch v21, b5, b7
+b5():
+  v22 = load s4
+  v23 = load s2
+  store s2, v22
+  v24 = load s1
+  v25 = load s0
+  v26 = load s2
+  invoke rt.str_index(v25, v26) to b9 unwind b10
+b6():
+  v47 = load s4
+  v48 = load s6
+  v49 = int.add v47, v48
+  v50 = load s4
+  store s4, v49
+  jump b4()
+b7():
+  jump b8()
+b8():
+  v52 = load s1
+  v53 = const int 400
+  v54 = cmp.int.gt v52, v53
+  jump b13(v54)
+b9(v27: str):
+  invoke rt.ord(v27) to b11 unwind b12
+b10(v28: exception):
+  v29 = load s0
+  v30 = load s1
+  v31 = load s2
+  v32 = load s3
+  v33 = load s4
+  v34 = load s5
+  v35 = load s6
+  return_error v28
+b11(v36: int):
+  v45 = int.add v24, v36
+  v46 = load s1
+  store s1, v45
+  jump b6()
+b12(v37: exception):
+  v38 = load s0
+  v39 = load s1
+  v40 = load s2
+  v41 = load s3
+  v42 = load s4
+  v43 = load s5
+  v44 = load s6
+  return_error v37
+b13(v51: bool):
+  branch v51, b14, b15
+b14():
+  v56 = load s0
+  v57 = const str s1
+  v58 = call rt.str_concat(v56, v57)
+  jump b16(v58)
+b15():
+  v59 = const str s2
+  jump b16(v59)
+b16(v55: str):
+  v60 = load s3
+  store s3, v55
+  v61 = load s3
+  v62 = load s3
+  v63 = call rt.str_repr(v62)
+  v64 = load s3
+  v65 = call rt.str_length(v64)
+  v66 = const str s3
+  v67 = const str s4
+  call rt.write_stdout(v61)
+  v68 = const unit
+  call rt.write_stdout(v67)
+  v69 = const unit
+  call rt.write_stdout(v63)
+  v70 = const unit
+  call rt.write_stdout(v67)
+  v71 = const unit
+  invoke rt.int_to_str(v65) to b17 unwind b18
+b17(v72: str):
+  call rt.write_stdout(v72)
+  v81 = const unit
+  call rt.write_stdout(v66)
+  v82 = const unit
+  v83 = const unit
+  v86 = load s0
+  v87 = const int 1
+  v88 = int.neg v87
+  invoke rt.str_index(v86, v88) to b21 unwind b22
+b18(v73: exception):
+  v74 = load s0
+  v75 = load s1
+  v76 = load s2
+  v77 = load s3
+  v78 = load s4
+  v79 = load s5
+  v80 = load s6
+  return_error v73
+b19(v84: bool):
+  v123 = const str s4
+  v124 = const str s5
+  v125 = const str s6
+  branch v84, b30, b31
+b20(v85: bool):
+  branch v85, b26, b25
+b21(v89: str):
+  invoke rt.ord(v89) to b23 unwind b24
+b22(v90: exception):
+  v91 = load s0
+  v92 = load s1
+  v93 = load s2
+  v94 = load s3
+  v95 = load s4
+  v96 = load s5
+  v97 = load s6
+  return_error v90
+b23(v98: int):
+  v107 = const int 233
+  v108 = cmp.int.eq v98, v107
+  jump b20(v108)
+b24(v99: exception):
+  v100 = load s0
+  v101 = load s1
+  v102 = load s2
+  v103 = load s3
+  v104 = load s4
+  v105 = load s5
+  v106 = load s6
+  return_error v99
+b25():
+  jump b19(v85)
+b26():
+  v110 = load s1
+  v111 = const int 2
+  invoke rt.int_modulo(v110, v111) to b28 unwind b29
+b27(v109: bool):
+  jump b19(v109)
+b28(v112: int):
+  v121 = const int 0
+  v122 = cmp.int.eq v112, v121
+  jump b27(v122)
+b29(v113: exception):
+  v114 = load s0
+  v115 = load s1
+  v116 = load s2
+  v117 = load s3
+  v118 = load s4
+  v119 = load s5
+  v120 = load s6
+  return_error v113
+b30():
+  jump b32(v124)
+b31():
+  jump b32(v125)
+b32(v126: str):
+  call rt.write_stdout(v126)
+  v127 = const unit
+  v128 = const str s3
+  call rt.write_stdout(v128)
+  v129 = const unit
+  v130 = const unit
+  v131 = const unit
+  v132 = load s0
+  v133 = load s1
+  v134 = load s2
+  v135 = load s3
+  v136 = load s4
+  v137 = load s5
+  v138 = load s6
+  return v131
+}
