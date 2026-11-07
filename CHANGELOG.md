@@ -61,6 +61,10 @@ All notable changes to TyPy are recorded here. The format follows
   which keeps each build in a cache under `TYPY_HOME` and runs it again
   without compiling. Exit status 0 on success, 1 for program errors, 2 for
   wrong usage and 101 for an internal error, which a panic also becomes.
+- The runtime archive is built for musl as well as glibc, and `make check`
+  checks its size: 40.3 KB, and 29.8 KB without large integers (NFR-02). A
+  hello world built with `--release-small` and linked statically with musl
+  is 75 KB (NFR-01).
 - E0106 when an output file cannot be written; the linker reports a
   directory it cannot write with E0106 instead of E0702.
 - The `typy-driver` crate: runs loading, checking, lowering, code

@@ -3,10 +3,10 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy test plan |
-| Version | 0.2 |
+| Version | 0.3 |
 | Status | Draft |
 | Owner | typy-lang contributors |
-| Last updated | 2026-11-06 |
+| Last updated | 2026-11-07 |
 
 ## 1. Purpose
 
@@ -354,8 +354,8 @@ that the specification does not define.
 | DIA-05 | 0.3 | UT, IT | `typy-diagnostics` unit tests; `tests/golden/diagnostics/DIA-05_*` |
 | DIA-06 | 0.1 | UT, IT | `typy-diagnostics` unit tests; `tests/golden/diagnostics/DIA-06_*` |
 | DIA-07 | 0.1 | UT, IT | `typy-diagnostics` unit tests; `tests/golden/diagnostics/DIA-07_*` |
-| NFR-01 | 0.1 | E2E | Size check `tests/e2e/size.rs`: hello world, `--release-small`, musl, under 100 KB |
-| NFR-02 | 0.1 | E2E | Size check `tests/e2e/size.rs`: runtime archive under 48 KB, and under 32 KB without large integers and cycle collection |
+| NFR-01 | 0.1 | IT | `crates/typy-driver/tests/size.rs`: hello world, `--release-small`, linked statically with musl, run, and under 100 KB (75 KB in 0.1, 17 KB stripped) |
+| NFR-02 | 0.1 | Static | `make runtime-size`, `scripts/check-runtime-size.py`: the code and data of the runtime's own object in each archive under 48 KB, and under 32 KB less the large-integer module (40.3 KB and 29.8 KB in 0.1) |
 | NFR-03 | 1.0 | Benchmark | `tests/bench/` suite against its C versions, geometric mean within 1.5 times |
 | NFR-04 | 1.0 | Benchmark | `tests/bench/build_time`: debug build of the 10,000-line project under 2 s |
 | NFR-05 | 1.0 | Benchmark | `tests/bench/build_time`: release build of the 10,000-line project under 20 s |

@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy development guide |
-| Version | 0.6 |
+| Version | 0.7 |
 | Status | Draft |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-07 |
@@ -51,8 +51,9 @@ Container". VS Code attaches to the same `dev` service.
 | `make dev` | Starts the `dev` service, building its image the first time |
 | `make shell` | Opens a shell in the `dev` service |
 | `make build` | Builds the compiler, `<target>/debug/typy`, after `make runtime` |
-| `make runtime` | Builds the runtime archive and stages it in `<target>/lib/typy/<triple>/`, where a compiler in `<target>/debug` or `<target>/release` finds it; `make test` and `make coverage` run it first |
-| `make check` | Runs the whole quality gate: formatting, Clippy, the tests with coverage, the four documentation checks below, and the Unicode table check |
+| `make runtime` | Builds the runtime archive for `x86_64-unknown-linux-gnu` and `x86_64-unknown-linux-musl` with `scripts/build-runtime.sh`, and stages each in `<target>/lib/typy/<triple>/`, where a compiler in `<target>/debug` or `<target>/release` finds it; `make test` and `make coverage` run it first |
+| `make runtime-size` | Fails when a runtime archive is over the size budgets of NFR-02 |
+| `make check` | Runs the whole quality gate: formatting, Clippy, the tests with coverage, the four documentation checks below, the Unicode table check and the runtime size check |
 | `make fmt` | Formats the Rust code |
 | `make lint` | Runs Clippy on every crate and test, with warnings as errors |
 | `make type` | Type checks every crate and test |
