@@ -9,9 +9,20 @@ use crate::operation::{IntUnaryOperator, Operation};
 use crate::terminator::{Callee, Terminator};
 use crate::value::ValueId;
 
-/// Returns the module as text: the string pool, then each function in order.
+/// Returns the module as text, the string pool and then each function in order, with every
+/// reference count operation, for `--emit=tyir-mem`.
 #[must_use]
 pub fn print(module: &TyirModule) -> String {
+    print_with(module, true)
+}
+
+/// Returns the module as text without its `inc` and `dec` instructions, for `--emit=tyir`.
+#[must_use]
+pub fn print_without_counting(module: &TyirModule) -> String {
+    print_with(module, false)
+}
+
+fn print_with(module: &TyirModule, counting: bool) -> String {
     let mut text = String::new();
     for (index, string) in module.strings.iter().enumerate() {
         let _ = writeln!(text, "string s{index} = {string:?}");
@@ -19,7 +30,7 @@ pub fn print(module: &TyirModule) -> String {
     let _ = writeln!(text, "entry fn{}", module.entry.0);
     for function in &module.functions {
         text.push('\n');
-        print_function(module, function, &mut text);
+        print_function(module, function, counting, &mut text);
     }
     text
 }
@@ -50,7 +61,7 @@ fn callee(module: &TyirModule, callee: Callee) -> String {
     }
 }
 
-fn print_function(module: &TyirModule, function: &TyirFunction, text: &mut String) {
+fn print_function(module: &TyirModule, function: &TyirFunction, counting: bool, text: &mut String) {
     let raises = if function.may_raise { " raises" } else { "" };
     let _ = writeln!(
         text,
@@ -64,7 +75,7 @@ fn print_function(module: &TyirModule, function: &TyirFunction, text: &mut Strin
         let _ = writeln!(text, "  slot s{index} {}: {}", slot.name, slot.ty);
     }
     for block in &function.blocks {
-        print_block(module, function, block, text);
+        print_block(module, function, block, counting, text);
     }
     text.push_str("}\n");
 }
@@ -73,6 +84,7 @@ fn print_block(
     module: &TyirModule,
     function: &TyirFunction,
     block: &BasicBlock,
+    counting: bool,
     text: &mut String,
 ) {
     let _ = writeln!(
@@ -82,6 +94,13 @@ fn print_block(
         value_list(function, &block.parameters)
     );
     for instruction in &block.instructions {
+        let counts = matches!(
+            instruction.operation,
+            Operation::Increment(_) | Operation::Decrement(_)
+        );
+        if counts && !counting {
+            continue;
+        }
         let operation = operation(module, &instruction.operation);
         match instruction.result {
             Some(value) => {

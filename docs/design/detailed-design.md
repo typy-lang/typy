@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy detailed design |
-| Version | 1.10 |
+| Version | 1.11 |
 | Status | Approved |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-07 |
@@ -61,7 +61,8 @@ crates/
                               emit
   typy-build/src/             request, mode, emit_stage, runtime_archive,
                               linker, artifact
-  typy-driver/src/            pipeline
+  typy-driver/src/            pipeline, emission, outcome, failure,
+                              sources
   typy-cli/src/               main, arguments, output, exit_status, guard
   typy-runtime/src/           entry, cell, header, allocator, libc, libm,
                               refcount, word, compare, int, float,
@@ -487,6 +488,21 @@ expression statements; the operators of EXP-02 to EXP-11; calls; names;
 constants of type `int`, `float`, `str`, `bool` and `None`; and indexing a
 `str` with an `int`.
 
+`dump(program, lookup) -> String` writes the typed program for
+`--emit=typed-ast`: a `Program` line naming the entry function, then each
+function with its module, parameters and return type, its locals, and its
+body, one node per line, indented two spaces per level. Each statement and
+expression line ends with `@LINE:COLUMN`, and each expression line also
+gives its type after ` : `:
+
+```text
+Function fn0 __main__.twice(n: int) -> int @1:1
+  locals total: int
+  body
+    Assign total: int @2:5
+      Local n : int @2:13
+```
+
 ## 8. typy-tyir
 
 ### 8.1 Types
@@ -568,7 +584,8 @@ block, and the caller reports it as E9001 with the pass that ran last. The
 verifier runs after every pass in every build of the compiler.
 
 `print(module) -> String` writes the deterministic text form used by
-`--emit=tyir` and `--emit=tyir-mem`:
+`--emit=tyir-mem`, and `print_without_counting(module)` the same text without
+its `inc` and `dec` instructions, for `--emit=tyir`:
 
 ```text
 string s0 = "hi\n"
@@ -729,12 +746,23 @@ gives E0702 with the directory. None of them has a source location. An
 
 ## 12. typy-driver
 
-`Pipeline::run(request) -> Result<Outcome, Failure>` loads the `Project`,
-checks it, lowers it, generates code and links, in that order, and stops
-after `request.emit` when it is set. `Outcome` holds the artifacts and any
-warnings; `Failure` holds the diagnostics. `Pipeline::check(path)` stops
-after checking. The driver holds no state between calls, so the conformance
-suite runs many builds in one process.
+`Pipeline::new(compiler)` takes the path of the `typy` executable, which
+finds the runtime archives (section 11); it holds nothing else, so one
+pipeline runs any number of builds, and the conformance suite runs many in
+one process.
+
+| Method | Behaviour |
+| --- | --- |
+| `check(main)` | Loads and checks the program, and returns `Outcome::Checked` with its `Sources` (CLI-03) |
+| `run(request)` with `emit` set | Runs the stages up to that stage and returns `Outcome::Emitted` with an `Emission`: `Text` for every stage but `obj`, `Bytes` for `obj` (CLI-04). `ast` needs only a program that parses; every later stage needs one that checks |
+| `run(request)` without `emit` | Opens the runtime archive, then loads, checks, lowers, generates the object and links it, and returns `Outcome::Executable` with the `Artifact` |
+
+The root of the project is the main file's directory. A `Failure` holds
+the `Diagnostics` and the `Sources` they are rendered against:
+`Sources::Project` once the program loaded, `Sources::Unloaded` with the
+files of a program that did not, and `Sources::None` when the build stopped
+before reading any file, as a missing runtime archive does. Each stage runs
+only when the stages before it found no errors.
 
 ## 13. typy-cli
 

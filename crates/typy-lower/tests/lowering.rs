@@ -147,6 +147,24 @@ fn stores_count_the_new_value_and_release_the_old_one() {
 }
 
 #[test]
+fn the_text_without_counting_leaves_out_only_inc_and_dec() {
+    let module = lower("s = \"a\"\ns = \"b\"\nprint(s)\n");
+    let full = print(&module);
+    let plain = typy_tyir::print_without_counting(&module);
+    assert!(
+        !plain.contains("inc v") && !plain.contains("dec v"),
+        "{plain}"
+    );
+    let kept: Vec<&str> = full
+        .lines()
+        .filter(|line| {
+            !line.trim_start().starts_with("inc ") && !line.trim_start().starts_with("dec ")
+        })
+        .collect();
+    assert_eq!(plain.lines().collect::<Vec<_>>(), kept);
+}
+
+#[test]
 fn a_zero_step_is_checked_only_when_the_step_is_not_a_nonzero_constant() {
     assert!(!text("for i in range(0, 3, 1):\n    pass\n").contains("range_check_step"));
     assert!(

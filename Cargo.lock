@@ -974,6 +974,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "typy-driver"
+version = "0.0.0"
+dependencies = [
+ "camino",
+ "tempfile",
+ "typy-build",
+ "typy-check",
+ "typy-codegen",
+ "typy-diagnostics",
+ "typy-lower",
+ "typy-source",
+ "typy-tyir",
+]
+
+[[package]]
 name = "typy-lower"
 version = "0.0.0"
 dependencies = [

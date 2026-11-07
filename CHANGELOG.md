@@ -56,6 +56,11 @@ All notable changes to TyPy are recorded here. The format follows
   toolchain program is E0701, a failed link E0702, and a missing runtime
   archive, or one from another TyPy version, E0703.
 - Diagnostics without a source location, such as a failed link.
+- The `typy-driver` crate: runs loading, checking, lowering, code
+  generation and linking in order, and stops after the stage `--emit`
+  names. `--emit=typed-ast` writes every node with its position and type,
+  and `--emit=tyir` leaves out the `inc` and `dec` that `--emit=tyir-mem`
+  shows.
 - A quality gate, `make check`, that checks formatting, runs Clippy and the
   tests with at least 95 percent line coverage, lints the documents, checks for
   non-ASCII text, checks that every requirement has a row in the test plan,

@@ -429,3 +429,60 @@ fn certain_fixes_are_offered_for_int_literals_in_float_places() {
         assert!(fix.replacement.ends_with(".0"), "{source}");
     }
 }
+
+#[test]
+fn the_typed_dump_shows_every_node_with_its_position_and_type() {
+    let source = "def twice(n: int = 2) -> int:\n    total = n\n    total += n\n    return total\nfor i in range(3):\n    if i > 0 and not False:\n        print(twice(i), \"x\"[0], sep=\"-\")\n    else:\n        continue\nwhile True:\n    break\nx: float = -1.5 if __name__ else 2.0\npass\n";
+    let (_directory, project) = load(source);
+    let program = TypeChecker::check(&project).unwrap();
+    let expected = r#"
+Program entry fn1
+Function fn0 __main__.twice(n: int) -> int @1:1
+  locals total: int
+  body
+    Assign total: int @2:5
+      Local n : int @2:13
+    AugAssign Add total: int @3:5
+      Local n : int @3:14
+    Return @4:5
+      Local total : int @4:12
+Function fn1 __main__.<module>() -> None @5:1
+  locals i: int, x: float
+  body
+    ForRange i: int @5:1
+      Constant Int("0") : int @5:10
+      Constant Int("3") : int @5:16
+      Constant Int("1") : int @5:10
+      body
+        If @6:5
+          BoolOp And : bool @6:8
+            Compare [Gt] : bool @6:8
+              Local i : int @6:8
+              Constant Int("0") : int @6:12
+            Unary Not : bool @6:18
+              Constant Bool(false) : bool @6:22
+          body
+            Expr @7:9
+              Print sep=true end=false : None @7:9
+                Call twice : int @7:15
+                  Local i : int @7:21
+                Index : str @7:25
+                  Constant Str("x") : str @7:25
+                  Constant Int("0") : int @7:29
+                Constant Str("-") : str @7:37
+          orelse
+            Continue @9:9
+    While @10:1
+      Constant Bool(true) : bool @10:7
+      body
+        Break @11:5
+    Assign x: float @12:1
+      IfExp : float @12:12
+        ModuleName : str @12:20
+        Unary USub : float @12:12
+          Constant Float(1.5) : float @12:13
+        Constant Float(2.0) : float @12:34
+    Pass @13:1
+"#;
+    assert_eq!(typy_check::dump(&program, &project), expected.trim_start());
+}

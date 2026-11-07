@@ -1,0 +1,25 @@
+[package]
+name = "typy-driver"
+description = "Runs the compiler's stages in order for one build or check"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+camino.workspace = true
+typy-build.workspace = true
+typy-check.workspace = true
+typy-codegen.workspace = true
+typy-diagnostics.workspace = true
+typy-lower.workspace = true
+typy-source.workspace = true
+typy-tyir.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true

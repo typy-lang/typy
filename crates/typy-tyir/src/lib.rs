@@ -25,7 +25,7 @@ pub use module::TyirModule;
 pub use operation::{
     BoolOperator, Comparison, FloatOperator, IntOperator, IntUnaryOperator, Operation, ScalarKind,
 };
-pub use print::print;
+pub use print::{print, print_without_counting};
 pub use runtime::{RuntimeFunction, RuntimeSignature};
 pub use slot::{Slot, SlotId};
 pub use terminator::{Callee, Terminator};
