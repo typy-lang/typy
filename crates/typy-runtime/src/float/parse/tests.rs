@@ -19,7 +19,9 @@ fn parse(text: &str) -> Result<f64, String> {
 
 #[test]
 fn text_is_read_with_python_rules() {
-    let cases: [(&str, f64); 18] = [
+    let cases: [(&str, f64); 20] = [
+        ("\u{661}.\u{665}", 1.5),
+        ("\u{661}e\u{662}", 100.0),
         (" 1_0.5 ", 10.5),
         ("+1E-3", 0.001),
         ("1e500", f64::INFINITY),
@@ -66,6 +68,7 @@ fn malformed_text_raises_with_the_quoted_input() {
         "- 1",
         "1 2",
         "e5",
+        "\u{661}x",
     ] {
         assert_eq!(
             parse(text),

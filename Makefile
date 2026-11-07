@@ -10,7 +10,7 @@ MARKDOWN := "**/*.md" "\#.tmp/**" "\#target/**"
 
 
 .PHONY: dev image shell runtime fmt fmt-check lint type test coverage docs-lint ascii-check traceability \
-	diagrams diagrams-check check hooks clean
+	diagrams diagrams-check unicode-tables unicode-tables-check check hooks clean
 
 dev: ## Start the dev service, building its image the first time
 	@$(COMPOSE) up -d --quiet-pull dev 2>/dev/null
@@ -58,7 +58,13 @@ diagrams: ## Render every PlantUML source to the SVG next to it
 diagrams-check: diagrams dev ## Fail when an SVG in the index differs from its source
 	@$(EXEC) scripts/check-diagrams.sh
 
-check: fmt-check lint coverage docs-lint ascii-check traceability diagrams-check ## Run the whole quality gate
+unicode-tables: dev ## Write the runtime's Unicode tables from CPython 3.15's unicodedata (OI-15)
+	@$(EXEC) python3.15 scripts/generate-unicode-tables.py
+
+unicode-tables-check: dev ## Fail when the committed Unicode tables differ from CPython 3.15's
+	@$(EXEC) python3.15 scripts/generate-unicode-tables.py --check
+
+check: fmt-check lint coverage docs-lint ascii-check traceability diagrams-check unicode-tables-check ## Run the whole quality gate
 
 hooks: ## Use the hooks in .githooks for this clone
 	git config core.hooksPath .githooks

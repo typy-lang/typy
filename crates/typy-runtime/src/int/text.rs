@@ -5,7 +5,9 @@ use super::value::Integer;
 use crate::Raising;
 use crate::exception::{ExceptionKind, raise};
 use crate::message::MessageBuffer;
-use crate::string::{Points, StrKind, StrObject, is_space, new_string, set_code_point};
+use crate::string::{
+    Points, StrKind, StrObject, decimal_value, is_space, new_string, set_code_point,
+};
 use crate::word::{inline_value, is_inline};
 
 /// The most decimal digits CPython converts by default (`sys.int_info.default_max_str_digits`).
@@ -165,10 +167,7 @@ pub unsafe extern "C" fn typy_rt_int_from_str(text: *const StrObject, base: i64)
             previous_underscore = true;
             continue;
         }
-        let Some(digit) = char::from_u32(point)
-            .and_then(|character| character.to_digit(36))
-            .filter(|digit| *digit < radix)
-        else {
+        let Some(digit) = digit_value(point).filter(|digit| *digit < radix) else {
             return invalid(text, base_value);
         };
         match first_digit {
@@ -198,6 +197,16 @@ pub unsafe extern "C" fn typy_rt_int_from_str(text: *const StrObject, base: i64)
         }
         .into_word(),
     )
+}
+
+/// Returns the value of a digit in bases up to 36: a decimal digit of any script, as CPython
+/// reads it, or an ASCII letter, `a` and `A` being 10.
+fn digit_value(point: u32) -> Option<u32> {
+    decimal_value(point).or_else(|| {
+        char::from_u32(point)
+            .filter(char::is_ascii_alphabetic)
+            .and_then(|letter| letter.to_digit(36))
+    })
 }
 
 #[cfg(test)]

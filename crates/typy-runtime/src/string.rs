@@ -1,9 +1,10 @@
 //! `str` objects: a sequence of code points stored at 1, 2 or 4 bytes each, the narrowest that holds them all (PEP 393, DAT-05).
 
+mod character;
 mod operations;
 mod points;
-mod printable;
 mod repr;
+mod unicode;
 mod utf8;
 
 use crate::allocator::{allocate, array_size};
@@ -11,6 +12,7 @@ use crate::header::{ObjectHeader, STR_TYPE_ID};
 
 pub(crate) use points::{Points, is_space};
 pub(crate) use repr::repr_into;
+pub(crate) use unicode::decimal_value;
 pub(crate) use utf8::write_utf8;
 
 /// The width of each code point of a string.

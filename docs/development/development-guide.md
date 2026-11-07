@@ -3,10 +3,10 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy development guide |
-| Version | 0.3 |
+| Version | 0.4 |
 | Status | Draft |
 | Owner | typy-lang contributors |
-| Last updated | 2026-11-06 |
+| Last updated | 2026-11-07 |
 
 ## 1. Purpose
 
@@ -50,7 +50,7 @@ Container". VS Code attaches to the same `dev` service.
 | --- | --- |
 | `make dev` | Starts the `dev` service, building its image the first time |
 | `make shell` | Opens a shell in the `dev` service |
-| `make check` | Runs the whole quality gate: formatting, Clippy, the tests with coverage, and the four documentation checks below |
+| `make check` | Runs the whole quality gate: formatting, Clippy, the tests with coverage, the four documentation checks below, and the Unicode table check |
 | `make fmt` | Formats the Rust code |
 | `make lint` | Runs Clippy on every crate and test, with warnings as errors |
 | `make type` | Type checks every crate and test |
@@ -61,6 +61,8 @@ Container". VS Code attaches to the same `dev` service.
 | `make traceability` | Fails when a requirement has no row in the test plan's matrix, or a document cites an ID that is not defined |
 | `make diagrams` | Renders every PlantUML source to the SVG beside it |
 | `make diagrams-check` | Renders, then fails when an SVG differs from the one staged |
+| `make unicode-tables` | Writes `crates/typy-runtime/src/string/unicode/tables.rs` from the `unicodedata` of CPython 3.15 (OI-15); never edit that file by hand |
+| `make unicode-tables-check` | Fails when the committed Unicode tables differ from the ones CPython 3.15 gives |
 | `make image` | Rebuilds the dev image after a change under `.devcontainer/` |
 | `make clean` | Stops the containers and removes `.tmp/preview` |
 
@@ -78,7 +80,7 @@ planned for 0.1.
 | `.githooks/` | The pre-commit hook, which runs `make check` |
 | `docs/` | The engineering documents, listed with their status in `docs/index.md` |
 | `docs/diagrams/` | PlantUML sources, the shared `style.puml`, and the rendered SVG of each |
-| `scripts/` | The checks that `make` runs |
+| `scripts/` | The checks that `make` runs, and the generator of the Unicode tables |
 | `rust-toolchain.toml` | The Rust version and components every build uses |
 | `.tmp/` | Scratch files. Ignored by Git and never committed |
 

@@ -6,7 +6,7 @@ use crate::exception::ExceptionKind;
 use crate::int::limbs::Limbs;
 use crate::int::natural::multiply_add_small;
 use crate::message::MessageBuffer;
-use crate::string::{Points, StrObject, is_space};
+use crate::string::{Points, StrObject, decimal_value, is_space};
 
 /// A decimal exponent beyond which a non-zero value is infinite.
 const INFINITE_ABOVE: i64 = 310;
@@ -31,7 +31,7 @@ impl Cursor<'_> {
         if index >= self.end {
             return None;
         }
-        char::from_u32(self.points.get(index))?.to_digit(10)
+        decimal_value(self.points.get(index))
     }
 
     /// Takes `+` or `-` and returns true for `-`.

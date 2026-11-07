@@ -45,6 +45,11 @@ All notable changes to TyPy are recorded here. The format follows
   `float`; and `repr` with CPython's shortest digits and layout.
 - Every division by zero raises `ZeroDivisionError: division by zero`, the
   wording of CPython 3.14 and later (OI-14).
+- `repr` of a string escapes exactly the code points CPython 3.15 escapes,
+  from Unicode 17.0 tables generated from CPython's own data (OI-15).
+- `chr` and `ord` in the runtime, with CPython's messages.
+- `int()` and `float()` read decimal digits of every script, such as
+  `int("\u0661\u0662")`, which is `12`.
 - A quality gate, `make check`, that checks formatting, runs Clippy and the
   tests with at least 95 percent line coverage, lints the documents, checks for
   non-ASCII text, checks that every requirement has a row in the test plan,

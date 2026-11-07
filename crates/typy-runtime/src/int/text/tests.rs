@@ -64,7 +64,12 @@ fn integers_of_more_than_4300_digits_are_refused() {
 
 #[test]
 fn text_is_parsed_with_python_rules() {
-    let cases: [(&str, i64, i128); 16] = [
+    let cases: [(&str, i64, i128); 21] = [
+        ("\u{661}\u{662}", 10, 12),
+        ("\u{663}", 16, 3),
+        ("0x\u{661}\u{662}", 16, 18),
+        ("\u{ff11}\u{ff12}", 10, 12),
+        ("\u{661}_\u{662}", 10, 12),
         ("12", 10, 12),
         ("  -12\n", 10, -12),
         ("+7", 10, 7),
@@ -104,6 +109,9 @@ fn malformed_text_raises_with_the_quoted_input() {
         ("12", 2),
         ("0x10", 10),
         (" ", 10),
+        ("\u{663}", 2),
+        ("\u{b2}", 10),
+        ("\u{661}x", 10),
     ] {
         let message = parse(source, base).expect_err(source);
         assert!(
