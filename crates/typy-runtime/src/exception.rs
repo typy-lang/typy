@@ -37,6 +37,14 @@ pub struct ExceptionObject {
 
 /// Returns a new exception of `kind` with `message`, owned by the caller.
 pub(crate) fn raise(kind: ExceptionKind, message: &str) -> *mut ExceptionObject {
+    raise_with_message(kind, from_str(message))
+}
+
+/// Returns a new exception of `kind` that takes over the reference to `message`.
+pub(crate) fn raise_with_message(
+    kind: ExceptionKind,
+    message: *mut StrObject,
+) -> *mut ExceptionObject {
     #[allow(
         clippy::cast_ptr_alignment,
         reason = "malloc returns memory aligned for every type"
@@ -46,7 +54,7 @@ pub(crate) fn raise(kind: ExceptionKind, message: &str) -> *mut ExceptionObject 
         header: ObjectHeader::new(EXCEPTION_TYPE_ID),
         kind,
         padding: 0,
-        message: from_str(message),
+        message,
         traceback: Traceback::new(),
         cause: core::ptr::null_mut(),
     };

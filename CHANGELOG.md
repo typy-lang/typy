@@ -35,6 +35,10 @@ All notable changes to TyPy are recorded here. The format follows
   reference counting, `str` objects and their operations, exceptions with
   tracebacks and the uncaught-exception report, buffered output, the stack
   check and `main`. `make runtime` builds the archive programs link.
+- Unlimited-size `int` in the runtime: arithmetic, `//`, `%` and `**` with
+  Python's floor rules, bitwise operators and shifts, comparisons, and
+  conversion to and from `str` with `int()`'s parsing rules and CPython's
+  4300-digit limit. Error messages match CPython's.
 - A quality gate, `make check`, that checks formatting, runs Clippy and the
   tests with at least 95 percent line coverage, lints the documents, checks for
   non-ASCII text, checks that every requirement has a row in the test plan,
