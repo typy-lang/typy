@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy detailed design |
-| Version | 1.3 |
+| Version | 1.4 |
 | Status | Approved |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-06 |
@@ -24,21 +24,31 @@ says so with the release number.
 
 ## 2. Workspace layout
 
+Each crate is laid out by the rules of section 3.1: one module per kind of
+object, a `name.rs` file for a module and a `name/` folder for its children.
+
 ```text
 Cargo.toml                    workspace, shared lint settings
 Cargo.lock                    committed
 rust-toolchain.toml           Rust 1.99.1
+clippy.toml                   project names allowed in documentation
 crates/
-  typy-diagnostics/src/       span, position, diagnostic, code, rule,
-                              registry, render
-  typy-source/src/            project, settings, source_file, module,
-                              syntax (TyPy's AST), parse (Ruff wrapper)
-  typy-stdlib/
-    src/lib.rs                embeds the modules below
-    modules/builtins.py       print, len, abs, min, max, repr, ord, chr
-    modules/_typy.pyi         declarations of the runtime primitives
-  typy-check/src/             types, scope, symbol, signature, resolve,
-                              infer, assignment, subset, typed_program
+  typy-diagnostics/src/       span, code, rule, registry, diagnostic,
+                              diagnostics, render
+  typy-source/src/            settings, module, source_file, line_index,
+                              int_literal, project,
+                              syntax/ (tree, statement, expression,
+                              operator, node_kind, dump),
+                              parse/ (statement, expression, operator)
+  typy-check/src/             types, builtin, unprovided, check/
+                              (definition, annotation, module_scope,
+                              definition_order, visit), subset/ (feature,
+                              statement, expression), body/ (program,
+                              flow, locals, statement, expression, name,
+                              operator, call, builtin_call), typed/
+                              (symbol, constant, signature, function,
+                              program, statement, expression)
+  typy-check/tests/           checker.rs, through the public API
   typy-tyir/src/              module, function, block, instruction,
                               types, verify, print
   typy-lower/src/             lower, raise_analysis, ownership_analysis
@@ -56,10 +66,37 @@ tests/
   e2e/                        tests that run the typy executable
 ```
 
+The crates from `typy-tyir` on are listed with their planned modules; each
+is laid out by the same rules when it is written.
+
 ## 3. Layering and code rules
 
 The dependencies between crates are those of architecture section 4.2, and
-a CI job checks them against `cargo metadata`. Within the code:
+a CI job checks them against `cargo metadata`.
+
+### 3.1 Modules
+
+The code is organised so that it stays easy to change as it grows:
+
+- One module per kind of object or per responsibility: `Span` and
+  `Position` in `span`, the `Diagnostics` collection apart from the single
+  `Diagnostic`, operator typing apart from name resolution.
+- A module with children is a `name.rs` file and a `name/` folder, without
+  `mod.rs`. A type's methods may be spread over child modules by
+  responsibility, as `BodyChecker`'s are under `body/`.
+- Modules are private. The crate root re-exports the public API with
+  `pub use`, so a type moves between modules without breaking a caller.
+- Items are as private as they can be: `pub(super)` for a module family,
+  `pub(crate)` for the crate, `pub` only for the API.
+- A source file stays under about 400 lines. A longer file is split by
+  responsibility before more is added to it.
+- Unit tests sit with their module, in `#[cfg(test)] mod tests`, or in
+  `name/tests.rs` when they are long. Tests that need only the public API
+  are integration tests in the crate's `tests/` folder.
+
+### 3.2 Code rules
+
+Within the code:
 
 - Every compiler crate starts with `#![forbid(unsafe_code)]`. Only
   `typy-runtime` contains `unsafe`, and each block carries a comment that

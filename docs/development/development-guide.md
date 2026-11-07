@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy development guide |
-| Version | 0.2 |
+| Version | 0.3 |
 | Status | Draft |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-06 |
@@ -84,6 +84,21 @@ planned for 0.1.
 
 The crates under `crates/` and the tests under `tests/` follow detailed
 design section 2.
+
+### 4.1 Organising code
+
+New code follows detailed design section 3.1, so the codebase stays easy
+to change as it grows:
+
+- Give each kind of object, or each responsibility, its own module.
+- Write a module with children as `name.rs` plus a `name/` folder, never
+  `mod.rs`.
+- Keep modules private and re-export the public API from the crate root.
+- Use the narrowest visibility that works: `pub(super)`, then
+  `pub(crate)`, then `pub`.
+- Split a source file by responsibility before it passes about 400 lines.
+- Put tests that need only the public API in the crate's `tests/` folder,
+  and the rest next to the module they test.
 
 ## 5. Working on the documents
 

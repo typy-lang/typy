@@ -1,0 +1,166 @@
+//! Checks expressions and annotations against the feature table.
+
+use typy_diagnostics::{Diagnostic, DiagnosticCode, RuleId};
+use typy_source::syntax::{BinaryOperator, CompareOperator, Constant, Expr, NodeKind};
+
+use super::Walker;
+use super::feature::{Feature, feature, planned};
+
+impl Walker {
+    /// Annotations in 0.1 name `int`, `float`, `bool`, `str` or `None`; the checker reports any other name.
+    pub(super) fn annotation(&mut self, annotation: &Expr) {
+        match annotation {
+            Expr::Subscript { span, .. } => {
+                self.report(
+                    *span,
+                    planned(
+                        "generic annotations such as `list[int]`",
+                        "0.2",
+                        RuleId::TYP_06,
+                    ),
+                );
+            }
+            Expr::BinOp {
+                operator: BinaryOperator::BitOr,
+                span,
+                ..
+            } => {
+                self.report(
+                    *span,
+                    planned(
+                        "union annotations such as `int | None`",
+                        "0.2",
+                        RuleId::TYP_06,
+                    ),
+                );
+            }
+            Expr::Constant {
+                value: Constant::Str(_),
+                span,
+            } => {
+                self.report(
+                    *span,
+                    Feature::Excluded {
+                        what: "annotations written as strings",
+                    },
+                );
+            }
+            other => self.expression(other),
+        }
+    }
+
+    #[allow(clippy::too_many_lines, reason = "one arm per expression kind")]
+    pub(super) fn expression(&mut self, expression: &Expr) {
+        match expression {
+            Expr::BoolOp { values, .. } => {
+                for value in values {
+                    self.expression(value);
+                }
+            }
+            Expr::BinOp {
+                left,
+                operator,
+                right,
+                span,
+            } => {
+                if *operator == BinaryOperator::MatMult {
+                    self.report(
+                        *span,
+                        Feature::Excluded {
+                            what: "the `@` operator",
+                        },
+                    );
+                }
+                self.expression(left);
+                self.expression(right);
+            }
+            Expr::UnaryOp { operand, .. } => self.expression(operand),
+            Expr::IfExp {
+                test, body, orelse, ..
+            } => {
+                self.expression(test);
+                self.expression(body);
+                self.expression(orelse);
+            }
+            Expr::Compare {
+                left,
+                operators,
+                comparators,
+                span,
+            } => {
+                if operators.iter().any(|operator| {
+                    matches!(operator, CompareOperator::In | CompareOperator::NotIn)
+                }) {
+                    self.report(*span, planned("`in` and `not in`", "0.2", RuleId::EXP_07));
+                }
+                self.expression(left);
+                for comparator in comparators {
+                    self.expression(comparator);
+                }
+            }
+            Expr::Call {
+                function,
+                arguments,
+                keywords,
+                ..
+            } => {
+                match function.as_ref() {
+                    Expr::Name { .. } => {}
+                    Expr::Other {
+                        kind: NodeKind::Attribute,
+                        span,
+                    } => {
+                        self.report(
+                            *span,
+                            planned("attributes and methods", "0.2", RuleId::CLS_01),
+                        );
+                    }
+                    other => self.report(
+                        other.span(),
+                        planned("calls of values that are not names", "1.0", RuleId::FUN_05),
+                    ),
+                }
+                for argument in arguments {
+                    self.expression(argument);
+                }
+                for keyword in keywords {
+                    if keyword.name.is_none() {
+                        self.report(
+                            keyword.span,
+                            planned("unpacking with `**`", "1.0", RuleId::EXP_17),
+                        );
+                    }
+                    self.expression(&keyword.value);
+                }
+            }
+            Expr::Constant { value, span } => match value {
+                Constant::Complex { .. } => self.diagnostics.push(
+                    Diagnostic::new(
+                        DiagnosticCode::error(104),
+                        *span,
+                        "imaginary literals are not supported",
+                    )
+                    .with_rule(RuleId::LEX_08),
+                ),
+                Constant::Bytes(_) => self.report(*span, planned("bytes", "0.2", RuleId::DAT_06)),
+                Constant::Ellipsis => self.report(
+                    *span,
+                    Feature::Excluded {
+                        what: "`...` as a value",
+                    },
+                ),
+                Constant::None
+                | Constant::Bool(_)
+                | Constant::Int(_)
+                | Constant::Float(_)
+                | Constant::Str(_) => {}
+            },
+            Expr::Subscript { value, index, .. } => {
+                self.expression(value);
+                self.expression(index);
+            }
+            Expr::Name { .. } => {}
+            Expr::Other { kind, span } => self.report(*span, feature(*kind)),
+        }
+    }
+}

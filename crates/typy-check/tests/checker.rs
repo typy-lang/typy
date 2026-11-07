@@ -1,10 +1,10 @@
-//! Tests of the whole checker: each case is a program and the codes it must give.
+//! Tests of the whole checker through its public API: each case is a program and the codes it must give.
 
 use camino::Utf8PathBuf;
 use typy_diagnostics::Diagnostics;
 use typy_source::{Project, ProjectSettings};
 
-use crate::{Type, TypeChecker, TypedExprKind, TypedProgram, TypedStmt};
+use typy_check::{Type, TypeChecker, TypedExprKind, TypedProgram, TypedStmt};
 
 fn load(source: &str) -> (tempfile_dir::Dir, Project) {
     let directory = tempfile_dir::Dir::new();
