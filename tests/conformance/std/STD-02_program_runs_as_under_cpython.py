@@ -1,0 +1,10 @@
+# typy-test: STD-02
+# typy-expect: accepted
+def fib(n: int) -> int:
+    if n < 2:
+        return n
+    return fib(n - 1) + fib(n - 2)
+
+
+for i in range(15):
+    print(i, fib(i))

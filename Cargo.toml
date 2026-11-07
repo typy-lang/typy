@@ -5,6 +5,7 @@ members = [
     "crates/typy-check",
     "crates/typy-cli",
     "crates/typy-codegen",
+    "crates/typy-conformance",
     "crates/typy-diagnostics",
     "crates/typy-driver",
     "crates/typy-lower",

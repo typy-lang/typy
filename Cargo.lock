@@ -1160,6 +1160,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "typy-conformance"
+version = "0.0.0"
+dependencies = [
+ "camino",
+ "tempfile",
+ "typy-build",
+ "typy-diagnostics",
+ "typy-driver",
+ "typy-source",
+]
+
+[[package]]
 name = "typy-diagnostics"
 version = "0.0.0"
 dependencies = [

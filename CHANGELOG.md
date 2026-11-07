@@ -61,6 +61,11 @@ All notable changes to TyPy are recorded here. The format follows
   which keeps each build in a cache under `TYPY_HOME` and runs it again
   without compiling. Exit status 0 on success, 1 for program errors, 2 for
   wrong usage and 101 for an internal error, which a panic also becomes.
+- The `typy-conformance` crate and a conformance suite of 89 programs in
+  `tests/conformance/`: each accepted program runs under CPython 3.12 to
+  3.15 and under TyPy in debug and release mode, with the same output,
+  exit status and last line of standard error; each rejected program gets
+  exactly its diagnostic code at its line and column. `make test` runs it.
 - The runtime archive is built for musl as well as glibc, and `make check`
   checks its size: 40.3 KB, and 29.8 KB without large integers (NFR-02). A
   hello world built with `--release-small` and linked statically with musl

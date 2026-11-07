@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy detailed design |
-| Version | 1.12 |
+| Version | 1.13 |
 | Status | Approved |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-07 |
@@ -69,7 +69,8 @@ crates/
                               refcount, word, compare, int, float,
                               string, message, io, exception, range,
                               stack
-  typy-conformance/src/       main, test_case, oracle, verdict
+  typy-conformance/src/       expectation, observation, oracle, subject,
+                              suite, test_case, verdict
 tests/
   conformance/<area>/         <ID>_<behaviour>.py, one rule per file
   golden/<stage>/             expected --emit output
@@ -859,6 +860,23 @@ with `Pipeline::run` in debug and in release mode, and compares standard
 output, exit status and the last line of standard error (UC-09). The
 second test above is a valid Python program that CPython runs; TyPy rejects
 it because the exponent is a variable.
+
+| Module | Behaviour |
+| --- | --- |
+| `test_case` | `TestCase::parse(path, text)` reads the comment lines at the top of the file; a missing or malformed field, or a file name that does not start with the first ID, is a `CaseError` |
+| `expectation` | `Expectation::Accepted`, or `Rejected` with a `DiagnosticCode`, a line and a column |
+| `observation` | `Observation::of(command)` runs a program with no standard input, reads both pipes on their own threads, and keeps standard output, the exit status and the last line of standard error; a program that runs longer than 10 seconds is stopped |
+| `oracle` | Runs `python3.X -I -X utf8 FILE` in the file's directory for each oracle version from the floor up |
+| `subject` | Builds an accepted test in debug and release mode into a temporary directory and runs each build; checks a rejected test with `Pipeline::check`, which passes when exactly one diagnostic is reported, with that code at that line and column |
+| `verdict` | `Pass`, `Fail` with the reason, or `Invalid` when the oracles disagree, an oracle cannot run the file, or the header is not valid (STD-03) |
+| `suite` | `Suite::run(root)` judges every `.py` file under `root`, as many at once as the machine has cores, and returns a `Report` with each verdict and, for each requirement ID, how many accepted and rejected tests name it |
+
+The suite runs as the test `crates/typy-conformance/tests/suite.rs`, so
+`make test` and `make check` run it on every commit. That test fails on any
+verdict but `Pass`, and on any requirement the test plan gives the suite for
+0.1 that lacks an accepted or a rejected test. An accepted test whose floor
+is not 3.12 is `Invalid` until `python-floor` in `typy.toml` sets the floor
+of a build (CLI-12, 0.3).
 
 ## 16. Design class diagrams
 
