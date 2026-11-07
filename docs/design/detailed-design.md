@@ -3,10 +3,10 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy detailed design |
-| Version | 1.7 |
+| Version | 1.8 |
 | Status | Approved |
 | Owner | typy-lang contributors |
-| Last updated | 2026-11-06 |
+| Last updated | 2026-11-07 |
 
 ## 1. Purpose and scope
 
@@ -63,8 +63,10 @@ crates/
                               artifact
   typy-driver/src/            pipeline
   typy-cli/src/               main, arguments, output, exit_status, guard
-  typy-runtime/src/           entry, header, allocator, refcount, int,
-                              float_repr, str, print, exception, stack
+  typy-runtime/src/           entry, cell, header, allocator, libc, libm,
+                              refcount, word, compare, int, float,
+                              string, message, io, exception, range,
+                              stack
   typy-conformance/src/       main, test_case, oracle, verdict
 tests/
   conformance/<area>/         <ID>_<behaviour>.py, one rule per file
@@ -735,10 +737,12 @@ suite runs many builds in one process.
 | `allocator` | `typy_rt_allocate`, `typy_rt_reallocate` and `typy_rt_free` over `malloc`, `realloc` and `free`. Running out of memory prints `MemoryError` and aborts |
 | `refcount` | `typy_rt_increment` and `typy_rt_decrement`, not atomic (A-03). A decrement to zero calls the type's `drop`, then frees the memory |
 | `int` | Addition, subtraction, multiplication, floor division, modulo, power, negation, comparison, conversion to and from `str` and `float`, all with Python's results (EXP-02, EXP-05) |
-| `float_repr` | The shortest digit string that reads back as the same double, formatted by CPython's rules for `repr`: fixed notation when the decimal exponent is from -4 to 15, otherwise scientific with a sign and at least two exponent digits, and `inf`, `-inf`, `nan` and `-0.0` as CPython writes them (DAT-02) |
-| `str` | Creation, concatenation, repetition, indexing with negative indexes (DAT-11), length, comparison, `repr` |
-| `print` | Standard output is buffered in 8 KiB and flushed when full, at exit, and before anything is written to standard error |
-| `exception` | Creates the built-in exceptions of EXC-02 with CPython's message for each operation, such as `division by zero` for `1 / 0`, `integer division or modulo by zero` for `1 // 0` and `float modulo by zero` for `1.0 % 0.0`. Each message has a conformance test; where the oracle versions word a message differently, that test is invalid (STD-03). It adds `TracebackEntry` values, and it prints an uncaught exception as `Traceback (most recent call last):`, one line per entry, then `Type: message`, or `Type` alone when the message is empty, as CPython does (STD-05) |
+| `float` | Division, floor division, modulo and power with the special cases of CPython's `float_divmod` and `float_pow`. `int / int`, `float(int)` and `float(str)` round once to the nearest double, ties to even, by CPython's `long_true_divide` method on exact integers. `int(float)` and `int` against `float` comparisons are exact. `repr` writes the shortest digits that read back as the same double, found exactly with large integers, and breaks an exact tie toward the even digit as CPython does; the layout is positional when the decimal exponent is from -4 to 15, otherwise scientific with a sign and at least two exponent digits, and `inf`, `-inf`, `nan` and `-0.0` are written as CPython writes them (DAT-02) |
+| `libm` | `floor`, `fmod`, `pow` and `ldexp` from the C maths library, which is why every link passes `-lm` |
+| `string` | Creation, concatenation, repetition, indexing with negative indexes (DAT-11), length, comparison, `repr` |
+| `message` | Builds an exception message of up to 1024 code points from text, numbers and `repr` of a string, so an error about a long input stays short |
+| `io` | Standard output is buffered in 8 KiB and flushed when full, at exit, and before anything is written to standard error |
+| `exception` | Creates the built-in exceptions of EXC-02 with CPython's message for each operation. Where the oracle versions word a message differently, the runtime uses the wording of the newest, CPython 3.15 (OI-14): `division by zero` for every division and modulo of `int` and `float`, and `zero to a negative power` for `0.0 ** -1.0`. A conformance test of such a message compares only the exception type. It adds `TracebackEntry` values, and it prints an uncaught exception as `Traceback (most recent call last):`, one line per entry, then `Type: message`, or `Type` alone when the message is empty, as CPython does (STD-05) |
 | `stack` | The check at the start of recursive functions compares the stack pointer with the recorded limit, which leaves 64 KiB unused, and raises `RecursionError: maximum recursion depth exceeded` |
 
 The runtime uses no `core::fmt`. Each of its `unsafe` blocks is covered by

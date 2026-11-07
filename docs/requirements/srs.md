@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy software requirements specification |
-| Version | 1.5 |
+| Version | 1.6 |
 | Status | Approved |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-07 |
@@ -125,7 +125,7 @@ oracle needs CPython 3.12 or later.
 | STD-02 | An accepted program shall run alike under TyPy and under the oracle, for every input on which the oracle finishes without an uncaught exception. | M | 0.1 | 9.1 |
 | STD-03 | STD-02 shall cover only behaviour the Language Reference or the library documentation defines. It shall not cover `id()` values, `hash()` values, set iteration order, memory addresses in default `repr()` output, or the recursion limit. | M | 0.1 | 3.1 |
 | STD-04 | TyPy shall reject, with a diagnostic, any program that uses a feature it cannot compile with CPython's meaning. It shall never compile such a feature with a different meaning. | M | 0.1 | |
-| STD-05 | When the oracle ends with an uncaught exception, the TyPy binary shall end with the same exception type and message on the last line of standard error, and exit status 1. | M | 0.3 | 4.3 |
+| STD-05 | When the oracle ends with an uncaught exception, the TyPy binary shall end with the same exception type on the last line of standard error, with the same message where every oracle version words it alike and otherwise with the wording of the newest (OI-14), and exit status 1. | M | 0.3 | 4.3 |
 | STD-06 | A program shall run its module-level statements in order, as `python file.py` does, with `__name__` equal to `"__main__"` in the main module. | M | 0.1 | 9.1 |
 | STD-07 | TyPy shall add no module, function, type, decorator or syntax of its own. A program shall use only the Python language and the standard library modules TyPy provides (LIB). | M | 0.1 | |
 
@@ -453,6 +453,7 @@ There are no open issues. A new question gets the next unused issue number.
 | OI-11 | How does TyPy support PEP 810 lazy imports, whose `lazy` keyword CPython 3.12 to 3.14 reject? | Each program has a Python floor; a program with floor 3.15 may use `lazy import`, and `__lazy_modules__` works for every floor (ADR-0008). | 2026-11-06 |
 | OI-12 | May an `int` be stored where a `float` is declared, as PEP 484 allows? | No. CPython keeps the value an `int`, so `x: float = 1` prints `1`; TyPy would print `1.0`. TYP-09 rejects it, with the fix `1.0` for a literal. Checked on CPython 3.12 to 3.15. | 2026-11-06 |
 | OI-13 | Can `x ** y` with a `float` exponent give a type TyPy does not have? | Yes: `(-8.0) ** 0.5` is `complex` in CPython 3.12 to 3.15. EXP-04 accepts a `float` exponent only when it is an integral literal or the base is a non-negative literal. | 2026-11-07 |
+| OI-14 | Which wording does an exception message take when the oracle versions word it differently? | The wording of the newest oracle, CPython 3.15. CPython 3.14 reworded every division by zero to `division by zero` and `0.0 ** -1.0` to `zero to a negative power`, where 3.12 and 3.13 name the operation, and 3.12 and 3.13 differ from each other for `float` modulo. A conformance test of such a message compares only the exception type (STD-03, STD-05). | 2026-11-07 |
 
 ## Appendix A. Disposition of the specification pack
 

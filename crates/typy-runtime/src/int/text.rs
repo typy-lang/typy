@@ -4,7 +4,8 @@ use super::natural;
 use super::value::Integer;
 use crate::Raising;
 use crate::exception::{ExceptionKind, raise};
-use crate::string::{StrKind, StrObject, code_point, length, new_string, set_code_point};
+use crate::message::MessageBuffer;
+use crate::string::{Points, StrKind, StrObject, is_space, new_string, set_code_point};
 use crate::word::{inline_value, is_inline};
 
 /// The most decimal digits CPython converts by default (`sys.int_info.default_max_str_digits`).
@@ -87,7 +88,7 @@ fn invalid(text: *const StrObject, base: i64) -> Raising<i64> {
     message.push_number(base);
     message.push_str(": ");
     // SAFETY: the caller of `typy_rt_int_from_str` passes a live string.
-    unsafe { crate::string::repr_into(text, |point| message.push(point)) };
+    unsafe { message.push_repr(text) };
     Raising::error(1, message.raise(ExceptionKind::ValueError))
 }
 
@@ -197,101 +198,6 @@ pub unsafe extern "C" fn typy_rt_int_from_str(text: *const StrObject, base: i64)
         }
         .into_word(),
     )
-}
-
-/// Python's whitespace for `int()`: the ASCII spaces and the Unicode spaces of `str.isspace`.
-fn is_space(point: u32) -> bool {
-    char::from_u32(point).is_some_and(char::is_whitespace) || (0x1c..=0x1f).contains(&point)
-}
-
-/// The code points of a string, read on demand.
-struct Points {
-    text: *const StrObject,
-    length: usize,
-}
-
-impl Points {
-    /// # Safety
-    ///
-    /// `text` points to a live `str` object for as long as the value is used.
-    unsafe fn of(text: *const StrObject) -> Self {
-        Self {
-            text,
-            // SAFETY: the caller passes a live string.
-            length: unsafe { length(text) },
-        }
-    }
-
-    fn len(&self) -> usize {
-        self.length
-    }
-
-    fn get(&self, index: usize) -> u32 {
-        // SAFETY: the string is live, and callers keep `index` below its length.
-        unsafe { code_point(self.text, index) }
-    }
-}
-
-/// A message of up to 4 KiB of code points, built without allocating until it is raised.
-struct MessageBuffer {
-    points: [u32; 1024],
-    used: usize,
-}
-
-impl MessageBuffer {
-    fn new() -> Self {
-        Self {
-            points: [0; 1024],
-            used: 0,
-        }
-    }
-
-    fn push(&mut self, point: u32) {
-        if self.used < self.points.len() {
-            self.points[self.used] = point;
-            self.used += 1;
-        }
-    }
-
-    fn push_str(&mut self, text: &str) {
-        for character in text.chars() {
-            self.push(u32::from(character));
-        }
-    }
-
-    fn push_number(&mut self, value: i64) {
-        let mut digits = [0_u8; 20];
-        let mut start = digits.len();
-        let mut rest = value.unsigned_abs();
-        loop {
-            start -= 1;
-            digits[start] = b'0' + u8::try_from(rest % 10).unwrap_or(0);
-            rest /= 10;
-            if rest == 0 {
-                break;
-            }
-        }
-        if value < 0 {
-            self.push(u32::from(b'-'));
-        }
-        for digit in &digits[start..] {
-            self.push(u32::from(*digit));
-        }
-    }
-
-    fn raise(&self, kind: ExceptionKind) -> *mut crate::exception::ExceptionObject {
-        let kind_of_text = self.points[..self.used]
-            .iter()
-            .map(|point| StrKind::of(*point))
-            .max()
-            .unwrap_or(StrKind::Latin1);
-        let message = new_string(self.used, kind_of_text);
-        for (index, point) in self.points[..self.used].iter().enumerate() {
-            // SAFETY: the string is new, the index is in bounds, and the kind holds every code point.
-            unsafe { set_code_point(message, index, *point) };
-        }
-        crate::exception::raise_with_message(kind, message)
-    }
 }
 
 #[cfg(test)]

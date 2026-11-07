@@ -1,8 +1,8 @@
 //! Tests of magnitude arithmetic against Rust's `u128` and against identities on larger values.
 
 use super::{
-    add, bit_length, compare, divide, multiply, multiply_add_small, shift_left, shift_right,
-    subtract,
+    add, any_low_bits, bit_length, compare, divide, multiply, multiply_add_small, shift_left,
+    shift_right, subtract,
 };
 
 fn value(limbs: &[u64]) -> u128 {
@@ -93,6 +93,10 @@ fn shifts_and_bit_lengths_agree_with_u128() {
             }
             if bits < 128 {
                 assert_eq!(value(shift_right(&limbs(a), bits).as_slice()), a >> bits);
+                assert_eq!(
+                    any_low_bits(&limbs(a), bits),
+                    bits > 0 && a & ((1_u128 << bits) - 1) != 0
+                );
             }
         }
         assert_eq!(bit_length(&limbs(a)), 128 - u64::from(a.leading_zeros()));

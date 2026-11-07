@@ -2,10 +2,12 @@
 
 mod arithmetic;
 mod bitwise;
-mod limbs;
-mod natural;
+pub(crate) mod limbs;
+pub(crate) mod natural;
 mod text;
-mod value;
+pub(crate) mod value;
+
+pub(crate) use arithmetic::ZERO_DIVISION;
 
 use crate::header::ObjectHeader;
 

@@ -39,6 +39,12 @@ All notable changes to TyPy are recorded here. The format follows
   Python's floor rules, bitwise operators and shifts, comparisons, and
   conversion to and from `str` with `int()`'s parsing rules and CPython's
   4300-digit limit. Error messages match CPython's.
+- `float` in the runtime: `/`, `//`, `%`, `**` and `abs` with CPython's
+  special cases; `int / int`, `float(int)` and `float(str)` rounded once to
+  the nearest double; exact `int(float)` and exact comparison of `int` with
+  `float`; and `repr` with CPython's shortest digits and layout.
+- Every division by zero raises `ZeroDivisionError: division by zero`, the
+  wording of CPython 3.14 and later (OI-14).
 - A quality gate, `make check`, that checks formatting, runs Clippy and the
   tests with at least 95 percent line coverage, lints the documents, checks for
   non-ASCII text, checks that every requirement has a row in the test plan,

@@ -202,6 +202,16 @@ pub(crate) fn bit_length(value: &[u64]) -> u64 {
     })
 }
 
+/// Returns true when any of the lowest `bits` bits is set.
+pub(crate) fn any_low_bits(value: &[u64], bits: u64) -> bool {
+    let whole = usize::try_from(bits / 64).unwrap_or(usize::MAX);
+    let part = bits % 64;
+    value.iter().take(whole).any(|limb| *limb != 0)
+        || value
+            .get(whole)
+            .is_some_and(|limb| part > 0 && limb & ((1 << part) - 1) != 0)
+}
+
 fn low(value: u128) -> u64 {
     u64::try_from(value & u128::from(u64::MAX)).unwrap_or(0)
 }

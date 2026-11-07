@@ -118,6 +118,9 @@ pub unsafe extern "C" fn typy_rt_int_compare(left: i64, right: i64, comparison: 
     crate::compare::holds(ordering, comparison)
 }
 
+/// CPython 3.14 and later word every division by zero alike; the runtime follows the newest oracle (OI-14).
+pub(crate) const ZERO_DIVISION: &str = "division by zero";
+
 fn zero_division(message: &str) -> Raising<i64> {
     Raising::error(1, raise(ExceptionKind::ZeroDivisionError, message))
 }
@@ -130,7 +133,7 @@ fn zero_division(message: &str) -> Raising<i64> {
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn typy_rt_int_floor_divide(left: i64, right: i64) -> Raising<i64> {
     if Some(right) == inline(0) {
-        return zero_division("integer division or modulo by zero");
+        return zero_division(ZERO_DIVISION);
     }
     // SAFETY: the caller's guarantee is passed on.
     Raising::ok(unsafe {
@@ -154,7 +157,7 @@ pub unsafe extern "C" fn typy_rt_int_floor_divide(left: i64, right: i64) -> Rais
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn typy_rt_int_modulo(left: i64, right: i64) -> Raising<i64> {
     if Some(right) == inline(0) {
-        return zero_division("integer modulo by zero");
+        return zero_division(ZERO_DIVISION);
     }
     let fast = |a: i64, b: i64| {
         a.checked_rem_euclid(b)
