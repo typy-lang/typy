@@ -7,6 +7,7 @@ mod bits;
 mod call;
 mod comparison;
 mod constant;
+mod descriptor;
 mod emit;
 mod error;
 mod function;

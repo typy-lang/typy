@@ -56,17 +56,6 @@ impl BodyChecker<'_> {
                 );
             }
         };
-        if !item_type.is_list_item() {
-            return self.error(
-                Diagnostic::new(
-                    DiagnosticCode::error(201),
-                    span,
-                    format!("lists of {item_type} are planned for TyPy 0.2 (DAT-07)"),
-                )
-                .with_rule(RuleId::DAT_07),
-                span,
-            );
-        }
         for item in &items {
             if !item.ty.is_assignable_to(&item_type) {
                 self.diagnostics.push(

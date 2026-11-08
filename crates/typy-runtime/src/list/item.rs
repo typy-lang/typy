@@ -1,9 +1,12 @@
-//! The kinds of list items, and how each is counted, compared and written as text. An item is
-//! eight bytes: an `int` word, the bits of a `float`, a `bool` as 0 or 1, or a pointer.
+//! The types of list items, and how each is stored, counted, compared and written as text. An
+//! item of a fixed kind is eight bytes: an `int` word, the bits of a `float`, a `bool` as 0 or
+//! 1, a pointer, or 0 for `None`. A tuple is stored inline, as many words as its descriptor
+//! says, and crosses the runtime's interface as the address of its bytes (ADR-0001, ADR-0009).
 
 use crate::Raising;
 use crate::header::{LIST_TYPE_ID, ObjectHeader, STR_TYPE_ID};
 use crate::string::StrObject;
+use crate::tuple::TupleType;
 use crate::word::inline;
 
 /// How a list stores its items. The compiler passes the code of the kind it chooses.
@@ -18,6 +21,10 @@ pub(crate) enum ItemKind {
     Bool = 2,
     /// A pointer to a `str` or a `list`.
     Object = 3,
+    /// `None`, stored as 0.
+    NoneValue = 4,
+    /// A tuple, stored inline as its descriptor lays it out.
+    Tuple = 5,
 }
 
 impl ItemKind {
@@ -28,43 +35,124 @@ impl ItemKind {
             1 => Self::Float,
             2 => Self::Bool,
             3 => Self::Object,
+            4 => Self::NoneValue,
+            5 => Self::Tuple,
             _ => crate::libc::abort_with(b"typy runtime: a list has an unknown item kind\n"),
         }
     }
+}
 
-    /// Adds a reference to an item that holds one.
+/// The type of a list's items: a kind, and for a tuple its descriptor.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct ItemType {
+    kind: ItemKind,
+    tuple: *const TupleType,
+}
+
+impl From<ItemKind> for ItemType {
+    fn from(kind: ItemKind) -> Self {
+        Self {
+            kind,
+            tuple: core::ptr::null(),
+        }
+    }
+}
+
+impl ItemType {
+    /// Returns the type of tuple items laid out by `tuple`.
+    pub(crate) const fn tuple(tuple: *const TupleType) -> Self {
+        Self {
+            kind: ItemKind::Tuple,
+            tuple,
+        }
+    }
+
+    /// Returns the kind.
+    pub(crate) const fn kind(self) -> ItemKind {
+        self.kind
+    }
+
+    /// Returns the descriptor of tuple items, or null.
+    pub(crate) const fn descriptor(self) -> *const TupleType {
+        self.tuple
+    }
+
+    /// Returns the number of eight-byte words an item takes.
+    pub(crate) fn words(self) -> usize {
+        match self.kind {
+            // SAFETY: a tuple item type always has a live descriptor, emitted by the compiler.
+            ItemKind::Tuple => unsafe { (*self.tuple).words() },
+            _ => 1,
+        }
+    }
+
+    /// Returns the item stored at `slot`: its eight bytes, or for a tuple the slot's address.
     ///
     /// # Safety
     ///
-    /// `item` is a live item of this kind.
+    /// `slot` points to an item of this type.
+    pub(crate) unsafe fn load(self, slot: *const u64) -> u64 {
+        match self.kind {
+            ItemKind::Tuple => slot.expose_provenance() as u64,
+            // SAFETY: the caller passes a slot that holds an item.
+            _ => unsafe { *slot },
+        }
+    }
+
+    /// Writes `item` into `slot`, without counting a reference: its eight bytes, or for a
+    /// tuple the words at the address `item` holds.
+    ///
+    /// # Safety
+    ///
+    /// `slot` has room for an item of this type, and `item` is one, which does not overlap it.
+    pub(crate) unsafe fn store(self, slot: *mut u64, item: u64) {
+        // SAFETY: the caller passes a slot with room for the item and a live item.
+        unsafe {
+            match self.kind {
+                ItemKind::Tuple => {
+                    core::ptr::copy_nonoverlapping(address(item), slot, self.words());
+                }
+                _ => *slot = item,
+            }
+        }
+    }
+
+    /// Adds a reference to every object an item holds.
+    ///
+    /// # Safety
+    ///
+    /// `item` is a live item of this type.
     pub(crate) unsafe fn retain(self, item: u64) {
-        // SAFETY: the caller passes a live item; its bits are an `int` word or a pointer.
+        // SAFETY: the caller passes a live item; its bits are an `int` word, a pointer or an
+        // address.
         unsafe {
-            match self {
-                Self::Int => crate::refcount::typy_rt_int_increment(item.cast_signed()),
-                Self::Object => crate::refcount::typy_rt_increment(pointer(item)),
-                Self::Float | Self::Bool => {}
+            match self.kind {
+                ItemKind::Int => crate::refcount::typy_rt_int_increment(item.cast_signed()),
+                ItemKind::Object => crate::refcount::typy_rt_increment(pointer(item)),
+                ItemKind::Tuple => crate::tuple::retain(self.tuple, item),
+                ItemKind::Float | ItemKind::Bool | ItemKind::NoneValue => {}
             }
         }
     }
 
-    /// Drops a reference held by an item.
+    /// Drops a reference to every object an item holds.
     ///
     /// # Safety
     ///
-    /// `item` is a live item of this kind that the caller holds a reference to.
+    /// `item` is a live item of this type that the caller holds references for.
     pub(crate) unsafe fn release(self, item: u64) {
-        // SAFETY: the caller passes a live item it holds a reference to.
+        // SAFETY: the caller passes a live item it holds references for.
         unsafe {
-            match self {
-                Self::Int => crate::refcount::typy_rt_int_decrement(item.cast_signed()),
-                Self::Object => crate::refcount::typy_rt_decrement(pointer(item)),
-                Self::Float | Self::Bool => {}
+            match self.kind {
+                ItemKind::Int => crate::refcount::typy_rt_int_decrement(item.cast_signed()),
+                ItemKind::Object => crate::refcount::typy_rt_decrement(pointer(item)),
+                ItemKind::Tuple => crate::tuple::release(self.tuple, item),
+                ItemKind::Float | ItemKind::Bool | ItemKind::NoneValue => {}
             }
         }
     }
 
-    /// Returns `left == right` for two items of this kind, as CPython compares them.
+    /// Returns `left == right` for two items of this type, as CPython compares them.
     #[allow(
         clippy::float_cmp,
         reason = "Python's `==` on floats is IEEE equality, under which `nan` is not equal to itself"
@@ -72,36 +160,41 @@ impl ItemKind {
     ///
     /// # Safety
     ///
-    /// Both are live items of this kind.
+    /// Both are live items of this type.
     pub(crate) unsafe fn equal(self, left: u64, right: u64) -> bool {
         let equal_code = inline(0).unwrap_or(1);
-        match self {
-            Self::Bool => left == right,
-            Self::Float => f64::from_bits(left) == f64::from_bits(right),
+        match self.kind {
+            ItemKind::Bool => left == right,
+            ItemKind::NoneValue => true,
+            ItemKind::Float => f64::from_bits(left) == f64::from_bits(right),
             // SAFETY: the caller passes live `int` words.
-            Self::Int => unsafe {
+            ItemKind::Int => unsafe {
                 crate::int::typy_rt_int_compare(left.cast_signed(), right.cast_signed(), equal_code)
             },
             // SAFETY: the caller passes pointers to live objects of one type.
-            Self::Object => unsafe { objects_equal(pointer(left), pointer(right)) },
+            ItemKind::Object => unsafe { objects_equal(pointer(left), pointer(right)) },
+            // SAFETY: the caller passes the addresses of two live tuples of this layout.
+            ItemKind::Tuple => unsafe { crate::tuple::equal(self.tuple, left, right) },
         }
     }
 
     /// Returns whether `left` and `right` stand in the comparison whose code is the `int` word
-    /// `comparison`, as CPython orders two items of this kind: numbers by value, `str` and lists
-    /// item by item.
+    /// `comparison`, as CPython orders two items of this type: numbers by value, and strings,
+    /// lists and tuples item by item. `None` is not ordered; the checker refuses it.
     ///
     /// # Safety
     ///
-    /// Both are live items of this kind.
+    /// Both are live items of this type.
     #[allow(
         clippy::float_cmp,
         reason = "Python's comparisons on floats are IEEE comparisons, under which `nan` is unordered"
     )]
     pub(crate) unsafe fn order(self, left: u64, right: u64, comparison: i64) -> bool {
-        match self {
-            Self::Bool => crate::compare::holds(left.cmp(&right), comparison),
-            Self::Float => {
+        match self.kind {
+            ItemKind::Bool | ItemKind::NoneValue => {
+                crate::compare::holds(left.cmp(&right), comparison)
+            }
+            ItemKind::Float => {
                 let (left, right) = (f64::from_bits(left), f64::from_bits(right));
                 match crate::word::inline_value(comparison) {
                     0 => left == right,
@@ -113,28 +206,33 @@ impl ItemKind {
                 }
             }
             // SAFETY: the caller passes live `int` words.
-            Self::Int => unsafe {
+            ItemKind::Int => unsafe {
                 crate::int::typy_rt_int_compare(left.cast_signed(), right.cast_signed(), comparison)
             },
             // SAFETY: the caller passes pointers to live objects of one type.
-            Self::Object => unsafe { objects_order(pointer(left), pointer(right), comparison) },
+            ItemKind::Object => unsafe { objects_order(pointer(left), pointer(right), comparison) },
+            // SAFETY: the caller passes the addresses of two live tuples of this layout.
+            ItemKind::Tuple => unsafe { crate::tuple::order(self.tuple, left, right, comparison) },
         }
     }
 
     /// Returns the truth of an item, as `bool(item)` gives it: a number is true when it is not
-    /// zero, and a `str` or a list when it is not empty.
+    /// zero, a `str`, a list or a tuple when it is not empty, and `None` never.
     ///
     /// # Safety
     ///
-    /// `item` is a live item of this kind.
+    /// `item` is a live item of this type.
     pub(crate) unsafe fn is_true(self, item: u64) -> bool {
-        match self {
-            Self::Bool => item != 0,
+        match self.kind {
+            ItemKind::Bool => item != 0,
+            ItemKind::NoneValue => false,
             // A large integer is never zero, because zero is always inline.
-            Self::Int => item.cast_signed() != inline(0).unwrap_or(1),
-            Self::Float => f64::from_bits(item) != 0.0,
+            ItemKind::Int => item.cast_signed() != inline(0).unwrap_or(1),
+            ItemKind::Float => f64::from_bits(item) != 0.0,
             // SAFETY: the caller passes a pointer to a live object.
-            Self::Object => unsafe { object_is_true(pointer(item)) },
+            ItemKind::Object => unsafe { object_is_true(pointer(item)) },
+            // SAFETY: a tuple item type always has a live descriptor.
+            ItemKind::Tuple => unsafe { (*self.tuple).length != 0 },
         }
     }
 
@@ -142,21 +240,31 @@ impl ItemKind {
     ///
     /// # Safety
     ///
-    /// `item` is a live item of this kind.
+    /// `item` is a live item of this type.
     pub(crate) unsafe fn repr(self, item: u64) -> Raising<*mut StrObject> {
-        match self {
+        match self.kind {
             // SAFETY: the caller passes a live `int` word.
-            Self::Int => unsafe { crate::int::typy_rt_int_to_str(item.cast_signed()) },
-            Self::Float => Raising::ok(crate::float::typy_rt_float_to_str(f64::from_bits(item))),
-            Self::Bool => Raising::ok(crate::string::from_str(if item == 0 {
+            ItemKind::Int => unsafe { crate::int::typy_rt_int_to_str(item.cast_signed()) },
+            ItemKind::Float => {
+                Raising::ok(crate::float::typy_rt_float_to_str(f64::from_bits(item)))
+            }
+            ItemKind::Bool => Raising::ok(crate::string::from_str(if item == 0 {
                 "False"
             } else {
                 "True"
             })),
+            ItemKind::NoneValue => Raising::ok(crate::string::from_str("None")),
             // SAFETY: the caller passes a pointer to a live object.
-            Self::Object => unsafe { object_repr(pointer(item)) },
+            ItemKind::Object => unsafe { object_repr(pointer(item)) },
+            // SAFETY: the caller passes the address of a live tuple of this layout.
+            ItemKind::Tuple => unsafe { crate::tuple::repr(self.tuple, item) },
         }
     }
+}
+
+/// Returns the words an item address points to.
+fn address(item: u64) -> *const u64 {
+    core::ptr::with_exposed_provenance(usize::try_from(item).unwrap_or(0))
 }
 
 /// Returns the object an item points to.

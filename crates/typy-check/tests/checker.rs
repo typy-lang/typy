@@ -747,8 +747,6 @@ fn list_rules_give_their_codes() {
         ("x = 1\nx[0] = 2\n", &["E0401"]),
         ("for a in 3:\n    pass\n", &["E0411"]),
         ("print(\"a\" in [1])\n", &["E0407"]),
-        ("x = [(1, 2)]\n", &["E0201"]),
-        ("x: list[None] = []\n", &["E0201"]),
         ("missing.append(1)\n", &["E0205"]),
         ("x = [1]\nx.append(item=2)\n", &["E0404"]),
         ("x = [1]\nx.append()\n", &["E0404"]),

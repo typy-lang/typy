@@ -44,6 +44,14 @@ impl<'ctx> FunctionEmitter<'_, '_, 'ctx> {
                 });
                 Some(global.as_pointer_value().into())
             }
+            Constant::TupleDescriptor(id) => {
+                let descriptor = crate::descriptor::tuple_descriptor(self.shared, *id)?;
+                Some(
+                    self.builder
+                        .build_ptr_to_int(descriptor, context.i64_type(), "")?
+                        .into(),
+                )
+            }
         })
     }
 

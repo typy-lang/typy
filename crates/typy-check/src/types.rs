@@ -95,17 +95,6 @@ impl Type {
         }
     }
 
-    /// Returns true when a list can hold items of this type in 0.2 so far: values that fit in
-    /// eight bytes, `int`, `float`, `bool`, `str` and lists (MEM-02). Lists of tuples and of
-    /// `None` follow.
-    #[must_use]
-    pub fn is_list_item(&self) -> bool {
-        matches!(
-            self,
-            Self::Int | Self::Float | Self::Bool | Self::Str | Self::List(_) | Self::Error
-        )
-    }
-
     /// Returns true for `int` and `float`.
     #[must_use]
     pub fn is_numeric(&self) -> bool {

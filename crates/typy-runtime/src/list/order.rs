@@ -1,7 +1,7 @@
 //! Lists as values: `+`, `*` and the comparisons, as CPython's `list_concat`, `list_repeat`
 //! and `list_richcompare` give them.
 
-use super::{ListObject, new_list};
+use super::{ListObject, new_list, push_retained};
 use crate::Raising;
 use crate::exception::{ExceptionKind, raise};
 use crate::word::{inline_value, is_inline};
@@ -18,14 +18,10 @@ pub unsafe extern "C" fn typy_rt_list_concat(
 ) -> *mut ListObject {
     // SAFETY: the caller passes live lists; every index stays below each length.
     unsafe {
-        let kind = (*left).item_kind();
-        let result = new_list(kind, (*left).length + (*right).length);
+        let result = new_list((*left).item_type(), (*left).length + (*right).length);
         for list in [left, right] {
             for index in 0..(*list).length {
-                let item = *(*list).items.add(index);
-                kind.retain(item);
-                *(*result).items.add((*result).length) = item;
-                (*result).length += 1;
+                push_retained(result, (*list).item(index));
             }
         }
         result
@@ -44,7 +40,6 @@ pub unsafe extern "C" fn typy_rt_list_repeat(
 ) -> Raising<*mut ListObject> {
     // SAFETY: the caller passes a live list; every index stays below its length.
     unsafe {
-        let kind = (*list).item_kind();
         if !is_inline(count) && !crate::int::is_negative(count) {
             let error = raise(
                 ExceptionKind::OverflowError,
@@ -64,13 +59,10 @@ pub unsafe extern "C" fn typy_rt_list_repeat(
             );
             return Raising::error(core::ptr::null_mut(), error);
         };
-        let result = new_list(kind, total);
+        let result = new_list((*list).item_type(), total);
         for _ in 0..times {
             for index in 0..(*list).length {
-                let item = *(*list).items.add(index);
-                kind.retain(item);
-                *(*result).items.add((*result).length) = item;
-                (*result).length += 1;
+                push_retained(result, (*list).item(index));
             }
         }
         Raising::ok(result)
@@ -92,15 +84,15 @@ pub unsafe extern "C" fn typy_rt_list_compare(
 ) -> bool {
     // SAFETY: the caller passes live lists; every index stays below both lengths.
     unsafe {
-        let kind = (*left).item_kind();
+        let item_type = (*left).item_type();
         let shared = (*left).length.min((*right).length);
         for index in 0..shared {
-            let (a, b) = (*(*left).items.add(index), *(*right).items.add(index));
-            if !kind.equal(a, b) {
+            let (a, b) = ((*left).item(index), (*right).item(index));
+            if !item_type.equal(a, b) {
                 return match inline_value(comparison) {
                     0 => false,
                     1 => true,
-                    _ => kind.order(a, b, comparison),
+                    _ => item_type.order(a, b, comparison),
                 };
             }
         }

@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy detailed design |
-| Version | 1.22 |
+| Version | 1.23 |
 | Status | Approved |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-08 |
@@ -41,25 +41,28 @@ crates/
                               syntax/ (tree, statement, expression,
                               operator, node_kind, dump),
                               parse/ (statement, expression, operator)
-  typy-check/src/             types, builtin, unprovided, check/
+  typy-check/src/             types, builtin, method, unprovided, check/
                               (definition, annotation, module_scope,
                               definition_order, visit), subset/ (feature,
                               statement, expression), body/ (program,
                               flow, locals, statement, expression, name,
-                              operator, call, builtin_call), typed/
+                              operator, call, builtin_call, iterable_call,
+                              list, slice, loop_source), typed/
                               (symbol, constant, signature, function,
                               program, statement, expression)
   typy-check/tests/           checker.rs, through the public API
   typy-tyir/src/              module, function, block, instruction,
                               types, verify, print
   typy-lower/src/             program, function, ownership, invoke,
-                              statement, expression, arithmetic,
-                              comparison, conversion, builtin,
-                              call_graph, mangle, strings, types
+                              statement, augmented, expression,
+                              arithmetic, comparison, conversion, builtin,
+                              iterable_builtin, tuple, list, list_method,
+                              slice, loop_source, call_graph, mangle,
+                              strings, types
   typy-codegen/src/           target, optimization, layout, statics, abi,
                               runtime, function, operation, constant,
-                              arithmetic, comparison, call, terminator,
-                              emit
+                              descriptor, bits, tuple, arithmetic,
+                              comparison, call, terminator, emit
   typy-build/src/             request, mode, emit_stage, runtime_archive,
                               linker, artifact
   typy-driver/src/            pipeline, emission, outcome, failure,
@@ -68,8 +71,8 @@ crates/
                               run), cache, output, exit_status, guard
   typy-runtime/src/           entry, cell, header, allocator, libc, libm,
                               refcount, word, compare, int, float,
-                              string, message, io, exception, range,
-                              stack
+                              string, list, tuple, slice, zip, message,
+                              io, exception, range, stack
   typy-conformance/src/       expectation, observation, oracle, subject,
                               suite, test_case, verdict
 tests/
@@ -495,9 +498,8 @@ any other value E0411. `enumerate`, `zip` and `reversed` outside a `for`
 give an iterator, E0201 until iterators arrive with CST-08 in 0.3. `x in
 xs` needs an `x` of the item type, and two lists compare with `==` when
 their item types are equal, because the runtime compares items by the
-list's own item kind. A list item is an `int`, `float`, `bool`, `str` or
-list, `Type::is_list_item`; lists of tuples and of `None` are planned for
-later in 0.2.
+list's own item kind. A list holds items of any type: `int`, `float`,
+`bool`, `None`, `str`, lists and tuples of these.
 
 In a comparison chain, an empty display takes its type from a neighbouring
 operand, so `xs == []` and `x in []` need no annotation; `[] == []` is still
@@ -543,7 +545,7 @@ each module in name order:
 1. `SubsetChecker::check` walks the syntax tree and looks up each node kind
    in the feature table of `ProjectSettings::release`. A node planned for a
    later release gives E0201, naming the release and the rule, such as
-   "lists are planned for TyPy 0.2 (DAT-07)". A node that is excluded from
+   "dicts are planned for TyPy 0.2 (DAT-09)". A node that is excluded from
    TyPy gives E0202 with rule STD-04.
 2. The resolver binds names. A name assigned anywhere in a function is a
    local of that function, as LR 4.2.2 defines. In 0.1 a function may read
@@ -612,11 +614,17 @@ not an object, as ADR-0001 decides, so `is` cannot observe a copy (EXP-08),
 and it is counted when an item is.
 
 A list is `TyirType::LIST`, `Object(TypeId::LIST)`. `TyirType::Bits` is the
-eight bytes a list stores for an item, never counted: `ToBits(value)` makes
-them from an `int`, `float`, `bool` or object, and `FromBits { bits, ty }`
-reads them back as a value borrowed from the list (MEM-02).
-`Constant::PlaceholderList` is the runtime's immortal empty list, the first
-value of a list slot. An `Int`
+eight bytes that stand for a list item at the runtime's interface, never
+counted: `ToBits(value)` makes them from an `int`, `float`, `bool` or
+object, 0 from `None`, and for a tuple the address of a stack slot made at
+the start of the function that holds it, which the runtime copies from
+before the call returns. `FromBits { bits, ty }` reads them back as a value
+borrowed from the list, for a tuple by loading it from the address the
+runtime gives (MEM-02). `Constant::PlaceholderList` is the runtime's
+immortal empty list, the first value of a list slot.
+`Constant::TupleDescriptor(id)` is the address of the descriptor of a tuple
+type, which `ListNew` receives for a list of tuples, and zero bits for any
+other list. An `Int`
 is a 64-bit word: an inline value has its lowest bit set and holds the
 number shifted left by one, so it covers -2^62 to 2^62 - 1; any other value
 is a pointer to a `BigInt` (ADR-0001, DAT-01). `Str` values are
@@ -771,7 +779,11 @@ Each declares every function first, emits each one, verifies the LLVM
 module, runs the pipeline and writes the output. A tuple is an LLVM struct
 of its items that have a value, so an item of type `None` takes no field and
 the empty tuple is `{}`; `MakeTuple` inserts each field and `TupleItem`
-extracts one. Tuples pass to and return from program functions by value. The
+extracts one. Tuples pass to and return from program functions by value. A
+tuple type that a list holds gets a descriptor, emitted once as two private
+constants: the `TupleType` header and its table of `Field` entries, whose
+offsets the target's data layout gives, so the runtime reads each field
+where the generated code stores it. The
 target machine uses the baseline CPU of the triple, so the output runs on
 every machine of the target and does not depend on the build host (NFR-06).
 Only the entry function is visible outside the object. `lookup` gives the
@@ -793,6 +805,7 @@ comparisons, calls and counting, terminators, and emission.
 | `str` object | Header, `length: u64` in code points, `kind: u32` (1, 2 or 4 bytes per code point), 4 bytes of padding, then the code points |
 | Large integer | Header, `sign_and_length: i32`, 4 bytes of padding, then that many `u64` limbs, least significant first |
 | Constants | Strings and large integers are immortal static objects in read-only memory |
+| List items | Eight bytes: the `int` word, the `float` bits, a `bool` as 0 or 1, the pointer, 0 for `None`, or for a tuple the address of its bytes. A tuple descriptor is `{ size: u64, length: u64, fields: ptr }`, and each field `{ kind: u32, offset: u32, tuple: ptr }`, with the kind codes of `ItemKind`: 0 `int`, 1 `float`, 2 `bool`, 3 object, 4 `None`, 5 tuple |
 | A function that may raise | Returns `{ result, exception }`, or only the exception when it returns nothing; a null exception means none was raised. The entry function always uses this form |
 | A function that cannot raise | Returns its result directly |
 | `invoke` | When the exception is not null, generated code calls `typy_rt_traceback_add(exception, function, file, line)` with C strings, then takes the error path |
@@ -924,10 +937,11 @@ installed `typy` finds `<prefix>/lib/typy/` and a `typy` in
 | `float` | Division, floor division, modulo and power with the special cases of CPython's `float_divmod` and `float_pow`. `int / int`, `float(int)` and `float(str)` round once to the nearest double, ties to even, by CPython's `long_true_divide` method on exact integers. `int(float)` and `int` against `float` comparisons are exact. `repr` writes the shortest digits that read back as the same double, found exactly with large integers, and breaks an exact tie toward the even digit as CPython does; the layout is positional when the decimal exponent is from -4 to 15, otherwise scientific with a sign and at least two exponent digits, and `inf`, `-inf`, `nan` and `-0.0` are written as CPython writes them (DAT-02) |
 | `libm` | `floor`, `fmod`, `pow` and `ldexp` from the C maths library, which is why every link passes `-lm` |
 | `string` | Creation, concatenation, repetition, indexing with negative indexes (DAT-11), slicing into a string as narrow as the code points it selects (DAT-12), length, comparison, `repr`, `chr` and `ord`. `repr` escapes the code points `str.isprintable` rejects, and `int()` and `float()` read the decimal digits of every script, from tables that `scripts/generate-unicode-tables.py` writes from CPython 3.15's Unicode 17.0 data (OI-15). The tables hold 676 boundaries up to U+FFFF as `u16`, 806 above it as `u32`, and 77 digit zeros, about 4.9 KB |
-| `list` | `typy_rt_list_new`, `_append`, `_length`, `_get`, `_set`, `_equal`, `_contains`, `_repr`, `_slice`, `_pop`, `_insert`, `_extend`, `_remove`, `_index`, `_count`, `_clear`, `_copy`, `_reverse`, `_concat`, `_repeat`, `_compare`, `_sort`, `_extreme`, `_sum_int`, `_sum_float`, `_any` and `_all`. A list grows to `n + n/8 + 4` items while small and to `n + n/32 + 4` from 65,536 items, so a list of a million `int` values built one `append` at a time takes at most 8.5 MB (NFR-13). A position counts from the end when negative; one outside the list raises `IndexError: list index out of range`, or `list assignment index out of range`, and a large integer `cannot fit 'int' into an index-sized integer`. An `Object` item is compared and written by the type ID in its header, so a list of lists needs nothing from the compiler. `repr` joins the `repr` of each item once, in a string as wide as its widest piece. `pop` takes its index with an `int` flag, 1 when an index is given, so no `bool` crosses into the runtime as an argument, and returns the item with the reference the list held. `insert` clamps its position to the list, as CPython does. `extend` reads the other list's length first, so `xs.extend(xs)` doubles the list once. `clear` sets the length to zero before releasing the items, so an item's `drop` never sees a half-cleared list. `remove` and `index` raise `ValueError` with CPython 3.14's messages, `list.remove(x): x not in list` and `list.index(x): x not in list` (OI-14). `repeat` raises `OverflowError` for a count that does not fit an index. `compare` decides by the first unequal pair, then by length. `sort` is stable and compares only with `<`, as CPython's does: runs of 32 items by binary insertion, then merged bottom up through one buffer of the list's length. With `reverse` it reverses, sorts and reverses again, as CPython does, so equal items keep their order; a `nan` makes the order of a list depend on the algorithm, and CPython's own versions differ on it. `extreme` keeps the first item until a later one is less, for `min`, or greater, for `max`, so the first of equal items wins, and an empty list raises `ValueError: min() iterable argument is empty`. `sum_float` is CPython 3.12's compensated sum, Neumaier's improvement of Kahan's: each rounding error is collected and added once at the end unless it is not finite. `typy_rt_placeholder_list` is an immortal empty list. Freeing a list releases each item |
+| `list` | `typy_rt_list_new(kind, capacity, descriptor)`, `_append`, `_length`, `_get`, `_set`, `_equal`, `_contains`, `_repr`, `_slice`, `_pop`, `_insert`, `_extend`, `_remove`, `_index`, `_count`, `_clear`, `_copy`, `_reverse`, `_concat`, `_repeat`, `_compare`, `_sort`, `_extreme`, `_sum_int`, `_sum_float`, `_any` and `_all`. A list grows to `n + n/8 + 4` items while small and to `n + n/32 + 4` from 65,536 items, so a list of a million `int` values built one `append` at a time takes at most 8.5 MB (NFR-13). A position counts from the end when negative; one outside the list raises `IndexError: list index out of range`, or `list assignment index out of range`, and a large integer `cannot fit 'int' into an index-sized integer`. An `Object` item is compared and written by the type ID in its header, so a list of lists needs nothing from the compiler. `repr` joins the `repr` of each item once, in a string as wide as its widest piece. `pop` takes its index with an `int` flag, 1 when an index is given, so no `bool` crosses into the runtime as an argument, and returns the item with the reference the list held. `insert` clamps its position to the list, as CPython does. `extend` reads the other list's length first, so `xs.extend(xs)` doubles the list once. `clear` sets the length to zero before releasing the items, so an item's `drop` never sees a half-cleared list. `remove` and `index` raise `ValueError` with CPython 3.14's messages, `list.remove(x): x not in list` and `list.index(x): x not in list` (OI-14). `repeat` raises `OverflowError` for a count that does not fit an index. `compare` decides by the first unequal pair, then by length. `sort` is stable and compares only with `<`, as CPython's does: runs of 32 items by binary insertion, then merged bottom up through one buffer of the list's length. With `reverse` it reverses, sorts and reverses again, as CPython does, so equal items keep their order; a `nan` makes the order of a list depend on the algorithm, and CPython's own versions differ on it. `extreme` keeps the first item until a later one is less, for `min`, or greater, for `max`, so the first of equal items wins, and an empty list raises `ValueError: min() iterable argument is empty`. `sum_float` is CPython 3.12's compensated sum, Neumaier's improvement of Kahan's: each rounding error is collected and added once at the end unless it is not finite. `typy_rt_placeholder_list` is an immortal empty list. Freeing a list releases each item |
 | `message` | Builds an exception message of up to 1024 code points from text, numbers and `repr` of a string, so an error about a long input stays short |
 | `io` | Standard output is buffered in 8 KiB and flushed when full, at exit, and before anything is written to standard error |
 | `exception` | Creates the built-in exceptions of EXC-02 with CPython's message for each operation. Where the oracle versions word a message differently, the runtime uses the wording of the newest, CPython 3.15 (OI-14): `division by zero` for every division and modulo of `int` and `float`, and `zero to a negative power` for `0.0 ** -1.0`. A conformance test cannot check such a message, because the oracles disagree on it, so the runtime's unit tests check it. It adds `TracebackEntry` values, and it prints an uncaught exception as `Traceback (most recent call last):`, one line per entry, then `Type: message`, or `Type` alone when the message is empty, as CPython does (STD-05) |
+| `tuple` | A list of tuples stores each tuple inline, in the words its descriptor gives, and the list's header keeps the descriptor. A `TupleType` holds the item size, a multiple of eight bytes and at least eight, the number of items, and a `Field` for each: its `ItemKind` code, its byte offset, and a nested tuple's descriptor. A `bool` field is one byte and `None` takes none. `retain`, `release`, `equal`, `order` and `repr` walk the fields, so the compiler emits data and no code: tuples order as CPython orders them, by the first pair of items that are not equal, and `repr` writes `(1,)` for one item |
 | `zip` | `typy_rt_zip_unequal(index, longer)` raises CPython's `ValueError` for a strict `zip`: `zip() argument 2 is shorter than argument 1`, or `zip() argument 3 is longer than arguments 1-2` |
 | `stack` | The check at the start of recursive functions reads the stack pointer register and compares it with the recorded limit; the register is read rather than the address of a local, because a sanitizer may keep locals on a separate fake stack. The limit leaves 64 KiB of stack unused; past it the check raises `RecursionError: maximum recursion depth exceeded` |
 

@@ -11,13 +11,16 @@ use typy_tyir::{
 use crate::function::FunctionLowerer;
 use crate::ownership::Lowered;
 
-/// Returns the runtime's code for the kind of item a list of `item` holds.
+/// Returns the runtime's code for the kind of item a list of `item` holds, the numbering of the
+/// runtime's `ItemKind`.
 fn item_kind(item: TyirType) -> i64 {
     match item {
         TyirType::Int => 0,
         TyirType::Float => 1,
         TyirType::Bool => 2,
-        _ => 3,
+        TyirType::Unit => 4,
+        TyirType::Tuple(_) => 5,
+        TyirType::Object(_) | TyirType::Bits => 3,
     }
 }
 
@@ -37,7 +40,18 @@ impl FunctionLowerer<'_> {
     ) -> Lowered {
         let kind = self.constant(Constant::Int(item_kind(item).to_string()), span);
         let capacity = self.constant(Constant::Int(items.len().to_string()), span);
-        let list = self.call_runtime(RuntimeFunction::ListNew, vec![kind, capacity], span);
+        let descriptor = if let TyirType::Tuple(id) = item {
+            self.constant(Constant::TupleDescriptor(id), span)
+        } else {
+            let none = self.constant(Constant::Unit, span);
+            self.builder
+                .push_value(Operation::ToBits(none), TyirType::Bits, span)
+        };
+        let list = self.call_runtime(
+            RuntimeFunction::ListNew,
+            vec![kind, capacity, descriptor],
+            span,
+        );
         for element in items {
             let value = self.expression(element);
             let bits = self.bits(value, span);

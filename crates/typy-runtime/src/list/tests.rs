@@ -108,7 +108,7 @@ fn equality_and_membership_compare_items_by_value() {
 
 #[test]
 fn every_item_kind_is_written_as_cpython_writes_it() {
-    let floats = typy_rt_list_new(word(ItemKind::Float as i64), word(2));
+    let floats = typy_rt_list_new(word(ItemKind::Float as i64), word(2), 0);
     let bools = new_list(ItemKind::Bool, 0);
     let strings = new_list(ItemKind::Object, 0);
     let nested = new_list(ItemKind::Object, 0);

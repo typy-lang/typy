@@ -1,6 +1,6 @@
 //! The methods of `list` (LIB-03), and slicing (DAT-12), with CPython's results and messages.
 
-use super::{ListObject, new_list, reserve_one};
+use super::{ListObject, new_list, push_retained, reserve, reserve_one, take_out};
 use crate::Raising;
 use crate::exception::{ExceptionKind, ExceptionObject, raise};
 use crate::slice::select;
@@ -25,21 +25,19 @@ pub unsafe extern "C" fn typy_rt_list_slice(
             Ok(selection) => selection,
             Err(error) => return Raising::error(core::ptr::null_mut(), error),
         };
-        let kind = (*list).item_kind();
-        let result = new_list(kind, selection.count);
+        let result = new_list((*list).item_type(), selection.count);
         for index in 0..selection.count {
-            let item = *(*list).items.add(selection.position(index));
-            kind.retain(item);
-            *(*result).items.add(index) = item;
+            push_retained(result, (*list).item(selection.position(index)));
         }
-        (*result).length = selection.count;
         Raising::ok(result)
     }
 }
 
 /// Removes the item at `index`, or the last item when `present`, an `int` word, is 0, and
-/// returns it with the reference the list held, which the caller now owns (`list.pop`). The
-/// flag is a word rather than a `bool`, so no `bool` crosses into the runtime as an argument.
+/// returns it with the reference the list held, which the caller now owns (`list.pop`). A tuple
+/// is returned as the address of the slot just past the new end, which the caller copies before
+/// it changes the list again. The flag is a word rather than a `bool`, so no `bool` crosses into
+/// the runtime as an argument.
 ///
 /// # Safety
 ///
@@ -78,15 +76,7 @@ pub unsafe extern "C" fn typy_rt_list_pop(
                 raise(ExceptionKind::IndexError, "pop index out of range"),
             );
         };
-        let items = (*list).items;
-        let item = *items.add(position);
-        core::ptr::copy(
-            items.add(position + 1),
-            items.add(position),
-            length - position - 1,
-        );
-        (*list).length = length - 1;
-        Raising::ok(item)
+        Raising::ok(take_out(list, position))
     }
 }
 
@@ -114,20 +104,22 @@ pub unsafe extern "C" fn typy_rt_list_insert(list: *mut ListObject, index: i64, 
         };
         let position = usize::try_from(position).unwrap_or(0);
         reserve_one(list);
-        (*list).item_kind().retain(item);
-        let items = (*list).items;
+        let item_type = (*list).item_type();
+        item_type.retain(item);
+        let words = (*list).words();
         core::ptr::copy(
-            items.add(position),
-            items.add(position + 1),
-            (*list).length - position,
+            (*list).slot(position),
+            (*list).slot(position + 1),
+            ((*list).length - position) * words,
         );
-        *items.add(position) = item;
+        item_type.store((*list).slot(position), item);
         (*list).length += 1;
     }
 }
 
 /// Appends the items of `other` to `list`, as `list.extend` and `list += other` do. The count is
-/// read first, so a list extended by itself doubles once.
+/// read and the room reserved first, so a list extended by itself doubles once and its tuple
+/// items are read from a buffer that does not move.
 ///
 /// # Safety
 ///
@@ -137,8 +129,9 @@ pub unsafe extern "C" fn typy_rt_list_extend(list: *mut ListObject, other: *cons
     // SAFETY: the caller passes live lists; `count` items of `other` exist throughout.
     unsafe {
         let count = (*other).length;
+        reserve(list, count);
         for index in 0..count {
-            super::typy_rt_list_append(list, *(*other).items.add(index));
+            push_retained(list, (*other).item(index));
         }
     }
 }
@@ -151,8 +144,8 @@ pub unsafe extern "C" fn typy_rt_list_extend(list: *mut ListObject, other: *cons
 unsafe fn find(list: *const ListObject, item: u64) -> Option<usize> {
     // SAFETY: the caller passes a live list and item.
     unsafe {
-        let kind = (*list).item_kind();
-        (0..(*list).length).find(|index| kind.equal(*(*list).items.add(*index), item))
+        let item_type = (*list).item_type();
+        (0..(*list).length).find(|index| item_type.equal((*list).item(*index), item))
     }
 }
 
@@ -171,15 +164,8 @@ pub unsafe extern "C" fn typy_rt_list_remove(
         let Some(position) = find(list, item) else {
             return raise(ExceptionKind::ValueError, "list.remove(x): x not in list");
         };
-        let items = (*list).items;
-        let removed = *items.add(position);
-        core::ptr::copy(
-            items.add(position + 1),
-            items.add(position),
-            (*list).length - position - 1,
-        );
-        (*list).length -= 1;
-        (*list).item_kind().release(removed);
+        let removed = take_out(list, position);
+        (*list).item_type().release(removed);
         core::ptr::null_mut()
     }
 }
@@ -214,9 +200,9 @@ pub unsafe extern "C" fn typy_rt_list_index(list: *const ListObject, item: u64) 
 pub unsafe extern "C" fn typy_rt_list_count(list: *const ListObject, item: u64) -> i64 {
     // SAFETY: the caller passes a live list and item.
     let count = unsafe {
-        let kind = (*list).item_kind();
+        let item_type = (*list).item_type();
         (0..(*list).length)
-            .filter(|index| kind.equal(*(*list).items.add(*index), item))
+            .filter(|index| item_type.equal((*list).item(*index), item))
             .count()
     };
     inline(i64::try_from(count).unwrap_or(i64::MAX)).unwrap_or(1)
@@ -234,9 +220,9 @@ pub unsafe extern "C" fn typy_rt_list_clear(list: *mut ListObject) {
     unsafe {
         let length = (*list).length;
         (*list).length = 0;
-        let kind = (*list).item_kind();
+        let item_type = (*list).item_type();
         for index in 0..length {
-            kind.release(*(*list).items.add(index));
+            item_type.release((*list).item(index));
         }
     }
 }
@@ -250,7 +236,7 @@ pub unsafe extern "C" fn typy_rt_list_clear(list: *mut ListObject) {
 pub unsafe extern "C" fn typy_rt_list_copy(list: *const ListObject) -> *mut ListObject {
     // SAFETY: the caller passes a live list.
     unsafe {
-        let copy = new_list((*list).item_kind(), (*list).length);
+        let copy = new_list((*list).item_type(), (*list).length);
         typy_rt_list_extend(copy, list);
         copy
     }
@@ -265,8 +251,13 @@ pub unsafe extern "C" fn typy_rt_list_copy(list: *const ListObject) -> *mut List
 pub unsafe extern "C" fn typy_rt_list_reverse(list: *mut ListObject) {
     // SAFETY: the caller passes a live list, whose first `length` items are initialised.
     unsafe {
-        if (*list).length > 1 {
-            core::slice::from_raw_parts_mut((*list).items, (*list).length).reverse();
+        let (length, words) = ((*list).length, (*list).words());
+        for index in 0..length / 2 {
+            core::ptr::swap_nonoverlapping(
+                (*list).slot(index),
+                (*list).slot(length - 1 - index),
+                words,
+            );
         }
     }
 }

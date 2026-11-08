@@ -2,7 +2,7 @@
 
 use std::fmt;
 
-use crate::types::TyirType;
+use crate::types::{TupleTypeId, TyirType};
 
 /// Index of a string in the module's string pool.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -24,6 +24,9 @@ pub enum Constant {
     /// The runtime's immortal empty list, the first value of a list slot. Definite assignment
     /// guarantees it is never read, so it is never changed.
     PlaceholderList,
+    /// The address of the descriptor of a tuple type that a list holds, which the runtime
+    /// reads to store, count, compare and write its items (ADR-0009).
+    TupleDescriptor(TupleTypeId),
 }
 
 impl Constant {
@@ -37,6 +40,7 @@ impl Constant {
             Self::Unit => TyirType::Unit,
             Self::Str(_) => TyirType::STR,
             Self::PlaceholderList => TyirType::LIST,
+            Self::TupleDescriptor(_) => TyirType::Bits,
         }
     }
 }
@@ -50,6 +54,7 @@ impl fmt::Display for Constant {
             Self::Unit => formatter.write_str("unit"),
             Self::Str(StringId(id)) => write!(formatter, "str s{id}"),
             Self::PlaceholderList => formatter.write_str("placeholder list"),
+            Self::TupleDescriptor(TupleTypeId(id)) => write!(formatter, "descriptor tuple#{id}"),
         }
     }
 }
@@ -57,7 +62,7 @@ impl fmt::Display for Constant {
 #[cfg(test)]
 mod tests {
     use super::{Constant, StringId};
-    use crate::types::TyirType;
+    use crate::types::{TupleTypeId, TyirType};
 
     #[test]
     fn constants_have_their_types_and_text() {
@@ -71,6 +76,11 @@ mod tests {
                 Constant::PlaceholderList,
                 TyirType::LIST,
                 "placeholder list",
+            ),
+            (
+                Constant::TupleDescriptor(TupleTypeId(2)),
+                TyirType::Bits,
+                "descriptor tuple#2",
             ),
         ];
         for (constant, ty, text) in cases {

@@ -11,11 +11,16 @@ use crate::header::{
 /// `object` points to a live object with a valid header.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn typy_rt_increment(object: *mut ObjectHeader) {
+    // An immortal object may be a static in read-only memory, so the count is read through the
+    // pointer and written only when it is not immortal.
     // SAFETY: the caller passes a live object.
-    let header = unsafe { &mut *object };
-    if header.reference_count != IMMORTAL {
-        // A count that reaches the immortal value keeps the object alive for good, which is safe.
-        header.reference_count += 1;
+    unsafe {
+        let count = (*object).reference_count;
+        if count != IMMORTAL {
+            // A count that reaches the immortal value keeps the object alive for good, which is
+            // safe.
+            (*object).reference_count = count + 1;
+        }
     }
 }
 
@@ -26,16 +31,18 @@ pub unsafe extern "C" fn typy_rt_increment(object: *mut ObjectHeader) {
 /// `object` points to a live object with a valid header, and the caller owns the reference it drops.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn typy_rt_decrement(object: *mut ObjectHeader) {
-    // SAFETY: the caller passes a live object it holds a reference to.
-    let header = unsafe { &mut *object };
-    match header.reference_count {
-        IMMORTAL => {}
-        1 => {
-            let type_id = header.type_id;
-            // SAFETY: this was the last reference, so nothing else uses the object.
-            unsafe { destroy(object, type_id) };
+    // SAFETY: the caller passes a live object it holds a reference to; an immortal one is never
+    // written, as in `typy_rt_increment`.
+    unsafe {
+        match (*object).reference_count {
+            IMMORTAL => {}
+            1 => {
+                let type_id = (*object).type_id;
+                // This was the last reference, so nothing else uses the object.
+                destroy(object, type_id);
+            }
+            count => (*object).reference_count = count - 1,
         }
-        count => header.reference_count = count - 1,
     }
 }
 

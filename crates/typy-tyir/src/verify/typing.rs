@@ -201,7 +201,12 @@ impl Checker<'_> {
                 let ty = self.ty(*value)?;
                 if !matches!(
                     ty,
-                    TyirType::Int | TyirType::Float | TyirType::Bool | TyirType::Object(_)
+                    TyirType::Int
+                        | TyirType::Float
+                        | TyirType::Bool
+                        | TyirType::Object(_)
+                        | TyirType::Unit
+                        | TyirType::Tuple(_)
                 ) {
                     return Err(self.error(format!("v{} of type {ty} is not a list item", value.0)));
                 }

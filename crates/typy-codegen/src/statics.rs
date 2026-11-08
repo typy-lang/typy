@@ -16,6 +16,7 @@ pub(crate) struct Statics<'ctx> {
     strings: BTreeMap<String, PointerValue<'ctx>>,
     c_strings: BTreeMap<String, PointerValue<'ctx>>,
     big_ints: BTreeMap<String, PointerValue<'ctx>>,
+    descriptors: BTreeMap<u32, PointerValue<'ctx>>,
 }
 
 impl<'ctx> Statics<'ctx> {
@@ -25,10 +26,22 @@ impl<'ctx> Statics<'ctx> {
             strings: BTreeMap::new(),
             c_strings: BTreeMap::new(),
             big_ints: BTreeMap::new(),
+            descriptors: BTreeMap::new(),
         }
     }
 
-    fn global(
+    /// Returns the descriptor of tuple type `id`, if it was emitted already.
+    pub(crate) fn descriptor(&self, id: u32) -> Option<PointerValue<'ctx>> {
+        self.descriptors.get(&id).copied()
+    }
+
+    /// Records the descriptor of tuple type `id`.
+    pub(crate) fn add_descriptor(&mut self, id: u32, pointer: PointerValue<'ctx>) {
+        self.descriptors.insert(id, pointer);
+    }
+
+    /// Adds a private constant global holding `value`, and returns its address.
+    pub(crate) fn global(
         module: &Module<'ctx>,
         value: BasicValueEnum<'ctx>,
         name: &str,

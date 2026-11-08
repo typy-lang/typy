@@ -196,7 +196,7 @@ impl RuntimeFunction {
             Self::WriteStdout => signature(&[STR], Unit, false),
             Self::CheckStack => signature(&[], Unit, true),
             Self::RangeCheckStep => signature(&[Int], Unit, true),
-            Self::ListNew => signature(&[Int, Int], LIST, false),
+            Self::ListNew => signature(&[Int, Int, Bits], LIST, false),
             Self::ListAppend => signature(&[LIST, Bits], Unit, false),
             Self::ListLength => signature(&[LIST], Int, false),
             Self::ListGet | Self::ListExtreme => signature(&[LIST, Int], Bits, true),

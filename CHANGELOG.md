@@ -42,6 +42,9 @@ All notable changes to TyPy are recorded here. The format follows
   `sum` of a `list[float]` takes a start such as `0.0`, because CPython
   returns the `int` 0 for an empty list without one. The `key` argument
   arrives with function values in 1.0 (FUN-05).
+- Lists of tuples and of `None`, such as `list[tuple[int, str]]`, with every
+  list operation. A tuple is stored inline in the list, so a million pairs
+  of `int` values take 16 MB (DAT-07, MEM-02).
 - `for` over the characters of a `str`, and over `enumerate`, with
   `start`, `zip`, with `strict`, and `reversed` of lists and strings,
   nested as in `enumerate(zip(a, b))`, with CPython's errors (CST-03,

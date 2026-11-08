@@ -2,8 +2,8 @@
 //! (LIB-02, LIB-03).
 
 use super::ListObject;
-use super::item::ItemKind;
 use crate::Raising;
+use crate::allocator::{allocate, array_size, free};
 use crate::exception::{ExceptionKind, raise};
 use crate::word::inline_value;
 
@@ -29,24 +29,68 @@ pub unsafe extern "C" fn typy_rt_list_sort(list: *mut ListObject, reverse: i64) 
         if length < 2 {
             return;
         }
-        let kind = (*list).item_kind();
-        let items = core::slice::from_raw_parts_mut((*list).items, length);
         let reverse = inline_value(reverse) != 0;
         if reverse {
-            items.reverse();
+            super::methods::typy_rt_list_reverse(list);
         }
-        sort(kind, items);
+        let item_type = (*list).item_type();
+        if item_type.kind() == super::ItemKind::Tuple {
+            sort_tuples(list);
+        } else {
+            let items = core::slice::from_raw_parts_mut((*list).items, length);
+            sort(items, &|left: u64, right: u64| {
+                item_type.order(left, right, LESS)
+            });
+        }
         if reverse {
-            items.reverse();
+            super::methods::typy_rt_list_reverse(list);
         }
     }
 }
 
-/// Returns the items of a list; an empty list may have no buffer at all.
+/// Sorts a list of tuples, which are compared through their addresses: the positions are sorted
+/// by the items they hold, then the items are copied into that order through one buffer.
 ///
 /// # Safety
 ///
-/// `list` points to a live list, which outlives the slice and is not changed while it is used.
+/// `list` points to a live list of at least two items.
+#[allow(
+    clippy::cast_ptr_alignment,
+    reason = "malloc returns memory aligned for every type"
+)]
+unsafe fn sort_tuples(list: *mut ListObject) {
+    // SAFETY: the caller passes a live list; every position stays below its length.
+    unsafe {
+        let (length, words) = ((*list).length, (*list).words());
+        let item_type = (*list).item_type();
+        let order = allocate(array_size(length, core::mem::size_of::<usize>(), 0)).cast::<usize>();
+        let positions = core::slice::from_raw_parts_mut(order, length);
+        for (index, position) in positions.iter_mut().enumerate() {
+            *position = index;
+        }
+        sort(positions, &|left: usize, right: usize| {
+            item_type.order((*list).item(left), (*list).item(right), LESS)
+        });
+        let sorted = allocate(array_size(length, 8 * words, 0)).cast::<u64>();
+        for (index, position) in positions.iter().enumerate() {
+            core::ptr::copy_nonoverlapping(
+                (*list).slot(*position),
+                sorted.add(index * words),
+                words,
+            );
+        }
+        core::ptr::copy_nonoverlapping(sorted, (*list).items, length * words);
+        free(sorted.cast());
+        free(order.cast());
+    }
+}
+
+/// Returns the items of a list of eight-byte items; an empty list may have no buffer at all.
+///
+/// # Safety
+///
+/// `list` points to a live list of eight-byte items, which outlives the slice and is not
+/// changed while it is used.
 unsafe fn items_of<'list>(list: *const ListObject) -> &'list [u64] {
     // SAFETY: the caller passes a live list, whose first `length` items are initialised.
     unsafe {
@@ -59,15 +103,9 @@ unsafe fn items_of<'list>(list: *const ListObject) -> &'list [u64] {
 }
 
 /// Sorts `items` stably: runs of `RUN` items by binary insertion, then merged bottom up.
-///
-/// # Safety
-///
-/// Every item is a live item of `kind`.
-unsafe fn sort(kind: ItemKind, items: &mut [u64]) {
-    // SAFETY: the caller passes live items of `kind`.
-    let less = |left: u64, right: u64| unsafe { kind.order(left, right, LESS) };
+fn sort<T: Copy>(items: &mut [T], less: &impl Fn(T, T) -> bool) {
     for run in items.chunks_mut(RUN) {
-        insertion_sort(run, &less);
+        insertion_sort(run, less);
     }
     if items.len() <= RUN {
         return;
@@ -76,25 +114,24 @@ unsafe fn sort(kind: ItemKind, items: &mut [u64]) {
         clippy::cast_ptr_alignment,
         reason = "malloc returns memory aligned for every type"
     )]
-    let buffer =
-        crate::allocator::allocate(crate::allocator::array_size(items.len(), 8, 0)).cast::<u64>();
-    // SAFETY: the buffer has room for every item, and is freed below.
+    let buffer = allocate(array_size(items.len(), core::mem::size_of::<T>(), 0)).cast::<T>();
+    // SAFETY: the buffer has room for every item; `merge` writes each slot before reading it.
     let scratch = unsafe { core::slice::from_raw_parts_mut(buffer, items.len()) };
     let mut width = RUN;
     while width < items.len() {
         let mut start = 0;
         while start + width < items.len() {
             let end = (start + 2 * width).min(items.len());
-            merge(&mut items[start..end], width, scratch, &less);
+            merge(&mut items[start..end], width, scratch, less);
             start = end;
         }
         width *= 2;
     }
-    crate::allocator::free(buffer.cast());
+    free(buffer.cast());
 }
 
 /// Sorts a short run by binary insertion; an item goes after every item it is not less than.
-fn insertion_sort(run: &mut [u64], less: &impl Fn(u64, u64) -> bool) {
+fn insertion_sort<T: Copy>(run: &mut [T], less: &impl Fn(T, T) -> bool) {
     for next in 1..run.len() {
         let pivot = run[next];
         let (mut low, mut high) = (0, next);
@@ -113,7 +150,7 @@ fn insertion_sort(run: &mut [u64], less: &impl Fn(u64, u64) -> bool) {
 
 /// Merges the sorted halves `items[..middle]` and `items[middle..]`; an item of the right half
 /// goes first only when it is less than the left one, which keeps the sort stable.
-fn merge(items: &mut [u64], middle: usize, scratch: &mut [u64], less: &impl Fn(u64, u64) -> bool) {
+fn merge<T: Copy>(items: &mut [T], middle: usize, scratch: &mut [T], less: &impl Fn(T, T) -> bool) {
     scratch[..middle].copy_from_slice(&items[..middle]);
     let (mut left, mut right, mut out) = (0, middle, 0);
     while left < middle && right < items.len() {
@@ -132,7 +169,7 @@ fn merge(items: &mut [u64], middle: usize, scratch: &mut [u64], less: &impl Fn(u
 /// Returns the smallest item, or with `largest`, an `int` word that is not 0, the largest, with
 /// a reference of its own (`min` and `max`). As in CPython, an item replaces the one kept so far
 /// only when it is less, or greater, so the first of equal items wins; an empty list raises
-/// `ValueError`.
+/// `ValueError`. A tuple is returned as its address in the list, which the caller copies.
 ///
 /// # Safety
 ///
@@ -145,25 +182,25 @@ pub unsafe extern "C" fn typy_rt_list_extreme(
     let largest = inline_value(largest) != 0;
     // SAFETY: the caller passes a live list, whose first `length` items are initialised.
     unsafe {
-        let kind = (*list).item_kind();
-        let items = items_of(list);
-        let Some((&first, rest)) = items.split_first() else {
+        let item_type = (*list).item_type();
+        if (*list).length == 0 {
             let message = if largest {
                 "max() iterable argument is empty"
             } else {
                 "min() iterable argument is empty"
             };
             return Raising::error(0, raise(ExceptionKind::ValueError, message));
-        };
+        }
         let comparison = if largest { GREATER } else { LESS };
-        let kept = rest.iter().fold(first, |kept, &item| {
-            if kind.order(item, kept, comparison) {
+        let kept = (1..(*list).length).fold((*list).item(0), |kept, index| {
+            let item = (*list).item(index);
+            if item_type.order(item, kept, comparison) {
                 item
             } else {
                 kept
             }
         });
-        kind.retain(kept);
+        item_type.retain(kept);
         Raising::ok(kept)
     }
 }
@@ -230,8 +267,8 @@ fn libm_fabs(value: f64) -> f64 {
 pub unsafe extern "C" fn typy_rt_list_any(list: *const ListObject) -> bool {
     // SAFETY: the caller passes a live list, whose first `length` items are initialised.
     unsafe {
-        let kind = (*list).item_kind();
-        items_of(list).iter().any(|&item| kind.is_true(item))
+        let item_type = (*list).item_type();
+        (0..(*list).length).any(|index| item_type.is_true((*list).item(index)))
     }
 }
 
@@ -244,8 +281,8 @@ pub unsafe extern "C" fn typy_rt_list_any(list: *const ListObject) -> bool {
 pub unsafe extern "C" fn typy_rt_list_all(list: *const ListObject) -> bool {
     // SAFETY: the caller passes a live list, whose first `length` items are initialised.
     unsafe {
-        let kind = (*list).item_kind();
-        items_of(list).iter().all(|&item| kind.is_true(item))
+        let item_type = (*list).item_type();
+        (0..(*list).length).all(|index| item_type.is_true((*list).item(index)))
     }
 }
 

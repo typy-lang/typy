@@ -2,7 +2,7 @@
 //! runtime function: a list that stores an item adds a reference to it, and an item read from a
 //! list is borrowed from the list.
 
-use super::{ItemKind, ListObject, new_list, reserve_one};
+use super::{ItemKind, ItemType, ListObject, new_list, reserve_one};
 use crate::Raising;
 use crate::allocator::{allocate, array_size, free};
 use crate::exception::{ExceptionKind, ExceptionObject, raise};
@@ -10,11 +10,21 @@ use crate::string::{StrKind, StrObject, code_point, length, new_string, set_code
 use crate::word::{inline, inline_value, is_inline};
 
 /// Returns a new empty list of the item kind whose code is the `int` word `kind`, with room
-/// for `capacity` items.
+/// for `capacity` items; `tuple` is the address of the descriptor of tuple items, or 0.
 #[unsafe(no_mangle)]
-pub extern "C" fn typy_rt_list_new(kind: i64, capacity: i64) -> *mut ListObject {
+pub extern "C" fn typy_rt_list_new(kind: i64, capacity: i64, tuple: u64) -> *mut ListObject {
     let kind = ItemKind::from_code(u32::try_from(inline_value(kind)).unwrap_or(u32::MAX));
-    new_list(kind, usize::try_from(inline_value(capacity)).unwrap_or(0))
+    let item_type = if kind == ItemKind::Tuple {
+        ItemType::tuple(core::ptr::with_exposed_provenance(
+            usize::try_from(tuple).unwrap_or(0),
+        ))
+    } else {
+        ItemType::from(kind)
+    };
+    new_list(
+        item_type,
+        usize::try_from(inline_value(capacity)).unwrap_or(0),
+    )
 }
 
 /// Adds `item` at the end of `list`, with a reference of its own (`list.append`).
@@ -27,8 +37,9 @@ pub unsafe extern "C" fn typy_rt_list_append(list: *mut ListObject, item: u64) {
     // SAFETY: the caller passes a live list and item; `reserve_one` makes room for it.
     unsafe {
         reserve_one(list);
-        (*list).item_kind().retain(item);
-        *(*list).items.add((*list).length) = item;
+        let item_type = (*list).item_type();
+        item_type.retain(item);
+        item_type.store((*list).slot((*list).length), item);
         (*list).length += 1;
     }
 }
@@ -74,7 +85,7 @@ pub unsafe extern "C" fn typy_rt_list_get(list: *const ListObject, index: i64) -
     // SAFETY: the caller passes a live list; `position` keeps the index inside it.
     unsafe {
         match position(index, (*list).length, "list index out of range") {
-            Ok(index) => Raising::ok(*(*list).items.add(index)),
+            Ok(index) => Raising::ok((*list).item(index)),
             Err(exception) => Raising::error(0, exception),
         }
     }
@@ -97,12 +108,12 @@ pub unsafe extern "C" fn typy_rt_list_set(
     unsafe {
         match position(index, (*list).length, "list assignment index out of range") {
             Ok(index) => {
-                let kind = (*list).item_kind();
-                kind.retain(item);
-                let slot = (*list).items.add(index);
-                let old = *slot;
-                *slot = item;
-                kind.release(old);
+                // The new item is counted first, so releasing the old one cannot free what the
+                // new one holds.
+                let item_type = (*list).item_type();
+                item_type.retain(item);
+                item_type.release((*list).item(index));
+                item_type.store((*list).slot(index), item);
                 core::ptr::null_mut()
             }
             Err(exception) => exception,
@@ -125,9 +136,8 @@ pub unsafe extern "C" fn typy_rt_list_equal(
         if (*left).length != (*right).length {
             return false;
         }
-        let kind = (*left).item_kind();
-        (0..(*left).length)
-            .all(|index| kind.equal(*(*left).items.add(index), *(*right).items.add(index)))
+        let item_type = (*left).item_type();
+        (0..(*left).length).all(|index| item_type.equal((*left).item(index), (*right).item(index)))
     }
 }
 
@@ -140,8 +150,8 @@ pub unsafe extern "C" fn typy_rt_list_equal(
 pub unsafe extern "C" fn typy_rt_list_contains(list: *const ListObject, item: u64) -> bool {
     // SAFETY: the caller passes a live list and item; every index stays below its length.
     unsafe {
-        let kind = (*list).item_kind();
-        (0..(*list).length).any(|index| kind.equal(*(*list).items.add(index), item))
+        let item_type = (*list).item_type();
+        (0..(*list).length).any(|index| item_type.equal((*list).item(index), item))
     }
 }
 
@@ -152,25 +162,44 @@ pub unsafe extern "C" fn typy_rt_list_contains(list: *const ListObject, item: u6
 /// `list` points to a live list.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn typy_rt_list_repr(list: *const ListObject) -> Raising<*mut StrObject> {
-    // SAFETY: the caller passes a live list; each piece is a new string this function owns.
+    // SAFETY: the caller passes a live list; every index stays below its length.
     unsafe {
-        let count = (*list).length;
-        let kind = (*list).item_kind();
+        let item_type = (*list).item_type();
+        let items = (0..(*list).length).map(|index| (item_type, (*list).item(index)));
+        join_reprs(items, (*list).length, "[", "]")
+    }
+}
+
+/// Returns the `repr` of `count` items, separated by `, ` between `open` and `close`, as one
+/// new string as wide as its widest piece needs; each `repr` is made once. Only an `int` of more
+/// than 4300 digits raises.
+///
+/// # Safety
+///
+/// `items` gives `count` live items of their types.
+pub(crate) unsafe fn join_reprs(
+    items: impl Iterator<Item = (ItemType, u64)>,
+    count: usize,
+    open: &str,
+    close: &str,
+) -> Raising<*mut StrObject> {
+    // SAFETY: the caller passes live items; each piece is a new string this function owns.
+    unsafe {
         #[allow(
             clippy::cast_ptr_alignment,
             reason = "malloc returns memory aligned for every type"
         )]
         let pieces =
             allocate(array_size(count, core::mem::size_of::<usize>(), 0)).cast::<*mut StrObject>();
-        for index in 0..count {
-            let piece = kind.repr(*(*list).items.add(index));
+        for (index, (item_type, item)) in items.take(count).enumerate() {
+            let piece = item_type.repr(item);
             if !piece.exception.is_null() {
                 release_pieces(pieces, index);
                 return Raising::error(core::ptr::null_mut(), piece.exception);
             }
             *pieces.add(index) = piece.value;
         }
-        let text = join(pieces, count);
+        let text = join(pieces, count, open, close);
         release_pieces(pieces, count);
         Raising::ok(text)
     }
@@ -191,16 +220,21 @@ unsafe fn release_pieces(pieces: *mut *mut StrObject, count: usize) {
     free(pieces.cast::<u8>());
 }
 
-/// Returns `[piece, piece, ...]` as one new string, as wide as its widest piece needs.
+/// Returns `open piece, piece, ... close` as one new string, as wide as its widest piece needs.
 ///
 /// # Safety
 ///
 /// `pieces` holds `count` live strings.
-unsafe fn join(pieces: *const *mut StrObject, count: usize) -> *mut StrObject {
+unsafe fn join(
+    pieces: *const *mut StrObject,
+    count: usize,
+    open: &str,
+    close: &str,
+) -> *mut StrObject {
     // SAFETY: the caller passes `count` live strings; every index stays below each length.
     unsafe {
         let separators = count.saturating_sub(1) * 2;
-        let mut total = 2 + separators;
+        let mut total = open.len() + close.len() + separators;
         let mut kind = StrKind::Latin1;
         for index in 0..count {
             let piece = *pieces.add(index);
@@ -213,7 +247,7 @@ unsafe fn join(pieces: *const *mut StrObject, count: usize) -> *mut StrObject {
             set_code_point(text, at, point);
             at += 1;
         };
-        put(u32::from(b'['));
+        open.bytes().for_each(|byte| put(u32::from(byte)));
         for index in 0..count {
             if index > 0 {
                 put(u32::from(b','));
@@ -224,7 +258,7 @@ unsafe fn join(pieces: *const *mut StrObject, count: usize) -> *mut StrObject {
                 put(code_point(piece, position));
             }
         }
-        put(u32::from(b']'));
+        close.bytes().for_each(|byte| put(u32::from(byte)));
         text
     }
 }

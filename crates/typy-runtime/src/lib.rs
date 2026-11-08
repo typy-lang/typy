@@ -27,6 +27,7 @@ mod refcount;
 mod slice;
 mod stack;
 mod string;
+mod tuple;
 mod version;
 mod word;
 mod zip;

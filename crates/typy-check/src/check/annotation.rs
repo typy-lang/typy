@@ -79,21 +79,8 @@ pub(crate) fn annotation_type(annotation: &Expr, diagnostics: &mut Diagnostics) 
         Expr::Subscript { value, index, .. } if matches!(value.as_ref(), Expr::Name { id, .. } if id == "tuple") => {
             tuple_annotation(index, diagnostics)
         }
-        Expr::Subscript { value, index, .. } if matches!(value.as_ref(), Expr::Name { id, .. } if id == "list") =>
-        {
-            let item = annotation_type(index, diagnostics);
-            if !item.is_list_item() {
-                diagnostics.push(
-                    Diagnostic::new(
-                        DiagnosticCode::error(201),
-                        index.span(),
-                        format!("lists of {item} are planned for TyPy 0.2 (DAT-07)"),
-                    )
-                    .with_rule(RuleId::DAT_07),
-                );
-                return Type::Error;
-            }
-            Type::List(Box::new(item))
+        Expr::Subscript { value, index, .. } if matches!(value.as_ref(), Expr::Name { id, .. } if id == "list") => {
+            Type::List(Box::new(annotation_type(index, diagnostics)))
         }
         other => {
             diagnostics.push(
