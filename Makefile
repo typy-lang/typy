@@ -84,7 +84,7 @@ miri: dev ## Run the runtime's unit tests under Miri with the pinned nightly too
 fuzz: dev ## Fuzz the source, checking and lowering stages for FUZZ_SECONDS seconds, 60 by default (NFR-09)
 	@$(EXEC) scripts/fuzz.sh
 
-runtime-size: runtime ## Fail when a runtime archive is over the size budgets of NFR-02
+runtime-size: build ## Fail when the runtime a hello world links is over the size budgets of NFR-02
 	@$(EXEC) python3 scripts/check-runtime-size.py
 
 unicode-tables: dev ## Write the runtime's Unicode tables from CPython 3.15's unicodedata (OI-15)

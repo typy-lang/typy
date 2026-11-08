@@ -3,10 +3,10 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy software requirements specification |
-| Version | 1.12 |
+| Version | 1.14 |
 | Status | Approved |
 | Owner | typy-lang contributors |
-| Last updated | 2026-11-07 |
+| Last updated | 2026-11-08 |
 
 ## 1. Introduction
 
@@ -241,11 +241,12 @@ formatter applies; Ruff's formatter is the project's recommendation.
 | --- | --- | --- | --- | --- |
 | CST-01 | `if`, `elif` and `else` shall be accepted. | M | 0.1 | 8.1 |
 | CST-02 | `while` and `for`, each with an optional `else` clause, shall be accepted. | M | 0.1 | 8.2 |
-| CST-03 | `for` shall iterate over `range`, `str`, `bytes`, `list`, `tuple`, `dict`, `set` and any class with `__iter__` and `__next__`. | M | 0.2 | 8.3 |
+| CST-03 | `for` shall iterate over `range`, `str`, `bytes`, `list`, `tuple`, `dict` and `set`. | M | 0.2 | 8.3 |
 | CST-04 | `try` with `except`, `else` and `finally` clauses shall be accepted, and `finally` shall run on `return`, `break`, `continue` and exceptions. | M | 0.3 | 8.4 |
 | CST-05 | `with` shall call `__enter__` and `__exit__` as the Language Reference defines, also when the block exits early. | M | 0.3 | 8.5 |
 | CST-06 | `match` shall be accepted with literal, capture, wildcard, value, sequence, mapping and class patterns, guards and `\|` alternatives. | M | 0.5 | 8.6 |
 | CST-07 | A `match` on an enumeration-like union of classes shall report a warning when cases are missing. | S | 0.5 | 8.6 |
+| CST-08 | `for` shall iterate over any class with `__iter__` and `__next__`, and end when `__next__` raises `StopIteration` (OI-17). | M | 0.3 | 8.3 |
 
 ### 3.9 Functions (FUN)
 
@@ -367,6 +368,18 @@ expressions and statements, `E04xx` types, `E05xx` exceptions and control
 flow, `E06xx` memory, `E07xx` C interoperability, `E08xx` modules, `E9xxx`
 internal errors, and `Wxxxx` warnings in the same ranges.
 
+### 3.18 User documentation (DOC)
+
+The user documentation is written as Markdown under `docs/user/`, beside
+the engineering documents, and describes the release it ships with.
+
+| ID | Requirement | Priority | Release |
+| --- | --- | --- | --- |
+| DOC-01 | A getting-started page shall show how to install TyPy from a release archive, and how to check, build and run a first program. | M | 0.2 |
+| DOC-02 | A language guide shall have one page per area of the specification, listing what the release accepts with the rule ID of each item, and an accepted and a rejected example. | M | 0.2 |
+| DOC-03 | A troubleshooting page shall list each active diagnostic code with its cause and how to change the program. | M | 0.2 |
+| DOC-04 | Every Python sample in the user documentation shall be checked by the test suite against the current compiler, with the outcome the page states. | M | 0.2 |
+
 ## 4. Non-functional requirements
 
 Measurements run on the reference machine: Linux x86_64, 8 cores, warm file
@@ -375,7 +388,7 @@ cache, unless a row says otherwise.
 | ID | Requirement | Release | Verified by |
 | --- | --- | --- | --- |
 | NFR-01 | A hello world program built with `--release-small` and linked statically with musl shall be smaller than 100 KB. | 0.1 | Size check in CI |
-| NFR-02 | The runtime library, excluding libc, shall be smaller than 48 KB, and smaller than 32 KB without its large-integer and cycle-collection parts. | 0.1 | Size check in CI, for both figures |
+| NFR-02 | The runtime code and data that a hello world built with `--release-small` links, excluding libc, shall be smaller than 48 KB, and smaller than 32 KB without its large-integer and cycle-collection parts (ADR-0009). | 0.1 | Size check in CI, for both figures |
 | NFR-03 | The geometric mean run time of the benchmark suite in `--release` mode shall be within 1.5 times that of the equivalent C programs. | 1.0 | Weekly benchmark run |
 | NFR-04 | A debug build of a 10,000-line project shall take under 2 seconds. | 1.0 | Benchmark with budget |
 | NFR-05 | A release build of a 10,000-line project shall take under 20 seconds. | 1.0 | Benchmark with budget |
@@ -395,7 +408,7 @@ cache, unless a row says otherwise.
 | Release | Language added | Other content |
 | --- | --- | --- |
 | 0.1 | Functions, `int`, `float`, `bool`, `str`, `None`, `if`, `while`, `for` over `range`, operators | `build`, `run`, `check`, `--emit`; runtime; diagnostics; Linux x86_64 |
-| 0.2 | `list`, `tuple`, `dict`, `set`, `bytes`, classes without inheritance, f-strings, comprehensions, slicing | Unboxed values, reference count elision |
+| 0.2 | `list`, `tuple`, `dict`, `set`, `bytes`, classes without inheritance, f-strings, comprehensions, slicing | Unboxed values, reference count elision; user documentation |
 | 0.3 | `try`, `raise`, user exceptions, `with`, `assert`, `del`, `global`, modules and packages, lazy imports | `sys`, `math`, `open`; `typy.toml` with `python-floor`; JSON diagnostics; the first warnings and `--deny-warnings` |
 | 0.4 | Dataclasses, inheritance, protocols, PEP 695 generics, narrowing, `Final`, `type` aliases | Stack allocation |
 | 0.5 | `match`, `:=`, C interoperability through `ctypes` | Libraries and exports; Linux and macOS AArch64; cross-compilation |
@@ -456,6 +469,7 @@ There are no open issues. A new question gets the next unused issue number.
 | OI-14 | Which wording does an exception message take when the oracle versions word it differently? | The wording of the newest oracle, CPython 3.15. CPython 3.14 reworded every division by zero to `division by zero` and `0.0 ** -1.0` to `zero to a negative power`, where 3.12 and 3.13 name the operation, and 3.12 and 3.13 differ from each other for `float` modulo. A conformance test of such a message compares only the exception type (STD-03, STD-05). | 2026-11-07 |
 | OI-15 | Which Unicode version decides `repr`, `str.isprintable` and the digits `int()` reads, when CPython 3.12 to 3.15 ship Unicode 15.0 to 17.0? | Unicode 17.0, the version of the newest oracle, as OI-14 decides for messages. A character assigned after Unicode 15.0 is shown unescaped by TyPy and by CPython 3.15 but escaped by older oracles, so a conformance test of such a character is invalid (STD-03). | 2026-11-07 |
 | OI-16 | How are generated code and the runtime instrumented with AddressSanitizer, and the runtime's unit tests run under Miri, when both need a nightly Rust toolchain? | The dev image holds one pinned nightly, `nightly-2026-11-05`, used only for these checks and for fuzzing; every build still uses stable. The runtime is built with `-Zsanitizer=address` for the conformance suite's sanitizer run, and `make miri` runs its unit tests. Instrumenting generated code needs LLVM's AddressSanitizer pass in code generation and is planned for 0.2. | 2026-11-07 |
+| OI-17 | How does a 0.2 program end a `for` over a class with `__iter__` and `__next__`, when `raise` arrives in 0.3? | It does not: CST-03 covers the built-in iterables in 0.2, and CST-08 adds iterator classes in 0.3 together with `raise`, so `StopIteration` works as in CPython. | 2026-11-08 |
 
 ## Appendix A. Disposition of the specification pack
 

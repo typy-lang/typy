@@ -3,10 +3,10 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy development guide |
-| Version | 0.11 |
+| Version | 0.12 |
 | Status | Draft |
 | Owner | typy-lang contributors |
-| Last updated | 2026-11-07 |
+| Last updated | 2026-11-08 |
 
 ## 1. Purpose
 
@@ -55,7 +55,7 @@ Container". VS Code attaches to the same `dev` service.
 | `make bless` | Rewrites the golden files in `tests/golden/` from the current compiler; review the diff before committing |
 | `make miri` | Runs the runtime's unit tests under Miri with the pinned nightly toolchain, in about 8 minutes |
 | `make fuzz` | Fuzzes the source, checking and lowering stages for `FUZZ_SECONDS` seconds, 60 by default; a crash leaves its input in `fuzz/artifacts/` |
-| `make runtime-size` | Fails when a runtime archive is over the size budgets of NFR-02 |
+| `make runtime-size` | Links a hello world for each target and fails when the runtime it links is over the size budgets of NFR-02 |
 | `make check` | Runs the whole quality gate: formatting, Clippy, the tests with line and branch coverage, the four documentation checks below, the Unicode table check and the runtime size check |
 | `make fmt` | Formats the Rust code |
 | `make lint` | Runs Clippy on every crate and test, with warnings as errors |

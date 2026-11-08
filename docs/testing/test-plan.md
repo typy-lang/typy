@@ -3,10 +3,10 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy test plan |
-| Version | 0.11 |
+| Version | 0.13 |
 | Status | Draft |
 | Owner | typy-lang contributors |
-| Last updated | 2026-11-07 |
+| Last updated | 2026-11-08 |
 
 ## 1. Purpose
 
@@ -326,6 +326,7 @@ that the specification does not define.
 | CST-05 | 0.3 | IT | `tests/conformance/cst/CST-05_*.py` |
 | CST-06 | 0.5 | IT | `tests/conformance/cst/CST-06_*.py` |
 | CST-07 | 0.5 | IT | `tests/conformance/cst/CST-07_*.py` |
+| CST-08 | 0.3 | IT | `tests/conformance/cst/CST-08_*.py` |
 | FUN-01 | 0.1 | IT | `tests/conformance/fun/FUN-01_*.py` |
 | FUN-02 | 0.1 | IT | `tests/conformance/fun/FUN-02_*.py` |
 | FUN-03 | 1.0 | IT | `tests/conformance/fun/FUN-03_*.py` |
@@ -392,8 +393,12 @@ that the specification does not define.
 | DIA-05 | 0.3 | UT, IT | `typy-diagnostics` unit tests; `tests/golden/diagnostics/DIA-05_*` |
 | DIA-06 | 0.1 | UT | `typy-diagnostics` unit tests of the code registry |
 | DIA-07 | 0.3 | UT, IT | `typy-diagnostics` unit tests; `tests/golden/diagnostics/DIA-07_*` |
+| DOC-01 | 0.2 | Static | `make docs-lint`; review against the release |
+| DOC-02 | 0.2 | Static, IT | `make docs-lint`; every rule ID on the pages is checked to exist by `make traceability`; samples by DOC-04 |
+| DOC-03 | 0.2 | UT | A test lists every active code of the registry and fails when the troubleshooting page has no section for one |
+| DOC-04 | 0.2 | IT | A test extracts every Python sample from `docs/user/`, checks it with `Pipeline::check` and, for an accepted sample, runs it and compares with CPython |
 | NFR-01 | 0.1 | IT | `crates/typy-driver/tests/size.rs`: hello world, `--release-small`, linked statically with musl, run, and under 100 KB (75 KB in 0.1, 17 KB stripped) |
-| NFR-02 | 0.1 | Static | `make runtime-size`, `scripts/check-runtime-size.py`: the code and data of the runtime's own object in each archive under 48 KB, and under 32 KB less the large-integer module (40.3 KB and 29.8 KB in 0.1) |
+| NFR-02 | 0.1 | Static | `make runtime-size`, `scripts/check-runtime-size.py`: a hello world built with `--release-small` and linked for each target with a link map; the runtime sections linked are under 48 KB, and under 32 KB less the large-integer sections (10.3 KB and 10.3 KB in 0.2, ADR-0009) |
 | NFR-03 | 1.0 | Benchmark | `tests/bench/` suite against its C versions, geometric mean within 1.5 times |
 | NFR-04 | 1.0 | Benchmark | `tests/bench/build_time`: debug build of the 10,000-line project under 2 s |
 | NFR-05 | 1.0 | Benchmark | `tests/bench/build_time`: release build of the 10,000-line project under 20 s |

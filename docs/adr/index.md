@@ -14,3 +14,4 @@ supersedes it.
 | [ADR-0006](0006-write-the-runtime-in-rust-without-the-standard-library.md) | Write the runtime in Rust without the standard library | Accepted | 2026-11-06 |
 | [ADR-0007](0007-write-standard-library-modules-in-python-compiled-by-typy.md) | Write standard library modules in Python, compiled by TyPy | Accepted | 2026-11-06 |
 | [ADR-0008](0008-judge-each-program-from-its-own-python-floor.md) | Judge each program by CPython from its own Python floor | Accepted | 2026-11-06 |
+| [ADR-0009](0009-hold-collections-in-the-runtime-and-measure-what-programs-link.md) | Hold the built-in collections in the runtime, and measure the runtime a program links | Accepted | 2026-11-08 |

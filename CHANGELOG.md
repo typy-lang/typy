@@ -6,6 +6,13 @@ All notable changes to TyPy are recorded here. The format follows
 
 ## [Unreleased]
 
+### Changed
+
+- The runtime's size budget (NFR-02) is measured on the runtime a hello
+  world links, 10.3 KB, rather than on the whole runtime archive, so the
+  runtime can hold the built-in collections without enlarging programs
+  that do not use them (ADR-0009).
+
 ## [0.1.0] - 2026-11-07
 
 The first release. TyPy 0.1 compiles programs made of module-level
