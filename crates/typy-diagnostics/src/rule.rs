@@ -37,6 +37,8 @@ impl RuleId {
     pub const DAT_10: Self = Self("DAT-10");
     /// Slicing shall return a new object with the items selected by start, stop and step, as in Python.
     pub const DAT_12: Self = Self("DAT-12");
+    /// Assigning to a slice of a list shall replace the selected items with the items of a list, as in Python.
+    pub const DAT_13: Self = Self("DAT-13");
     /// Raising and catching exceptions shall follow the Language Reference, including matching on base classes.
     pub const EXC_01: Self = Self("EXC-01");
     /// `+`, `-`, `*`, `/`, `//`, `%` and `**` shall give Python's results for `int` and `float`, including `/` on two `int` values returning `float` and `%` taking the sign of the divisor.
@@ -159,6 +161,7 @@ impl RuleId {
         Self::DAT_09,
         Self::DAT_10,
         Self::DAT_12,
+        Self::DAT_13,
         Self::EXC_01,
         Self::EXP_02,
         Self::EXP_04,

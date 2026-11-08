@@ -105,7 +105,7 @@ impl Dump<'_> {
                 value,
                 span,
             } => {
-                let label = format!("AugAssign {operator:?} {}", self.symbol(*target));
+                let label = format!("AugAssign {operator:?} {}", self.target(target));
                 self.line(depth, &label, *span);
                 self.expression(depth + 1, value);
             }
@@ -197,6 +197,7 @@ impl Dump<'_> {
             TypedExprKind::Tuple(_) => "Tuple".to_owned(),
             TypedExprKind::List(_) => "List".to_owned(),
             TypedExprKind::ListItem { .. } => "ListItem".to_owned(),
+            TypedExprKind::Slice { .. } => "Slice".to_owned(),
             TypedExprKind::Method { method, .. } => format!("Method {}", method.name()),
             TypedExprKind::TupleItem { index, .. } => format!("TupleItem {index}"),
         };
@@ -225,6 +226,16 @@ fn children(expression: &TypedExpr) -> Vec<&TypedExpr> {
         }
         TypedExprKind::Tuple(items) | TypedExprKind::List(items) => items.iter().collect(),
         TypedExprKind::ListItem { list, index } => vec![list, index],
+        TypedExprKind::Slice {
+            value,
+            lower,
+            upper,
+            step,
+        } => std::iter::once(value.as_ref())
+            .chain(lower.as_deref())
+            .chain(upper.as_deref())
+            .chain(step.as_deref())
+            .collect(),
         TypedExprKind::Method {
             receiver,
             arguments,

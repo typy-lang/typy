@@ -141,3 +141,22 @@ fn indexing_with_a_large_int_raises_index_error() {
         )
     );
 }
+
+#[test]
+fn a_slice_is_as_narrow_as_its_code_points() {
+    use super::typy_rt_str_slice;
+    use crate::slice::{START, STEP, STOP};
+    let source = from_str("a\u{e9}c\u{3b1}");
+    // SAFETY: the source is live; the bounds are inline words.
+    unsafe {
+        let all = word(START | STOP | STEP);
+        let first_two = typy_rt_str_slice(source, word(0), word(2), word(1), all);
+        assert_eq!(text(first_two.value), "a\u{e9}");
+        assert_eq!((*first_two.value).kind, StrKind::Latin1);
+        let backwards = typy_rt_str_slice(source, word(0), word(0), word(-1), word(STEP));
+        assert_eq!(text(backwards.value), "\u{3b1}c\u{e9}a");
+        assert_eq!((*backwards.value).kind, StrKind::Ucs2);
+        let zero = typy_rt_str_slice(source, word(0), word(0), word(0), word(STEP));
+        assert!(!zero.exception.is_null());
+    }
+}

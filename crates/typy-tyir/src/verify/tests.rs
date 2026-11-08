@@ -621,7 +621,9 @@ fn terminator_type_errors_are_reported() {
 fn every_runtime_function_has_a_complete_signature() {
     for function in RuntimeFunction::ALL {
         let signature = function.signature();
-        assert!(signature.parameters.len() <= 3, "{function:?}");
+        // Every argument travels in one of the six integer argument registers of the System V
+        // ABI, so no runtime call passes arguments on the stack.
+        assert!(signature.parameters.len() <= 6, "{function:?}");
         assert_ne!(function.name(), "");
     }
 }

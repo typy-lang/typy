@@ -77,10 +77,6 @@ fn later_features_name_their_release_and_rule() {
             "f-strings are planned for TyPy 0.2 (LEX-07)",
         ),
         ("x = b'a'\n", "bytes are planned for TyPy 0.2 (DAT-06)"),
-        (
-            "x = 'abc'[0:1]\n",
-            "slices are planned for TyPy 0.2 (DAT-12)",
-        ),
         ("import os\n", "imports are planned for TyPy 0.3 (SMT-07)"),
         (
             "try:\n    pass\nexcept E:\n    pass\n",

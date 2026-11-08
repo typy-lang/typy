@@ -37,8 +37,11 @@ pub enum TypedStmt {
         value: TypedExpr,
         span: Span,
     },
+    /// `target op= value`: an item target evaluates its list and index once, then reads the item
+    /// before the value is evaluated, as CPython does. A list target with `+=` or `*=` changes
+    /// the list in place.
     AugAssign {
-        target: SymbolId,
+        target: AssignTarget,
         operator: BinaryOperator,
         value: TypedExpr,
         span: Span,

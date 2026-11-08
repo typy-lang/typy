@@ -4,6 +4,7 @@ use typy_diagnostics::{Diagnostic, DiagnosticCode, RuleId};
 use typy_source::syntax::{BoolOperator, Constant, Expr};
 
 use super::BodyChecker;
+use super::slice::Bounds;
 use crate::typed::{TypedConstant, TypedExpr, TypedExprKind};
 use crate::types::Type;
 
@@ -104,11 +105,9 @@ impl BodyChecker<'_> {
                 comparators,
                 ..
             } => {
-                let left = self.expression(left);
-                let comparators: Vec<TypedExpr> = comparators
-                    .iter()
-                    .map(|value| self.expression(value))
-                    .collect();
+                let mut operands = self.comparison_operands(left, comparators, operators);
+                let comparators = operands.split_off(1);
+                let left = operands.remove(0);
                 let mut previous = &left;
                 for (operator, right) in operators.iter().zip(&comparators) {
                     self.compare_types(*operator, previous, right);
@@ -165,6 +164,17 @@ impl BodyChecker<'_> {
             }
             Expr::Subscript { value, index, .. } => {
                 let value = self.expression(value);
+                if let Expr::Slice {
+                    lower, upper, step, ..
+                } = index.as_ref()
+                {
+                    let bounds = Bounds {
+                        lower: lower.as_deref(),
+                        upper: upper.as_deref(),
+                        step: step.as_deref(),
+                    };
+                    return self.slice(value, &bounds, span);
+                }
                 if let Type::Tuple(items) = &value.ty {
                     let items = items.clone();
                     return self.tuple_item(value, &items, index, span);
@@ -222,6 +232,7 @@ impl BodyChecker<'_> {
                 ),
             },
             Expr::List { elements, .. } => self.list_display(elements, None, span),
+            Expr::Slice { .. } => self.misplaced_slice(span),
             // An attribute that is not a method call is refused by the subset check until classes.
             Expr::Attribute { .. } | Expr::Other { .. } => Self::typed(
                 TypedExprKind::Constant(TypedConstant::None),
@@ -312,7 +323,8 @@ impl BodyChecker<'_> {
 
     /// Reports a value whose type is not `expected`.
     pub(super) fn expect(&mut self, value: &TypedExpr, expected: Type, what: &str) {
-        if value.ty.is_assignable_to(&expected) {
+        // A type that holds an error was already reported where the error arose.
+        if value.ty.has_error() || value.ty.is_assignable_to(&expected) {
             return;
         }
         let rule = if expected == Type::Float && value.ty == Type::Int {

@@ -68,9 +68,13 @@ impl BodyChecker<'_> {
                 let current = self.expression(target);
                 let value = self.expression(value);
                 let result = self.binary_type(*operator, &current, &value, *span);
-                let symbol = self.assign(target, result, &value)?;
+                let target = if let Expr::Subscript { .. } = target {
+                    self.augmented_item(current, &result, *span)?
+                } else {
+                    AssignTarget::Name(self.assign(target, result, &value)?)
+                };
                 TypedStmt::AugAssign {
-                    target: symbol,
+                    target,
                     operator: *operator,
                     value,
                     span: *span,

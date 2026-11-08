@@ -87,6 +87,40 @@ impl ItemKind {
         }
     }
 
+    /// Returns whether `left` and `right` stand in the comparison whose code is the `int` word
+    /// `comparison`, as CPython orders two items of this kind: numbers by value, `str` and lists
+    /// item by item.
+    ///
+    /// # Safety
+    ///
+    /// Both are live items of this kind.
+    #[allow(
+        clippy::float_cmp,
+        reason = "Python's comparisons on floats are IEEE comparisons, under which `nan` is unordered"
+    )]
+    pub(crate) unsafe fn order(self, left: u64, right: u64, comparison: i64) -> bool {
+        match self {
+            Self::Bool => crate::compare::holds(left.cmp(&right), comparison),
+            Self::Float => {
+                let (left, right) = (f64::from_bits(left), f64::from_bits(right));
+                match crate::word::inline_value(comparison) {
+                    0 => left == right,
+                    1 => left != right,
+                    2 => left < right,
+                    3 => left <= right,
+                    4 => left > right,
+                    _ => left >= right,
+                }
+            }
+            // SAFETY: the caller passes live `int` words.
+            Self::Int => unsafe {
+                crate::int::typy_rt_int_compare(left.cast_signed(), right.cast_signed(), comparison)
+            },
+            // SAFETY: the caller passes pointers to live objects of one type.
+            Self::Object => unsafe { objects_order(pointer(left), pointer(right), comparison) },
+        }
+    }
+
     /// Returns `repr(item)`; only an `int` of more than 4300 digits raises.
     ///
     /// # Safety
@@ -135,6 +169,30 @@ unsafe fn objects_equal(left: *mut ObjectHeader, right: *mut ObjectHeader) -> bo
             _ => {
                 crate::libc::abort_with(b"typy runtime: a list holds an object it cannot compare\n")
             }
+        }
+    }
+}
+
+/// Returns whether two strings, or two lists, stand in the comparison `comparison`.
+#[allow(
+    clippy::cast_ptr_alignment,
+    reason = "every object comes from malloc, aligned for every type, and starts with its header"
+)]
+unsafe fn objects_order(
+    left: *mut ObjectHeader,
+    right: *mut ObjectHeader,
+    comparison: i64,
+) -> bool {
+    // SAFETY: the caller passes live objects; the type ID says which they are.
+    unsafe {
+        match (*left).type_id {
+            STR_TYPE_ID => crate::string::typy_rt_str_compare(
+                left.cast::<StrObject>(),
+                right.cast::<StrObject>(),
+                comparison,
+            ),
+            LIST_TYPE_ID => super::typy_rt_list_compare(left.cast(), right.cast(), comparison),
+            _ => crate::libc::abort_with(b"typy runtime: a list holds an object it cannot order\n"),
         }
     }
 }

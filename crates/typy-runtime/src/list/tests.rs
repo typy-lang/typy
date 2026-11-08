@@ -201,3 +201,176 @@ fn the_text_of_a_list_with_an_int_of_too_many_digits_raises() {
         assert_eq!((*result.exception).kind, crate::ExceptionKind::ValueError);
     }
 }
+
+fn values(list: *const super::ListObject) -> Vec<i64> {
+    // SAFETY: the list is live and holds inline words.
+    unsafe {
+        (0..(*list).length)
+            .map(|index| inline_value((*(*list).items.add(index)).cast_signed()))
+            .collect()
+    }
+}
+
+fn message(exception: *mut crate::ExceptionObject) -> String {
+    // SAFETY: the exception is live; its message is a live string.
+    unsafe { text((*exception).message) }
+}
+
+#[test]
+fn slices_pops_inserts_and_removals_follow_cpython() {
+    use super::methods::{
+        typy_rt_list_insert, typy_rt_list_pop, typy_rt_list_remove, typy_rt_list_slice,
+    };
+    use crate::slice::{START, STEP, STOP};
+    let list = ints(&[1, 2, 3, 4]);
+    // SAFETY: the list is live; the bounds are inline words.
+    unsafe {
+        let all = word(START | STOP | STEP);
+        let backwards = typy_rt_list_slice(list, word(3), word(0), word(-2), all);
+        assert_eq!(values(backwards.value), [4, 2]);
+        let zero = typy_rt_list_slice(list, word(0), word(0), word(0), word(STEP));
+        assert_eq!(message(zero.exception), "slice step cannot be zero");
+        assert_eq!(
+            inline_value(typy_rt_list_pop(list, word(0), word(0)).value.cast_signed()),
+            4
+        );
+        assert_eq!(
+            inline_value(
+                typy_rt_list_pop(list, word(-3), word(1))
+                    .value
+                    .cast_signed()
+            ),
+            1
+        );
+        assert_eq!(
+            message(typy_rt_list_pop(list, word(9), word(1)).exception),
+            "pop index out of range"
+        );
+        let huge = Integer::from_i128(1 << 70).into_word();
+        assert_eq!(
+            message(typy_rt_list_pop(list, huge, word(1)).exception),
+            "pop index out of range"
+        );
+        typy_rt_list_insert(list, word(-9), word(0).cast_unsigned());
+        typy_rt_list_insert(list, word(99), word(9).cast_unsigned());
+        typy_rt_list_insert(list, huge, word(10).cast_unsigned());
+        typy_rt_list_insert(
+            list,
+            Integer::from_i128(-(1 << 70)).into_word(),
+            word(-1).cast_unsigned(),
+        );
+        assert_eq!(values(list), [-1, 0, 2, 3, 9, 10]);
+        assert!(typy_rt_list_remove(list, word(3).cast_unsigned()).is_null());
+        assert_eq!(
+            message(typy_rt_list_remove(list, word(3).cast_unsigned())),
+            "list.remove(x): x not in list"
+        );
+        let empty = ints(&[]);
+        assert_eq!(
+            message(typy_rt_list_pop(empty, word(0), word(0)).exception),
+            "pop from empty list"
+        );
+    }
+}
+
+#[test]
+fn searching_counting_and_copying_follow_cpython() {
+    use super::methods::{
+        typy_rt_list_clear, typy_rt_list_copy, typy_rt_list_count, typy_rt_list_extend,
+        typy_rt_list_index, typy_rt_list_reverse,
+    };
+    let list = ints(&[5, 6, 5]);
+    // SAFETY: the list is live; the items are inline words.
+    unsafe {
+        assert_eq!(
+            inline_value(typy_rt_list_index(list, word(5).cast_unsigned()).value),
+            0
+        );
+        assert_eq!(
+            message(typy_rt_list_index(list, word(9).cast_unsigned()).exception),
+            "list.index(x): x not in list"
+        );
+        assert_eq!(
+            inline_value(typy_rt_list_count(list, word(5).cast_unsigned())),
+            2
+        );
+        typy_rt_list_extend(list, list);
+        assert_eq!(values(list), [5, 6, 5, 5, 6, 5]);
+        typy_rt_list_reverse(list);
+        let copy = typy_rt_list_copy(list);
+        typy_rt_list_clear(list);
+        assert_eq!(
+            (values(list), values(copy)),
+            (vec![], vec![5, 6, 5, 5, 6, 5])
+        );
+    }
+    let strings = new_list(ItemKind::Object, 0);
+    // SAFETY: the list and the string are live.
+    unsafe {
+        typy_rt_list_append(strings, from_str("a").expose_provenance() as u64);
+        let missing = from_str("b").expose_provenance() as u64;
+        assert_eq!(
+            message(typy_rt_list_index(strings, missing).exception),
+            "list.index(x): x not in list"
+        );
+    }
+}
+
+#[test]
+fn lists_join_repeat_and_order_item_by_item() {
+    use super::order::{typy_rt_list_compare, typy_rt_list_concat, typy_rt_list_repeat};
+    let (a, b) = (ints(&[1, 2]), ints(&[1, 3]));
+    // SAFETY: the lists are live; the counts are words.
+    unsafe {
+        assert_eq!(values(typy_rt_list_concat(a, b)), [1, 2, 1, 3]);
+        assert_eq!(values(typy_rt_list_repeat(a, word(2)).value), [1, 2, 1, 2]);
+        assert_eq!(
+            values(typy_rt_list_repeat(a, word(-1)).value),
+            Vec::<i64>::new()
+        );
+        let huge = Integer::from_i128(1 << 70).into_word();
+        assert_eq!(
+            message(typy_rt_list_repeat(a, huge).exception),
+            "cannot fit 'int' into an index-sized integer"
+        );
+        let negative = Integer::from_i128(-(1 << 70)).into_word();
+        assert_eq!(
+            values(typy_rt_list_repeat(a, negative).value),
+            Vec::<i64>::new()
+        );
+        let less = word(2);
+        assert!(typy_rt_list_compare(a, b, less));
+        assert!(!typy_rt_list_compare(a, ints(&[1]), less));
+        assert!(typy_rt_list_compare(ints(&[]), a, less));
+        assert!(!typy_rt_list_compare(a, b, word(0)));
+        assert!(typy_rt_list_compare(a, b, word(1)));
+        assert!(typy_rt_list_compare(a, ints(&[1, 2]), word(3)));
+    }
+    let floats = new_list(ItemKind::Float, 0);
+    let more = new_list(ItemKind::Float, 0);
+    let words = [new_list(ItemKind::Object, 0), new_list(ItemKind::Object, 0)];
+    let bools = [new_list(ItemKind::Bool, 0), new_list(ItemKind::Bool, 0)];
+    // SAFETY: the lists and items are live.
+    unsafe {
+        typy_rt_list_append(floats, 0.5_f64.to_bits());
+        typy_rt_list_append(more, 1.5_f64.to_bits());
+        typy_rt_list_append(words[0], from_str("a").expose_provenance() as u64);
+        typy_rt_list_append(words[1], from_str("b").expose_provenance() as u64);
+        typy_rt_list_append(bools[0], 0);
+        typy_rt_list_append(bools[1], 1);
+        let expected = [false, true, true, true, false, false];
+        for (comparison, expected) in (0..).zip(expected) {
+            assert_eq!(
+                typy_rt_list_compare(floats, more, word(comparison)),
+                expected,
+                "{comparison}"
+            );
+        }
+        assert!(typy_rt_list_compare(words[0], words[1], word(2)));
+        assert!(typy_rt_list_compare(bools[0], bools[1], word(2)));
+        let nested = [new_list(ItemKind::Object, 0), new_list(ItemKind::Object, 0)];
+        typy_rt_list_append(nested[0], ints(&[1]).expose_provenance() as u64);
+        typy_rt_list_append(nested[1], ints(&[2]).expose_provenance() as u64);
+        assert!(typy_rt_list_compare(nested[0], nested[1], word(2)));
+    }
+}

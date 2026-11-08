@@ -91,8 +91,18 @@ impl FunctionLowerer<'_> {
         };
         let kind = match (left.ty, right.ty) {
             (TyirType::Tuple(_), _) => return self.compare_tuples(operator, left, right, span),
-            (TyirType::Object(typy_tyir::TypeId::LIST), _) => {
-                return self.list_equality(comparison, left, right, span);
+            (TyirType::LIST, _) => {
+                if matches!(comparison, Comparison::Equal | Comparison::NotEqual) {
+                    return self.list_equality(comparison, left, right, span);
+                }
+                let code = self.constant(Constant::Int(comparison.code().to_string()), span);
+                return self
+                    .call_runtime(
+                        RuntimeFunction::ListCompare,
+                        vec![left.value, right.value, code],
+                        span,
+                    )
+                    .value;
             }
             (TyirType::Bits, _) => {
                 unreachable!("list items are converted before they are compared")

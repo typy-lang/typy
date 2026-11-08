@@ -96,6 +96,13 @@ pub(super) fn visit_expression(expression: &Expr, visit: &mut dyn FnMut(&Expr)) 
             visit_expression(value, visit);
             visit_expression(index, visit);
         }
+        Expr::Slice {
+            lower, upper, step, ..
+        } => {
+            for bound in [lower, upper, step].into_iter().flatten() {
+                visit_expression(bound, visit);
+            }
+        }
         Expr::Constant { .. } | Expr::Name { .. } | Expr::Other { .. } => {}
     }
 }

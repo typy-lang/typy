@@ -108,6 +108,12 @@ pub enum Expr {
         attribute: Identifier,
         span: Span,
     },
+    Slice {
+        lower: Option<Box<Expr>>,
+        upper: Option<Box<Expr>>,
+        step: Option<Box<Expr>>,
+        span: Span,
+    },
     Other {
         kind: NodeKind,
         span: Span,
@@ -131,6 +137,7 @@ impl Expr {
             | Self::Tuple { span, .. }
             | Self::List { span, .. }
             | Self::Attribute { span, .. }
+            | Self::Slice { span, .. }
             | Self::Other { span, .. } => *span,
         }
     }

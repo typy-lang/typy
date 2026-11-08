@@ -152,7 +152,12 @@ impl Converter<'_> {
                     .collect(),
                 span: self.span(node.range),
             },
-            ast::Expr::Slice(node) => self.other(NodeKind::Slice, node.range),
+            ast::Expr::Slice(node) => Expr::Slice {
+                lower: node.lower.as_deref().map(|bound| self.boxed(bound)),
+                upper: node.upper.as_deref().map(|bound| self.boxed(bound)),
+                step: node.step.as_deref().map(|bound| self.boxed(bound)),
+                span,
+            },
             ast::Expr::IpyEscapeCommand(node) => self.other(NodeKind::IpyEscapeCommand, node.range),
         }
     }

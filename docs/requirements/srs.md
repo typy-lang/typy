@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy software requirements specification |
-| Version | 1.16 |
+| Version | 1.17 |
 | Status | Approved |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-08 |
@@ -196,6 +196,7 @@ formatter applies; Ruff's formatter is the project's recommendation.
 | DAT-10 | `set[T]` shall be a mutable set. | M | 0.2 | 3.2.6 |
 | DAT-11 | Indexing a sequence with a negative index shall count from the end, and an index outside the sequence shall raise `IndexError`. | M | 0.2 | 6.3.2 |
 | DAT-12 | Slicing shall return a new object with the items selected by start, stop and step, as in Python. | M | 0.2 | 6.3.3 |
+| DAT-13 | Assigning to a slice of a list shall replace the selected items with the items of a list, as in Python. | S | 0.3 | 7.2 |
 
 ### 3.6 Expressions (EXP)
 
@@ -470,7 +471,7 @@ A new question gets the next unused issue number.
 | OI-11 | How does TyPy support PEP 810 lazy imports, whose `lazy` keyword CPython 3.12 to 3.14 reject? | Each program has a Python floor; a program with floor 3.15 may use `lazy import`, and `__lazy_modules__` works for every floor (ADR-0008). | 2026-11-06 |
 | OI-12 | May an `int` be stored where a `float` is declared, as PEP 484 allows? | No. CPython keeps the value an `int`, so `x: float = 1` prints `1`; TyPy would print `1.0`. TYP-09 rejects it, with the fix `1.0` for a literal. Checked on CPython 3.12 to 3.15. | 2026-11-06 |
 | OI-13 | Can `x ** y` with a `float` exponent give a type TyPy does not have? | Yes: `(-8.0) ** 0.5` is `complex` in CPython 3.12 to 3.15. EXP-04 accepts a `float` exponent only when it is an integral literal or the base is a non-negative literal. | 2026-11-07 |
-| OI-14 | Which wording does an exception message take when the oracle versions word it differently? | The wording of the newest oracle, CPython 3.15. CPython 3.14 reworded every division by zero to `division by zero` and `0.0 ** -1.0` to `zero to a negative power`, where 3.12 and 3.13 name the operation, and 3.12 and 3.13 differ from each other for `float` modulo. A conformance test of such a message compares only the exception type (STD-03, STD-05). | 2026-11-07 |
+| OI-14 | Which wording does an exception message take when the oracle versions word it differently? | The wording of the newest oracle, CPython 3.15. CPython 3.14 reworded every division by zero to `division by zero` and `0.0 ** -1.0` to `zero to a negative power`, where 3.12 and 3.13 name the operation, and 3.12 and 3.13 differ from each other for `float` modulo. A conformance test cannot check such a message, because the oracles disagree on it, so the runtime's unit tests check it (STD-03, STD-05). | 2026-11-07 |
 | OI-15 | Which Unicode version decides `repr`, `str.isprintable` and the digits `int()` reads, when CPython 3.12 to 3.15 ship Unicode 15.0 to 17.0? | Unicode 17.0, the version of the newest oracle, as OI-14 decides for messages. A character assigned after Unicode 15.0 is shown unescaped by TyPy and by CPython 3.15 but escaped by older oracles, so a conformance test of such a character is invalid (STD-03). | 2026-11-07 |
 | OI-16 | How are generated code and the runtime instrumented with AddressSanitizer, and the runtime's unit tests run under Miri, when both need a nightly Rust toolchain? | The dev image holds one pinned nightly, `nightly-2026-11-05`, used only for these checks and for fuzzing; every build still uses stable. The runtime is built with `-Zsanitizer=address` for the conformance suite's sanitizer run, and `make miri` runs its unit tests. Instrumenting generated code needs LLVM's AddressSanitizer pass in code generation and is planned for 0.2. | 2026-11-07 |
 | OI-17 | How does a 0.2 program end a `for` over a class with `__iter__` and `__next__`, when `raise` arrives in 0.3? | It does not: CST-03 covers the built-in iterables in 0.2, and CST-08 adds iterator classes in 0.3 together with `raise`, so `StopIteration` works as in CPython. | 2026-11-08 |

@@ -1,8 +1,8 @@
 //! Checks lists: displays, empty displays that take an expected type, items, and methods
-//! (DAT-07, DAT-11, TYP-05, LIB-03).
+//! (DAT-07, DAT-11, DAT-12, TYP-05, LIB-03).
 
 use typy_diagnostics::{Diagnostic, DiagnosticCode, RuleId, Span};
-use typy_source::syntax::{Expr, Identifier, Keyword};
+use typy_source::syntax::{CompareOperator, Expr, Identifier, Keyword};
 
 use super::BodyChecker;
 use crate::method::Method;
@@ -91,6 +91,30 @@ impl BodyChecker<'_> {
         )
     }
 
+    /// Checks the operands of a comparison chain. An empty list display takes its type from a
+    /// neighbouring operand, so `xs == []` and `x in []` need no annotation (TYP-05).
+    pub(super) fn comparison_operands(
+        &mut self,
+        left: &Expr,
+        comparators: &[Expr],
+        operators: &[CompareOperator],
+    ) -> Vec<TypedExpr> {
+        let operands: Vec<&Expr> = std::iter::once(left).chain(comparators).collect();
+        let mut typed: Vec<Option<TypedExpr>> = operands
+            .iter()
+            .map(|operand| (!is_empty_list(operand)).then(|| self.expression(operand)))
+            .collect();
+        for position in 0..operands.len() {
+            if typed[position].is_some() {
+                continue;
+            }
+            let expected = empty_list_type(&typed, operators, position);
+            typed[position] =
+                Some(self.expression_expecting(operands[position], expected.as_ref()));
+        }
+        typed.into_iter().flatten().collect()
+    }
+
     /// Checks `list[index]`: the index is an `int`, and the item has the list's item type.
     pub(super) fn list_item(
         &mut self,
@@ -154,19 +178,24 @@ impl BodyChecker<'_> {
                 span,
             );
         }
-        let (parameters, result) = match (method, &receiver.ty) {
-            (Method::ListAppend, Type::List(item)) => (vec![item.as_ref().clone()], Type::NoneType),
-            (Method::ListAppend, _) => unreachable!("`append` belongs to lists"),
-        };
-        if arguments.len() != parameters.len() {
+        let signature = method.signature(&receiver.ty);
+        let parameters = signature.parameters;
+        if arguments.len() < signature.required || arguments.len() > parameters.len() {
+            let expected = if signature.required == parameters.len() {
+                counted(parameters.len(), "argument")
+            } else if signature.required == 0 {
+                format!("at most {}", counted(parameters.len(), "argument"))
+            } else {
+                format!("{} to {} arguments", signature.required, parameters.len())
+            };
+            let given = if arguments.len() == 1 { "is" } else { "are" };
             return self.error(
                 Diagnostic::new(
                     DiagnosticCode::error(404),
                     span,
                     format!(
-                        "`{}` takes {} arguments, and {} are given",
+                        "`{}` takes {expected}, and {} {given} given",
                         method.name(),
-                        parameters.len(),
                         arguments.len()
                     ),
                 )
@@ -193,8 +222,51 @@ impl BodyChecker<'_> {
                 method,
                 arguments,
             },
-            result,
+            signature.result,
             span,
         )
+    }
+}
+
+/// Returns `count` with the noun, plural unless the count is one: "1 argument", "2 arguments".
+fn counted(count: usize, noun: &str) -> String {
+    if count == 1 {
+        format!("1 {noun}")
+    } else {
+        format!("{count} {noun}s")
+    }
+}
+
+fn is_empty_list(expression: &Expr) -> bool {
+    matches!(expression, Expr::List { elements, .. } if elements.is_empty())
+}
+
+/// Returns the type an empty list display at `position` of a comparison chain takes from its
+/// left neighbour, or else from its right one: the neighbour's list type, or for `in` the list
+/// type that holds or is held by the neighbour.
+fn empty_list_type(
+    typed: &[Option<TypedExpr>],
+    operators: &[CompareOperator],
+    position: usize,
+) -> Option<Type> {
+    let is_membership = |operator: CompareOperator| {
+        matches!(operator, CompareOperator::In | CompareOperator::NotIn)
+    };
+    let left = position
+        .checked_sub(1)
+        .and_then(|before| Some((typed[before].as_ref()?, operators[before])));
+    if let Some((neighbour, operator)) = left {
+        if is_membership(operator) {
+            return Some(Type::List(Box::new(neighbour.ty.clone())));
+        }
+        if matches!(neighbour.ty, Type::List(_)) {
+            return Some(neighbour.ty.clone());
+        }
+    }
+    let (neighbour, operator) = (typed.get(position + 1)?.as_ref()?, operators[position]);
+    match &neighbour.ty {
+        Type::List(item) if is_membership(operator) => Some(item.as_ref().clone()),
+        Type::List(_) => Some(neighbour.ty.clone()),
+        _ => None,
     }
 }

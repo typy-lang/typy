@@ -52,6 +52,21 @@ impl FunctionLowerer<'_> {
                 );
                 Self::borrowed(value, TyirType::Bool)
             }
+            (TyirType::LIST, TyirType::LIST) => self.call_runtime(
+                RuntimeFunction::ListConcat,
+                vec![left.value, right.value],
+                span,
+            ),
+            (TyirType::LIST, TyirType::Int) => self.call_runtime(
+                RuntimeFunction::ListRepeat,
+                vec![left.value, right.value],
+                span,
+            ),
+            (TyirType::Int, TyirType::LIST) => self.call_runtime(
+                RuntimeFunction::ListRepeat,
+                vec![right.value, left.value],
+                span,
+            ),
             (TyirType::Object(_), TyirType::Object(_)) => self.call_runtime(
                 RuntimeFunction::StrConcat,
                 vec![left.value, right.value],

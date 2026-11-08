@@ -93,6 +93,13 @@ pub enum TypedExprKind {
         list: Box<TypedExpr>,
         index: Box<TypedExpr>,
     },
+    /// `value[lower:upper:step]` on a `str` or a list, each bound optional (DAT-12).
+    Slice {
+        value: Box<TypedExpr>,
+        lower: Option<Box<TypedExpr>>,
+        upper: Option<Box<TypedExpr>>,
+        step: Option<Box<TypedExpr>>,
+    },
     /// A method of a built-in type called on `receiver` (LIB-03).
     Method {
         receiver: Box<TypedExpr>,

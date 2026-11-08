@@ -75,6 +75,38 @@ pub unsafe extern "C" fn typy_rt_str_repeat(
     }
 }
 
+/// Returns `text[start:stop:step]`, a new string (DAT-12); `present` says which bounds are given.
+///
+/// # Safety
+///
+/// `text` points to a live `str` object, and the bounds are `int` words.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn typy_rt_str_slice(
+    text: *const StrObject,
+    start: i64,
+    stop: i64,
+    stride: i64,
+    present: i64,
+) -> Raising<*mut StrObject> {
+    // SAFETY: the caller passes a live string; every selected position is inside it.
+    unsafe {
+        let selection = match crate::slice::select(start, stop, stride, present, length(text)) {
+            Ok(selection) => selection,
+            Err(error) => return Raising::error(core::ptr::null_mut(), error),
+        };
+        // A string is as narrow as its widest code point, so the kind is measured on the slice.
+        let kind = (0..selection.count)
+            .map(|index| StrKind::of(code_point(text, selection.position(index))))
+            .max()
+            .unwrap_or(StrKind::Latin1);
+        let result = new_string(selection.count, kind);
+        for index in 0..selection.count {
+            set_code_point(result, index, code_point(text, selection.position(index)));
+        }
+        Raising::ok(result)
+    }
+}
+
 /// Returns `text[index]`, counting a negative index from the end (DAT-11).
 ///
 /// # Safety

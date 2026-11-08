@@ -47,6 +47,20 @@ pub enum RuntimeFunction {
     ListEqual,
     ListContains,
     ListRepr,
+    ListSlice,
+    StrSlice,
+    ListPop,
+    ListInsert,
+    ListExtend,
+    ListRemove,
+    ListIndex,
+    ListCount,
+    ListClear,
+    ListCopy,
+    ListReverse,
+    ListConcat,
+    ListRepeat,
+    ListCompare,
 }
 
 /// The parameter types, result type and raising behaviour of a runtime function.
@@ -77,7 +91,7 @@ const FLOAT_FLOAT: &[TyirType] = &[TyirType::Float, TyirType::Float];
 
 impl RuntimeFunction {
     /// Every runtime function.
-    pub const ALL: [Self; 38] = [
+    pub const ALL: [Self; 52] = [
         Self::IntFloorDivide,
         Self::IntModulo,
         Self::IntPower,
@@ -116,6 +130,20 @@ impl RuntimeFunction {
         Self::ListEqual,
         Self::ListContains,
         Self::ListRepr,
+        Self::ListSlice,
+        Self::StrSlice,
+        Self::ListPop,
+        Self::ListInsert,
+        Self::ListExtend,
+        Self::ListRemove,
+        Self::ListIndex,
+        Self::ListCount,
+        Self::ListClear,
+        Self::ListCopy,
+        Self::ListReverse,
+        Self::ListConcat,
+        Self::ListRepeat,
+        Self::ListCompare,
     ];
 
     /// Returns the function's signature. Comparisons take the comparison as an `int` operand, numbered as `Comparison::code`.
@@ -162,6 +190,19 @@ impl RuntimeFunction {
             Self::ListEqual => signature(&[LIST, LIST], Bool, false),
             Self::ListContains => signature(&[LIST, Bits], Bool, false),
             Self::ListRepr => signature(&[LIST], STR, true),
+            Self::ListSlice => signature(&[LIST, Int, Int, Int, Int], LIST, true),
+            Self::StrSlice => signature(&[STR, Int, Int, Int, Int], STR, true),
+            Self::ListPop => signature(&[LIST, Int, Int], Bits, true),
+            Self::ListInsert => signature(&[LIST, Int, Bits], Unit, false),
+            Self::ListExtend => signature(&[LIST, LIST], Unit, false),
+            Self::ListRemove => signature(&[LIST, Bits], Unit, true),
+            Self::ListIndex => signature(&[LIST, Bits], Int, true),
+            Self::ListCount => signature(&[LIST, Bits], Int, false),
+            Self::ListCopy => signature(&[LIST], LIST, false),
+            Self::ListClear | Self::ListReverse => signature(&[LIST], Unit, false),
+            Self::ListConcat => signature(&[LIST, LIST], LIST, false),
+            Self::ListRepeat => signature(&[LIST, Int], LIST, true),
+            Self::ListCompare => signature(&[LIST, LIST, Int], Bool, false),
         }
     }
 
@@ -207,6 +248,20 @@ impl RuntimeFunction {
             Self::ListEqual => "list_equal",
             Self::ListContains => "list_contains",
             Self::ListRepr => "list_repr",
+            Self::ListSlice => "list_slice",
+            Self::StrSlice => "str_slice",
+            Self::ListPop => "list_pop",
+            Self::ListInsert => "list_insert",
+            Self::ListExtend => "list_extend",
+            Self::ListRemove => "list_remove",
+            Self::ListIndex => "list_index",
+            Self::ListCount => "list_count",
+            Self::ListClear => "list_clear",
+            Self::ListCopy => "list_copy",
+            Self::ListReverse => "list_reverse",
+            Self::ListConcat => "list_concat",
+            Self::ListRepeat => "list_repeat",
+            Self::ListCompare => "list_compare",
         }
     }
 }

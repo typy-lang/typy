@@ -236,6 +236,14 @@ impl Dump<'_> {
                 self.line(depth, &format!("Attribute {}", attribute.name), span);
                 self.expression(depth + 1, value);
             }
+            Expr::Slice {
+                lower, upper, step, ..
+            } => {
+                self.line(depth, "Slice", span);
+                for bound in [lower, upper, step].into_iter().flatten() {
+                    self.expression(depth + 1, bound);
+                }
+            }
             Expr::IfExp {
                 test, body, orelse, ..
             } => {

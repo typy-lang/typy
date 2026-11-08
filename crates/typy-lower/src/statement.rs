@@ -47,12 +47,17 @@ impl FunctionLowerer<'_> {
                 value,
                 span,
             } => {
-                let slot = self.slot(*target);
-                let current = self.load(slot, *span);
-                let result_type = &self.program.symbol(*target).ty;
-                let right = self.expression(value);
-                let result = self.binary(*operator, current, right, result_type, *span);
-                self.store(slot, result, *span);
+                let result = match target {
+                    typy_check::AssignTarget::Name(symbol) => {
+                        self.program.symbol(*symbol).ty.clone()
+                    }
+                    typy_check::AssignTarget::Item { list, .. } => match &list.ty {
+                        typy_check::Type::List(item) => item.as_ref().clone(),
+                        _ => unreachable!("the checker allows an item target only on a list"),
+                    },
+                    typy_check::AssignTarget::Tuple(_) => typy_check::Type::Error,
+                };
+                self.augmented_assignment(target, *operator, value, &result, *span);
             }
             TypedStmt::Expr { value, span } => {
                 let lowered = self.expression(value);

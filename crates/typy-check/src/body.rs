@@ -9,6 +9,7 @@ mod locals;
 mod name;
 mod operator;
 mod program;
+mod slice;
 mod statement;
 
 pub(crate) use program::Program;

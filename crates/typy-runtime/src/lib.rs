@@ -24,6 +24,7 @@ mod list;
 mod message;
 mod range;
 mod refcount;
+mod slice;
 mod stack;
 mod string;
 mod version;

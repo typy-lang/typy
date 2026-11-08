@@ -169,6 +169,13 @@ impl Walker {
                 self.expression(index);
             }
             Expr::Name { .. } => {}
+            Expr::Slice {
+                lower, upper, step, ..
+            } => {
+                for bound in [lower, upper, step].into_iter().flatten() {
+                    self.expression(bound);
+                }
+            }
             Expr::Tuple { elements, .. } | Expr::List { elements, .. } => {
                 for element in elements {
                     self.expression(element);

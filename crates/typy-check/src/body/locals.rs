@@ -1,6 +1,6 @@
 //! Finds the local variables of a body and binds values to them (LR 4.2.2, TYP-02, TYP-03).
 
-use typy_diagnostics::{Diagnostic, DiagnosticCode, RuleId};
+use typy_diagnostics::{Diagnostic, DiagnosticCode, RuleId, Span};
 use typy_source::syntax::{Expr, Stmt};
 
 use super::BodyChecker;
@@ -156,26 +156,55 @@ impl BodyChecker<'_> {
         list: &Expr,
         index: &Expr,
         ty: &Type,
-        span: typy_diagnostics::Span,
+        span: Span,
     ) -> Option<AssignTarget> {
         let list = self.expression(list);
+        if let Expr::Slice { .. } = index {
+            self.slice_assignment(span);
+            return None;
+        }
         let index = self.expression(index);
+        self.checked_item_target(list, index, ty, span)
+    }
+
+    /// Checks the target of `target[index] op= value`, already checked as the expression
+    /// `current`, which the operation gives a value of type `ty`.
+    pub(super) fn augmented_item(
+        &mut self,
+        current: TypedExpr,
+        ty: &Type,
+        span: Span,
+    ) -> Option<AssignTarget> {
+        match current.kind {
+            TypedExprKind::ListItem { list, index }
+            | TypedExprKind::Index { value: list, index } => {
+                self.checked_item_target(*list, *index, ty, span)
+            }
+            TypedExprKind::TupleItem { tuple, .. } => {
+                self.unassignable_item(&tuple.ty, span);
+                None
+            }
+            TypedExprKind::Slice { .. } => {
+                self.slice_assignment(span);
+                None
+            }
+            _ => None,
+        }
+    }
+
+    fn checked_item_target(
+        &mut self,
+        list: TypedExpr,
+        index: TypedExpr,
+        ty: &Type,
+        span: Span,
+    ) -> Option<AssignTarget> {
         let item = match &list.ty {
             Type::List(item) => item.as_ref().clone(),
             Type::Error => return None,
             other => {
-                self.diagnostics.push(
-                    Diagnostic::new(
-                        DiagnosticCode::error(401),
-                        span,
-                        format!("an item of {} cannot be assigned", other.with_article()),
-                    )
-                    .with_rule(if *other == Type::Str {
-                        RuleId::DAT_05
-                    } else {
-                        RuleId::DAT_07
-                    }),
-                );
+                let other = other.clone();
+                self.unassignable_item(&other, span);
                 return None;
             }
         };
@@ -194,6 +223,33 @@ impl BodyChecker<'_> {
             list: Box::new(list),
             index: Box::new(index),
         })
+    }
+
+    fn unassignable_item(&mut self, container: &Type, span: Span) {
+        let rule = match container {
+            Type::Str => RuleId::DAT_05,
+            Type::Tuple(_) => RuleId::DAT_08,
+            _ => RuleId::DAT_07,
+        };
+        self.diagnostics.push(
+            Diagnostic::new(
+                DiagnosticCode::error(401),
+                span,
+                format!("an item of {} cannot be assigned", container.with_article()),
+            )
+            .with_rule(rule),
+        );
+    }
+
+    fn slice_assignment(&mut self, span: Span) {
+        self.diagnostics.push(
+            Diagnostic::new(
+                DiagnosticCode::error(201),
+                span,
+                "assigning to a slice is planned for TyPy 0.3 (DAT-13)",
+            )
+            .with_rule(RuleId::DAT_13),
+        );
     }
 
     /// Binds a name target to a value of type `ty`; the first binding fixes the variable's type (TYP-02, TYP-03).

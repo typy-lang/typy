@@ -42,6 +42,11 @@ impl BodyChecker<'_> {
             Op::BitAnd | Op::BitOr | Op::BitXor if l == Bool && r == Bool => Bool,
             _ if l == Bool || r == Bool => self.bool_arithmetic(span),
             Op::Add if l == Str && r == Str => Str,
+            // A list joins only a list of its own type, because the runtime stores each item by
+            // the kind of the item type (DAT-07).
+            Op::Add if matches!(l, Type::List(_)) && l == r => l,
+            Op::Mult if matches!(l, Type::List(_)) && r == Int => l,
+            Op::Mult if l == Int && matches!(r, Type::List(_)) => r,
             Op::Mult if (l == Str && r == Int) || (l == Int && r == Str) => Str,
             Op::Add | Op::Sub | Op::Mult | Op::FloorDiv | Op::Mod
                 if l.is_numeric() && r.is_numeric() =>

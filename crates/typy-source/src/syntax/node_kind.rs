@@ -31,7 +31,6 @@ pub enum NodeKind {
     Raise,
     Set,
     SetComp,
-    Slice,
     Starred,
     TemplateStr,
     Try,

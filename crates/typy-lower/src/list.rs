@@ -2,7 +2,7 @@
 //! and `for` over a list (DAT-07, DAT-11, EXP-07, CST-03, LIB-03). Items cross into the runtime
 //! as eight bytes each; every runtime list function borrows its arguments.
 
-use typy_check::{AssignTarget, Method, TypedExpr};
+use typy_check::{AssignTarget, TypedExpr};
 use typy_diagnostics::Span;
 use typy_tyir::{
     Comparison, Constant, IntOperator, Operation, RuntimeFunction, ScalarKind, Terminator,
@@ -24,7 +24,7 @@ fn item_kind(item: TyirType) -> i64 {
 
 impl FunctionLowerer<'_> {
     /// Returns the eight bytes a list stores for a value, without changing who owns it.
-    fn bits(&mut self, value: Lowered, span: Span) -> ValueId {
+    pub(crate) fn bits(&mut self, value: Lowered, span: Span) -> ValueId {
         self.builder
             .push_value(Operation::ToBits(value.value), TyirType::Bits, span)
     }
@@ -104,37 +104,6 @@ impl FunctionLowerer<'_> {
         self.release(value, span);
         self.release(index, span);
         self.release(list, span);
-    }
-
-    /// Calls a method of a built-in type (LIB-03).
-    pub(crate) fn method(
-        &mut self,
-        receiver: &TypedExpr,
-        method: Method,
-        arguments: &[TypedExpr],
-        span: Span,
-    ) -> Lowered {
-        let receiver = self.expression(receiver);
-        let arguments: Vec<Lowered> = arguments
-            .iter()
-            .map(|argument| self.expression(argument))
-            .collect();
-        let result = match (method, arguments.as_slice()) {
-            (Method::ListAppend, [item]) => {
-                let bits = self.bits(*item, span);
-                self.call_runtime(
-                    RuntimeFunction::ListAppend,
-                    vec![receiver.value, bits],
-                    span,
-                )
-            }
-            (Method::ListAppend, _) => unreachable!("the checker gives `append` one argument"),
-        };
-        for argument in arguments {
-            self.release(argument, span);
-        }
-        self.release(receiver, span);
-        result
     }
 
     /// Returns `len(list)` as an `int`.

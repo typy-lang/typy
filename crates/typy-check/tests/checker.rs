@@ -761,3 +761,92 @@ fn list_rules_give_their_codes() {
         assert_eq!(&rejected(source), expected, "\n{source}");
     }
 }
+
+#[test]
+fn slice_and_list_method_rules_give_their_codes() {
+    let cases: &[(&str, &[&str])] = &[
+        ("x = (1, 2)[0:1]\n", &["E0201"]),
+        ("x = [1][\"a\":]\n", &["E0404"]),
+        ("x = [1][:1.5]\n", &["E0404"]),
+        ("x = [1][::\"a\"]\n", &["E0404"]),
+        ("x = 1\ny = x[1:2]\n", &["E0401"]),
+        ("y = missing[1:2]\n", &["E0205"]),
+        ("x = [[1]]\ny = x[0:1, 0]\n", &["E0401"]),
+        ("x = [1]\nx[0:1] = [2]\n", &["E0201"]),
+        ("x = [1]\nx[0:1] += [2]\n", &["E0201"]),
+        ("x = (1, 2)\nx[0] += 1\n", &["E0401"]),
+        ("x = 'ab'\nx[0] += 'c'\n", &["E0401"]),
+        ("x = [1]\nx[0] += 1.5\n", &["E0402"]),
+        ("x = [1]\nx[0.5] += 1\n", &["E0404"]),
+        ("missing[0] += 1\n", &["E0205"]),
+        ("x = [1]\nx.pop(1, 2)\n", &["E0404"]),
+        ("x = [1]\nx.insert(0)\n", &["E0404"]),
+        ("x = [1]\nx.extend([1.5])\n", &["E0409"]),
+        ("x = [1]\nx.index(\"a\")\n", &["E0404"]),
+        ("x = [1]\nx.clear(1)\n", &["E0404"]),
+        ("x = [1] + [\"a\"]\n", &["E0401"]),
+        ("x = [1] * 1.5\n", &["E0401"]),
+        ("x = [1] < [\"a\"]\n", &["E0407"]),
+        ("x = [] == []\n", &["E0410"]),
+        ("x = [] < 1\n", &["E0410"]),
+        ("x = 1 < []\n", &["E0410"]),
+    ];
+    for (source, expected) in cases {
+        assert_eq!(&rejected(source), expected, "\n{source}");
+    }
+}
+
+#[test]
+fn method_argument_counts_are_worded_for_their_number() {
+    let cases = [
+        (
+            "x = [1]\nx.pop(1, 2)\n",
+            "`pop` takes at most 1 argument, and 2 are given",
+        ),
+        (
+            "x = [1]\nx.insert(0)\n",
+            "`insert` takes 2 arguments, and 1 is given",
+        ),
+        (
+            "x = [1]\nx.append()\n",
+            "`append` takes 1 argument, and 0 are given",
+        ),
+        (
+            "x = [1]\nx.copy(1)\n",
+            "`copy` takes 0 arguments, and 1 is given",
+        ),
+    ];
+    for (source, expected) in cases {
+        assert_eq!(messages(source), [expected], "\n{source}");
+    }
+}
+
+#[test]
+fn slices_methods_and_list_operators_have_python_s_types() {
+    let source = "\
+xs: list[int] = [3, 1]
+words = ['a']
+a = xs[1:] + xs[:1] + xs[::-1] + xs[::]
+b = words[0][1:2]
+c = xs.pop() + xs.pop(0) + xs.index(3) + xs.count(1)
+d = xs.copy() * 2 + 3 * xs
+e = xs < [1] and [[1]] >= [[2]] and xs == [] and [] != xs and 1 in [] and [] in [xs]
+xs.insert(0, 5)
+xs.extend(xs)
+xs.remove(5)
+xs.reverse()
+xs.clear()
+xs += [1]
+xs *= 2
+xs[0] += 1
+words[0] *= 3
+grid = [[1]]
+grid[0] += [2]
+";
+    let (_directory, project) = load(source);
+    let program = TypeChecker::check(&project).expect("the program is accepted");
+    let dump = typy_check::dump(&program, &project);
+    for node in ["Slice", "Method pop", "AugAssign Add item of list[int]"] {
+        assert!(dump.contains(node), "{node} missing from\n{dump}");
+    }
+}

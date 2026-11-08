@@ -43,7 +43,11 @@ fn statements(body: &[TypedStmt], callees: &mut BTreeSet<FunctionId>) {
                     assign_target(target, callees);
                 }
             }
-            TypedStmt::AugAssign { value, .. } | TypedStmt::Expr { value, .. } => {
+            TypedStmt::AugAssign { target, value, .. } => {
+                assign_target(target, callees);
+                expression(value, callees);
+            }
+            TypedStmt::Expr { value, .. } => {
                 expression(value, callees);
             }
             TypedStmt::ForEach {
@@ -130,6 +134,17 @@ fn expression(expression_value: &TypedExpr, callees: &mut BTreeSet<FunctionId>) 
         TypedExprKind::ListItem { list, index } => {
             expression(list, callees);
             expression(index, callees);
+        }
+        TypedExprKind::Slice {
+            value,
+            lower,
+            upper,
+            step,
+        } => {
+            expression(value, callees);
+            for bound in [lower, upper, step].into_iter().flatten() {
+                expression(bound, callees);
+            }
         }
         TypedExprKind::Method {
             receiver,

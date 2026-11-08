@@ -2,12 +2,15 @@
 //! MEM-02, NFR-13, ADR-0009).
 
 mod item;
+mod methods;
 mod operations;
+mod order;
 #[cfg(test)]
 mod tests;
 
 pub(crate) use item::ItemKind;
-pub(crate) use operations::{typy_rt_list_equal, typy_rt_list_repr};
+pub(crate) use operations::{typy_rt_list_append, typy_rt_list_equal, typy_rt_list_repr};
+pub(crate) use order::typy_rt_list_compare;
 
 use crate::allocator::{allocate, array_size, free, reallocate};
 use crate::header::{LIST_TYPE_ID, ObjectHeader};

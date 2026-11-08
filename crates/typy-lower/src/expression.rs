@@ -32,11 +32,22 @@ impl FunctionLowerer<'_> {
                 let index = self.expression(index);
                 self.list_item(list, index, ty, span)
             }
+            TypedExprKind::Slice {
+                value,
+                lower,
+                upper,
+                step,
+            } => self.slice(
+                value,
+                [lower.as_deref(), upper.as_deref(), step.as_deref()],
+                ty,
+                span,
+            ),
             TypedExprKind::Method {
                 receiver,
                 method,
                 arguments,
-            } => self.method(receiver, *method, arguments, span),
+            } => self.method(receiver, *method, arguments, ty, span),
             TypedExprKind::TupleItem { tuple, index } => {
                 let tuple = self.expression(tuple);
                 self.tuple_item(tuple, *index, ty, span)
@@ -93,18 +104,7 @@ impl FunctionLowerer<'_> {
                     .collect();
                 self.builtin(*builtin, values, &types, ty, span)
             }
-            TypedExprKind::Index { value, index } => {
-                let text = self.expression(value);
-                let position = self.expression(index);
-                let result = self.call_runtime(
-                    typy_tyir::RuntimeFunction::StrIndex,
-                    vec![text.value, position.value],
-                    span,
-                );
-                self.release(position, span);
-                self.release(text, span);
-                result
-            }
+            TypedExprKind::Index { value, index } => self.str_index(value, index, span),
         }
     }
 

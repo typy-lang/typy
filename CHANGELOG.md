@@ -24,6 +24,17 @@ All notable changes to TyPy are recorded here. The format follows
   DAT-11, TYP-05, EXP-07, CST-03). A list stores each item in eight bytes,
   so a `list[float]` holds raw doubles (MEM-02), and a million `int` items
   fit in 8.5 MB (NFR-13).
+- Slices of strings and lists, such as `text[1:4]`, `xs[::-1]` and
+  `xs[-2:]`, with Python's defaults and clamping, and `ValueError` for a
+  zero step (DAT-12).
+- The list methods `pop`, `insert`, `extend`, `remove`, `index`, `count`,
+  `clear`, `copy` and `reverse`, with CPython's errors (LIB-03).
+- `+` and `*` on lists, ordering of lists with `<`, `<=`, `>` and `>=`,
+  `xs += ys` and `xs *= n` changing the list in place, and augmented
+  assignment of a list item such as `counts[i] += 1` (EXP-02, EXP-06,
+  SMT-01).
+- An empty `[]` in a comparison takes the type of the other operand, so
+  `xs == []` needs no annotation (TYP-05).
 
 ### Changed
 
