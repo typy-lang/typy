@@ -14,6 +14,7 @@ mod ownership;
 mod program;
 mod statement;
 mod strings;
+mod tuple;
 mod types;
 
 pub use program::lower;

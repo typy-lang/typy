@@ -105,13 +105,16 @@ pub(super) fn operands(operation: &Operation) -> Vec<ValueId> {
         | Operation::BoolNot(value)
         | Operation::IsTrue { value, .. }
         | Operation::Increment(value)
-        | Operation::Decrement(value) => vec![*value],
+        | Operation::Decrement(value)
+        | Operation::TupleItem { tuple: value, .. } => vec![*value],
         Operation::IntBinary { left, right, .. }
         | Operation::FloatBinary { left, right, .. }
         | Operation::BoolBinary { left, right, .. }
         | Operation::Compare { left, right, .. } => vec![*left, *right],
-        Operation::CallRuntime { arguments, .. } | Operation::Call { arguments, .. } => {
-            arguments.clone()
-        }
+        Operation::CallRuntime { arguments, .. }
+        | Operation::Call { arguments, .. }
+        | Operation::MakeTuple {
+            items: arguments, ..
+        } => arguments.clone(),
     }
 }

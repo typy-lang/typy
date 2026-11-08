@@ -106,7 +106,13 @@ impl<'ctx> FunctionEmitter<'_, '_, 'ctx> {
                 ));
             }
         };
-        let (result, exception) = if crate::abi::value_type(context, result_type).is_some() {
+        let (result, exception) = if crate::abi::value_type(
+            context,
+            &self.shared.tyir.tuple_types,
+            result_type,
+        )
+        .is_some()
+        {
             let pair = returned.into_struct_value();
             let result: BasicValueEnum<'ctx> = self.builder.build_extract_value(pair, 0, "")?;
             let exception = self
@@ -170,7 +176,11 @@ impl<'ctx> FunctionEmitter<'_, '_, 'ctx> {
         exception: Option<ValueId>,
     ) -> Result<(), CodegenError> {
         let context = self.shared.context;
-        let result_type = crate::abi::value_type(context, self.function.return_type);
+        let result_type = crate::abi::value_type(
+            context,
+            &self.shared.tyir.tuple_types,
+            self.function.return_type,
+        );
         let result = match value {
             Some(value) if self.function.value(value).ty != TyirType::Unit => {
                 Some(self.value(value)?)

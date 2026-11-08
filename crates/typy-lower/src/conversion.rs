@@ -27,10 +27,12 @@ impl FunctionLowerer<'_> {
                 let value = self.select(lowered.value, yes, no, TyirType::STR);
                 Self::borrowed(value, TyirType::STR)
             }
+            TyirType::Tuple(_) => self.tuple_text(lowered, span),
         }
     }
 
-    /// Returns `repr(value)`, which differs from `str` only for strings in 0.1.
+    /// Returns `repr(value)`, which differs from `str` only for strings, and for tuples, whose
+    /// `str` is their `repr`.
     pub(crate) fn repr_of(&mut self, lowered: Lowered, span: Span) -> Lowered {
         if lowered.ty == TyirType::STR {
             self.call_runtime(RuntimeFunction::StrRepr, vec![lowered.value], span)
@@ -56,7 +58,9 @@ impl FunctionLowerer<'_> {
                 let base = self.constant(Constant::Int("10".to_owned()), span);
                 self.call_runtime(RuntimeFunction::IntFromStr, vec![lowered.value, base], span)
             }
-            TyirType::Unit => unreachable!("the checker refuses int(None)"),
+            TyirType::Unit | TyirType::Tuple(_) => {
+                unreachable!("the checker refuses int() of None and of a tuple")
+            }
         }
     }
 
@@ -76,7 +80,9 @@ impl FunctionLowerer<'_> {
             TyirType::Object(_) => {
                 self.call_runtime(RuntimeFunction::FloatFromStr, vec![lowered.value], span)
             }
-            TyirType::Unit => unreachable!("the checker refuses float(None)"),
+            TyirType::Unit | TyirType::Tuple(_) => {
+                unreachable!("the checker refuses float() of None and of a tuple")
+            }
         }
     }
 

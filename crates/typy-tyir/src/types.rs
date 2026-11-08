@@ -13,6 +13,10 @@ impl TypeId {
     pub const EXCEPTION: Self = Self(2);
 }
 
+/// The number of a tuple type in its module's `TupleTypes`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct TupleTypeId(pub u32);
+
 /// The type of one TyIR value.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum TyirType {
@@ -26,6 +30,8 @@ pub enum TyirType {
     Unit,
     /// A pointer to a heap object of the given type.
     Object(TypeId),
+    /// A tuple, held as a value with its items in place; `TupleTypes` gives the item types.
+    Tuple(TupleTypeId),
 }
 
 impl TyirType {
@@ -33,12 +39,6 @@ impl TyirType {
     pub const STR: Self = Self::Object(TypeId::STR);
     /// An exception object.
     pub const EXCEPTION: Self = Self::Object(TypeId::EXCEPTION);
-
-    /// Returns true for values that may point to a counted heap object, so they take part in reference counting (ADR-0001).
-    #[must_use]
-    pub fn is_counted(self) -> bool {
-        matches!(self, Self::Int | Self::Object(_))
-    }
 }
 
 impl fmt::Display for TyirType {
@@ -51,22 +51,14 @@ impl fmt::Display for TyirType {
             Self::Object(TypeId::STR) => formatter.write_str("str"),
             Self::Object(TypeId::EXCEPTION) => formatter.write_str("exception"),
             Self::Object(TypeId(id)) => write!(formatter, "object#{id}"),
+            Self::Tuple(TupleTypeId(id)) => write!(formatter, "tuple#{id}"),
         }
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{TyirType, TypeId};
-
-    #[test]
-    fn ints_and_objects_are_counted_and_scalars_are_not() {
-        assert!(TyirType::Int.is_counted());
-        assert!(TyirType::STR.is_counted());
-        assert!(!TyirType::Float.is_counted());
-        assert!(!TyirType::Bool.is_counted());
-        assert!(!TyirType::Unit.is_counted());
-    }
+    use super::{TupleTypeId, TyirType, TypeId};
 
     #[test]
     fn types_are_written_by_name() {
@@ -78,6 +70,7 @@ mod tests {
             TyirType::STR,
             TyirType::EXCEPTION,
             TyirType::Object(TypeId(300)),
+            TyirType::Tuple(TupleTypeId(4)),
         ]
         .iter()
         .map(ToString::to_string)
@@ -91,7 +84,8 @@ mod tests {
                 "unit",
                 "str",
                 "exception",
-                "object#300"
+                "object#300",
+                "tuple#4"
             ]
         );
     }

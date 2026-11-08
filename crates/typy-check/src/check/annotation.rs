@@ -1,11 +1,12 @@
-//! The types that annotations name in 0.1: `int`, `float`, `bool`, `str` and `None`.
+//! The types that annotations name: `int`, `float`, `bool`, `str`, `None`, and from 0.2
+//! `tuple[...]`.
 
 use typy_diagnostics::{Diagnostic, DiagnosticCode, Diagnostics, RuleId};
 use typy_source::syntax::{Constant, Expr};
 
 use crate::types::Type;
 
-/// Returns the type an annotation names; 0.1 knows `int`, `float`, `bool`, `str` and `None`.
+/// Returns the type an annotation names.
 pub(crate) fn annotation_type(annotation: &Expr, diagnostics: &mut Diagnostics) -> Type {
     match annotation {
         Expr::Constant {
@@ -29,7 +30,18 @@ pub(crate) fn annotation_type(annotation: &Expr, diagnostics: &mut Diagnostics) 
                     );
                     Type::Error
                 }
-                "list" | "dict" | "set" | "tuple" | "bytes" => {
+                "tuple" => {
+                    diagnostics.push(
+                        Diagnostic::new(
+                            DiagnosticCode::error(408),
+                            *span,
+                            "a `tuple` annotation names the type of each item, such as `tuple[int, str]`",
+                        )
+                        .with_rule(RuleId::TYP_06),
+                    );
+                    Type::Error
+                }
+                "list" | "dict" | "set" | "bytes" => {
                     diagnostics.push(
                         Diagnostic::new(
                             DiagnosticCode::error(201),
@@ -53,6 +65,9 @@ pub(crate) fn annotation_type(annotation: &Expr, diagnostics: &mut Diagnostics) 
                 }
             }
         }
+        Expr::Subscript { value, index, .. } if matches!(value.as_ref(), Expr::Name { id, .. } if id == "tuple") => {
+            tuple_annotation(index, diagnostics)
+        }
         other => {
             diagnostics.push(
                 Diagnostic::new(
@@ -65,4 +80,38 @@ pub(crate) fn annotation_type(annotation: &Expr, diagnostics: &mut Diagnostics) 
             Type::Error
         }
     }
+}
+
+/// Returns the type `tuple[...]` names: one type per item, `tuple[()]` for the empty tuple. A
+/// tuple of any length, `tuple[T, ...]`, is a sequence like a list and arrives with lists.
+fn tuple_annotation(index: &Expr, diagnostics: &mut Diagnostics) -> Type {
+    let items: Vec<&Expr> = match index {
+        Expr::Tuple { elements, .. } => elements.iter().collect(),
+        single => vec![single],
+    };
+    if items.iter().any(|item| {
+        matches!(
+            item,
+            Expr::Constant {
+                value: Constant::Ellipsis,
+                ..
+            }
+        )
+    }) {
+        diagnostics.push(
+            Diagnostic::new(
+                DiagnosticCode::error(201),
+                index.span(),
+                "`tuple[T, ...]` annotations are planned for TyPy 0.2 (TYP-06)",
+            )
+            .with_rule(RuleId::TYP_06),
+        );
+        return Type::Error;
+    }
+    Type::Tuple(
+        items
+            .into_iter()
+            .map(|item| annotation_type(item, diagnostics))
+            .collect(),
+    )
 }

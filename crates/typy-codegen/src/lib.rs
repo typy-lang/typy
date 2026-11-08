@@ -17,6 +17,7 @@ mod runtime;
 mod statics;
 mod target;
 mod terminator;
+mod tuple;
 
 use typy_diagnostics::{Diagnostic, DiagnosticCode, Diagnostics, RuleId, SourceLookup};
 use typy_tyir::TyirModule;

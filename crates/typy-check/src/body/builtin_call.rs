@@ -45,7 +45,7 @@ impl BodyChecker<'_> {
                 span,
             );
         }
-        let types: Vec<Type> = values.iter().map(|value| value.ty).collect();
+        let types: Vec<Type> = values.iter().map(|value| value.ty.clone()).collect();
         let result = match builtin {
             Builtin::Print => unreachable!("print is checked above"),
             Builtin::Range => {
@@ -67,7 +67,9 @@ impl BodyChecker<'_> {
                         span,
                     );
                 }
-                self.expect(&values[0], Type::Str, "the argument of `len`");
+                if !matches!(values[0].ty, Type::Tuple(_)) {
+                    self.expect(&values[0], Type::Str, "the argument of `len`");
+                }
                 Type::Int
             }
             Builtin::Abs => {
@@ -78,8 +80,8 @@ impl BodyChecker<'_> {
                         span,
                     );
                 }
-                match types[0] {
-                    Type::Int | Type::Float => types[0],
+                match &types[0] {
+                    Type::Int | Type::Float => types[0].clone(),
                     Type::Bool => self.bool_arithmetic(values[0].span),
                     other => self.operator_error("abs", other, other, values[0].span),
                 }
@@ -106,7 +108,7 @@ impl BodyChecker<'_> {
                         span,
                     );
                 }
-                let first = types[0];
+                let first = types[0].clone();
                 if let Some(other) = values.iter().find(|value| value.ty != first) {
                     return self.error(
                         Diagnostic::new(
@@ -123,7 +125,7 @@ impl BodyChecker<'_> {
                     );
                 }
                 if !matches!(first, Type::Int | Type::Float | Type::Str) {
-                    self.comparison_error(first, first, span);
+                    self.comparison_error(&first, &first, span);
                     return Self::typed(
                         TypedExprKind::Constant(TypedConstant::None),
                         Type::Error,
@@ -154,7 +156,7 @@ impl BodyChecker<'_> {
                     if !matches!(value.ty, Type::Int | Type::Float | Type::Str | Type::Bool) {
                         self.expect(
                             value,
-                            target,
+                            target.clone(),
                             &format!("the argument of `{}`", builtin.name()),
                         );
                     }

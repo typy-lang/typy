@@ -38,7 +38,6 @@ pub enum NodeKind {
     TemplateStr,
     Try,
     TryStar,
-    Tuple,
     TypeAlias,
     With,
     Yield,

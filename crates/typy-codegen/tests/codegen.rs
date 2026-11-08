@@ -39,6 +39,7 @@ const PROGRAMS: &[&str] = &[
     "def f(flag: bool = True, ratio: float = 0.5, none: None = None) -> None:\n    return None\nf()\nx = 1\nprint(x is None, None is None)\n",
     "n = 3\nfor i in range(10, 0, -n):\n    if i == 4:\n        break\n    print(i)\nelse:\n    print(\"done\")\n",
     "x = 0\n",
+    "def less(a: int, b: int) -> bool:\n    return a < b\npair = (less(1, 2), (\"x\", 2.5), None)\na, (b, c), d = pair\nprint(pair, a, b, c, d, pair[1][0], len(pair), pair == pair, pair < pair)\n",
     "",
 ];
 
@@ -110,4 +111,30 @@ fn release_small_marks_every_function_minsize() {
     let (project, module) = compile(PROGRAMS[1]);
     let ir = llvm_ir(&module, Target::host(), Optimization::Size, &project).unwrap();
     assert!(ir.contains("minsize") && ir.contains("optsize"), "{ir}");
+}
+
+#[test]
+fn reading_an_item_of_a_value_that_is_not_a_tuple_is_an_internal_error() {
+    let (project, mut module) = compile("x = 0\n");
+    let entry = module.entry.0 as usize;
+    let function = &mut module.functions[entry];
+    let item = typy_tyir::ValueId(u32::try_from(function.values.len()).unwrap());
+    function.values.push(typy_tyir::ValueInfo {
+        ty: typy_tyir::TyirType::Int,
+        representation: typy_tyir::ValueRepresentation::Inline,
+    });
+    let span = function.blocks[0].instructions[0].span;
+    function.blocks[0]
+        .instructions
+        .push(typy_tyir::Instruction {
+            result: Some(item),
+            operation: typy_tyir::Operation::TupleItem {
+                tuple: typy_tyir::ValueId(0),
+                index: 0,
+            },
+            span,
+        });
+    let error = llvm_ir(&module, Target::host(), Optimization::None, &project).unwrap_err();
+    let text = format!("{error:?}");
+    assert!(text.contains("is not a tuple"), "{text}");
 }

@@ -219,6 +219,12 @@ impl Dump<'_> {
                 self.line(depth, &format!("UnaryOp {operator:?}"), span);
                 self.expression(depth + 1, operand);
             }
+            Expr::Tuple { elements, .. } => {
+                self.line(depth, "Tuple", span);
+                for element in elements {
+                    self.expression(depth + 1, element);
+                }
+            }
             Expr::IfExp {
                 test, body, orelse, ..
             } => {

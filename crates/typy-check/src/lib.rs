@@ -12,7 +12,8 @@ mod unprovided;
 pub use builtin::Builtin;
 pub use check::TypeChecker;
 pub use typed::{
-    Argument, FunctionId, FunctionSignature, SignatureParameter, Symbol, SymbolId, SymbolKind,
-    TypedConstant, TypedExpr, TypedExprKind, TypedFunction, TypedProgram, TypedStmt, dump,
+    Argument, AssignTarget, FunctionId, FunctionSignature, SignatureParameter, Symbol, SymbolId,
+    SymbolKind, TypedConstant, TypedExpr, TypedExprKind, TypedFunction, TypedProgram, TypedStmt,
+    dump,
 };
 pub use types::Type;

@@ -2,7 +2,7 @@
 
 use typy_check::TypedProgram;
 use typy_diagnostics::{Diagnostic, DiagnosticCode, Diagnostics, RuleId};
-use typy_tyir::{FunctionId, TyirModule, verify};
+use typy_tyir::{FunctionId, TupleTypes, TyirModule, verify};
 
 use crate::call_graph::recursive_functions;
 use crate::function::FunctionLowerer;
@@ -14,6 +14,7 @@ pub fn lower(program: &TypedProgram) -> Result<TyirModule, Diagnostics> {
     let mut may_raise = vec![false; program.functions.len()];
     loop {
         let mut strings = StringPool::default();
+        let mut tuple_types = TupleTypes::default();
         let functions: Vec<_> = program
             .functions
             .iter()
@@ -23,6 +24,7 @@ pub fn lower(program: &TypedProgram) -> Result<TyirModule, Diagnostics> {
                     function,
                     &may_raise,
                     &mut strings,
+                    &mut tuple_types,
                     recursive.contains(&function.id),
                 )
             })
@@ -38,6 +40,7 @@ pub fn lower(program: &TypedProgram) -> Result<TyirModule, Diagnostics> {
         let module = TyirModule {
             functions,
             strings: strings.into_strings(),
+            tuple_types,
             entry: FunctionId(program.entry.0),
         };
         return match verify(&module) {

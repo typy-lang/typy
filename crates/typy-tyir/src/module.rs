@@ -2,6 +2,7 @@
 
 use crate::constant::StringId;
 use crate::function::{FunctionId, TyirFunction};
+use crate::tuple_types::TupleTypes;
 
 /// Every function of the program, the string pool, and the entry function.
 #[derive(Clone, Debug, PartialEq)]
@@ -10,6 +11,8 @@ pub struct TyirModule {
     pub functions: Vec<TyirFunction>,
     /// The string constants, indexed by `StringId`.
     pub strings: Vec<String>,
+    /// The tuple types its values use.
+    pub tuple_types: TupleTypes,
     /// The module body of `__main__`.
     pub entry: FunctionId,
 }

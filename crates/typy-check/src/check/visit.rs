@@ -47,7 +47,10 @@ pub(super) fn visit_statement(statement: &Stmt, visit: &mut dyn FnMut(&Expr)) {
 pub(super) fn visit_expression(expression: &Expr, visit: &mut dyn FnMut(&Expr)) {
     visit(expression);
     match expression {
-        Expr::BoolOp { values, .. } => values
+        Expr::BoolOp { values, .. }
+        | Expr::Tuple {
+            elements: values, ..
+        } => values
             .iter()
             .for_each(|value| visit_expression(value, visit)),
         Expr::BinOp { left, right, .. } => {

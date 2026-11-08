@@ -92,8 +92,11 @@ fn expression(expression_value: &TypedExpr, callees: &mut BTreeSet<FunctionId>) 
             expression(left, callees);
             expression(right, callees);
         }
-        TypedExprKind::Unary { operand, .. } => expression(operand, callees),
+        TypedExprKind::Unary { operand, .. } | TypedExprKind::TupleItem { tuple: operand, .. } => {
+            expression(operand, callees);
+        }
         TypedExprKind::BoolOp { values, .. }
+        | TypedExprKind::Tuple(values)
         | TypedExprKind::Builtin {
             arguments: values, ..
         } => {

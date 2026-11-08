@@ -5,7 +5,7 @@ use typy_source::syntax::{Expr, Stmt};
 
 use super::BodyChecker;
 use crate::check::annotation_type;
-use crate::typed::{SymbolId, SymbolKind, TypedConstant, TypedExpr, TypedExprKind};
+use crate::typed::{AssignTarget, SymbolId, SymbolKind, TypedConstant, TypedExpr, TypedExprKind};
 use crate::types::Type;
 
 impl BodyChecker<'_> {
@@ -43,6 +43,12 @@ impl BodyChecker<'_> {
     }
 
     pub(super) fn bind_local(&mut self, target: &Expr) {
+        if let Expr::Tuple { elements, .. } = target {
+            for element in elements {
+                self.bind_local(element);
+            }
+            return;
+        }
         let Expr::Name { id, span } = target else {
             return;
         };
@@ -72,7 +78,7 @@ impl BodyChecker<'_> {
             ),
             Some(_) => {}
             None => {
-                self.declared.insert(symbol, ty);
+                self.declared.insert(symbol, ty.clone());
                 self.types.insert(symbol, ty);
             }
         }
@@ -80,10 +86,49 @@ impl BodyChecker<'_> {
 
     pub(super) fn finish_locals(&mut self) -> Vec<SymbolId> {
         for symbol in &self.local_order {
-            let ty = self.types.get(symbol).copied().unwrap_or(Type::Error);
+            let ty = self.types.get(symbol).cloned().unwrap_or(Type::Error);
             self.program.symbols[symbol.0 as usize].ty = ty;
         }
         std::mem::take(&mut self.local_order)
+    }
+
+    /// Binds a target, a name or a tuple of targets, to a value of type `ty`; a tuple target
+    /// takes a tuple of as many items, one for each of its targets (SMT-02).
+    pub(super) fn assign_target(
+        &mut self,
+        target: &Expr,
+        ty: Type,
+        value: &TypedExpr,
+    ) -> Option<AssignTarget> {
+        let Expr::Tuple { elements, span } = target else {
+            return self.assign(target, ty, value).map(AssignTarget::Name);
+        };
+        let items = match ty {
+            Type::Tuple(items) if items.len() == elements.len() => items,
+            Type::Error => vec![Type::Error; elements.len()],
+            other => {
+                let counted = match &other {
+                    Type::Tuple(items) => format!("{} values", items.len()),
+                    other => other.with_article(),
+                };
+                self.diagnostics.push(
+                    Diagnostic::new(
+                        DiagnosticCode::error(308),
+                        value.span,
+                        format!("this unpacks {counted} into {} targets", elements.len()),
+                    )
+                    .with_label(*span, "the targets")
+                    .with_rule(RuleId::SMT_02),
+                );
+                vec![Type::Error; elements.len()]
+            }
+        };
+        let targets: Option<Vec<AssignTarget>> = elements
+            .iter()
+            .zip(items)
+            .map(|(element, item)| self.assign_target(element, item, value))
+            .collect();
+        targets.map(AssignTarget::Tuple)
     }
 
     /// Binds a name target to a value of type `ty`; the first binding fixes the variable's type (TYP-02, TYP-03).
@@ -97,11 +142,11 @@ impl BodyChecker<'_> {
             return None;
         };
         let symbol = *self.locals.get(id)?;
-        match self.types.get(&symbol).copied() {
+        match self.types.get(&symbol).cloned() {
             None => {
                 self.types.insert(symbol, ty);
             }
-            Some(existing) if !ty.is_assignable_to(existing) => {
+            Some(existing) if !ty.is_assignable_to(&existing) => {
                 let mut diagnostic = Diagnostic::new(
                     DiagnosticCode::error(402),
                     value.span,
@@ -117,7 +162,7 @@ impl BodyChecker<'_> {
                     RuleId::TYP_03
                 });
                 if let (TypedExprKind::Constant(TypedConstant::Int(digits)), Type::Float) =
-                    (&value.kind, existing)
+                    (&value.kind, &existing)
                 {
                     diagnostic = diagnostic.with_fix(value.span, format!("{digits}.0"));
                 } else {

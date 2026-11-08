@@ -73,6 +73,8 @@ impl<'ctx> FunctionEmitter<'_, '_, 'ctx> {
                     inkwell::values::ValueKind::Instruction(_) => None,
                 }
             }
+            Operation::MakeTuple { ty, items } => Some(self.make_tuple(*ty, items)?),
+            Operation::TupleItem { tuple, index } => self.tuple_item(*tuple, *index)?,
             Operation::Increment(value) => {
                 self.count(*value, true)?;
                 None
@@ -91,8 +93,12 @@ impl<'ctx> FunctionEmitter<'_, '_, 'ctx> {
         let Some(pointer) = self.slots[slot.0 as usize] else {
             return Ok(None);
         };
-        let ty = crate::abi::value_type(self.shared.context, self.function.slot(slot).ty)
-            .ok_or_else(|| CodegenError("a slot with a value has a type".to_owned()))?;
+        let ty = crate::abi::value_type(
+            self.shared.context,
+            &self.shared.tyir.tuple_types,
+            self.function.slot(slot).ty,
+        )
+        .ok_or_else(|| CodegenError("a slot with a value has a type".to_owned()))?;
         Ok(Some(self.builder.build_load(ty, pointer, "")?))
     }
 

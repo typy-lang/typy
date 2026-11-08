@@ -136,7 +136,14 @@ fn declare_functions<'ctx>(
                 .iter()
                 .map(|value| function.value(*value).ty)
                 .collect();
-            let ty = function_type(context, &parameters, function.return_type, *raising, false);
+            let ty = function_type(
+                context,
+                &module.tuple_types,
+                &parameters,
+                function.return_type,
+                *raising,
+                false,
+            );
             let linkage = if function.id == module.entry {
                 Linkage::External
             } else {

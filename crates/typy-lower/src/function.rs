@@ -6,7 +6,7 @@ use typy_check::{SymbolId, TypedFunction, TypedProgram};
 use typy_diagnostics::Span;
 use typy_tyir::{
     BlockId, Constant, FunctionBuilder, FunctionId, Operation, RuntimeFunction, SlotId, Terminator,
-    TyirFunction, TyirType, ValueId,
+    TupleTypes, TyirFunction, TyirType, ValueId,
 };
 
 use crate::mangle::{ENTRY_SYMBOL, symbol};
@@ -26,6 +26,7 @@ pub(crate) struct FunctionLowerer<'context> {
     pub(crate) program: &'context TypedProgram,
     pub(crate) may_raise: &'context [bool],
     pub(crate) strings: &'context mut StringPool,
+    pub(crate) tuple_types: &'context mut TupleTypes,
     pub(crate) slots: BTreeMap<SymbolId, SlotId>,
     pub(crate) temporaries: Vec<ValueId>,
     pub(crate) loops: Vec<LoopTargets>,
@@ -37,12 +38,23 @@ pub(crate) struct FunctionLowerer<'context> {
 }
 
 impl<'context> FunctionLowerer<'context> {
+    /// Returns true when a value of type `ty` holds a reference that is counted.
+    pub(crate) fn counted(&self, ty: TyirType) -> bool {
+        self.tuple_types.is_counted(ty)
+    }
+
+    /// Returns the TyIR type of a checked type, adding a tuple type to the module when it is new.
+    pub(crate) fn lowered_type(&mut self, ty: &typy_check::Type) -> TyirType {
+        tyir_type(ty, self.tuple_types)
+    }
+
     /// Lowers `function`. `may_raise` says, for each function of the program, whether calls to it are invokes.
     pub(crate) fn lower(
         program: &'context TypedProgram,
         function: &TypedFunction,
         may_raise: &'context [bool],
         strings: &'context mut StringPool,
+        tuple_types: &'context mut TupleTypes,
         recursive: bool,
     ) -> TyirFunction {
         let entry = function.id == program.entry;
@@ -51,7 +63,7 @@ impl<'context> FunctionLowerer<'context> {
         } else {
             symbol(&function.module, &function.name)
         };
-        let return_type = tyir_type(function.signature.returns);
+        let return_type = tyir_type(&function.signature.returns, tuple_types);
         let mut builder = FunctionBuilder::new(
             FunctionId(function.id.0),
             symbol_name,
@@ -62,7 +74,7 @@ impl<'context> FunctionLowerer<'context> {
         let mut parameters = Vec::new();
         for symbol_id in &function.parameters {
             let symbol = program.symbol(*symbol_id);
-            let ty = tyir_type(symbol.ty);
+            let ty = tyir_type(&symbol.ty, tuple_types);
             let value = builder.add_parameter(ty);
             let slot = builder.add_slot(symbol.name.clone(), ty);
             slots.insert(*symbol_id, slot);
@@ -70,7 +82,7 @@ impl<'context> FunctionLowerer<'context> {
         }
         for symbol_id in &function.locals {
             let symbol = program.symbol(*symbol_id);
-            let slot = builder.add_slot(symbol.name.clone(), tyir_type(symbol.ty));
+            let slot = builder.add_slot(symbol.name.clone(), tyir_type(&symbol.ty, tuple_types));
             slots.insert(*symbol_id, slot);
         }
         let body_start = builder.create_block();
@@ -80,6 +92,7 @@ impl<'context> FunctionLowerer<'context> {
             program,
             may_raise,
             strings,
+            tuple_types,
             slots,
             temporaries: Vec::new(),
             loops: Vec::new(),
@@ -119,7 +132,7 @@ impl<'context> FunctionLowerer<'context> {
         self.builder.switch_to(BlockId(0));
         let parameter_slots: Vec<(ValueId, SlotId)> = self.parameters.clone();
         for (value, slot) in &parameter_slots {
-            if self.builder.slot_type(*slot).is_counted() {
+            if self.counted(self.builder.slot_type(*slot)) {
                 self.builder.push(Operation::Increment(*value), span);
             }
             self.builder.push(
@@ -139,11 +152,8 @@ impl<'context> FunctionLowerer<'context> {
             {
                 continue;
             }
-            let initial = match self.builder.slot_type(slot) {
-                TyirType::Int => Some(self.constant(Constant::Int("0".to_owned()), span)),
-                TyirType::Object(_) => Some(self.string("", span)),
-                TyirType::Float | TyirType::Bool | TyirType::Unit => None,
-            };
+            let ty = self.builder.slot_type(slot);
+            let initial = self.initial_value(ty, span);
             if let Some(value) = initial {
                 self.builder.push(Operation::Store { slot, value }, span);
             }

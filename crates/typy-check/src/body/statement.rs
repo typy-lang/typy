@@ -5,7 +5,7 @@ use typy_source::syntax::{Constant, Expr, Stmt};
 
 use super::BodyChecker;
 use super::flow::meet;
-use crate::typed::{TypedConstant, TypedExpr, TypedExprKind, TypedStmt};
+use crate::typed::{AssignTarget, TypedConstant, TypedExpr, TypedExprKind, TypedStmt};
 use crate::types::Type;
 
 impl BodyChecker<'_> {
@@ -32,7 +32,7 @@ impl BodyChecker<'_> {
                 let value = self.expression(value);
                 let targets = targets
                     .iter()
-                    .filter_map(|target| self.assign(target, value.ty, &value))
+                    .filter_map(|target| self.assign_target(target, value.ty.clone(), &value))
                     .collect();
                 TypedStmt::Assign {
                     targets,
@@ -47,9 +47,9 @@ impl BodyChecker<'_> {
                 ..
             } => {
                 let value = self.expression(value);
-                let target = self.assign(target, value.ty, &value)?;
+                let target = self.assign(target, value.ty.clone(), &value)?;
                 TypedStmt::Assign {
-                    targets: vec![target],
+                    targets: vec![AssignTarget::Name(target)],
                     value,
                     span: *span,
                 }
@@ -229,10 +229,12 @@ impl BodyChecker<'_> {
     }
 
     pub(super) fn return_statement(&mut self, value: Option<&Expr>, span: Span) -> TypedStmt {
-        let expected = self.returns.unwrap_or(Type::NoneType);
+        let expected = self.returns.clone().unwrap_or(Type::NoneType);
         let value = value.map(|value| self.expression(value));
-        let actual = value.as_ref().map_or(Type::NoneType, |value| value.ty);
-        if !actual.is_assignable_to(expected) {
+        let actual = value
+            .as_ref()
+            .map_or(Type::NoneType, |value| value.ty.clone());
+        if !actual.is_assignable_to(&expected) {
             let mut diagnostic = Diagnostic::new(
                 DiagnosticCode::error(405),
                 value.as_ref().map_or(span, |value| value.span),

@@ -21,6 +21,7 @@ fn span() -> Span {
 fn module(function: TyirFunction) -> TyirModule {
     TyirModule {
         functions: vec![function],
+        tuple_types: crate::TupleTypes::default(),
         strings: vec!["hi\n".to_owned()],
         entry: FunctionId(0),
     }
@@ -425,6 +426,7 @@ fn every_operation() -> TyirModule {
     builder.push_value(Operation::Constant(Constant::Unit), TyirType::Unit, span());
     TyirModule {
         functions: vec![builder.finish(), callee.finish()],
+        tuple_types: crate::TupleTypes::default(),
         strings: vec!["a".to_owned()],
         entry: FunctionId(0),
     }
@@ -622,4 +624,76 @@ fn every_runtime_function_has_a_complete_signature() {
         assert!(signature.parameters.len() <= 3, "{function:?}");
         assert_ne!(function.name(), "");
     }
+}
+
+#[test]
+fn a_tuple_of_a_type_the_module_does_not_have_fails() {
+    let mut function = division();
+    let tuple = function.values.len();
+    function.values.push(crate::value::ValueInfo {
+        ty: TyirType::Tuple(crate::TupleTypeId(7)),
+        representation: crate::value::ValueRepresentation::Inline,
+    });
+    function.blocks[0]
+        .instructions
+        .push(crate::instruction::Instruction {
+            result: Some(ValueId(u32::try_from(tuple).unwrap())),
+            operation: Operation::MakeTuple {
+                ty: crate::TupleTypeId(7),
+                items: Vec::new(),
+            },
+            span: span(),
+        });
+    assert!(message(&module(function)).contains("tuple#7 is not a type of the module"));
+}
+
+#[test]
+fn a_tuple_with_the_wrong_number_of_items_fails() {
+    let mut function = division();
+    let mut module = module_with_pair(&mut function);
+    if let Operation::MakeTuple { items, .. } = &mut module.functions[0].blocks[0]
+        .instructions
+        .last_mut()
+        .unwrap()
+        .operation
+    {
+        items.pop();
+    }
+    assert!(message(&module).contains("has 2 items, and 1 are given"));
+}
+
+#[test]
+fn an_item_of_a_value_that_is_not_a_tuple_fails() {
+    let mut function = division();
+    let mut module = module_with_pair(&mut function);
+    let last = module.functions[0].blocks[0].instructions.len() - 1;
+    module.functions[0].blocks[0].instructions[last].operation = Operation::TupleItem {
+        tuple: ValueId(0),
+        index: 0,
+    };
+    assert!(message(&module).contains("v0 is not a tuple"));
+}
+
+/// The division function with `tuple#0 (v0, v1)` added to its entry block, as `v7`.
+fn module_with_pair(function: &mut TyirFunction) -> TyirModule {
+    let mut tuple_types = crate::TupleTypes::default();
+    let pair = tuple_types.intern(vec![TyirType::Int, TyirType::Int]);
+    let value = ValueId(u32::try_from(function.values.len()).unwrap());
+    function.values.push(crate::value::ValueInfo {
+        ty: pair,
+        representation: crate::value::ValueRepresentation::Inline,
+    });
+    function.blocks[0]
+        .instructions
+        .push(crate::instruction::Instruction {
+            result: Some(value),
+            operation: Operation::MakeTuple {
+                ty: crate::TupleTypeId(0),
+                items: vec![ValueId(0), ValueId(1)],
+            },
+            span: span(),
+        });
+    let mut module = module(function.clone());
+    module.tuple_types = tuple_types;
+    module
 }

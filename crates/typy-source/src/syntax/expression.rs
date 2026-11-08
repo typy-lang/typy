@@ -95,6 +95,10 @@ pub enum Expr {
         id: String,
         span: Span,
     },
+    Tuple {
+        elements: Vec<Expr>,
+        span: Span,
+    },
     Other {
         kind: NodeKind,
         span: Span,
@@ -115,6 +119,7 @@ impl Expr {
             | Self::Constant { span, .. }
             | Self::Subscript { span, .. }
             | Self::Name { span, .. }
+            | Self::Tuple { span, .. }
             | Self::Other { span, .. } => *span,
         }
     }

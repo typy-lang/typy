@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy software requirements specification |
-| Version | 1.14 |
+| Version | 1.15 |
 | Status | Approved |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-08 |
@@ -447,7 +447,11 @@ TyPy rejects them (STD-04):
 
 ## 7. Open issues
 
-There are no open issues. A new question gets the next unused issue number.
+| ID | Question | Status |
+| --- | --- | --- |
+| OI-18 | How do items of type `float` compare inside containers? CPython compares container items by identity before value, so with `x = float("nan")`, `(x,) == (x,)`, `[x] == [x]` and `x in [x]` are `True`, while TyPy holds floats without an object and compares them by value. | Open. Tuples in 0.2 compare `float` items by value, as `x == x` does; lists, `in` and the other containers settle it before 0.2 ships. |
+
+A new question gets the next unused issue number.
 
 ## 8. Resolved issues
 

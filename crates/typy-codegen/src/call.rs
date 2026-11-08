@@ -41,15 +41,27 @@ impl<'ctx> FunctionEmitter<'_, '_, 'ctx> {
 
     /// Adds or drops a reference; an `int` word is counted only when it points to a large integer, which the runtime checks.
     pub(super) fn count(&mut self, value: ValueId, increment: bool) -> Result<(), CodegenError> {
-        let function = match (self.function.value(value).ty, increment) {
+        let ty = self.function.value(value).ty;
+        let argument = self.value(value)?;
+        self.count_value(ty, argument, increment)
+    }
+
+    /// Adds or drops a reference held by `value` of type `ty`; a tuple does so for each counted item.
+    pub(crate) fn count_value(
+        &mut self,
+        ty: TyirType,
+        value: inkwell::values::BasicValueEnum<'ctx>,
+        increment: bool,
+    ) -> Result<(), CodegenError> {
+        let function = match (ty, increment) {
+            (TyirType::Tuple(id), _) => return self.count_tuple(id, value, increment),
             (TyirType::Int, true) => Internal::IntIncrement,
             (TyirType::Int, false) => Internal::IntDecrement,
             (_, true) => Internal::Increment,
             (_, false) => Internal::Decrement,
         };
         let callee = internal_function(self.shared.context, self.shared.module, function);
-        let argument = self.value(value)?;
-        self.builder.build_call(callee, &[argument.into()], "")?;
+        self.builder.build_call(callee, &[value.into()], "")?;
         Ok(())
     }
 }

@@ -116,7 +116,7 @@ if __name__ == \"__main__\":
     assert_eq!(fib.module, "__main__");
     assert_eq!(program.symbol(fib.parameters[0]).ty, Type::Int);
     let total = program.symbol(entry.locals[0]);
-    assert_eq!((total.name.as_str(), total.ty), ("total", Type::Int));
+    assert_eq!((total.name.as_str(), &total.ty), ("total", &Type::Int));
 }
 
 #[test]
@@ -128,7 +128,7 @@ fn types_of_expressions_follow_python() {
     let types: Vec<Type> = entry
         .locals
         .iter()
-        .map(|symbol| program.symbol(*symbol).ty)
+        .map(|symbol| program.symbol(*symbol).ty.clone())
         .collect();
     assert_eq!(
         types,
@@ -667,4 +667,73 @@ fn a_variable_read_twice_before_assignment_is_reported_once() {
     let diagnostics = TypeChecker::check(&project).unwrap_err();
     let codes: Vec<String> = diagnostics.iter().map(|d| d.code().to_string()).collect();
     assert_eq!(codes, ["E0306"]);
+}
+
+#[test]
+fn tuples_have_one_type_per_item() {
+    let cases: &[(&str, Result<&str, &[&str]>)] = &[
+        ("(i, s)", Ok("tuple[int, str]")),
+        ("()", Ok("tuple[()]")),
+        ("(i, (f, b))", Ok("tuple[int, tuple[float, bool]]")),
+        ("(i, s)[0]", Ok("int")),
+        ("(i, s)[-1]", Ok("str")),
+        ("(i, s)[2]", Err(&["E0307"])),
+        ("(i, s)[-3]", Err(&["E0307"])),
+        ("(i, s)[i]", Err(&["E0307"])),
+        ("(i, s)[missing]", Err(&["E0205"])),
+        ("(missing, i)[i]", Err(&["E0205"])),
+        ("(i,) + (s, f)", Ok("tuple[int, str, float]")),
+        ("(i, s) - (i, s)", Err(&["E0401"])),
+        ("len((i, s))", Ok("int")),
+        ("(i, s) == (i, s)", Ok("bool")),
+        ("(1, 2.5) == (1.0, 2)", Ok("bool")),
+        ("(i,) == (s,)", Err(&["E0407"])),
+        ("(i,) == (i, i)", Err(&["E0407"])),
+        ("(i, s) < (i, s)", Ok("bool")),
+        ("(n,) < (n,)", Ok("bool")),
+        ("(i, n) < (i, n)", Ok("bool")),
+        ("n < n", Err(&["E0407"])),
+        ("(n,) < (i,)", Err(&["E0407"])),
+        ("(i,) < (i, i)", Err(&["E0407"])),
+    ];
+    let mut wrong = Vec::new();
+    for (expression, expected) in cases {
+        let expected = expected.map(str::to_owned).map_err(|codes| {
+            codes
+                .iter()
+                .map(|code| (*code).to_owned())
+                .collect::<Vec<_>>()
+        });
+        let actual = type_of(expression);
+        if actual != expected {
+            wrong.push(format!(
+                "{expression}: expected {expected:?}, got {actual:?}"
+            ));
+        }
+    }
+    assert!(wrong.is_empty(), "{}", wrong.join("\n"));
+}
+
+#[test]
+fn tuple_annotations_and_unpacking_follow_the_item_types() {
+    accepted("single: tuple[int] = (1,)\nprint(single)\n");
+    accepted(
+        "pair: tuple[int, str] = (1, \"a\")\nempty: tuple[()] = ()\nn, s = pair\nn += 1\na, (b, c) = 1, (2.5, \"x\")\nb = 1.5\n",
+    );
+    accepted(
+        "def swap(p: tuple[int, str]) -> tuple[str, int]:\n    a, b = p\n    return b, a\n\n\nprint(swap((1, \"x\")))\n",
+    );
+    let cases: &[(&str, &[&str])] = &[
+        ("a, b = (1, 2, 3)\n", &["E0308"]),
+        ("a, b = 1\n", &["E0308"]),
+        ("a, b = 1, \"x\"\na = \"y\"\n", &["E0402"]),
+        ("p: tuple = (1, 2)\n", &["E0408"]),
+        ("p: tuple[int, ...] = (1, 2)\n", &["E0201"]),
+        ("p: tuple[...] = ()\n", &["E0201"]),
+        ("p: tuple[int, str] = (1, 2)\n", &["E0402"]),
+        ("p: tuple[int] = (1, 2)\n", &["E0402"]),
+    ];
+    for (source, expected) in cases {
+        assert_eq!(rejected(source), *expected, "{source:?}");
+    }
 }

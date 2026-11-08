@@ -52,6 +52,10 @@ impl FunctionLowerer<'_> {
                 let truth = self.truth(*value, span);
                 Self::borrowed(truth, TyirType::Bool)
             }
+            (Builtin::Len, [tuple]) if matches!(tuple.ty, TyirType::Tuple(_)) => {
+                let length = self.tuple_length(tuple.ty).to_string();
+                Self::borrowed(self.constant(Constant::Int(length), span), TyirType::Int)
+            }
             (Builtin::Len, [text]) => {
                 self.call_runtime(RuntimeFunction::StrLength, vec![text.value], span)
             }

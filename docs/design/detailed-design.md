@@ -3,10 +3,10 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy detailed design |
-| Version | 1.17 |
+| Version | 1.18 |
 | Status | Approved |
 | Owner | typy-lang contributors |
-| Last updated | 2026-11-07 |
+| Last updated | 2026-11-08 |
 
 ## 1. Purpose and scope
 
@@ -15,12 +15,13 @@ rules, and each type with its fields, behaviour and errors, under the names
 the code uses. It builds on the approved
 [software architecture](../architecture/architecture.md), the
 [domain model](../modeling/domain-model.md) and the decision records
-ADR-0001 to ADR-0007.
+ADR-0001 to ADR-0009.
 
-It covers release 0.1: every requirement of the specification whose release
-is 0.1. Each later release extends this document in the same change as its
-code. Where a type gains fields or variants in a later release, the text
-says so with the release number.
+It covers release 0.1, every requirement of the specification whose release
+is 0.1, and the parts of release 0.2 written so far. Each later release
+extends this document in the same change as its code. Where a type gains
+fields or variants in a later release, the text says so with the release
+number.
 
 ## 2. Workspace layout
 
@@ -240,7 +241,7 @@ help: install `cc`, which TyPy runs to link the program
 
 `render_json` is planned for 0.3 (DIA-05).
 
-### 4.3 Diagnostic codes in 0.1
+### 4.3 Diagnostic codes
 
 The registry in `registry.rs` lists every code with its summary, the rule
 it enforces and its status. `typy explain` (0.3) reads the same table.
@@ -265,6 +266,8 @@ it enforces and its status. `typy explain` (0.3) reads the same table.
 | E0304 | Truth test on a value of an unsupported type | EXP-10 |
 | E0305 | Conditional expression with branches of different types | EXP-11 |
 | E0306 | Variable read before it is assigned on every path | TYP-12 |
+| E0307 | Tuple indexed other than by an integer literal inside it | DAT-08 |
+| E0308 | Unpacking into a different number of targets | SMT-02 |
 | E0401 | Operator not defined for these operand types | EXP-02 |
 | E0402 | Assignment changes the type of a variable | TYP-03 |
 | E0403 | `Any`, `cast` or an untyped value | TYP-10 |
@@ -272,6 +275,7 @@ it enforces and its status. `typy explain` (0.3) reads the same table.
 | E0405 | Returned value of the wrong type | TYP-01 |
 | E0406 | Arithmetic on `bool` | DAT-03 |
 | E0407 | Comparison between unsupported types | EXP-06 |
+| E0408 | `tuple` annotation without its item types | TYP-06 |
 | E0701 | C toolchain program not found | A-01 |
 | E0702 | Link failed | A-01 |
 | E0703 | Runtime archive missing, or from another TyPy version | None |
@@ -387,16 +391,20 @@ The builtins of 0.1 (LIB-01) are not written in Python. `print`, `min` and
 
 ### 7.1 Types
 
-`Type` is an enum. In 0.1 its variants are `Int`, `Float`, `Bool`, `Str`,
-`NoneType` and `Error`. `Error` is the type of an expression that
-already has a diagnostic; every check accepts it silently, so one cause
-gives one error (DIA-04). `List`, `Tuple`, `Dict`, `Set`, `Bytes` and
-`Class` are planned for 0.2; `Union`, `TypeParameter` and `Callable` for
-0.4 and 1.0.
+`Type` is an enum. Its variants are `Int`, `Float`, `Bool`, `Str`,
+`NoneType`, `Tuple(Vec<Type>)` from 0.2, and `Error`. `Error` is the type of
+an expression that already has a diagnostic; every check accepts it
+silently, so one cause gives one error (DIA-04). A type built from other
+types holds them, so `Type` is `Clone` and not `Copy`, and two types are
+equal when their structure is. `List`, `Dict`, `Set`, `Bytes` and `Class`
+follow in 0.2; `Union`, `TypeParameter` and `Callable` in 0.4 and 1.0.
 
 | Method | Behaviour |
 | --- | --- |
-| `is_assignable_to(&self, target)` | True when equal, or either side is `Error`. An `Int` is not assignable to `Float` (TYP-09) |
+| `is_assignable_to(&self, target)` | True when equal, or either side is `Error`; a tuple item by item. An `Int` is not assignable to `Float` (TYP-09) |
+| `can_test_equality(&self, other)` | True for the same type, two numbers, or tuples of one length whose items can (EXP-06) |
+| `can_order(&self, other)` | The same, except that `None` cannot be ordered; inside a tuple a pair of `None` items is accepted, because CPython orders tuples by the first pair of items that differ and two `None` items never do |
+| `has_error(&self)` | True when the type is or holds `Error` |
 | `Display` | The Python spelling, such as `int` or `None` |
 | `with_article(&self)` | The spelling with its article, for messages: `an int`, `a str`, `None` |
 
@@ -440,6 +448,20 @@ function is defined" (EXP-16) hold trivially.
 A `TypedFunction` holds its `FunctionSignature` and its body as typed
 statements, in which every expression is a `TypedExpr` with a `kind`, a
 `ty` and a `span`.
+
+Tuples (DAT-08, SMT-02, TYP-06) add these forms. `TypedExprKind::Tuple`
+holds a display's items. `TypedExprKind::TupleItem { tuple, index }` reads
+an item at a position known when compiling: the index is an integer
+literal, or a negated one counted from the end, and E0307 reports any other
+index or one outside the tuple, a program CPython would stop with
+`IndexError`. `TypedStmt::Assign` stores into `AssignTarget`s, each a
+`Name(SymbolId)` or a `Tuple` of targets; unpacking needs a tuple with one
+item for each target, or E0308. An annotation `tuple[A, B]` names each item
+and `tuple[()]` the empty tuple; a bare `tuple` is E0408, and
+`tuple[T, ...]` arrives with lists. `+` joins two tuples, `len` gives a
+constant, and `==`, `!=`, `<`, `<=`, `>` and `>=` compare tuples whose items
+compare. Iterating a tuple, `in`, and indexing at a computed position need
+a stored sequence and arrive with lists.
 
 ### 7.2 Behaviour
 
@@ -510,7 +532,12 @@ Function fn0 __main__.twice(n: int) -> int @1:1
 
 ### 8.1 Types
 
-`TyirType` is `Int`, `Float`, `Bool`, `Unit` or `Object(TypeId)`. An `Int`
+`TyirType` is `Int`, `Float`, `Bool`, `Unit`, `Object(TypeId)` or, from
+0.2, `Tuple(TupleTypeId)`. It is `Copy`: a tuple type is a number in the
+module's `TupleTypes`, which interns each distinct list of item types and
+says whether a type is counted. A tuple is a value with its items in place,
+not an object, as ADR-0001 decides, so `is` cannot observe a copy (EXP-08),
+and it is counted when an item is. An `Int`
 is a 64-bit word: an inline value has its lowest bit set and holds the
 number shifted left by one, so it covers -2^62 to 2^62 - 1; any other value
 is a pointer to a `BigInt` (ADR-0001, DAT-01). `Str` values are
@@ -550,8 +577,10 @@ and the `span` of the source it came from, which becomes the line of a
 `TracebackEntry`. An `Operation` cannot raise. It is a constant, a `load`
 or `store`, an `int`, `float` or `bool` operation that cannot raise, a
 comparison or truth test of one `ScalarKind`, a call of a runtime function
-or a program function that cannot raise, or an `Increment` or `Decrement`
-of a counted value.
+or a program function that cannot raise, `MakeTuple { ty, items }`, which
+takes over its items' references, `TupleItem { tuple, index }`, which
+borrows an item, or an `Increment` or `Decrement` of a counted value; for a
+tuple it counts each counted item.
 
 `RuntimeFunction` lists the runtime's functions, each with its parameter
 types, result type and whether it may raise, such as `int_floor_divide`
@@ -631,6 +660,7 @@ graph, symbol names and the string pool.
 | `RaiseAnalysis` | A function may raise when its lowered code contains an `invoke`. Lowering runs again until that set of functions stops growing, so the analysis always agrees with the code; the verifier checks it |
 | Statements | `if`, `while` and `for` with `else`; `break` and `continue` jump to the loop's targets. `for` over `range` evaluates its arguments once into hidden slots, raises `ValueError` for a zero step unless the step is a nonzero constant, and keeps its counter apart from the target, as CPython's iterator does |
 | Expressions | `and` and `or` return an operand and stop early (EXP-09); comparison chains evaluate each operand once and stop at the first false link (EXP-06); mixed `int` and `float` arithmetic converts the `int` with an `invoke`, because a large `int` raises `OverflowError`; `int` and `float` compare exactly in the runtime |
+| Tuples | A display evaluates every item first, so an exception from a later item still releases the earlier ones, then takes over their references. An item read from a tuple the function owns gets its own reference before the tuple is released. A tuple target stores each item into its target from left to right after the whole value is evaluated, so `a, b = b, a` swaps. `str` and `repr` join the `repr` of each item, with a comma after a single item, as `(1,)`. Two tuples compare item by item: the first pair that is not equal decides, and tuples whose items are all equal are equal. A counted tuple slot starts as a tuple of zeros, empty strings and `None` |
 | Builtins | Each builtin of 0.1 becomes runtime calls. `print` evaluates every argument in source order, then converts and writes each value. `min` and `max` keep the first value on a tie, as CPython does |
 | Stack | A function in a cycle of calls invokes the runtime's stack check on entry (FUN-02) |
 
@@ -658,11 +688,14 @@ function marked `minsize` and `optsize`.
 | `assembly(module, target, optimization, lookup)` | Assembly text, for `--emit=asm` |
 
 Each declares every function first, emits each one, verifies the LLVM
-module, runs the pipeline and writes the output. The target machine uses
-the baseline CPU of the triple, so the output runs on every machine of the
-target and does not depend on the build host (NFR-06). Only the entry
-function is visible outside the object. `lookup` gives the file names and
-lines of traceback entries. Every error is internal, E9001.
+module, runs the pipeline and writes the output. A tuple is an LLVM struct
+of its items that have a value, so an item of type `None` takes no field and
+the empty tuple is `{}`; `MakeTuple` inserts each field and `TupleItem`
+extracts one. Tuples pass to and return from program functions by value. The
+target machine uses the baseline CPU of the triple, so the output runs on
+every machine of the target and does not depend on the build host (NFR-06).
+Only the entry function is visible outside the object. `lookup` gives the
+file names and lines of traceback entries. Every error is internal, E9001.
 
 The crate has one module per responsibility: the target, the optimisation
 level, the shared layout, static objects, the calling convention, runtime

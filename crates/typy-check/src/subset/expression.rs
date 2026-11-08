@@ -7,9 +7,33 @@ use super::Walker;
 use super::feature::{Feature, feature, planned};
 
 impl Walker {
-    /// Annotations in 0.1 name `int`, `float`, `bool`, `str` or `None`; the checker reports any other name.
+    /// Annotations name `int`, `float`, `bool`, `str`, `None` or `tuple[...]`; the checker reports any other name.
     pub(super) fn annotation(&mut self, annotation: &Expr) {
         match annotation {
+            Expr::Subscript { value, index, .. } if matches!(value.as_ref(), Expr::Name { id, .. } if id == "tuple") =>
+            {
+                match index.as_ref() {
+                    // `tuple[int, ...]` is checked, and reported, by the checker.
+                    Expr::Tuple { elements, .. } => {
+                        for element in elements {
+                            if !matches!(
+                                element,
+                                Expr::Constant {
+                                    value: Constant::Ellipsis,
+                                    ..
+                                }
+                            ) {
+                                self.annotation(element);
+                            }
+                        }
+                    }
+                    Expr::Constant {
+                        value: Constant::Ellipsis,
+                        ..
+                    } => {}
+                    single => self.annotation(single),
+                }
+            }
             Expr::Subscript { span, .. } => {
                 self.report(
                     *span,
@@ -160,6 +184,11 @@ impl Walker {
                 self.expression(index);
             }
             Expr::Name { .. } => {}
+            Expr::Tuple { elements, .. } => {
+                for element in elements {
+                    self.expression(element);
+                }
+            }
             Expr::Other { kind, span } => self.report(*span, feature(*kind)),
         }
     }

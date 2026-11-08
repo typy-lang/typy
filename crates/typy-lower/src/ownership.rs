@@ -16,7 +16,7 @@ pub(crate) struct Lowered {
 impl FunctionLowerer<'_> {
     /// Returns a value the function now owns, such as the result of a call; it is tracked until it is released or moved.
     pub(crate) fn produced(&mut self, value: ValueId, ty: TyirType) -> Lowered {
-        let owned = ty.is_counted();
+        let owned = self.counted(ty);
         if owned {
             self.temporaries.push(value);
         }
@@ -54,7 +54,7 @@ impl FunctionLowerer<'_> {
     pub(crate) fn take_reference(&mut self, lowered: Lowered, span: Span) -> ValueId {
         if lowered.owned {
             self.untrack(lowered.value);
-        } else if lowered.ty.is_counted() {
+        } else if self.counted(lowered.ty) {
             self.builder.push(Operation::Increment(lowered.value), span);
         }
         lowered.value
@@ -63,7 +63,7 @@ impl FunctionLowerer<'_> {
     /// Stores a value in a slot, which takes over its reference and releases the value it held.
     pub(crate) fn store(&mut self, slot: SlotId, lowered: Lowered, span: Span) {
         let value = self.take_reference(lowered, span);
-        if lowered.ty.is_counted() {
+        if self.counted(lowered.ty) {
             let old = self
                 .builder
                 .push_value(Operation::Load(slot), lowered.ty, span);
@@ -86,7 +86,7 @@ impl FunctionLowerer<'_> {
         for index in 0..self.builder.slot_count() {
             let slot = SlotId(u32::try_from(index).unwrap_or(u32::MAX));
             let ty = self.builder.slot_type(slot);
-            if ty.is_counted() {
+            if self.counted(ty) {
                 let value = self.builder.push_value(Operation::Load(slot), ty, span);
                 self.builder.push(Operation::Decrement(value), span);
             }

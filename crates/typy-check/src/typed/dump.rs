@@ -8,7 +8,7 @@ use typy_diagnostics::{SourceLookup, Span};
 use super::expression::{TypedExpr, TypedExprKind};
 use super::function::TypedFunction;
 use super::program::TypedProgram;
-use super::statement::TypedStmt;
+use super::statement::{AssignTarget, TypedStmt};
 use super::symbol::SymbolId;
 
 /// Returns the program as text: each function with its signature and locals, then its body.
@@ -76,6 +76,17 @@ impl Dump<'_> {
         }
     }
 
+    /// Writes an assignment target: a variable with its type, or a tuple of targets.
+    fn target(&self, target: &AssignTarget) -> String {
+        match target {
+            AssignTarget::Name(id) => self.symbol(*id),
+            AssignTarget::Tuple(targets) => {
+                let parts: Vec<String> = targets.iter().map(|target| self.target(target)).collect();
+                format!("({})", parts.join(", "))
+            }
+        }
+    }
+
     fn statement(&mut self, depth: usize, statement: &TypedStmt) {
         match statement {
             TypedStmt::Assign {
@@ -83,7 +94,7 @@ impl Dump<'_> {
                 value,
                 span,
             } => {
-                let names: Vec<String> = targets.iter().map(|id| self.symbol(*id)).collect();
+                let names: Vec<String> = targets.iter().map(|target| self.target(target)).collect();
                 self.line(depth, &format!("Assign {}", names.join(", ")), *span);
                 self.expression(depth + 1, value);
             }
@@ -152,7 +163,7 @@ impl Dump<'_> {
     }
 
     fn expression(&mut self, depth: usize, expression: &TypedExpr) {
-        let ty = expression.ty;
+        let ty = &expression.ty;
         let label = match &expression.kind {
             TypedExprKind::Constant(constant) => format!("Constant {constant:?}"),
             TypedExprKind::Local(id) => format!("Local {}", self.program.symbol(*id).name),
@@ -170,6 +181,8 @@ impl Dump<'_> {
             }
             TypedExprKind::Builtin { builtin, .. } => format!("Builtin {builtin:?}"),
             TypedExprKind::Index { .. } => "Index".to_owned(),
+            TypedExprKind::Tuple(_) => "Tuple".to_owned(),
+            TypedExprKind::TupleItem { index, .. } => format!("TupleItem {index}"),
         };
         self.line(depth, &format!("{label} : {ty}"), expression.span);
         for child in children(expression) {
@@ -191,7 +204,10 @@ fn children(expression: &TypedExpr) -> Vec<&TypedExpr> {
         } => {
             vec![left, right]
         }
-        TypedExprKind::Unary { operand, .. } => vec![operand],
+        TypedExprKind::Unary { operand, .. } | TypedExprKind::TupleItem { tuple: operand, .. } => {
+            vec![operand]
+        }
+        TypedExprKind::Tuple(items) => items.iter().collect(),
         TypedExprKind::BoolOp { values, .. }
         | TypedExprKind::Builtin {
             arguments: values, ..

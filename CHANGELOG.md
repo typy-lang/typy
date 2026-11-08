@@ -6,6 +6,16 @@ All notable changes to TyPy are recorded here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- Tuples: displays such as `(1, "a")`, annotations such as
+  `tuple[int, str]` and `tuple[()]`, items read at a literal position such
+  as `pair[0]` or `pair[-1]`, `+`, `len`, comparisons item by item, truth
+  tests, `str` and `repr`, and tuples as arguments and return values
+  (DAT-08, TYP-06).
+- Unpacking assignment into names and nested tuples of names, such as
+  `a, b = b, a` and `x, (y, z) = t` (SMT-02).
+
 ### Changed
 
 - The runtime's size budget (NFR-02) is measured on the runtime a hello

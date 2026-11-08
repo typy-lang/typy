@@ -18,12 +18,16 @@ impl FunctionLowerer<'_> {
         operator: BinaryOperator,
         left: Lowered,
         right: Lowered,
-        result: Type,
+        result: &Type,
         span: Span,
     ) -> Lowered {
         use BinaryOperator as Op;
         let lowered = match (left.ty, right.ty) {
-            (TyirType::Int, TyirType::Int) if result == Type::Int => {
+            (TyirType::Tuple(_), TyirType::Tuple(_)) => {
+                let ty = self.lowered_type(result);
+                return self.tuple_concat(left, right, ty, span);
+            }
+            (TyirType::Int, TyirType::Int) if *result == Type::Int => {
                 self.int_binary(operator, left.value, right.value, span)
             }
             (TyirType::Int, TyirType::Int) if operator == Op::Div => self.call_runtime(

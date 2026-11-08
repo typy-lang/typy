@@ -18,7 +18,7 @@ impl BodyChecker<'_> {
         span: Span,
     ) -> TypedExpr {
         if let Some(symbol) = self.locals.get(name) {
-            let ty = self.types.get(symbol).copied().unwrap_or(Type::Error);
+            let ty = self.types.get(symbol).cloned().unwrap_or(Type::Error);
             return self.error(
                 Diagnostic::new(
                     DiagnosticCode::error(401),
@@ -74,7 +74,7 @@ impl BodyChecker<'_> {
             };
             self.expect(
                 &value,
-                parameter.ty,
+                parameter.ty.clone(),
                 &format!("argument `{}`", parameter.name),
             );
             filled[index] = true;
@@ -116,7 +116,7 @@ impl BodyChecker<'_> {
             }
             self.expect(
                 &value,
-                signature.parameters[index].ty,
+                signature.parameters[index].ty.clone(),
                 &format!("argument `{}`", keyword_name.name),
             );
             filled[index] = true;

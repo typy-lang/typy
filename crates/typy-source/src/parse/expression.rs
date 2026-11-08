@@ -133,7 +133,14 @@ impl Converter<'_> {
             ast::Expr::Attribute(node) => self.other(NodeKind::Attribute, node.range),
             ast::Expr::Starred(node) => self.other(NodeKind::Starred, node.range),
             ast::Expr::List(node) => self.other(NodeKind::List, node.range),
-            ast::Expr::Tuple(node) => self.other(NodeKind::Tuple, node.range),
+            ast::Expr::Tuple(node) => Expr::Tuple {
+                elements: node
+                    .elts
+                    .iter()
+                    .map(|element| self.expression(element))
+                    .collect(),
+                span: self.span(node.range),
+            },
             ast::Expr::Slice(node) => self.other(NodeKind::Slice, node.range),
             ast::Expr::IpyEscapeCommand(node) => self.other(NodeKind::IpyEscapeCommand, node.range),
         }

@@ -184,6 +184,20 @@ pub enum Operation {
         /// The arguments, borrowed.
         arguments: Vec<ValueId>,
     },
+    /// A tuple of these values, which it takes over (DAT-08).
+    MakeTuple {
+        /// The tuple's type.
+        ty: crate::types::TupleTypeId,
+        /// One value for each item, in order.
+        items: Vec<ValueId>,
+    },
+    /// The item of a tuple at a position, borrowed from the tuple.
+    TupleItem {
+        /// The tuple.
+        tuple: ValueId,
+        /// The position, from 0.
+        index: u32,
+    },
     /// Adds one to the count of a counted value (ADR-0001).
     Increment(ValueId),
     /// Takes one from the count of a counted value, and frees it at zero.

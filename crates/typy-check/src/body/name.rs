@@ -39,7 +39,7 @@ impl BodyChecker<'_> {
                     )),
                 );
             }
-            let ty = self.types.get(&symbol).copied().unwrap_or(Type::Error);
+            let ty = self.types.get(&symbol).cloned().unwrap_or(Type::Error);
             return Self::typed(TypedExprKind::Local(symbol), ty, span);
         }
         if id == "__name__" {

@@ -7,18 +7,22 @@ use typy_tyir::{Callee, Constant, Operation, ScalarKind, Terminator, TyirType, V
 
 use crate::function::FunctionLowerer;
 use crate::ownership::Lowered;
-use crate::types::tyir_type;
 
 impl FunctionLowerer<'_> {
     /// Lowers an expression; the caller releases or moves the result.
     pub(crate) fn expression(&mut self, expression: &TypedExpr) -> Lowered {
         let span = expression.span;
-        let ty = tyir_type(expression.ty);
+        let ty = self.lowered_type(&expression.ty);
         match &expression.kind {
             TypedExprKind::Constant(constant) => self.typed_constant(constant, span),
             TypedExprKind::Local(symbol) => {
                 let slot = self.slots[symbol];
                 self.load(slot, span)
+            }
+            TypedExprKind::Tuple(items) => self.tuple_display(items, ty, span),
+            TypedExprKind::TupleItem { tuple, index } => {
+                let tuple = self.expression(tuple);
+                self.tuple_item(tuple, *index, ty, span)
             }
             TypedExprKind::ModuleName => {
                 let value = self.string("__main__", span);
@@ -31,7 +35,7 @@ impl FunctionLowerer<'_> {
             } => {
                 let left = self.expression(left);
                 let right = self.expression(right);
-                self.binary(*operator, left, right, expression.ty, span)
+                self.binary(*operator, left, right, &expression.ty, span)
             }
             TypedExprKind::Unary { operator, operand } => {
                 let operand = self.expression(operand);
@@ -62,8 +66,10 @@ impl FunctionLowerer<'_> {
                 self.print(values, sep.as_deref(), end.as_deref(), span)
             }
             TypedExprKind::Builtin { builtin, arguments } => {
-                let types: Vec<typy_check::Type> =
-                    arguments.iter().map(|argument| argument.ty).collect();
+                let types: Vec<typy_check::Type> = arguments
+                    .iter()
+                    .map(|argument| argument.ty.clone())
+                    .collect();
                 let values: Vec<Lowered> = arguments
                     .iter()
                     .map(|argument| self.expression(argument))
@@ -113,6 +119,11 @@ impl FunctionLowerer<'_> {
             TyirType::Int => ScalarKind::Int,
             TyirType::Float => ScalarKind::Float,
             TyirType::Object(_) => ScalarKind::Str,
+            // A tuple's length is fixed by its type, so its truth is too.
+            TyirType::Tuple(_) => {
+                let filled = self.tuple_length(lowered.ty) > 0;
+                return self.constant(Constant::Bool(filled), span);
+            }
         };
         self.builder.push_value(
             Operation::IsTrue {
@@ -163,7 +174,7 @@ impl FunctionLowerer<'_> {
                 arguments: vec![owned],
             });
             self.builder.switch_to(next);
-            if ty.is_counted() {
+            if self.counted(ty) {
                 self.builder.push(Operation::Decrement(owned), span);
             }
         }

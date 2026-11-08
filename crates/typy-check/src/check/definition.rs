@@ -72,7 +72,7 @@ pub(super) fn collect_functions<'tree>(
             let default = parameter
                 .default
                 .as_ref()
-                .and_then(|default| default_value(default, ty, diagnostics));
+                .and_then(|default| default_value(default, &ty, diagnostics));
             signature_parameters.push(SignatureParameter {
                 name: parameter.name.name.clone(),
                 ty,
@@ -109,7 +109,11 @@ pub(super) fn collect_functions<'tree>(
 }
 
 /// Returns the constant of a default value, checked against the parameter's type (TYP-09).
-fn default_value(default: &Expr, ty: Type, diagnostics: &mut Diagnostics) -> Option<TypedConstant> {
+fn default_value(
+    default: &Expr,
+    ty: &Type,
+    diagnostics: &mut Diagnostics,
+) -> Option<TypedConstant> {
     let Expr::Constant { value, span } = default else {
         return None;
     };
@@ -131,7 +135,7 @@ fn default_value(default: &Expr, ty: Type, diagnostics: &mut Diagnostics) -> Opt
                 ty.with_article()
             ),
         )
-        .with_rule(if ty == Type::Float {
+        .with_rule(if *ty == Type::Float {
             RuleId::TYP_09
         } else {
             RuleId::TYP_03

@@ -108,6 +108,16 @@ pub const CODES: &[CodeInfo] = &[
         RuleId::TYP_12,
     ),
     active(
+        307,
+        "tuple indexed other than by an integer literal inside it",
+        RuleId::DAT_08,
+    ),
+    active(
+        308,
+        "unpacking into a different number of targets",
+        RuleId::SMT_02,
+    ),
+    active(
         401,
         "operator not defined for these operand types",
         RuleId::EXP_02,
@@ -122,6 +132,11 @@ pub const CODES: &[CodeInfo] = &[
     active(405, "returned value of the wrong type", RuleId::TYP_01),
     active(406, "arithmetic on `bool`", RuleId::DAT_03),
     active(407, "comparison between unsupported types", RuleId::EXP_06),
+    active(
+        408,
+        "`tuple` annotation without its item types",
+        RuleId::TYP_06,
+    ),
     active(701, "C toolchain program not found", RuleId::A_01),
     active(702, "link failed", RuleId::A_01),
     CodeInfo {

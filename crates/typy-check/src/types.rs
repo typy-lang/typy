@@ -1,9 +1,10 @@
-//! The static types of release 0.1.
+//! The static types: the scalars of 0.1, and from 0.2 the types built from other types.
 
 use std::fmt;
 
-/// The static type of a value (TYP-11).
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+/// The static type of a value (TYP-11). Types built from others, such as a tuple, hold their
+/// parts, and two types are equal when their structure is.
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum Type {
     /// `int`, without a size limit (DAT-01).
     Int,
@@ -15,32 +16,93 @@ pub enum Type {
     Str,
     /// The type of `None` (DAT-04).
     NoneType,
+    /// `tuple[A, B, ...]`: a fixed number of items, each with its own type (DAT-08).
+    Tuple(Vec<Type>),
     /// The type of an expression that already has a diagnostic; every check accepts it, so one cause gives one error (DIA-04).
     Error,
 }
 
 impl Type {
-    /// Returns true when a value of this type may be stored where `target` is declared (TYP-03, TYP-09).
+    /// Returns true when a value of this type may be stored where `target` is declared, item by
+    /// item for a tuple (TYP-03, TYP-09).
     #[must_use]
-    pub fn is_assignable_to(self, target: Self) -> bool {
-        self == target || self == Self::Error || target == Self::Error
+    pub fn is_assignable_to(&self, target: &Self) -> bool {
+        match (self, target) {
+            (Self::Error, _) | (_, Self::Error) => true,
+            (Self::Tuple(items), Self::Tuple(targets)) => {
+                items.len() == targets.len()
+                    && items
+                        .iter()
+                        .zip(targets)
+                        .all(|(item, target)| item.is_assignable_to(target))
+            }
+            _ => self == target,
+        }
+    }
+
+    /// Returns true when the type is `Error`, or holds it, so a check of it would repeat an error.
+    #[must_use]
+    pub fn has_error(&self) -> bool {
+        match self {
+            Self::Error => true,
+            Self::Tuple(items) => items.iter().any(Self::has_error),
+            _ => false,
+        }
+    }
+
+    /// Returns true when `==` and `!=` accept a value of this type against one of `other`: the
+    /// same type, two numbers, or tuples whose items accept each other (EXP-06).
+    #[must_use]
+    pub fn can_test_equality(&self, other: &Self) -> bool {
+        match (self, other) {
+            (Self::Error, _) | (_, Self::Error) => true,
+            (Self::Tuple(left), Self::Tuple(right)) => {
+                left.len() == right.len()
+                    && left
+                        .iter()
+                        .zip(right)
+                        .all(|(left, right)| left.can_test_equality(right))
+            }
+            _ => self == other || (self.is_numeric() && other.is_numeric()),
+        }
+    }
+
+    /// Returns true when `<`, `<=`, `>` and `>=` accept a value of this type against one of
+    /// `other`: the same type other than `None`, two numbers, or tuples whose items order
+    /// against each other (EXP-06). CPython orders tuples by the first pair of items that are
+    /// not equal, so a pair of `None` items, which are always equal, is never ordered and is
+    /// accepted inside a tuple.
+    #[must_use]
+    pub fn can_order(&self, other: &Self) -> bool {
+        match (self, other) {
+            (Self::Error, _) | (_, Self::Error) => true,
+            (Self::Tuple(left), Self::Tuple(right)) => {
+                left.len() == right.len()
+                    && left.iter().zip(right).all(|(left, right)| {
+                        (*left == Self::NoneType && *right == Self::NoneType)
+                            || left.can_order(right)
+                    })
+            }
+            (Self::NoneType, _) | (_, Self::NoneType) => false,
+            _ => self == other || (self.is_numeric() && other.is_numeric()),
+        }
     }
 
     /// Returns true for `int` and `float`.
     #[must_use]
-    pub fn is_numeric(self) -> bool {
+    pub fn is_numeric(&self) -> bool {
         matches!(self, Self::Int | Self::Float)
     }
 
     /// Returns true when a value of this type may be used in a truth test (EXP-10).
     #[must_use]
-    pub fn is_truth_testable(self) -> bool {
+    pub fn is_truth_testable(&self) -> bool {
         true
     }
 
     /// Returns the type's name with its article, for messages: `an int`, `a str`, `None`.
     #[must_use]
-    pub fn with_article(self) -> String {
+    pub fn with_article(&self) -> String {
         match self {
             Self::Int => "an int".to_owned(),
             Self::NoneType => "None".to_owned(),
@@ -50,21 +112,32 @@ impl Type {
 
     /// Returns true when `print`, `str` and `repr` accept a value of this type.
     #[must_use]
-    pub fn is_printable(self) -> bool {
+    pub fn is_printable(&self) -> bool {
         true
     }
 }
 
 impl fmt::Display for Type {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        formatter.write_str(match self {
-            Self::Int => "int",
-            Self::Float => "float",
-            Self::Bool => "bool",
-            Self::Str => "str",
-            Self::NoneType => "None",
-            Self::Error => "<error>",
-        })
+        match self {
+            Self::Int => formatter.write_str("int"),
+            Self::Float => formatter.write_str("float"),
+            Self::Bool => formatter.write_str("bool"),
+            Self::Str => formatter.write_str("str"),
+            Self::NoneType => formatter.write_str("None"),
+            Self::Tuple(items) if items.is_empty() => formatter.write_str("tuple[()]"),
+            Self::Tuple(items) => {
+                formatter.write_str("tuple[")?;
+                for (index, item) in items.iter().enumerate() {
+                    if index > 0 {
+                        formatter.write_str(", ")?;
+                    }
+                    write!(formatter, "{item}")?;
+                }
+                formatter.write_str("]")
+            }
+            Self::Error => formatter.write_str("<error>"),
+        }
     }
 }
 
@@ -74,9 +147,9 @@ mod tests {
 
     #[test]
     fn an_int_is_not_assignable_to_a_float() {
-        assert!(!Type::Int.is_assignable_to(Type::Float));
-        assert!(!Type::Float.is_assignable_to(Type::Int));
-        assert!(!Type::Bool.is_assignable_to(Type::Int));
+        assert!(!Type::Int.is_assignable_to(&Type::Float));
+        assert!(!Type::Float.is_assignable_to(&Type::Int));
+        assert!(!Type::Bool.is_assignable_to(&Type::Int));
     }
 
     #[test]
@@ -88,9 +161,9 @@ mod tests {
             Type::Str,
             Type::NoneType,
         ] {
-            assert!(ty.is_assignable_to(ty));
-            assert!(Type::Error.is_assignable_to(ty));
-            assert!(ty.is_assignable_to(Type::Error));
+            assert!(ty.is_assignable_to(&ty));
+            assert!(Type::Error.is_assignable_to(&ty));
+            assert!(ty.is_assignable_to(&Type::Error));
             assert!(ty.is_truth_testable());
             assert!(ty.is_printable());
         }
@@ -112,8 +185,9 @@ mod tests {
             Type::Str,
             Type::NoneType,
         ]
+        .iter()
         .map(Type::is_numeric)
-        .to_vec();
+        .collect::<Vec<_>>();
         assert_eq!(numeric, [true, true, false, false, false]);
     }
 

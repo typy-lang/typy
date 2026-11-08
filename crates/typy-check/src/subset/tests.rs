@@ -67,7 +67,6 @@ fn later_features_name_their_release_and_rule() {
             "classes are planned for TyPy 0.2 (CLS-01)",
         ),
         ("x = [1]\n", "lists are planned for TyPy 0.2 (DAT-07)"),
-        ("x = (1, 2)\n", "tuples are planned for TyPy 0.2 (DAT-08)"),
         ("x = {1: 2}\n", "dicts are planned for TyPy 0.2 (DAT-09)"),
         ("x = {1}\n", "sets are planned for TyPy 0.2 (DAT-10)"),
         (
@@ -94,10 +93,6 @@ fn later_features_name_their_release_and_rule() {
         (
             "for c in 'abc':\n    pass\n",
             "`for` loops over values other than `range` are planned for TyPy 0.2 (CST-03)",
-        ),
-        (
-            "a, b = 1, 2\n",
-            "unpacking assignments are planned for TyPy 0.2 (SMT-02)",
         ),
         ("import os\n", "imports are planned for TyPy 0.3 (SMT-07)"),
         (

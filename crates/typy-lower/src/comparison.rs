@@ -58,7 +58,7 @@ impl FunctionLowerer<'_> {
     }
 
     /// Compares two values whose types the checker accepted; the operands are not released.
-    fn compare(
+    pub(crate) fn compare(
         &mut self,
         operator: CompareOperator,
         left: Lowered,
@@ -84,6 +84,7 @@ impl FunctionLowerer<'_> {
             }
         };
         let kind = match (left.ty, right.ty) {
+            (TyirType::Tuple(_), _) => return self.compare_tuples(operator, left, right, span),
             (TyirType::Unit, TyirType::Unit) => {
                 return self.constant(Constant::Bool(comparison == Comparison::Equal), span);
             }

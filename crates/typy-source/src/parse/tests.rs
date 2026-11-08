@@ -271,7 +271,6 @@ global g
 fn expressions_beyond_the_release_keep_their_kind() {
     let cases = [
         ("[1]\n", NodeKind::List),
-        ("(1, 2)\n", NodeKind::Tuple),
         ("{1: 2}\n", NodeKind::Dict),
         ("{1}\n", NodeKind::Set),
         ("[x for x in y]\n", NodeKind::ListComp),
@@ -579,4 +578,18 @@ fn a_parameter_without_annotation_is_dumped_without_one() {
     let expected =
         "Module\n  FunctionDef f @1:1\n    Parameter n Normal @1:7\n    body\n      Pass @2:5\n";
     assert_eq!(dumped, expected);
+}
+
+#[test]
+fn tuples_are_converted_with_their_elements() {
+    for source in ["(1, x)\n", "1, x\n"] {
+        let Expr::Tuple { elements, .. } = only_expression(source) else {
+            panic!("not a tuple: {source:?}");
+        };
+        assert_eq!(elements.len(), 2, "{source:?}");
+        assert!(matches!(elements[1], Expr::Name { ref id, .. } if id == "x"));
+    }
+    assert!(
+        matches!(only_expression("()\n"), Expr::Tuple { ref elements, .. } if elements.is_empty())
+    );
 }

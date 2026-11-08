@@ -67,20 +67,22 @@ impl<'program> BodyChecker<'program> {
         definition: &Definition<'_>,
         diagnostics: &mut Diagnostics,
     ) {
-        let returns = definition.signature.returns;
-        let mut checker = BodyChecker::new(program, diagnostics, Some(returns));
+        let returns = definition.signature.returns.clone();
+        let mut checker = BodyChecker::new(program, diagnostics, Some(returns.clone()));
         let mut parameters = Vec::new();
         for ((name, span), parameter) in definition
             .parameters
             .iter()
             .zip(&definition.signature.parameters)
         {
-            let symbol =
-                checker
-                    .program
-                    .add_symbol(name, SymbolKind::Parameter, parameter.ty, *span);
+            let symbol = checker.program.add_symbol(
+                name,
+                SymbolKind::Parameter,
+                parameter.ty.clone(),
+                *span,
+            );
             checker.locals.insert(name.clone(), symbol);
-            checker.types.insert(symbol, parameter.ty);
+            checker.types.insert(symbol, parameter.ty.clone());
             checker
                 .assigned
                 .get_or_insert_with(BTreeSet::new)

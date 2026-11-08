@@ -10,8 +10,16 @@ use super::definition::Definition;
 /// Names bound by module-level statements outside function definitions.
 pub(super) fn module_variables(statements: &[Stmt], names: &mut BTreeMap<String, Span>) {
     fn bind(names: &mut BTreeMap<String, Span>, target: &Expr) {
-        if let Expr::Name { id, span } = target {
-            names.entry(id.clone()).or_insert(*span);
+        match target {
+            Expr::Name { id, span } => {
+                names.entry(id.clone()).or_insert(*span);
+            }
+            Expr::Tuple { elements, .. } => {
+                for element in elements {
+                    bind(names, element);
+                }
+            }
+            _ => {}
         }
     }
     for statement in statements {

@@ -91,7 +91,13 @@ impl<'shared, 'module, 'ctx> FunctionEmitter<'shared, 'module, 'ctx> {
         let context = self.shared.context;
         let mut parameters = self.llvm_function.get_param_iter();
         for value in &self.function.parameters {
-            if value_type(context, self.function.value(*value).ty).is_some() {
+            if value_type(
+                context,
+                &self.shared.tyir.tuple_types,
+                self.function.value(*value).ty,
+            )
+            .is_some()
+            {
                 self.values[value.0 as usize] = parameters.next();
             }
         }
@@ -99,7 +105,11 @@ impl<'shared, 'module, 'ctx> FunctionEmitter<'shared, 'module, 'ctx> {
             self.builder
                 .position_at_end(self.blocks[block.id.0 as usize]);
             for parameter in &block.parameters {
-                if let Some(ty) = value_type(context, self.function.value(*parameter).ty) {
+                if let Some(ty) = value_type(
+                    context,
+                    &self.shared.tyir.tuple_types,
+                    self.function.value(*parameter).ty,
+                ) {
                     let phi = self.builder.build_phi(ty, &format!("v{}", parameter.0))?;
                     self.phis.insert(*parameter, phi);
                     self.values[parameter.0 as usize] = Some(phi.as_basic_value());
@@ -108,7 +118,7 @@ impl<'shared, 'module, 'ctx> FunctionEmitter<'shared, 'module, 'ctx> {
         }
         self.builder.position_at_end(self.blocks[0]);
         for (index, slot) in self.function.slots.iter().enumerate() {
-            let pointer = match value_type(context, slot.ty) {
+            let pointer = match value_type(context, &self.shared.tyir.tuple_types, slot.ty) {
                 Some(ty) => Some(self.builder.build_alloca(ty, &format!("s{index}"))?),
                 None => None,
             };
@@ -139,7 +149,12 @@ impl<'shared, 'module, 'ctx> FunctionEmitter<'shared, 'module, 'ctx> {
         arguments
             .iter()
             .filter(|value| {
-                value_type(self.shared.context, self.function.value(**value).ty).is_some()
+                value_type(
+                    self.shared.context,
+                    &self.shared.tyir.tuple_types,
+                    self.function.value(**value).ty,
+                )
+                .is_some()
             })
             .map(|value| self.value(*value).map(Into::into))
             .collect()

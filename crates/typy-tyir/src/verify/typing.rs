@@ -6,7 +6,7 @@ use crate::function::TyirFunction;
 use crate::module::TyirModule;
 use crate::operation::{Operation, ScalarKind};
 use crate::terminator::{Callee, Terminator};
-use crate::types::TyirType;
+use crate::types::{TupleTypeId, TyirType};
 use crate::value::ValueId;
 
 struct Checker<'module> {
@@ -197,13 +197,47 @@ impl Checker<'_> {
                 function,
                 arguments,
             } => self.call(Callee::Function(*function), arguments)?,
+            Operation::MakeTuple { ty, items } => Some(self.make_tuple(*ty, items)?),
+            Operation::TupleItem { tuple, index } => Some(self.tuple_item(*tuple, *index)?),
             Operation::Increment(value) | Operation::Decrement(value) => {
-                if !self.ty(*value)?.is_counted() {
+                if !self.module.tuple_types.is_counted(self.ty(*value)?) {
                     return Err(self.error(format!("v{} is not counted", value.0)));
                 }
                 None
             }
         })
+    }
+
+    /// A tuple's items have the types of its tuple type, one for each.
+    fn make_tuple(&self, ty: TupleTypeId, items: &[ValueId]) -> Result<TyirType, VerifyError> {
+        let Some(expected) = self.module.tuple_types.items(ty) else {
+            return Err(self.error(format!("tuple#{} is not a type of the module", ty.0)));
+        };
+        if expected.len() != items.len() {
+            return Err(self.error(format!(
+                "tuple#{} has {} items, and {} are given",
+                ty.0,
+                expected.len(),
+                items.len()
+            )));
+        }
+        for (item, item_type) in items.iter().zip(expected) {
+            self.expect(*item, *item_type, "a tuple item")?;
+        }
+        Ok(TyirType::Tuple(ty))
+    }
+
+    /// An item is read from a tuple that has it.
+    fn tuple_item(&self, tuple: ValueId, index: u32) -> Result<TyirType, VerifyError> {
+        let TyirType::Tuple(id) = self.ty(tuple)? else {
+            return Err(self.error(format!("v{} is not a tuple", tuple.0)));
+        };
+        self.module
+            .tuple_types
+            .items(id)
+            .and_then(|items| items.get(index as usize))
+            .copied()
+            .ok_or_else(|| self.error(format!("tuple#{} has no item {index}", id.0)))
     }
 
     fn call(&self, callee: Callee, arguments: &[ValueId]) -> Result<Option<TyirType>, VerifyError> {

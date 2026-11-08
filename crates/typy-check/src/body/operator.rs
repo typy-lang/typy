@@ -30,11 +30,14 @@ impl BodyChecker<'_> {
     ) -> Type {
         use BinaryOperator as Op;
         use Type::{Bool, Error, Float, Int, Str};
-        let (l, r) = (left.ty, right.ty);
+        let (l, r) = (left.ty.clone(), right.ty.clone());
         if l == Error || r == Error {
             return Error;
         }
         let symbol = binary_symbol(operator);
+        if let (Op::Add, Type::Tuple(first), Type::Tuple(second)) = (operator, &l, &r) {
+            return Type::Tuple(first.iter().chain(second).cloned().collect());
+        }
         match operator {
             Op::BitAnd | Op::BitOr | Op::BitXor if l == Bool && r == Bool => Bool,
             _ if l == Bool || r == Bool => self.bool_arithmetic(span),
@@ -95,7 +98,7 @@ impl BodyChecker<'_> {
                 );
                 Error
             }
-            _ => self.operator_error(symbol, l, r, span),
+            _ => self.operator_error(symbol, &l, &r, span),
         }
     }
 
@@ -105,7 +108,7 @@ impl BodyChecker<'_> {
         operand: &TypedExpr,
         span: Span,
     ) -> Type {
-        let ty = operand.ty;
+        let ty = operand.ty.clone();
         match operator {
             _ if ty == Type::Error => Type::Error,
             UnaryOperator::Not => Type::Bool,
@@ -138,7 +141,7 @@ impl BodyChecker<'_> {
         left: &TypedExpr,
         right: &TypedExpr,
     ) {
-        let (l, r) = (left.ty, right.ty);
+        let (l, r) = (left.ty.clone(), right.ty.clone());
         if l == Type::Error || r == Type::Error {
             return;
         }
@@ -158,17 +161,16 @@ impl BodyChecker<'_> {
                 }
             }
             CompareOperator::Eq | CompareOperator::NotEq => {
-                if !(l == r || (l.is_numeric() && r.is_numeric())) {
-                    self.comparison_error(l, r, span);
+                if !l.can_test_equality(&r) {
+                    self.comparison_error(&l, &r, span);
                 }
             }
             CompareOperator::Lt
             | CompareOperator::LtE
             | CompareOperator::Gt
             | CompareOperator::GtE => {
-                let ordered = (l == r && l != Type::NoneType) || (l.is_numeric() && r.is_numeric());
-                if !ordered {
-                    self.comparison_error(l, r, span);
+                if !l.can_order(&r) {
+                    self.comparison_error(&l, &r, span);
                 }
             }
             CompareOperator::In | CompareOperator::NotIn => {}
@@ -178,8 +180,8 @@ impl BodyChecker<'_> {
     pub(super) fn operator_error(
         &mut self,
         symbol: &str,
-        left: Type,
-        right: Type,
+        left: &Type,
+        right: &Type,
         span: Span,
     ) -> Type {
         self.diagnostics.push(
@@ -206,7 +208,7 @@ impl BodyChecker<'_> {
         Type::Error
     }
 
-    pub(super) fn comparison_error(&mut self, left: Type, right: Type, span: Span) {
+    pub(super) fn comparison_error(&mut self, left: &Type, right: &Type, span: Span) {
         self.diagnostics.push(
             Diagnostic::new(
                 DiagnosticCode::error(407),

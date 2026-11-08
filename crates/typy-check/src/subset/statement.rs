@@ -188,13 +188,19 @@ impl Walker {
                     planned("assignments to items", "0.2", RuleId::DAT_07),
                 );
             }
+            // An unpacking target: each element is itself a target (SMT-02).
+            Expr::Tuple { elements, .. } => {
+                for element in elements {
+                    self.name_target(element);
+                }
+            }
             Expr::Other {
-                kind: NodeKind::Tuple | NodeKind::List,
+                kind: NodeKind::List,
                 span,
             } => {
                 self.report(
                     *span,
-                    planned("unpacking assignments", "0.2", RuleId::SMT_02),
+                    planned("unpacking into a list display", "0.2", RuleId::SMT_02),
                 );
             }
             Expr::Other {

@@ -4,7 +4,7 @@ use inkwell::AddressSpace;
 use inkwell::context::Context;
 use inkwell::module::{Linkage, Module};
 use inkwell::values::FunctionValue;
-use typy_tyir::{RuntimeFunction, TyirType};
+use typy_tyir::{RuntimeFunction, TupleTypes, TyirType};
 
 use crate::abi::function_type;
 
@@ -72,8 +72,10 @@ pub(crate) fn runtime_function<'ctx>(
     function: RuntimeFunction,
 ) -> FunctionValue<'ctx> {
     let signature = function.signature();
+    // Runtime functions take and return no tuples.
     let ty = function_type(
         context,
+        &TupleTypes::default(),
         signature.parameters,
         signature.result,
         signature.may_raise,
@@ -100,6 +102,7 @@ pub(crate) fn internal_function<'ctx>(
         Internal::IntNegate | Internal::IntInvert => word.fn_type(&[word.into()], false),
         Internal::IntCompare => function_type(
             context,
+            &TupleTypes::default(),
             &[TyirType::Int, TyirType::Int, TyirType::Int],
             TyirType::Bool,
             false,

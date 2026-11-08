@@ -15,5 +15,5 @@ pub use expression::{Argument, TypedExpr, TypedExprKind};
 pub use function::{FunctionId, TypedFunction};
 pub use program::TypedProgram;
 pub use signature::{FunctionSignature, SignatureParameter};
-pub use statement::TypedStmt;
+pub use statement::{AssignTarget, TypedStmt};
 pub use symbol::{Symbol, SymbolId, SymbolKind};

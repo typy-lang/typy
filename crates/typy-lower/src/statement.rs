@@ -29,11 +29,14 @@ impl FunctionLowerer<'_> {
             } => {
                 let lowered = self.expression(value);
                 for (position, target) in targets.iter().enumerate() {
-                    let slot = self.slot(*target);
                     if position + 1 == targets.len() {
-                        self.store(slot, lowered, *span);
+                        self.assign_target(target, lowered, *span);
                     } else {
-                        self.store(slot, Self::borrowed(lowered.value, lowered.ty), *span);
+                        self.assign_target(
+                            target,
+                            Self::borrowed(lowered.value, lowered.ty),
+                            *span,
+                        );
                     }
                 }
             }
@@ -45,7 +48,7 @@ impl FunctionLowerer<'_> {
             } => {
                 let slot = self.slot(*target);
                 let current = self.load(slot, *span);
-                let result_type = self.program.symbol(*target).ty;
+                let result_type = &self.program.symbol(*target).ty;
                 let right = self.expression(value);
                 let result = self.binary(*operator, current, right, result_type, *span);
                 self.store(slot, result, *span);
