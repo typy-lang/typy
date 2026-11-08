@@ -52,12 +52,14 @@ fn statements(body: &[TypedStmt], callees: &mut BTreeSet<FunctionId>) {
             }
             TypedStmt::ForEach {
                 target,
-                iterable,
+                source,
                 body,
                 orelse,
                 ..
             } => {
-                expression(iterable, callees);
+                for value in source.expressions() {
+                    expression(value, callees);
+                }
                 assign_target(target, callees);
                 statements(body, callees);
                 statements(orelse, callees);

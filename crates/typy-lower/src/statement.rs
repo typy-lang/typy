@@ -104,11 +104,11 @@ impl FunctionLowerer<'_> {
             } => self.while_loop(test, body, orelse, *span),
             TypedStmt::ForEach {
                 target,
-                iterable,
+                source,
                 body,
                 orelse,
                 span,
-            } => self.for_each(target, iterable, body, orelse, *span),
+            } => self.for_each(target, source, body, orelse, *span),
             TypedStmt::ForRange {
                 target,
                 start,

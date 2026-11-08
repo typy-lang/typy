@@ -92,7 +92,7 @@ impl BodyChecker<'_> {
             );
         }
         let iterable = self.expression(&arguments[0]);
-        let item = self.iterated_item(&iterable, &format!("`{}`", builtin.name()));
+        let item = self.iterated_item(&iterable, &format!("`{}`", builtin.name()), false);
         let option = self.option_argument(builtin, arguments.get(1), keywords, span);
         if let Given::Refused = option {
             return Self::invalid(span);
@@ -250,11 +250,17 @@ impl BodyChecker<'_> {
         }
     }
 
-    /// Returns the type of the items `user` gets from `iterable`; reports an iterable it cannot
-    /// go over yet and returns the error type.
-    pub(super) fn iterated_item(&mut self, iterable: &TypedExpr, user: &str) -> Type {
+    /// Returns the type of the items `user` gets from `iterable`, which may be a `str` when
+    /// `strings` is set; reports an iterable it cannot go over yet and returns the error type.
+    pub(super) fn iterated_item(
+        &mut self,
+        iterable: &TypedExpr,
+        user: &str,
+        strings: bool,
+    ) -> Type {
         match &iterable.ty {
             Type::List(item) => item.as_ref().clone(),
+            Type::Str if strings => Type::Str,
             Type::Error => Type::Error,
             Type::Str | Type::Tuple(_) => {
                 self.diagnostics.push(

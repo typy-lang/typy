@@ -21,6 +21,8 @@ impl RuleId {
     pub const CST_05: Self = Self("CST-05");
     /// `match` shall be accepted with literal, capture, wildcard, value, sequence, mapping and class patterns, guards and `\\|` alternatives.
     pub const CST_06: Self = Self("CST-06");
+    /// `for` shall iterate over any class with `__iter__` and `__next__`, and end when `__next__` raises `StopIteration` (OI-17).
+    pub const CST_08: Self = Self("CST-08");
     /// `bool` shall have the values `True` and `False`.
     pub const DAT_03: Self = Self("DAT-03");
     /// `str` shall be an immutable sequence of Unicode code points. `len()` and indexing shall count code points, and indexing shall return a `str` of length 1.
@@ -153,6 +155,7 @@ impl RuleId {
         Self::CST_04,
         Self::CST_05,
         Self::CST_06,
+        Self::CST_08,
         Self::DAT_03,
         Self::DAT_05,
         Self::DAT_06,

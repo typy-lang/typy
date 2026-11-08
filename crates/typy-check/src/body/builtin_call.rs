@@ -54,6 +54,20 @@ impl BodyChecker<'_> {
             Builtin::Print | Builtin::Sorted | Builtin::Sum | Builtin::Any | Builtin::All => {
                 unreachable!("print and the builtins of one iterable are checked above")
             }
+            Builtin::Enumerate | Builtin::Zip | Builtin::Reversed => {
+                return self.error(
+                    Diagnostic::new(
+                        DiagnosticCode::error(201),
+                        span,
+                        format!(
+                            "`{}` outside a `for` loop gives an iterator, which is planned for TyPy 0.3 (CST-08)",
+                            builtin.name()
+                        ),
+                    )
+                    .with_rule(RuleId::CST_08),
+                    span,
+                );
+            }
             Builtin::Range => {
                 return self.error(
                     Diagnostic::new(

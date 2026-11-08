@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy detailed design |
-| Version | 1.21 |
+| Version | 1.22 |
 | Status | Approved |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-08 |
@@ -483,12 +483,21 @@ so far the list methods `append`, `pop`, `insert`, `extend`, `remove`,
 parameter types, the number a call must give, and the result: `pop` takes an
 optional `int`, `extend` a list of the receiver's type, and `copy` returns
 that type. A call with too few or too many arguments is E0404. `for` over a
-call of `range` stays `ForRange`; over a list it is `ForEach`, binding a
-target that may unpack; over any other value E0411. `x in xs` needs an `x`
-of the item type, and two lists compare with `==` when their item types are
-equal, because the runtime compares items by the list's own item kind. A
-list item is an `int`, `float`, `bool`, `str` or list, `Type::is_list_item`;
-lists of tuples and of `None` are planned for later in 0.2.
+call of the builtin `range` stays `ForRange`; any other `for` is `ForEach`
+over a `LoopSource`, binding a target that may unpack. A source is
+`Items` of a list or a `str`, `Reversed` of one, `Enumerate { source,
+start }`, or `Zip { sources, strict }`, and `enumerate` and `zip` take
+sources, so `enumerate(zip(a, b))` nests. `called_builtin` names a builtin
+only when no local or program function of the same name hides it, as a
+call resolves it, so a program's own `range` is called by `for`. Over a
+tuple a `for` is E0201 until tuples can be iterated later in 0.2, and over
+any other value E0411. `enumerate`, `zip` and `reversed` outside a `for`
+give an iterator, E0201 until iterators arrive with CST-08 in 0.3. `x in
+xs` needs an `x` of the item type, and two lists compare with `==` when
+their item types are equal, because the runtime compares items by the
+list's own item kind. A list item is an `int`, `float`, `bool`, `str` or
+list, `Type::is_list_item`; lists of tuples and of `None` are planned for
+later in 0.2.
 
 In a comparison chain, an empty display takes its type from a neighbouring
 operand, so `xs == []` and `x in []` need no annotation; `[] == []` is still
@@ -731,7 +740,7 @@ graph, symbol names and the string pool.
 | Statements | `if`, `while` and `for` with `else`; `break` and `continue` jump to the loop's targets. `for` over `range` evaluates its arguments once into hidden slots, raises `ValueError` for a zero step unless the step is a nonzero constant, and keeps its counter apart from the target, as CPython's iterator does |
 | Expressions | `and` and `or` return an operand and stop early (EXP-09); comparison chains evaluate each operand once and stop at the first false link (EXP-06); mixed `int` and `float` arithmetic converts the `int` with an `invoke`, because a large `int` raises `OverflowError`; `int` and `float` compare exactly in the runtime |
 | Tuples | A display evaluates every item first, so an exception from a later item still releases the earlier ones, then takes over their references. An item read from a tuple the function owns gets its own reference before the tuple is released. A tuple target stores each item into its target from left to right after the whole value is evaluated, so `a, b = b, a` swaps. `str` and `repr` join the `repr` of each item, with a comma after a single item, as `(1,)`. Two tuples compare item by item: the first pair that is not equal decides, and tuples whose items are all equal are equal. A counted tuple slot starts as a tuple of zeros, empty strings and `None` |
-| Lists | Every list operation is a runtime call that borrows its arguments; a list adds its own reference to an item it stores. A display creates the list with room for its items, then appends each in order. `list[index]` borrows the item, which gets its own reference when the list is a temporary. `list[index] = value` evaluates the value, then the list and the index, as CPython does. `for` over a list keeps the list in a hidden slot and reads its length again at every step, as CPython's list iterator does, so items appended in the body are visited. A list slot starts as the placeholder list. A slice passes each bound as an `int` word, 0 when it is missing, and a mask of the bounds written, 1 for the start, 2 for the stop and 4 for the step, so the runtime applies Python's defaults. `xs += ys` and `xs *= n` change the list in place, as `list.__iadd__` and `list.__imul__` do, so every name that shares it sees the change; `*=` builds the repetition first, so a count that raises leaves the list as it was. `xs[i] op= value` evaluates the list and the index once and reads the item before the value, as CPython does; the item keeps its own reference while the value is evaluated, because the value may change the list. `sorted` copies the list and sorts the copy. `max(xs, default=d)` tests the length first: an empty list gives `d` with a reference of its own, and any other list the item the runtime found, so both reach the join with one reference |
+| Lists | Every list operation is a runtime call that borrows its arguments; a list adds its own reference to an item it stores. A display creates the list with room for its items, then appends each in order. `list[index]` borrows the item, which gets its own reference when the list is a temporary. `list[index] = value` evaluates the value, then the list and the index, as CPython does. `for` follows CPython's iterators: each sequence is evaluated once and kept in a hidden slot with its position, and taking the next value reads the length again, checks the position, fetches the item and moves the position on before the body runs, so items appended in the body are visited and a list that shrinks ends the loop. `reversed` starts at the length less one and also stops below zero. `enumerate` keeps its count in a slot. `zip` asks its sources in order and stops at the first that runs out; with `strict` true, a later source that runs out is shorter, and when the first runs out each other source is asked once more and is longer if it gives a value, both raising `ValueError` through `typy_rt_zip_unequal`. The branch taken when a source runs out is lowered with the temporaries tracked before that source was asked, so an error raised there releases only values that exist on it. A list slot starts as the placeholder list. A slice passes each bound as an `int` word, 0 when it is missing, and a mask of the bounds written, 1 for the start, 2 for the stop and 4 for the step, so the runtime applies Python's defaults. `xs += ys` and `xs *= n` change the list in place, as `list.__iadd__` and `list.__imul__` do, so every name that shares it sees the change; `*=` builds the repetition first, so a count that raises leaves the list as it was. `xs[i] op= value` evaluates the list and the index once and reads the item before the value, as CPython does; the item keeps its own reference while the value is evaluated, because the value may change the list. `sorted` copies the list and sorts the copy. `max(xs, default=d)` tests the length first: an empty list gives `d` with a reference of its own, and any other list the item the runtime found, so both reach the join with one reference |
 | Builtins | Each builtin of 0.1 becomes runtime calls. `print` evaluates every argument in source order, then converts and writes each value. `min` and `max` keep the first value on a tie, as CPython does |
 | Stack | A function in a cycle of calls invokes the runtime's stack check on entry (FUN-02) |
 
@@ -919,6 +928,7 @@ installed `typy` finds `<prefix>/lib/typy/` and a `typy` in
 | `message` | Builds an exception message of up to 1024 code points from text, numbers and `repr` of a string, so an error about a long input stays short |
 | `io` | Standard output is buffered in 8 KiB and flushed when full, at exit, and before anything is written to standard error |
 | `exception` | Creates the built-in exceptions of EXC-02 with CPython's message for each operation. Where the oracle versions word a message differently, the runtime uses the wording of the newest, CPython 3.15 (OI-14): `division by zero` for every division and modulo of `int` and `float`, and `zero to a negative power` for `0.0 ** -1.0`. A conformance test cannot check such a message, because the oracles disagree on it, so the runtime's unit tests check it. It adds `TracebackEntry` values, and it prints an uncaught exception as `Traceback (most recent call last):`, one line per entry, then `Type: message`, or `Type` alone when the message is empty, as CPython does (STD-05) |
+| `zip` | `typy_rt_zip_unequal(index, longer)` raises CPython's `ValueError` for a strict `zip`: `zip() argument 2 is shorter than argument 1`, or `zip() argument 3 is longer than arguments 1-2` |
 | `stack` | The check at the start of recursive functions reads the stack pointer register and compares it with the recorded limit; the register is read rather than the address of a local, because a sanitizer may keep locals on a separate fake stack. The limit leaves 64 KiB of stack unused; past it the check raises `RecursionError: maximum recursion depth exceeded` |
 
 An `int` word that is not inline is the address of a large integer. The

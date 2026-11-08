@@ -12,6 +12,7 @@ pub enum Builtin {
     Any,
     Bool,
     Chr,
+    Enumerate,
     Float,
     Int,
     Len,
@@ -21,9 +22,11 @@ pub enum Builtin {
     Print,
     Range,
     Repr,
+    Reversed,
     Sorted,
     Str,
     Sum,
+    Zip,
 }
 
 impl Builtin {
@@ -36,6 +39,7 @@ impl Builtin {
             "any" => Self::Any,
             "bool" => Self::Bool,
             "chr" => Self::Chr,
+            "enumerate" => Self::Enumerate,
             "float" => Self::Float,
             "int" => Self::Int,
             "len" => Self::Len,
@@ -45,9 +49,11 @@ impl Builtin {
             "print" => Self::Print,
             "range" => Self::Range,
             "repr" => Self::Repr,
+            "reversed" => Self::Reversed,
             "sorted" => Self::Sorted,
             "str" => Self::Str,
             "sum" => Self::Sum,
+            "zip" => Self::Zip,
             _ => return None,
         })
     }
@@ -61,6 +67,7 @@ impl Builtin {
             Self::Any => "any",
             Self::Bool => "bool",
             Self::Chr => "chr",
+            Self::Enumerate => "enumerate",
             Self::Float => "float",
             Self::Int => "int",
             Self::Len => "len",
@@ -70,9 +77,11 @@ impl Builtin {
             Self::Print => "print",
             Self::Range => "range",
             Self::Repr => "repr",
+            Self::Reversed => "reversed",
             Self::Sorted => "sorted",
             Self::Str => "str",
             Self::Sum => "sum",
+            Self::Zip => "zip",
         }
     }
 }
@@ -84,8 +93,26 @@ mod tests {
     #[test]
     fn every_builtin_is_found_by_its_name() {
         for name in [
-            "abs", "all", "any", "bool", "chr", "float", "int", "len", "max", "min", "ord",
-            "print", "range", "repr", "sorted", "str", "sum",
+            "abs",
+            "all",
+            "any",
+            "bool",
+            "chr",
+            "enumerate",
+            "float",
+            "int",
+            "len",
+            "max",
+            "min",
+            "ord",
+            "print",
+            "range",
+            "repr",
+            "reversed",
+            "sorted",
+            "str",
+            "sum",
+            "zip",
         ] {
             let builtin = Builtin::named(name).unwrap();
             assert_eq!(builtin.name(), name);

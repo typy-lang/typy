@@ -29,6 +29,7 @@ mod stack;
 mod string;
 mod version;
 mod word;
+mod zip;
 
 pub use exception::{ExceptionKind, ExceptionObject};
 pub use header::{

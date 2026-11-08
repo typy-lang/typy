@@ -1,15 +1,14 @@
-//! Lowers lists: displays, items, item assignment, `append`, `len`, `in`, equality, text, truth
-//! and `for` over a list (DAT-07, DAT-11, EXP-07, CST-03, LIB-03). Items cross into the runtime
-//! as eight bytes each; every runtime list function borrows its arguments.
+//! Lowers lists: displays, items, item assignment, `len`, `in`, equality and truth (DAT-07,
+//! DAT-11, EXP-07). Items cross into the runtime as eight bytes each; every runtime list
+//! function borrows its arguments.
 
-use typy_check::{AssignTarget, TypedExpr};
+use typy_check::TypedExpr;
 use typy_diagnostics::Span;
 use typy_tyir::{
-    Comparison, Constant, IntOperator, Operation, RuntimeFunction, ScalarKind, Terminator,
-    TyirType, ValueId,
+    Comparison, Constant, Operation, RuntimeFunction, ScalarKind, Terminator, TyirType, ValueId,
 };
 
-use crate::function::{FunctionLowerer, LoopTargets};
+use crate::function::FunctionLowerer;
 use crate::ownership::Lowered;
 
 /// Returns the runtime's code for the kind of item a list of `item` holds.
@@ -154,91 +153,8 @@ impl FunctionLowerer<'_> {
         }
     }
 
-    /// Lowers `for target in list`. The list is evaluated once and kept in a hidden slot; each
-    /// step reads the length again, as CPython's list iterator does, so items appended in the
-    /// body are visited and a list that shrinks ends the loop (CST-03).
-    pub(crate) fn for_each(
-        &mut self,
-        target: &AssignTarget,
-        iterable: &TypedExpr,
-        body: &[typy_check::TypedStmt],
-        orelse: &[typy_check::TypedStmt],
-        span: Span,
-    ) {
-        let list_type = self.lowered_type(&iterable.ty);
-        let item = match &iterable.ty {
-            typy_check::Type::List(item) => self.lowered_type(item),
-            _ => unreachable!("the checker gives `for` a list here"),
-        };
-        let list_slot = self.hidden_slot("list", list_type);
-        let position = self.hidden_slot("position", TyirType::Int);
-        let lowered = self.expression(iterable);
-        self.store(list_slot, lowered, span);
-        let zero = Self::borrowed(
-            self.constant(Constant::Int("0".to_owned()), span),
-            TyirType::Int,
-        );
-        self.store(position, zero, span);
-        let header = self.builder.create_block();
-        let inside = self.builder.create_block();
-        let advance = self.builder.create_block();
-        let otherwise = self.builder.create_block();
-        let exit = self.builder.create_block();
-        self.jump_to(header);
-        self.builder.switch_to(header);
-        let list = self.load(list_slot, span);
-        let length = self.list_length(list, span);
-        let index = self.load(position, span);
-        let more = self.builder.push_value(
-            Operation::Compare {
-                kind: ScalarKind::Int,
-                comparison: Comparison::Less,
-                left: index.value,
-                right: length.value,
-            },
-            TyirType::Bool,
-            span,
-        );
-        self.builder.terminate(Terminator::Branch {
-            condition: more,
-            then: inside,
-            otherwise,
-        });
-        self.builder.switch_to(inside);
-        let list = self.load(list_slot, span);
-        let index = self.load(position, span);
-        let value = self.list_item(list, index, item, span);
-        self.assign_target(target, value, span);
-        self.loops.push(LoopTargets {
-            break_target: exit,
-            continue_target: advance,
-        });
-        self.statements(body);
-        self.loops.pop();
-        self.jump_to(advance);
-        self.builder.switch_to(advance);
-        let current = self.load(position, span).value;
-        let one = self.constant(Constant::Int("1".to_owned()), span);
-        let next = self.builder.push_value(
-            Operation::IntBinary {
-                operator: IntOperator::Add,
-                left: current,
-                right: one,
-            },
-            TyirType::Int,
-            span,
-        );
-        let next = self.produced(next, TyirType::Int);
-        self.store(position, next, span);
-        self.jump_to(header);
-        self.builder.switch_to(otherwise);
-        self.statements(orelse);
-        self.jump_to(exit);
-        self.builder.switch_to(exit);
-    }
-
     /// Ends the current block with a jump to `target`, unless it already ends.
-    fn jump_to(&mut self, target: typy_tyir::BlockId) {
+    pub(crate) fn jump_to(&mut self, target: typy_tyir::BlockId) {
         if !self.builder.is_terminated() {
             self.builder.terminate(Terminator::Jump {
                 target,

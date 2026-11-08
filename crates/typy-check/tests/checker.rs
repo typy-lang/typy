@@ -754,7 +754,6 @@ fn list_rules_give_their_codes() {
         ("x = [1]\nx.append()\n", &["E0404"]),
         ("x = 'a'.upper()\n", &["E0412"]),
         ("print(1 in 2)\n", &["E0407"]),
-        ("for c in 'abc':\n    pass\n", &["E0201"]),
         ("def f(x: list) -> None:\n    pass\n", &["E0408"]),
     ];
     for (source, expected) in cases {
@@ -904,6 +903,66 @@ xs.sort(reverse=False)
         "IterableBuiltin Sum",
         "Method sort",
     ] {
+        assert!(dump.contains(node), "{node} missing from\n{dump}");
+    }
+}
+
+#[test]
+fn loop_sources_give_their_codes() {
+    let cases: &[(&str, &[&str])] = &[
+        ("for i in enumerate():\n    pass\n", &["E0404"]),
+        ("for i in enumerate([1], 0, 1):\n    pass\n", &["E0404"]),
+        (
+            "for i in enumerate([1], 0, start=1):\n    pass\n",
+            &["E0404"],
+        ),
+        (
+            "for i in enumerate([1], start=1.5):\n    pass\n",
+            &["E0404"],
+        ),
+        ("for i in enumerate([1], begin=1):\n    pass\n", &["E0404"]),
+        (
+            "for i in enumerate([1], start=1, start=2):\n    pass\n",
+            &["E0404"],
+        ),
+        ("for i in enumerate(3):\n    pass\n", &["E0411"]),
+        ("for i in zip([1], strict=1):\n    pass\n", &["E0404"]),
+        ("for i in zip([1], **{}):\n    pass\n", &["E0201"]),
+        ("for i in reversed():\n    pass\n", &["E0404"]),
+        ("for i in reversed([1], [2]):\n    pass\n", &["E0404"]),
+        ("for i in reversed([1], key=1):\n    pass\n", &["E0404"]),
+        ("for i in reversed((1, 2)):\n    pass\n", &["E0201"]),
+        ("for a, b in enumerate([1], 0):\n    a = 'x'\n", &["E0402"]),
+        ("for a, b, c in zip([1], [2]):\n    pass\n", &["E0308"]),
+        ("x = enumerate([1])\n", &["E0201"]),
+        ("x = reversed([1])\n", &["E0201"]),
+        ("for c in (1, 2):\n    pass\n", &["E0201"]),
+    ];
+    for (source, expected) in cases {
+        assert_eq!(&rejected(source), expected, "\n{source}");
+    }
+}
+
+#[test]
+fn loop_sources_bind_python_s_types() {
+    let shadowed = "def enumerate(n: int) -> list[int]:\n    return [n]\n\n\nfor i in enumerate(3):\n    pass\n";
+    let (_directory, project) = load(shadowed);
+    let program = TypeChecker::check(&project).expect("the program is accepted");
+    assert!(typy_check::dump(&program, &project).contains("ForEach i: int"));
+    let source = "\
+for a, b in zip([1], 'x'):
+    pass
+for s in reversed('ab'):
+    pass
+for (k, c), d in zip(enumerate(['p']), [1.5], strict=True):
+    pass
+for n, letter in enumerate('ab', start=1):
+    pass
+";
+    let (_directory, project) = load(source);
+    let program = TypeChecker::check(&project).expect("the program is accepted");
+    let dump = typy_check::dump(&program, &project);
+    for node in ["ForEach zip", "ForEach reversed", "ForEach enumerate"] {
         assert!(dump.contains(node), "{node} missing from\n{dump}");
     }
 }

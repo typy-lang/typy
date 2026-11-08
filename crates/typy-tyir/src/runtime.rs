@@ -67,6 +67,7 @@ pub enum RuntimeFunction {
     ListSumFloat,
     ListAny,
     ListAll,
+    ZipUnequal,
 }
 
 /// The parameter types, result type and raising behaviour of a runtime function.
@@ -97,7 +98,7 @@ const FLOAT_FLOAT: &[TyirType] = &[TyirType::Float, TyirType::Float];
 
 impl RuntimeFunction {
     /// Every runtime function.
-    pub const ALL: [Self; 58] = [
+    pub const ALL: [Self; 59] = [
         Self::IntFloorDivide,
         Self::IntModulo,
         Self::IntPower,
@@ -156,6 +157,7 @@ impl RuntimeFunction {
         Self::ListSumFloat,
         Self::ListAny,
         Self::ListAll,
+        Self::ZipUnequal,
     ];
 
     /// Returns the function's signature. Comparisons take the comparison as an `int` operand, numbered as `Comparison::code`.
@@ -219,6 +221,7 @@ impl RuntimeFunction {
             Self::ListSumInt => signature(&[LIST, Int], Int, false),
             Self::ListSumFloat => signature(&[LIST, Float], Float, false),
             Self::ListAny | Self::ListAll => signature(&[LIST], Bool, false),
+            Self::ZipUnequal => signature(INT_INT, Unit, true),
         }
     }
 
@@ -284,6 +287,7 @@ impl RuntimeFunction {
             Self::ListSumFloat => "list_sum_float",
             Self::ListAny => "list_any",
             Self::ListAll => "list_all",
+            Self::ZipUnequal => "zip_unequal",
         }
     }
 }

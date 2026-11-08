@@ -7,6 +7,7 @@ mod flow;
 mod iterable_call;
 mod list;
 mod locals;
+mod loop_source;
 mod name;
 mod operator;
 mod program;

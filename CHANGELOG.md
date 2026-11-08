@@ -42,6 +42,10 @@ All notable changes to TyPy are recorded here. The format follows
   `sum` of a `list[float]` takes a start such as `0.0`, because CPython
   returns the `int` 0 for an empty list without one. The `key` argument
   arrives with function values in 1.0 (FUN-05).
+- `for` over the characters of a `str`, and over `enumerate`, with
+  `start`, `zip`, with `strict`, and `reversed` of lists and strings,
+  nested as in `enumerate(zip(a, b))`, with CPython's errors (CST-03,
+  LIB-02).
 
 ### Changed
 
@@ -49,6 +53,11 @@ All notable changes to TyPy are recorded here. The format follows
   world links, 10.3 KB, rather than on the whole runtime archive, so the
   runtime can hold the built-in collections without enlarging programs
   that do not use them (ADR-0009).
+
+### Fixed
+
+- A program function named `range` is called by `for i in range(...)`,
+  as in CPython, instead of the builtin (CST-02).
 
 ## [0.1.0] - 2026-11-07
 

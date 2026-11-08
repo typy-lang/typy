@@ -5,6 +5,7 @@ use typy_source::syntax::{Constant, Expr, Stmt};
 
 use super::BodyChecker;
 use super::flow::meet;
+use crate::builtin::Builtin;
 use crate::typed::{AssignTarget, TypedConstant, TypedExpr, TypedExprKind, TypedStmt};
 use crate::types::Type;
 
@@ -184,16 +185,22 @@ impl BodyChecker<'_> {
         orelse: &[Stmt],
         span: Span,
     ) -> Option<TypedStmt> {
-        if is_range_call(iter) {
+        if self.is_range_call(iter) {
             return self.for_range(target, iter, body, orelse, span);
         }
-        let iterable = self.expression(iter);
-        let item = self.iterated_item(&iterable, "`for`");
+        let (source, item) = self.loop_source(iter);
+        // What each step binds has no expression of its own; diagnostics about it point at the
+        // loop's source.
+        let binding = TypedExpr {
+            kind: TypedExprKind::Constant(TypedConstant::None),
+            ty: item.clone(),
+            span: iter.span(),
+        };
         // Binding the target marks its names as assigned: the body runs with them, while the
         // `else` clause and the code after the loop start from the state before it, because the
         // list may be empty.
         let before_loop = self.assigned.clone();
-        let target = self.assign_target(target, item, &iterable)?;
+        let target = self.assign_target(target, item, &binding)?;
         self.breaks.push(Vec::new());
         let body = self.block(body);
         let breaks = self.breaks.pop().unwrap_or_default();
@@ -206,7 +213,7 @@ impl BodyChecker<'_> {
         self.assigned = exit;
         Some(TypedStmt::ForEach {
             target,
-            iterable,
+            source,
             body,
             orelse,
             span,
@@ -276,6 +283,17 @@ impl BodyChecker<'_> {
         })
     }
 
+    /// Returns true for a call of the builtin `range` with one to three positional arguments,
+    /// the form `for` lowers as a counting loop. A program function or variable named `range`
+    /// hides the builtin, as it does in a call.
+    fn is_range_call(&self, iter: &Expr) -> bool {
+        matches!(
+            self.called_builtin(iter),
+            Some((Builtin::Range, arguments, keywords))
+                if keywords.is_empty() && (1..=3).contains(&arguments.len())
+        )
+    }
+
     pub(super) fn return_statement(&mut self, value: Option<&Expr>, span: Span) -> TypedStmt {
         let expected = self.returns.clone().unwrap_or(Type::NoneType);
         let value = value.map(|value| self.expression_expecting(value, Some(&expected)));
@@ -310,16 +328,4 @@ impl BodyChecker<'_> {
         self.assigned = None;
         TypedStmt::Return { value, span }
     }
-}
-
-/// Returns true for `range(...)` with one to three positional arguments, the form `for` lowers
-/// as a counting loop.
-fn is_range_call(iter: &Expr) -> bool {
-    matches!(
-        iter,
-        Expr::Call { function, arguments, keywords, .. }
-            if matches!(function.as_ref(), Expr::Name { id, .. } if id == "range")
-                && keywords.is_empty()
-                && (1..=3).contains(&arguments.len())
-    )
 }

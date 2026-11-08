@@ -8,7 +8,7 @@ use typy_diagnostics::{SourceLookup, Span};
 use super::expression::{TypedExpr, TypedExprKind};
 use super::function::TypedFunction;
 use super::program::TypedProgram;
-use super::statement::{AssignTarget, TypedStmt};
+use super::statement::{AssignTarget, LoopSource, TypedStmt};
 use super::symbol::SymbolId;
 
 /// Returns the program as text: each function with its signature and locals, then its body.
@@ -143,13 +143,25 @@ impl Dump<'_> {
             }
             TypedStmt::ForEach {
                 target,
-                iterable,
+                source,
                 body,
                 orelse,
                 span,
             } => {
-                self.line(depth, &format!("ForEach {}", self.target(target)), *span);
-                self.expression(depth + 1, iterable);
+                let label = match source {
+                    LoopSource::Items(_) => "",
+                    LoopSource::Enumerate { .. } => " enumerate",
+                    LoopSource::Zip { .. } => " zip",
+                    LoopSource::Reversed(_) => " reversed",
+                };
+                self.line(
+                    depth,
+                    &format!("ForEach{label} {}", self.target(target)),
+                    *span,
+                );
+                for expression in source.expressions() {
+                    self.expression(depth + 1, expression);
+                }
                 self.block(depth + 1, "body", body);
                 self.block(depth + 1, "orelse", orelse);
             }
