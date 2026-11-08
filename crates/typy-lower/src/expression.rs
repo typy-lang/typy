@@ -93,6 +93,11 @@ impl FunctionLowerer<'_> {
             TypedExprKind::Print { values, sep, end } => {
                 self.print(values, sep.as_deref(), end.as_deref(), span)
             }
+            TypedExprKind::IterableBuiltin {
+                builtin,
+                iterable,
+                option,
+            } => self.iterable_builtin(*builtin, iterable, option.as_deref(), ty, span),
             TypedExprKind::Builtin { builtin, arguments } => {
                 let types: Vec<typy_check::Type> = arguments
                     .iter()

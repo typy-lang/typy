@@ -74,6 +74,13 @@ pub enum TypedExprKind {
         sep: Option<Box<TypedExpr>>,
         end: Option<Box<TypedExpr>>,
     },
+    /// `sorted`, `sum`, `any`, `all`, or `min` or `max` of one iterable, with the one optional
+    /// value the builtin takes: `reverse`, `start` or `default` (LIB-02).
+    IterableBuiltin {
+        builtin: Builtin,
+        iterable: Box<TypedExpr>,
+        option: Option<Box<TypedExpr>>,
+    },
     /// A call of any other builtin of 0.1, with positional arguments only.
     Builtin {
         builtin: Builtin,

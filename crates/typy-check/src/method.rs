@@ -25,6 +25,8 @@ pub enum Method {
     ListCopy,
     /// `list.reverse()`: reverses the items in place.
     ListReverse,
+    /// `list.sort(reverse=False)`: sorts the items in place, stably, and returns `None`.
+    ListSort,
 }
 
 /// The parameters a method takes, how many of them a call must give, and its result.
@@ -36,6 +38,9 @@ pub struct MethodSignature {
     pub required: usize,
     /// The result type.
     pub result: Type,
+    /// The name of the last parameter when it can only be given by keyword, as `reverse` of
+    /// `list.sort`.
+    pub keyword: Option<&'static str>,
 }
 
 impl Method {
@@ -56,6 +61,7 @@ impl Method {
             "clear" => Self::ListClear,
             "copy" => Self::ListCopy,
             "reverse" => Self::ListReverse,
+            "sort" => Self::ListSort,
             _ => return None,
         })
     }
@@ -74,6 +80,7 @@ impl Method {
             Self::ListClear => "clear",
             Self::ListCopy => "copy",
             Self::ListReverse => "reverse",
+            Self::ListSort => "sort",
         }
     }
 
@@ -93,11 +100,13 @@ impl Method {
             Self::ListIndex | Self::ListCount => (vec![item], 1, Type::Int),
             Self::ListClear | Self::ListReverse => (Vec::new(), 0, Type::NoneType),
             Self::ListCopy => (Vec::new(), 0, receiver.clone()),
+            Self::ListSort => (vec![Type::Bool], 0, Type::NoneType),
         };
         MethodSignature {
             parameters,
             required,
             result,
+            keyword: (self == Self::ListSort).then_some("reverse"),
         }
     }
 }
@@ -115,7 +124,7 @@ mod tests {
         assert_eq!(Method::of(&Type::Str, "append"), None);
         for name in [
             "append", "pop", "insert", "extend", "remove", "index", "count", "clear", "copy",
-            "reverse",
+            "reverse", "sort",
         ] {
             assert_eq!(Method::of(&list, name).map(Method::name), Some(name));
         }

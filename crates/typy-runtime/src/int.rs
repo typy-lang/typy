@@ -7,7 +7,7 @@ pub(crate) mod natural;
 mod text;
 pub(crate) mod value;
 
-pub(crate) use arithmetic::{ZERO_DIVISION, typy_rt_int_compare};
+pub(crate) use arithmetic::{ZERO_DIVISION, typy_rt_int_add, typy_rt_int_compare};
 pub(crate) use text::typy_rt_int_to_str;
 
 use crate::header::ObjectHeader;

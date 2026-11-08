@@ -1,6 +1,6 @@
-//! The builtin functions TyPy 0.1 compiles (LIB-01).
+//! The builtin functions TyPy compiles (LIB-01, LIB-02).
 
-/// A builtin function TyPy 0.1 compiles (LIB-01). Each one is typed by the checker and lowered to runtime calls, because several take a variable number of arguments, which the 0.1 subset cannot declare (EXP-17).
+/// A builtin function TyPy compiles (LIB-01, LIB-02). Each one is typed by the checker and lowered to runtime calls, because several take a variable number of arguments, which the 0.1 subset cannot declare (EXP-17).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 #[allow(
     missing_docs,
@@ -8,6 +8,8 @@
 )]
 pub enum Builtin {
     Abs,
+    All,
+    Any,
     Bool,
     Chr,
     Float,
@@ -19,15 +21,19 @@ pub enum Builtin {
     Print,
     Range,
     Repr,
+    Sorted,
     Str,
+    Sum,
 }
 
 impl Builtin {
-    /// Returns the builtin with this name, if 0.1 provides it.
+    /// Returns the builtin with this name, if the release provides it.
     #[must_use]
     pub fn named(name: &str) -> Option<Self> {
         Some(match name {
             "abs" => Self::Abs,
+            "all" => Self::All,
+            "any" => Self::Any,
             "bool" => Self::Bool,
             "chr" => Self::Chr,
             "float" => Self::Float,
@@ -39,7 +45,9 @@ impl Builtin {
             "print" => Self::Print,
             "range" => Self::Range,
             "repr" => Self::Repr,
+            "sorted" => Self::Sorted,
             "str" => Self::Str,
+            "sum" => Self::Sum,
             _ => return None,
         })
     }
@@ -49,6 +57,8 @@ impl Builtin {
     pub const fn name(self) -> &'static str {
         match self {
             Self::Abs => "abs",
+            Self::All => "all",
+            Self::Any => "any",
             Self::Bool => "bool",
             Self::Chr => "chr",
             Self::Float => "float",
@@ -60,7 +70,9 @@ impl Builtin {
             Self::Print => "print",
             Self::Range => "range",
             Self::Repr => "repr",
+            Self::Sorted => "sorted",
             Self::Str => "str",
+            Self::Sum => "sum",
         }
     }
 }
@@ -70,10 +82,10 @@ mod tests {
     use super::Builtin;
 
     #[test]
-    fn every_builtin_of_0_1_is_found_by_its_name() {
+    fn every_builtin_is_found_by_its_name() {
         for name in [
-            "abs", "bool", "chr", "float", "int", "len", "max", "min", "ord", "print", "range",
-            "repr", "str",
+            "abs", "all", "any", "bool", "chr", "float", "int", "len", "max", "min", "ord",
+            "print", "range", "repr", "sorted", "str", "sum",
         ] {
             let builtin = Builtin::named(name).unwrap();
             assert_eq!(builtin.name(), name);

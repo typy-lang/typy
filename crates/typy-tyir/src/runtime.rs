@@ -61,6 +61,12 @@ pub enum RuntimeFunction {
     ListConcat,
     ListRepeat,
     ListCompare,
+    ListSort,
+    ListExtreme,
+    ListSumInt,
+    ListSumFloat,
+    ListAny,
+    ListAll,
 }
 
 /// The parameter types, result type and raising behaviour of a runtime function.
@@ -91,7 +97,7 @@ const FLOAT_FLOAT: &[TyirType] = &[TyirType::Float, TyirType::Float];
 
 impl RuntimeFunction {
     /// Every runtime function.
-    pub const ALL: [Self; 52] = [
+    pub const ALL: [Self; 58] = [
         Self::IntFloorDivide,
         Self::IntModulo,
         Self::IntPower,
@@ -144,6 +150,12 @@ impl RuntimeFunction {
         Self::ListConcat,
         Self::ListRepeat,
         Self::ListCompare,
+        Self::ListSort,
+        Self::ListExtreme,
+        Self::ListSumInt,
+        Self::ListSumFloat,
+        Self::ListAny,
+        Self::ListAll,
     ];
 
     /// Returns the function's signature. Comparisons take the comparison as an `int` operand, numbered as `Comparison::code`.
@@ -185,7 +197,7 @@ impl RuntimeFunction {
             Self::ListNew => signature(&[Int, Int], LIST, false),
             Self::ListAppend => signature(&[LIST, Bits], Unit, false),
             Self::ListLength => signature(&[LIST], Int, false),
-            Self::ListGet => signature(&[LIST, Int], Bits, true),
+            Self::ListGet | Self::ListExtreme => signature(&[LIST, Int], Bits, true),
             Self::ListSet => signature(&[LIST, Int, Bits], Unit, true),
             Self::ListEqual => signature(&[LIST, LIST], Bool, false),
             Self::ListContains => signature(&[LIST, Bits], Bool, false),
@@ -203,6 +215,10 @@ impl RuntimeFunction {
             Self::ListConcat => signature(&[LIST, LIST], LIST, false),
             Self::ListRepeat => signature(&[LIST, Int], LIST, true),
             Self::ListCompare => signature(&[LIST, LIST, Int], Bool, false),
+            Self::ListSort => signature(&[LIST, Int], Unit, false),
+            Self::ListSumInt => signature(&[LIST, Int], Int, false),
+            Self::ListSumFloat => signature(&[LIST, Float], Float, false),
+            Self::ListAny | Self::ListAll => signature(&[LIST], Bool, false),
         }
     }
 
@@ -262,6 +278,12 @@ impl RuntimeFunction {
             Self::ListConcat => "list_concat",
             Self::ListRepeat => "list_repeat",
             Self::ListCompare => "list_compare",
+            Self::ListSort => "list_sort",
+            Self::ListExtreme => "list_extreme",
+            Self::ListSumInt => "list_sum_int",
+            Self::ListSumFloat => "list_sum_float",
+            Self::ListAny => "list_any",
+            Self::ListAll => "list_all",
         }
     }
 }

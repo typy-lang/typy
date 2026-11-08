@@ -121,6 +121,23 @@ impl ItemKind {
         }
     }
 
+    /// Returns the truth of an item, as `bool(item)` gives it: a number is true when it is not
+    /// zero, and a `str` or a list when it is not empty.
+    ///
+    /// # Safety
+    ///
+    /// `item` is a live item of this kind.
+    pub(crate) unsafe fn is_true(self, item: u64) -> bool {
+        match self {
+            Self::Bool => item != 0,
+            // A large integer is never zero, because zero is always inline.
+            Self::Int => item.cast_signed() != inline(0).unwrap_or(1),
+            Self::Float => f64::from_bits(item) != 0.0,
+            // SAFETY: the caller passes a pointer to a live object.
+            Self::Object => unsafe { object_is_true(pointer(item)) },
+        }
+    }
+
     /// Returns `repr(item)`; only an `int` of more than 4300 digits raises.
     ///
     /// # Safety
@@ -145,6 +162,26 @@ impl ItemKind {
 /// Returns the object an item points to.
 fn pointer(item: u64) -> *mut ObjectHeader {
     core::ptr::with_exposed_provenance_mut(usize::try_from(item).unwrap_or(0))
+}
+
+/// Returns whether a string or a list is not empty.
+#[allow(
+    clippy::cast_ptr_alignment,
+    reason = "every object comes from malloc, aligned for every type, and starts with its header"
+)]
+///
+/// # Safety
+///
+/// `object` points to a live string or list.
+unsafe fn object_is_true(object: *mut ObjectHeader) -> bool {
+    // SAFETY: the caller passes a live object; the type ID says which it is.
+    unsafe {
+        match (*object).type_id {
+            STR_TYPE_ID => (*object.cast::<StrObject>()).length != 0,
+            LIST_TYPE_ID => (*object.cast::<super::ListObject>()).length != 0,
+            _ => crate::libc::abort_with(b"typy runtime: a list holds an object it cannot test\n"),
+        }
+    }
 }
 
 /// Returns `left == right` for two objects of one type: strings, or lists.

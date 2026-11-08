@@ -622,7 +622,7 @@ fn each_builtin_call_name_and_statement_rule_gives_its_code() {
         ("print(chr(1, 2))\n", &["E0404"]),
         ("print(repr())\n", &["E0404"]),
         ("print(abs())\n", &["E0404"]),
-        ("print(min(1))\n", &["E0201"]),
+        ("print(min(1))\n", &["E0411"]),
         ("print(max())\n", &["E0404"]),
         ("print(len(missing))\n", &["E0205"]),
         ("print(1 and \"a\")\n", &["E0303"]),
@@ -847,6 +847,63 @@ grid[0] += [2]
     let program = TypeChecker::check(&project).expect("the program is accepted");
     let dump = typy_check::dump(&program, &project);
     for node in ["Slice", "Method pop", "AugAssign Add item of list[int]"] {
+        assert!(dump.contains(node), "{node} missing from\n{dump}");
+    }
+}
+
+#[test]
+fn builtins_of_one_iterable_give_their_codes() {
+    let cases: &[(&str, &[&str])] = &[
+        ("x = sum([0.5])\n", &["E0404"]),
+        ("x = sum(['a'])\n", &["E0401"]),
+        ("x = sum([True])\n", &["E0406"]),
+        ("x = sum([1], 0.5)\n", &["E0404"]),
+        ("x = sum([1], 0, 1)\n", &["E0404"]),
+        ("x = sum([1], start=0, start=1)\n", &["E0404"]),
+        ("x = sum([1], key=1)\n", &["E0404"]),
+        ("x = sorted()\n", &["E0404"]),
+        ("x = sorted([1], key=abs)\n", &["E0201"]),
+        ("x = sorted([1], reverse=1)\n", &["E0404"]),
+        ("x = sorted([1], cmp=1)\n", &["E0404"]),
+        ("x = sorted([1], **{})\n", &["E0201"]),
+        ("x = sorted('abc')\n", &["E0201"]),
+        ("x = sorted(3)\n", &["E0411"]),
+        ("x = sorted(missing)\n", &["E0205"]),
+        ("x = max([1], default='a')\n", &["E0404"]),
+        ("x = min([1], default=1, default=2)\n", &["E0404"]),
+        ("x = any(5)\n", &["E0411"]),
+        ("x = [1]\nx.sort(True)\n", &["E0404"]),
+        ("x = [1]\nx.sort(key=abs)\n", &["E0201"]),
+        ("x = [1]\nx.sort(order=1)\n", &["E0404"]),
+        ("x = [1]\nx.sort(reverse=True, reverse=False)\n", &["E0404"]),
+        ("x = [1]\nx.append(1, key=2)\n", &["E0404"]),
+        ("x = any([])\n", &["E0410"]),
+    ];
+    for (source, expected) in cases {
+        assert_eq!(&rejected(source), expected, "\n{source}");
+    }
+}
+
+#[test]
+fn builtins_of_one_iterable_have_python_s_types() {
+    let source = "\
+xs = [3, 1]
+floats = [0.5]
+a: list[int] = sorted(xs, reverse=True)
+b: int = sum(xs) + sum(xs, 1) + sum(xs, start=2) + max(xs) + min(xs, default=0)
+c: float = sum(floats, 0.0) + max(floats)
+d: bool = any(xs) and all(['a']) and any([[1], []])
+xs.sort()
+xs.sort(reverse=False)
+";
+    let (_directory, project) = load(source);
+    let program = TypeChecker::check(&project).expect("the program is accepted");
+    let dump = typy_check::dump(&program, &project);
+    for node in [
+        "IterableBuiltin Sorted",
+        "IterableBuiltin Sum",
+        "Method sort",
+    ] {
         assert!(dump.contains(node), "{node} missing from\n{dump}");
     }
 }

@@ -51,6 +51,10 @@ impl FunctionLowerer<'_> {
             (Method::ListExtend, [other]) => {
                 self.call_runtime(RuntimeFunction::ListExtend, vec![list, other.value], span)
             }
+            (Method::ListSort, given) => {
+                self.sort(list, given.first().copied(), span);
+                Self::borrowed(self.constant(Constant::Unit, span), TyirType::Unit)
+            }
             (Method::ListClear | Method::ListCopy | Method::ListReverse, []) => {
                 let function = match method {
                     Method::ListClear => RuntimeFunction::ListClear,

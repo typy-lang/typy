@@ -1,6 +1,7 @@
 //! `list`: a growable array whose items are stored in eight bytes each, by their kind (DAT-07,
 //! MEM-02, NFR-13, ADR-0009).
 
+mod aggregate;
 mod item;
 mod methods;
 mod operations;

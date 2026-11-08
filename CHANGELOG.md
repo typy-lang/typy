@@ -34,7 +34,14 @@ All notable changes to TyPy are recorded here. The format follows
   assignment of a list item such as `counts[i] += 1` (EXP-02, EXP-06,
   SMT-01).
 - An empty `[]` in a comparison takes the type of the other operand, so
-  `xs == []` needs no annotation (TYP-05).
+  `xs == []` needs no annotation, and one inside a display takes the type
+  of the other items, as in `[[1], []]` (TYP-05).
+- `sorted`, with `reverse`, `list.sort`, `sum`, with an exact result for
+  `int` items and CPython's compensated result for `float` items, `any`,
+  `all`, and `min` and `max` of a list, with `default` (LIB-02, LIB-03).
+  `sum` of a `list[float]` takes a start such as `0.0`, because CPython
+  returns the `int` 0 for an empty list without one. The `key` argument
+  arrives with function values in 1.0 (FUN-05).
 
 ### Changed
 

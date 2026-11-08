@@ -5,6 +5,7 @@ use typy_diagnostics::{Diagnostic, DiagnosticCode, RuleId, Span};
 use typy_source::syntax::{CompareOperator, Expr, Identifier, Keyword};
 
 use super::BodyChecker;
+use super::iterable_call::Given;
 use crate::method::Method;
 use crate::typed::{TypedConstant, TypedExpr, TypedExprKind};
 use crate::types::Type;
@@ -38,10 +39,7 @@ impl BodyChecker<'_> {
             Some(expected) if expected.has_error() => Some(Type::Error),
             _ => None,
         };
-        let items: Vec<TypedExpr> = elements
-            .iter()
-            .map(|element| self.expression_expecting(element, expected_item.as_ref()))
-            .collect();
+        let items = self.display_items(elements, expected_item.as_ref());
         let item_type = match (items.first(), expected_item) {
             (_, Some(expected)) => expected,
             (Some(first), None) => first.ty.clone(),
@@ -91,6 +89,58 @@ impl BodyChecker<'_> {
         )
     }
 
+    /// Returns the value given for the method's keyword parameter, after reporting any keyword
+    /// the method does not take.
+    fn method_keyword<'call>(
+        &mut self,
+        method: Method,
+        accepted: Option<&'static str>,
+        keywords: &'call [Keyword],
+        span: Span,
+    ) -> Given<'call> {
+        let mut value = None;
+        for keyword in keywords {
+            let name = keyword.name.as_ref().map(|name| name.name.as_str());
+            if name.is_some() && name == accepted && value.is_none() {
+                value = Some(&keyword.value);
+                continue;
+            }
+            let diagnostic = match name {
+                Some("key") if method == Method::ListSort => Diagnostic::new(
+                    DiagnosticCode::error(201),
+                    keyword.span,
+                    "the `key` argument of `sort` is planned for TyPy 1.0, with function values (FUN-05)",
+                )
+                .with_rule(RuleId::FUN_05),
+                Some(name) if Some(name) == accepted => Diagnostic::new(
+                    DiagnosticCode::error(404),
+                    keyword.span,
+                    format!("`{name}` is given twice"),
+                )
+                .with_rule(RuleId::LIB_03),
+                _ if accepted.is_none() => Diagnostic::new(
+                    DiagnosticCode::error(404),
+                    keyword.span,
+                    format!("`{}` takes no keyword arguments", method.name()),
+                )
+                .with_rule(RuleId::LIB_03),
+                _ => Diagnostic::new(
+                    DiagnosticCode::error(404),
+                    keyword.span,
+                    format!(
+                        "`{}` takes only the keyword argument `{}`",
+                        method.name(),
+                        accepted.unwrap_or_default()
+                    ),
+                )
+                .with_rule(RuleId::LIB_03),
+            };
+            self.error(diagnostic, span);
+            return Given::Refused;
+        }
+        value.map_or(Given::Absent, Given::Value)
+    }
+
     /// Checks the operands of a comparison chain. An empty list display takes its type from a
     /// neighbouring operand, so `xs == []` and `x in []` need no annotation (TYP-05).
     pub(super) fn comparison_operands(
@@ -113,6 +163,28 @@ impl BodyChecker<'_> {
                 Some(self.expression_expecting(operands[position], expected.as_ref()));
         }
         typed.into_iter().flatten().collect()
+    }
+
+    /// Checks the items of a display. Without an expected item type, an empty display among the
+    /// items takes the type of the first other item, so `[[1], []]` needs no annotation.
+    fn display_items(&mut self, elements: &[Expr], expected: Option<&Type>) -> Vec<TypedExpr> {
+        if expected.is_some() {
+            return elements
+                .iter()
+                .map(|element| self.expression_expecting(element, expected))
+                .collect();
+        }
+        let mut items: Vec<Option<TypedExpr>> = elements
+            .iter()
+            .map(|element| (!is_empty_list(element)).then(|| self.expression(element)))
+            .collect();
+        let sibling = items.iter().flatten().next().map(|item| item.ty.clone());
+        for (item, element) in items.iter_mut().zip(elements) {
+            if item.is_none() {
+                *item = Some(self.expression_expecting(element, sibling.as_ref()));
+            }
+        }
+        items.into_iter().flatten().collect()
     }
 
     /// Checks `list[index]`: the index is an `int`, and the item has the list's item type.
@@ -167,26 +239,27 @@ impl BodyChecker<'_> {
                 span,
             );
         };
-        if let Some(keyword) = keywords.first() {
-            return self.error(
-                Diagnostic::new(
-                    DiagnosticCode::error(404),
-                    keyword.span,
-                    format!("`{}` takes no keyword arguments", method.name()),
-                )
-                .with_rule(RuleId::LIB_03),
+        let signature = method.signature(&receiver.ty);
+        let keyword_value = self.method_keyword(method, signature.keyword, keywords, span);
+        if let Given::Refused = keyword_value {
+            return Self::typed(
+                TypedExprKind::Constant(TypedConstant::None),
+                Type::Error,
                 span,
             );
         }
-        let signature = method.signature(&receiver.ty);
+        let keyword_value = keyword_value.value();
         let parameters = signature.parameters;
-        if arguments.len() < signature.required || arguments.len() > parameters.len() {
-            let expected = if signature.required == parameters.len() {
-                counted(parameters.len(), "argument")
+        let positional = parameters.len() - usize::from(signature.keyword.is_some());
+        if arguments.len() < signature.required || arguments.len() > positional {
+            let expected = if positional == 0 && signature.keyword.is_some() {
+                "no positional arguments".to_owned()
+            } else if signature.required == positional {
+                counted(positional, "argument")
             } else if signature.required == 0 {
-                format!("at most {}", counted(parameters.len(), "argument"))
+                format!("at most {}", counted(positional, "argument"))
             } else {
-                format!("{} to {} arguments", signature.required, parameters.len())
+                format!("{} to {} arguments", signature.required, positional)
             };
             let given = if arguments.len() == 1 { "is" } else { "are" };
             return self.error(
@@ -203,9 +276,11 @@ impl BodyChecker<'_> {
                 span,
             );
         }
+        let keyword_parameter = keyword_value.and_then(|value| Some((value, parameters.last()?)));
         let arguments: Vec<TypedExpr> = arguments
             .iter()
             .zip(&parameters)
+            .chain(keyword_parameter)
             .map(|(argument, parameter)| {
                 let value = self.expression_expecting(argument, Some(parameter));
                 self.expect(

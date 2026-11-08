@@ -188,32 +188,7 @@ impl BodyChecker<'_> {
             return self.for_range(target, iter, body, orelse, span);
         }
         let iterable = self.expression(iter);
-        let item = match &iterable.ty {
-            Type::List(item) => item.as_ref().clone(),
-            Type::Error => Type::Error,
-            Type::Str | Type::Tuple(_) => {
-                self.diagnostics.push(
-                    Diagnostic::new(
-                        DiagnosticCode::error(201),
-                        iterable.span,
-                        "`for` loops over a str or a tuple are planned for TyPy 0.2 (CST-03)",
-                    )
-                    .with_rule(RuleId::CST_03),
-                );
-                Type::Error
-            }
-            other => {
-                self.diagnostics.push(
-                    Diagnostic::new(
-                        DiagnosticCode::error(411),
-                        iterable.span,
-                        format!("{} cannot be iterated over", other.with_article()),
-                    )
-                    .with_rule(RuleId::CST_03),
-                );
-                Type::Error
-            }
-        };
+        let item = self.iterated_item(&iterable, "`for`");
         // Binding the target marks its names as assigned: the body runs with them, while the
         // `else` clause and the code after the loop start from the state before it, because the
         // list may be empty.

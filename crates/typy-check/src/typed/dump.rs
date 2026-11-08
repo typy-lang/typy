@@ -193,6 +193,9 @@ impl Dump<'_> {
                 format!("Print sep={} end={}", sep.is_some(), end.is_some())
             }
             TypedExprKind::Builtin { builtin, .. } => format!("Builtin {builtin:?}"),
+            TypedExprKind::IterableBuiltin { builtin, .. } => {
+                format!("IterableBuiltin {builtin:?}")
+            }
             TypedExprKind::Index { .. } => "Index".to_owned(),
             TypedExprKind::Tuple(_) => "Tuple".to_owned(),
             TypedExprKind::List(_) => "List".to_owned(),
@@ -226,6 +229,11 @@ fn children(expression: &TypedExpr) -> Vec<&TypedExpr> {
         }
         TypedExprKind::Tuple(items) | TypedExprKind::List(items) => items.iter().collect(),
         TypedExprKind::ListItem { list, index } => vec![list, index],
+        TypedExprKind::IterableBuiltin {
+            iterable, option, ..
+        } => std::iter::once(iterable.as_ref())
+            .chain(option.as_deref())
+            .collect(),
         TypedExprKind::Slice {
             value,
             lower,

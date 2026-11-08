@@ -4,6 +4,7 @@ mod builtin_call;
 mod call;
 mod expression;
 mod flow;
+mod iterable_call;
 mod list;
 mod locals;
 mod name;

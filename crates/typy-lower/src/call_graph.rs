@@ -156,6 +156,14 @@ fn expression(expression_value: &TypedExpr, callees: &mut BTreeSet<FunctionId>) 
                 expression(argument, callees);
             }
         }
+        TypedExprKind::IterableBuiltin {
+            iterable, option, ..
+        } => {
+            expression(iterable, callees);
+            if let Some(option) = option {
+                expression(option, callees);
+            }
+        }
         TypedExprKind::BoolOp { values, .. }
         | TypedExprKind::Tuple(values)
         | TypedExprKind::List(values)

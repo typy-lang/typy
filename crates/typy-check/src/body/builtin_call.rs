@@ -4,6 +4,7 @@ use typy_diagnostics::{Diagnostic, DiagnosticCode, RuleId, Span};
 use typy_source::syntax::{Expr, Keyword};
 
 use super::BodyChecker;
+use super::iterable_call::takes_one_iterable;
 use crate::builtin::Builtin;
 use crate::typed::{TypedConstant, TypedExpr, TypedExprKind};
 use crate::types::Type;
@@ -19,6 +20,9 @@ impl BodyChecker<'_> {
     ) -> TypedExpr {
         if builtin == Builtin::Print {
             return self.print(arguments, keywords, span);
+        }
+        if takes_one_iterable(builtin, arguments.len()) {
+            return self.call_over_iterable(builtin, arguments, keywords, span);
         }
         let values: Vec<TypedExpr> = arguments
             .iter()
@@ -47,7 +51,9 @@ impl BodyChecker<'_> {
         }
         let types: Vec<Type> = values.iter().map(|value| value.ty.clone()).collect();
         let result = match builtin {
-            Builtin::Print => unreachable!("print is checked above"),
+            Builtin::Print | Builtin::Sorted | Builtin::Sum | Builtin::Any | Builtin::All => {
+                unreachable!("print and the builtins of one iterable are checked above")
+            }
             Builtin::Range => {
                 return self.error(
                     Diagnostic::new(
@@ -87,20 +93,6 @@ impl BodyChecker<'_> {
                 }
             }
             Builtin::Min | Builtin::Max => {
-                if values.len() == 1 {
-                    return self.error(
-                        Diagnostic::new(
-                            DiagnosticCode::error(201),
-                            span,
-                            format!(
-                                "`{}` of one iterable is planned for TyPy 0.2 (LIB-02)",
-                                builtin.name()
-                            ),
-                        )
-                        .with_rule(RuleId::LIB_02),
-                        span,
-                    );
-                }
                 if !self.arity(builtin, values.len(), 2..=usize::MAX, span) {
                     return Self::typed(
                         TypedExprKind::Constant(TypedConstant::None),
