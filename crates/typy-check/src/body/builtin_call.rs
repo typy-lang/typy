@@ -67,7 +67,7 @@ impl BodyChecker<'_> {
                         span,
                     );
                 }
-                if !matches!(values[0].ty, Type::Tuple(_)) {
+                if !matches!(values[0].ty, Type::Tuple(_) | Type::List(_)) {
                     self.expect(&values[0], Type::Str, "the argument of `len`");
                 }
                 Type::Int

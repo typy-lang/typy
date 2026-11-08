@@ -198,6 +198,16 @@ pub enum Operation {
         /// The position, from 0.
         index: u32,
     },
+    /// The eight bytes a list stores for a value: an `int` word, the bits of a `float`, a
+    /// `bool` as 0 or 1, or a pointer (MEM-02).
+    ToBits(ValueId),
+    /// The value of type `ty` that eight bytes from a list hold, borrowed from the list.
+    FromBits {
+        /// The bytes.
+        bits: ValueId,
+        /// The value's type.
+        ty: crate::types::TyirType,
+    },
     /// Adds one to the count of a counted value (ADR-0001).
     Increment(ValueId),
     /// Takes one from the count of a counted value, and frees it at zero.

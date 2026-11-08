@@ -73,6 +73,8 @@ impl<'ctx> FunctionEmitter<'_, '_, 'ctx> {
                     inkwell::values::ValueKind::Instruction(_) => None,
                 }
             }
+            Operation::ToBits(value) => Some(self.emit_to_bits(*value)?),
+            Operation::FromBits { bits, ty } => self.emit_from_bits(*bits, *ty)?,
             Operation::MakeTuple { ty, items } => Some(self.make_tuple(*ty, items)?),
             Operation::TupleItem { tuple, index } => self.tuple_item(*tuple, *index)?,
             Operation::Increment(value) => {

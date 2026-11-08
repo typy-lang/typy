@@ -3,6 +3,7 @@
 
 mod abi;
 mod arithmetic;
+mod bits;
 mod call;
 mod comparison;
 mod constant;

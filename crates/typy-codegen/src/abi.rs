@@ -13,7 +13,7 @@ pub(crate) fn value_type<'ctx>(
     ty: TyirType,
 ) -> Option<BasicTypeEnum<'ctx>> {
     match ty {
-        TyirType::Int => Some(context.i64_type().into()),
+        TyirType::Int | TyirType::Bits => Some(context.i64_type().into()),
         TyirType::Float => Some(context.f64_type().into()),
         TyirType::Bool => Some(context.bool_type().into()),
         TyirType::Unit => None,

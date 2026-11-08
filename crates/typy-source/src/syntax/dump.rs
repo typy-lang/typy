@@ -219,11 +219,22 @@ impl Dump<'_> {
                 self.line(depth, &format!("UnaryOp {operator:?}"), span);
                 self.expression(depth + 1, operand);
             }
-            Expr::Tuple { elements, .. } => {
-                self.line(depth, "Tuple", span);
+            Expr::Tuple { elements, .. } | Expr::List { elements, .. } => {
+                let label = if matches!(expression, Expr::List { .. }) {
+                    "List"
+                } else {
+                    "Tuple"
+                };
+                self.line(depth, label, span);
                 for element in elements {
                     self.expression(depth + 1, element);
                 }
+            }
+            Expr::Attribute {
+                value, attribute, ..
+            } => {
+                self.line(depth, &format!("Attribute {}", attribute.name), span);
+                self.expression(depth + 1, value);
             }
             Expr::IfExp {
                 test, body, orelse, ..

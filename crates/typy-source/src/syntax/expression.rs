@@ -99,6 +99,15 @@ pub enum Expr {
         elements: Vec<Expr>,
         span: Span,
     },
+    List {
+        elements: Vec<Expr>,
+        span: Span,
+    },
+    Attribute {
+        value: Box<Expr>,
+        attribute: Identifier,
+        span: Span,
+    },
     Other {
         kind: NodeKind,
         span: Span,
@@ -120,6 +129,8 @@ impl Expr {
             | Self::Subscript { span, .. }
             | Self::Name { span, .. }
             | Self::Tuple { span, .. }
+            | Self::List { span, .. }
+            | Self::Attribute { span, .. }
             | Self::Other { span, .. } => *span,
         }
     }

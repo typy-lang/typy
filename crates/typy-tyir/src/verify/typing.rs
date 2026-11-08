@@ -197,6 +197,20 @@ impl Checker<'_> {
                 function,
                 arguments,
             } => self.call(Callee::Function(*function), arguments)?,
+            Operation::ToBits(value) => {
+                let ty = self.ty(*value)?;
+                if !matches!(
+                    ty,
+                    TyirType::Int | TyirType::Float | TyirType::Bool | TyirType::Object(_)
+                ) {
+                    return Err(self.error(format!("v{} of type {ty} is not a list item", value.0)));
+                }
+                Some(TyirType::Bits)
+            }
+            Operation::FromBits { bits, ty } => {
+                self.expect(*bits, TyirType::Bits, "a list item")?;
+                Some(*ty)
+            }
             Operation::MakeTuple { ty, items } => Some(self.make_tuple(*ty, items)?),
             Operation::TupleItem { tuple, index } => Some(self.tuple_item(*tuple, *index)?),
             Operation::Increment(value) | Operation::Decrement(value) => {

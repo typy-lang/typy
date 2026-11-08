@@ -11,6 +11,8 @@ impl TypeId {
     pub const STR: Self = Self(1);
     /// An exception object (ADR-0004).
     pub const EXCEPTION: Self = Self(2);
+    /// A `list`, whatever its item type; the item type lives in the checked program.
+    pub const LIST: Self = Self(4);
 }
 
 /// The number of a tuple type in its module's `TupleTypes`.
@@ -32,6 +34,8 @@ pub enum TyirType {
     Object(TypeId),
     /// A tuple, held as a value with its items in place; `TupleTypes` gives the item types.
     Tuple(TupleTypeId),
+    /// The eight bytes of a list item, as the runtime stores it; never counted (MEM-02).
+    Bits,
 }
 
 impl TyirType {
@@ -39,6 +43,8 @@ impl TyirType {
     pub const STR: Self = Self::Object(TypeId::STR);
     /// An exception object.
     pub const EXCEPTION: Self = Self::Object(TypeId::EXCEPTION);
+    /// A list.
+    pub const LIST: Self = Self::Object(TypeId::LIST);
 }
 
 impl fmt::Display for TyirType {
@@ -50,6 +56,8 @@ impl fmt::Display for TyirType {
             Self::Unit => formatter.write_str("unit"),
             Self::Object(TypeId::STR) => formatter.write_str("str"),
             Self::Object(TypeId::EXCEPTION) => formatter.write_str("exception"),
+            Self::Object(TypeId::LIST) => formatter.write_str("list"),
+            Self::Bits => formatter.write_str("bits"),
             Self::Object(TypeId(id)) => write!(formatter, "object#{id}"),
             Self::Tuple(TupleTypeId(id)) => write!(formatter, "tuple#{id}"),
         }

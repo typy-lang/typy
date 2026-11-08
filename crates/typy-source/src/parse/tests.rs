@@ -270,14 +270,12 @@ global g
 #[test]
 fn expressions_beyond_the_release_keep_their_kind() {
     let cases = [
-        ("[1]\n", NodeKind::List),
         ("{1: 2}\n", NodeKind::Dict),
         ("{1}\n", NodeKind::Set),
         ("[x for x in y]\n", NodeKind::ListComp),
         ("(x for x in y)\n", NodeKind::GeneratorExp),
         ("lambda: 1\n", NodeKind::Lambda),
         ("f'{x}'\n", NodeKind::JoinedStr),
-        ("a.b\n", NodeKind::Attribute),
         ("(y := 1)\n", NodeKind::NamedExpr),
     ];
     for (source, expected) in cases {
@@ -592,4 +590,23 @@ fn tuples_are_converted_with_their_elements() {
     assert!(
         matches!(only_expression("()\n"), Expr::Tuple { ref elements, .. } if elements.is_empty())
     );
+}
+
+#[test]
+fn lists_and_attributes_are_converted() {
+    let Expr::List { elements, .. } = only_expression("[1, x]\n") else {
+        panic!("not a list");
+    };
+    assert_eq!(elements.len(), 2);
+    let Expr::Call { function, .. } = only_expression("items.append(1)\n") else {
+        panic!("not a call");
+    };
+    let Expr::Attribute {
+        value, attribute, ..
+    } = *function
+    else {
+        panic!("not an attribute");
+    };
+    assert!(matches!(*value, Expr::Name { ref id, .. } if id == "items"));
+    assert_eq!(attribute.name, "append");
 }

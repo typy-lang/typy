@@ -8,6 +8,8 @@ pub const STR_TYPE_ID: u32 = 1;
 pub const EXCEPTION_TYPE_ID: u32 = 2;
 /// The type ID of large integers.
 pub const BIG_INT_TYPE_ID: u32 = 3;
+/// The type ID of a `list`.
+pub const LIST_TYPE_ID: u32 = 4;
 
 /// The first 8 bytes of every heap object.
 #[repr(C)]

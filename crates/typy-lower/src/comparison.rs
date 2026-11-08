@@ -80,11 +80,23 @@ impl FunctionLowerer<'_> {
                 );
             }
             CompareOperator::In | CompareOperator::NotIn => {
-                unreachable!("the checker refuses `in` in 0.1")
+                let found = self.list_contains(left, right, span);
+                if operator == CompareOperator::In {
+                    return found;
+                }
+                return self
+                    .builder
+                    .push_value(Operation::BoolNot(found), TyirType::Bool, span);
             }
         };
         let kind = match (left.ty, right.ty) {
             (TyirType::Tuple(_), _) => return self.compare_tuples(operator, left, right, span),
+            (TyirType::Object(typy_tyir::TypeId::LIST), _) => {
+                return self.list_equality(comparison, left, right, span);
+            }
+            (TyirType::Bits, _) => {
+                unreachable!("list items are converted before they are compared")
+            }
             (TyirType::Unit, TyirType::Unit) => {
                 return self.constant(Constant::Bool(comparison == Comparison::Equal), span);
             }

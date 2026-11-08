@@ -89,6 +89,7 @@ impl FunctionLowerer<'_> {
                 let slot = self.slots[symbol];
                 self.store(slot, value, span);
             }
+            AssignTarget::Item { list, index } => self.assign_item(list, index, value, span),
             AssignTarget::Tuple(targets) => {
                 let (_, items) = self.item_types(value.ty);
                 for (index, (target, ty)) in targets.iter().zip(items).enumerate() {
@@ -235,7 +236,11 @@ impl FunctionLowerer<'_> {
             TyirType::Float => self.constant(Constant::Float(0.0), span),
             TyirType::Bool => self.constant(Constant::Bool(false), span),
             TyirType::Unit => self.constant(Constant::Unit, span),
+            TyirType::Object(typy_tyir::TypeId::LIST) => {
+                self.constant(Constant::PlaceholderList, span)
+            }
             TyirType::Object(_) => self.string("", span),
+            TyirType::Bits => unreachable!("no slot holds list item bytes"),
             TyirType::Tuple(id) => {
                 let (_, items) = self.item_types(ty);
                 let values: Vec<ValueId> = items

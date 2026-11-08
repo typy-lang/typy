@@ -43,7 +43,7 @@ impl BodyChecker<'_> {
     }
 
     pub(super) fn bind_local(&mut self, target: &Expr) {
-        if let Expr::Tuple { elements, .. } = target {
+        if let Expr::Tuple { elements, .. } | Expr::List { elements, .. } = target {
             for element in elements {
                 self.bind_local(element);
             }
@@ -92,6 +92,16 @@ impl BodyChecker<'_> {
         std::mem::take(&mut self.local_order)
     }
 
+    /// Returns the type a name target already has, declared by an annotation or fixed by an
+    /// earlier assignment, which a value without a type of its own, such as `[]`, takes.
+    pub(super) fn known_type(&self, target: &Expr) -> Option<Type> {
+        let Expr::Name { id, .. } = target else {
+            return None;
+        };
+        let symbol = self.locals.get(id)?;
+        self.types.get(symbol).cloned()
+    }
+
     /// Binds a target, a name or a tuple of targets, to a value of type `ty`; a tuple target
     /// takes a tuple of as many items, one for each of its targets (SMT-02).
     pub(super) fn assign_target(
@@ -100,7 +110,15 @@ impl BodyChecker<'_> {
         ty: Type,
         value: &TypedExpr,
     ) -> Option<AssignTarget> {
-        let Expr::Tuple { elements, span } = target else {
+        if let Expr::Subscript {
+            value: list,
+            index,
+            span,
+        } = target
+        {
+            return self.item_target(list, index, &ty, *span);
+        }
+        let (Expr::Tuple { elements, span } | Expr::List { elements, span }) = target else {
             return self.assign(target, ty, value).map(AssignTarget::Name);
         };
         let items = match ty {
@@ -129,6 +147,53 @@ impl BodyChecker<'_> {
             .map(|(element, item)| self.assign_target(element, item, value))
             .collect();
         targets.map(AssignTarget::Tuple)
+    }
+
+    /// Checks `list[index] = value`: the target is an item of a list, and the value has the
+    /// list's item type (DAT-07).
+    fn item_target(
+        &mut self,
+        list: &Expr,
+        index: &Expr,
+        ty: &Type,
+        span: typy_diagnostics::Span,
+    ) -> Option<AssignTarget> {
+        let list = self.expression(list);
+        let index = self.expression(index);
+        let item = match &list.ty {
+            Type::List(item) => item.as_ref().clone(),
+            Type::Error => return None,
+            other => {
+                self.diagnostics.push(
+                    Diagnostic::new(
+                        DiagnosticCode::error(401),
+                        span,
+                        format!("an item of {} cannot be assigned", other.with_article()),
+                    )
+                    .with_rule(if *other == Type::Str {
+                        RuleId::DAT_05
+                    } else {
+                        RuleId::DAT_07
+                    }),
+                );
+                return None;
+            }
+        };
+        self.expect(&index, Type::Int, "an index");
+        if !ty.is_assignable_to(&item) {
+            self.diagnostics.push(
+                Diagnostic::new(
+                    DiagnosticCode::error(402),
+                    span,
+                    format!("an item of {} is assigned {}", list.ty, ty.with_article()),
+                )
+                .with_rule(RuleId::TYP_03),
+            );
+        }
+        Some(AssignTarget::Item {
+            list: Box::new(list),
+            index: Box::new(index),
+        })
     }
 
     /// Binds a name target to a value of type `ty`; the first binding fixes the variable's type (TYP-02, TYP-03).

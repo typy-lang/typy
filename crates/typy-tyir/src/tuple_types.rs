@@ -48,7 +48,7 @@ impl TupleTypes {
             TyirType::Tuple(id) => self
                 .items(id)
                 .is_some_and(|items| items.iter().any(|item| self.is_counted(*item))),
-            TyirType::Float | TyirType::Bool | TyirType::Unit => false,
+            TyirType::Float | TyirType::Bool | TyirType::Unit | TyirType::Bits => false,
         }
     }
 }

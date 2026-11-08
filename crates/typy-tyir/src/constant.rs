@@ -21,6 +21,9 @@ pub enum Constant {
     Unit,
     /// A string from the pool; string constants are never freed.
     Str(StringId),
+    /// The runtime's immortal empty list, the first value of a list slot. Definite assignment
+    /// guarantees it is never read, so it is never changed.
+    PlaceholderList,
 }
 
 impl Constant {
@@ -33,6 +36,7 @@ impl Constant {
             Self::Bool(_) => TyirType::Bool,
             Self::Unit => TyirType::Unit,
             Self::Str(_) => TyirType::STR,
+            Self::PlaceholderList => TyirType::LIST,
         }
     }
 }
@@ -45,6 +49,7 @@ impl fmt::Display for Constant {
             Self::Bool(value) => write!(formatter, "bool {value}"),
             Self::Unit => formatter.write_str("unit"),
             Self::Str(StringId(id)) => write!(formatter, "str s{id}"),
+            Self::PlaceholderList => formatter.write_str("placeholder list"),
         }
     }
 }
@@ -62,6 +67,11 @@ mod tests {
             (Constant::Bool(true), TyirType::Bool, "bool true"),
             (Constant::Unit, TyirType::Unit, "unit"),
             (Constant::Str(StringId(3)), TyirType::STR, "str s3"),
+            (
+                Constant::PlaceholderList,
+                TyirType::LIST,
+                "placeholder list",
+            ),
         ];
         for (constant, ty, text) in cases {
             assert_eq!(constant.ty(), ty);

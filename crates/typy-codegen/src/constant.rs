@@ -35,6 +35,15 @@ impl<'ctx> FunctionEmitter<'_, '_, 'ctx> {
                 let text = self.shared.tyir.string(*id);
                 Some(self.shared.statics.string(self.shared.module, text).into())
             }
+            Constant::PlaceholderList => {
+                let name = "typy_rt_placeholder_list";
+                let global = self.shared.module.get_global(name).unwrap_or_else(|| {
+                    let global = self.shared.module.add_global(context.i8_type(), None, name);
+                    global.set_linkage(inkwell::module::Linkage::External);
+                    global
+                });
+                Some(global.as_pointer_value().into())
+            }
         })
     }
 

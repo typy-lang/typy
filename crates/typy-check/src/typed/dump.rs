@@ -84,6 +84,7 @@ impl Dump<'_> {
                 let parts: Vec<String> = targets.iter().map(|target| self.target(target)).collect();
                 format!("({})", parts.join(", "))
             }
+            AssignTarget::Item { list, .. } => format!("item of {}", list.ty),
         }
     }
 
@@ -140,6 +141,18 @@ impl Dump<'_> {
                 self.block(depth + 1, "body", body);
                 self.block(depth + 1, "orelse", orelse);
             }
+            TypedStmt::ForEach {
+                target,
+                iterable,
+                body,
+                orelse,
+                span,
+            } => {
+                self.line(depth, &format!("ForEach {}", self.target(target)), *span);
+                self.expression(depth + 1, iterable);
+                self.block(depth + 1, "body", body);
+                self.block(depth + 1, "orelse", orelse);
+            }
             TypedStmt::ForRange {
                 target,
                 start,
@@ -182,6 +195,9 @@ impl Dump<'_> {
             TypedExprKind::Builtin { builtin, .. } => format!("Builtin {builtin:?}"),
             TypedExprKind::Index { .. } => "Index".to_owned(),
             TypedExprKind::Tuple(_) => "Tuple".to_owned(),
+            TypedExprKind::List(_) => "List".to_owned(),
+            TypedExprKind::ListItem { .. } => "ListItem".to_owned(),
+            TypedExprKind::Method { method, .. } => format!("Method {}", method.name()),
             TypedExprKind::TupleItem { index, .. } => format!("TupleItem {index}"),
         };
         self.line(depth, &format!("{label} : {ty}"), expression.span);
@@ -207,7 +223,15 @@ fn children(expression: &TypedExpr) -> Vec<&TypedExpr> {
         TypedExprKind::Unary { operand, .. } | TypedExprKind::TupleItem { tuple: operand, .. } => {
             vec![operand]
         }
-        TypedExprKind::Tuple(items) => items.iter().collect(),
+        TypedExprKind::Tuple(items) | TypedExprKind::List(items) => items.iter().collect(),
+        TypedExprKind::ListItem { list, index } => vec![list, index],
+        TypedExprKind::Method {
+            receiver,
+            arguments,
+            ..
+        } => std::iter::once(receiver.as_ref())
+            .chain(arguments)
+            .collect(),
         TypedExprKind::BoolOp { values, .. }
         | TypedExprKind::Builtin {
             arguments: values, ..

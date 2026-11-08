@@ -18,6 +18,8 @@ pub enum Type {
     NoneType,
     /// `tuple[A, B, ...]`: a fixed number of items, each with its own type (DAT-08).
     Tuple(Vec<Type>),
+    /// `list[T]`: a mutable sequence shared by every name bound to it (DAT-07).
+    List(Box<Type>),
     /// The type of an expression that already has a diagnostic; every check accepts it, so one cause gives one error (DIA-04).
     Error,
 }
@@ -29,6 +31,7 @@ impl Type {
     pub fn is_assignable_to(&self, target: &Self) -> bool {
         match (self, target) {
             (Self::Error, _) | (_, Self::Error) => true,
+            (Self::List(item), Self::List(target)) => item.is_assignable_to(target),
             (Self::Tuple(items), Self::Tuple(targets)) => {
                 items.len() == targets.len()
                     && items
@@ -46,6 +49,7 @@ impl Type {
         match self {
             Self::Error => true,
             Self::Tuple(items) => items.iter().any(Self::has_error),
+            Self::List(item) => item.has_error(),
             _ => false,
         }
     }
@@ -56,6 +60,9 @@ impl Type {
     pub fn can_test_equality(&self, other: &Self) -> bool {
         match (self, other) {
             (Self::Error, _) | (_, Self::Error) => true,
+            // The runtime compares items by the list's own item kind, so two lists compare when
+            // their items have one type.
+            (Self::List(left), Self::List(right)) => left == right,
             (Self::Tuple(left), Self::Tuple(right)) => {
                 left.len() == right.len()
                     && left
@@ -86,6 +93,17 @@ impl Type {
             (Self::NoneType, _) | (_, Self::NoneType) => false,
             _ => self == other || (self.is_numeric() && other.is_numeric()),
         }
+    }
+
+    /// Returns true when a list can hold items of this type in 0.2 so far: values that fit in
+    /// eight bytes, `int`, `float`, `bool`, `str` and lists (MEM-02). Lists of tuples and of
+    /// `None` follow.
+    #[must_use]
+    pub fn is_list_item(&self) -> bool {
+        matches!(
+            self,
+            Self::Int | Self::Float | Self::Bool | Self::Str | Self::List(_) | Self::Error
+        )
     }
 
     /// Returns true for `int` and `float`.
@@ -136,6 +154,7 @@ impl fmt::Display for Type {
                 }
                 formatter.write_str("]")
             }
+            Self::List(item) => write!(formatter, "list[{item}]"),
             Self::Error => formatter.write_str("<error>"),
         }
     }

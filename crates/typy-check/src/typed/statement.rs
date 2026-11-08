@@ -6,17 +6,25 @@ use typy_source::syntax::BinaryOperator;
 use super::expression::TypedExpr;
 use super::symbol::SymbolId;
 
-/// A statement after checking.
 /// Where an assignment stores its value: a variable, or a tuple of targets that the value is
 /// unpacked into, item by item (SMT-02).
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum AssignTarget {
     /// A variable.
     Name(SymbolId),
     /// One target for each item of a tuple value.
     Tuple(Vec<AssignTarget>),
+    /// An item of a list, `list[index] = value`; the list and the index are evaluated after the
+    /// value, as CPython does (DAT-07).
+    Item {
+        /// The list.
+        list: Box<TypedExpr>,
+        /// The position, counted from the end when negative.
+        index: Box<TypedExpr>,
+    },
 }
 
+/// A statement after checking.
 #[derive(Clone, Debug, PartialEq)]
 #[allow(
     missing_docs,
@@ -56,6 +64,14 @@ pub enum TypedStmt {
         span: Span,
     },
     /// `for target in range(start, stop, step)`; the arguments are evaluated once, in order.
+    /// `for target in iterable`, over the items of a list (CST-03).
+    ForEach {
+        target: AssignTarget,
+        iterable: TypedExpr,
+        body: Vec<TypedStmt>,
+        orelse: Vec<TypedStmt>,
+        span: Span,
+    },
     ForRange {
         target: SymbolId,
         start: TypedExpr,

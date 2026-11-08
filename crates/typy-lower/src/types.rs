@@ -12,6 +12,7 @@ pub(crate) fn tyir_type(ty: &Type, tuples: &mut TupleTypes) -> TyirType {
         Type::Bool => TyirType::Bool,
         Type::Str => TyirType::STR,
         Type::NoneType | Type::Error => TyirType::Unit,
+        Type::List(_) => TyirType::LIST,
         Type::Tuple(items) => {
             let items = items.iter().map(|item| tyir_type(item, tuples)).collect();
             tuples.intern(items)

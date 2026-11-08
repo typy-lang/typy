@@ -10,8 +10,9 @@ mod utf8;
 use crate::allocator::{allocate, array_size};
 use crate::header::{ObjectHeader, STR_TYPE_ID};
 
+pub(crate) use operations::typy_rt_str_compare;
 pub(crate) use points::{Points, is_space};
-pub(crate) use repr::repr_into;
+pub(crate) use repr::{repr_into, typy_rt_str_repr};
 pub(crate) use unicode::decimal_value;
 pub(crate) use utf8::write_utf8;
 

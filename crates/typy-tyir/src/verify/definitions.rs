@@ -106,7 +106,9 @@ pub(super) fn operands(operation: &Operation) -> Vec<ValueId> {
         | Operation::IsTrue { value, .. }
         | Operation::Increment(value)
         | Operation::Decrement(value)
-        | Operation::TupleItem { tuple: value, .. } => vec![*value],
+        | Operation::TupleItem { tuple: value, .. }
+        | Operation::ToBits(value)
+        | Operation::FromBits { bits: value, .. } => vec![*value],
         Operation::IntBinary { left, right, .. }
         | Operation::FloatBinary { left, right, .. }
         | Operation::BoolBinary { left, right, .. }

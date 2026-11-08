@@ -39,6 +39,14 @@ pub enum RuntimeFunction {
     WriteStdout,
     CheckStack,
     RangeCheckStep,
+    ListNew,
+    ListAppend,
+    ListLength,
+    ListGet,
+    ListSet,
+    ListEqual,
+    ListContains,
+    ListRepr,
 }
 
 /// The parameter types, result type and raising behaviour of a runtime function.
@@ -69,7 +77,7 @@ const FLOAT_FLOAT: &[TyirType] = &[TyirType::Float, TyirType::Float];
 
 impl RuntimeFunction {
     /// Every runtime function.
-    pub const ALL: [Self; 30] = [
+    pub const ALL: [Self; 38] = [
         Self::IntFloorDivide,
         Self::IntModulo,
         Self::IntPower,
@@ -100,13 +108,22 @@ impl RuntimeFunction {
         Self::WriteStdout,
         Self::CheckStack,
         Self::RangeCheckStep,
+        Self::ListNew,
+        Self::ListAppend,
+        Self::ListLength,
+        Self::ListGet,
+        Self::ListSet,
+        Self::ListEqual,
+        Self::ListContains,
+        Self::ListRepr,
     ];
 
     /// Returns the function's signature. Comparisons take the comparison as an `int` operand, numbered as `Comparison::code`.
     #[must_use]
     pub const fn signature(self) -> RuntimeSignature {
-        use TyirType::{Bool, Float, Int, Unit};
+        use TyirType::{Bits, Bool, Float, Int, Unit};
         const STR: TyirType = TyirType::STR;
+        const LIST: TyirType = TyirType::LIST;
         match self {
             Self::IntFloorDivide
             | Self::IntModulo
@@ -137,6 +154,14 @@ impl RuntimeFunction {
             Self::WriteStdout => signature(&[STR], Unit, false),
             Self::CheckStack => signature(&[], Unit, true),
             Self::RangeCheckStep => signature(&[Int], Unit, true),
+            Self::ListNew => signature(&[Int, Int], LIST, false),
+            Self::ListAppend => signature(&[LIST, Bits], Unit, false),
+            Self::ListLength => signature(&[LIST], Int, false),
+            Self::ListGet => signature(&[LIST, Int], Bits, true),
+            Self::ListSet => signature(&[LIST, Int, Bits], Unit, true),
+            Self::ListEqual => signature(&[LIST, LIST], Bool, false),
+            Self::ListContains => signature(&[LIST, Bits], Bool, false),
+            Self::ListRepr => signature(&[LIST], STR, true),
         }
     }
 
@@ -174,6 +199,14 @@ impl RuntimeFunction {
             Self::WriteStdout => "write_stdout",
             Self::CheckStack => "check_stack",
             Self::RangeCheckStep => "range_check_step",
+            Self::ListNew => "list_new",
+            Self::ListAppend => "list_append",
+            Self::ListLength => "list_length",
+            Self::ListGet => "list_get",
+            Self::ListSet => "list_set",
+            Self::ListEqual => "list_equal",
+            Self::ListContains => "list_contains",
+            Self::ListRepr => "list_repr",
         }
     }
 }

@@ -29,7 +29,11 @@ impl BodyChecker<'_> {
                 value,
                 span,
             } => {
-                let value = self.expression(value);
+                let expected = match targets.as_slice() {
+                    [single] => self.known_type(single),
+                    _ => None,
+                };
+                let value = self.expression_expecting(value, expected.as_ref());
                 let targets = targets
                     .iter()
                     .filter_map(|target| self.assign_target(target, value.ty.clone(), &value))
@@ -46,7 +50,8 @@ impl BodyChecker<'_> {
                 span,
                 ..
             } => {
-                let value = self.expression(value);
+                let expected = self.known_type(target);
+                let value = self.expression_expecting(value, expected.as_ref());
                 let target = self.assign(target, value.ty.clone(), &value)?;
                 TypedStmt::Assign {
                     targets: vec![AssignTarget::Name(target)],
@@ -123,7 +128,7 @@ impl BodyChecker<'_> {
                 body,
                 orelse,
                 span,
-            } => self.for_range(target, iter, body, orelse, *span)?,
+            } => self.for_statement(target, iter, body, orelse, *span)?,
             Stmt::Pass { span } => TypedStmt::Pass { span: *span },
             Stmt::Break { span } => {
                 let state = self.assigned.take();
@@ -163,6 +168,70 @@ impl BodyChecker<'_> {
         }
         self.assigned = exit;
         (body, orelse)
+    }
+
+    /// Checks a `for` statement: over a call of `range`, or over the items of a list (CST-02,
+    /// CST-03).
+    pub(super) fn for_statement(
+        &mut self,
+        target: &Expr,
+        iter: &Expr,
+        body: &[Stmt],
+        orelse: &[Stmt],
+        span: Span,
+    ) -> Option<TypedStmt> {
+        if is_range_call(iter) {
+            return self.for_range(target, iter, body, orelse, span);
+        }
+        let iterable = self.expression(iter);
+        let item = match &iterable.ty {
+            Type::List(item) => item.as_ref().clone(),
+            Type::Error => Type::Error,
+            Type::Str | Type::Tuple(_) => {
+                self.diagnostics.push(
+                    Diagnostic::new(
+                        DiagnosticCode::error(201),
+                        iterable.span,
+                        "`for` loops over a str or a tuple are planned for TyPy 0.2 (CST-03)",
+                    )
+                    .with_rule(RuleId::CST_03),
+                );
+                Type::Error
+            }
+            other => {
+                self.diagnostics.push(
+                    Diagnostic::new(
+                        DiagnosticCode::error(411),
+                        iterable.span,
+                        format!("{} cannot be iterated over", other.with_article()),
+                    )
+                    .with_rule(RuleId::CST_03),
+                );
+                Type::Error
+            }
+        };
+        // Binding the target marks its names as assigned: the body runs with them, while the
+        // `else` clause and the code after the loop start from the state before it, because the
+        // list may be empty.
+        let before_loop = self.assigned.clone();
+        let target = self.assign_target(target, item, &iterable)?;
+        self.breaks.push(Vec::new());
+        let body = self.block(body);
+        let breaks = self.breaks.pop().unwrap_or_default();
+        self.assigned = before_loop;
+        let orelse = self.block(orelse);
+        let mut exit = self.assigned.take();
+        for state in breaks {
+            exit = meet(exit, state);
+        }
+        self.assigned = exit;
+        Some(TypedStmt::ForEach {
+            target,
+            iterable,
+            body,
+            orelse,
+            span,
+        })
     }
 
     pub(super) fn for_range(
@@ -230,7 +299,7 @@ impl BodyChecker<'_> {
 
     pub(super) fn return_statement(&mut self, value: Option<&Expr>, span: Span) -> TypedStmt {
         let expected = self.returns.clone().unwrap_or(Type::NoneType);
-        let value = value.map(|value| self.expression(value));
+        let value = value.map(|value| self.expression_expecting(value, Some(&expected)));
         let actual = value
             .as_ref()
             .map_or(Type::NoneType, |value| value.ty.clone());
@@ -262,4 +331,16 @@ impl BodyChecker<'_> {
         self.assigned = None;
         TypedStmt::Return { value, span }
     }
+}
+
+/// Returns true for `range(...)` with one to three positional arguments, the form `for` lowers
+/// as a counting loop.
+fn is_range_call(iter: &Expr) -> bool {
+    matches!(
+        iter,
+        Expr::Call { function, arguments, keywords, .. }
+            if matches!(function.as_ref(), Expr::Name { id, .. } if id == "range")
+                && keywords.is_empty()
+                && (1..=3).contains(&arguments.len())
+    )
 }

@@ -192,6 +192,8 @@ fn operation(module: &TyirModule, operation: &Operation) -> String {
         ),
         Operation::MakeTuple { ty, items } => format!("tuple#{} ({})", ty.0, names(items)),
         Operation::TupleItem { tuple, index } => format!("item v{}, {index}", tuple.0),
+        Operation::ToBits(value) => format!("to_bits v{}", value.0),
+        Operation::FromBits { bits, ty } => format!("from_bits v{}, {ty}", bits.0),
         Operation::Increment(value) => format!("inc v{}", value.0),
         Operation::Decrement(value) => format!("dec v{}", value.0),
     }

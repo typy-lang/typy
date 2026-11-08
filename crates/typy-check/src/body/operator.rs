@@ -173,7 +173,33 @@ impl BodyChecker<'_> {
                     self.comparison_error(&l, &r, span);
                 }
             }
-            CompareOperator::In | CompareOperator::NotIn => {}
+            // `x in xs` tests each item with `==`, so `x` compares for equality with the items
+            // (EXP-07).
+            CompareOperator::In | CompareOperator::NotIn => match &r {
+                // The runtime compares the value with each item by the item's kind, so the value
+                // has the item type.
+                Type::List(item) if l.is_assignable_to(item) => {}
+                Type::Str | Type::Tuple(_) => self.diagnostics.push(
+                    Diagnostic::new(
+                        DiagnosticCode::error(201),
+                        span,
+                        "`in` on a str or a tuple is planned for TyPy 0.2 (EXP-07)",
+                    )
+                    .with_rule(RuleId::EXP_07),
+                ),
+                other => self.diagnostics.push(
+                    Diagnostic::new(
+                        DiagnosticCode::error(407),
+                        span,
+                        format!(
+                            "`in` looks for {} in {}, which cannot hold it",
+                            l.with_article(),
+                            other.with_article()
+                        ),
+                    )
+                    .with_rule(RuleId::EXP_07),
+                ),
+            },
         }
     }
 

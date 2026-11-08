@@ -4,6 +4,7 @@
 mod body;
 mod builtin;
 mod check;
+mod method;
 mod subset;
 mod typed;
 mod types;
@@ -11,6 +12,7 @@ mod unprovided;
 
 pub use builtin::Builtin;
 pub use check::TypeChecker;
+pub use method::Method;
 pub use typed::{
     Argument, AssignTarget, FunctionId, FunctionSignature, SignatureParameter, Symbol, SymbolId,
     SymbolKind, TypedConstant, TypedExpr, TypedExprKind, TypedFunction, TypedProgram, TypedStmt,

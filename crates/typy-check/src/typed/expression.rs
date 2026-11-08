@@ -86,6 +86,19 @@ pub enum TypedExprKind {
     },
     /// A tuple display, one value per item (DAT-08).
     Tuple(Vec<TypedExpr>),
+    /// A list display, one value per item, in order (DAT-07).
+    List(Vec<TypedExpr>),
+    /// `list[index]`, counted from the end when negative (DAT-11).
+    ListItem {
+        list: Box<TypedExpr>,
+        index: Box<TypedExpr>,
+    },
+    /// A method of a built-in type called on `receiver` (LIB-03).
+    Method {
+        receiver: Box<TypedExpr>,
+        method: crate::method::Method,
+        arguments: Vec<TypedExpr>,
+    },
     /// The item of a tuple at a position known when compiling, counted from the start.
     TupleItem {
         tuple: Box<TypedExpr>,

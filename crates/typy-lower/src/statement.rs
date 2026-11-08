@@ -20,6 +20,7 @@ impl FunctionLowerer<'_> {
         self.slots[&symbol]
     }
 
+    #[allow(clippy::too_many_lines, reason = "one arm per statement kind")]
     fn statement(&mut self, statement: &TypedStmt) {
         match statement {
             TypedStmt::Assign {
@@ -96,6 +97,13 @@ impl FunctionLowerer<'_> {
                 orelse,
                 span,
             } => self.while_loop(test, body, orelse, *span),
+            TypedStmt::ForEach {
+                target,
+                iterable,
+                body,
+                orelse,
+                span,
+            } => self.for_each(target, iterable, body, orelse, *span),
             TypedStmt::ForRange {
                 target,
                 start,

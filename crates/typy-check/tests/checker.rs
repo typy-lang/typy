@@ -178,11 +178,9 @@ fn rejected_programs_give_their_codes() {
         ("def f(x) -> None:\n    pass\n", &["E0203"]),
         ("def f(x: int):\n    pass\n", &["E0204"]),
         ("def f(x: Any) -> None:\n    pass\n", &["E0403"]),
-        ("def f(x: list) -> None:\n    pass\n", &["E0201"]),
         ("def f(x: Thing) -> None:\n    pass\n", &["E0205"]),
         ("print(undefined)\n", &["E0205"]),
         ("print(eval(\"1\"))\n", &["E0202"]),
-        ("x = [1]\n", &["E0201"]),
         ("class C:\n    pass\n", &["E0201"]),
         ("x = 2j\n", &["E0104"]),
         ("n = 3\nprint(2 ** n)\n", &["E0302"]),
@@ -639,10 +637,10 @@ fn each_builtin_call_name_and_statement_rule_gives_its_code() {
         // A return value of another type (TYP-03, TYP-09).
         ("def f() -> str:\n    return 1\n", &["E0405"]),
         ("def f() -> float:\n    return 1\n", &["E0405"]),
-        // `for` takes only a call of `range` with one to three positional arguments (CST-02).
+        // `for` loops over a call of `range` or a list; `range` takes no keyword arguments (CST-02, CST-03).
         ("for i in range(1, 2, 3, 4):\n    pass\n", &["E0201"]),
-        ("for i in range(stop=3):\n    pass\n", &["E0201"]),
-        ("for i in len(\"abc\"):\n    pass\n", &["E0201"]),
+        ("for i in range(stop=3):\n    pass\n", &["E0404"]),
+        ("for i in len(\"abc\"):\n    pass\n", &["E0411"]),
         // A default is a constant (EXP-16).
         ("def f(n: int = 1 + 1) -> int:\n    return n\n", &["E0201"]),
     ];
@@ -735,5 +733,31 @@ fn tuple_annotations_and_unpacking_follow_the_item_types() {
     ];
     for (source, expected) in cases {
         assert_eq!(rejected(source), *expected, "{source:?}");
+    }
+}
+
+#[test]
+fn list_rules_give_their_codes() {
+    let cases: &[(&str, &[&str])] = &[
+        ("x = []\n", &["E0410"]),
+        ("x = [1, \"a\"]\n", &["E0409"]),
+        ("x = [1]\nx.push(2)\n", &["E0412"]),
+        ("x: list[int] = []\nx.append(\"a\")\n", &["E0404"]),
+        ("x: list[int] = [1]\nx[0] = \"a\"\n", &["E0402"]),
+        ("x = 1\nx[0] = 2\n", &["E0401"]),
+        ("for a in 3:\n    pass\n", &["E0411"]),
+        ("print(\"a\" in [1])\n", &["E0407"]),
+        ("x = [(1, 2)]\n", &["E0201"]),
+        ("x: list[None] = []\n", &["E0201"]),
+        ("missing.append(1)\n", &["E0205"]),
+        ("x = [1]\nx.append(item=2)\n", &["E0404"]),
+        ("x = [1]\nx.append()\n", &["E0404"]),
+        ("x = 'a'.upper()\n", &["E0412"]),
+        ("print(1 in 2)\n", &["E0407"]),
+        ("for c in 'abc':\n    pass\n", &["E0201"]),
+        ("def f(x: list) -> None:\n    pass\n", &["E0408"]),
+    ];
+    for (source, expected) in cases {
+        assert_eq!(&rejected(source), expected, "\n{source}");
     }
 }

@@ -169,6 +169,10 @@ impl BodyChecker<'_> {
                     let items = items.clone();
                     return self.tuple_item(value, &items, index, span);
                 }
+                if let Type::List(item) = &value.ty {
+                    let item = item.as_ref().clone();
+                    return self.list_item(value, item, index, span);
+                }
                 let index = self.expression(index);
                 if value.ty == Type::Error || index.ty == Type::Error {
                     return Self::typed(
@@ -203,21 +207,23 @@ impl BodyChecker<'_> {
                 arguments,
                 keywords,
                 ..
-            } => {
-                let Expr::Name {
+            } => match function.as_ref() {
+                Expr::Name {
                     id,
                     span: name_span,
-                } = function.as_ref()
-                else {
-                    return Self::typed(
-                        TypedExprKind::Constant(TypedConstant::None),
-                        Type::Error,
-                        span,
-                    );
-                };
-                self.call(id, *name_span, arguments, keywords, span)
-            }
-            Expr::Other { .. } => Self::typed(
+                } => self.call(id, *name_span, arguments, keywords, span),
+                Expr::Attribute {
+                    value, attribute, ..
+                } => self.method_call(value, attribute, arguments, keywords, span),
+                _ => Self::typed(
+                    TypedExprKind::Constant(TypedConstant::None),
+                    Type::Error,
+                    span,
+                ),
+            },
+            Expr::List { elements, .. } => self.list_display(elements, None, span),
+            // An attribute that is not a method call is refused by the subset check until classes.
+            Expr::Attribute { .. } | Expr::Other { .. } => Self::typed(
                 TypedExprKind::Constant(TypedConstant::None),
                 Type::Error,
                 span,

@@ -697,3 +697,24 @@ fn module_with_pair(function: &mut TyirFunction) -> TyirModule {
     module.tuple_types = tuple_types;
     module
 }
+
+#[test]
+fn bits_of_a_value_that_cannot_be_a_list_item_fail() {
+    let mut function = division();
+    let mut module = module_with_pair(&mut function);
+    let entry = &mut module.functions[0];
+    let tuple = entry.blocks[0].instructions.last().unwrap().result.unwrap();
+    let bits = ValueId(u32::try_from(entry.values.len()).unwrap());
+    entry.values.push(crate::value::ValueInfo {
+        ty: TyirType::Bits,
+        representation: crate::value::ValueRepresentation::Inline,
+    });
+    entry.blocks[0]
+        .instructions
+        .push(crate::instruction::Instruction {
+            result: Some(bits),
+            operation: Operation::ToBits(tuple),
+            span: span(),
+        });
+    assert!(message(&module).contains("is not a list item"));
+}

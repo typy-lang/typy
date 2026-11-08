@@ -20,6 +20,23 @@ impl FunctionLowerer<'_> {
                 self.load(slot, span)
             }
             TypedExprKind::Tuple(items) => self.tuple_display(items, ty, span),
+            TypedExprKind::List(items) => {
+                let item = match &expression.ty {
+                    typy_check::Type::List(item) => self.lowered_type(item),
+                    _ => unreachable!("a list display has a list type"),
+                };
+                self.list_display(items, item, span)
+            }
+            TypedExprKind::ListItem { list, index } => {
+                let list = self.expression(list);
+                let index = self.expression(index);
+                self.list_item(list, index, ty, span)
+            }
+            TypedExprKind::Method {
+                receiver,
+                method,
+                arguments,
+            } => self.method(receiver, *method, arguments, span),
             TypedExprKind::TupleItem { tuple, index } => {
                 let tuple = self.expression(tuple);
                 self.tuple_item(tuple, *index, ty, span)
@@ -118,7 +135,9 @@ impl FunctionLowerer<'_> {
             TyirType::Unit => return self.constant(Constant::Bool(false), span),
             TyirType::Int => ScalarKind::Int,
             TyirType::Float => ScalarKind::Float,
+            TyirType::Object(typy_tyir::TypeId::LIST) => return self.list_truth(lowered, span),
             TyirType::Object(_) => ScalarKind::Str,
+            TyirType::Bits => unreachable!("list items are converted before they are tested"),
             // A tuple's length is fixed by its type, so its truth is too.
             TyirType::Tuple(_) => {
                 let filled = self.tuple_length(lowered.ty) > 0;

@@ -2,7 +2,7 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use typy_check::{FunctionId, TypedExpr, TypedExprKind, TypedProgram, TypedStmt};
+use typy_check::{AssignTarget, FunctionId, TypedExpr, TypedExprKind, TypedProgram, TypedStmt};
 
 /// Returns the functions that can call themselves, directly or through others.
 pub(crate) fn recursive_functions(program: &TypedProgram) -> BTreeSet<FunctionId> {
@@ -37,10 +37,26 @@ pub(crate) fn recursive_functions(program: &TypedProgram) -> BTreeSet<FunctionId
 fn statements(body: &[TypedStmt], callees: &mut BTreeSet<FunctionId>) {
     for statement in body {
         match statement {
-            TypedStmt::Assign { value, .. }
-            | TypedStmt::AugAssign { value, .. }
-            | TypedStmt::Expr { value, .. } => {
+            TypedStmt::Assign { targets, value, .. } => {
                 expression(value, callees);
+                for target in targets {
+                    assign_target(target, callees);
+                }
+            }
+            TypedStmt::AugAssign { value, .. } | TypedStmt::Expr { value, .. } => {
+                expression(value, callees);
+            }
+            TypedStmt::ForEach {
+                target,
+                iterable,
+                body,
+                orelse,
+                ..
+            } => {
+                expression(iterable, callees);
+                assign_target(target, callees);
+                statements(body, callees);
+                statements(orelse, callees);
             }
             TypedStmt::Return {
                 value: Some(value), ..
@@ -77,6 +93,22 @@ fn statements(body: &[TypedStmt], callees: &mut BTreeSet<FunctionId>) {
     }
 }
 
+/// Finds calls in an assignment target: the list and the index of an item target.
+fn assign_target(target: &AssignTarget, callees: &mut BTreeSet<FunctionId>) {
+    match target {
+        AssignTarget::Name(_) => {}
+        AssignTarget::Tuple(targets) => {
+            for target in targets {
+                assign_target(target, callees);
+            }
+        }
+        AssignTarget::Item { list, index } => {
+            expression(list, callees);
+            expression(index, callees);
+        }
+    }
+}
+
 fn expression(expression_value: &TypedExpr, callees: &mut BTreeSet<FunctionId>) {
     match &expression_value.kind {
         TypedExprKind::Call {
@@ -95,8 +127,23 @@ fn expression(expression_value: &TypedExpr, callees: &mut BTreeSet<FunctionId>) 
         TypedExprKind::Unary { operand, .. } | TypedExprKind::TupleItem { tuple: operand, .. } => {
             expression(operand, callees);
         }
+        TypedExprKind::ListItem { list, index } => {
+            expression(list, callees);
+            expression(index, callees);
+        }
+        TypedExprKind::Method {
+            receiver,
+            arguments,
+            ..
+        } => {
+            expression(receiver, callees);
+            for argument in arguments {
+                expression(argument, callees);
+            }
+        }
         TypedExprKind::BoolOp { values, .. }
         | TypedExprKind::Tuple(values)
+        | TypedExprKind::List(values)
         | TypedExprKind::Builtin {
             arguments: values, ..
         } => {

@@ -50,6 +50,9 @@ pub(super) fn visit_expression(expression: &Expr, visit: &mut dyn FnMut(&Expr)) 
         Expr::BoolOp { values, .. }
         | Expr::Tuple {
             elements: values, ..
+        }
+        | Expr::List {
+            elements: values, ..
         } => values
             .iter()
             .for_each(|value| visit_expression(value, visit)),
@@ -57,7 +60,9 @@ pub(super) fn visit_expression(expression: &Expr, visit: &mut dyn FnMut(&Expr)) 
             visit_expression(left, visit);
             visit_expression(right, visit);
         }
-        Expr::UnaryOp { operand, .. } => visit_expression(operand, visit),
+        Expr::UnaryOp { operand, .. } | Expr::Attribute { value: operand, .. } => {
+            visit_expression(operand, visit);
+        }
         Expr::IfExp {
             test, body, orelse, ..
         } => {

@@ -66,7 +66,6 @@ fn later_features_name_their_release_and_rule() {
             "class C:\n    pass\n",
             "classes are planned for TyPy 0.2 (CLS-01)",
         ),
-        ("x = [1]\n", "lists are planned for TyPy 0.2 (DAT-07)"),
         ("x = {1: 2}\n", "dicts are planned for TyPy 0.2 (DAT-09)"),
         ("x = {1}\n", "sets are planned for TyPy 0.2 (DAT-10)"),
         (
@@ -79,20 +78,8 @@ fn later_features_name_their_release_and_rule() {
         ),
         ("x = b'a'\n", "bytes are planned for TyPy 0.2 (DAT-06)"),
         (
-            "x = 'a'.upper()\n",
-            "attributes and methods are planned for TyPy 0.2 (CLS-01)",
-        ),
-        (
             "x = 'abc'[0:1]\n",
             "slices are planned for TyPy 0.2 (DAT-12)",
-        ),
-        (
-            "print(1 in 2)\n",
-            "`in` and `not in` are planned for TyPy 0.2 (EXP-07)",
-        ),
-        (
-            "for c in 'abc':\n    pass\n",
-            "`for` loops over values other than `range` are planned for TyPy 0.2 (CST-03)",
         ),
         ("import os\n", "imports are planned for TyPy 0.3 (SMT-07)"),
         (
@@ -180,21 +167,14 @@ fn later_features_name_their_release_and_rule() {
             "`nonlocal` statements are planned for TyPy 1.0 (SMT-09)",
         ),
         (
-            "def f(x: list[int]) -> None:\n    pass\n",
+            "def f(x: dict[str, int]) -> None:\n    pass\n",
             "generic annotations such as `list[int]` are planned for TyPy 0.2 (TYP-06)",
         ),
         (
             "def f(x: int | None) -> None:\n    pass\n",
             "union annotations such as `int | None` are planned for TyPy 0.2 (TYP-06)",
         ),
-        (
-            "x.y = 1\n",
-            "attributes and methods are planned for TyPy 0.2 (CLS-01)",
-        ),
-        (
-            "x[0] = 1\n",
-            "assignments to items are planned for TyPy 0.2 (DAT-07)",
-        ),
+        ("x.y = 1\n", "attributes are planned for TyPy 0.2 (CLS-01)"),
         (
             "f()()\n",
             "calls of values that are not names are planned for TyPy 1.0 (FUN-05)",

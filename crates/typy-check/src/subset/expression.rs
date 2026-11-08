@@ -1,7 +1,7 @@
 //! Checks expressions and annotations against the feature table.
 
 use typy_diagnostics::{Diagnostic, DiagnosticCode, RuleId};
-use typy_source::syntax::{BinaryOperator, CompareOperator, Constant, Expr, NodeKind};
+use typy_source::syntax::{BinaryOperator, Constant, Expr};
 
 use super::Walker;
 use super::feature::{Feature, feature, planned};
@@ -10,7 +10,7 @@ impl Walker {
     /// Annotations name `int`, `float`, `bool`, `str`, `None` or `tuple[...]`; the checker reports any other name.
     pub(super) fn annotation(&mut self, annotation: &Expr) {
         match annotation {
-            Expr::Subscript { value, index, .. } if matches!(value.as_ref(), Expr::Name { id, .. } if id == "tuple") =>
+            Expr::Subscript { value, index, .. } if matches!(value.as_ref(), Expr::Name { id, .. } if id == "tuple" || id == "list") =>
             {
                 match index.as_ref() {
                     // `tuple[int, ...]` is checked, and reported, by the checker.
@@ -107,16 +107,8 @@ impl Walker {
                 self.expression(orelse);
             }
             Expr::Compare {
-                left,
-                operators,
-                comparators,
-                span,
+                left, comparators, ..
             } => {
-                if operators.iter().any(|operator| {
-                    matches!(operator, CompareOperator::In | CompareOperator::NotIn)
-                }) {
-                    self.report(*span, planned("`in` and `not in`", "0.2", RuleId::EXP_07));
-                }
                 self.expression(left);
                 for comparator in comparators {
                     self.expression(comparator);
@@ -130,15 +122,8 @@ impl Walker {
             } => {
                 match function.as_ref() {
                     Expr::Name { .. } => {}
-                    Expr::Other {
-                        kind: NodeKind::Attribute,
-                        span,
-                    } => {
-                        self.report(
-                            *span,
-                            planned("attributes and methods", "0.2", RuleId::CLS_01),
-                        );
-                    }
+                    // A method call: the checker decides whether the value has the method.
+                    Expr::Attribute { value, .. } => self.expression(value),
                     other => self.report(
                         other.span(),
                         planned("calls of values that are not names", "1.0", RuleId::FUN_05),
@@ -184,10 +169,13 @@ impl Walker {
                 self.expression(index);
             }
             Expr::Name { .. } => {}
-            Expr::Tuple { elements, .. } => {
+            Expr::Tuple { elements, .. } | Expr::List { elements, .. } => {
                 for element in elements {
                     self.expression(element);
                 }
+            }
+            Expr::Attribute { span, .. } => {
+                self.report(*span, planned("attributes", "0.2", RuleId::CLS_01));
             }
             Expr::Other { kind, span } => self.report(*span, feature(*kind)),
         }

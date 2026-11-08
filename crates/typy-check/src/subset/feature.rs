@@ -30,8 +30,6 @@ pub(super) const fn planned(what: &'static str, release: &'static str, rule: Rul
 pub(super) fn feature(kind: NodeKind) -> Feature {
     match kind {
         NodeKind::ClassDef => planned("classes", "0.2", RuleId::CLS_01),
-        NodeKind::Attribute => planned("attributes and methods", "0.2", RuleId::CLS_01),
-        NodeKind::List => planned("lists", "0.2", RuleId::DAT_07),
         NodeKind::Dict => planned("dicts", "0.2", RuleId::DAT_09),
         NodeKind::Set => planned("sets", "0.2", RuleId::DAT_10),
         NodeKind::Slice => planned("slices", "0.2", RuleId::DAT_12),

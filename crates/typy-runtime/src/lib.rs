@@ -20,6 +20,7 @@ mod int;
 mod io;
 mod libc;
 mod libm;
+mod list;
 mod message;
 mod range;
 mod refcount;
@@ -29,8 +30,11 @@ mod version;
 mod word;
 
 pub use exception::{ExceptionKind, ExceptionObject};
-pub use header::{BIG_INT_TYPE_ID, EXCEPTION_TYPE_ID, IMMORTAL, ObjectHeader, STR_TYPE_ID};
+pub use header::{
+    BIG_INT_TYPE_ID, EXCEPTION_TYPE_ID, IMMORTAL, LIST_TYPE_ID, ObjectHeader, STR_TYPE_ID,
+};
 pub use int::BigIntObject;
+pub use list::ListObject;
 pub use string::{StrKind, StrObject};
 
 /// A result that may carry an exception, as a function that may raise returns it (detailed design section 10.2).

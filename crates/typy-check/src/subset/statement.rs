@@ -1,7 +1,7 @@
 //! Checks statements against the feature table.
 
 use typy_diagnostics::RuleId;
-use typy_source::syntax::{Expr, NodeKind, ParameterKind, Stmt};
+use typy_source::syntax::{Expr, ParameterKind, Stmt};
 
 use super::feature::{Feature, feature, planned};
 use super::{Place, Walker};
@@ -112,29 +112,8 @@ impl Walker {
                 ..
             } => {
                 self.name_target(target);
-                match iter {
-                    Expr::Call {
-                        function,
-                        arguments,
-                        keywords,
-                        ..
-                    } if matches!(function.as_ref(), Expr::Name { id, .. } if id == "range")
-                        && keywords.is_empty()
-                        && (1..=3).contains(&arguments.len()) =>
-                    {
-                        for argument in arguments {
-                            self.expression(argument);
-                        }
-                    }
-                    other => self.report(
-                        other.span(),
-                        planned(
-                            "`for` loops over values other than `range`",
-                            "0.2",
-                            RuleId::CST_03,
-                        ),
-                    ),
-                }
+                // The checker decides by type what a `for` may loop over (CST-03).
+                self.expression(iter);
                 self.loop_body(body, place);
                 self.block(orelse, place);
             }
@@ -182,35 +161,19 @@ impl Walker {
     pub(super) fn name_target(&mut self, target: &Expr) {
         match target {
             Expr::Name { .. } => {}
-            Expr::Subscript { span, .. } => {
-                self.report(
-                    *span,
-                    planned("assignments to items", "0.2", RuleId::DAT_07),
-                );
+            // An item of a list; the checker decides what may be indexed (DAT-07).
+            Expr::Subscript { value, index, .. } => {
+                self.expression(value);
+                self.expression(index);
             }
             // An unpacking target: each element is itself a target (SMT-02).
-            Expr::Tuple { elements, .. } => {
+            Expr::Tuple { elements, .. } | Expr::List { elements, .. } => {
                 for element in elements {
                     self.name_target(element);
                 }
             }
-            Expr::Other {
-                kind: NodeKind::List,
-                span,
-            } => {
-                self.report(
-                    *span,
-                    planned("unpacking into a list display", "0.2", RuleId::SMT_02),
-                );
-            }
-            Expr::Other {
-                kind: NodeKind::Attribute,
-                span,
-            } => {
-                self.report(
-                    *span,
-                    planned("attributes and methods", "0.2", RuleId::CLS_01),
-                );
+            Expr::Attribute { span, .. } => {
+                self.report(*span, planned("attributes", "0.2", RuleId::CLS_01));
             }
             other => self.expression(other),
         }

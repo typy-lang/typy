@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy detailed design |
-| Version | 1.18 |
+| Version | 1.19 |
 | Status | Approved |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-08 |
@@ -275,7 +275,11 @@ it enforces and its status. `typy explain` (0.3) reads the same table.
 | E0405 | Returned value of the wrong type | TYP-01 |
 | E0406 | Arithmetic on `bool` | DAT-03 |
 | E0407 | Comparison between unsupported types | EXP-06 |
-| E0408 | `tuple` annotation without its item types | TYP-06 |
+| E0408 | `tuple` or `list` annotation without its item types | TYP-06 |
+| E0409 | List display with items of different types | DAT-07 |
+| E0410 | Empty list display without an annotation | TYP-05 |
+| E0411 | `for` over a value that cannot be iterated | CST-03 |
+| E0412 | Method a built-in type does not have | LIB-03 |
 | E0701 | C toolchain program not found | A-01 |
 | E0702 | Link failed | A-01 |
 | E0703 | Runtime archive missing, or from another TyPy version | None |
@@ -392,12 +396,13 @@ The builtins of 0.1 (LIB-01) are not written in Python. `print`, `min` and
 ### 7.1 Types
 
 `Type` is an enum. Its variants are `Int`, `Float`, `Bool`, `Str`,
-`NoneType`, `Tuple(Vec<Type>)` from 0.2, and `Error`. `Error` is the type of
-an expression that already has a diagnostic; every check accepts it
-silently, so one cause gives one error (DIA-04). A type built from other
-types holds them, so `Type` is `Clone` and not `Copy`, and two types are
-equal when their structure is. `List`, `Dict`, `Set`, `Bytes` and `Class`
-follow in 0.2; `Union`, `TypeParameter` and `Callable` in 0.4 and 1.0.
+`NoneType`, `Tuple(Vec<Type>)` and `List(Box<Type>)` from 0.2, and `Error`.
+`Error` is the type of an expression that already has a diagnostic; every
+check accepts it silently, so one cause gives one error (DIA-04). A type
+built from other types holds them, so `Type` is `Clone` and not `Copy`, and
+two types are equal when their structure is. `Dict`, `Set`, `Bytes` and
+`Class` follow in 0.2; `Union`, `TypeParameter` and `Callable` in 0.4 and
+1.0.
 
 | Method | Behaviour |
 | --- | --- |
@@ -462,6 +467,22 @@ and `tuple[()]` the empty tuple; a bare `tuple` is E0408, and
 constant, and `==`, `!=`, `<`, `<=`, `>` and `>=` compare tuples whose items
 compare. Iterating a tuple, `in`, and indexing at a computed position need
 a stored sequence and arrive with lists.
+
+Lists (DAT-07, DAT-11, TYP-05, EXP-07, CST-03) add `TypedExprKind::List`,
+`ListItem { list, index }` and `Method { receiver, method, arguments }`, the
+target `AssignTarget::Item { list, index }`, and `TypedStmt::ForEach`. Every
+item of a display has the first item's type, or E0409. An empty display has
+a type only where the context gives one, through
+`expression_expecting(expr, expected)`: an annotated or already typed
+variable, a `return`, or an argument; anywhere else it is E0410 (TYP-05).
+`Method::of(receiver, name)` lists the methods of the built-in types, in 0.2
+so far `list.append`; any other name is E0412 (LIB-03). `for` over a call of
+`range` stays `ForRange`; over a list it is `ForEach`, binding a target that
+may unpack; over any other value E0411. `x in xs` needs an `x` of the item
+type, and two lists compare with `==` when their item types are equal,
+because the runtime compares items by the list's own item kind. A list item
+is an `int`, `float`, `bool`, `str` or list, `Type::is_list_item`; lists of
+tuples and of `None` are planned for later in 0.2.
 
 ### 7.2 Behaviour
 
@@ -537,7 +558,14 @@ Function fn0 __main__.twice(n: int) -> int @1:1
 module's `TupleTypes`, which interns each distinct list of item types and
 says whether a type is counted. A tuple is a value with its items in place,
 not an object, as ADR-0001 decides, so `is` cannot observe a copy (EXP-08),
-and it is counted when an item is. An `Int`
+and it is counted when an item is.
+
+A list is `TyirType::LIST`, `Object(TypeId::LIST)`. `TyirType::Bits` is the
+eight bytes a list stores for an item, never counted: `ToBits(value)` makes
+them from an `int`, `float`, `bool` or object, and `FromBits { bits, ty }`
+reads them back as a value borrowed from the list (MEM-02).
+`Constant::PlaceholderList` is the runtime's immortal empty list, the first
+value of a list slot. An `Int`
 is a 64-bit word: an inline value has its lowest bit set and holds the
 number shifted left by one, so it covers -2^62 to 2^62 - 1; any other value
 is a pointer to a `BigInt` (ADR-0001, DAT-01). `Str` values are
@@ -661,6 +689,7 @@ graph, symbol names and the string pool.
 | Statements | `if`, `while` and `for` with `else`; `break` and `continue` jump to the loop's targets. `for` over `range` evaluates its arguments once into hidden slots, raises `ValueError` for a zero step unless the step is a nonzero constant, and keeps its counter apart from the target, as CPython's iterator does |
 | Expressions | `and` and `or` return an operand and stop early (EXP-09); comparison chains evaluate each operand once and stop at the first false link (EXP-06); mixed `int` and `float` arithmetic converts the `int` with an `invoke`, because a large `int` raises `OverflowError`; `int` and `float` compare exactly in the runtime |
 | Tuples | A display evaluates every item first, so an exception from a later item still releases the earlier ones, then takes over their references. An item read from a tuple the function owns gets its own reference before the tuple is released. A tuple target stores each item into its target from left to right after the whole value is evaluated, so `a, b = b, a` swaps. `str` and `repr` join the `repr` of each item, with a comma after a single item, as `(1,)`. Two tuples compare item by item: the first pair that is not equal decides, and tuples whose items are all equal are equal. A counted tuple slot starts as a tuple of zeros, empty strings and `None` |
+| Lists | Every list operation is a runtime call that borrows its arguments; a list adds its own reference to an item it stores. A display creates the list with room for its items, then appends each in order. `list[index]` borrows the item, which gets its own reference when the list is a temporary. `list[index] = value` evaluates the value, then the list and the index, as CPython does. `for` over a list keeps the list in a hidden slot and reads its length again at every step, as CPython's list iterator does, so items appended in the body are visited. A list slot starts as the placeholder list |
 | Builtins | Each builtin of 0.1 becomes runtime calls. `print` evaluates every argument in source order, then converts and writes each value. `min` and `max` keep the first value on a tie, as CPython does |
 | Stack | A function in a cycle of calls invokes the runtime's stack check on entry (FUN-02) |
 
@@ -829,6 +858,7 @@ installed `typy` finds `<prefix>/lib/typy/` and a `typy` in
 | `Str` | Header, `length: u64` in code points, `kind: StrKind`, then the data | `kind` is `Latin1`, `Ucs2` or `Ucs4`, the narrowest that holds every code point, as in PEP 393 |
 | `ExceptionObject` | Header, `message: *mut Str`, `traceback: TracebackBuffer`, `cause: *mut ExceptionObject` | Its `type_id` names its exception class |
 | `TracebackEntry` | `function: *const u8`, `file: *const u8`, `line: u32` | One per frame passed through |
+| `ListObject` | Header, `length: usize`, `capacity: usize`, `kind: u32`, padding, `items: *mut u64` | The items live in a buffer of their own, eight bytes each, so the list keeps its address as it grows; `kind` is an `ItemKind`: `Int`, `Float`, `Bool` or `Object` |
 
 ![Design classes of the runtime](../diagrams/class-design-runtime.svg)
 
@@ -843,6 +873,7 @@ installed `typy` finds `<prefix>/lib/typy/` and a `typy` in
 | `float` | Division, floor division, modulo and power with the special cases of CPython's `float_divmod` and `float_pow`. `int / int`, `float(int)` and `float(str)` round once to the nearest double, ties to even, by CPython's `long_true_divide` method on exact integers. `int(float)` and `int` against `float` comparisons are exact. `repr` writes the shortest digits that read back as the same double, found exactly with large integers, and breaks an exact tie toward the even digit as CPython does; the layout is positional when the decimal exponent is from -4 to 15, otherwise scientific with a sign and at least two exponent digits, and `inf`, `-inf`, `nan` and `-0.0` are written as CPython writes them (DAT-02) |
 | `libm` | `floor`, `fmod`, `pow` and `ldexp` from the C maths library, which is why every link passes `-lm` |
 | `string` | Creation, concatenation, repetition, indexing with negative indexes (DAT-11), length, comparison, `repr`, `chr` and `ord`. `repr` escapes the code points `str.isprintable` rejects, and `int()` and `float()` read the decimal digits of every script, from tables that `scripts/generate-unicode-tables.py` writes from CPython 3.15's Unicode 17.0 data (OI-15). The tables hold 676 boundaries up to U+FFFF as `u16`, 806 above it as `u32`, and 77 digit zeros, about 4.9 KB |
+| `list` | `typy_rt_list_new`, `_append`, `_length`, `_get`, `_set`, `_equal`, `_contains` and `_repr`. A list grows to `n + n/8 + 4` items while small and to `n + n/32 + 4` from 65,536 items, so a list of a million `int` values built one `append` at a time takes at most 8.5 MB (NFR-13). A position counts from the end when negative; one outside the list raises `IndexError: list index out of range`, or `list assignment index out of range`, and a large integer `cannot fit 'int' into an index-sized integer`. An `Object` item is compared and written by the type ID in its header, so a list of lists needs nothing from the compiler. `repr` joins the `repr` of each item once, in a string as wide as its widest piece. `typy_rt_placeholder_list` is an immortal empty list. Freeing a list releases each item |
 | `message` | Builds an exception message of up to 1024 code points from text, numbers and `repr` of a string, so an error about a long input stays short |
 | `io` | Standard output is buffered in 8 KiB and flushed when full, at exit, and before anything is written to standard error |
 | `exception` | Creates the built-in exceptions of EXC-02 with CPython's message for each operation. Where the oracle versions word a message differently, the runtime uses the wording of the newest, CPython 3.15 (OI-14): `division by zero` for every division and modulo of `int` and `float`, and `zero to a negative power` for `0.0 ** -1.0`. A conformance test of such a message compares only the exception type. It adds `TracebackEntry` values, and it prints an uncaught exception as `Traceback (most recent call last):`, one line per entry, then `Type: message`, or `Type` alone when the message is empty, as CPython does (STD-05) |

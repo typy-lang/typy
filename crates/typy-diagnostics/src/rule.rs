@@ -23,6 +23,8 @@ impl RuleId {
     pub const CST_06: Self = Self("CST-06");
     /// `bool` shall have the values `True` and `False`.
     pub const DAT_03: Self = Self("DAT-03");
+    /// `str` shall be an immutable sequence of Unicode code points. `len()` and indexing shall count code points, and indexing shall return a `str` of length 1.
+    pub const DAT_05: Self = Self("DAT-05");
     /// `bytes` shall be an immutable sequence of integers from 0 to 255.
     pub const DAT_06: Self = Self("DAT-06");
     /// `list[T]` shall be a mutable sequence.
@@ -129,6 +131,8 @@ impl RuleId {
     pub const TYP_01: Self = Self("TYP-01");
     /// Assigning a value of another type to a variable shall be rejected.
     pub const TYP_03: Self = Self("TYP-03");
+    /// An empty list, dict or set display shall need an annotation that names its element types.
+    pub const TYP_05: Self = Self("TYP-05");
     /// The annotations `list[T]`, `dict[K, V]`, `set[T]`, `tuple[...]` and `T \\| None` shall be accepted.
     pub const TYP_06: Self = Self("TYP-06");
     /// An `int` value shall be rejected where a `float` is declared, because CPython keeps it an `int`: `x: float = 1` prints `1`.
@@ -148,6 +152,7 @@ impl RuleId {
         Self::CST_05,
         Self::CST_06,
         Self::DAT_03,
+        Self::DAT_05,
         Self::DAT_06,
         Self::DAT_07,
         Self::DAT_08,
@@ -201,6 +206,7 @@ impl RuleId {
         Self::STD_04,
         Self::TYP_01,
         Self::TYP_03,
+        Self::TYP_05,
         Self::TYP_06,
         Self::TYP_09,
         Self::TYP_10,

@@ -1,7 +1,7 @@
 //! Converts values to `str`, `int`, `float` and `bool`, as the builtins of the same names do (LIB-01).
 
 use typy_diagnostics::Span;
-use typy_tyir::{Constant, RuntimeFunction, Terminator, TyirType, ValueId};
+use typy_tyir::{Constant, RuntimeFunction, Terminator, TyirType, TypeId, ValueId};
 
 use crate::function::FunctionLowerer;
 use crate::ownership::Lowered;
@@ -16,7 +16,11 @@ impl FunctionLowerer<'_> {
             TyirType::Float => {
                 self.call_runtime(RuntimeFunction::FloatToStr, vec![lowered.value], span)
             }
+            TyirType::Object(TypeId::LIST) => {
+                self.call_runtime(RuntimeFunction::ListRepr, vec![lowered.value], span)
+            }
             TyirType::Object(_) => Self::borrowed(lowered.value, lowered.ty),
+            TyirType::Bits => unreachable!("list items are converted before they are written"),
             TyirType::Unit => {
                 let value = self.string("None", span);
                 Self::borrowed(value, TyirType::STR)
@@ -58,7 +62,7 @@ impl FunctionLowerer<'_> {
                 let base = self.constant(Constant::Int("10".to_owned()), span);
                 self.call_runtime(RuntimeFunction::IntFromStr, vec![lowered.value, base], span)
             }
-            TyirType::Unit | TyirType::Tuple(_) => {
+            TyirType::Unit | TyirType::Tuple(_) | TyirType::Bits => {
                 unreachable!("the checker refuses int() of None and of a tuple")
             }
         }
@@ -80,7 +84,7 @@ impl FunctionLowerer<'_> {
             TyirType::Object(_) => {
                 self.call_runtime(RuntimeFunction::FloatFromStr, vec![lowered.value], span)
             }
-            TyirType::Unit | TyirType::Tuple(_) => {
+            TyirType::Unit | TyirType::Tuple(_) | TyirType::Bits => {
                 unreachable!("the checker refuses float() of None and of a tuple")
             }
         }

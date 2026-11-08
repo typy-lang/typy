@@ -15,6 +15,15 @@ All notable changes to TyPy are recorded here. The format follows
   (DAT-08, TYP-06).
 - Unpacking assignment into names and nested tuples of names, such as
   `a, b = b, a` and `x, (y, z) = t` (SMT-02).
+- Lists of `int`, `float`, `bool`, `str` and lists: displays such as
+  `[1, 2]`, annotations such as `list[str]`, an empty `[]` where an
+  annotation, a return type or a parameter gives its type, items read and
+  assigned at positions counted from either end with `IndexError` outside,
+  `append`, `len`, `in` and `not in`, `==`, truth tests, `str` and `repr`,
+  and `for` over a list. Two names bound to one list share it (DAT-07,
+  DAT-11, TYP-05, EXP-07, CST-03). A list stores each item in eight bytes,
+  so a `list[float]` holds raw doubles (MEM-02), and a million `int` items
+  fit in 8.5 MB (NFR-13).
 
 ### Changed
 

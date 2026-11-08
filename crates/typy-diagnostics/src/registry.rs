@@ -134,9 +134,25 @@ pub const CODES: &[CodeInfo] = &[
     active(407, "comparison between unsupported types", RuleId::EXP_06),
     active(
         408,
-        "`tuple` annotation without its item types",
+        "`tuple` or `list` annotation without its item types",
         RuleId::TYP_06,
     ),
+    active(
+        409,
+        "list display with items of different types",
+        RuleId::DAT_07,
+    ),
+    active(
+        410,
+        "empty list display without an annotation",
+        RuleId::TYP_05,
+    ),
+    active(
+        411,
+        "`for` over a value that cannot be iterated",
+        RuleId::CST_03,
+    ),
+    active(412, "method a built-in type does not have", RuleId::LIB_03),
     active(701, "C toolchain program not found", RuleId::A_01),
     active(702, "link failed", RuleId::A_01),
     CodeInfo {

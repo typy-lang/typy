@@ -130,9 +130,20 @@ impl Converter<'_> {
             ast::Expr::YieldFrom(node) => self.other(NodeKind::YieldFrom, node.range),
             ast::Expr::FString(node) => self.other(NodeKind::JoinedStr, node.range),
             ast::Expr::TString(node) => self.other(NodeKind::TemplateStr, node.range),
-            ast::Expr::Attribute(node) => self.other(NodeKind::Attribute, node.range),
+            ast::Expr::Attribute(node) => Expr::Attribute {
+                value: Box::new(self.expression(&node.value)),
+                attribute: self.identifier(&node.attr),
+                span: self.span(node.range),
+            },
             ast::Expr::Starred(node) => self.other(NodeKind::Starred, node.range),
-            ast::Expr::List(node) => self.other(NodeKind::List, node.range),
+            ast::Expr::List(node) => Expr::List {
+                elements: node
+                    .elts
+                    .iter()
+                    .map(|element| self.expression(element))
+                    .collect(),
+                span: self.span(node.range),
+            },
             ast::Expr::Tuple(node) => Expr::Tuple {
                 elements: node
                     .elts
