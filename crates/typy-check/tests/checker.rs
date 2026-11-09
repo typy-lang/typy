@@ -751,7 +751,7 @@ fn list_rules_give_their_codes() {
         ("missing.append(1)\n", &["E0205"]),
         ("x = [1]\nx.append(item=2)\n", &["E0404"]),
         ("x = [1]\nx.append()\n", &["E0404"]),
-        ("x = 'a'.upper()\n", &["E0412"]),
+        ("x = 'a'.format()\n", &["E0412"]),
         ("print(1 in 2)\n", &["E0407"]),
         ("def f(x: list) -> None:\n    pass\n", &["E0408"]),
     ];
@@ -1067,7 +1067,7 @@ fn str_method_arguments_bind_by_position_and_name() {
         ("x = ','.join([1, 2])\n", &["E0404"]),
         ("x = ','.join(5)\n", &["E0411"]),
         ("x = 'a'.strip(**{})\n", &["E0201"]),
-        ("x = 'a'.upper()\n", &["E0412"]),
+        ("x = 'a'.format()\n", &["E0412"]),
         ("x = 'a'.center(5, fillchar='*')\n", &["E0404"]),
         ("x = [1]\nx.sort(key=abs)\n", &["E0201"]),
     ];
@@ -1089,4 +1089,19 @@ g: str = 'a'.center(5) + 'a'.ljust(3, '*') + '7'.zfill(3) + 'a\\tb'.expandtabs(t
 h: str = 'ab'.removeprefix('a') + 'ab'.removesuffix('b')
 ";
     accepted(source);
+}
+
+#[test]
+fn str_case_and_is_methods_take_no_arguments() {
+    let cases: &[(&str, &[&str])] = &[
+        ("x = 'a'.upper(1)\n", &["E0404"]),
+        ("x = 'a'.isalpha('b')\n", &["E0404"]),
+        ("x = 'a'.title(case=1)\n", &["E0404"]),
+    ];
+    for (source, expected) in cases {
+        assert_eq!(&rejected(source), expected, "\n{source}");
+    }
+    accepted(
+        "a: str = 'a'.upper() + 'a'.lower() + 'a'.casefold() + 'a'.swapcase() + 'a'.capitalize() + 'a'.title()\nb: bool = 'a'.isalpha() and 'a'.isalnum() and 'a'.isdecimal() and 'a'.isdigit() and 'a'.isnumeric() and 'a'.isspace() and 'a'.isupper() and 'a'.islower() and 'a'.istitle() and 'a'.isidentifier() and 'a'.isprintable()\n",
+    );
 }

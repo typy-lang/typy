@@ -86,10 +86,44 @@ pub enum Method {
     StrExpandtabs,
     /// `str.isascii()`.
     StrIsascii,
+    /// `str.upper()`.
+    StrUpper,
+    /// `str.lower()`.
+    StrLower,
+    /// `str.casefold()`.
+    StrCasefold,
+    /// `str.swapcase()`.
+    StrSwapcase,
+    /// `str.capitalize()`.
+    StrCapitalize,
+    /// `str.title()`.
+    StrTitle,
+    /// `str.isalpha()`.
+    StrIsalpha,
+    /// `str.isalnum()`.
+    StrIsalnum,
+    /// `str.isdecimal()`.
+    StrIsdecimal,
+    /// `str.isdigit()`.
+    StrIsdigit,
+    /// `str.isnumeric()`.
+    StrIsnumeric,
+    /// `str.isspace()`.
+    StrIsspace,
+    /// `str.isupper()`.
+    StrIsupper,
+    /// `str.islower()`.
+    StrIslower,
+    /// `str.istitle()`.
+    StrIstitle,
+    /// `str.isidentifier()`.
+    StrIsidentifier,
+    /// `str.isprintable()`.
+    StrIsprintable,
 }
 
 /// The `str` methods, by name, in the order of the variants.
-const STR_METHODS: [(&str, Method); 25] = [
+const STR_METHODS: [(&str, Method); 42] = [
     ("find", Method::StrFind),
     ("rfind", Method::StrRfind),
     ("index", Method::StrIndex),
@@ -115,6 +149,23 @@ const STR_METHODS: [(&str, Method); 25] = [
     ("zfill", Method::StrZfill),
     ("expandtabs", Method::StrExpandtabs),
     ("isascii", Method::StrIsascii),
+    ("upper", Method::StrUpper),
+    ("lower", Method::StrLower),
+    ("casefold", Method::StrCasefold),
+    ("swapcase", Method::StrSwapcase),
+    ("capitalize", Method::StrCapitalize),
+    ("title", Method::StrTitle),
+    ("isalpha", Method::StrIsalpha),
+    ("isalnum", Method::StrIsalnum),
+    ("isdecimal", Method::StrIsdecimal),
+    ("isdigit", Method::StrIsdigit),
+    ("isnumeric", Method::StrIsnumeric),
+    ("isspace", Method::StrIsspace),
+    ("isupper", Method::StrIsupper),
+    ("islower", Method::StrIslower),
+    ("istitle", Method::StrIstitle),
+    ("isidentifier", Method::StrIsidentifier),
+    ("isprintable", Method::StrIsprintable),
 ];
 
 impl Method {
@@ -191,6 +242,23 @@ impl Method {
             Self::StrZfill => "zfill",
             Self::StrExpandtabs => "expandtabs",
             Self::StrIsascii => "isascii",
+            Self::StrUpper => "upper",
+            Self::StrLower => "lower",
+            Self::StrCasefold => "casefold",
+            Self::StrSwapcase => "swapcase",
+            Self::StrCapitalize => "capitalize",
+            Self::StrTitle => "title",
+            Self::StrIsalpha => "isalpha",
+            Self::StrIsalnum => "isalnum",
+            Self::StrIsdecimal => "isdecimal",
+            Self::StrIsdigit => "isdigit",
+            Self::StrIsnumeric => "isnumeric",
+            Self::StrIsspace => "isspace",
+            Self::StrIsupper => "isupper",
+            Self::StrIslower => "islower",
+            Self::StrIstitle => "istitle",
+            Self::StrIsidentifier => "isidentifier",
+            Self::StrIsprintable => "isprintable",
         }
     }
 }
@@ -237,7 +305,8 @@ mod tests {
     #[test]
     fn str_methods_take_python_s_parameters() {
         assert_eq!(Method::of(&Type::Str, "split"), Some(Method::StrSplit));
-        assert_eq!(Method::of(&Type::Str, "upper"), None);
+        assert_eq!(Method::of(&Type::Str, "upper"), Some(Method::StrUpper));
+        assert_eq!(Method::of(&Type::Str, "format"), None);
         let find = Method::StrFind.signature(&Type::Str);
         let names: Vec<&str> = find
             .parameters

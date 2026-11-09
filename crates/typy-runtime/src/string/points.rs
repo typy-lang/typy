@@ -34,10 +34,11 @@ impl Points {
     }
 }
 
-/// Returns true for the whitespace `int()` and `float()` strip: `str.isspace`, which adds the
-/// information separators U+001C to U+001F to Unicode's white space.
+/// Returns true for the whitespace `int()`, `float()`, `str.split` and `str.strip` skip:
+/// `str.isspace`, from CPython's Unicode data, which adds the information separators U+001C to
+/// U+001F to Unicode's white space.
 pub(crate) fn is_space(point: u32) -> bool {
-    char::from_u32(point).is_some_and(char::is_whitespace) || (0x1c..=0x1f).contains(&point)
+    super::unicode::has(super::unicode::Property::Space, point)
 }
 
 #[cfg(test)]

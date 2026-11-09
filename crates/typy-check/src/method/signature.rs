@@ -178,6 +178,12 @@ impl Method {
                 vec![either("tabsize", ParameterType::Exact(Type::Int))],
                 Type::Str,
             ),
+            Self::StrUpper
+            | Self::StrLower
+            | Self::StrCasefold
+            | Self::StrSwapcase
+            | Self::StrCapitalize
+            | Self::StrTitle => (Vec::new(), Type::Str),
             _ => (Vec::new(), Type::Bool),
         };
         MethodSignature { parameters, result }

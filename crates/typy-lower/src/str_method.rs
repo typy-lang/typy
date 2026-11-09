@@ -19,6 +19,12 @@ impl FunctionLowerer<'_> {
         result: TyirType,
         span: Span,
     ) -> Lowered {
+        if let Some(mode) = case_mode(method) {
+            return self.str_case(text, mode, span);
+        }
+        if let Some(question) = test_question(method) {
+            return self.str_test(text, question, span);
+        }
         let argument = |index: usize| given.get(index).copied().flatten();
         match method {
             Method::StrFind
@@ -91,18 +97,7 @@ impl FunctionLowerer<'_> {
                 )
             }
             Method::StrCenter | Method::StrLjust | Method::StrRjust => {
-                let mode = match method {
-                    Method::StrCenter => 0,
-                    Method::StrLjust => 1,
-                    _ => 2,
-                };
-                let width = required(argument(0));
-                let fill = match argument(1) {
-                    Some(fill) => fill.value,
-                    None => self.string(" ", span),
-                };
-                let mode = self.int(mode, span);
-                self.call_runtime(RuntimeFunction::StrPad, vec![text, width, fill, mode], span)
+                self.str_pad(text, method, argument(0), argument(1), span)
             }
             Method::StrZfill => {
                 let width = required(argument(0));
@@ -115,6 +110,41 @@ impl FunctionLowerer<'_> {
             Method::StrIsascii => self.call_runtime(RuntimeFunction::StrIsascii, vec![text], span),
             other => unreachable!("`{}` is not a method of `str`", other.name()),
         }
+    }
+
+    /// Calls `center`, `ljust` or `rjust`, with a space as the fill when none is given.
+    fn str_pad(
+        &mut self,
+        text: ValueId,
+        method: Method,
+        width: Option<Lowered>,
+        fill: Option<Lowered>,
+        span: Span,
+    ) -> Lowered {
+        let mode = match method {
+            Method::StrCenter => 0,
+            Method::StrLjust => 1,
+            _ => 2,
+        };
+        let width = required(width);
+        let fill = match fill {
+            Some(fill) => fill.value,
+            None => self.string(" ", span),
+        };
+        let mode = self.int(mode, span);
+        self.call_runtime(RuntimeFunction::StrPad, vec![text, width, fill, mode], span)
+    }
+
+    /// Calls the case method numbered `mode`, as `typy_rt_str_case` numbers them.
+    fn str_case(&mut self, text: ValueId, mode: i64, span: Span) -> Lowered {
+        let mode = self.int(mode, span);
+        self.call_runtime(RuntimeFunction::StrCase, vec![text, mode], span)
+    }
+
+    /// Calls the `is` method numbered `question`, as `typy_rt_str_test` numbers them.
+    fn str_test(&mut self, text: ValueId, question: i64, span: Span) -> Lowered {
+        let question = self.int(question, span);
+        self.call_runtime(RuntimeFunction::StrTest, vec![text, question], span)
     }
 
     /// Calls a search, `find` to `count`, or a match, `startswith` or `endswith`.
@@ -215,4 +245,42 @@ fn required(argument: Option<Lowered>) -> ValueId {
         Some(argument) => argument.value,
         None => unreachable!("the checker gives every required argument"),
     }
+}
+
+/// Returns the number `typy_rt_str_case` gives a case method, or `None` for another method.
+fn case_mode(method: Method) -> Option<i64> {
+    let order = [
+        Method::StrUpper,
+        Method::StrLower,
+        Method::StrCasefold,
+        Method::StrSwapcase,
+        Method::StrCapitalize,
+        Method::StrTitle,
+    ];
+    position(&order, method)
+}
+
+/// Returns the number `typy_rt_str_test` gives an `is` method, or `None` for another method.
+fn test_question(method: Method) -> Option<i64> {
+    let order = [
+        Method::StrIsalpha,
+        Method::StrIsalnum,
+        Method::StrIsdecimal,
+        Method::StrIsdigit,
+        Method::StrIsnumeric,
+        Method::StrIsspace,
+        Method::StrIsupper,
+        Method::StrIslower,
+        Method::StrIstitle,
+        Method::StrIsidentifier,
+        Method::StrIsprintable,
+    ];
+    position(&order, method)
+}
+
+fn position(order: &[Method], method: Method) -> Option<i64> {
+    order
+        .iter()
+        .position(|each| *each == method)
+        .and_then(|index| i64::try_from(index).ok())
 }

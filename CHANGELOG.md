@@ -61,6 +61,12 @@ All notable changes to TyPy are recorded here. The format follows
   `removesuffix`, `replace`, `center`, `ljust`, `rjust`, `zfill`,
   `expandtabs` and `isascii`, with arguments by keyword where CPython allows
   them (LIB-03).
+- The `str` methods `upper`, `lower`, `casefold`, `swapcase`, `capitalize`
+  and `title`, and `isalpha`, `isalnum`, `isdecimal`, `isdigit`,
+  `isnumeric`, `isspace`, `isupper`, `islower`, `istitle`, `isidentifier`
+  and `isprintable`, from CPython 3.15's Unicode 17.0 data, with CPython's
+  final sigma and its title case of words such as `they're` (LIB-03,
+  OI-15).
 - `round`, with and without `ndigits`, rounding half to even on the exact
   value as CPython does, so `round(2.675, 2)` is `2.67` (LIB-02).
 - `for` over the characters of a `str`, and over `enumerate`, with

@@ -1,6 +1,7 @@
 //! `str` objects: a sequence of code points stored at 1, 2 or 4 bytes each, the narrowest that holds them all (PEP 393, DAT-05).
 
 mod builder;
+mod case;
 mod character;
 mod methods;
 mod operations;

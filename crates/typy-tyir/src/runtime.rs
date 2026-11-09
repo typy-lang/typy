@@ -87,6 +87,8 @@ pub enum RuntimeFunction {
     StrSplitlines,
     StrPartition,
     StrJoin,
+    StrCase,
+    StrTest,
 }
 
 /// The parameter types, result type and raising behaviour of a runtime function.
@@ -117,7 +119,7 @@ const FLOAT_FLOAT: &[TyirType] = &[TyirType::Float, TyirType::Float];
 
 impl RuntimeFunction {
     /// Every runtime function.
-    pub const ALL: [Self; 78] = [
+    pub const ALL: [Self; 80] = [
         Self::IntFloorDivide,
         Self::IntModulo,
         Self::IntPower,
@@ -196,6 +198,8 @@ impl RuntimeFunction {
         Self::StrSplitlines,
         Self::StrPartition,
         Self::StrJoin,
+        Self::StrCase,
+        Self::StrTest,
     ];
 
     /// Returns the function's signature. Comparisons take the comparison as an `int` operand, numbered as `Comparison::code`.
@@ -276,7 +280,10 @@ impl RuntimeFunction {
             Self::StrSplitlines => signature(&[STR, Int], LIST, false),
             Self::StrPartition => signature(&[STR, STR, Int], LIST, true),
             Self::StrJoin => signature(&[STR, LIST], STR, false),
-            Self::StrZfill | Self::StrExpandtabs => signature(&[STR, Int], STR, false),
+            Self::StrZfill | Self::StrExpandtabs | Self::StrCase => {
+                signature(&[STR, Int], STR, false)
+            }
+            Self::StrTest => signature(&[STR, Int], Bool, false),
         }
     }
 
@@ -362,6 +369,8 @@ impl RuntimeFunction {
             Self::StrSplitlines => "str_splitlines",
             Self::StrPartition => "str_partition",
             Self::StrJoin => "str_join",
+            Self::StrCase => "str_case",
+            Self::StrTest => "str_test",
         }
     }
 }
