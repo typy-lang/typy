@@ -87,7 +87,7 @@ pub unsafe extern "C" fn typy_rt_int_true_divide(left: i64, right: i64) -> Raisi
 }
 
 /// Returns the integral part of a finite double, exactly.
-fn truncate(value: f64) -> Integer {
+pub(super) fn truncate(value: f64) -> Integer {
     let bits = value.to_bits();
     let biased = i64::try_from((bits >> 52) & 0x7ff).unwrap_or(0);
     let exponent = biased - 1075;

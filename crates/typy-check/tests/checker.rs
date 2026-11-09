@@ -964,3 +964,23 @@ for n, letter in enumerate('ab', start=1):
         assert!(dump.contains(node), "{node} missing from\n{dump}");
     }
 }
+
+#[test]
+fn round_gives_python_s_result_types_and_codes() {
+    let cases: &[(&str, &[&str])] = &[
+        ("x = round()\n", &["E0404"]),
+        ("x = round(1.5, 1, 2)\n", &["E0404"]),
+        ("x = round(1.5, 1.5)\n", &["E0404"]),
+        ("x = round('a')\n", &["E0401"]),
+        ("x = round(True)\n", &["E0406"]),
+        ("x = round(1.5, digits=1)\n", &["E0404"]),
+        ("x = round(1.5, 1, ndigits=1)\n", &["E0404"]),
+        ("x = round(1.5, **{})\n", &["E0201"]),
+        ("x = round(missing)\n", &["E0205"]),
+    ];
+    for (source, expected) in cases {
+        assert_eq!(&rejected(source), expected, "\n{source}");
+    }
+    let source = "a: int = round(2.5)\nb: float = round(2.5, 1)\nc: int = round(15, -1)\nd: int = round(7)\ne: float = round(2.5, ndigits=0)\n";
+    accepted(source);
+}

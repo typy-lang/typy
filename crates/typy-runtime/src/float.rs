@@ -6,5 +6,6 @@ mod convert;
 mod parse;
 mod ratio;
 mod repr;
+mod round;
 
 pub(crate) use repr::typy_rt_float_to_str;

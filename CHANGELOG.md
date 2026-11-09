@@ -45,6 +45,8 @@ All notable changes to TyPy are recorded here. The format follows
 - Lists of tuples and of `None`, such as `list[tuple[int, str]]`, with every
   list operation. A tuple is stored inline in the list, so a million pairs
   of `int` values take 16 MB (DAT-07, MEM-02).
+- `round`, with and without `ndigits`, rounding half to even on the exact
+  value as CPython does, so `round(2.675, 2)` is `2.67` (LIB-02).
 - `for` over the characters of a `str`, and over `enumerate`, with
   `start`, `zip`, with `strict`, and `reversed` of lists and strings,
   nested as in `enumerate(zip(a, b))`, with CPython's errors (CST-03,

@@ -1,4 +1,4 @@
-//! Lowers the builtins of 0.1 (LIB-01), including `print`.
+//! Lowers the builtins that take positional values (LIB-01, LIB-02), including `print`.
 
 use typy_check::{Builtin, Type, TypedExpr};
 use typy_diagnostics::Span;
@@ -71,6 +71,18 @@ impl FunctionLowerer<'_> {
             }
             (Builtin::Chr, [code]) => {
                 self.call_runtime(RuntimeFunction::Chr, vec![code.value], span)
+            }
+            (Builtin::Round, [number]) if number.ty == TyirType::Float => {
+                self.call_runtime(RuntimeFunction::FloatRound, vec![number.value], span)
+            }
+            (Builtin::Round, [number]) => self.keep_or_copy(*number, span, |_, number| number),
+            (Builtin::Round, [number, digits]) => {
+                let function = if number.ty == TyirType::Float {
+                    RuntimeFunction::FloatRoundDigits
+                } else {
+                    RuntimeFunction::IntRoundDigits
+                };
+                self.call_runtime(function, vec![number.value, digits.value], span)
             }
             (Builtin::Min | Builtin::Max, _) => {
                 self.extreme(builtin == Builtin::Max, &values, types, ty, span)

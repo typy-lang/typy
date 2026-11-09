@@ -37,6 +37,10 @@ fn repr(list: *const super::ListObject) -> String {
 }
 
 #[test]
+#[cfg_attr(
+    miri,
+    ignore = "a million appends take hours under Miri; the other list tests cover the same code"
+)]
 fn a_million_ints_built_one_append_at_a_time_fit_in_eight_and_a_half_megabytes() {
     let list = new_list(ItemKind::Int, 0);
     for value in 0..1_000_000 {

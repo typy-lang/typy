@@ -21,6 +21,9 @@ impl BodyChecker<'_> {
         if builtin == Builtin::Print {
             return self.print(arguments, keywords, span);
         }
+        if builtin == Builtin::Round {
+            return self.call_round(arguments, keywords, span);
+        }
         if takes_one_iterable(builtin, arguments.len()) {
             return self.call_over_iterable(builtin, arguments, keywords, span);
         }
@@ -51,8 +54,13 @@ impl BodyChecker<'_> {
         }
         let types: Vec<Type> = values.iter().map(|value| value.ty.clone()).collect();
         let result = match builtin {
-            Builtin::Print | Builtin::Sorted | Builtin::Sum | Builtin::Any | Builtin::All => {
-                unreachable!("print and the builtins of one iterable are checked above")
+            Builtin::Print
+            | Builtin::Round
+            | Builtin::Sorted
+            | Builtin::Sum
+            | Builtin::Any
+            | Builtin::All => {
+                unreachable!("print, round and the builtins of one iterable are checked above")
             }
             Builtin::Enumerate | Builtin::Zip | Builtin::Reversed => {
                 return self.error(

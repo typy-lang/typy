@@ -68,6 +68,9 @@ pub enum RuntimeFunction {
     ListAny,
     ListAll,
     ZipUnequal,
+    FloatRound,
+    FloatRoundDigits,
+    IntRoundDigits,
 }
 
 /// The parameter types, result type and raising behaviour of a runtime function.
@@ -98,7 +101,7 @@ const FLOAT_FLOAT: &[TyirType] = &[TyirType::Float, TyirType::Float];
 
 impl RuntimeFunction {
     /// Every runtime function.
-    pub const ALL: [Self; 59] = [
+    pub const ALL: [Self; 62] = [
         Self::IntFloorDivide,
         Self::IntModulo,
         Self::IntPower,
@@ -158,6 +161,9 @@ impl RuntimeFunction {
         Self::ListAny,
         Self::ListAll,
         Self::ZipUnequal,
+        Self::FloatRound,
+        Self::FloatRoundDigits,
+        Self::IntRoundDigits,
     ];
 
     /// Returns the function's signature. Comparisons take the comparison as an `int` operand, numbered as `Comparison::code`.
@@ -184,7 +190,7 @@ impl RuntimeFunction {
                 signature(FLOAT_FLOAT, Float, true)
             }
             Self::FloatAbsolute => signature(&[Float], Float, false),
-            Self::FloatToInt => signature(&[Float], Int, true),
+            Self::FloatToInt | Self::FloatRound => signature(&[Float], Int, true),
             Self::FloatToStr => signature(&[Float], STR, false),
             Self::FloatFromStr => signature(&[STR], Float, true),
             Self::StrConcat => signature(&[STR, STR], STR, false),
@@ -222,6 +228,8 @@ impl RuntimeFunction {
             Self::ListSumFloat => signature(&[LIST, Float], Float, false),
             Self::ListAny | Self::ListAll => signature(&[LIST], Bool, false),
             Self::ZipUnequal => signature(INT_INT, Unit, true),
+            Self::FloatRoundDigits => signature(&[Float, Int], Float, true),
+            Self::IntRoundDigits => signature(INT_INT, Int, false),
         }
     }
 
@@ -288,6 +296,9 @@ impl RuntimeFunction {
             Self::ListAny => "list_any",
             Self::ListAll => "list_all",
             Self::ZipUnequal => "zip_unequal",
+            Self::FloatRound => "float_round",
+            Self::FloatRoundDigits => "float_round_digits",
+            Self::IntRoundDigits => "int_round_digits",
         }
     }
 }
