@@ -4,6 +4,7 @@
 mod body;
 mod builtin;
 mod check;
+mod codec;
 mod method;
 mod subset;
 mod typed;

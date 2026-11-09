@@ -5,7 +5,8 @@ use typy_source::syntax::{Expr, Keyword};
 
 use super::BodyChecker;
 use crate::builtin::Builtin;
-use crate::typed::{LoopSource, TypedConstant, TypedExpr, TypedExprKind};
+use crate::method::ParameterType;
+use crate::typed::{Argument, LoopSource, TypedConstant, TypedExpr, TypedExprKind};
 use crate::types::Type;
 
 impl BodyChecker<'_> {
@@ -129,16 +130,8 @@ impl BodyChecker<'_> {
         keywords: &[Keyword],
         span: Span,
     ) -> TypedExpr {
-        if let Some(keyword) = keywords.first() {
-            return self.error(
-                Diagnostic::new(
-                    DiagnosticCode::error(404),
-                    keyword.span,
-                    "`bytes` takes no keyword arguments",
-                )
-                .with_rule(RuleId::LIB_02),
-                span,
-            );
+        if arguments.len() > 1 || !keywords.is_empty() {
+            return self.bytes_of_text(arguments, keywords, span);
         }
         let argument = match arguments {
             [] => {
@@ -148,18 +141,7 @@ impl BodyChecker<'_> {
                     span,
                 );
             }
-            [argument] => argument,
-            _ => {
-                return self.error(
-                    Diagnostic::new(
-                        DiagnosticCode::error(201),
-                        span,
-                        "`bytes` of a `str` and its encoding is planned for TyPy 0.2 (LIB-03); `str.encode` gives it",
-                    )
-                    .with_rule(RuleId::LIB_03),
-                    span,
-                );
-            }
+            [argument, ..] => argument,
         };
         let Some(value) = self.bytes_argument(argument) else {
             return Self::typed(
@@ -172,6 +154,65 @@ impl BodyChecker<'_> {
             TypedExprKind::Builtin {
                 builtin: Builtin::Bytes,
                 arguments: vec![value],
+            },
+            Type::Bytes,
+            span,
+        )
+    }
+
+    /// Checks `bytes(text, encoding, errors)`, which is `text.encode(encoding, errors)`; the
+    /// encoding and the errors may be given by keyword, and the encoding must be given.
+    fn bytes_of_text(&mut self, arguments: &[Expr], keywords: &[Keyword], span: Span) -> TypedExpr {
+        let mut given: Vec<Option<&Expr>> = vec![arguments.get(1), arguments.get(2)];
+        for keyword in keywords {
+            let slot = match keyword.name.as_ref().map(|name| name.name.as_str()) {
+                Some("encoding") => 0,
+                Some("errors") => 1,
+                _ => {
+                    return self.error(
+                        Diagnostic::new(
+                            DiagnosticCode::error(404),
+                            keyword.span,
+                            "`bytes` takes only the keyword arguments `encoding` and `errors`",
+                        )
+                        .with_rule(RuleId::LIB_02),
+                        span,
+                    );
+                }
+            };
+            given[slot] = Some(&keyword.value);
+        }
+        let (Some(text), Some(encoding), true) =
+            (arguments.first(), given[0], arguments.len() <= 3)
+        else {
+            return self.error(
+                Diagnostic::new(
+                    DiagnosticCode::error(404),
+                    span,
+                    "`bytes` of a `str` takes the text, its encoding and the errors",
+                )
+                .with_rule(RuleId::LIB_02),
+                span,
+            );
+        };
+        let text = self.expression(text);
+        self.expect(&text, Type::Str, "the text `bytes` encodes");
+        let mut bound = vec![Argument {
+            parameter: 0,
+            value: self.codec_argument(&ParameterType::Codec, encoding, "the encoding of `bytes`"),
+        }];
+        if let Some(errors) = given[1] {
+            let kind = ParameterType::Handler { decoding: false };
+            bound.push(Argument {
+                parameter: 1,
+                value: self.codec_argument(&kind, errors, "the errors of `bytes`"),
+            });
+        }
+        Self::typed(
+            TypedExprKind::Method {
+                receiver: Box::new(text),
+                method: crate::method::Method::StrEncode,
+                arguments: bound,
             },
             Type::Bytes,
             span,

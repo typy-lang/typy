@@ -100,6 +100,8 @@ pub enum RuntimeFunction {
     BytesZeros,
     BytesFromList,
     BytesRepr,
+    StrEncode,
+    BytesDecode,
 }
 
 /// The parameter types, result type and raising behaviour of a runtime function.
@@ -130,7 +132,7 @@ const FLOAT_FLOAT: &[TyirType] = &[TyirType::Float, TyirType::Float];
 
 impl RuntimeFunction {
     /// Every runtime function.
-    pub const ALL: [Self; 91] = [
+    pub const ALL: [Self; 93] = [
         Self::IntFloorDivide,
         Self::IntModulo,
         Self::IntPower,
@@ -222,6 +224,8 @@ impl RuntimeFunction {
         Self::BytesZeros,
         Self::BytesFromList,
         Self::BytesRepr,
+        Self::StrEncode,
+        Self::BytesDecode,
     ];
 
     /// Returns the function's signature. Comparisons take the comparison as an `int` operand, numbered as `Comparison::code`.
@@ -318,6 +322,8 @@ impl RuntimeFunction {
             Self::BytesZeros => signature(&[Int], BYTES, true),
             Self::BytesFromList => signature(&[LIST], BYTES, true),
             Self::BytesRepr => signature(&[BYTES], STR, false),
+            Self::StrEncode => signature(&[STR, Int, Int], BYTES, true),
+            Self::BytesDecode => signature(&[BYTES, Int, Int], STR, true),
         }
     }
 
@@ -416,6 +422,8 @@ impl RuntimeFunction {
             Self::BytesZeros => "bytes_zeros",
             Self::BytesFromList => "bytes_from_list",
             Self::BytesRepr => "bytes_repr",
+            Self::StrEncode => "str_encode",
+            Self::BytesDecode => "bytes_decode",
         }
     }
 }

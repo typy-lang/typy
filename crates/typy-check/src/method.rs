@@ -120,10 +120,14 @@ pub enum Method {
     StrIsidentifier,
     /// `str.isprintable()`.
     StrIsprintable,
+    /// `str.encode(encoding='utf-8', errors='strict')`.
+    StrEncode,
+    /// `bytes.decode(encoding='utf-8', errors='strict')`.
+    BytesDecode,
 }
 
 /// The `str` methods, by name, in the order of the variants.
-const STR_METHODS: [(&str, Method); 42] = [
+const STR_METHODS: [(&str, Method); 43] = [
     ("find", Method::StrFind),
     ("rfind", Method::StrRfind),
     ("index", Method::StrIndex),
@@ -166,6 +170,7 @@ const STR_METHODS: [(&str, Method); 42] = [
     ("istitle", Method::StrIstitle),
     ("isidentifier", Method::StrIsidentifier),
     ("isprintable", Method::StrIsprintable),
+    ("encode", Method::StrEncode),
 ];
 
 impl Method {
@@ -177,6 +182,9 @@ impl Method {
                 .iter()
                 .find(|(each, _)| *each == name)
                 .map(|(_, method)| *method);
+        }
+        if *receiver == Type::Bytes {
+            return (name == "decode").then_some(Self::BytesDecode);
         }
         if let Type::TupleOf(_) = receiver {
             return match name {
@@ -259,6 +267,8 @@ impl Method {
             Self::StrIstitle => "istitle",
             Self::StrIsidentifier => "isidentifier",
             Self::StrIsprintable => "isprintable",
+            Self::StrEncode => "encode",
+            Self::BytesDecode => "decode",
         }
     }
 }

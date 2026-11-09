@@ -66,6 +66,11 @@ impl StrBuilder {
         unsafe { self.push_range(text, 0, length(text)) };
     }
 
+    /// Frees the buffer without making a string, when the result is not wanted.
+    pub(crate) fn discard(self) {
+        free(self.points.cast());
+    }
+
     /// Returns the new string, and frees the buffer.
     pub(crate) fn finish(self) -> *mut StrObject {
         let text = new_string(self.length, self.kind);

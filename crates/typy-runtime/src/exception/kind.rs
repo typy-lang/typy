@@ -1,4 +1,4 @@
-//! The exception classes the runtime raises in 0.1 (EXC-02).
+//! The exception classes the runtime raises (EXC-02).
 
 /// An exception's class.
 #[repr(u32)]
@@ -14,6 +14,8 @@ pub enum ExceptionKind {
     TypeError = 4,
     ValueError = 5,
     ZeroDivisionError = 6,
+    UnicodeEncodeError = 7,
+    UnicodeDecodeError = 8,
 }
 
 impl ExceptionKind {
@@ -27,6 +29,8 @@ impl ExceptionKind {
             Self::TypeError => "TypeError",
             Self::ValueError => "ValueError",
             Self::ZeroDivisionError => "ZeroDivisionError",
+            Self::UnicodeEncodeError => "UnicodeEncodeError",
+            Self::UnicodeDecodeError => "UnicodeDecodeError",
         }
     }
 }

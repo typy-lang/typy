@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy software requirements specification |
-| Version | 1.18 |
+| Version | 1.19 |
 | Status | Approved |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-08 |
@@ -291,7 +291,7 @@ formatter applies; Ruff's formatter is the project's recommendation.
 | ID | Requirement | Priority | Release | LR |
 | --- | --- | --- | --- | --- |
 | EXC-01 | Raising and catching exceptions shall follow the Language Reference, including matching on base classes. | M | 0.3 | 4.3 |
-| EXC-02 | The built-in exception classes the runtime raises shall exist with their Python names: `ArithmeticError`, `AssertionError`, `IndexError`, `KeyError`, `OverflowError`, `RecursionError`, `RuntimeError`, `StopIteration`, `TypeError`, `ValueError`, `ZeroDivisionError` and their bases. | M | 0.3 | 4.3 |
+| EXC-02 | The built-in exception classes the runtime raises shall exist with their Python names: `ArithmeticError`, `AssertionError`, `IndexError`, `KeyError`, `OverflowError`, `RecursionError`, `RuntimeError`, `StopIteration`, `TypeError`, `UnicodeDecodeError`, `UnicodeEncodeError`, `ValueError`, `ZeroDivisionError` and their bases. | M | 0.3 | 4.3 |
 | EXC-03 | An exception that is not raised shall cost no more than a compare and branch at each call that may raise. | M | 0.3 | |
 | EXC-04 | Exception chaining with `from` and the implicit context shall be kept, and shown in the uncaught exception output. | S | 0.3 | 7.8 |
 | EXC-05 | An exception shall not cross a function exported to C (FFI-05); the program shall abort with the exception printed. | M | 0.5 | |

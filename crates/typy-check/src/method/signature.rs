@@ -26,6 +26,14 @@ pub enum ParameterType {
     Affixes,
     /// Any iterable of `str`, as the argument of `str.join`.
     Strings,
+    /// The name of a codec, a string literal the checker resolves.
+    Codec,
+    /// The name of an error handler, a string literal the checker resolves; one for decoding
+    /// when `decoding` is set.
+    Handler {
+        /// True for `bytes.decode`.
+        decoding: bool,
+    },
 }
 
 /// One parameter of a method.
@@ -177,6 +185,22 @@ impl Method {
             Self::StrExpandtabs => (
                 vec![either("tabsize", ParameterType::Exact(Type::Int))],
                 Type::Str,
+            ),
+            Self::StrEncode | Self::BytesDecode => (
+                vec![
+                    either("encoding", ParameterType::Codec),
+                    either(
+                        "errors",
+                        ParameterType::Handler {
+                            decoding: self == Self::BytesDecode,
+                        },
+                    ),
+                ],
+                if self == Self::StrEncode {
+                    Type::Bytes
+                } else {
+                    Type::Str
+                },
             ),
             Self::StrUpper
             | Self::StrLower

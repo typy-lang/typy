@@ -12,6 +12,7 @@
 mod allocator;
 mod bytes;
 mod cell;
+mod codec;
 mod compare;
 mod entry;
 mod exception;

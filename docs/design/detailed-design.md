@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy detailed design |
-| Version | 1.29 |
+| Version | 1.30 |
 | Status | Approved |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-08 |
@@ -475,8 +475,17 @@ item read at a position, an `int` from 0 to 255, slices, `len`, `+`, `*`,
 comparisons, `in` of an `int` or of `bytes`, `for` over its `int` items,
 and `str` and `repr`, which write `b'...'`. `bytes()` is empty, `bytes(n)`
 holds `n` zero bytes, and `bytes(values)` takes any iterable of `int`;
-`bytes` of a `str` without an encoding is E0404, and with one it is given
-by `str.encode`.
+`bytes` of a `str` without an encoding is E0404, and `bytes(text,
+encoding, errors)` is `text.encode(encoding, errors)`.
+
+`str.encode` and `bytes.decode` take the encoding and the errors as string
+literals, by position or keyword, so the checker resolves them when
+compiling, as `codecs.lookup` would, and passes their numbers: the codecs
+`utf-8`, `ascii` and `latin-1` under every alias CPython gives them, and
+the error handlers `strict`, `ignore`, `replace`, `backslashreplace`,
+`xmlcharrefreplace` for encoding only, and `surrogateescape`. A name TyPy
+does not provide, or one that is not a literal, is E0404, so a program
+never meets a `LookupError` that CPython would not raise.
 
 `Type::TupleOf(T)` is `tuple[T, ...]` (DAT-14), an immutable sequence of any
 length, written `tuple[int, ...]`; `...` anywhere else in a tuple annotation
@@ -992,6 +1001,7 @@ installed `typy` finds `<prefix>/lib/typy/` and a `typy` in
 | `io` | Standard output is buffered in 8 KiB and flushed when full, at exit, and before anything is written to standard error |
 | `exception` | Creates the built-in exceptions of EXC-02 with CPython's message for each operation. Where the oracle versions word a message differently, the runtime uses the wording of the newest, CPython 3.15 (OI-14): `division by zero` for every division and modulo of `int` and `float`, and `zero to a negative power` for `0.0 ** -1.0`. A conformance test cannot check such a message, because the oracles disagree on it, so the runtime's unit tests check it. It adds `TracebackEntry` values, and it prints an uncaught exception as `Traceback (most recent call last):`, one line per entry, an entry repeated in a row shown at most three times and the rest counted as `[Previous line repeated N more times]`, as CPython's `TB_RECURSIVE_CUTOFF` does, then `Type: message`, or `Type` alone when the message is empty, as CPython does (STD-05) |
 | `bytes` | A `bytes` is a `str` object of one byte per code point under the type ID 6, so it shares the string algorithms; `typy_rt_bytes_concat`, `_repeat`, `_slice`, `_length`, `_compare` and `_contains` call them and keep the result a `bytes`. `_get` gives an item as an `int`, with `IndexError: index out of range` outside; `_contains_byte` raises `ValueError: byte must be in range(0, 256)` for an `int` outside; `_zeros` and `_from_list` build one, `bytes must be in range(0, 256)` and `negative count` as CPython words them; `_repr` writes `b'...'` in double quotes when the bytes hold a single quote and no double quote, and escapes every byte outside 0x20 to 0x7e as `\xhh` |
+| `codec` | `typy_rt_str_encode` and `typy_rt_bytes_decode` with the codecs and handlers above. A run of code points the codec cannot encode, surrogates for `utf-8` or those past its range for `ascii` and `latin-1`, is one error, and UTF-8 is decoded as CPython's decoder does: a lead byte outside `C2` to `F4` is an invalid start byte, a byte outside the range its lead allows ends an invalid continuation, and data that runs out is an unexpected end of data; `replace` gives one U+FFFD for each error range. The messages of `UnicodeEncodeError` and `UnicodeDecodeError` are CPython's, such as `'utf-8' codec can't decode byte 0xff in position 0: invalid start byte` |
 | `tuple` | A list of tuples stores each tuple inline, in the words its descriptor gives, and the list's header keeps the descriptor. A `TupleType` holds the item size, a multiple of eight bytes and at least eight, the number of items, and a `Field` for each: its `ItemKind` code, its byte offset, and a nested tuple's descriptor. A `bool` field is one byte and `None` takes none. `retain`, `release`, `equal`, `order` and `repr` walk the fields, so the compiler emits data and no code: tuples order as CPython orders them, by the first pair of items that are not equal, and `repr` writes `(1,)` for one item |
 | `zip` | `typy_rt_zip_unequal(index, longer)` raises CPython's `ValueError` for a strict `zip`: `zip() argument 2 is shorter than argument 1`, or `zip() argument 3 is longer than arguments 1-2` |
 | `stack` | The check at the start of recursive functions reads the stack pointer register and compares it with the recorded limit; the register is read rather than the address of a local, because a sanitizer may keep locals on a separate fake stack. The limit leaves 64 KiB of stack unused; past it the check raises `RecursionError: maximum recursion depth exceeded` |

@@ -1125,3 +1125,28 @@ fn bytes_follow_python_s_types_and_codes() {
         "a: bytes = b'ab' + bytes(2) + bytes([1]) + bytes((1, 2)) + bytes(reversed(b'x')) + bytes(b'y')\nb: int = a[0] + len(a)\nc: bytes = a[1:] * 2\nd: bool = 1 in a and b'a' in a and a < b'z'\nfor n in a:\n    e: int = n\n",
     );
 }
+
+#[test]
+fn codecs_and_handlers_are_literals_typy_provides() {
+    let cases: &[(&str, &[&str])] = &[
+        ("x = 'a'.encode('utf-16')\n", &["E0404"]),
+        ("e = 'utf-8'\nx = 'a'.encode(e)\n", &["E0404"]),
+        ("x = 'a'.encode('utf-8', 'namereplace')\n", &["E0404"]),
+        (
+            "x = b'a'.decode('utf-8', 'xmlcharrefreplace')\n",
+            &["E0404"],
+        ),
+        ("x = b'a'.decode(1)\n", &["E0404"]),
+        ("x = bytes('a', key='utf-8')\n", &["E0404"]),
+        ("x = bytes('a', errors='strict')\n", &["E0404"]),
+        ("x = bytes(1, 'utf-8')\n", &["E0404"]),
+        ("x = bytes('a', 'utf-8', 'strict', 1)\n", &["E0404"]),
+        ("x = b'a'.upper()\n", &["E0412"]),
+    ];
+    for (source, expected) in cases {
+        assert_eq!(&rejected(source), expected, "\n{source}");
+    }
+    accepted(
+        "a: bytes = 'a'.encode() + 'a'.encode('Latin_1', errors='replace') + bytes('a', 'ascii') + bytes('a', encoding='utf8', errors='ignore')\nb: str = a.decode() + a.decode('ascii', 'surrogateescape') + a.decode(encoding='l1')\n",
+    );
+}

@@ -207,6 +207,9 @@ impl BodyChecker<'_> {
                 }
                 value
             }
+            ParameterType::Codec | ParameterType::Handler { .. } => {
+                self.codec_argument(&parameter.ty, argument, &what)
+            }
             ParameterType::Strings => {
                 let value = self.iterable_argument(argument, crate::builtin::Builtin::List);
                 if let Some(item) = value.ty.sequence_item()
@@ -225,6 +228,65 @@ impl BodyChecker<'_> {
                 value
             }
         }
+    }
+}
+
+impl BodyChecker<'_> {
+    /// Checks the name of a codec or an error handler, which is a string literal so it can be
+    /// resolved when compiling, and returns its number as an `int` constant.
+    pub(super) fn codec_argument(
+        &mut self,
+        kind: &ParameterType,
+        argument: &Expr,
+        what: &str,
+    ) -> TypedExpr {
+        let span = argument.span();
+        let Expr::Constant {
+            value: Constant::Str(name),
+            ..
+        } = argument
+        else {
+            self.expression(argument);
+            return self.error(
+                Diagnostic::new(
+                    DiagnosticCode::error(404),
+                    span,
+                    format!("{what} is a string literal, so TyPy can check it when compiling"),
+                )
+                .with_rule(RuleId::LIB_03),
+                span,
+            );
+        };
+        let (number, provided) = match kind {
+            ParameterType::Handler { decoding } => (
+                crate::codec::handler(name, *decoding),
+                if *decoding {
+                    "the error handlers `strict`, `ignore`, `replace`, `backslashreplace` and `surrogateescape`"
+                } else {
+                    "the error handlers `strict`, `ignore`, `replace`, `backslashreplace`, `xmlcharrefreplace` and `surrogateescape`"
+                },
+            ),
+            _ => (
+                crate::codec::codec(name),
+                "the codecs `utf-8`, `ascii` and `latin-1`",
+            ),
+        };
+        let Some(number) = number else {
+            return self.error(
+                Diagnostic::new(
+                    DiagnosticCode::error(404),
+                    span,
+                    format!("TyPy provides {provided}, and {name:?} is none of them"),
+                )
+                .with_rule(RuleId::LIB_03),
+                span,
+            );
+        };
+        Self::typed(
+            TypedExprKind::Constant(TypedConstant::Int(number.to_string())),
+            Type::Int,
+            span,
+        )
     }
 }
 

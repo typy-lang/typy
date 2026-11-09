@@ -28,7 +28,7 @@ impl FunctionLowerer<'_> {
             }
             given[argument.parameter] = Some(value);
         }
-        let lowered = if receiver.ty == TyirType::STR {
+        let lowered = if receiver.ty == TyirType::STR || receiver.ty == TyirType::BYTES {
             self.str_method(receiver.value, method, &given, result, span)
         } else {
             let arguments: Vec<Lowered> = given.iter().flatten().copied().collect();

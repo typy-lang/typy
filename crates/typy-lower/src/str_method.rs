@@ -1,4 +1,4 @@
-//! Lowers the methods of `str` (LIB-03). An argument a call leaves out takes Python's default;
+//! Lowers the methods of `str`, and `bytes.decode` (LIB-03). An argument a call leaves out takes Python's default;
 //! `start` and `end`, and a `str` that may be `None`, are passed with flag bits saying which
 //! are given, as slices pass their bounds.
 
@@ -108,6 +108,9 @@ impl FunctionLowerer<'_> {
                 self.call_runtime(RuntimeFunction::StrExpandtabs, vec![text, size], span)
             }
             Method::StrIsascii => self.call_runtime(RuntimeFunction::StrIsascii, vec![text], span),
+            Method::StrEncode | Method::BytesDecode => {
+                self.codec(text, method, argument(0), argument(1), span)
+            }
             other => unreachable!("`{}` is not a method of `str`", other.name()),
         }
     }
@@ -133,6 +136,26 @@ impl FunctionLowerer<'_> {
         };
         let mode = self.int(mode, span);
         self.call_runtime(RuntimeFunction::StrPad, vec![text, width, fill, mode], span)
+    }
+
+    /// Calls `encode` or `decode` with the numbers of the codec and the error handler, `utf-8`
+    /// and `strict` when they are left out.
+    fn codec(
+        &mut self,
+        text: ValueId,
+        method: Method,
+        codec: Option<Lowered>,
+        handler: Option<Lowered>,
+        span: Span,
+    ) -> Lowered {
+        let codec = self.int_or(codec, 0, span);
+        let handler = self.int_or(handler, 0, span);
+        let function = if method == Method::StrEncode {
+            RuntimeFunction::StrEncode
+        } else {
+            RuntimeFunction::BytesDecode
+        };
+        self.call_runtime(function, vec![text, codec, handler], span)
     }
 
     /// Calls the case method numbered `mode`, as `typy_rt_str_case` numbers them.
