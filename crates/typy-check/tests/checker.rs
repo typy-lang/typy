@@ -1141,12 +1141,32 @@ fn codecs_and_handlers_are_literals_typy_provides() {
         ("x = bytes('a', errors='strict')\n", &["E0404"]),
         ("x = bytes(1, 'utf-8')\n", &["E0404"]),
         ("x = bytes('a', 'utf-8', 'strict', 1)\n", &["E0404"]),
-        ("x = b'a'.upper()\n", &["E0412"]),
+        ("x = b'a'.format()\n", &["E0412"]),
     ];
     for (source, expected) in cases {
         assert_eq!(&rejected(source), expected, "\n{source}");
     }
     accepted(
         "a: bytes = 'a'.encode() + 'a'.encode('Latin_1', errors='replace') + bytes('a', 'ascii') + bytes('a', encoding='utf8', errors='ignore')\nb: str = a.decode() + a.decode('ascii', 'surrogateescape') + a.decode(encoding='l1')\n",
+    );
+}
+
+#[test]
+fn bytes_methods_take_bytes_and_give_bytes() {
+    let cases: &[(&str, &[&str])] = &[
+        ("x = b'abc'.find('b')\n", &["E0404"]),
+        ("x = b'a'.split(',')\n", &["E0404"]),
+        ("x = b','.join(['a'])\n", &["E0404"]),
+        ("x = b'a'.startswith(('a',))\n", &["E0404"]),
+        ("x = b'a'.casefold()\n", &["E0412"]),
+        ("x = b'a'.isdecimal()\n", &["E0412"]),
+        ("x = b'a'.encode()\n", &["E0412"]),
+        ("x = 'a'.hex()\n", &["E0412"]),
+    ];
+    for (source, expected) in cases {
+        assert_eq!(&rejected(source), expected, "\n{source}");
+    }
+    accepted(
+        "a: list[bytes] = b'a b'.split() + b'a,b'.rsplit(b',', 1) + b'a\\nb'.splitlines()\nb: tuple[bytes, bytes, bytes] = b'k=v'.partition(b'=')\nc: bytes = b'-'.join(a) + b'x'.strip(None) + b'x'.upper() + b'x'.center(3, b'*')\nd: int = b'abc'.find(b'b')\ne: bool = b'a'.startswith((b'a',)) and b'a'.isalpha()\nf: str = b'a'.hex()\n",
     );
 }

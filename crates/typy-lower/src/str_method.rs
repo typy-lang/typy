@@ -14,16 +14,17 @@ impl FunctionLowerer<'_> {
     pub(crate) fn str_method(
         &mut self,
         text: ValueId,
+        bytes: bool,
         method: Method,
         given: &[Option<Lowered>],
         result: TyirType,
         span: Span,
     ) -> Lowered {
         if let Some(mode) = case_mode(method) {
-            return self.str_case(text, mode, span);
+            return self.str_case(text, bytes, mode, span);
         }
         if let Some(question) = test_question(method) {
-            return self.str_test(text, question, span);
+            return self.str_test(text, bytes, question, span);
         }
         let argument = |index: usize| given.get(index).copied().flatten();
         match method {
@@ -33,55 +34,33 @@ impl FunctionLowerer<'_> {
             | Method::StrRindex
             | Method::StrCount
             | Method::StrStartswith
-            | Method::StrEndswith => self.str_search(text, method, given, span),
-            Method::StrSplit | Method::StrRsplit => {
-                let (separator, mut flags) = self.optional_str(argument(0), span);
-                if method == Method::StrRsplit {
-                    flags |= 2;
-                }
-                let maxsplit = self.int_or(argument(1), -1, span);
-                let flags = self.int(flags, span);
-                self.call_runtime(
-                    RuntimeFunction::StrSplit,
-                    vec![text, separator, maxsplit, flags],
-                    span,
-                )
-            }
-            Method::StrSplitlines => {
-                let keep = match argument(0) {
-                    Some(keep) => self.int_of(keep, span).value,
-                    None => self.int(0, span),
-                };
-                self.call_runtime(RuntimeFunction::StrSplitlines, vec![text, keep], span)
-            }
-            Method::StrPartition | Method::StrRpartition => {
-                let backwards = self.int(i64::from(method == Method::StrRpartition), span);
-                let separator = required(argument(0));
-                let parts = self.call_runtime(
-                    RuntimeFunction::StrPartition,
-                    vec![text, separator, backwards],
-                    span,
-                );
-                self.three_parts(parts, result, span)
-            }
-            Method::StrJoin => {
-                let parts = required(argument(0));
-                self.call_runtime(RuntimeFunction::StrJoin, vec![text, parts], span)
-            }
+            | Method::StrEndswith => self.str_search(text, bytes, method, given, span),
+            Method::StrSplit
+            | Method::StrRsplit
+            | Method::StrSplitlines
+            | Method::StrPartition
+            | Method::StrRpartition
+            | Method::StrJoin => self.str_split(text, bytes, method, given, result, span),
             Method::StrStrip | Method::StrLstrip | Method::StrRstrip => {
-                let (chars, flags) = self.optional_str(argument(0), span);
+                let (chars, flags) = self.optional_str(argument(0), bytes, span);
                 let sides = match method {
                     Method::StrLstrip => 2,
                     Method::StrRstrip => 4,
                     _ => 6,
                 };
                 let flags = self.int(flags | sides, span);
-                self.call_runtime(RuntimeFunction::StrStrip, vec![text, chars, flags], span)
+                self.text_call(
+                    bytes,
+                    RuntimeFunction::StrStrip,
+                    vec![text, chars, flags],
+                    span,
+                )
             }
             Method::StrRemoveprefix | Method::StrRemovesuffix => {
                 let suffix = self.int(i64::from(method == Method::StrRemovesuffix), span);
                 let affix = required(argument(0));
-                self.call_runtime(
+                self.text_call(
+                    bytes,
                     RuntimeFunction::StrRemoveAffix,
                     vec![text, affix, suffix],
                     span,
@@ -90,26 +69,35 @@ impl FunctionLowerer<'_> {
             Method::StrReplace => {
                 let (old, new) = (required(argument(0)), required(argument(1)));
                 let count = self.int_or(argument(2), -1, span);
-                self.call_runtime(
+                self.text_call(
+                    bytes,
                     RuntimeFunction::StrReplace,
                     vec![text, old, new, count],
                     span,
                 )
             }
             Method::StrCenter | Method::StrLjust | Method::StrRjust => {
-                self.str_pad(text, method, argument(0), argument(1), span)
+                self.str_pad(text, bytes, method, argument(0), argument(1), span)
             }
             Method::StrZfill => {
                 let width = required(argument(0));
-                self.call_runtime(RuntimeFunction::StrZfill, vec![text, width], span)
+                self.text_call(bytes, RuntimeFunction::StrZfill, vec![text, width], span)
             }
             Method::StrExpandtabs => {
                 let size = self.int_or(argument(0), 8, span);
-                self.call_runtime(RuntimeFunction::StrExpandtabs, vec![text, size], span)
+                self.text_call(
+                    bytes,
+                    RuntimeFunction::StrExpandtabs,
+                    vec![text, size],
+                    span,
+                )
             }
-            Method::StrIsascii => self.call_runtime(RuntimeFunction::StrIsascii, vec![text], span),
+            Method::StrIsascii => {
+                self.text_call(bytes, RuntimeFunction::StrIsascii, vec![text], span)
+            }
+            Method::BytesHex => self.text_call(bytes, RuntimeFunction::BytesHex, vec![text], span),
             Method::StrEncode | Method::BytesDecode => {
-                self.codec(text, method, argument(0), argument(1), span)
+                self.codec(text, bytes, method, argument(0), argument(1), span)
             }
             other => unreachable!("`{}` is not a method of `str`", other.name()),
         }
@@ -119,6 +107,7 @@ impl FunctionLowerer<'_> {
     fn str_pad(
         &mut self,
         text: ValueId,
+        bytes: bool,
         method: Method,
         width: Option<Lowered>,
         fill: Option<Lowered>,
@@ -132,10 +121,15 @@ impl FunctionLowerer<'_> {
         let width = required(width);
         let fill = match fill {
             Some(fill) => fill.value,
-            None => self.string(" ", span),
+            None => self.text_constant(bytes, " ", span),
         };
         let mode = self.int(mode, span);
-        self.call_runtime(RuntimeFunction::StrPad, vec![text, width, fill, mode], span)
+        self.text_call(
+            bytes,
+            RuntimeFunction::StrPad,
+            vec![text, width, fill, mode],
+            span,
+        )
     }
 
     /// Calls `encode` or `decode` with the numbers of the codec and the error handler, `utf-8`
@@ -143,6 +137,7 @@ impl FunctionLowerer<'_> {
     fn codec(
         &mut self,
         text: ValueId,
+        bytes: bool,
         method: Method,
         codec: Option<Lowered>,
         handler: Option<Lowered>,
@@ -155,25 +150,99 @@ impl FunctionLowerer<'_> {
         } else {
             RuntimeFunction::BytesDecode
         };
-        self.call_runtime(function, vec![text, codec, handler], span)
+        self.text_call(bytes, function, vec![text, codec, handler], span)
+    }
+
+    /// Calls `function`, or its `bytes` twin when the text is a `bytes`.
+    fn text_call(
+        &mut self,
+        bytes: bool,
+        function: RuntimeFunction,
+        arguments: Vec<ValueId>,
+        span: Span,
+    ) -> Lowered {
+        let function = if bytes {
+            bytes_twin(function)
+        } else {
+            function
+        };
+        self.call_runtime(function, arguments, span)
     }
 
     /// Calls the case method numbered `mode`, as `typy_rt_str_case` numbers them.
-    fn str_case(&mut self, text: ValueId, mode: i64, span: Span) -> Lowered {
+    fn str_case(&mut self, text: ValueId, bytes: bool, mode: i64, span: Span) -> Lowered {
         let mode = self.int(mode, span);
-        self.call_runtime(RuntimeFunction::StrCase, vec![text, mode], span)
+        self.text_call(bytes, RuntimeFunction::StrCase, vec![text, mode], span)
     }
 
     /// Calls the `is` method numbered `question`, as `typy_rt_str_test` numbers them.
-    fn str_test(&mut self, text: ValueId, question: i64, span: Span) -> Lowered {
+    fn str_test(&mut self, text: ValueId, bytes: bool, question: i64, span: Span) -> Lowered {
         let question = self.int(question, span);
-        self.call_runtime(RuntimeFunction::StrTest, vec![text, question], span)
+        self.text_call(bytes, RuntimeFunction::StrTest, vec![text, question], span)
+    }
+
+    /// Calls `split`, `rsplit`, `splitlines`, `partition`, `rpartition` or `join`.
+    fn str_split(
+        &mut self,
+        text: ValueId,
+        bytes: bool,
+        method: Method,
+        given: &[Option<Lowered>],
+        result: TyirType,
+        span: Span,
+    ) -> Lowered {
+        let argument = |index: usize| given.get(index).copied().flatten();
+        match method {
+            Method::StrSplit | Method::StrRsplit => {
+                let (separator, mut flags) = self.optional_str(argument(0), bytes, span);
+                if method == Method::StrRsplit {
+                    flags |= 2;
+                }
+                let maxsplit = self.int_or(argument(1), -1, span);
+                let flags = self.int(flags, span);
+                self.text_call(
+                    bytes,
+                    RuntimeFunction::StrSplit,
+                    vec![text, separator, maxsplit, flags],
+                    span,
+                )
+            }
+            Method::StrSplitlines => {
+                let keep = match argument(0) {
+                    Some(keep) => self.int_of(keep, span).value,
+                    None => self.int(0, span),
+                };
+                self.text_call(
+                    bytes,
+                    RuntimeFunction::StrSplitlines,
+                    vec![text, keep],
+                    span,
+                )
+            }
+            Method::StrPartition | Method::StrRpartition => {
+                let backwards = self.int(i64::from(method == Method::StrRpartition), span);
+                let separator = required(argument(0));
+                let parts = self.text_call(
+                    bytes,
+                    RuntimeFunction::StrPartition,
+                    vec![text, separator, backwards],
+                    span,
+                );
+                self.three_parts(parts, result, span)
+            }
+            Method::StrJoin => {
+                let parts = required(argument(0));
+                self.text_call(bytes, RuntimeFunction::StrJoin, vec![text, parts], span)
+            }
+            other => unreachable!("`{}` does not split or join", other.name()),
+        }
     }
 
     /// Calls a search, `find` to `count`, or a match, `startswith` or `endswith`.
     fn str_search(
         &mut self,
         text: ValueId,
+        bytes: bool,
         method: Method,
         given: &[Option<Lowered>],
         span: Span,
@@ -198,7 +267,12 @@ impl FunctionLowerer<'_> {
             _ => (RuntimeFunction::StrSearch, 4 << 2),
         };
         let (start, end, flags) = self.bounds(argument(1), argument(2), flags, span);
-        self.call_runtime(function, vec![text, target.value, start, end, flags], span)
+        self.text_call(
+            bytes,
+            function,
+            vec![text, target.value, start, end, flags],
+            span,
+        )
     }
 
     /// Returns the `int` word of a constant.
@@ -229,27 +303,46 @@ impl FunctionLowerer<'_> {
         (start, end, self.int(mask, span))
     }
 
-    /// Returns a `str` argument that may be `None` or left out, with flag bit 0 set when it is
-    /// a `str`; otherwise an empty string stands in for it.
-    fn optional_str(&mut self, argument: Option<Lowered>, span: Span) -> (ValueId, i64) {
+    /// Returns a text argument that may be `None` or left out, with flag bit 0 set when it is
+    /// given; otherwise an empty text of the receiver's type stands in for it.
+    fn optional_str(
+        &mut self,
+        argument: Option<Lowered>,
+        bytes: bool,
+        span: Span,
+    ) -> (ValueId, i64) {
         match argument {
-            Some(argument) if argument.ty == TyirType::STR => (argument.value, 1),
-            _ => (self.string("", span), 0),
+            Some(argument) if argument.ty != TyirType::Unit => (argument.value, 1),
+            _ => (self.text_constant(bytes, "", span), 0),
         }
     }
 
-    /// Returns a tuple of three strings from the new list of three the runtime gives, and
-    /// releases the list.
+    /// Returns a constant of the text's type: a `str`, or a `bytes` of the same ASCII.
+    fn text_constant(&mut self, bytes: bool, text: &str, span: Span) -> ValueId {
+        if bytes {
+            self.bytes_constant(text.as_bytes(), span)
+        } else {
+            self.string(text, span)
+        }
+    }
+
+    /// Returns a tuple of three parts, strings or `bytes`, from the new list of three the
+    /// runtime gives, and releases the list.
     fn three_parts(&mut self, parts: Lowered, result: TyirType, span: Span) -> Lowered {
         let TyirType::Tuple(id) = result else {
             unreachable!("`partition` gives a tuple")
         };
+        let part = self
+            .tuple_types
+            .items(id)
+            .and_then(|items| items.first().copied())
+            .unwrap_or(TyirType::STR);
         let items: Vec<ValueId> = (0..3)
             .map(|index| {
                 let position = self.int(index, span);
                 let list = Self::borrowed(parts.value, TyirType::LIST);
                 let index = Self::borrowed(position, TyirType::Int);
-                let item = self.list_item(list, index, TyirType::STR, span);
+                let item = self.list_item(list, index, part, span);
                 self.take_reference(item, span)
             })
             .collect();
@@ -306,4 +399,28 @@ fn position(order: &[Method], method: Method) -> Option<i64> {
         .iter()
         .position(|each| *each == method)
         .and_then(|index| i64::try_from(index).ok())
+}
+
+/// Returns the runtime function of `bytes` that does what `function` does for `str`.
+fn bytes_twin(function: RuntimeFunction) -> RuntimeFunction {
+    use RuntimeFunction as F;
+    match function {
+        F::StrSearch => F::BytesSearch,
+        F::StrMatch => F::BytesMatch,
+        F::StrMatchAny => F::BytesMatchAny,
+        F::StrSplit => F::BytesSplit,
+        F::StrSplitlines => F::BytesSplitlines,
+        F::StrPartition => F::BytesPartition,
+        F::StrJoin => F::BytesJoin,
+        F::StrStrip => F::BytesStrip,
+        F::StrRemoveAffix => F::BytesRemoveAffix,
+        F::StrReplace => F::BytesReplace,
+        F::StrPad => F::BytesPad,
+        F::StrZfill => F::BytesZfill,
+        F::StrExpandtabs => F::BytesExpandtabs,
+        F::StrIsascii => F::BytesIsascii,
+        F::StrCase => F::BytesCase,
+        F::StrTest => F::BytesTest,
+        other => other,
+    }
 }

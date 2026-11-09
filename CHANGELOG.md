@@ -59,6 +59,10 @@ All notable changes to TyPy are recorded here. The format follows
   `bytes(values)`, items as `int` values, slices, `len`, `+`, `*`,
   comparisons, `in`, `for`, and `str` and `repr` as CPython writes them
   (DAT-06).
+- The methods of `bytes` that `str` has too, `find` to `join`, `strip`,
+  `replace`, padding, `upper`, `lower`, `swapcase`, `capitalize`, `title`
+  and the `is` tests, with CPython's ASCII meaning, and `bytes.hex`
+  (LIB-03).
 - `str.encode`, `bytes.decode` and `bytes(text, encoding, errors)` with the
   codecs `utf-8`, `ascii` and `latin-1` under all their CPython names, and
   the error handlers `strict`, `ignore`, `replace`, `backslashreplace`,

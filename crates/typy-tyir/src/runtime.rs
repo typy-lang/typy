@@ -102,6 +102,23 @@ pub enum RuntimeFunction {
     BytesRepr,
     StrEncode,
     BytesDecode,
+    BytesSearch,
+    BytesMatch,
+    BytesMatchAny,
+    BytesSplit,
+    BytesSplitlines,
+    BytesPartition,
+    BytesJoin,
+    BytesStrip,
+    BytesRemoveAffix,
+    BytesReplace,
+    BytesPad,
+    BytesZfill,
+    BytesExpandtabs,
+    BytesIsascii,
+    BytesCase,
+    BytesTest,
+    BytesHex,
 }
 
 /// The parameter types, result type and raising behaviour of a runtime function.
@@ -132,7 +149,7 @@ const FLOAT_FLOAT: &[TyirType] = &[TyirType::Float, TyirType::Float];
 
 impl RuntimeFunction {
     /// Every runtime function.
-    pub const ALL: [Self; 93] = [
+    pub const ALL: [Self; 110] = [
         Self::IntFloorDivide,
         Self::IntModulo,
         Self::IntPower,
@@ -226,8 +243,29 @@ impl RuntimeFunction {
         Self::BytesRepr,
         Self::StrEncode,
         Self::BytesDecode,
+        Self::BytesSearch,
+        Self::BytesMatch,
+        Self::BytesMatchAny,
+        Self::BytesSplit,
+        Self::BytesSplitlines,
+        Self::BytesPartition,
+        Self::BytesJoin,
+        Self::BytesStrip,
+        Self::BytesRemoveAffix,
+        Self::BytesReplace,
+        Self::BytesPad,
+        Self::BytesZfill,
+        Self::BytesExpandtabs,
+        Self::BytesIsascii,
+        Self::BytesCase,
+        Self::BytesTest,
+        Self::BytesHex,
     ];
 
+    #[allow(
+        clippy::too_many_lines,
+        reason = "one arm for each runtime function, a table"
+    )]
     /// Returns the function's signature. Comparisons take the comparison as an `int` operand, numbered as `Comparison::code`.
     #[must_use]
     pub const fn signature(self) -> RuntimeSignature {
@@ -321,14 +359,35 @@ impl RuntimeFunction {
             Self::BytesContainsByte => signature(&[BYTES, Int], Bool, true),
             Self::BytesZeros => signature(&[Int], BYTES, true),
             Self::BytesFromList => signature(&[LIST], BYTES, true),
-            Self::BytesRepr => signature(&[BYTES], STR, false),
+            Self::BytesRepr | Self::BytesHex => signature(&[BYTES], STR, false),
             Self::StrEncode => signature(&[STR, Int, Int], BYTES, true),
             Self::BytesDecode => signature(&[BYTES, Int, Int], STR, true),
+            Self::BytesSearch => signature(&[BYTES, BYTES, Int, Int, Int], Int, true),
+            Self::BytesMatch => signature(&[BYTES, BYTES, Int, Int, Int], Bool, false),
+            Self::BytesMatchAny => signature(&[BYTES, LIST, Int, Int, Int], Bool, false),
+            Self::BytesSplit => signature(&[BYTES, BYTES, Int, Int], LIST, true),
+            Self::BytesSplitlines => signature(&[BYTES, Int], LIST, false),
+            Self::BytesPartition => signature(&[BYTES, BYTES, Int], LIST, true),
+            Self::BytesJoin => signature(&[BYTES, LIST], BYTES, false),
+            Self::BytesReplace => signature(&[BYTES, BYTES, BYTES, Int], BYTES, false),
+            Self::BytesPad => signature(&[BYTES, Int, BYTES, Int], BYTES, true),
+            Self::BytesIsascii => signature(&[BYTES], Bool, false),
+            Self::BytesTest => signature(&[BYTES, Int], Bool, false),
+            Self::BytesStrip | Self::BytesRemoveAffix => {
+                signature(&[BYTES, BYTES, Int], BYTES, false)
+            }
+            Self::BytesZfill | Self::BytesExpandtabs | Self::BytesCase => {
+                signature(&[BYTES, Int], BYTES, false)
+            }
         }
     }
 
     /// Returns the name after `typy_rt_`, such as `int_floor_divide`.
     #[must_use]
+    #[allow(
+        clippy::too_many_lines,
+        reason = "one arm for each runtime function, a table"
+    )]
     pub const fn name(self) -> &'static str {
         match self {
             Self::IntFloorDivide => "int_floor_divide",
@@ -424,6 +483,23 @@ impl RuntimeFunction {
             Self::BytesRepr => "bytes_repr",
             Self::StrEncode => "str_encode",
             Self::BytesDecode => "bytes_decode",
+            Self::BytesSearch => "bytes_search",
+            Self::BytesMatch => "bytes_match",
+            Self::BytesMatchAny => "bytes_match_any",
+            Self::BytesSplit => "bytes_split",
+            Self::BytesSplitlines => "bytes_splitlines",
+            Self::BytesPartition => "bytes_partition",
+            Self::BytesJoin => "bytes_join",
+            Self::BytesStrip => "bytes_strip",
+            Self::BytesRemoveAffix => "bytes_remove_affix",
+            Self::BytesReplace => "bytes_replace",
+            Self::BytesPad => "bytes_pad",
+            Self::BytesZfill => "bytes_zfill",
+            Self::BytesExpandtabs => "bytes_expandtabs",
+            Self::BytesIsascii => "bytes_isascii",
+            Self::BytesCase => "bytes_case",
+            Self::BytesTest => "bytes_test",
+            Self::BytesHex => "bytes_hex",
         }
     }
 }

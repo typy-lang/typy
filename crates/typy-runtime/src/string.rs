@@ -15,12 +15,20 @@ use crate::allocator::{allocate, array_size};
 use crate::header::{ObjectHeader, STR_TYPE_ID};
 
 pub(crate) use builder::StrBuilder;
+pub(crate) use methods::{
+    typy_rt_str_expandtabs, typy_rt_str_isascii, typy_rt_str_match, typy_rt_str_match_any,
+    typy_rt_str_pad, typy_rt_str_remove_affix, typy_rt_str_replace, typy_rt_str_search,
+    typy_rt_str_strip, typy_rt_str_zfill,
+};
 pub(crate) use operations::{
     typy_rt_str_compare, typy_rt_str_concat, typy_rt_str_contains, typy_rt_str_length,
     typy_rt_str_repeat, typy_rt_str_slice,
 };
 pub(crate) use points::{Points, is_space};
 pub(crate) use repr::{repr_into, typy_rt_str_repr};
+pub(crate) use split::{
+    typy_rt_str_join, typy_rt_str_partition, typy_rt_str_split, typy_rt_str_splitlines,
+};
 pub(crate) use unicode::decimal_value;
 pub(crate) use utf8::write_utf8;
 

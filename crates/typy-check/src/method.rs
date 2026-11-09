@@ -124,7 +124,50 @@ pub enum Method {
     StrEncode,
     /// `bytes.decode(encoding='utf-8', errors='strict')`.
     BytesDecode,
+    /// `bytes.hex()`.
+    BytesHex,
 }
+
+/// The methods of `str` that `bytes` has too, with ASCII meaning.
+const BYTES_SHARED: [Method; 37] = [
+    Method::StrFind,
+    Method::StrRfind,
+    Method::StrIndex,
+    Method::StrRindex,
+    Method::StrCount,
+    Method::StrStartswith,
+    Method::StrEndswith,
+    Method::StrSplit,
+    Method::StrRsplit,
+    Method::StrSplitlines,
+    Method::StrPartition,
+    Method::StrRpartition,
+    Method::StrJoin,
+    Method::StrStrip,
+    Method::StrLstrip,
+    Method::StrRstrip,
+    Method::StrRemoveprefix,
+    Method::StrRemovesuffix,
+    Method::StrReplace,
+    Method::StrCenter,
+    Method::StrLjust,
+    Method::StrRjust,
+    Method::StrZfill,
+    Method::StrExpandtabs,
+    Method::StrIsascii,
+    Method::StrUpper,
+    Method::StrLower,
+    Method::StrSwapcase,
+    Method::StrCapitalize,
+    Method::StrTitle,
+    Method::StrIsalpha,
+    Method::StrIsalnum,
+    Method::StrIsdigit,
+    Method::StrIsspace,
+    Method::StrIsupper,
+    Method::StrIslower,
+    Method::StrIstitle,
+];
 
 /// The `str` methods, by name, in the order of the variants.
 const STR_METHODS: [(&str, Method); 43] = [
@@ -184,7 +227,14 @@ impl Method {
                 .map(|(_, method)| *method);
         }
         if *receiver == Type::Bytes {
-            return (name == "decode").then_some(Self::BytesDecode);
+            return match name {
+                "decode" => Some(Self::BytesDecode),
+                "hex" => Some(Self::BytesHex),
+                _ => STR_METHODS
+                    .iter()
+                    .find(|(each, method)| *each == name && BYTES_SHARED.contains(method))
+                    .map(|(_, method)| *method),
+            };
         }
         if let Type::TupleOf(_) = receiver {
             return match name {
@@ -269,6 +319,7 @@ impl Method {
             Self::StrIsprintable => "isprintable",
             Self::StrEncode => "encode",
             Self::BytesDecode => "decode",
+            Self::BytesHex => "hex",
         }
     }
 }

@@ -1,8 +1,8 @@
 //! The methods of `str` that read or rebuild text without Unicode tables: searching, prefixes
 //! and suffixes, stripping, replacing and padding, with CPython's results (LIB-03).
 
-use super::builder::{StrBuilder, substring};
-use super::{StrObject, code_point, is_space, length};
+use super::builder::{StrBuilder, is_bytes, space_for, substring};
+use super::{StrObject, code_point, length};
 use crate::Raising;
 use crate::exception::{ExceptionKind, raise};
 use crate::slice::clamped;
@@ -60,7 +60,8 @@ fn word(value: usize) -> i64 {
 /// Searches `text[start:end]` for `needle`, as the operation in bits 2 and up of `flags` asks:
 /// 0 `find`, 1 `rfind`, 2 `index`, 3 `rindex`, 4 `count`. Returns an `int` word: the position,
 /// -1 when `find` or `rfind` finds nothing, or the number of occurrences that do not overlap.
-/// `index` and `rindex` raise `ValueError: substring not found` instead of returning -1.
+/// `index` and `rindex` raise `ValueError: substring not found` instead of returning -1, or
+/// `subsection not found` for `bytes`.
 ///
 /// # Safety
 ///
@@ -111,7 +112,12 @@ pub unsafe extern "C" fn typy_rt_str_search(
             (Some(at), _) => Raising::ok(inline(at).unwrap_or(1)),
             (None, false) => Raising::ok(inline(-1).unwrap_or(1)),
             (None, true) => {
-                Raising::error(1, raise(ExceptionKind::ValueError, "substring not found"))
+                let message = if is_bytes(text) {
+                    "subsection not found"
+                } else {
+                    "substring not found"
+                };
+                Raising::error(1, raise(ExceptionKind::ValueError, message))
             }
         }
     }
@@ -185,6 +191,7 @@ pub unsafe extern "C" fn typy_rt_str_strip(
     let flags = inline_value(flags);
     // SAFETY: the caller passes live strings; every index stays inside them.
     unsafe {
+        let is_space = space_for(text);
         let stripped = |point: u32| {
             if flags & 1 == 0 {
                 is_space(point)
@@ -271,7 +278,7 @@ pub unsafe extern "C" fn typy_rt_str_replace(
                 }
                 at += 1;
             }
-            return builder.finish();
+            return builder.finish_like(text);
         }
         while at < whole {
             if remaining > 0 && at + size <= whole && occurs_at(text, old, at) {
@@ -283,7 +290,7 @@ pub unsafe extern "C" fn typy_rt_str_replace(
                 at += 1;
             }
         }
-        builder.finish()
+        builder.finish_like(text)
     }
 }
 
@@ -305,10 +312,23 @@ pub unsafe extern "C" fn typy_rt_str_pad(
     // SAFETY: the caller passes live strings; every index stays inside them.
     unsafe {
         if length(fill) != 1 {
-            let error = raise(
-                ExceptionKind::TypeError,
-                "The fill character must be exactly one character long",
-            );
+            let error = if is_bytes(text) {
+                // CPython 3.15's wording, the newest oracle's (OI-14).
+                let mut message = crate::message::MessageBuffer::new();
+                message.push_str(match inline_value(mode) {
+                    0 => "center",
+                    1 => "ljust",
+                    _ => "rjust",
+                });
+                message.push_str("(): argument 2 must be a byte string of length 1, not a bytes object of length ");
+                message.push_number(i64::try_from(length(fill)).unwrap_or(i64::MAX));
+                message.raise(ExceptionKind::TypeError)
+            } else {
+                raise(
+                    ExceptionKind::TypeError,
+                    "The fill character must be exactly one character long",
+                )
+            };
             return Raising::error(core::ptr::null_mut(), error);
         }
         let whole = length(text);
@@ -327,7 +347,7 @@ pub unsafe extern "C" fn typy_rt_str_pad(
         (0..left).for_each(|_| builder.push(point));
         builder.push_str(text);
         (0..margin - left).for_each(|_| builder.push(point));
-        Raising::ok(builder.finish())
+        Raising::ok(builder.finish_like(text))
     }
 }
 
@@ -352,7 +372,7 @@ pub unsafe extern "C" fn typy_rt_str_zfill(text: *const StrObject, width: i64) -
         }
         (0..width - whole).for_each(|_| builder.push(u32::from(b'0')));
         builder.push_range(text, usize::from(signed), whole);
-        builder.finish()
+        builder.finish_like(text)
     }
 }
 
@@ -390,7 +410,7 @@ pub unsafe extern "C" fn typy_rt_str_expandtabs(
                 };
             }
         }
-        builder.finish()
+        builder.finish_like(text)
     }
 }
 

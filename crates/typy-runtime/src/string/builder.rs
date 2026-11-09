@@ -71,6 +71,18 @@ impl StrBuilder {
         free(self.points.cast());
     }
 
+    /// Returns the new string, of the type of `source`, and frees the buffer.
+    ///
+    /// # Safety
+    ///
+    /// `source` points to a live string.
+    pub(crate) unsafe fn finish_like(self, source: *const StrObject) -> *mut StrObject {
+        let text = self.finish();
+        // SAFETY: the caller passes a live string; the new one is not shared yet.
+        unsafe { (*text).header.type_id = (*source).header.type_id };
+        text
+    }
+
     /// Returns the new string, and frees the buffer.
     pub(crate) fn finish(self) -> *mut StrObject {
         let text = new_string(self.length, self.kind);
@@ -84,7 +96,8 @@ impl StrBuilder {
     }
 }
 
-/// Returns a new string of the code points `start..end` of `text`.
+/// Returns a new string of the code points `start..end` of `text`, of the type of `text`: a
+/// part of a `bytes` is a `bytes`.
 ///
 /// # Safety
 ///
@@ -92,6 +105,34 @@ impl StrBuilder {
 pub(crate) unsafe fn substring(text: *const StrObject, start: usize, end: usize) -> *mut StrObject {
     let mut builder = StrBuilder::with_capacity(end - start);
     // SAFETY: the caller's guarantee.
-    unsafe { builder.push_range(text, start, end) };
-    builder.finish()
+    unsafe {
+        builder.push_range(text, start, end);
+        builder.finish_like(text)
+    }
+}
+
+/// Returns whether `text` is a `bytes`, whose methods treat only ASCII as whitespace, letters
+/// and line breaks.
+///
+/// # Safety
+///
+/// `text` points to a live string.
+pub(crate) unsafe fn is_bytes(text: *const StrObject) -> bool {
+    // SAFETY: the caller's guarantee.
+    unsafe { (*text).header.type_id == crate::header::BYTES_TYPE_ID }
+}
+
+/// Returns whether a code point is whitespace for `text`: `str.isspace` for a `str`, and for a
+/// `bytes` only space, `\t`, `\n`, `\v`, `\f` and `\r`.
+///
+/// # Safety
+///
+/// `text` points to a live string.
+pub(crate) unsafe fn space_for(text: *const StrObject) -> fn(u32) -> bool {
+    // SAFETY: the caller's guarantee.
+    if unsafe { is_bytes(text) } {
+        |point| matches!(point, 0x20 | 0x09..=0x0d)
+    } else {
+        super::is_space
+    }
 }

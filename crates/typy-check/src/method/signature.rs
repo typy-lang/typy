@@ -125,17 +125,17 @@ impl Method {
                 )],
                 Type::NoneType,
             ),
-            _ => return self.str_signature(),
+            _ => return self.str_signature(receiver),
         };
         MethodSignature { parameters, result }
     }
 
-    /// Returns the signature of a method of `str`.
-    fn str_signature(self) -> MethodSignature {
-        let strings = Type::List(Box::new(Type::Str));
+    /// Returns the signature of a method of `str`, or of `bytes` when `text` is `bytes`.
+    fn str_signature(self, text: &Type) -> MethodSignature {
+        let strings = Type::List(Box::new(text.clone()));
         let (parameters, result) = match self {
             Self::StrFind | Self::StrRfind | Self::StrIndex | Self::StrRindex | Self::StrCount => {
-                (searched(positional("sub", Type::Str, true)), Type::Int)
+                (searched(positional("sub", text.clone(), true)), Type::Int)
             }
             Self::StrStartswith | Self::StrEndswith => (
                 searched(positional_as("prefix", ParameterType::Affixes, true)),
@@ -153,38 +153,38 @@ impl Method {
                 strings,
             ),
             Self::StrPartition | Self::StrRpartition => (
-                vec![positional("sep", Type::Str, true)],
-                Type::Tuple(vec![Type::Str, Type::Str, Type::Str]),
+                vec![positional("sep", text.clone(), true)],
+                Type::Tuple(vec![text.clone(), text.clone(), text.clone()]),
             ),
             Self::StrJoin => (
                 vec![positional_as("iterable", ParameterType::Strings, true)],
-                Type::Str,
+                text.clone(),
             ),
             Self::StrStrip | Self::StrLstrip | Self::StrRstrip => (
                 vec![positional_as("chars", ParameterType::StrOrNone, false)],
-                Type::Str,
+                text.clone(),
             ),
-            Self::StrRemoveprefix => (vec![positional("prefix", Type::Str, true)], Type::Str),
-            Self::StrRemovesuffix => (vec![positional("suffix", Type::Str, true)], Type::Str),
+            Self::StrRemoveprefix => (vec![positional("prefix", text.clone(), true)], text.clone()),
+            Self::StrRemovesuffix => (vec![positional("suffix", text.clone(), true)], text.clone()),
             Self::StrReplace => (
                 vec![
-                    positional("old", Type::Str, true),
-                    positional("new", Type::Str, true),
+                    positional("old", text.clone(), true),
+                    positional("new", text.clone(), true),
                     positional("count", Type::Int, false),
                 ],
-                Type::Str,
+                text.clone(),
             ),
             Self::StrCenter | Self::StrLjust | Self::StrRjust => (
                 vec![
                     positional("width", Type::Int, true),
-                    positional("fillchar", Type::Str, false),
+                    positional("fillchar", text.clone(), false),
                 ],
-                Type::Str,
+                text.clone(),
             ),
-            Self::StrZfill => (vec![positional("width", Type::Int, true)], Type::Str),
+            Self::StrZfill => (vec![positional("width", Type::Int, true)], text.clone()),
             Self::StrExpandtabs => (
                 vec![either("tabsize", ParameterType::Exact(Type::Int))],
-                Type::Str,
+                text.clone(),
             ),
             Self::StrEncode | Self::BytesDecode => (
                 vec![
@@ -207,7 +207,8 @@ impl Method {
             | Self::StrCasefold
             | Self::StrSwapcase
             | Self::StrCapitalize
-            | Self::StrTitle => (Vec::new(), Type::Str),
+            | Self::StrTitle => (Vec::new(), text.clone()),
+            Self::BytesHex => (Vec::new(), Type::Str),
             _ => (Vec::new(), Type::Bool),
         };
         MethodSignature { parameters, result }

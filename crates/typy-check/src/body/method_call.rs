@@ -42,11 +42,21 @@ impl BodyChecker<'_> {
         let Some(bound) = self.bind(method, &signature, arguments, keywords, span) else {
             return Self::invalid_call(span);
         };
+        let text = if receiver.ty == Type::Bytes {
+            Type::Bytes
+        } else {
+            Type::Str
+        };
         let arguments = bound
             .into_iter()
             .map(|(parameter, expression)| Argument {
                 parameter,
-                value: self.method_argument(method, &signature.parameters[parameter], expression),
+                value: self.method_argument(
+                    method,
+                    &signature.parameters[parameter],
+                    expression,
+                    &text,
+                ),
             })
             .collect();
         Self::typed(
@@ -178,6 +188,7 @@ impl BodyChecker<'_> {
         method: Method,
         parameter: &Parameter,
         argument: &Expr,
+        text: &Type,
     ) -> TypedExpr {
         let what = format!("`{}` of `{}`", parameter.name, method.name());
         match &parameter.ty {
@@ -195,15 +206,15 @@ impl BodyChecker<'_> {
                         ..
                     }
                 ) {
-                    self.expect(&value, Type::Str, &what);
+                    self.expect(&value, text.clone(), &what);
                 }
                 value
             }
             ParameterType::Affixes => {
-                let wanted = Type::TupleOf(Box::new(Type::Str));
+                let wanted = Type::TupleOf(Box::new(text.clone()));
                 let value = self.expression_expecting(argument, Some(&wanted));
                 if value.ty != wanted {
-                    self.expect(&value, Type::Str, &what);
+                    self.expect(&value, text.clone(), &what);
                 }
                 value
             }
@@ -213,14 +224,16 @@ impl BodyChecker<'_> {
             ParameterType::Strings => {
                 let value = self.iterable_argument(argument, crate::builtin::Builtin::List);
                 if let Some(item) = value.ty.sequence_item()
-                    && *item != Type::Str
+                    && item != text
                     && !item.has_error()
                 {
                     self.diagnostics.push(
                         Diagnostic::new(
                             DiagnosticCode::error(404),
                             value.span,
-                            format!("`join` joins strings, and these items are {item}"),
+                            format!(
+                                "`join` joins items of type {text}, and these items are {item}"
+                            ),
                         )
                         .with_rule(RuleId::LIB_03),
                     );

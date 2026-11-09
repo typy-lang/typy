@@ -1,8 +1,8 @@
 //! Splits and joins strings: `split`, `rsplit`, `splitlines`, `partition`, `rpartition` and
 //! `join`, as CPython's `stringlib` does them (LIB-03).
 
-use super::builder::{StrBuilder, substring};
-use super::{StrObject, code_point, is_space, length};
+use super::builder::{StrBuilder, is_bytes, space_for, substring};
+use super::{StrObject, code_point, length};
 use crate::ListObject;
 use crate::Raising;
 use crate::exception::{ExceptionKind, raise};
@@ -121,6 +121,7 @@ pub unsafe extern "C" fn typy_rt_str_split(
 unsafe fn split_whitespace(text: *const StrObject, limit: usize, parts: *mut ListObject) {
     // SAFETY: the caller's guarantee; every index stays inside the string.
     unsafe {
+        let is_space = space_for(text);
         let whole = length(text);
         let (mut at, mut splits) = (0, 0);
         while splits < limit {
@@ -154,6 +155,7 @@ unsafe fn split_whitespace(text: *const StrObject, limit: usize, parts: *mut Lis
 unsafe fn split_whitespace_backwards(text: *const StrObject, limit: usize, parts: *mut ListObject) {
     // SAFETY: the caller's guarantee; every index stays inside the string.
     unsafe {
+        let is_space = space_for(text);
         let (mut at, mut splits) = (length(text), 0);
         while splits < limit {
             while at > 0 && is_space(code_point(text, at - 1)) {
@@ -201,6 +203,11 @@ pub unsafe extern "C" fn typy_rt_str_splitlines(
     // SAFETY: the caller passes a live string; every index stays inside it.
     unsafe {
         let whole = length(text);
+        let is_line_break: fn(u32) -> bool = if is_bytes(text) {
+            |point| point == 0x0a || point == 0x0d
+        } else {
+            is_line_break
+        };
         let lines = new_list(ItemKind::Object, 0);
         let mut at = 0;
         while at < whole {
@@ -298,6 +305,6 @@ pub unsafe extern "C" fn typy_rt_str_join(
             );
             builder.push_str(part);
         }
-        builder.finish()
+        builder.finish_like(separator)
     }
 }

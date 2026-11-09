@@ -3,6 +3,8 @@
 //! algorithms, and these functions give it its own results: items that are `int`, text in
 //! the form `b'...'`, and new objects of type `bytes`.
 
+mod methods;
+
 use crate::Raising;
 use crate::exception::{ExceptionKind, raise};
 use crate::header::BYTES_TYPE_ID;
