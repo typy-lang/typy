@@ -450,10 +450,13 @@ mod tests {
         assert_eq!(add.result, Type::NoneType);
         assert_eq!(Method::SetPop.signature(&set).result, Type::Int);
         assert_eq!(Method::SetUnion.signature(&set).result, set);
-        assert_eq!(
-            Method::SetUpdate.signature(&set).parameters[0].ty,
-            ParameterType::Exact(set.clone())
-        );
+        let update = Method::SetUpdate.signature(&set);
+        assert_eq!(update.parameters[0].ty, ParameterType::Items(Type::Int));
+        assert_eq!(update.parameters[0].kind, ParameterKind::Rest);
+        assert!(!update.parameters[0].required);
+        let other = &Method::SetIssubset.signature(&set).parameters[0];
+        assert_eq!(other.kind, ParameterKind::Positional);
+        assert!(other.required);
         assert_eq!(Method::SetIsdisjoint.signature(&set).result, Type::Bool);
         assert_eq!(Method::SetCopy.signature(&set).parameters, []);
     }

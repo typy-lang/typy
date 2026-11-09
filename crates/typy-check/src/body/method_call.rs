@@ -90,6 +90,9 @@ impl BodyChecker<'_> {
         span: Span,
     ) -> Option<Vec<(usize, &'call Expr)>> {
         let parameters = &signature.parameters;
+        let rest = parameters
+            .iter()
+            .position(|parameter| parameter.kind == ParameterKind::Rest);
         let positional = parameters
             .iter()
             .filter(|parameter| parameter.kind != ParameterKind::Keyword)
@@ -98,15 +101,24 @@ impl BodyChecker<'_> {
             .iter()
             .filter(|parameter| parameter.required)
             .count();
-        if arguments.len() > positional {
+        if rest.is_none() && arguments.len() > positional {
             self.arity_error(method, positional, required, arguments.len(), span);
             return None;
         }
-        let mut bound: Vec<(usize, &Expr)> = arguments.iter().enumerate().collect();
+        // Every argument from the rest parameter on binds to it.
+        let mut bound: Vec<(usize, &Expr)> = arguments
+            .iter()
+            .enumerate()
+            .map(|(index, argument)| (rest.map_or(index, |rest| index.min(rest)), argument))
+            .collect();
         for keyword in keywords {
             let name = keyword.name.as_ref().map(|name| name.name.as_str());
             let index = parameters.iter().position(|parameter| {
-                Some(parameter.name) == name && parameter.kind != ParameterKind::Positional
+                Some(parameter.name) == name
+                    && matches!(
+                        parameter.kind,
+                        ParameterKind::Either | ParameterKind::Keyword
+                    )
             });
             let message = match (name, index) {
                 (Some(_), Some(index)) if bound.iter().all(|(given, _)| *given != index) => {
@@ -221,6 +233,7 @@ impl BodyChecker<'_> {
             ParameterType::Codec | ParameterType::Handler { .. } => {
                 self.codec_argument(&parameter.ty, argument, &what)
             }
+            ParameterType::Items(item) => self.items_argument(argument, item, &what),
             ParameterType::Strings => {
                 let value = self.iterable_argument(argument, crate::builtin::Builtin::List);
                 if let Some(item) = value.ty.sequence_item()

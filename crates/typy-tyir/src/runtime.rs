@@ -131,10 +131,15 @@ pub enum RuntimeFunction {
     SetItem,
     SetRepr,
     SetCopy,
-    SetCombine,
-    SetUpdate,
     SetCompare,
-    SetIsdisjoint,
+    SetExtend,
+    SetIntersect,
+    SetSubtract,
+    SetRemoveAll,
+    SetSymmetric,
+    SetToggle,
+    SetReplace,
+    SetRelation,
 }
 
 /// The parameter types, result type and raising behaviour of a runtime function.
@@ -165,7 +170,7 @@ const FLOAT_FLOAT: &[TyirType] = &[TyirType::Float, TyirType::Float];
 
 impl RuntimeFunction {
     /// Every runtime function.
-    pub const ALL: [Self; 126] = [
+    pub const ALL: [Self; 131] = [
         Self::IntFloorDivide,
         Self::IntModulo,
         Self::IntPower,
@@ -288,10 +293,15 @@ impl RuntimeFunction {
         Self::SetItem,
         Self::SetRepr,
         Self::SetCopy,
-        Self::SetCombine,
-        Self::SetUpdate,
         Self::SetCompare,
-        Self::SetIsdisjoint,
+        Self::SetExtend,
+        Self::SetIntersect,
+        Self::SetSubtract,
+        Self::SetRemoveAll,
+        Self::SetSymmetric,
+        Self::SetToggle,
+        Self::SetReplace,
+        Self::SetRelation,
     ];
 
     #[allow(
@@ -394,7 +404,9 @@ impl RuntimeFunction {
             Self::BytesFromList => signature(&[LIST], BYTES, true),
             Self::BytesRepr | Self::BytesHex => signature(&[BYTES], STR, false),
             Self::SetNew => signature(&[Int, Bits], SET, false),
-            Self::SetAdd | Self::SetDiscard => signature(&[SET, Bits], Unit, false),
+            Self::SetAdd | Self::SetDiscard | Self::SetRemoveAll | Self::SetToggle => {
+                signature(&[SET, Bits], Unit, false)
+            }
             Self::SetContains => signature(&[SET, Bits], Bool, false),
             Self::SetRemove => signature(&[SET, Bits], Unit, true),
             Self::SetPop => signature(&[SET], Bits, true),
@@ -404,10 +416,13 @@ impl RuntimeFunction {
             Self::SetItem => signature(&[SET, Int], Bits, false),
             Self::SetRepr => signature(&[SET], STR, true),
             Self::SetCopy => signature(&[SET], SET, false),
-            Self::SetCombine => signature(&[SET, SET, Int], SET, false),
-            Self::SetUpdate => signature(&[SET, SET, Int], Unit, false),
             Self::SetCompare => signature(&[SET, SET, Int], Bool, false),
-            Self::SetIsdisjoint => signature(&[SET, SET], Bool, false),
+            Self::SetExtend => signature(&[SET, Bits, Bits], Unit, false),
+            Self::SetIntersect | Self::SetSubtract | Self::SetSymmetric => {
+                signature(&[SET, Bits], SET, false)
+            }
+            Self::SetReplace => signature(&[SET, SET], Unit, false),
+            Self::SetRelation => signature(&[SET, Bits, Int], Bool, false),
             Self::StrEncode => signature(&[STR, Int, Int], BYTES, true),
             Self::BytesDecode => signature(&[BYTES, Int, Int], STR, true),
             Self::BytesSearch => signature(&[BYTES, BYTES, Int, Int, Int], Int, true),
@@ -560,10 +575,15 @@ impl RuntimeFunction {
             Self::SetItem => "set_item",
             Self::SetRepr => "set_repr",
             Self::SetCopy => "set_copy",
-            Self::SetCombine => "set_combine",
-            Self::SetUpdate => "set_update",
             Self::SetCompare => "set_compare",
-            Self::SetIsdisjoint => "set_isdisjoint",
+            Self::SetExtend => "set_extend",
+            Self::SetIntersect => "set_intersect",
+            Self::SetSubtract => "set_subtract",
+            Self::SetRemoveAll => "set_remove_all",
+            Self::SetSymmetric => "set_symmetric",
+            Self::SetToggle => "set_toggle",
+            Self::SetReplace => "set_replace",
+            Self::SetRelation => "set_relation",
         }
     }
 }

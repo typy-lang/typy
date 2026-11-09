@@ -43,6 +43,8 @@ impl RuleId {
     pub const DAT_13: Self = Self("DAT-13");
     /// `tuple[T, ...]` shall be an immutable sequence of any number of items of type `T`, and a tuple of a fixed number of items of type `T` shall be accepted where one is expected.
     pub const DAT_14: Self = Self("DAT-14");
+    /// The methods of `set` that combine a set with others, `union`, `intersection`, `difference`, `symmetric_difference`, `update`, `intersection_update`, `difference_update`, `symmetric_difference_update`, `issubset`, `issuperset` and `isdisjoint`, shall accept any iterable of the set's item type, and as many arguments as CPython accepts, with CPython's results and order.
+    pub const DAT_15: Self = Self("DAT-15");
     /// Raising and catching exceptions shall follow the Language Reference, including matching on base classes.
     pub const EXC_01: Self = Self("EXC-01");
     /// `+`, `-`, `*`, `/`, `//`, `%` and `**` shall give Python's results for `int` and `float`, including `/` on two `int` values returning `float` and `%` taking the sign of the divisor.
@@ -168,6 +170,7 @@ impl RuleId {
         Self::DAT_12,
         Self::DAT_13,
         Self::DAT_14,
+        Self::DAT_15,
         Self::EXC_01,
         Self::EXP_02,
         Self::EXP_04,

@@ -221,6 +221,12 @@ impl BodyChecker<'_> {
             .then_some(Empty::Set)
     }
 
+    /// Returns whether an expression is `set()`, an empty set that takes its type from where it
+    /// is used.
+    pub(super) fn is_empty_set_call(&self, expression: &Expr) -> bool {
+        self.empty_collection(expression) == Some(Empty::Set)
+    }
+
     /// Checks the items of a display. Without an expected item type, an empty display among the
     /// items takes the type of the first other item, so `[[1], []]` needs no annotation.
     pub(super) fn display_items(

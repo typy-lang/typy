@@ -13,6 +13,8 @@ pub enum ParameterKind {
     Either,
     /// Only by its name, as `reverse` of `list.sort`.
     Keyword,
+    /// Every remaining positional argument, none or many, as `*others` of `set.union`.
+    Rest,
 }
 
 /// What a parameter accepts.
@@ -26,6 +28,8 @@ pub enum ParameterType {
     Affixes,
     /// Any iterable of `str`, as the argument of `str.join`.
     Strings,
+    /// Any iterable of this item type, as the argument of `set.update`.
+    Items(Type),
     /// The name of a codec, a string literal the checker resolves.
     Codec,
     /// The name of an error handler, a string literal the checker resolves; one for decoding
@@ -99,20 +103,34 @@ impl Method {
             Type::Set(item) => item.as_ref().clone(),
             _ => receiver.sequence_item().cloned().unwrap_or(Type::Error),
         };
-        let other = || vec![positional("other", receiver.clone(), true)];
+        let other = || {
+            vec![positional_as(
+                "other",
+                ParameterType::Items(item.clone()),
+                true,
+            )]
+        };
+        let others = || {
+            vec![parameter(
+                "others",
+                ParameterType::Items(item.clone()),
+                ParameterKind::Rest,
+                false,
+            )]
+        };
         let (parameters, result) = match self {
             Self::SetAdd | Self::SetRemove | Self::SetDiscard => {
                 (vec![positional("object", item, true)], Type::NoneType)
             }
             Self::SetPop => (Vec::new(), item),
-            Self::SetUnion
-            | Self::SetIntersection
-            | Self::SetDifference
-            | Self::SetSymmetricDifference => (other(), receiver.clone()),
-            Self::SetUpdate
-            | Self::SetIntersectionUpdate
-            | Self::SetDifferenceUpdate
-            | Self::SetSymmetricDifferenceUpdate => (other(), Type::NoneType),
+            Self::SetUnion | Self::SetIntersection | Self::SetDifference => {
+                (others(), receiver.clone())
+            }
+            Self::SetSymmetricDifference => (other(), receiver.clone()),
+            Self::SetUpdate | Self::SetIntersectionUpdate | Self::SetDifferenceUpdate => {
+                (others(), Type::NoneType)
+            }
+            Self::SetSymmetricDifferenceUpdate => (other(), Type::NoneType),
             Self::SetIssubset | Self::SetIssuperset | Self::SetIsdisjoint => (other(), Type::Bool),
             Self::ListAppend => (vec![positional("object", item, true)], Type::NoneType),
             Self::ListRemove => (vec![positional("value", item, true)], Type::NoneType),

@@ -37,16 +37,6 @@ fn is_signed_number(item: &TypedExpr) -> bool {
     }
 }
 
-/// Returns the code `typy_rt_set_combine` and `typy_rt_set_update` take for an operator.
-fn operation_code(operator: BinaryOperator) -> &'static str {
-    match operator {
-        BinaryOperator::BitOr => "0",
-        BinaryOperator::BitAnd => "1",
-        BinaryOperator::Sub => "2",
-        _ => "3",
-    }
-}
-
 impl FunctionLowerer<'_> {
     /// Returns a new empty set of items of type `item`.
     pub(crate) fn new_set(&mut self, item: TyirType, span: Span) -> Lowered {
@@ -97,7 +87,14 @@ impl FunctionLowerer<'_> {
         set
     }
 
-    /// Returns `left op right` for two sets, a new set; the operands are not released.
+    /// Returns the address the runtime takes for another collection, a set or a list.
+    fn address(&mut self, collection: ValueId, span: Span) -> ValueId {
+        self.builder
+            .push_value(Operation::ToBits(collection), TyirType::Bits, span)
+    }
+
+    /// Returns `left op right` for two sets, a new set, by CPython's steps for each operator;
+    /// the operands are not released.
     pub(crate) fn set_combine(
         &mut self,
         operator: BinaryOperator,
@@ -105,12 +102,30 @@ impl FunctionLowerer<'_> {
         right: ValueId,
         span: Span,
     ) -> Lowered {
-        let code = self.constant(Constant::Int(operation_code(operator).to_owned()), span);
-        self.call_runtime(RuntimeFunction::SetCombine, vec![left, right, code], span)
+        let other = self.address(right, span);
+        match operator {
+            BinaryOperator::BitOr => {
+                let result = self.call_runtime(RuntimeFunction::SetCopy, vec![left], span);
+                let skip = self.address(left, span);
+                self.call_runtime(
+                    RuntimeFunction::SetExtend,
+                    vec![result.value, other, skip],
+                    span,
+                );
+                result
+            }
+            BinaryOperator::BitAnd => {
+                self.call_runtime(RuntimeFunction::SetIntersect, vec![left, other], span)
+            }
+            BinaryOperator::Sub => {
+                self.call_runtime(RuntimeFunction::SetSubtract, vec![left, other], span)
+            }
+            _ => self.call_runtime(RuntimeFunction::SetSymmetric, vec![left, other], span),
+        }
     }
 
     /// Changes `set` in place for `|=`, `&=`, `-=` and `^=`, as CPython's in-place operators of
-    /// a set do; the operands are not released.
+    /// a set do; `other` is a set, or a list for the updating methods, and is not released.
     pub(crate) fn set_update(
         &mut self,
         operator: BinaryOperator,
@@ -118,11 +133,48 @@ impl FunctionLowerer<'_> {
         other: ValueId,
         span: Span,
     ) {
-        let code = self.constant(Constant::Int(operation_code(operator).to_owned()), span);
-        self.call_runtime(RuntimeFunction::SetUpdate, vec![set, other, code], span);
+        let address = self.address(other, span);
+        match operator {
+            BinaryOperator::BitOr => {
+                let skip = self.address(set, span);
+                self.call_runtime(RuntimeFunction::SetExtend, vec![set, address, skip], span);
+            }
+            BinaryOperator::BitAnd => {
+                let common = self.set_intersection(set, &[other], span);
+                self.call_runtime(RuntimeFunction::SetReplace, vec![set, common.value], span);
+                self.release(common, span);
+            }
+            BinaryOperator::Sub => {
+                self.call_runtime(RuntimeFunction::SetRemoveAll, vec![set, address], span);
+            }
+            _ => {
+                self.call_runtime(RuntimeFunction::SetToggle, vec![set, address], span);
+            }
+        }
     }
 
-    /// Calls a method of a set with its arguments in parameter order.
+    /// Returns `set.intersection(*others)`, a new set: a copy without others, and otherwise the
+    /// set intersected with each in turn, as CPython does.
+    fn set_intersection(&mut self, set: ValueId, others: &[ValueId], span: Span) -> Lowered {
+        let Some((first, rest)) = others.split_first() else {
+            return self.call_runtime(RuntimeFunction::SetCopy, vec![set], span);
+        };
+        let address = self.address(*first, span);
+        let mut result = self.call_runtime(RuntimeFunction::SetIntersect, vec![set, address], span);
+        for other in rest {
+            let address = self.address(*other, span);
+            let next = self.call_runtime(
+                RuntimeFunction::SetIntersect,
+                vec![result.value, address],
+                span,
+            );
+            self.release(result, span);
+            result = next;
+        }
+        result
+    }
+
+    /// Calls a method of a set with its arguments in source order.
     pub(crate) fn set_method(
         &mut self,
         set: ValueId,
@@ -131,14 +183,15 @@ impl FunctionLowerer<'_> {
         result: TyirType,
         span: Span,
     ) -> Lowered {
-        match (method, arguments) {
-            (Method::SetAdd | Method::SetRemove | Method::SetDiscard, [item]) => {
+        let others: Vec<ValueId> = arguments.iter().map(|argument| argument.value).collect();
+        match (method, others.as_slice()) {
+            (Method::SetAdd | Method::SetRemove | Method::SetDiscard, [_]) => {
                 let function = match method {
                     Method::SetAdd => RuntimeFunction::SetAdd,
                     Method::SetRemove => RuntimeFunction::SetRemove,
                     _ => RuntimeFunction::SetDiscard,
                 };
-                let bits = self.bits(*item, span);
+                let bits = self.bits(arguments[0], span);
                 self.call_runtime(function, vec![set, bits], span)
             }
             (Method::SetPop, []) => {
@@ -156,41 +209,73 @@ impl FunctionLowerer<'_> {
             }
             (Method::SetClear, []) => self.call_runtime(RuntimeFunction::SetClear, vec![set], span),
             (Method::SetCopy, []) => self.call_runtime(RuntimeFunction::SetCopy, vec![set], span),
-            (Method::SetIsdisjoint, [other]) => {
-                self.call_runtime(RuntimeFunction::SetIsdisjoint, vec![set, other.value], span)
-            }
-            (Method::SetIssubset | Method::SetIssuperset, [other]) => {
-                let code = if method == Method::SetIssubset {
-                    "3"
-                } else {
-                    "5"
+            (Method::SetIssubset | Method::SetIssuperset | Method::SetIsdisjoint, [other]) => {
+                let code = match method {
+                    Method::SetIssubset => "0",
+                    Method::SetIssuperset => "1",
+                    _ => "2",
                 };
                 let code = self.constant(Constant::Int(code.to_owned()), span);
-                self.call_runtime(
-                    RuntimeFunction::SetCompare,
-                    vec![set, other.value, code],
-                    span,
-                )
+                let address = self.address(*other, span);
+                self.call_runtime(RuntimeFunction::SetRelation, vec![set, address, code], span)
             }
-            (_, [other]) => {
-                let (operator, in_place) = match method {
-                    Method::SetUnion => (BinaryOperator::BitOr, false),
-                    Method::SetIntersection => (BinaryOperator::BitAnd, false),
-                    Method::SetDifference => (BinaryOperator::Sub, false),
-                    Method::SetSymmetricDifference => (BinaryOperator::BitXor, false),
-                    Method::SetUpdate => (BinaryOperator::BitOr, true),
-                    Method::SetIntersectionUpdate => (BinaryOperator::BitAnd, true),
-                    Method::SetDifferenceUpdate => (BinaryOperator::Sub, true),
-                    Method::SetSymmetricDifferenceUpdate => (BinaryOperator::BitXor, true),
-                    method => unreachable!("`{}` is not a set method", method.name()),
-                };
-                if !in_place {
-                    return self.set_combine(operator, set, other.value, span);
+            (Method::SetSymmetricDifference, [other]) => {
+                self.set_combine(BinaryOperator::BitXor, set, *other, span)
+            }
+            (Method::SetSymmetricDifferenceUpdate, [other]) => {
+                self.set_update(BinaryOperator::BitXor, set, *other, span);
+                self.unit(span)
+            }
+            (Method::SetUnion, others) => {
+                let union = self.call_runtime(RuntimeFunction::SetCopy, vec![set], span);
+                let skip = self.address(set, span);
+                for other in others {
+                    let address = self.address(*other, span);
+                    self.call_runtime(
+                        RuntimeFunction::SetExtend,
+                        vec![union.value, address, skip],
+                        span,
+                    );
                 }
-                self.set_update(operator, set, other.value, span);
-                Self::borrowed(self.constant(Constant::Unit, span), TyirType::Unit)
+                union
+            }
+            (Method::SetIntersection, others) => self.set_intersection(set, others, span),
+            (Method::SetDifference, []) => {
+                self.call_runtime(RuntimeFunction::SetCopy, vec![set], span)
+            }
+            (Method::SetDifference, [first, rest @ ..]) => {
+                let address = self.address(*first, span);
+                let difference =
+                    self.call_runtime(RuntimeFunction::SetSubtract, vec![set, address], span);
+                for other in rest {
+                    self.set_update(BinaryOperator::Sub, difference.value, *other, span);
+                }
+                difference
+            }
+            (Method::SetUpdate, others) => {
+                for other in others {
+                    self.set_update(BinaryOperator::BitOr, set, *other, span);
+                }
+                self.unit(span)
+            }
+            (Method::SetIntersectionUpdate, others) => {
+                let common = self.set_intersection(set, others, span);
+                self.call_runtime(RuntimeFunction::SetReplace, vec![set, common.value], span);
+                self.release(common, span);
+                self.unit(span)
+            }
+            (Method::SetDifferenceUpdate, others) => {
+                for other in others {
+                    self.set_update(BinaryOperator::Sub, set, *other, span);
+                }
+                self.unit(span)
             }
             (method, _) => unreachable!("the checker gives `{}` its arguments", method.name()),
         }
+    }
+
+    /// Returns `None`, the result of a method that changes the set.
+    fn unit(&mut self, span: Span) -> Lowered {
+        Self::borrowed(self.constant(Constant::Unit, span), TyirType::Unit)
     }
 }

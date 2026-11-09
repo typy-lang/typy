@@ -1201,6 +1201,16 @@ fn set_rules_give_their_codes() {
         ("s: set[Thing] = {1}\n", &["E0205"]),
         ("s: set[Thing] = set()\n", &["E0205"]),
         ("s = set(missing)\n", &["E0205"]),
+        ("s = {1}\ns.update(['a'])\n", &["E0409"]),
+        ("s = {1}\ns.update(('a', 'b'))\n", &["E0404"]),
+        ("s = {1}\ns.update(5)\n", &["E0411"]),
+        ("s = {1}\ns.update(missing)\n", &["E0205"]),
+        ("s = {1}\nprint(s.issubset())\n", &["E0404"]),
+        (
+            "s = {1}\nprint(s.symmetric_difference([1], [2]))\n",
+            &["E0404"],
+        ),
+        ("s = {1}\ns.update(others=[1])\n", &["E0404"]),
         ("s = {1}\nt = {2.5}\nprint(s == t)\n", &["E0407"]),
         ("s = {1}\nt = {2.5}\nprint(s <= t)\n", &["E0407"]),
     ];
@@ -1222,7 +1232,12 @@ e: set[float] = set()
 e |= {1.5}
 for item in a:
     c += item
-g = set('ab').union({'c'}).copy()
+g = set('ab').union({'c'}, 'de', ['f'], set(), []).copy()
+h = a.intersection() | a.difference([1], (2,), {3}) | a.symmetric_difference([4])
+a.update([], set(), (5, 6), {7})
+k = a.issuperset((1, 2)) or a.isdisjoint([1])
+m: set[tuple[int, str]] = set()
+m.update(enumerate('ab'), zip([1], 'c'))
 ";
     let (_directory, project) = load(source);
     let program = TypeChecker::check(&project).expect("the program is accepted");

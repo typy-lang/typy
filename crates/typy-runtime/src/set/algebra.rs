@@ -185,39 +185,6 @@ pub(crate) unsafe fn symmetric_difference_update(set: *mut SetObject, other: *co
     }
 }
 
-/// Returns `left ^ right`: a new set merged from `right`, then updated with `left`, as CPython
-/// builds it.
-///
-/// # Safety
-///
-/// Both point to live sets of one item type.
-pub(crate) unsafe fn symmetric_difference(
-    left: *const SetObject,
-    right: *const SetObject,
-) -> *mut SetObject {
-    // SAFETY: the caller passes two live sets.
-    unsafe {
-        let result = new_set((*left).item_type());
-        merge(result, right);
-        symmetric_difference_update(result, left);
-        result
-    }
-}
-
-/// Returns `left | right`: a copy of `left` merged with `right`.
-///
-/// # Safety
-///
-/// Both point to live sets of one item type.
-pub(crate) unsafe fn union(left: *const SetObject, right: *const SetObject) -> *mut SetObject {
-    // SAFETY: the caller passes two live sets.
-    unsafe {
-        let result = copy(left);
-        merge(result, right);
-        result
-    }
-}
-
 /// Returns whether every item of `set` is in `other`.
 ///
 /// # Safety

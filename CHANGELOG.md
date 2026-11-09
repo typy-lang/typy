@@ -93,7 +93,8 @@ All notable changes to TyPy are recorded here. The format follows
   comparisons, and the methods `add`, `remove`, `discard`, `pop`,
   `clear`, `copy`, `union`, `intersection`, `difference`,
   `symmetric_difference`, `update`, the `_update` methods, `issubset`,
-  `issuperset` and `isdisjoint` with a set argument (DAT-10, LIB-03). A
+  `issuperset` and `isdisjoint`, which take any iterable of the items, and
+  several where Python takes several (DAT-10, DAT-15, LIB-03). A
   set hashes its items as CPython does and iterates and prints them in
   CPython's order (ADR-0010). A list or a set as an item of a set is
   rejected, since it has no hash. `remove` of a missing item and `pop` of

@@ -1,7 +1,7 @@
 //! The set functions generated code calls (DAT-10): creating, adding, finding and removing
 //! items, iterating, comparing, combining and writing a set as text.
 
-use super::algebra::{self, copy, is_disjoint, is_subset, purge};
+use super::algebra::{copy, is_subset};
 use super::{SetObject, add, discard, lookup, new_set, take};
 use crate::Raising;
 use crate::exception::{ExceptionKind, ExceptionObject, raise, raise_with_message};
@@ -222,84 +222,6 @@ pub unsafe extern "C" fn typy_rt_set_copy(set: *const SetObject) -> *mut SetObje
     unsafe { copy(set) }
 }
 
-/// Returns a new set combined from two by `operation`, an `int` word: 0 for `|`, 1 for `&`, 2
-/// for `-` and 3 for `^`.
-///
-/// # Safety
-///
-/// Both point to live sets of one item type.
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn typy_rt_set_combine(
-    left: *const SetObject,
-    right: *const SetObject,
-    operation: i64,
-) -> *mut SetObject {
-    // SAFETY: the caller passes two live sets.
-    unsafe {
-        match inline_value(operation) {
-            0 => algebra::union(left, right),
-            1 => algebra::intersection(left, right),
-            2 => algebra::difference(left, right),
-            _ => algebra::symmetric_difference(left, right),
-        }
-    }
-}
-
-/// Changes `set` in place by `operation`, an `int` word: 0 for `|=` and `update`, 1 for `&=`,
-/// 2 for `-=` and 3 for `^=`.
-///
-/// # Safety
-///
-/// Both point to live sets of one item type.
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn typy_rt_set_update(
-    set: *mut SetObject,
-    other: *const SetObject,
-    operation: i64,
-) {
-    // SAFETY: the caller passes two live sets.
-    unsafe {
-        match inline_value(operation) {
-            0 => algebra::merge(set, other),
-            1 => intersection_update(set, other),
-            2 => algebra::difference_update(set, other),
-            _ => algebra::symmetric_difference_update(set, other),
-        }
-    }
-}
-
-/// Keeps only the items `other` holds: the intersection's table replaces the set's, which
-/// keeps its finger, as CPython's `set_swap_bodies` does.
-///
-/// # Safety
-///
-/// Both point to live sets of one item type.
-unsafe fn intersection_update(set: *mut SetObject, other: *const SetObject) {
-    // SAFETY: the caller passes two live sets; the swapped tables stay owned once each.
-    unsafe {
-        let common = algebra::intersection(set, other);
-        let (target, source) = (&mut *set, &mut *common);
-        core::mem::swap(&mut target.fill, &mut source.fill);
-        core::mem::swap(&mut target.used, &mut source.used);
-        core::mem::swap(&mut target.mask, &mut source.mask);
-        core::mem::swap(&mut target.table, &mut source.table);
-        core::mem::swap(&mut target.states, &mut source.states);
-        crate::refcount::typy_rt_decrement(common.cast());
-    }
-}
-
-/// Removes the dummy slots of a set more than a quarter dummy, as CPython does after removing
-/// the items of an iterable that is not a set (`set.difference_update`).
-///
-/// # Safety
-///
-/// `set` points to a live set.
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn typy_rt_set_purge(set: *mut SetObject) {
-    // SAFETY: the caller passes a live set.
-    unsafe { purge(&mut *set) }
-}
-
 /// Returns whether two sets stand in the comparison whose code is the `int` word `comparison`:
 /// equal for `==`, a subset for `<=` and a proper one for `<`, a superset for `>=` and `>`.
 ///
@@ -324,18 +246,4 @@ pub unsafe extern "C" fn typy_rt_set_compare(
             _ => is_subset(right, left),
         }
     }
-}
-
-/// Returns whether two sets have no item in common (`set.isdisjoint`).
-///
-/// # Safety
-///
-/// Both point to live sets of one item type.
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn typy_rt_set_isdisjoint(
-    left: *const SetObject,
-    right: *const SetObject,
-) -> bool {
-    // SAFETY: the caller passes two live sets.
-    unsafe { is_disjoint(left, right) }
 }

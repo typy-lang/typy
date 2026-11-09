@@ -6,7 +6,7 @@ use typy_source::syntax::{Expr, Keyword};
 
 use super::BodyChecker;
 use crate::check::unhashable;
-use crate::typed::{TypedConstant, TypedExpr, TypedExprKind};
+use crate::typed::{LoopSource, TypedConstant, TypedExpr, TypedExprKind};
 use crate::types::Type;
 
 impl BodyChecker<'_> {
@@ -113,6 +113,52 @@ impl BodyChecker<'_> {
                     ),
                 )
                 .with_rule(RuleId::LIB_02),
+                span,
+            ),
+        }
+    }
+
+    /// Checks an argument of a set method that takes any iterable of `item` (DAT-15). A set, a
+    /// list or a `tuple[T, ...]` is passed as it is; any other source becomes a list of the
+    /// values it gives, in order, which the runtime reads as CPython reads the iterable. A
+    /// display, `[]` or `set()` takes the type the method wants.
+    pub(super) fn items_argument(&mut self, argument: &Expr, item: &Type, what: &str) -> TypedExpr {
+        let span = argument.span();
+        let expected = match argument {
+            Expr::Set { .. } => Some(Type::Set(Box::new(item.clone()))),
+            Expr::List { .. } => Some(Type::List(Box::new(item.clone()))),
+            _ if self.is_empty_set_call(argument) => Some(Type::Set(Box::new(item.clone()))),
+            _ => None,
+        };
+        if let Some(expected) = expected {
+            let value = self.expression_expecting(argument, Some(&expected));
+            self.expect(&value, expected, what);
+            return value;
+        }
+        let (source, given) = self.loop_source(argument, what);
+        if given.has_error() {
+            return Self::invalid_set(span);
+        }
+        if !given.is_assignable_to(item) {
+            return self.error(
+                Diagnostic::new(
+                    DiagnosticCode::error(404),
+                    span,
+                    format!("{what} must give items of type {item}, and these items are {given}"),
+                )
+                .with_rule(RuleId::DAT_15),
+                span,
+            );
+        }
+        match source {
+            LoopSource::Items(sequence)
+                if matches!(sequence.ty, Type::Set(_)) || sequence.ty.sequence_item().is_some() =>
+            {
+                sequence
+            }
+            source => Self::typed(
+                TypedExprKind::ListOf(Box::new(source)),
+                Type::List(Box::new(item.clone())),
                 span,
             ),
         }

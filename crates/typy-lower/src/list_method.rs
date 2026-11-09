@@ -20,9 +20,13 @@ impl FunctionLowerer<'_> {
         span: Span,
     ) -> Lowered {
         let receiver = self.expression(receiver);
+        // Every value in source order, and each parameter's value, which is the last given for
+        // a parameter that takes many.
+        let mut values: Vec<Lowered> = Vec::with_capacity(arguments.len());
         let mut given: Vec<Option<Lowered>> = Vec::new();
         for argument in arguments {
             let value = self.expression(&argument.value);
+            values.push(value);
             if given.len() <= argument.parameter {
                 given.resize(argument.parameter + 1, None);
             }
@@ -32,14 +36,13 @@ impl FunctionLowerer<'_> {
             let bytes = receiver.ty == TyirType::BYTES;
             self.str_method(receiver.value, bytes, method, &given, result, span)
         } else if receiver.ty == TyirType::SET {
-            let arguments: Vec<Lowered> = given.iter().flatten().copied().collect();
-            self.set_method(receiver.value, method, &arguments, result, span)
+            self.set_method(receiver.value, method, &values, result, span)
         } else {
             let arguments: Vec<Lowered> = given.iter().flatten().copied().collect();
             self.list_method(receiver.value, method, &arguments, result, span)
         };
-        for argument in given.into_iter().flatten() {
-            self.release(argument, span);
+        for value in values {
+            self.release(value, span);
         }
         self.release(receiver, span);
         lowered

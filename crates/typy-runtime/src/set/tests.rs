@@ -1,14 +1,18 @@
 //! Tests of sets: CPython's order through every operation, items of each kind, errors and
 //! freeing.
 
+mod lists;
 mod steps;
 
 use super::SetObject;
 use super::operations::{
-    typy_rt_set_add, typy_rt_set_clear, typy_rt_set_combine, typy_rt_set_compare,
-    typy_rt_set_contains, typy_rt_set_copy, typy_rt_set_discard, typy_rt_set_isdisjoint,
-    typy_rt_set_item, typy_rt_set_length, typy_rt_set_new, typy_rt_set_next, typy_rt_set_pop,
-    typy_rt_set_purge, typy_rt_set_remove, typy_rt_set_repr, typy_rt_set_update,
+    typy_rt_set_add, typy_rt_set_clear, typy_rt_set_compare, typy_rt_set_contains,
+    typy_rt_set_copy, typy_rt_set_discard, typy_rt_set_item, typy_rt_set_length, typy_rt_set_new,
+    typy_rt_set_next, typy_rt_set_pop, typy_rt_set_remove, typy_rt_set_repr,
+};
+use super::others::{
+    typy_rt_set_extend, typy_rt_set_intersect, typy_rt_set_relation, typy_rt_set_remove_all,
+    typy_rt_set_replace, typy_rt_set_subtract, typy_rt_set_symmetric, typy_rt_set_toggle,
 };
 use crate::exception::ExceptionObject;
 use crate::int::value::Integer;
@@ -83,6 +87,67 @@ fn ints(values: &[i128]) -> *mut SetObject {
     set
 }
 
+/// Returns the address a set function takes for another collection.
+fn address<T>(object: *const T) -> u64 {
+    object.expose_provenance() as u64
+}
+
+/// Returns `left op right` for the operator whose code is `operation`: 0 for `|`, 1 for `&`,
+/// 2 for `-` and 3 for `^`, as generated code builds each.
+///
+/// # Safety
+///
+/// Both are live sets of `int` items.
+unsafe fn combine(left: *mut SetObject, right: *mut SetObject, operation: i64) -> *mut SetObject {
+    // SAFETY: the caller's guarantee.
+    unsafe {
+        match operation {
+            0 => {
+                let result = typy_rt_set_copy(left);
+                typy_rt_set_extend(result, address(right), address(left));
+                result
+            }
+            1 => typy_rt_set_intersect(left, address(right)),
+            2 => typy_rt_set_subtract(left, address(right)),
+            _ => typy_rt_set_symmetric(left, address(right)),
+        }
+    }
+}
+
+/// Applies `set op= other` for the operator whose code is `operation`, as `combine` numbers
+/// them.
+///
+/// # Safety
+///
+/// Both are live sets of `int` items.
+unsafe fn update(set: *mut SetObject, other: *mut SetObject, operation: i64) {
+    // SAFETY: the caller's guarantee; the intersection is released after the exchange.
+    unsafe {
+        match operation {
+            0 => typy_rt_set_extend(set, address(other), address(set)),
+            1 => {
+                let common = typy_rt_set_intersect(set, address(other));
+                typy_rt_set_replace(set, common);
+                typy_rt_decrement(common.cast());
+            }
+            2 => typy_rt_set_remove_all(set, address(other)),
+            _ => typy_rt_set_toggle(set, address(other)),
+        }
+    }
+}
+
+/// Returns a new list of `int` items.
+fn int_list(values: &[i128]) -> *mut crate::list::ListObject {
+    let list = crate::list::new_list(ItemKind::Int, 0);
+    for value in values {
+        // SAFETY: the list is live and the item is a live `int` word.
+        with_int(*value, |item| unsafe {
+            crate::list::typy_rt_list_append(list, item);
+        });
+    }
+    list
+}
+
 fn release(set: *mut SetObject) {
     // SAFETY: the set is live and the caller holds a reference.
     unsafe { typy_rt_decrement(set.cast()) };
@@ -123,12 +188,12 @@ unsafe fn run(sets: &mut [*mut SetObject; 2], step: Step) {
                 typy_rt_int_decrement(popped.value.cast_signed());
             }
             Step::Combine(at, operation) => {
-                let combined = typy_rt_set_combine(sets[at], sets[1 - at], word(operation));
+                let combined = combine(sets[at], sets[1 - at], operation);
                 release(sets[at]);
                 sets[at] = combined;
             }
             Step::Update(at, operation) => {
-                typy_rt_set_update(sets[at], sets[1 - at], word(operation));
+                update(sets[at], sets[1 - at], operation);
             }
             Step::Clear(at) => typy_rt_set_clear(sets[at]),
             Step::Copy(at) => {
@@ -265,10 +330,12 @@ fn comparisons_test_subsets_and_supersets() {
         assert!(holds(large, small, 4));
         assert!(holds(large, small, 5));
         assert!(!holds(small, large, 5));
-        assert!(!typy_rt_set_isdisjoint(small, large));
+        assert!(!typy_rt_set_relation(small, address(large), word(2)));
         let apart = ints(&[7, 8, 9, 10]);
-        assert!(typy_rt_set_isdisjoint(small, apart));
-        assert!(typy_rt_set_isdisjoint(apart, small));
+        assert!(typy_rt_set_relation(small, address(apart), word(2)));
+        assert!(typy_rt_set_relation(apart, address(small), word(2)));
+        assert!(typy_rt_set_relation(small, address(large), word(0)));
+        assert!(typy_rt_set_relation(large, address(small), word(1)));
         release(apart);
     }
     [small, large, other].into_iter().for_each(release);
@@ -279,38 +346,38 @@ fn operations_with_the_same_set_follow_cpython() {
     let set = ints(&[1, 2, 3]);
     // SAFETY: the set is live.
     unsafe {
-        let both = typy_rt_set_combine(set, set, word(1));
+        let both = combine(set, set, 1);
         assert_eq!(repr(both), "{1, 2, 3}");
         release(both);
-        let joined = typy_rt_set_combine(set, set, word(0));
+        let joined = combine(set, set, 0);
         assert_eq!(repr(joined), "{1, 2, 3}");
         release(joined);
-        typy_rt_set_update(set, set, word(0));
+        update(set, set, 0);
         assert_eq!(repr(set), "{1, 2, 3}");
-        typy_rt_set_update(set, set, word(3));
+        update(set, set, 3);
         assert_eq!(repr(set), "set()");
         with_int(4, |item| typy_rt_set_add(set, item));
-        typy_rt_set_update(set, set, word(2));
+        update(set, set, 2);
         assert_eq!(repr(set), "set()");
     }
     release(set);
 }
 
 #[test]
-fn removing_most_items_lets_the_purge_shrink_the_table() {
+fn removing_most_items_of_a_list_shrinks_the_table() {
     let values: Vec<i128> = (0..40).collect();
     let set = ints(&values);
-    // SAFETY: the set is live and each item is a live `int` word.
+    let removed: Vec<i128> = (0..36).collect();
+    let list = int_list(&removed);
+    // SAFETY: the set and the list are live.
     unsafe {
-        for value in 0..36 {
-            with_int(value, |item| typy_rt_set_discard(set, item));
-        }
         let before = (*set).mask;
-        typy_rt_set_purge(set);
+        typy_rt_set_remove_all(set, address(list));
         assert!((*set).mask < before);
         assert_eq!(repr(set), "{36, 37, 38, 39}");
-        typy_rt_set_purge(set);
+        typy_rt_set_remove_all(set, address(list));
         assert_eq!(repr(set), "{36, 37, 38, 39}");
+        typy_rt_decrement(list.cast());
     }
     release(set);
 }
@@ -322,7 +389,7 @@ fn a_larger_other_set_is_intersected_before_its_items_are_removed() {
     let small = ints(&[3, 500, 7]);
     // SAFETY: the sets are live.
     unsafe {
-        typy_rt_set_update(small, large, word(2));
+        update(small, large, 2);
         assert_eq!(repr(small), "{500}");
     }
     [large, small].into_iter().for_each(release);
@@ -432,4 +499,58 @@ fn sets_inside_lists_are_written_compared_and_tested() {
         unsafe { typy_rt_decrement(list.cast()) };
     }
     [small, large, empty].into_iter().for_each(release);
+}
+
+#[test]
+#[cfg_attr(miri, ignore = "sixty cases of growing tables take Miri minutes")]
+fn methods_with_a_list_take_cpythons_steps() {
+    for (method, base, other, expected) in lists::CASES {
+        let set = ints(base);
+        let list = int_list(other);
+        // SAFETY: the set and the list are live; every result is released.
+        let shown = unsafe {
+            let other = address(list);
+            let new = |result: *mut SetObject| {
+                let shown = repr(result);
+                release(result);
+                shown
+            };
+            let truth = |holds: bool| if holds { "True" } else { "False" }.to_owned();
+            let shown = match method {
+                "union" => {
+                    let result = typy_rt_set_copy(set);
+                    typy_rt_set_extend(result, other, address(set));
+                    new(result)
+                }
+                "intersection" => new(typy_rt_set_intersect(set, other)),
+                "difference" => new(typy_rt_set_subtract(set, other)),
+                "symmetric_difference" => new(typy_rt_set_symmetric(set, other)),
+                "update" => {
+                    typy_rt_set_extend(set, other, address(set));
+                    repr(set)
+                }
+                "intersection_update" => {
+                    let common = typy_rt_set_intersect(set, other);
+                    typy_rt_set_replace(set, common);
+                    release(common);
+                    repr(set)
+                }
+                "difference_update" => {
+                    typy_rt_set_remove_all(set, other);
+                    repr(set)
+                }
+                "symmetric_difference_update" => {
+                    typy_rt_set_toggle(set, other);
+                    repr(set)
+                }
+                "issubset" => truth(typy_rt_set_relation(set, other, word(0))),
+                "issuperset" => truth(typy_rt_set_relation(set, other, word(1))),
+                _ => truth(typy_rt_set_relation(set, other, word(2))),
+            };
+            typy_rt_decrement(list.cast());
+            shown
+        };
+        assert_eq!(shown, expected, "{method} {base:?} {other:?}");
+        release(set);
+    }
 }

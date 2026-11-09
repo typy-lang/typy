@@ -4,6 +4,7 @@
 
 mod algebra;
 mod operations;
+mod others;
 
 pub(crate) use operations::{typy_rt_set_compare, typy_rt_set_repr};
 #[cfg(test)]
