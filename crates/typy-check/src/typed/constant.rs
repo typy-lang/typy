@@ -15,6 +15,8 @@ pub enum TypedConstant {
     Float(f64),
     /// A string.
     Str(String),
+    /// A `bytes` literal.
+    Bytes(Vec<u8>),
 }
 
 impl TypedConstant {
@@ -27,6 +29,7 @@ impl TypedConstant {
             Self::Int(_) => Type::Int,
             Self::Float(_) => Type::Float,
             Self::Str(_) => Type::Str,
+            Self::Bytes(_) => Type::Bytes,
         }
     }
 }

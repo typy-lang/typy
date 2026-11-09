@@ -74,11 +74,13 @@ impl LoopSource {
     #[must_use]
     pub fn item_type(&self) -> Type {
         match self {
-            Self::Items(sequence) | Self::Reversed(sequence) => sequence
-                .ty
-                .sequence_item()
-                .cloned()
-                .unwrap_or_else(|| sequence.ty.clone()),
+            Self::Items(sequence) | Self::Reversed(sequence) => match &sequence.ty {
+                Type::Bytes => Type::Int,
+                other => other
+                    .sequence_item()
+                    .cloned()
+                    .unwrap_or_else(|| other.clone()),
+            },
             Self::Enumerate { source, .. } => Type::Tuple(vec![Type::Int, source.item_type()]),
             Self::Zip { sources, .. } => Type::Tuple(sources.iter().map(Self::item_type).collect()),
         }

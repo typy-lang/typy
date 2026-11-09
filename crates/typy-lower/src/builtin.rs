@@ -57,6 +57,16 @@ impl FunctionLowerer<'_> {
                 Self::borrowed(self.constant(Constant::Int(length), span), TyirType::Int)
             }
             (Builtin::Len, [list]) if list.ty == TyirType::LIST => self.list_length(*list, span),
+            (Builtin::Len, [data]) if data.ty == TyirType::BYTES => {
+                self.call_runtime(RuntimeFunction::BytesLength, vec![data.value], span)
+            }
+            (Builtin::Bytes, [count]) if count.ty == TyirType::Int => {
+                self.call_runtime(RuntimeFunction::BytesZeros, vec![count.value], span)
+            }
+            (Builtin::Bytes, [values]) if values.ty == TyirType::LIST => {
+                self.call_runtime(RuntimeFunction::BytesFromList, vec![values.value], span)
+            }
+            (Builtin::Bytes, [data]) => self.keep_or_copy(*data, span, |_, data| data),
             (Builtin::Len, [text]) => {
                 self.call_runtime(RuntimeFunction::StrLength, vec![text.value], span)
             }

@@ -25,8 +25,8 @@ use typy_diagnostics::{Diagnostic, DiagnosticCode, Diagnostics, RuleId, SourceLo
 use typy_tyir::TyirModule;
 
 pub use layout::{
-    BIG_INT_TYPE_ID, EXCEPTION_TYPE_ID, IMMORTAL, INLINE_MAX, INLINE_MIN, IntEncoding, STR_TYPE_ID,
-    StrKind, encode_int, encode_str,
+    BIG_INT_TYPE_ID, BYTES_TYPE_ID, EXCEPTION_TYPE_ID, IMMORTAL, INLINE_MAX, INLINE_MIN,
+    IntEncoding, STR_TYPE_ID, StrKind, encode_int, encode_str,
 };
 pub use object::ObjectFile;
 pub use optimization::Optimization;

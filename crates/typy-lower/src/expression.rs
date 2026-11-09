@@ -3,7 +3,9 @@
 use typy_check::{FunctionId, SignatureParameter, TypedConstant, TypedExpr, TypedExprKind};
 use typy_diagnostics::Span;
 use typy_source::syntax::BoolOperator;
-use typy_tyir::{Callee, Constant, Operation, ScalarKind, Terminator, TyirType, ValueId};
+use typy_tyir::{
+    Callee, Constant, Operation, RuntimeFunction, ScalarKind, Terminator, TyirType, ValueId,
+};
 
 use crate::function::FunctionLowerer;
 use crate::ownership::Lowered;
@@ -142,6 +144,7 @@ impl FunctionLowerer<'_> {
                 TyirType::Float,
             ),
             TypedConstant::Str(text) => (self.string(text, span), TyirType::STR),
+            TypedConstant::Bytes(data) => (self.bytes_constant(data, span), TyirType::BYTES),
         };
         Self::borrowed(value, ty)
     }
@@ -154,6 +157,19 @@ impl FunctionLowerer<'_> {
             TyirType::Int => ScalarKind::Int,
             TyirType::Float => ScalarKind::Float,
             TyirType::Object(typy_tyir::TypeId::LIST) => return self.list_truth(lowered, span),
+            TyirType::Object(typy_tyir::TypeId::BYTES) => {
+                let length = self
+                    .call_runtime(RuntimeFunction::BytesLength, vec![lowered.value], span)
+                    .value;
+                return self.builder.push_value(
+                    Operation::IsTrue {
+                        kind: ScalarKind::Int,
+                        value: length,
+                    },
+                    TyirType::Bool,
+                    span,
+                );
+            }
             TyirType::Object(_) => ScalarKind::Str,
             TyirType::Bits => unreachable!("list items are converted before they are tested"),
             // A tuple's length is fixed by its type, so its truth is too.

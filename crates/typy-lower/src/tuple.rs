@@ -291,6 +291,7 @@ impl FunctionLowerer<'_> {
             TyirType::Object(typy_tyir::TypeId::LIST) => {
                 self.constant(Constant::PlaceholderList, span)
             }
+            TyirType::Object(typy_tyir::TypeId::BYTES) => self.bytes_constant(&[], span),
             TyirType::Object(_) => self.string("", span),
             TyirType::Bits => unreachable!("no slot holds list item bytes"),
             TyirType::Tuple(id) => {

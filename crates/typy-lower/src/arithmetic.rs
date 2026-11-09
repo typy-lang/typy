@@ -67,6 +67,21 @@ impl FunctionLowerer<'_> {
                 vec![right.value, left.value],
                 span,
             ),
+            (TyirType::BYTES, TyirType::BYTES) => self.call_runtime(
+                RuntimeFunction::BytesConcat,
+                vec![left.value, right.value],
+                span,
+            ),
+            (TyirType::BYTES, TyirType::Int) => self.call_runtime(
+                RuntimeFunction::BytesRepeat,
+                vec![left.value, right.value],
+                span,
+            ),
+            (TyirType::Int, TyirType::BYTES) => self.call_runtime(
+                RuntimeFunction::BytesRepeat,
+                vec![right.value, left.value],
+                span,
+            ),
             (TyirType::Object(_), TyirType::Object(_)) => self.call_runtime(
                 RuntimeFunction::StrConcat,
                 vec![left.value, right.value],

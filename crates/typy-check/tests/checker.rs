@@ -1105,3 +1105,23 @@ fn str_case_and_is_methods_take_no_arguments() {
         "a: str = 'a'.upper() + 'a'.lower() + 'a'.casefold() + 'a'.swapcase() + 'a'.capitalize() + 'a'.title()\nb: bool = 'a'.isalpha() and 'a'.isalnum() and 'a'.isdecimal() and 'a'.isdigit() and 'a'.isnumeric() and 'a'.isspace() and 'a'.isupper() and 'a'.islower() and 'a'.istitle() and 'a'.isidentifier() and 'a'.isprintable()\n",
     );
 }
+
+#[test]
+fn bytes_follow_python_s_types_and_codes() {
+    let cases: &[(&str, &[&str])] = &[
+        ("x = bytes('a')\n", &["E0404"]),
+        ("x = bytes(['a'])\n", &["E0404"]),
+        ("x = bytes(1.5)\n", &["E0411"]),
+        ("x = bytes([1], key=1)\n", &["E0404"]),
+        ("x = b'a' + 'a'\n", &["E0401"]),
+        ("x = 'a' in b'a'\n", &["E0407"]),
+        ("x = b'a'['0']\n", &["E0404"]),
+        ("x = b'a' == 'a'\n", &["E0407"]),
+    ];
+    for (source, expected) in cases {
+        assert_eq!(&rejected(source), expected, "\n{source}");
+    }
+    accepted(
+        "a: bytes = b'ab' + bytes(2) + bytes([1]) + bytes((1, 2)) + bytes(reversed(b'x')) + bytes(b'y')\nb: int = a[0] + len(a)\nc: bytes = a[1:] * 2\nd: bool = 1 in a and b'a' in a and a < b'z'\nfor n in a:\n    e: int = n\n",
+    );
+}

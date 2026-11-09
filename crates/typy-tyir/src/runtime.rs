@@ -89,6 +89,17 @@ pub enum RuntimeFunction {
     StrJoin,
     StrCase,
     StrTest,
+    BytesConcat,
+    BytesRepeat,
+    BytesSlice,
+    BytesGet,
+    BytesLength,
+    BytesCompare,
+    BytesContains,
+    BytesContainsByte,
+    BytesZeros,
+    BytesFromList,
+    BytesRepr,
 }
 
 /// The parameter types, result type and raising behaviour of a runtime function.
@@ -119,7 +130,7 @@ const FLOAT_FLOAT: &[TyirType] = &[TyirType::Float, TyirType::Float];
 
 impl RuntimeFunction {
     /// Every runtime function.
-    pub const ALL: [Self; 80] = [
+    pub const ALL: [Self; 91] = [
         Self::IntFloorDivide,
         Self::IntModulo,
         Self::IntPower,
@@ -200,6 +211,17 @@ impl RuntimeFunction {
         Self::StrJoin,
         Self::StrCase,
         Self::StrTest,
+        Self::BytesConcat,
+        Self::BytesRepeat,
+        Self::BytesSlice,
+        Self::BytesGet,
+        Self::BytesLength,
+        Self::BytesCompare,
+        Self::BytesContains,
+        Self::BytesContainsByte,
+        Self::BytesZeros,
+        Self::BytesFromList,
+        Self::BytesRepr,
     ];
 
     /// Returns the function's signature. Comparisons take the comparison as an `int` operand, numbered as `Comparison::code`.
@@ -208,6 +230,7 @@ impl RuntimeFunction {
         use TyirType::{Bits, Bool, Float, Int, Unit};
         const STR: TyirType = TyirType::STR;
         const LIST: TyirType = TyirType::LIST;
+        const BYTES: TyirType = TyirType::BYTES;
         match self {
             Self::IntFloorDivide
             | Self::IntModulo
@@ -284,6 +307,17 @@ impl RuntimeFunction {
                 signature(&[STR, Int], STR, false)
             }
             Self::StrTest => signature(&[STR, Int], Bool, false),
+            Self::BytesConcat => signature(&[BYTES, BYTES], BYTES, false),
+            Self::BytesRepeat => signature(&[BYTES, Int], BYTES, true),
+            Self::BytesSlice => signature(&[BYTES, Int, Int, Int, Int], BYTES, true),
+            Self::BytesGet => signature(&[BYTES, Int], Int, true),
+            Self::BytesLength => signature(&[BYTES], Int, false),
+            Self::BytesCompare => signature(&[BYTES, BYTES, Int], Bool, false),
+            Self::BytesContains => signature(&[BYTES, BYTES], Bool, false),
+            Self::BytesContainsByte => signature(&[BYTES, Int], Bool, true),
+            Self::BytesZeros => signature(&[Int], BYTES, true),
+            Self::BytesFromList => signature(&[LIST], BYTES, true),
+            Self::BytesRepr => signature(&[BYTES], STR, false),
         }
     }
 
@@ -371,6 +405,17 @@ impl RuntimeFunction {
             Self::StrJoin => "str_join",
             Self::StrCase => "str_case",
             Self::StrTest => "str_test",
+            Self::BytesConcat => "bytes_concat",
+            Self::BytesRepeat => "bytes_repeat",
+            Self::BytesSlice => "bytes_slice",
+            Self::BytesGet => "bytes_get",
+            Self::BytesLength => "bytes_length",
+            Self::BytesCompare => "bytes_compare",
+            Self::BytesContains => "bytes_contains",
+            Self::BytesContainsByte => "bytes_contains_byte",
+            Self::BytesZeros => "bytes_zeros",
+            Self::BytesFromList => "bytes_from_list",
+            Self::BytesRepr => "bytes_repr",
         }
     }
 }

@@ -19,6 +19,7 @@ pub(crate) fn annotation_type(annotation: &Expr, diagnostics: &mut Diagnostics) 
                 "float" => Type::Float,
                 "bool" => Type::Bool,
                 "str" => Type::Str,
+                "bytes" => Type::Bytes,
                 "Any" | "object" => {
                     diagnostics.push(
                         Diagnostic::new(
@@ -52,7 +53,7 @@ pub(crate) fn annotation_type(annotation: &Expr, diagnostics: &mut Diagnostics) 
                     );
                     Type::Error
                 }
-                "dict" | "set" | "bytes" => {
+                "dict" | "set" => {
                     diagnostics.push(
                         Diagnostic::new(
                             DiagnosticCode::error(201),

@@ -14,6 +14,8 @@ pub enum Type {
     Bool,
     /// `str` (DAT-05).
     Str,
+    /// `bytes`, an immutable sequence of integers from 0 to 255 (DAT-06).
+    Bytes,
     /// The type of `None` (DAT-04).
     NoneType,
     /// `tuple[A, B, ...]`: a fixed number of items, each with its own type (DAT-08).
@@ -154,6 +156,7 @@ impl fmt::Display for Type {
             Self::Float => formatter.write_str("float"),
             Self::Bool => formatter.write_str("bool"),
             Self::Str => formatter.write_str("str"),
+            Self::Bytes => formatter.write_str("bytes"),
             Self::NoneType => formatter.write_str("None"),
             Self::Tuple(items) if items.is_empty() => formatter.write_str("tuple[()]"),
             Self::Tuple(items) => {

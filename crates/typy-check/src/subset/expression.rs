@@ -151,7 +151,6 @@ impl Walker {
                     )
                     .with_rule(RuleId::LEX_08),
                 ),
-                Constant::Bytes(_) => self.report(*span, planned("bytes", "0.2", RuleId::DAT_06)),
                 Constant::Ellipsis => self.report(
                     *span,
                     Feature::Excluded {
@@ -162,7 +161,8 @@ impl Walker {
                 | Constant::Bool(_)
                 | Constant::Int(_)
                 | Constant::Float(_)
-                | Constant::Str(_) => {}
+                | Constant::Str(_)
+                | Constant::Bytes(_) => {}
             },
             Expr::Subscript { value, index, .. } => {
                 self.expression(value);

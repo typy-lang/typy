@@ -63,6 +63,15 @@ impl FunctionLowerer<'_> {
         match container.ty {
             TyirType::Tuple(_) => self.tuple_contains(item, container, span),
             TyirType::LIST => self.list_contains(item, container, span),
+            TyirType::BYTES => {
+                let function = if item.ty == TyirType::Int {
+                    RuntimeFunction::BytesContainsByte
+                } else {
+                    RuntimeFunction::BytesContains
+                };
+                self.call_runtime(function, vec![container.value, item.value], span)
+                    .value
+            }
             _ => {
                 self.call_runtime(
                     RuntimeFunction::StrContains,
@@ -172,6 +181,16 @@ impl FunctionLowerer<'_> {
             (TyirType::Int, _) => ScalarKind::Int,
             (TyirType::Float, _) => ScalarKind::Float,
             (TyirType::Bool, _) => ScalarKind::Bool,
+            (TyirType::BYTES, _) => {
+                let code = self.constant(Constant::Int(comparison.code().to_string()), span);
+                return self
+                    .call_runtime(
+                        RuntimeFunction::BytesCompare,
+                        vec![left.value, right.value, code],
+                        span,
+                    )
+                    .value;
+            }
             (TyirType::Object(_), _) => ScalarKind::Str,
             (TyirType::Unit, _) => {
                 unreachable!("the checker refuses comparing None with other types")

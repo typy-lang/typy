@@ -22,11 +22,12 @@ impl FunctionLowerer<'_> {
     ) -> Lowered {
         let text = self.expression(value);
         let position = self.expression(index);
-        let result = self.call_runtime(
-            RuntimeFunction::StrIndex,
-            vec![text.value, position.value],
-            span,
-        );
+        let function = if text.ty == TyirType::BYTES {
+            RuntimeFunction::BytesGet
+        } else {
+            RuntimeFunction::StrIndex
+        };
+        let result = self.call_runtime(function, vec![text.value, position.value], span);
         self.release(position, span);
         self.release(text, span);
         result
@@ -59,10 +60,10 @@ impl FunctionLowerer<'_> {
             arguments.push(word);
         }
         arguments.push(self.constant(Constant::Int(mask.to_string()), span));
-        let function = if ty == TyirType::STR {
-            RuntimeFunction::StrSlice
-        } else {
-            RuntimeFunction::ListSlice
+        let function = match ty {
+            TyirType::STR => RuntimeFunction::StrSlice,
+            TyirType::BYTES => RuntimeFunction::BytesSlice,
+            _ => RuntimeFunction::ListSlice,
         };
         let result = self.call_runtime(function, arguments, span);
         for bound in lowered.into_iter().flatten() {

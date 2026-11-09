@@ -1,8 +1,8 @@
 //! Reference counting of heap objects (ADR-0001, MEM-01).
 
 use crate::header::{
-    BIG_INT_TYPE_ID, EXCEPTION_TYPE_ID, IMMORTAL, LIST_TYPE_ID, ObjectHeader, STR_TYPE_ID,
-    TUPLE_TYPE_ID,
+    BIG_INT_TYPE_ID, BYTES_TYPE_ID, EXCEPTION_TYPE_ID, IMMORTAL, LIST_TYPE_ID, ObjectHeader,
+    STR_TYPE_ID, TUPLE_TYPE_ID,
 };
 
 /// Adds a reference to an object.
@@ -76,7 +76,7 @@ pub unsafe extern "C" fn typy_rt_int_decrement(word: i64) {
 /// Frees an object whose last reference is gone, after releasing what it refers to.
 unsafe fn destroy(object: *mut ObjectHeader, type_id: u32) {
     match type_id {
-        STR_TYPE_ID | BIG_INT_TYPE_ID => crate::allocator::free(object.cast()),
+        STR_TYPE_ID | BYTES_TYPE_ID | BIG_INT_TYPE_ID => crate::allocator::free(object.cast()),
         // SAFETY: an object with the exception type ID is an `ExceptionObject`.
         EXCEPTION_TYPE_ID => unsafe { crate::exception::destroy(object.cast()) },
         // SAFETY: an object with the list or tuple type ID is a `ListObject`.

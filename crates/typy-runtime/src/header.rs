@@ -12,6 +12,8 @@ pub const BIG_INT_TYPE_ID: u32 = 3;
 pub const LIST_TYPE_ID: u32 = 4;
 /// The type ID of a `tuple[T, ...]`, a list object that is never changed after it is sealed.
 pub const TUPLE_TYPE_ID: u32 = 5;
+/// The type ID of a `bytes`: a `str` object of one byte per code point, each code point a byte.
+pub const BYTES_TYPE_ID: u32 = 6;
 
 /// The first 8 bytes of every heap object.
 #[repr(C)]

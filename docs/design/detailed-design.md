@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy detailed design |
-| Version | 1.28 |
+| Version | 1.29 |
 | Status | Approved |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-08 |
@@ -470,6 +470,14 @@ and `tuple[()]` the empty tuple; a bare `tuple` is E0408. `+` joins two
 tuples, `len` gives a constant, and `==`, `!=`, `<`, `<=`, `>` and `>=`
 compare tuples whose items compare.
 
+`Type::Bytes` is `bytes` (DAT-06): a literal such as `b"a\x00"`, an
+item read at a position, an `int` from 0 to 255, slices, `len`, `+`, `*`,
+comparisons, `in` of an `int` or of `bytes`, `for` over its `int` items,
+and `str` and `repr`, which write `b'...'`. `bytes()` is empty, `bytes(n)`
+holds `n` zero bytes, and `bytes(values)` takes any iterable of `int`;
+`bytes` of a `str` without an encoding is E0404, and with one it is given
+by `str.encode`.
+
 `Type::TupleOf(T)` is `tuple[T, ...]` (DAT-14), an immutable sequence of any
 length, written `tuple[int, ...]`; `...` anywhere else in a tuple annotation
 is E0408. It is a list object at run time, under the tuple type ID, so it
@@ -843,12 +851,12 @@ comparisons, calls and counting, terminators, and emission.
 | `int` | A 64-bit word. An inline value has its lowest bit set and holds the number shifted left by one; any other word is the address of a large integer. Every `int` argument of a runtime function is such a word |
 | `float`, `bool`, objects | A double, an `i1`, a pointer. A `bool` returned by the runtime is one byte |
 | Object header | 8 bytes: `reference_count: u32`, then `type_id: u32`. A count of `u32::MAX` marks an immortal object, whose header the runtime never writes |
-| Type IDs | `str` is 1, an exception is 2, a large integer is 3, a list is 4 and a `tuple[T, ...]` is 5 |
+| Type IDs | `str` is 1, an exception is 2, a large integer is 3, a list is 4, a `tuple[T, ...]` is 5 and a `bytes` is 6 |
 | `str` object | Header, `length: u64` in code points, `kind: u32` (1, 2 or 4 bytes per code point), 4 bytes of padding, then the code points |
 | Large integer | Header, `sign_and_length: i32`, 4 bytes of padding, then that many `u64` limbs, least significant first |
-| Constants | Strings and large integers are immortal static objects in read-only memory |
+| Constants | Strings, `bytes` and large integers are immortal static objects in read-only memory; a `bytes` constant is a one-byte `str` object with the `bytes` type ID |
 | List items | Eight bytes: the `int` word, the `float` bits, a `bool` as 0 or 1, the pointer, 0 for `None`, or for a tuple the address of its bytes. A tuple descriptor is `{ size: u64, length: u64, fields: ptr }`, and each field `{ kind: u32, offset: u32, tuple: ptr }`, with the kind codes of `ItemKind`: 0 `int`, 1 `float`, 2 `bool`, 3 object, 4 `None`, 5 tuple |
-| A function that may raise | Returns `{ result, exception }`, or only the exception when it returns nothing; a null exception means none was raised. The entry function always uses this form |
+| A function that may raise | Returns `{ result, exception }`, or only the exception when it returns nothing; a null exception means none was raised. A runtime function's `bool` result is one byte in either form. The entry function always uses this form |
 | A function that cannot raise | Returns its result directly |
 | `invoke` | When the exception is not null, generated code calls `typy_rt_traceback_add(exception, function, file, line)` with C strings, then takes the error path |
 | Entry | The runtime's `main` calls `__typy_main`, the body of `__main__` |
@@ -983,6 +991,7 @@ installed `typy` finds `<prefix>/lib/typy/` and a `typy` in
 | `message` | Builds an exception message of up to 1024 code points from text, numbers and `repr` of a string, so an error about a long input stays short |
 | `io` | Standard output is buffered in 8 KiB and flushed when full, at exit, and before anything is written to standard error |
 | `exception` | Creates the built-in exceptions of EXC-02 with CPython's message for each operation. Where the oracle versions word a message differently, the runtime uses the wording of the newest, CPython 3.15 (OI-14): `division by zero` for every division and modulo of `int` and `float`, and `zero to a negative power` for `0.0 ** -1.0`. A conformance test cannot check such a message, because the oracles disagree on it, so the runtime's unit tests check it. It adds `TracebackEntry` values, and it prints an uncaught exception as `Traceback (most recent call last):`, one line per entry, an entry repeated in a row shown at most three times and the rest counted as `[Previous line repeated N more times]`, as CPython's `TB_RECURSIVE_CUTOFF` does, then `Type: message`, or `Type` alone when the message is empty, as CPython does (STD-05) |
+| `bytes` | A `bytes` is a `str` object of one byte per code point under the type ID 6, so it shares the string algorithms; `typy_rt_bytes_concat`, `_repeat`, `_slice`, `_length`, `_compare` and `_contains` call them and keep the result a `bytes`. `_get` gives an item as an `int`, with `IndexError: index out of range` outside; `_contains_byte` raises `ValueError: byte must be in range(0, 256)` for an `int` outside; `_zeros` and `_from_list` build one, `bytes must be in range(0, 256)` and `negative count` as CPython words them; `_repr` writes `b'...'` in double quotes when the bytes hold a single quote and no double quote, and escapes every byte outside 0x20 to 0x7e as `\xhh` |
 | `tuple` | A list of tuples stores each tuple inline, in the words its descriptor gives, and the list's header keeps the descriptor. A `TupleType` holds the item size, a multiple of eight bytes and at least eight, the number of items, and a `Field` for each: its `ItemKind` code, its byte offset, and a nested tuple's descriptor. A `bool` field is one byte and `None` takes none. `retain`, `release`, `equal`, `order` and `repr` walk the fields, so the compiler emits data and no code: tuples order as CPython orders them, by the first pair of items that are not equal, and `repr` writes `(1,)` for one item |
 | `zip` | `typy_rt_zip_unequal(index, longer)` raises CPython's `ValueError` for a strict `zip`: `zip() argument 2 is shorter than argument 1`, or `zip() argument 3 is longer than arguments 1-2` |
 | `stack` | The check at the start of recursive functions reads the stack pointer register and compares it with the recorded limit; the register is read rather than the address of a local, because a sanitizer may keep locals on a separate fake stack. The limit leaves 64 KiB of stack unused; past it the check raises `RecursionError: maximum recursion depth exceeded` |

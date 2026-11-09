@@ -20,7 +20,8 @@ impl BodyChecker<'_> {
                     Constant::Int(digits) => TypedConstant::Int(digits.clone()),
                     Constant::Float(value) => TypedConstant::Float(*value),
                     Constant::Str(value) => TypedConstant::Str(value.clone()),
-                    Constant::Complex { .. } | Constant::Bytes(_) | Constant::Ellipsis => {
+                    Constant::Bytes(value) => TypedConstant::Bytes(value.clone()),
+                    Constant::Complex { .. } | Constant::Ellipsis => {
                         return Self::typed(
                             TypedExprKind::Constant(TypedConstant::None),
                             Type::Error,
@@ -188,6 +189,17 @@ impl BodyChecker<'_> {
                     return Self::typed(
                         TypedExprKind::Constant(TypedConstant::None),
                         Type::Error,
+                        span,
+                    );
+                }
+                if value.ty == Type::Bytes {
+                    self.expect(&index, Type::Int, "an index");
+                    return Self::typed(
+                        TypedExprKind::Index {
+                            value: Box::new(value),
+                            index: Box::new(index),
+                        },
+                        Type::Int,
                         span,
                     );
                 }

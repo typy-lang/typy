@@ -35,6 +35,10 @@ impl<'ctx> FunctionEmitter<'_, '_, 'ctx> {
                 let text = self.shared.tyir.string(*id);
                 Some(self.shared.statics.string(self.shared.module, text).into())
             }
+            Constant::Bytes(id) => {
+                let text = self.shared.tyir.string(*id);
+                Some(self.shared.statics.bytes(self.shared.module, text).into())
+            }
             Constant::PlaceholderList => {
                 let name = "typy_rt_placeholder_list";
                 let global = self.shared.module.get_global(name).unwrap_or_else(|| {

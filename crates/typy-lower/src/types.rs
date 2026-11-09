@@ -11,6 +11,7 @@ pub(crate) fn tyir_type(ty: &Type, tuples: &mut TupleTypes) -> TyirType {
         Type::Float => TyirType::Float,
         Type::Bool => TyirType::Bool,
         Type::Str => TyirType::STR,
+        Type::Bytes => TyirType::BYTES,
         Type::NoneType | Type::Error => TyirType::Unit,
         // A `tuple[T, ...]` is a list object with the tuple type ID, so every list function
         // of the runtime reads it (DAT-14).

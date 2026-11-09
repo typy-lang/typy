@@ -14,13 +14,24 @@ use typy_tyir::{
 use crate::function::{FunctionLowerer, LoopTargets};
 use crate::ownership::Lowered;
 
+/// What kind of sequence a loop reads, which decides how it reads its length and items.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Kind {
+    /// A list or a `tuple[T, ...]`.
+    List,
+    /// A `str`, whose items are strings of one code point.
+    Str,
+    /// A `bytes`, whose items are `int` values.
+    Bytes,
+}
+
 /// The state of one iterator of a loop, kept in hidden slots.
 enum Iterator {
     /// A list or `str`, read forwards or, for `reversed`, backwards.
     Sequence {
         sequence: SlotId,
         position: SlotId,
-        is_str: bool,
+        kind: Kind,
         backwards: bool,
         item: TyirType,
     },
@@ -139,15 +150,15 @@ impl FunctionLowerer<'_> {
     /// Keeps a sequence and its first position: 0, or for `reversed` its length less one, as
     /// CPython's `reversed` reads the length once when it is called.
     fn start_sequence(&mut self, sequence: &TypedExpr, backwards: bool, span: Span) -> Iterator {
-        let is_str = sequence.ty.sequence_item().is_none();
-        let item = match sequence.ty.sequence_item() {
-            Some(item) => self.lowered_type(item),
-            None => TyirType::STR,
+        let (kind, item) = match (&sequence.ty, sequence.ty.sequence_item()) {
+            (_, Some(item)) => (Kind::List, self.lowered_type(item)),
+            (typy_check::Type::Bytes, None) => (Kind::Bytes, TyirType::Int),
+            _ => (Kind::Str, TyirType::STR),
         };
         let sequence = self.kept(sequence, "sequence", span);
         let position = self.hidden_slot("position", TyirType::Int);
         let first = if backwards {
-            let length = self.sequence_length(sequence, is_str, span);
+            let length = self.sequence_length(sequence, kind, span);
             self.add_int(length, -1, span)
         } else {
             Self::borrowed(
@@ -159,18 +170,18 @@ impl FunctionLowerer<'_> {
         Iterator::Sequence {
             sequence,
             position,
-            is_str,
+            kind,
             backwards,
             item,
         }
     }
 
-    fn sequence_length(&mut self, sequence: SlotId, is_str: bool, span: Span) -> Lowered {
+    fn sequence_length(&mut self, sequence: SlotId, kind: Kind, span: Span) -> Lowered {
         let value = self.load(sequence, span);
-        let function = if is_str {
-            RuntimeFunction::StrLength
-        } else {
-            RuntimeFunction::ListLength
+        let function = match kind {
+            Kind::List => RuntimeFunction::ListLength,
+            Kind::Str => RuntimeFunction::StrLength,
+            Kind::Bytes => RuntimeFunction::BytesLength,
         };
         self.call_runtime(function, vec![value.value], span)
     }
@@ -181,11 +192,11 @@ impl FunctionLowerer<'_> {
             Iterator::Sequence {
                 sequence,
                 position,
-                is_str,
+                kind,
                 backwards,
                 item,
             } => self.next_item(
-                *sequence, *position, *is_str, *backwards, *item, exhausted, span,
+                *sequence, *position, *kind, *backwards, *item, exhausted, span,
             ),
             Iterator::Enumerate { count, inner, ty } => {
                 let value = self.next_value(inner, exhausted, span);
@@ -245,13 +256,13 @@ impl FunctionLowerer<'_> {
         &mut self,
         sequence: SlotId,
         position: SlotId,
-        is_str: bool,
+        kind: Kind,
         backwards: bool,
         item: TyirType,
         exhausted: BlockId,
         span: Span,
     ) -> Lowered {
-        let length = self.sequence_length(sequence, is_str, span);
+        let length = self.sequence_length(sequence, kind, span);
         let index = self.load(position, span);
         let mut more = self.int_compare(Comparison::Less, index.value, length.value, span);
         self.release(length, span);
@@ -277,14 +288,18 @@ impl FunctionLowerer<'_> {
         self.builder.switch_to(fetch);
         let value = self.load(sequence, span);
         let index = self.load(position, span);
-        let fetched = if is_str {
-            self.call_runtime(
+        let fetched = match kind {
+            Kind::Str => self.call_runtime(
                 RuntimeFunction::StrIndex,
                 vec![value.value, index.value],
                 span,
-            )
-        } else {
-            self.list_item(value, index, item, span)
+            ),
+            Kind::Bytes => self.call_runtime(
+                RuntimeFunction::BytesGet,
+                vec![value.value, index.value],
+                span,
+            ),
+            Kind::List => self.list_item(value, index, item, span),
         };
         let current = self.load(position, span);
         let next = self.add_int(current, if backwards { -1 } else { 1 }, span);

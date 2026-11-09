@@ -121,6 +121,130 @@ impl BodyChecker<'_> {
         )
     }
 
+    /// Checks `bytes()`, `bytes(count)`, `bytes(data)` or `bytes(values)` for an iterable of
+    /// `int`. A `str` needs an encoding, which `str.encode` gives.
+    pub(super) fn call_bytes(
+        &mut self,
+        arguments: &[Expr],
+        keywords: &[Keyword],
+        span: Span,
+    ) -> TypedExpr {
+        if let Some(keyword) = keywords.first() {
+            return self.error(
+                Diagnostic::new(
+                    DiagnosticCode::error(404),
+                    keyword.span,
+                    "`bytes` takes no keyword arguments",
+                )
+                .with_rule(RuleId::LIB_02),
+                span,
+            );
+        }
+        let argument = match arguments {
+            [] => {
+                return Self::typed(
+                    TypedExprKind::Constant(TypedConstant::Bytes(Vec::new())),
+                    Type::Bytes,
+                    span,
+                );
+            }
+            [argument] => argument,
+            _ => {
+                return self.error(
+                    Diagnostic::new(
+                        DiagnosticCode::error(201),
+                        span,
+                        "`bytes` of a `str` and its encoding is planned for TyPy 0.2 (LIB-03); `str.encode` gives it",
+                    )
+                    .with_rule(RuleId::LIB_03),
+                    span,
+                );
+            }
+        };
+        let Some(value) = self.bytes_argument(argument) else {
+            return Self::typed(
+                TypedExprKind::Constant(TypedConstant::None),
+                Type::Error,
+                span,
+            );
+        };
+        Self::typed(
+            TypedExprKind::Builtin {
+                builtin: Builtin::Bytes,
+                arguments: vec![value],
+            },
+            Type::Bytes,
+            span,
+        )
+    }
+
+    /// Checks the one argument of `bytes`: a count, a `bytes`, or `int` values from any
+    /// iterable; returns `None` after reporting any other.
+    fn bytes_argument(&mut self, argument: &Expr) -> Option<TypedExpr> {
+        let source = self.called_builtin(argument).is_some_and(|(builtin, ..)| {
+            matches!(
+                builtin,
+                Builtin::Enumerate | Builtin::Zip | Builtin::Reversed
+            )
+        });
+        let value = if source {
+            self.iterable_argument(argument, Builtin::Bytes)
+        } else {
+            let value = self.expression(argument);
+            let ints = Type::TupleOf(Box::new(Type::Int));
+            Self::converted(value, Some(&ints))
+        };
+        match &value.ty {
+            Type::Int | Type::Bytes | Type::Error => Some(value),
+            Type::Str => {
+                self.diagnostics.push(
+                    Diagnostic::new(
+                        DiagnosticCode::error(404),
+                        value.span,
+                        "`bytes` of a `str` needs an encoding, such as `text.encode(\"utf-8\")`",
+                    )
+                    .with_rule(RuleId::DAT_06),
+                );
+                None
+            }
+            Type::List(_) | Type::TupleOf(_) => {
+                let values = value;
+                if let Some(item) = values.ty.sequence_item()
+                    && !matches!(item, Type::Int | Type::Error)
+                {
+                    let item = item.clone();
+                    self.diagnostics.push(
+                        Diagnostic::new(
+                            DiagnosticCode::error(404),
+                            values.span,
+                            format!(
+                                "`bytes` takes `int` values from 0 to 255, and these are {item}"
+                            ),
+                        )
+                        .with_rule(RuleId::DAT_06),
+                    );
+                    return None;
+                }
+                Some(values)
+            }
+            other => {
+                let other = other.clone();
+                self.diagnostics.push(
+                    Diagnostic::new(
+                        DiagnosticCode::error(411),
+                        value.span,
+                        format!(
+                            "`bytes` takes a count or `int` values, and this is {}",
+                            other.with_article()
+                        ),
+                    )
+                    .with_rule(RuleId::DAT_06),
+                );
+                None
+            }
+        }
+    }
+
     /// Checks the iterable argument of `builtin` and returns it as a list: a list as it is, and
     /// any other source, a `str` or `enumerate`, `zip` or `reversed`, as a new list of its
     /// values, which the builtin then reads.

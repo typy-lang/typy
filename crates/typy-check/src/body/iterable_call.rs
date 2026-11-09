@@ -256,6 +256,7 @@ impl BodyChecker<'_> {
         match &iterable.ty {
             Type::List(item) | Type::TupleOf(item) => item.as_ref().clone(),
             Type::Str => Type::Str,
+            Type::Bytes => Type::Int,
             Type::Error => Type::Error,
             // A tuple whose items have one type is read as a `tuple[T, ...]` before it gets
             // here; the items of this one differ, or there are none.

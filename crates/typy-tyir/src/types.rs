@@ -13,6 +13,8 @@ impl TypeId {
     pub const EXCEPTION: Self = Self(2);
     /// A `list`, whatever its item type; the item type lives in the checked program.
     pub const LIST: Self = Self(4);
+    /// `bytes`, which the runtime stores as a `str` object of one byte per code point.
+    pub const BYTES: Self = Self(6);
 }
 
 /// The number of a tuple type in its module's `TupleTypes`.
@@ -45,6 +47,8 @@ impl TyirType {
     pub const EXCEPTION: Self = Self::Object(TypeId::EXCEPTION);
     /// A list.
     pub const LIST: Self = Self::Object(TypeId::LIST);
+    /// `bytes`.
+    pub const BYTES: Self = Self::Object(TypeId::BYTES);
 }
 
 impl fmt::Display for TyirType {

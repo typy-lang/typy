@@ -42,6 +42,10 @@ impl BodyChecker<'_> {
             Op::BitAnd | Op::BitOr | Op::BitXor if l == Bool && r == Bool => Bool,
             _ if l == Bool || r == Bool => self.bool_arithmetic(span),
             Op::Add if l == Str && r == Str => Str,
+            Op::Add if l == Type::Bytes && r == Type::Bytes => Type::Bytes,
+            Op::Mult if (l == Type::Bytes && r == Int) || (l == Int && r == Type::Bytes) => {
+                Type::Bytes
+            }
             // A list joins only a list of its own type, because the runtime stores each item by
             // the kind of the item type (DAT-07).
             Op::Add if l.sequence_item().is_some() && l == r => l,
@@ -186,6 +190,8 @@ impl BodyChecker<'_> {
                 Type::List(item) | Type::TupleOf(item) if l.is_assignable_to(item) => {}
                 // A substring test: `in` on a `str` needs a `str` on its left.
                 Type::Str if l == Type::Str => {}
+                // `in` on `bytes` looks for a byte, an `int`, or for `bytes` within them.
+                Type::Bytes if matches!(l, Type::Int | Type::Bytes) => {}
                 // A tuple compares the value with each item for equality, so each item has to
                 // compare with it.
                 Type::Tuple(items) if items.iter().all(|item| l.can_test_equality(item)) => {}

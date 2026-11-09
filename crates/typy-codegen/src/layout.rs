@@ -4,6 +4,8 @@
 pub const IMMORTAL: u32 = u32::MAX;
 /// The type ID of `str` objects.
 pub const STR_TYPE_ID: u32 = 1;
+/// The type ID of a `bytes` object, a `str` object of one byte per code point.
+pub const BYTES_TYPE_ID: u32 = 6;
 /// The type ID of exception objects.
 pub const EXCEPTION_TYPE_ID: u32 = 2;
 /// The type ID of large integers.

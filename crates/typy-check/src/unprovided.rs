@@ -24,7 +24,6 @@ pub(crate) fn unprovided(name: &str) -> Option<Unprovided> {
     }
     match name {
         "dict" | "set" => Some(planned("0.2", RuleId::LIB_02)),
-        "bytes" => Some(planned("0.2", RuleId::DAT_06)),
         "iter" | "next" => Some(planned("0.2", RuleId::CST_03)),
         "input" | "open" => Some(planned("0.3", RuleId::LIB_04)),
         "isinstance" | "issubclass" => Some(planned("0.4", RuleId::CLS_09)),
@@ -216,7 +215,6 @@ mod tests {
     fn later_builtins_name_their_release_and_rule() {
         let cases = [
             ("dict", "0.2", RuleId::LIB_02),
-            ("bytes", "0.2", RuleId::DAT_06),
             ("next", "0.2", RuleId::CST_03),
             ("open", "0.3", RuleId::LIB_04),
             ("ValueError", "0.3", RuleId::EXC_01),

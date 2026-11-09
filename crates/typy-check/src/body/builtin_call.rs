@@ -24,6 +24,9 @@ impl BodyChecker<'_> {
         if builtin == Builtin::List {
             return self.call_list(arguments, keywords, None, span);
         }
+        if builtin == Builtin::Bytes {
+            return self.call_bytes(arguments, keywords, span);
+        }
         if builtin == Builtin::Tuple {
             return self.call_tuple(arguments, keywords, None, span);
         }
@@ -61,6 +64,7 @@ impl BodyChecker<'_> {
         let types: Vec<Type> = values.iter().map(|value| value.ty.clone()).collect();
         let result = match builtin {
             Builtin::Print
+            | Builtin::Bytes
             | Builtin::List
             | Builtin::Tuple
             | Builtin::Round
@@ -105,7 +109,7 @@ impl BodyChecker<'_> {
                 }
                 if !matches!(
                     values[0].ty,
-                    Type::Tuple(_) | Type::List(_) | Type::TupleOf(_)
+                    Type::Tuple(_) | Type::List(_) | Type::TupleOf(_) | Type::Bytes
                 ) {
                     self.expect(&values[0], Type::Str, "the argument of `len`");
                 }

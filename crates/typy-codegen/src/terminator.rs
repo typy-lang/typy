@@ -114,7 +114,11 @@ impl<'ctx> FunctionEmitter<'_, '_, 'ctx> {
         .is_some()
         {
             let pair = returned.into_struct_value();
-            let result: BasicValueEnum<'ctx> = self.builder.build_extract_value(pair, 0, "")?;
+            let mut result: BasicValueEnum<'ctx> = self.builder.build_extract_value(pair, 0, "")?;
+            // A runtime function returns a `bool` as one byte, as C's `_Bool` is.
+            if matches!(callee, Callee::Runtime(_)) && result_type == TyirType::Bool {
+                result = self.byte_to_bool(result.into_int_value())?.into();
+            }
             let exception = self
                 .builder
                 .build_extract_value(pair, 1, "")?

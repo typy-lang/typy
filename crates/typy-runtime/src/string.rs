@@ -14,7 +14,11 @@ mod utf8;
 use crate::allocator::{allocate, array_size};
 use crate::header::{ObjectHeader, STR_TYPE_ID};
 
-pub(crate) use operations::typy_rt_str_compare;
+pub(crate) use builder::StrBuilder;
+pub(crate) use operations::{
+    typy_rt_str_compare, typy_rt_str_concat, typy_rt_str_contains, typy_rt_str_length,
+    typy_rt_str_repeat, typy_rt_str_slice,
+};
 pub(crate) use points::{Points, is_space};
 pub(crate) use repr::{repr_into, typy_rt_str_repr};
 pub(crate) use unicode::decimal_value;

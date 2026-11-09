@@ -55,6 +55,10 @@ All notable changes to TyPy are recorded here. The format follows
   A tuple such as `(1, 2)` is accepted where a `tuple[int, ...]` is
   expected, and `for` goes over a tuple whose items have one type (DAT-14,
   CST-03).
+- `bytes`: literals such as `b"a\x00"`, `bytes()`, `bytes(n)` and
+  `bytes(values)`, items as `int` values, slices, `len`, `+`, `*`,
+  comparisons, `in`, `for`, and `str` and `repr` as CPython writes them
+  (DAT-06).
 - The `str` methods `find`, `rfind`, `index`, `rindex`, `count`,
   `startswith`, `endswith`, `split`, `rsplit`, `splitlines`, `partition`,
   `rpartition`, `join`, `strip`, `lstrip`, `rstrip`, `removeprefix`,

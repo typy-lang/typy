@@ -126,6 +126,13 @@ impl<'context> FunctionLowerer<'context> {
         self.constant(Constant::Str(id), span)
     }
 
+    /// Returns a `bytes` constant, each byte held as the code point of its value.
+    pub(crate) fn bytes_constant(&mut self, data: &[u8], span: Span) -> ValueId {
+        let text: String = data.iter().copied().map(char::from).collect();
+        let id = self.strings.intern(&text);
+        self.constant(Constant::Bytes(id), span)
+    }
+
     /// Fills the entry block: every slot gets a value before the body runs, so every error path can release every slot.
     fn prologue(&mut self) {
         let span = self.span;

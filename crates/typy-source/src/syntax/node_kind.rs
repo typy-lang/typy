@@ -14,7 +14,6 @@ pub enum NodeKind {
     AsyncWith,
     Assert,
     Await,
-    BytesLiteral,
     ClassDef,
     Delete,
     Dict,

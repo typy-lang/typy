@@ -21,6 +21,8 @@ pub enum Constant {
     Unit,
     /// A string from the pool; string constants are never freed.
     Str(StringId),
+    /// A `bytes` from the pool, each byte the code point of its value; never freed.
+    Bytes(StringId),
     /// The runtime's immortal empty list, the first value of a list slot. Definite assignment
     /// guarantees it is never read, so it is never changed.
     PlaceholderList,
@@ -39,6 +41,7 @@ impl Constant {
             Self::Bool(_) => TyirType::Bool,
             Self::Unit => TyirType::Unit,
             Self::Str(_) => TyirType::STR,
+            Self::Bytes(_) => TyirType::BYTES,
             Self::PlaceholderList => TyirType::LIST,
             Self::TupleDescriptor(_) => TyirType::Bits,
         }
@@ -53,6 +56,7 @@ impl fmt::Display for Constant {
             Self::Bool(value) => write!(formatter, "bool {value}"),
             Self::Unit => formatter.write_str("unit"),
             Self::Str(StringId(id)) => write!(formatter, "str s{id}"),
+            Self::Bytes(StringId(id)) => write!(formatter, "bytes s{id}"),
             Self::PlaceholderList => formatter.write_str("placeholder list"),
             Self::TupleDescriptor(TupleTypeId(id)) => write!(formatter, "descriptor tuple#{id}"),
         }
@@ -72,6 +76,7 @@ mod tests {
             (Constant::Bool(true), TyirType::Bool, "bool true"),
             (Constant::Unit, TyirType::Unit, "unit"),
             (Constant::Str(StringId(3)), TyirType::STR, "str s3"),
+            (Constant::Bytes(StringId(4)), TyirType::BYTES, "bytes s4"),
             (
                 Constant::PlaceholderList,
                 TyirType::LIST,
