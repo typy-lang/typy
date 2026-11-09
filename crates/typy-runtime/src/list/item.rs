@@ -59,6 +59,14 @@ impl From<ItemKind> for ItemType {
 }
 
 impl ItemType {
+    /// Returns the type whose kind has the code `kind`, with the descriptor `tuple` for tuples.
+    pub(crate) fn of(kind: u32, tuple: *const TupleType) -> Self {
+        match ItemKind::from_code(kind) {
+            ItemKind::Tuple => Self::tuple(tuple),
+            kind => Self::from(kind),
+        }
+    }
+
     /// Returns the type of tuple items laid out by `tuple`.
     pub(crate) const fn tuple(tuple: *const TupleType) -> Self {
         Self {
@@ -216,6 +224,26 @@ impl ItemType {
         }
     }
 
+    /// Returns `hash(item)`, the value CPython gives an equal item (ADR-0010). A list is not
+    /// hashable, and the checker refuses one where a hash is needed.
+    ///
+    /// # Safety
+    ///
+    /// `item` is a live item of this type.
+    pub(crate) unsafe fn hash(self, item: u64) -> i64 {
+        match self.kind {
+            ItemKind::Bool => i64::from(item != 0),
+            ItemKind::NoneValue => crate::hash::NONE,
+            ItemKind::Float => crate::hash::float(f64::from_bits(item)),
+            // SAFETY: the caller passes a live `int` word.
+            ItemKind::Int => unsafe { crate::hash::int(item.cast_signed()) },
+            // SAFETY: the caller passes a pointer to a live object.
+            ItemKind::Object => unsafe { object_hash(pointer(item)) },
+            // SAFETY: the caller passes the address of a live tuple of this layout.
+            ItemKind::Tuple => unsafe { crate::tuple::hash(self.tuple, item) },
+        }
+    }
+
     /// Returns the truth of an item, as `bool(item)` gives it: a number is true when it is not
     /// zero, a `str`, a list or a tuple when it is not empty, and `None` never.
     ///
@@ -288,6 +316,31 @@ unsafe fn object_is_true(object: *mut ObjectHeader) -> bool {
             STR_TYPE_ID | BYTES_TYPE_ID => (*object.cast::<StrObject>()).length != 0,
             LIST_TYPE_ID | TUPLE_TYPE_ID => (*object.cast::<super::ListObject>()).length != 0,
             _ => crate::libc::abort_with(b"typy runtime: a list holds an object it cannot test\n"),
+        }
+    }
+}
+
+/// Returns the hash of a string, `bytes` or a `tuple[T, ...]`.
+#[allow(
+    clippy::cast_ptr_alignment,
+    reason = "every object comes from malloc, aligned for every type, and starts with its header"
+)]
+///
+/// # Safety
+///
+/// `object` points to a live string, `bytes` or sealed tuple.
+unsafe fn object_hash(object: *mut ObjectHeader) -> i64 {
+    // SAFETY: the caller passes a live object; the type ID says which it is.
+    unsafe {
+        match (*object).type_id {
+            STR_TYPE_ID | BYTES_TYPE_ID => crate::hash::text(object.cast::<StrObject>()),
+            TUPLE_TYPE_ID => {
+                let tuple = &*object.cast::<super::ListObject>();
+                let item_type = tuple.item_type();
+                let hashes = (0..tuple.length).map(|index| item_type.hash(tuple.item(index)));
+                crate::hash::tuple(hashes, tuple.length)
+            }
+            _ => crate::libc::abort_with(b"typy runtime: a hash was asked of a list\n"),
         }
     }
 }

@@ -57,10 +57,7 @@ impl ListObject {
 
     /// Returns the type of the list's items.
     pub(crate) fn item_type(&self) -> ItemType {
-        match ItemKind::from_code(self.kind) {
-            ItemKind::Tuple => ItemType::tuple(self.tuple),
-            kind => ItemType::from(kind),
-        }
+        ItemType::of(self.kind, self.tuple)
     }
 
     /// Returns the eight-byte words an item takes.

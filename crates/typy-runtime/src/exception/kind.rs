@@ -16,6 +16,8 @@ pub enum ExceptionKind {
     ZeroDivisionError = 6,
     UnicodeEncodeError = 7,
     UnicodeDecodeError = 8,
+    KeyError = 9,
+    RuntimeError = 10,
 }
 
 impl ExceptionKind {
@@ -31,6 +33,8 @@ impl ExceptionKind {
             Self::ZeroDivisionError => "ZeroDivisionError",
             Self::UnicodeEncodeError => "UnicodeEncodeError",
             Self::UnicodeDecodeError => "UnicodeDecodeError",
+            Self::KeyError => "KeyError",
+            Self::RuntimeError => "RuntimeError",
         }
     }
 }

@@ -115,6 +115,23 @@ pub(crate) unsafe fn release(tuple: *const TupleType, address: u64) {
     }
 }
 
+/// Returns the hash of the tuple at `address`, from the hashes of its items as CPython
+/// combines them.
+///
+/// # Safety
+///
+/// As for `retain`.
+pub(crate) unsafe fn hash(tuple: *const TupleType, address: u64) -> i64 {
+    // SAFETY: the caller's guarantee covers each field.
+    unsafe {
+        let fields = (*tuple).fields();
+        let hashes = fields
+            .iter()
+            .map(|field| field.item_type().hash(field.value(address)));
+        crate::hash::tuple(hashes, fields.len())
+    }
+}
+
 /// Returns `left == right` for two tuples of one layout: every item equal.
 ///
 /// # Safety

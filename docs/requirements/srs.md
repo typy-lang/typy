@@ -3,10 +3,10 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy software requirements specification |
-| Version | 1.20 |
+| Version | 1.21 |
 | Status | Approved |
 | Owner | typy-lang contributors |
-| Last updated | 2026-11-08 |
+| Last updated | 2026-11-09 |
 
 ## 1. Introduction
 
@@ -474,6 +474,7 @@ after the last of the resolved issues below.
 | OI-16 | How are generated code and the runtime instrumented with AddressSanitizer, and the runtime's unit tests run under Miri, when both need a nightly Rust toolchain? | The dev image holds one pinned nightly, `nightly-2026-11-05`, used only for these checks and for fuzzing; every build still uses stable. The runtime is built with `-Zsanitizer=address` for the conformance suite's sanitizer run, and `make miri` runs its unit tests. Instrumenting generated code needs LLVM's AddressSanitizer pass in code generation and is planned for 0.2. | 2026-11-07 |
 | OI-17 | How does a 0.2 program end a `for` over a class with `__iter__` and `__next__`, when `raise` arrives in 0.3? | It does not: CST-03 covers the built-in iterables in 0.2, and CST-08 adds iterator classes in 0.3 together with `raise`, so `StopIteration` works as in CPython. | 2026-11-08 |
 | OI-18 | How do items of type `float` compare inside containers? CPython compares container items by identity before value, so with `x = float("nan")`, `(x,) == (x,)`, `[x] == [x]` and `x in [x]` are `True`, while TyPy holds floats without an object. | By value, as `x == x` does: a NaN item is never equal to another, in a tuple, a list, `in`, `count`, `index`, a `dict` key or a `set`. This gives CPython's result for NaN values made separately, and differs from it only when one NaN object is placed in a container more than once, which the user documentation names as a known difference. | 2026-11-09 |
+| OI-19 | In which order does a set display of constant items iterate, when the oracle versions build it differently? A display of three to thirty items that are all constants compiles to a frozenset of the items, which is merged into a new set, and the merge can place the items in other slots than adding them one by one does. CPython 3.12 and 3.13 also rebuild the frozenset once more from its own order when they merge the code's constants, and CPython 3.14 iterates a `for` loop over such a display in the order of the items added one by one. | The order of the newest oracle, CPython 3.15, as OI-14 decides for messages: such a display, and a loop over it, holds the items added in order to a set, then merged into a new set. A constant item is a literal, `None`, `True`, `False`, a number with a sign, or a tuple of constant items; CPython also folds arithmetic on constants, which TyPy computes when the program runs, so a display such as `{1 + 2, 4, 5}` may iterate in another order than CPython's. A conformance test of such a display is invalid unless every oracle prints it alike (STD-03, DAT-10, ADR-0010). | 2026-11-09 |
 
 ## Appendix A. Disposition of the specification pack
 
