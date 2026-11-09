@@ -315,6 +315,7 @@ impl FunctionLowerer<'_> {
             TyirType::Object(typy_tyir::TypeId::BYTES) => self.bytes_constant(&[], span),
             TyirType::Object(_) => self.string("", span),
             TyirType::Bits => unreachable!("no slot holds list item bytes"),
+            TyirType::Optional(_) => self.none_of(ty, span),
             TyirType::Tuple(id) => {
                 let (_, items) = self.item_types(ty);
                 let values: Vec<ValueId> = items

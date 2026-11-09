@@ -22,6 +22,13 @@ fn kind_code(item: TyirType) -> Result<u64, CodegenError> {
         TyirType::Object(_) => 3,
         TyirType::Unit => 4,
         TyirType::Tuple(_) => 5,
+        TyirType::Optional(base) => match base {
+            typy_tyir::OptionalBase::Int => 6,
+            typy_tyir::OptionalBase::Float => 7,
+            typy_tyir::OptionalBase::Bool => 8,
+            typy_tyir::OptionalBase::Object(_) => 9,
+            typy_tyir::OptionalBase::Tuple(_) => 10,
+        },
         TyirType::Bits => return Err(CodegenError("bits are not a tuple item".to_owned())),
     })
 }

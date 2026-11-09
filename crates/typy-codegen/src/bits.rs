@@ -20,7 +20,17 @@ impl<'ctx> FunctionEmitter<'_, '_, 'ctx> {
             return Ok(word.const_zero().into());
         }
         let lowered = self.value(value)?;
-        Ok(match self.function.value(value).ty {
+        let ty = match self.function.value(value).ty {
+            TyirType::Optional(typy_tyir::OptionalBase::Bool) => {
+                return Ok(self
+                    .builder
+                    .build_int_z_extend(lowered.into_int_value(), word, "")?
+                    .into());
+            }
+            TyirType::Optional(base) => crate::abi::storage(base),
+            other => other,
+        };
+        Ok(match ty {
             TyirType::Int => lowered,
             TyirType::Float => self.builder.build_bit_cast(lowered, word, "")?,
             TyirType::Bool => self
@@ -48,6 +58,17 @@ impl<'ctx> FunctionEmitter<'_, '_, 'ctx> {
     ) -> Result<Option<BasicValueEnum<'ctx>>, CodegenError> {
         let context = self.shared.context;
         let lowered = self.value(bits)?.into_int_value();
+        let ty = match ty {
+            TyirType::Optional(typy_tyir::OptionalBase::Bool) => {
+                return Ok(Some(
+                    self.builder
+                        .build_int_truncate(lowered, context.i8_type(), "")?
+                        .into(),
+                ));
+            }
+            TyirType::Optional(base) => crate::abi::storage(base),
+            other => other,
+        };
         Ok(Some(match ty {
             TyirType::Int | TyirType::Bits => lowered.into(),
             TyirType::Float => self
@@ -71,6 +92,9 @@ impl<'ctx> FunctionEmitter<'_, '_, 'ctx> {
                 )?
                 .into(),
             TyirType::Unit => return Ok(None),
+            TyirType::Optional(_) => {
+                return Err(CodegenError("an optional has a storage type".to_owned()));
+            }
             TyirType::Tuple(_) => {
                 let struct_type =
                     crate::abi::value_type(context, &self.shared.tyir.tuple_types, ty)

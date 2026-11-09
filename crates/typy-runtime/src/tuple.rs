@@ -55,14 +55,12 @@ impl TupleType {
 
 impl Field {
     fn item_type(&self) -> ItemType {
-        match ItemKind::from_code(self.kind) {
-            ItemKind::Tuple => ItemType::tuple(self.tuple),
-            kind => ItemType::from(kind),
-        }
+        ItemType::of(self.kind, self.tuple)
     }
 
-    /// Returns the field of the tuple at `address` as an item: its eight bytes, a `bool` widened
-    /// to 0 or 1, 0 for `None`, or for a nested tuple its address.
+    /// Returns the field of the tuple at `address` as an item: its eight bytes, a `bool` or a
+    /// `bool | None` widened from its byte, 0 for `None`, or for a nested tuple, optional or
+    /// not, its address.
     ///
     /// # Safety
     ///
@@ -73,9 +71,9 @@ impl Field {
         // SAFETY: the field lies inside the caller's live tuple, at its own alignment.
         unsafe {
             match ItemKind::from_code(self.kind) {
-                ItemKind::Bool => u64::from(*pointer),
+                ItemKind::Bool | ItemKind::OptionalBool => u64::from(*pointer),
                 ItemKind::NoneValue => 0,
-                ItemKind::Tuple => at,
+                ItemKind::Tuple | ItemKind::OptionalTuple => at,
                 #[allow(
                     clippy::cast_ptr_alignment,
                     reason = "the compiler places an eight-byte field at an offset that is a multiple of eight"
@@ -94,6 +92,16 @@ impl Field {
 pub(crate) unsafe fn field(tuple: *const TupleType, address: u64, index: usize) -> u64 {
     // SAFETY: the caller's guarantee.
     unsafe { (*tuple).fields()[index].value(address) }
+}
+
+/// Returns the descriptor of item `index` of a tuple type, a tuple itself.
+///
+/// # Safety
+///
+/// `tuple` is a descriptor the compiler emitted whose item `index` is a tuple.
+pub(crate) unsafe fn field_tuple(tuple: *const TupleType, index: usize) -> *const TupleType {
+    // SAFETY: the caller's guarantee.
+    unsafe { (*tuple).fields()[index].tuple }
 }
 
 /// Adds a reference to every object the tuple at `address` holds.

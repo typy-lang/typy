@@ -279,6 +279,8 @@ that the specification does not define.
 | TYP-10 | 0.1 | IT | `tests/conformance/typ/TYP-10_*.py` |
 | TYP-11 | 0.1 | IT | `tests/conformance/typ/TYP-11_*.py` |
 | TYP-12 | 0.1 | IT | `tests/conformance/typ/TYP-12_*.py` |
+| TYP-13 | 0.2 | IT | `tests/conformance/typ/TYP-13_*.py` |
+| TYP-14 | 0.4 | IT | `tests/conformance/typ/TYP-14_*.py` |
 | DAT-01 | 0.1 | IT | `tests/conformance/dat/DAT-01_*.py` |
 | DAT-02 | 0.1 | IT | `tests/conformance/dat/DAT-02_*.py` |
 | DAT-03 | 0.1 | IT | `tests/conformance/dat/DAT-03_*.py` |

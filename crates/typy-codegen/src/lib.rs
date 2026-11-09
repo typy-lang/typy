@@ -15,6 +15,7 @@ mod layout;
 mod object;
 mod operation;
 mod optimization;
+mod optional;
 mod runtime;
 mod statics;
 mod target;

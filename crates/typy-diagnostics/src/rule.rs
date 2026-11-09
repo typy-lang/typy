@@ -153,6 +153,10 @@ impl RuleId {
     pub const TYP_10: Self = Self("TYP-10");
     /// A read of a local variable shall be rejected unless the variable is assigned on every path that reaches the read, so `UnboundLocalError` cannot occur.
     pub const TYP_12: Self = Self("TYP-12");
+    /// A local variable or parameter of type `T | None` shall narrow to `T` where an `is None` or `is not None` test, or a truth test that holds, shows it is not `None`, and using it as `T` anywhere else shall be rejected.
+    pub const TYP_13: Self = Self("TYP-13");
+    /// Annotations that join two or more types other than `None` with `|`, such as `int | str`, shall be accepted, with narrowing by `isinstance` (TYP-07).
+    pub const TYP_14: Self = Self("TYP-14");
 
     /// Every rule a diagnostic can name, in ID order.
     pub const ALL: &'static [Self] = &[
@@ -229,6 +233,8 @@ impl RuleId {
         Self::TYP_09,
         Self::TYP_10,
         Self::TYP_12,
+        Self::TYP_13,
+        Self::TYP_14,
     ];
 
     /// Returns the ID as text, such as `TYP-03`.

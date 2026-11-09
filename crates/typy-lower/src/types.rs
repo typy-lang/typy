@@ -1,7 +1,7 @@
 //! Maps checked types to TyIR types.
 
 use typy_check::Type;
-use typy_tyir::{TupleTypes, TyirType};
+use typy_tyir::{OptionalBase, TupleTypes, TyirType};
 
 /// Returns the TyIR type of a checked type; `None` maps to `unit`, and a tuple to the module's
 /// tuple type with the same items. A checked program has no error types.
@@ -23,6 +23,18 @@ pub(crate) fn tyir_type(ty: &Type, tuples: &mut TupleTypes) -> TyirType {
             let items = items.iter().map(|item| tyir_type(item, tuples)).collect();
             tuples.intern(items)
         }
+        Type::Optional(inner) => TyirType::Optional(match tyir_type(inner, tuples) {
+            TyirType::Int => OptionalBase::Int,
+            TyirType::Float => OptionalBase::Float,
+            TyirType::Bool => OptionalBase::Bool,
+            TyirType::Object(id) => OptionalBase::Object(id),
+            // A tuple has no value to spare, so it is held beside a presence flag (ADR-0011).
+            tuple @ TyirType::Tuple(_) => match tuples.intern(vec![TyirType::Bool, tuple]) {
+                TyirType::Tuple(pair) => OptionalBase::Tuple(pair),
+                _ => unreachable!("interning gives a tuple type"),
+            },
+            other => unreachable!("`{other} | None` is not an optional type the checker makes"),
+        }),
     }
 }
 

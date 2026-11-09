@@ -77,6 +77,9 @@ impl<'ctx> FunctionEmitter<'_, '_, 'ctx> {
             Operation::FromBits { bits, ty } => self.emit_from_bits(*bits, *ty)?,
             Operation::MakeTuple { ty, items } => Some(self.make_tuple(*ty, items)?),
             Operation::TupleItem { tuple, index } => self.tuple_item(*tuple, *index)?,
+            Operation::Wrap { value, ty } => Some(self.wrap(*value, *ty)?),
+            Operation::Unwrap(value) => Some(self.unwrap(*value)?),
+            Operation::IsNone(value) => Some(self.is_none(*value)?),
             Operation::Increment(value) => {
                 self.count(*value, true)?;
                 None

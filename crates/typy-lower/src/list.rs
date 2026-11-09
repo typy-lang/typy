@@ -5,7 +5,8 @@
 use typy_check::TypedExpr;
 use typy_diagnostics::Span;
 use typy_tyir::{
-    Comparison, Constant, Operation, RuntimeFunction, ScalarKind, Terminator, TyirType, ValueId,
+    Comparison, Constant, Operation, OptionalBase, RuntimeFunction, ScalarKind, Terminator,
+    TyirType, ValueId,
 };
 
 use crate::function::FunctionLowerer;
@@ -21,6 +22,13 @@ fn item_kind(item: TyirType) -> i64 {
         TyirType::Unit => 4,
         TyirType::Tuple(_) => 5,
         TyirType::Object(_) | TyirType::Bits => 3,
+        TyirType::Optional(base) => match base {
+            OptionalBase::Int => 6,
+            OptionalBase::Float => 7,
+            OptionalBase::Bool => 8,
+            OptionalBase::Object(_) => 9,
+            OptionalBase::Tuple(_) => 10,
+        },
     }
 }
 
@@ -35,13 +43,14 @@ impl FunctionLowerer<'_> {
     /// `item`: the code of its kind, and the descriptor of a tuple, or 0.
     pub(crate) fn item_layout(&mut self, item: TyirType, span: Span) -> (ValueId, ValueId) {
         let kind = self.constant(Constant::Int(item_kind(item).to_string()), span);
-        let descriptor = if let TyirType::Tuple(id) = item {
-            self.constant(Constant::TupleDescriptor(id), span)
-        } else {
-            let none = self.constant(Constant::Unit, span);
-            self.builder
-                .push_value(Operation::ToBits(none), TyirType::Bits, span)
-        };
+        let descriptor =
+            if let TyirType::Tuple(id) | TyirType::Optional(OptionalBase::Tuple(id)) = item {
+                self.constant(Constant::TupleDescriptor(id), span)
+            } else {
+                let none = self.constant(Constant::Unit, span);
+                self.builder
+                    .push_value(Operation::ToBits(none), TyirType::Bits, span)
+            };
         (kind, descriptor)
     }
 

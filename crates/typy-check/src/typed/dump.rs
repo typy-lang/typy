@@ -219,6 +219,8 @@ impl Dump<'_> {
             TypedExprKind::SetOf(_) => "SetOf".to_owned(),
             TypedExprKind::Set(_) => "Set".to_owned(),
             TypedExprKind::Dict { .. } => "Dict".to_owned(),
+            TypedExprKind::Wrap(_) => "Wrap".to_owned(),
+            TypedExprKind::Unwrap(_) => "Unwrap".to_owned(),
             TypedExprKind::Comprehension { .. } => "Comprehension".to_owned(),
             TypedExprKind::DictOf(_) => "DictOf".to_owned(),
             TypedExprKind::DictItem { .. } => "DictItem".to_owned(),
@@ -268,6 +270,7 @@ fn children(expression: &TypedExpr) -> Vec<&TypedExpr> {
             .flat_map(|(key, value)| [key, value])
             .collect(),
         TypedExprKind::DictItem { dict, key } => vec![dict, key],
+        TypedExprKind::Wrap(inner) | TypedExprKind::Unwrap(inner) => vec![inner],
         TypedExprKind::Comprehension {
             element,
             value,

@@ -208,6 +208,17 @@ pub enum Operation {
         /// The value's type.
         ty: crate::types::TyirType,
     },
+    /// A `T | None` that holds `value`, of the optional's base (ADR-0011).
+    Wrap {
+        /// The value.
+        value: ValueId,
+        /// The optional type.
+        ty: crate::types::TyirType,
+    },
+    /// The value an optional holds, which is not `None`.
+    Unwrap(ValueId),
+    /// Whether an optional value is `None`.
+    IsNone(ValueId),
     /// Adds one to the count of a counted value (ADR-0001).
     Increment(ValueId),
     /// Takes one from the count of a counted value, and frees it at zero.

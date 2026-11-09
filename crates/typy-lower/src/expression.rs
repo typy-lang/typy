@@ -35,6 +35,8 @@ impl FunctionLowerer<'_> {
                 let item = self.set_item_type(&expression.ty);
                 self.set_display(items, item, span)
             }
+            TypedExprKind::Wrap(inner) => self.wrap(inner, ty, span),
+            TypedExprKind::Unwrap(inner) => self.unwrap(inner, ty, span),
             TypedExprKind::Dict { keys, values } => {
                 self.dict_display(keys, values, &expression.ty, span)
             }
@@ -211,6 +213,7 @@ impl FunctionLowerer<'_> {
             }
             TyirType::Object(_) => ScalarKind::Str,
             TyirType::Bits => unreachable!("list items are converted before they are tested"),
+            TyirType::Optional(_) => return self.optional_truth(lowered, span),
             // A tuple's length is fixed by its type, so its truth is too.
             TyirType::Tuple(_) => {
                 let filled = self.tuple_length(lowered.ty) > 0;
@@ -325,7 +328,22 @@ impl FunctionLowerer<'_> {
                 lowered.value
             } else {
                 let default = parameter.default.clone().unwrap_or(TypedConstant::None);
-                self.typed_constant(&default, span).value
+                let constant = self.typed_constant(&default, span).value;
+                match self.lowered_type(&parameter.ty) {
+                    // A default of an optional parameter is `None` or a value of its base.
+                    optional @ TyirType::Optional(_) if default == TypedConstant::None => {
+                        self.none_of(optional, span)
+                    }
+                    optional @ TyirType::Optional(_) => self.builder.push_value(
+                        Operation::Wrap {
+                            value: constant,
+                            ty: optional,
+                        },
+                        optional,
+                        span,
+                    ),
+                    _ => constant,
+                }
             };
             ordered.push(value);
         }

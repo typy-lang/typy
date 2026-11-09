@@ -48,10 +48,15 @@ impl BodyChecker<'_> {
                 span: generator.iter.span(),
             };
             let target = self.assign_target(&generator.target, item, &binding);
+            // Each condition, and what comes after it, is read only where those before held.
             let conditions = generator
                 .ifs
                 .iter()
-                .map(|condition| self.truth_test(condition))
+                .map(|condition| {
+                    let condition = self.truth_test(condition);
+                    self.add_facts(super::flow::test_facts(&condition).0);
+                    condition
+                })
                 .collect();
             if let Some(target) = target {
                 checked.push(Generator {

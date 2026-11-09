@@ -145,11 +145,22 @@ impl FunctionLowerer<'_> {
             CompareOperator::Gt => Comparison::Greater,
             CompareOperator::GtE => Comparison::GreaterEqual,
             CompareOperator::Is | CompareOperator::IsNot => {
-                let both_none = left.ty == TyirType::Unit && right.ty == TyirType::Unit;
-                return self.constant(
-                    Constant::Bool(both_none == (operator == CompareOperator::Is)),
-                    span,
-                );
+                // An optional value is `None` when its spare value says so; any other value
+                // is `None` only when its type is (ADR-0011).
+                let none = match (left.ty, right.ty) {
+                    (TyirType::Optional(_), _) => self.is_none(left, span),
+                    (_, TyirType::Optional(_)) => self.is_none(right, span),
+                    (left, right) => self.constant(
+                        Constant::Bool(left == TyirType::Unit && right == TyirType::Unit),
+                        span,
+                    ),
+                };
+                if operator == CompareOperator::Is {
+                    return none;
+                }
+                return self
+                    .builder
+                    .push_value(Operation::BoolNot(none), TyirType::Bool, span);
             }
             CompareOperator::In | CompareOperator::NotIn => {
                 let found = self.contains(left, right, span);
@@ -181,6 +192,9 @@ impl FunctionLowerer<'_> {
             }
             (TyirType::Bits, _) => {
                 unreachable!("list items are converted before they are compared")
+            }
+            (TyirType::Optional(_), _) => {
+                unreachable!("the checker compares an optional value only with `is`")
             }
             (TyirType::Unit, TyirType::Unit) => {
                 return self.constant(Constant::Bool(comparison == Comparison::Equal), span);

@@ -4,7 +4,9 @@ use typy_diagnostics::{Diagnostic, DiagnosticCode, RuleId, Span};
 use typy_source::syntax::{Constant, Expr, Stmt};
 
 use super::BodyChecker;
-use super::flow::meet;
+use std::collections::BTreeSet;
+
+use super::flow::{Fact, meet, test_facts};
 use crate::builtin::Builtin;
 use crate::typed::{AssignTarget, TypedConstant, TypedExpr, TypedExprKind, TypedStmt};
 use crate::types::Type;
@@ -94,9 +96,12 @@ impl BodyChecker<'_> {
                 span,
             } => {
                 let test = self.truth_test(test);
+                let (holds, fails) = test_facts(&test);
                 let before = self.assigned.clone();
+                self.add_facts(holds);
                 let body = self.block(body);
                 let after_body = std::mem::replace(&mut self.assigned, before);
+                self.add_facts(fails);
                 let orelse = self.block(orelse);
                 self.assigned = meet(after_body, self.assigned.take());
                 TypedStmt::If {
@@ -119,8 +124,11 @@ impl BodyChecker<'_> {
                         ..
                     }
                 );
+                // A variable the body assigns may be `None` again when the test is next read.
+                self.forget_not_none(body);
                 let test = self.truth_test(test);
-                let (body, orelse) = self.loop_statement(body, orelse, always);
+                let facts = test_facts(&test);
+                let (body, orelse) = self.loop_statement(body, orelse, always, facts);
                 TypedStmt::While {
                     test,
                     body,
@@ -155,18 +163,42 @@ impl BodyChecker<'_> {
         })
     }
 
+    /// Adds what a test shows to what holds here, when this point can be reached.
+    pub(super) fn add_facts(&mut self, facts: BTreeSet<Fact>) {
+        if let Some(known) = &mut self.assigned {
+            known.extend(facts);
+        }
+    }
+
+    /// Forgets that a variable is not `None` for each variable `body` assigns, since a loop
+    /// reads its body again with what the body left (TYP-13).
+    pub(super) fn forget_not_none(&mut self, body: &[Stmt]) {
+        let mut names = BTreeSet::new();
+        assigned_names(body, &mut names);
+        if let Some(known) = &mut self.assigned {
+            for name in names {
+                if let Some(symbol) = self.locals.get(name) {
+                    known.remove(&Fact::NotNone(*symbol));
+                }
+            }
+        }
+    }
+
     /// Checks a loop body and its `else` clause; the body may run zero times, and `else` runs only when no `break` does.
     pub(super) fn loop_statement(
         &mut self,
         body: &[Stmt],
         orelse: &[Stmt],
         always: bool,
+        (holds, fails): (BTreeSet<Fact>, BTreeSet<Fact>),
     ) -> (Vec<TypedStmt>, Vec<TypedStmt>) {
         let entry = self.assigned.clone();
+        self.add_facts(holds);
         self.breaks.push(Vec::new());
         let body = self.block(body);
         let breaks = self.breaks.pop().unwrap_or_default();
         self.assigned = if always { None } else { entry };
+        self.add_facts(fails);
         let orelse = self.block(orelse);
         let mut exit = self.assigned.take();
         for state in breaks {
@@ -200,6 +232,7 @@ impl BodyChecker<'_> {
         // Binding the target marks its names as assigned: the body runs with them, while the
         // `else` clause and the code after the loop start from the state before it, because the
         // list may be empty.
+        self.forget_not_none(body);
         let before_loop = self.assigned.clone();
         let target = self.assign_target(target, item, &binding)?;
         self.breaks.push(Vec::new());
@@ -256,12 +289,13 @@ impl BodyChecker<'_> {
             (Some(begin), Some(end), Some(increment)) => (begin, end, increment),
             (None, _, _) => return None,
         };
+        self.forget_not_none(body);
         let entry = self.assigned.clone();
         let variable = first.clone();
         let target = self.assign(target, Type::Int, &variable)?;
         self.assigned = entry;
         let mut inside = self.assigned.clone().unwrap_or_default();
-        inside.insert(target);
+        inside.insert(Fact::Assigned(target));
         let before_loop = self.assigned.replace(inside);
         self.breaks.push(Vec::new());
         let body = self.block(body);
@@ -328,5 +362,51 @@ impl BodyChecker<'_> {
         }
         self.assigned = None;
         TypedStmt::Return { value, span }
+    }
+}
+
+/// Collects the names the statements assign, in nested blocks as well.
+fn assigned_names<'tree>(statements: &'tree [Stmt], names: &mut BTreeSet<&'tree str>) {
+    for statement in statements {
+        match statement {
+            Stmt::Assign { targets, .. } => {
+                for target in targets {
+                    target_names(target, names);
+                }
+            }
+            Stmt::AugAssign { target, .. } | Stmt::AnnAssign { target, .. } => {
+                target_names(target, names);
+            }
+            Stmt::For {
+                target,
+                body,
+                orelse,
+                ..
+            } => {
+                target_names(target, names);
+                assigned_names(body, names);
+                assigned_names(orelse, names);
+            }
+            Stmt::While { body, orelse, .. } | Stmt::If { body, orelse, .. } => {
+                assigned_names(body, names);
+                assigned_names(orelse, names);
+            }
+            _ => {}
+        }
+    }
+}
+
+/// Collects the names an assignment target binds.
+fn target_names<'tree>(target: &'tree Expr, names: &mut BTreeSet<&'tree str>) {
+    match target {
+        Expr::Name { id, .. } => {
+            names.insert(id.as_str());
+        }
+        Expr::Tuple { elements, .. } | Expr::List { elements, .. } => {
+            for element in elements {
+                target_names(element, names);
+            }
+        }
+        _ => {}
     }
 }

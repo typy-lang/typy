@@ -726,3 +726,50 @@ fn bits_of_a_value_that_cannot_be_a_list_item_fail() {
     add(Operation::ToBits(descriptor));
     assert!(message(&module).contains("is not a list item"));
 }
+
+/// A function of one `int` parameter whose body is `operation`, on that parameter.
+fn on_int(operation: impl FnOnce(ValueId) -> (Operation, TyirType)) -> TyirModule {
+    let mut builder = FunctionBuilder::new(FunctionId(0), "_TY8__main__1f", "f", TyirType::Unit);
+    let parameter = builder.add_parameter(TyirType::Int);
+    let (operation, ty) = operation(parameter);
+    builder.push_value(operation, ty, span());
+    let unit = builder.push_value(Operation::Constant(Constant::Unit), TyirType::Unit, span());
+    builder.terminate(Terminator::Return(unit));
+    module(builder.finish())
+}
+
+#[test]
+fn optional_operations_check_their_types() {
+    use crate::types::OptionalBase;
+    let optional = TyirType::Optional(OptionalBase::Int);
+    let wrapped = on_int(|value| {
+        (
+            Operation::Wrap {
+                value,
+                ty: optional,
+            },
+            optional,
+        )
+    });
+    assert_eq!(verify(&wrapped), Ok(()));
+    let not_optional = on_int(|value| {
+        (
+            Operation::Wrap {
+                value,
+                ty: TyirType::Int,
+            },
+            TyirType::Int,
+        )
+    });
+    assert!(message(&not_optional).contains("is not optional"));
+    let wrong_base = on_int(|value| {
+        let ty = TyirType::Optional(OptionalBase::Float);
+        (Operation::Wrap { value, ty }, ty)
+    });
+    assert!(message(&wrong_base).contains("the value of an optional"));
+    let unwrapped = on_int(|value| (Operation::Unwrap(value), TyirType::Int));
+    assert!(message(&unwrapped).contains("is not optional"));
+    let tested = on_int(|value| (Operation::IsNone(value), TyirType::Bool));
+    assert!(message(&tested).contains("is not optional"));
+    assert!(print(&wrapped).contains("wrap v0, optional int"));
+}

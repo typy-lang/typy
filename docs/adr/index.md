@@ -16,3 +16,4 @@ supersedes it.
 | [ADR-0008](0008-judge-each-program-from-its-own-python-floor.md) | Judge each program by CPython from its own Python floor | Accepted | 2026-11-06 |
 | [ADR-0009](0009-hold-collections-in-the-runtime-and-measure-what-programs-link.md) | Hold the built-in collections in the runtime, and measure the runtime a program links | Accepted | 2026-11-08 |
 | [ADR-0010](0010-hash-and-order-sets-and-dicts-as-cpython-does.md) | Hash and order sets and dicts as CPython does | Accepted | 2026-11-09 |
+| [ADR-0011](0011-hold-none-in-a-value-each-type-never-takes.md) | Hold None in a value each type never takes | Accepted | 2026-11-09 |

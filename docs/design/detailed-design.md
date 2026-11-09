@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy detailed design |
-| Version | 1.36 |
+| Version | 1.37 |
 | Status | Approved |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-09 |
@@ -665,6 +665,39 @@ without a default would give `V | None`, E0201 until TYP-06 brings it.
 source of pairs of the dict's types. A dict passed to a set method or to
 `set()` stays a dict, so the runtime takes CPython's dict steps.
 
+Optional values (TYP-06, TYP-13, ADR-0011) add `Type::Optional(T)`, written
+`T | None` or `None | T`, which `Type::optional` builds so that `T` is never
+`None` or optional itself. Any other `|` annotation is E0201, planned for
+0.4 (TYP-14). `is_assignable_to` accepts `None` and a `T` where `T | None`
+is declared, and `matches` compares types item by item for everything a
+container stores, so `list[int]` is not a `list[int | None]`: a stored item
+is never converted. `BodyChecker::converted` makes the conversion explicit
+as `TypedExprKind::Wrap(value)` wherever a value meets a declared type, at
+an assignment, an argument, a `return`, an item of a display and a branch
+of a conditional expression, and converts a tuple display item by item. A
+display, and a conditional expression with a `None` branch, join their
+items' types, so `[1, None]` is `list[int | None]`. An optional value is
+compared with `None` by `is`, tested for truth and written as text; `==`,
+ordering, operators and methods on it are E0407, E0401 and E0412, with a
+help that says how to narrow it. The flow state of definite assignment holds
+`Fact::Assigned(symbol)` and `Fact::NotNone(symbol)`, joined by
+intersection, so a fact holds only where it holds on every path.
+`test_facts` gives the facts a test shows when it holds and when it fails:
+`x is not None` and a truth test of `x` show `x` is not `None` when they
+hold, `x is None` when it fails, `not` exchanges them, and `and` and `or`
+combine their operands'. An `if` and a `while` add them to each branch, the
+operands of `and` and `or`, the branches of a conditional expression and
+the clauses of a comprehension after a condition see what the test before
+showed, and an early `return`, `break` or `continue` leaves what the other
+branch showed. Assigning a value that is not `None` to an optional variable
+shows it is not `None`, and assigning `None` or an optional value forgets
+it. A loop forgets the facts of every variable its body assigns before it
+reads its test or binds its target, since the next pass starts from what the
+body left. A name whose fact holds reads as `TypedExprKind::Unwrap(local)`
+of type `T`. `dict.get(key)` without a default gives `V | None`, or `V` when
+`V` is optional, as `get(key, None)`; `setdefault(key)` without a default
+needs an optional `V`, E0404 otherwise.
+
 Comprehensions (EXP-12) add `TypedExprKind::Comprehension { element, value,
 generators }`, a `value` only for a dict, and each `Generator { target,
 source, conditions }`. A clause's source is checked before its target is
@@ -753,11 +786,18 @@ Function fn0 __main__.twice(n: int) -> int @1:1
 ### 8.1 Types
 
 `TyirType` is `Int`, `Float`, `Bool`, `Unit`, `Object(TypeId)` or, from
-0.2, `Tuple(TupleTypeId)`. It is `Copy`: a tuple type is a number in the
-module's `TupleTypes`, which interns each distinct list of item types and
-says whether a type is counted. A tuple is a value with its items in place,
-not an object, as ADR-0001 decides, so `is` cannot observe a copy (EXP-08),
-and it is counted when an item is.
+0.2, `Tuple(TupleTypeId)` and `Optional(OptionalBase)`, an `int`, `float`,
+`bool`, object or tuple that holds `None` in a value it never takes
+(ADR-0011): the word 0, the signalling NaN `0x7ff4000000000001`, the byte 2,
+the null address, or for a tuple a two-item tuple of a presence flag and the
+tuple, which `TupleTypes` interns. `Wrap { value, ty }`, `Unwrap(value)`
+and `IsNone(value)` make, read and test one, and `Constant::NoneOf(base)`
+is its `None`. An optional `bool` is a byte; every other optional has its
+base's layout, and is counted as its base is. `TyirType` is `Copy`: a tuple
+type is a number in the module's `TupleTypes`, which interns each distinct
+list of item types and says whether a type is counted. A tuple is a value
+with its items in place, not an object, as ADR-0001 decides, so `is` cannot
+observe a copy (EXP-08), and it is counted when an item is.
 
 A list is `TyirType::LIST`, `Object(TypeId::LIST)`. `TyirType::Bits` is the
 eight bytes that stand for a list item at the runtime's interface, never
@@ -899,6 +939,7 @@ graph, symbol names and the string pool.
 | Dicts | Every dict operation is a runtime call that borrows its arguments; a dict adds its own references to a key and a value it stores. A display creates the dict presized for its entries, as CPython's `BUILD_MAP` does, then sets each key and value in order. `d[k]` borrows the value, which gets its own reference when the dict is a temporary; `d[k] = v` evaluates the value, then the dict and the key. `get`, `setdefault` and `pop` give a value with a reference of its own, and `popitem` builds its pair from the key and value the dict gives up. `keys()`, `values()` and `items()` make a view object that holds the dict, so a view reads the dict as it changes and keeps its own type ID for `in`, `len` and its text, also inside a list or a tuple. `for` over a dict or a view keeps the source, the next entry, the number of entries when the loop began and the entries visited in hidden slots, and `typy_rt_dict_next` raises CPython's `RuntimeError` when the size or the keys changed. `\|` copies and updates, and `\|=` updates in place. A dict slot starts as the placeholder dict, and a view slot as a view of it |
 | Comprehensions | A comprehension creates its list, set or dict, then lowers its clauses as loops, each around the next. A clause starts its iterator, binds its target and tests each condition, going back for the next value when one fails; the innermost loop evaluates the element and appends or adds it, or evaluates the key, then the value, and sets the entry, as CPython does. The collection is a temporary throughout, so an exception from an element releases it |
 | Ranges | A `range` source evaluates its arguments once, in order, and raises `ValueError` for a step that is not a nonzero constant and is zero. It keeps a counter, a limit and the step, and gives each value with a reference of its own before the counter moves on. `reversed(range(...))` starts from `typy_rt_range_last` and steps back to `start - step`, as CPython's `range_reverse` does |
+| Optional values | `None` where `T \| None` is expected is the constant `NoneOf`, and a value of `T` is wrapped; wrapping and unwrapping hand the reference on with the value. `is None` and `is not None` on an optional value test `IsNone`, and on any other value are constants. `str`, `repr` and truth tests branch on `IsNone` and read the value only where it is not `None`, so a null object never reaches the runtime. An optional slot starts as `None`, and an optional parameter's default is `None` or its wrapped constant. `dict.get(key)` finds the key and wraps its value with a reference of its own, or gives `None` |
 | Builtins | Each builtin of 0.1 becomes runtime calls. `print` evaluates every argument in source order, then converts and writes each value. `min` and `max` keep the first value on a tie, as CPython does |
 | Stack | A function in a cycle of calls invokes the runtime's stack check on entry (FUN-02) |
 
@@ -955,7 +996,7 @@ comparisons, calls and counting, terminators, and emission.
 | `str` object | Header, `length: u64` in code points, `kind: u32` (1, 2 or 4 bytes per code point), 4 bytes of padding, then the code points |
 | Large integer | Header, `sign_and_length: i32`, 4 bytes of padding, then that many `u64` limbs, least significant first |
 | Constants | Strings, `bytes` and large integers are immortal static objects in read-only memory; a `bytes` constant is a one-byte `str` object with the `bytes` type ID |
-| List items | Eight bytes: the `int` word, the `float` bits, a `bool` as 0 or 1, the pointer, 0 for `None`, or for a tuple the address of its bytes. A tuple descriptor is `{ size: u64, length: u64, fields: ptr }`, and each field `{ kind: u32, offset: u32, tuple: ptr }`, with the kind codes of `ItemKind`: 0 `int`, 1 `float`, 2 `bool`, 3 object, 4 `None`, 5 tuple |
+| List items | Eight bytes: the `int` word, the `float` bits, a `bool` as 0 or 1, the pointer, 0 for `None`, or for a tuple the address of its bytes. A tuple descriptor is `{ size: u64, length: u64, fields: ptr }`, and each field `{ kind: u32, offset: u32, tuple: ptr }`, with the kind codes of `ItemKind`: 0 `int`, 1 `float`, 2 `bool`, 3 object, 4 `None`, 5 tuple, and for `T \| None` 6 `int`, 7 `float`, 8 `bool` (one byte in a tuple), 9 object and 10 tuple, whose descriptor is that of its pair of a flag and the tuple (ADR-0011). The runtime writes, compares, hashes and tests an optional item as `None` or as its base, and counting does nothing for the word 0 and the null address |
 | A function that may raise | Returns `{ result, exception }`, or only the exception when it returns nothing; a null exception means none was raised. A runtime function's `bool` result is one byte in either form. The entry function always uses this form |
 | A function that cannot raise | Returns its result directly |
 | `invoke` | When the exception is not null, generated code calls `typy_rt_traceback_add(exception, function, file, line)` with C strings, then takes the error path |

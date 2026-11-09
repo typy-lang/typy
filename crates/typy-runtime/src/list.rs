@@ -6,6 +6,8 @@ mod aggregate;
 mod item;
 mod methods;
 mod operations;
+#[cfg(test)]
+mod optional_tests;
 mod order;
 #[cfg(test)]
 mod tests;

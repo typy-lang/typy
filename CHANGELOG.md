@@ -119,6 +119,17 @@ All notable changes to TyPy are recorded here. The format follows
   conditions, each in its own scope, so a comprehension variable does not
   leak and the first source is read in the enclosing scope, as in CPython
   (EXP-12).
+- Optional values: annotations such as `int | None` and `None | str`,
+  `None` or a value where one is expected, in variables, parameters,
+  defaults, returns, lists, sets, dicts and tuples, `is None` and
+  `is not None`, truth tests, `str` and `repr`, and `dict.get(key)` without
+  a default (TYP-06). A variable narrows to its value where an
+  `is not None` test, an `is None` test that failed, a truth test, or an
+  assignment shows it is not `None`, and using it unnarrowed is rejected
+  with a hint (TYP-13). `None` costs no memory: it is held in a value the
+  type never takes (ADR-0011).
+- A display with `None` among its items, and a conditional expression with a
+  `None` branch, have the optional type, such as `list[int | None]`.
 - `range(...)` and `reversed(range(...))` wherever an iterable is read: in
   comprehensions, `list`, `set`, `dict`, `sum`, `sorted`, `enumerate`,
   `zip` and the set methods, as well as in `for` (CST-03).

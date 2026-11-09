@@ -96,7 +96,7 @@ impl<'program> BodyChecker<'program> {
             checker
                 .assigned
                 .get_or_insert_with(BTreeSet::new)
-                .insert(symbol);
+                .insert(flow::Fact::Assigned(symbol));
             parameters.push(symbol);
         }
         let statements: Vec<&Stmt> = definition.body.iter().collect();

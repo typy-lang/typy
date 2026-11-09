@@ -38,24 +38,25 @@ impl BodyChecker<'_> {
                 span,
             );
         };
-        if matches!(method, Method::DictGet | Method::DictSetdefault)
+        // `setdefault` without a default stores `None`, which only an optional value type holds.
+        if method == Method::DictSetdefault
             && arguments.len() == 1
             && keywords.is_empty()
+            && let Type::Dict(_, value) = &receiver.ty
+            && !matches!(value.as_ref(), Type::Optional(_))
         {
+            let value = value.as_ref().clone();
             for argument in arguments {
                 self.expression(argument);
             }
             return self.error(
                 Diagnostic::new(
-                    DiagnosticCode::error(201),
+                    DiagnosticCode::error(404),
                     span,
-                    format!(
-                        "`{}` without a default gives `V | None`, which is planned for TyPy 0.2 (TYP-06)",
-                        method.name()
-                    ),
+                    format!("`setdefault` without a default stores None, which a value of type {value} cannot be"),
                 )
-                .with_rule(RuleId::TYP_06)
-                .with_help("give a default of the value type, such as `counts.get(word, 0)`"),
+                .with_rule(RuleId::DAT_09)
+                .with_help("give a default of the value type, such as `counts.setdefault(word, 0)`"),
                 span,
             );
         }
@@ -68,7 +69,7 @@ impl BodyChecker<'_> {
         } else {
             Type::Str
         };
-        let arguments = bound
+        let arguments: Vec<Argument> = bound
             .into_iter()
             .map(|(parameter, expression)| Argument {
                 parameter,
@@ -80,13 +81,32 @@ impl BodyChecker<'_> {
                 ),
             })
             .collect();
+        // `get` without a default gives `None` for a missing key (TYP-06). For an optional value
+        // type that is `get(key, None)`, since `None` is already one of its values.
+        let mut arguments = arguments;
+        let result = match (method, arguments.len(), &signature.result) {
+            (Method::DictGet, 1, Type::Optional(_)) => {
+                let none = Self::typed(
+                    TypedExprKind::Constant(TypedConstant::None),
+                    Type::NoneType,
+                    span,
+                );
+                arguments.push(Argument {
+                    parameter: 1,
+                    value: Self::converted(none, Some(&signature.result)),
+                });
+                signature.result
+            }
+            (Method::DictGet, 1, _) => Type::optional(signature.result),
+            _ => signature.result,
+        };
         Self::typed(
             TypedExprKind::Method {
                 receiver: Box::new(receiver),
                 method,
                 arguments,
             },
-            signature.result,
+            result,
             span,
         )
     }

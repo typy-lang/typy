@@ -44,6 +44,7 @@ impl FunctionLowerer<'_> {
                 Self::borrowed(value, TyirType::STR)
             }
             TyirType::Tuple(_) => self.tuple_text(lowered, span),
+            TyirType::Optional(_) => self.optional_text(lowered, false, span),
         }
     }
 
@@ -52,6 +53,8 @@ impl FunctionLowerer<'_> {
     pub(crate) fn repr_of(&mut self, lowered: Lowered, span: Span) -> Lowered {
         if lowered.ty == TyirType::STR {
             self.call_runtime(RuntimeFunction::StrRepr, vec![lowered.value], span)
+        } else if let TyirType::Optional(_) = lowered.ty {
+            self.optional_text(lowered, true, span)
         } else {
             self.string_of(lowered, span)
         }
@@ -74,8 +77,8 @@ impl FunctionLowerer<'_> {
                 let base = self.constant(Constant::Int("10".to_owned()), span);
                 self.call_runtime(RuntimeFunction::IntFromStr, vec![lowered.value, base], span)
             }
-            TyirType::Unit | TyirType::Tuple(_) | TyirType::Bits => {
-                unreachable!("the checker refuses int() of None and of a tuple")
+            TyirType::Unit | TyirType::Tuple(_) | TyirType::Bits | TyirType::Optional(_) => {
+                unreachable!("the checker refuses int() of None, a tuple and an optional value")
             }
         }
     }
@@ -96,8 +99,8 @@ impl FunctionLowerer<'_> {
             TyirType::Object(_) => {
                 self.call_runtime(RuntimeFunction::FloatFromStr, vec![lowered.value], span)
             }
-            TyirType::Unit | TyirType::Tuple(_) | TyirType::Bits => {
-                unreachable!("the checker refuses float() of None and of a tuple")
+            TyirType::Unit | TyirType::Tuple(_) | TyirType::Bits | TyirType::Optional(_) => {
+                unreachable!("the checker refuses float() of None, a tuple and an optional value")
             }
         }
     }

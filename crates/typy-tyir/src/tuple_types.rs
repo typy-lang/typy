@@ -1,6 +1,6 @@
 //! The tuple types of a module: each distinct list of item types, numbered once (DAT-08).
 
-use crate::types::{TupleTypeId, TyirType};
+use crate::types::{OptionalBase, TupleTypeId, TyirType};
 
 /// The tuple types a module uses. A tuple is a value of fixed layout, its items held in place,
 /// so counting it counts each counted item.
@@ -49,6 +49,26 @@ impl TupleTypes {
                 .items(id)
                 .is_some_and(|items| items.iter().any(|item| self.is_counted(*item))),
             TyirType::Float | TyirType::Bool | TyirType::Unit | TyirType::Bits => false,
+            TyirType::Optional(base) => match base {
+                OptionalBase::Int | OptionalBase::Object(_) => true,
+                OptionalBase::Float | OptionalBase::Bool => false,
+                OptionalBase::Tuple(pair) => self.is_counted(TyirType::Tuple(pair)),
+            },
+        }
+    }
+
+    /// Returns the type an optional value of `base` holds when it is not `None`.
+    #[must_use]
+    pub fn optional_value(&self, base: OptionalBase) -> TyirType {
+        match base {
+            OptionalBase::Int => TyirType::Int,
+            OptionalBase::Float => TyirType::Float,
+            OptionalBase::Bool => TyirType::Bool,
+            OptionalBase::Object(id) => TyirType::Object(id),
+            OptionalBase::Tuple(pair) => self
+                .items(pair)
+                .and_then(|items| items.get(1).copied())
+                .unwrap_or(TyirType::Unit),
         }
     }
 }

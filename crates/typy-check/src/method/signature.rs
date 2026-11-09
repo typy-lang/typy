@@ -175,14 +175,7 @@ impl Method {
     fn dict_signature(self, receiver: &Type, key: &Type, value: &Type) -> MethodSignature {
         let view = |view| Type::DictView(view, Box::new(key.clone()), Box::new(value.clone()));
         let (parameters, result) = match self {
-            Self::DictGet | Self::DictSetdefault => (
-                vec![
-                    positional("key", key.clone(), true),
-                    positional("default", value.clone(), true),
-                ],
-                value.clone(),
-            ),
-            Self::DictPop => (
+            Self::DictGet | Self::DictSetdefault | Self::DictPop => (
                 vec![
                     positional("key", key.clone(), true),
                     positional("default", value.clone(), false),

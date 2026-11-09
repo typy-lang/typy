@@ -98,6 +98,10 @@ pub enum TypedExprKind {
         value: Option<Box<TypedExpr>>,
         generators: Vec<super::statement::Generator>,
     },
+    /// A value of `T`, or `None`, held as a `T | None` (TYP-06, ADR-0011).
+    Wrap(Box<TypedExpr>),
+    /// The value of a `T | None` that a test showed is not `None` (TYP-13).
+    Unwrap(Box<TypedExpr>),
     /// A dict display: each key and its value, in order (DAT-09).
     Dict {
         keys: Vec<TypedExpr>,

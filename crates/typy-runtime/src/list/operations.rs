@@ -2,7 +2,7 @@
 //! runtime function: a list that stores an item adds a reference to it, and an item read from a
 //! list is borrowed from the list.
 
-use super::{ItemKind, ItemType, ListObject, new_list, reserve_one};
+use super::{ItemType, ListObject, new_list, reserve_one};
 use crate::Raising;
 use crate::allocator::{allocate, array_size, free};
 use crate::exception::{ExceptionKind, ExceptionObject, raise};
@@ -13,14 +13,10 @@ use crate::word::{inline, inline_value, is_inline};
 /// for `capacity` items; `tuple` is the address of the descriptor of tuple items, or 0.
 #[unsafe(no_mangle)]
 pub extern "C" fn typy_rt_list_new(kind: i64, capacity: i64, tuple: u64) -> *mut ListObject {
-    let kind = ItemKind::from_code(u32::try_from(inline_value(kind)).unwrap_or(u32::MAX));
-    let item_type = if kind == ItemKind::Tuple {
-        ItemType::tuple(core::ptr::with_exposed_provenance(
-            usize::try_from(tuple).unwrap_or(0),
-        ))
-    } else {
-        ItemType::from(kind)
-    };
+    let item_type = ItemType::of(
+        u32::try_from(inline_value(kind)).unwrap_or(u32::MAX),
+        core::ptr::with_exposed_provenance(usize::try_from(tuple).unwrap_or(0)),
+    );
     new_list(
         item_type,
         usize::try_from(inline_value(capacity)).unwrap_or(0),

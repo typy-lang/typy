@@ -1265,8 +1265,7 @@ fn dict_rules_give_their_codes() {
         ("d = {1: 'a', 2: 3}\n", &["E0409"]),
         ("d: dict = {}\n", &["E0408"]),
         ("d: dict[int] = {}\n", &["E0408"]),
-        ("d = {1: 2}.get(1)\n", &["E0201"]),
-        ("d = {1: 2}.setdefault(1)\n", &["E0201"]),
+        ("d = {1: 2}.setdefault(1)\n", &["E0404"]),
         ("d = {1: 2} < {1: 2}\n", &["E0407"]),
         ("d = {1: 2} + {3: 4}\n", &["E0401"]),
         ("d = {1: 2} | {'a': 4}\n", &["E0401"]),
@@ -1413,5 +1412,160 @@ m = x + 'a'
         "Comprehension : list[tuple[int, int]]",
     ] {
         assert!(dump.contains(node), "{node} missing from\n{dump}");
+    }
+}
+
+#[test]
+fn optional_rules_give_their_codes() {
+    let cases: &[(&str, &[&str])] = &[
+        ("a: int | None = None\nprint(a + 1)\n", &["E0401"]),
+        (
+            "b: int | None = 1\nwhile True:\n    print(b + 1)\n    b = None\n",
+            &["E0401"],
+        ),
+        (
+            "c: int | None = 3\nif c is not None:\n    c = None\n    print(c + 1)\n",
+            &["E0401"],
+        ),
+        (
+            "d: int | None = None\nif d is None:\n    print(d + 1)\n",
+            &["E0401"],
+        ),
+        (
+            "def e(x: int | None) -> bool:\n    return x < 5\n",
+            &["E0407"],
+        ),
+        (
+            "def f(x: int | None) -> bool:\n    return x == 5\n",
+            &["E0407"],
+        ),
+        (
+            "def g(x: str | None) -> str:\n    return x.upper()\n",
+            &["E0412"],
+        ),
+        ("h: int | str = 1\n", &["E0201"]),
+        ("j: list[int] = [1]\nk: list[int | None] = j\n", &["E0402"]),
+        ("m: int | None = 'a'\n", &["E0402"]),
+        ("n = {'a': 1}\nn.setdefault('b')\n", &["E0404"]),
+        (
+            "o: int | None = None\nfor i in range(2):\n    print(o + i)\n    o = None\n",
+            &["E0401"],
+        ),
+        (
+            "p: int | None = 1\nq = p if p is None else 'x'\n",
+            &["E0305"],
+        ),
+        (
+            "def f(x: int | None = 'a') -> None:\n    pass\n",
+            &["E0404"],
+        ),
+        ("a = [1, 'b', None]\n", &["E0409"]),
+        (
+            "b: dict[str, int | None] = {}\nb.setdefault('k')\nc = b.get('k')\nprint(c + 1)\n",
+            &["E0401"],
+        ),
+        ("e = [y + 1 for y in [1, None]]\n", &["E0401"]),
+        (
+            "def f(a: int | None) -> None:\n    print([1, a] + [2])\n",
+            &["E0401"],
+        ),
+        ("x: list[Thing] = [1]\n", &["E0205"]),
+    ];
+    for (source, expected) in cases {
+        assert_eq!(&rejected(source), expected, "\n{source}");
+    }
+}
+
+#[test]
+fn optional_values_narrow_where_a_test_shows_they_are_not_none() {
+    let source = "\
+def f(x: int | None = None, y: str | None = 'a') -> int:
+    if x is None or y is None:
+        return 0
+    return x + len(y)
+a: int | None = f(1)
+b = a + 1 if a is not None else 0
+c = [v + 1 for v in [a, None] if v is not None]
+d = a is not None and a > 0
+e = not (a is None) and a > 1
+while a is not None and a < 5:
+    a = a + 1
+g = {'k': 1}.get('k')
+h = (1, None)
+i: tuple[int, int | None] = (1, None)
+j: tuple[int | None, ...] = (1, None)
+k = None if b else (1, 'x')
+m: float | None = 1.5
+n = m if m else 0.0
+o = a if a else None
+q = None if a else a
+r: int | None = 1 if a else a
+s = [None, 1, None]
+t = {None, 'x'}
+u = {1: None, 2: 3}
+v = {None: 1, 2: 2}
+w = [[1], None]
+if not a:
+    pass
+else:
+    n = a * 1.0
+";
+    let (_directory, project) = load(source);
+    let program = TypeChecker::check(&project).expect("the program is accepted");
+    let dump = typy_check::dump(&program, &project);
+    for node in [
+        "Unwrap : int",
+        "Wrap : int | None",
+        "Method get : int | None",
+        "Wrap : tuple[int, str] | None",
+        "TupleOf : tuple[int | None, ...]",
+        "List : list[int | None]",
+        "Set : set[str | None]",
+        "Dict : dict[int, int | None]",
+        "Dict : dict[int | None, int]",
+        "List : list[list[int] | None]",
+    ] {
+        assert!(dump.contains(node), "{node} missing from\n{dump}");
+    }
+}
+
+#[test]
+fn statements_and_expressions_outside_the_subset_give_their_codes() {
+    let cases: &[(&str, &[&str])] = &[
+        ("@d\ndef f() -> None:\n    pass\n", &["E0201"]),
+        ("def f[T](a: T) -> None:\n    pass\n", &["E0201"]),
+        ("return 1\n", &["E0103"]),
+        ("break\n", &["E0103"]),
+        ("continue\n", &["E0103"]),
+        ("print([x for x in 1 for y in x])\n", &["E0411"]),
+        ("print({u: 1 for x in [1]})\n", &["E0205"]),
+        ("print(ValueError)\n", &["E0201"]),
+        ("print(Exception)\n", &["E0201"]),
+        ("print(UserWarning)\n", &["E0201"]),
+        ("print(ExceptionGroup)\n", &["E0201"]),
+        ("for i in range(u):\n    print(i)\n", &["E0205"]),
+        ("print({1: u for x in [1]})\n", &["E0205"]),
+        (
+            "def f(range: int) -> None:\n    for i in range(3):\n        print(i)\n",
+            &["E0401"],
+        ),
+        ("x: set[Thing] = {1}\n", &["E0205"]),
+        ("print(sorted([{1: 2}]))\n", &["E0407"]),
+    ];
+    for (source, expected) in cases {
+        assert_eq!(&rejected(source), expected, "\n{source}");
+    }
+}
+
+#[test]
+fn methods_builtins_and_tests_of_each_type_are_accepted() {
+    for source in [
+        "print(sorted([{1}]))\n",
+        "a: list[int] = list([1])\nb: set[int] = set([1])\n",
+        "def f() -> None:\n    pass\nif f():\n    pass\n",
+        "t: tuple[int, ...] = (1, 1)\nprint(b'a'.hex(), {1: 2}.get(1), {1}.copy(), t.count(1))\n",
+        "def range(a: int) -> list[int]:\n    return [a]\nfor i in range(3):\n    print(i)\n",
+    ] {
+        accepted(source);
     }
 }

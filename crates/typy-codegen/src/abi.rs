@@ -3,7 +3,7 @@
 use inkwell::AddressSpace;
 use inkwell::context::Context;
 use inkwell::types::{BasicMetadataTypeEnum, BasicType, BasicTypeEnum, FunctionType};
-use typy_tyir::{TupleTypes, TyirType};
+use typy_tyir::{OptionalBase, TupleTypes, TyirType};
 
 /// Returns the LLVM type of a TyIR value; `unit` has none. A tuple is a struct of its items
 /// that have a value, so an item of type `None` takes no field.
@@ -18,6 +18,8 @@ pub(crate) fn value_type<'ctx>(
         TyirType::Bool => Some(context.bool_type().into()),
         TyirType::Unit => None,
         TyirType::Object(_) => Some(context.ptr_type(AddressSpace::default()).into()),
+        TyirType::Optional(OptionalBase::Bool) => Some(context.i8_type().into()),
+        TyirType::Optional(base) => value_type(context, tuples, storage(base)),
         TyirType::Tuple(id) => {
             let fields: Vec<BasicTypeEnum<'ctx>> = tuples
                 .items(id)
@@ -27,6 +29,18 @@ pub(crate) fn value_type<'ctx>(
                 .collect();
             Some(context.struct_type(&fields, false).into())
         }
+    }
+}
+
+/// Returns the type whose layout an optional value of `base` shares, other than a `bool`'s,
+/// which widens to a byte: an `int`, a `float`, an object, or the pair of a flag and a tuple.
+pub(crate) const fn storage(base: OptionalBase) -> TyirType {
+    match base {
+        OptionalBase::Int => TyirType::Int,
+        OptionalBase::Float => TyirType::Float,
+        OptionalBase::Bool => TyirType::Bool,
+        OptionalBase::Object(id) => TyirType::Object(id),
+        OptionalBase::Tuple(pair) => TyirType::Tuple(pair),
     }
 }
 

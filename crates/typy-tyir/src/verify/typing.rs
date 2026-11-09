@@ -132,6 +132,7 @@ impl Checker<'_> {
     }
 
     /// Returns the result type of an operation after checking its operands.
+    #[allow(clippy::too_many_lines, reason = "one arm per operation")]
     fn operation(&self, operation: &Operation) -> Result<Option<TyirType>, VerifyError> {
         Ok(match operation {
             Operation::Constant(constant) => Some(constant.ty()),
@@ -207,6 +208,7 @@ impl Checker<'_> {
                         | TyirType::Object(_)
                         | TyirType::Unit
                         | TyirType::Tuple(_)
+                        | TyirType::Optional(_)
                 ) {
                     return Err(self.error(format!("v{} of type {ty} is not a list item", value.0)));
                 }
@@ -217,6 +219,19 @@ impl Checker<'_> {
                 Some(*ty)
             }
             Operation::MakeTuple { ty, items } => Some(self.make_tuple(*ty, items)?),
+            Operation::Wrap { value, ty } => {
+                let TyirType::Optional(base) = ty else {
+                    return Err(self.error(format!("wrap gives {ty}, which is not optional")));
+                };
+                let expected = self.module.tuple_types.optional_value(*base);
+                self.expect(*value, expected, "the value of an optional")?;
+                Some(*ty)
+            }
+            Operation::Unwrap(value) => Some(self.optional_value(*value)?),
+            Operation::IsNone(value) => {
+                self.optional_value(*value)?;
+                Some(TyirType::Bool)
+            }
             Operation::TupleItem { tuple, index } => Some(self.tuple_item(*tuple, *index)?),
             Operation::Increment(value) | Operation::Decrement(value) => {
                 if !self.module.tuple_types.is_counted(self.ty(*value)?) {
@@ -225,6 +240,14 @@ impl Checker<'_> {
                 None
             }
         })
+    }
+
+    /// Returns the type an optional value holds, after checking it is optional.
+    fn optional_value(&self, value: ValueId) -> Result<TyirType, VerifyError> {
+        match self.ty(value)? {
+            TyirType::Optional(base) => Ok(self.module.tuple_types.optional_value(base)),
+            other => Err(self.error(format!("v{} of type {other} is not optional", value.0))),
+        }
     }
 
     /// A tuple's items have the types of its tuple type, one for each.

@@ -283,8 +283,22 @@ impl FunctionLowerer<'_> {
         result: TyirType,
         span: Span,
     ) -> Lowered {
+        if method == Method::DictGet && arguments.len() == 1 {
+            return self.get_optional(dict, arguments[0], result, span);
+        }
         let key = self.bits(arguments[0], span);
-        let default = arguments.get(1).map(|default| self.bits(*default, span));
+        let default = match arguments.get(1) {
+            Some(default) => Some(self.bits(*default, span)),
+            // `setdefault` without a default stores `None` of an optional value type.
+            None if method == Method::DictSetdefault => {
+                let none = self.none_of(result, span);
+                Some(
+                    self.builder
+                        .push_value(Operation::ToBits(none), TyirType::Bits, span),
+                )
+            }
+            None => None,
+        };
         let (function, owned) = match (method, default) {
             (Method::DictPop, None) => (RuntimeFunction::DictPop, true),
             (Method::DictPop, Some(_)) => (RuntimeFunction::DictPopOr, true),
@@ -304,5 +318,61 @@ impl FunctionLowerer<'_> {
         // The value is borrowed from the dict or the default, both released after the call, so
         // it takes a reference of its own.
         self.owned_copy(found, result, span)
+    }
+
+    /// Returns `dict.get(key)`, a `V | None`: the value of `key` with a reference of its own,
+    /// or `None` when it is missing (TYP-06).
+    fn get_optional(
+        &mut self,
+        dict: ValueId,
+        key: Lowered,
+        result: TyirType,
+        span: Span,
+    ) -> Lowered {
+        let key = self.bits(key, span);
+        let position = self.call_runtime(RuntimeFunction::DictFind, vec![dict, key], span);
+        let zero = self.constant(Constant::Int("0".to_owned()), span);
+        let found = self.builder.push_value(
+            Operation::Compare {
+                kind: typy_tyir::ScalarKind::Int,
+                comparison: typy_tyir::Comparison::GreaterEqual,
+                left: position.value,
+                right: zero,
+            },
+            TyirType::Bool,
+            span,
+        );
+        let (some, none, join) = (
+            self.builder.create_block(),
+            self.builder.create_block(),
+            self.builder.create_block(),
+        );
+        let joined = self.builder.add_block_parameter(join, result);
+        self.builder.terminate(typy_tyir::Terminator::Branch {
+            condition: found,
+            then: some,
+            otherwise: none,
+        });
+        self.builder.switch_to(some);
+        let base = self.base_type(result);
+        let bits = self.call_runtime(RuntimeFunction::DictValue, vec![dict, position.value], span);
+        let value = self.value_of_bits(bits.value, base, span);
+        let wrapped = self
+            .builder
+            .push_value(Operation::Wrap { value, ty: result }, result, span);
+        let wrapped = self.take_reference(Self::borrowed(wrapped, result), span);
+        self.builder.terminate(typy_tyir::Terminator::Jump {
+            target: join,
+            arguments: vec![wrapped],
+        });
+        self.builder.switch_to(none);
+        let missing = self.none_of(result, span);
+        self.builder.terminate(typy_tyir::Terminator::Jump {
+            target: join,
+            arguments: vec![missing],
+        });
+        self.builder.switch_to(join);
+        self.release(position, span);
+        self.produced(joined, result)
     }
 }

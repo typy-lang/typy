@@ -71,6 +71,10 @@ fn later_features_name_their_release_and_rule() {
             "unpacking with `**` are planned for TyPy 1.0 (EXP-17)",
         ),
         (
+            "x = [i async for i in y]\n",
+            "`async` and `await` are planned for a release after TyPy 1.0",
+        ),
+        (
             "x = (i for i in range(3))\n",
             "generator expressions are planned for TyPy 1.0 (EXP-15)",
         ),
@@ -168,8 +172,8 @@ fn later_features_name_their_release_and_rule() {
             "generic annotations such as `frozenset[int]` are planned for TyPy 0.2 (TYP-06)",
         ),
         (
-            "def f(x: int | None) -> None:\n    pass\n",
-            "union annotations such as `int | None` are planned for TyPy 0.2 (TYP-06)",
+            "def f(x: int | str) -> None:\n    pass\n",
+            "union annotations such as `int | str` are planned for TyPy 0.4 (TYP-14)",
         ),
         ("x.y = 1\n", "attributes are planned for TyPy 0.2 (CLS-01)"),
         (

@@ -31,6 +31,6 @@ pub use runtime::{RuntimeFunction, RuntimeSignature};
 pub use slot::{Slot, SlotId};
 pub use terminator::{Callee, Terminator};
 pub use tuple_types::TupleTypes;
-pub use types::{TupleTypeId, TyirType, TypeId};
+pub use types::{OptionalBase, TupleTypeId, TyirType, TypeId};
 pub use value::{ValueId, ValueInfo, ValueRepresentation};
 pub use verify::{VerifyError, verify};

@@ -31,6 +31,9 @@ pub enum Type {
     Dict(Box<Type>, Box<Type>),
     /// A view of a dict's keys, values or items, which reads the dict as it changes (DAT-09).
     DictView(View, Box<Type>, Box<Type>),
+    /// `T | None`: a value of `T`, or `None` (TYP-06, ADR-0011). `T` is never `None` or
+    /// optional itself; `optional` builds the type and keeps that rule.
+    Optional(Box<Type>),
     /// The type of an expression that already has a diagnostic; every check accepts it, so one cause gives one error (DIA-04).
     Error,
 }
@@ -79,26 +82,55 @@ impl View {
 }
 
 impl Type {
-    /// Returns true when a value of this type may be stored where `target` is declared, item by
-    /// item for a tuple (TYP-03, TYP-09).
+    /// Returns `T | None`: `None` for `None`, and `T | None` itself for an optional `T`, as
+    /// Python's typing joins them.
+    #[must_use]
+    pub fn optional(inner: Self) -> Self {
+        match inner {
+            Self::NoneType | Self::Optional(_) | Self::Error => inner,
+            other => Self::Optional(Box::new(other)),
+        }
+    }
+
+    /// Returns true when a value of this type may be stored where `target` is declared: a
+    /// value of the same type, `None` or a `T` where `T | None` is declared, which the checker
+    /// wraps (TYP-03, TYP-06, TYP-09).
     #[must_use]
     pub fn is_assignable_to(&self, target: &Self) -> bool {
         match (self, target) {
+            (Self::Error, _) | (_, Self::Error) | (Self::NoneType, Self::Optional(_)) => true,
+            (Self::Optional(_), _) => self.matches(target),
+            (_, Self::Optional(inner)) => self.is_assignable_to(inner),
+            _ => self.matches(target),
+        }
+    }
+
+    /// Returns true when the two types are the same, item by item, an error matching anything.
+    /// The items of lists, sets, dicts and tuples must match, since the runtime stores each item
+    /// by its type and a stored item is never converted.
+    #[must_use]
+    pub fn matches(&self, other: &Self) -> bool {
+        match (self, other) {
             (Self::Error, _) | (_, Self::Error) => true,
-            (Self::List(item), Self::List(target))
-            | (Self::TupleOf(item), Self::TupleOf(target))
-            | (Self::Set(item), Self::Set(target)) => item.is_assignable_to(target),
-            (Self::Dict(key, value), Self::Dict(target_key, target_value)) => {
-                key.is_assignable_to(target_key) && value.is_assignable_to(target_value)
+            (Self::List(item), Self::List(other))
+            | (Self::TupleOf(item), Self::TupleOf(other))
+            | (Self::Set(item), Self::Set(other))
+            | (Self::Optional(item), Self::Optional(other)) => item.matches(other),
+            (Self::Dict(key, value), Self::Dict(other_key, other_value)) => {
+                key.matches(other_key) && value.matches(other_value)
             }
-            (Self::Tuple(items), Self::Tuple(targets)) => {
-                items.len() == targets.len()
+            (
+                Self::DictView(view, key, value),
+                Self::DictView(other_view, other_key, other_value),
+            ) => view == other_view && key.matches(other_key) && value.matches(other_value),
+            (Self::Tuple(items), Self::Tuple(others)) => {
+                items.len() == others.len()
                     && items
                         .iter()
-                        .zip(targets)
-                        .all(|(item, target)| item.is_assignable_to(target))
+                        .zip(others)
+                        .all(|(item, other)| item.matches(other))
             }
-            _ => self == target,
+            _ => self == other,
         }
     }
 
@@ -112,6 +144,7 @@ impl Type {
             Self::Dict(key, value) | Self::DictView(_, key, value) => {
                 key.has_error() || value.has_error()
             }
+            Self::Optional(inner) => inner.has_error(),
             _ => false,
         }
     }
@@ -128,8 +161,10 @@ impl Type {
             | (Self::TupleOf(left), Self::TupleOf(right))
             | (Self::Set(left), Self::Set(right)) => left == right,
             (Self::Dict(..), Self::Dict(..)) => self == other,
-            // Comparing views is planned with their set operations (DAT-16).
-            (Self::DictView(..), _) | (_, Self::DictView(..)) => false,
+            // Comparing views is planned with their set operations (DAT-16), and an optional
+            // value is compared with `None` by `is`.
+            (Self::DictView(..) | Self::Optional(_), _)
+            | (_, Self::DictView(..) | Self::Optional(_)) => false,
             (Self::Tuple(left), Self::Tuple(right)) => {
                 left.len() == right.len()
                     && left
@@ -162,8 +197,10 @@ impl Type {
                             || left.can_order(right)
                     })
             }
-            (Self::NoneType | Self::Dict(..) | Self::DictView(..), _)
-            | (_, Self::NoneType | Self::Dict(..) | Self::DictView(..)) => false,
+            (Self::NoneType | Self::Dict(..) | Self::DictView(..) | Self::Optional(_), _)
+            | (_, Self::NoneType | Self::Dict(..) | Self::DictView(..) | Self::Optional(_)) => {
+                false
+            }
             _ => self == other || (self.is_numeric() && other.is_numeric()),
         }
     }
@@ -182,7 +219,7 @@ impl Type {
     /// converts to where that type is expected (DAT-14).
     #[must_use]
     pub fn fits_tuple_of(&self, item: &Self) -> bool {
-        matches!(self, Self::Tuple(items) if items.iter().all(|each| each.is_assignable_to(item)))
+        matches!(self, Self::Tuple(items) if items.iter().all(|each| each.matches(item)))
     }
 
     /// Returns true when a value of this type has a hash, so it may be an item of a set or a key
@@ -193,7 +230,7 @@ impl Type {
         match self {
             Self::List(_) | Self::Set(_) | Self::Dict(..) | Self::DictView(..) => false,
             Self::Tuple(items) => items.iter().all(Self::is_hashable),
-            Self::TupleOf(item) => item.is_hashable(),
+            Self::TupleOf(item) | Self::Optional(item) => item.is_hashable(),
             _ => true,
         }
     }
@@ -254,6 +291,7 @@ impl fmt::Display for Type {
             Self::DictView(view, key, value) => {
                 write!(formatter, "{}[{key}, {value}]", view.name())
             }
+            Self::Optional(inner) => write!(formatter, "{inner} | None"),
             Self::Error => formatter.write_str("<error>"),
         }
     }
@@ -407,5 +445,37 @@ mod tests {
         assert!(!Type::Str.can_order(&Type::Int));
         assert!(Type::Str.can_test_equality(&Type::Str));
         assert!(!Type::Str.can_test_equality(&Type::Int));
+    }
+
+    #[test]
+    fn optional_types_join_none_and_keep_containers_exact() {
+        let optional = |inner: Type| Type::optional(inner);
+        let int = optional(Type::Int);
+        assert_eq!(int.to_string(), "int | None");
+        assert_eq!(optional(Type::NoneType), Type::NoneType);
+        assert_eq!(optional(int.clone()), int);
+        assert_eq!(optional(Type::Error), Type::Error);
+        assert!(Type::NoneType.is_assignable_to(&int));
+        assert!(Type::Int.is_assignable_to(&int));
+        assert!(!Type::Str.is_assignable_to(&int));
+        assert!(int.is_assignable_to(&int));
+        assert!(!int.is_assignable_to(&Type::Int));
+        assert!(!int.is_assignable_to(&optional(Type::Float)));
+        let list = |item: Type| Type::List(Box::new(item));
+        assert!(!list(Type::Int).is_assignable_to(&list(int.clone())));
+        assert!(list(int.clone()).matches(&list(int.clone())));
+        let view = |view, key: Type| Type::DictView(view, Box::new(key), Box::new(Type::Int));
+        assert!(view(super::View::Keys, Type::Str).matches(&view(super::View::Keys, Type::Str)));
+        assert!(!view(super::View::Keys, Type::Str).matches(&view(super::View::Values, Type::Str)));
+        assert!(!view(super::View::Keys, Type::Str).matches(&view(super::View::Keys, Type::Int)));
+        let pair = Type::Tuple(vec![Type::Int, Type::Str]);
+        assert!(!pair.matches(&Type::Tuple(vec![Type::Int])));
+        assert!(pair.is_assignable_to(&optional(pair.clone())));
+        assert!(
+            optional(Type::Error).has_error() && Type::Optional(Box::new(Type::Error)).has_error()
+        );
+        assert!(int.is_hashable());
+        assert!(!int.can_order(&int) && !int.can_test_equality(&int));
+        assert!(!Type::Int.can_test_equality(&int));
     }
 }

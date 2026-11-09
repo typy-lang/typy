@@ -108,6 +108,9 @@ pub(super) fn operands(operation: &Operation) -> Vec<ValueId> {
         | Operation::Decrement(value)
         | Operation::TupleItem { tuple: value, .. }
         | Operation::ToBits(value)
+        | Operation::Wrap { value, .. }
+        | Operation::Unwrap(value)
+        | Operation::IsNone(value)
         | Operation::FromBits { bits: value, .. } => vec![*value],
         Operation::IntBinary { left, right, .. }
         | Operation::FloatBinary { left, right, .. }

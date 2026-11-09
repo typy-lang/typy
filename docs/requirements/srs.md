@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy software requirements specification |
-| Version | 1.23 |
+| Version | 1.24 |
 | Status | Approved |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-09 |
@@ -173,12 +173,14 @@ formatter applies; Ruff's formatter is the project's recommendation.
 | TYP-04 | Type inference shall stay within one function; it shall not use the bodies of other functions. | M | 0.1 | |
 | TYP-05 | An empty list, dict or set display shall need an annotation that names its element types. | M | 0.2 | 6.2.4 |
 | TYP-06 | The annotations `list[T]`, `dict[K, V]`, `set[T]`, `tuple[...]` and `T \| None` shall be accepted. | M | 0.2 | 3.3.5 |
-| TYP-07 | A value of type `T \| None` shall narrow to `T` after `is None`, `is not None` and `isinstance` tests, and using it unnarrowed shall be rejected. | M | 0.4 | |
+| TYP-07 | A value of type `T \| None`, or of a union of classes, shall narrow after `isinstance` tests. | M | 0.4 | |
 | TYP-08 | A name annotated `Final` shall not be assigned again. | M | 0.4 | |
 | TYP-09 | An `int` value shall be rejected where a `float` is declared, because CPython keeps it an `int`: `x: float = 1` prints `1`. Arithmetic that mixes `int` and `float` gives a `float`, as in Python (EXP-02). | M | 0.1 | |
 | TYP-10 | `typing.Any`, `typing.cast` and unannotated `object` values shall be rejected. | M | 0.1 | |
 | TYP-11 | The type of an expression shall be fixed when the program is compiled, and no run-time type information shall be generated except for classes used with `isinstance` or in `except` clauses. | M | 0.1 | |
 | TYP-12 | A read of a local variable shall be rejected unless the variable is assigned on every path that reaches the read, so `UnboundLocalError` cannot occur. | M | 0.1 | 4.2.2 |
+| TYP-13 | A local variable or parameter of type `T \| None` shall narrow to `T` where an `is None` or `is not None` test, or a truth test that holds, shows it is not `None`, and using it as `T` anywhere else shall be rejected. | M | 0.2 | |
+| TYP-14 | Annotations that join two or more types other than `None` with `\|`, such as `int \| str`, shall be accepted, with narrowing by `isinstance` (TYP-07). | M | 0.4 | 3.3.5 |
 
 ### 3.5 Built-in types and values (DAT)
 

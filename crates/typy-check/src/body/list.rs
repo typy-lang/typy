@@ -84,11 +84,50 @@ impl BodyChecker<'_> {
     /// fixed tuple of items of type `T`, which Python's typing accepts there (DAT-14); returns
     /// any other value as it is.
     pub(super) fn converted(value: TypedExpr, expected: Option<&Type>) -> TypedExpr {
+        let Some(expected) = expected else {
+            return value;
+        };
         match expected {
-            Some(Type::TupleOf(item)) if value.ty.fits_tuple_of(item) => {
+            Type::Optional(inner) if !matches!(value.ty, Type::Optional(_) | Type::Error) => {
+                if value.ty != Type::NoneType && !value.ty.is_assignable_to(inner) {
+                    return value;
+                }
+                // `None` and a value of the base become an optional value (ADR-0011).
+                let value = if value.ty == Type::NoneType {
+                    value
+                } else {
+                    Self::converted(value, Some(inner))
+                };
+                let span = value.span;
+                Self::typed(TypedExprKind::Wrap(Box::new(value)), expected.clone(), span)
+            }
+            Type::TupleOf(item) => {
+                // A display of the items becomes a tuple of them first, item by item.
+                let value = match &value.kind {
+                    TypedExprKind::Tuple(items) if !value.ty.fits_tuple_of(item) => {
+                        let wanted = Type::Tuple(vec![item.as_ref().clone(); items.len()]);
+                        Self::converted(value, Some(&wanted))
+                    }
+                    _ => value,
+                };
+                if !value.ty.fits_tuple_of(item) {
+                    return value;
+                }
                 let (ty, span) = (Type::TupleOf(item.clone()), value.span);
                 Self::typed(TypedExprKind::TupleOf(Box::new(value)), ty, span)
             }
+            Type::Tuple(wanted) => match value.kind {
+                TypedExprKind::Tuple(items) if items.len() == wanted.len() => {
+                    let items: Vec<TypedExpr> = items
+                        .into_iter()
+                        .zip(wanted)
+                        .map(|(item, wanted)| Self::converted(item, Some(wanted)))
+                        .collect();
+                    let ty = Type::Tuple(items.iter().map(|item| item.ty.clone()).collect());
+                    Self::typed(TypedExprKind::Tuple(items), ty, value.span)
+                }
+                kind => TypedExpr { kind, ..value },
+            },
             _ => value,
         }
     }
@@ -135,9 +174,9 @@ impl BodyChecker<'_> {
             _ => None,
         };
         let items = self.display_items(elements, expected_item.as_ref());
-        let item_type = match (items.first(), expected_item) {
+        let item_type = match (joined_type(&items), expected_item) {
             (_, Some(expected)) => expected,
-            (Some(first), None) => first.ty.clone(),
+            (Some(joined), None) => joined,
             (None, None) => {
                 return self.error(
                     Diagnostic::new(
@@ -151,6 +190,7 @@ impl BodyChecker<'_> {
                 );
             }
         };
+        let items = converted_all(items, &item_type);
         for item in &items {
             if !item.ty.is_assignable_to(&item_type) {
                 self.diagnostics.push(
@@ -338,6 +378,29 @@ impl Empty {
             Self::Dict => None,
         }
     }
+}
+
+/// Returns the type the items of a display join to: the first item's type, made optional when
+/// another item is `None` or optional, as Python's typing joins them (TYP-06).
+pub(super) fn joined_type(items: &[TypedExpr]) -> Option<Type> {
+    let (first, rest) = items.split_first()?;
+    Some(
+        rest.iter()
+            .fold(first.ty.clone(), |joined, item| match (&joined, &item.ty) {
+                (_, other) if other.is_assignable_to(&joined) => joined,
+                (current, _) if current.is_assignable_to(&item.ty) => item.ty.clone(),
+                (Type::NoneType, other) | (other, Type::NoneType) => Type::optional(other.clone()),
+                _ => joined,
+            }),
+    )
+}
+
+/// Converts each item of a display to the type the display holds.
+pub(super) fn converted_all(items: Vec<TypedExpr>, item_type: &Type) -> Vec<TypedExpr> {
+    items
+        .into_iter()
+        .map(|item| BodyChecker::converted(item, Some(item_type)))
+        .collect()
 }
 
 fn is_empty_list(expression: &Expr) -> bool {

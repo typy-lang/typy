@@ -53,6 +53,10 @@ impl<'ctx> FunctionEmitter<'_, '_, 'ctx> {
         value: inkwell::values::BasicValueEnum<'ctx>,
         increment: bool,
     ) -> Result<(), CodegenError> {
+        let ty = match ty {
+            TyirType::Optional(base) => crate::abi::storage(base),
+            other => other,
+        };
         let function = match (ty, increment) {
             (TyirType::Tuple(id), _) => return self.count_tuple(id, value, increment),
             (TyirType::Int, true) => Internal::IntIncrement,

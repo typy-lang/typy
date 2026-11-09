@@ -44,6 +44,24 @@ pub enum TyirType {
     Tuple(TupleTypeId),
     /// The eight bytes of a list item, as the runtime stores it; never counted (MEM-02).
     Bits,
+    /// A `T | None`, held in a value its base never takes (ADR-0011).
+    Optional(OptionalBase),
+}
+
+/// What an optional value holds when it is not `None`, which decides how it holds `None`
+/// (ADR-0011).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum OptionalBase {
+    /// An `int` word, or 0.
+    Int,
+    /// The bits of a `float`, or the reserved signalling NaN.
+    Float,
+    /// A `bool` widened to a byte, or 2.
+    Bool,
+    /// An object's address, or null.
+    Object(TypeId),
+    /// A tuple, held as this two-item tuple type of a presence flag and the tuple.
+    Tuple(TupleTypeId),
 }
 
 impl TyirType {
@@ -79,6 +97,16 @@ impl fmt::Display for TyirType {
             Self::Bits => formatter.write_str("bits"),
             Self::Object(TypeId(id)) => write!(formatter, "object#{id}"),
             Self::Tuple(TupleTypeId(id)) => write!(formatter, "tuple#{id}"),
+            Self::Optional(base) => {
+                let value = match base {
+                    OptionalBase::Int => Self::Int,
+                    OptionalBase::Float => Self::Float,
+                    OptionalBase::Bool => Self::Bool,
+                    OptionalBase::Object(id) => Self::Object(*id),
+                    OptionalBase::Tuple(pair) => Self::Tuple(*pair),
+                };
+                write!(formatter, "optional {value}")
+            }
         }
     }
 }
@@ -101,6 +129,8 @@ mod tests {
             TyirType::VIEW,
             TyirType::Object(TypeId(300)),
             TyirType::Tuple(TupleTypeId(4)),
+            TyirType::Optional(super::OptionalBase::Int),
+            TyirType::Optional(super::OptionalBase::Tuple(TupleTypeId(2))),
         ]
         .iter()
         .map(ToString::to_string)
@@ -118,7 +148,9 @@ mod tests {
                 "dict",
                 "view",
                 "object#300",
-                "tuple#4"
+                "tuple#4",
+                "optional int",
+                "optional tuple#2"
             ]
         );
     }

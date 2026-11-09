@@ -30,6 +30,8 @@ pub enum Constant {
     PlaceholderSet,
     /// The runtime's immortal empty dict, the first value of a dict slot, never read either.
     PlaceholderDict,
+    /// `None` of an optional type (ADR-0011).
+    NoneOf(crate::types::OptionalBase),
     /// The address of the descriptor of a tuple type that a list holds, which the runtime
     /// reads to store, count, compare and write its items (ADR-0009).
     TupleDescriptor(TupleTypeId),
@@ -49,6 +51,7 @@ impl Constant {
             Self::PlaceholderList => TyirType::LIST,
             Self::PlaceholderSet => TyirType::SET,
             Self::PlaceholderDict => TyirType::DICT,
+            Self::NoneOf(base) => TyirType::Optional(*base),
             Self::TupleDescriptor(_) => TyirType::Bits,
         }
     }
@@ -66,6 +69,7 @@ impl fmt::Display for Constant {
             Self::PlaceholderList => formatter.write_str("placeholder list"),
             Self::PlaceholderSet => formatter.write_str("placeholder set"),
             Self::PlaceholderDict => formatter.write_str("placeholder dict"),
+            Self::NoneOf(base) => write!(formatter, "none {}", TyirType::Optional(*base)),
             Self::TupleDescriptor(TupleTypeId(id)) => write!(formatter, "descriptor tuple#{id}"),
         }
     }
@@ -95,6 +99,11 @@ mod tests {
                 Constant::PlaceholderDict,
                 TyirType::DICT,
                 "placeholder dict",
+            ),
+            (
+                Constant::NoneOf(crate::types::OptionalBase::Int),
+                TyirType::Optional(crate::types::OptionalBase::Int),
+                "none optional int",
             ),
             (
                 Constant::TupleDescriptor(TupleTypeId(2)),

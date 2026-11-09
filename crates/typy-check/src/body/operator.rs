@@ -245,14 +245,14 @@ impl BodyChecker<'_> {
         right: &Type,
         span: Span,
     ) -> Type {
-        self.diagnostics.push(
-            Diagnostic::new(
-                DiagnosticCode::error(401),
-                span,
-                format!("`{symbol}` is not defined for {left} and {right}"),
-            )
-            .with_rule(RuleId::EXP_02),
-        );
+        let diagnostic = Diagnostic::new(
+            DiagnosticCode::error(401),
+            span,
+            format!("`{symbol}` is not defined for {left} and {right}"),
+        )
+        .with_rule(RuleId::EXP_02);
+        self.diagnostics
+            .push(with_narrowing_help(diagnostic, left, right));
         Type::Error
     }
 
@@ -283,14 +283,25 @@ impl BodyChecker<'_> {
     }
 
     pub(super) fn comparison_error(&mut self, left: &Type, right: &Type, span: Span) {
-        self.diagnostics.push(
-            Diagnostic::new(
-                DiagnosticCode::error(407),
-                span,
-                format!("{left} and {right} cannot be compared"),
-            )
-            .with_rule(RuleId::EXP_06),
-        );
+        let diagnostic = Diagnostic::new(
+            DiagnosticCode::error(407),
+            span,
+            format!("{left} and {right} cannot be compared"),
+        )
+        .with_rule(RuleId::EXP_06);
+        self.diagnostics
+            .push(with_narrowing_help(diagnostic, left, right));
+    }
+}
+
+/// Adds to an error about an optional operand how to use the value it holds (TYP-13).
+fn with_narrowing_help(diagnostic: Diagnostic, left: &Type, right: &Type) -> Diagnostic {
+    if matches!(left, Type::Optional(_)) || matches!(right, Type::Optional(_)) {
+        diagnostic.with_help(
+            "an optional value is used after a test shows it is not None, such as `if value is not None:`",
+        )
+    } else {
+        diagnostic
     }
 }
 

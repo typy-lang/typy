@@ -28,6 +28,17 @@ pub(crate) enum ItemKind {
     NoneValue = 4,
     /// A tuple, stored inline as its descriptor lays it out.
     Tuple = 5,
+    /// An `int | None`: an `int` word, or 0 for `None` (ADR-0011).
+    OptionalInt = 6,
+    /// A `float | None`: the bits of a `float`, or the reserved signalling NaN for `None`.
+    OptionalFloat = 7,
+    /// A `bool | None`: 0 or 1, or 2 for `None`.
+    OptionalBool = 8,
+    /// An object `| None`: a pointer, or null for `None`.
+    OptionalObject = 9,
+    /// A `tuple | None`: a two-item tuple of a presence flag and the tuple, as its descriptor
+    /// lays out the pair.
+    OptionalTuple = 10,
 }
 
 impl ItemKind {
@@ -40,6 +51,11 @@ impl ItemKind {
             3 => Self::Object,
             4 => Self::NoneValue,
             5 => Self::Tuple,
+            6 => Self::OptionalInt,
+            7 => Self::OptionalFloat,
+            8 => Self::OptionalBool,
+            9 => Self::OptionalObject,
+            10 => Self::OptionalTuple,
             _ => crate::libc::abort_with(b"typy runtime: a list has an unknown item kind\n"),
         }
     }
@@ -66,7 +82,76 @@ impl ItemType {
     pub(crate) fn of(kind: u32, tuple: *const TupleType) -> Self {
         match ItemKind::from_code(kind) {
             ItemKind::Tuple => Self::tuple(tuple),
+            ItemKind::OptionalTuple => Self {
+                kind: ItemKind::OptionalTuple,
+                tuple,
+            },
             kind => Self::from(kind),
+        }
+    }
+
+    /// Returns the type of the values an optional item holds when it is not `None`, or `None`
+    /// for a type that is not optional.
+    pub(crate) fn base(self) -> Option<Self> {
+        Some(match self.kind {
+            ItemKind::OptionalInt => Self::from(ItemKind::Int),
+            ItemKind::OptionalFloat => Self::from(ItemKind::Float),
+            ItemKind::OptionalBool => Self::from(ItemKind::Bool),
+            ItemKind::OptionalObject => Self::from(ItemKind::Object),
+            // SAFETY: an optional tuple's descriptor is the pair of its flag and its tuple.
+            ItemKind::OptionalTuple => unsafe {
+                Self::tuple(crate::tuple::field_tuple(self.tuple, 1))
+            },
+            _ => return None,
+        })
+    }
+
+    /// Returns whether an optional item is `None`.
+    ///
+    /// # Safety
+    ///
+    /// `item` is a live item of this optional type.
+    unsafe fn is_none(self, item: u64) -> bool {
+        match self.kind {
+            ItemKind::OptionalFloat => item == NONE_FLOAT,
+            ItemKind::OptionalBool => item == 2,
+            // SAFETY: the caller passes the address of a live pair; its flag is item 0.
+            ItemKind::OptionalTuple => unsafe { crate::tuple::field(self.tuple, item, 0) == 0 },
+            _ => item == 0,
+        }
+    }
+
+    /// Returns the value an optional item holds that is not `None`: the item itself, or for a
+    /// tuple the address of the tuple inside the pair.
+    ///
+    /// # Safety
+    ///
+    /// `item` is a live item of this optional type.
+    unsafe fn unwrapped(self, item: u64) -> u64 {
+        match self.kind {
+            // SAFETY: the caller passes the address of a live pair; its tuple is item 1.
+            ItemKind::OptionalTuple => unsafe { crate::tuple::field(self.tuple, item, 1) },
+            _ => item,
+        }
+    }
+
+    /// Returns what an item holds: itself for a type that is not optional, `None`, or the value
+    /// of an optional item with the value's type.
+    ///
+    /// # Safety
+    ///
+    /// `item` is a live item of this type.
+    unsafe fn held(self, item: u64) -> Held {
+        let Some(base) = self.base() else {
+            return Held::Plain;
+        };
+        // SAFETY: the caller's guarantee.
+        unsafe {
+            if self.is_none(item) {
+                Held::None
+            } else {
+                Held::Value(base, self.unwrapped(item))
+            }
         }
     }
 
@@ -92,7 +177,7 @@ impl ItemType {
     pub(crate) fn words(self) -> usize {
         match self.kind {
             // SAFETY: a tuple item type always has a live descriptor, emitted by the compiler.
-            ItemKind::Tuple => unsafe { (*self.tuple).words() },
+            ItemKind::Tuple | ItemKind::OptionalTuple => unsafe { (*self.tuple).words() },
             _ => 1,
         }
     }
@@ -104,7 +189,7 @@ impl ItemType {
     /// `slot` points to an item of this type.
     pub(crate) unsafe fn load(self, slot: *const u64) -> u64 {
         match self.kind {
-            ItemKind::Tuple => slot.expose_provenance() as u64,
+            ItemKind::Tuple | ItemKind::OptionalTuple => slot.expose_provenance() as u64,
             // SAFETY: the caller passes a slot that holds an item.
             _ => unsafe { *slot },
         }
@@ -120,7 +205,7 @@ impl ItemType {
         // SAFETY: the caller passes a slot with room for the item and a live item.
         unsafe {
             match self.kind {
-                ItemKind::Tuple => {
+                ItemKind::Tuple | ItemKind::OptionalTuple => {
                     core::ptr::copy_nonoverlapping(address(item), slot, self.words());
                 }
                 _ => *slot = item,
@@ -138,10 +223,18 @@ impl ItemType {
         // address.
         unsafe {
             match self.kind {
-                ItemKind::Int => crate::refcount::typy_rt_int_increment(item.cast_signed()),
-                ItemKind::Object => crate::refcount::typy_rt_increment(pointer(item)),
-                ItemKind::Tuple => crate::tuple::retain(self.tuple, item),
-                ItemKind::Float | ItemKind::Bool | ItemKind::NoneValue => {}
+                ItemKind::Int | ItemKind::OptionalInt => {
+                    crate::refcount::typy_rt_int_increment(item.cast_signed());
+                }
+                ItemKind::Object | ItemKind::OptionalObject => {
+                    crate::refcount::typy_rt_increment(pointer(item));
+                }
+                ItemKind::Tuple | ItemKind::OptionalTuple => crate::tuple::retain(self.tuple, item),
+                ItemKind::Float
+                | ItemKind::Bool
+                | ItemKind::NoneValue
+                | ItemKind::OptionalFloat
+                | ItemKind::OptionalBool => {}
             }
         }
     }
@@ -155,10 +248,20 @@ impl ItemType {
         // SAFETY: the caller passes a live item it holds references for.
         unsafe {
             match self.kind {
-                ItemKind::Int => crate::refcount::typy_rt_int_decrement(item.cast_signed()),
-                ItemKind::Object => crate::refcount::typy_rt_decrement(pointer(item)),
-                ItemKind::Tuple => crate::tuple::release(self.tuple, item),
-                ItemKind::Float | ItemKind::Bool | ItemKind::NoneValue => {}
+                ItemKind::Int | ItemKind::OptionalInt => {
+                    crate::refcount::typy_rt_int_decrement(item.cast_signed());
+                }
+                ItemKind::Object | ItemKind::OptionalObject => {
+                    crate::refcount::typy_rt_decrement(pointer(item));
+                }
+                ItemKind::Tuple | ItemKind::OptionalTuple => {
+                    crate::tuple::release(self.tuple, item);
+                }
+                ItemKind::Float
+                | ItemKind::Bool
+                | ItemKind::NoneValue
+                | ItemKind::OptionalFloat
+                | ItemKind::OptionalBool => {}
             }
         }
     }
@@ -173,6 +276,16 @@ impl ItemType {
     ///
     /// Both are live items of this type.
     pub(crate) unsafe fn equal(self, left: u64, right: u64) -> bool {
+        // SAFETY: the caller passes live items of this type.
+        match unsafe { (self.held(left), self.held(right)) } {
+            (Held::Plain, _) | (_, Held::Plain) => {}
+            (Held::None, Held::None) => return true,
+            (Held::Value(base, left), Held::Value(_, right)) => {
+                // SAFETY: both are live values of the optional type's base.
+                return unsafe { base.equal(left, right) };
+            }
+            _ => return false,
+        }
         let equal_code = inline(0).unwrap_or(1);
         match self.kind {
             ItemKind::Bool => left == right,
@@ -186,6 +299,7 @@ impl ItemType {
             ItemKind::Object => unsafe { objects_equal(pointer(left), pointer(right)) },
             // SAFETY: the caller passes the addresses of two live tuples of this layout.
             ItemKind::Tuple => unsafe { crate::tuple::equal(self.tuple, left, right) },
+            _ => unreachable!("an optional item is compared by its base"),
         }
     }
 
@@ -201,6 +315,17 @@ impl ItemType {
         reason = "Python's comparisons on floats are IEEE comparisons, under which `nan` is unordered"
     )]
     pub(crate) unsafe fn order(self, left: u64, right: u64, comparison: i64) -> bool {
+        // The checker orders no optional item; only a list whose items are all values reaches
+        // here, and two `None` items are equal.
+        // SAFETY: the caller passes live items of this type.
+        match unsafe { (self.held(left), self.held(right)) } {
+            (Held::Plain, _) | (_, Held::Plain) => {}
+            (Held::Value(base, left), Held::Value(_, right)) => {
+                // SAFETY: both are live values of the optional type's base.
+                return unsafe { base.order(left, right, comparison) };
+            }
+            _ => return crate::compare::holds(core::cmp::Ordering::Equal, comparison),
+        }
         match self.kind {
             ItemKind::Bool | ItemKind::NoneValue => {
                 crate::compare::holds(left.cmp(&right), comparison)
@@ -224,6 +349,7 @@ impl ItemType {
             ItemKind::Object => unsafe { objects_order(pointer(left), pointer(right), comparison) },
             // SAFETY: the caller passes the addresses of two live tuples of this layout.
             ItemKind::Tuple => unsafe { crate::tuple::order(self.tuple, left, right, comparison) },
+            _ => unreachable!("an optional item is ordered by its base"),
         }
     }
 
@@ -234,6 +360,13 @@ impl ItemType {
     ///
     /// `item` is a live item of this type.
     pub(crate) unsafe fn hash(self, item: u64) -> i64 {
+        // SAFETY: the caller passes a live item of this type.
+        match unsafe { self.held(item) } {
+            Held::None => return crate::hash::NONE,
+            // SAFETY: a live value of the optional type's base.
+            Held::Value(base, value) => return unsafe { base.hash(value) },
+            Held::Plain => {}
+        }
         match self.kind {
             ItemKind::Bool => i64::from(item != 0),
             ItemKind::NoneValue => crate::hash::NONE,
@@ -244,6 +377,7 @@ impl ItemType {
             ItemKind::Object => unsafe { object_hash(pointer(item)) },
             // SAFETY: the caller passes the address of a live tuple of this layout.
             ItemKind::Tuple => unsafe { crate::tuple::hash(self.tuple, item) },
+            _ => unreachable!("an optional item is hashed by its base"),
         }
     }
 
@@ -254,6 +388,13 @@ impl ItemType {
     ///
     /// `item` is a live item of this type.
     pub(crate) unsafe fn is_true(self, item: u64) -> bool {
+        // SAFETY: the caller passes a live item of this type.
+        match unsafe { self.held(item) } {
+            Held::None => return false,
+            // SAFETY: a live value of the optional type's base.
+            Held::Value(base, value) => return unsafe { base.is_true(value) },
+            Held::Plain => {}
+        }
         match self.kind {
             ItemKind::Bool => item != 0,
             ItemKind::NoneValue => false,
@@ -264,6 +405,7 @@ impl ItemType {
             ItemKind::Object => unsafe { object_is_true(pointer(item)) },
             // SAFETY: a tuple item type always has a live descriptor.
             ItemKind::Tuple => unsafe { (*self.tuple).length != 0 },
+            _ => unreachable!("an optional item is tested by its base"),
         }
     }
 
@@ -273,6 +415,13 @@ impl ItemType {
     ///
     /// `item` is a live item of this type.
     pub(crate) unsafe fn repr(self, item: u64) -> Raising<*mut StrObject> {
+        // SAFETY: the caller passes a live item of this type.
+        match unsafe { self.held(item) } {
+            Held::None => return Raising::ok(crate::string::from_str("None")),
+            // SAFETY: a live value of the optional type's base.
+            Held::Value(base, value) => return unsafe { base.repr(value) },
+            Held::Plain => {}
+        }
         match self.kind {
             // SAFETY: the caller passes a live `int` word.
             ItemKind::Int => unsafe { crate::int::typy_rt_int_to_str(item.cast_signed()) },
@@ -289,9 +438,24 @@ impl ItemType {
             ItemKind::Object => unsafe { object_repr(pointer(item)) },
             // SAFETY: the caller passes the address of a live tuple of this layout.
             ItemKind::Tuple => unsafe { crate::tuple::repr(self.tuple, item) },
+            _ => unreachable!("an optional item is written by its base"),
         }
     }
 }
+
+/// What an item holds, as `ItemType::held` reads it.
+enum Held {
+    /// An item of a type that is not optional.
+    Plain,
+    /// `None` of an optional item.
+    None,
+    /// The value an optional item holds, with the value's type.
+    Value(ItemType, u64),
+}
+
+/// The bits of `None` of a `float | None`: a signalling NaN that no float operation produces,
+/// since every operation gives a quiet NaN (ADR-0011).
+pub(crate) const NONE_FLOAT: u64 = 0x7ff4_0000_0000_0001;
 
 /// Returns the words an item address points to.
 fn address(item: u64) -> *const u64 {

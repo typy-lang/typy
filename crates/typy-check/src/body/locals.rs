@@ -4,6 +4,7 @@ use typy_diagnostics::{Diagnostic, DiagnosticCode, RuleId, Span};
 use typy_source::syntax::{Expr, Stmt};
 
 use super::BodyChecker;
+use super::flow::Fact;
 use crate::check::annotation_type;
 use crate::typed::{AssignTarget, SymbolId, SymbolKind, TypedConstant, TypedExpr, TypedExprKind};
 use crate::types::Type;
@@ -302,8 +303,17 @@ impl BodyChecker<'_> {
             }
             Some(_) => {}
         }
-        if let Some(assigned) = &mut self.assigned {
-            assigned.insert(symbol);
+        // A value that is not `None` shows the optional variable is not `None` until it is
+        // assigned again (TYP-13).
+        let not_none = matches!(self.types.get(&symbol), Some(Type::Optional(_)))
+            && matches!(&value.kind, TypedExprKind::Wrap(inner) if inner.ty != Type::NoneType);
+        if let Some(facts) = &mut self.assigned {
+            facts.insert(Fact::Assigned(symbol));
+            if not_none {
+                facts.insert(Fact::NotNone(symbol));
+            } else {
+                facts.remove(&Fact::NotNone(symbol));
+            }
         }
         Some(symbol)
     }

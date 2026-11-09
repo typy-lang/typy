@@ -42,6 +42,16 @@ impl FunctionLowerer<'_> {
         }
     }
 
+    /// Returns `to`, made from `from` by an operation that hands on its references, as owned when
+    /// `from` was and borrowed otherwise.
+    pub(crate) fn transfer(&mut self, from: Lowered, to: ValueId, ty: TyirType) -> Lowered {
+        if from.owned {
+            self.untrack(from.value);
+            return self.produced(to, ty);
+        }
+        Self::borrowed(to, ty)
+    }
+
     /// Returns the result of a runtime function that is borrowed from one of its arguments, such
     /// as the dict a view reads, which the function must not release.
     pub(crate) fn borrowed_result(&mut self, lowered: Lowered) -> Lowered {

@@ -4,6 +4,7 @@ use typy_diagnostics::{Diagnostic, DiagnosticCode, RuleId};
 use typy_source::syntax::{BoolOperator, Constant, Expr};
 
 use super::BodyChecker;
+use super::flow::test_facts;
 use super::slice::Bounds;
 use crate::typed::{TypedConstant, TypedExpr, TypedExprKind};
 use crate::types::Type;
@@ -70,8 +71,23 @@ impl BodyChecker<'_> {
             Expr::BoolOp {
                 operator, values, ..
             } => {
-                let values: Vec<TypedExpr> =
-                    values.iter().map(|value| self.truth_test(value)).collect();
+                // Each operand is read only when the ones before it held for `and`, or failed
+                // for `or`, so it is checked with what that shows (TYP-13).
+                let outer = self.assigned.clone();
+                let values: Vec<TypedExpr> = values
+                    .iter()
+                    .map(|value| {
+                        let value = self.truth_test(value);
+                        let (holds, fails) = test_facts(&value);
+                        self.add_facts(if *operator == BoolOperator::And {
+                            holds
+                        } else {
+                            fails
+                        });
+                        value
+                    })
+                    .collect();
+                self.assigned = outer;
                 let ty = values[0].ty.clone();
                 if let Some(other) = values.iter().find(|value| !value.ty.is_assignable_to(&ty)) {
                     let word = if *operator == BoolOperator::And {
@@ -129,8 +145,33 @@ impl BodyChecker<'_> {
                 test, body, orelse, ..
             } => {
                 let test = self.truth_test(test);
+                let (holds, fails) = test_facts(&test);
+                let outer = self.assigned.clone();
+                self.add_facts(holds);
                 let body = self.expression(body);
+                self.assigned.clone_from(&outer);
+                self.add_facts(fails);
                 let orelse = self.expression(orelse);
+                self.assigned = outer;
+                // A branch of `None` and one of `T` give `T | None`, as Python's typing joins
+                // them (TYP-06).
+                let joined = match (&body.ty, &orelse.ty) {
+                    (Type::NoneType, other) | (other, Type::NoneType)
+                        if !matches!(other, Type::NoneType) =>
+                    {
+                        Some(Type::optional(other.clone()))
+                    }
+                    (Type::Optional(_), _) => Some(body.ty.clone()),
+                    (_, Type::Optional(_)) => Some(orelse.ty.clone()),
+                    _ => None,
+                };
+                let (body, orelse) = match &joined {
+                    Some(joined) => (
+                        Self::converted(body, Some(joined)),
+                        Self::converted(orelse, Some(joined)),
+                    ),
+                    None => (body, orelse),
+                };
                 if !orelse.ty.is_assignable_to(&body.ty) {
                     return self.error(
                         Diagnostic::new(

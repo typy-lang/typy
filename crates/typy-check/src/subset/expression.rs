@@ -62,17 +62,33 @@ impl Walker {
             }
             Expr::BinOp {
                 operator: BinaryOperator::BitOr,
+                left,
+                right,
                 span,
-                ..
             } => {
-                self.report(
-                    *span,
-                    planned(
-                        "union annotations such as `int | None`",
-                        "0.2",
-                        RuleId::TYP_06,
+                let is_none = |side: &Expr| {
+                    matches!(
+                        side,
+                        Expr::Constant {
+                            value: Constant::None,
+                            ..
+                        }
+                    )
+                };
+                // `T | None` and `None | T` are optional types (TYP-06); any other union waits
+                // for `isinstance` narrowing.
+                match (is_none(left), is_none(right)) {
+                    (false, true) => self.annotation(left),
+                    (true, false) => self.annotation(right),
+                    _ => self.report(
+                        *span,
+                        planned(
+                            "union annotations such as `int | str`",
+                            "0.4",
+                            RuleId::TYP_14,
+                        ),
                     ),
-                );
+                }
             }
             Expr::Constant {
                 value: Constant::Str(_),

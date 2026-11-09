@@ -26,8 +26,9 @@ impl BodyChecker<'_> {
         };
         let items = self.display_items(elements, expected_item.as_ref());
         let item_type = expected_item
-            .or_else(|| items.first().map(|first| first.ty.clone()))
+            .or_else(|| super::list::joined_type(&items))
             .unwrap_or(Type::Error);
+        let items = super::list::converted_all(items, &item_type);
         for item in &items {
             if !item.ty.is_assignable_to(&item_type) {
                 self.diagnostics.push(

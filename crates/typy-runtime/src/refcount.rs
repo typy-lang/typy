@@ -5,13 +5,16 @@ use crate::header::{
     LIST_TYPE_ID, ObjectHeader, SET_TYPE_ID, STR_TYPE_ID, TUPLE_TYPE_ID,
 };
 
-/// Adds a reference to an object.
+/// Adds a reference to an object; the null address, `None` of an optional object, has none.
 ///
 /// # Safety
 ///
-/// `object` points to a live object with a valid header.
+/// `object` is null or points to a live object with a valid header.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn typy_rt_increment(object: *mut ObjectHeader) {
+    if object.is_null() {
+        return;
+    }
     // An immortal object may be a static in read-only memory, so the count is read through the
     // pointer and written only when it is not immortal.
     // SAFETY: the caller passes a live object.
@@ -25,13 +28,18 @@ pub unsafe extern "C" fn typy_rt_increment(object: *mut ObjectHeader) {
     }
 }
 
-/// Drops a reference to an object, and frees it when it was the last.
+/// Drops a reference to an object, and frees it when it was the last; the null address, `None`
+/// of an optional object, has none.
 ///
 /// # Safety
 ///
-/// `object` points to a live object with a valid header, and the caller owns the reference it drops.
+/// `object` is null or points to a live object with a valid header, and the caller owns the
+/// reference it drops.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn typy_rt_decrement(object: *mut ObjectHeader) {
+    if object.is_null() {
+        return;
+    }
     // SAFETY: the caller passes a live object it holds a reference to; an immortal one is never
     // written, as in `typy_rt_increment`.
     unsafe {
@@ -54,7 +62,8 @@ pub unsafe extern "C" fn typy_rt_decrement(object: *mut ObjectHeader) {
 /// A word with its lowest bit clear points to a live large integer.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn typy_rt_int_increment(word: i64) {
-    if word & 1 == 0 {
+    // The word 0 is `None` of an `int | None` (ADR-0011).
+    if word & 1 == 0 && word != 0 {
         // SAFETY: a word with its lowest bit clear is the address of a large integer.
         unsafe { typy_rt_increment(crate::int::object_of(word).cast()) };
     }
@@ -67,7 +76,8 @@ pub unsafe extern "C" fn typy_rt_int_increment(word: i64) {
 /// A word with its lowest bit clear points to a live large integer that the caller holds a reference to.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn typy_rt_int_decrement(word: i64) {
-    if word & 1 == 0 {
+    // The word 0 is `None` of an `int | None` (ADR-0011).
+    if word & 1 == 0 && word != 0 {
         // SAFETY: a word with its lowest bit clear is the address of a large integer.
         unsafe { typy_rt_decrement(crate::int::object_of(word).cast()) };
     }
@@ -122,6 +132,17 @@ mod tests {
             typy_rt_decrement(object.cast());
             assert_eq!((*object).header.reference_count, 1);
             typy_rt_decrement(object.cast());
+        }
+    }
+
+    #[test]
+    fn none_of_an_optional_value_is_not_counted() {
+        // SAFETY: the null address and the word 0 stand for `None` and are never dereferenced.
+        unsafe {
+            typy_rt_increment(core::ptr::null_mut());
+            typy_rt_decrement(core::ptr::null_mut());
+            typy_rt_int_increment(0);
+            typy_rt_int_decrement(0);
         }
     }
 

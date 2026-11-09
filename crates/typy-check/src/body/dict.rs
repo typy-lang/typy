@@ -33,9 +33,12 @@ impl BodyChecker<'_> {
         let keys: Vec<Expr> = keys.iter().flatten().cloned().collect();
         let keys = self.display_items(&keys, expected_key.as_ref());
         let values = self.display_items(values, expected_value.as_ref());
-        let types = expected_key
-            .zip(expected_value)
-            .or_else(|| Some((keys.first()?.ty.clone(), values.first()?.ty.clone())));
+        let types = expected_key.zip(expected_value).or_else(|| {
+            Some((
+                super::list::joined_type(&keys)?,
+                super::list::joined_type(&values)?,
+            ))
+        });
         let Some((key_type, value_type)) = types else {
             return self.error(
                 Diagnostic::new(
@@ -48,6 +51,8 @@ impl BodyChecker<'_> {
                 span,
             );
         };
+        let keys = super::list::converted_all(keys, &key_type);
+        let values = super::list::converted_all(values, &value_type);
         for (items, ty, what) in [(&keys, &key_type, "keys"), (&values, &value_type, "values")] {
             for item in items {
                 if !item.ty.is_assignable_to(ty) {

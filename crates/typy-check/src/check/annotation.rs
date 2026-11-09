@@ -20,6 +20,22 @@ pub(crate) fn annotation_type(annotation: &Expr, diagnostics: &mut Diagnostics) 
         Expr::Subscript { value, index, .. } if matches!(value.as_ref(), Expr::Name { id, .. } if id == "list") => {
             Type::List(Box::new(annotation_type(index, diagnostics)))
         }
+        Expr::BinOp {
+            operator: typy_source::syntax::BinaryOperator::BitOr,
+            left,
+            right,
+            ..
+        } => {
+            // The subset checker lets only `T | None` and `None | T` through.
+            let inner = match left.as_ref() {
+                Expr::Constant {
+                    value: Constant::None,
+                    ..
+                } => right,
+                _ => left,
+            };
+            Type::optional(annotation_type(inner, diagnostics))
+        }
         Expr::Subscript { value, index, span } if matches!(value.as_ref(), Expr::Name { id, .. } if id == "dict") => {
             dict_annotation(index, *span, diagnostics)
         }
