@@ -2,7 +2,7 @@
 //! and their types (LIB-03).
 
 use super::Method;
-use crate::types::Type;
+use crate::types::{Type, View};
 
 /// How a call may give a parameter.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -30,6 +30,9 @@ pub enum ParameterType {
     Strings,
     /// Any iterable of this item type, as the argument of `set.update`.
     Items(Type),
+    /// A dict of these key and value types, or any iterable of `(key, value)` pairs of them, as
+    /// the argument of `dict.update`.
+    Pairs(Type, Type),
     /// The name of a codec, a string literal the checker resolves.
     Codec,
     /// The name of an error handler, a string literal the checker resolves; one for decoding
@@ -99,6 +102,9 @@ impl Method {
     /// `of` found the method on.
     #[must_use]
     pub fn signature(self, receiver: &Type) -> MethodSignature {
+        if let Type::Dict(key, value) = receiver {
+            return self.dict_signature(receiver, key, value);
+        }
         let item = match receiver {
             Type::Set(item) => item.as_ref().clone(),
             _ => receiver.sequence_item().cloned().unwrap_or(Type::Error),
@@ -161,6 +167,42 @@ impl Method {
                 Type::NoneType,
             ),
             _ => return self.str_signature(receiver),
+        };
+        MethodSignature { parameters, result }
+    }
+
+    /// Returns the signature of a method of a dict of `key` and `value`.
+    fn dict_signature(self, receiver: &Type, key: &Type, value: &Type) -> MethodSignature {
+        let view = |view| Type::DictView(view, Box::new(key.clone()), Box::new(value.clone()));
+        let (parameters, result) = match self {
+            Self::DictGet | Self::DictSetdefault => (
+                vec![
+                    positional("key", key.clone(), true),
+                    positional("default", value.clone(), true),
+                ],
+                value.clone(),
+            ),
+            Self::DictPop => (
+                vec![
+                    positional("key", key.clone(), true),
+                    positional("default", value.clone(), false),
+                ],
+                value.clone(),
+            ),
+            Self::DictPopitem => (Vec::new(), Type::Tuple(vec![key.clone(), value.clone()])),
+            Self::DictKeys => (Vec::new(), view(View::Keys)),
+            Self::DictValues => (Vec::new(), view(View::Values)),
+            Self::DictItems => (Vec::new(), view(View::Items)),
+            Self::DictUpdate => (
+                vec![positional_as(
+                    "other",
+                    ParameterType::Pairs(key.clone(), value.clone()),
+                    false,
+                )],
+                Type::NoneType,
+            ),
+            Self::DictCopy => (Vec::new(), receiver.clone()),
+            _ => (Vec::new(), Type::NoneType),
         };
         MethodSignature { parameters, result }
     }

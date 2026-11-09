@@ -59,6 +59,12 @@ pub(super) fn visit_expression(expression: &Expr, visit: &mut dyn FnMut(&Expr)) 
         } => values
             .iter()
             .for_each(|value| visit_expression(value, visit)),
+        Expr::Dict { keys, values, .. } => {
+            keys.iter()
+                .flatten()
+                .chain(values)
+                .for_each(|value| visit_expression(value, visit));
+        }
         Expr::BinOp { left, right, .. } => {
             visit_expression(left, visit);
             visit_expression(right, visit);

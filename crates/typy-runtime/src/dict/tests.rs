@@ -417,3 +417,97 @@ fn a_copy_of_a_dict_with_many_holes_is_compacted() {
     }
     release(dict);
 }
+
+#[test]
+fn a_view_reads_its_dict_as_it_changes_and_keeps_it_alive() {
+    use super::view::{
+        typy_rt_dict_view, typy_rt_dict_view_contains, typy_rt_dict_view_dict,
+        typy_rt_dict_view_length,
+    };
+    let fields = Box::leak(Box::new([field(ItemKind::Int, 0), field(ItemKind::Int, 8)]));
+    let pair = Box::leak(Box::new(TupleType {
+        size: 16,
+        length: 2,
+        fields: fields.as_ptr(),
+    }));
+    let pair = core::ptr::from_ref::<TupleType>(pair).expose_provenance() as u64;
+    let dict = int_dict();
+    set(dict, 1, 10);
+    // SAFETY: the dict and the views are live; each pair is two inline `int` words.
+    unsafe {
+        let keys = typy_rt_dict_view(dict, word(0));
+        let values = typy_rt_dict_view(dict, word(1));
+        let items = typy_rt_dict_view(dict, word(2));
+        set(dict, 2, 20);
+        assert_eq!(
+            shown(super::text::typy_rt_dict_view_text(items)),
+            "dict_items([(1, 10), (2, 20)])"
+        );
+        assert_eq!(inline_value(typy_rt_dict_view_length(keys)), 2);
+        assert_eq!(typy_rt_dict_view_dict(values), dict);
+        assert!(typy_rt_dict_view_contains(keys, word(2).cast_unsigned(), 0));
+        assert!(typy_rt_dict_view_contains(
+            values,
+            word(20).cast_unsigned(),
+            0
+        ));
+        assert!(!typy_rt_dict_view_contains(
+            values,
+            word(2).cast_unsigned(),
+            0
+        ));
+        let found = [word(2).cast_unsigned(), word(20).cast_unsigned()];
+        let wrong = [word(2).cast_unsigned(), word(21).cast_unsigned()];
+        let address = |words: &[u64; 2]| words.as_ptr().expose_provenance() as u64;
+        assert!(typy_rt_dict_view_contains(items, address(&found), pair));
+        assert!(!typy_rt_dict_view_contains(items, address(&wrong), pair));
+        release(dict);
+        assert_eq!((*dict).header.reference_count, 3);
+        for view in [keys, values, items] {
+            release(view);
+        }
+    }
+}
+
+#[test]
+fn a_merge_clones_a_full_source_or_resizes_the_target_first() {
+    let source = int_dict();
+    for key in 0..20 {
+        set(source, key, key * 10);
+    }
+    let (empty, small) = (int_dict(), int_dict());
+    set(small, 100, 1);
+    // SAFETY: the dicts are live.
+    unsafe {
+        typy_rt_dict_update(empty, source.expose_provenance() as u64);
+        assert_eq!((*empty).log2, (*source).log2);
+        assert_eq!((*empty).filled, 20);
+        assert!(typy_rt_dict_equal(empty, source));
+        typy_rt_dict_update(small, source.expose_provenance() as u64);
+        assert_eq!(inline_value(typy_rt_dict_length(small)), 21);
+        assert!(repr(small).starts_with("{100: 1, 0: 0, 1: 10"));
+        let reread = with_int(19, |key| typy_rt_dict_find(small, key));
+        assert_eq!(
+            inline_value(typy_rt_dict_value(small, reread).cast_signed()),
+            190
+        );
+    }
+    [source, empty, small].into_iter().for_each(release);
+}
+
+#[test]
+fn a_sparse_source_is_merged_entry_by_entry() {
+    let int = word(ItemKind::Int as i64);
+    let source = typy_rt_dict_new(int, 0, int, 0, word(40));
+    for key in 0..5 {
+        set(source, key, key);
+    }
+    let target = int_dict();
+    // SAFETY: the dicts are live.
+    unsafe {
+        typy_rt_dict_update(target, source.expose_provenance() as u64);
+        assert!((*target).log2 < (*source).log2);
+        assert!(typy_rt_dict_equal(target, source));
+    }
+    [source, target].into_iter().for_each(release);
+}

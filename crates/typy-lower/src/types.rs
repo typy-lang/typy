@@ -17,6 +17,8 @@ pub(crate) fn tyir_type(ty: &Type, tuples: &mut TupleTypes) -> TyirType {
         // of the runtime reads it (DAT-14).
         Type::List(_) | Type::TupleOf(_) => TyirType::LIST,
         Type::Set(_) => TyirType::SET,
+        Type::Dict(..) => TyirType::DICT,
+        Type::DictView(..) => TyirType::VIEW,
         Type::Tuple(items) => {
             let items = items.iter().map(|item| tyir_type(item, tuples)).collect();
             tuples.intern(items)

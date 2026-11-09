@@ -112,6 +112,22 @@ pub unsafe extern "C" fn typy_rt_dict_repr(dict: *const DictObject) -> Raising<*
     unsafe { entries_text(&*dict, Shown::Entry, "{", "}") }
 }
 
+/// Returns the text of a view object, as `typy_rt_dict_view_repr` writes it.
+///
+/// # Safety
+///
+/// `view` points to a live view.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn typy_rt_dict_view_text(
+    view: *const super::ViewObject,
+) -> Raising<*mut StrObject> {
+    // SAFETY: the caller's guarantee.
+    unsafe {
+        let kind = i64::from((*view).kind);
+        typy_rt_dict_view_repr((*view).dict, crate::word::inline(kind).unwrap_or(1))
+    }
+}
+
 /// Returns the text of a view of the dict whose kind is the `int` word `view`: 0 for
 /// `dict_keys([...])`, 1 for `dict_values([...])` and 2 for `dict_items([(key, value), ...])`.
 ///

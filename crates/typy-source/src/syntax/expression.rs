@@ -103,6 +103,13 @@ pub enum Expr {
         elements: Vec<Expr>,
         span: Span,
     },
+    /// A dict display, `{k: v}`, as CPython's `ast.Dict`: each key with its value, and a key of
+    /// `None` for `**mapping`.
+    Dict {
+        keys: Vec<Option<Expr>>,
+        values: Vec<Expr>,
+        span: Span,
+    },
     /// A set display, `{a, b}`; `{}` is an empty dict, so a set display always has items.
     Set {
         elements: Vec<Expr>,
@@ -142,6 +149,7 @@ impl Expr {
             | Self::Tuple { span, .. }
             | Self::List { span, .. }
             | Self::Set { span, .. }
+            | Self::Dict { span, .. }
             | Self::Attribute { span, .. }
             | Self::Slice { span, .. }
             | Self::Other { span, .. } => *span,

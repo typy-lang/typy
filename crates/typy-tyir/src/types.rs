@@ -17,6 +17,10 @@ impl TypeId {
     pub const BYTES: Self = Self(6);
     /// A `set`, whatever its item type.
     pub const SET: Self = Self(7);
+    /// A `dict`, whatever its key and value types.
+    pub const DICT: Self = Self(8);
+    /// A view of a dict's keys, values or items.
+    pub const DICT_VIEW: Self = Self(9);
 }
 
 /// The number of a tuple type in its module's `TupleTypes`.
@@ -53,6 +57,10 @@ impl TyirType {
     pub const BYTES: Self = Self::Object(TypeId::BYTES);
     /// A set.
     pub const SET: Self = Self::Object(TypeId::SET);
+    /// A dict.
+    pub const DICT: Self = Self::Object(TypeId::DICT);
+    /// A view of a dict.
+    pub const VIEW: Self = Self::Object(TypeId::DICT_VIEW);
 }
 
 impl fmt::Display for TyirType {
@@ -66,6 +74,8 @@ impl fmt::Display for TyirType {
             Self::Object(TypeId::EXCEPTION) => formatter.write_str("exception"),
             Self::Object(TypeId::LIST) => formatter.write_str("list"),
             Self::Object(TypeId::SET) => formatter.write_str("set"),
+            Self::Object(TypeId::DICT) => formatter.write_str("dict"),
+            Self::Object(TypeId::DICT_VIEW) => formatter.write_str("view"),
             Self::Bits => formatter.write_str("bits"),
             Self::Object(TypeId(id)) => write!(formatter, "object#{id}"),
             Self::Tuple(TupleTypeId(id)) => write!(formatter, "tuple#{id}"),
@@ -87,6 +97,8 @@ mod tests {
             TyirType::STR,
             TyirType::EXCEPTION,
             TyirType::SET,
+            TyirType::DICT,
+            TyirType::VIEW,
             TyirType::Object(TypeId(300)),
             TyirType::Tuple(TupleTypeId(4)),
         ]
@@ -103,6 +115,8 @@ mod tests {
                 "str",
                 "exception",
                 "set",
+                "dict",
+                "view",
                 "object#300",
                 "tuple#4"
             ]

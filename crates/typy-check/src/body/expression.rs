@@ -157,6 +157,7 @@ impl BodyChecker<'_> {
                 )
             }
             Expr::Set { elements, .. } => self.set_display(elements, None, span),
+            Expr::Dict { keys, values, .. } => self.dict_display(keys, values, None, span),
             Expr::Tuple { elements, .. } => {
                 let elements: Vec<TypedExpr> = elements
                     .iter()
@@ -185,6 +186,10 @@ impl BodyChecker<'_> {
                 if let Some(item) = value.ty.sequence_item() {
                     let item = item.clone();
                     return self.list_item(value, item, index, span);
+                }
+                if let Type::Dict(key, entry) = &value.ty {
+                    let (key, entry) = (key.as_ref().clone(), entry.as_ref().clone());
+                    return self.dict_item(value, &key, entry, index, span);
                 }
                 let index = self.expression(index);
                 if value.ty == Type::Error || index.ty == Type::Error {

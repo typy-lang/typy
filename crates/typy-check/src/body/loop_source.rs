@@ -103,6 +103,9 @@ impl BodyChecker<'_> {
             return self.source_arity(Builtin::Reversed, "1", arguments.len(), arguments, span);
         }
         let sequence = self.sequence(&arguments[0]);
+        if let Type::Dict(..) | Type::DictView(..) = sequence.ty {
+            return self.reversed_dict(&sequence, span);
+        }
         if let Type::Set(_) = sequence.ty {
             self.diagnostics.push(
                 Diagnostic::new(
@@ -123,6 +126,24 @@ impl BodyChecker<'_> {
         }
         self.iterated_item(&sequence, "`reversed`");
         LoopSource::Reversed(sequence)
+    }
+
+    /// Reports `reversed` of a dict or a view, which CPython reads from the last entry; it is
+    /// planned with the other forms of DAT-16.
+    fn reversed_dict(&mut self, sequence: &TypedExpr, span: Span) -> LoopSource {
+        self.diagnostics.push(
+            Diagnostic::new(
+                DiagnosticCode::error(201),
+                sequence.span,
+                "`reversed` of a dict or a dict view is planned for TyPy 0.3 (DAT-16)",
+            )
+            .with_rule(RuleId::DAT_16),
+        );
+        LoopSource::Reversed(Self::typed(
+            TypedExprKind::Constant(TypedConstant::None),
+            Type::Error,
+            span,
+        ))
     }
 
     /// Checks a sequence a loop reads. A fixed tuple whose items have one type is read as a

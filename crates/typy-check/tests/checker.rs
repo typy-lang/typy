@@ -1196,8 +1196,8 @@ fn set_rules_give_their_codes() {
         ("for x in reversed({1}):\n    pass\n", &["E0411"]),
         ("s = {1}\ns.add('a')\n", &["E0404"]),
         ("s = {1}\ns.update({'a'})\n", &["E0409"]),
-        ("x: dict[str, int] = 1\n", &["E0201"]),
-        ("x: dict = 1\n", &["E0201"]),
+        ("x: dict[str, int] = 1\n", &["E0402"]),
+        ("x: dict = 1\n", &["E0408"]),
         ("s: set[Thing] = {1}\n", &["E0205"]),
         ("s: set[Thing] = set()\n", &["E0205"]),
         ("s = set(missing)\n", &["E0205"]),
@@ -1249,6 +1249,114 @@ m.update(enumerate('ab'), zip([1], 'c'))
         "Method pop",
         "Method union",
         "Set : set[tuple[int, ...]]",
+    ] {
+        assert!(dump.contains(node), "{node} missing from\n{dump}");
+    }
+}
+
+#[test]
+fn dict_rules_give_their_codes() {
+    let cases: &[(&str, &[&str])] = &[
+        ("d = {}\n", &["E0410"]),
+        ("d = dict()\n", &["E0410"]),
+        ("d = {[1]: 2}\n", &["E0413"]),
+        ("d: dict[list[int], int] = {}\n", &["E0413"]),
+        ("d = {1: 'a', 'b': 'c'}\n", &["E0409"]),
+        ("d = {1: 'a', 2: 3}\n", &["E0409"]),
+        ("d: dict = {}\n", &["E0408"]),
+        ("d: dict[int] = {}\n", &["E0408"]),
+        ("d = {1: 2}.get(1)\n", &["E0201"]),
+        ("d = {1: 2}.setdefault(1)\n", &["E0201"]),
+        ("d = {1: 2} < {1: 2}\n", &["E0407"]),
+        ("d = {1: 2} + {3: 4}\n", &["E0401"]),
+        ("d = {1: 2} | {'a': 4}\n", &["E0401"]),
+        ("d = dict([1, 2])\n", &["E0404"]),
+        ("d = dict([(1, 2, 3)])\n", &["E0404"]),
+        ("d = dict([([1], 2)])\n", &["E0413"]),
+        ("d = dict(a=1)\n", &["E0201"]),
+        ("d = dict([(1, 2)], [(3, 4)])\n", &["E0404"]),
+        ("d = dict(missing)\n", &["E0205"]),
+        ("d = {1: 2}.keys() == {1: 2}.keys()\n", &["E0201"]),
+        ("d = {1: 2}.keys() & {1}\n", &["E0201"]),
+        ("for x in reversed({1: 2}):\n    pass\n", &["E0201"]),
+        ("p = {1: 2}\np['a'] = 3\n", &["E0404"]),
+        ("p = {1: 2}\np[1] = 'b'\n", &["E0402"]),
+        ("p = {1: 2}\nprint(p['a'])\n", &["E0404"]),
+        ("p = {1: 2}\np.update([('a', 1)])\n", &["E0409"]),
+        ("p = {1: 2}\np.update(zip(['a'], [1]))\n", &["E0404"]),
+        ("p = {1: 2}\np.update(5)\n", &["E0411"]),
+        ("p = {1: 2}\np.update(missing)\n", &["E0205"]),
+        ("p = {1: 2}\np.update([1])\n", &["E0409"]),
+        ("p = {1: 2}\np.update(enumerate('a'))\n", &["E0404"]),
+        ("p = {1: 2}\np.push(3)\n", &["E0412"]),
+        ("p = {1: 2}\nprint('a' in p)\n", &["E0407"]),
+        ("p = {1: 2}\nprint('a' in p.values())\n", &["E0407"]),
+        ("d = {{1: 2}: 3}\n", &["E0413"]),
+        ("d = {1: 2}\nprint({d})\n", &["E0413"]),
+        ("d: dict[Thing, int] = {}\n", &["E0205"]),
+        ("d: dict[Thing, int] = {1: 2}\n", &["E0205"]),
+        ("d = dict(5)\n", &["E0411"]),
+        ("x: int = {}\n", &["E0410"]),
+        ("x: int = set()\n", &["E0410"]),
+        ("x: int = {1}\n", &["E0402"]),
+        ("x: dict[int, int, int] = {}\n", &["E0408"]),
+        ("x: tuple[..., ...] = ()\n", &["E0408"]),
+        ("missing[1] = 2\n", &["E0205"]),
+        ("d = {1: 2}\nd.update({'a': 1})\n", &["E0409"]),
+        ("d = {1: 2}\nd.update(dict(zip(['a'], [1])))\n", &["E0404"]),
+        ("d = {1: [2]}\nd.update({1: ['a']})\n", &["E0409"]),
+        ("d = {1: 2}\nd.update([(1, 'a')])\n", &["E0409"]),
+        ("d = {1: 2}\nd.update((1, 2))\n", &["E0404"]),
+    ];
+    for (source, expected) in cases {
+        assert_eq!(&rejected(source), expected, "\n{source}");
+    }
+}
+
+#[test]
+fn dicts_have_python_s_types() {
+    let source = "\
+def f(counts: dict[str, int]) -> dict[str, int]:
+    return counts | {'z': 0}
+a = f({'a': 1}) | dict([('b', 2)]) | dict(zip(['c'], [3])) | dict(f({}))
+b: dict[int, list[str]] = {}
+b.setdefault(1, []).append('x')
+c = a['a'] + a.get('q', 0) + a.pop('a') + a.pop('q', 0) + a.setdefault('r', 1)
+k, v = a.popitem()
+a['n'] = len(a) + len(a.keys())
+a['n'] += 1
+a |= {'m': 1}
+a.update({'o': 2})
+a.update([('p', 3)], )
+a.update(zip(['s'], [4]))
+a.update()
+a.update({})
+a.update(dict())
+a.update({'t': 5})
+pl = [('u', 6)]
+a.update(pl)
+for key in a:
+    c += a[key]
+for key, value in a.items():
+    c += value
+e = 'a' in a and 'a' in a.keys() and 1 in a.values() and ('a', 1) in a.items()
+g = sorted(a) + list(a.keys()) + [x for x in []] if False else sorted(a.values())
+h = a == a.copy() and a != {} and bool(a.values())
+m = set(a) | set(a.keys())
+n: dict[tuple[int, str], set[float]] = {(1, 'a'): {1.5}}
+";
+    let source = source.replace("+ [x for x in []] if False else sorted(a.values())", "");
+    let (_directory, project) = load(&source);
+    let program = TypeChecker::check(&project).expect("the program is accepted");
+    let dump = typy_check::dump(&program, &project);
+    for node in [
+        "Dict : dict[str, int]",
+        "DictOf : dict[str, int]",
+        "DictItem : int",
+        "Method popitem",
+        "Method items : dict_items[str, int]",
+        "entry of dict[str, int]",
+        "Dict : dict[tuple[int, str], set[float]]",
     ] {
         assert!(dump.contains(node), "{node} missing from\n{dump}");
     }

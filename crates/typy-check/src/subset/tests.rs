@@ -66,7 +66,10 @@ fn later_features_name_their_release_and_rule() {
             "class C:\n    pass\n",
             "classes are planned for TyPy 0.2 (CLS-01)",
         ),
-        ("x = {1: 2}\n", "dicts are planned for TyPy 0.2 (DAT-09)"),
+        (
+            "x = {**y}\n",
+            "unpacking with `**` are planned for TyPy 1.0 (EXP-17)",
+        ),
         (
             "x = {i for i in range(3)}\n",
             "comprehensions are planned for TyPy 0.2 (EXP-12)",
@@ -165,8 +168,8 @@ fn later_features_name_their_release_and_rule() {
             "`nonlocal` statements are planned for TyPy 1.0 (SMT-09)",
         ),
         (
-            "def f(x: dict[str, int]) -> None:\n    pass\n",
-            "generic annotations such as `dict[str, int]` are planned for TyPy 0.2 (TYP-06)",
+            "def f(x: frozenset[int]) -> None:\n    pass\n",
+            "generic annotations such as `frozenset[int]` are planned for TyPy 0.2 (TYP-06)",
         ),
         (
             "def f(x: int | None) -> None:\n    pass\n",

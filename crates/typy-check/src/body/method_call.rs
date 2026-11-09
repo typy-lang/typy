@@ -38,6 +38,27 @@ impl BodyChecker<'_> {
                 span,
             );
         };
+        if matches!(method, Method::DictGet | Method::DictSetdefault)
+            && arguments.len() == 1
+            && keywords.is_empty()
+        {
+            for argument in arguments {
+                self.expression(argument);
+            }
+            return self.error(
+                Diagnostic::new(
+                    DiagnosticCode::error(201),
+                    span,
+                    format!(
+                        "`{}` without a default gives `V | None`, which is planned for TyPy 0.2 (TYP-06)",
+                        method.name()
+                    ),
+                )
+                .with_rule(RuleId::TYP_06)
+                .with_help("give a default of the value type, such as `counts.get(word, 0)`"),
+                span,
+            );
+        }
         let signature = method.signature(&receiver.ty);
         let Some(bound) = self.bind(method, &signature, arguments, keywords, span) else {
             return Self::invalid_call(span);
@@ -234,6 +255,7 @@ impl BodyChecker<'_> {
                 self.codec_argument(&parameter.ty, argument, &what)
             }
             ParameterType::Items(item) => self.items_argument(argument, item, &what),
+            ParameterType::Pairs(key, value) => self.pairs_argument(argument, key, value, &what),
             ParameterType::Strings => {
                 let value = self.iterable_argument(argument, crate::builtin::Builtin::List);
                 if let Some(item) = value.ty.sequence_item()

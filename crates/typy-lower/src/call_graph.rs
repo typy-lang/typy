@@ -112,9 +112,14 @@ fn assign_target(target: &AssignTarget, callees: &mut BTreeSet<FunctionId>) {
             expression(list, callees);
             expression(index, callees);
         }
+        AssignTarget::Entry { dict, key } => {
+            expression(dict, callees);
+            expression(key, callees);
+        }
     }
 }
 
+#[allow(clippy::too_many_lines, reason = "one arm per expression kind")]
 fn expression(expression_value: &TypedExpr, callees: &mut BTreeSet<FunctionId>) {
     match &expression_value.kind {
         TypedExprKind::Call {
@@ -136,11 +141,22 @@ fn expression(expression_value: &TypedExpr, callees: &mut BTreeSet<FunctionId>) 
         | TypedExprKind::TupleSlice { tuple: operand, .. } => {
             expression(operand, callees);
         }
-        TypedExprKind::ListItem { list, index } => {
+        TypedExprKind::ListItem { list, index }
+        | TypedExprKind::DictItem {
+            dict: list,
+            key: index,
+        } => {
             expression(list, callees);
             expression(index, callees);
         }
-        TypedExprKind::ListOf(source) | TypedExprKind::SetOf(source) => {
+        TypedExprKind::Dict { keys, values } => {
+            for value in keys.iter().chain(values) {
+                expression(value, callees);
+            }
+        }
+        TypedExprKind::ListOf(source)
+        | TypedExprKind::SetOf(source)
+        | TypedExprKind::DictOf(source) => {
             for value in source.expressions() {
                 expression(value, callees);
             }

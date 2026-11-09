@@ -26,8 +26,56 @@ pub enum Type {
     TupleOf(Box<Type>),
     /// `set[T]`: a mutable set of hashable items, shared by every name bound to it (DAT-10).
     Set(Box<Type>),
+    /// `dict[K, V]`: a mutable mapping of hashable keys to values, in insertion order, shared by
+    /// every name bound to it (DAT-09).
+    Dict(Box<Type>, Box<Type>),
+    /// A view of a dict's keys, values or items, which reads the dict as it changes (DAT-09).
+    DictView(View, Box<Type>, Box<Type>),
     /// The type of an expression that already has a diagnostic; every check accepts it, so one cause gives one error (DIA-04).
     Error,
+}
+
+/// What a view of a dict shows.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum View {
+    /// `dict.keys()`.
+    Keys,
+    /// `dict.values()`.
+    Values,
+    /// `dict.items()`.
+    Items,
+}
+
+impl View {
+    /// Returns the name CPython gives the view's type.
+    #[must_use]
+    pub const fn name(self) -> &'static str {
+        match self {
+            Self::Keys => "dict_keys",
+            Self::Values => "dict_values",
+            Self::Items => "dict_items",
+        }
+    }
+
+    /// Returns the code the runtime takes for the view: 0, 1 or 2.
+    #[must_use]
+    pub const fn code(self) -> i64 {
+        match self {
+            Self::Keys => 0,
+            Self::Values => 1,
+            Self::Items => 2,
+        }
+    }
+
+    /// Returns the type of what the view of a dict of `key` and `value` gives.
+    #[must_use]
+    pub fn item(self, key: &Type, value: &Type) -> Type {
+        match self {
+            Self::Keys => key.clone(),
+            Self::Values => value.clone(),
+            Self::Items => Type::Tuple(vec![key.clone(), value.clone()]),
+        }
+    }
 }
 
 impl Type {
@@ -40,6 +88,9 @@ impl Type {
             (Self::List(item), Self::List(target))
             | (Self::TupleOf(item), Self::TupleOf(target))
             | (Self::Set(item), Self::Set(target)) => item.is_assignable_to(target),
+            (Self::Dict(key, value), Self::Dict(target_key, target_value)) => {
+                key.is_assignable_to(target_key) && value.is_assignable_to(target_value)
+            }
             (Self::Tuple(items), Self::Tuple(targets)) => {
                 items.len() == targets.len()
                     && items
@@ -58,6 +109,9 @@ impl Type {
             Self::Error => true,
             Self::Tuple(items) => items.iter().any(Self::has_error),
             Self::List(item) | Self::TupleOf(item) | Self::Set(item) => item.has_error(),
+            Self::Dict(key, value) | Self::DictView(_, key, value) => {
+                key.has_error() || value.has_error()
+            }
             _ => false,
         }
     }
@@ -73,6 +127,9 @@ impl Type {
             (Self::List(left), Self::List(right))
             | (Self::TupleOf(left), Self::TupleOf(right))
             | (Self::Set(left), Self::Set(right)) => left == right,
+            (Self::Dict(..), Self::Dict(..)) => self == other,
+            // Comparing views is planned with their set operations (DAT-16).
+            (Self::DictView(..), _) | (_, Self::DictView(..)) => false,
             (Self::Tuple(left), Self::Tuple(right)) => {
                 left.len() == right.len()
                     && left
@@ -93,7 +150,10 @@ impl Type {
     pub fn can_order(&self, other: &Self) -> bool {
         match (self, other) {
             (Self::Error, _) | (_, Self::Error) => true,
-            (Self::TupleOf(left), Self::TupleOf(right)) => left == right && left.can_order(right),
+            // Two lists or tuples of any length order item by item, so their items must order.
+            (Self::TupleOf(left), Self::TupleOf(right)) | (Self::List(left), Self::List(right)) => {
+                left == right && left.can_order(right)
+            }
             (Self::Set(left), Self::Set(right)) => left == right,
             (Self::Tuple(left), Self::Tuple(right)) => {
                 left.len() == right.len()
@@ -102,7 +162,8 @@ impl Type {
                             || left.can_order(right)
                     })
             }
-            (Self::NoneType, _) | (_, Self::NoneType) => false,
+            (Self::NoneType | Self::Dict(..) | Self::DictView(..), _)
+            | (_, Self::NoneType | Self::Dict(..) | Self::DictView(..)) => false,
             _ => self == other || (self.is_numeric() && other.is_numeric()),
         }
     }
@@ -124,12 +185,13 @@ impl Type {
         matches!(self, Self::Tuple(items) if items.iter().all(|each| each.is_assignable_to(item)))
     }
 
-    /// Returns true when a value of this type has a hash, so it may be an item of a set: not a
-    /// list or a set, which change, and not a tuple that holds one (DAT-10).
+    /// Returns true when a value of this type has a hash, so it may be an item of a set or a key
+    /// of a dict: not a list, a set, a dict or a view, which change, and not a tuple that holds
+    /// one (DAT-09, DAT-10).
     #[must_use]
     pub fn is_hashable(&self) -> bool {
         match self {
-            Self::List(_) | Self::Set(_) => false,
+            Self::List(_) | Self::Set(_) | Self::Dict(..) | Self::DictView(..) => false,
             Self::Tuple(items) => items.iter().all(Self::is_hashable),
             Self::TupleOf(item) => item.is_hashable(),
             _ => true,
@@ -188,6 +250,10 @@ impl fmt::Display for Type {
             Self::List(item) => write!(formatter, "list[{item}]"),
             Self::TupleOf(item) => write!(formatter, "tuple[{item}, ...]"),
             Self::Set(item) => write!(formatter, "set[{item}]"),
+            Self::Dict(key, value) => write!(formatter, "dict[{key}, {value}]"),
+            Self::DictView(view, key, value) => {
+                write!(formatter, "{}[{key}, {value}]", view.name())
+            }
             Self::Error => formatter.write_str("<error>"),
         }
     }
@@ -288,5 +354,58 @@ mod tests {
         assert!(!ints.can_test_equality(&floats) && !ints.can_order(&floats));
         assert!(ints.is_assignable_to(&ints) && !ints.is_assignable_to(&floats));
         assert!(Type::Set(Box::new(Type::Error)).has_error());
+    }
+
+    #[test]
+    fn dicts_and_views_follow_their_key_and_value_types() {
+        use super::View;
+        let dict = |key: Type, value: Type| Type::Dict(Box::new(key), Box::new(value));
+        let ints = dict(Type::Int, Type::Int);
+        let view = |kind| Type::DictView(kind, Box::new(Type::Int), Box::new(Type::Str));
+        assert_eq!(ints.to_string(), "dict[int, int]");
+        assert_eq!(view(View::Items).to_string(), "dict_items[int, str]");
+        assert_eq!(view(View::Keys).to_string(), "dict_keys[int, str]");
+        assert_eq!(view(View::Values).to_string(), "dict_values[int, str]");
+        assert!(ints.is_assignable_to(&ints));
+        assert!(!ints.is_assignable_to(&dict(Type::Int, Type::Float)));
+        assert!(!ints.is_assignable_to(&dict(Type::Str, Type::Int)));
+        assert!(dict(Type::Error, Type::Int).has_error());
+        assert!(dict(Type::Int, Type::Error).has_error());
+        assert!(ints.can_test_equality(&ints));
+        assert!(!ints.can_test_equality(&dict(Type::Int, Type::Str)));
+        assert!(!view(View::Keys).can_test_equality(&view(View::Keys)));
+        assert!(!Type::Int.can_test_equality(&view(View::Keys)));
+        assert!(!ints.can_order(&ints));
+        assert!(!Type::Int.can_order(&view(View::Values)));
+        assert!(!ints.is_hashable() && !view(View::Keys).is_hashable());
+        let lists = |item: Type| Type::List(Box::new(item));
+        assert!(lists(Type::Int).can_order(&lists(Type::Int)));
+        assert!(!lists(ints.clone()).can_order(&lists(ints)));
+        assert_eq!(
+            [View::Keys, View::Values, View::Items].map(View::code),
+            [0, 1, 2]
+        );
+        assert_eq!(
+            View::Items.item(&Type::Int, &Type::Str),
+            Type::Tuple(vec![Type::Int, Type::Str])
+        );
+        assert_eq!(View::Values.item(&Type::Int, &Type::Str), Type::Str);
+    }
+
+    #[test]
+    fn tuples_are_written_compared_and_ordered_item_by_item() {
+        let pair = Type::Tuple(vec![Type::Int, Type::Str]);
+        let nones = Type::Tuple(vec![Type::NoneType, Type::Int]);
+        assert_eq!(Type::Tuple(Vec::new()).to_string(), "tuple[()]");
+        assert_eq!(pair.to_string(), "tuple[int, str]");
+        assert!(!pair.is_assignable_to(&Type::Tuple(vec![Type::Int])));
+        assert!(!pair.can_test_equality(&Type::Tuple(vec![Type::Int])));
+        assert!(pair.can_test_equality(&Type::Tuple(vec![Type::Float, Type::Str])));
+        assert!(nones.can_order(&nones));
+        assert!(!pair.can_order(&Type::Tuple(vec![Type::Int])));
+        assert!(Type::Int.can_order(&Type::Float));
+        assert!(!Type::Str.can_order(&Type::Int));
+        assert!(Type::Str.can_test_equality(&Type::Str));
+        assert!(!Type::Str.can_test_equality(&Type::Int));
     }
 }

@@ -102,6 +102,19 @@ All notable changes to TyPy are recorded here. The format follows
   reads it raises `RuntimeError`.
 - `set()` in a comparison takes the type of the other operand, as `[]`
   does, so `s == set()` needs no annotation (TYP-05).
+- Dicts: displays such as `{"a": 1}`, annotations such as
+  `dict[str, int]`, `{}` and `dict()` where an annotation or the other
+  operand of a comparison gives the type, `dict(source)` from a dict or
+  from `(key, value)` pairs, `d[k]` with `KeyError` for a missing key,
+  `d[k] = v` and `d[k] += v`, `in`, `len`, truth tests, `str` and `repr`,
+  `for` over a dict, `|`, `|=`, `==` and `!=`, the views `keys()`,
+  `values()` and `items()`, which follow the dict as it changes, and the
+  methods `get` and `setdefault` with a default, `pop`, `popitem`,
+  `update`, `clear` and `copy` (DAT-09, LIB-03). A dict keeps insertion
+  order, leaves holes where entries were removed until it is resized, and
+  raises CPython's `RuntimeError` when it changes while a loop reads it.
+  Sets take a dict wherever they take an iterable, with CPython's steps
+  for a dict (DAT-15).
 
 ### Changed
 

@@ -19,4 +19,4 @@ pub use typed::{
     SymbolId, SymbolKind, TypedConstant, TypedExpr, TypedExprKind, TypedFunction, TypedProgram,
     TypedStmt, dump,
 };
-pub use types::Type;
+pub use types::{Type, View};

@@ -63,6 +63,7 @@ impl FunctionLowerer<'_> {
         match container.ty {
             TyirType::Tuple(_) => self.tuple_contains(item, container, span),
             TyirType::LIST => self.list_contains(item, container, span),
+            TyirType::DICT | TyirType::VIEW => self.dict_contains(item, container, span),
             TyirType::SET => {
                 let bits = self.bits(item, span);
                 self.call_runtime(
@@ -175,16 +176,8 @@ impl FunctionLowerer<'_> {
                     )
                     .value;
             }
-            // Sets order as subsets and supersets, which the runtime tests.
-            (TyirType::SET, _) => {
-                let code = self.constant(Constant::Int(comparison.code().to_string()), span);
-                return self
-                    .call_runtime(
-                        RuntimeFunction::SetCompare,
-                        vec![left.value, right.value, code],
-                        span,
-                    )
-                    .value;
+            (TyirType::DICT | TyirType::SET, _) => {
+                return self.compare_collections(comparison, left, right, span);
             }
             (TyirType::Bits, _) => {
                 unreachable!("list items are converted before they are compared")
@@ -226,6 +219,39 @@ impl FunctionLowerer<'_> {
             TyirType::Bool,
             span,
         )
+    }
+
+    /// Compares two dicts for equality, or two sets, which order as subsets and supersets;
+    /// the runtime tests both.
+    fn compare_collections(
+        &mut self,
+        comparison: Comparison,
+        left: Lowered,
+        right: Lowered,
+        span: Span,
+    ) -> ValueId {
+        if left.ty == TyirType::SET {
+            let code = self.constant(Constant::Int(comparison.code().to_string()), span);
+            return self
+                .call_runtime(
+                    RuntimeFunction::SetCompare,
+                    vec![left.value, right.value, code],
+                    span,
+                )
+                .value;
+        }
+        let equal = self
+            .call_runtime(
+                RuntimeFunction::DictEqual,
+                vec![left.value, right.value],
+                span,
+            )
+            .value;
+        if comparison == Comparison::Equal {
+            return equal;
+        }
+        self.builder
+            .push_value(Operation::BoolNot(equal), TyirType::Bool, span)
     }
 
     /// CPython compares an `int` with a `float` exactly, without converting the `int` first.

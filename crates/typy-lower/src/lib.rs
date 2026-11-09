@@ -7,6 +7,7 @@ mod builtin;
 mod call_graph;
 mod comparison;
 mod conversion;
+mod dict;
 mod expression;
 mod function;
 mod invoke;

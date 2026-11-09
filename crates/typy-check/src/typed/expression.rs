@@ -91,6 +91,19 @@ pub enum TypedExprKind {
     SetOf(Box<super::statement::LoopSource>),
     /// A set display, one value per item, in order (DAT-10).
     Set(Vec<TypedExpr>),
+    /// A dict display: each key and its value, in order (DAT-09).
+    Dict {
+        keys: Vec<TypedExpr>,
+        values: Vec<TypedExpr>,
+    },
+    /// `dict(source)`: a copy of a dict, or a dict of the `(key, value)` pairs the source gives,
+    /// set in order (DAT-09).
+    DictOf(Box<super::statement::LoopSource>),
+    /// `dict[key]`, which raises `KeyError` for a missing key (DAT-09).
+    DictItem {
+        dict: Box<TypedExpr>,
+        key: Box<TypedExpr>,
+    },
     /// A call of any other builtin of 0.1, with positional arguments only.
     Builtin {
         builtin: Builtin,

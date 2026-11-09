@@ -35,6 +35,8 @@ impl FunctionLowerer<'_> {
         let lowered = if receiver.ty == TyirType::STR || receiver.ty == TyirType::BYTES {
             let bytes = receiver.ty == TyirType::BYTES;
             self.str_method(receiver.value, bytes, method, &given, result, span)
+        } else if receiver.ty == TyirType::DICT {
+            self.dict_method(receiver.value, method, &values, result, span)
         } else if receiver.ty == TyirType::SET {
             self.set_method(receiver.value, method, &values, result, span)
         } else {

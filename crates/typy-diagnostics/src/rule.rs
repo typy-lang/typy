@@ -45,6 +45,8 @@ impl RuleId {
     pub const DAT_14: Self = Self("DAT-14");
     /// The methods of `set` that combine a set with others, `union`, `intersection`, `difference`, `symmetric_difference`, `update`, `intersection_update`, `difference_update`, `symmetric_difference_update`, `issubset`, `issuperset` and `isdisjoint`, shall accept any iterable of the set's item type, and as many arguments as CPython accepts, with CPython's results and order.
     pub const DAT_15: Self = Self("DAT-15");
+    /// `reversed` of a dict and of its views, `dict` with keyword arguments, `dict.fromkeys`, and the comparisons and set operations of `dict.keys()` and `dict.items()` shall be available with Python's results.
+    pub const DAT_16: Self = Self("DAT-16");
     /// Raising and catching exceptions shall follow the Language Reference, including matching on base classes.
     pub const EXC_01: Self = Self("EXC-01");
     /// `+`, `-`, `*`, `/`, `//`, `%` and `**` shall give Python's results for `int` and `float`, including `/` on two `int` values returning `float` and `%` taking the sign of the divisor.
@@ -171,6 +173,7 @@ impl RuleId {
         Self::DAT_13,
         Self::DAT_14,
         Self::DAT_15,
+        Self::DAT_16,
         Self::EXC_01,
         Self::EXP_02,
         Self::EXP_04,

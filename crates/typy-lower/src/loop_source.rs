@@ -36,6 +36,17 @@ enum Iterator {
         length: SlotId,
         item: TyirType,
     },
+    /// A dict or a view of one: the next entry, the number of entries when the loop began, and
+    /// how many entries it has given, which CPython's dict iterator checks at every step.
+    Dict {
+        source: SlotId,
+        position: SlotId,
+        length: SlotId,
+        visited: SlotId,
+        shows: typy_check::View,
+        through_view: bool,
+        ty: TyirType,
+    },
     /// A list or `str`, read forwards or, for `reversed`, backwards.
     Sequence {
         sequence: SlotId,
@@ -172,6 +183,9 @@ impl FunctionLowerer<'_> {
     /// Keeps a sequence and its first position: 0, or for `reversed` its length less one, as
     /// CPython's `reversed` reads the length once when it is called.
     fn start_sequence(&mut self, sequence: &TypedExpr, backwards: bool, span: Span) -> Iterator {
+        if let typy_check::Type::Dict(_, _) | typy_check::Type::DictView(..) = &sequence.ty {
+            return self.start_dict(sequence, span);
+        }
         if let typy_check::Type::Set(item) = &sequence.ty {
             let item = self.lowered_type(item);
             return self.start_set(sequence, item, span);
@@ -200,6 +214,114 @@ impl FunctionLowerer<'_> {
             backwards,
             item,
         }
+    }
+
+    /// Keeps a dict or a view of one, the first entry to look at, the number of entries and
+    /// none visited.
+    fn start_dict(&mut self, source: &TypedExpr, span: Span) -> Iterator {
+        let (shows, through_view, item) = match &source.ty {
+            typy_check::Type::DictView(view, key, value) => (*view, true, view.item(key, value)),
+            typy_check::Type::Dict(key, _) => (typy_check::View::Keys, false, key.as_ref().clone()),
+            _ => unreachable!("a dict source is a dict or a view"),
+        };
+        let ty = self.lowered_type(&item);
+        let source = self.kept(source, "dict", span);
+        let zero = || Constant::Int("0".to_owned());
+        let position = self.hidden_slot("position", TyirType::Int);
+        let start = Self::borrowed(self.constant(zero(), span), TyirType::Int);
+        self.store(position, start, span);
+        let visited = self.hidden_slot("visited", TyirType::Int);
+        let none = Self::borrowed(self.constant(zero(), span), TyirType::Int);
+        self.store(visited, none, span);
+        let length = self.hidden_slot("length", TyirType::Int);
+        let dict = self.iterated_dict(source, through_view, span);
+        let count = self.call_runtime(RuntimeFunction::DictLength, vec![dict], span);
+        self.store(length, count, span);
+        Iterator::Dict {
+            source,
+            position,
+            length,
+            visited,
+            shows,
+            through_view,
+            ty,
+        }
+    }
+
+    /// Returns the dict a loop reads, borrowed from the dict or view kept in `source`.
+    fn iterated_dict(&mut self, source: SlotId, through_view: bool, span: Span) -> ValueId {
+        let value = self.load(source, span);
+        if !through_view {
+            return value.value;
+        }
+        self.call_runtime(RuntimeFunction::DictViewDict, vec![value.value], span)
+            .value
+    }
+
+    /// Returns the next key, value or `(key, value)` pair of a dict, or jumps to `exhausted`;
+    /// a dict that changed raises `RuntimeError`, as CPython's dict iterator does.
+    fn next_dict_entry(&mut self, iterator: &Iterator, exhausted: BlockId, span: Span) -> Lowered {
+        let Iterator::Dict {
+            source,
+            position,
+            length,
+            visited,
+            shows,
+            through_view,
+            ty,
+        } = iterator
+        else {
+            unreachable!("a dict iterator")
+        };
+        let dict = self.iterated_dict(*source, *through_view, span);
+        let at = self.load(*position, span);
+        let count = self.load(*length, span);
+        let seen = self.load(*visited, span);
+        let found = self.call_runtime(
+            RuntimeFunction::DictNext,
+            vec![dict, at.value, count.value, seen.value],
+            span,
+        );
+        let zero = self.constant(Constant::Int("0".to_owned()), span);
+        let more = self.int_compare(Comparison::GreaterEqual, found.value, zero, span);
+        let fetch = self.builder.create_block();
+        self.builder.terminate(Terminator::Branch {
+            condition: more,
+            then: fetch,
+            otherwise: exhausted,
+        });
+        self.builder.switch_to(fetch);
+        let read = |lowerer: &mut Self, function, ty| {
+            let bits = lowerer.call_runtime(function, vec![dict, found.value], span);
+            let value = lowerer.builder.push_value(
+                Operation::FromBits {
+                    bits: bits.value,
+                    ty,
+                },
+                ty,
+                span,
+            );
+            Self::borrowed(value, ty)
+        };
+        let fetched = match shows {
+            typy_check::View::Keys => read(self, RuntimeFunction::DictKey, *ty),
+            typy_check::View::Values => read(self, RuntimeFunction::DictValue, *ty),
+            typy_check::View::Items => {
+                let TyirType::Tuple(id) = ty else {
+                    unreachable!("the items of a dict are pairs")
+                };
+                let types = self.tuple_types.items(*id).unwrap_or_default().to_vec();
+                let key = read(self, RuntimeFunction::DictKey, types[0]);
+                let value = read(self, RuntimeFunction::DictValue, types[1]);
+                self.make_tuple(*ty, vec![key, value], span)
+            }
+        };
+        let next = self.add_int(found, 1, span);
+        self.store(*position, next, span);
+        let seen = self.load(*visited, span);
+        let seen = self.add_int(seen, 1, span);
+        self.store(*visited, seen, span);
+        fetched
     }
 
     /// Keeps a set, the first slot to look at, and its number of items, which CPython's set
@@ -283,6 +405,7 @@ impl FunctionLowerer<'_> {
     /// Returns the iterator's next value, or jumps to `exhausted` when it has none.
     fn next_value(&mut self, iterator: &Iterator, exhausted: BlockId, span: Span) -> Lowered {
         match iterator {
+            Iterator::Dict { .. } => self.next_dict_entry(iterator, exhausted, span),
             Iterator::Set {
                 set,
                 slot,
@@ -409,7 +532,7 @@ impl FunctionLowerer<'_> {
     }
 
     /// Returns a tuple of `parts`, which takes over a reference to each.
-    fn make_tuple(&mut self, ty: TyirType, parts: Vec<Lowered>, span: Span) -> Lowered {
+    pub(crate) fn make_tuple(&mut self, ty: TyirType, parts: Vec<Lowered>, span: Span) -> Lowered {
         let TyirType::Tuple(id) = ty else {
             unreachable!("`enumerate` and `zip` give tuples")
         };

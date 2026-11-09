@@ -35,6 +35,11 @@ impl BodyChecker<'_> {
             return Error;
         }
         let symbol = binary_symbol(operator);
+        if matches!(operator, Op::BitOr | Op::BitAnd | Op::Sub | Op::BitXor)
+            && (matches!(l, Type::DictView(..)) || matches!(r, Type::DictView(..)))
+        {
+            return self.planned_view_operation(span);
+        }
         if let (Op::Add, Type::Tuple(first), Type::Tuple(second)) = (operator, &l, &r) {
             return Type::Tuple(first.iter().chain(second).cloned().collect());
         }
@@ -55,6 +60,8 @@ impl BodyChecker<'_> {
             {
                 l
             }
+            // `|` merges two dicts of one type into a new one (DAT-09).
+            Op::BitOr if matches!(l, Type::Dict(..)) && l == r => l,
             Op::Mult if l.sequence_item().is_some() && r == Int => l,
             Op::Mult if l == Int && r.sequence_item().is_some() => r,
             Op::Mult if (l == Str && r == Int) || (l == Int && r == Str) => Str,
@@ -161,6 +168,17 @@ impl BodyChecker<'_> {
             return;
         }
         let span = right.span;
+        let compares = !matches!(
+            operator,
+            CompareOperator::In
+                | CompareOperator::NotIn
+                | CompareOperator::Is
+                | CompareOperator::IsNot
+        );
+        if compares && (matches!(l, Type::DictView(..)) || matches!(r, Type::DictView(..))) {
+            self.planned_view_operation(span);
+            return;
+        }
         match operator {
             CompareOperator::Is | CompareOperator::IsNot => {
                 if l != Type::NoneType && r != Type::NoneType {
@@ -193,8 +211,10 @@ impl BodyChecker<'_> {
             CompareOperator::In | CompareOperator::NotIn => match &r {
                 // The runtime compares the value with each item by the item's kind, so the value
                 // has the item type.
-                Type::List(item) | Type::TupleOf(item) | Type::Set(item)
+                Type::List(item) | Type::TupleOf(item) | Type::Set(item) | Type::Dict(item, _)
                     if l.is_assignable_to(item) => {}
+                // A view finds a key, a value, or a `(key, value)` pair.
+                Type::DictView(view, key, value) if l.is_assignable_to(&view.item(key, value)) => {}
                 // A substring test: `in` on a `str` needs a `str` on its left.
                 Type::Str if l == Type::Str => {}
                 // `in` on `bytes` looks for a byte, an `int`, or for `bytes` within them.
@@ -232,6 +252,19 @@ impl BodyChecker<'_> {
                 format!("`{symbol}` is not defined for {left} and {right}"),
             )
             .with_rule(RuleId::EXP_02),
+        );
+        Type::Error
+    }
+
+    /// Reports a comparison or a set operation of a dict view, planned for 0.3 (DAT-16).
+    fn planned_view_operation(&mut self, span: Span) -> Type {
+        self.diagnostics.push(
+            Diagnostic::new(
+                DiagnosticCode::error(201),
+                span,
+                "comparisons and set operations of dict views are planned for TyPy 0.3 (DAT-16)",
+            )
+            .with_rule(RuleId::DAT_16),
         );
         Type::Error
     }

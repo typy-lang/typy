@@ -254,7 +254,10 @@ impl BodyChecker<'_> {
     /// iterable it cannot go over yet and returns the error type.
     pub(super) fn iterated_item(&mut self, iterable: &TypedExpr, user: &str) -> Type {
         match &iterable.ty {
-            Type::List(item) | Type::TupleOf(item) | Type::Set(item) => item.as_ref().clone(),
+            Type::List(item) | Type::TupleOf(item) | Type::Set(item) | Type::Dict(item, _) => {
+                item.as_ref().clone()
+            }
+            Type::DictView(view, key, value) => view.item(key, value),
             Type::Str => Type::Str,
             Type::Bytes => Type::Int,
             Type::Error => Type::Error,

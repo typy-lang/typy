@@ -23,6 +23,14 @@ pub enum AssignTarget {
         /// The position, counted from the end when negative.
         index: Box<TypedExpr>,
     },
+    /// An entry of a dict, `dict[key] = value`; the dict and the key are evaluated after the
+    /// value, as CPython does (DAT-09).
+    Entry {
+        /// The dict.
+        dict: Box<TypedExpr>,
+        /// The key.
+        key: Box<TypedExpr>,
+    },
 }
 
 /// What a `for` loop goes over (CST-03, LIB-02). A sequence is read as CPython's list
@@ -76,7 +84,8 @@ impl LoopSource {
         match self {
             Self::Items(sequence) | Self::Reversed(sequence) => match &sequence.ty {
                 Type::Bytes => Type::Int,
-                Type::Set(item) => item.as_ref().clone(),
+                Type::Set(item) | Type::Dict(item, _) => item.as_ref().clone(),
+                Type::DictView(view, key, value) => view.item(key, value),
                 other => other
                     .sequence_item()
                     .cloned()

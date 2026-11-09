@@ -192,6 +192,18 @@ impl Dump<'_> {
         }
     }
 
+    /// Writes a dict display: each key, or `Unpack` for a `**` item, then its value.
+    fn dict(&mut self, depth: usize, keys: &[Option<Expr>], values: &[Expr], span: Option<Span>) {
+        self.line(depth, "Dict", span);
+        for (key, value) in keys.iter().zip(values) {
+            match key {
+                Some(key) => self.expression(depth + 1, key),
+                None => self.line(depth + 1, "Unpack", Some(value.span())),
+            }
+            self.expression(depth + 1, value);
+        }
+    }
+
     /// Writes a tuple, list or set display and its items.
     fn display(&mut self, depth: usize, label: &str, elements: &[Expr], span: Option<Span>) {
         self.line(depth, label, span);
@@ -230,6 +242,7 @@ impl Dump<'_> {
             Expr::Tuple { elements, .. } => self.display(depth, "Tuple", elements, span),
             Expr::List { elements, .. } => self.display(depth, "List", elements, span),
             Expr::Set { elements, .. } => self.display(depth, "Set", elements, span),
+            Expr::Dict { keys, values, .. } => self.dict(depth, keys, values, span),
             Expr::Attribute {
                 value, attribute, ..
             } => {

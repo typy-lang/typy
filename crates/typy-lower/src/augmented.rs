@@ -36,6 +36,20 @@ impl FunctionLowerer<'_> {
             AssignTarget::Item { list, index } => {
                 self.augmented_item(list, index, operator, value, result, span);
             }
+            AssignTarget::Entry { dict, key } => {
+                self.augmented_entry(
+                    dict,
+                    key,
+                    |lowerer, current| {
+                        let right = lowerer.expression(value);
+                        match lowerer.in_place(operator, current, right, result, span) {
+                            Some(changed) => changed,
+                            None => lowerer.binary(operator, current, right, result, span),
+                        }
+                    },
+                    span,
+                );
+            }
             AssignTarget::Tuple(_) => {
                 unreachable!("Python refuses a tuple as the target of an augmented assignment")
             }
@@ -102,6 +116,12 @@ impl FunctionLowerer<'_> {
         result: &Type,
         span: Span,
     ) -> Option<Lowered> {
+        if current.ty == TyirType::DICT {
+            // `|=` is the only augmented operator of a dict, and updates it in place.
+            self.dict_update(current.value, right.value, span);
+            self.release(right, span);
+            return Some(current);
+        }
         if current.ty == TyirType::SET {
             self.set_update(operator, current.value, right.value, span);
             self.release(right, span);

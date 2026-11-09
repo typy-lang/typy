@@ -119,7 +119,7 @@ impl BodyChecker<'_> {
     }
 
     /// Checks an argument of a set method that takes any iterable of `item` (DAT-15). A set, a
-    /// list or a `tuple[T, ...]` is passed as it is; any other source becomes a list of the
+    /// dict, a list or a `tuple[T, ...]` is passed as it is; any other source becomes a list of the
     /// values it gives, in order, which the runtime reads as CPython reads the iterable. A
     /// display, `[]` or `set()` takes the type the method wants.
     pub(super) fn items_argument(&mut self, argument: &Expr, item: &Type, what: &str) -> TypedExpr {
@@ -152,7 +152,8 @@ impl BodyChecker<'_> {
         }
         match source {
             LoopSource::Items(sequence)
-                if matches!(sequence.ty, Type::Set(_)) || sequence.ty.sequence_item().is_some() =>
+                if matches!(sequence.ty, Type::Set(_) | Type::Dict(..))
+                    || sequence.ty.sequence_item().is_some() =>
             {
                 sequence
             }

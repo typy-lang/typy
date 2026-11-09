@@ -20,6 +20,9 @@ pub(crate) fn annotation_type(annotation: &Expr, diagnostics: &mut Diagnostics) 
         Expr::Subscript { value, index, .. } if matches!(value.as_ref(), Expr::Name { id, .. } if id == "list") => {
             Type::List(Box::new(annotation_type(index, diagnostics)))
         }
+        Expr::Subscript { value, index, span } if matches!(value.as_ref(), Expr::Name { id, .. } if id == "dict") => {
+            dict_annotation(index, *span, diagnostics)
+        }
         Expr::Subscript { value, index, .. } if matches!(value.as_ref(), Expr::Name { id, .. } if id == "set") =>
         {
             let item = annotation_type(index, diagnostics);
@@ -97,14 +100,7 @@ fn named_type(id: &str, span: typy_diagnostics::Span, diagnostics: &mut Diagnost
             Type::Error
         }
         "dict" => {
-            diagnostics.push(
-                Diagnostic::new(
-                    DiagnosticCode::error(201),
-                    span,
-                    "`dict` annotations are planned for TyPy 0.2 (TYP-06)",
-                )
-                .with_rule(RuleId::TYP_06),
-            );
+            diagnostics.push(dict_arity(span));
             Type::Error
         }
         _ => {
@@ -123,18 +119,66 @@ fn named_type(id: &str, span: typy_diagnostics::Span, diagnostics: &mut Diagnost
     }
 }
 
+/// Returns the type `dict[K, V]` names: two types, and a key type with a hash.
+fn dict_annotation(
+    index: &Expr,
+    span: typy_diagnostics::Span,
+    diagnostics: &mut Diagnostics,
+) -> Type {
+    let Expr::Tuple { elements, .. } = index else {
+        diagnostics.push(dict_arity(span));
+        return Type::Error;
+    };
+    let [key, value] = elements.as_slice() else {
+        diagnostics.push(dict_arity(span));
+        return Type::Error;
+    };
+    let (key_type, value_type) = (
+        annotation_type(key, diagnostics),
+        annotation_type(value, diagnostics),
+    );
+    if !key_type.is_hashable() {
+        diagnostics.push(unhashable_key(&key_type, key.span()));
+        return Type::Error;
+    }
+    Type::Dict(Box::new(key_type), Box::new(value_type))
+}
+
+fn dict_arity(span: typy_diagnostics::Span) -> Diagnostic {
+    Diagnostic::new(
+        DiagnosticCode::error(408),
+        span,
+        "a `dict` annotation names the types of its keys and values, such as `dict[str, int]`",
+    )
+    .with_rule(RuleId::TYP_06)
+}
+
 /// Returns the error for an item of a set, or a key of a dict, whose type has no hash.
 pub(crate) fn unhashable(item: &Type, span: typy_diagnostics::Span) -> Diagnostic {
+    unhashable_as(item, span, "an item of a set", RuleId::DAT_10)
+}
+
+/// Returns the error for a key of a dict whose type has no hash.
+pub(crate) fn unhashable_key(key: &Type, span: typy_diagnostics::Span) -> Diagnostic {
+    unhashable_as(key, span, "a key of a dict", RuleId::DAT_09)
+}
+
+fn unhashable_as(
+    item: &Type,
+    span: typy_diagnostics::Span,
+    place: &str,
+    rule: RuleId,
+) -> Diagnostic {
     Diagnostic::new(
         DiagnosticCode::error(413),
         span,
         format!(
-            "{} cannot be an item of a set, because it has no hash",
+            "{} cannot be {place}, because it has no hash",
             item.with_article()
         ),
     )
-    .with_rule(RuleId::DAT_10)
-    .with_help("a list or a set changes, so it has no hash; use a tuple of its items")
+    .with_rule(rule)
+    .with_help("a list, a set or a dict changes, so it has no hash; use a tuple of its items")
 }
 
 /// Returns the type `tuple[...]` names: one type per item, `tuple[()]` for the empty tuple. A

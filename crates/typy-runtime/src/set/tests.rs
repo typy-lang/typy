@@ -581,3 +581,32 @@ fn check_methods(cases: &[(&str, &[i128], &[i128], &str)], make: fn(&[i128]) -> 
         release(set);
     }
 }
+
+#[test]
+fn pop_wraps_round_the_table_and_comparisons_can_fail() {
+    let set = ints(&[1, 2]);
+    let same = ints(&[2, 1]);
+    // SAFETY: the sets are live.
+    unsafe {
+        (*set).finger = 7;
+        let popped = typy_rt_set_pop(set);
+        assert_eq!(inline_value(popped.value.cast_signed()), 1);
+        typy_rt_set_add(set, word(1).cast_unsigned());
+        assert!(!typy_rt_set_compare(set, same, word(1)));
+        assert!(!typy_rt_set_compare(set, same, word(4)));
+    }
+    [set, same].into_iter().for_each(release);
+}
+
+#[test]
+#[cfg_attr(miri, ignore = "fifty thousand items take Miri minutes")]
+fn a_large_set_grows_to_twice_its_items() {
+    let values: Vec<i128> = (0..50_002).collect();
+    let set = ints(&values);
+    // SAFETY: the set is live.
+    unsafe {
+        assert_eq!(inline_value(typy_rt_set_length(set)), 50_002);
+        assert_eq!((*set).mask + 1, 131_072);
+    }
+    release(set);
+}

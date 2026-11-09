@@ -119,7 +119,19 @@ impl Converter<'_> {
             },
             ast::Expr::Named(node) => self.other(NodeKind::NamedExpr, node.range),
             ast::Expr::Lambda(node) => self.other(NodeKind::Lambda, node.range),
-            ast::Expr::Dict(node) => self.other(NodeKind::Dict, node.range),
+            ast::Expr::Dict(node) => Expr::Dict {
+                keys: node
+                    .items
+                    .iter()
+                    .map(|item| item.key.as_ref().map(|key| self.expression(key)))
+                    .collect(),
+                values: node
+                    .items
+                    .iter()
+                    .map(|item| self.expression(&item.value))
+                    .collect(),
+                span: self.span(node.range),
+            },
             ast::Expr::ListComp(node) => self.other(NodeKind::ListComp, node.range),
             ast::Expr::SetComp(node) => self.other(NodeKind::SetComp, node.range),
             ast::Expr::DictComp(node) => self.other(NodeKind::DictComp, node.range),

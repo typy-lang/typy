@@ -16,7 +16,6 @@ pub enum NodeKind {
     Await,
     ClassDef,
     Delete,
-    Dict,
     DictComp,
     GeneratorExp,
     Global,

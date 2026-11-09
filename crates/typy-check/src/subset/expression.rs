@@ -11,7 +11,7 @@ impl Walker {
     /// `set[...]`; the checker reports any other name.
     pub(super) fn annotation(&mut self, annotation: &Expr) {
         match annotation {
-            Expr::Subscript { value, index, .. } if matches!(value.as_ref(), Expr::Name { id, .. } if matches!(id.as_str(), "tuple" | "list" | "set")) =>
+            Expr::Subscript { value, index, .. } if matches!(value.as_ref(), Expr::Name { id, .. } if matches!(id.as_str(), "tuple" | "list" | "set" | "dict")) =>
             {
                 match index.as_ref() {
                     // `tuple[int, ...]` is checked, and reported, by the checker.
@@ -39,7 +39,7 @@ impl Walker {
                 self.report(
                     *span,
                     planned(
-                        "generic annotations such as `dict[str, int]`",
+                        "generic annotations such as `frozenset[int]`",
                         "0.2",
                         RuleId::TYP_06,
                     ),
@@ -182,6 +182,18 @@ impl Walker {
             | Expr::Set { elements, .. } => {
                 for element in elements {
                     self.expression(element);
+                }
+            }
+            Expr::Dict { keys, values, .. } => {
+                for (key, value) in keys.iter().zip(values) {
+                    match key {
+                        Some(key) => self.expression(key),
+                        None => self.report(
+                            value.span(),
+                            planned("unpacking with `**`", "1.0", RuleId::EXP_17),
+                        ),
+                    }
+                    self.expression(value);
                 }
             }
             Expr::Attribute { span, .. } => {

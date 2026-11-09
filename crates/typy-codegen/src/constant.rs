@@ -39,11 +39,11 @@ impl<'ctx> FunctionEmitter<'_, '_, 'ctx> {
                 let text = self.shared.tyir.string(*id);
                 Some(self.shared.statics.bytes(self.shared.module, text).into())
             }
-            Constant::PlaceholderList | Constant::PlaceholderSet => {
-                let name = if *constant == Constant::PlaceholderList {
-                    "typy_rt_placeholder_list"
-                } else {
-                    "typy_rt_placeholder_set"
+            Constant::PlaceholderList | Constant::PlaceholderSet | Constant::PlaceholderDict => {
+                let name = match constant {
+                    Constant::PlaceholderList => "typy_rt_placeholder_list",
+                    Constant::PlaceholderSet => "typy_rt_placeholder_set",
+                    _ => "typy_rt_placeholder_dict",
                 };
                 let global = self.shared.module.get_global(name).unwrap_or_else(|| {
                     let global = self.shared.module.add_global(context.i8_type(), None, name);

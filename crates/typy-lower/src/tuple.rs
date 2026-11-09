@@ -20,7 +20,13 @@ impl FunctionLowerer<'_> {
     }
 
     /// Returns item `index` of a tuple, borrowed from it.
-    fn borrowed_item(&mut self, tuple: Lowered, index: usize, ty: TyirType, span: Span) -> Lowered {
+    pub(crate) fn borrowed_item(
+        &mut self,
+        tuple: Lowered,
+        index: usize,
+        ty: TyirType,
+        span: Span,
+    ) -> Lowered {
         let index = u32::try_from(index).unwrap_or(u32::MAX);
         let value = self.builder.push_value(
             Operation::TupleItem {
@@ -142,6 +148,7 @@ impl FunctionLowerer<'_> {
                 self.store(slot, value, span);
             }
             AssignTarget::Item { list, index } => self.assign_item(list, index, value, span),
+            AssignTarget::Entry { dict, key } => self.assign_entry(dict, key, value, span),
             AssignTarget::Tuple(targets) => {
                 let (_, items) = self.item_types(value.ty);
                 for (index, (target, ty)) in targets.iter().zip(items).enumerate() {
@@ -293,6 +300,17 @@ impl FunctionLowerer<'_> {
             }
             TyirType::Object(typy_tyir::TypeId::SET) => {
                 self.constant(Constant::PlaceholderSet, span)
+            }
+            TyirType::Object(typy_tyir::TypeId::DICT) => {
+                self.constant(Constant::PlaceholderDict, span)
+            }
+            // A view slot starts as a view of the placeholder dict, which holds no reference
+            // to an immortal object that matters, and is freed like any other view.
+            TyirType::Object(typy_tyir::TypeId::DICT_VIEW) => {
+                let dict = self.constant(Constant::PlaceholderDict, span);
+                let kind = self.constant(Constant::Int("0".to_owned()), span);
+                self.call_runtime(RuntimeFunction::DictView, vec![dict, kind], span)
+                    .value
             }
             TyirType::Object(typy_tyir::TypeId::BYTES) => self.bytes_constant(&[], span),
             TyirType::Object(_) => self.string("", span),

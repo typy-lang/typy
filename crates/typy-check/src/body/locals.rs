@@ -159,6 +159,11 @@ impl BodyChecker<'_> {
         span: Span,
     ) -> Option<AssignTarget> {
         let list = self.expression(list);
+        if let Type::Dict(key, _) = &list.ty {
+            let key = key.as_ref().clone();
+            let key = self.expression_expecting(index, Some(&key));
+            return self.entry_target(list, key, ty, span);
+        }
         if let Expr::Slice { .. } = index {
             self.slice_assignment(span);
             return None;
@@ -180,6 +185,7 @@ impl BodyChecker<'_> {
             | TypedExprKind::Index { value: list, index } => {
                 self.checked_item_target(*list, *index, ty, span)
             }
+            TypedExprKind::DictItem { dict, key } => self.entry_target(*dict, *key, ty, span),
             TypedExprKind::TupleItem { tuple, .. } => {
                 self.unassignable_item(&tuple.ty, span);
                 None

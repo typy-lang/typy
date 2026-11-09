@@ -35,6 +35,15 @@ impl FunctionLowerer<'_> {
                 let item = self.set_item_type(&expression.ty);
                 self.set_display(items, item, span)
             }
+            TypedExprKind::Dict { keys, values } => {
+                self.dict_display(keys, values, &expression.ty, span)
+            }
+            TypedExprKind::DictOf(source) => self.dict_of(source, &expression.ty, span),
+            TypedExprKind::DictItem { dict, key } => {
+                let dict = self.expression(dict);
+                let key = self.expression(key);
+                self.dict_item(dict, key, ty, span)
+            }
             TypedExprKind::SetOf(source) => {
                 let item = self.set_item_type(&expression.ty);
                 self.set_of(source, item, span)
@@ -173,11 +182,17 @@ impl FunctionLowerer<'_> {
             TyirType::Int => ScalarKind::Int,
             TyirType::Float => ScalarKind::Float,
             TyirType::Object(typy_tyir::TypeId::LIST) => return self.list_truth(lowered, span),
-            TyirType::Object(typy_tyir::TypeId::BYTES | typy_tyir::TypeId::SET) => {
-                let function = if lowered.ty == TyirType::SET {
-                    RuntimeFunction::SetLength
-                } else {
-                    RuntimeFunction::BytesLength
+            TyirType::Object(
+                typy_tyir::TypeId::BYTES
+                | typy_tyir::TypeId::SET
+                | typy_tyir::TypeId::DICT
+                | typy_tyir::TypeId::DICT_VIEW,
+            ) => {
+                let function = match lowered.ty {
+                    TyirType::SET => RuntimeFunction::SetLength,
+                    TyirType::DICT => RuntimeFunction::DictLength,
+                    TyirType::VIEW => RuntimeFunction::DictViewLength,
+                    _ => RuntimeFunction::BytesLength,
                 };
                 let length = self.call_runtime(function, vec![lowered.value], span).value;
                 return self.builder.push_value(

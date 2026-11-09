@@ -7,6 +7,10 @@ mod operations;
 #[cfg(test)]
 mod tests;
 mod text;
+mod view;
+
+pub(crate) use text::typy_rt_dict_view_text;
+pub(crate) use view::{ViewObject, destroy as destroy_view, length as view_length};
 
 pub(crate) use operations::typy_rt_dict_equal;
 #[cfg(test)]

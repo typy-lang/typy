@@ -21,6 +21,7 @@ impl BodyChecker<'_> {
         match expression {
             Expr::List { elements, span } => self.list_display(elements, expected, *span),
             Expr::Set { elements, span } => self.set_display(elements, expected, *span),
+            Expr::Dict { keys, values, span } => self.dict_display(keys, values, expected, *span),
             Expr::Call {
                 arguments,
                 keywords,
@@ -56,6 +57,18 @@ impl BodyChecker<'_> {
                     .is_some_and(|(builtin, ..)| builtin == Builtin::Set) =>
             {
                 self.call_set(arguments, keywords, expected, *span)
+            }
+            Expr::Call {
+                arguments,
+                keywords,
+                span,
+                ..
+            } if arguments.is_empty()
+                && self
+                    .called_builtin(expression)
+                    .is_some_and(|(builtin, ..)| builtin == Builtin::Dict) =>
+            {
+                self.call_dict(arguments, keywords, expected, *span)
             }
             other => {
                 let value = self.expression(other);
@@ -216,9 +229,24 @@ impl BodyChecker<'_> {
         if is_empty_list(expression) {
             return Some(Empty::List);
         }
+        if matches!(expression, Expr::Dict { keys, .. } if keys.is_empty()) {
+            return Some(Empty::Dict);
+        }
         let (builtin, arguments, keywords) = self.called_builtin(expression)?;
-        (builtin == Builtin::Set && arguments.is_empty() && keywords.is_empty())
-            .then_some(Empty::Set)
+        if !arguments.is_empty() || !keywords.is_empty() {
+            return None;
+        }
+        match builtin {
+            Builtin::Set => Some(Empty::Set),
+            Builtin::Dict => Some(Empty::Dict),
+            _ => None,
+        }
+    }
+
+    /// Returns whether an expression is `{}` or `dict()`, an empty dict that takes its type
+    /// from where it is used.
+    pub(super) fn is_empty_dict_call(&self, expression: &Expr) -> bool {
+        self.empty_collection(expression) == Some(Empty::Dict)
     }
 
     /// Returns whether an expression is `set()`, an empty set that takes its type from where it
@@ -242,7 +270,11 @@ impl BodyChecker<'_> {
         }
         let mut items: Vec<Option<TypedExpr>> = elements
             .iter()
-            .map(|element| (!is_empty_list(element)).then(|| self.expression(element)))
+            .map(|element| {
+                self.empty_collection(element)
+                    .is_none()
+                    .then(|| self.expression(element))
+            })
             .collect();
         let sibling = items.iter().flatten().next().map(|item| item.ty.clone());
         for (item, element) in items.iter_mut().zip(elements) {
@@ -281,6 +313,8 @@ enum Empty {
     List,
     /// `set()`.
     Set,
+    /// `{}` or `dict()`.
+    Dict,
 }
 
 impl Empty {
@@ -288,15 +322,17 @@ impl Empty {
     fn holds(self, ty: &Type) -> bool {
         matches!(
             (self, ty),
-            (Self::List, Type::List(_)) | (Self::Set, Type::Set(_))
+            (Self::List, Type::List(_)) | (Self::Set, Type::Set(_)) | (Self::Dict, Type::Dict(..))
         )
     }
 
-    /// Returns the collection of this kind with items of type `item`.
-    fn of(self, item: Type) -> Type {
+    /// Returns the collection of this kind that `in` finds `item` in; a dict finds its keys,
+    /// and its value type is not known, so `x in {}` is not given one.
+    fn of(self, item: Type) -> Option<Type> {
         match self {
-            Self::List => Type::List(Box::new(item)),
-            Self::Set => Type::Set(Box::new(item)),
+            Self::List => Some(Type::List(Box::new(item))),
+            Self::Set => Some(Type::Set(Box::new(item))),
+            Self::Dict => None,
         }
     }
 }
@@ -323,7 +359,7 @@ fn empty_type(
         .and_then(|before| Some((typed[before].as_ref()?, operators[before])));
     if let Some((neighbour, operator)) = left {
         if is_membership(operator) {
-            return Some(kind.of(neighbour.ty.clone()));
+            return kind.of(neighbour.ty.clone());
         }
         if kind.holds(&neighbour.ty) {
             return Some(neighbour.ty.clone());
@@ -334,6 +370,7 @@ fn empty_type(
         // The empty collection is the item looked for, so it has the item type.
         return match &neighbour.ty {
             Type::List(item) | Type::Set(item) => Some(item.as_ref().clone()),
+            Type::Dict(key, _) => Some(key.as_ref().clone()),
             _ => None,
         };
     }

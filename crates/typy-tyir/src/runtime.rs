@@ -140,6 +140,30 @@ pub enum RuntimeFunction {
     SetToggle,
     SetReplace,
     SetRelation,
+    DictNew,
+    DictSet,
+    DictFind,
+    DictContains,
+    DictGet,
+    DictGetOr,
+    DictKey,
+    DictValue,
+    DictPop,
+    DictPopOr,
+    DictPopitem,
+    DictSetdefault,
+    DictLength,
+    DictClear,
+    DictNext,
+    DictCopy,
+    DictUpdate,
+    DictEqual,
+    DictRepr,
+    DictView,
+    DictViewDict,
+    DictViewContains,
+    DictViewLength,
+    DictViewText,
 }
 
 /// The parameter types, result type and raising behaviour of a runtime function.
@@ -170,7 +194,7 @@ const FLOAT_FLOAT: &[TyirType] = &[TyirType::Float, TyirType::Float];
 
 impl RuntimeFunction {
     /// Every runtime function.
-    pub const ALL: [Self; 131] = [
+    pub const ALL: [Self; 155] = [
         Self::IntFloorDivide,
         Self::IntModulo,
         Self::IntPower,
@@ -302,6 +326,30 @@ impl RuntimeFunction {
         Self::SetToggle,
         Self::SetReplace,
         Self::SetRelation,
+        Self::DictNew,
+        Self::DictSet,
+        Self::DictFind,
+        Self::DictContains,
+        Self::DictGet,
+        Self::DictGetOr,
+        Self::DictKey,
+        Self::DictValue,
+        Self::DictPop,
+        Self::DictPopOr,
+        Self::DictPopitem,
+        Self::DictSetdefault,
+        Self::DictLength,
+        Self::DictClear,
+        Self::DictNext,
+        Self::DictCopy,
+        Self::DictUpdate,
+        Self::DictEqual,
+        Self::DictRepr,
+        Self::DictView,
+        Self::DictViewDict,
+        Self::DictViewContains,
+        Self::DictViewLength,
+        Self::DictViewText,
     ];
 
     #[allow(
@@ -316,6 +364,8 @@ impl RuntimeFunction {
         const LIST: TyirType = TyirType::LIST;
         const BYTES: TyirType = TyirType::BYTES;
         const SET: TyirType = TyirType::SET;
+        const DICT: TyirType = TyirType::DICT;
+        const VIEW: TyirType = TyirType::VIEW;
         match self {
             Self::IntFloorDivide
             | Self::IntModulo
@@ -423,6 +473,28 @@ impl RuntimeFunction {
             }
             Self::SetReplace => signature(&[SET, SET], Unit, false),
             Self::SetRelation => signature(&[SET, Bits, Int], Bool, false),
+            Self::DictNew => signature(&[Int, Bits, Int, Bits, Int], DICT, false),
+            Self::DictSet => signature(&[DICT, Bits, Bits], Unit, false),
+            Self::DictFind => signature(&[DICT, Bits], Int, false),
+            Self::DictContains => signature(&[DICT, Bits], Bool, false),
+            Self::DictGet | Self::DictPop => signature(&[DICT, Bits], Bits, true),
+            Self::DictGetOr | Self::DictPopOr | Self::DictSetdefault => {
+                signature(&[DICT, Bits, Bits], Bits, false)
+            }
+            Self::DictKey | Self::DictValue => signature(&[DICT, Int], Bits, false),
+            Self::DictPopitem => signature(&[DICT], Int, true),
+            Self::DictLength => signature(&[DICT], Int, false),
+            Self::DictClear => signature(&[DICT], Unit, false),
+            Self::DictNext => signature(&[DICT, Int, Int, Int], Int, true),
+            Self::DictCopy => signature(&[DICT], DICT, false),
+            Self::DictUpdate => signature(&[DICT, Bits], Unit, false),
+            Self::DictEqual => signature(&[DICT, DICT], Bool, false),
+            Self::DictRepr => signature(&[DICT], STR, true),
+            Self::DictView => signature(&[DICT, Int], VIEW, false),
+            Self::DictViewDict => signature(&[VIEW], DICT, false),
+            Self::DictViewContains => signature(&[VIEW, Bits, Bits], Bool, false),
+            Self::DictViewLength => signature(&[VIEW], Int, false),
+            Self::DictViewText => signature(&[VIEW], STR, true),
             Self::StrEncode => signature(&[STR, Int, Int], BYTES, true),
             Self::BytesDecode => signature(&[BYTES, Int, Int], STR, true),
             Self::BytesSearch => signature(&[BYTES, BYTES, Int, Int, Int], Int, true),
@@ -584,6 +656,30 @@ impl RuntimeFunction {
             Self::SetToggle => "set_toggle",
             Self::SetReplace => "set_replace",
             Self::SetRelation => "set_relation",
+            Self::DictNew => "dict_new",
+            Self::DictSet => "dict_set",
+            Self::DictFind => "dict_find",
+            Self::DictContains => "dict_contains",
+            Self::DictGet => "dict_get",
+            Self::DictGetOr => "dict_get_or",
+            Self::DictKey => "dict_key",
+            Self::DictValue => "dict_value",
+            Self::DictPop => "dict_pop",
+            Self::DictPopOr => "dict_pop_or",
+            Self::DictPopitem => "dict_popitem",
+            Self::DictSetdefault => "dict_setdefault",
+            Self::DictLength => "dict_length",
+            Self::DictClear => "dict_clear",
+            Self::DictNext => "dict_next",
+            Self::DictCopy => "dict_copy",
+            Self::DictUpdate => "dict_update",
+            Self::DictEqual => "dict_equal",
+            Self::DictRepr => "dict_repr",
+            Self::DictView => "dict_view",
+            Self::DictViewDict => "dict_view_dict",
+            Self::DictViewContains => "dict_view_contains",
+            Self::DictViewLength => "dict_view_length",
+            Self::DictViewText => "dict_view_text",
         }
     }
 }

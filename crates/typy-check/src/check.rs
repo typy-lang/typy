@@ -2,7 +2,7 @@
 
 mod annotation;
 
-pub(crate) use annotation::unhashable;
+pub(crate) use annotation::{unhashable, unhashable_key};
 mod definition;
 mod definition_order;
 mod module_scope;

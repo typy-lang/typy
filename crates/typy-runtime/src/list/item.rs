@@ -5,8 +5,8 @@
 
 use crate::Raising;
 use crate::header::{
-    BYTES_TYPE_ID, DICT_TYPE_ID, LIST_TYPE_ID, ObjectHeader, SET_TYPE_ID, STR_TYPE_ID,
-    TUPLE_TYPE_ID,
+    BYTES_TYPE_ID, DICT_TYPE_ID, DICT_VIEW_TYPE_ID, LIST_TYPE_ID, ObjectHeader, SET_TYPE_ID,
+    STR_TYPE_ID, TUPLE_TYPE_ID,
 };
 use crate::string::StrObject;
 use crate::tuple::TupleType;
@@ -320,6 +320,7 @@ unsafe fn object_is_true(object: *mut ObjectHeader) -> bool {
             LIST_TYPE_ID | TUPLE_TYPE_ID => (*object.cast::<super::ListObject>()).length != 0,
             SET_TYPE_ID => (*object.cast::<crate::set::SetObject>()).used != 0,
             DICT_TYPE_ID => (*object.cast::<crate::dict::DictObject>()).used != 0,
+            DICT_VIEW_TYPE_ID => crate::dict::view_length(object.cast()) != 0,
             _ => crate::libc::abort_with(b"typy runtime: a list holds an object it cannot test\n"),
         }
     }
@@ -428,6 +429,7 @@ unsafe fn object_repr(object: *mut ObjectHeader) -> Raising<*mut StrObject> {
             LIST_TYPE_ID | TUPLE_TYPE_ID => super::typy_rt_list_repr(object.cast()),
             SET_TYPE_ID => crate::set::typy_rt_set_repr(object.cast()),
             DICT_TYPE_ID => crate::dict::typy_rt_dict_repr(object.cast()),
+            DICT_VIEW_TYPE_ID => crate::dict::typy_rt_dict_view_text(object.cast()),
             _ => crate::libc::abort_with(b"typy runtime: a list holds an object it cannot write\n"),
         }
     }

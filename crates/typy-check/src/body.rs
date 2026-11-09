@@ -2,6 +2,7 @@
 
 mod builtin_call;
 mod call;
+mod dict;
 mod expression;
 mod flow;
 mod iterable_call;

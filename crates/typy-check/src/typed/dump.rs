@@ -85,6 +85,7 @@ impl Dump<'_> {
                 format!("({})", parts.join(", "))
             }
             AssignTarget::Item { list, .. } => format!("item of {}", list.ty),
+            AssignTarget::Entry { dict, .. } => format!("entry of {}", dict.ty),
         }
     }
 
@@ -214,6 +215,9 @@ impl Dump<'_> {
             TypedExprKind::ListOf(_) => "ListOf".to_owned(),
             TypedExprKind::SetOf(_) => "SetOf".to_owned(),
             TypedExprKind::Set(_) => "Set".to_owned(),
+            TypedExprKind::Dict { .. } => "Dict".to_owned(),
+            TypedExprKind::DictOf(_) => "DictOf".to_owned(),
+            TypedExprKind::DictItem { .. } => "DictItem".to_owned(),
             TypedExprKind::TupleOf(_) => "TupleOf".to_owned(),
             TypedExprKind::ListItem { .. } => "ListItem".to_owned(),
             TypedExprKind::Slice { .. } => "Slice".to_owned(),
@@ -251,7 +255,15 @@ fn children(expression: &TypedExpr) -> Vec<&TypedExpr> {
             items.iter().collect()
         }
         TypedExprKind::ListItem { list, index } => vec![list, index],
-        TypedExprKind::ListOf(source) | TypedExprKind::SetOf(source) => source.expressions(),
+        TypedExprKind::ListOf(source)
+        | TypedExprKind::SetOf(source)
+        | TypedExprKind::DictOf(source) => source.expressions(),
+        TypedExprKind::Dict { keys, values } => keys
+            .iter()
+            .zip(values)
+            .flat_map(|(key, value)| [key, value])
+            .collect(),
+        TypedExprKind::DictItem { dict, key } => vec![dict, key],
         TypedExprKind::IterableBuiltin {
             iterable, option, ..
         } => std::iter::once(iterable.as_ref())

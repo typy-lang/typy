@@ -72,6 +72,25 @@ impl FunctionLowerer<'_> {
     /// other source is read as a `for` loop reads it, adding each value in order.
     pub(crate) fn set_of(&mut self, source: &LoopSource, item: TyirType, span: Span) -> Lowered {
         if let LoopSource::Items(sequence) = source
+            && matches!(sequence.ty, typy_check::Type::Dict(..))
+        {
+            // CPython adds a dict's keys with the hashes it stored, after one resize.
+            let dict = self.expression(sequence);
+            let set = self.new_set(item, span);
+            let address = self.address(dict.value, span);
+            let none = self.constant(Constant::Unit, span);
+            let skip = self
+                .builder
+                .push_value(Operation::ToBits(none), TyirType::Bits, span);
+            self.call_runtime(
+                RuntimeFunction::SetExtend,
+                vec![set.value, address, skip],
+                span,
+            );
+            self.release(dict, span);
+            return set;
+        }
+        if let LoopSource::Items(sequence) = source
             && matches!(sequence.ty, typy_check::Type::Set(_))
         {
             let set = self.expression(sequence);
@@ -88,7 +107,7 @@ impl FunctionLowerer<'_> {
     }
 
     /// Returns the address the runtime takes for another collection, a set or a list.
-    fn address(&mut self, collection: ValueId, span: Span) -> ValueId {
+    pub(crate) fn address(&mut self, collection: ValueId, span: Span) -> ValueId {
         self.builder
             .push_value(Operation::ToBits(collection), TyirType::Bits, span)
     }

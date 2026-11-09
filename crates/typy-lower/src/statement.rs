@@ -55,6 +55,10 @@ impl FunctionLowerer<'_> {
                         typy_check::Type::List(item) => item.as_ref().clone(),
                         _ => unreachable!("the checker allows an item target only on a list"),
                     },
+                    typy_check::AssignTarget::Entry { dict, .. } => match &dict.ty {
+                        typy_check::Type::Dict(_, value) => value.as_ref().clone(),
+                        _ => unreachable!("the checker allows an entry target only on a dict"),
+                    },
                     typy_check::AssignTarget::Tuple(_) => typy_check::Type::Error,
                 };
                 self.augmented_assignment(target, *operator, value, &result, *span);

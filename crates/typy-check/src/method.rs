@@ -65,6 +65,26 @@ pub enum Method {
     SetIssuperset,
     /// `set.isdisjoint(other)`: whether no item is in both.
     SetIsdisjoint,
+    /// `dict.get(key, default)`: the value of `key`, or `default`.
+    DictGet,
+    /// `dict.pop(key)` or `dict.pop(key, default)`: removes `key` and returns its value.
+    DictPop,
+    /// `dict.popitem()`: removes and returns the last `(key, value)` pair.
+    DictPopitem,
+    /// `dict.setdefault(key, default)`: the value of `key`, set to `default` when missing.
+    DictSetdefault,
+    /// `dict.keys()`: a view of the keys.
+    DictKeys,
+    /// `dict.values()`: a view of the values.
+    DictValues,
+    /// `dict.items()`: a view of the `(key, value)` pairs.
+    DictItems,
+    /// `dict.update(other)`: sets each pair of a dict or an iterable of pairs.
+    DictUpdate,
+    /// `dict.clear()`: removes every entry.
+    DictClear,
+    /// `dict.copy()`: a new dict with the same entries.
+    DictCopy,
     /// `tuple.index(item)`: returns the position of the first equal item, or raises
     /// `ValueError`.
     TupleIndex,
@@ -250,6 +270,20 @@ const STR_METHODS: [(&str, Method); 43] = [
     ("encode", Method::StrEncode),
 ];
 
+/// The methods of `dict`.
+const DICT_METHODS: [Method; 10] = [
+    Method::DictGet,
+    Method::DictPop,
+    Method::DictPopitem,
+    Method::DictSetdefault,
+    Method::DictKeys,
+    Method::DictValues,
+    Method::DictItems,
+    Method::DictUpdate,
+    Method::DictClear,
+    Method::DictCopy,
+];
+
 /// The methods of `set`.
 const SET_METHODS: [Method; 17] = [
     Method::SetAdd,
@@ -291,6 +325,12 @@ impl Method {
                     .map(|(_, method)| *method),
             };
         }
+        if let Type::Dict(..) = receiver {
+            return DICT_METHODS
+                .iter()
+                .find(|method| method.name() == name)
+                .copied();
+        }
         if let Type::Set(_) = receiver {
             return SET_METHODS
                 .iter()
@@ -328,21 +368,27 @@ impl Method {
     pub const fn name(self) -> &'static str {
         match self {
             Self::ListAppend => "append",
-            Self::ListPop | Self::SetPop => "pop",
+            Self::ListPop | Self::SetPop | Self::DictPop => "pop",
             Self::ListInsert => "insert",
             Self::ListExtend => "extend",
             Self::ListRemove | Self::SetRemove => "remove",
             Self::ListIndex | Self::TupleIndex | Self::StrIndex => "index",
             Self::ListCount | Self::TupleCount | Self::StrCount => "count",
-            Self::ListClear | Self::SetClear => "clear",
-            Self::ListCopy | Self::SetCopy => "copy",
+            Self::ListClear | Self::SetClear | Self::DictClear => "clear",
+            Self::ListCopy | Self::SetCopy | Self::DictCopy => "copy",
+            Self::DictGet => "get",
+            Self::DictPopitem => "popitem",
+            Self::DictSetdefault => "setdefault",
+            Self::DictKeys => "keys",
+            Self::DictValues => "values",
+            Self::DictItems => "items",
             Self::SetAdd => "add",
             Self::SetDiscard => "discard",
             Self::SetUnion => "union",
             Self::SetIntersection => "intersection",
             Self::SetDifference => "difference",
             Self::SetSymmetricDifference => "symmetric_difference",
-            Self::SetUpdate => "update",
+            Self::SetUpdate | Self::DictUpdate => "update",
             Self::SetIntersectionUpdate => "intersection_update",
             Self::SetDifferenceUpdate => "difference_update",
             Self::SetSymmetricDifferenceUpdate => "symmetric_difference_update",
