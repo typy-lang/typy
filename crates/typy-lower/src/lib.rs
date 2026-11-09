@@ -19,6 +19,7 @@ mod ownership;
 mod program;
 mod slice;
 mod statement;
+mod str_method;
 mod strings;
 mod tuple;
 mod types;

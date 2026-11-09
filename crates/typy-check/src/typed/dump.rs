@@ -268,7 +268,7 @@ fn children(expression: &TypedExpr) -> Vec<&TypedExpr> {
             arguments,
             ..
         } => std::iter::once(receiver.as_ref())
-            .chain(arguments)
+            .chain(arguments.iter().map(|argument| &argument.value))
             .collect(),
         TypedExprKind::BoolOp { values, .. }
         | TypedExprKind::Builtin {

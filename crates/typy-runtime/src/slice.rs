@@ -32,7 +32,7 @@ impl Selection {
 
 /// Returns the value of an `int` word, a large integer clamped to the range of `i64`, as
 /// CPython clamps a slice bound to `Py_ssize_t`.
-fn clamped(word: i64) -> i64 {
+pub(crate) fn clamped(word: i64) -> i64 {
     if is_inline(word) {
         inline_value(word)
     } else {

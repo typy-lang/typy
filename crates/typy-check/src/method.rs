@@ -1,5 +1,9 @@
 //! The methods of built-in types that a program can call (LIB-03).
 
+mod signature;
+
+pub(crate) use signature::{MethodSignature, Parameter, ParameterKind, ParameterType};
+
 use crate::types::Type;
 
 /// A method of a built-in type.
@@ -32,26 +36,97 @@ pub enum Method {
     TupleIndex,
     /// `tuple.count(item)`: returns how many items are equal to `item`.
     TupleCount,
+    /// `str.find(sub, start, end)`: the first position of `sub`, or -1.
+    StrFind,
+    /// `str.rfind(sub, start, end)`: the last position of `sub`, or -1.
+    StrRfind,
+    /// `str.index(sub, start, end)`: the first position of `sub`, or `ValueError`.
+    StrIndex,
+    /// `str.rindex(sub, start, end)`: the last position of `sub`, or `ValueError`.
+    StrRindex,
+    /// `str.count(sub, start, end)`: the occurrences of `sub` that do not overlap.
+    StrCount,
+    /// `str.startswith(prefix, start, end)`, with a `str` or a tuple of them.
+    StrStartswith,
+    /// `str.endswith(suffix, start, end)`, with a `str` or a tuple of them.
+    StrEndswith,
+    /// `str.split(sep=None, maxsplit=-1)`.
+    StrSplit,
+    /// `str.rsplit(sep=None, maxsplit=-1)`.
+    StrRsplit,
+    /// `str.splitlines(keepends=False)`.
+    StrSplitlines,
+    /// `str.partition(sep)`: the parts before, of and after the first `sep`.
+    StrPartition,
+    /// `str.rpartition(sep)`: the parts before, of and after the last `sep`.
+    StrRpartition,
+    /// `str.join(iterable)`: the strings, with the receiver between each two.
+    StrJoin,
+    /// `str.strip(chars=None)`.
+    StrStrip,
+    /// `str.lstrip(chars=None)`.
+    StrLstrip,
+    /// `str.rstrip(chars=None)`.
+    StrRstrip,
+    /// `str.removeprefix(prefix)`.
+    StrRemoveprefix,
+    /// `str.removesuffix(suffix)`.
+    StrRemovesuffix,
+    /// `str.replace(old, new, count=-1)`.
+    StrReplace,
+    /// `str.center(width, fillchar=' ')`.
+    StrCenter,
+    /// `str.ljust(width, fillchar=' ')`.
+    StrLjust,
+    /// `str.rjust(width, fillchar=' ')`.
+    StrRjust,
+    /// `str.zfill(width)`.
+    StrZfill,
+    /// `str.expandtabs(tabsize=8)`.
+    StrExpandtabs,
+    /// `str.isascii()`.
+    StrIsascii,
 }
 
-/// The parameters a method takes, how many of them a call must give, and its result.
-#[derive(Clone, Debug, PartialEq)]
-pub struct MethodSignature {
-    /// The parameter types, in order.
-    pub parameters: Vec<Type>,
-    /// The number of leading parameters a call must give; the rest have Python's defaults.
-    pub required: usize,
-    /// The result type.
-    pub result: Type,
-    /// The name of the last parameter when it can only be given by keyword, as `reverse` of
-    /// `list.sort`.
-    pub keyword: Option<&'static str>,
-}
+/// The `str` methods, by name, in the order of the variants.
+const STR_METHODS: [(&str, Method); 25] = [
+    ("find", Method::StrFind),
+    ("rfind", Method::StrRfind),
+    ("index", Method::StrIndex),
+    ("rindex", Method::StrRindex),
+    ("count", Method::StrCount),
+    ("startswith", Method::StrStartswith),
+    ("endswith", Method::StrEndswith),
+    ("split", Method::StrSplit),
+    ("rsplit", Method::StrRsplit),
+    ("splitlines", Method::StrSplitlines),
+    ("partition", Method::StrPartition),
+    ("rpartition", Method::StrRpartition),
+    ("join", Method::StrJoin),
+    ("strip", Method::StrStrip),
+    ("lstrip", Method::StrLstrip),
+    ("rstrip", Method::StrRstrip),
+    ("removeprefix", Method::StrRemoveprefix),
+    ("removesuffix", Method::StrRemovesuffix),
+    ("replace", Method::StrReplace),
+    ("center", Method::StrCenter),
+    ("ljust", Method::StrLjust),
+    ("rjust", Method::StrRjust),
+    ("zfill", Method::StrZfill),
+    ("expandtabs", Method::StrExpandtabs),
+    ("isascii", Method::StrIsascii),
+];
 
 impl Method {
     /// Returns the method `name` of a value of type `receiver`, if the release provides it.
     #[must_use]
     pub fn of(receiver: &Type, name: &str) -> Option<Self> {
+        if *receiver == Type::Str {
+            return STR_METHODS
+                .iter()
+                .find(|(each, _)| *each == name)
+                .map(|(_, method)| *method);
+        }
         if let Type::TupleOf(_) = receiver {
             return match name {
                 "index" => Some(Self::TupleIndex),
@@ -87,44 +162,42 @@ impl Method {
             Self::ListInsert => "insert",
             Self::ListExtend => "extend",
             Self::ListRemove => "remove",
-            Self::ListIndex | Self::TupleIndex => "index",
-            Self::ListCount | Self::TupleCount => "count",
+            Self::ListIndex | Self::TupleIndex | Self::StrIndex => "index",
+            Self::ListCount | Self::TupleCount | Self::StrCount => "count",
             Self::ListClear => "clear",
             Self::ListCopy => "copy",
             Self::ListReverse => "reverse",
             Self::ListSort => "sort",
-        }
-    }
-
-    /// Returns the signature of the method on a receiver of type `receiver`, which is the type
-    /// `of` found the method on.
-    #[must_use]
-    pub fn signature(self, receiver: &Type) -> MethodSignature {
-        let item = receiver.sequence_item().cloned().unwrap_or(Type::Error);
-        let (parameters, required, result) = match self {
-            Self::ListAppend | Self::ListRemove => (vec![item], 1, Type::NoneType),
-            Self::ListPop => (vec![Type::Int], 0, item),
-            Self::ListInsert => (vec![Type::Int, item], 2, Type::NoneType),
-            Self::ListExtend => (vec![receiver.clone()], 1, Type::NoneType),
-            Self::ListIndex | Self::ListCount | Self::TupleIndex | Self::TupleCount => {
-                (vec![item], 1, Type::Int)
-            }
-            Self::ListClear | Self::ListReverse => (Vec::new(), 0, Type::NoneType),
-            Self::ListCopy => (Vec::new(), 0, receiver.clone()),
-            Self::ListSort => (vec![Type::Bool], 0, Type::NoneType),
-        };
-        MethodSignature {
-            parameters,
-            required,
-            result,
-            keyword: (self == Self::ListSort).then_some("reverse"),
+            Self::StrFind => "find",
+            Self::StrRfind => "rfind",
+            Self::StrRindex => "rindex",
+            Self::StrStartswith => "startswith",
+            Self::StrEndswith => "endswith",
+            Self::StrSplit => "split",
+            Self::StrRsplit => "rsplit",
+            Self::StrSplitlines => "splitlines",
+            Self::StrPartition => "partition",
+            Self::StrRpartition => "rpartition",
+            Self::StrJoin => "join",
+            Self::StrStrip => "strip",
+            Self::StrLstrip => "lstrip",
+            Self::StrRstrip => "rstrip",
+            Self::StrRemoveprefix => "removeprefix",
+            Self::StrRemovesuffix => "removesuffix",
+            Self::StrReplace => "replace",
+            Self::StrCenter => "center",
+            Self::StrLjust => "ljust",
+            Self::StrRjust => "rjust",
+            Self::StrZfill => "zfill",
+            Self::StrExpandtabs => "expandtabs",
+            Self::StrIsascii => "isascii",
         }
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::Method;
+    use super::{Method, ParameterKind, ParameterType};
     use crate::types::Type;
 
     #[test]
@@ -145,16 +218,41 @@ mod tests {
     fn signatures_follow_the_item_type() {
         let list = Type::List(Box::new(Type::Str));
         let pop = Method::ListPop.signature(&list);
-        assert_eq!(
-            (pop.parameters, pop.required, pop.result),
-            (vec![Type::Int], 0, Type::Str)
-        );
+        assert_eq!(pop.result, Type::Str);
+        assert_eq!(pop.parameters[0].ty, ParameterType::Exact(Type::Int));
+        assert!(!pop.parameters[0].required);
         let insert = Method::ListInsert.signature(&list);
-        assert_eq!(insert.parameters, vec![Type::Int, Type::Str]);
+        assert_eq!(insert.parameters[1].ty, ParameterType::Exact(Type::Str));
         assert_eq!(Method::ListCopy.signature(&list).result, list);
         assert_eq!(
-            Method::ListIndex.signature(&Type::Int).parameters,
-            vec![Type::Error]
+            Method::ListIndex.signature(&Type::Int).parameters[0].ty,
+            ParameterType::Exact(Type::Error)
         );
+        assert_eq!(
+            Method::ListSort.signature(&list).parameters[0].kind,
+            ParameterKind::Keyword
+        );
+    }
+
+    #[test]
+    fn str_methods_take_python_s_parameters() {
+        assert_eq!(Method::of(&Type::Str, "split"), Some(Method::StrSplit));
+        assert_eq!(Method::of(&Type::Str, "upper"), None);
+        let find = Method::StrFind.signature(&Type::Str);
+        let names: Vec<&str> = find
+            .parameters
+            .iter()
+            .map(|parameter| parameter.name)
+            .collect();
+        assert_eq!(names, ["sub", "start", "end"]);
+        let split = Method::StrSplit.signature(&Type::Str);
+        assert_eq!(split.parameters[0].ty, ParameterType::StrOrNone);
+        assert_eq!(split.parameters[1].kind, ParameterKind::Either);
+        assert_eq!(
+            Method::StrJoin.signature(&Type::Str).parameters[0].ty,
+            ParameterType::Strings
+        );
+        assert_eq!(Method::StrIsascii.signature(&Type::Str).result, Type::Bool);
+        assert_eq!(Method::StrIndex.name(), "index");
     }
 }

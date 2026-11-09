@@ -55,6 +55,12 @@ All notable changes to TyPy are recorded here. The format follows
   A tuple such as `(1, 2)` is accepted where a `tuple[int, ...]` is
   expected, and `for` goes over a tuple whose items have one type (DAT-14,
   CST-03).
+- The `str` methods `find`, `rfind`, `index`, `rindex`, `count`,
+  `startswith`, `endswith`, `split`, `rsplit`, `splitlines`, `partition`,
+  `rpartition`, `join`, `strip`, `lstrip`, `rstrip`, `removeprefix`,
+  `removesuffix`, `replace`, `center`, `ljust`, `rjust`, `zfill`,
+  `expandtabs` and `isascii`, with arguments by keyword where CPython allows
+  them (LIB-03).
 - `round`, with and without `ndigits`, rounding half to even on the exact
   value as CPython does, so `round(2.675, 2)` is `2.67` (LIB-02).
 - `for` over the characters of a `str`, and over `enumerate`, with
@@ -73,6 +79,10 @@ All notable changes to TyPy are recorded here. The format follows
 
 - A program function named `range` is called by `for i in range(...)`,
   as in CPython, instead of the builtin (CST-02).
+- A traceback shows an entry repeated in a row at most three times, then
+  `[Previous line repeated N more times]`, as CPython does, so a
+  `RecursionError` writes a few lines instead of one for each frame
+  (STD-05).
 
 ## [0.1.0] - 2026-11-07
 

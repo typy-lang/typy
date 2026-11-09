@@ -2,13 +2,11 @@
 //! (DAT-07, DAT-11, DAT-12, TYP-05, LIB-03).
 
 use typy_diagnostics::{Diagnostic, DiagnosticCode, RuleId, Span};
-use typy_source::syntax::{CompareOperator, Expr, Identifier, Keyword};
+use typy_source::syntax::{CompareOperator, Expr};
 
 use super::BodyChecker;
-use super::iterable_call::Given;
 use crate::builtin::Builtin;
-use crate::method::Method;
-use crate::typed::{TypedConstant, TypedExpr, TypedExprKind};
+use crate::typed::{TypedExpr, TypedExprKind};
 use crate::types::Type;
 
 impl BodyChecker<'_> {
@@ -119,58 +117,6 @@ impl BodyChecker<'_> {
         )
     }
 
-    /// Returns the value given for the method's keyword parameter, after reporting any keyword
-    /// the method does not take.
-    fn method_keyword<'call>(
-        &mut self,
-        method: Method,
-        accepted: Option<&'static str>,
-        keywords: &'call [Keyword],
-        span: Span,
-    ) -> Given<'call> {
-        let mut value = None;
-        for keyword in keywords {
-            let name = keyword.name.as_ref().map(|name| name.name.as_str());
-            if name.is_some() && name == accepted && value.is_none() {
-                value = Some(&keyword.value);
-                continue;
-            }
-            let diagnostic = match name {
-                Some("key") if method == Method::ListSort => Diagnostic::new(
-                    DiagnosticCode::error(201),
-                    keyword.span,
-                    "the `key` argument of `sort` is planned for TyPy 1.0, with function values (FUN-05)",
-                )
-                .with_rule(RuleId::FUN_05),
-                Some(name) if Some(name) == accepted => Diagnostic::new(
-                    DiagnosticCode::error(404),
-                    keyword.span,
-                    format!("`{name}` is given twice"),
-                )
-                .with_rule(RuleId::LIB_03),
-                _ if accepted.is_none() => Diagnostic::new(
-                    DiagnosticCode::error(404),
-                    keyword.span,
-                    format!("`{}` takes no keyword arguments", method.name()),
-                )
-                .with_rule(RuleId::LIB_03),
-                _ => Diagnostic::new(
-                    DiagnosticCode::error(404),
-                    keyword.span,
-                    format!(
-                        "`{}` takes only the keyword argument `{}`",
-                        method.name(),
-                        accepted.unwrap_or_default()
-                    ),
-                )
-                .with_rule(RuleId::LIB_03),
-            };
-            self.error(diagnostic, span);
-            return Given::Refused;
-        }
-        value.map_or(Given::Absent, Given::Value)
-    }
-
     /// Checks the operands of a comparison chain. An empty list display takes its type from a
     /// neighbouring operand, so `xs == []` and `x in []` need no annotation (TYP-05).
     pub(super) fn comparison_operands(
@@ -255,110 +201,6 @@ impl BodyChecker<'_> {
             item,
             span,
         )
-    }
-
-    /// Checks `receiver.name(arguments)`, a method of a built-in type (LIB-03).
-    pub(super) fn method_call(
-        &mut self,
-        receiver: &Expr,
-        name: &Identifier,
-        arguments: &[Expr],
-        keywords: &[Keyword],
-        span: Span,
-    ) -> TypedExpr {
-        let receiver = self.expression(receiver);
-        if receiver.ty.has_error() {
-            return Self::typed(
-                TypedExprKind::Constant(TypedConstant::None),
-                Type::Error,
-                span,
-            );
-        }
-        let Some(method) = Method::of(&receiver.ty, &name.name) else {
-            return self.error(
-                Diagnostic::new(
-                    DiagnosticCode::error(412),
-                    name.span,
-                    format!(
-                        "{} has no method `{}` in TyPy",
-                        receiver.ty.with_article(),
-                        name.name
-                    ),
-                )
-                .with_rule(RuleId::LIB_03),
-                span,
-            );
-        };
-        let signature = method.signature(&receiver.ty);
-        let keyword_value = self.method_keyword(method, signature.keyword, keywords, span);
-        if let Given::Refused = keyword_value {
-            return Self::typed(
-                TypedExprKind::Constant(TypedConstant::None),
-                Type::Error,
-                span,
-            );
-        }
-        let keyword_value = keyword_value.value();
-        let parameters = signature.parameters;
-        let positional = parameters.len() - usize::from(signature.keyword.is_some());
-        if arguments.len() < signature.required || arguments.len() > positional {
-            let expected = if positional == 0 && signature.keyword.is_some() {
-                "no positional arguments".to_owned()
-            } else if signature.required == positional {
-                counted(positional, "argument")
-            } else if signature.required == 0 {
-                format!("at most {}", counted(positional, "argument"))
-            } else {
-                format!("{} to {} arguments", signature.required, positional)
-            };
-            let given = if arguments.len() == 1 { "is" } else { "are" };
-            return self.error(
-                Diagnostic::new(
-                    DiagnosticCode::error(404),
-                    span,
-                    format!(
-                        "`{}` takes {expected}, and {} {given} given",
-                        method.name(),
-                        arguments.len()
-                    ),
-                )
-                .with_rule(RuleId::LIB_03),
-                span,
-            );
-        }
-        let keyword_parameter = keyword_value.and_then(|value| Some((value, parameters.last()?)));
-        let arguments: Vec<TypedExpr> = arguments
-            .iter()
-            .zip(&parameters)
-            .chain(keyword_parameter)
-            .map(|(argument, parameter)| {
-                let value = self.expression_expecting(argument, Some(parameter));
-                self.expect(
-                    &value,
-                    parameter.clone(),
-                    &format!("the argument of `{}`", method.name()),
-                );
-                value
-            })
-            .collect();
-        Self::typed(
-            TypedExprKind::Method {
-                receiver: Box::new(receiver),
-                method,
-                arguments,
-            },
-            signature.result,
-            span,
-        )
-    }
-}
-
-/// Returns `count` with the noun, plural unless the count is one: "1 argument", "2 arguments".
-fn counted(count: usize, noun: &str) -> String {
-    if count == 1 {
-        format!("1 {noun}")
-    } else {
-        format!("{count} {noun}s")
     }
 }
 

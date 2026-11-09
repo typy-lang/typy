@@ -1051,3 +1051,42 @@ e: tuple[()] = tuple()
         assert!(dump.contains(node), "{node} missing from\n{dump}");
     }
 }
+
+#[test]
+fn str_method_arguments_bind_by_position_and_name() {
+    let cases: &[(&str, &[&str])] = &[
+        ("x = 'a'.split(1)\n", &["E0404"]),
+        ("x = 'a'.split(',', 1, 2)\n", &["E0404"]),
+        ("x = 'a'.split(sep=',', sep=',')\n", &["E0404"]),
+        ("x = 'a'.split(separator=',')\n", &["E0404"]),
+        ("x = 'a'.find(sub='a')\n", &["E0404"]),
+        ("x = 'a'.find()\n", &["E0404"]),
+        ("x = 'a'.find('a', 1.5)\n", &["E0404"]),
+        ("x = 'a'.startswith(1)\n", &["E0404"]),
+        ("x = 'a'.startswith(('a', 1))\n", &["E0404"]),
+        ("x = ','.join([1, 2])\n", &["E0404"]),
+        ("x = ','.join(5)\n", &["E0411"]),
+        ("x = 'a'.strip(**{})\n", &["E0201"]),
+        ("x = 'a'.upper()\n", &["E0412"]),
+        ("x = 'a'.center(5, fillchar='*')\n", &["E0404"]),
+        ("x = [1]\nx.sort(key=abs)\n", &["E0201"]),
+    ];
+    for (source, expected) in cases {
+        assert_eq!(&rejected(source), expected, "\n{source}");
+    }
+    assert_eq!(
+        messages("x = 'a'.find(sub='a')\n"),
+        ["`sub` of `find` is given by position only"]
+    );
+    let source = "\
+a: list[str] = 'a b'.split() + 'a,b'.rsplit(sep=',', maxsplit=1) + 'a\\nb'.splitlines(keepends=True)
+b: tuple[str, str, str] = 'k=v'.partition('=')
+c: str = '-'.join(a) + ''.join(reversed('ab')) + ','.join(('x', 'y'))
+d: bool = 'abc'.startswith(('a', 'b'), 1) or 'abc'.endswith('c', 0, -1) or 'a'.isascii()
+e: int = 'abc'.find('b') + 'abc'.count('', 1) + 'abc'.rindex('c', 0)
+f: str = 'ab'.strip() + 'ab'.lstrip(None) + 'ab'.rstrip('b') + 'x'.replace('x', 'y', 1)
+g: str = 'a'.center(5) + 'a'.ljust(3, '*') + '7'.zfill(3) + 'a\\tb'.expandtabs(tabsize=4)
+h: str = 'ab'.removeprefix('a') + 'ab'.removesuffix('b')
+";
+    accepted(source);
+}

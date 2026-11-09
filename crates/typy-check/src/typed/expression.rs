@@ -116,7 +116,7 @@ pub enum TypedExprKind {
     Method {
         receiver: Box<TypedExpr>,
         method: crate::method::Method,
-        arguments: Vec<TypedExpr>,
+        arguments: Vec<Argument>,
     },
     /// A new tuple of the items of `tuple` at positions known when compiling (DAT-12).
     TupleSlice {

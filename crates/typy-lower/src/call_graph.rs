@@ -163,7 +163,7 @@ fn expression(expression_value: &TypedExpr, callees: &mut BTreeSet<FunctionId>) 
         } => {
             expression(receiver, callees);
             for argument in arguments {
-                expression(argument, callees);
+                expression(&argument.value, callees);
             }
         }
         TypedExprKind::IterableBuiltin {

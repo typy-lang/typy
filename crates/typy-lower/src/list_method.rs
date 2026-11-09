@@ -1,31 +1,56 @@
-//! Lowers the methods of lists and of `tuple[T, ...]` (LIB-03, DAT-14). Each runtime list function borrows its arguments;
-//! one that stores an item takes a reference of its own.
+//! Lowers the methods of lists and of `tuple[T, ...]` (LIB-03, DAT-14). Each runtime list
+//! function borrows its arguments; one that stores an item takes a reference of its own.
 
-use typy_check::{Method, TypedExpr};
+use typy_check::{Argument, Method, TypedExpr};
 use typy_diagnostics::Span;
-use typy_tyir::{Constant, Operation, RuntimeFunction, TyirType};
+use typy_tyir::{Constant, Operation, RuntimeFunction, TyirType, ValueId};
 
 use crate::function::FunctionLowerer;
 use crate::ownership::Lowered;
 
 impl FunctionLowerer<'_> {
     /// Calls `receiver.method(arguments)`, whose result has type `result`. The receiver is
-    /// evaluated first, then the arguments in order, and all are released afterwards.
+    /// evaluated first, then the arguments in source order, and all are released afterwards.
     pub(crate) fn method(
         &mut self,
         receiver: &TypedExpr,
         method: Method,
-        arguments: &[TypedExpr],
+        arguments: &[Argument],
         result: TyirType,
         span: Span,
     ) -> Lowered {
         let receiver = self.expression(receiver);
-        let arguments: Vec<Lowered> = arguments
-            .iter()
-            .map(|argument| self.expression(argument))
-            .collect();
-        let list = receiver.value;
-        let lowered = match (method, arguments.as_slice()) {
+        let mut given: Vec<Option<Lowered>> = Vec::new();
+        for argument in arguments {
+            let value = self.expression(&argument.value);
+            if given.len() <= argument.parameter {
+                given.resize(argument.parameter + 1, None);
+            }
+            given[argument.parameter] = Some(value);
+        }
+        let lowered = if receiver.ty == TyirType::STR {
+            self.str_method(receiver.value, method, &given, result, span)
+        } else {
+            let arguments: Vec<Lowered> = given.iter().flatten().copied().collect();
+            self.list_method(receiver.value, method, &arguments, result, span)
+        };
+        for argument in given.into_iter().flatten() {
+            self.release(argument, span);
+        }
+        self.release(receiver, span);
+        lowered
+    }
+
+    /// Calls a method of a list or a `tuple[T, ...]` with its arguments in parameter order.
+    fn list_method(
+        &mut self,
+        list: ValueId,
+        method: Method,
+        arguments: &[Lowered],
+        result: TyirType,
+        span: Span,
+    ) -> Lowered {
+        match (method, arguments) {
             (Method::ListPop, given) => self.pop(list, given.first().copied(), result, span),
             (
                 Method::ListAppend
@@ -70,12 +95,7 @@ impl FunctionLowerer<'_> {
                 self.call_runtime(function, vec![list], span)
             }
             (method, _) => unreachable!("the checker gives `{}` its arguments", method.name()),
-        };
-        for argument in arguments {
-            self.release(argument, span);
         }
-        self.release(receiver, span);
-        lowered
     }
 
     /// Returns `list.pop()` or `list.pop(index)`. The list gives up its reference to the item,

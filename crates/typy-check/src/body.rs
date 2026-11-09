@@ -9,6 +9,7 @@ mod list;
 mod list_call;
 mod locals;
 mod loop_source;
+mod method_call;
 mod name;
 mod operator;
 mod program;

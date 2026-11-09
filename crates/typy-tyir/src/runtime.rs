@@ -73,6 +73,20 @@ pub enum RuntimeFunction {
     IntRoundDigits,
     StrContains,
     TupleSeal,
+    StrSearch,
+    StrMatch,
+    StrMatchAny,
+    StrStrip,
+    StrRemoveAffix,
+    StrReplace,
+    StrPad,
+    StrZfill,
+    StrExpandtabs,
+    StrIsascii,
+    StrSplit,
+    StrSplitlines,
+    StrPartition,
+    StrJoin,
 }
 
 /// The parameter types, result type and raising behaviour of a runtime function.
@@ -103,7 +117,7 @@ const FLOAT_FLOAT: &[TyirType] = &[TyirType::Float, TyirType::Float];
 
 impl RuntimeFunction {
     /// Every runtime function.
-    pub const ALL: [Self; 64] = [
+    pub const ALL: [Self; 78] = [
         Self::IntFloorDivide,
         Self::IntModulo,
         Self::IntPower,
@@ -168,6 +182,20 @@ impl RuntimeFunction {
         Self::IntRoundDigits,
         Self::StrContains,
         Self::TupleSeal,
+        Self::StrSearch,
+        Self::StrMatch,
+        Self::StrMatchAny,
+        Self::StrStrip,
+        Self::StrRemoveAffix,
+        Self::StrReplace,
+        Self::StrPad,
+        Self::StrZfill,
+        Self::StrExpandtabs,
+        Self::StrIsascii,
+        Self::StrSplit,
+        Self::StrSplitlines,
+        Self::StrPartition,
+        Self::StrJoin,
     ];
 
     /// Returns the function's signature. Comparisons take the comparison as an `int` operand, numbered as `Comparison::code`.
@@ -237,6 +265,18 @@ impl RuntimeFunction {
             Self::FloatRoundDigits => signature(&[Float, Int], Float, true),
             Self::IntRoundDigits => signature(INT_INT, Int, false),
             Self::StrContains => signature(&[STR, STR], Bool, false),
+            Self::StrSearch => signature(&[STR, STR, Int, Int, Int], Int, true),
+            Self::StrMatch => signature(&[STR, STR, Int, Int, Int], Bool, false),
+            Self::StrMatchAny => signature(&[STR, LIST, Int, Int, Int], Bool, false),
+            Self::StrStrip | Self::StrRemoveAffix => signature(&[STR, STR, Int], STR, false),
+            Self::StrReplace => signature(&[STR, STR, STR, Int], STR, false),
+            Self::StrPad => signature(&[STR, Int, STR, Int], STR, true),
+            Self::StrIsascii => signature(&[STR], Bool, false),
+            Self::StrSplit => signature(&[STR, STR, Int, Int], LIST, true),
+            Self::StrSplitlines => signature(&[STR, Int], LIST, false),
+            Self::StrPartition => signature(&[STR, STR, Int], LIST, true),
+            Self::StrJoin => signature(&[STR, LIST], STR, false),
+            Self::StrZfill | Self::StrExpandtabs => signature(&[STR, Int], STR, false),
         }
     }
 
@@ -308,6 +348,20 @@ impl RuntimeFunction {
             Self::IntRoundDigits => "int_round_digits",
             Self::StrContains => "str_contains",
             Self::TupleSeal => "tuple_seal",
+            Self::StrSearch => "str_search",
+            Self::StrMatch => "str_match",
+            Self::StrMatchAny => "str_match_any",
+            Self::StrStrip => "str_strip",
+            Self::StrRemoveAffix => "str_remove_affix",
+            Self::StrReplace => "str_replace",
+            Self::StrPad => "str_pad",
+            Self::StrZfill => "str_zfill",
+            Self::StrExpandtabs => "str_expandtabs",
+            Self::StrIsascii => "str_isascii",
+            Self::StrSplit => "str_split",
+            Self::StrSplitlines => "str_splitlines",
+            Self::StrPartition => "str_partition",
+            Self::StrJoin => "str_join",
         }
     }
 }
