@@ -1,8 +1,8 @@
 //! Reference counting of heap objects (ADR-0001, MEM-01).
 
 use crate::header::{
-    BIG_INT_TYPE_ID, BYTES_TYPE_ID, EXCEPTION_TYPE_ID, IMMORTAL, LIST_TYPE_ID, ObjectHeader,
-    SET_TYPE_ID, STR_TYPE_ID, TUPLE_TYPE_ID,
+    BIG_INT_TYPE_ID, BYTES_TYPE_ID, DICT_TYPE_ID, EXCEPTION_TYPE_ID, IMMORTAL, LIST_TYPE_ID,
+    ObjectHeader, SET_TYPE_ID, STR_TYPE_ID, TUPLE_TYPE_ID,
 };
 
 /// Adds a reference to an object.
@@ -83,6 +83,8 @@ unsafe fn destroy(object: *mut ObjectHeader, type_id: u32) {
         LIST_TYPE_ID | TUPLE_TYPE_ID => unsafe { crate::list::destroy(object.cast()) },
         // SAFETY: an object with the set type ID is a `SetObject`.
         SET_TYPE_ID => unsafe { crate::set::destroy(object.cast()) },
+        // SAFETY: an object with the dict type ID is a `DictObject`.
+        DICT_TYPE_ID => unsafe { crate::dict::destroy(object.cast()) },
         _ => crate::libc::abort_with(b"typy runtime: an object has an unknown type\n"),
     }
 }

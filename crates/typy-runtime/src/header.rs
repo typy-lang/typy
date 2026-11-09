@@ -16,6 +16,8 @@ pub const TUPLE_TYPE_ID: u32 = 5;
 pub const BYTES_TYPE_ID: u32 = 6;
 /// The type ID of a `set`.
 pub const SET_TYPE_ID: u32 = 7;
+/// The type ID of a `dict`.
+pub const DICT_TYPE_ID: u32 = 8;
 
 /// The first 8 bytes of every heap object.
 #[repr(C)]

@@ -1,6 +1,7 @@
 //! Tests of sets: CPython's order through every operation, items of each kind, errors and
 //! freeing.
 
+mod dicts;
 mod lists;
 mod steps;
 
@@ -501,22 +502,46 @@ fn sets_inside_lists_are_written_compared_and_tested() {
     [small, large, empty].into_iter().for_each(release);
 }
 
+/// Returns a new dict whose keys are `values`, in order, each with the value 0.
+fn int_keys(values: &[i128]) -> *mut crate::dict::DictObject {
+    let int = word(ItemKind::Int as i64);
+    let dict = crate::dict::typy_rt_dict_new(int, 0, int, 0, word(0));
+    for value in values {
+        // SAFETY: the dict is live and the key is a live `int` word.
+        with_int(*value, |key| unsafe {
+            crate::dict::typy_rt_dict_set(dict, key, word(0).cast_unsigned());
+        });
+    }
+    dict
+}
+
 #[test]
 #[cfg_attr(miri, ignore = "sixty cases of growing tables take Miri minutes")]
 fn methods_with_a_list_take_cpythons_steps() {
-    for (method, base, other, expected) in lists::CASES {
+    check_methods(&lists::CASES, |values| address(int_list(values)));
+}
+
+#[test]
+#[cfg_attr(miri, ignore = "sixty cases of growing tables take Miri minutes")]
+fn methods_with_a_dict_take_cpythons_steps() {
+    check_methods(&dicts::CASES, |values| address(int_keys(values)));
+}
+
+/// Runs each case of a set method with another collection that `make` builds from its items.
+fn check_methods(cases: &[(&str, &[i128], &[i128], &str)], make: fn(&[i128]) -> u64) {
+    for (method, base, other, expected) in cases {
         let set = ints(base);
-        let list = int_list(other);
-        // SAFETY: the set and the list are live; every result is released.
+        let other_address = make(other);
+        // SAFETY: the set and the other collection are live; every result is released.
         let shown = unsafe {
-            let other = address(list);
+            let other = other_address;
             let new = |result: *mut SetObject| {
                 let shown = repr(result);
                 release(result);
                 shown
             };
             let truth = |holds: bool| if holds { "True" } else { "False" }.to_owned();
-            let shown = match method {
+            let shown = match *method {
                 "union" => {
                     let result = typy_rt_set_copy(set);
                     typy_rt_set_extend(result, other, address(set));
@@ -547,10 +572,12 @@ fn methods_with_a_list_take_cpythons_steps() {
                 "issuperset" => truth(typy_rt_set_relation(set, other, word(1))),
                 _ => truth(typy_rt_set_relation(set, other, word(2))),
             };
-            typy_rt_decrement(list.cast());
+            typy_rt_decrement(core::ptr::with_exposed_provenance_mut::<
+                crate::header::ObjectHeader,
+            >(usize::try_from(other_address).unwrap()));
             shown
         };
-        assert_eq!(shown, expected, "{method} {base:?} {other:?}");
+        assert_eq!(shown, *expected, "{method} {base:?} {other:?}");
         release(set);
     }
 }

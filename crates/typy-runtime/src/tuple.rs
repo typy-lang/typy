@@ -86,6 +86,16 @@ impl Field {
     }
 }
 
+/// Returns item `index` of the tuple at `address`, as `Field::value` gives it.
+///
+/// # Safety
+///
+/// As for `retain`, and the tuple has more than `index` items.
+pub(crate) unsafe fn field(tuple: *const TupleType, address: u64, index: usize) -> u64 {
+    // SAFETY: the caller's guarantee.
+    unsafe { (*tuple).fields()[index].value(address) }
+}
+
 /// Adds a reference to every object the tuple at `address` holds.
 ///
 /// # Safety

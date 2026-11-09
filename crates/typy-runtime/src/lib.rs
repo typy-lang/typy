@@ -14,6 +14,7 @@ mod bytes;
 mod cell;
 mod codec;
 mod compare;
+mod dict;
 mod entry;
 mod exception;
 mod float;
