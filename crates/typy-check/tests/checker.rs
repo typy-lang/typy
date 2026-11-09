@@ -1039,6 +1039,8 @@ b: tuple[str, ...] = tuple()
 c = tuple('ab')[1:] + b
 d = a < (1, 2) and (1,) in [a] and a.count(1) == a.index(1)
 e: tuple[()] = tuple()
+g = (0,) + a + (4,)
+g += (5,)
 ";
     let (_directory, project) = load(source);
     let program = TypeChecker::check(&project).expect("the program is accepted");

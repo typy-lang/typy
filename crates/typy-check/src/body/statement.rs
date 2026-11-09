@@ -68,6 +68,7 @@ impl BodyChecker<'_> {
             } => {
                 let current = self.expression(target);
                 let value = self.expression(value);
+                let (current, value) = Self::tuple_operands(*operator, current, value);
                 let result = self.binary_type(*operator, &current, &value, *span);
                 let target = if let Expr::Subscript { .. } = target {
                     self.augmented_item(current, &result, *span)?

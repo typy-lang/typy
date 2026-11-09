@@ -26,7 +26,7 @@ impl FunctionLowerer<'_> {
                 let slot = self.slots[symbol];
                 let current = self.load(slot, span);
                 let right = self.expression(value);
-                if let Some(changed) = self.in_place(operator, current, right, span) {
+                if let Some(changed) = self.in_place(operator, current, right, result, span) {
                     self.release(changed, span);
                     return;
                 }
@@ -75,7 +75,7 @@ impl FunctionLowerer<'_> {
         }
         let current = self.produced(current, item);
         let right = self.expression(value);
-        let lowered = match self.in_place(operator, current, right, span) {
+        let lowered = match self.in_place(operator, current, right, result, span) {
             Some(changed) => changed,
             None => self.binary(operator, current, right, result, span),
         };
@@ -92,12 +92,14 @@ impl FunctionLowerer<'_> {
 
     /// Changes a list in place for `+=` and `*=`, and a set for `|=`, `&=`, `-=` and `^=`,
     /// releases `right`, and returns the collection; returns `None`, releasing nothing, for any
-    /// other operation.
+    /// other operation. A `tuple[T, ...]` is a list object too, but is never changed: its
+    /// result is a new tuple, as for a fixed tuple.
     fn in_place(
         &mut self,
         operator: BinaryOperator,
         current: Lowered,
         right: Lowered,
+        result: &Type,
         span: Span,
     ) -> Option<Lowered> {
         if current.ty == TyirType::SET {
@@ -105,7 +107,7 @@ impl FunctionLowerer<'_> {
             self.release(right, span);
             return Some(current);
         }
-        if current.ty != TyirType::LIST {
+        if !matches!(result, Type::List(_)) {
             return None;
         }
         match operator {

@@ -41,6 +41,7 @@ impl BodyChecker<'_> {
             } => {
                 let left = self.expression(left);
                 let right = self.expression(right);
+                let (left, right) = Self::tuple_operands(*operator, left, right);
                 let ty = self.binary_type(*operator, &left, &right, span);
                 Self::typed(
                     TypedExprKind::Binary {

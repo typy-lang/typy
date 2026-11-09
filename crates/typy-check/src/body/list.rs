@@ -2,7 +2,7 @@
 //! (DAT-07, DAT-11, DAT-12, TYP-05, LIB-03).
 
 use typy_diagnostics::{Diagnostic, DiagnosticCode, RuleId, Span};
-use typy_source::syntax::{CompareOperator, Expr};
+use typy_source::syntax::{BinaryOperator, CompareOperator, Expr};
 
 use super::BodyChecker;
 use crate::builtin::Builtin;
@@ -75,6 +75,33 @@ impl BodyChecker<'_> {
             }
             _ => value,
         }
+    }
+
+    /// Returns the operands of `left op right` with a fixed tuple beside a `tuple[T, ...]` in
+    /// `+` converted to one, as Python's typing accepts it there (DAT-14).
+    pub(super) fn tuple_operands(
+        operator: BinaryOperator,
+        left: TypedExpr,
+        right: TypedExpr,
+    ) -> (TypedExpr, TypedExpr) {
+        if operator != BinaryOperator::Add {
+            return (left, right);
+        }
+        let left = match &right.ty {
+            Type::TupleOf(_) => {
+                let wanted = right.ty.clone();
+                Self::converted(left, Some(&wanted))
+            }
+            _ => left,
+        };
+        let right = match &left.ty {
+            Type::TupleOf(_) => {
+                let wanted = left.ty.clone();
+                Self::converted(right, Some(&wanted))
+            }
+            _ => right,
+        };
+        (left, right)
     }
 
     /// Checks a list display: every item has the type of the first, and an empty display has the
