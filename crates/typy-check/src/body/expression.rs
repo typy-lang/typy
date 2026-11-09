@@ -158,6 +158,9 @@ impl BodyChecker<'_> {
             }
             Expr::Set { elements, .. } => self.set_display(elements, None, span),
             Expr::Dict { keys, values, .. } => self.dict_display(keys, values, None, span),
+            Expr::ListComp { .. } | Expr::SetComp { .. } | Expr::DictComp { .. } => {
+                self.comprehension(expression, None)
+            }
             Expr::Tuple { elements, .. } => {
                 let elements: Vec<TypedExpr> = elements
                     .iter()

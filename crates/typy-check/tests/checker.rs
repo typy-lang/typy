@@ -638,7 +638,7 @@ fn each_builtin_call_name_and_statement_rule_gives_its_code() {
         ("def f() -> str:\n    return 1\n", &["E0405"]),
         ("def f() -> float:\n    return 1\n", &["E0405"]),
         // `for` loops over a call of `range` or a list; `range` takes no keyword arguments (CST-02, CST-03).
-        ("for i in range(1, 2, 3, 4):\n    pass\n", &["E0201"]),
+        ("for i in range(1, 2, 3, 4):\n    pass\n", &["E0404"]),
         ("for i in range(stop=3):\n    pass\n", &["E0404"]),
         ("for i in len(\"abc\"):\n    pass\n", &["E0411"]),
         // A default is a constant (EXP-16).
@@ -1357,6 +1357,60 @@ n: dict[tuple[int, str], set[float]] = {(1, 'a'): {1.5}}
         "Method items : dict_items[str, int]",
         "entry of dict[str, int]",
         "Dict : dict[tuple[int, str], set[float]]",
+    ] {
+        assert!(dump.contains(node), "{node} missing from\n{dump}");
+    }
+}
+
+#[test]
+fn comprehension_and_range_rules_give_their_codes() {
+    let cases: &[(&str, &[&str])] = &[
+        ("a = [y for y in range(2)]\nprint(y)\n", &["E0205"]),
+        ("b = [z for z in 5]\n", &["E0411"]),
+        ("c = {[1] for z in range(2)}\n", &["E0413"]),
+        ("d = {[1]: 2 for z in range(2)}\n", &["E0413"]),
+        ("e = [[] for z in range(2)]\n", &["E0410"]),
+        ("f = [q for q in range(2) if q == 'a']\n", &["E0407"]),
+        ("g = [q for q in missing]\n", &["E0205"]),
+        ("h = [missing for q in range(2)]\n", &["E0205"]),
+        ("i = {missing: 1 for q in range(2)}\n", &["E0205"]),
+        ("j = [q for q, r in range(2)]\n", &["E0308"]),
+        ("k = range(3)\n", &["E0201"]),
+        ("m = list(range('a'))\n", &["E0404"]),
+        ("n = list(range(1, 2, 3, 4))\n", &["E0404"]),
+        ("o = list(range(x=1))\n", &["E0404"]),
+        ("p = list(reversed(range('a', 2)))\n", &["E0404"]),
+    ];
+    for (source, expected) in cases {
+        assert_eq!(&rejected(source), expected, "\n{source}");
+    }
+}
+
+#[test]
+fn comprehensions_and_ranges_have_python_s_types() {
+    let source = "\
+x = 'outer'
+a = [x for x in range(3)]
+b: list[list[str]] = [[] for _ in range(2)]
+c = {len(w) for w in ['a', 'bc']}
+d = {w: len(w) for w in ['a', 'bc'] if w}
+e: set[float] = {n / 2 for n in range(3)}
+f: dict[str, list[int]] = {w: [] for w in 'ab'}
+g = [(i, j) for i in range(3) for j in range(i) if i if j]
+h = sum(range(10)) + len(list(reversed(range(1, 9, 2))))
+k = [v for v in enumerate(range(2))]
+m = x + 'a'
+";
+    let (_directory, project) = load(source);
+    let program = TypeChecker::check(&project).expect("the program is accepted");
+    let dump = typy_check::dump(&program, &project);
+    for node in [
+        "Comprehension : list[int]",
+        "Comprehension : list[list[str]]",
+        "Comprehension : set[int]",
+        "Comprehension : dict[str, int]",
+        "Comprehension : set[float]",
+        "Comprehension : list[tuple[int, int]]",
     ] {
         assert!(dump.contains(node), "{node} missing from\n{dump}");
     }

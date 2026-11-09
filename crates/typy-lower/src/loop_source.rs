@@ -4,7 +4,7 @@
 //! again, so items appended in the body are visited and a list that shrinks ends the loop, then
 //! moves the position on before the body runs.
 
-use typy_check::{AssignTarget, LoopSource, TypedExpr, TypedStmt};
+use typy_check::{AssignTarget, Generator, LoopSource, TypedExpr, TypedStmt};
 use typy_diagnostics::Span;
 use typy_tyir::{
     BlockId, BoolOperator, Comparison, Constant, IntOperator, Operation, RuntimeFunction,
@@ -46,6 +46,14 @@ enum Iterator {
         shows: typy_check::View,
         through_view: bool,
         ty: TyirType,
+    },
+    /// A `range`: the next value, the limit it stops at and the step, and whether the step
+    /// rises when it is a constant.
+    Range {
+        counter: SlotId,
+        limit: SlotId,
+        stride: SlotId,
+        rising: Option<bool>,
     },
     /// A list or `str`, read forwards or, for `reversed`, backwards.
     Sequence {
@@ -120,6 +128,42 @@ impl FunctionLowerer<'_> {
         list
     }
 
+    /// Lowers the clauses from the first, each a loop around the next, and calls `innermost` in the
+    /// innermost one for each value that meets every condition.
+    pub(crate) fn generate(
+        &mut self,
+        generators: &[Generator],
+        span: Span,
+        innermost: &mut dyn FnMut(&mut Self),
+    ) {
+        let Some((first, rest)) = generators.split_first() else {
+            innermost(self);
+            return;
+        };
+        let iterator = self.start_iterator(&first.source, span);
+        let header = self.builder.create_block();
+        let exit = self.builder.create_block();
+        self.jump_to(header);
+        self.builder.switch_to(header);
+        let value = self.next_value(&iterator, exit, span);
+        self.assign_target(&first.target, value, span);
+        for condition in &first.conditions {
+            let tested = self.expression(condition);
+            let holds = self.truth(tested, span);
+            self.release(tested, span);
+            let next = self.builder.create_block();
+            self.builder.terminate(typy_tyir::Terminator::Branch {
+                condition: holds,
+                then: next,
+                otherwise: header,
+            });
+            self.builder.switch_to(next);
+        }
+        self.generate(rest, span, innermost);
+        self.jump_to(header);
+        self.builder.switch_to(exit);
+    }
+
     /// Reads `source` as a `for` loop reads it and calls `visit` with each value, which is
     /// released after the call.
     pub(crate) fn each_value(
@@ -144,6 +188,12 @@ impl FunctionLowerer<'_> {
     fn start_iterator(&mut self, source: &LoopSource, span: Span) -> Iterator {
         match source {
             LoopSource::Items(sequence) => self.start_sequence(sequence, false, span),
+            LoopSource::Range {
+                start,
+                stop,
+                step,
+                reversed,
+            } => self.start_range([start, stop, step], *reversed, span),
             LoopSource::Reversed(sequence) => self.start_sequence(sequence, true, span),
             LoopSource::Enumerate {
                 source: inner,
@@ -216,6 +266,106 @@ impl FunctionLowerer<'_> {
         }
     }
 
+    /// Evaluates the arguments of `range` once, in order, raises `ValueError` for a zero step,
+    /// and keeps the counter, the limit and the step. `reversed` starts from the last value and
+    /// steps back to `start - step`, as CPython's `range_reverse` does.
+    fn start_range(&mut self, arguments: [&TypedExpr; 3], reversed: bool, span: Span) -> Iterator {
+        let [first, end, increment] = arguments;
+        let counter = self.hidden_slot("counter", TyirType::Int);
+        let limit = self.hidden_slot("limit", TyirType::Int);
+        let stride = self.hidden_slot("stride", TyirType::Int);
+        for (slot, value) in [(counter, first), (limit, end), (stride, increment)] {
+            let lowered = self.expression(value);
+            self.store(slot, lowered, span);
+        }
+        let constant = match &increment.kind {
+            typy_check::TypedExprKind::Constant(typy_check::TypedConstant::Int(digits))
+                if digits != "0" =>
+            {
+                Some(!digits.starts_with('-'))
+            }
+            _ => None,
+        };
+        if constant.is_none() {
+            let value = self.load(stride, span);
+            self.call_runtime(RuntimeFunction::RangeCheckStep, vec![value.value], span);
+        }
+        if reversed {
+            let (first, end, increment) = (
+                self.load(counter, span),
+                self.load(limit, span),
+                self.load(stride, span),
+            );
+            let last = self.call_runtime(
+                RuntimeFunction::RangeLast,
+                vec![first.value, end.value, increment.value],
+                span,
+            );
+            let before = self.builder.push_value(
+                Operation::IntBinary {
+                    operator: IntOperator::Subtract,
+                    left: first.value,
+                    right: increment.value,
+                },
+                TyirType::Int,
+                span,
+            );
+            let before = self.produced(before, TyirType::Int);
+            let back = self.builder.push_value(
+                Operation::IntUnary {
+                    operator: typy_tyir::IntUnaryOperator::Negate,
+                    operand: increment.value,
+                },
+                TyirType::Int,
+                span,
+            );
+            let back = self.produced(back, TyirType::Int);
+            self.store(limit, before, span);
+            self.store(stride, back, span);
+            self.store(counter, last, span);
+        }
+        Iterator::Range {
+            counter,
+            limit,
+            stride,
+            rising: constant.map(|rising| rising != reversed),
+        }
+    }
+
+    /// Returns the range's next value with a reference of its own, or jumps to `exhausted`.
+    fn next_in_range(
+        &mut self,
+        [counter, limit, stride]: [SlotId; 3],
+        rising: Option<bool>,
+        exhausted: BlockId,
+        span: Span,
+    ) -> Lowered {
+        let condition = self.range_condition([counter, limit, stride], rising, span);
+        let fetch = self.builder.create_block();
+        self.builder.terminate(Terminator::Branch {
+            condition,
+            then: fetch,
+            otherwise: exhausted,
+        });
+        self.builder.switch_to(fetch);
+        let current = self.load(counter, span);
+        self.builder.push(Operation::Increment(current.value), span);
+        let value = self.produced(current.value, TyirType::Int);
+        let increment = self.load(stride, span);
+        let next = self.builder.push_value(
+            Operation::IntBinary {
+                operator: IntOperator::Add,
+                left: current.value,
+                right: increment.value,
+            },
+            TyirType::Int,
+            span,
+        );
+        let next = self.produced(next, TyirType::Int);
+        self.store(counter, next, span);
+        value
+    }
+
     /// Keeps a dict or a view of one, the first entry to look at, the number of entries and
     /// none visited.
     fn start_dict(&mut self, source: &TypedExpr, span: Span) -> Iterator {
@@ -254,8 +404,8 @@ impl FunctionLowerer<'_> {
         if !through_view {
             return value.value;
         }
-        self.call_runtime(RuntimeFunction::DictViewDict, vec![value.value], span)
-            .value
+        let dict = self.call_runtime(RuntimeFunction::DictViewDict, vec![value.value], span);
+        self.borrowed_result(dict).value
     }
 
     /// Returns the next key, value or `(key, value)` pair of a dict, or jumps to `exhausted`;
@@ -405,6 +555,12 @@ impl FunctionLowerer<'_> {
     /// Returns the iterator's next value, or jumps to `exhausted` when it has none.
     fn next_value(&mut self, iterator: &Iterator, exhausted: BlockId, span: Span) -> Lowered {
         match iterator {
+            Iterator::Range {
+                counter,
+                limit,
+                stride,
+                rising,
+            } => self.next_in_range([*counter, *limit, *stride], *rising, exhausted, span),
             Iterator::Dict { .. } => self.next_dict_entry(iterator, exhausted, span),
             Iterator::Set {
                 set,

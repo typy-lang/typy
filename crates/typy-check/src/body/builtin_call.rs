@@ -101,9 +101,9 @@ impl BodyChecker<'_> {
                     Diagnostic::new(
                         DiagnosticCode::error(201),
                         span,
-                        "`range` outside a `for` loop is planned for TyPy 0.2 (CST-03)",
+                        "a `range` value outside a loop, a comprehension or an iterable argument is planned for TyPy 0.3 (DAT-17)",
                     )
-                    .with_rule(RuleId::CST_03),
+                    .with_rule(RuleId::DAT_17),
                     span,
                 );
             }

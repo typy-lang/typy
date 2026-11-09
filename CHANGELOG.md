@@ -115,6 +115,13 @@ All notable changes to TyPy are recorded here. The format follows
   raises CPython's `RuntimeError` when it changes while a loop reads it.
   Sets take a dict wherever they take an iterable, with CPython's steps
   for a dict (DAT-15).
+- List, set and dict comprehensions, with several `for` clauses and `if`
+  conditions, each in its own scope, so a comprehension variable does not
+  leak and the first source is read in the enclosing scope, as in CPython
+  (EXP-12).
+- `range(...)` and `reversed(range(...))` wherever an iterable is read: in
+  comprehensions, `list`, `set`, `dict`, `sum`, `sorted`, `enumerate`,
+  `zip` and the set methods, as well as in `for` (CST-03).
 
 ### Changed
 

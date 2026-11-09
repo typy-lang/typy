@@ -47,6 +47,8 @@ impl RuleId {
     pub const DAT_15: Self = Self("DAT-15");
     /// `reversed` of a dict and of its views, `dict` with keyword arguments, `dict.fromkeys`, and the comparisons and set operations of `dict.keys()` and `dict.items()` shall be available with Python's results.
     pub const DAT_16: Self = Self("DAT-16");
+    /// `range` shall be a value as well as a loop source: a sequence of `int` with `len`, indexing, slicing, `in`, `==` and `repr`, as in Python.
+    pub const DAT_17: Self = Self("DAT-17");
     /// Raising and catching exceptions shall follow the Language Reference, including matching on base classes.
     pub const EXC_01: Self = Self("EXC-01");
     /// `+`, `-`, `*`, `/`, `//`, `%` and `**` shall give Python's results for `int` and `float`, including `/` on two `int` values returning `float` and `%` taking the sign of the divisor.
@@ -174,6 +176,7 @@ impl RuleId {
         Self::DAT_14,
         Self::DAT_15,
         Self::DAT_16,
+        Self::DAT_17,
         Self::EXC_01,
         Self::EXP_02,
         Self::EXP_04,

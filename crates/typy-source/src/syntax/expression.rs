@@ -30,6 +30,22 @@ pub enum Constant {
     Ellipsis,
 }
 
+/// One `for target in iter if condition ...` clause of a comprehension, as CPython's
+/// `ast.comprehension`.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Comprehension {
+    /// What each value is bound to.
+    pub target: Expr,
+    /// What the clause goes over.
+    pub iter: Expr,
+    /// The `if` conditions, in order.
+    pub ifs: Vec<Expr>,
+    /// True for `async for`.
+    pub is_async: bool,
+    /// Where the clause is.
+    pub span: Span,
+}
+
 /// A keyword argument, or `**mapping` when `name` is `None`.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Keyword {
@@ -110,6 +126,25 @@ pub enum Expr {
         values: Vec<Expr>,
         span: Span,
     },
+    /// `[element for ...]`.
+    ListComp {
+        element: Box<Expr>,
+        generators: Vec<Comprehension>,
+        span: Span,
+    },
+    /// `{element for ...}`.
+    SetComp {
+        element: Box<Expr>,
+        generators: Vec<Comprehension>,
+        span: Span,
+    },
+    /// `{key: value for ...}`.
+    DictComp {
+        key: Box<Expr>,
+        value: Box<Expr>,
+        generators: Vec<Comprehension>,
+        span: Span,
+    },
     /// A set display, `{a, b}`; `{}` is an empty dict, so a set display always has items.
     Set {
         elements: Vec<Expr>,
@@ -150,6 +185,9 @@ impl Expr {
             | Self::List { span, .. }
             | Self::Set { span, .. }
             | Self::Dict { span, .. }
+            | Self::ListComp { span, .. }
+            | Self::SetComp { span, .. }
+            | Self::DictComp { span, .. }
             | Self::Attribute { span, .. }
             | Self::Slice { span, .. }
             | Self::Other { span, .. } => *span,

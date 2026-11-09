@@ -6,9 +6,29 @@ use ruff_text_size::{Ranged, TextRange};
 use super::Converter;
 use super::operator::{binary_operator, compare_operator};
 use crate::int_literal::decimal_digits;
-use crate::syntax::{BoolOperator, Constant, Expr, Keyword, NodeKind, UnaryOperator};
+use crate::syntax::{
+    BoolOperator, Comprehension, Constant, Expr, Keyword, NodeKind, UnaryOperator,
+};
 
 impl Converter<'_> {
+    /// Converts the `for` clauses of a comprehension.
+    fn generators(&self, generators: &[ast::Comprehension]) -> Vec<Comprehension> {
+        generators
+            .iter()
+            .map(|generator| Comprehension {
+                target: self.expression(&generator.target),
+                iter: self.expression(&generator.iter),
+                ifs: generator
+                    .ifs
+                    .iter()
+                    .map(|condition| self.expression(condition))
+                    .collect(),
+                is_async: generator.is_async,
+                span: self.span(generator.range),
+            })
+            .collect()
+    }
+
     #[allow(
         clippy::too_many_lines,
         reason = "one arm per expression kind of Python's grammar"
@@ -132,9 +152,27 @@ impl Converter<'_> {
                     .collect(),
                 span: self.span(node.range),
             },
-            ast::Expr::ListComp(node) => self.other(NodeKind::ListComp, node.range),
-            ast::Expr::SetComp(node) => self.other(NodeKind::SetComp, node.range),
-            ast::Expr::DictComp(node) => self.other(NodeKind::DictComp, node.range),
+            ast::Expr::ListComp(node) => Expr::ListComp {
+                element: Box::new(self.expression(&node.elt)),
+                generators: self.generators(&node.generators),
+                span: self.span(node.range),
+            },
+            ast::Expr::SetComp(node) => Expr::SetComp {
+                element: Box::new(self.expression(&node.elt)),
+                generators: self.generators(&node.generators),
+                span: self.span(node.range),
+            },
+            ast::Expr::DictComp(node) => Expr::DictComp {
+                // Ruff leaves the key out only for `{**d for ...}`, a syntax error, and a tree
+                // with errors is never converted.
+                key: Box::new(match node.key.as_deref() {
+                    Some(key) => self.expression(key),
+                    None => self.expression(&node.value),
+                }),
+                value: Box::new(self.expression(&node.value)),
+                generators: self.generators(&node.generators),
+                span: self.span(node.range),
+            },
             ast::Expr::Generator(node) => self.other(NodeKind::GeneratorExp, node.range),
             ast::Expr::Await(node) => self.other(NodeKind::Await, node.range),
             ast::Expr::Yield(node) => self.other(NodeKind::Yield, node.range),

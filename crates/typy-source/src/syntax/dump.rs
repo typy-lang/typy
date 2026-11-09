@@ -4,7 +4,7 @@ use std::fmt::Write as _;
 
 use typy_diagnostics::Span;
 
-use super::expression::Expr;
+use super::expression::{Comprehension, Expr};
 use super::statement::Stmt;
 use super::tree::SyntaxTree;
 use crate::source_file::SourceFile;
@@ -192,6 +192,35 @@ impl Dump<'_> {
         }
     }
 
+    /// Writes a comprehension: what it makes, then each clause with its target, its source and
+    /// its conditions.
+    fn comprehension(
+        &mut self,
+        depth: usize,
+        label: &str,
+        made: &[&Expr],
+        generators: &[Comprehension],
+        span: Option<Span>,
+    ) {
+        self.line(depth, label, span);
+        for expression in made {
+            self.expression(depth + 1, expression);
+        }
+        for generator in generators {
+            let label = if generator.is_async {
+                "AsyncComprehension"
+            } else {
+                "Comprehension"
+            };
+            self.line(depth + 1, label, Some(generator.span));
+            self.expression(depth + 2, &generator.target);
+            self.expression(depth + 2, &generator.iter);
+            for condition in &generator.ifs {
+                self.expression(depth + 2, condition);
+            }
+        }
+    }
+
     /// Writes a dict display: each key, or `Unpack` for a `**` item, then its value.
     fn dict(&mut self, depth: usize, keys: &[Option<Expr>], values: &[Expr], span: Option<Span>) {
         self.line(depth, "Dict", span);
@@ -212,6 +241,7 @@ impl Dump<'_> {
         }
     }
 
+    #[allow(clippy::too_many_lines, reason = "one arm per expression kind")]
     fn expression(&mut self, depth: usize, expression: &Expr) {
         let span = Some(expression.span());
         match expression {
@@ -243,6 +273,29 @@ impl Dump<'_> {
             Expr::List { elements, .. } => self.display(depth, "List", elements, span),
             Expr::Set { elements, .. } => self.display(depth, "Set", elements, span),
             Expr::Dict { keys, values, .. } => self.dict(depth, keys, values, span),
+            Expr::ListComp {
+                element,
+                generators,
+                ..
+            }
+            | Expr::SetComp {
+                element,
+                generators,
+                ..
+            } => {
+                let label = if matches!(expression, Expr::ListComp { .. }) {
+                    "ListComp"
+                } else {
+                    "SetComp"
+                };
+                self.comprehension(depth, label, &[element], generators, span);
+            }
+            Expr::DictComp {
+                key,
+                value,
+                generators,
+                ..
+            } => self.comprehension(depth, "DictComp", &[key, value], generators, span),
             Expr::Attribute {
                 value, attribute, ..
             } => {

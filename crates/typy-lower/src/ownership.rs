@@ -42,6 +42,13 @@ impl FunctionLowerer<'_> {
         }
     }
 
+    /// Returns the result of a runtime function that is borrowed from one of its arguments, such
+    /// as the dict a view reads, which the function must not release.
+    pub(crate) fn borrowed_result(&mut self, lowered: Lowered) -> Lowered {
+        self.untrack(lowered.value);
+        Self::borrowed(lowered.value, lowered.ty)
+    }
+
     /// Drops the function's reference to a value it owns.
     pub(crate) fn release(&mut self, lowered: Lowered, span: Span) {
         if lowered.owned {

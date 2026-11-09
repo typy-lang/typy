@@ -295,6 +295,7 @@ that the specification does not define.
 | DAT-14 | 0.2 | IT | `tests/conformance/dat/DAT-14_*.py` |
 | DAT-15 | 0.2 | IT | `tests/conformance/dat/DAT-15_*.py` |
 | DAT-16 | 0.3 | IT | `tests/conformance/dat/DAT-16_*.py` |
+| DAT-17 | 0.3 | IT | `tests/conformance/dat/DAT-17_*.py` |
 | EXP-01 | 0.1 | IT | `tests/conformance/exp/EXP-01_*.py` |
 | EXP-02 | 0.1 | IT | `tests/conformance/exp/EXP-02_*.py` |
 | EXP-03 | 0.1 | IT | `tests/conformance/exp/EXP-03_*.py` |

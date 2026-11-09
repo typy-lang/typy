@@ -1,14 +1,29 @@
 //! Checks expressions and annotations against the feature table.
 
 use typy_diagnostics::{Diagnostic, DiagnosticCode, RuleId};
-use typy_source::syntax::{BinaryOperator, Constant, Expr};
+use typy_source::syntax::{BinaryOperator, Comprehension, Constant, Expr, NodeKind};
 
 use super::Walker;
 use super::feature::{Feature, feature, planned};
 
 impl Walker {
-    /// Annotations name `int`, `float`, `bool`, `str`, `None`, `tuple[...]`, `list[...]` or
-    /// `set[...]`; the checker reports any other name.
+    /// Checks each clause of a comprehension: its target, its source and its conditions; an
+    /// `async for` clause is refused as `async` is.
+    fn generators(&mut self, generators: &[Comprehension]) {
+        for generator in generators {
+            if generator.is_async {
+                self.report(generator.span, feature(NodeKind::AsyncFor));
+            }
+            self.name_target(&generator.target);
+            self.expression(&generator.iter);
+            for condition in &generator.ifs {
+                self.expression(condition);
+            }
+        }
+    }
+
+    /// Annotations name `int`, `float`, `bool`, `str`, `None`, `tuple[...]`, `list[...]`,
+    /// `set[...]` or `dict[...]`; the checker reports any other name.
     pub(super) fn annotation(&mut self, annotation: &Expr) {
         match annotation {
             Expr::Subscript { value, index, .. } if matches!(value.as_ref(), Expr::Name { id, .. } if matches!(id.as_str(), "tuple" | "list" | "set" | "dict")) =>
@@ -183,6 +198,29 @@ impl Walker {
                 for element in elements {
                     self.expression(element);
                 }
+            }
+            Expr::ListComp {
+                element,
+                generators,
+                ..
+            }
+            | Expr::SetComp {
+                element,
+                generators,
+                ..
+            } => {
+                self.expression(element);
+                self.generators(generators);
+            }
+            Expr::DictComp {
+                key,
+                value,
+                generators,
+                ..
+            } => {
+                self.expression(key);
+                self.expression(value);
+                self.generators(generators);
             }
             Expr::Dict { keys, values, .. } => {
                 for (key, value) in keys.iter().zip(values) {

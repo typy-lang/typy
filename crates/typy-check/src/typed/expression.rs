@@ -91,6 +91,13 @@ pub enum TypedExprKind {
     SetOf(Box<super::statement::LoopSource>),
     /// A set display, one value per item, in order (DAT-10).
     Set(Vec<TypedExpr>),
+    /// A list, set or dict comprehension: `element`, or `element: value` for a dict, made for
+    /// each value its clauses give, in its own scope (EXP-12).
+    Comprehension {
+        element: Box<TypedExpr>,
+        value: Option<Box<TypedExpr>>,
+        generators: Vec<super::statement::Generator>,
+    },
     /// A dict display: each key and its value, in order (DAT-09).
     Dict {
         keys: Vec<TypedExpr>,

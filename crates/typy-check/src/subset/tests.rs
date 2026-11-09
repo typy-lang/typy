@@ -71,12 +71,8 @@ fn later_features_name_their_release_and_rule() {
             "unpacking with `**` are planned for TyPy 1.0 (EXP-17)",
         ),
         (
-            "x = {i for i in range(3)}\n",
-            "comprehensions are planned for TyPy 0.2 (EXP-12)",
-        ),
-        (
-            "x = [i for i in range(3)]\n",
-            "comprehensions are planned for TyPy 0.2 (EXP-12)",
+            "x = (i for i in range(3))\n",
+            "generator expressions are planned for TyPy 1.0 (EXP-15)",
         ),
         (
             "x = f'{1}'\n",

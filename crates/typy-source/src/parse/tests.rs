@@ -270,7 +270,6 @@ global g
 #[test]
 fn expressions_beyond_the_release_keep_their_kind() {
     let cases = [
-        ("[x for x in y]\n", NodeKind::ListComp),
         ("(x for x in y)\n", NodeKind::GeneratorExp),
         ("lambda: 1\n", NodeKind::Lambda),
         ("f'{x}'\n", NodeKind::JoinedStr),
@@ -402,14 +401,7 @@ f(*args)
         &parse(&file(source), PythonFloor::V3_12).unwrap(),
         &file(source),
     );
-    for kind in [
-        "AsyncFunctionDef",
-        "TryStar",
-        "Slice",
-        "SetComp",
-        "DictComp",
-        "Starred",
-    ] {
+    for kind in ["AsyncFunctionDef", "TryStar", "Slice", "SetComp", "Starred"] {
         assert!(dumped.contains(kind), "{kind} missing from\n{dumped}");
     }
     let Stmt::FunctionDef { body: inner, .. } = &statements[1] else {

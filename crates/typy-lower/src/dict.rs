@@ -21,7 +21,13 @@ impl FunctionLowerer<'_> {
     }
 
     /// Returns a new empty dict with a table for `capacity` entries.
-    fn new_dict(&mut self, key: TyirType, value: TyirType, capacity: usize, span: Span) -> Lowered {
+    pub(crate) fn new_dict(
+        &mut self,
+        key: TyirType,
+        value: TyirType,
+        capacity: usize,
+        span: Span,
+    ) -> Lowered {
         let (key_kind, key_descriptor) = self.item_layout(key, span);
         let (value_kind, value_descriptor) = self.item_layout(value, span);
         let capacity = self.constant(Constant::Int(capacity.to_string()), span);
@@ -60,7 +66,7 @@ impl FunctionLowerer<'_> {
     }
 
     /// Sets `dict[key] = value`; neither is released.
-    fn set_entry(&mut self, dict: ValueId, key: Lowered, value: Lowered, span: Span) {
+    pub(crate) fn set_entry(&mut self, dict: ValueId, key: Lowered, value: Lowered, span: Span) {
         let key = self.bits(key, span);
         let value = self.bits(value, span);
         self.call_runtime(RuntimeFunction::DictSet, vec![dict, key, value], span);

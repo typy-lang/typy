@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy software requirements specification |
-| Version | 1.22 |
+| Version | 1.23 |
 | Status | Approved |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-09 |
@@ -200,6 +200,7 @@ formatter applies; Ruff's formatter is the project's recommendation.
 | DAT-14 | `tuple[T, ...]` shall be an immutable sequence of any number of items of type `T`, and a tuple of a fixed number of items of type `T` shall be accepted where one is expected. | M | 0.2 | 3.2.5 |
 | DAT-15 | The methods of `set` that combine a set with others, `union`, `intersection`, `difference`, `symmetric_difference`, `update`, `intersection_update`, `difference_update`, `symmetric_difference_update`, `issubset`, `issuperset` and `isdisjoint`, shall accept any iterable of the set's item type, and as many arguments as CPython accepts, with CPython's results and order. | M | 0.2 | 3.2.6 |
 | DAT-16 | `reversed` of a dict and of its views, `dict` with keyword arguments, `dict.fromkeys`, and the comparisons and set operations of `dict.keys()` and `dict.items()` shall be available with Python's results. | S | 0.3 | 3.2.7 |
+| DAT-17 | `range` shall be a value as well as a loop source: a sequence of `int` with `len`, indexing, slicing, `in`, `==` and `repr`, as in Python. | S | 0.3 | 3.2.5 |
 
 ### 3.6 Expressions (EXP)
 

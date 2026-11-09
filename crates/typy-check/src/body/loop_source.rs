@@ -40,7 +40,7 @@ impl BodyChecker<'_> {
         let call = self.called_builtin(iter).filter(|(builtin, ..)| {
             matches!(
                 builtin,
-                Builtin::Enumerate | Builtin::Zip | Builtin::Reversed
+                Builtin::Enumerate | Builtin::Zip | Builtin::Reversed | Builtin::Range
             )
         });
         let Some((builtin, arguments, keywords)) = call else {
@@ -52,6 +52,7 @@ impl BodyChecker<'_> {
         let source = match builtin {
             Builtin::Enumerate => self.enumerate(arguments, keywords, span),
             Builtin::Zip => self.zip(arguments, keywords),
+            Builtin::Range => self.range(arguments, keywords, false, span),
             _ => self.reversed(arguments, keywords, span),
         };
         let ty = source.item_type();
@@ -102,6 +103,11 @@ impl BodyChecker<'_> {
         if arguments.len() != 1 {
             return self.source_arity(Builtin::Reversed, "1", arguments.len(), arguments, span);
         }
+        if let Some((Builtin::Range, range_arguments, range_keywords)) =
+            self.called_builtin(&arguments[0])
+        {
+            return self.range(range_arguments, range_keywords, true, span);
+        }
         let sequence = self.sequence(&arguments[0]);
         if let Type::Dict(..) | Type::DictView(..) = sequence.ty {
             return self.reversed_dict(&sequence, span);
@@ -144,6 +150,68 @@ impl BodyChecker<'_> {
             Type::Error,
             span,
         ))
+    }
+
+    /// Checks `range(stop)`, `range(start, stop)` or `range(start, stop, step)`, each an `int`,
+    /// or `reversed` of one.
+    fn range(
+        &mut self,
+        arguments: &[Expr],
+        keywords: &[Keyword],
+        reversed: bool,
+        span: Span,
+    ) -> LoopSource {
+        if !keywords.is_empty() {
+            // `range` takes no keyword argument; each is reported, and the call has no value.
+            self.only_keyword(Builtin::Range, "", keywords);
+            for argument in arguments {
+                self.expression(argument);
+            }
+            return LoopSource::Items(Self::typed(
+                TypedExprKind::Constant(TypedConstant::None),
+                Type::Error,
+                span,
+            ));
+        }
+        if !(1..=3).contains(&arguments.len()) {
+            return self.source_arity(Builtin::Range, "1 to 3", arguments.len(), arguments, span);
+        }
+        let values: Vec<TypedExpr> = arguments
+            .iter()
+            .map(|argument| {
+                let value = self.expression(argument);
+                self.expect(&value, Type::Int, "an argument of `range`");
+                value
+            })
+            .collect();
+        let constant = |digits: &str| TypedExpr {
+            kind: TypedExprKind::Constant(TypedConstant::Int(digits.to_owned())),
+            ty: Type::Int,
+            span,
+        };
+        let mut given = values.into_iter();
+        let (first, end, increment) = match (given.next(), given.next(), given.next()) {
+            (Some(end), None, _) => (constant("0"), end, constant("1")),
+            (Some(first), Some(end), None) => (first, end, constant("1")),
+            (Some(first), Some(end), Some(increment)) => (first, end, increment),
+            (None, ..) => unreachable!("`range` has one to three arguments here"),
+        };
+        if [&first, &end, &increment]
+            .iter()
+            .any(|value| value.ty.has_error())
+        {
+            return LoopSource::Items(Self::typed(
+                TypedExprKind::Constant(TypedConstant::None),
+                Type::Error,
+                span,
+            ));
+        }
+        LoopSource::Range {
+            start: first,
+            stop: end,
+            step: increment,
+            reversed,
+        }
     }
 
     /// Checks a sequence a loop reads. A fixed tuple whose items have one type is read as a

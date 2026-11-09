@@ -6,6 +6,7 @@ mod augmented;
 mod builtin;
 mod call_graph;
 mod comparison;
+mod comprehension;
 mod conversion;
 mod dict;
 mod expression;

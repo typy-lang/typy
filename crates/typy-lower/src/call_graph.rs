@@ -149,6 +149,27 @@ fn expression(expression_value: &TypedExpr, callees: &mut BTreeSet<FunctionId>) 
             expression(list, callees);
             expression(index, callees);
         }
+        TypedExprKind::Comprehension {
+            element,
+            value,
+            generators,
+        } => {
+            expression(element, callees);
+            if let Some(value) = value {
+                expression(value, callees);
+            }
+            for generator in generators {
+                assign_target(&generator.target, callees);
+                for value in generator
+                    .source
+                    .expressions()
+                    .into_iter()
+                    .chain(&generator.conditions)
+                {
+                    expression(value, callees);
+                }
+            }
+        }
         TypedExprKind::Dict { keys, values } => {
             for value in keys.iter().chain(values) {
                 expression(value, callees);

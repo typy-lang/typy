@@ -2,6 +2,7 @@
 
 mod builtin_call;
 mod call;
+mod comprehension;
 mod dict;
 mod expression;
 mod flow;

@@ -22,6 +22,9 @@ impl BodyChecker<'_> {
             Expr::List { elements, span } => self.list_display(elements, expected, *span),
             Expr::Set { elements, span } => self.set_display(elements, expected, *span),
             Expr::Dict { keys, values, span } => self.dict_display(keys, values, expected, *span),
+            Expr::ListComp { .. } | Expr::SetComp { .. } | Expr::DictComp { .. } => {
+                self.comprehension(expression, expected)
+            }
             Expr::Call {
                 arguments,
                 keywords,

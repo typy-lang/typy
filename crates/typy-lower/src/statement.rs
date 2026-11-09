@@ -268,7 +268,7 @@ impl FunctionLowerer<'_> {
     }
 
     /// Returns whether a `range` loop continues: `counter < limit` for a positive step, `counter > limit` for a negative one; `rising_step` is known when the step is a constant.
-    fn range_condition(
+    pub(crate) fn range_condition(
         &mut self,
         [counter, limit, stride]: [SlotId; 3],
         rising_step: Option<bool>,

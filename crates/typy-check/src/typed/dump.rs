@@ -153,7 +153,10 @@ impl Dump<'_> {
                     LoopSource::Items(_) => "",
                     LoopSource::Enumerate { .. } => " enumerate",
                     LoopSource::Zip { .. } => " zip",
-                    LoopSource::Reversed(_) => " reversed",
+                    LoopSource::Reversed(_) | LoopSource::Range { reversed: true, .. } => {
+                        " reversed"
+                    }
+                    LoopSource::Range { .. } => " range",
                 };
                 self.line(
                     depth,
@@ -216,6 +219,7 @@ impl Dump<'_> {
             TypedExprKind::SetOf(_) => "SetOf".to_owned(),
             TypedExprKind::Set(_) => "Set".to_owned(),
             TypedExprKind::Dict { .. } => "Dict".to_owned(),
+            TypedExprKind::Comprehension { .. } => "Comprehension".to_owned(),
             TypedExprKind::DictOf(_) => "DictOf".to_owned(),
             TypedExprKind::DictItem { .. } => "DictItem".to_owned(),
             TypedExprKind::TupleOf(_) => "TupleOf".to_owned(),
@@ -264,6 +268,20 @@ fn children(expression: &TypedExpr) -> Vec<&TypedExpr> {
             .flat_map(|(key, value)| [key, value])
             .collect(),
         TypedExprKind::DictItem { dict, key } => vec![dict, key],
+        TypedExprKind::Comprehension {
+            element,
+            value,
+            generators,
+        } => std::iter::once(element.as_ref())
+            .chain(value.as_deref())
+            .chain(generators.iter().flat_map(|generator| {
+                generator
+                    .source
+                    .expressions()
+                    .into_iter()
+                    .chain(&generator.conditions)
+            }))
+            .collect(),
         TypedExprKind::IterableBuiltin {
             iterable, option, ..
         } => std::iter::once(iterable.as_ref())

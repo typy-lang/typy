@@ -33,6 +33,17 @@ pub enum AssignTarget {
     },
 }
 
+/// One `for target in source if condition ...` clause of a comprehension (EXP-12).
+#[derive(Clone, Debug, PartialEq)]
+pub struct Generator {
+    /// What each value is bound to, in the comprehension's own scope.
+    pub target: AssignTarget,
+    /// What the clause goes over.
+    pub source: LoopSource,
+    /// The conditions a value must meet, tested in order, each a truth test.
+    pub conditions: Vec<super::expression::TypedExpr>,
+}
+
 /// What a `for` loop goes over (CST-03, LIB-02). A sequence is read as CPython's list
 /// iterator reads it: each step checks the length again, so a list that grows or shrinks in
 /// the body changes how many steps there are.
@@ -42,6 +53,18 @@ pub enum LoopSource {
     Items(TypedExpr),
     /// `reversed(sequence)`: the items from the last to the first.
     Reversed(TypedExpr),
+    /// `range(start, stop, step)`, or `reversed` of one: the arguments are evaluated once, in
+    /// order, and a zero step raises `ValueError`, as `range()` does.
+    Range {
+        /// The first value, 0 when `range` is given only a stop.
+        start: TypedExpr,
+        /// The value the range stops before.
+        stop: TypedExpr,
+        /// The step, 1 when it is not given.
+        step: TypedExpr,
+        /// True for `reversed(range(...))`.
+        reversed: bool,
+    },
     /// `enumerate(source, start)`: a count from `start`, with each value of `source`.
     Enumerate {
         /// What is counted.
@@ -65,6 +88,9 @@ impl LoopSource {
     pub fn expressions(&self) -> Vec<&TypedExpr> {
         match self {
             Self::Items(sequence) | Self::Reversed(sequence) => vec![sequence],
+            Self::Range {
+                start, stop, step, ..
+            } => vec![start, stop, step],
             Self::Enumerate { source, start } => {
                 let mut expressions = source.expressions();
                 expressions.push(start);
@@ -82,6 +108,7 @@ impl LoopSource {
     #[must_use]
     pub fn item_type(&self) -> Type {
         match self {
+            Self::Range { .. } => Type::Int,
             Self::Items(sequence) | Self::Reversed(sequence) => match &sequence.ty {
                 Type::Bytes => Type::Int,
                 Type::Set(item) | Type::Dict(item, _) => item.as_ref().clone(),
