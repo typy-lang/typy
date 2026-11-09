@@ -34,7 +34,35 @@ impl BodyChecker<'_> {
             {
                 self.call_list(arguments, keywords, expected, *span)
             }
-            other => self.expression(other),
+            Expr::Call {
+                arguments,
+                keywords,
+                span,
+                ..
+            } if arguments.is_empty()
+                && self
+                    .called_builtin(expression)
+                    .is_some_and(|(builtin, ..)| builtin == Builtin::Tuple) =>
+            {
+                self.call_tuple(arguments, keywords, expected, *span)
+            }
+            other => {
+                let value = self.expression(other);
+                Self::converted(value, expected)
+            }
+        }
+    }
+
+    /// Returns `value` as a `tuple[T, ...]` when that is the expected type and `value` is a
+    /// fixed tuple of items of type `T`, which Python's typing accepts there (DAT-14); returns
+    /// any other value as it is.
+    pub(super) fn converted(value: TypedExpr, expected: Option<&Type>) -> TypedExpr {
+        match expected {
+            Some(Type::TupleOf(item)) if value.ty.fits_tuple_of(item) => {
+                let (ty, span) = (Type::TupleOf(item.clone()), value.span);
+                Self::typed(TypedExprKind::TupleOf(Box::new(value)), ty, span)
+            }
+            _ => value,
         }
     }
 
@@ -164,7 +192,27 @@ impl BodyChecker<'_> {
             typed[position] =
                 Some(self.expression_expecting(operands[position], expected.as_ref()));
         }
-        typed.into_iter().flatten().collect()
+        let mut typed: Vec<TypedExpr> = typed.into_iter().flatten().collect();
+        // A fixed tuple compared with a `tuple[T, ...]`, or looked for among them, becomes one
+        // (DAT-14).
+        for (position, operator) in operators.iter().enumerate() {
+            let (left, right) = (typed[position].ty.clone(), typed[position + 1].ty.clone());
+            let membership = matches!(operator, CompareOperator::In | CompareOperator::NotIn);
+            let wanted = if membership {
+                right.sequence_item().cloned()
+            } else {
+                Some(right.clone())
+            };
+            if let Some(wanted) = wanted.filter(|wanted| matches!(wanted, Type::TupleOf(_))) {
+                let value = typed[position].clone();
+                typed[position] = Self::converted(value, Some(&wanted));
+            }
+            if !membership && matches!(left, Type::TupleOf(_)) {
+                let value = typed[position + 1].clone();
+                typed[position + 1] = Self::converted(value, Some(&left));
+            }
+        }
+        typed
     }
 
     /// Checks the items of a display. Without an expected item type, an empty display among the

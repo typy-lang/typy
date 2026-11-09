@@ -28,6 +28,7 @@ pub enum Builtin {
     Sorted,
     Str,
     Sum,
+    Tuple,
     Zip,
 }
 
@@ -57,6 +58,7 @@ impl Builtin {
             "sorted" => Self::Sorted,
             "str" => Self::Str,
             "sum" => Self::Sum,
+            "tuple" => Self::Tuple,
             "zip" => Self::Zip,
             _ => return None,
         })
@@ -87,6 +89,7 @@ impl Builtin {
             Self::Sorted => "sorted",
             Self::Str => "str",
             Self::Sum => "sum",
+            Self::Tuple => "tuple",
             Self::Zip => "zip",
         }
     }
@@ -120,6 +123,7 @@ mod tests {
             "sorted",
             "str",
             "sum",
+            "tuple",
             "zip",
         ] {
             let builtin = Builtin::named(name).unwrap();

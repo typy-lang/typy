@@ -210,7 +210,7 @@ fn rejected_programs_give_their_codes() {
         ("def f() -> int:\n    return 1\ng = f\n", &["E0201"]),
         ("x = 1\nx()\n", &["E0401"]),
         ("print(min(1, 2.0))\n", &["E0404"]),
-        ("print(min((1, 2)))\n", &["E0201"]),
+        ("print(min((1, 'a')))\n", &["E0411"]),
         ("print(len(1))\n", &["E0404"]),
         ("print(len(\"a\", \"b\"))\n", &["E0404"]),
         ("print(abs(\"a\"))\n", &["E0401"]),
@@ -726,8 +726,9 @@ fn tuple_annotations_and_unpacking_follow_the_item_types() {
         ("a, b = 1\n", &["E0308"]),
         ("a, b = 1, \"x\"\na = \"y\"\n", &["E0402"]),
         ("p: tuple = (1, 2)\n", &["E0408"]),
-        ("p: tuple[int, ...] = (1, 2)\n", &["E0201"]),
-        ("p: tuple[...] = ()\n", &["E0201"]),
+        ("p: tuple[int, ..., int] = (1, 2)\n", &["E0408"]),
+        ("p: tuple[..., int] = (1, 2)\n", &["E0408"]),
+        ("p: tuple[...] = ()\n", &["E0408"]),
         ("p: tuple[int, str] = (1, 2)\n", &["E0402"]),
         ("p: tuple[int] = (1, 2)\n", &["E0402"]),
     ];
@@ -864,7 +865,7 @@ fn builtins_of_one_iterable_give_their_codes() {
         ("x = sorted([1], reverse=1)\n", &["E0404"]),
         ("x = sorted([1], cmp=1)\n", &["E0404"]),
         ("x = sorted([1], **{})\n", &["E0201"]),
-        ("x = sorted((1, 2))\n", &["E0201"]),
+        ("x = sorted((1, 'a'))\n", &["E0411"]),
         ("x = sorted(3)\n", &["E0411"]),
         ("x = sorted(missing)\n", &["E0205"]),
         ("x = max([1], default='a')\n", &["E0404"]),
@@ -930,12 +931,12 @@ fn loop_sources_give_their_codes() {
         ("for i in reversed():\n    pass\n", &["E0404"]),
         ("for i in reversed([1], [2]):\n    pass\n", &["E0404"]),
         ("for i in reversed([1], key=1):\n    pass\n", &["E0404"]),
-        ("for i in reversed((1, 2)):\n    pass\n", &["E0201"]),
+        ("for i in reversed((1, 'a')):\n    pass\n", &["E0411"]),
         ("for a, b in enumerate([1], 0):\n    a = 'x'\n", &["E0402"]),
         ("for a, b, c in zip([1], [2]):\n    pass\n", &["E0308"]),
         ("x = enumerate([1])\n", &["E0201"]),
         ("x = reversed([1])\n", &["E0201"]),
-        ("for c in (1, 2):\n    pass\n", &["E0201"]),
+        ("for c in (1, 'a'):\n    pass\n", &["E0411"]),
     ];
     for (source, expected) in cases {
         assert_eq!(&rejected(source), expected, "\n{source}");
@@ -993,7 +994,7 @@ fn list_calls_and_in_give_their_codes() {
         ("x = list([1], [2])\n", &["E0404"]),
         ("x = list([1], key=1)\n", &["E0404"]),
         ("x = list(3)\n", &["E0411"]),
-        ("x = list((1, 2))\n", &["E0201"]),
+        ("x = list((1, 'a'))\n", &["E0411"]),
         ("x = list(missing)\n", &["E0205"]),
         ("x = 1 in 'abc'\n", &["E0407"]),
         ("x = 'a' in (1, 2)\n", &["E0407"]),
@@ -1007,6 +1008,46 @@ fn list_calls_and_in_give_their_codes() {
     let program = TypeChecker::check(&project).expect("the program is accepted");
     let dump = typy_check::dump(&program, &project);
     for node in ["ListOf", "TupleSlice [2, 1, 0]"] {
+        assert!(dump.contains(node), "{node} missing from\n{dump}");
+    }
+}
+
+#[test]
+fn tuples_of_any_length_give_their_codes_and_types() {
+    let cases: &[(&str, &[&str])] = &[
+        ("t: tuple[int, ...] = (1, 'a')\n", &["E0402"]),
+        ("t = tuple([1])\nt.append(2)\n", &["E0412"]),
+        ("t = tuple([1])\nt[0] = 2\n", &["E0401"]),
+        ("x = tuple([1], [2])\n", &["E0404"]),
+        ("x = tuple([1], key=1)\n", &["E0404"]),
+        ("x = tuple(5)\n", &["E0411"]),
+        ("x = tuple([1]) + [1]\n", &["E0401"]),
+        ("x = tuple([1]) == tuple(['a'])\n", &["E0407"]),
+        (
+            "def f(t: tuple[int, ...]) -> None:\n    pass\nf((1, 'a'))\n",
+            &["E0404"],
+        ),
+    ];
+    for (source, expected) in cases {
+        assert_eq!(&rejected(source), expected, "\n{source}");
+    }
+    let source = "\
+def f(values: tuple[int, ...]) -> tuple[int, ...]:
+    return values
+a = f((1, 2)) + f(values=(3,))
+b: tuple[str, ...] = tuple()
+c = tuple('ab')[1:] + b
+d = a < (1, 2) and (1,) in [a] and a.count(1) == a.index(1)
+e: tuple[()] = tuple()
+";
+    let (_directory, project) = load(source);
+    let program = TypeChecker::check(&project).expect("the program is accepted");
+    let dump = typy_check::dump(&program, &project);
+    for node in [
+        "TupleOf : tuple[int, ...]",
+        "Method count",
+        "Slice : tuple[str, ...]",
+    ] {
         assert!(dump.contains(node), "{node} missing from\n{dump}");
     }
 }

@@ -378,3 +378,36 @@ fn lists_join_repeat_and_order_item_by_item() {
         assert!(typy_rt_list_compare(nested[0], nested[1], word(2)));
     }
 }
+
+#[test]
+fn a_sealed_list_is_a_tuple_in_text_errors_and_results() {
+    use super::methods::{typy_rt_list_index, typy_rt_list_slice};
+    use super::order::{typy_rt_list_concat, typy_rt_list_repeat};
+    use crate::slice::START;
+    let pair = ints(&[1, 2]);
+    let single = ints(&[7]);
+    let empty = ints(&[]);
+    // SAFETY: the lists are live and nothing else refers to them.
+    unsafe {
+        for tuple in [pair, single, empty] {
+            super::typy_rt_tuple_seal(tuple);
+            assert!((*tuple).is_tuple());
+        }
+        assert_eq!(repr(pair), "(1, 2)");
+        assert_eq!(repr(single), "(7,)");
+        assert_eq!(repr(empty), "()");
+        assert_eq!(
+            message(typy_rt_list_get(pair, word(5)).exception),
+            "tuple index out of range"
+        );
+        assert_eq!(
+            message(typy_rt_list_index(pair, word(9).cast_unsigned()).exception),
+            "tuple.index(x): x not in tuple"
+        );
+        let sliced = typy_rt_list_slice(pair, word(1), word(0), word(0), word(START)).value;
+        assert_eq!(repr(sliced), "(2,)");
+        assert_eq!(repr(typy_rt_list_concat(pair, single)), "(1, 2, 7)");
+        assert_eq!(repr(typy_rt_list_repeat(single, word(2)).value), "(7, 7)");
+        crate::refcount::typy_rt_decrement(pair.cast());
+    }
+}

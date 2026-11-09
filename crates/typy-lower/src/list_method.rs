@@ -1,4 +1,4 @@
-//! Lowers the methods of lists (LIB-03). Each runtime list function borrows its arguments;
+//! Lowers the methods of lists and of `tuple[T, ...]` (LIB-03, DAT-14). Each runtime list function borrows its arguments;
 //! one that stores an item takes a reference of its own.
 
 use typy_check::{Method, TypedExpr};
@@ -28,13 +28,19 @@ impl FunctionLowerer<'_> {
         let lowered = match (method, arguments.as_slice()) {
             (Method::ListPop, given) => self.pop(list, given.first().copied(), result, span),
             (
-                Method::ListAppend | Method::ListRemove | Method::ListIndex | Method::ListCount,
+                Method::ListAppend
+                | Method::ListRemove
+                | Method::ListIndex
+                | Method::ListCount
+                | Method::TupleIndex
+                | Method::TupleCount,
                 [item],
             ) => {
+                // A `tuple[T, ...]` is a list object, so its `index` and `count` are the list's.
                 let function = match method {
                     Method::ListAppend => RuntimeFunction::ListAppend,
                     Method::ListRemove => RuntimeFunction::ListRemove,
-                    Method::ListIndex => RuntimeFunction::ListIndex,
+                    Method::ListIndex | Method::TupleIndex => RuntimeFunction::ListIndex,
                     _ => RuntimeFunction::ListCount,
                 };
                 let bits = self.bits(*item, span);

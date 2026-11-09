@@ -44,9 +44,9 @@ impl BodyChecker<'_> {
             Op::Add if l == Str && r == Str => Str,
             // A list joins only a list of its own type, because the runtime stores each item by
             // the kind of the item type (DAT-07).
-            Op::Add if matches!(l, Type::List(_)) && l == r => l,
-            Op::Mult if matches!(l, Type::List(_)) && r == Int => l,
-            Op::Mult if l == Int && matches!(r, Type::List(_)) => r,
+            Op::Add if l.sequence_item().is_some() && l == r => l,
+            Op::Mult if l.sequence_item().is_some() && r == Int => l,
+            Op::Mult if l == Int && r.sequence_item().is_some() => r,
             Op::Mult if (l == Str && r == Int) || (l == Int && r == Str) => Str,
             Op::Add | Op::Sub | Op::Mult | Op::FloorDiv | Op::Mod
                 if l.is_numeric() && r.is_numeric() =>
@@ -183,7 +183,7 @@ impl BodyChecker<'_> {
             CompareOperator::In | CompareOperator::NotIn => match &r {
                 // The runtime compares the value with each item by the item's kind, so the value
                 // has the item type.
-                Type::List(item) if l.is_assignable_to(item) => {}
+                Type::List(item) | Type::TupleOf(item) if l.is_assignable_to(item) => {}
                 // A substring test: `in` on a `str` needs a `str` on its left.
                 Type::Str if l == Type::Str => {}
                 // A tuple compares the value with each item for equality, so each item has to

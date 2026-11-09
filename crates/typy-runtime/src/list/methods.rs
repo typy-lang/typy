@@ -25,7 +25,7 @@ pub unsafe extern "C" fn typy_rt_list_slice(
             Ok(selection) => selection,
             Err(error) => return Raising::error(core::ptr::null_mut(), error),
         };
-        let result = new_list((*list).item_type(), selection.count);
+        let result = super::same_type(new_list((*list).item_type(), selection.count), list);
         for index in 0..selection.count {
             push_retained(result, (*list).item(selection.position(index)));
         }
@@ -184,10 +184,12 @@ pub unsafe extern "C" fn typy_rt_list_index(list: *const ListObject, item: u64) 
         if let Some(position) = find(list, item) {
             return Raising::ok(inline(i64::try_from(position).unwrap_or(0)).unwrap_or(1));
         }
-        Raising::error(
-            1,
-            raise(ExceptionKind::ValueError, "list.index(x): x not in list"),
-        )
+        let message = if (*list).is_tuple() {
+            "tuple.index(x): x not in tuple"
+        } else {
+            "list.index(x): x not in list"
+        };
+        Raising::error(1, raise(ExceptionKind::ValueError, message))
     }
 }
 

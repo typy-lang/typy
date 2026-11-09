@@ -179,8 +179,8 @@ impl BodyChecker<'_> {
                     let items = items.clone();
                     return self.tuple_item(value, &items, index, span);
                 }
-                if let Type::List(item) = &value.ty {
-                    let item = item.as_ref().clone();
+                if let Some(item) = value.ty.sequence_item() {
+                    let item = item.clone();
                     return self.list_item(value, item, index, span);
                 }
                 let index = self.expression(index);

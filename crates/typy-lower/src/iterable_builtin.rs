@@ -29,7 +29,7 @@ impl FunctionLowerer<'_> {
                 self.sort(copy.value, option, span);
                 copy
             }
-            Builtin::Sum if iterable.ty == Type::List(Box::new(Type::Float)) => {
+            Builtin::Sum if iterable.ty.sequence_item() == Some(&Type::Float) => {
                 let start = match option {
                     Some(start) => start.value,
                     None => self.constant(Constant::Float(0.0), span),

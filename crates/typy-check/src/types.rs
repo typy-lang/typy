@@ -20,6 +20,8 @@ pub enum Type {
     Tuple(Vec<Type>),
     /// `list[T]`: a mutable sequence shared by every name bound to it (DAT-07).
     List(Box<Type>),
+    /// `tuple[T, ...]`: an immutable sequence of any number of items of one type (DAT-14).
+    TupleOf(Box<Type>),
     /// The type of an expression that already has a diagnostic; every check accepts it, so one cause gives one error (DIA-04).
     Error,
 }
@@ -31,7 +33,8 @@ impl Type {
     pub fn is_assignable_to(&self, target: &Self) -> bool {
         match (self, target) {
             (Self::Error, _) | (_, Self::Error) => true,
-            (Self::List(item), Self::List(target)) => item.is_assignable_to(target),
+            (Self::List(item), Self::List(target))
+            | (Self::TupleOf(item), Self::TupleOf(target)) => item.is_assignable_to(target),
             (Self::Tuple(items), Self::Tuple(targets)) => {
                 items.len() == targets.len()
                     && items
@@ -49,7 +52,7 @@ impl Type {
         match self {
             Self::Error => true,
             Self::Tuple(items) => items.iter().any(Self::has_error),
-            Self::List(item) => item.has_error(),
+            Self::List(item) | Self::TupleOf(item) => item.has_error(),
             _ => false,
         }
     }
@@ -62,7 +65,9 @@ impl Type {
             (Self::Error, _) | (_, Self::Error) => true,
             // The runtime compares items by the list's own item kind, so two lists compare when
             // their items have one type.
-            (Self::List(left), Self::List(right)) => left == right,
+            (Self::List(left), Self::List(right)) | (Self::TupleOf(left), Self::TupleOf(right)) => {
+                left == right
+            }
             (Self::Tuple(left), Self::Tuple(right)) => {
                 left.len() == right.len()
                     && left
@@ -83,6 +88,7 @@ impl Type {
     pub fn can_order(&self, other: &Self) -> bool {
         match (self, other) {
             (Self::Error, _) | (_, Self::Error) => true,
+            (Self::TupleOf(left), Self::TupleOf(right)) => left == right && left.can_order(right),
             (Self::Tuple(left), Self::Tuple(right)) => {
                 left.len() == right.len()
                     && left.iter().zip(right).all(|(left, right)| {
@@ -93,6 +99,23 @@ impl Type {
             (Self::NoneType, _) | (_, Self::NoneType) => false,
             _ => self == other || (self.is_numeric() && other.is_numeric()),
         }
+    }
+
+    /// Returns the item type of a sequence stored as a runtime list object: a `list[T]` or a
+    /// `tuple[T, ...]`.
+    #[must_use]
+    pub fn sequence_item(&self) -> Option<&Self> {
+        match self {
+            Self::List(item) | Self::TupleOf(item) => Some(item),
+            _ => None,
+        }
+    }
+
+    /// Returns `tuple[T, ...]` for a fixed tuple whose items are all of type `item`, which it
+    /// converts to where that type is expected (DAT-14).
+    #[must_use]
+    pub fn fits_tuple_of(&self, item: &Self) -> bool {
+        matches!(self, Self::Tuple(items) if items.iter().all(|each| each.is_assignable_to(item)))
     }
 
     /// Returns true for `int` and `float`.
@@ -144,6 +167,7 @@ impl fmt::Display for Type {
                 formatter.write_str("]")
             }
             Self::List(item) => write!(formatter, "list[{item}]"),
+            Self::TupleOf(item) => write!(formatter, "tuple[{item}, ...]"),
             Self::Error => formatter.write_str("<error>"),
         }
     }

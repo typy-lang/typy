@@ -212,6 +212,7 @@ impl Dump<'_> {
             TypedExprKind::Tuple(_) => "Tuple".to_owned(),
             TypedExprKind::List(_) => "List".to_owned(),
             TypedExprKind::ListOf(_) => "ListOf".to_owned(),
+            TypedExprKind::TupleOf(_) => "TupleOf".to_owned(),
             TypedExprKind::ListItem { .. } => "ListItem".to_owned(),
             TypedExprKind::Slice { .. } => "Slice".to_owned(),
             TypedExprKind::Method { method, .. } => format!("Method {}", method.name()),
@@ -239,6 +240,7 @@ fn children(expression: &TypedExpr) -> Vec<&TypedExpr> {
             vec![left, right]
         }
         TypedExprKind::Unary { operand, .. }
+        | TypedExprKind::TupleOf(operand)
         | TypedExprKind::TupleItem { tuple: operand, .. }
         | TypedExprKind::TupleSlice { tuple: operand, .. } => {
             vec![operand]

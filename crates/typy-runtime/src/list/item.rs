@@ -4,7 +4,7 @@
 //! says, and crosses the runtime's interface as the address of its bytes (ADR-0001, ADR-0009).
 
 use crate::Raising;
-use crate::header::{LIST_TYPE_ID, ObjectHeader, STR_TYPE_ID};
+use crate::header::{LIST_TYPE_ID, ObjectHeader, STR_TYPE_ID, TUPLE_TYPE_ID};
 use crate::string::StrObject;
 use crate::tuple::TupleType;
 use crate::word::inline;
@@ -286,7 +286,7 @@ unsafe fn object_is_true(object: *mut ObjectHeader) -> bool {
     unsafe {
         match (*object).type_id {
             STR_TYPE_ID => (*object.cast::<StrObject>()).length != 0,
-            LIST_TYPE_ID => (*object.cast::<super::ListObject>()).length != 0,
+            LIST_TYPE_ID | TUPLE_TYPE_ID => (*object.cast::<super::ListObject>()).length != 0,
             _ => crate::libc::abort_with(b"typy runtime: a list holds an object it cannot test\n"),
         }
     }
@@ -310,7 +310,7 @@ unsafe fn objects_equal(left: *mut ObjectHeader, right: *mut ObjectHeader) -> bo
                 right.cast::<StrObject>(),
                 inline(0).unwrap_or(1),
             ),
-            LIST_TYPE_ID => super::typy_rt_list_equal(left.cast(), right.cast()),
+            LIST_TYPE_ID | TUPLE_TYPE_ID => super::typy_rt_list_equal(left.cast(), right.cast()),
             _ => {
                 crate::libc::abort_with(b"typy runtime: a list holds an object it cannot compare\n")
             }
@@ -336,7 +336,9 @@ unsafe fn objects_order(
                 right.cast::<StrObject>(),
                 comparison,
             ),
-            LIST_TYPE_ID => super::typy_rt_list_compare(left.cast(), right.cast(), comparison),
+            LIST_TYPE_ID | TUPLE_TYPE_ID => {
+                super::typy_rt_list_compare(left.cast(), right.cast(), comparison)
+            }
             _ => crate::libc::abort_with(b"typy runtime: a list holds an object it cannot order\n"),
         }
     }
@@ -356,7 +358,7 @@ unsafe fn object_repr(object: *mut ObjectHeader) -> Raising<*mut StrObject> {
     unsafe {
         match (*object).type_id {
             STR_TYPE_ID => Raising::ok(crate::string::typy_rt_str_repr(object.cast::<StrObject>())),
-            LIST_TYPE_ID => super::typy_rt_list_repr(object.cast()),
+            LIST_TYPE_ID | TUPLE_TYPE_ID => super::typy_rt_list_repr(object.cast()),
             _ => crate::libc::abort_with(b"typy runtime: a list holds an object it cannot write\n"),
         }
     }

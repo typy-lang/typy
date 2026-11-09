@@ -27,6 +27,11 @@ pub enum Method {
     ListReverse,
     /// `list.sort(reverse=False)`: sorts the items in place, stably, and returns `None`.
     ListSort,
+    /// `tuple.index(item)`: returns the position of the first equal item, or raises
+    /// `ValueError`.
+    TupleIndex,
+    /// `tuple.count(item)`: returns how many items are equal to `item`.
+    TupleCount,
 }
 
 /// The parameters a method takes, how many of them a call must give, and its result.
@@ -47,6 +52,13 @@ impl Method {
     /// Returns the method `name` of a value of type `receiver`, if the release provides it.
     #[must_use]
     pub fn of(receiver: &Type, name: &str) -> Option<Self> {
+        if let Type::TupleOf(_) = receiver {
+            return match name {
+                "index" => Some(Self::TupleIndex),
+                "count" => Some(Self::TupleCount),
+                _ => None,
+            };
+        }
         let Type::List(_) = receiver else {
             return None;
         };
@@ -75,8 +87,8 @@ impl Method {
             Self::ListInsert => "insert",
             Self::ListExtend => "extend",
             Self::ListRemove => "remove",
-            Self::ListIndex => "index",
-            Self::ListCount => "count",
+            Self::ListIndex | Self::TupleIndex => "index",
+            Self::ListCount | Self::TupleCount => "count",
             Self::ListClear => "clear",
             Self::ListCopy => "copy",
             Self::ListReverse => "reverse",
@@ -88,16 +100,15 @@ impl Method {
     /// `of` found the method on.
     #[must_use]
     pub fn signature(self, receiver: &Type) -> MethodSignature {
-        let item = match receiver {
-            Type::List(item) => item.as_ref().clone(),
-            _ => Type::Error,
-        };
+        let item = receiver.sequence_item().cloned().unwrap_or(Type::Error);
         let (parameters, required, result) = match self {
             Self::ListAppend | Self::ListRemove => (vec![item], 1, Type::NoneType),
             Self::ListPop => (vec![Type::Int], 0, item),
             Self::ListInsert => (vec![Type::Int, item], 2, Type::NoneType),
             Self::ListExtend => (vec![receiver.clone()], 1, Type::NoneType),
-            Self::ListIndex | Self::ListCount => (vec![item], 1, Type::Int),
+            Self::ListIndex | Self::ListCount | Self::TupleIndex | Self::TupleCount => {
+                (vec![item], 1, Type::Int)
+            }
             Self::ListClear | Self::ListReverse => (Vec::new(), 0, Type::NoneType),
             Self::ListCopy => (Vec::new(), 0, receiver.clone()),
             Self::ListSort => (vec![Type::Bool], 0, Type::NoneType),

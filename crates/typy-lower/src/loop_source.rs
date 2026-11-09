@@ -73,7 +73,7 @@ impl FunctionLowerer<'_> {
     /// directly; any other source is read as a `for` loop reads it, appending each value.
     pub(crate) fn list_of(&mut self, source: &LoopSource, span: Span) -> Lowered {
         if let LoopSource::Items(sequence) = source
-            && matches!(sequence.ty, typy_check::Type::List(_))
+            && sequence.ty.sequence_item().is_some()
         {
             let list = self.expression(sequence);
             let copy = self.call_runtime(RuntimeFunction::ListCopy, vec![list.value], span);
@@ -139,11 +139,11 @@ impl FunctionLowerer<'_> {
     /// Keeps a sequence and its first position: 0, or for `reversed` its length less one, as
     /// CPython's `reversed` reads the length once when it is called.
     fn start_sequence(&mut self, sequence: &TypedExpr, backwards: bool, span: Span) -> Iterator {
-        let item = match &sequence.ty {
-            typy_check::Type::List(item) => self.lowered_type(item),
-            _ => TyirType::STR,
+        let is_str = sequence.ty.sequence_item().is_none();
+        let item = match sequence.ty.sequence_item() {
+            Some(item) => self.lowered_type(item),
+            None => TyirType::STR,
         };
-        let is_str = item == TyirType::STR && !matches!(sequence.ty, typy_check::Type::List(_));
         let sequence = self.kept(sequence, "sequence", span);
         let position = self.hidden_slot("position", TyirType::Int);
         let first = if backwards {

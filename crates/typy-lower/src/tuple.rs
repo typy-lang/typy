@@ -58,6 +58,27 @@ impl FunctionLowerer<'_> {
         self.produced(value, ty)
     }
 
+    /// Returns a `tuple[T, ...]` with items of type `item`: a new list that `inner` builds,
+    /// sealed, or a list made from the items of a fixed tuple, sealed (DAT-14).
+    pub(crate) fn tuple_of(&mut self, inner: &TypedExpr, item: TyirType, span: Span) -> Lowered {
+        let lowered = self.expression(inner);
+        let list = if lowered.ty == TyirType::LIST {
+            lowered
+        } else {
+            let (_, types) = self.item_types(lowered.ty);
+            let list = self.list_display(&[], item, span);
+            for (index, ty) in types.into_iter().enumerate() {
+                let value = self.borrowed_item(lowered, index, ty, span);
+                let bits = self.bits(value, span);
+                self.call_runtime(RuntimeFunction::ListAppend, vec![list.value, bits], span);
+            }
+            self.release(lowered, span);
+            list
+        };
+        self.call_runtime(RuntimeFunction::TupleSeal, vec![list.value], span);
+        list
+    }
+
     /// Returns a new tuple of the items at `positions`, each with a reference of its own; the
     /// tuple sliced is released.
     pub(crate) fn tuple_slice(

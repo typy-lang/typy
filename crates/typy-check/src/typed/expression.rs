@@ -81,6 +81,9 @@ pub enum TypedExprKind {
         iterable: Box<TypedExpr>,
         option: Option<Box<TypedExpr>>,
     },
+    /// A `tuple[T, ...]` made from a fixed tuple whose items are all of type `T`, or from a new
+    /// list that `tuple(source)` built (DAT-14).
+    TupleOf(Box<TypedExpr>),
     /// `list(source)`: a new list of every value the source gives, in order (LIB-02).
     ListOf(Box<super::statement::LoopSource>),
     /// A call of any other builtin of 0.1, with positional arguments only.

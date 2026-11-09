@@ -57,7 +57,11 @@ impl BodyChecker<'_> {
         let mut bound: Vec<Argument> = Vec::new();
         let mut filled = vec![false; signature.parameters.len()];
         for (index, argument) in arguments.iter().enumerate() {
-            let value = self.expression(argument);
+            let expected = signature
+                .parameters
+                .get(index)
+                .map(|parameter| &parameter.ty);
+            let value = self.expression_expecting(argument, expected);
             let Some(parameter) = signature.parameters.get(index) else {
                 return self.error(
                     Diagnostic::new(
@@ -84,15 +88,18 @@ impl BodyChecker<'_> {
             });
         }
         for keyword in keywords {
-            let value = self.expression(&keyword.value);
+            let position = keyword.name.as_ref().and_then(|keyword_name| {
+                signature
+                    .parameters
+                    .iter()
+                    .position(|parameter| parameter.name == keyword_name.name)
+            });
+            let expected = position.map(|index| &signature.parameters[index].ty);
+            let value = self.expression_expecting(&keyword.value, expected);
             let Some(keyword_name) = &keyword.name else {
                 continue;
             };
-            let Some(index) = signature
-                .parameters
-                .iter()
-                .position(|parameter| parameter.name == keyword_name.name)
-            else {
+            let Some(index) = position else {
                 return self.error(
                     Diagnostic::new(
                         DiagnosticCode::error(404),

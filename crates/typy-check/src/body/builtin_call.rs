@@ -24,6 +24,9 @@ impl BodyChecker<'_> {
         if builtin == Builtin::List {
             return self.call_list(arguments, keywords, None, span);
         }
+        if builtin == Builtin::Tuple {
+            return self.call_tuple(arguments, keywords, None, span);
+        }
         if builtin == Builtin::Round {
             return self.call_round(arguments, keywords, span);
         }
@@ -59,6 +62,7 @@ impl BodyChecker<'_> {
         let result = match builtin {
             Builtin::Print
             | Builtin::List
+            | Builtin::Tuple
             | Builtin::Round
             | Builtin::Sorted
             | Builtin::Sum
@@ -99,7 +103,10 @@ impl BodyChecker<'_> {
                         span,
                     );
                 }
-                if !matches!(values[0].ty, Type::Tuple(_) | Type::List(_)) {
+                if !matches!(
+                    values[0].ty,
+                    Type::Tuple(_) | Type::List(_) | Type::TupleOf(_)
+                ) {
                     self.expect(&values[0], Type::Str, "the argument of `len`");
                 }
                 Type::Int

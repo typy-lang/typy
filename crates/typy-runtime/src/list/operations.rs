@@ -84,7 +84,12 @@ fn position(index: i64, length: usize, message: &str) -> Result<usize, *mut Exce
 pub unsafe extern "C" fn typy_rt_list_get(list: *const ListObject, index: i64) -> Raising<u64> {
     // SAFETY: the caller passes a live list; `position` keeps the index inside it.
     unsafe {
-        match position(index, (*list).length, "list index out of range") {
+        let message = if (*list).is_tuple() {
+            "tuple index out of range"
+        } else {
+            "list index out of range"
+        };
+        match position(index, (*list).length, message) {
             Ok(index) => Raising::ok((*list).item(index)),
             Err(exception) => Raising::error(0, exception),
         }
@@ -155,7 +160,8 @@ pub unsafe extern "C" fn typy_rt_list_contains(list: *const ListObject, item: u6
     }
 }
 
-/// Returns `repr(list)`: the `repr` of each item, separated by `, ` between brackets.
+/// Returns `repr(list)`: the `repr` of each item, separated by `, ` between brackets, or for a
+/// tuple between parentheses, with a comma after the only item of a one-item tuple.
 ///
 /// # Safety
 ///
@@ -166,7 +172,12 @@ pub unsafe extern "C" fn typy_rt_list_repr(list: *const ListObject) -> Raising<*
     unsafe {
         let item_type = (*list).item_type();
         let items = (0..(*list).length).map(|index| (item_type, (*list).item(index)));
-        join_reprs(items, (*list).length, "[", "]")
+        let (open, close) = match ((*list).is_tuple(), (*list).length) {
+            (false, _) => ("[", "]"),
+            (true, 1) => ("(", ",)"),
+            (true, _) => ("(", ")"),
+        };
+        join_reprs(items, (*list).length, open, close)
     }
 }
 

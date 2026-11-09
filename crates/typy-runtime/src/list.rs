@@ -49,6 +49,11 @@ pub struct ListObject {
 }
 
 impl ListObject {
+    /// Returns whether this is a `tuple[T, ...]`, a list object sealed by `typy_rt_tuple_seal`.
+    pub(crate) fn is_tuple(&self) -> bool {
+        self.header.type_id == crate::header::TUPLE_TYPE_ID
+    }
+
     /// Returns the type of the list's items.
     pub(crate) fn item_type(&self) -> ItemType {
         match ItemKind::from_code(self.kind) {
@@ -259,4 +264,30 @@ pub(crate) unsafe fn destroy(list: *mut ListObject) {
         }
     }
     free(list.cast::<u8>());
+}
+
+/// Makes `list` a `tuple[T, ...]`: it keeps its items and is never changed again (DAT-14).
+///
+/// # Safety
+///
+/// `list` points to a live list that nothing else refers to yet.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn typy_rt_tuple_seal(list: *mut ListObject) {
+    // SAFETY: the caller passes a live list.
+    unsafe { (*list).header.type_id = crate::header::TUPLE_TYPE_ID };
+}
+
+/// Gives `result`, a new list made from `source`, the type of `source`, so a slice, a
+/// concatenation or a repetition of a tuple is a tuple.
+///
+/// # Safety
+///
+/// Both point to live lists.
+pub(crate) unsafe fn same_type(
+    result: *mut ListObject,
+    source: *const ListObject,
+) -> *mut ListObject {
+    // SAFETY: the caller passes live lists.
+    unsafe { (*result).header.type_id = (*source).header.type_id };
+    result
 }

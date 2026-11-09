@@ -44,7 +44,7 @@ impl BodyChecker<'_> {
             )
         });
         let Some((builtin, arguments, keywords)) = call else {
-            let sequence = self.expression(iter);
+            let sequence = self.sequence(iter);
             let item = self.iterated_item(&sequence, user);
             return (LoopSource::Items(sequence), item);
         };
@@ -102,9 +102,25 @@ impl BodyChecker<'_> {
         if arguments.len() != 1 {
             return self.source_arity(Builtin::Reversed, "1", arguments.len(), arguments, span);
         }
-        let sequence = self.expression(&arguments[0]);
+        let sequence = self.sequence(&arguments[0]);
         self.iterated_item(&sequence, "`reversed`");
         LoopSource::Reversed(sequence)
+    }
+
+    /// Checks a sequence a loop reads. A fixed tuple whose items have one type is read as a
+    /// `tuple[T, ...]` (DAT-14).
+    fn sequence(&mut self, expression: &Expr) -> TypedExpr {
+        let value = self.expression(expression);
+        let Type::Tuple(items) = &value.ty else {
+            return value;
+        };
+        match items.split_first() {
+            Some((first, rest)) if rest.iter().all(|item| item == first) => {
+                let wanted = Type::TupleOf(Box::new(first.clone()));
+                Self::converted(value, Some(&wanted))
+            }
+            _ => value,
+        }
     }
 
     /// Returns the value of the one keyword argument `accepted`, after reporting any other.

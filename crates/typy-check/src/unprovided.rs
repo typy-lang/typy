@@ -23,7 +23,7 @@ pub(crate) fn unprovided(name: &str) -> Option<Unprovided> {
         Unprovided::Planned { release, rule }
     }
     match name {
-        "dict" | "set" | "tuple" => Some(planned("0.2", RuleId::LIB_02)),
+        "dict" | "set" => Some(planned("0.2", RuleId::LIB_02)),
         "bytes" => Some(planned("0.2", RuleId::DAT_06)),
         "iter" | "next" => Some(planned("0.2", RuleId::CST_03)),
         "input" | "open" => Some(planned("0.3", RuleId::LIB_04)),

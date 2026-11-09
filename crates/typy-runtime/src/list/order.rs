@@ -18,7 +18,10 @@ pub unsafe extern "C" fn typy_rt_list_concat(
 ) -> *mut ListObject {
     // SAFETY: the caller passes live lists; every index stays below each length.
     unsafe {
-        let result = new_list((*left).item_type(), (*left).length + (*right).length);
+        let result = super::same_type(
+            new_list((*left).item_type(), (*left).length + (*right).length),
+            left,
+        );
         for list in [left, right] {
             for index in 0..(*list).length {
                 push_retained(result, (*list).item(index));
@@ -59,7 +62,7 @@ pub unsafe extern "C" fn typy_rt_list_repeat(
             );
             return Raising::error(core::ptr::null_mut(), error);
         };
-        let result = new_list((*list).item_type(), total);
+        let result = super::same_type(new_list((*list).item_type(), total), list);
         for _ in 0..times {
             for index in 0..(*list).length {
                 push_retained(result, (*list).item(index));

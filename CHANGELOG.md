@@ -50,6 +50,11 @@ All notable changes to TyPy are recorded here. The format follows
   sources too (LIB-02).
 - `in` on a `str`, a substring test, and on a tuple, and slices of a tuple
   with literal bounds such as `pair[1:]` (EXP-07, DAT-12).
+- `tuple[T, ...]`, a tuple of any length, with `tuple(source)`, indexing,
+  slicing, `in`, `len`, `+`, `*`, comparisons, `count`, `index` and `for`.
+  A tuple such as `(1, 2)` is accepted where a `tuple[int, ...]` is
+  expected, and `for` goes over a tuple whose items have one type (DAT-14,
+  CST-03).
 - `round`, with and without `ndigits`, rounding half to even on the exact
   value as CPython does, so `round(2.675, 2)` is `2.67` (LIB-02).
 - `for` over the characters of a `str`, and over `enumerate`, with

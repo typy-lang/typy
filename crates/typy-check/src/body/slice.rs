@@ -33,7 +33,7 @@ impl BodyChecker<'_> {
         let upper = bound(self, bounds.upper);
         let step = bound(self, bounds.step);
         match &value.ty {
-            Type::Str | Type::List(_) => {
+            Type::Str | Type::List(_) | Type::TupleOf(_) => {
                 let ty = value.ty.clone();
                 Self::typed(
                     TypedExprKind::Slice {

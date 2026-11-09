@@ -72,6 +72,7 @@ pub enum RuntimeFunction {
     FloatRoundDigits,
     IntRoundDigits,
     StrContains,
+    TupleSeal,
 }
 
 /// The parameter types, result type and raising behaviour of a runtime function.
@@ -102,7 +103,7 @@ const FLOAT_FLOAT: &[TyirType] = &[TyirType::Float, TyirType::Float];
 
 impl RuntimeFunction {
     /// Every runtime function.
-    pub const ALL: [Self; 63] = [
+    pub const ALL: [Self; 64] = [
         Self::IntFloorDivide,
         Self::IntModulo,
         Self::IntPower,
@@ -166,6 +167,7 @@ impl RuntimeFunction {
         Self::FloatRoundDigits,
         Self::IntRoundDigits,
         Self::StrContains,
+        Self::TupleSeal,
     ];
 
     /// Returns the function's signature. Comparisons take the comparison as an `int` operand, numbered as `Comparison::code`.
@@ -221,7 +223,9 @@ impl RuntimeFunction {
             Self::ListIndex => signature(&[LIST, Bits], Int, true),
             Self::ListCount => signature(&[LIST, Bits], Int, false),
             Self::ListCopy => signature(&[LIST], LIST, false),
-            Self::ListClear | Self::ListReverse => signature(&[LIST], Unit, false),
+            Self::ListClear | Self::ListReverse | Self::TupleSeal => {
+                signature(&[LIST], Unit, false)
+            }
             Self::ListConcat => signature(&[LIST, LIST], LIST, false),
             Self::ListRepeat => signature(&[LIST, Int], LIST, true),
             Self::ListCompare => signature(&[LIST, LIST, Int], Bool, false),
@@ -303,6 +307,7 @@ impl RuntimeFunction {
             Self::FloatRoundDigits => "float_round_digits",
             Self::IntRoundDigits => "int_round_digits",
             Self::StrContains => "str_contains",
+            Self::TupleSeal => "tuple_seal",
         }
     }
 }

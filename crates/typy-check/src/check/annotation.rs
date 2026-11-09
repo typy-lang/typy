@@ -103,7 +103,7 @@ fn tuple_annotation(index: &Expr, diagnostics: &mut Diagnostics) -> Type {
         Expr::Tuple { elements, .. } => elements.iter().collect(),
         single => vec![single],
     };
-    if items.iter().any(|item| {
+    let is_ellipsis = |item: &Expr| {
         matches!(
             item,
             Expr::Constant {
@@ -111,14 +111,21 @@ fn tuple_annotation(index: &Expr, diagnostics: &mut Diagnostics) -> Type {
                 ..
             }
         )
-    }) {
+    };
+    if let [item, ellipsis] = items.as_slice()
+        && is_ellipsis(ellipsis)
+        && !is_ellipsis(item)
+    {
+        return Type::TupleOf(Box::new(annotation_type(item, diagnostics)));
+    }
+    if items.iter().any(|item| is_ellipsis(item)) {
         diagnostics.push(
             Diagnostic::new(
-                DiagnosticCode::error(201),
+                DiagnosticCode::error(408),
                 index.span(),
-                "`tuple[T, ...]` annotations are planned for TyPy 0.2 (TYP-06)",
+                "`...` in a tuple annotation follows its only item type, as in `tuple[int, ...]`",
             )
-            .with_rule(RuleId::TYP_06),
+            .with_rule(RuleId::DAT_14),
         );
         return Type::Error;
     }

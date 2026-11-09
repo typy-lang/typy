@@ -10,6 +10,8 @@ pub const EXCEPTION_TYPE_ID: u32 = 2;
 pub const BIG_INT_TYPE_ID: u32 = 3;
 /// The type ID of a `list`.
 pub const LIST_TYPE_ID: u32 = 4;
+/// The type ID of a `tuple[T, ...]`, a list object that is never changed after it is sealed.
+pub const TUPLE_TYPE_ID: u32 = 5;
 
 /// The first 8 bytes of every heap object.
 #[repr(C)]

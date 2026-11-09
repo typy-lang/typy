@@ -35,6 +35,7 @@ mod zip;
 pub use exception::{ExceptionKind, ExceptionObject};
 pub use header::{
     BIG_INT_TYPE_ID, EXCEPTION_TYPE_ID, IMMORTAL, LIST_TYPE_ID, ObjectHeader, STR_TYPE_ID,
+    TUPLE_TYPE_ID,
 };
 pub use int::BigIntObject;
 pub use list::ListObject;

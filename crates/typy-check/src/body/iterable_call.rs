@@ -92,10 +92,7 @@ impl BodyChecker<'_> {
             );
         }
         let iterable = self.iterable_argument(&arguments[0], builtin);
-        let item = match &iterable.ty {
-            Type::List(item) => item.as_ref().clone(),
-            _ => Type::Error,
-        };
+        let item = iterable.ty.sequence_item().cloned().unwrap_or(Type::Error);
         let option = self.option_argument(builtin, arguments.get(1), keywords, span);
         if let Given::Refused = option {
             return Self::invalid(span);
@@ -257,15 +254,20 @@ impl BodyChecker<'_> {
     /// iterable it cannot go over yet and returns the error type.
     pub(super) fn iterated_item(&mut self, iterable: &TypedExpr, user: &str) -> Type {
         match &iterable.ty {
-            Type::List(item) => item.as_ref().clone(),
+            Type::List(item) | Type::TupleOf(item) => item.as_ref().clone(),
             Type::Str => Type::Str,
             Type::Error => Type::Error,
+            // A tuple whose items have one type is read as a `tuple[T, ...]` before it gets
+            // here; the items of this one differ, or there are none.
             Type::Tuple(_) => {
                 self.diagnostics.push(
                     Diagnostic::new(
-                        DiagnosticCode::error(201),
+                        DiagnosticCode::error(411),
                         iterable.span,
-                        format!("{user} over a tuple is planned for TyPy 0.2 (CST-03)"),
+                        format!(
+                            "{user} over {} would give values of no one type; its items need one type",
+                            iterable.ty.with_article()
+                        ),
                     )
                     .with_rule(RuleId::CST_03),
                 );

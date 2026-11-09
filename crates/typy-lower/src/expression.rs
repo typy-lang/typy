@@ -29,6 +29,13 @@ impl FunctionLowerer<'_> {
                 self.list_display(items, item, span)
             }
             TypedExprKind::ListOf(source) => self.list_of(source, span),
+            TypedExprKind::TupleOf(inner) => {
+                let item = match &expression.ty {
+                    typy_check::Type::TupleOf(item) => self.lowered_type(item),
+                    _ => unreachable!("a tuple of a sequence has a `tuple[T, ...]` type"),
+                };
+                self.tuple_of(inner, item, span)
+            }
             TypedExprKind::ListItem { list, index } => {
                 let list = self.expression(list);
                 let index = self.expression(index);
