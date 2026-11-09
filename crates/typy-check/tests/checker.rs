@@ -210,7 +210,7 @@ fn rejected_programs_give_their_codes() {
         ("def f() -> int:\n    return 1\ng = f\n", &["E0201"]),
         ("x = 1\nx()\n", &["E0401"]),
         ("print(min(1, 2.0))\n", &["E0404"]),
-        ("print(min(\"ab\"))\n", &["E0201"]),
+        ("print(min((1, 2)))\n", &["E0201"]),
         ("print(len(1))\n", &["E0404"]),
         ("print(len(\"a\", \"b\"))\n", &["E0404"]),
         ("print(abs(\"a\"))\n", &["E0401"]),
@@ -306,7 +306,7 @@ fn messages_use_the_right_article_and_python_names() {
     );
     assert_eq!(
         messages("print(list)\n"),
-        ["`list` is planned for TyPy 0.2 (LIB-02)"]
+        ["using `list` as a value is planned for TyPy 1.0 (FUN-05)"]
     );
     assert_eq!(
         messages("print(undefined)\n"),
@@ -762,7 +762,8 @@ fn list_rules_give_their_codes() {
 #[test]
 fn slice_and_list_method_rules_give_their_codes() {
     let cases: &[(&str, &[&str])] = &[
-        ("x = (1, 2)[0:1]\n", &["E0201"]),
+        ("i = 0\nx = (1, 2)[i:1]\n", &["E0307"]),
+        ("x = (1, 2)[::0]\n", &["E0307"]),
         ("x = [1][\"a\":]\n", &["E0404"]),
         ("x = [1][:1.5]\n", &["E0404"]),
         ("x = [1][::\"a\"]\n", &["E0404"]),
@@ -863,7 +864,7 @@ fn builtins_of_one_iterable_give_their_codes() {
         ("x = sorted([1], reverse=1)\n", &["E0404"]),
         ("x = sorted([1], cmp=1)\n", &["E0404"]),
         ("x = sorted([1], **{})\n", &["E0201"]),
-        ("x = sorted('abc')\n", &["E0201"]),
+        ("x = sorted((1, 2))\n", &["E0201"]),
         ("x = sorted(3)\n", &["E0411"]),
         ("x = sorted(missing)\n", &["E0205"]),
         ("x = max([1], default='a')\n", &["E0404"]),
@@ -983,4 +984,29 @@ fn round_gives_python_s_result_types_and_codes() {
     }
     let source = "a: int = round(2.5)\nb: float = round(2.5, 1)\nc: int = round(15, -1)\nd: int = round(7)\ne: float = round(2.5, ndigits=0)\n";
     accepted(source);
+}
+
+#[test]
+fn list_calls_and_in_give_their_codes() {
+    let cases: &[(&str, &[&str])] = &[
+        ("x = list()\n", &["E0410"]),
+        ("x = list([1], [2])\n", &["E0404"]),
+        ("x = list([1], key=1)\n", &["E0404"]),
+        ("x = list(3)\n", &["E0411"]),
+        ("x = list((1, 2))\n", &["E0201"]),
+        ("x = list(missing)\n", &["E0205"]),
+        ("x = 1 in 'abc'\n", &["E0407"]),
+        ("x = 'a' in (1, 2)\n", &["E0407"]),
+        ("x = 1 in (1, None)\n", &["E0407"]),
+    ];
+    for (source, expected) in cases {
+        assert_eq!(&rejected(source), expected, "\n{source}");
+    }
+    let source = "a: list[int] = list()\nb: list[str] = list('ab')\nc = list(enumerate(b))\nd = 'a' in 'ab' and 1 in (1, 2.5) and 1 not in ()\ne = (1, 'a', 2.5)[::-1]\nf: tuple[str, float] = e[1::-1]\n";
+    let (_directory, project) = load(source);
+    let program = TypeChecker::check(&project).expect("the program is accepted");
+    let dump = typy_check::dump(&program, &project);
+    for node in ["ListOf", "TupleSlice [2, 1, 0]"] {
+        assert!(dump.contains(node), "{node} missing from\n{dump}");
+    }
 }

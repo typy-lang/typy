@@ -57,6 +57,59 @@ impl FunctionLowerer<'_> {
         Self::borrowed(result, TyirType::Bool)
     }
 
+    /// Returns `item in container` for a list, a `str` or a tuple; the operands are not
+    /// released (EXP-07).
+    fn contains(&mut self, item: Lowered, container: Lowered, span: Span) -> ValueId {
+        match container.ty {
+            TyirType::Tuple(_) => self.tuple_contains(item, container, span),
+            TyirType::LIST => self.list_contains(item, container, span),
+            _ => {
+                self.call_runtime(
+                    RuntimeFunction::StrContains,
+                    vec![container.value, item.value],
+                    span,
+                )
+                .value
+            }
+        }
+    }
+
+    /// Returns whether a tuple has an item equal to `item`. Each item is compared in order, as
+    /// CPython compares them, and the first equal one ends the search.
+    fn tuple_contains(&mut self, item: Lowered, tuple: Lowered, span: Span) -> ValueId {
+        let TyirType::Tuple(id) = tuple.ty else {
+            unreachable!("the container is a tuple")
+        };
+        let items = self.tuple_types.items(id).unwrap_or_default().to_vec();
+        let join = self.builder.create_block();
+        let found = self.builder.add_block_parameter(join, TyirType::Bool);
+        for (index, ty) in items.into_iter().enumerate() {
+            let candidate = self.tuple_item(Self::borrowed(tuple.value, tuple.ty), index, ty, span);
+            let equal = self.compare(CompareOperator::Eq, item, candidate, span);
+            let next = self.builder.create_block();
+            let yes = self.constant(Constant::Bool(true), span);
+            let hit = self.builder.create_block();
+            self.builder.terminate(Terminator::Branch {
+                condition: equal,
+                then: hit,
+                otherwise: next,
+            });
+            self.builder.switch_to(hit);
+            self.builder.terminate(Terminator::Jump {
+                target: join,
+                arguments: vec![yes],
+            });
+            self.builder.switch_to(next);
+        }
+        let no = self.constant(Constant::Bool(false), span);
+        self.builder.terminate(Terminator::Jump {
+            target: join,
+            arguments: vec![no],
+        });
+        self.builder.switch_to(join);
+        found
+    }
+
     /// Compares two values whose types the checker accepted; the operands are not released.
     pub(crate) fn compare(
         &mut self,
@@ -80,7 +133,7 @@ impl FunctionLowerer<'_> {
                 );
             }
             CompareOperator::In | CompareOperator::NotIn => {
-                let found = self.list_contains(left, right, span);
+                let found = self.contains(left, right, span);
                 if operator == CompareOperator::In {
                     return found;
                 }

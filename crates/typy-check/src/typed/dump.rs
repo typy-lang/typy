@@ -211,10 +211,12 @@ impl Dump<'_> {
             TypedExprKind::Index { .. } => "Index".to_owned(),
             TypedExprKind::Tuple(_) => "Tuple".to_owned(),
             TypedExprKind::List(_) => "List".to_owned(),
+            TypedExprKind::ListOf(_) => "ListOf".to_owned(),
             TypedExprKind::ListItem { .. } => "ListItem".to_owned(),
             TypedExprKind::Slice { .. } => "Slice".to_owned(),
             TypedExprKind::Method { method, .. } => format!("Method {}", method.name()),
             TypedExprKind::TupleItem { index, .. } => format!("TupleItem {index}"),
+            TypedExprKind::TupleSlice { positions, .. } => format!("TupleSlice {positions:?}"),
         };
         self.line(depth, &format!("{label} : {ty}"), expression.span);
         for child in children(expression) {
@@ -236,11 +238,14 @@ fn children(expression: &TypedExpr) -> Vec<&TypedExpr> {
         } => {
             vec![left, right]
         }
-        TypedExprKind::Unary { operand, .. } | TypedExprKind::TupleItem { tuple: operand, .. } => {
+        TypedExprKind::Unary { operand, .. }
+        | TypedExprKind::TupleItem { tuple: operand, .. }
+        | TypedExprKind::TupleSlice { tuple: operand, .. } => {
             vec![operand]
         }
         TypedExprKind::Tuple(items) | TypedExprKind::List(items) => items.iter().collect(),
         TypedExprKind::ListItem { list, index } => vec![list, index],
+        TypedExprKind::ListOf(source) => source.expressions(),
         TypedExprKind::IterableBuiltin {
             iterable, option, ..
         } => std::iter::once(iterable.as_ref())

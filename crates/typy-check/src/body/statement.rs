@@ -188,7 +188,7 @@ impl BodyChecker<'_> {
         if self.is_range_call(iter) {
             return self.for_range(target, iter, body, orelse, span);
         }
-        let (source, item) = self.loop_source(iter);
+        let (source, item) = self.loop_source(iter, "`for`");
         // What each step binds has no expression of its own; diagnostics about it point at the
         // loop's source.
         let binding = TypedExpr {

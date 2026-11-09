@@ -6,6 +6,7 @@ use typy_source::syntax::{CompareOperator, Expr, Identifier, Keyword};
 
 use super::BodyChecker;
 use super::iterable_call::Given;
+use crate::builtin::Builtin;
 use crate::method::Method;
 use crate::typed::{TypedConstant, TypedExpr, TypedExprKind};
 use crate::types::Type;
@@ -21,6 +22,18 @@ impl BodyChecker<'_> {
     ) -> TypedExpr {
         match expression {
             Expr::List { elements, span } => self.list_display(elements, expected, *span),
+            Expr::Call {
+                arguments,
+                keywords,
+                span,
+                ..
+            } if arguments.is_empty()
+                && self
+                    .called_builtin(expression)
+                    .is_some_and(|(builtin, ..)| builtin == Builtin::List) =>
+            {
+                self.call_list(arguments, keywords, expected, *span)
+            }
             other => self.expression(other),
         }
     }

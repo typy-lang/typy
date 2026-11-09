@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy detailed design |
-| Version | 1.24 |
+| Version | 1.25 |
 | Status | Approved |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-08 |
@@ -496,7 +496,9 @@ call resolves it, so a program's own `range` is called by `for`. Over a
 tuple a `for` is E0201 until tuples can be iterated later in 0.2, and over
 any other value E0411. `enumerate`, `zip` and `reversed` outside a `for`
 give an iterator, E0201 until iterators arrive with CST-08 in 0.3. `x in
-xs` needs an `x` of the item type, and two lists compare with `==` when
+xs` needs an `x` of the item type; on a `str` it is a substring test and
+needs a `str`; on a tuple it compares with each item, which must all compare
+with `x` for equality, or E0407, and two lists compare with `==` when
 their item types are equal, because the runtime compares items by the
 list's own item kind. A list holds items of any type: `int`, `float`,
 `bool`, `None`, `str`, lists and tuples of these.
@@ -524,17 +526,25 @@ list of `bool` is E0406, as all arithmetic on `bool` is (DAT-03).
 `round(number, ndigits)` gives an `int` for an `int`, and for a `float`
 an `int` without `ndigits` and a `float` with it, as CPython does;
 `ndigits` is an `int`, by position or keyword, and `round` of a `bool` is
-E0406. `list.sort` takes `reverse` by keyword only, which
+E0406. `list()` has the expected type, as `[]` does, and `list(source)` is
+`TypedExprKind::ListOf(source)`, a new list of every value the loop source
+gives. The builtins of one iterable take any loop source the same way:
+`iterable_argument` passes a list on as it is and wraps any other source,
+a `str` or `enumerate`, `zip` or `reversed`, in `ListOf`, as CPython's
+`sorted` builds a list. `list.sort` takes `reverse` by keyword only, which
 `MethodSignature::keyword` names. Inside a display without an expected type,
 an empty display takes the type of the first other item, so `[[1], []]`
 needs no annotation.
 
 Slices (DAT-12) add `TypedExprKind::Slice { value, lower, upper, step }`, each
 bound optional and an `int`, or E0404. A `str` or a list can be sliced, and
-the slice has the sliced type; any other value is E0401, and a tuple is
-E0201 until tuple slices arrive later in 0.2. A slice inside a tuple index,
-`grid[1:2, 0]`, is E0401. Assigning to a slice is E0201, planned for 0.3
-(DAT-13).
+the slice has the sliced type; any other value is E0401. A tuple is sliced
+with integer literals, or missing bounds, E0307 otherwise, because each item
+can have its own type: `TypedExprKind::TupleSlice { tuple, positions }`
+holds the positions, worked out as CPython's `PySlice_AdjustIndices` does,
+and a zero step is E0307, since the slice would always raise. A slice
+inside a tuple index, `grid[1:2, 0]`, is E0401. Assigning to a slice is
+E0201, planned for 0.3 (DAT-13).
 
 `TypedStmt::AugAssign` takes an `AssignTarget`: a name, or an item of a list,
 `xs[i] += 1`. An item of a `str` or a tuple cannot be assigned, E0401, and the

@@ -130,12 +130,19 @@ fn expression(expression_value: &TypedExpr, callees: &mut BTreeSet<FunctionId>) 
             expression(left, callees);
             expression(right, callees);
         }
-        TypedExprKind::Unary { operand, .. } | TypedExprKind::TupleItem { tuple: operand, .. } => {
+        TypedExprKind::Unary { operand, .. }
+        | TypedExprKind::TupleItem { tuple: operand, .. }
+        | TypedExprKind::TupleSlice { tuple: operand, .. } => {
             expression(operand, callees);
         }
         TypedExprKind::ListItem { list, index } => {
             expression(list, callees);
             expression(index, callees);
+        }
+        TypedExprKind::ListOf(source) => {
+            for value in source.expressions() {
+                expression(value, callees);
+            }
         }
         TypedExprKind::Slice {
             value,

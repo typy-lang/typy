@@ -58,6 +58,37 @@ impl FunctionLowerer<'_> {
         self.produced(value, ty)
     }
 
+    /// Returns a new tuple of the items at `positions`, each with a reference of its own; the
+    /// tuple sliced is released.
+    pub(crate) fn tuple_slice(
+        &mut self,
+        tuple: Lowered,
+        positions: &[usize],
+        ty: TyirType,
+        span: Span,
+    ) -> Lowered {
+        let (_, items) = self.item_types(tuple.ty);
+        let (id, _) = self.item_types(ty);
+        let values: Vec<ValueId> = positions
+            .iter()
+            .map(|position| {
+                let item = self.borrowed_item(tuple, *position, items[*position], span);
+                self.take_reference(item, span)
+            })
+            .collect();
+        let value = self.builder.push_value(
+            Operation::MakeTuple {
+                ty: id,
+                items: values,
+            },
+            ty,
+            span,
+        );
+        let sliced = self.produced(value, ty);
+        self.release(tuple, span);
+        sliced
+    }
+
     /// Returns item `index` of a tuple. An item of a tuple the function owns gets its own
     /// reference before the tuple is released, so it outlives the tuple.
     pub(crate) fn tuple_item(

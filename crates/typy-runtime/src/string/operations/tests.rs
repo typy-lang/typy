@@ -1,8 +1,8 @@
 //! Tests of the string operations.
 
 use super::{
-    typy_rt_str_compare, typy_rt_str_concat, typy_rt_str_index, typy_rt_str_length,
-    typy_rt_str_repeat,
+    typy_rt_str_compare, typy_rt_str_concat, typy_rt_str_contains, typy_rt_str_index,
+    typy_rt_str_length, typy_rt_str_repeat,
 };
 use crate::int::value::Integer;
 use crate::string::{StrKind, StrObject, code_point, from_str, length};
@@ -158,5 +158,26 @@ fn a_slice_is_as_narrow_as_its_code_points() {
         assert_eq!((*backwards.value).kind, StrKind::Ucs2);
         let zero = typy_rt_str_slice(source, word(0), word(0), word(0), word(STEP));
         assert!(!zero.exception.is_null());
+    }
+}
+
+#[test]
+fn containment_finds_code_points_together() {
+    let cases = [
+        ("hello", "ell", true),
+        ("hello", "", true),
+        ("", "", true),
+        ("", "a", false),
+        ("hello", "hello!", false),
+        ("hello", "lo", true),
+        ("hello", "ol", false),
+        ("na\u{ef}ve \u{1f600}", "\u{1f600}", true),
+        ("na\u{ef}ve", "i", false),
+    ];
+    for (haystack, needle, expected) in cases {
+        let (outer, inner) = (from_str(haystack), from_str(needle));
+        // SAFETY: both strings are live.
+        let found = unsafe { typy_rt_str_contains(outer, inner) };
+        assert_eq!(found, expected, "{needle:?} in {haystack:?}");
     }
 }

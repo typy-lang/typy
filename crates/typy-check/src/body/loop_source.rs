@@ -36,7 +36,7 @@ impl BodyChecker<'_> {
 
     /// Checks the source of a `for` loop, or an argument of `enumerate` or `zip`, and returns
     /// it with the type of what each step gives.
-    pub(super) fn loop_source(&mut self, iter: &Expr) -> (LoopSource, Type) {
+    pub(super) fn loop_source(&mut self, iter: &Expr, user: &str) -> (LoopSource, Type) {
         let call = self.called_builtin(iter).filter(|(builtin, ..)| {
             matches!(
                 builtin,
@@ -45,7 +45,7 @@ impl BodyChecker<'_> {
         });
         let Some((builtin, arguments, keywords)) = call else {
             let sequence = self.expression(iter);
-            let item = self.iterated_item(&sequence, "`for`", true);
+            let item = self.iterated_item(&sequence, user);
             return (LoopSource::Items(sequence), item);
         };
         let span = iter.span();
@@ -64,7 +64,7 @@ impl BodyChecker<'_> {
         if arguments.is_empty() || given > 2 {
             return self.source_arity(Builtin::Enumerate, "1 or 2", given, arguments, span);
         }
-        let (source, _) = self.loop_source(&arguments[0]);
+        let (source, _) = self.loop_source(&arguments[0], "`enumerate`");
         let start = match arguments.get(1).or(keyword) {
             Some(start) => {
                 let start = self.expression(start);
@@ -87,7 +87,7 @@ impl BodyChecker<'_> {
         let strict = self.only_keyword(Builtin::Zip, "strict", keywords);
         let sources = arguments
             .iter()
-            .map(|argument| self.loop_source(argument).0)
+            .map(|argument| self.loop_source(argument, "`zip`").0)
             .collect();
         let strict = strict.map(|strict| {
             let strict = self.expression(strict);
@@ -103,7 +103,7 @@ impl BodyChecker<'_> {
             return self.source_arity(Builtin::Reversed, "1", arguments.len(), arguments, span);
         }
         let sequence = self.expression(&arguments[0]);
-        self.iterated_item(&sequence, "`reversed`", true);
+        self.iterated_item(&sequence, "`reversed`");
         LoopSource::Reversed(sequence)
     }
 

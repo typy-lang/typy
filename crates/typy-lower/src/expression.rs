@@ -10,6 +10,7 @@ use crate::ownership::Lowered;
 
 impl FunctionLowerer<'_> {
     /// Lowers an expression; the caller releases or moves the result.
+    #[allow(clippy::too_many_lines, reason = "one arm per expression kind")]
     pub(crate) fn expression(&mut self, expression: &TypedExpr) -> Lowered {
         let span = expression.span;
         let ty = self.lowered_type(&expression.ty);
@@ -27,6 +28,7 @@ impl FunctionLowerer<'_> {
                 };
                 self.list_display(items, item, span)
             }
+            TypedExprKind::ListOf(source) => self.list_of(source, span),
             TypedExprKind::ListItem { list, index } => {
                 let list = self.expression(list);
                 let index = self.expression(index);
@@ -48,6 +50,10 @@ impl FunctionLowerer<'_> {
                 method,
                 arguments,
             } => self.method(receiver, *method, arguments, ty, span),
+            TypedExprKind::TupleSlice { tuple, positions } => {
+                let tuple = self.expression(tuple);
+                self.tuple_slice(tuple, positions, ty, span)
+            }
             TypedExprKind::TupleItem { tuple, index } => {
                 let tuple = self.expression(tuple);
                 self.tuple_item(tuple, *index, ty, span)

@@ -1,4 +1,5 @@
-//! The string operations generated code calls: concatenation, repetition, indexing, length and comparison.
+//! The string operations generated code calls: concatenation, repetition, indexing, slicing,
+//! length, comparison and `in`.
 
 use super::{StrKind, StrObject, code_point, length, new_string, set_code_point};
 use crate::Raising;
@@ -185,6 +186,30 @@ pub unsafe extern "C" fn typy_rt_str_compare(
         ordering
     };
     crate::compare::holds(ordering, comparison)
+}
+
+/// Returns `needle in haystack`: whether the code points of `needle` appear together in
+/// `haystack`. The empty string is in every string.
+///
+/// # Safety
+///
+/// Both point to live strings.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn typy_rt_str_contains(
+    haystack: *const StrObject,
+    needle: *const StrObject,
+) -> bool {
+    // SAFETY: the caller passes live strings; every index stays below each length.
+    unsafe {
+        let (outer, inner) = (length(haystack), length(needle));
+        if inner > outer {
+            return false;
+        }
+        (0..=outer - inner).any(|start| {
+            (0..inner)
+                .all(|offset| code_point(haystack, start + offset) == code_point(needle, offset))
+        })
+    }
 }
 
 #[cfg(test)]

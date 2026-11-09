@@ -352,7 +352,7 @@ impl BodyChecker<'_> {
 }
 
 /// Returns the value of an integer literal, or of a negated one, such as `2` or `-1`.
-fn literal_position(index: &Expr) -> Option<i128> {
+pub(super) fn literal_position(index: &Expr) -> Option<i128> {
     use typy_source::syntax::UnaryOperator;
     match index {
         Expr::Constant {

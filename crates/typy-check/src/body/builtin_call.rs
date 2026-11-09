@@ -21,6 +21,9 @@ impl BodyChecker<'_> {
         if builtin == Builtin::Print {
             return self.print(arguments, keywords, span);
         }
+        if builtin == Builtin::List {
+            return self.call_list(arguments, keywords, None, span);
+        }
         if builtin == Builtin::Round {
             return self.call_round(arguments, keywords, span);
         }
@@ -55,6 +58,7 @@ impl BodyChecker<'_> {
         let types: Vec<Type> = values.iter().map(|value| value.ty.clone()).collect();
         let result = match builtin {
             Builtin::Print
+            | Builtin::List
             | Builtin::Round
             | Builtin::Sorted
             | Builtin::Sum

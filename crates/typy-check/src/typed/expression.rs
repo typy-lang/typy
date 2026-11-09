@@ -81,6 +81,8 @@ pub enum TypedExprKind {
         iterable: Box<TypedExpr>,
         option: Option<Box<TypedExpr>>,
     },
+    /// `list(source)`: a new list of every value the source gives, in order (LIB-02).
+    ListOf(Box<super::statement::LoopSource>),
     /// A call of any other builtin of 0.1, with positional arguments only.
     Builtin {
         builtin: Builtin,
@@ -112,6 +114,11 @@ pub enum TypedExprKind {
         receiver: Box<TypedExpr>,
         method: crate::method::Method,
         arguments: Vec<TypedExpr>,
+    },
+    /// A new tuple of the items of `tuple` at positions known when compiling (DAT-12).
+    TupleSlice {
+        tuple: Box<TypedExpr>,
+        positions: Vec<usize>,
     },
     /// The item of a tuple at a position known when compiling, counted from the start.
     TupleItem {

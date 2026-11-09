@@ -71,6 +71,7 @@ pub enum RuntimeFunction {
     FloatRound,
     FloatRoundDigits,
     IntRoundDigits,
+    StrContains,
 }
 
 /// The parameter types, result type and raising behaviour of a runtime function.
@@ -101,7 +102,7 @@ const FLOAT_FLOAT: &[TyirType] = &[TyirType::Float, TyirType::Float];
 
 impl RuntimeFunction {
     /// Every runtime function.
-    pub const ALL: [Self; 62] = [
+    pub const ALL: [Self; 63] = [
         Self::IntFloorDivide,
         Self::IntModulo,
         Self::IntPower,
@@ -164,6 +165,7 @@ impl RuntimeFunction {
         Self::FloatRound,
         Self::FloatRoundDigits,
         Self::IntRoundDigits,
+        Self::StrContains,
     ];
 
     /// Returns the function's signature. Comparisons take the comparison as an `int` operand, numbered as `Comparison::code`.
@@ -230,6 +232,7 @@ impl RuntimeFunction {
             Self::ZipUnequal => signature(INT_INT, Unit, true),
             Self::FloatRoundDigits => signature(&[Float, Int], Float, true),
             Self::IntRoundDigits => signature(INT_INT, Int, false),
+            Self::StrContains => signature(&[STR, STR], Bool, false),
         }
     }
 
@@ -299,6 +302,7 @@ impl RuntimeFunction {
             Self::FloatRound => "float_round",
             Self::FloatRoundDigits => "float_round_digits",
             Self::IntRoundDigits => "int_round_digits",
+            Self::StrContains => "str_contains",
         }
     }
 }

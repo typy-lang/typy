@@ -69,6 +69,33 @@ impl FunctionLowerer<'_> {
         self.builder.switch_to(exit);
     }
 
+    /// Returns `list(source)`, a new list of every value the source gives. A list is copied
+    /// directly; any other source is read as a `for` loop reads it, appending each value.
+    pub(crate) fn list_of(&mut self, source: &LoopSource, span: Span) -> Lowered {
+        if let LoopSource::Items(sequence) = source
+            && matches!(sequence.ty, typy_check::Type::List(_))
+        {
+            let list = self.expression(sequence);
+            let copy = self.call_runtime(RuntimeFunction::ListCopy, vec![list.value], span);
+            self.release(list, span);
+            return copy;
+        }
+        let iterator = self.start_iterator(source, span);
+        let item = self.lowered_type(&source.item_type());
+        let list = self.list_display(&[], item, span);
+        let header = self.builder.create_block();
+        let exit = self.builder.create_block();
+        self.jump_to(header);
+        self.builder.switch_to(header);
+        let value = self.next_value(&iterator, exit, span);
+        let bits = self.bits(value, span);
+        self.call_runtime(RuntimeFunction::ListAppend, vec![list.value, bits], span);
+        self.release(value, span);
+        self.jump_to(header);
+        self.builder.switch_to(exit);
+        list
+    }
+
     /// Evaluates the source's expressions in order and keeps them in hidden slots.
     fn start_iterator(&mut self, source: &LoopSource, span: Span) -> Iterator {
         match source {

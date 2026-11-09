@@ -184,14 +184,11 @@ impl BodyChecker<'_> {
                 // The runtime compares the value with each item by the item's kind, so the value
                 // has the item type.
                 Type::List(item) if l.is_assignable_to(item) => {}
-                Type::Str | Type::Tuple(_) => self.diagnostics.push(
-                    Diagnostic::new(
-                        DiagnosticCode::error(201),
-                        span,
-                        "`in` on a str or a tuple is planned for TyPy 0.2 (EXP-07)",
-                    )
-                    .with_rule(RuleId::EXP_07),
-                ),
+                // A substring test: `in` on a `str` needs a `str` on its left.
+                Type::Str if l == Type::Str => {}
+                // A tuple compares the value with each item for equality, so each item has to
+                // compare with it.
+                Type::Tuple(items) if items.iter().all(|item| l.can_test_equality(item)) => {}
                 other => self.diagnostics.push(
                     Diagnostic::new(
                         DiagnosticCode::error(407),

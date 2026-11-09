@@ -91,8 +91,11 @@ impl BodyChecker<'_> {
                 span,
             );
         }
-        let iterable = self.expression(&arguments[0]);
-        let item = self.iterated_item(&iterable, &format!("`{}`", builtin.name()), false);
+        let iterable = self.iterable_argument(&arguments[0], builtin);
+        let item = match &iterable.ty {
+            Type::List(item) => item.as_ref().clone(),
+            _ => Type::Error,
+        };
         let option = self.option_argument(builtin, arguments.get(1), keywords, span);
         if let Given::Refused = option {
             return Self::invalid(span);
@@ -250,24 +253,19 @@ impl BodyChecker<'_> {
         }
     }
 
-    /// Returns the type of the items `user` gets from `iterable`, which may be a `str` when
-    /// `strings` is set; reports an iterable it cannot go over yet and returns the error type.
-    pub(super) fn iterated_item(
-        &mut self,
-        iterable: &TypedExpr,
-        user: &str,
-        strings: bool,
-    ) -> Type {
+    /// Returns the type of the items `user` gets from `iterable`, a list or a `str`; reports an
+    /// iterable it cannot go over yet and returns the error type.
+    pub(super) fn iterated_item(&mut self, iterable: &TypedExpr, user: &str) -> Type {
         match &iterable.ty {
             Type::List(item) => item.as_ref().clone(),
-            Type::Str if strings => Type::Str,
+            Type::Str => Type::Str,
             Type::Error => Type::Error,
-            Type::Str | Type::Tuple(_) => {
+            Type::Tuple(_) => {
                 self.diagnostics.push(
                     Diagnostic::new(
                         DiagnosticCode::error(201),
                         iterable.span,
-                        format!("{user} over a str or a tuple is planned for TyPy 0.2 (CST-03)"),
+                        format!("{user} over a tuple is planned for TyPy 0.2 (CST-03)"),
                     )
                     .with_rule(RuleId::CST_03),
                 );
