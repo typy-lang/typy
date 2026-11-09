@@ -1,6 +1,7 @@
-//! Lowers augmented assignment, `target op= value` (SMT-01, DAT-07). A list target with `+=`
-//! or `*=` changes the list in place, as CPython's `list.__iadd__` and `list.__imul__` do, so
-//! every name that shares the list sees the change.
+//! Lowers augmented assignment, `target op= value` (SMT-01, DAT-07, DAT-10). A list target
+//! with `+=` or `*=` changes the list in place, as CPython's `list.__iadd__` and
+//! `list.__imul__` do, and a set target with `|=`, `&=`, `-=` or `^=` changes the set, so every
+//! name that shares the collection sees the change.
 
 use typy_check::{AssignTarget, Type, TypedExpr};
 use typy_diagnostics::Span;
@@ -89,8 +90,9 @@ impl FunctionLowerer<'_> {
         self.release(list, span);
     }
 
-    /// Changes a list in place for `+=` and `*=`, releases `right`, and returns the list;
-    /// returns `None`, releasing nothing, for any other operation.
+    /// Changes a list in place for `+=` and `*=`, and a set for `|=`, `&=`, `-=` and `^=`,
+    /// releases `right`, and returns the collection; returns `None`, releasing nothing, for any
+    /// other operation.
     fn in_place(
         &mut self,
         operator: BinaryOperator,
@@ -98,6 +100,11 @@ impl FunctionLowerer<'_> {
         right: Lowered,
         span: Span,
     ) -> Option<Lowered> {
+        if current.ty == TyirType::SET {
+            self.set_update(operator, current.value, right.value, span);
+            self.release(right, span);
+            return Some(current);
+        }
         if current.ty != TyirType::LIST {
             return None;
         }

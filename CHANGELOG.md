@@ -86,6 +86,21 @@ All notable changes to TyPy are recorded here. The format follows
   `start`, `zip`, with `strict`, and `reversed` of lists and strings,
   nested as in `enumerate(zip(a, b))`, with CPython's errors (CST-03,
   LIB-02).
+- Sets of numbers, `bool`, `None`, `str`, `bytes` and tuples of them:
+  displays such as `{1, 2}`, annotations such as `set[int]`, `set()` and
+  `set(source)`, `in`, `len`, truth tests, `str` and `repr`, `for`,
+  `|`, `&`, `-` and `^` and their in-place forms, `==` and the subset
+  comparisons, and the methods `add`, `remove`, `discard`, `pop`,
+  `clear`, `copy`, `union`, `intersection`, `difference`,
+  `symmetric_difference`, `update`, the `_update` methods, `issubset`,
+  `issuperset` and `isdisjoint` with a set argument (DAT-10, LIB-03). A
+  set hashes its items as CPython does and iterates and prints them in
+  CPython's order (ADR-0010). A list or a set as an item of a set is
+  rejected, since it has no hash. `remove` of a missing item and `pop` of
+  an empty set raise `KeyError`, and a set that changes size while a loop
+  reads it raises `RuntimeError`.
+- `set()` in a comparison takes the type of the other operand, as `[]`
+  does, so `s == set()` needs no annotation (TYP-05).
 
 ### Changed
 

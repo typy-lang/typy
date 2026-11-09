@@ -155,6 +155,7 @@ impl BodyChecker<'_> {
                     span,
                 )
             }
+            Expr::Set { elements, .. } => self.set_display(elements, None, span),
             Expr::Tuple { elements, .. } => {
                 let elements: Vec<TypedExpr> = elements
                     .iter()

@@ -1,6 +1,8 @@
 //! Checks a project and builds its typed program (detailed design section 7.2).
 
 mod annotation;
+
+pub(crate) use annotation::unhashable;
 mod definition;
 mod definition_order;
 mod module_scope;

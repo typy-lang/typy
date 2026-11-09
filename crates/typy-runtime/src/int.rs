@@ -7,6 +7,8 @@ pub(crate) mod natural;
 mod text;
 pub(crate) mod value;
 
+#[cfg(test)]
+pub(crate) use arithmetic::typy_rt_int_power;
 pub(crate) use arithmetic::{ZERO_DIVISION, typy_rt_int_add, typy_rt_int_compare};
 pub(crate) use text::typy_rt_int_to_str;
 

@@ -23,10 +23,19 @@ enum Kind {
     Str,
     /// A `bytes`, whose items are `int` values.
     Bytes,
+    /// A set, read slot by slot in its table's order.
+    Set,
 }
 
 /// The state of one iterator of a loop, kept in hidden slots.
 enum Iterator {
+    /// A set: its slot, and its number of items when the loop began, which must not change.
+    Set {
+        set: SlotId,
+        slot: SlotId,
+        length: SlotId,
+        item: TyirType,
+    },
     /// A list or `str`, read forwards or, for `reversed`, backwards.
     Sequence {
         sequence: SlotId,
@@ -91,20 +100,33 @@ impl FunctionLowerer<'_> {
             self.release(list, span);
             return copy;
         }
-        let iterator = self.start_iterator(source, span);
         let item = self.lowered_type(&source.item_type());
         let list = self.list_display(&[], item, span);
+        self.each_value(source, span, |lowerer, value| {
+            let bits = lowerer.bits(value, span);
+            lowerer.call_runtime(RuntimeFunction::ListAppend, vec![list.value, bits], span);
+        });
+        list
+    }
+
+    /// Reads `source` as a `for` loop reads it and calls `visit` with each value, which is
+    /// released after the call.
+    pub(crate) fn each_value(
+        &mut self,
+        source: &LoopSource,
+        span: Span,
+        mut visit: impl FnMut(&mut Self, Lowered),
+    ) {
+        let iterator = self.start_iterator(source, span);
         let header = self.builder.create_block();
         let exit = self.builder.create_block();
         self.jump_to(header);
         self.builder.switch_to(header);
         let value = self.next_value(&iterator, exit, span);
-        let bits = self.bits(value, span);
-        self.call_runtime(RuntimeFunction::ListAppend, vec![list.value, bits], span);
+        visit(self, value);
         self.release(value, span);
         self.jump_to(header);
         self.builder.switch_to(exit);
-        list
     }
 
     /// Evaluates the source's expressions in order and keeps them in hidden slots.
@@ -150,6 +172,10 @@ impl FunctionLowerer<'_> {
     /// Keeps a sequence and its first position: 0, or for `reversed` its length less one, as
     /// CPython's `reversed` reads the length once when it is called.
     fn start_sequence(&mut self, sequence: &TypedExpr, backwards: bool, span: Span) -> Iterator {
+        if let typy_check::Type::Set(item) = &sequence.ty {
+            let item = self.lowered_type(item);
+            return self.start_set(sequence, item, span);
+        }
         let (kind, item) = match (&sequence.ty, sequence.ty.sequence_item()) {
             (_, Some(item)) => (Kind::List, self.lowered_type(item)),
             (typy_check::Type::Bytes, None) => (Kind::Bytes, TyirType::Int),
@@ -176,12 +202,80 @@ impl FunctionLowerer<'_> {
         }
     }
 
+    /// Keeps a set, the first slot to look at, and its number of items, which CPython's set
+    /// iterator checks at every step.
+    fn start_set(&mut self, set: &TypedExpr, item: TyirType, span: Span) -> Iterator {
+        let set = self.kept(set, "set", span);
+        let slot = self.hidden_slot("slot", TyirType::Int);
+        let zero = Self::borrowed(
+            self.constant(Constant::Int("0".to_owned()), span),
+            TyirType::Int,
+        );
+        self.store(slot, zero, span);
+        let length = self.hidden_slot("length", TyirType::Int);
+        let count = self.sequence_length(set, Kind::Set, span);
+        self.store(length, count, span);
+        Iterator::Set {
+            set,
+            slot,
+            length,
+            item,
+        }
+    }
+
+    /// Returns the set's next item, borrowed from the set, or jumps to `exhausted`; a set whose
+    /// number of items changed raises `RuntimeError`.
+    fn next_set_item(
+        &mut self,
+        set: SlotId,
+        slot: SlotId,
+        length: SlotId,
+        item: TyirType,
+        exhausted: BlockId,
+        span: Span,
+    ) -> Lowered {
+        let value = self.load(set, span);
+        let position = self.load(slot, span);
+        let count = self.load(length, span);
+        let found = self.call_runtime(
+            RuntimeFunction::SetNext,
+            vec![value.value, position.value, count.value],
+            span,
+        );
+        let zero = self.constant(Constant::Int("0".to_owned()), span);
+        let more = self.int_compare(Comparison::GreaterEqual, found.value, zero, span);
+        let fetch = self.builder.create_block();
+        self.builder.terminate(Terminator::Branch {
+            condition: more,
+            then: fetch,
+            otherwise: exhausted,
+        });
+        self.builder.switch_to(fetch);
+        let bits = self.call_runtime(
+            RuntimeFunction::SetItem,
+            vec![value.value, found.value],
+            span,
+        );
+        let fetched = self.builder.push_value(
+            Operation::FromBits {
+                bits: bits.value,
+                ty: item,
+            },
+            item,
+            span,
+        );
+        let next = self.add_int(found, 1, span);
+        self.store(slot, next, span);
+        Self::borrowed(fetched, item)
+    }
+
     fn sequence_length(&mut self, sequence: SlotId, kind: Kind, span: Span) -> Lowered {
         let value = self.load(sequence, span);
         let function = match kind {
             Kind::List => RuntimeFunction::ListLength,
             Kind::Str => RuntimeFunction::StrLength,
             Kind::Bytes => RuntimeFunction::BytesLength,
+            Kind::Set => RuntimeFunction::SetLength,
         };
         self.call_runtime(function, vec![value.value], span)
     }
@@ -189,6 +283,12 @@ impl FunctionLowerer<'_> {
     /// Returns the iterator's next value, or jumps to `exhausted` when it has none.
     fn next_value(&mut self, iterator: &Iterator, exhausted: BlockId, span: Span) -> Lowered {
         match iterator {
+            Iterator::Set {
+                set,
+                slot,
+                length,
+                item,
+            } => self.next_set_item(*set, *slot, *length, *item, exhausted, span),
             Iterator::Sequence {
                 sequence,
                 position,
@@ -300,6 +400,7 @@ impl FunctionLowerer<'_> {
                 span,
             ),
             Kind::List => self.list_item(value, index, item, span),
+            Kind::Set => unreachable!("a set is read by its own iterator"),
         };
         let current = self.load(position, span);
         let next = self.add_int(current, if backwards { -1 } else { 1 }, span);

@@ -278,11 +278,12 @@ it enforces and its status. `typy explain` (0.3) reads the same table.
 | E0405 | Returned value of the wrong type | TYP-01 |
 | E0406 | Arithmetic on `bool` | DAT-03 |
 | E0407 | Comparison between unsupported types | EXP-06 |
-| E0408 | `tuple` or `list` annotation without its item types | TYP-06 |
-| E0409 | List display with items of different types | DAT-07 |
-| E0410 | Empty list display without an annotation | TYP-05 |
+| E0408 | `tuple`, `list` or `set` annotation without its item types | TYP-06 |
+| E0409 | List or set display with items of different types | DAT-07, DAT-10 |
+| E0410 | Empty list display, `list()`, `tuple()` or `set()` without an annotation | TYP-05 |
 | E0411 | `for` over a value that cannot be iterated | CST-03 |
 | E0412 | Method a built-in type does not have | LIB-03 |
+| E0413 | Set item of a type without a hash: a list, a set, or a tuple that holds one | DAT-10 |
 | E0701 | C toolchain program not found | A-01 |
 | E0702 | Link failed | A-01 |
 | E0703 | Runtime archive missing, or from another TyPy version | None |
@@ -360,7 +361,8 @@ A node the current release compiles is converted with all its parts. Any
 other node becomes `Stmt::Other` or `Expr::Other`, holding its `NodeKind`,
 such as `ClassDef` or `ListComp`, and its span, which is what the subset
 checker needs to reject it with E0201 or E0202. Each release converts the
-nodes of the features it adds. `elif` chains become nested `If` nodes, as
+nodes of the features it adds, as 0.2 does for `Expr::Set`, a set display.
+`elif` chains become nested `If` nodes, as
 in CPython's `ast`. An integer literal keeps its value as decimal digits,
 so literals of any size survive conversion (DAT-01).
 
@@ -596,6 +598,30 @@ and a zero step is E0307, since the slice would always raise. A slice
 inside a tuple index, `grid[1:2, 0]`, is E0401. Assigning to a slice is
 E0201, planned for 0.3 (DAT-13).
 
+Sets (DAT-10, DAT-15, TYP-05, EXP-07, CST-03) add `Type::Set(T)`, written
+`set[T]`, and `TypedExprKind::Set(items)` for a display and `SetOf(source)`
+for `set(source)`. An item of a set needs a hash: `Type::is_hashable` is
+false for a list, a set, and a tuple that holds one, and such an item type,
+in a display, in `set(source)` or in a `set[...]` annotation, is E0413.
+Every item of a display has the first item's type, or the expected item
+type, or E0409. A display always has items, since `{}` is a dict; `set()`
+has the expected type, from an annotation, a `return`, an argument, or a
+neighbouring operand of a comparison as `[]` has, and is E0410 elsewhere.
+`set(source)` takes any loop source, as `list(source)` does. `|`, `&`, `-`
+and `^` combine two sets of one type, and the augmented forms change the
+set in place; sets of different item types are E0401. `==` and `!=` compare
+sets of one type, and `<`, `<=`, `>` and `>=` test proper and plain subsets
+and supersets. `x in s` needs an `x` of the item type. `for`, `len`,
+`bool`, `print`, `str`, `repr` and the builtins of one iterable read a set
+in its table's order; `reversed` of a set is E0411, because a set has no
+order to reverse. On a set the methods are `add`, `remove`, `discard`,
+`pop`, `clear`, `copy`, `union`, `intersection`, `difference`,
+`symmetric_difference`, `update`, `intersection_update`,
+`difference_update`, `symmetric_difference_update`, `issubset`,
+`issuperset` and `isdisjoint`. The methods that combine sets take one
+`set[T]` of the receiver's type; any iterable, and several arguments where
+CPython allows them, follow with DAT-15 in 0.2.
+
 `TypedStmt::AugAssign` takes an `AssignTarget`: a name, or an item of a list,
 `xs[i] += 1`. An item of a `str` or a tuple cannot be assigned, E0401, and the
 result must have the item type, E0402.
@@ -812,6 +838,7 @@ graph, symbol names and the string pool.
 | Expressions | `and` and `or` return an operand and stop early (EXP-09); comparison chains evaluate each operand once and stop at the first false link (EXP-06); mixed `int` and `float` arithmetic converts the `int` with an `invoke`, because a large `int` raises `OverflowError`; `int` and `float` compare exactly in the runtime |
 | Tuples | A display evaluates every item first, so an exception from a later item still releases the earlier ones, then takes over their references. An item read from a tuple the function owns gets its own reference before the tuple is released. A tuple target stores each item into its target from left to right after the whole value is evaluated, so `a, b = b, a` swaps. `str` and `repr` join the `repr` of each item, with a comma after a single item, as `(1,)`. Two tuples compare item by item: the first pair that is not equal decides, and tuples whose items are all equal are equal. A counted tuple slot starts as a tuple of zeros, empty strings and `None` |
 | Lists | Every list operation is a runtime call that borrows its arguments; a list adds its own reference to an item it stores. A display creates the list with room for its items, then appends each in order. `list[index]` borrows the item, which gets its own reference when the list is a temporary. `list[index] = value` evaluates the value, then the list and the index, as CPython does. `for` follows CPython's iterators: each sequence is evaluated once and kept in a hidden slot with its position, and taking the next value reads the length again, checks the position, fetches the item and moves the position on before the body runs, so items appended in the body are visited and a list that shrinks ends the loop. `reversed` starts at the length less one and also stops below zero. `enumerate` keeps its count in a slot. `zip` asks its sources in order and stops at the first that runs out; with `strict` true, a later source that runs out is shorter, and when the first runs out each other source is asked once more and is longer if it gives a value, both raising `ValueError` through `typy_rt_zip_unequal`. The branch taken when a source runs out is lowered with the temporaries tracked before that source was asked, so an error raised there releases only values that exist on it. A list slot starts as the placeholder list. A slice passes each bound as an `int` word, 0 when it is missing, and a mask of the bounds written, 1 for the start, 2 for the stop and 4 for the step, so the runtime applies Python's defaults. `xs += ys` and `xs *= n` change the list in place, as `list.__iadd__` and `list.__imul__` do, so every name that shares it sees the change; `*=` builds the repetition first, so a count that raises leaves the list as it was. `xs[i] op= value` evaluates the list and the index once and reads the item before the value, as CPython does; the item keeps its own reference while the value is evaluated, because the value may change the list. `sorted` copies the list and sorts the copy. `max(xs, default=d)` tests the length first: an empty list gives `d` with a reference of its own, and any other list the item the runtime found, so both reach the join with one reference |
+| Sets | Every set operation is a runtime call that borrows its arguments; a set adds its own reference to an item it stores. A display creates the set, then adds each item in order. A display of three to thirty items that are all constants, literals, numbers with signs and tuples of them, is then copied, as CPython 3.15 merges the frozenset its compiler builds into a new set (OI-19). `set(s)` of a set copies it, which merges its table as CPython does; `set(source)` of any other source adds each value in order. `\|`, `&`, `-` and `^` call `typy_rt_set_combine`, and the augmented forms and the updating methods call `typy_rt_set_update`, which changes the set in place, so every name that shares it sees the change. `for` keeps the set, the next slot and its number of items in hidden slots; `typy_rt_set_next` returns the next active slot, or -1 at the end, and raises `RuntimeError` when the number of items changed, as CPython's set iterator does. `pop` gives an owned item. A set slot starts as the placeholder set |
 | Builtins | Each builtin of 0.1 becomes runtime calls. `print` evaluates every argument in source order, then converts and writes each value. `min` and `max` keep the first value on a tie, as CPython does |
 | Stack | A function in a cycle of calls invokes the runtime's stack check on entry (FUN-02) |
 

@@ -60,6 +60,9 @@ impl FunctionLowerer<'_> {
             (Builtin::Len, [data]) if data.ty == TyirType::BYTES => {
                 self.call_runtime(RuntimeFunction::BytesLength, vec![data.value], span)
             }
+            (Builtin::Len, [set]) if set.ty == TyirType::SET => {
+                self.call_runtime(RuntimeFunction::SetLength, vec![set.value], span)
+            }
             (Builtin::Bytes, [count]) if count.ty == TyirType::Int => {
                 self.call_runtime(RuntimeFunction::BytesZeros, vec![count.value], span)
             }

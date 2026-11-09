@@ -196,6 +196,21 @@ fn removing_a_missing_item_raises_key_error_with_its_repr() {
 }
 
 #[test]
+fn a_missing_key_whose_repr_fails_still_raises_key_error() {
+    let set = int_set();
+    // SAFETY: the set is live; `10 ** 5000` has more digits than `repr` writes.
+    unsafe {
+        let large = crate::int::typy_rt_int_power(word(10), word(5000)).value;
+        let error = typy_rt_set_remove(set, large.cast_unsigned());
+        assert_eq!((*error).kind, crate::exception::ExceptionKind::KeyError);
+        assert_eq!(message(error), "<exception str() failed>");
+        typy_rt_int_decrement(large);
+        typy_rt_set_clear(set);
+    }
+    release(set);
+}
+
+#[test]
 fn popping_an_empty_set_raises_key_error() {
     let set = int_set();
     // SAFETY: the set is live.
@@ -380,4 +395,41 @@ fn string_items_keep_their_references() {
         typy_rt_set_clear(set);
     }
     release(set);
+}
+
+#[test]
+fn sets_inside_lists_are_written_compared_and_tested() {
+    use crate::list::{
+        ListObject, new_list, typy_rt_list_any, typy_rt_list_append, typy_rt_list_compare,
+        typy_rt_list_equal, typy_rt_list_repr,
+    };
+    let holding = |sets: &[*mut SetObject]| -> *mut ListObject {
+        let list = new_list(ItemKind::Object, 0);
+        for set in sets {
+            // SAFETY: the list and the set are live; the list takes its own reference.
+            unsafe { typy_rt_list_append(list, set.expose_provenance() as u64) };
+        }
+        list
+    };
+    let (small, large, empty) = (ints(&[1]), ints(&[1, 2]), int_set());
+    let first = holding(&[small, large]);
+    let second = holding(&[small, large]);
+    let third = holding(&[large]);
+    let blank = holding(&[empty]);
+    // SAFETY: every list and set is live.
+    unsafe {
+        let shown = typy_rt_list_repr(first);
+        assert_eq!(text(shown.value), "[{1}, {1, 2}]");
+        typy_rt_decrement(shown.value.cast());
+        assert!(typy_rt_list_equal(first, second));
+        assert!(!typy_rt_list_equal(first, third));
+        assert!(typy_rt_list_compare(first, third, word(2)));
+        assert!(typy_rt_list_any(first));
+        assert!(!typy_rt_list_any(blank));
+    }
+    for list in [first, second, third, blank] {
+        // SAFETY: the list is live and the test holds its reference.
+        unsafe { typy_rt_decrement(list.cast()) };
+    }
+    [small, large, empty].into_iter().for_each(release);
 }

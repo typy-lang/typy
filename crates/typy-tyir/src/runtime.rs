@@ -119,6 +119,22 @@ pub enum RuntimeFunction {
     BytesCase,
     BytesTest,
     BytesHex,
+    SetNew,
+    SetAdd,
+    SetContains,
+    SetDiscard,
+    SetRemove,
+    SetPop,
+    SetClear,
+    SetLength,
+    SetNext,
+    SetItem,
+    SetRepr,
+    SetCopy,
+    SetCombine,
+    SetUpdate,
+    SetCompare,
+    SetIsdisjoint,
 }
 
 /// The parameter types, result type and raising behaviour of a runtime function.
@@ -149,7 +165,7 @@ const FLOAT_FLOAT: &[TyirType] = &[TyirType::Float, TyirType::Float];
 
 impl RuntimeFunction {
     /// Every runtime function.
-    pub const ALL: [Self; 110] = [
+    pub const ALL: [Self; 126] = [
         Self::IntFloorDivide,
         Self::IntModulo,
         Self::IntPower,
@@ -260,6 +276,22 @@ impl RuntimeFunction {
         Self::BytesCase,
         Self::BytesTest,
         Self::BytesHex,
+        Self::SetNew,
+        Self::SetAdd,
+        Self::SetContains,
+        Self::SetDiscard,
+        Self::SetRemove,
+        Self::SetPop,
+        Self::SetClear,
+        Self::SetLength,
+        Self::SetNext,
+        Self::SetItem,
+        Self::SetRepr,
+        Self::SetCopy,
+        Self::SetCombine,
+        Self::SetUpdate,
+        Self::SetCompare,
+        Self::SetIsdisjoint,
     ];
 
     #[allow(
@@ -273,6 +305,7 @@ impl RuntimeFunction {
         const STR: TyirType = TyirType::STR;
         const LIST: TyirType = TyirType::LIST;
         const BYTES: TyirType = TyirType::BYTES;
+        const SET: TyirType = TyirType::SET;
         match self {
             Self::IntFloorDivide
             | Self::IntModulo
@@ -360,6 +393,21 @@ impl RuntimeFunction {
             Self::BytesZeros => signature(&[Int], BYTES, true),
             Self::BytesFromList => signature(&[LIST], BYTES, true),
             Self::BytesRepr | Self::BytesHex => signature(&[BYTES], STR, false),
+            Self::SetNew => signature(&[Int, Bits], SET, false),
+            Self::SetAdd | Self::SetDiscard => signature(&[SET, Bits], Unit, false),
+            Self::SetContains => signature(&[SET, Bits], Bool, false),
+            Self::SetRemove => signature(&[SET, Bits], Unit, true),
+            Self::SetPop => signature(&[SET], Bits, true),
+            Self::SetClear => signature(&[SET], Unit, false),
+            Self::SetLength => signature(&[SET], Int, false),
+            Self::SetNext => signature(&[SET, Int, Int], Int, true),
+            Self::SetItem => signature(&[SET, Int], Bits, false),
+            Self::SetRepr => signature(&[SET], STR, true),
+            Self::SetCopy => signature(&[SET], SET, false),
+            Self::SetCombine => signature(&[SET, SET, Int], SET, false),
+            Self::SetUpdate => signature(&[SET, SET, Int], Unit, false),
+            Self::SetCompare => signature(&[SET, SET, Int], Bool, false),
+            Self::SetIsdisjoint => signature(&[SET, SET], Bool, false),
             Self::StrEncode => signature(&[STR, Int, Int], BYTES, true),
             Self::BytesDecode => signature(&[BYTES, Int, Int], STR, true),
             Self::BytesSearch => signature(&[BYTES, BYTES, Int, Int, Int], Int, true),
@@ -500,6 +548,22 @@ impl RuntimeFunction {
             Self::BytesCase => "bytes_case",
             Self::BytesTest => "bytes_test",
             Self::BytesHex => "bytes_hex",
+            Self::SetNew => "set_new",
+            Self::SetAdd => "set_add",
+            Self::SetContains => "set_contains",
+            Self::SetDiscard => "set_discard",
+            Self::SetRemove => "set_remove",
+            Self::SetPop => "set_pop",
+            Self::SetClear => "set_clear",
+            Self::SetLength => "set_length",
+            Self::SetNext => "set_next",
+            Self::SetItem => "set_item",
+            Self::SetRepr => "set_repr",
+            Self::SetCopy => "set_copy",
+            Self::SetCombine => "set_combine",
+            Self::SetUpdate => "set_update",
+            Self::SetCompare => "set_compare",
+            Self::SetIsdisjoint => "set_isdisjoint",
         }
     }
 }

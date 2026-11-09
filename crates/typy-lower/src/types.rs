@@ -16,6 +16,7 @@ pub(crate) fn tyir_type(ty: &Type, tuples: &mut TupleTypes) -> TyirType {
         // A `tuple[T, ...]` is a list object with the tuple type ID, so every list function
         // of the runtime reads it (DAT-14).
         Type::List(_) | Type::TupleOf(_) => TyirType::LIST,
+        Type::Set(_) => TyirType::SET,
         Type::Tuple(items) => {
             let items = items.iter().map(|item| tyir_type(item, tuples)).collect();
             tuples.intern(items)

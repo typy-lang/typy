@@ -103,6 +103,11 @@ pub enum Expr {
         elements: Vec<Expr>,
         span: Span,
     },
+    /// A set display, `{a, b}`; `{}` is an empty dict, so a set display always has items.
+    Set {
+        elements: Vec<Expr>,
+        span: Span,
+    },
     Attribute {
         value: Box<Expr>,
         attribute: Identifier,
@@ -136,6 +141,7 @@ impl Expr {
             | Self::Name { span, .. }
             | Self::Tuple { span, .. }
             | Self::List { span, .. }
+            | Self::Set { span, .. }
             | Self::Attribute { span, .. }
             | Self::Slice { span, .. }
             | Self::Other { span, .. } => *span,

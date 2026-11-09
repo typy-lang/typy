@@ -26,6 +26,8 @@ pub enum Constant {
     /// The runtime's immortal empty list, the first value of a list slot. Definite assignment
     /// guarantees it is never read, so it is never changed.
     PlaceholderList,
+    /// The runtime's immortal empty set, the first value of a set slot, never read either.
+    PlaceholderSet,
     /// The address of the descriptor of a tuple type that a list holds, which the runtime
     /// reads to store, count, compare and write its items (ADR-0009).
     TupleDescriptor(TupleTypeId),
@@ -43,6 +45,7 @@ impl Constant {
             Self::Str(_) => TyirType::STR,
             Self::Bytes(_) => TyirType::BYTES,
             Self::PlaceholderList => TyirType::LIST,
+            Self::PlaceholderSet => TyirType::SET,
             Self::TupleDescriptor(_) => TyirType::Bits,
         }
     }
@@ -58,6 +61,7 @@ impl fmt::Display for Constant {
             Self::Str(StringId(id)) => write!(formatter, "str s{id}"),
             Self::Bytes(StringId(id)) => write!(formatter, "bytes s{id}"),
             Self::PlaceholderList => formatter.write_str("placeholder list"),
+            Self::PlaceholderSet => formatter.write_str("placeholder set"),
             Self::TupleDescriptor(TupleTypeId(id)) => write!(formatter, "descriptor tuple#{id}"),
         }
     }
@@ -82,6 +86,7 @@ mod tests {
                 TyirType::LIST,
                 "placeholder list",
             ),
+            (Constant::PlaceholderSet, TyirType::SET, "placeholder set"),
             (
                 Constant::TupleDescriptor(TupleTypeId(2)),
                 TyirType::Bits,

@@ -212,6 +212,8 @@ impl Dump<'_> {
             TypedExprKind::Tuple(_) => "Tuple".to_owned(),
             TypedExprKind::List(_) => "List".to_owned(),
             TypedExprKind::ListOf(_) => "ListOf".to_owned(),
+            TypedExprKind::SetOf(_) => "SetOf".to_owned(),
+            TypedExprKind::Set(_) => "Set".to_owned(),
             TypedExprKind::TupleOf(_) => "TupleOf".to_owned(),
             TypedExprKind::ListItem { .. } => "ListItem".to_owned(),
             TypedExprKind::Slice { .. } => "Slice".to_owned(),
@@ -245,9 +247,11 @@ fn children(expression: &TypedExpr) -> Vec<&TypedExpr> {
         | TypedExprKind::TupleSlice { tuple: operand, .. } => {
             vec![operand]
         }
-        TypedExprKind::Tuple(items) | TypedExprKind::List(items) => items.iter().collect(),
+        TypedExprKind::Tuple(items) | TypedExprKind::List(items) | TypedExprKind::Set(items) => {
+            items.iter().collect()
+        }
         TypedExprKind::ListItem { list, index } => vec![list, index],
-        TypedExprKind::ListOf(source) => source.expressions(),
+        TypedExprKind::ListOf(source) | TypedExprKind::SetOf(source) => source.expressions(),
         TypedExprKind::IterableBuiltin {
             iterable, option, ..
         } => std::iter::once(iterable.as_ref())

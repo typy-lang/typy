@@ -192,6 +192,14 @@ impl Dump<'_> {
         }
     }
 
+    /// Writes a tuple, list or set display and its items.
+    fn display(&mut self, depth: usize, label: &str, elements: &[Expr], span: Option<Span>) {
+        self.line(depth, label, span);
+        for element in elements {
+            self.expression(depth + 1, element);
+        }
+    }
+
     fn expression(&mut self, depth: usize, expression: &Expr) {
         let span = Some(expression.span());
         match expression {
@@ -219,17 +227,9 @@ impl Dump<'_> {
                 self.line(depth, &format!("UnaryOp {operator:?}"), span);
                 self.expression(depth + 1, operand);
             }
-            Expr::Tuple { elements, .. } | Expr::List { elements, .. } => {
-                let label = if matches!(expression, Expr::List { .. }) {
-                    "List"
-                } else {
-                    "Tuple"
-                };
-                self.line(depth, label, span);
-                for element in elements {
-                    self.expression(depth + 1, element);
-                }
-            }
+            Expr::Tuple { elements, .. } => self.display(depth, "Tuple", elements, span),
+            Expr::List { elements, .. } => self.display(depth, "List", elements, span),
+            Expr::Set { elements, .. } => self.display(depth, "Set", elements, span),
             Expr::Attribute {
                 value, attribute, ..
             } => {

@@ -28,7 +28,6 @@ pub enum NodeKind {
     NamedExpr,
     Nonlocal,
     Raise,
-    Set,
     SetComp,
     Starred,
     TemplateStr,

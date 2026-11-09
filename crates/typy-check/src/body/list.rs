@@ -20,6 +20,7 @@ impl BodyChecker<'_> {
     ) -> TypedExpr {
         match expression {
             Expr::List { elements, span } => self.list_display(elements, expected, *span),
+            Expr::Set { elements, span } => self.set_display(elements, expected, *span),
             Expr::Call {
                 arguments,
                 keywords,
@@ -43,6 +44,18 @@ impl BodyChecker<'_> {
                     .is_some_and(|(builtin, ..)| builtin == Builtin::Tuple) =>
             {
                 self.call_tuple(arguments, keywords, expected, *span)
+            }
+            Expr::Call {
+                arguments,
+                keywords,
+                span,
+                ..
+            } if arguments.is_empty()
+                && self
+                    .called_builtin(expression)
+                    .is_some_and(|(builtin, ..)| builtin == Builtin::Set) =>
+            {
+                self.call_set(arguments, keywords, expected, *span)
             }
             other => {
                 let value = self.expression(other);
@@ -117,8 +130,9 @@ impl BodyChecker<'_> {
         )
     }
 
-    /// Checks the operands of a comparison chain. An empty list display takes its type from a
-    /// neighbouring operand, so `xs == []` and `x in []` need no annotation (TYP-05).
+    /// Checks the operands of a comparison chain. An empty list display, or `set()`, takes its
+    /// type from a neighbouring operand, so `xs == []`, `x in []` and `s == set()` need no
+    /// annotation (TYP-05).
     pub(super) fn comparison_operands(
         &mut self,
         left: &Expr,
@@ -126,15 +140,20 @@ impl BodyChecker<'_> {
         operators: &[CompareOperator],
     ) -> Vec<TypedExpr> {
         let operands: Vec<&Expr> = std::iter::once(left).chain(comparators).collect();
+        let kinds: Vec<Option<Empty>> = operands
+            .iter()
+            .map(|operand| self.empty_collection(operand))
+            .collect();
         let mut typed: Vec<Option<TypedExpr>> = operands
             .iter()
-            .map(|operand| (!is_empty_list(operand)).then(|| self.expression(operand)))
+            .zip(&kinds)
+            .map(|(operand, kind)| kind.is_none().then(|| self.expression(operand)))
             .collect();
-        for position in 0..operands.len() {
-            if typed[position].is_some() {
+        for (position, kind) in kinds.iter().enumerate() {
+            let Some(kind) = kind else {
                 continue;
-            }
-            let expected = empty_list_type(&typed, operators, position);
+            };
+            let expected = empty_type(*kind, &typed, operators, position);
             typed[position] =
                 Some(self.expression_expecting(operands[position], expected.as_ref()));
         }
@@ -145,7 +164,10 @@ impl BodyChecker<'_> {
             let (left, right) = (typed[position].ty.clone(), typed[position + 1].ty.clone());
             let membership = matches!(operator, CompareOperator::In | CompareOperator::NotIn);
             let wanted = if membership {
-                right.sequence_item().cloned()
+                match &right {
+                    Type::Set(item) => Some(item.as_ref().clone()),
+                    _ => right.sequence_item().cloned(),
+                }
             } else {
                 Some(right.clone())
             };
@@ -161,9 +183,24 @@ impl BodyChecker<'_> {
         typed
     }
 
+    /// Returns which empty collection an expression makes without an annotation: an empty list
+    /// display, or `set()`.
+    fn empty_collection(&self, expression: &Expr) -> Option<Empty> {
+        if is_empty_list(expression) {
+            return Some(Empty::List);
+        }
+        let (builtin, arguments, keywords) = self.called_builtin(expression)?;
+        (builtin == Builtin::Set && arguments.is_empty() && keywords.is_empty())
+            .then_some(Empty::Set)
+    }
+
     /// Checks the items of a display. Without an expected item type, an empty display among the
     /// items takes the type of the first other item, so `[[1], []]` needs no annotation.
-    fn display_items(&mut self, elements: &[Expr], expected: Option<&Type>) -> Vec<TypedExpr> {
+    pub(super) fn display_items(
+        &mut self,
+        elements: &[Expr],
+        expected: Option<&Type>,
+    ) -> Vec<TypedExpr> {
         if expected.is_some() {
             return elements
                 .iter()
@@ -204,14 +241,43 @@ impl BodyChecker<'_> {
     }
 }
 
+/// An empty collection that takes its type from where it is used.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Empty {
+    /// `[]`.
+    List,
+    /// `set()`.
+    Set,
+}
+
+impl Empty {
+    /// Returns whether `ty` is a collection of this kind.
+    fn holds(self, ty: &Type) -> bool {
+        matches!(
+            (self, ty),
+            (Self::List, Type::List(_)) | (Self::Set, Type::Set(_))
+        )
+    }
+
+    /// Returns the collection of this kind with items of type `item`.
+    fn of(self, item: Type) -> Type {
+        match self {
+            Self::List => Type::List(Box::new(item)),
+            Self::Set => Type::Set(Box::new(item)),
+        }
+    }
+}
+
 fn is_empty_list(expression: &Expr) -> bool {
     matches!(expression, Expr::List { elements, .. } if elements.is_empty())
 }
 
-/// Returns the type an empty list display at `position` of a comparison chain takes from its
-/// left neighbour, or else from its right one: the neighbour's list type, or for `in` the list
-/// type that holds or is held by the neighbour.
-fn empty_list_type(
+/// Returns the type an empty collection at `position` of a comparison chain takes from its
+/// left neighbour, or else from its right one: the neighbour's type when it is a collection of
+/// the same kind, or for `in` the collection that holds the neighbour, or the item type of the
+/// collection that holds this one.
+fn empty_type(
+    kind: Empty,
     typed: &[Option<TypedExpr>],
     operators: &[CompareOperator],
     position: usize,
@@ -224,16 +290,19 @@ fn empty_list_type(
         .and_then(|before| Some((typed[before].as_ref()?, operators[before])));
     if let Some((neighbour, operator)) = left {
         if is_membership(operator) {
-            return Some(Type::List(Box::new(neighbour.ty.clone())));
+            return Some(kind.of(neighbour.ty.clone()));
         }
-        if matches!(neighbour.ty, Type::List(_)) {
+        if kind.holds(&neighbour.ty) {
             return Some(neighbour.ty.clone());
         }
     }
     let (neighbour, operator) = (typed.get(position + 1)?.as_ref()?, operators[position]);
-    match &neighbour.ty {
-        Type::List(item) if is_membership(operator) => Some(item.as_ref().clone()),
-        Type::List(_) => Some(neighbour.ty.clone()),
-        _ => None,
+    if is_membership(operator) {
+        // The empty collection is the item looked for, so it has the item type.
+        return match &neighbour.ty {
+            Type::List(item) | Type::Set(item) => Some(item.as_ref().clone()),
+            _ => None,
+        };
     }
+    kind.holds(&neighbour.ty).then(|| neighbour.ty.clone())
 }

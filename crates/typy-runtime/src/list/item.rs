@@ -4,7 +4,9 @@
 //! says, and crosses the runtime's interface as the address of its bytes (ADR-0001, ADR-0009).
 
 use crate::Raising;
-use crate::header::{BYTES_TYPE_ID, LIST_TYPE_ID, ObjectHeader, STR_TYPE_ID, TUPLE_TYPE_ID};
+use crate::header::{
+    BYTES_TYPE_ID, LIST_TYPE_ID, ObjectHeader, SET_TYPE_ID, STR_TYPE_ID, TUPLE_TYPE_ID,
+};
 use crate::string::StrObject;
 use crate::tuple::TupleType;
 use crate::word::inline;
@@ -300,7 +302,7 @@ fn pointer(item: u64) -> *mut ObjectHeader {
     core::ptr::with_exposed_provenance_mut(usize::try_from(item).unwrap_or(0))
 }
 
-/// Returns whether a string or a list is not empty.
+/// Returns whether a string, a list or a set is not empty.
 #[allow(
     clippy::cast_ptr_alignment,
     reason = "every object comes from malloc, aligned for every type, and starts with its header"
@@ -308,13 +310,14 @@ fn pointer(item: u64) -> *mut ObjectHeader {
 ///
 /// # Safety
 ///
-/// `object` points to a live string or list.
+/// `object` points to a live string, list or set.
 unsafe fn object_is_true(object: *mut ObjectHeader) -> bool {
     // SAFETY: the caller passes a live object; the type ID says which it is.
     unsafe {
         match (*object).type_id {
             STR_TYPE_ID | BYTES_TYPE_ID => (*object.cast::<StrObject>()).length != 0,
             LIST_TYPE_ID | TUPLE_TYPE_ID => (*object.cast::<super::ListObject>()).length != 0,
+            SET_TYPE_ID => (*object.cast::<crate::set::SetObject>()).used != 0,
             _ => crate::libc::abort_with(b"typy runtime: a list holds an object it cannot test\n"),
         }
     }
@@ -345,7 +348,7 @@ unsafe fn object_hash(object: *mut ObjectHeader) -> i64 {
     }
 }
 
-/// Returns `left == right` for two objects of one type: strings, or lists.
+/// Returns `left == right` for two objects of one type: strings, lists or sets.
 #[allow(
     clippy::cast_ptr_alignment,
     reason = "every object comes from malloc, aligned for every type, and starts with its header"
@@ -364,6 +367,9 @@ unsafe fn objects_equal(left: *mut ObjectHeader, right: *mut ObjectHeader) -> bo
                 inline(0).unwrap_or(1),
             ),
             LIST_TYPE_ID | TUPLE_TYPE_ID => super::typy_rt_list_equal(left.cast(), right.cast()),
+            SET_TYPE_ID => {
+                crate::set::typy_rt_set_compare(left.cast(), right.cast(), inline(0).unwrap_or(1))
+            }
             _ => {
                 crate::libc::abort_with(b"typy runtime: a list holds an object it cannot compare\n")
             }
@@ -371,7 +377,8 @@ unsafe fn objects_equal(left: *mut ObjectHeader, right: *mut ObjectHeader) -> bo
     }
 }
 
-/// Returns whether two strings, or two lists, stand in the comparison `comparison`.
+/// Returns whether two strings, two lists or two sets stand in the comparison `comparison`;
+/// sets order as subsets and supersets.
 #[allow(
     clippy::cast_ptr_alignment,
     reason = "every object comes from malloc, aligned for every type, and starts with its header"
@@ -392,12 +399,13 @@ unsafe fn objects_order(
             LIST_TYPE_ID | TUPLE_TYPE_ID => {
                 super::typy_rt_list_compare(left.cast(), right.cast(), comparison)
             }
+            SET_TYPE_ID => crate::set::typy_rt_set_compare(left.cast(), right.cast(), comparison),
             _ => crate::libc::abort_with(b"typy runtime: a list holds an object it cannot order\n"),
         }
     }
 }
 
-/// Returns `repr(object)` for a string or a list.
+/// Returns `repr(object)` for a string, a list or a set.
 #[allow(
     clippy::cast_ptr_alignment,
     reason = "every object comes from malloc, aligned for every type, and starts with its header"
@@ -405,7 +413,7 @@ unsafe fn objects_order(
 ///
 /// # Safety
 ///
-/// `object` points to a live string or list.
+/// `object` points to a live string, list or set.
 unsafe fn object_repr(object: *mut ObjectHeader) -> Raising<*mut StrObject> {
     // SAFETY: the caller passes a live object; the type ID says which it is.
     unsafe {
@@ -415,6 +423,7 @@ unsafe fn object_repr(object: *mut ObjectHeader) -> Raising<*mut StrObject> {
                 Raising::ok(crate::bytes::typy_rt_bytes_repr(object.cast::<StrObject>()))
             }
             LIST_TYPE_ID | TUPLE_TYPE_ID => super::typy_rt_list_repr(object.cast()),
+            SET_TYPE_ID => crate::set::typy_rt_set_repr(object.cast()),
             _ => crate::libc::abort_with(b"typy runtime: a list holds an object it cannot write\n"),
         }
     }

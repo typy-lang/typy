@@ -86,6 +86,11 @@ pub enum TypedExprKind {
     TupleOf(Box<TypedExpr>),
     /// `list(source)`: a new list of every value the source gives, in order (LIB-02).
     ListOf(Box<super::statement::LoopSource>),
+    /// `set(source)`: a new set of every value the source gives, added in order, or a copy of
+    /// the source when it is a set (DAT-10).
+    SetOf(Box<super::statement::LoopSource>),
+    /// A set display, one value per item, in order (DAT-10).
+    Set(Vec<TypedExpr>),
     /// A call of any other builtin of 0.1, with positional arguments only.
     Builtin {
         builtin: Builtin,

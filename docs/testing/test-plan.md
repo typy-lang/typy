@@ -3,10 +3,10 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy test plan |
-| Version | 0.16 |
+| Version | 0.17 |
 | Status | Draft |
 | Owner | typy-lang contributors |
-| Last updated | 2026-11-08 |
+| Last updated | 2026-11-09 |
 
 ## 1. Purpose
 
@@ -293,6 +293,7 @@ that the specification does not define.
 | DAT-12 | 0.2 | IT | `tests/conformance/dat/DAT-12_*.py` |
 | DAT-13 | 0.3 | IT | `tests/conformance/dat/DAT-13_*.py` |
 | DAT-14 | 0.2 | IT | `tests/conformance/dat/DAT-14_*.py` |
+| DAT-15 | 0.2 | IT | `tests/conformance/dat/DAT-15_*.py` |
 | EXP-01 | 0.1 | IT | `tests/conformance/exp/EXP-01_*.py` |
 | EXP-02 | 0.1 | IT | `tests/conformance/exp/EXP-02_*.py` |
 | EXP-03 | 0.1 | IT | `tests/conformance/exp/EXP-03_*.py` |

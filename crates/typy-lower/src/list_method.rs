@@ -31,6 +31,9 @@ impl FunctionLowerer<'_> {
         let lowered = if receiver.ty == TyirType::STR || receiver.ty == TyirType::BYTES {
             let bytes = receiver.ty == TyirType::BYTES;
             self.str_method(receiver.value, bytes, method, &given, result, span)
+        } else if receiver.ty == TyirType::SET {
+            let arguments: Vec<Lowered> = given.iter().flatten().copied().collect();
+            self.set_method(receiver.value, method, &arguments, result, span)
         } else {
             let arguments: Vec<Lowered> = given.iter().flatten().copied().collect();
             self.list_method(receiver.value, method, &arguments, result, span)

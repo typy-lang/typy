@@ -4,6 +4,8 @@
 
 mod algebra;
 mod operations;
+
+pub(crate) use operations::{typy_rt_set_compare, typy_rt_set_repr};
 #[cfg(test)]
 mod tests;
 
@@ -110,6 +112,37 @@ impl SetObject {
         (0..=self.mask).filter(move |slot| unsafe { self.state(*slot) } == ACTIVE)
     }
 }
+
+/// An empty set that is never freed: the first value the compiler gives a set variable, so
+/// every path out of a function can release it. Definite assignment guarantees no program reads
+/// it, so it has no table and is never changed.
+#[repr(transparent)]
+pub struct Placeholder(SetObject);
+
+// SAFETY: the placeholder is immortal and never written, so sharing it cannot race.
+unsafe impl Sync for Placeholder {}
+
+/// The placeholder set generated code refers to.
+#[unsafe(no_mangle)]
+#[allow(
+    non_upper_case_globals,
+    reason = "the runtime's symbols are `typy_rt_` and a snake-case name"
+)]
+pub static typy_rt_placeholder_set: Placeholder = Placeholder(SetObject {
+    header: ObjectHeader {
+        reference_count: crate::header::IMMORTAL,
+        type_id: SET_TYPE_ID,
+    },
+    fill: 0,
+    used: 0,
+    mask: 0,
+    finger: 0,
+    kind: 0,
+    words: 1,
+    tuple: core::ptr::null(),
+    table: core::ptr::null_mut(),
+    states: core::ptr::null_mut(),
+});
 
 /// Returns a new table of `size` slots of `stride` words, every slot empty.
 fn new_table(size: usize, stride: usize) -> (*mut u64, *mut u8) {
@@ -279,7 +312,9 @@ unsafe fn first_empty(set: &SetObject, hash: i64) -> usize {
 }
 
 /// Moves the items to a new table of the smallest power-of-two size above `minimum`, at least
-/// eight slots, which drops the dummy slots. A table of eight slots without dummies is kept.
+/// eight slots, which drops the dummy slots. CPython keeps a table of eight slots that has no
+/// dummies, but no caller asks for one: a table is resized for at most eight slots only when
+/// fewer than four items fill at least five slots, so some of those slots are dummies.
 ///
 /// # Safety
 ///
@@ -288,9 +323,6 @@ pub(crate) unsafe fn resize(set: &mut SetObject, minimum: usize) {
     let mut size = MINIMUM_SIZE;
     while size <= minimum {
         size <<= 1;
-    }
-    if size == MINIMUM_SIZE && set.mask == MINIMUM_SIZE - 1 && set.fill == set.used {
-        return;
     }
     let (old_table, old_states, old_mask) = (set.table, set.states, set.mask);
     let stride = set.stride();

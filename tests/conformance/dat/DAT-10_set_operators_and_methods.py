@@ -1,0 +1,30 @@
+# typy-test: DAT-10, LIB-03
+# typy-expect: accepted
+a = set([1, 2, 3, 4, 5, 2 ** 70])
+b = set([4, 5, 6, 7, 2 ** 70])
+print(a | b, a & b, a - b, b - a, a ^ b)
+print(a.union(b), a.intersection(b), a.difference(b), a.symmetric_difference(b))
+print(a == b, a != b, set([1, 2]) < a, set([1, 2]) <= a, a > set([1]), a >= a, a < a)
+print(a.issubset(b), set([4, 5]).issubset(b), b.issuperset(set([6, 7])), a.isdisjoint(set([100])))
+c = set(a)
+alias = c
+c |= b
+c &= set([1, 6, 7, 99])
+c -= set([6])
+c ^= set([1, 50, 51])
+print(c, alias)
+c.update(set([60, 61]))
+c.difference_update(set([50]))
+c.symmetric_difference_update(set([61, 62]))
+c.intersection_update(set([7, 51, 60, 62, 63]))
+c.discard(7)
+c.discard(1000)
+c.remove(51)
+print(c, c.pop(), c, len(c), bool(c))
+c.clear()
+print(c, len(c), bool(c), c == set(), sorted(a), sum(a), min(a), max(a))
+groups: list[set[int]] = [set([1]), set([2, 3])]
+groups[0].add(4)
+print(groups, groups[0] < groups[1], (set([1, 2]), 3))
+words = set(["pear", "apple", "fig"])
+print(sorted(words), "fig" in words, len(words), words == set(["fig", "pear", "apple"]))

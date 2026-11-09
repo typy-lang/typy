@@ -271,7 +271,6 @@ global g
 fn expressions_beyond_the_release_keep_their_kind() {
     let cases = [
         ("{1: 2}\n", NodeKind::Dict),
-        ("{1}\n", NodeKind::Set),
         ("[x for x in y]\n", NodeKind::ListComp),
         ("(x for x in y)\n", NodeKind::GeneratorExp),
         ("lambda: 1\n", NodeKind::Lambda),

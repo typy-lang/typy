@@ -53,6 +53,9 @@ pub(super) fn visit_expression(expression: &Expr, visit: &mut dyn FnMut(&Expr)) 
         }
         | Expr::List {
             elements: values, ..
+        }
+        | Expr::Set {
+            elements: values, ..
         } => values
             .iter()
             .for_each(|value| visit_expression(value, visit)),

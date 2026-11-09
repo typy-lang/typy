@@ -52,6 +52,9 @@ impl FunctionLowerer<'_> {
                 );
                 Self::borrowed(value, TyirType::Bool)
             }
+            (TyirType::SET, TyirType::SET) => {
+                self.set_combine(operator, left.value, right.value, span)
+            }
             (TyirType::LIST, TyirType::LIST) => self.call_runtime(
                 RuntimeFunction::ListConcat,
                 vec![left.value, right.value],

@@ -103,6 +103,24 @@ impl BodyChecker<'_> {
             return self.source_arity(Builtin::Reversed, "1", arguments.len(), arguments, span);
         }
         let sequence = self.sequence(&arguments[0]);
+        if let Type::Set(_) = sequence.ty {
+            self.diagnostics.push(
+                Diagnostic::new(
+                    DiagnosticCode::error(411),
+                    sequence.span,
+                    format!(
+                        "`reversed` needs a sequence, and {} has no order to reverse",
+                        sequence.ty.with_article()
+                    ),
+                )
+                .with_rule(RuleId::LIB_02),
+            );
+            return LoopSource::Reversed(Self::typed(
+                TypedExprKind::Constant(TypedConstant::None),
+                Type::Error,
+                span,
+            ));
+        }
         self.iterated_item(&sequence, "`reversed`");
         LoopSource::Reversed(sequence)
     }

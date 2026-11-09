@@ -22,6 +22,9 @@ impl FunctionLowerer<'_> {
             TyirType::Object(TypeId::BYTES) => {
                 self.call_runtime(RuntimeFunction::BytesRepr, vec![lowered.value], span)
             }
+            TyirType::Object(TypeId::SET) => {
+                self.call_runtime(RuntimeFunction::SetRepr, vec![lowered.value], span)
+            }
             TyirType::Object(_) => Self::borrowed(lowered.value, lowered.ty),
             TyirType::Bits => unreachable!("list items are converted before they are written"),
             TyirType::Unit => {

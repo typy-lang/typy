@@ -7,10 +7,11 @@ use super::Walker;
 use super::feature::{Feature, feature, planned};
 
 impl Walker {
-    /// Annotations name `int`, `float`, `bool`, `str`, `None` or `tuple[...]`; the checker reports any other name.
+    /// Annotations name `int`, `float`, `bool`, `str`, `None`, `tuple[...]`, `list[...]` or
+    /// `set[...]`; the checker reports any other name.
     pub(super) fn annotation(&mut self, annotation: &Expr) {
         match annotation {
-            Expr::Subscript { value, index, .. } if matches!(value.as_ref(), Expr::Name { id, .. } if id == "tuple" || id == "list") =>
+            Expr::Subscript { value, index, .. } if matches!(value.as_ref(), Expr::Name { id, .. } if matches!(id.as_str(), "tuple" | "list" | "set")) =>
             {
                 match index.as_ref() {
                     // `tuple[int, ...]` is checked, and reported, by the checker.
@@ -38,7 +39,7 @@ impl Walker {
                 self.report(
                     *span,
                     planned(
-                        "generic annotations such as `list[int]`",
+                        "generic annotations such as `dict[str, int]`",
                         "0.2",
                         RuleId::TYP_06,
                     ),
@@ -176,7 +177,9 @@ impl Walker {
                     self.expression(bound);
                 }
             }
-            Expr::Tuple { elements, .. } | Expr::List { elements, .. } => {
+            Expr::Tuple { elements, .. }
+            | Expr::List { elements, .. }
+            | Expr::Set { elements, .. } => {
                 for element in elements {
                     self.expression(element);
                 }

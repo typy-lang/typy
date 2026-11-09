@@ -49,6 +49,12 @@ impl BodyChecker<'_> {
             // A list joins only a list of its own type, because the runtime stores each item by
             // the kind of the item type (DAT-07).
             Op::Add if l.sequence_item().is_some() && l == r => l,
+            // The runtime combines two sets by the item type of the first (DAT-10).
+            Op::BitOr | Op::BitAnd | Op::Sub | Op::BitXor
+                if matches!(l, Type::Set(_)) && l == r =>
+            {
+                l
+            }
             Op::Mult if l.sequence_item().is_some() && r == Int => l,
             Op::Mult if l == Int && r.sequence_item().is_some() => r,
             Op::Mult if (l == Str && r == Int) || (l == Int && r == Str) => Str,
@@ -187,7 +193,8 @@ impl BodyChecker<'_> {
             CompareOperator::In | CompareOperator::NotIn => match &r {
                 // The runtime compares the value with each item by the item's kind, so the value
                 // has the item type.
-                Type::List(item) | Type::TupleOf(item) if l.is_assignable_to(item) => {}
+                Type::List(item) | Type::TupleOf(item) | Type::Set(item)
+                    if l.is_assignable_to(item) => {}
                 // A substring test: `in` on a `str` needs a `str` on its left.
                 Type::Str if l == Type::Str => {}
                 // `in` on `bytes` looks for a byte, an `int`, or for `bytes` within them.

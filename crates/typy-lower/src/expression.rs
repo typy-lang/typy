@@ -31,6 +31,14 @@ impl FunctionLowerer<'_> {
                 self.list_display(items, item, span)
             }
             TypedExprKind::ListOf(source) => self.list_of(source, span),
+            TypedExprKind::Set(items) => {
+                let item = self.set_item_type(&expression.ty);
+                self.set_display(items, item, span)
+            }
+            TypedExprKind::SetOf(source) => {
+                let item = self.set_item_type(&expression.ty);
+                self.set_of(source, item, span)
+            }
             TypedExprKind::TupleOf(inner) => {
                 let item = match &expression.ty {
                     typy_check::Type::TupleOf(item) => self.lowered_type(item),
@@ -128,6 +136,14 @@ impl FunctionLowerer<'_> {
         }
     }
 
+    /// Returns the TyIR type of the items of a set type.
+    fn set_item_type(&mut self, ty: &typy_check::Type) -> TyirType {
+        match ty {
+            typy_check::Type::Set(item) => self.lowered_type(item),
+            _ => unreachable!("a set expression has a set type"),
+        }
+    }
+
     /// Lowers a literal; constants are immortal, so they are borrowed.
     pub(crate) fn typed_constant(&mut self, constant: &TypedConstant, span: Span) -> Lowered {
         let (value, ty) = match constant {
@@ -157,10 +173,13 @@ impl FunctionLowerer<'_> {
             TyirType::Int => ScalarKind::Int,
             TyirType::Float => ScalarKind::Float,
             TyirType::Object(typy_tyir::TypeId::LIST) => return self.list_truth(lowered, span),
-            TyirType::Object(typy_tyir::TypeId::BYTES) => {
-                let length = self
-                    .call_runtime(RuntimeFunction::BytesLength, vec![lowered.value], span)
-                    .value;
+            TyirType::Object(typy_tyir::TypeId::BYTES | typy_tyir::TypeId::SET) => {
+                let function = if lowered.ty == TyirType::SET {
+                    RuntimeFunction::SetLength
+                } else {
+                    RuntimeFunction::BytesLength
+                };
+                let length = self.call_runtime(function, vec![lowered.value], span).value;
                 return self.builder.push_value(
                     Operation::IsTrue {
                         kind: ScalarKind::Int,

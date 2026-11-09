@@ -120,7 +120,6 @@ impl Converter<'_> {
             ast::Expr::Named(node) => self.other(NodeKind::NamedExpr, node.range),
             ast::Expr::Lambda(node) => self.other(NodeKind::Lambda, node.range),
             ast::Expr::Dict(node) => self.other(NodeKind::Dict, node.range),
-            ast::Expr::Set(node) => self.other(NodeKind::Set, node.range),
             ast::Expr::ListComp(node) => self.other(NodeKind::ListComp, node.range),
             ast::Expr::SetComp(node) => self.other(NodeKind::SetComp, node.range),
             ast::Expr::DictComp(node) => self.other(NodeKind::DictComp, node.range),
@@ -137,6 +136,14 @@ impl Converter<'_> {
             },
             ast::Expr::Starred(node) => self.other(NodeKind::Starred, node.range),
             ast::Expr::List(node) => Expr::List {
+                elements: node
+                    .elts
+                    .iter()
+                    .map(|element| self.expression(element))
+                    .collect(),
+                span: self.span(node.range),
+            },
+            ast::Expr::Set(node) => Expr::Set {
                 elements: node
                     .elts
                     .iter()

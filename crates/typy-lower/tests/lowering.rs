@@ -195,3 +195,30 @@ fn the_module_body_is_the_entry_symbol_and_strings_are_pooled_once() {
         1
     );
 }
+
+#[test]
+fn only_displays_of_three_to_thirty_constants_are_copied_as_cpython_merges_them() {
+    let copies = |display: &str| {
+        text(&format!("x = 4\nprint({display})\n"))
+            .matches("rt.set_copy")
+            .count()
+    };
+    let thirty: Vec<String> = (0..30).map(|value| value.to_string()).collect();
+    let thirty_one: Vec<String> = (0..31).map(|value| value.to_string()).collect();
+    for (display, copied) in [
+        ("{1, 2}".to_owned(), 0),
+        ("{1, -2, +3}".to_owned(), 1),
+        ("{-(-1.0), 2.5, -0.5}".to_owned(), 1),
+        ("{(1, -2), (3, 4), (5, +6)}".to_owned(), 1),
+        ("{'a', 'b', 'c'}".to_owned(), 1),
+        ("{True, False, True}".to_owned(), 1),
+        ("{x, 2, 3}".to_owned(), 0),
+        ("{-x, 2, 3}".to_owned(), 0),
+        ("{(x, 1), (2, 1), (3, 1)}".to_owned(), 0),
+        ("{1 + 2, 4, 5}".to_owned(), 0),
+        (format!("{{{}}}", thirty.join(", ")), 1),
+        (format!("{{{}}}", thirty_one.join(", ")), 0),
+    ] {
+        assert_eq!(copies(&display), copied, "{display}");
+    }
+}

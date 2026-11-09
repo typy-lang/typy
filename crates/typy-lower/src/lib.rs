@@ -17,6 +17,7 @@ mod loop_source;
 mod mangle;
 mod ownership;
 mod program;
+mod set;
 mod slice;
 mod statement;
 mod str_method;

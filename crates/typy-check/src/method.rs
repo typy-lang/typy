@@ -31,6 +31,40 @@ pub enum Method {
     ListReverse,
     /// `list.sort(reverse=False)`: sorts the items in place, stably, and returns `None`.
     ListSort,
+    /// `set.add(item)`: adds an item unless an equal one is there.
+    SetAdd,
+    /// `set.remove(item)`: removes an equal item, or raises `KeyError`.
+    SetRemove,
+    /// `set.discard(item)`: removes an equal item, if there is one.
+    SetDiscard,
+    /// `set.pop()`: removes and returns an item, or raises `KeyError` on an empty set.
+    SetPop,
+    /// `set.clear()`: removes every item.
+    SetClear,
+    /// `set.copy()`: returns a new set with the same items.
+    SetCopy,
+    /// `set.union(other)`: a new set of the items of both.
+    SetUnion,
+    /// `set.intersection(other)`: a new set of the items in both.
+    SetIntersection,
+    /// `set.difference(other)`: a new set of the items not in `other`.
+    SetDifference,
+    /// `set.symmetric_difference(other)`: a new set of the items in exactly one.
+    SetSymmetricDifference,
+    /// `set.update(other)`: adds the items of `other`.
+    SetUpdate,
+    /// `set.intersection_update(other)`: keeps the items `other` holds.
+    SetIntersectionUpdate,
+    /// `set.difference_update(other)`: removes the items of `other`.
+    SetDifferenceUpdate,
+    /// `set.symmetric_difference_update(other)`: keeps the items in exactly one.
+    SetSymmetricDifferenceUpdate,
+    /// `set.issubset(other)`: whether `other` holds every item.
+    SetIssubset,
+    /// `set.issuperset(other)`: whether every item of `other` is held.
+    SetIssuperset,
+    /// `set.isdisjoint(other)`: whether no item is in both.
+    SetIsdisjoint,
     /// `tuple.index(item)`: returns the position of the first equal item, or raises
     /// `ValueError`.
     TupleIndex,
@@ -216,6 +250,27 @@ const STR_METHODS: [(&str, Method); 43] = [
     ("encode", Method::StrEncode),
 ];
 
+/// The methods of `set`.
+const SET_METHODS: [Method; 17] = [
+    Method::SetAdd,
+    Method::SetRemove,
+    Method::SetDiscard,
+    Method::SetPop,
+    Method::SetClear,
+    Method::SetCopy,
+    Method::SetUnion,
+    Method::SetIntersection,
+    Method::SetDifference,
+    Method::SetSymmetricDifference,
+    Method::SetUpdate,
+    Method::SetIntersectionUpdate,
+    Method::SetDifferenceUpdate,
+    Method::SetSymmetricDifferenceUpdate,
+    Method::SetIssubset,
+    Method::SetIssuperset,
+    Method::SetIsdisjoint,
+];
+
 impl Method {
     /// Returns the method `name` of a value of type `receiver`, if the release provides it.
     #[must_use]
@@ -235,6 +290,12 @@ impl Method {
                     .find(|(each, method)| *each == name && BYTES_SHARED.contains(method))
                     .map(|(_, method)| *method),
             };
+        }
+        if let Type::Set(_) = receiver {
+            return SET_METHODS
+                .iter()
+                .find(|method| method.name() == name)
+                .copied();
         }
         if let Type::TupleOf(_) = receiver {
             return match name {
@@ -267,14 +328,27 @@ impl Method {
     pub const fn name(self) -> &'static str {
         match self {
             Self::ListAppend => "append",
-            Self::ListPop => "pop",
+            Self::ListPop | Self::SetPop => "pop",
             Self::ListInsert => "insert",
             Self::ListExtend => "extend",
-            Self::ListRemove => "remove",
+            Self::ListRemove | Self::SetRemove => "remove",
             Self::ListIndex | Self::TupleIndex | Self::StrIndex => "index",
             Self::ListCount | Self::TupleCount | Self::StrCount => "count",
-            Self::ListClear => "clear",
-            Self::ListCopy => "copy",
+            Self::ListClear | Self::SetClear => "clear",
+            Self::ListCopy | Self::SetCopy => "copy",
+            Self::SetAdd => "add",
+            Self::SetDiscard => "discard",
+            Self::SetUnion => "union",
+            Self::SetIntersection => "intersection",
+            Self::SetDifference => "difference",
+            Self::SetSymmetricDifference => "symmetric_difference",
+            Self::SetUpdate => "update",
+            Self::SetIntersectionUpdate => "intersection_update",
+            Self::SetDifferenceUpdate => "difference_update",
+            Self::SetSymmetricDifferenceUpdate => "symmetric_difference_update",
+            Self::SetIssubset => "issubset",
+            Self::SetIssuperset => "issuperset",
+            Self::SetIsdisjoint => "isdisjoint",
             Self::ListReverse => "reverse",
             Self::ListSort => "sort",
             Self::StrFind => "find",
@@ -361,6 +435,27 @@ mod tests {
             Method::ListSort.signature(&list).parameters[0].kind,
             ParameterKind::Keyword
         );
+    }
+
+    #[test]
+    fn set_methods_take_items_and_sets_of_the_receiver_type() {
+        let set = Type::Set(Box::new(Type::Int));
+        assert_eq!(Method::of(&set, "add"), Some(Method::SetAdd));
+        assert_eq!(Method::of(&set, "append"), None);
+        for method in super::SET_METHODS {
+            assert_eq!(Method::of(&set, method.name()), Some(method));
+        }
+        let add = Method::SetAdd.signature(&set);
+        assert_eq!(add.parameters[0].ty, ParameterType::Exact(Type::Int));
+        assert_eq!(add.result, Type::NoneType);
+        assert_eq!(Method::SetPop.signature(&set).result, Type::Int);
+        assert_eq!(Method::SetUnion.signature(&set).result, set);
+        assert_eq!(
+            Method::SetUpdate.signature(&set).parameters[0].ty,
+            ParameterType::Exact(set.clone())
+        );
+        assert_eq!(Method::SetIsdisjoint.signature(&set).result, Type::Bool);
+        assert_eq!(Method::SetCopy.signature(&set).parameters, []);
     }
 
     #[test]

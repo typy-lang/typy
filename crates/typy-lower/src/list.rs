@@ -31,15 +31,10 @@ impl FunctionLowerer<'_> {
             .push_value(Operation::ToBits(value.value), TyirType::Bits, span)
     }
 
-    /// Lowers a list display: a list with room for every item, then each item appended in order.
-    pub(crate) fn list_display(
-        &mut self,
-        items: &[TypedExpr],
-        item: TyirType,
-        span: Span,
-    ) -> Lowered {
+    /// Returns the operands that tell the runtime how a new list or set stores items of type
+    /// `item`: the code of its kind, and the descriptor of a tuple, or 0.
+    pub(crate) fn item_layout(&mut self, item: TyirType, span: Span) -> (ValueId, ValueId) {
         let kind = self.constant(Constant::Int(item_kind(item).to_string()), span);
-        let capacity = self.constant(Constant::Int(items.len().to_string()), span);
         let descriptor = if let TyirType::Tuple(id) = item {
             self.constant(Constant::TupleDescriptor(id), span)
         } else {
@@ -47,6 +42,18 @@ impl FunctionLowerer<'_> {
             self.builder
                 .push_value(Operation::ToBits(none), TyirType::Bits, span)
         };
+        (kind, descriptor)
+    }
+
+    /// Lowers a list display: a list with room for every item, then each item appended in order.
+    pub(crate) fn list_display(
+        &mut self,
+        items: &[TypedExpr],
+        item: TyirType,
+        span: Span,
+    ) -> Lowered {
+        let (kind, descriptor) = self.item_layout(item, span);
+        let capacity = self.constant(Constant::Int(items.len().to_string()), span);
         let list = self.call_runtime(
             RuntimeFunction::ListNew,
             vec![kind, capacity, descriptor],

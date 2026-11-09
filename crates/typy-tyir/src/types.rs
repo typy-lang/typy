@@ -15,6 +15,8 @@ impl TypeId {
     pub const LIST: Self = Self(4);
     /// `bytes`, which the runtime stores as a `str` object of one byte per code point.
     pub const BYTES: Self = Self(6);
+    /// A `set`, whatever its item type.
+    pub const SET: Self = Self(7);
 }
 
 /// The number of a tuple type in its module's `TupleTypes`.
@@ -49,6 +51,8 @@ impl TyirType {
     pub const LIST: Self = Self::Object(TypeId::LIST);
     /// `bytes`.
     pub const BYTES: Self = Self::Object(TypeId::BYTES);
+    /// A set.
+    pub const SET: Self = Self::Object(TypeId::SET);
 }
 
 impl fmt::Display for TyirType {
@@ -61,6 +65,7 @@ impl fmt::Display for TyirType {
             Self::Object(TypeId::STR) => formatter.write_str("str"),
             Self::Object(TypeId::EXCEPTION) => formatter.write_str("exception"),
             Self::Object(TypeId::LIST) => formatter.write_str("list"),
+            Self::Object(TypeId::SET) => formatter.write_str("set"),
             Self::Bits => formatter.write_str("bits"),
             Self::Object(TypeId(id)) => write!(formatter, "object#{id}"),
             Self::Tuple(TupleTypeId(id)) => write!(formatter, "tuple#{id}"),
@@ -81,6 +86,7 @@ mod tests {
             TyirType::Unit,
             TyirType::STR,
             TyirType::EXCEPTION,
+            TyirType::SET,
             TyirType::Object(TypeId(300)),
             TyirType::Tuple(TupleTypeId(4)),
         ]
@@ -96,6 +102,7 @@ mod tests {
                 "unit",
                 "str",
                 "exception",
+                "set",
                 "object#300",
                 "tuple#4"
             ]

@@ -95,8 +95,25 @@ impl Method {
     /// `of` found the method on.
     #[must_use]
     pub fn signature(self, receiver: &Type) -> MethodSignature {
-        let item = receiver.sequence_item().cloned().unwrap_or(Type::Error);
+        let item = match receiver {
+            Type::Set(item) => item.as_ref().clone(),
+            _ => receiver.sequence_item().cloned().unwrap_or(Type::Error),
+        };
+        let other = || vec![positional("other", receiver.clone(), true)];
         let (parameters, result) = match self {
+            Self::SetAdd | Self::SetRemove | Self::SetDiscard => {
+                (vec![positional("object", item, true)], Type::NoneType)
+            }
+            Self::SetPop => (Vec::new(), item),
+            Self::SetUnion
+            | Self::SetIntersection
+            | Self::SetDifference
+            | Self::SetSymmetricDifference => (other(), receiver.clone()),
+            Self::SetUpdate
+            | Self::SetIntersectionUpdate
+            | Self::SetDifferenceUpdate
+            | Self::SetSymmetricDifferenceUpdate => (other(), Type::NoneType),
+            Self::SetIssubset | Self::SetIssuperset | Self::SetIsdisjoint => (other(), Type::Bool),
             Self::ListAppend => (vec![positional("object", item, true)], Type::NoneType),
             Self::ListRemove => (vec![positional("value", item, true)], Type::NoneType),
             Self::ListPop => (vec![positional("index", Type::Int, false)], item),
@@ -114,8 +131,8 @@ impl Method {
             Self::ListIndex | Self::ListCount | Self::TupleIndex | Self::TupleCount => {
                 (vec![positional("value", item, true)], Type::Int)
             }
-            Self::ListClear | Self::ListReverse => (Vec::new(), Type::NoneType),
-            Self::ListCopy => (Vec::new(), receiver.clone()),
+            Self::ListClear | Self::ListReverse | Self::SetClear => (Vec::new(), Type::NoneType),
+            Self::ListCopy | Self::SetCopy => (Vec::new(), receiver.clone()),
             Self::ListSort => (
                 vec![parameter(
                     "reverse",

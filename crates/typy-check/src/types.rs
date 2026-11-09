@@ -24,6 +24,8 @@ pub enum Type {
     List(Box<Type>),
     /// `tuple[T, ...]`: an immutable sequence of any number of items of one type (DAT-14).
     TupleOf(Box<Type>),
+    /// `set[T]`: a mutable set of hashable items, shared by every name bound to it (DAT-10).
+    Set(Box<Type>),
     /// The type of an expression that already has a diagnostic; every check accepts it, so one cause gives one error (DIA-04).
     Error,
 }
@@ -36,7 +38,8 @@ impl Type {
         match (self, target) {
             (Self::Error, _) | (_, Self::Error) => true,
             (Self::List(item), Self::List(target))
-            | (Self::TupleOf(item), Self::TupleOf(target)) => item.is_assignable_to(target),
+            | (Self::TupleOf(item), Self::TupleOf(target))
+            | (Self::Set(item), Self::Set(target)) => item.is_assignable_to(target),
             (Self::Tuple(items), Self::Tuple(targets)) => {
                 items.len() == targets.len()
                     && items
@@ -54,7 +57,7 @@ impl Type {
         match self {
             Self::Error => true,
             Self::Tuple(items) => items.iter().any(Self::has_error),
-            Self::List(item) | Self::TupleOf(item) => item.has_error(),
+            Self::List(item) | Self::TupleOf(item) | Self::Set(item) => item.has_error(),
             _ => false,
         }
     }
@@ -67,9 +70,9 @@ impl Type {
             (Self::Error, _) | (_, Self::Error) => true,
             // The runtime compares items by the list's own item kind, so two lists compare when
             // their items have one type.
-            (Self::List(left), Self::List(right)) | (Self::TupleOf(left), Self::TupleOf(right)) => {
-                left == right
-            }
+            (Self::List(left), Self::List(right))
+            | (Self::TupleOf(left), Self::TupleOf(right))
+            | (Self::Set(left), Self::Set(right)) => left == right,
             (Self::Tuple(left), Self::Tuple(right)) => {
                 left.len() == right.len()
                     && left
@@ -85,12 +88,13 @@ impl Type {
     /// `other`: the same type other than `None`, two numbers, or tuples whose items order
     /// against each other (EXP-06). CPython orders tuples by the first pair of items that are
     /// not equal, so a pair of `None` items, which are always equal, is never ordered and is
-    /// accepted inside a tuple.
+    /// accepted inside a tuple. Two sets of one item type order as subsets and supersets.
     #[must_use]
     pub fn can_order(&self, other: &Self) -> bool {
         match (self, other) {
             (Self::Error, _) | (_, Self::Error) => true,
             (Self::TupleOf(left), Self::TupleOf(right)) => left == right && left.can_order(right),
+            (Self::Set(left), Self::Set(right)) => left == right,
             (Self::Tuple(left), Self::Tuple(right)) => {
                 left.len() == right.len()
                     && left.iter().zip(right).all(|(left, right)| {
@@ -118,6 +122,18 @@ impl Type {
     #[must_use]
     pub fn fits_tuple_of(&self, item: &Self) -> bool {
         matches!(self, Self::Tuple(items) if items.iter().all(|each| each.is_assignable_to(item)))
+    }
+
+    /// Returns true when a value of this type has a hash, so it may be an item of a set: not a
+    /// list or a set, which change, and not a tuple that holds one (DAT-10).
+    #[must_use]
+    pub fn is_hashable(&self) -> bool {
+        match self {
+            Self::List(_) | Self::Set(_) => false,
+            Self::Tuple(items) => items.iter().all(Self::is_hashable),
+            Self::TupleOf(item) => item.is_hashable(),
+            _ => true,
+        }
     }
 
     /// Returns true for `int` and `float`.
@@ -171,6 +187,7 @@ impl fmt::Display for Type {
             }
             Self::List(item) => write!(formatter, "list[{item}]"),
             Self::TupleOf(item) => write!(formatter, "tuple[{item}, ...]"),
+            Self::Set(item) => write!(formatter, "set[{item}]"),
             Self::Error => formatter.write_str("<error>"),
         }
     }
@@ -239,5 +256,37 @@ mod tests {
         .map(ToString::to_string)
         .collect();
         assert_eq!(names, ["int", "float", "bool", "str", "None"]);
+    }
+
+    #[test]
+    fn lists_sets_and_tuples_that_hold_them_have_no_hash() {
+        let list = Type::List(Box::new(Type::Int));
+        let set = Type::Set(Box::new(Type::Int));
+        let cases = [
+            (Type::Int, true),
+            (Type::Float, true),
+            (Type::Bytes, true),
+            (Type::NoneType, true),
+            (Type::Tuple(vec![Type::Int, Type::Str]), true),
+            (Type::TupleOf(Box::new(Type::Float)), true),
+            (list.clone(), false),
+            (set.clone(), false),
+            (Type::Tuple(vec![Type::Int, list]), false),
+            (Type::TupleOf(Box::new(set)), false),
+        ];
+        for (ty, hashable) in cases {
+            assert_eq!(ty.is_hashable(), hashable, "{ty}");
+        }
+    }
+
+    #[test]
+    fn sets_compare_and_order_only_with_sets_of_their_item_type() {
+        let ints = Type::Set(Box::new(Type::Int));
+        let floats = Type::Set(Box::new(Type::Float));
+        assert_eq!(ints.to_string(), "set[int]");
+        assert!(ints.can_test_equality(&ints) && ints.can_order(&ints));
+        assert!(!ints.can_test_equality(&floats) && !ints.can_order(&floats));
+        assert!(ints.is_assignable_to(&ints) && !ints.is_assignable_to(&floats));
+        assert!(Type::Set(Box::new(Type::Error)).has_error());
     }
 }

@@ -57,12 +57,21 @@ impl FunctionLowerer<'_> {
         Self::borrowed(result, TyirType::Bool)
     }
 
-    /// Returns `item in container` for a list, a `str` or a tuple; the operands are not
+    /// Returns `item in container` for a list, a set, a `str` or a tuple; the operands are not
     /// released (EXP-07).
     fn contains(&mut self, item: Lowered, container: Lowered, span: Span) -> ValueId {
         match container.ty {
             TyirType::Tuple(_) => self.tuple_contains(item, container, span),
             TyirType::LIST => self.list_contains(item, container, span),
+            TyirType::SET => {
+                let bits = self.bits(item, span);
+                self.call_runtime(
+                    RuntimeFunction::SetContains,
+                    vec![container.value, bits],
+                    span,
+                )
+                .value
+            }
             TyirType::BYTES => {
                 let function = if item.ty == TyirType::Int {
                     RuntimeFunction::BytesContainsByte
@@ -161,6 +170,17 @@ impl FunctionLowerer<'_> {
                 return self
                     .call_runtime(
                         RuntimeFunction::ListCompare,
+                        vec![left.value, right.value, code],
+                        span,
+                    )
+                    .value;
+            }
+            // Sets order as subsets and supersets, which the runtime tests.
+            (TyirType::SET, _) => {
+                let code = self.constant(Constant::Int(comparison.code().to_string()), span);
+                return self
+                    .call_runtime(
+                        RuntimeFunction::SetCompare,
                         vec![left.value, right.value, code],
                         span,
                     )

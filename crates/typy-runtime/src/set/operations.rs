@@ -61,19 +61,22 @@ pub unsafe extern "C" fn typy_rt_set_discard(set: *mut SetObject, item: u64) {
     }
 }
 
-/// Returns a `KeyError` whose message is the `repr` of `item`, as CPython prints a missing key,
-/// or the exception making the `repr` raised.
+/// Returns a `KeyError` whose message is the `repr` of `item`, as CPython prints a missing key.
+/// When the `repr` raises, as for an `int` of more than 4300 digits, the message is the one
+/// CPython prints for an exception it cannot convert to text.
 ///
 /// # Safety
 ///
 /// `item` is a live item of `item_type`.
 pub(crate) unsafe fn key_error(item_type: ItemType, item: u64) -> *mut ExceptionObject {
-    // SAFETY: the caller passes a live item.
-    let text = unsafe { item_type.repr(item) };
-    if text.exception.is_null() {
-        raise_with_message(ExceptionKind::KeyError, text.value)
-    } else {
-        text.exception
+    // SAFETY: the caller passes a live item; the exception of a failed `repr` is owned here.
+    unsafe {
+        let text = item_type.repr(item);
+        if text.exception.is_null() {
+            return raise_with_message(ExceptionKind::KeyError, text.value);
+        }
+        crate::refcount::typy_rt_decrement(text.exception.cast());
+        raise(ExceptionKind::KeyError, "<exception str() failed>")
     }
 }
 

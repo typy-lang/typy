@@ -76,6 +76,7 @@ impl LoopSource {
         match self {
             Self::Items(sequence) | Self::Reversed(sequence) => match &sequence.ty {
                 Type::Bytes => Type::Int,
+                Type::Set(item) => item.as_ref().clone(),
                 other => other
                     .sequence_item()
                     .cloned()

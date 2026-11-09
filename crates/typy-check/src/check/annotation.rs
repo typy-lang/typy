@@ -13,75 +13,21 @@ pub(crate) fn annotation_type(annotation: &Expr, diagnostics: &mut Diagnostics) 
             value: Constant::None,
             ..
         } => Type::NoneType,
-        Expr::Name { id, span } => {
-            match id.as_str() {
-                "int" => Type::Int,
-                "float" => Type::Float,
-                "bool" => Type::Bool,
-                "str" => Type::Str,
-                "bytes" => Type::Bytes,
-                "Any" | "object" => {
-                    diagnostics.push(
-                        Diagnostic::new(
-                            DiagnosticCode::error(403),
-                            *span,
-                            format!("`{id}` does not give the value one type"),
-                        )
-                        .with_rule(RuleId::TYP_10),
-                    );
-                    Type::Error
-                }
-                "tuple" => {
-                    diagnostics.push(
-                        Diagnostic::new(
-                            DiagnosticCode::error(408),
-                            *span,
-                            "a `tuple` annotation names the type of each item, such as `tuple[int, str]`",
-                        )
-                        .with_rule(RuleId::TYP_06),
-                    );
-                    Type::Error
-                }
-                "list" => {
-                    diagnostics.push(
-                        Diagnostic::new(
-                            DiagnosticCode::error(408),
-                            *span,
-                            "a `list` annotation names the type of its items, such as `list[int]`",
-                        )
-                        .with_rule(RuleId::TYP_06),
-                    );
-                    Type::Error
-                }
-                "dict" | "set" => {
-                    diagnostics.push(
-                        Diagnostic::new(
-                            DiagnosticCode::error(201),
-                            *span,
-                            format!("`{id}` annotations are planned for TyPy 0.2 (TYP-06)"),
-                        )
-                        .with_rule(RuleId::TYP_06),
-                    );
-                    Type::Error
-                }
-                _ => {
-                    diagnostics.push(
-                    Diagnostic::new(
-                        DiagnosticCode::error(205),
-                        *span,
-                        format!("`{id}` is not a type TyPy 0.1 knows; use int, float, bool, str or None"),
-                    )
-                    .with_rule(RuleId::STD_04),
-                );
-                    Type::Error
-                }
-            }
-        }
+        Expr::Name { id, span } => named_type(id, *span, diagnostics),
         Expr::Subscript { value, index, .. } if matches!(value.as_ref(), Expr::Name { id, .. } if id == "tuple") => {
             tuple_annotation(index, diagnostics)
         }
         Expr::Subscript { value, index, .. } if matches!(value.as_ref(), Expr::Name { id, .. } if id == "list") => {
             Type::List(Box::new(annotation_type(index, diagnostics)))
+        }
+        Expr::Subscript { value, index, .. } if matches!(value.as_ref(), Expr::Name { id, .. } if id == "set") =>
+        {
+            let item = annotation_type(index, diagnostics);
+            if !item.is_hashable() {
+                diagnostics.push(unhashable(&item, index.span()));
+                return Type::Error;
+            }
+            Type::Set(Box::new(item))
         }
         other => {
             diagnostics.push(
@@ -95,6 +41,100 @@ pub(crate) fn annotation_type(annotation: &Expr, diagnostics: &mut Diagnostics) 
             Type::Error
         }
     }
+}
+
+/// Returns the type a bare name names: a scalar, or an error for a name that is not a type or
+/// needs its item types.
+fn named_type(id: &str, span: typy_diagnostics::Span, diagnostics: &mut Diagnostics) -> Type {
+    match id {
+        "int" => Type::Int,
+        "float" => Type::Float,
+        "bool" => Type::Bool,
+        "str" => Type::Str,
+        "bytes" => Type::Bytes,
+        "Any" | "object" => {
+            diagnostics.push(
+                Diagnostic::new(
+                    DiagnosticCode::error(403),
+                    span,
+                    format!("`{id}` does not give the value one type"),
+                )
+                .with_rule(RuleId::TYP_10),
+            );
+            Type::Error
+        }
+        "tuple" => {
+            diagnostics.push(
+                Diagnostic::new(
+                    DiagnosticCode::error(408),
+                    span,
+                    "a `tuple` annotation names the type of each item, such as `tuple[int, str]`",
+                )
+                .with_rule(RuleId::TYP_06),
+            );
+            Type::Error
+        }
+        "list" => {
+            diagnostics.push(
+                Diagnostic::new(
+                    DiagnosticCode::error(408),
+                    span,
+                    "a `list` annotation names the type of its items, such as `list[int]`",
+                )
+                .with_rule(RuleId::TYP_06),
+            );
+            Type::Error
+        }
+        "set" => {
+            diagnostics.push(
+                Diagnostic::new(
+                    DiagnosticCode::error(408),
+                    span,
+                    "a `set` annotation names the type of its items, such as `set[int]`",
+                )
+                .with_rule(RuleId::TYP_06),
+            );
+            Type::Error
+        }
+        "dict" => {
+            diagnostics.push(
+                Diagnostic::new(
+                    DiagnosticCode::error(201),
+                    span,
+                    "`dict` annotations are planned for TyPy 0.2 (TYP-06)",
+                )
+                .with_rule(RuleId::TYP_06),
+            );
+            Type::Error
+        }
+        _ => {
+            diagnostics.push(
+                Diagnostic::new(
+                    DiagnosticCode::error(205),
+                    span,
+                    format!(
+                        "`{id}` is not a type TyPy 0.1 knows; use int, float, bool, str or None"
+                    ),
+                )
+                .with_rule(RuleId::STD_04),
+            );
+            Type::Error
+        }
+    }
+}
+
+/// Returns the error for an item of a set, or a key of a dict, whose type has no hash.
+pub(crate) fn unhashable(item: &Type, span: typy_diagnostics::Span) -> Diagnostic {
+    Diagnostic::new(
+        DiagnosticCode::error(413),
+        span,
+        format!(
+            "{} cannot be an item of a set, because it has no hash",
+            item.with_article()
+        ),
+    )
+    .with_rule(RuleId::DAT_10)
+    .with_help("a list or a set changes, so it has no hash; use a tuple of its items")
 }
 
 /// Returns the type `tuple[...]` names: one type per item, `tuple[()]` for the empty tuple. A

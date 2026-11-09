@@ -31,7 +31,6 @@ pub(super) fn feature(kind: NodeKind) -> Feature {
     match kind {
         NodeKind::ClassDef => planned("classes", "0.2", RuleId::CLS_01),
         NodeKind::Dict => planned("dicts", "0.2", RuleId::DAT_09),
-        NodeKind::Set => planned("sets", "0.2", RuleId::DAT_10),
         NodeKind::ListComp | NodeKind::SetComp | NodeKind::DictComp => {
             planned("comprehensions", "0.2", RuleId::EXP_12)
         }

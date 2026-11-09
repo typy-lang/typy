@@ -1170,3 +1170,69 @@ fn bytes_methods_take_bytes_and_give_bytes() {
         "a: list[bytes] = b'a b'.split() + b'a,b'.rsplit(b',', 1) + b'a\\nb'.splitlines()\nb: tuple[bytes, bytes, bytes] = b'k=v'.partition(b'=')\nc: bytes = b'-'.join(a) + b'x'.strip(None) + b'x'.upper() + b'x'.center(3, b'*')\nd: int = b'abc'.find(b'b')\ne: bool = b'a'.startswith((b'a',)) and b'a'.isalpha()\nf: str = b'a'.hex()\n",
     );
 }
+
+#[test]
+fn set_rules_give_their_codes() {
+    let cases: &[(&str, &[&str])] = &[
+        ("s = {[1], [2]}\n", &["E0413"]),
+        ("s = set()\n", &["E0410"]),
+        ("s: set[list[int]] = set()\n", &["E0413"]),
+        ("s: set = set()\n", &["E0408"]),
+        ("s = {1, 'a'}\n", &["E0409"]),
+        ("s = {1, 2} + {3}\n", &["E0401"]),
+        ("s = {1.5} | {1}\n", &["E0401"]),
+        ("s = {1} < [1]\n", &["E0407"]),
+        ("s = {1} == {'a'}\n", &["E0407"]),
+        ("s = set([[1]])\n", &["E0413"]),
+        ("s = {(1, [2])}\n", &["E0413"]),
+        ("s = set(1, 2)\n", &["E0404"]),
+        ("s = set(x=1)\n", &["E0404"]),
+        ("s = set(5)\n", &["E0411"]),
+        ("s = {1}.push(2)\n", &["E0412"]),
+        ("s = {1}\nprint(s[0])\n", &["E0401"]),
+        ("s = {1}\nprint('a' in s)\n", &["E0407"]),
+        ("for x in reversed({1}):\n    pass\n", &["E0411"]),
+        ("s = {1}\ns.add('a')\n", &["E0404"]),
+        ("s = {1}\ns.update({'a'})\n", &["E0409"]),
+        ("x: dict[str, int] = 1\n", &["E0201"]),
+        ("x: dict = 1\n", &["E0201"]),
+        ("s: set[Thing] = {1}\n", &["E0205"]),
+        ("s: set[Thing] = set()\n", &["E0205"]),
+        ("s = set(missing)\n", &["E0205"]),
+        ("s = {1}\nt = {2.5}\nprint(s == t)\n", &["E0407"]),
+        ("s = {1}\nt = {2.5}\nprint(s <= t)\n", &["E0407"]),
+    ];
+    for (source, expected) in cases {
+        assert_eq!(&rejected(source), expected, "\n{source}");
+    }
+}
+
+#[test]
+fn sets_have_python_s_types() {
+    let source = "\
+def f(values: set[int]) -> set[int]:
+    return values | {0}
+a = f({1, 2}) & set([2, 3]) - {9} ^ f(set())
+b: set[tuple[int, ...]] = {(1, 2), (3,)}
+c = len(a) + sum(a) + max(a) + a.pop()
+d = a < {1} and 2 in a and a.issubset(a) and bool(a) and sorted(a) == list(a)
+e: set[float] = set()
+e |= {1.5}
+for item in a:
+    c += item
+g = set('ab').union({'c'}).copy()
+";
+    let (_directory, project) = load(source);
+    let program = TypeChecker::check(&project).expect("the program is accepted");
+    let dump = typy_check::dump(&program, &project);
+    for node in [
+        "Set : set[int]",
+        "SetOf : set[int]",
+        "SetOf : set[str]",
+        "Method pop",
+        "Method union",
+        "Set : set[tuple[int, ...]]",
+    ] {
+        assert!(dump.contains(node), "{node} missing from\n{dump}");
+    }
+}

@@ -140,7 +140,7 @@ fn expression(expression_value: &TypedExpr, callees: &mut BTreeSet<FunctionId>) 
             expression(list, callees);
             expression(index, callees);
         }
-        TypedExprKind::ListOf(source) => {
+        TypedExprKind::ListOf(source) | TypedExprKind::SetOf(source) => {
             for value in source.expressions() {
                 expression(value, callees);
             }
@@ -177,6 +177,7 @@ fn expression(expression_value: &TypedExpr, callees: &mut BTreeSet<FunctionId>) 
         TypedExprKind::BoolOp { values, .. }
         | TypedExprKind::Tuple(values)
         | TypedExprKind::List(values)
+        | TypedExprKind::Set(values)
         | TypedExprKind::Builtin {
             arguments: values, ..
         } => {
