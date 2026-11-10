@@ -1032,7 +1032,7 @@ borrowed argument, such as an item read from a list or an attribute, gets
 a reference of the caller's own, released after the call, since the callee
 could free it by changing the container. A `return` of a variable hands its
 slot's reference to the caller and skips that slot when the others are
-released. Moving a variable at its last use in other places is MEM-06,
+released. Moving a variable at its last use in other places is MEM-09,
 planned for 0.3. `EscapeAnalysis` is planned for 0.4 and `CycleAnalysis`
 for 1.0.
 

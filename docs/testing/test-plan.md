@@ -388,10 +388,10 @@ that the specification does not define.
 | MEM-03 | 0.4 | UT, IT | `typy-runtime` unit tests; `tests/conformance/mem/MEM-03_*.py` under sanitizers |
 | MEM-04 | 0.2 | UT, IT | `typy-lower` lowering tests of the counting; `tests/conformance/mem/MEM-04_*.py` under sanitizers |
 | MEM-05 | 1.0 | UT, IT | `typy-runtime` unit tests; `tests/conformance/mem/MEM-05_*.py` under sanitizers |
-| MEM-06 | 0.3 | UT, IT | `typy-lower` lowering tests of the counting; `tests/conformance/mem/MEM-06_*.py` under sanitizers |
 | MEM-06 | 1.0 | UT, IT | `typy-runtime` unit tests; `tests/conformance/mem/MEM-06_*.py` under sanitizers |
 | MEM-07 | 1.0 | UT, IT | `typy-runtime` unit tests; `tests/conformance/mem/MEM-07_*.py` under sanitizers |
 | MEM-08 | 0.5 | UT, IT | `typy-runtime` unit tests; `tests/conformance/mem/MEM-08_*.py` under sanitizers |
+| MEM-09 | 0.3 | UT, IT | `typy-lower` lowering tests of the counting; `tests/conformance/mem/MEM-09_*.py` under sanitizers |
 | FFI-01 | 0.5 | IT | `tests/conformance/ffi/FFI-01_*.py` |
 | FFI-02 | 0.5 | IT | `tests/conformance/ffi/FFI-02_*.py` |
 | FFI-03 | 0.5 | IT | `tests/conformance/ffi/FFI-03_*.py` |
