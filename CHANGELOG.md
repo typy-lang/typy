@@ -6,6 +6,8 @@ All notable changes to TyPy are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-11-10
+
 ### Added
 
 - Tuples: displays such as `(1, "a")`, annotations such as
@@ -173,7 +175,6 @@ All notable changes to TyPy are recorded here. The format follows
   `next` for 0.3 (CST-09); an f-string formats a value now. An annotation
   of a generic type other than `list`, `dict`, `set`, `tuple` and `type`,
   such as `frozenset[int]`, is reported as not provided.
-
 - The runtime's size budget (NFR-02) is measured on the runtime a hello
   world links, 10.3 KB, rather than on the whole runtime archive, so the
   runtime can hold the built-in collections without enlarging programs
@@ -299,5 +300,6 @@ compiler needs glibc 2.39 or later and a C toolchain.
   non-ASCII text, checks that every requirement has a row in the test plan,
   and checks that every diagram is rendered from its source.
 
-[Unreleased]: https://github.com/typy-lang/typy/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/typy-lang/typy/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/typy-lang/typy/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/typy-lang/typy/releases/tag/v0.1.0

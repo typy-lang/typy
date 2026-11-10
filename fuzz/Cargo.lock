@@ -713,7 +713,7 @@ checksum = "fd3ca314f692efd6c868f8408f53fe444634a845f96c028b97d35f6a1f79f0ee"
 
 [[package]]
 name = "typy-check"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "typy-diagnostics",
  "typy-source",
@@ -721,7 +721,7 @@ dependencies = [
 
 [[package]]
 name = "typy-diagnostics"
-version = "0.1.0"
+version = "0.2.0"
 
 [[package]]
 name = "typy-fuzz"
@@ -737,7 +737,7 @@ dependencies = [
 
 [[package]]
 name = "typy-lower"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "typy-check",
  "typy-diagnostics",
@@ -747,7 +747,7 @@ dependencies = [
 
 [[package]]
 name = "typy-source"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "camino",
  "ruff_python_ast",
@@ -758,7 +758,7 @@ dependencies = [
 
 [[package]]
 name = "typy-tyir"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "typy-diagnostics",
 ]
