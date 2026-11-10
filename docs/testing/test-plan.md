@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy test plan |
-| Version | 0.20 |
+| Version | 0.21 |
 | Status | Draft |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-10 |
@@ -334,6 +334,7 @@ that the specification does not define.
 | CST-06 | 0.5 | IT | `tests/conformance/cst/CST-06_*.py` |
 | CST-07 | 0.5 | IT | `tests/conformance/cst/CST-07_*.py` |
 | CST-08 | 0.3 | IT | `tests/conformance/cst/CST-08_*.py` |
+| CST-09 | 0.3 | IT | `tests/conformance/cst/CST-09_*.py` |
 | FUN-01 | 0.1 | IT | `tests/conformance/fun/FUN-01_*.py` |
 | FUN-02 | 0.1 | IT | `tests/conformance/fun/FUN-02_*.py` |
 | FUN-03 | 1.0 | IT | `tests/conformance/fun/FUN-03_*.py` |
@@ -381,6 +382,7 @@ that the specification does not define.
 | LIB-07 | 1.0 | IT | `tests/conformance/lib/LIB-07_*.py` |
 | LIB-08 | 0.3 | IT | `tests/conformance/lib/LIB-08_*.py` |
 | LIB-09 | 0.1 | IT | `tests/conformance/lib/LIB-09_*.py` |
+| LIB-10 | 0.3 | IT | `tests/conformance/lib/LIB-10_*.py` |
 | MEM-01 | 0.1 | UT, IT | `typy-runtime` unit tests; `tests/conformance/mem/MEM-01_*.py` under sanitizers |
 | MEM-02 | 0.2 | UT, IT | `typy-runtime` list unit tests; `tests/conformance/dat/DAT-07_*.py`, which name MEM-02, also under the sanitizers |
 | MEM-03 | 0.4 | UT, IT | `typy-runtime` unit tests; `tests/conformance/mem/MEM-03_*.py` under sanitizers |

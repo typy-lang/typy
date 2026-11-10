@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy software requirements specification |
-| Version | 1.27 |
+| Version | 1.28 |
 | Status | Approved |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-10 |
@@ -254,6 +254,7 @@ formatter applies; Ruff's formatter is the project's recommendation.
 | CST-06 | `match` shall be accepted with literal, capture, wildcard, value, sequence, mapping and class patterns, guards and `\|` alternatives. | M | 0.5 | 8.6 |
 | CST-07 | A `match` on an enumeration-like union of classes shall report a warning when cases are missing. | S | 0.5 | 8.6 |
 | CST-08 | `for` shall iterate over any class with `__iter__` and `__next__`, and end when `__next__` raises `StopIteration` (OI-17). | M | 0.3 | 8.3 |
+| CST-09 | `iter` and `next`, with and without a default, shall be available for the built-in iterables. | S | 0.3 | 8.3 |
 
 ### 3.9 Functions (FUN)
 
@@ -331,6 +332,7 @@ formatter applies; Ruff's formatter is the project's recommendation.
 | LIB-07 | `os.environ`, `os.path`, `time` and `random` shall be available. | S | 1.0 |
 | LIB-08 | Importing a standard library module that TyPy does not provide shall be rejected with the list of modules it provides. | M | 0.3 |
 | LIB-09 | Each standard library module TyPy provides shall be TyPy's own implementation, with the names and results the Python library documentation defines. | M | 0.1 |
+| LIB-10 | `str % values`, printf-style formatting with a value, a tuple of values or a dict of named values, shall be accepted with Python's results. | S | 0.3 |
 
 ### 3.15 Memory management (MEM)
 

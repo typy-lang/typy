@@ -114,9 +114,10 @@ impl BodyChecker<'_> {
                     Diagnostic::new(
                         DiagnosticCode::error(201),
                         span,
-                        "formatting strings with `%` is planned for TyPy 0.2 (LIB-03)",
+                        "formatting strings with `%` is planned for TyPy 0.3 (LIB-10)",
                     )
-                    .with_rule(RuleId::LIB_03),
+                    .with_rule(RuleId::LIB_10)
+                    .with_help("write an f-string, such as `f\"{count} items\"`"),
                 );
                 Error
             }

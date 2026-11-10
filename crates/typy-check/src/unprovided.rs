@@ -23,8 +23,7 @@ pub(crate) fn unprovided(name: &str) -> Option<Unprovided> {
         Unprovided::Planned { release, rule }
     }
     match name {
-        "dict" | "set" => Some(planned("0.2", RuleId::LIB_02)),
-        "iter" | "next" => Some(planned("0.2", RuleId::CST_03)),
+        "iter" | "next" => Some(planned("0.3", RuleId::CST_09)),
         "input" | "open" => Some(planned("0.3", RuleId::LIB_04)),
         "isinstance" | "issubclass" => Some(planned("0.4", RuleId::CLS_09)),
         "property" | "staticmethod" | "classmethod" | "super" => {
@@ -214,8 +213,7 @@ mod tests {
     #[test]
     fn later_builtins_name_their_release_and_rule() {
         let cases = [
-            ("dict", "0.2", RuleId::LIB_02),
-            ("next", "0.2", RuleId::CST_03),
+            ("next", "0.3", RuleId::CST_09),
             ("open", "0.3", RuleId::LIB_04),
             ("ValueError", "0.3", RuleId::EXC_01),
             ("KeyboardInterrupt", "0.3", RuleId::EXC_01),

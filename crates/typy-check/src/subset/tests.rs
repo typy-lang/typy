@@ -186,10 +186,6 @@ fn later_features_name_their_release_and_rule() {
             "`nonlocal` statements are planned for TyPy 1.0 (SMT-09)",
         ),
         (
-            "def f(x: frozenset[int]) -> None:\n    pass\n",
-            "generic annotations such as `frozenset[int]` are planned for TyPy 0.2 (TYP-06)",
-        ),
-        (
             "def f(x: int | str) -> None:\n    pass\n",
             "union annotations such as `int | str` are planned for TyPy 0.4 (TYP-14)",
         ),
@@ -238,6 +234,10 @@ fn excluded_features_say_they_cannot_be_compiled() {
         (
             "x = a @ b\n",
             "the `@` operator cannot be compiled by TyPy with CPython's meaning",
+        ),
+        (
+            "def f(x: frozenset[int]) -> None:\n    pass\n",
+            "generic annotations other than `list`, `dict`, `set`, `tuple` and `type`, such as `frozenset[int]`, cannot be compiled by TyPy with CPython's meaning",
         ),
         (
             "x = ...\n",

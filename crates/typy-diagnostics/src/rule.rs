@@ -39,6 +39,8 @@ impl RuleId {
     pub const CST_06: Self = Self("CST-06");
     /// `for` shall iterate over any class with `__iter__` and `__next__`, and end when `__next__` raises `StopIteration` (OI-17).
     pub const CST_08: Self = Self("CST-08");
+    /// `iter` and `next`, with and without a default, shall be available for the built-in iterables.
+    pub const CST_09: Self = Self("CST-09");
     /// `bool` shall have the values `True` and `False`.
     pub const DAT_03: Self = Self("DAT-03");
     /// `str` shall be an immutable sequence of Unicode code points. `len()` and indexing shall count code points, and indexing shall return a `str` of length 1.
@@ -127,6 +129,8 @@ impl RuleId {
     pub const LIB_04: Self = Self("LIB-04");
     /// Importing a standard library module that TyPy does not provide shall be rejected with the list of modules it provides.
     pub const LIB_08: Self = Self("LIB-08");
+    /// `str % values`, printf-style formatting with a value, a tuple of values or a dict of named values, shall be accepted with Python's results.
+    pub const LIB_10: Self = Self("LIB-10");
     /// `lazy import` and `lazy from ... import` are accepted at module level when the Python floor is 3.15 or later.
     pub const MOD_06: Self = Self("MOD-06");
     /// The compiler shall not crash on any input; an internal error shall be reported as `E9xxx` with a hint to report it.
@@ -192,6 +196,7 @@ impl RuleId {
         Self::CST_05,
         Self::CST_06,
         Self::CST_08,
+        Self::CST_09,
         Self::DAT_03,
         Self::DAT_05,
         Self::DAT_06,
@@ -236,6 +241,7 @@ impl RuleId {
         Self::LIB_03,
         Self::LIB_04,
         Self::LIB_08,
+        Self::LIB_10,
         Self::MOD_06,
         Self::NFR_09,
         Self::SMT_02,

@@ -161,6 +161,11 @@ All notable changes to TyPy are recorded here. The format follows
 
 ### Changed
 
+- `%` formatting of strings is planned for 0.3 (LIB-10), and `iter` and
+  `next` for 0.3 (CST-09); an f-string formats a value now. An annotation
+  of a generic type other than `list`, `dict`, `set`, `tuple` and `type`,
+  such as `frozenset[int]`, is reported as not provided.
+
 - The runtime's size budget (NFR-02) is measured on the runtime a hello
   world links, 10.3 KB, rather than on the whole runtime archive, so the
   runtime can hold the built-in collections without enlarging programs
