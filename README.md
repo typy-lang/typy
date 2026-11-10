@@ -4,7 +4,8 @@ TyPy is an independent implementation of Python that compiles a strict,
 typed subset of standard Python ahead of time to small native executables
 through LLVM.
 
-Documentation: [docs/index.md](docs/index.md). Source:
+Documentation: [docs/user/index.md](docs/user/index.md) for users, and
+[docs/index.md](docs/index.md) for the engineering documents. Source:
 <https://github.com/typy-lang/typy>.
 
 ## Features

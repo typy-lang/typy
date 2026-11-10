@@ -144,17 +144,17 @@ pub const CODES: &[CodeInfo] = &[
     active(407, "comparison between unsupported types", RuleId::EXP_06),
     active(
         408,
-        "`tuple` or `list` annotation without its item types",
+        "`tuple`, `list`, `set` or `dict` annotation without its item types",
         RuleId::TYP_06,
     ),
     active(
         409,
-        "list display with items of different types",
+        "list, set or dict display with items of different types",
         RuleId::DAT_07,
     ),
     active(
         410,
-        "empty list display without an annotation",
+        "empty collection without an annotation that names its item types",
         RuleId::TYP_05,
     ),
     active(

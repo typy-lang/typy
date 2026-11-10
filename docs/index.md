@@ -3,7 +3,8 @@
 TyPy is an independent implementation of Python that compiles a strict
 subset of standard Python ahead of time to native code through LLVM. The
 engineering documents below are written in order, and each builds on the one
-before.
+before. The [user documentation](user/index.md) explains how to install
+TyPy and what each release accepts.
 
 | Order | Document | Status |
 | --- | --- | --- |
@@ -12,7 +13,7 @@ before.
 | 3 | [Use case model](modeling/use-case-model.md) | Approved |
 | 4 | [Domain model](modeling/domain-model.md) | Approved |
 | 5 | [Software architecture](architecture/architecture.md) | Approved |
-| 6 | [Architecture decision records](adr/index.md) | Seven records, Accepted |
+| 6 | [Architecture decision records](adr/index.md) | Twelve records, Accepted |
 | 7 | [Detailed design](design/detailed-design.md) | Approved |
 | 8 | [Test plan](testing/test-plan.md) | Draft |
 | 9 | [Development guide](development/development-guide.md) | Draft |

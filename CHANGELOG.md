@@ -162,6 +162,10 @@ All notable changes to TyPy are recorded here. The format follows
   reference, and `return name` moves the variable's value to the caller
   (MEM-04). An argument read from a container is kept alive for the call,
   so a callee that empties the container still sees it, as in CPython.
+- User documentation in `docs/user`: getting started, a language guide with
+  one page per area of the specification, and a troubleshooting page for
+  every diagnostic code. Every Python sample is checked by the test suite,
+  and an accepted one must print what CPython prints (DOC-01 to DOC-04).
 
 ### Changed
 

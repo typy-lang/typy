@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy test plan |
-| Version | 0.22 |
+| Version | 0.23 |
 | Status | Draft |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-10 |
@@ -408,8 +408,8 @@ that the specification does not define.
 | DIA-07 | 0.3 | UT, IT | `typy-diagnostics` unit tests; `tests/golden/diagnostics/DIA-07_*` |
 | DOC-01 | 0.2 | Static | `make docs-lint`; review against the release |
 | DOC-02 | 0.2 | Static, IT | `make docs-lint`; every rule ID on the pages is checked to exist by `make traceability`; samples by DOC-04 |
-| DOC-03 | 0.2 | UT | A test lists every active code of the registry and fails when the troubleshooting page has no section for one |
-| DOC-04 | 0.2 | IT | A test extracts every Python sample from `docs/user/`, checks it with `Pipeline::check` and, for an accepted sample, runs it and compares with CPython |
+| DOC-03 | 0.2 | IT | `crates/typy-conformance/tests/documentation.rs` lists every active code of the registry and fails when `docs/user/troubleshooting.md` has no section for one |
+| DOC-04 | 0.2 | IT | `crates/typy-conformance/tests/documentation.rs` extracts every `python` sample from `docs/user/` with the outcome its `typy-expect` comment states, and judges it as a conformance test: a rejected sample by its code and place, an accepted one by running it and comparing with CPython |
 | NFR-01 | 0.1 | IT | `crates/typy-driver/tests/size.rs`: hello world, `--release-small`, linked statically with musl, run, and under 100 KB (75 KB in 0.1, 17 KB stripped) |
 | NFR-02 | 0.1 | Static | `make runtime-size`, `scripts/check-runtime-size.py`: a hello world built with `--release-small` and linked for each target with a link map; the runtime sections linked are under 48 KB, and under 32 KB less the large-integer sections (10.3 KB and 10.3 KB in 0.2, ADR-0009) |
 | NFR-03 | 1.0 | Benchmark | `tests/bench/` suite against its C versions, geometric mean within 1.5 times |
