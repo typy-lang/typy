@@ -30,6 +30,22 @@ pub enum Constant {
     Ellipsis,
 }
 
+/// One `for target in iter if condition ...` clause of a comprehension, as CPython's
+/// `ast.comprehension`.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Comprehension {
+    /// What each value is bound to.
+    pub target: Expr,
+    /// What the clause goes over.
+    pub iter: Expr,
+    /// The `if` conditions, in order.
+    pub ifs: Vec<Expr>,
+    /// True for `async for`.
+    pub is_async: bool,
+    /// Where the clause is.
+    pub span: Span,
+}
+
 /// A keyword argument, or `**mapping` when `name` is `None`.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Keyword {
@@ -95,6 +111,68 @@ pub enum Expr {
         id: String,
         span: Span,
     },
+    /// An f-string: its literal text and replacement fields, in order, the parts of an
+    /// implicit concatenation joined (LEX-07).
+    FString {
+        parts: Vec<FStringPart>,
+        span: Span,
+    },
+    /// An annotation written as a string, such as `"Node | None"`, with the expression the
+    /// string holds; only annotations are read this way.
+    Quoted {
+        annotation: Box<Expr>,
+        span: Span,
+    },
+    Tuple {
+        elements: Vec<Expr>,
+        span: Span,
+    },
+    List {
+        elements: Vec<Expr>,
+        span: Span,
+    },
+    /// A dict display, `{k: v}`, as CPython's `ast.Dict`: each key with its value, and a key of
+    /// `None` for `**mapping`.
+    Dict {
+        keys: Vec<Option<Expr>>,
+        values: Vec<Expr>,
+        span: Span,
+    },
+    /// `[element for ...]`.
+    ListComp {
+        element: Box<Expr>,
+        generators: Vec<Comprehension>,
+        span: Span,
+    },
+    /// `{element for ...}`.
+    SetComp {
+        element: Box<Expr>,
+        generators: Vec<Comprehension>,
+        span: Span,
+    },
+    /// `{key: value for ...}`.
+    DictComp {
+        key: Box<Expr>,
+        value: Box<Expr>,
+        generators: Vec<Comprehension>,
+        span: Span,
+    },
+    /// A set display, `{a, b}`; `{}` is an empty dict, so a set display always has items.
+    Set {
+        elements: Vec<Expr>,
+        span: Span,
+    },
+    Attribute {
+        value: Box<Expr>,
+        attribute: Identifier,
+        span: Span,
+    },
+    Slice {
+        lower: Option<Box<Expr>>,
+        upper: Option<Box<Expr>>,
+        step: Option<Box<Expr>>,
+        span: Span,
+    },
     Other {
         kind: NodeKind,
         span: Span,
@@ -115,7 +193,44 @@ impl Expr {
             | Self::Constant { span, .. }
             | Self::Subscript { span, .. }
             | Self::Name { span, .. }
+            | Self::Quoted { span, .. }
+            | Self::FString { span, .. }
+            | Self::Tuple { span, .. }
+            | Self::List { span, .. }
+            | Self::Set { span, .. }
+            | Self::Dict { span, .. }
+            | Self::ListComp { span, .. }
+            | Self::SetComp { span, .. }
+            | Self::DictComp { span, .. }
+            | Self::Attribute { span, .. }
+            | Self::Slice { span, .. }
             | Self::Other { span, .. } => *span,
         }
     }
+}
+
+/// One piece of an f-string or of a format specification.
+#[derive(Clone, Debug, PartialEq)]
+pub enum FStringPart {
+    /// Literal text, with its escapes already applied and `{{` and `}}` already halved.
+    Literal(String),
+    /// A replacement field, `{value!conversion:spec}`.
+    Field(Box<ReplacementField>),
+}
+
+/// A replacement field of an f-string.
+#[derive(Clone, Debug, PartialEq)]
+pub struct ReplacementField {
+    /// The expression whose value is formatted.
+    pub value: Expr,
+    /// For a field such as `{x = }`, the text from the brace through the `=`, written before the
+    /// value.
+    pub debug: Option<String>,
+    /// The conversion: `s`, `r` or `a`.
+    pub conversion: Option<char>,
+    /// The format specification after `:`, itself literal text and replacement fields; `None`
+    /// when the field has no `:`.
+    pub spec: Option<Vec<FStringPart>>,
+    /// Where the field is, braces included.
+    pub span: Span,
 }

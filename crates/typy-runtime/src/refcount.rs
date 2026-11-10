@@ -1,39 +1,57 @@
 //! Reference counting of heap objects (ADR-0001, MEM-01).
 
-use crate::header::{BIG_INT_TYPE_ID, EXCEPTION_TYPE_ID, IMMORTAL, ObjectHeader, STR_TYPE_ID};
+use crate::header::{
+    BIG_INT_TYPE_ID, BYTES_TYPE_ID, DICT_TYPE_ID, DICT_VIEW_TYPE_ID, EXCEPTION_TYPE_ID, IMMORTAL,
+    INSTANCE_TYPE_ID, LIST_TYPE_ID, ObjectHeader, SET_TYPE_ID, STR_TYPE_ID, TUPLE_TYPE_ID,
+};
 
-/// Adds a reference to an object.
+/// Adds a reference to an object; the null address, `None` of an optional object, has none.
 ///
 /// # Safety
 ///
-/// `object` points to a live object with a valid header.
+/// `object` is null or points to a live object with a valid header.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn typy_rt_increment(object: *mut ObjectHeader) {
+    if object.is_null() {
+        return;
+    }
+    // An immortal object may be a static in read-only memory, so the count is read through the
+    // pointer and written only when it is not immortal.
     // SAFETY: the caller passes a live object.
-    let header = unsafe { &mut *object };
-    if header.reference_count != IMMORTAL {
-        // A count that reaches the immortal value keeps the object alive for good, which is safe.
-        header.reference_count += 1;
+    unsafe {
+        let count = (*object).reference_count;
+        if count != IMMORTAL {
+            // A count that reaches the immortal value keeps the object alive for good, which is
+            // safe.
+            (*object).reference_count = count + 1;
+        }
     }
 }
 
-/// Drops a reference to an object, and frees it when it was the last.
+/// Drops a reference to an object, and frees it when it was the last; the null address, `None`
+/// of an optional object, has none.
 ///
 /// # Safety
 ///
-/// `object` points to a live object with a valid header, and the caller owns the reference it drops.
+/// `object` is null or points to a live object with a valid header, and the caller owns the
+/// reference it drops.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn typy_rt_decrement(object: *mut ObjectHeader) {
-    // SAFETY: the caller passes a live object it holds a reference to.
-    let header = unsafe { &mut *object };
-    match header.reference_count {
-        IMMORTAL => {}
-        1 => {
-            let type_id = header.type_id;
-            // SAFETY: this was the last reference, so nothing else uses the object.
-            unsafe { destroy(object, type_id) };
+    if object.is_null() {
+        return;
+    }
+    // SAFETY: the caller passes a live object it holds a reference to; an immortal one is never
+    // written, as in `typy_rt_increment`.
+    unsafe {
+        match (*object).reference_count {
+            IMMORTAL => {}
+            1 => {
+                let type_id = (*object).type_id;
+                // This was the last reference, so nothing else uses the object.
+                destroy(object, type_id);
+            }
+            count => (*object).reference_count = count - 1,
         }
-        count => header.reference_count = count - 1,
     }
 }
 
@@ -44,7 +62,8 @@ pub unsafe extern "C" fn typy_rt_decrement(object: *mut ObjectHeader) {
 /// A word with its lowest bit clear points to a live large integer.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn typy_rt_int_increment(word: i64) {
-    if word & 1 == 0 {
+    // The word 0 is `None` of an `int | None` (ADR-0011).
+    if word & 1 == 0 && word != 0 {
         // SAFETY: a word with its lowest bit clear is the address of a large integer.
         unsafe { typy_rt_increment(crate::int::object_of(word).cast()) };
     }
@@ -57,7 +76,8 @@ pub unsafe extern "C" fn typy_rt_int_increment(word: i64) {
 /// A word with its lowest bit clear points to a live large integer that the caller holds a reference to.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn typy_rt_int_decrement(word: i64) {
-    if word & 1 == 0 {
+    // The word 0 is `None` of an `int | None` (ADR-0011).
+    if word & 1 == 0 && word != 0 {
         // SAFETY: a word with its lowest bit clear is the address of a large integer.
         unsafe { typy_rt_decrement(crate::int::object_of(word).cast()) };
     }
@@ -66,9 +86,19 @@ pub unsafe extern "C" fn typy_rt_int_decrement(word: i64) {
 /// Frees an object whose last reference is gone, after releasing what it refers to.
 unsafe fn destroy(object: *mut ObjectHeader, type_id: u32) {
     match type_id {
-        STR_TYPE_ID | BIG_INT_TYPE_ID => crate::allocator::free(object.cast()),
+        STR_TYPE_ID | BYTES_TYPE_ID | BIG_INT_TYPE_ID => crate::allocator::free(object.cast()),
         // SAFETY: an object with the exception type ID is an `ExceptionObject`.
         EXCEPTION_TYPE_ID => unsafe { crate::exception::destroy(object.cast()) },
+        // SAFETY: an object with the list or tuple type ID is a `ListObject`.
+        LIST_TYPE_ID | TUPLE_TYPE_ID => unsafe { crate::list::destroy(object.cast()) },
+        // SAFETY: an object with the set type ID is a `SetObject`.
+        SET_TYPE_ID => unsafe { crate::set::destroy(object.cast()) },
+        // SAFETY: an object with the dict type ID is a `DictObject`.
+        DICT_TYPE_ID => unsafe { crate::dict::destroy(object.cast()) },
+        // SAFETY: an object with the view type ID is a `ViewObject`.
+        DICT_VIEW_TYPE_ID => unsafe { crate::dict::destroy_view(object.cast()) },
+        // SAFETY: an object with the instance type ID is an `InstanceObject`.
+        INSTANCE_TYPE_ID => unsafe { crate::instance::destroy(object.cast()) },
         _ => crate::libc::abort_with(b"typy runtime: an object has an unknown type\n"),
     }
 }
@@ -104,6 +134,17 @@ mod tests {
             typy_rt_decrement(object.cast());
             assert_eq!((*object).header.reference_count, 1);
             typy_rt_decrement(object.cast());
+        }
+    }
+
+    #[test]
+    fn none_of_an_optional_value_is_not_counted() {
+        // SAFETY: the null address and the word 0 stand for `None` and are never dereferenced.
+        unsafe {
+            typy_rt_increment(core::ptr::null_mut());
+            typy_rt_decrement(core::ptr::null_mut());
+            typy_rt_int_increment(0);
+            typy_rt_int_decrement(0);
         }
     }
 

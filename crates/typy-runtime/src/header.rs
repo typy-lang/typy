@@ -8,6 +8,22 @@ pub const STR_TYPE_ID: u32 = 1;
 pub const EXCEPTION_TYPE_ID: u32 = 2;
 /// The type ID of large integers.
 pub const BIG_INT_TYPE_ID: u32 = 3;
+/// The type ID of a `list`.
+pub const LIST_TYPE_ID: u32 = 4;
+/// The type ID of a `tuple[T, ...]`, a list object that is never changed after it is sealed.
+pub const TUPLE_TYPE_ID: u32 = 5;
+/// The type ID of a `bytes`: a `str` object of one byte per code point, each code point a byte.
+pub const BYTES_TYPE_ID: u32 = 6;
+/// The type ID of a `set`.
+pub const SET_TYPE_ID: u32 = 7;
+/// The type ID of a `dict`.
+pub const DICT_TYPE_ID: u32 = 8;
+/// The type ID of a view of a dict: its keys, values or items.
+pub const DICT_VIEW_TYPE_ID: u32 = 9;
+/// The type ID of a type object (ADR-0012).
+pub const TYPE_TYPE_ID: u32 = 10;
+/// The type ID of an instance of a class, whose type object follows the header (ADR-0012).
+pub const INSTANCE_TYPE_ID: u32 = 11;
 
 /// The first 8 bytes of every heap object.
 #[repr(C)]

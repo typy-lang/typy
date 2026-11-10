@@ -3,10 +3,10 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy software architecture |
-| Version | 1.4 |
+| Version | 1.5 |
 | Status | Approved |
 | Owner | typy-lang contributors |
-| Last updated | 2026-11-07 |
+| Last updated | 2026-11-08 |
 
 ## 1. Purpose
 
@@ -271,7 +271,7 @@ end-to-end tests run the `typy` executable as a subprocess.
 | Requirement | How the architecture meets it | Verified by |
 | --- | --- | --- |
 | NFR-01 binary under 100 KB | Small runtime, section garbage collection at link time, functions marked `minsize` in `--release-small` | Size check in CI |
-| NFR-02 runtime under 48 KB, core under 32 KB | `no_std` runtime without `core::fmt` (ADR-0006); modules in Python, not in the runtime (ADR-0007) | Archive size check in CI |
+| NFR-02 runtime a hello world links under 48 KB, core under 32 KB | `no_std` runtime without `core::fmt` (ADR-0006); modules in Python, not in the runtime (ADR-0007); one section per function, so programs link only what they use (ADR-0009) | Link-map size check in CI |
 | NFR-03 within 1.5 times C | Inline values, stack allocation and count elision (ADR-0001); no unwinding (ADR-0004); LLVM `-O2` | Weekly benchmark run |
 | NFR-04 and NFR-05 build time | Rust compiler, parallel stages (section 7.5), LLVM `-O0` for debug | Build-time benchmarks with budgets |
 | NFR-06 identical output | Section 7.2 | Build twice and compare in CI |
@@ -291,7 +291,7 @@ end-to-end tests run the `typy` executable as a subprocess.
 | R-01 | `ruff_python_parser` changes its API | Parser upgrades take work | One wrapper module in `typy-source`; upgrade once per minor release (C-02) |
 | R-02 | `float` text differs from CPython | Run tests fail across the board | Port the shortest round-trip algorithm and CPython's formatting rules; test against CPython on a large set of values |
 | R-03 | The oracle versions ship different Unicode databases: 15.1.0 in 3.13, 16.0.0 in 3.14 and 17.0.0 in 3.15 | `str` methods differ for new characters, and such tests are invalid | TyPy uses one Unicode version per release, the newest the oracle uses; tests for characters whose properties changed are marked invalid (STD-03) |
-| R-04 | The runtime grows past NFR-02 | Size budget missed | Size checks in CI from 0.1; large-integer code linked only when used where the compiler can prove it |
+| R-04 | The runtime grows past NFR-02 | Size budget missed | Size checks in CI from 0.1 on what a hello world links (ADR-0009); large-integer code linked only when used where the compiler can prove it |
 | R-05 | Release builds with LLVM `-O2` exceed NFR-05 | Release builds too slow | Per-function parallel code generation; measure from 0.2 |
 | R-06 | Cycle collection runs at different points than CPython's collector | A program that observes collection timing behaves differently | No `__del__` before 1.0, so timing cannot be observed; revisit with the decision on `__del__` |
 | R-07 | Windows support arrives late, at 1.0 | Late surprises in linking and the C ABI | Cross-compile and run the conformance suite for Windows from 0.5 |

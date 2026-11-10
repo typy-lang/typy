@@ -3,10 +3,10 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy software requirements specification |
-| Version | 1.12 |
+| Version | 1.29 |
 | Status | Approved |
 | Owner | typy-lang contributors |
-| Last updated | 2026-11-07 |
+| Last updated | 2026-11-10 |
 
 ## 1. Introduction
 
@@ -173,12 +173,14 @@ formatter applies; Ruff's formatter is the project's recommendation.
 | TYP-04 | Type inference shall stay within one function; it shall not use the bodies of other functions. | M | 0.1 | |
 | TYP-05 | An empty list, dict or set display shall need an annotation that names its element types. | M | 0.2 | 6.2.4 |
 | TYP-06 | The annotations `list[T]`, `dict[K, V]`, `set[T]`, `tuple[...]` and `T \| None` shall be accepted. | M | 0.2 | 3.3.5 |
-| TYP-07 | A value of type `T \| None` shall narrow to `T` after `is None`, `is not None` and `isinstance` tests, and using it unnarrowed shall be rejected. | M | 0.4 | |
+| TYP-07 | A value of type `T \| None`, or of a union of classes, shall narrow after `isinstance` tests. | M | 0.4 | |
 | TYP-08 | A name annotated `Final` shall not be assigned again. | M | 0.4 | |
 | TYP-09 | An `int` value shall be rejected where a `float` is declared, because CPython keeps it an `int`: `x: float = 1` prints `1`. Arithmetic that mixes `int` and `float` gives a `float`, as in Python (EXP-02). | M | 0.1 | |
 | TYP-10 | `typing.Any`, `typing.cast` and unannotated `object` values shall be rejected. | M | 0.1 | |
-| TYP-11 | The type of an expression shall be fixed when the program is compiled, and no run-time type information shall be generated except for classes used with `isinstance` or in `except` clauses. | M | 0.1 | |
+| TYP-11 | The type of an expression shall be fixed when the program is compiled, and a value shall carry no type information of its own beyond the type object a heap object refers to (ADR-0012). | M | 0.1 | |
 | TYP-12 | A read of a local variable shall be rejected unless the variable is assigned on every path that reaches the read, so `UnboundLocalError` cannot occur. | M | 0.1 | 4.2.2 |
+| TYP-13 | A local variable or parameter of type `T \| None` shall narrow to `T` where an `is None` or `is not None` test, or a truth test that holds, shows it is not `None`, and using it as `T` anywhere else shall be rejected. | M | 0.2 | |
+| TYP-14 | Annotations that join two or more types other than `None` with `\|`, such as `int \| str`, shall be accepted, with narrowing by `isinstance` (TYP-07). | M | 0.4 | 3.3.5 |
 
 ### 3.5 Built-in types and values (DAT)
 
@@ -196,6 +198,11 @@ formatter applies; Ruff's formatter is the project's recommendation.
 | DAT-10 | `set[T]` shall be a mutable set. | M | 0.2 | 3.2.6 |
 | DAT-11 | Indexing a sequence with a negative index shall count from the end, and an index outside the sequence shall raise `IndexError`. | M | 0.2 | 6.3.2 |
 | DAT-12 | Slicing shall return a new object with the items selected by start, stop and step, as in Python. | M | 0.2 | 6.3.3 |
+| DAT-13 | Assigning to a slice of a list shall replace the selected items with the items of a list, as in Python. | S | 0.3 | 7.2 |
+| DAT-14 | `tuple[T, ...]` shall be an immutable sequence of any number of items of type `T`, and a tuple of a fixed number of items of type `T` shall be accepted where one is expected. | M | 0.2 | 3.2.5 |
+| DAT-15 | The methods of `set` that combine a set with others, `union`, `intersection`, `difference`, `symmetric_difference`, `update`, `intersection_update`, `difference_update`, `symmetric_difference_update`, `issubset`, `issuperset` and `isdisjoint`, shall accept any iterable of the set's item type, and as many arguments as CPython accepts, with CPython's results and order. | M | 0.2 | 3.2.6 |
+| DAT-16 | `reversed` of a dict and of its views, `dict` with keyword arguments, `dict.fromkeys`, and the comparisons and set operations of `dict.keys()` and `dict.items()` shall be available with Python's results. | S | 0.3 | 3.2.7 |
+| DAT-17 | `range` shall be a value as well as a loop source: a sequence of `int` with `len`, indexing, slicing, `in`, `==` and `repr`, as in Python. | S | 0.3 | 3.2.5 |
 
 ### 3.6 Expressions (EXP)
 
@@ -241,11 +248,13 @@ formatter applies; Ruff's formatter is the project's recommendation.
 | --- | --- | --- | --- | --- |
 | CST-01 | `if`, `elif` and `else` shall be accepted. | M | 0.1 | 8.1 |
 | CST-02 | `while` and `for`, each with an optional `else` clause, shall be accepted. | M | 0.1 | 8.2 |
-| CST-03 | `for` shall iterate over `range`, `str`, `bytes`, `list`, `tuple`, `dict`, `set` and any class with `__iter__` and `__next__`. | M | 0.2 | 8.3 |
+| CST-03 | `for` shall iterate over `range`, `str`, `bytes`, `list`, `tuple`, `dict` and `set`. | M | 0.2 | 8.3 |
 | CST-04 | `try` with `except`, `else` and `finally` clauses shall be accepted, and `finally` shall run on `return`, `break`, `continue` and exceptions. | M | 0.3 | 8.4 |
 | CST-05 | `with` shall call `__enter__` and `__exit__` as the Language Reference defines, also when the block exits early. | M | 0.3 | 8.5 |
 | CST-06 | `match` shall be accepted with literal, capture, wildcard, value, sequence, mapping and class patterns, guards and `\|` alternatives. | M | 0.5 | 8.6 |
 | CST-07 | A `match` on an enumeration-like union of classes shall report a warning when cases are missing. | S | 0.5 | 8.6 |
+| CST-08 | `for` shall iterate over any class with `__iter__` and `__next__`, and end when `__next__` raises `StopIteration` (OI-17). | M | 0.3 | 8.3 |
+| CST-09 | `iter` and `next`, with and without a default, shall be available for the built-in iterables. | S | 0.3 | 8.3 |
 
 ### 3.9 Functions (FUN)
 
@@ -272,6 +281,9 @@ formatter applies; Ruff's formatter is the project's recommendation.
 | CLS-07 | Operator methods such as `__add__`, `__eq__`, `__lt__`, `__len__`, `__getitem__` and `__contains__` shall be called for the matching operators. | M | 0.4 | 3.3 |
 | CLS-08 | `__str__` and `__repr__` shall be used by `str()`, `repr()`, `print()` and f-strings. | M | 0.2 | 3.3.1 |
 | CLS-09 | `isinstance` shall be accepted with a class or a tuple of classes. | M | 0.4 | |
+| CLS-10 | Every type, built in or a class, shall have a type object that names it and its base, and the chain of bases of every type shall end at `object`. | M | 0.2 | |
+| CLS-11 | Class variables, given a value in the class body, shall be accepted. | S | 0.4 | |
+| CLS-12 | `type(x)` shall give the type object of the value `x`, and a class name or the name of a built-in type shall be its type object as a value; a type object shall print as `<class 'name'>`, give its name as `__name__`, and compare with `is`, `is not`, `==` and `!=`. | M | 0.2 | |
 
 ### 3.11 Generics and protocols (GEN)
 
@@ -288,7 +300,7 @@ formatter applies; Ruff's formatter is the project's recommendation.
 | ID | Requirement | Priority | Release | LR |
 | --- | --- | --- | --- | --- |
 | EXC-01 | Raising and catching exceptions shall follow the Language Reference, including matching on base classes. | M | 0.3 | 4.3 |
-| EXC-02 | The built-in exception classes the runtime raises shall exist with their Python names: `ArithmeticError`, `AssertionError`, `IndexError`, `KeyError`, `OverflowError`, `RecursionError`, `RuntimeError`, `StopIteration`, `TypeError`, `ValueError`, `ZeroDivisionError` and their bases. | M | 0.3 | 4.3 |
+| EXC-02 | The built-in exception classes the runtime raises shall exist with their Python names: `ArithmeticError`, `AssertionError`, `IndexError`, `KeyError`, `OverflowError`, `RecursionError`, `RuntimeError`, `StopIteration`, `TypeError`, `UnicodeDecodeError`, `UnicodeEncodeError`, `ValueError`, `ZeroDivisionError` and their bases. | M | 0.3 | 4.3 |
 | EXC-03 | An exception that is not raised shall cost no more than a compare and branch at each call that may raise. | M | 0.3 | |
 | EXC-04 | Exception chaining with `from` and the implicit context shall be kept, and shown in the uncaught exception output. | S | 0.3 | 7.8 |
 | EXC-05 | An exception shall not cross a function exported to C (FFI-05); the program shall abort with the exception printed. | M | 0.5 | |
@@ -320,6 +332,7 @@ formatter applies; Ruff's formatter is the project's recommendation.
 | LIB-07 | `os.environ`, `os.path`, `time` and `random` shall be available. | S | 1.0 |
 | LIB-08 | Importing a standard library module that TyPy does not provide shall be rejected with the list of modules it provides. | M | 0.3 |
 | LIB-09 | Each standard library module TyPy provides shall be TyPy's own implementation, with the names and results the Python library documentation defines. | M | 0.1 |
+| LIB-10 | `str % values`, printf-style formatting with a value, a tuple of values or a dict of named values, shall be accepted with Python's results. | S | 0.3 |
 
 ### 3.15 Memory management (MEM)
 
@@ -328,11 +341,12 @@ formatter applies; Ruff's formatter is the project's recommendation.
 | MEM-01 | An object shall be freed when its last reference goes, with no tracing garbage collector and no pause. | M | 0.1 |
 | MEM-02 | `float`, `bool` and inline `int` values shall be held without a heap allocation in variables, fields and containers, so a `list[float]` stores 8 bytes per item. | M | 0.2 |
 | MEM-03 | An object the compiler proves does not outlive its function shall be allocated without a heap call. | S | 0.4 |
-| MEM-04 | Passing an argument shall cost no reference count operation, and the last use of a variable shall move its value. | M | 0.2 |
+| MEM-04 | Passing a variable or a constant as an argument shall cost no reference count operation, and returning a variable shall move its value to the caller. | M | 0.2 |
 | MEM-05 | Freed memory of one object shall be reused for a new object of the same size in the same function when the compiler can prove it safe. | C | 1.0 |
 | MEM-06 | Reference cycles shall be collected, without a background thread, and only objects whose class can be part of a cycle shall pay for cycle tracking (ADR-0001). | S | 1.0 |
 | MEM-07 | `weakref.ref` shall be available. | S | 1.0 |
 | MEM-08 | The allocator shall be replaceable per project through three functions: allocate, reallocate and free. | S | 0.5 |
+| MEM-09 | The last use of a variable in an assignment, or as an item a collection stores, shall move its value instead of counting it. | S | 0.3 |
 
 ### 3.16 C interoperability (FFI)
 
@@ -367,6 +381,18 @@ expressions and statements, `E04xx` types, `E05xx` exceptions and control
 flow, `E06xx` memory, `E07xx` C interoperability, `E08xx` modules, `E9xxx`
 internal errors, and `Wxxxx` warnings in the same ranges.
 
+### 3.18 User documentation (DOC)
+
+The user documentation is written as Markdown under `docs/user/`, beside
+the engineering documents, and describes the release it ships with.
+
+| ID | Requirement | Priority | Release |
+| --- | --- | --- | --- |
+| DOC-01 | A getting-started page shall show how to install TyPy from a release archive, and how to check, build and run a first program. | M | 0.2 |
+| DOC-02 | A language guide shall have one page per area of the specification, listing what the release accepts with the rule ID of each item, and an accepted and a rejected example. | M | 0.2 |
+| DOC-03 | A troubleshooting page shall list each active diagnostic code with its cause and how to change the program. | M | 0.2 |
+| DOC-04 | Every Python sample in the user documentation shall be checked by the test suite against the current compiler, with the outcome the page states. | M | 0.2 |
+
 ## 4. Non-functional requirements
 
 Measurements run on the reference machine: Linux x86_64, 8 cores, warm file
@@ -375,7 +401,7 @@ cache, unless a row says otherwise.
 | ID | Requirement | Release | Verified by |
 | --- | --- | --- | --- |
 | NFR-01 | A hello world program built with `--release-small` and linked statically with musl shall be smaller than 100 KB. | 0.1 | Size check in CI |
-| NFR-02 | The runtime library, excluding libc, shall be smaller than 48 KB, and smaller than 32 KB without its large-integer and cycle-collection parts. | 0.1 | Size check in CI, for both figures |
+| NFR-02 | The runtime code and data that a hello world built with `--release-small` links, excluding libc, shall be smaller than 48 KB, and smaller than 32 KB without its large-integer and cycle-collection parts (ADR-0009). | 0.1 | Size check in CI, for both figures |
 | NFR-03 | The geometric mean run time of the benchmark suite in `--release` mode shall be within 1.5 times that of the equivalent C programs. | 1.0 | Weekly benchmark run |
 | NFR-04 | A debug build of a 10,000-line project shall take under 2 seconds. | 1.0 | Benchmark with budget |
 | NFR-05 | A release build of a 10,000-line project shall take under 20 seconds. | 1.0 | Benchmark with budget |
@@ -386,7 +412,7 @@ cache, unless a row says otherwise.
 | NFR-10 | Every requirement in section 3 shall have at least one accepted and one rejected test program, and every run test shall run alike on each oracle version from its Python floor up. | 0.1 | Conformance suite in CI |
 | NFR-11 | Line and branch coverage of the compiler and runtime shall be at least 95 percent. | 0.1 | Coverage gate in CI |
 | NFR-12 | An object header shall take at most 8 bytes. | 0.2 | Layout test |
-| NFR-13 | A `list[int]` of one million small values shall use at most 8.5 MB. | 0.2 | Memory benchmark |
+| NFR-13 | A `list[int]` of one million small values shall use at most 8.5 MB. | 0.2 | Layout test of the runtime's list |
 | NFR-14 | The compiler shall use at most 1 GB of memory to build a 10,000-line project. | 1.0 | Benchmark with budget |
 | NFR-15 | A debug build and a release build of a program shall run alike. | 0.1 | Differential tests in CI |
 
@@ -395,7 +421,7 @@ cache, unless a row says otherwise.
 | Release | Language added | Other content |
 | --- | --- | --- |
 | 0.1 | Functions, `int`, `float`, `bool`, `str`, `None`, `if`, `while`, `for` over `range`, operators | `build`, `run`, `check`, `--emit`; runtime; diagnostics; Linux x86_64 |
-| 0.2 | `list`, `tuple`, `dict`, `set`, `bytes`, classes without inheritance, f-strings, comprehensions, slicing | Unboxed values, reference count elision |
+| 0.2 | `list`, `tuple`, `dict`, `set`, `bytes`, classes without inheritance, f-strings, comprehensions, slicing | Unboxed values, reference count elision; user documentation |
 | 0.3 | `try`, `raise`, user exceptions, `with`, `assert`, `del`, `global`, modules and packages, lazy imports | `sys`, `math`, `open`; `typy.toml` with `python-floor`; JSON diagnostics; the first warnings and `--deny-warnings` |
 | 0.4 | Dataclasses, inheritance, protocols, PEP 695 generics, narrowing, `Final`, `type` aliases | Stack allocation |
 | 0.5 | `match`, `:=`, C interoperability through `ctypes` | Libraries and exports; Linux and macOS AArch64; cross-compilation |
@@ -434,7 +460,8 @@ TyPy rejects them (STD-04):
 
 ## 7. Open issues
 
-There are no open issues. A new question gets the next unused issue number.
+There are no open issues. A new question gets the next unused issue number,
+after the last of the resolved issues below.
 
 ## 8. Resolved issues
 
@@ -453,9 +480,12 @@ There are no open issues. A new question gets the next unused issue number.
 | OI-11 | How does TyPy support PEP 810 lazy imports, whose `lazy` keyword CPython 3.12 to 3.14 reject? | Each program has a Python floor; a program with floor 3.15 may use `lazy import`, and `__lazy_modules__` works for every floor (ADR-0008). | 2026-11-06 |
 | OI-12 | May an `int` be stored where a `float` is declared, as PEP 484 allows? | No. CPython keeps the value an `int`, so `x: float = 1` prints `1`; TyPy would print `1.0`. TYP-09 rejects it, with the fix `1.0` for a literal. Checked on CPython 3.12 to 3.15. | 2026-11-06 |
 | OI-13 | Can `x ** y` with a `float` exponent give a type TyPy does not have? | Yes: `(-8.0) ** 0.5` is `complex` in CPython 3.12 to 3.15. EXP-04 accepts a `float` exponent only when it is an integral literal or the base is a non-negative literal. | 2026-11-07 |
-| OI-14 | Which wording does an exception message take when the oracle versions word it differently? | The wording of the newest oracle, CPython 3.15. CPython 3.14 reworded every division by zero to `division by zero` and `0.0 ** -1.0` to `zero to a negative power`, where 3.12 and 3.13 name the operation, and 3.12 and 3.13 differ from each other for `float` modulo. A conformance test of such a message compares only the exception type (STD-03, STD-05). | 2026-11-07 |
+| OI-14 | Which wording does an exception message take when the oracle versions word it differently? | The wording of the newest oracle, CPython 3.15. CPython 3.14 reworded every division by zero to `division by zero` and `0.0 ** -1.0` to `zero to a negative power`, where 3.12 and 3.13 name the operation, and 3.12 and 3.13 differ from each other for `float` modulo. A conformance test cannot check such a message, because the oracles disagree on it, so the runtime's unit tests check it (STD-03, STD-05). | 2026-11-07 |
 | OI-15 | Which Unicode version decides `repr`, `str.isprintable` and the digits `int()` reads, when CPython 3.12 to 3.15 ship Unicode 15.0 to 17.0? | Unicode 17.0, the version of the newest oracle, as OI-14 decides for messages. A character assigned after Unicode 15.0 is shown unescaped by TyPy and by CPython 3.15 but escaped by older oracles, so a conformance test of such a character is invalid (STD-03). | 2026-11-07 |
 | OI-16 | How are generated code and the runtime instrumented with AddressSanitizer, and the runtime's unit tests run under Miri, when both need a nightly Rust toolchain? | The dev image holds one pinned nightly, `nightly-2026-11-05`, used only for these checks and for fuzzing; every build still uses stable. The runtime is built with `-Zsanitizer=address` for the conformance suite's sanitizer run, and `make miri` runs its unit tests. Instrumenting generated code needs LLVM's AddressSanitizer pass in code generation and is planned for 0.2. | 2026-11-07 |
+| OI-17 | How does a 0.2 program end a `for` over a class with `__iter__` and `__next__`, when `raise` arrives in 0.3? | It does not: CST-03 covers the built-in iterables in 0.2, and CST-08 adds iterator classes in 0.3 together with `raise`, so `StopIteration` works as in CPython. | 2026-11-08 |
+| OI-18 | How do items of type `float` compare inside containers? CPython compares container items by identity before value, so with `x = float("nan")`, `(x,) == (x,)`, `[x] == [x]` and `x in [x]` are `True`, while TyPy holds floats without an object. | By value, as `x == x` does: a NaN item is never equal to another, in a tuple, a list, `in`, `count`, `index`, a `dict` key or a `set`. This gives CPython's result for NaN values made separately, and differs from it only when one NaN object is placed in a container more than once, which the user documentation names as a known difference. | 2026-11-09 |
+| OI-19 | In which order does a set display of constant items iterate, when the oracle versions build it differently? A display of three to thirty items that are all constants compiles to a frozenset of the items, which is merged into a new set, and the merge can place the items in other slots than adding them one by one does. CPython 3.12 and 3.13 also rebuild the frozenset once more from its own order when they merge the code's constants, and CPython 3.14 iterates a `for` loop over such a display in the order of the items added one by one. | The order of the newest oracle, CPython 3.15, as OI-14 decides for messages: such a display, and a loop over it, holds the items added in order to a set, then merged into a new set. A constant item is a literal, `None`, `True`, `False`, a number with a sign, or a tuple of constant items; CPython also folds arithmetic on constants, which TyPy computes when the program runs, so a display such as `{1 + 2, 4, 5}` may iterate in another order than CPython's. A conformance test of such a display is invalid unless every oracle prints it alike (STD-03, DAT-10, ADR-0010). | 2026-11-09 |
 
 ## Appendix A. Disposition of the specification pack
 

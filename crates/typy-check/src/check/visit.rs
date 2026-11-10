@@ -1,6 +1,6 @@
 //! Visits every expression of a statement, outside nested definitions.
 
-use typy_source::syntax::{Expr, Stmt};
+use typy_source::syntax::{Comprehension, Expr, Stmt};
 
 pub(super) fn visit_statement(statement: &Stmt, visit: &mut dyn FnMut(&Expr)) {
     match statement {
@@ -47,14 +47,54 @@ pub(super) fn visit_statement(statement: &Stmt, visit: &mut dyn FnMut(&Expr)) {
 pub(super) fn visit_expression(expression: &Expr, visit: &mut dyn FnMut(&Expr)) {
     visit(expression);
     match expression {
-        Expr::BoolOp { values, .. } => values
+        Expr::BoolOp { values, .. }
+        | Expr::Tuple {
+            elements: values, ..
+        }
+        | Expr::List {
+            elements: values, ..
+        }
+        | Expr::Set {
+            elements: values, ..
+        } => values
             .iter()
             .for_each(|value| visit_expression(value, visit)),
+        Expr::ListComp {
+            element,
+            generators,
+            ..
+        }
+        | Expr::SetComp {
+            element,
+            generators,
+            ..
+        } => {
+            visit_expression(element, visit);
+            visit_generators(generators, visit);
+        }
+        Expr::DictComp {
+            key,
+            value,
+            generators,
+            ..
+        } => {
+            visit_expression(key, visit);
+            visit_expression(value, visit);
+            visit_generators(generators, visit);
+        }
+        Expr::Dict { keys, values, .. } => {
+            keys.iter()
+                .flatten()
+                .chain(values)
+                .for_each(|value| visit_expression(value, visit));
+        }
         Expr::BinOp { left, right, .. } => {
             visit_expression(left, visit);
             visit_expression(right, visit);
         }
-        Expr::UnaryOp { operand, .. } => visit_expression(operand, visit),
+        Expr::UnaryOp { operand, .. } | Expr::Attribute { value: operand, .. } => {
+            visit_expression(operand, visit);
+        }
         Expr::IfExp {
             test, body, orelse, ..
         } => {
@@ -88,6 +128,35 @@ pub(super) fn visit_expression(expression: &Expr, visit: &mut dyn FnMut(&Expr)) 
             visit_expression(value, visit);
             visit_expression(index, visit);
         }
-        Expr::Constant { .. } | Expr::Name { .. } | Expr::Other { .. } => {}
+        Expr::Slice {
+            lower, upper, step, ..
+        } => {
+            for bound in [lower, upper, step].into_iter().flatten() {
+                visit_expression(bound, visit);
+            }
+        }
+        Expr::FString { parts, .. } => visit_fstring(parts, visit),
+        Expr::Constant { .. } | Expr::Name { .. } | Expr::Quoted { .. } | Expr::Other { .. } => {}
+    }
+}
+
+fn visit_fstring(parts: &[typy_source::syntax::FStringPart], visit: &mut dyn FnMut(&Expr)) {
+    for part in parts {
+        if let typy_source::syntax::FStringPart::Field(field) = part {
+            visit_expression(&field.value, visit);
+            if let Some(spec) = &field.spec {
+                visit_fstring(spec, visit);
+            }
+        }
+    }
+}
+
+fn visit_generators(generators: &[Comprehension], visit: &mut dyn FnMut(&Expr)) {
+    for generator in generators {
+        visit_expression(&generator.target, visit);
+        visit_expression(&generator.iter, visit);
+        for condition in &generator.ifs {
+            visit_expression(condition, visit);
+        }
     }
 }

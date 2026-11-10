@@ -7,7 +7,8 @@ use inkwell::module::{Linkage, Module};
 use inkwell::values::{BasicValueEnum, IntValue, PointerValue};
 
 use crate::layout::{
-    BIG_INT_TYPE_ID, IMMORTAL, IntEncoding, STR_TYPE_ID, StrKind, encode_int, encode_str,
+    BIG_INT_TYPE_ID, BYTES_TYPE_ID, IMMORTAL, IntEncoding, STR_TYPE_ID, StrKind, encode_int,
+    encode_str,
 };
 
 /// Creates each static object once per module.
@@ -16,6 +17,9 @@ pub(crate) struct Statics<'ctx> {
     strings: BTreeMap<String, PointerValue<'ctx>>,
     c_strings: BTreeMap<String, PointerValue<'ctx>>,
     big_ints: BTreeMap<String, PointerValue<'ctx>>,
+    bytes: BTreeMap<String, PointerValue<'ctx>>,
+    descriptors: BTreeMap<u32, PointerValue<'ctx>>,
+    type_objects: BTreeMap<u32, PointerValue<'ctx>>,
 }
 
 impl<'ctx> Statics<'ctx> {
@@ -25,10 +29,34 @@ impl<'ctx> Statics<'ctx> {
             strings: BTreeMap::new(),
             c_strings: BTreeMap::new(),
             big_ints: BTreeMap::new(),
+            bytes: BTreeMap::new(),
+            descriptors: BTreeMap::new(),
+            type_objects: BTreeMap::new(),
         }
     }
 
-    fn global(
+    /// Returns the descriptor of tuple type `id`, if it was emitted already.
+    pub(crate) fn descriptor(&self, id: u32) -> Option<PointerValue<'ctx>> {
+        self.descriptors.get(&id).copied()
+    }
+
+    /// Records the descriptor of tuple type `id`.
+    pub(crate) fn add_descriptor(&mut self, id: u32, pointer: PointerValue<'ctx>) {
+        self.descriptors.insert(id, pointer);
+    }
+
+    /// Returns the type object of class `index`, if it was emitted already.
+    pub(crate) fn type_object(&self, index: u32) -> Option<PointerValue<'ctx>> {
+        self.type_objects.get(&index).copied()
+    }
+
+    /// Records the type object of class `index`.
+    pub(crate) fn add_type_object(&mut self, index: u32, pointer: PointerValue<'ctx>) {
+        self.type_objects.insert(index, pointer);
+    }
+
+    /// Adds a private constant global holding `value`, and returns its address.
+    pub(crate) fn global(
         module: &Module<'ctx>,
         value: BasicValueEnum<'ctx>,
         name: &str,
@@ -46,6 +74,39 @@ impl<'ctx> Statics<'ctx> {
         if let Some(pointer) = self.strings.get(text) {
             return *pointer;
         }
+        let pointer = self.text_object(
+            module,
+            text,
+            STR_TYPE_ID,
+            &format!("typy.str.{}", self.strings.len()),
+        );
+        self.strings.insert(text.to_owned(), pointer);
+        pointer
+    }
+
+    /// Returns a `bytes` object: a `str` object of one byte per code point under the `bytes`
+    /// type ID, each byte held as the code point of its value in `text`.
+    pub(crate) fn bytes(&mut self, module: &Module<'ctx>, text: &str) -> PointerValue<'ctx> {
+        if let Some(pointer) = self.bytes.get(text) {
+            return *pointer;
+        }
+        let pointer = self.text_object(
+            module,
+            text,
+            BYTES_TYPE_ID,
+            &format!("typy.bytes.{}", self.bytes.len()),
+        );
+        self.bytes.insert(text.to_owned(), pointer);
+        pointer
+    }
+
+    fn text_object(
+        &mut self,
+        module: &Module<'ctx>,
+        text: &str,
+        type_id: u32,
+        name: &str,
+    ) -> PointerValue<'ctx> {
         let context = self.context;
         let (kind, points) = encode_str(text);
         let unit = match kind {
@@ -65,7 +126,7 @@ impl<'ctx> Statics<'ctx> {
                     .into(),
                 context
                     .i32_type()
-                    .const_int(u64::from(STR_TYPE_ID), false)
+                    .const_int(u64::from(type_id), false)
                     .into(),
                 context
                     .i64_type()
@@ -77,13 +138,7 @@ impl<'ctx> Statics<'ctx> {
             ],
             false,
         );
-        let pointer = Self::global(
-            module,
-            value.into(),
-            &format!("typy.str.{}", self.strings.len()),
-        );
-        self.strings.insert(text.to_owned(), pointer);
-        pointer
+        Self::global(module, value.into(), name)
     }
 
     /// Returns a null-terminated byte string, for the names in traceback entries.

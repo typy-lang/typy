@@ -4,6 +4,8 @@ use typy_diagnostics::{Diagnostic, DiagnosticCode, RuleId};
 use typy_source::syntax::{BoolOperator, Constant, Expr};
 
 use super::BodyChecker;
+use super::flow::test_facts;
+use super::slice::Bounds;
 use crate::typed::{TypedConstant, TypedExpr, TypedExprKind};
 use crate::types::Type;
 
@@ -19,7 +21,8 @@ impl BodyChecker<'_> {
                     Constant::Int(digits) => TypedConstant::Int(digits.clone()),
                     Constant::Float(value) => TypedConstant::Float(*value),
                     Constant::Str(value) => TypedConstant::Str(value.clone()),
-                    Constant::Complex { .. } | Constant::Bytes(_) | Constant::Ellipsis => {
+                    Constant::Bytes(value) => TypedConstant::Bytes(value.clone()),
+                    Constant::Complex { .. } | Constant::Ellipsis => {
                         return Self::typed(
                             TypedExprKind::Constant(TypedConstant::None),
                             Type::Error,
@@ -39,6 +42,7 @@ impl BodyChecker<'_> {
             } => {
                 let left = self.expression(left);
                 let right = self.expression(right);
+                let (left, right) = Self::tuple_operands(*operator, left, right);
                 let ty = self.binary_type(*operator, &left, &right, span);
                 Self::typed(
                     TypedExprKind::Binary {
@@ -67,10 +71,25 @@ impl BodyChecker<'_> {
             Expr::BoolOp {
                 operator, values, ..
             } => {
-                let values: Vec<TypedExpr> =
-                    values.iter().map(|value| self.truth_test(value)).collect();
-                let ty = values[0].ty;
-                if let Some(other) = values.iter().find(|value| !value.ty.is_assignable_to(ty)) {
+                // Each operand is read only when the ones before it held for `and`, or failed
+                // for `or`, so it is checked with what that shows (TYP-13).
+                let outer = self.assigned.clone();
+                let values: Vec<TypedExpr> = values
+                    .iter()
+                    .map(|value| {
+                        let value = self.truth_test(value);
+                        let (holds, fails) = test_facts(&value);
+                        self.add_facts(if *operator == BoolOperator::And {
+                            holds
+                        } else {
+                            fails
+                        });
+                        value
+                    })
+                    .collect();
+                self.assigned = outer;
+                let ty = values[0].ty.clone();
+                if let Some(other) = values.iter().find(|value| !value.ty.is_assignable_to(&ty)) {
                     let word = if *operator == BoolOperator::And {
                         "and"
                     } else {
@@ -104,11 +123,9 @@ impl BodyChecker<'_> {
                 comparators,
                 ..
             } => {
-                let left = self.expression(left);
-                let comparators: Vec<TypedExpr> = comparators
-                    .iter()
-                    .map(|value| self.expression(value))
-                    .collect();
+                let mut operands = self.comparison_operands(left, comparators, operators);
+                let comparators = operands.split_off(1);
+                let left = operands.remove(0);
                 let mut previous = &left;
                 for (operator, right) in operators.iter().zip(&comparators) {
                     self.compare_types(*operator, previous, right);
@@ -128,9 +145,34 @@ impl BodyChecker<'_> {
                 test, body, orelse, ..
             } => {
                 let test = self.truth_test(test);
+                let (holds, fails) = test_facts(&test);
+                let outer = self.assigned.clone();
+                self.add_facts(holds);
                 let body = self.expression(body);
+                self.assigned.clone_from(&outer);
+                self.add_facts(fails);
                 let orelse = self.expression(orelse);
-                if !orelse.ty.is_assignable_to(body.ty) {
+                self.assigned = outer;
+                // A branch of `None` and one of `T` give `T | None`, as Python's typing joins
+                // them (TYP-06).
+                let joined = match (&body.ty, &orelse.ty) {
+                    (Type::NoneType, other) | (other, Type::NoneType)
+                        if !matches!(other, Type::NoneType) =>
+                    {
+                        Some(Type::optional(other.clone()))
+                    }
+                    (Type::Optional(_), _) => Some(body.ty.clone()),
+                    (_, Type::Optional(_)) => Some(orelse.ty.clone()),
+                    _ => None,
+                };
+                let (body, orelse) = match &joined {
+                    Some(joined) => (
+                        Self::converted(body, Some(joined)),
+                        Self::converted(orelse, Some(joined)),
+                    ),
+                    None => (body, orelse),
+                };
+                if !orelse.ty.is_assignable_to(&body.ty) {
                     return self.error(
                         Diagnostic::new(
                             DiagnosticCode::error(305),
@@ -144,7 +186,7 @@ impl BodyChecker<'_> {
                         span,
                     );
                 }
-                let ty = body.ty;
+                let ty = body.ty.clone();
                 Self::typed(
                     TypedExprKind::IfExp {
                         test: Box::new(test),
@@ -155,13 +197,60 @@ impl BodyChecker<'_> {
                     span,
                 )
             }
+            Expr::Set { elements, .. } => self.set_display(elements, None, span),
+            Expr::Dict { keys, values, .. } => self.dict_display(keys, values, None, span),
+            Expr::ListComp { .. } | Expr::SetComp { .. } | Expr::DictComp { .. } => {
+                self.comprehension(expression, None)
+            }
+            Expr::Tuple { elements, .. } => {
+                let elements: Vec<TypedExpr> = elements
+                    .iter()
+                    .map(|element| self.expression(element))
+                    .collect();
+                let ty = Type::Tuple(elements.iter().map(|element| element.ty.clone()).collect());
+                Self::typed(TypedExprKind::Tuple(elements), ty, span)
+            }
             Expr::Subscript { value, index, .. } => {
                 let value = self.expression(value);
+                if let Expr::Slice {
+                    lower, upper, step, ..
+                } = index.as_ref()
+                {
+                    let bounds = Bounds {
+                        lower: lower.as_deref(),
+                        upper: upper.as_deref(),
+                        step: step.as_deref(),
+                    };
+                    return self.slice(value, &bounds, span);
+                }
+                if let Type::Tuple(items) = &value.ty {
+                    let items = items.clone();
+                    return self.tuple_item(value, &items, index, span);
+                }
+                if let Some(item) = value.ty.sequence_item() {
+                    let item = item.clone();
+                    return self.list_item(value, item, index, span);
+                }
+                if let Type::Dict(key, entry) = &value.ty {
+                    let (key, entry) = (key.as_ref().clone(), entry.as_ref().clone());
+                    return self.dict_item(value, &key, entry, index, span);
+                }
                 let index = self.expression(index);
                 if value.ty == Type::Error || index.ty == Type::Error {
                     return Self::typed(
                         TypedExprKind::Constant(TypedConstant::None),
                         Type::Error,
+                        span,
+                    );
+                }
+                if value.ty == Type::Bytes {
+                    self.expect(&index, Type::Int, "an index");
+                    return Self::typed(
+                        TypedExprKind::Index {
+                            value: Box::new(value),
+                            index: Box::new(index),
+                        },
+                        Type::Int,
                         span,
                     );
                 }
@@ -191,21 +280,29 @@ impl BodyChecker<'_> {
                 arguments,
                 keywords,
                 ..
-            } => {
-                let Expr::Name {
+            } => match function.as_ref() {
+                Expr::Name {
                     id,
                     span: name_span,
-                } = function.as_ref()
-                else {
-                    return Self::typed(
-                        TypedExprKind::Constant(TypedConstant::None),
-                        Type::Error,
-                        span,
-                    );
-                };
-                self.call(id, *name_span, arguments, keywords, span)
-            }
-            Expr::Other { .. } => Self::typed(
+                } => self.call(id, *name_span, arguments, keywords, span),
+                Expr::Attribute {
+                    value, attribute, ..
+                } => self.method_call(value, attribute, arguments, keywords, span),
+                _ => Self::typed(
+                    TypedExprKind::Constant(TypedConstant::None),
+                    Type::Error,
+                    span,
+                ),
+            },
+            Expr::List { elements, .. } => self.list_display(elements, None, span),
+            Expr::Slice { .. } => self.misplaced_slice(span),
+            Expr::Attribute {
+                value, attribute, ..
+            } => self.attribute(value, attribute, span),
+            Expr::FString { parts, .. } => self.fstring(parts, span),
+            // The subset check refuses every other expression, and a quoted expression is
+            // only read as an annotation.
+            Expr::Quoted { .. } | Expr::Other { .. } => Self::typed(
                 TypedExprKind::Constant(TypedConstant::None),
                 Type::Error,
                 span,
@@ -228,9 +325,74 @@ impl BodyChecker<'_> {
         test
     }
 
+    /// Checks `tuple[index]`: the position is an integer literal, counted from the end when
+    /// negative, inside the tuple, so the item and its type are known when compiling (DAT-08).
+    fn tuple_item(
+        &mut self,
+        tuple: TypedExpr,
+        items: &[Type],
+        index: &Expr,
+        span: typy_diagnostics::Span,
+    ) -> TypedExpr {
+        let Some(position) = literal_position(index) else {
+            let index = self.expression(index);
+            if index.ty.has_error() || tuple.ty.has_error() {
+                return Self::typed(
+                    TypedExprKind::Constant(TypedConstant::None),
+                    Type::Error,
+                    span,
+                );
+            }
+            return self.error(
+                Diagnostic::new(
+                    DiagnosticCode::error(307),
+                    index.span,
+                    "a tuple is indexed with an integer literal, because each item can have its own type",
+                )
+                .with_rule(RuleId::DAT_08)
+                .with_help("write the position as a number, such as `pair[0]`"),
+                span,
+            );
+        };
+        let length = i128::try_from(items.len()).unwrap_or(i128::MAX);
+        let from_start = if position < 0 {
+            position + length
+        } else {
+            position
+        };
+        let Some(index_from_start) = usize::try_from(from_start)
+            .ok()
+            .filter(|index| *index < items.len())
+        else {
+            return self.error(
+                Diagnostic::new(
+                    DiagnosticCode::error(307),
+                    index.span(),
+                    format!(
+                        "position {position} is outside {}, which has {} items",
+                        tuple.ty,
+                        items.len()
+                    ),
+                )
+                .with_rule(RuleId::DAT_08),
+                span,
+            );
+        };
+        let ty = items[index_from_start].clone();
+        Self::typed(
+            TypedExprKind::TupleItem {
+                tuple: Box::new(tuple),
+                index: index_from_start,
+            },
+            ty,
+            span,
+        )
+    }
+
     /// Reports a value whose type is not `expected`.
     pub(super) fn expect(&mut self, value: &TypedExpr, expected: Type, what: &str) {
-        if value.ty.is_assignable_to(expected) {
+        // A type that holds an error was already reported where the error arose.
+        if value.ty.has_error() || value.ty.is_assignable_to(&expected) {
             return;
         }
         let rule = if expected == Type::Float && value.ty == Type::Int {
@@ -254,5 +416,22 @@ impl BodyChecker<'_> {
             diagnostic = diagnostic.with_fix(value.span, format!("{digits}.0"));
         }
         self.diagnostics.push(diagnostic);
+    }
+}
+
+/// Returns the value of an integer literal, or of a negated one, such as `2` or `-1`.
+pub(super) fn literal_position(index: &Expr) -> Option<i128> {
+    use typy_source::syntax::UnaryOperator;
+    match index {
+        Expr::Constant {
+            value: Constant::Int(digits),
+            ..
+        } => digits.parse().ok().or(Some(i128::MAX)),
+        Expr::UnaryOp {
+            operator: UnaryOperator::USub,
+            operand,
+            ..
+        } => literal_position(operand).map(|value| -value),
+        _ => None,
     }
 }

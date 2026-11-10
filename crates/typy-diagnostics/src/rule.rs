@@ -11,8 +11,24 @@ impl RuleId {
     pub const A_01: Self = Self("A-01");
     /// Classes with methods and an `__init__` shall be accepted, with each instance attribute assigned in `__init__` or declared in the class body.
     pub const CLS_01: Self = Self("CLS-01");
+    /// Adding an attribute that the class does not declare shall be rejected.
+    pub const CLS_02: Self = Self("CLS-02");
+    /// Single inheritance between user classes shall be accepted, with overriding methods type checked against the base.
+    pub const CLS_04: Self = Self("CLS-04");
+    /// `@dataclass`, including `frozen`, `order` and `field(default=...)`, shall be accepted.
+    pub const CLS_05: Self = Self("CLS-05");
+    /// `@property`, `@staticmethod` and `@classmethod` shall be accepted.
+    pub const CLS_06: Self = Self("CLS-06");
+    /// Operator methods such as `__add__`, `__eq__`, `__lt__`, `__len__`, `__getitem__` and `__contains__` shall be called for the matching operators.
+    pub const CLS_07: Self = Self("CLS-07");
+    /// `__str__` and `__repr__` shall be used by `str()`, `repr()`, `print()` and f-strings.
+    pub const CLS_08: Self = Self("CLS-08");
     /// `isinstance` shall be accepted with a class or a tuple of classes.
     pub const CLS_09: Self = Self("CLS-09");
+    /// Class variables, given a value in the class body, shall be accepted.
+    pub const CLS_11: Self = Self("CLS-11");
+    /// `type(x)` shall give the type object of the value `x`, and a class name or the name of a built-in type shall be its type object as a value; a type object shall print as `<class 'name'>`, give its name as `__name__`, and compare with `is`, `is not`, `==` and `!=`.
+    pub const CLS_12: Self = Self("CLS-12");
     /// `for` shall iterate over `range`, `str`, `bytes`, `list`, `tuple`, `dict`, `set` and any class with `__iter__` and `__next__`.
     pub const CST_03: Self = Self("CST-03");
     /// `try` with `except`, `else` and `finally` clauses shall be accepted, and `finally` shall run on `return`, `break`, `continue` and exceptions.
@@ -21,8 +37,14 @@ impl RuleId {
     pub const CST_05: Self = Self("CST-05");
     /// `match` shall be accepted with literal, capture, wildcard, value, sequence, mapping and class patterns, guards and `\\|` alternatives.
     pub const CST_06: Self = Self("CST-06");
+    /// `for` shall iterate over any class with `__iter__` and `__next__`, and end when `__next__` raises `StopIteration` (OI-17).
+    pub const CST_08: Self = Self("CST-08");
+    /// `iter` and `next`, with and without a default, shall be available for the built-in iterables.
+    pub const CST_09: Self = Self("CST-09");
     /// `bool` shall have the values `True` and `False`.
     pub const DAT_03: Self = Self("DAT-03");
+    /// `str` shall be an immutable sequence of Unicode code points. `len()` and indexing shall count code points, and indexing shall return a `str` of length 1.
+    pub const DAT_05: Self = Self("DAT-05");
     /// `bytes` shall be an immutable sequence of integers from 0 to 255.
     pub const DAT_06: Self = Self("DAT-06");
     /// `list[T]` shall be a mutable sequence.
@@ -35,6 +57,16 @@ impl RuleId {
     pub const DAT_10: Self = Self("DAT-10");
     /// Slicing shall return a new object with the items selected by start, stop and step, as in Python.
     pub const DAT_12: Self = Self("DAT-12");
+    /// Assigning to a slice of a list shall replace the selected items with the items of a list, as in Python.
+    pub const DAT_13: Self = Self("DAT-13");
+    /// `tuple[T, ...]` shall be an immutable sequence of any number of items of type `T`, and a tuple of a fixed number of items of type `T` shall be accepted where one is expected.
+    pub const DAT_14: Self = Self("DAT-14");
+    /// The methods of `set` that combine a set with others, `union`, `intersection`, `difference`, `symmetric_difference`, `update`, `intersection_update`, `difference_update`, `symmetric_difference_update`, `issubset`, `issuperset` and `isdisjoint`, shall accept any iterable of the set's item type, and as many arguments as CPython accepts, with CPython's results and order.
+    pub const DAT_15: Self = Self("DAT-15");
+    /// `reversed` of a dict and of its views, `dict` with keyword arguments, `dict.fromkeys`, and the comparisons and set operations of `dict.keys()` and `dict.items()` shall be available with Python's results.
+    pub const DAT_16: Self = Self("DAT-16");
+    /// `range` shall be a value as well as a loop source: a sequence of `int` with `len`, indexing, slicing, `in`, `==` and `repr`, as in Python.
+    pub const DAT_17: Self = Self("DAT-17");
     /// Raising and catching exceptions shall follow the Language Reference, including matching on base classes.
     pub const EXC_01: Self = Self("EXC-01");
     /// `+`, `-`, `*`, `/`, `//`, `%` and `**` shall give Python's results for `int` and `float`, including `/` on two `int` values returning `float` and `%` taking the sign of the divisor.
@@ -97,6 +129,8 @@ impl RuleId {
     pub const LIB_04: Self = Self("LIB-04");
     /// Importing a standard library module that TyPy does not provide shall be rejected with the list of modules it provides.
     pub const LIB_08: Self = Self("LIB-08");
+    /// `str % values`, printf-style formatting with a value, a tuple of values or a dict of named values, shall be accepted with Python's results.
+    pub const LIB_10: Self = Self("LIB-10");
     /// `lazy import` and `lazy from ... import` are accepted at module level when the Python floor is 3.15 or later.
     pub const MOD_06: Self = Self("MOD-06");
     /// The compiler shall not crash on any input; an internal error shall be reported as `E9xxx` with a hint to report it.
@@ -129,6 +163,8 @@ impl RuleId {
     pub const TYP_01: Self = Self("TYP-01");
     /// Assigning a value of another type to a variable shall be rejected.
     pub const TYP_03: Self = Self("TYP-03");
+    /// An empty list, dict or set display shall need an annotation that names its element types.
+    pub const TYP_05: Self = Self("TYP-05");
     /// The annotations `list[T]`, `dict[K, V]`, `set[T]`, `tuple[...]` and `T \\| None` shall be accepted.
     pub const TYP_06: Self = Self("TYP-06");
     /// An `int` value shall be rejected where a `float` is declared, because CPython keeps it an `int`: `x: float = 1` prints `1`.
@@ -137,23 +173,43 @@ impl RuleId {
     pub const TYP_10: Self = Self("TYP-10");
     /// A read of a local variable shall be rejected unless the variable is assigned on every path that reaches the read, so `UnboundLocalError` cannot occur.
     pub const TYP_12: Self = Self("TYP-12");
+    /// A local variable or parameter of type `T | None` shall narrow to `T` where an `is None` or `is not None` test, or a truth test that holds, shows it is not `None`, and using it as `T` anywhere else shall be rejected.
+    pub const TYP_13: Self = Self("TYP-13");
+    /// Annotations that join two or more types other than `None` with `|`, such as `int | str`, shall be accepted, with narrowing by `isinstance` (TYP-07).
+    pub const TYP_14: Self = Self("TYP-14");
 
     /// Every rule a diagnostic can name, in ID order.
     pub const ALL: &'static [Self] = &[
         Self::A_01,
         Self::CLS_01,
+        Self::CLS_02,
+        Self::CLS_04,
+        Self::CLS_05,
+        Self::CLS_06,
+        Self::CLS_07,
+        Self::CLS_08,
         Self::CLS_09,
+        Self::CLS_11,
+        Self::CLS_12,
         Self::CST_03,
         Self::CST_04,
         Self::CST_05,
         Self::CST_06,
+        Self::CST_08,
+        Self::CST_09,
         Self::DAT_03,
+        Self::DAT_05,
         Self::DAT_06,
         Self::DAT_07,
         Self::DAT_08,
         Self::DAT_09,
         Self::DAT_10,
         Self::DAT_12,
+        Self::DAT_13,
+        Self::DAT_14,
+        Self::DAT_15,
+        Self::DAT_16,
+        Self::DAT_17,
         Self::EXC_01,
         Self::EXP_02,
         Self::EXP_04,
@@ -185,6 +241,7 @@ impl RuleId {
         Self::LIB_03,
         Self::LIB_04,
         Self::LIB_08,
+        Self::LIB_10,
         Self::MOD_06,
         Self::NFR_09,
         Self::SMT_02,
@@ -201,10 +258,13 @@ impl RuleId {
         Self::STD_04,
         Self::TYP_01,
         Self::TYP_03,
+        Self::TYP_05,
         Self::TYP_06,
         Self::TYP_09,
         Self::TYP_10,
         Self::TYP_12,
+        Self::TYP_13,
+        Self::TYP_14,
     ];
 
     /// Returns the ID as text, such as `TYP-03`.

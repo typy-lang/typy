@@ -1,57 +1,80 @@
-//! The types that annotations name in 0.1: `int`, `float`, `bool`, `str` and `None`.
+//! The types that annotations name: `int`, `float`, `bool`, `str`, `None`, and from 0.2
+//! `tuple[...]`.
+
+use std::collections::BTreeMap;
 
 use typy_diagnostics::{Diagnostic, DiagnosticCode, Diagnostics, RuleId};
 use typy_source::syntax::{Constant, Expr};
 
+use crate::typed::ClassId;
 use crate::types::Type;
 
-/// Returns the type an annotation names; 0.1 knows `int`, `float`, `bool`, `str` and `None`.
-pub(crate) fn annotation_type(annotation: &Expr, diagnostics: &mut Diagnostics) -> Type {
+/// The classes an annotation may name. A class whose ID is below `bound` is bound where the
+/// annotation is evaluated, so its bare name may be used; any class may be named in a string.
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct AnnotationScope<'classes> {
+    pub(crate) classes: &'classes BTreeMap<String, ClassId>,
+    pub(crate) bound: u32,
+}
+
+/// Returns the type an annotation names.
+pub(crate) fn annotation_type(
+    annotation: &Expr,
+    scope: &AnnotationScope<'_>,
+    diagnostics: &mut Diagnostics,
+) -> Type {
     match annotation {
         Expr::Constant {
             value: Constant::None,
             ..
         } => Type::NoneType,
-        Expr::Name { id, span } => {
-            match id.as_str() {
-                "int" => Type::Int,
-                "float" => Type::Float,
-                "bool" => Type::Bool,
-                "str" => Type::Str,
-                "Any" | "object" => {
-                    diagnostics.push(
-                        Diagnostic::new(
-                            DiagnosticCode::error(403),
-                            *span,
-                            format!("`{id}` does not give the value one type"),
-                        )
-                        .with_rule(RuleId::TYP_10),
-                    );
-                    Type::Error
-                }
-                "list" | "dict" | "set" | "tuple" | "bytes" => {
-                    diagnostics.push(
-                        Diagnostic::new(
-                            DiagnosticCode::error(201),
-                            *span,
-                            format!("`{id}` annotations are planned for TyPy 0.2 (TYP-06)"),
-                        )
-                        .with_rule(RuleId::TYP_06),
-                    );
-                    Type::Error
-                }
-                _ => {
-                    diagnostics.push(
-                    Diagnostic::new(
-                        DiagnosticCode::error(205),
-                        *span,
-                        format!("`{id}` is not a type TyPy 0.1 knows; use int, float, bool, str or None"),
-                    )
-                    .with_rule(RuleId::STD_04),
-                );
-                    Type::Error
-                }
+        Expr::Name { id, span } => named_type(id, *span, scope, diagnostics),
+        // A string is read when the annotation is, so it may name any class (CLS-01).
+        Expr::Quoted { annotation, .. } => {
+            let deferred = AnnotationScope {
+                bound: u32::MAX,
+                ..*scope
+            };
+            annotation_type(annotation, &deferred, diagnostics)
+        }
+        Expr::Subscript { value, index, .. } if matches!(value.as_ref(), Expr::Name { id, .. } if id == "tuple") => {
+            tuple_annotation(index, scope, diagnostics)
+        }
+        Expr::Subscript { value, index, .. } if matches!(value.as_ref(), Expr::Name { id, .. } if id == "type") =>
+        {
+            let of = annotation_type(index, scope, diagnostics);
+            crate::types::TypeObjectOf::type_of(crate::types::TypeObjectOf::of(&of))
+        }
+        Expr::Subscript { value, index, .. } if matches!(value.as_ref(), Expr::Name { id, .. } if id == "list") => {
+            Type::List(Box::new(annotation_type(index, scope, diagnostics)))
+        }
+        Expr::BinOp {
+            operator: typy_source::syntax::BinaryOperator::BitOr,
+            left,
+            right,
+            ..
+        } => {
+            // The subset checker lets only `T | None` and `None | T` through.
+            let inner = match left.as_ref() {
+                Expr::Constant {
+                    value: Constant::None,
+                    ..
+                } => right,
+                _ => left,
+            };
+            Type::optional(annotation_type(inner, scope, diagnostics))
+        }
+        Expr::Subscript { value, index, span } if matches!(value.as_ref(), Expr::Name { id, .. } if id == "dict") => {
+            dict_annotation(index, *span, scope, diagnostics)
+        }
+        Expr::Subscript { value, index, .. } if matches!(value.as_ref(), Expr::Name { id, .. } if id == "set") =>
+        {
+            let item = annotation_type(index, scope, diagnostics);
+            if !item.is_hashable() {
+                diagnostics.push(unhashable(&item, index.span()));
+                return Type::Error;
             }
+            Type::Set(Box::new(item))
         }
         other => {
             diagnostics.push(
@@ -65,4 +88,207 @@ pub(crate) fn annotation_type(annotation: &Expr, diagnostics: &mut Diagnostics) 
             Type::Error
         }
     }
+}
+
+/// Returns the type a bare name names: a scalar, or an error for a name that is not a type or
+/// needs its item types.
+fn named_type(
+    id: &str,
+    span: typy_diagnostics::Span,
+    scope: &AnnotationScope<'_>,
+    diagnostics: &mut Diagnostics,
+) -> Type {
+    if let Some(class) = scope.classes.get(id) {
+        if class.0 >= scope.bound {
+            diagnostics.push(
+                Diagnostic::new(
+                    DiagnosticCode::error(306),
+                    span,
+                    format!("this annotation is evaluated before the `class {id}` statement runs"),
+                )
+                .with_rule(RuleId::TYP_12)
+                .with_help(format!("write the annotation as a string, `\"{id}\"`")),
+            );
+            return Type::Error;
+        }
+        return Type::Instance(*class, id.to_owned());
+    }
+    match id {
+        "int" => Type::Int,
+        // `type` holds any type object; `type[X]` the one of `X` (CLS-12).
+        "type" => Type::TypeObject(None),
+        "float" => Type::Float,
+        "bool" => Type::Bool,
+        "str" => Type::Str,
+        "bytes" => Type::Bytes,
+        "Any" | "object" => {
+            diagnostics.push(
+                Diagnostic::new(
+                    DiagnosticCode::error(403),
+                    span,
+                    format!("`{id}` does not give the value one type"),
+                )
+                .with_rule(RuleId::TYP_10),
+            );
+            Type::Error
+        }
+        "tuple" => {
+            diagnostics.push(
+                Diagnostic::new(
+                    DiagnosticCode::error(408),
+                    span,
+                    "a `tuple` annotation names the type of each item, such as `tuple[int, str]`",
+                )
+                .with_rule(RuleId::TYP_06),
+            );
+            Type::Error
+        }
+        "list" => {
+            diagnostics.push(
+                Diagnostic::new(
+                    DiagnosticCode::error(408),
+                    span,
+                    "a `list` annotation names the type of its items, such as `list[int]`",
+                )
+                .with_rule(RuleId::TYP_06),
+            );
+            Type::Error
+        }
+        "set" => {
+            diagnostics.push(
+                Diagnostic::new(
+                    DiagnosticCode::error(408),
+                    span,
+                    "a `set` annotation names the type of its items, such as `set[int]`",
+                )
+                .with_rule(RuleId::TYP_06),
+            );
+            Type::Error
+        }
+        "dict" => {
+            diagnostics.push(dict_arity(span));
+            Type::Error
+        }
+        _ => {
+            diagnostics.push(
+                Diagnostic::new(
+                    DiagnosticCode::error(205),
+                    span,
+                    format!(
+                        "`{id}` is not a type TyPy 0.1 knows; use int, float, bool, str or None"
+                    ),
+                )
+                .with_rule(RuleId::STD_04),
+            );
+            Type::Error
+        }
+    }
+}
+
+/// Returns the type `dict[K, V]` names: two types, and a key type with a hash.
+fn dict_annotation(
+    index: &Expr,
+    span: typy_diagnostics::Span,
+    scope: &AnnotationScope<'_>,
+    diagnostics: &mut Diagnostics,
+) -> Type {
+    let Expr::Tuple { elements, .. } = index else {
+        diagnostics.push(dict_arity(span));
+        return Type::Error;
+    };
+    let [key, value] = elements.as_slice() else {
+        diagnostics.push(dict_arity(span));
+        return Type::Error;
+    };
+    let (key_type, value_type) = (
+        annotation_type(key, scope, diagnostics),
+        annotation_type(value, scope, diagnostics),
+    );
+    if !key_type.is_hashable() {
+        diagnostics.push(unhashable_key(&key_type, key.span()));
+        return Type::Error;
+    }
+    Type::Dict(Box::new(key_type), Box::new(value_type))
+}
+
+fn dict_arity(span: typy_diagnostics::Span) -> Diagnostic {
+    Diagnostic::new(
+        DiagnosticCode::error(408),
+        span,
+        "a `dict` annotation names the types of its keys and values, such as `dict[str, int]`",
+    )
+    .with_rule(RuleId::TYP_06)
+}
+
+/// Returns the error for an item of a set, or a key of a dict, whose type has no hash.
+pub(crate) fn unhashable(item: &Type, span: typy_diagnostics::Span) -> Diagnostic {
+    unhashable_as(item, span, "an item of a set", RuleId::DAT_10)
+}
+
+/// Returns the error for a key of a dict whose type has no hash.
+pub(crate) fn unhashable_key(key: &Type, span: typy_diagnostics::Span) -> Diagnostic {
+    unhashable_as(key, span, "a key of a dict", RuleId::DAT_09)
+}
+
+fn unhashable_as(
+    item: &Type,
+    span: typy_diagnostics::Span,
+    place: &str,
+    rule: RuleId,
+) -> Diagnostic {
+    Diagnostic::new(
+        DiagnosticCode::error(413),
+        span,
+        format!(
+            "{} cannot be {place}, because it has no hash",
+            item.with_article()
+        ),
+    )
+    .with_rule(rule)
+    .with_help("a list, a set or a dict changes, so it has no hash; use a tuple of its items")
+}
+
+/// Returns the type `tuple[...]` names: one type per item, `tuple[()]` for the empty tuple. A
+/// tuple of any length, `tuple[T, ...]`, is a sequence like a list and arrives with lists.
+fn tuple_annotation(
+    index: &Expr,
+    scope: &AnnotationScope<'_>,
+    diagnostics: &mut Diagnostics,
+) -> Type {
+    let items: Vec<&Expr> = match index {
+        Expr::Tuple { elements, .. } => elements.iter().collect(),
+        single => vec![single],
+    };
+    let is_ellipsis = |item: &Expr| {
+        matches!(
+            item,
+            Expr::Constant {
+                value: Constant::Ellipsis,
+                ..
+            }
+        )
+    };
+    if let [item, ellipsis] = items.as_slice()
+        && is_ellipsis(ellipsis)
+        && !is_ellipsis(item)
+    {
+        return Type::TupleOf(Box::new(annotation_type(item, scope, diagnostics)));
+    }
+    if items.iter().any(|item| is_ellipsis(item)) {
+        diagnostics.push(
+            Diagnostic::new(
+                DiagnosticCode::error(408),
+                index.span(),
+                "`...` in a tuple annotation follows its only item type, as in `tuple[int, ...]`",
+            )
+            .with_rule(RuleId::DAT_14),
+        );
+        return Type::Error;
+    }
+    Type::Tuple(
+        items
+            .into_iter()
+            .map(|item| annotation_type(item, scope, diagnostics))
+            .collect(),
+    )
 }

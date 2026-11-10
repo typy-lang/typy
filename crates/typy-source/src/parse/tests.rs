@@ -4,8 +4,8 @@ use super::{parse, sentence};
 use crate::settings::PythonFloor;
 use crate::source_file::SourceFile;
 use crate::syntax::{
-    BinaryOperator, BoolOperator, CompareOperator, Constant, Expr, NodeKind, ParameterKind, Stmt,
-    dump,
+    BinaryOperator, BoolOperator, CompareOperator, Constant, Expr, FStringPart, NodeKind,
+    ParameterKind, Stmt, dump,
 };
 use typy_diagnostics::FileId;
 
@@ -224,8 +224,6 @@ fn operators_are_converted() {
 #[test]
 fn constructs_beyond_the_release_keep_their_kind_and_span() {
     let source = "\
-class C:
-    pass
 async def a():
     pass
 type X = int
@@ -253,7 +251,6 @@ global g
     assert_eq!(
         kinds,
         [
-            NodeKind::ClassDef,
             NodeKind::AsyncFunctionDef,
             NodeKind::TypeAlias,
             NodeKind::Match,
@@ -270,15 +267,8 @@ global g
 #[test]
 fn expressions_beyond_the_release_keep_their_kind() {
     let cases = [
-        ("[1]\n", NodeKind::List),
-        ("(1, 2)\n", NodeKind::Tuple),
-        ("{1: 2}\n", NodeKind::Dict),
-        ("{1}\n", NodeKind::Set),
-        ("[x for x in y]\n", NodeKind::ListComp),
         ("(x for x in y)\n", NodeKind::GeneratorExp),
         ("lambda: 1\n", NodeKind::Lambda),
-        ("f'{x}'\n", NodeKind::JoinedStr),
-        ("a.b\n", NodeKind::Attribute),
         ("(y := 1)\n", NodeKind::NamedExpr),
     ];
     for (source, expected) in cases {
@@ -286,6 +276,48 @@ fn expressions_beyond_the_release_keep_their_kind() {
             matches!(only_expression(source), Expr::Other { kind, .. } if kind == expected),
             "{source}"
         );
+    }
+}
+
+#[test]
+fn fstrings_keep_their_text_fields_conversions_specs_and_debug_text() {
+    let source = "f'a{{{x!r:>{w}.2f}' 'b' f'{y = }{z:}'\n";
+    let Expr::FString { parts, .. } = only_expression(source) else {
+        panic!("an f-string");
+    };
+    assert_eq!(parts.len(), 5);
+    assert_eq!(parts[0], FStringPart::Literal("a{".to_owned()));
+    let FStringPart::Field(field) = &parts[1] else {
+        panic!("a field");
+    };
+    assert_eq!(field.conversion, Some('r'));
+    assert!(matches!(&field.value, Expr::Name { id, .. } if id == "x"));
+    let spec = field.spec.as_ref().expect("a spec");
+    assert_eq!(spec[0], FStringPart::Literal(">".to_owned()));
+    assert!(matches!(&spec[1], FStringPart::Field(_)));
+    assert_eq!(spec[2], FStringPart::Literal(".2f".to_owned()));
+    assert_eq!(parts[2], FStringPart::Literal("b".to_owned()));
+    let FStringPart::Field(debug) = &parts[3] else {
+        panic!("a field");
+    };
+    assert_eq!(debug.debug.as_deref(), Some("y = "));
+    assert_eq!(debug.spec, None);
+    let FStringPart::Field(empty) = &parts[4] else {
+        panic!("a field");
+    };
+    assert_eq!(empty.spec, Some(Vec::new()));
+    let dumped = dump(
+        &parse(&file(source), PythonFloor::V3_12).unwrap(),
+        &file(source),
+    );
+    for line in [
+        "FString @1:1",
+        "Literal \"a{\"",
+        "Field !r @1:6",
+        "spec",
+        "Field debug \"y = \"",
+    ] {
+        assert!(dumped.contains(line), "{line} in\n{dumped}");
     }
 }
 
@@ -407,14 +439,7 @@ f(*args)
         &parse(&file(source), PythonFloor::V3_12).unwrap(),
         &file(source),
     );
-    for kind in [
-        "AsyncFunctionDef",
-        "TryStar",
-        "Slice",
-        "SetComp",
-        "DictComp",
-        "Starred",
-    ] {
+    for kind in ["AsyncFunctionDef", "TryStar", "Slice", "SetComp", "Starred"] {
         assert!(dumped.contains(kind), "{kind} missing from\n{dumped}");
     }
     let Stmt::FunctionDef { body: inner, .. } = &statements[1] else {
@@ -448,6 +473,65 @@ fn template_strings_need_floor_3_14() {
             ..
         }
     ));
+}
+
+#[test]
+fn classes_keep_their_bases_keywords_decorators_and_body() {
+    let source =
+        "@d\nclass C[T](B, metaclass=M):\n    x: int\n    def f(self) -> None:\n        pass\n";
+    let parsed = parse(&file(source), PythonFloor::V3_12).unwrap();
+    let Stmt::ClassDef {
+        name,
+        bases,
+        keyword_count,
+        body,
+        decorators,
+        type_parameter_count,
+        ..
+    } = &parsed.body[0]
+    else {
+        panic!("a class: {:?}", parsed.body[0]);
+    };
+    assert_eq!(name.name, "C");
+    assert_eq!((bases.len(), *keyword_count, body.len()), (1, 1, 2));
+    assert_eq!((decorators.len(), *type_parameter_count), (1, 1));
+    let dumped = dump(&parsed, &file(source));
+    for line in [
+        "ClassDef C @1:1",
+        "  decorator",
+        "  type_params 1",
+        "  base",
+        "    Name B",
+        "  keywords 1",
+        "  body",
+        "    AnnAssign @3:5",
+    ] {
+        assert!(dumped.contains(line), "{line} in\n{dumped}");
+    }
+    let plain = parse(&file("class D:\n    pass\n"), PythonFloor::V3_12).unwrap();
+    assert_eq!(
+        dump(&plain, &file("class D:\n    pass\n")),
+        "Module\n  ClassDef D @1:1\n    body\n      Pass @2:5\n"
+    );
+    assert!(
+        matches!(&plain.body[0], Stmt::ClassDef { bases, keyword_count: 0, .. } if bases.is_empty())
+    );
+}
+
+#[test]
+fn string_annotations_hold_the_expression_they_quote() {
+    let source = "def f(a: \"Node | None\") -> 'int':\n    b: \"x(\" = 1\n";
+    let parsed = parse(&file(source), PythonFloor::V3_12).unwrap();
+    let dumped = dump(&parsed, &file(source));
+    for line in [
+        "Quoted @1:10",
+        "BinOp BitOr @1:11",
+        "Name Node @1:11",
+        "Quoted @1:28",
+    ] {
+        assert!(dumped.contains(line), "{line} in\n{dumped}");
+    }
+    assert!(dumped.contains("Constant Str(\"x(\")"), "{dumped}");
 }
 
 #[test]
@@ -579,4 +663,53 @@ fn a_parameter_without_annotation_is_dumped_without_one() {
     let expected =
         "Module\n  FunctionDef f @1:1\n    Parameter n Normal @1:7\n    body\n      Pass @2:5\n";
     assert_eq!(dumped, expected);
+}
+
+#[test]
+fn tuples_are_converted_with_their_elements() {
+    for source in ["(1, x)\n", "1, x\n"] {
+        let Expr::Tuple { elements, .. } = only_expression(source) else {
+            panic!("not a tuple: {source:?}");
+        };
+        assert_eq!(elements.len(), 2, "{source:?}");
+        assert!(matches!(elements[1], Expr::Name { ref id, .. } if id == "x"));
+    }
+    assert!(
+        matches!(only_expression("()\n"), Expr::Tuple { ref elements, .. } if elements.is_empty())
+    );
+}
+
+#[test]
+fn lists_and_attributes_are_converted() {
+    let Expr::List { elements, .. } = only_expression("[1, x]\n") else {
+        panic!("not a list");
+    };
+    assert_eq!(elements.len(), 2);
+    let Expr::Call { function, .. } = only_expression("items.append(1)\n") else {
+        panic!("not a call");
+    };
+    let Expr::Attribute {
+        value, attribute, ..
+    } = *function
+    else {
+        panic!("not an attribute");
+    };
+    assert!(matches!(*value, Expr::Name { ref id, .. } if id == "items"));
+    assert_eq!(attribute.name, "append");
+}
+
+#[test]
+fn every_node_kind_is_dumped_at_its_depth_with_its_position() {
+    let source = "@trace\nclass Box(Base, metaclass=M):\n    size: int\n\n    def put[T](self, item: int, /, *rest: int, flag: bool = True, **more: int) -> None:\n        self.items = [x * 2 for x in rest if x if not x]\n        pairs = {k: v for k, v in more.items()}\n        unique = {y async for y in rest}\n        text = f\"{item!r:>{size}.2f} {flag=}\"\n        part = rest[1:2:3]\n        same = {1, 2}\n        table = {\"a\": 1, **more}\n        print(a < b <= c, -item, item if flag else 0, x or y, lambda: 1)\n";
+    let expected = "Module\n  ClassDef Box @1:1\n    decorator\n      Name trace @1:2\n    base\n      Name Base @2:11\n    keywords 1\n    body\n      AnnAssign @3:5\n        Name size @3:5\n        Name int @3:11\n      FunctionDef put @5:5\n        type_params 1\n        Parameter self PositionalOnly @5:16\n        Parameter item PositionalOnly @5:22\n          Name int @5:28\n        Parameter rest VarPositional @5:36\n          Name int @5:43\n        Parameter flag KeywordOnly @5:48\n          Name bool @5:54\n          default\n            Constant Bool(true) @5:61\n        Parameter more VarKeyword @5:67\n          Name int @5:75\n        returns\n          Constant None @5:83\n        body\n          Assign @6:9\n            Attribute items @6:9\n              Name self @6:9\n            ListComp @6:22\n              BinOp Mult @6:23\n                Name x @6:23\n                Constant Int(\"2\") @6:27\n              Comprehension @6:29\n                Name x @6:33\n                Name rest @6:38\n                Name x @6:46\n                UnaryOp Not @6:51\n                  Name x @6:55\n          Assign @7:9\n            Name pairs @7:9\n            DictComp @7:17\n              Name k @7:18\n              Name v @7:21\n              Comprehension @7:23\n                Tuple @7:27\n                  Name k @7:27\n                  Name v @7:30\n                Call @7:35\n                  Attribute items @7:35\n                    Name more @7:35\n          Assign @8:9\n            Name unique @8:9\n            SetComp @8:18\n              Name y @8:19\n              AsyncComprehension @8:21\n                Name y @8:31\n                Name rest @8:36\n          Assign @9:9\n            Name text @9:9\n            FString @9:16\n              Field !r @9:18\n                Name item @9:19\n                spec\n                  Literal \">\"\n                  Field @9:27\n                    Name size @9:28\n                  Literal \".2f\"\n              Literal \" \"\n              Field debug \"flag=\" @9:38\n                Name flag @9:39\n          Assign @10:9\n            Name part @10:9\n            Subscript @10:16\n              Name rest @10:16\n              Slice @10:21\n                Constant Int(\"1\") @10:21\n                Constant Int(\"2\") @10:23\n                Constant Int(\"3\") @10:25\n          Assign @11:9\n            Name same @11:9\n            Set @11:16\n              Constant Int(\"1\") @11:17\n              Constant Int(\"2\") @11:20\n          Assign @12:9\n            Name table @12:9\n            Dict @12:17\n              Constant Str(\"a\") @12:18\n              Constant Int(\"1\") @12:23\n              Unpack @12:28\n              Name more @12:28\n          Expr @13:9\n            Call @13:9\n              Name print @13:9\n              Compare [Lt, LtE] @13:15\n                Name a @13:15\n                Name b @13:19\n                Name c @13:24\n              UnaryOp USub @13:27\n                Name item @13:28\n              IfExp @13:34\n                Name flag @13:42\n                Name item @13:34\n                Constant Int(\"0\") @13:52\n              BoolOp Or @13:55\n                Name x @13:55\n                Name y @13:60\n              Lambda @13:63\n";
+    let parsed = parse(&file(source), PythonFloor::V3_12).unwrap();
+    assert_eq!(dump(&parsed, &file(source)), expected);
+}
+
+#[test]
+fn every_statement_kind_is_dumped_at_its_depth_with_its_position() {
+    let source = "@cache\ndef f(n: int) -> int:\n    total = 0\n    total += n\n    for i in range(n):\n        continue\n    else:\n        pass\n    while n:\n        break\n    else:\n        pass\n    if n:\n        return n\n    else:\n        return 0\nimport os\nfrom ..pkg import name\nprint(s[0], sep=\"-\", **options)\n";
+    let expected = "Module\n  FunctionDef f @1:1\n    decorator\n      Name cache @1:2\n    Parameter n Normal @2:7\n      Name int @2:10\n    returns\n      Name int @2:18\n    body\n      Assign @3:5\n        Name total @3:5\n        Constant Int(\"0\") @3:13\n      AugAssign Add @4:5\n        Name total @4:5\n        Name n @4:14\n      For @5:5\n        Name i @5:9\n        Call @5:14\n          Name range @5:14\n          Name n @5:20\n        body\n          Continue @6:9\n        orelse\n          Pass @8:9\n      While @9:5\n        Name n @9:11\n        body\n          Break @10:9\n        orelse\n          Pass @12:9\n      If @13:5\n        Name n @13:8\n        body\n          Return @14:9\n            Name n @14:16\n        orelse\n          Return @16:9\n            Constant Int(\"0\") @16:16\n  Import os @17:1\n  ImportFrom ..pkg name @18:1\n  Expr @19:1\n    Call @19:1\n      Name print @19:1\n      Subscript @19:7\n        Name s @19:7\n        Constant Int(\"0\") @19:9\n      keyword sep @19:13\n        Constant Str(\"-\") @19:17\n      keyword ** @19:22\n        Name options @19:24\n";
+    let parsed = parse(&file(source), PythonFloor::V3_12).unwrap();
+    assert_eq!(dump(&parsed, &file(source)), expected);
 }

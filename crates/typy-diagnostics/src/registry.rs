@@ -108,6 +108,26 @@ pub const CODES: &[CodeInfo] = &[
         RuleId::TYP_12,
     ),
     active(
+        307,
+        "tuple indexed other than by an integer literal inside it",
+        RuleId::DAT_08,
+    ),
+    active(
+        308,
+        "unpacking into a different number of targets",
+        RuleId::SMT_02,
+    ),
+    active(
+        309,
+        "instance used, or an attribute read, before `__init__` assigns every attribute",
+        RuleId::CLS_01,
+    ),
+    active(
+        310,
+        "attribute whose type is not known yet where it is read",
+        RuleId::CLS_01,
+    ),
+    active(
         401,
         "operator not defined for these operand types",
         RuleId::EXP_02,
@@ -122,6 +142,37 @@ pub const CODES: &[CodeInfo] = &[
     active(405, "returned value of the wrong type", RuleId::TYP_01),
     active(406, "arithmetic on `bool`", RuleId::DAT_03),
     active(407, "comparison between unsupported types", RuleId::EXP_06),
+    active(
+        408,
+        "`tuple`, `list`, `set` or `dict` annotation without its item types",
+        RuleId::TYP_06,
+    ),
+    active(
+        409,
+        "list, set or dict display with items of different types",
+        RuleId::DAT_07,
+    ),
+    active(
+        410,
+        "empty collection without an annotation that names its item types",
+        RuleId::TYP_05,
+    ),
+    active(
+        411,
+        "`for` over a value that cannot be iterated",
+        RuleId::CST_03,
+    ),
+    active(412, "method a built-in type does not have", RuleId::LIB_03),
+    active(
+        413,
+        "set item or dict key of a type without a hash",
+        RuleId::DAT_10,
+    ),
+    active(
+        414,
+        "attribute or method a class does not have",
+        RuleId::CLS_02,
+    ),
     active(701, "C toolchain program not found", RuleId::A_01),
     active(702, "link failed", RuleId::A_01),
     CodeInfo {

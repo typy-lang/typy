@@ -3,22 +3,93 @@
 use typy_check::{FunctionId, SignatureParameter, TypedConstant, TypedExpr, TypedExprKind};
 use typy_diagnostics::Span;
 use typy_source::syntax::BoolOperator;
-use typy_tyir::{Callee, Constant, Operation, ScalarKind, Terminator, TyirType, ValueId};
+use typy_tyir::{
+    Callee, Constant, Operation, RuntimeFunction, ScalarKind, Terminator, TyirType, ValueId,
+};
 
 use crate::function::FunctionLowerer;
 use crate::ownership::Lowered;
-use crate::types::tyir_type;
 
 impl FunctionLowerer<'_> {
     /// Lowers an expression; the caller releases or moves the result.
+    #[allow(clippy::too_many_lines, reason = "one arm per expression kind")]
     pub(crate) fn expression(&mut self, expression: &TypedExpr) -> Lowered {
         let span = expression.span;
-        let ty = tyir_type(expression.ty);
+        let ty = self.lowered_type(&expression.ty);
         match &expression.kind {
             TypedExprKind::Constant(constant) => self.typed_constant(constant, span),
             TypedExprKind::Local(symbol) => {
                 let slot = self.slots[symbol];
                 self.load(slot, span)
+            }
+            TypedExprKind::Tuple(items) => self.tuple_display(items, ty, span),
+            TypedExprKind::List(items) => {
+                let item = match &expression.ty {
+                    typy_check::Type::List(item) => self.lowered_type(item),
+                    _ => unreachable!("a list display has a list type"),
+                };
+                self.list_display(items, item, span)
+            }
+            TypedExprKind::ListOf(source) => self.list_of(source, span),
+            TypedExprKind::Set(items) => {
+                let item = self.set_item_type(&expression.ty);
+                self.set_display(items, item, span)
+            }
+            TypedExprKind::Wrap(inner) => self.wrap(inner, ty, span),
+            TypedExprKind::Unwrap(inner) => self.unwrap(inner, ty, span),
+            TypedExprKind::Dict { keys, values } => {
+                self.dict_display(keys, values, &expression.ty, span)
+            }
+            TypedExprKind::DictOf(source) => self.dict_of(source, &expression.ty, span),
+            TypedExprKind::Comprehension {
+                element,
+                value,
+                generators,
+            } => self.comprehension(element, value.as_deref(), generators, &expression.ty, span),
+            TypedExprKind::DictItem { dict, key } => {
+                let dict = self.expression(dict);
+                let key = self.expression(key);
+                self.dict_item(dict, key, ty, span)
+            }
+            TypedExprKind::SetOf(source) => {
+                let item = self.set_item_type(&expression.ty);
+                self.set_of(source, item, span)
+            }
+            TypedExprKind::TupleOf(inner) => {
+                let item = match &expression.ty {
+                    typy_check::Type::TupleOf(item) => self.lowered_type(item),
+                    _ => unreachable!("a tuple of a sequence has a `tuple[T, ...]` type"),
+                };
+                self.tuple_of(inner, item, span)
+            }
+            TypedExprKind::ListItem { list, index } => {
+                let list = self.expression(list);
+                let index = self.expression(index);
+                self.list_item(list, index, ty, span)
+            }
+            TypedExprKind::Slice {
+                value,
+                lower,
+                upper,
+                step,
+            } => self.slice(
+                value,
+                [lower.as_deref(), upper.as_deref(), step.as_deref()],
+                ty,
+                span,
+            ),
+            TypedExprKind::Method {
+                receiver,
+                method,
+                arguments,
+            } => self.method(receiver, *method, arguments, ty, span),
+            TypedExprKind::TupleSlice { tuple, positions } => {
+                let tuple = self.expression(tuple);
+                self.tuple_slice(tuple, positions, ty, span)
+            }
+            TypedExprKind::TupleItem { tuple, index } => {
+                let tuple = self.expression(tuple);
+                self.tuple_item(tuple, *index, ty, span)
             }
             TypedExprKind::ModuleName => {
                 let value = self.string("__main__", span);
@@ -31,7 +102,7 @@ impl FunctionLowerer<'_> {
             } => {
                 let left = self.expression(left);
                 let right = self.expression(right);
-                self.binary(*operator, left, right, expression.ty, span)
+                self.binary(*operator, left, right, &expression.ty, span)
             }
             TypedExprKind::Unary { operator, operand } => {
                 let operand = self.expression(operand);
@@ -54,34 +125,59 @@ impl FunctionLowerer<'_> {
             } => {
                 let values: Vec<(usize, Lowered)> = arguments
                     .iter()
-                    .map(|argument| (argument.parameter, self.expression(&argument.value)))
+                    .map(|argument| {
+                        let lowered = self.expression(&argument.value);
+                        (
+                            argument.parameter,
+                            self.kept_for_call(&argument.value, lowered, span),
+                        )
+                    })
                     .collect();
                 self.call_function(*function, values, ty, span)
+            }
+            TypedExprKind::New {
+                class,
+                init,
+                arguments,
+            } => self.new_instance(*class, *init, arguments, span),
+            TypedExprKind::Attribute { object, index } => self.attribute(object, *index, span),
+            TypedExprKind::TypeOf(value) => self.type_of(value, span),
+            TypedExprKind::FString(parts) => self.fstring(parts, span),
+            TypedExprKind::TypeObject(of) => self.type_object(of, span),
+            TypedExprKind::TypeName(object) => {
+                let object = self.expression(object);
+                let name = self.call_runtime(RuntimeFunction::TypeName, vec![object.value], span);
+                self.release(object, span);
+                name
             }
             TypedExprKind::Print { values, sep, end } => {
                 self.print(values, sep.as_deref(), end.as_deref(), span)
             }
+            TypedExprKind::IterableBuiltin {
+                builtin,
+                iterable,
+                option,
+            } => self.iterable_builtin(*builtin, iterable, option.as_deref(), ty, span),
             TypedExprKind::Builtin { builtin, arguments } => {
-                let types: Vec<typy_check::Type> =
-                    arguments.iter().map(|argument| argument.ty).collect();
+                let types: Vec<typy_check::Type> = arguments
+                    .iter()
+                    .map(|argument| argument.ty.clone())
+                    .collect();
                 let values: Vec<Lowered> = arguments
                     .iter()
                     .map(|argument| self.expression(argument))
                     .collect();
                 self.builtin(*builtin, values, &types, ty, span)
             }
-            TypedExprKind::Index { value, index } => {
-                let text = self.expression(value);
-                let position = self.expression(index);
-                let result = self.call_runtime(
-                    typy_tyir::RuntimeFunction::StrIndex,
-                    vec![text.value, position.value],
-                    span,
-                );
-                self.release(position, span);
-                self.release(text, span);
-                result
-            }
+            TypedExprKind::Index { value, index } => self.str_index(value, index, span),
+        }
+    }
+
+    /// Returns the TyIR type of the items of a set type.
+    fn set_item_type(&mut self, ty: &typy_check::Type) -> TyirType {
+        match ty {
+            typy_check::Type::Set(item) => self.lowered_type(item),
+            _ => unreachable!("a set expression has a set type"),
         }
     }
 
@@ -101,6 +197,7 @@ impl FunctionLowerer<'_> {
                 TyirType::Float,
             ),
             TypedConstant::Str(text) => (self.string(text, span), TyirType::STR),
+            TypedConstant::Bytes(data) => (self.bytes_constant(data, span), TyirType::BYTES),
         };
         Self::borrowed(value, ty)
     }
@@ -112,7 +209,42 @@ impl FunctionLowerer<'_> {
             TyirType::Unit => return self.constant(Constant::Bool(false), span),
             TyirType::Int => ScalarKind::Int,
             TyirType::Float => ScalarKind::Float,
+            TyirType::Object(typy_tyir::TypeId::LIST) => return self.list_truth(lowered, span),
+            TyirType::Object(
+                typy_tyir::TypeId::BYTES
+                | typy_tyir::TypeId::SET
+                | typy_tyir::TypeId::DICT
+                | typy_tyir::TypeId::DICT_VIEW,
+            ) => {
+                let function = match lowered.ty {
+                    TyirType::SET => RuntimeFunction::SetLength,
+                    TyirType::DICT => RuntimeFunction::DictLength,
+                    TyirType::VIEW => RuntimeFunction::DictViewLength,
+                    _ => RuntimeFunction::BytesLength,
+                };
+                let length = self.call_runtime(function, vec![lowered.value], span).value;
+                return self.builder.push_value(
+                    Operation::IsTrue {
+                        kind: ScalarKind::Int,
+                        value: length,
+                    },
+                    TyirType::Bool,
+                    span,
+                );
+            }
+            // An instance of a class without `__bool__` or `__len__` is true (CLS-07), and so
+            // is a type object.
+            TyirType::Object(id) if id.class_index().is_some() || id == typy_tyir::TypeId::TYPE => {
+                return self.constant(Constant::Bool(true), span);
+            }
             TyirType::Object(_) => ScalarKind::Str,
+            TyirType::Bits => unreachable!("list items are converted before they are tested"),
+            TyirType::Optional(_) => return self.optional_truth(lowered, span),
+            // A tuple's length is fixed by its type, so its truth is too.
+            TyirType::Tuple(_) => {
+                let filled = self.tuple_length(lowered.ty) > 0;
+                return self.constant(Constant::Bool(filled), span);
+            }
         };
         self.builder.push_value(
             Operation::IsTrue {
@@ -163,7 +295,7 @@ impl FunctionLowerer<'_> {
                 arguments: vec![owned],
             });
             self.builder.switch_to(next);
-            if ty.is_counted() {
+            if self.counted(ty) {
                 self.builder.push(Operation::Decrement(owned), span);
             }
         }
@@ -205,7 +337,7 @@ impl FunctionLowerer<'_> {
     }
 
     /// Calls a program function: arguments were evaluated in source order; missing ones take their constant defaults (EXP-16).
-    fn call_function(
+    pub(crate) fn call_function(
         &mut self,
         function: FunctionId,
         arguments: Vec<(usize, Lowered)>,
@@ -222,7 +354,22 @@ impl FunctionLowerer<'_> {
                 lowered.value
             } else {
                 let default = parameter.default.clone().unwrap_or(TypedConstant::None);
-                self.typed_constant(&default, span).value
+                let constant = self.typed_constant(&default, span).value;
+                match self.lowered_type(&parameter.ty) {
+                    // A default of an optional parameter is `None` or a value of its base.
+                    optional @ TyirType::Optional(_) if default == TypedConstant::None => {
+                        self.none_of(optional, span)
+                    }
+                    optional @ TyirType::Optional(_) => self.builder.push_value(
+                        Operation::Wrap {
+                            value: constant,
+                            ty: optional,
+                        },
+                        optional,
+                        span,
+                    ),
+                    _ => constant,
+                }
             };
             ordered.push(value);
         }

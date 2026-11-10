@@ -6,6 +6,189 @@ All notable changes to TyPy are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-11-10
+
+### Added
+
+- Tuples: displays such as `(1, "a")`, annotations such as
+  `tuple[int, str]` and `tuple[()]`, items read at a literal position such
+  as `pair[0]` or `pair[-1]`, `+`, `len`, comparisons item by item, truth
+  tests, `str` and `repr`, and tuples as arguments and return values
+  (DAT-08, TYP-06).
+- Unpacking assignment into names and nested tuples of names, such as
+  `a, b = b, a` and `x, (y, z) = t` (SMT-02).
+- Lists of `int`, `float`, `bool`, `str` and lists: displays such as
+  `[1, 2]`, annotations such as `list[str]`, an empty `[]` where an
+  annotation, a return type or a parameter gives its type, items read and
+  assigned at positions counted from either end with `IndexError` outside,
+  `append`, `len`, `in` and `not in`, `==`, truth tests, `str` and `repr`,
+  and `for` over a list. Two names bound to one list share it (DAT-07,
+  DAT-11, TYP-05, EXP-07, CST-03). A list stores each item in eight bytes,
+  so a `list[float]` holds raw doubles (MEM-02), and a million `int` items
+  fit in 8.5 MB (NFR-13).
+- Slices of strings and lists, such as `text[1:4]`, `xs[::-1]` and
+  `xs[-2:]`, with Python's defaults and clamping, and `ValueError` for a
+  zero step (DAT-12).
+- The list methods `pop`, `insert`, `extend`, `remove`, `index`, `count`,
+  `clear`, `copy` and `reverse`, with CPython's errors (LIB-03).
+- `+` and `*` on lists, ordering of lists with `<`, `<=`, `>` and `>=`,
+  `xs += ys` and `xs *= n` changing the list in place, and augmented
+  assignment of a list item such as `counts[i] += 1` (EXP-02, EXP-06,
+  SMT-01).
+- An empty `[]` in a comparison takes the type of the other operand, so
+  `xs == []` needs no annotation, and one inside a display takes the type
+  of the other items, as in `[[1], []]` (TYP-05).
+- `sorted`, with `reverse`, `list.sort`, `sum`, with an exact result for
+  `int` items and CPython's compensated result for `float` items, `any`,
+  `all`, and `min` and `max` of a list, with `default` (LIB-02, LIB-03).
+  `sum` of a `list[float]` takes a start such as `0.0`, because CPython
+  returns the `int` 0 for an empty list without one. The `key` argument
+  arrives with function values in 1.0 (FUN-05).
+- Lists of tuples and of `None`, such as `list[tuple[int, str]]`, with every
+  list operation. A tuple is stored inline in the list, so a million pairs
+  of `int` values take 16 MB (DAT-07, MEM-02).
+- `list()`, `list(xs)`, and `list` of a `str`, `enumerate`, `zip` or
+  `reversed`; `sorted`, `min`, `max`, `sum`, `any` and `all` take those
+  sources too (LIB-02).
+- `in` on a `str`, a substring test, and on a tuple, and slices of a tuple
+  with literal bounds such as `pair[1:]` (EXP-07, DAT-12).
+- `tuple[T, ...]`, a tuple of any length, with `tuple(source)`, indexing,
+  slicing, `in`, `len`, `+`, `*`, comparisons, `count`, `index` and `for`.
+  A tuple such as `(1, 2)` is accepted where a `tuple[int, ...]` is
+  expected, and `for` goes over a tuple whose items have one type (DAT-14,
+  CST-03).
+- `bytes`: literals such as `b"a\x00"`, `bytes()`, `bytes(n)` and
+  `bytes(values)`, items as `int` values, slices, `len`, `+`, `*`,
+  comparisons, `in`, `for`, and `str` and `repr` as CPython writes them
+  (DAT-06).
+- The methods of `bytes` that `str` has too, `find` to `join`, `strip`,
+  `replace`, padding, `upper`, `lower`, `swapcase`, `capitalize`, `title`
+  and the `is` tests, with CPython's ASCII meaning, and `bytes.hex`
+  (LIB-03).
+- `str.encode`, `bytes.decode` and `bytes(text, encoding, errors)` with the
+  codecs `utf-8`, `ascii` and `latin-1` under all their CPython names, and
+  the error handlers `strict`, `ignore`, `replace`, `backslashreplace`,
+  `xmlcharrefreplace` and `surrogateescape`, raising `UnicodeEncodeError`
+  and `UnicodeDecodeError` with CPython's messages (LIB-03, EXC-02).
+- The `str` methods `find`, `rfind`, `index`, `rindex`, `count`,
+  `startswith`, `endswith`, `split`, `rsplit`, `splitlines`, `partition`,
+  `rpartition`, `join`, `strip`, `lstrip`, `rstrip`, `removeprefix`,
+  `removesuffix`, `replace`, `center`, `ljust`, `rjust`, `zfill`,
+  `expandtabs` and `isascii`, with arguments by keyword where CPython allows
+  them (LIB-03).
+- The `str` methods `upper`, `lower`, `casefold`, `swapcase`, `capitalize`
+  and `title`, and `isalpha`, `isalnum`, `isdecimal`, `isdigit`,
+  `isnumeric`, `isspace`, `isupper`, `islower`, `istitle`, `isidentifier`
+  and `isprintable`, from CPython 3.15's Unicode 17.0 data, with CPython's
+  final sigma and its title case of words such as `they're` (LIB-03,
+  OI-15).
+- `round`, with and without `ndigits`, rounding half to even on the exact
+  value as CPython does, so `round(2.675, 2)` is `2.67` (LIB-02).
+- `for` over the characters of a `str`, and over `enumerate`, with
+  `start`, `zip`, with `strict`, and `reversed` of lists and strings,
+  nested as in `enumerate(zip(a, b))`, with CPython's errors (CST-03,
+  LIB-02).
+- Sets of numbers, `bool`, `None`, `str`, `bytes` and tuples of them:
+  displays such as `{1, 2}`, annotations such as `set[int]`, `set()` and
+  `set(source)`, `in`, `len`, truth tests, `str` and `repr`, `for`,
+  `|`, `&`, `-` and `^` and their in-place forms, `==` and the subset
+  comparisons, and the methods `add`, `remove`, `discard`, `pop`,
+  `clear`, `copy`, `union`, `intersection`, `difference`,
+  `symmetric_difference`, `update`, the `_update` methods, `issubset`,
+  `issuperset` and `isdisjoint`, which take any iterable of the items, and
+  several where Python takes several (DAT-10, DAT-15, LIB-03). A
+  set hashes its items as CPython does and iterates and prints them in
+  CPython's order (ADR-0010). A list or a set as an item of a set is
+  rejected, since it has no hash. `remove` of a missing item and `pop` of
+  an empty set raise `KeyError`, and a set that changes size while a loop
+  reads it raises `RuntimeError`.
+- `set()` in a comparison takes the type of the other operand, as `[]`
+  does, so `s == set()` needs no annotation (TYP-05).
+- Dicts: displays such as `{"a": 1}`, annotations such as
+  `dict[str, int]`, `{}` and `dict()` where an annotation or the other
+  operand of a comparison gives the type, `dict(source)` from a dict or
+  from `(key, value)` pairs, `d[k]` with `KeyError` for a missing key,
+  `d[k] = v` and `d[k] += v`, `in`, `len`, truth tests, `str` and `repr`,
+  `for` over a dict, `|`, `|=`, `==` and `!=`, the views `keys()`,
+  `values()` and `items()`, which follow the dict as it changes, and the
+  methods `get` and `setdefault` with a default, `pop`, `popitem`,
+  `update`, `clear` and `copy` (DAT-09, LIB-03). A dict keeps insertion
+  order, leaves holes where entries were removed until it is resized, and
+  raises CPython's `RuntimeError` when it changes while a loop reads it.
+  Sets take a dict wherever they take an iterable, with CPython's steps
+  for a dict (DAT-15).
+- List, set and dict comprehensions, with several `for` clauses and `if`
+  conditions, each in its own scope, so a comprehension variable does not
+  leak and the first source is read in the enclosing scope, as in CPython
+  (EXP-12).
+- Optional values: annotations such as `int | None` and `None | str`,
+  `None` or a value where one is expected, in variables, parameters,
+  defaults, returns, lists, sets, dicts and tuples, `is None` and
+  `is not None`, truth tests, `str` and `repr`, and `dict.get(key)` without
+  a default (TYP-06). A variable narrows to its value where an
+  `is not None` test, an `is None` test that failed, a truth test, or an
+  assignment shows it is not `None`, and using it unnarrowed is rejected
+  with a hint (TYP-13). `None` costs no memory: it is held in a value the
+  type never takes (ADR-0011).
+- A display with `None` among its items, and a conditional expression with a
+  `None` branch, have the optional type, such as `list[int | None]`.
+- `range(...)` and `reversed(range(...))` wherever an iterable is read: in
+  comprehensions, `list`, `set`, `dict`, `sum`, `sorted`, `enumerate`,
+  `zip` and the set methods, as well as in `for` (CST-03).
+- Classes: `class` statements with `__init__`, methods, attributes declared
+  in the class body or assigned in `__init__`, and instances in variables,
+  parameters, returns, lists, sets, dicts and tuples (CLS-01). Assigning or
+  calling a name the class does not have is rejected (CLS-02), and so is
+  any use of `self` in `__init__` before every attribute is assigned.
+  `__str__` and `__repr__` write instances for `print`, `str`, `repr` and
+  containers, and a class without them is written as CPython writes it
+  (CLS-08). Instances are equal only to themselves, hashed by identity and
+  compared with `is`. A signature names a class defined below it, or its
+  own class, in quotes, such as `"Node | None"`.
+- Every type has a type object whose bases end at `object`, the base of
+  each class, ready for inheritance and `isinstance` in 0.4 (CLS-10,
+  ADR-0012).
+- `type(x)` gives the type object of a value, and class names and the
+  built-in type names, such as `int` and `dict`, are type objects as values.
+  A type object prints as `<class 'int'>` or `<class '__main__.Point'>`,
+  has `__name__`, compares with `is` and `==`, and can be a dict key; the
+  annotations `type` and `type[int]` hold one (CLS-12).
+- f-strings, with `!s`, `!r` and `!a`, `{x = }`, nested fields in a format
+  specification, and the whole format specification mini-language for
+  `int`, `bool`, `float` and `str`: fill, alignment, sign, `z`, `#`, `0`,
+  width, `,` and `_` grouping, precision and the types `b`, `c`, `d`, `o`,
+  `x`, `X`, `n`, `e`, `E`, `f`, `F`, `g`, `G`, `%` and `s`. Every result
+  and error message matches CPython 3.12 to 3.15 on a table of 4,628
+  cases, and `float` digits are rounded exactly (LEX-07).
+- Passing a variable or a constant as an argument no longer counts a
+  reference, and `return name` moves the variable's value to the caller
+  (MEM-04). An argument read from a container is kept alive for the call,
+  so a callee that empties the container still sees it, as in CPython.
+- User documentation in `docs/user`: getting started, a language guide with
+  one page per area of the specification, and a troubleshooting page for
+  every diagnostic code. Every Python sample is checked by the test suite,
+  and an accepted one must print what CPython prints (DOC-01 to DOC-04).
+
+### Changed
+
+- `%` formatting of strings is planned for 0.3 (LIB-10), and `iter` and
+  `next` for 0.3 (CST-09); an f-string formats a value now. An annotation
+  of a generic type other than `list`, `dict`, `set`, `tuple` and `type`,
+  such as `frozenset[int]`, is reported as not provided.
+- The runtime's size budget (NFR-02) is measured on the runtime a hello
+  world links, 10.3 KB, rather than on the whole runtime archive, so the
+  runtime can hold the built-in collections without enlarging programs
+  that do not use them (ADR-0009).
+
+### Fixed
+
+- A program function named `range` is called by `for i in range(...)`,
+  as in CPython, instead of the builtin (CST-02).
+- A traceback shows an entry repeated in a row at most three times, then
+  `[Previous line repeated N more times]`, as CPython does, so a
+  `RecursionError` writes a few lines instead of one for each frame
+  (STD-05).
+
 ## [0.1.0] - 2026-11-07
 
 The first release. TyPy 0.1 compiles programs made of module-level
@@ -117,5 +300,6 @@ compiler needs glibc 2.39 or later and a C toolchain.
   non-ASCII text, checks that every requirement has a row in the test plan,
   and checks that every diagram is rendered from its source.
 
-[Unreleased]: https://github.com/typy-lang/typy/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/typy-lang/typy/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/typy-lang/typy/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/typy-lang/typy/releases/tag/v0.1.0

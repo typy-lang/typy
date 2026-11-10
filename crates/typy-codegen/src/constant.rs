@@ -24,6 +24,20 @@ impl<'ctx> FunctionEmitter<'_, '_, 'ctx> {
                 })
             }
             Constant::Float(value) => Some(context.f64_type().const_float(*value).into()),
+            Constant::NoneOf(base) => Some(self.none_of(*base)?),
+            Constant::TypeObject(typy_tyir::TypeObjectRef::Runtime(ty)) => {
+                Some(crate::class::runtime_global(self.shared, ty.symbol()).into())
+            }
+            Constant::TypeObject(typy_tyir::TypeObjectRef::Class(index)) => {
+                Some(crate::class::type_object(self.shared, *index)?.into())
+            }
+            Constant::NoInstance(_) => Some(
+                self.shared
+                    .context
+                    .ptr_type(inkwell::AddressSpace::default())
+                    .const_null()
+                    .into(),
+            ),
             Constant::Bool(value) => Some(
                 context
                     .bool_type()
@@ -34,6 +48,31 @@ impl<'ctx> FunctionEmitter<'_, '_, 'ctx> {
             Constant::Str(id) => {
                 let text = self.shared.tyir.string(*id);
                 Some(self.shared.statics.string(self.shared.module, text).into())
+            }
+            Constant::Bytes(id) => {
+                let text = self.shared.tyir.string(*id);
+                Some(self.shared.statics.bytes(self.shared.module, text).into())
+            }
+            Constant::PlaceholderList | Constant::PlaceholderSet | Constant::PlaceholderDict => {
+                let name = match constant {
+                    Constant::PlaceholderList => "typy_rt_placeholder_list",
+                    Constant::PlaceholderSet => "typy_rt_placeholder_set",
+                    _ => "typy_rt_placeholder_dict",
+                };
+                let global = self.shared.module.get_global(name).unwrap_or_else(|| {
+                    let global = self.shared.module.add_global(context.i8_type(), None, name);
+                    global.set_linkage(inkwell::module::Linkage::External);
+                    global
+                });
+                Some(global.as_pointer_value().into())
+            }
+            Constant::TupleDescriptor(id) => {
+                let descriptor = crate::descriptor::tuple_descriptor(self.shared, *id)?;
+                Some(
+                    self.builder
+                        .build_ptr_to_int(descriptor, context.i64_type(), "")?
+                        .into(),
+                )
             }
         })
     }

@@ -54,6 +54,12 @@ def f(a: int, b: int = 1) -> int:
         x -= 1
     return x
 print(f(1), not True, -1, 1 if True else 2, 'abc'[0], 1 < 2)
+class C(object):
+    \"\"\"A class.\"\"\"
+    x: int
+    pass
+    def m(self, y: 'C') -> None:
+        self.x = y.x
 ";
     assert_eq!(diagnostics(source), []);
 }
@@ -63,41 +69,36 @@ print(f(1), not True, -1, 1 if True else 2, 'abc'[0], 1 < 2)
 fn later_features_name_their_release_and_rule() {
     let cases = [
         (
-            "class C:\n    pass\n",
-            "classes are planned for TyPy 0.2 (CLS-01)",
-        ),
-        ("x = [1]\n", "lists are planned for TyPy 0.2 (DAT-07)"),
-        ("x = (1, 2)\n", "tuples are planned for TyPy 0.2 (DAT-08)"),
-        ("x = {1: 2}\n", "dicts are planned for TyPy 0.2 (DAT-09)"),
-        ("x = {1}\n", "sets are planned for TyPy 0.2 (DAT-10)"),
-        (
-            "x = [i for i in range(3)]\n",
-            "comprehensions are planned for TyPy 0.2 (EXP-12)",
+            "class C(B):\n    pass\n",
+            "base classes other than `object` are planned for TyPy 0.4 (CLS-04)",
         ),
         (
-            "x = f'{1}'\n",
-            "f-strings are planned for TyPy 0.2 (LEX-07)",
-        ),
-        ("x = b'a'\n", "bytes are planned for TyPy 0.2 (DAT-06)"),
-        (
-            "x = 'a'.upper()\n",
-            "attributes and methods are planned for TyPy 0.2 (CLS-01)",
+            "@d\nclass C:\n    pass\n",
+            "class decorators are planned for TyPy 0.4 (CLS-05)",
         ),
         (
-            "x = 'abc'[0:1]\n",
-            "slices are planned for TyPy 0.2 (DAT-12)",
+            "class C[T]:\n    pass\n",
+            "type parameters are planned for TyPy 0.4 (GEN-01)",
         ),
         (
-            "print(1 in 2)\n",
-            "`in` and `not in` are planned for TyPy 0.2 (EXP-07)",
+            "class C:\n    x = 1\n",
+            "class variables are planned for TyPy 0.4 (CLS-11)",
         ),
         (
-            "for c in 'abc':\n    pass\n",
-            "`for` loops over values other than `range` are planned for TyPy 0.2 (CST-03)",
+            "class C:\n    x: int = 1\n",
+            "class variables are planned for TyPy 0.4 (CLS-11)",
         ),
         (
-            "a, b = 1, 2\n",
-            "unpacking assignments are planned for TyPy 0.2 (SMT-02)",
+            "x = {**y}\n",
+            "unpacking with `**` are planned for TyPy 1.0 (EXP-17)",
+        ),
+        (
+            "x = [i async for i in y]\n",
+            "`async` and `await` are planned for a release after TyPy 1.0",
+        ),
+        (
+            "x = (i for i in range(3))\n",
+            "generator expressions are planned for TyPy 1.0 (EXP-15)",
         ),
         ("import os\n", "imports are planned for TyPy 0.3 (SMT-07)"),
         (
@@ -185,20 +186,8 @@ fn later_features_name_their_release_and_rule() {
             "`nonlocal` statements are planned for TyPy 1.0 (SMT-09)",
         ),
         (
-            "def f(x: list[int]) -> None:\n    pass\n",
-            "generic annotations such as `list[int]` are planned for TyPy 0.2 (TYP-06)",
-        ),
-        (
-            "def f(x: int | None) -> None:\n    pass\n",
-            "union annotations such as `int | None` are planned for TyPy 0.2 (TYP-06)",
-        ),
-        (
-            "x.y = 1\n",
-            "attributes and methods are planned for TyPy 0.2 (CLS-01)",
-        ),
-        (
-            "x[0] = 1\n",
-            "assignments to items are planned for TyPy 0.2 (DAT-07)",
+            "def f(x: int | str) -> None:\n    pass\n",
+            "union annotations such as `int | str` are planned for TyPy 0.4 (TYP-14)",
         ),
         (
             "f()()\n",
@@ -247,12 +236,28 @@ fn excluded_features_say_they_cannot_be_compiled() {
             "the `@` operator cannot be compiled by TyPy with CPython's meaning",
         ),
         (
+            "def f(x: frozenset[int]) -> None:\n    pass\n",
+            "generic annotations other than `list`, `dict`, `set`, `tuple` and `type`, such as `frozenset[int]`, cannot be compiled by TyPy with CPython's meaning",
+        ),
+        (
             "x = ...\n",
             "`...` as a value cannot be compiled by TyPy with CPython's meaning",
         ),
         (
-            "def f(x: 'int') -> None:\n    pass\n",
+            "def f(x: 'int(') -> None:\n    pass\n",
             "annotations written as strings cannot be compiled by TyPy with CPython's meaning",
+        ),
+        (
+            "def f() -> None:\n    class C:\n        pass\n",
+            "classes defined inside functions, classes or blocks cannot be compiled by TyPy with CPython's meaning",
+        ),
+        (
+            "class C(metaclass=M):\n    pass\n",
+            "class keywords such as `metaclass` cannot be compiled by TyPy with CPython's meaning",
+        ),
+        (
+            "class C:\n    if x:\n        pass\n",
+            "statements other than attribute annotations and methods in a class body cannot be compiled by TyPy with CPython's meaning",
         ),
     ];
     for (source, expected) in cases {

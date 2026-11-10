@@ -4,10 +4,14 @@
 pub const IMMORTAL: u32 = u32::MAX;
 /// The type ID of `str` objects.
 pub const STR_TYPE_ID: u32 = 1;
+/// The type ID of a `bytes` object, a `str` object of one byte per code point.
+pub const BYTES_TYPE_ID: u32 = 6;
 /// The type ID of exception objects.
 pub const EXCEPTION_TYPE_ID: u32 = 2;
 /// The type ID of large integers.
 pub const BIG_INT_TYPE_ID: u32 = 3;
+/// The type ID of a type object, such as a class's (ADR-0012).
+pub(crate) const TYPE_TYPE_ID: u32 = 10;
 /// The smallest integer held inline: -2^62.
 pub const INLINE_MIN: i128 = -(1 << 62);
 /// The largest integer held inline: 2^62 - 1.

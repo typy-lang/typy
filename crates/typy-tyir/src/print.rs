@@ -190,6 +190,21 @@ fn operation(module: &TyirModule, operation: &Operation) -> String {
             callee(module, Callee::Function(*function)),
             names(arguments)
         ),
+        Operation::MakeTuple { ty, items } => format!("tuple#{} ({})", ty.0, names(items)),
+        Operation::TupleItem { tuple, index } => format!("item v{}, {index}", tuple.0),
+        Operation::ToBits(value) => format!("to_bits v{}", value.0),
+        Operation::Wrap { value, ty } => format!("wrap v{}, {ty}", value.0),
+        Operation::Unwrap(value) => format!("unwrap v{}", value.0),
+        Operation::IsNone(value) => format!("is_none v{}", value.0),
+        Operation::FromBits { bits, ty } => format!("from_bits v{}, {ty}", bits.0),
+        Operation::NewInstance { class } => format!("new class#{class}"),
+        Operation::Field { object, index } => format!("field v{}, {index}", object.0),
+        Operation::SetField {
+            object,
+            index,
+            value,
+        } => format!("set_field v{}, {index}, v{}", object.0, value.0),
+        Operation::Identical { left, right } => format!("identical v{}, v{}", left.0, right.0),
         Operation::Increment(value) => format!("inc v{}", value.0),
         Operation::Decrement(value) => format!("dec v{}", value.0),
     }

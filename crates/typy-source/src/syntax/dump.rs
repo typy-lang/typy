@@ -4,7 +4,7 @@ use std::fmt::Write as _;
 
 use typy_diagnostics::Span;
 
-use super::expression::Expr;
+use super::expression::{Comprehension, Expr, FStringPart};
 use super::statement::Stmt;
 use super::tree::SyntaxTree;
 use crate::source_file::SourceFile;
@@ -91,6 +91,33 @@ impl Dump<'_> {
                 if let Some(returns) = returns {
                     self.line(depth + 1, "returns", None);
                     self.expression(depth + 2, returns);
+                }
+                self.block(depth + 1, "body", body);
+            }
+            Stmt::ClassDef {
+                name,
+                bases,
+                keyword_count,
+                body,
+                decorators,
+                type_parameter_count,
+                ..
+            } => {
+                self.line(depth, &format!("ClassDef {}", name.name), span);
+                for decorator in decorators {
+                    self.line(depth + 1, "decorator", None);
+                    self.expression(depth + 2, decorator);
+                }
+                if *type_parameter_count > 0 {
+                    let label = format!("type_params {type_parameter_count}");
+                    self.line(depth + 1, &label, None);
+                }
+                for base in bases {
+                    self.line(depth + 1, "base", None);
+                    self.expression(depth + 2, base);
+                }
+                if *keyword_count > 0 {
+                    self.line(depth + 1, &format!("keywords {keyword_count}"), None);
                 }
                 self.block(depth + 1, "body", body);
             }
@@ -192,6 +219,81 @@ impl Dump<'_> {
         }
     }
 
+    /// Writes a comprehension: what it makes, then each clause with its target, its source and
+    /// its conditions.
+    fn comprehension(
+        &mut self,
+        depth: usize,
+        label: &str,
+        made: &[&Expr],
+        generators: &[Comprehension],
+        span: Option<Span>,
+    ) {
+        self.line(depth, label, span);
+        for expression in made {
+            self.expression(depth + 1, expression);
+        }
+        for generator in generators {
+            let label = if generator.is_async {
+                "AsyncComprehension"
+            } else {
+                "Comprehension"
+            };
+            self.line(depth + 1, label, Some(generator.span));
+            self.expression(depth + 2, &generator.target);
+            self.expression(depth + 2, &generator.iter);
+            for condition in &generator.ifs {
+                self.expression(depth + 2, condition);
+            }
+        }
+    }
+
+    /// Writes the literal text and replacement fields of an f-string or a format spec.
+    fn fstring_parts(&mut self, depth: usize, parts: &[FStringPart]) {
+        for part in parts {
+            match part {
+                FStringPart::Literal(text) => self.line(depth, &format!("Literal {text:?}"), None),
+                FStringPart::Field(field) => {
+                    let conversion = field
+                        .conversion
+                        .map_or(String::new(), |conversion| format!(" !{conversion}"));
+                    let debug = field
+                        .debug
+                        .as_ref()
+                        .map_or(String::new(), |debug| format!(" debug {debug:?}"));
+                    let label = format!("Field{conversion}{debug}");
+                    self.line(depth, &label, Some(field.span));
+                    self.expression(depth + 1, &field.value);
+                    if let Some(spec) = &field.spec {
+                        self.line(depth + 1, "spec", None);
+                        self.fstring_parts(depth + 2, spec);
+                    }
+                }
+            }
+        }
+    }
+
+    /// Writes a dict display: each key, or `Unpack` for a `**` item, then its value.
+    fn dict(&mut self, depth: usize, keys: &[Option<Expr>], values: &[Expr], span: Option<Span>) {
+        self.line(depth, "Dict", span);
+        for (key, value) in keys.iter().zip(values) {
+            match key {
+                Some(key) => self.expression(depth + 1, key),
+                None => self.line(depth + 1, "Unpack", Some(value.span())),
+            }
+            self.expression(depth + 1, value);
+        }
+    }
+
+    /// Writes a tuple, list or set display and its items.
+    fn display(&mut self, depth: usize, label: &str, elements: &[Expr], span: Option<Span>) {
+        self.line(depth, label, span);
+        for element in elements {
+            self.expression(depth + 1, element);
+        }
+    }
+
+    #[allow(clippy::too_many_lines, reason = "one arm per expression kind")]
     fn expression(&mut self, depth: usize, expression: &Expr) {
         let span = Some(expression.span());
         match expression {
@@ -218,6 +320,47 @@ impl Dump<'_> {
             } => {
                 self.line(depth, &format!("UnaryOp {operator:?}"), span);
                 self.expression(depth + 1, operand);
+            }
+            Expr::Tuple { elements, .. } => self.display(depth, "Tuple", elements, span),
+            Expr::List { elements, .. } => self.display(depth, "List", elements, span),
+            Expr::Set { elements, .. } => self.display(depth, "Set", elements, span),
+            Expr::Dict { keys, values, .. } => self.dict(depth, keys, values, span),
+            Expr::ListComp {
+                element,
+                generators,
+                ..
+            }
+            | Expr::SetComp {
+                element,
+                generators,
+                ..
+            } => {
+                let label = if matches!(expression, Expr::ListComp { .. }) {
+                    "ListComp"
+                } else {
+                    "SetComp"
+                };
+                self.comprehension(depth, label, &[element], generators, span);
+            }
+            Expr::DictComp {
+                key,
+                value,
+                generators,
+                ..
+            } => self.comprehension(depth, "DictComp", &[key, value], generators, span),
+            Expr::Attribute {
+                value, attribute, ..
+            } => {
+                self.line(depth, &format!("Attribute {}", attribute.name), span);
+                self.expression(depth + 1, value);
+            }
+            Expr::Slice {
+                lower, upper, step, ..
+            } => {
+                self.line(depth, "Slice", span);
+                for bound in [lower, upper, step].into_iter().flatten() {
+                    self.expression(depth + 1, bound);
+                }
             }
             Expr::IfExp {
                 test, body, orelse, ..
@@ -266,6 +409,14 @@ impl Dump<'_> {
                 self.expression(depth + 1, index);
             }
             Expr::Name { id, .. } => self.line(depth, &format!("Name {id}"), span),
+            Expr::FString { parts, .. } => {
+                self.line(depth, "FString", span);
+                self.fstring_parts(depth + 1, parts);
+            }
+            Expr::Quoted { annotation, .. } => {
+                self.line(depth, "Quoted", span);
+                self.expression(depth + 1, annotation);
+            }
             Expr::Other { kind, .. } => self.line(depth, &kind.to_string(), span),
         }
     }

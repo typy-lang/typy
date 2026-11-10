@@ -5,6 +5,132 @@ use typy_source::syntax::BinaryOperator;
 
 use super::expression::TypedExpr;
 use super::symbol::SymbolId;
+use crate::types::Type;
+
+/// Where an assignment stores its value: a variable, or a tuple of targets that the value is
+/// unpacked into, item by item (SMT-02).
+#[derive(Clone, Debug, PartialEq)]
+pub enum AssignTarget {
+    /// A variable.
+    Name(SymbolId),
+    /// One target for each item of a tuple value.
+    Tuple(Vec<AssignTarget>),
+    /// An item of a list, `list[index] = value`; the list and the index are evaluated after the
+    /// value, as CPython does (DAT-07).
+    Item {
+        /// The list.
+        list: Box<TypedExpr>,
+        /// The position, counted from the end when negative.
+        index: Box<TypedExpr>,
+    },
+    /// An attribute of an instance, `object.name = value`, by its position in the class's
+    /// attributes; the object is evaluated after the value, as CPython does (CLS-01).
+    Attribute {
+        /// The instance.
+        object: Box<TypedExpr>,
+        /// The attribute's position.
+        index: usize,
+    },
+    /// An entry of a dict, `dict[key] = value`; the dict and the key are evaluated after the
+    /// value, as CPython does (DAT-09).
+    Entry {
+        /// The dict.
+        dict: Box<TypedExpr>,
+        /// The key.
+        key: Box<TypedExpr>,
+    },
+}
+
+/// One `for target in source if condition ...` clause of a comprehension (EXP-12).
+#[derive(Clone, Debug, PartialEq)]
+pub struct Generator {
+    /// What each value is bound to, in the comprehension's own scope.
+    pub target: AssignTarget,
+    /// What the clause goes over.
+    pub source: LoopSource,
+    /// The conditions a value must meet, tested in order, each a truth test.
+    pub conditions: Vec<super::expression::TypedExpr>,
+}
+
+/// What a `for` loop goes over (CST-03, LIB-02). A sequence is read as CPython's list
+/// iterator reads it: each step checks the length again, so a list that grows or shrinks in
+/// the body changes how many steps there are.
+#[derive(Clone, Debug, PartialEq)]
+pub enum LoopSource {
+    /// The items of a list, or the characters of a `str`.
+    Items(TypedExpr),
+    /// `reversed(sequence)`: the items from the last to the first.
+    Reversed(TypedExpr),
+    /// `range(start, stop, step)`, or `reversed` of one: the arguments are evaluated once, in
+    /// order, and a zero step raises `ValueError`, as `range()` does.
+    Range {
+        /// The first value, 0 when `range` is given only a stop.
+        start: TypedExpr,
+        /// The value the range stops before.
+        stop: TypedExpr,
+        /// The step, 1 when it is not given.
+        step: TypedExpr,
+        /// True for `reversed(range(...))`.
+        reversed: bool,
+    },
+    /// `enumerate(source, start)`: a count from `start`, with each value of `source`.
+    Enumerate {
+        /// What is counted.
+        source: Box<LoopSource>,
+        /// The first count.
+        start: TypedExpr,
+    },
+    /// `zip(first, second, ...)`: a tuple of one value from each source, until one ends. With
+    /// `strict` true, sources of different lengths raise `ValueError`.
+    Zip {
+        /// The sources, in order.
+        sources: Vec<LoopSource>,
+        /// The `strict` argument, when given.
+        strict: Option<TypedExpr>,
+    },
+}
+
+impl LoopSource {
+    /// Returns every expression of the source, in the order they are evaluated.
+    #[must_use]
+    pub fn expressions(&self) -> Vec<&TypedExpr> {
+        match self {
+            Self::Items(sequence) | Self::Reversed(sequence) => vec![sequence],
+            Self::Range {
+                start, stop, step, ..
+            } => vec![start, stop, step],
+            Self::Enumerate { source, start } => {
+                let mut expressions = source.expressions();
+                expressions.push(start);
+                expressions
+            }
+            Self::Zip { sources, strict } => sources
+                .iter()
+                .flat_map(Self::expressions)
+                .chain(strict)
+                .collect(),
+        }
+    }
+
+    /// Returns the type of what one step gives.
+    #[must_use]
+    pub fn item_type(&self) -> Type {
+        match self {
+            Self::Range { .. } => Type::Int,
+            Self::Items(sequence) | Self::Reversed(sequence) => match &sequence.ty {
+                Type::Bytes => Type::Int,
+                Type::Set(item) | Type::Dict(item, _) => item.as_ref().clone(),
+                Type::DictView(view, key, value) => view.item(key, value),
+                other => other
+                    .sequence_item()
+                    .cloned()
+                    .unwrap_or_else(|| other.clone()),
+            },
+            Self::Enumerate { source, .. } => Type::Tuple(vec![Type::Int, source.item_type()]),
+            Self::Zip { sources, .. } => Type::Tuple(sources.iter().map(Self::item_type).collect()),
+        }
+    }
+}
 
 /// A statement after checking.
 #[derive(Clone, Debug, PartialEq)]
@@ -15,12 +141,15 @@ use super::symbol::SymbolId;
 pub enum TypedStmt {
     /// `a = b = value`: the value is evaluated once, then bound to each target in order.
     Assign {
-        targets: Vec<SymbolId>,
+        targets: Vec<AssignTarget>,
         value: TypedExpr,
         span: Span,
     },
+    /// `target op= value`: an item target evaluates its list and index once, then reads the item
+    /// before the value is evaluated, as CPython does. A list target with `+=` or `*=` changes
+    /// the list in place.
     AugAssign {
-        target: SymbolId,
+        target: AssignTarget,
         operator: BinaryOperator,
         value: TypedExpr,
         span: Span,
@@ -41,6 +170,14 @@ pub enum TypedStmt {
     },
     While {
         test: TypedExpr,
+        body: Vec<TypedStmt>,
+        orelse: Vec<TypedStmt>,
+        span: Span,
+    },
+    /// `for target in source`, over a sequence or a builtin that goes over sequences (CST-03).
+    ForEach {
+        target: AssignTarget,
+        source: LoopSource,
         body: Vec<TypedStmt>,
         orelse: Vec<TypedStmt>,
         span: Span,

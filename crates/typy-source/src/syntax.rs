@@ -8,7 +8,7 @@ mod statement;
 mod tree;
 
 pub use dump::dump;
-pub use expression::{Constant, Expr, Keyword};
+pub use expression::{Comprehension, Constant, Expr, FStringPart, Keyword, ReplacementField};
 pub use node_kind::NodeKind;
 pub use operator::{BinaryOperator, BoolOperator, CompareOperator, UnaryOperator};
 pub use statement::{Alias, Parameter, ParameterKind, Stmt};

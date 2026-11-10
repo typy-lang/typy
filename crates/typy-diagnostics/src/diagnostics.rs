@@ -138,6 +138,35 @@ mod tests {
     }
 
     #[test]
+    fn extend_adds_every_new_diagnostic_and_skips_duplicates() {
+        let mut diagnostics = Diagnostics::new();
+        diagnostics.push(Diagnostic::new(
+            DiagnosticCode::error(402),
+            at(0, 3),
+            "kept",
+        ));
+        let mut other = Diagnostics::new();
+        other.push(Diagnostic::new(
+            DiagnosticCode::error(402),
+            at(0, 3),
+            "duplicate",
+        ));
+        other.push(Diagnostic::new(DiagnosticCode::error(401), at(0, 5), "new"));
+        diagnostics.extend(other);
+        let messages: Vec<&str> = diagnostics.iter().map(Diagnostic::message).collect();
+        assert_eq!(messages, ["kept", "new"]);
+    }
+
+    #[test]
+    fn a_collection_is_empty_until_a_diagnostic_is_added() {
+        let mut diagnostics = Diagnostics::new();
+        assert!(diagnostics.is_empty());
+        diagnostics.push(Diagnostic::new(DiagnosticCode::error(401), at(0, 0), "bad"));
+        assert!(!diagnostics.is_empty());
+        assert_eq!(diagnostics.len(), 1);
+    }
+
+    #[test]
     fn warnings_alone_are_not_errors() {
         let mut diagnostics = Diagnostics::new();
         assert!(!diagnostics.has_errors());

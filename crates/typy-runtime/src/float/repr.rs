@@ -27,8 +27,14 @@ impl Decimal {
         }
     }
 
-    fn digits(&self) -> &[u8] {
+    /// Returns the digits, each from 0 to 9, without trailing zeros.
+    pub(crate) fn digits(&self) -> &[u8] {
         &self.digits[..self.count]
+    }
+
+    /// Returns where the decimal point is: the value is `0.digits * 10^point`.
+    pub(crate) const fn point(&self) -> i64 {
+        self.point
     }
 }
 

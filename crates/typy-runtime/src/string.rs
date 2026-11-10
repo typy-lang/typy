@@ -1,17 +1,34 @@
 //! `str` objects: a sequence of code points stored at 1, 2 or 4 bytes each, the narrowest that holds them all (PEP 393, DAT-05).
 
+mod builder;
+mod case;
 mod character;
+mod methods;
 mod operations;
 mod points;
 mod repr;
+mod split;
 mod unicode;
 mod utf8;
 
 use crate::allocator::{allocate, array_size};
 use crate::header::{ObjectHeader, STR_TYPE_ID};
 
+pub(crate) use builder::StrBuilder;
+pub(crate) use methods::{
+    typy_rt_str_expandtabs, typy_rt_str_isascii, typy_rt_str_match, typy_rt_str_match_any,
+    typy_rt_str_pad, typy_rt_str_remove_affix, typy_rt_str_replace, typy_rt_str_search,
+    typy_rt_str_strip, typy_rt_str_zfill,
+};
+pub(crate) use operations::{
+    typy_rt_str_compare, typy_rt_str_concat, typy_rt_str_contains, typy_rt_str_length,
+    typy_rt_str_repeat, typy_rt_str_slice,
+};
 pub(crate) use points::{Points, is_space};
-pub(crate) use repr::repr_into;
+pub(crate) use repr::{repr_into, typy_rt_str_repr};
+pub(crate) use split::{
+    typy_rt_str_join, typy_rt_str_partition, typy_rt_str_split, typy_rt_str_splitlines,
+};
 pub(crate) use unicode::decimal_value;
 pub(crate) use utf8::write_utf8;
 
@@ -129,6 +146,21 @@ pub(crate) unsafe fn set_code_point(string: *mut StrObject, index: usize, point:
             StrKind::Ucs4 => data.cast::<u32>().add(index).write_unaligned(point),
         }
     }
+}
+
+/// Returns a new string of the code points of `parts`, one after another.
+pub(crate) fn from_parts(parts: &[&str]) -> *mut StrObject {
+    let points = || parts.iter().flat_map(|part| part.chars());
+    let kind = points()
+        .map(|point| StrKind::of(u32::from(point)))
+        .max()
+        .unwrap_or(StrKind::Latin1);
+    let string = new_string(points().count(), kind);
+    for (index, point) in points().enumerate() {
+        // SAFETY: the string is new, the index is in bounds, and the kind holds every code point.
+        unsafe { set_code_point(string, index, u32::from(point)) };
+    }
+    string
 }
 
 /// Returns a new string of the code points of `text`.

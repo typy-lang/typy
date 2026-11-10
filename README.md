@@ -4,7 +4,8 @@ TyPy is an independent implementation of Python that compiles a strict,
 typed subset of standard Python ahead of time to small native executables
 through LLVM.
 
-Documentation: [docs/index.md](docs/index.md). Source:
+Documentation: [docs/user/index.md](docs/user/index.md) for users, and
+[docs/index.md](docs/index.md) for the engineering documents. Source:
 <https://github.com/typy-lang/typy>.
 
 ## Features
@@ -29,22 +30,25 @@ These are the goals of TyPy 1.0, as the
 
 ## Status
 
-TyPy 0.1.0 checks, builds and runs programs made of module-level functions
-and statements over `int`, `float`, `str`, `bool` and `None`, with `if`,
-`while`, `for` over `range`, and `print`. Programs print what CPython
-prints, including the last line of an uncaught exception. Classes,
-containers, modules and `ctypes` come in later releases.
+TyPy 0.2.0 checks, builds and runs programs made of module-level functions,
+classes and statements over `int`, `float`, `str`, `bytes`, `bool`, `None`,
+lists, tuples, dicts, sets and optional values, with comprehensions,
+f-strings and the format specification language, slices, unpacking, `if`,
+`while` and `for`. Programs print what CPython prints, including the last
+line of an uncaught exception. Exceptions, imports, inheritance and `ctypes`
+come in later releases; the [language guide](docs/user/guide/index.md)
+lists what each release accepts.
 
 ## Quick start
 
 TyPy runs on x86_64 Linux with glibc 2.39 or later, such as Ubuntu 24.04
 or Debian 13, and needs a C toolchain (`cc`). Download the archive from the
-[0.1.0 release](https://github.com/typy-lang/typy/releases/tag/v0.1.0),
+[0.2.0 release](https://github.com/typy-lang/typy/releases/tag/v0.2.0),
 unpack it, and run a program:
 
 ```sh
-tar -xzf typy-0.1.0-x86_64-unknown-linux-gnu.tar.gz
-export PATH="$PWD/typy-0.1.0-x86_64-unknown-linux-gnu/bin:$PATH"
+tar -xzf typy-0.2.0-x86_64-unknown-linux-gnu.tar.gz
+export PATH="$PWD/typy-0.2.0-x86_64-unknown-linux-gnu/bin:$PATH"
 printf 'print("hello", 1 + 2)\n' > hello.py
 typy run hello.py
 ```

@@ -1,7 +1,7 @@
 //! Checks statements against the feature table.
 
 use typy_diagnostics::RuleId;
-use typy_source::syntax::{Expr, NodeKind, ParameterKind, Stmt};
+use typy_source::syntax::{Expr, ParameterKind, Stmt};
 
 use super::feature::{Feature, feature, planned};
 use super::{Place, Walker};
@@ -29,7 +29,7 @@ impl Walker {
                             what: "functions defined inside `if`, `for` or `while` blocks",
                         },
                     ),
-                    Place::ModuleTop => {}
+                    Place::ModuleTop | Place::Class => {}
                 }
                 if let Some(decorator) = decorators.first() {
                     self.report(
@@ -74,6 +74,25 @@ impl Walker {
                 self.statements(body, Place::Function);
                 self.loop_depth = outer_loops;
             }
+            Stmt::ClassDef {
+                bases,
+                keyword_count,
+                body,
+                decorators,
+                type_parameter_count,
+                span,
+                ..
+            } => self.class(
+                &super::class::ClassParts {
+                    bases,
+                    keyword_count: *keyword_count,
+                    body,
+                    decorators,
+                    type_parameter_count: *type_parameter_count,
+                    span: *span,
+                },
+                place,
+            ),
             Stmt::Return { value, span } => {
                 if place != Place::Function {
                     self.syntax_error(*span, "`return` outside a function");
@@ -112,29 +131,8 @@ impl Walker {
                 ..
             } => {
                 self.name_target(target);
-                match iter {
-                    Expr::Call {
-                        function,
-                        arguments,
-                        keywords,
-                        ..
-                    } if matches!(function.as_ref(), Expr::Name { id, .. } if id == "range")
-                        && keywords.is_empty()
-                        && (1..=3).contains(&arguments.len()) =>
-                    {
-                        for argument in arguments {
-                            self.expression(argument);
-                        }
-                    }
-                    other => self.report(
-                        other.span(),
-                        planned(
-                            "`for` loops over values other than `range`",
-                            "0.2",
-                            RuleId::CST_03,
-                        ),
-                    ),
-                }
+                // The checker decides by type what a `for` may loop over (CST-03).
+                self.expression(iter);
                 self.loop_body(body, place);
                 self.block(orelse, place);
             }
@@ -182,30 +180,19 @@ impl Walker {
     pub(super) fn name_target(&mut self, target: &Expr) {
         match target {
             Expr::Name { .. } => {}
-            Expr::Subscript { span, .. } => {
-                self.report(
-                    *span,
-                    planned("assignments to items", "0.2", RuleId::DAT_07),
-                );
+            // An item of a list; the checker decides what may be indexed (DAT-07).
+            Expr::Subscript { value, index, .. } => {
+                self.expression(value);
+                self.expression(index);
             }
-            Expr::Other {
-                kind: NodeKind::Tuple | NodeKind::List,
-                span,
-            } => {
-                self.report(
-                    *span,
-                    planned("unpacking assignments", "0.2", RuleId::SMT_02),
-                );
+            // An unpacking target: each element is itself a target (SMT-02).
+            Expr::Tuple { elements, .. } | Expr::List { elements, .. } => {
+                for element in elements {
+                    self.name_target(element);
+                }
             }
-            Expr::Other {
-                kind: NodeKind::Attribute,
-                span,
-            } => {
-                self.report(
-                    *span,
-                    planned("attributes and methods", "0.2", RuleId::CLS_01),
-                );
-            }
+            // An attribute of an instance; the checker decides which may be assigned (CLS-02).
+            Expr::Attribute { value, .. } => self.expression(value),
             other => self.expression(other),
         }
     }

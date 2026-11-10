@@ -10,7 +10,7 @@ MARKDOWN := "**/*.md" "\#.tmp/**" "\#target/**" "\#dist/**"
 
 
 .PHONY: dev image shell runtime fmt fmt-check lint type test coverage docs-lint ascii-check traceability test-int test-e2e test-all \
-	build dist bless coverage-branches miri fuzz runtime-size diagrams diagrams-check unicode-tables unicode-tables-check check hooks clean
+	build dist bless coverage-branches miri fuzz runtime-size diagrams diagrams-check unicode-tables unicode-tables-check format-cases format-cases-check check hooks clean
 
 dev: ## Start the dev service, building its image the first time
 	@$(COMPOSE) up -d --quiet-pull dev 2>/dev/null
@@ -24,6 +24,8 @@ shell: dev ## Open a shell in the dev service
 runtime: dev ## Build the runtime archive for each target and stage it where <target>/*/typy finds it
 	@$(EXEC) scripts/build-runtime.sh
 
+# The conformance, determinism and documentation tests run <target>/debug/typy as a
+# program, so every test target builds it first.
 build: runtime ## Build the typy compiler, <target>/debug/typy, with its runtime archive staged
 	@$(EXEC) cargo build -p typy-cli --locked
 
@@ -39,22 +41,22 @@ lint: dev ## Run Clippy on every crate and test, with warnings as errors
 type: dev ## Type check every crate and test
 	@$(EXEC) cargo check --workspace --all-targets --locked
 
-test: runtime ## Run the unit tests
+test: build ## Run the unit tests
 	@$(EXEC) cargo nextest run --workspace --locked
 
-test-int: runtime ## Run the integration tests: the conformance suite, its sanitizer run, golden files and the pipeline
+test-int: build ## Run the integration tests: the conformance suite, its sanitizer run, golden files and the pipeline
 	@$(EXEC) cargo nextest run -p typy-conformance -p typy-driver --locked
 
 test-e2e: runtime ## Run the end-to-end tests of the typy executable
 	@$(EXEC) cargo nextest run -p typy-cli --test cli --locked
 
 test-all: test miri ## Run every test level that runs on each commit, and Miri
-coverage: runtime ## Run the tests with coverage; fail below 95 percent of lines (NFR-11)
+coverage: build ## Run the tests with coverage; fail below 95 percent of lines (NFR-11)
 	@$(EXEC) cargo llvm-cov nextest --workspace --locked --status-level fail \
 		--final-status-level fail --fail-under-lines 95 --summary-only \
 		--ignore-filename-regex 'typy-conformance/'
 
-coverage-branches: runtime ## Measure line and branch coverage with nightly; fail below 95 percent of either (NFR-11)
+coverage-branches: build ## Measure line and branch coverage with nightly; fail below 95 percent of either (NFR-11)
 	@$(EXEC) scripts/coverage-branches.sh
 
 docs-lint: dev ## Lint every Markdown file with markdownlint-cli2
@@ -81,10 +83,14 @@ bless: dev ## Rewrite the golden files from the current compiler; review the dif
 miri: dev ## Run the runtime's unit tests under Miri with the pinned nightly toolchain (ADR-0006)
 	@$(EXEC) scripts/miri.sh
 
-fuzz: dev ## Fuzz the source, checking and lowering stages for FUZZ_SECONDS seconds, 60 by default (NFR-09)
-	@$(EXEC) scripts/fuzz.sh
+# `docker compose exec` passes no variable of the host's environment, so the
+# fuzzing time is handed to the container by name.
+FUZZ_SECONDS ?= 60
 
-runtime-size: runtime ## Fail when a runtime archive is over the size budgets of NFR-02
+fuzz: dev ## Fuzz the source, checking and lowering stages for FUZZ_SECONDS seconds, 60 by default (NFR-09)
+	@$(COMPOSE) exec -T -e FUZZ_SECONDS=$(FUZZ_SECONDS) dev scripts/fuzz.sh
+
+runtime-size: build ## Fail when the runtime a hello world links is over the size budgets of NFR-02
 	@$(EXEC) python3 scripts/check-runtime-size.py
 
 unicode-tables: dev ## Write the runtime's Unicode tables from CPython 3.15's unicodedata (OI-15)
@@ -93,7 +99,13 @@ unicode-tables: dev ## Write the runtime's Unicode tables from CPython 3.15's un
 unicode-tables-check: dev ## Fail when the committed Unicode tables differ from CPython 3.15's
 	@$(EXEC) python3.15 scripts/generate-unicode-tables.py --check
 
-check: fmt-check lint coverage-branches docs-lint ascii-check traceability diagrams-check unicode-tables-check runtime-size ## Run the whole quality gate
+format-cases: dev ## Write the runtime's table of format() results from CPython 3.12 to 3.15 (LEX-07)
+	@$(EXEC) python3.15 scripts/generate-format-cases.py
+
+format-cases-check: dev ## Fail when the committed table of format() results differs from CPython's
+	@$(EXEC) python3.15 scripts/generate-format-cases.py --check
+
+check: fmt-check lint coverage-branches docs-lint ascii-check traceability diagrams-check unicode-tables-check format-cases-check runtime-size ## Run the whole quality gate
 
 hooks: ## Use the hooks in .githooks for this clone
 	git config core.hooksPath .githooks

@@ -1,7 +1,7 @@
 //! Converts values to `str`, `int`, `float` and `bool`, as the builtins of the same names do (LIB-01).
 
 use typy_diagnostics::Span;
-use typy_tyir::{Constant, RuntimeFunction, Terminator, TyirType, ValueId};
+use typy_tyir::{Constant, RuntimeFunction, Terminator, TyirType, TypeId, ValueId};
 
 use crate::function::FunctionLowerer;
 use crate::ownership::Lowered;
@@ -16,7 +16,29 @@ impl FunctionLowerer<'_> {
             TyirType::Float => {
                 self.call_runtime(RuntimeFunction::FloatToStr, vec![lowered.value], span)
             }
+            TyirType::Object(TypeId::LIST) => {
+                self.call_runtime(RuntimeFunction::ListRepr, vec![lowered.value], span)
+            }
+            TyirType::Object(TypeId::BYTES) => {
+                self.call_runtime(RuntimeFunction::BytesRepr, vec![lowered.value], span)
+            }
+            TyirType::Object(TypeId::SET) => {
+                self.call_runtime(RuntimeFunction::SetRepr, vec![lowered.value], span)
+            }
+            TyirType::Object(TypeId::DICT) => {
+                self.call_runtime(RuntimeFunction::DictRepr, vec![lowered.value], span)
+            }
+            TyirType::Object(TypeId::DICT_VIEW) => {
+                self.call_runtime(RuntimeFunction::DictViewText, vec![lowered.value], span)
+            }
+            TyirType::Object(id) if id.class_index().is_some() => {
+                self.instance_text(lowered, false, span)
+            }
+            TyirType::TYPE => {
+                self.call_runtime(RuntimeFunction::TypeText, vec![lowered.value], span)
+            }
             TyirType::Object(_) => Self::borrowed(lowered.value, lowered.ty),
+            TyirType::Bits => unreachable!("list items are converted before they are written"),
             TyirType::Unit => {
                 let value = self.string("None", span);
                 Self::borrowed(value, TyirType::STR)
@@ -27,13 +49,22 @@ impl FunctionLowerer<'_> {
                 let value = self.select(lowered.value, yes, no, TyirType::STR);
                 Self::borrowed(value, TyirType::STR)
             }
+            TyirType::Tuple(_) => self.tuple_text(lowered, span),
+            TyirType::Optional(_) => self.optional_text(lowered, false, span),
         }
     }
 
-    /// Returns `repr(value)`, which differs from `str` only for strings in 0.1.
+    /// Returns `repr(value)`, which differs from `str` only for strings, and for tuples, whose
+    /// `str` is their `repr`.
     pub(crate) fn repr_of(&mut self, lowered: Lowered, span: Span) -> Lowered {
         if lowered.ty == TyirType::STR {
             self.call_runtime(RuntimeFunction::StrRepr, vec![lowered.value], span)
+        } else if let TyirType::Optional(_) = lowered.ty {
+            self.optional_text(lowered, true, span)
+        } else if let TyirType::Object(id) = lowered.ty
+            && id.class_index().is_some()
+        {
+            self.instance_text(lowered, true, span)
         } else {
             self.string_of(lowered, span)
         }
@@ -56,7 +87,9 @@ impl FunctionLowerer<'_> {
                 let base = self.constant(Constant::Int("10".to_owned()), span);
                 self.call_runtime(RuntimeFunction::IntFromStr, vec![lowered.value, base], span)
             }
-            TyirType::Unit => unreachable!("the checker refuses int(None)"),
+            TyirType::Unit | TyirType::Tuple(_) | TyirType::Bits | TyirType::Optional(_) => {
+                unreachable!("the checker refuses int() of None, a tuple and an optional value")
+            }
         }
     }
 
@@ -76,7 +109,9 @@ impl FunctionLowerer<'_> {
             TyirType::Object(_) => {
                 self.call_runtime(RuntimeFunction::FloatFromStr, vec![lowered.value], span)
             }
-            TyirType::Unit => unreachable!("the checker refuses float(None)"),
+            TyirType::Unit | TyirType::Tuple(_) | TyirType::Bits | TyirType::Optional(_) => {
+                unreachable!("the checker refuses float() of None, a tuple and an optional value")
+            }
         }
     }
 

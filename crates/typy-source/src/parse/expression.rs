@@ -6,9 +6,77 @@ use ruff_text_size::{Ranged, TextRange};
 use super::Converter;
 use super::operator::{binary_operator, compare_operator};
 use crate::int_literal::decimal_digits;
-use crate::syntax::{BoolOperator, Constant, Expr, Keyword, NodeKind, UnaryOperator};
+use crate::syntax::{
+    BoolOperator, Comprehension, Constant, Expr, FStringPart, Keyword, NodeKind, ReplacementField,
+    UnaryOperator,
+};
 
 impl Converter<'_> {
+    /// Converts an annotation; a string that holds an expression becomes `Quoted`, so the
+    /// checker can tell a forward reference from a name that is already bound.
+    pub(super) fn annotation(&self, annotation: &ast::Expr) -> Expr {
+        if let ast::Expr::StringLiteral(node) = annotation
+            && let Some(literal) = node.as_single_part_string()
+            && let Ok(parsed) = ruff_python_parser::parse_string_annotation(self.text, literal)
+        {
+            return Expr::Quoted {
+                annotation: Box::new(self.expression(parsed.expr())),
+                span: self.span(node.range),
+            };
+        }
+        self.expression(annotation)
+    }
+
+    /// Converts the elements of an f-string or of a format specification.
+    fn fstring_parts(&self, elements: &ast::InterpolatedStringElements) -> Vec<FStringPart> {
+        elements
+            .iter()
+            .map(|element| match element {
+                ast::InterpolatedStringElement::Literal(literal) => {
+                    FStringPart::Literal(literal.value.to_string())
+                }
+                ast::InterpolatedStringElement::Interpolation(field) => {
+                    FStringPart::Field(Box::new(ReplacementField {
+                        value: self.expression(&field.expression),
+                        debug: field
+                            .debug_text
+                            .as_ref()
+                            .map(|text| text.as_str().to_owned()),
+                        conversion: match field.conversion {
+                            ast::ConversionFlag::None => None,
+                            ast::ConversionFlag::Str => Some('s'),
+                            ast::ConversionFlag::Repr => Some('r'),
+                            ast::ConversionFlag::Ascii => Some('a'),
+                        },
+                        spec: field
+                            .format_spec
+                            .as_ref()
+                            .map(|spec| self.fstring_parts(&spec.elements)),
+                        span: self.span(field.range),
+                    }))
+                }
+            })
+            .collect()
+    }
+
+    /// Converts the `for` clauses of a comprehension.
+    fn generators(&self, generators: &[ast::Comprehension]) -> Vec<Comprehension> {
+        generators
+            .iter()
+            .map(|generator| Comprehension {
+                target: self.expression(&generator.target),
+                iter: self.expression(&generator.iter),
+                ifs: generator
+                    .ifs
+                    .iter()
+                    .map(|condition| self.expression(condition))
+                    .collect(),
+                is_async: generator.is_async,
+                span: self.span(generator.range),
+            })
+            .collect()
+    }
+
     #[allow(
         clippy::too_many_lines,
         reason = "one arm per expression kind of Python's grammar"
@@ -119,22 +187,96 @@ impl Converter<'_> {
             },
             ast::Expr::Named(node) => self.other(NodeKind::NamedExpr, node.range),
             ast::Expr::Lambda(node) => self.other(NodeKind::Lambda, node.range),
-            ast::Expr::Dict(node) => self.other(NodeKind::Dict, node.range),
-            ast::Expr::Set(node) => self.other(NodeKind::Set, node.range),
-            ast::Expr::ListComp(node) => self.other(NodeKind::ListComp, node.range),
-            ast::Expr::SetComp(node) => self.other(NodeKind::SetComp, node.range),
-            ast::Expr::DictComp(node) => self.other(NodeKind::DictComp, node.range),
+            ast::Expr::Dict(node) => Expr::Dict {
+                keys: node
+                    .items
+                    .iter()
+                    .map(|item| item.key.as_ref().map(|key| self.expression(key)))
+                    .collect(),
+                values: node
+                    .items
+                    .iter()
+                    .map(|item| self.expression(&item.value))
+                    .collect(),
+                span: self.span(node.range),
+            },
+            ast::Expr::ListComp(node) => Expr::ListComp {
+                element: Box::new(self.expression(&node.elt)),
+                generators: self.generators(&node.generators),
+                span: self.span(node.range),
+            },
+            ast::Expr::SetComp(node) => Expr::SetComp {
+                element: Box::new(self.expression(&node.elt)),
+                generators: self.generators(&node.generators),
+                span: self.span(node.range),
+            },
+            ast::Expr::DictComp(node) => Expr::DictComp {
+                // Ruff leaves the key out only for `{**d for ...}`, a syntax error, and a tree
+                // with errors is never converted.
+                key: Box::new(match node.key.as_deref() {
+                    Some(key) => self.expression(key),
+                    None => self.expression(&node.value),
+                }),
+                value: Box::new(self.expression(&node.value)),
+                generators: self.generators(&node.generators),
+                span: self.span(node.range),
+            },
             ast::Expr::Generator(node) => self.other(NodeKind::GeneratorExp, node.range),
             ast::Expr::Await(node) => self.other(NodeKind::Await, node.range),
             ast::Expr::Yield(node) => self.other(NodeKind::Yield, node.range),
             ast::Expr::YieldFrom(node) => self.other(NodeKind::YieldFrom, node.range),
-            ast::Expr::FString(node) => self.other(NodeKind::JoinedStr, node.range),
+            ast::Expr::FString(node) => Expr::FString {
+                parts: node
+                    .value
+                    .iter()
+                    .flat_map(|part| match part {
+                        ast::FStringPartRef::Literal(literal) => {
+                            vec![FStringPart::Literal(literal.value.to_string())]
+                        }
+                        ast::FStringPartRef::FString(fstring) => {
+                            self.fstring_parts(&fstring.elements)
+                        }
+                    })
+                    .collect(),
+                span,
+            },
             ast::Expr::TString(node) => self.other(NodeKind::TemplateStr, node.range),
-            ast::Expr::Attribute(node) => self.other(NodeKind::Attribute, node.range),
+            ast::Expr::Attribute(node) => Expr::Attribute {
+                value: Box::new(self.expression(&node.value)),
+                attribute: self.identifier(&node.attr),
+                span: self.span(node.range),
+            },
             ast::Expr::Starred(node) => self.other(NodeKind::Starred, node.range),
-            ast::Expr::List(node) => self.other(NodeKind::List, node.range),
-            ast::Expr::Tuple(node) => self.other(NodeKind::Tuple, node.range),
-            ast::Expr::Slice(node) => self.other(NodeKind::Slice, node.range),
+            ast::Expr::List(node) => Expr::List {
+                elements: node
+                    .elts
+                    .iter()
+                    .map(|element| self.expression(element))
+                    .collect(),
+                span: self.span(node.range),
+            },
+            ast::Expr::Set(node) => Expr::Set {
+                elements: node
+                    .elts
+                    .iter()
+                    .map(|element| self.expression(element))
+                    .collect(),
+                span: self.span(node.range),
+            },
+            ast::Expr::Tuple(node) => Expr::Tuple {
+                elements: node
+                    .elts
+                    .iter()
+                    .map(|element| self.expression(element))
+                    .collect(),
+                span: self.span(node.range),
+            },
+            ast::Expr::Slice(node) => Expr::Slice {
+                lower: node.lower.as_deref().map(|bound| self.boxed(bound)),
+                upper: node.upper.as_deref().map(|bound| self.boxed(bound)),
+                step: node.step.as_deref().map(|bound| self.boxed(bound)),
+                span,
+            },
             ast::Expr::IpyEscapeCommand(node) => self.other(NodeKind::IpyEscapeCommand, node.range),
         }
     }

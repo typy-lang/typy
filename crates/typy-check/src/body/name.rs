@@ -3,6 +3,7 @@
 use typy_diagnostics::{Diagnostic, DiagnosticCode, RuleId, Span};
 
 use super::BodyChecker;
+use super::flow::Fact;
 use crate::builtin::Builtin;
 use crate::typed::{TypedExpr, TypedExprKind};
 use crate::types::Type;
@@ -24,7 +25,7 @@ impl BodyChecker<'_> {
     pub(super) fn name(&mut self, id: &str, span: Span) -> TypedExpr {
         if let Some(symbol) = self.locals.get(id).copied() {
             if let Some(assigned) = &self.assigned
-                && !assigned.contains(&symbol)
+                && !assigned.contains(&Fact::Assigned(symbol))
                 && self.reported_unassigned.insert(symbol)
             {
                 self.diagnostics.push(
@@ -39,8 +40,26 @@ impl BodyChecker<'_> {
                     )),
                 );
             }
-            let ty = self.types.get(&symbol).copied().unwrap_or(Type::Error);
-            return Self::typed(TypedExprKind::Local(symbol), ty, span);
+            if let Some(initializing) = self.initializing
+                && initializing.instance == symbol
+                && !self.reported_incomplete
+                && !self.instance_is_complete(initializing)
+            {
+                self.reported_incomplete = true;
+                self.incomplete_instance(initializing, span, false);
+            }
+            let ty = self.types.get(&symbol).cloned().unwrap_or(Type::Error);
+            let read = Self::typed(TypedExprKind::Local(symbol), ty.clone(), span);
+            // A test before this point showed the optional variable is not `None` (TYP-13).
+            if let Type::Optional(inner) = ty
+                && self
+                    .assigned
+                    .as_ref()
+                    .is_some_and(|facts| facts.contains(&Fact::NotNone(symbol)))
+            {
+                return Self::typed(TypedExprKind::Unwrap(Box::new(read)), *inner, span);
+            }
+            return read;
         }
         if id == "__name__" {
             return Self::typed(TypedExprKind::ModuleName, Type::Str, span);
@@ -55,6 +74,9 @@ impl BodyChecker<'_> {
                 .with_rule(RuleId::SMT_08),
                 span,
             );
+        }
+        if let Some(type_object) = self.type_object_named(id, span) {
+            return type_object;
         }
         if self.program.function_ids.contains_key(id) || Builtin::named(id).is_some() {
             return self.error(

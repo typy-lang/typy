@@ -62,6 +62,17 @@ pub enum Stmt {
         type_parameter_count: usize,
         span: Span,
     },
+    /// `class name(bases): body`; `keyword_count` counts keyword arguments such as
+    /// `metaclass=...`.
+    ClassDef {
+        name: Identifier,
+        bases: Vec<Expr>,
+        keyword_count: usize,
+        body: Vec<Stmt>,
+        decorators: Vec<Expr>,
+        type_parameter_count: usize,
+        span: Span,
+    },
     Return {
         value: Option<Expr>,
         span: Span,
@@ -140,6 +151,7 @@ impl Stmt {
     pub fn span(&self) -> Span {
         match self {
             Self::FunctionDef { span, .. }
+            | Self::ClassDef { span, .. }
             | Self::Return { span, .. }
             | Self::Assign { span, .. }
             | Self::AugAssign { span, .. }

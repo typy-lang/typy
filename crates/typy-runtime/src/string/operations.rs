@@ -1,4 +1,5 @@
-//! The string operations generated code calls: concatenation, repetition, indexing, length and comparison.
+//! The string operations generated code calls: concatenation, repetition, indexing, slicing,
+//! length, comparison and `in`.
 
 use super::{StrKind, StrObject, code_point, length, new_string, set_code_point};
 use crate::Raising;
@@ -70,6 +71,38 @@ pub unsafe extern "C" fn typy_rt_str_repeat(
                     code_point(text, index),
                 );
             }
+        }
+        Raising::ok(result)
+    }
+}
+
+/// Returns `text[start:stop:step]`, a new string (DAT-12); `present` says which bounds are given.
+///
+/// # Safety
+///
+/// `text` points to a live `str` object, and the bounds are `int` words.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn typy_rt_str_slice(
+    text: *const StrObject,
+    start: i64,
+    stop: i64,
+    stride: i64,
+    present: i64,
+) -> Raising<*mut StrObject> {
+    // SAFETY: the caller passes a live string; every selected position is inside it.
+    unsafe {
+        let selection = match crate::slice::select(start, stop, stride, present, length(text)) {
+            Ok(selection) => selection,
+            Err(error) => return Raising::error(core::ptr::null_mut(), error),
+        };
+        // A string is as narrow as its widest code point, so the kind is measured on the slice.
+        let kind = (0..selection.count)
+            .map(|index| StrKind::of(code_point(text, selection.position(index))))
+            .max()
+            .unwrap_or(StrKind::Latin1);
+        let result = new_string(selection.count, kind);
+        for index in 0..selection.count {
+            set_code_point(result, index, code_point(text, selection.position(index)));
         }
         Raising::ok(result)
     }
@@ -153,6 +186,30 @@ pub unsafe extern "C" fn typy_rt_str_compare(
         ordering
     };
     crate::compare::holds(ordering, comparison)
+}
+
+/// Returns `needle in haystack`: whether the code points of `needle` appear together in
+/// `haystack`. The empty string is in every string.
+///
+/// # Safety
+///
+/// Both point to live strings.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn typy_rt_str_contains(
+    haystack: *const StrObject,
+    needle: *const StrObject,
+) -> bool {
+    // SAFETY: the caller passes live strings; every index stays below each length.
+    unsafe {
+        let (outer, inner) = (length(haystack), length(needle));
+        if inner > outer {
+            return false;
+        }
+        (0..=outer - inner).any(|start| {
+            (0..inner)
+                .all(|offset| code_point(haystack, start + offset) == code_point(needle, offset))
+        })
+    }
 }
 
 #[cfg(test)]

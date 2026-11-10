@@ -184,6 +184,70 @@ pub enum Operation {
         /// The arguments, borrowed.
         arguments: Vec<ValueId>,
     },
+    /// A tuple of these values, which it takes over (DAT-08).
+    MakeTuple {
+        /// The tuple's type.
+        ty: crate::types::TupleTypeId,
+        /// One value for each item, in order.
+        items: Vec<ValueId>,
+    },
+    /// The item of a tuple at a position, borrowed from the tuple.
+    TupleItem {
+        /// The tuple.
+        tuple: ValueId,
+        /// The position, from 0.
+        index: u32,
+    },
+    /// The eight bytes a list stores for a value: an `int` word, the bits of a `float`, a
+    /// `bool` as 0 or 1, or a pointer (MEM-02).
+    ToBits(ValueId),
+    /// The value of type `ty` that eight bytes from a list hold, borrowed from the list.
+    FromBits {
+        /// The bytes.
+        bits: ValueId,
+        /// The value's type.
+        ty: crate::types::TyirType,
+    },
+    /// A `T | None` that holds `value`, of the optional's base (ADR-0011).
+    Wrap {
+        /// The value.
+        value: ValueId,
+        /// The optional type.
+        ty: crate::types::TyirType,
+    },
+    /// The value an optional holds, which is not `None`.
+    Unwrap(ValueId),
+    /// Whether an optional value is `None`.
+    IsNone(ValueId),
+    /// A new instance of class `class`, with one reference and every attribute zero (CLS-01).
+    NewInstance {
+        /// The class's index in the module.
+        class: u32,
+    },
+    /// The attribute at a position of an instance, borrowed from the instance.
+    Field {
+        /// The instance.
+        object: ValueId,
+        /// The attribute's position.
+        index: u32,
+    },
+    /// Stores a value in an attribute of an instance, which takes over its reference; the
+    /// value the attribute held is not released.
+    SetField {
+        /// The instance.
+        object: ValueId,
+        /// The attribute's position.
+        index: u32,
+        /// The value.
+        value: ValueId,
+    },
+    /// Whether two objects, or optional objects, are the same object (EXP-08).
+    Identical {
+        /// One object.
+        left: ValueId,
+        /// The other.
+        right: ValueId,
+    },
     /// Adds one to the count of a counted value (ADR-0001).
     Increment(ValueId),
     /// Takes one from the count of a counted value, and frees it at zero.

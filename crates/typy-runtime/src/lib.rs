@@ -10,27 +10,43 @@
 )]
 
 mod allocator;
+mod bytes;
 mod cell;
+mod codec;
 mod compare;
+mod dict;
 mod entry;
 mod exception;
 mod float;
+mod format;
+mod hash;
 mod header;
+mod instance;
 mod int;
 mod io;
 mod libc;
 mod libm;
+mod list;
 mod message;
 mod range;
 mod refcount;
+mod set;
+mod slice;
 mod stack;
 mod string;
+mod tuple;
+mod type_object;
 mod version;
 mod word;
+mod zip;
 
 pub use exception::{ExceptionKind, ExceptionObject};
-pub use header::{BIG_INT_TYPE_ID, EXCEPTION_TYPE_ID, IMMORTAL, ObjectHeader, STR_TYPE_ID};
+pub use header::{
+    BIG_INT_TYPE_ID, BYTES_TYPE_ID, EXCEPTION_TYPE_ID, IMMORTAL, LIST_TYPE_ID, ObjectHeader,
+    STR_TYPE_ID, TUPLE_TYPE_ID,
+};
 pub use int::BigIntObject;
+pub use list::ListObject;
 pub use string::{StrKind, StrObject};
 
 /// A result that may carry an exception, as a function that may raise returns it (detailed design section 10.2).

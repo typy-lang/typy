@@ -20,6 +20,7 @@ impl FunctionLowerer<'_> {
         self.slots[&symbol]
     }
 
+    #[allow(clippy::too_many_lines, reason = "one arm per statement kind")]
     fn statement(&mut self, statement: &TypedStmt) {
         match statement {
             TypedStmt::Assign {
@@ -29,11 +30,14 @@ impl FunctionLowerer<'_> {
             } => {
                 let lowered = self.expression(value);
                 for (position, target) in targets.iter().enumerate() {
-                    let slot = self.slot(*target);
                     if position + 1 == targets.len() {
-                        self.store(slot, lowered, *span);
+                        self.assign_target(target, lowered, *span);
                     } else {
-                        self.store(slot, Self::borrowed(lowered.value, lowered.ty), *span);
+                        self.assign_target(
+                            target,
+                            Self::borrowed(lowered.value, lowered.ty),
+                            *span,
+                        );
                     }
                 }
             }
@@ -43,26 +47,52 @@ impl FunctionLowerer<'_> {
                 value,
                 span,
             } => {
-                let slot = self.slot(*target);
-                let current = self.load(slot, *span);
-                let result_type = self.program.symbol(*target).ty;
-                let right = self.expression(value);
-                let result = self.binary(*operator, current, right, result_type, *span);
-                self.store(slot, result, *span);
+                let result = match target {
+                    typy_check::AssignTarget::Name(symbol) => {
+                        self.program.symbol(*symbol).ty.clone()
+                    }
+                    typy_check::AssignTarget::Item { list, .. } => match &list.ty {
+                        typy_check::Type::List(item) => item.as_ref().clone(),
+                        _ => unreachable!("the checker allows an item target only on a list"),
+                    },
+                    typy_check::AssignTarget::Entry { dict, .. } => match &dict.ty {
+                        typy_check::Type::Dict(_, value) => value.as_ref().clone(),
+                        _ => unreachable!("the checker allows an entry target only on a dict"),
+                    },
+                    typy_check::AssignTarget::Attribute { object, index } => match &object.ty {
+                        typy_check::Type::Instance(class, _) => {
+                            self.program.class(*class).attributes[*index].ty.clone()
+                        }
+                        _ => unreachable!(
+                            "the checker allows an attribute target only on an instance"
+                        ),
+                    },
+                    typy_check::AssignTarget::Tuple(_) => typy_check::Type::Error,
+                };
+                self.augmented_assignment(target, *operator, value, &result, *span);
             }
             TypedStmt::Expr { value, span } => {
                 let lowered = self.expression(value);
                 self.release(lowered, *span);
             }
             TypedStmt::Return { value, span } => {
-                let value = match value {
-                    Some(value) => {
+                // A returned variable hands its slot's reference to the caller (MEM-04).
+                let moved = match value.as_ref().map(|value| &value.kind) {
+                    Some(typy_check::TypedExprKind::Local(symbol)) => {
+                        let slot = self.slots[symbol];
+                        (!self.borrowed.contains(&slot)).then_some(slot)
+                    }
+                    _ => None,
+                };
+                let value = match (value, moved) {
+                    (Some(_), Some(slot)) => self.load(slot, *span).value,
+                    (Some(value), None) => {
                         let lowered = self.expression(value);
                         self.take_reference(lowered, *span)
                     }
-                    None => self.constant(Constant::Unit, *span),
+                    (None, _) => self.constant(Constant::Unit, *span),
                 };
-                self.release_slots(*span);
+                self.release_slots_but(moved, *span);
                 self.builder.terminate(Terminator::Return(value));
             }
             TypedStmt::If {
@@ -93,6 +123,13 @@ impl FunctionLowerer<'_> {
                 orelse,
                 span,
             } => self.while_loop(test, body, orelse, *span),
+            TypedStmt::ForEach {
+                target,
+                source,
+                body,
+                orelse,
+                span,
+            } => self.for_each(target, source, body, orelse, *span),
             TypedStmt::ForRange {
                 target,
                 start,
@@ -248,7 +285,7 @@ impl FunctionLowerer<'_> {
     }
 
     /// Returns whether a `range` loop continues: `counter < limit` for a positive step, `counter > limit` for a negative one; `rising_step` is known when the step is a constant.
-    fn range_condition(
+    pub(crate) fn range_condition(
         &mut self,
         [counter, limit, stride]: [SlotId; 3],
         rising_step: Option<bool>,

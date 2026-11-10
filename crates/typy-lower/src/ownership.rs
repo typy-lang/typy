@@ -16,7 +16,7 @@ pub(crate) struct Lowered {
 impl FunctionLowerer<'_> {
     /// Returns a value the function now owns, such as the result of a call; it is tracked until it is released or moved.
     pub(crate) fn produced(&mut self, value: ValueId, ty: TyirType) -> Lowered {
-        let owned = ty.is_counted();
+        let owned = self.counted(ty);
         if owned {
             self.temporaries.push(value);
         }
@@ -42,6 +42,23 @@ impl FunctionLowerer<'_> {
         }
     }
 
+    /// Returns `to`, made from `from` by an operation that hands on its references, as owned when
+    /// `from` was and borrowed otherwise.
+    pub(crate) fn transfer(&mut self, from: Lowered, to: ValueId, ty: TyirType) -> Lowered {
+        if from.owned {
+            self.untrack(from.value);
+            return self.produced(to, ty);
+        }
+        Self::borrowed(to, ty)
+    }
+
+    /// Returns the result of a runtime function that is borrowed from one of its arguments, such
+    /// as the dict a view reads, which the function must not release.
+    pub(crate) fn borrowed_result(&mut self, lowered: Lowered) -> Lowered {
+        self.untrack(lowered.value);
+        Self::borrowed(lowered.value, lowered.ty)
+    }
+
     /// Drops the function's reference to a value it owns.
     pub(crate) fn release(&mut self, lowered: Lowered, span: Span) {
         if lowered.owned {
@@ -54,7 +71,7 @@ impl FunctionLowerer<'_> {
     pub(crate) fn take_reference(&mut self, lowered: Lowered, span: Span) -> ValueId {
         if lowered.owned {
             self.untrack(lowered.value);
-        } else if lowered.ty.is_counted() {
+        } else if self.counted(lowered.ty) {
             self.builder.push(Operation::Increment(lowered.value), span);
         }
         lowered.value
@@ -63,7 +80,7 @@ impl FunctionLowerer<'_> {
     /// Stores a value in a slot, which takes over its reference and releases the value it held.
     pub(crate) fn store(&mut self, slot: SlotId, lowered: Lowered, span: Span) {
         let value = self.take_reference(lowered, span);
-        if lowered.ty.is_counted() {
+        if self.counted(lowered.ty) {
             let old = self
                 .builder
                 .push_value(Operation::Load(slot), lowered.ty, span);
@@ -83,10 +100,19 @@ impl FunctionLowerer<'_> {
 
     /// Releases the value of every counted slot, on the way out of the function.
     pub(crate) fn release_slots(&mut self, span: Span) {
+        self.release_slots_but(None, span);
+    }
+
+    /// Releases the value of every counted slot but `kept`, whose reference a `return` hands
+    /// to the caller, and but the parameters that borrow their caller's reference (MEM-04).
+    pub(crate) fn release_slots_but(&mut self, kept: Option<SlotId>, span: Span) {
         for index in 0..self.builder.slot_count() {
             let slot = SlotId(u32::try_from(index).unwrap_or(u32::MAX));
+            if Some(slot) == kept || self.borrowed.contains(&slot) {
+                continue;
+            }
             let ty = self.builder.slot_type(slot);
-            if ty.is_counted() {
+            if self.counted(ty) {
                 let value = self.builder.push_value(Operation::Load(slot), ty, span);
                 self.builder.push(Operation::Decrement(value), span);
             }

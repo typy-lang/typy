@@ -3,10 +3,10 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy development guide |
-| Version | 0.11 |
+| Version | 0.14 |
 | Status | Draft |
 | Owner | typy-lang contributors |
-| Last updated | 2026-11-07 |
+| Last updated | 2026-11-10 |
 
 ## 1. Purpose
 
@@ -55,7 +55,7 @@ Container". VS Code attaches to the same `dev` service.
 | `make bless` | Rewrites the golden files in `tests/golden/` from the current compiler; review the diff before committing |
 | `make miri` | Runs the runtime's unit tests under Miri with the pinned nightly toolchain, in about 8 minutes |
 | `make fuzz` | Fuzzes the source, checking and lowering stages for `FUZZ_SECONDS` seconds, 60 by default; a crash leaves its input in `fuzz/artifacts/` |
-| `make runtime-size` | Fails when a runtime archive is over the size budgets of NFR-02 |
+| `make runtime-size` | Links a hello world for each target and fails when the runtime it links is over the size budgets of NFR-02 |
 | `make check` | Runs the whole quality gate: formatting, Clippy, the tests with line and branch coverage, the four documentation checks below, the Unicode table check and the runtime size check |
 | `make fmt` | Formats the Rust code |
 | `make lint` | Runs Clippy on every crate and test, with warnings as errors |
@@ -73,6 +73,8 @@ Container". VS Code attaches to the same `dev` service.
 | `make diagrams-check` | Renders, then fails when an SVG differs from the one staged |
 | `make unicode-tables` | Writes `crates/typy-runtime/src/string/unicode/tables.rs` from the `unicodedata` of CPython 3.15 (OI-15); never edit that file by hand |
 | `make unicode-tables-check` | Fails when the committed Unicode tables differ from the ones CPython 3.15 gives |
+| `make format-cases` | Writes `crates/typy-runtime/src/format/tests/cases.rs`, the results `format(value, spec)` gives under CPython 3.12 to 3.15 for a table of cases, keeping those all four agree on; never edit that file by hand |
+| `make format-cases-check` | Fails when the committed table of `format()` results differs from the one CPython 3.12 to 3.15 give |
 | `make image` | Rebuilds the dev image after a change under `.devcontainer/` |
 | `make clean` | Stops the containers and removes `.tmp/preview` |
 
@@ -89,8 +91,10 @@ its build. Both leave out `typy-conformance`, which is test code; NFR-11
 covers the compiler and the runtime. The runtime's branches are measured by
 its unit tests, because the programs the other tests build link the runtime
 archive without instrumentation. `make bench` arrives with the build-time
-benchmarks of NFR-04 and NFR-05 in 1.0, and `make docs` with the user
-documentation site.
+benchmarks of NFR-04 and NFR-05 in 1.0. The user documentation in
+`docs/user` is Markdown that `make docs-lint` checks, and
+`crates/typy-conformance/tests/documentation.rs` judges its samples
+(DOC-04).
 
 ## 4. Repository layout
 
@@ -200,7 +204,10 @@ maintainer's approval.
    a run of `ci.yml` started by hand (NFR-07, NFR-09).
 2. A commit titled "Prepare X.Y.Z" sets the version in `Cargo.toml`,
    renames the changelog's "Unreleased" section to `[X.Y.Z] - DATE`, and
-   opens a new empty "Unreleased" section above it.
+   opens a new empty "Unreleased" section above it. For a new minor
+   release it adds the release to `RELEASES` in
+   `crates/typy-conformance/tests/suite.rs`, so the suite requires an
+   accepted and a rejected test of every requirement up to it.
 3. A tag `vX.Y.Z` on that commit starts `release.yml`.
 4. `scripts/check-release.sh` checks that the tag names the version and that
    the changelog has a dated section for it, whose text becomes the release

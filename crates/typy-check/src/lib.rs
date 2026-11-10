@@ -4,6 +4,8 @@
 mod body;
 mod builtin;
 mod check;
+mod codec;
+mod method;
 mod subset;
 mod typed;
 mod types;
@@ -11,8 +13,11 @@ mod unprovided;
 
 pub use builtin::Builtin;
 pub use check::TypeChecker;
+pub use method::Method;
 pub use typed::{
-    Argument, FunctionId, FunctionSignature, SignatureParameter, Symbol, SymbolId, SymbolKind,
-    TypedConstant, TypedExpr, TypedExprKind, TypedFunction, TypedProgram, TypedStmt, dump,
+    Argument, AssignTarget, Attribute, ClassId, Conversion, FStringPart, FormattedValue,
+    FunctionId, FunctionSignature, Generator, LoopSource, SignatureParameter, Symbol, SymbolId,
+    SymbolKind, TypedClass, TypedConstant, TypedExpr, TypedExprKind, TypedFunction, TypedProgram,
+    TypedStmt, dump,
 };
-pub use types::Type;
+pub use types::{Type, TypeObjectOf, View};

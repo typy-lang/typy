@@ -38,7 +38,7 @@ impl Converter<'_> {
                 returns: node
                     .returns
                     .as_deref()
-                    .map(|returns| self.expression(returns)),
+                    .map(|returns| self.annotation(returns)),
                 body: self.statements(&node.body),
                 decorators: node
                     .decorator_list
@@ -51,7 +51,35 @@ impl Converter<'_> {
                     .map_or(0, |parameters| parameters.type_params.len()),
                 span,
             },
-            ast::Stmt::ClassDef(node) => self.other_statement(NodeKind::ClassDef, node.range),
+            ast::Stmt::ClassDef(node) => Stmt::ClassDef {
+                name: self.identifier(&node.name),
+                bases: node
+                    .arguments
+                    .as_deref()
+                    .map(|arguments| {
+                        arguments
+                            .args
+                            .iter()
+                            .map(|base| self.expression(base))
+                            .collect()
+                    })
+                    .unwrap_or_default(),
+                keyword_count: node
+                    .arguments
+                    .as_deref()
+                    .map_or(0, |arguments| arguments.keywords.len()),
+                body: self.statements(&node.body),
+                decorators: node
+                    .decorator_list
+                    .iter()
+                    .map(|decorator| self.expression(&decorator.expression))
+                    .collect(),
+                type_parameter_count: node
+                    .type_params
+                    .as_ref()
+                    .map_or(0, |parameters| parameters.type_params.len()),
+                span,
+            },
             ast::Stmt::Return(node) => Stmt::Return {
                 value: node.value.as_deref().map(|value| self.expression(value)),
                 span,
@@ -75,7 +103,7 @@ impl Converter<'_> {
             },
             ast::Stmt::AnnAssign(node) => Stmt::AnnAssign {
                 target: self.expression(&node.target),
-                annotation: self.expression(&node.annotation),
+                annotation: self.annotation(&node.annotation),
                 value: node.value.as_deref().map(|value| self.expression(value)),
                 simple: node.simple,
                 span,
@@ -171,7 +199,7 @@ impl Converter<'_> {
                     .parameter
                     .annotation
                     .as_deref()
-                    .map(|annotation| self.expression(annotation)),
+                    .map(|annotation| self.annotation(annotation)),
                 default: parameter
                     .default
                     .as_deref()
@@ -186,7 +214,7 @@ impl Converter<'_> {
                 annotation: parameter
                     .annotation
                     .as_deref()
-                    .map(|annotation| self.expression(annotation)),
+                    .map(|annotation| self.annotation(annotation)),
                 default: None,
                 kind,
                 span: self.span(parameter.range),

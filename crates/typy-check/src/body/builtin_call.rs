@@ -4,6 +4,7 @@ use typy_diagnostics::{Diagnostic, DiagnosticCode, RuleId, Span};
 use typy_source::syntax::{Expr, Keyword};
 
 use super::BodyChecker;
+use super::iterable_call::takes_one_iterable;
 use crate::builtin::Builtin;
 use crate::typed::{TypedConstant, TypedExpr, TypedExprKind};
 use crate::types::Type;
@@ -19,6 +20,30 @@ impl BodyChecker<'_> {
     ) -> TypedExpr {
         if builtin == Builtin::Print {
             return self.print(arguments, keywords, span);
+        }
+        if builtin == Builtin::List {
+            return self.call_list(arguments, keywords, None, span);
+        }
+        if builtin == Builtin::Bytes {
+            return self.call_bytes(arguments, keywords, span);
+        }
+        if builtin == Builtin::Tuple {
+            return self.call_tuple(arguments, keywords, None, span);
+        }
+        if builtin == Builtin::Set {
+            return self.call_set(arguments, keywords, None, span);
+        }
+        if builtin == Builtin::Dict {
+            return self.call_dict(arguments, keywords, None, span);
+        }
+        if builtin == Builtin::Type {
+            return self.call_type(arguments, keywords, span);
+        }
+        if builtin == Builtin::Round {
+            return self.call_round(arguments, keywords, span);
+        }
+        if takes_one_iterable(builtin, arguments.len()) {
+            return self.call_over_iterable(builtin, arguments, keywords, span);
         }
         let values: Vec<TypedExpr> = arguments
             .iter()
@@ -45,17 +70,46 @@ impl BodyChecker<'_> {
                 span,
             );
         }
-        let types: Vec<Type> = values.iter().map(|value| value.ty).collect();
+        let types: Vec<Type> = values.iter().map(|value| value.ty.clone()).collect();
         let result = match builtin {
-            Builtin::Print => unreachable!("print is checked above"),
+            Builtin::Print
+            | Builtin::Bytes
+            | Builtin::List
+            | Builtin::Tuple
+            | Builtin::Set
+            | Builtin::Dict
+            | Builtin::Round
+            | Builtin::Type
+            | Builtin::Sorted
+            | Builtin::Sum
+            | Builtin::Any
+            | Builtin::All => {
+                unreachable!(
+                    "print, round, type and the builtins of one iterable are checked above"
+                )
+            }
+            Builtin::Enumerate | Builtin::Zip | Builtin::Reversed => {
+                return self.error(
+                    Diagnostic::new(
+                        DiagnosticCode::error(201),
+                        span,
+                        format!(
+                            "`{}` outside a `for` loop gives an iterator, which is planned for TyPy 0.3 (CST-08)",
+                            builtin.name()
+                        ),
+                    )
+                    .with_rule(RuleId::CST_08),
+                    span,
+                );
+            }
             Builtin::Range => {
                 return self.error(
                     Diagnostic::new(
                         DiagnosticCode::error(201),
                         span,
-                        "`range` outside a `for` loop is planned for TyPy 0.2 (CST-03)",
+                        "a `range` value outside a loop, a comprehension or an iterable argument is planned for TyPy 0.3 (DAT-17)",
                     )
-                    .with_rule(RuleId::CST_03),
+                    .with_rule(RuleId::DAT_17),
                     span,
                 );
             }
@@ -67,7 +121,18 @@ impl BodyChecker<'_> {
                         span,
                     );
                 }
-                self.expect(&values[0], Type::Str, "the argument of `len`");
+                if !matches!(
+                    values[0].ty,
+                    Type::Tuple(_)
+                        | Type::List(_)
+                        | Type::TupleOf(_)
+                        | Type::Set(_)
+                        | Type::Dict(..)
+                        | Type::DictView(..)
+                        | Type::Bytes
+                ) {
+                    self.expect(&values[0], Type::Str, "the argument of `len`");
+                }
                 Type::Int
             }
             Builtin::Abs => {
@@ -78,27 +143,13 @@ impl BodyChecker<'_> {
                         span,
                     );
                 }
-                match types[0] {
-                    Type::Int | Type::Float => types[0],
+                match &types[0] {
+                    Type::Int | Type::Float => types[0].clone(),
                     Type::Bool => self.bool_arithmetic(values[0].span),
                     other => self.operator_error("abs", other, other, values[0].span),
                 }
             }
             Builtin::Min | Builtin::Max => {
-                if values.len() == 1 {
-                    return self.error(
-                        Diagnostic::new(
-                            DiagnosticCode::error(201),
-                            span,
-                            format!(
-                                "`{}` of one iterable is planned for TyPy 0.2 (LIB-02)",
-                                builtin.name()
-                            ),
-                        )
-                        .with_rule(RuleId::LIB_02),
-                        span,
-                    );
-                }
                 if !self.arity(builtin, values.len(), 2..=usize::MAX, span) {
                     return Self::typed(
                         TypedExprKind::Constant(TypedConstant::None),
@@ -106,7 +157,7 @@ impl BodyChecker<'_> {
                         span,
                     );
                 }
-                let first = types[0];
+                let first = types[0].clone();
                 if let Some(other) = values.iter().find(|value| value.ty != first) {
                     return self.error(
                         Diagnostic::new(
@@ -123,7 +174,7 @@ impl BodyChecker<'_> {
                     );
                 }
                 if !matches!(first, Type::Int | Type::Float | Type::Str) {
-                    self.comparison_error(first, first, span);
+                    self.comparison_error(&first, &first, span);
                     return Self::typed(
                         TypedExprKind::Constant(TypedConstant::None),
                         Type::Error,
@@ -154,7 +205,7 @@ impl BodyChecker<'_> {
                     if !matches!(value.ty, Type::Int | Type::Float | Type::Str | Type::Bool) {
                         self.expect(
                             value,
-                            target,
+                            target.clone(),
                             &format!("the argument of `{}`", builtin.name()),
                         );
                     }

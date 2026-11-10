@@ -98,20 +98,31 @@ pub(super) fn check(function: &TyirFunction) -> Result<(), VerifyError> {
 /// Returns the values an operation reads.
 pub(super) fn operands(operation: &Operation) -> Vec<ValueId> {
     match operation {
-        Operation::Constant(_) | Operation::Load(_) => Vec::new(),
+        Operation::Constant(_) | Operation::Load(_) | Operation::NewInstance { .. } => Vec::new(),
         Operation::Store { value, .. }
         | Operation::IntUnary { operand: value, .. }
         | Operation::FloatNegate(value)
         | Operation::BoolNot(value)
         | Operation::IsTrue { value, .. }
         | Operation::Increment(value)
-        | Operation::Decrement(value) => vec![*value],
-        Operation::IntBinary { left, right, .. }
+        | Operation::Decrement(value)
+        | Operation::TupleItem { tuple: value, .. }
+        | Operation::ToBits(value)
+        | Operation::Wrap { value, .. }
+        | Operation::Unwrap(value)
+        | Operation::IsNone(value)
+        | Operation::FromBits { bits: value, .. }
+        | Operation::Field { object: value, .. } => vec![*value],
+        Operation::SetField { object, value, .. } => vec![*object, *value],
+        Operation::Identical { left, right }
+        | Operation::IntBinary { left, right, .. }
         | Operation::FloatBinary { left, right, .. }
         | Operation::BoolBinary { left, right, .. }
         | Operation::Compare { left, right, .. } => vec![*left, *right],
-        Operation::CallRuntime { arguments, .. } | Operation::Call { arguments, .. } => {
-            arguments.clone()
-        }
+        Operation::CallRuntime { arguments, .. }
+        | Operation::Call { arguments, .. }
+        | Operation::MakeTuple {
+            items: arguments, ..
+        } => arguments.clone(),
     }
 }

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Fails when a requirement of the specification has no row in the test plan's
-# traceability matrix, or when a document cites a requirement, constraint,
+# Fails when a requirement of the specification is defined twice or has no row
+# in the test plan's traceability matrix, or when a document cites a requirement, constraint,
 # assumption, use case, issue or decision ID that is not defined.
 set -euo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
@@ -17,6 +17,14 @@ matrix_rows() {
     sed -n '/^## 8. Traceability matrix/,$p' "${PLAN}" |
         grep -oE "^\| ${ID} \|" | tr -d '| ' | sort -u
 }
+
+# An ID is never reused, so each is defined once.
+duplicated="$(grep -oE "^\| ${ID} \|" "${SRS}" | tr -d '| ' | sort | uniq -d)"
+if [[ -n "${duplicated}" ]]; then
+    echo "check-traceability: IDs defined more than once in ${SRS}:" >&2
+    echo "${duplicated}" >&2
+    status=1
+fi
 
 missing="$(comm -23 <(defined_requirements | grep -vE '^A-') <(matrix_rows) |
     grep -vE '^C-01$' || true)"

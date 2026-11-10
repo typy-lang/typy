@@ -6,7 +6,7 @@ use crate::function::TyirFunction;
 use crate::module::TyirModule;
 use crate::operation::{Operation, ScalarKind};
 use crate::terminator::{Callee, Terminator};
-use crate::types::TyirType;
+use crate::types::{OptionalBase, TupleTypeId, TyirType, TypeId};
 use crate::value::ValueId;
 
 struct Checker<'module> {
@@ -132,6 +132,7 @@ impl Checker<'_> {
     }
 
     /// Returns the result type of an operation after checking its operands.
+    #[allow(clippy::too_many_lines, reason = "one arm per operation")]
     fn operation(&self, operation: &Operation) -> Result<Option<TyirType>, VerifyError> {
         Ok(match operation {
             Operation::Constant(constant) => Some(constant.ty()),
@@ -197,13 +198,133 @@ impl Checker<'_> {
                 function,
                 arguments,
             } => self.call(Callee::Function(*function), arguments)?,
+            Operation::ToBits(value) => {
+                let ty = self.ty(*value)?;
+                if !matches!(
+                    ty,
+                    TyirType::Int
+                        | TyirType::Float
+                        | TyirType::Bool
+                        | TyirType::Object(_)
+                        | TyirType::Unit
+                        | TyirType::Tuple(_)
+                        | TyirType::Optional(_)
+                ) {
+                    return Err(self.error(format!("v{} of type {ty} is not a list item", value.0)));
+                }
+                Some(TyirType::Bits)
+            }
+            Operation::FromBits { bits, ty } => {
+                self.expect(*bits, TyirType::Bits, "a list item")?;
+                Some(*ty)
+            }
+            Operation::MakeTuple { ty, items } => Some(self.make_tuple(*ty, items)?),
+            Operation::Wrap { value, ty } => {
+                let TyirType::Optional(base) = ty else {
+                    return Err(self.error(format!("wrap gives {ty}, which is not optional")));
+                };
+                let expected = self.module.tuple_types.optional_value(*base);
+                self.expect(*value, expected, "the value of an optional")?;
+                Some(*ty)
+            }
+            Operation::Unwrap(value) => Some(self.optional_value(*value)?),
+            Operation::IsNone(value) => {
+                self.optional_value(*value)?;
+                Some(TyirType::Bool)
+            }
+            Operation::TupleItem { tuple, index } => Some(self.tuple_item(*tuple, *index)?),
+            Operation::NewInstance { class } => {
+                if self.module.classes.get(*class as usize).is_none() {
+                    return Err(self.error(format!("class#{class} is not a class of the module")));
+                }
+                Some(TyirType::Object(TypeId::class(*class)))
+            }
+            Operation::Field { object, index } => Some(self.field(*object, *index)?),
+            Operation::SetField {
+                object,
+                index,
+                value,
+            } => {
+                let ty = self.field(*object, *index)?;
+                self.expect(*value, ty, "the attribute's value")?;
+                None
+            }
+            Operation::Identical { left, right } => {
+                for value in [left, right] {
+                    if !matches!(
+                        self.ty(*value)?,
+                        TyirType::Object(_) | TyirType::Optional(OptionalBase::Object(_))
+                    ) {
+                        return Err(self.error(format!("v{} is not an object", value.0)));
+                    }
+                }
+                Some(TyirType::Bool)
+            }
             Operation::Increment(value) | Operation::Decrement(value) => {
-                if !self.ty(*value)?.is_counted() {
+                if !self.module.tuple_types.is_counted(self.ty(*value)?) {
                     return Err(self.error(format!("v{} is not counted", value.0)));
                 }
                 None
             }
         })
+    }
+
+    /// Returns the type an optional value holds, after checking it is optional.
+    fn optional_value(&self, value: ValueId) -> Result<TyirType, VerifyError> {
+        match self.ty(value)? {
+            TyirType::Optional(base) => Ok(self.module.tuple_types.optional_value(base)),
+            other => Err(self.error(format!("v{} of type {other} is not optional", value.0))),
+        }
+    }
+
+    /// Returns the type of an attribute of an instance of a class of the module.
+    fn field(&self, object: ValueId, index: u32) -> Result<TyirType, VerifyError> {
+        let ty = self.ty(object)?;
+        let TyirType::Object(id) = ty else {
+            return Err(self.error(format!("v{} of type {ty} is not an instance", object.0)));
+        };
+        let class = self
+            .module
+            .class(id)
+            .ok_or_else(|| self.error(format!("v{} of type {ty} is not an instance", object.0)))?;
+        self.module
+            .tuple_types
+            .items(class.fields)
+            .and_then(|items| items.get(index as usize))
+            .copied()
+            .ok_or_else(|| self.error(format!("{} has no attribute {index}", class.name)))
+    }
+
+    /// A tuple's items have the types of its tuple type, one for each.
+    fn make_tuple(&self, ty: TupleTypeId, items: &[ValueId]) -> Result<TyirType, VerifyError> {
+        let Some(expected) = self.module.tuple_types.items(ty) else {
+            return Err(self.error(format!("tuple#{} is not a type of the module", ty.0)));
+        };
+        if expected.len() != items.len() {
+            return Err(self.error(format!(
+                "tuple#{} has {} items, and {} are given",
+                ty.0,
+                expected.len(),
+                items.len()
+            )));
+        }
+        for (item, item_type) in items.iter().zip(expected) {
+            self.expect(*item, *item_type, "a tuple item")?;
+        }
+        Ok(TyirType::Tuple(ty))
+    }
+
+    /// An item is read from a tuple that has it.
+    fn tuple_item(&self, tuple: ValueId, index: u32) -> Result<TyirType, VerifyError> {
+        let TyirType::Tuple(id) = self.ty(tuple)? else {
+            return Err(self.error(format!("v{} is not a tuple", tuple.0)));
+        };
+        self.module
+            .tuple_types
+            .items(id)
+            .and_then(|items| items.get(index as usize))
+            .copied()
+            .ok_or_else(|| self.error(format!("tuple#{} has no item {index}", id.0)))
     }
 
     fn call(&self, callee: Callee, arguments: &[ValueId]) -> Result<Option<TyirType>, VerifyError> {

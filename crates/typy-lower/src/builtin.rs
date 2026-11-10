@@ -1,4 +1,4 @@
-//! Lowers the builtins of 0.1 (LIB-01), including `print`.
+//! Lowers the builtins that take positional values (LIB-01, LIB-02), including `print`.
 
 use typy_check::{Builtin, Type, TypedExpr};
 use typy_diagnostics::Span;
@@ -52,6 +52,30 @@ impl FunctionLowerer<'_> {
                 let truth = self.truth(*value, span);
                 Self::borrowed(truth, TyirType::Bool)
             }
+            (Builtin::Len, [tuple]) if matches!(tuple.ty, TyirType::Tuple(_)) => {
+                let length = self.tuple_length(tuple.ty).to_string();
+                Self::borrowed(self.constant(Constant::Int(length), span), TyirType::Int)
+            }
+            (Builtin::Len, [list]) if list.ty == TyirType::LIST => self.list_length(*list, span),
+            (Builtin::Len, [data]) if data.ty == TyirType::BYTES => {
+                self.call_runtime(RuntimeFunction::BytesLength, vec![data.value], span)
+            }
+            (Builtin::Len, [set]) if set.ty == TyirType::SET => {
+                self.call_runtime(RuntimeFunction::SetLength, vec![set.value], span)
+            }
+            (Builtin::Len, [dict]) if dict.ty == TyirType::DICT => {
+                self.call_runtime(RuntimeFunction::DictLength, vec![dict.value], span)
+            }
+            (Builtin::Len, [view]) if view.ty == TyirType::VIEW => {
+                self.call_runtime(RuntimeFunction::DictViewLength, vec![view.value], span)
+            }
+            (Builtin::Bytes, [count]) if count.ty == TyirType::Int => {
+                self.call_runtime(RuntimeFunction::BytesZeros, vec![count.value], span)
+            }
+            (Builtin::Bytes, [values]) if values.ty == TyirType::LIST => {
+                self.call_runtime(RuntimeFunction::BytesFromList, vec![values.value], span)
+            }
+            (Builtin::Bytes, [data]) => self.keep_or_copy(*data, span, |_, data| data),
             (Builtin::Len, [text]) => {
                 self.call_runtime(RuntimeFunction::StrLength, vec![text.value], span)
             }
@@ -66,6 +90,18 @@ impl FunctionLowerer<'_> {
             }
             (Builtin::Chr, [code]) => {
                 self.call_runtime(RuntimeFunction::Chr, vec![code.value], span)
+            }
+            (Builtin::Round, [number]) if number.ty == TyirType::Float => {
+                self.call_runtime(RuntimeFunction::FloatRound, vec![number.value], span)
+            }
+            (Builtin::Round, [number]) => self.keep_or_copy(*number, span, |_, number| number),
+            (Builtin::Round, [number, digits]) => {
+                let function = if number.ty == TyirType::Float {
+                    RuntimeFunction::FloatRoundDigits
+                } else {
+                    RuntimeFunction::IntRoundDigits
+                };
+                self.call_runtime(function, vec![number.value, digits.value], span)
             }
             (Builtin::Min | Builtin::Max, _) => {
                 self.extreme(builtin == Builtin::Max, &values, types, ty, span)

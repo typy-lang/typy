@@ -2,7 +2,9 @@
 
 use typy_check::TypedProgram;
 use typy_diagnostics::{Diagnostic, DiagnosticCode, Diagnostics, RuleId};
-use typy_tyir::{FunctionId, TyirModule, verify};
+use typy_tyir::{FunctionId, TupleTypes, TyirClass, TyirModule, TyirType, verify};
+
+use crate::types::tyir_type;
 
 use crate::call_graph::recursive_functions;
 use crate::function::FunctionLowerer;
@@ -14,6 +16,7 @@ pub fn lower(program: &TypedProgram) -> Result<TyirModule, Diagnostics> {
     let mut may_raise = vec![false; program.functions.len()];
     loop {
         let mut strings = StringPool::default();
+        let mut tuple_types = TupleTypes::default();
         let functions: Vec<_> = program
             .functions
             .iter()
@@ -23,6 +26,7 @@ pub fn lower(program: &TypedProgram) -> Result<TyirModule, Diagnostics> {
                     function,
                     &may_raise,
                     &mut strings,
+                    &mut tuple_types,
                     recursive.contains(&function.id),
                 )
             })
@@ -35,9 +39,36 @@ pub fn lower(program: &TypedProgram) -> Result<TyirModule, Diagnostics> {
             may_raise = found;
             continue;
         }
+        let classes = program
+            .classes
+            .iter()
+            .map(|class| {
+                let fields = class
+                    .attributes
+                    .iter()
+                    .map(|attribute| tyir_type(&attribute.ty, &mut tuple_types))
+                    .collect();
+                let TyirType::Tuple(fields) = tuple_types.intern(fields) else {
+                    unreachable!("interning gives a tuple type");
+                };
+                let repr = class
+                    .methods
+                    .iter()
+                    .find(|(name, _)| name == "__repr__")
+                    .map(|(_, id)| FunctionId(id.0));
+                TyirClass {
+                    name: class.name.clone(),
+                    module: class.module.clone(),
+                    fields,
+                    repr,
+                }
+            })
+            .collect();
         let module = TyirModule {
             functions,
             strings: strings.into_strings(),
+            tuple_types,
+            classes,
             entry: FunctionId(program.entry.0),
         };
         return match verify(&module) {

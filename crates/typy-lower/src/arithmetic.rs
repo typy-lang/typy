@@ -18,12 +18,16 @@ impl FunctionLowerer<'_> {
         operator: BinaryOperator,
         left: Lowered,
         right: Lowered,
-        result: Type,
+        result: &Type,
         span: Span,
     ) -> Lowered {
         use BinaryOperator as Op;
         let lowered = match (left.ty, right.ty) {
-            (TyirType::Int, TyirType::Int) if result == Type::Int => {
+            (TyirType::Tuple(_), TyirType::Tuple(_)) => {
+                let ty = self.lowered_type(result);
+                return self.tuple_concat(left, right, ty, span);
+            }
+            (TyirType::Int, TyirType::Int) if *result == Type::Int => {
                 self.int_binary(operator, left.value, right.value, span)
             }
             (TyirType::Int, TyirType::Int) if operator == Op::Div => self.call_runtime(
@@ -48,6 +52,40 @@ impl FunctionLowerer<'_> {
                 );
                 Self::borrowed(value, TyirType::Bool)
             }
+            (TyirType::DICT, TyirType::DICT) => self.dict_merge(left.value, right.value, span),
+            (TyirType::SET, TyirType::SET) => {
+                self.set_combine(operator, left.value, right.value, span)
+            }
+            (TyirType::LIST, TyirType::LIST) => self.call_runtime(
+                RuntimeFunction::ListConcat,
+                vec![left.value, right.value],
+                span,
+            ),
+            (TyirType::LIST, TyirType::Int) => self.call_runtime(
+                RuntimeFunction::ListRepeat,
+                vec![left.value, right.value],
+                span,
+            ),
+            (TyirType::Int, TyirType::LIST) => self.call_runtime(
+                RuntimeFunction::ListRepeat,
+                vec![right.value, left.value],
+                span,
+            ),
+            (TyirType::BYTES, TyirType::BYTES) => self.call_runtime(
+                RuntimeFunction::BytesConcat,
+                vec![left.value, right.value],
+                span,
+            ),
+            (TyirType::BYTES, TyirType::Int) => self.call_runtime(
+                RuntimeFunction::BytesRepeat,
+                vec![left.value, right.value],
+                span,
+            ),
+            (TyirType::Int, TyirType::BYTES) => self.call_runtime(
+                RuntimeFunction::BytesRepeat,
+                vec![right.value, left.value],
+                span,
+            ),
             (TyirType::Object(_), TyirType::Object(_)) => self.call_runtime(
                 RuntimeFunction::StrConcat,
                 vec![left.value, right.value],

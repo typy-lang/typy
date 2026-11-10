@@ -39,7 +39,14 @@ const PROGRAMS: &[&str] = &[
     "def f(flag: bool = True, ratio: float = 0.5, none: None = None) -> None:\n    return None\nf()\nx = 1\nprint(x is None, None is None)\n",
     "n = 3\nfor i in range(10, 0, -n):\n    if i == 4:\n        break\n    print(i)\nelse:\n    print(\"done\")\n",
     "x = 0\n",
+    "def less(a: int, b: int) -> bool:\n    return a < b\npair = (less(1, 2), (\"x\", 2.5), None)\na, (b, c), d = pair\nprint(pair, a, b, c, d, pair[1][0], len(pair), pair == pair, pair < pair)\n",
     "",
+    "class E:\n    pass\ne = E()\nprint(e == e, e != E(), e is e, bool(e), str(e) == repr(e), [e] == [e])\n",
+    "class P:\n    \"\"\"A point.\"\"\"\n    def __init__(self, x: int, s: str) -> None:\n        self.x = x\n        self.s = s\n        self.none: None = None\n        self.items: list[int] = []\n        self.next: P | None = None\n    def add(self, v: int) -> None:\n        self.items += [v]\n        self.x += v\n        self.s *= 2\n    def __repr__(self) -> str:\n        return 'P' + str(self.x)\np = P(1, 'a')\np.add(2)\nq = P(2, 'b')\nq.next = p\nn = q.next\nprint(P(3, 'c').x, P(4, 'd').s, p.none, p.items, p, repr(q), [p, q], n is p, n is not None, p is q)\n",
+    "class R:\n    def __init__(self, n: int) -> None:\n        self.n = n\n    def __str__(self) -> str:\n        return str(10 // self.n)\n    def __repr__(self) -> str:\n        return 'R' + str(10 // self.n)\nr = R(2)\nprint(r, repr(r), [r], {r: r.n})\nr.n = 0\nprint(r)\n",
+    "class T:\n    def __init__(self, pair: tuple[int, str], flag: bool, ratio: float) -> None:\n        self.pair = pair\n        self.flag = flag\n        self.ratio = ratio\n        self.maybe: bool | None = None\nt = T((1, 'x'), True, 0.5)\nt.maybe = False\nt.ratio /= 2.0\nprint(t.pair, t.flag, t.ratio, t.maybe, {t} == {t})\n",
+    "class P:\n    pass\nx: int | None = None\nkinds = [int, P, type(P()), type(x)]\nprint(kinds, type(1) == int, int != str, P.__name__, type(x).__name__, bool(int), {str: 1}[type('a')], type({1: 1}.values()), object, type(int))\n",
+    "class P:\n    pass\nx = 1\nf = 2.5\nb = True\ns = 'h\\u00e9'\nm: int | None = None\nn: int | None = 4\nitems = [1]\nprint(f'', f'{x}', f'{x:>5}', f'{f:.2f}', f'{b}', f'{b:d}', f'{s:^7}', f'{m}', f'{m:>4}', f'{n:03}', f'{items}', f'{items:}', f'{P():}', f'{x!s}', f'{s!r:>8}', f'{s!a}', f'{x = }', f'{f=:.1e}', f'{x:{x}}', f'{{}}')\n",
 ];
 
 #[test]
@@ -110,4 +117,30 @@ fn release_small_marks_every_function_minsize() {
     let (project, module) = compile(PROGRAMS[1]);
     let ir = llvm_ir(&module, Target::host(), Optimization::Size, &project).unwrap();
     assert!(ir.contains("minsize") && ir.contains("optsize"), "{ir}");
+}
+
+#[test]
+fn reading_an_item_of_a_value_that_is_not_a_tuple_is_an_internal_error() {
+    let (project, mut module) = compile("x = 0\n");
+    let entry = module.entry.0 as usize;
+    let function = &mut module.functions[entry];
+    let item = typy_tyir::ValueId(u32::try_from(function.values.len()).unwrap());
+    function.values.push(typy_tyir::ValueInfo {
+        ty: typy_tyir::TyirType::Int,
+        representation: typy_tyir::ValueRepresentation::Inline,
+    });
+    let span = function.blocks[0].instructions[0].span;
+    function.blocks[0]
+        .instructions
+        .push(typy_tyir::Instruction {
+            result: Some(item),
+            operation: typy_tyir::Operation::TupleItem {
+                tuple: typy_tyir::ValueId(0),
+                index: 0,
+            },
+            span,
+        });
+    let error = llvm_ir(&module, Target::host(), Optimization::None, &project).unwrap_err();
+    let text = format!("{error:?}");
+    assert!(text.contains("is not a tuple"), "{text}");
 }

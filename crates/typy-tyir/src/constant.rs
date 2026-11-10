@@ -2,7 +2,7 @@
 
 use std::fmt;
 
-use crate::types::TyirType;
+use crate::types::{TupleTypeId, TyirType};
 
 /// Index of a string in the module's string pool.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -21,6 +21,26 @@ pub enum Constant {
     Unit,
     /// A string from the pool; string constants are never freed.
     Str(StringId),
+    /// A `bytes` from the pool, each byte the code point of its value; never freed.
+    Bytes(StringId),
+    /// The runtime's immortal empty list, the first value of a list slot. Definite assignment
+    /// guarantees it is never read, so it is never changed.
+    PlaceholderList,
+    /// The runtime's immortal empty set, the first value of a set slot, never read either.
+    PlaceholderSet,
+    /// The runtime's immortal empty dict, the first value of a dict slot, never read either.
+    PlaceholderDict,
+    /// `None` of an optional type (ADR-0011).
+    NoneOf(crate::types::OptionalBase),
+    /// The null address, typed as an instance of a class: the first value of a slot of a
+    /// class type, which definite assignment guarantees is never read, and which counting
+    /// ignores.
+    NoInstance(crate::types::TypeId),
+    /// The address of a type object (CLS-12).
+    TypeObject(crate::types::TypeObjectRef),
+    /// The address of the descriptor of a tuple type that a list holds, which the runtime
+    /// reads to store, count, compare and write its items (ADR-0009).
+    TupleDescriptor(TupleTypeId),
 }
 
 impl Constant {
@@ -33,6 +53,14 @@ impl Constant {
             Self::Bool(_) => TyirType::Bool,
             Self::Unit => TyirType::Unit,
             Self::Str(_) => TyirType::STR,
+            Self::Bytes(_) => TyirType::BYTES,
+            Self::PlaceholderList => TyirType::LIST,
+            Self::PlaceholderSet => TyirType::SET,
+            Self::PlaceholderDict => TyirType::DICT,
+            Self::NoneOf(base) => TyirType::Optional(*base),
+            Self::NoInstance(id) => TyirType::Object(*id),
+            Self::TypeObject(_) => TyirType::TYPE,
+            Self::TupleDescriptor(_) => TyirType::Bits,
         }
     }
 }
@@ -45,6 +73,14 @@ impl fmt::Display for Constant {
             Self::Bool(value) => write!(formatter, "bool {value}"),
             Self::Unit => formatter.write_str("unit"),
             Self::Str(StringId(id)) => write!(formatter, "str s{id}"),
+            Self::Bytes(StringId(id)) => write!(formatter, "bytes s{id}"),
+            Self::PlaceholderList => formatter.write_str("placeholder list"),
+            Self::PlaceholderSet => formatter.write_str("placeholder set"),
+            Self::PlaceholderDict => formatter.write_str("placeholder dict"),
+            Self::NoneOf(base) => write!(formatter, "none {}", TyirType::Optional(*base)),
+            Self::NoInstance(id) => write!(formatter, "null {}", TyirType::Object(*id)),
+            Self::TypeObject(ty) => write!(formatter, "type {ty}"),
+            Self::TupleDescriptor(TupleTypeId(id)) => write!(formatter, "descriptor tuple#{id}"),
         }
     }
 }
@@ -52,7 +88,7 @@ impl fmt::Display for Constant {
 #[cfg(test)]
 mod tests {
     use super::{Constant, StringId};
-    use crate::types::TyirType;
+    use crate::types::{TupleTypeId, TyirType};
 
     #[test]
     fn constants_have_their_types_and_text() {
@@ -62,6 +98,28 @@ mod tests {
             (Constant::Bool(true), TyirType::Bool, "bool true"),
             (Constant::Unit, TyirType::Unit, "unit"),
             (Constant::Str(StringId(3)), TyirType::STR, "str s3"),
+            (Constant::Bytes(StringId(4)), TyirType::BYTES, "bytes s4"),
+            (
+                Constant::PlaceholderList,
+                TyirType::LIST,
+                "placeholder list",
+            ),
+            (Constant::PlaceholderSet, TyirType::SET, "placeholder set"),
+            (
+                Constant::PlaceholderDict,
+                TyirType::DICT,
+                "placeholder dict",
+            ),
+            (
+                Constant::NoneOf(crate::types::OptionalBase::Int),
+                TyirType::Optional(crate::types::OptionalBase::Int),
+                "none optional int",
+            ),
+            (
+                Constant::TupleDescriptor(TupleTypeId(2)),
+                TyirType::Bits,
+                "descriptor tuple#2",
+            ),
         ];
         for (constant, ty, text) in cases {
             assert_eq!(constant.ty(), ty);

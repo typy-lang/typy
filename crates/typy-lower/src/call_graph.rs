@@ -2,7 +2,7 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use typy_check::{FunctionId, TypedExpr, TypedExprKind, TypedProgram, TypedStmt};
+use typy_check::{AssignTarget, FunctionId, TypedExpr, TypedExprKind, TypedProgram, TypedStmt};
 
 /// Returns the functions that can call themselves, directly or through others.
 pub(crate) fn recursive_functions(program: &TypedProgram) -> BTreeSet<FunctionId> {
@@ -37,10 +37,32 @@ pub(crate) fn recursive_functions(program: &TypedProgram) -> BTreeSet<FunctionId
 fn statements(body: &[TypedStmt], callees: &mut BTreeSet<FunctionId>) {
     for statement in body {
         match statement {
-            TypedStmt::Assign { value, .. }
-            | TypedStmt::AugAssign { value, .. }
-            | TypedStmt::Expr { value, .. } => {
+            TypedStmt::Assign { targets, value, .. } => {
                 expression(value, callees);
+                for target in targets {
+                    assign_target(target, callees);
+                }
+            }
+            TypedStmt::AugAssign { target, value, .. } => {
+                assign_target(target, callees);
+                expression(value, callees);
+            }
+            TypedStmt::Expr { value, .. } => {
+                expression(value, callees);
+            }
+            TypedStmt::ForEach {
+                target,
+                source,
+                body,
+                orelse,
+                ..
+            } => {
+                for value in source.expressions() {
+                    expression(value, callees);
+                }
+                assign_target(target, callees);
+                statements(body, callees);
+                statements(orelse, callees);
             }
             TypedStmt::Return {
                 value: Some(value), ..
@@ -77,6 +99,28 @@ fn statements(body: &[TypedStmt], callees: &mut BTreeSet<FunctionId>) {
     }
 }
 
+/// Finds calls in an assignment target: the list and the index of an item target.
+fn assign_target(target: &AssignTarget, callees: &mut BTreeSet<FunctionId>) {
+    match target {
+        AssignTarget::Name(_) => {}
+        AssignTarget::Tuple(targets) => {
+            for target in targets {
+                assign_target(target, callees);
+            }
+        }
+        AssignTarget::Item { list, index } => {
+            expression(list, callees);
+            expression(index, callees);
+        }
+        AssignTarget::Entry { dict, key } => {
+            expression(dict, callees);
+            expression(key, callees);
+        }
+        AssignTarget::Attribute { object, .. } => expression(object, callees),
+    }
+}
+
+#[allow(clippy::too_many_lines, reason = "one arm per expression kind")]
 fn expression(expression_value: &TypedExpr, callees: &mut BTreeSet<FunctionId>) {
     match &expression_value.kind {
         TypedExprKind::Call {
@@ -92,8 +136,88 @@ fn expression(expression_value: &TypedExpr, callees: &mut BTreeSet<FunctionId>) 
             expression(left, callees);
             expression(right, callees);
         }
-        TypedExprKind::Unary { operand, .. } => expression(operand, callees),
+        TypedExprKind::Wrap(operand)
+        | TypedExprKind::Unwrap(operand)
+        | TypedExprKind::Unary { operand, .. }
+        | TypedExprKind::TupleOf(operand)
+        | TypedExprKind::TupleItem { tuple: operand, .. }
+        | TypedExprKind::TupleSlice { tuple: operand, .. } => {
+            expression(operand, callees);
+        }
+        TypedExprKind::ListItem { list, index }
+        | TypedExprKind::DictItem {
+            dict: list,
+            key: index,
+        } => {
+            expression(list, callees);
+            expression(index, callees);
+        }
+        TypedExprKind::Comprehension {
+            element,
+            value,
+            generators,
+        } => {
+            expression(element, callees);
+            if let Some(value) = value {
+                expression(value, callees);
+            }
+            for generator in generators {
+                assign_target(&generator.target, callees);
+                for value in generator
+                    .source
+                    .expressions()
+                    .into_iter()
+                    .chain(&generator.conditions)
+                {
+                    expression(value, callees);
+                }
+            }
+        }
+        TypedExprKind::Dict { keys, values } => {
+            for value in keys.iter().chain(values) {
+                expression(value, callees);
+            }
+        }
+        TypedExprKind::ListOf(source)
+        | TypedExprKind::SetOf(source)
+        | TypedExprKind::DictOf(source) => {
+            for value in source.expressions() {
+                expression(value, callees);
+            }
+        }
+        TypedExprKind::Slice {
+            value,
+            lower,
+            upper,
+            step,
+        } => {
+            expression(value, callees);
+            for bound in [lower, upper, step].into_iter().flatten() {
+                expression(bound, callees);
+            }
+        }
+        TypedExprKind::Method {
+            receiver,
+            arguments,
+            ..
+        } => {
+            expression(receiver, callees);
+            for argument in arguments {
+                expression(&argument.value, callees);
+            }
+        }
+        TypedExprKind::IterableBuiltin {
+            iterable, option, ..
+        } => {
+            expression(iterable, callees);
+            if let Some(option) = option {
+                expression(option, callees);
+            }
+        }
         TypedExprKind::BoolOp { values, .. }
+        | TypedExprKind::Tuple(values)
+        | TypedExprKind::List(values)
+        | TypedExprKind::Set(values)
         | TypedExprKind::Builtin {
             arguments: values, ..
         } => {
@@ -123,6 +247,33 @@ fn expression(expression_value: &TypedExpr, callees: &mut BTreeSet<FunctionId>) 
             expression(value, callees);
             expression(index, callees);
         }
-        TypedExprKind::Constant(_) | TypedExprKind::Local(_) | TypedExprKind::ModuleName => {}
+        TypedExprKind::New {
+            init, arguments, ..
+        } => {
+            callees.extend(*init);
+            for argument in arguments {
+                expression(&argument.value, callees);
+            }
+        }
+        TypedExprKind::Attribute { object, .. }
+        | TypedExprKind::TypeOf(object)
+        | TypedExprKind::TypeName(object) => expression(object, callees),
+        TypedExprKind::FString(parts) => fstring(parts, callees),
+        TypedExprKind::TypeObject(_)
+        | TypedExprKind::Constant(_)
+        | TypedExprKind::Local(_)
+        | TypedExprKind::ModuleName => {}
+    }
+}
+
+/// Finds calls in the fields of an f-string and of its specifications.
+fn fstring(parts: &[typy_check::FStringPart], callees: &mut BTreeSet<FunctionId>) {
+    for part in parts {
+        if let typy_check::FStringPart::Field(field) = part {
+            expression(&field.value, callees);
+            if let Some(spec) = &field.spec {
+                fstring(spec, callees);
+            }
+        }
     }
 }

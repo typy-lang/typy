@@ -53,6 +53,10 @@ mod tests {
     use super::{record_limit, typy_rt_check_stack};
 
     #[test]
+    #[cfg_attr(
+        miri,
+        ignore = "Miri cannot run the inline assembly that reads the stack pointer"
+    )]
     fn a_stack_past_its_limit_raises_recursion_error() {
         super::LIMIT.with(|limit| *limit = usize::MAX);
         let exception = typy_rt_check_stack();

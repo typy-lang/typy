@@ -186,6 +186,23 @@ help: assign an int, or use a new variable
     }
 
     #[test]
+    fn the_margin_is_as_wide_as_the_line_number() {
+        let source: &'static str =
+            Box::leak(format!("{}x = 1\n", "\n".repeat(11)).into_boxed_str());
+        let start = u32::try_from(source.find('x').unwrap()).unwrap();
+        let diagnostic =
+            Diagnostic::new(DiagnosticCode::error(402), span(start, start + 1), "wrong");
+        let expected = "\
+error[E0402]: wrong
+  --> app.py:12:1
+   |
+12 | x = 1
+   | ^
+";
+        assert_eq!(render_text(&diagnostic, &OneFile(source)), expected);
+    }
+
+    #[test]
     fn certain_fix_is_rendered_as_the_corrected_line() {
         let start = u32::try_from(SOURCE.find("\"done\"").unwrap()).unwrap();
         let diagnostic = Diagnostic::new(

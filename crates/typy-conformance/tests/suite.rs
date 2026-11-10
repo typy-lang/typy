@@ -6,10 +6,11 @@ use std::collections::BTreeSet;
 use camino::Utf8PathBuf;
 use typy_conformance::{Report, Suite};
 
-/// Requirements whose rejected case cannot be a file in the corpus, and the unit tests in
-/// `typy-source` that cover it instead: a file that is not UTF-8 breaks the repository's ASCII
-/// rule, and a file over 16 MiB is too large to commit.
-const NO_REJECTED_FILE: [&str; 2] = ["LEX-01", "LEX-09"];
+/// Requirements whose rejected case cannot be a file in the corpus. A file that is not UTF-8
+/// breaks the repository's ASCII rule, and a file over 16 MiB is too large to commit, so unit
+/// tests in `typy-source` cover LEX-01 and LEX-09. Memory management asks nothing of a
+/// program, so MEM-01, MEM-02 and MEM-04 have no rule a program can break.
+const NO_REJECTED_FILE: [&str; 5] = ["LEX-01", "LEX-09", "MEM-01", "MEM-02", "MEM-04"];
 
 fn workspace() -> Utf8PathBuf {
     Utf8PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..")
@@ -23,11 +24,22 @@ fn run() -> Report {
         .unwrap()
 }
 
-/// Returns the requirements the test plan's matrix gives to the conformance suite for 0.1.
+/// The releases whose requirements the suite must cover: every one up to the version being
+/// built.
+const RELEASES: [&str; 2] = ["0.1", "0.2"];
+
+/// Returns the requirements the test plan's matrix gives to the conformance suite for the
+/// releases up to this one.
 fn planned_requirements() -> BTreeSet<String> {
     let plan = std::fs::read_to_string(workspace().join("docs/testing/test-plan.md")).unwrap();
     plan.lines()
-        .filter(|line| line.contains("| 0.1 | IT | `tests/conformance/"))
+        .filter(|line| {
+            RELEASES.iter().any(|release| {
+                line.contains(&format!("| {release} | IT | `tests/conformance/"))
+                    || line.contains(&format!("| {release} | UT, IT | "))
+                        && line.contains("`tests/conformance/")
+            })
+        })
         .filter_map(|line| line.split('|').nth(1).map(|id| id.trim().to_owned()))
         .collect()
 }

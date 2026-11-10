@@ -5,8 +5,10 @@ use std::io::Read;
 use std::process::{Command, Stdio};
 use std::time::{Duration, Instant};
 
-/// A program longer than this has hung; every conformance program is short.
-const TIME_LIMIT: Duration = Duration::from_secs(10);
+/// A program longer than this has hung. Every conformance program finishes in well under a
+/// second, but the gate runs several suites at once, each with a worker per CPU, and a starved
+/// oracle can take many times longer; the limit catches a hang without failing a slow run.
+const TIME_LIMIT: Duration = Duration::from_secs(60);
 
 /// Standard output, exit status and the last line of standard error of one run.
 #[derive(Clone, Debug, PartialEq, Eq)]

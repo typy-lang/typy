@@ -8,7 +8,7 @@ use typy_diagnostics::{SourceLookup, Span};
 use super::expression::{TypedExpr, TypedExprKind};
 use super::function::TypedFunction;
 use super::program::TypedProgram;
-use super::statement::TypedStmt;
+use super::statement::{AssignTarget, LoopSource, TypedStmt};
 use super::symbol::SymbolId;
 
 /// Returns the program as text: each function with its signature and locals, then its body.
@@ -20,6 +20,26 @@ pub fn dump(program: &TypedProgram, lookup: &dyn SourceLookup) -> String {
         text: String::new(),
     };
     let _ = writeln!(writer.text, "Program entry fn{}", program.entry.0);
+    for class in &program.classes {
+        let attributes: Vec<String> = class
+            .attributes
+            .iter()
+            .map(|attribute| format!("{}: {}", attribute.name, attribute.ty))
+            .collect();
+        let methods: Vec<String> = class
+            .methods
+            .iter()
+            .map(|(name, id)| format!("{name} fn{}", id.0))
+            .collect();
+        let _ = writeln!(
+            writer.text,
+            "Class {}.{}({}) methods [{}]",
+            class.module,
+            class.name,
+            attributes.join(", "),
+            methods.join(", ")
+        );
+    }
     for function in &program.functions {
         writer.function(function);
     }
@@ -39,6 +59,15 @@ impl Dump<'_> {
         let _ = writeln!(self.text, "{indent}{label} @{}:{}", at.line, at.column);
     }
 
+    /// Returns `attribute NAME: TYPE` for the attribute at `index` of an instance of `ty`.
+    fn attribute(&self, ty: &crate::types::Type, index: usize) -> String {
+        let crate::types::Type::Instance(class, _) = ty else {
+            return format!("attribute {index}");
+        };
+        let attribute = &self.program.class(*class).attributes[index];
+        format!("attribute {}: {}", attribute.name, attribute.ty)
+    }
+
     fn symbol(&self, id: SymbolId) -> String {
         let symbol = self.program.symbol(id);
         format!("{}: {}", symbol.name, symbol.ty)
@@ -54,7 +83,7 @@ impl Dump<'_> {
             "Function fn{} {}.{}({}) -> {}",
             function.id.0,
             function.module,
-            function.name,
+            function.qualified_name,
             parameters.join(", "),
             function.signature.returns
         );
@@ -76,6 +105,20 @@ impl Dump<'_> {
         }
     }
 
+    /// Writes an assignment target: a variable with its type, or a tuple of targets.
+    fn target(&self, target: &AssignTarget) -> String {
+        match target {
+            AssignTarget::Name(id) => self.symbol(*id),
+            AssignTarget::Tuple(targets) => {
+                let parts: Vec<String> = targets.iter().map(|target| self.target(target)).collect();
+                format!("({})", parts.join(", "))
+            }
+            AssignTarget::Item { list, .. } => format!("item of {}", list.ty),
+            AssignTarget::Entry { dict, .. } => format!("entry of {}", dict.ty),
+            AssignTarget::Attribute { object, index } => self.attribute(&object.ty, *index),
+        }
+    }
+
     fn statement(&mut self, depth: usize, statement: &TypedStmt) {
         match statement {
             TypedStmt::Assign {
@@ -83,7 +126,7 @@ impl Dump<'_> {
                 value,
                 span,
             } => {
-                let names: Vec<String> = targets.iter().map(|id| self.symbol(*id)).collect();
+                let names: Vec<String> = targets.iter().map(|target| self.target(target)).collect();
                 self.line(depth, &format!("Assign {}", names.join(", ")), *span);
                 self.expression(depth + 1, value);
             }
@@ -93,7 +136,7 @@ impl Dump<'_> {
                 value,
                 span,
             } => {
-                let label = format!("AugAssign {operator:?} {}", self.symbol(*target));
+                let label = format!("AugAssign {operator:?} {}", self.target(target));
                 self.line(depth, &label, *span);
                 self.expression(depth + 1, value);
             }
@@ -129,6 +172,33 @@ impl Dump<'_> {
                 self.block(depth + 1, "body", body);
                 self.block(depth + 1, "orelse", orelse);
             }
+            TypedStmt::ForEach {
+                target,
+                source,
+                body,
+                orelse,
+                span,
+            } => {
+                let label = match source {
+                    LoopSource::Items(_) => "",
+                    LoopSource::Enumerate { .. } => " enumerate",
+                    LoopSource::Zip { .. } => " zip",
+                    LoopSource::Reversed(_) | LoopSource::Range { reversed: true, .. } => {
+                        " reversed"
+                    }
+                    LoopSource::Range { .. } => " range",
+                };
+                self.line(
+                    depth,
+                    &format!("ForEach{label} {}", self.target(target)),
+                    *span,
+                );
+                for expression in source.expressions() {
+                    self.expression(depth + 1, expression);
+                }
+                self.block(depth + 1, "body", body);
+                self.block(depth + 1, "orelse", orelse);
+            }
             TypedStmt::ForRange {
                 target,
                 start,
@@ -152,7 +222,7 @@ impl Dump<'_> {
     }
 
     fn expression(&mut self, depth: usize, expression: &TypedExpr) {
-        let ty = expression.ty;
+        let ty = &expression.ty;
         let label = match &expression.kind {
             TypedExprKind::Constant(constant) => format!("Constant {constant:?}"),
             TypedExprKind::Local(id) => format!("Local {}", self.program.symbol(*id).name),
@@ -163,13 +233,41 @@ impl Dump<'_> {
             TypedExprKind::Compare { operators, .. } => format!("Compare {operators:?}"),
             TypedExprKind::IfExp { .. } => "IfExp".to_owned(),
             TypedExprKind::Call { function, .. } => {
-                format!("Call {}", self.program.function(*function).name)
+                format!("Call {}", self.program.function(*function).qualified_name)
             }
+            TypedExprKind::New { class, .. } => {
+                format!("New {}", self.program.class(*class).name)
+            }
+            TypedExprKind::Attribute { object, index } => self.attribute(&object.ty, *index),
+            TypedExprKind::TypeOf(_) => "TypeOf".to_owned(),
+            TypedExprKind::FString(_) => "FString".to_owned(),
+            TypedExprKind::TypeObject(of) => format!("TypeObject {}", of.name()),
+            TypedExprKind::TypeName(_) => "TypeName".to_owned(),
             TypedExprKind::Print { sep, end, .. } => {
                 format!("Print sep={} end={}", sep.is_some(), end.is_some())
             }
             TypedExprKind::Builtin { builtin, .. } => format!("Builtin {builtin:?}"),
+            TypedExprKind::IterableBuiltin { builtin, .. } => {
+                format!("IterableBuiltin {builtin:?}")
+            }
             TypedExprKind::Index { .. } => "Index".to_owned(),
+            TypedExprKind::Tuple(_) => "Tuple".to_owned(),
+            TypedExprKind::List(_) => "List".to_owned(),
+            TypedExprKind::ListOf(_) => "ListOf".to_owned(),
+            TypedExprKind::SetOf(_) => "SetOf".to_owned(),
+            TypedExprKind::Set(_) => "Set".to_owned(),
+            TypedExprKind::Dict { .. } => "Dict".to_owned(),
+            TypedExprKind::Wrap(_) => "Wrap".to_owned(),
+            TypedExprKind::Unwrap(_) => "Unwrap".to_owned(),
+            TypedExprKind::Comprehension { .. } => "Comprehension".to_owned(),
+            TypedExprKind::DictOf(_) => "DictOf".to_owned(),
+            TypedExprKind::DictItem { .. } => "DictItem".to_owned(),
+            TypedExprKind::TupleOf(_) => "TupleOf".to_owned(),
+            TypedExprKind::ListItem { .. } => "ListItem".to_owned(),
+            TypedExprKind::Slice { .. } => "Slice".to_owned(),
+            TypedExprKind::Method { method, .. } => format!("Method {}", method.name()),
+            TypedExprKind::TupleItem { index, .. } => format!("TupleItem {index}"),
+            TypedExprKind::TupleSlice { positions, .. } => format!("TupleSlice {positions:?}"),
         };
         self.line(depth, &format!("{label} : {ty}"), expression.span);
         for child in children(expression) {
@@ -191,7 +289,62 @@ fn children(expression: &TypedExpr) -> Vec<&TypedExpr> {
         } => {
             vec![left, right]
         }
-        TypedExprKind::Unary { operand, .. } => vec![operand],
+        TypedExprKind::Unary { operand, .. }
+        | TypedExprKind::TupleOf(operand)
+        | TypedExprKind::TupleItem { tuple: operand, .. }
+        | TypedExprKind::TupleSlice { tuple: operand, .. } => {
+            vec![operand]
+        }
+        TypedExprKind::Tuple(items) | TypedExprKind::List(items) | TypedExprKind::Set(items) => {
+            items.iter().collect()
+        }
+        TypedExprKind::ListItem { list, index } => vec![list, index],
+        TypedExprKind::ListOf(source)
+        | TypedExprKind::SetOf(source)
+        | TypedExprKind::DictOf(source) => source.expressions(),
+        TypedExprKind::Dict { keys, values } => keys
+            .iter()
+            .zip(values)
+            .flat_map(|(key, value)| [key, value])
+            .collect(),
+        TypedExprKind::DictItem { dict, key } => vec![dict, key],
+        TypedExprKind::Wrap(inner) | TypedExprKind::Unwrap(inner) => vec![inner],
+        TypedExprKind::Comprehension {
+            element,
+            value,
+            generators,
+        } => std::iter::once(element.as_ref())
+            .chain(value.as_deref())
+            .chain(generators.iter().flat_map(|generator| {
+                generator
+                    .source
+                    .expressions()
+                    .into_iter()
+                    .chain(&generator.conditions)
+            }))
+            .collect(),
+        TypedExprKind::IterableBuiltin {
+            iterable, option, ..
+        } => std::iter::once(iterable.as_ref())
+            .chain(option.as_deref())
+            .collect(),
+        TypedExprKind::Slice {
+            value,
+            lower,
+            upper,
+            step,
+        } => std::iter::once(value.as_ref())
+            .chain(lower.as_deref())
+            .chain(upper.as_deref())
+            .chain(step.as_deref())
+            .collect(),
+        TypedExprKind::Method {
+            receiver,
+            arguments,
+            ..
+        } => std::iter::once(receiver.as_ref())
+            .chain(arguments.iter().map(|argument| &argument.value))
+            .collect(),
         TypedExprKind::BoolOp { values, .. }
         | TypedExprKind::Builtin {
             arguments: values, ..
@@ -200,13 +353,32 @@ fn children(expression: &TypedExpr) -> Vec<&TypedExpr> {
             left, comparators, ..
         } => std::iter::once(left.as_ref()).chain(comparators).collect(),
         TypedExprKind::IfExp { test, body, orelse } => vec![test, body, orelse],
-        TypedExprKind::Call { arguments, .. } => {
+        TypedExprKind::Call { arguments, .. } | TypedExprKind::New { arguments, .. } => {
             arguments.iter().map(|argument| &argument.value).collect()
         }
+        TypedExprKind::Attribute { object, .. }
+        | TypedExprKind::TypeOf(object)
+        | TypedExprKind::TypeName(object) => vec![object],
+        TypedExprKind::TypeObject(_) => Vec::new(),
+        TypedExprKind::FString(parts) => fstring_values(parts),
         TypedExprKind::Print { values, sep, end } => values
             .iter()
             .chain(sep.as_deref())
             .chain(end.as_deref())
             .collect(),
     }
+}
+
+/// Returns the values an f-string formats, in order, those of its specifications included.
+fn fstring_values(parts: &[super::expression::FStringPart]) -> Vec<&TypedExpr> {
+    let mut values = Vec::new();
+    for part in parts {
+        if let super::expression::FStringPart::Field(field) = part {
+            values.push(&field.value);
+            if let Some(spec) = &field.spec {
+                values.extend(fstring_values(spec));
+            }
+        }
+    }
+    values
 }

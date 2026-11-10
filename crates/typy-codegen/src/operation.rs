@@ -73,6 +73,24 @@ impl<'ctx> FunctionEmitter<'_, '_, 'ctx> {
                     inkwell::values::ValueKind::Instruction(_) => None,
                 }
             }
+            Operation::ToBits(value) => Some(self.emit_to_bits(*value)?),
+            Operation::FromBits { bits, ty } => self.emit_from_bits(*bits, *ty)?,
+            Operation::MakeTuple { ty, items } => Some(self.make_tuple(*ty, items)?),
+            Operation::TupleItem { tuple, index } => self.tuple_item(*tuple, *index)?,
+            Operation::Wrap { value, ty } => Some(self.wrap(*value, *ty)?),
+            Operation::Unwrap(value) => Some(self.unwrap(*value)?),
+            Operation::IsNone(value) => Some(self.is_none(*value)?),
+            Operation::NewInstance { class } => Some(self.new_instance(*class)?),
+            Operation::Field { object, index } => self.field(*object, *index)?,
+            Operation::SetField {
+                object,
+                index,
+                value,
+            } => {
+                self.set_field(*object, *index, *value)?;
+                None
+            }
+            Operation::Identical { left, right } => Some(self.identical(*left, *right)?),
             Operation::Increment(value) => {
                 self.count(*value, true)?;
                 None
@@ -91,8 +109,12 @@ impl<'ctx> FunctionEmitter<'_, '_, 'ctx> {
         let Some(pointer) = self.slots[slot.0 as usize] else {
             return Ok(None);
         };
-        let ty = crate::abi::value_type(self.shared.context, self.function.slot(slot).ty)
-            .ok_or_else(|| CodegenError("a slot with a value has a type".to_owned()))?;
+        let ty = crate::abi::value_type(
+            self.shared.context,
+            &self.shared.tyir.tuple_types,
+            self.function.slot(slot).ty,
+        )
+        .ok_or_else(|| CodegenError("a slot with a value has a type".to_owned()))?;
         Ok(Some(self.builder.build_load(ty, pointer, "")?))
     }
 

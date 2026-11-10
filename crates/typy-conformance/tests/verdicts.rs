@@ -41,7 +41,7 @@ fn each_way_a_test_fails_or_cannot_judge_typy_gets_its_verdict() {
     let suite = Suite::new(target().join("debug/typy"));
     let deep = "def depth(n: int) -> int:\n    if n == 0:\n        return 0\n    return 1 + depth(n - 1)\n\n\nprint(depth(5000))\n";
     let files = [
-        ("EXP-02_rejected_by_typy.py", "# typy-test: EXP-02\n# typy-expect: accepted\nprint([1, 2])\n".to_owned()),
+        ("EXP-02_rejected_by_typy.py", "# typy-test: EXP-02\n# typy-expect: accepted\nprint(eval(\"1\"))\n".to_owned()),
         ("FUN-02_deeper_than_cpython.py", format!("# typy-test: FUN-02\n# typy-expect: accepted\n{deep}")),
         ("TYP-03_accepted_by_typy.py", "# typy-test: TYP-03\n# typy-expect: rejected E0402 at 1:1\nprint(1)\n".to_owned()),
         ("TYP-03_another_code.py", "# typy-test: TYP-03\n# typy-expect: rejected E0401 at 3:10\nx: int = \"a\"\n".to_owned()),
