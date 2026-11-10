@@ -48,6 +48,28 @@ impl BodyChecker<'_> {
                 }
             }
             Stmt::AnnAssign {
+                target:
+                    Expr::Attribute {
+                        value: object,
+                        attribute,
+                        ..
+                    },
+                annotation,
+                value: Some(value),
+                span,
+                ..
+            } => {
+                let declared = self.annotation(annotation);
+                let value = self.expression_expecting(value, Some(&declared));
+                let target =
+                    self.attribute_target(object, attribute, &value.ty, Some(declared), *span)?;
+                TypedStmt::Assign {
+                    targets: vec![target],
+                    value,
+                    span: *span,
+                }
+            }
+            Stmt::AnnAssign {
                 target,
                 value: Some(value),
                 span,
@@ -72,7 +94,7 @@ impl BodyChecker<'_> {
                 let value = self.expression(value);
                 let (current, value) = Self::tuple_operands(*operator, current, value);
                 let result = self.binary_type(*operator, &current, &value, *span);
-                let target = if let Expr::Subscript { .. } = target {
+                let target = if let Expr::Subscript { .. } | Expr::Attribute { .. } = target {
                     self.augmented_item(current, &result, *span)?
                 } else {
                     AssignTarget::Name(self.assign(target, result, &value)?)
@@ -157,6 +179,7 @@ impl BodyChecker<'_> {
             }
             Stmt::AnnAssign { value: None, .. }
             | Stmt::FunctionDef { .. }
+            | Stmt::ClassDef { .. }
             | Stmt::Import { .. }
             | Stmt::ImportFrom { .. }
             | Stmt::Other { .. } => return None,
@@ -330,6 +353,7 @@ impl BodyChecker<'_> {
     }
 
     pub(super) fn return_statement(&mut self, value: Option<&Expr>, span: Span) -> TypedStmt {
+        self.check_instance_complete(span);
         let expected = self.returns.clone().unwrap_or(Type::NoneType);
         let value = value.map(|value| self.expression_expecting(value, Some(&expected)));
         let actual = value

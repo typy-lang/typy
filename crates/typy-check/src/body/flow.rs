@@ -14,6 +14,9 @@ pub(super) enum Fact {
     Assigned(SymbolId),
     /// The variable, of type `T | None`, is not `None` on every path.
     NotNone(SymbolId),
+    /// The attribute at this position of the instance `__init__` builds is assigned on every
+    /// path (CLS-01).
+    Attribute(usize),
 }
 
 /// What holds on every path to a point; `None` when the point cannot be reached.

@@ -31,6 +31,9 @@ impl FunctionLowerer<'_> {
             TyirType::Object(TypeId::DICT_VIEW) => {
                 self.call_runtime(RuntimeFunction::DictViewText, vec![lowered.value], span)
             }
+            TyirType::Object(id) if id.class_index().is_some() => {
+                self.instance_text(lowered, false, span)
+            }
             TyirType::Object(_) => Self::borrowed(lowered.value, lowered.ty),
             TyirType::Bits => unreachable!("list items are converted before they are written"),
             TyirType::Unit => {
@@ -55,6 +58,10 @@ impl FunctionLowerer<'_> {
             self.call_runtime(RuntimeFunction::StrRepr, vec![lowered.value], span)
         } else if let TyirType::Optional(_) = lowered.ty {
             self.optional_text(lowered, true, span)
+        } else if let TyirType::Object(id) = lowered.ty
+            && id.class_index().is_some()
+        {
+            self.instance_text(lowered, true, span)
         } else {
             self.string_of(lowered, span)
         }

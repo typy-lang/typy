@@ -21,6 +21,20 @@ impl TypeId {
     pub const DICT: Self = Self(8);
     /// A view of a dict's keys, values or items.
     pub const DICT_VIEW: Self = Self(9);
+    /// The first ID of the program's classes; class `n` of the module is this plus `n`.
+    const FIRST_CLASS: u32 = 1 << 16;
+
+    /// Returns the type of the instances of class `index` of the module (CLS-01).
+    #[must_use]
+    pub const fn class(index: u32) -> Self {
+        Self(Self::FIRST_CLASS + index)
+    }
+
+    /// Returns the index of the class whose instances have this type, if it is a class.
+    #[must_use]
+    pub const fn class_index(self) -> Option<u32> {
+        self.0.checked_sub(Self::FIRST_CLASS)
+    }
 }
 
 /// The number of a tuple type in its module's `TupleTypes`.
@@ -95,6 +109,9 @@ impl fmt::Display for TyirType {
             Self::Object(TypeId::DICT) => formatter.write_str("dict"),
             Self::Object(TypeId::DICT_VIEW) => formatter.write_str("view"),
             Self::Bits => formatter.write_str("bits"),
+            Self::Object(id) if id.class_index().is_some() => {
+                write!(formatter, "class#{}", id.class_index().unwrap_or(0))
+            }
             Self::Object(TypeId(id)) => write!(formatter, "object#{id}"),
             Self::Tuple(TupleTypeId(id)) => write!(formatter, "tuple#{id}"),
             Self::Optional(base) => {

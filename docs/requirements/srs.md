@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy software requirements specification |
-| Version | 1.25 |
+| Version | 1.26 |
 | Status | Approved |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-10 |
@@ -281,6 +281,7 @@ formatter applies; Ruff's formatter is the project's recommendation.
 | CLS-08 | `__str__` and `__repr__` shall be used by `str()`, `repr()`, `print()` and f-strings. | M | 0.2 | 3.3.1 |
 | CLS-09 | `isinstance` shall be accepted with a class or a tuple of classes. | M | 0.4 | |
 | CLS-10 | Every type, built in or a class, shall have a type object that names it and its base, and the chain of bases of every type shall end at `object`. | M | 0.2 | |
+| CLS-11 | Class variables, given a value in the class body, shall be accepted. | S | 0.4 | |
 
 ### 3.11 Generics and protocols (GEN)
 

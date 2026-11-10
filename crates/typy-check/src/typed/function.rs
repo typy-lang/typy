@@ -17,6 +17,9 @@ pub struct TypedFunction {
     pub id: FunctionId,
     /// The name tracebacks show: the function's name, or `<module>` for the module body.
     pub name: String,
+    /// The name that tells it from every other function of its module: the name, or for a
+    /// method the class's name, a dot and the method's name, as Python's `__qualname__`.
+    pub qualified_name: String,
     /// The module the function is defined in.
     pub module: String,
     /// The signature.

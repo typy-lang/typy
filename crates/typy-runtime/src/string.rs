@@ -148,6 +148,21 @@ pub(crate) unsafe fn set_code_point(string: *mut StrObject, index: usize, point:
     }
 }
 
+/// Returns a new string of the code points of `parts`, one after another.
+pub(crate) fn from_parts(parts: &[&str]) -> *mut StrObject {
+    let points = || parts.iter().flat_map(|part| part.chars());
+    let kind = points()
+        .map(|point| StrKind::of(u32::from(point)))
+        .max()
+        .unwrap_or(StrKind::Latin1);
+    let string = new_string(points().count(), kind);
+    for (index, point) in points().enumerate() {
+        // SAFETY: the string is new, the index is in bounds, and the kind holds every code point.
+        unsafe { set_code_point(string, index, u32::from(point)) };
+    }
+    string
+}
+
 /// Returns a new string of the code points of `text`.
 pub(crate) fn from_str(text: &str) -> *mut StrObject {
     let kind = text

@@ -34,6 +34,8 @@ pub enum Type {
     /// `T | None`: a value of `T`, or `None` (TYP-06, ADR-0011). `T` is never `None` or
     /// optional itself; `optional` builds the type and keeps that rule.
     Optional(Box<Type>),
+    /// An instance of a class of the program, with the class's name for messages (CLS-01).
+    Instance(crate::typed::ClassId, String),
     /// The type of an expression that already has a diagnostic; every check accepts it, so one cause gives one error (DIA-04).
     Error,
 }
@@ -197,10 +199,24 @@ impl Type {
                             || left.can_order(right)
                     })
             }
-            (Self::NoneType | Self::Dict(..) | Self::DictView(..) | Self::Optional(_), _)
-            | (_, Self::NoneType | Self::Dict(..) | Self::DictView(..) | Self::Optional(_)) => {
-                false
-            }
+            // A class orders its instances with `__lt__` and the other operator methods, which
+            // are planned for 0.4 (CLS-07).
+            (
+                Self::NoneType
+                | Self::Dict(..)
+                | Self::DictView(..)
+                | Self::Optional(_)
+                | Self::Instance(..),
+                _,
+            )
+            | (
+                _,
+                Self::NoneType
+                | Self::Dict(..)
+                | Self::DictView(..)
+                | Self::Optional(_)
+                | Self::Instance(..),
+            ) => false,
             _ => self == other || (self.is_numeric() && other.is_numeric()),
         }
     }
@@ -253,6 +269,9 @@ impl Type {
         match self {
             Self::Int => "an int".to_owned(),
             Self::NoneType => "None".to_owned(),
+            Self::Instance(_, name) if name.starts_with(['A', 'E', 'I', 'O', 'U']) => {
+                format!("an {name}")
+            }
             other => format!("a {other}"),
         }
     }
@@ -292,6 +311,7 @@ impl fmt::Display for Type {
                 write!(formatter, "{}[{key}, {value}]", view.name())
             }
             Self::Optional(inner) => write!(formatter, "{inner} | None"),
+            Self::Instance(_, name) => formatter.write_str(name),
             Self::Error => formatter.write_str("<error>"),
         }
     }
@@ -323,6 +343,24 @@ mod tests {
             assert!(ty.is_truth_testable());
             assert!(ty.is_printable());
         }
+    }
+
+    #[test]
+    fn instances_compare_by_identity_and_have_no_order() {
+        use crate::typed::ClassId;
+        let point = Type::Instance(ClassId(0), "Point".to_owned());
+        let item = Type::Instance(ClassId(1), "Item".to_owned());
+        assert!(point.can_test_equality(&point));
+        assert!(!point.can_test_equality(&item));
+        assert!(!point.can_order(&point));
+        assert!(!Type::Int.can_order(&point));
+        assert!(point.is_hashable());
+        assert!(point.is_assignable_to(&Type::optional(point.clone())));
+        assert_eq!(
+            (point.with_article(), item.with_article()),
+            ("a Point".to_owned(), "an Item".to_owned())
+        );
+        assert_eq!(Type::optional(item).to_string(), "Item | None");
     }
 
     #[test]
@@ -388,9 +426,12 @@ mod tests {
         let ints = Type::Set(Box::new(Type::Int));
         let floats = Type::Set(Box::new(Type::Float));
         assert_eq!(ints.to_string(), "set[int]");
-        assert!(ints.can_test_equality(&ints) && ints.can_order(&ints));
-        assert!(!ints.can_test_equality(&floats) && !ints.can_order(&floats));
-        assert!(ints.is_assignable_to(&ints) && !ints.is_assignable_to(&floats));
+        assert!(ints.can_test_equality(&ints));
+        assert!(ints.can_order(&ints));
+        assert!(!ints.can_test_equality(&floats));
+        assert!(!ints.can_order(&floats));
+        assert!(ints.is_assignable_to(&ints));
+        assert!(!ints.is_assignable_to(&floats));
         assert!(Type::Set(Box::new(Type::Error)).has_error());
     }
 
@@ -415,7 +456,8 @@ mod tests {
         assert!(!Type::Int.can_test_equality(&view(View::Keys)));
         assert!(!ints.can_order(&ints));
         assert!(!Type::Int.can_order(&view(View::Values)));
-        assert!(!ints.is_hashable() && !view(View::Keys).is_hashable());
+        assert!(!ints.is_hashable());
+        assert!(!view(View::Keys).is_hashable());
         let lists = |item: Type| Type::List(Box::new(item));
         assert!(lists(Type::Int).can_order(&lists(Type::Int)));
         assert!(!lists(ints.clone()).can_order(&lists(ints)));
@@ -471,11 +513,11 @@ mod tests {
         let pair = Type::Tuple(vec![Type::Int, Type::Str]);
         assert!(!pair.matches(&Type::Tuple(vec![Type::Int])));
         assert!(pair.is_assignable_to(&optional(pair.clone())));
-        assert!(
-            optional(Type::Error).has_error() && Type::Optional(Box::new(Type::Error)).has_error()
-        );
+        assert!(optional(Type::Error).has_error());
+        assert!(Type::Optional(Box::new(Type::Error)).has_error());
         assert!(int.is_hashable());
-        assert!(!int.can_order(&int) && !int.can_test_equality(&int));
+        assert!(!int.can_order(&int));
+        assert!(!int.can_test_equality(&int));
         assert!(!Type::Int.can_test_equality(&int));
     }
 }

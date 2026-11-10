@@ -296,8 +296,12 @@ impl BodyChecker<'_> {
             },
             Expr::List { elements, .. } => self.list_display(elements, None, span),
             Expr::Slice { .. } => self.misplaced_slice(span),
-            // An attribute that is not a method call is refused by the subset check until classes.
-            Expr::Attribute { .. } | Expr::Other { .. } => Self::typed(
+            Expr::Attribute {
+                value, attribute, ..
+            } => self.attribute(value, attribute, span),
+            // The subset check refuses every other expression, and a quoted expression is
+            // only read as an annotation.
+            Expr::Quoted { .. } | Expr::Other { .. } => Self::typed(
                 TypedExprKind::Constant(TypedConstant::None),
                 Type::Error,
                 span,

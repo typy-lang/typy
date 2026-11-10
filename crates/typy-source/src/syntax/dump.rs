@@ -94,6 +94,33 @@ impl Dump<'_> {
                 }
                 self.block(depth + 1, "body", body);
             }
+            Stmt::ClassDef {
+                name,
+                bases,
+                keyword_count,
+                body,
+                decorators,
+                type_parameter_count,
+                ..
+            } => {
+                self.line(depth, &format!("ClassDef {}", name.name), span);
+                for decorator in decorators {
+                    self.line(depth + 1, "decorator", None);
+                    self.expression(depth + 2, decorator);
+                }
+                if *type_parameter_count > 0 {
+                    let label = format!("type_params {type_parameter_count}");
+                    self.line(depth + 1, &label, None);
+                }
+                for base in bases {
+                    self.line(depth + 1, "base", None);
+                    self.expression(depth + 2, base);
+                }
+                if *keyword_count > 0 {
+                    self.line(depth + 1, &format!("keywords {keyword_count}"), None);
+                }
+                self.block(depth + 1, "body", body);
+            }
             Stmt::Return { value, .. } => {
                 self.line(depth, "Return", span);
                 if let Some(value) = value {
@@ -357,6 +384,10 @@ impl Dump<'_> {
                 self.expression(depth + 1, index);
             }
             Expr::Name { id, .. } => self.line(depth, &format!("Name {id}"), span),
+            Expr::Quoted { annotation, .. } => {
+                self.line(depth, "Quoted", span);
+                self.expression(depth + 1, annotation);
+            }
             Expr::Other { kind, .. } => self.line(depth, &kind.to_string(), span),
         }
     }

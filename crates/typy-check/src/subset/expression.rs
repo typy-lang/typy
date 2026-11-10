@@ -250,9 +250,8 @@ impl Walker {
                     self.expression(value);
                 }
             }
-            Expr::Attribute { span, .. } => {
-                self.report(*span, planned("attributes", "0.2", RuleId::CLS_01));
-            }
+            Expr::Attribute { value, .. } => self.expression(value),
+            Expr::Quoted { annotation, .. } => self.annotation(annotation),
             Expr::Other { kind, span } => self.report(*span, feature(*kind)),
         }
     }

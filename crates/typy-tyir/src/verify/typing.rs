@@ -6,7 +6,7 @@ use crate::function::TyirFunction;
 use crate::module::TyirModule;
 use crate::operation::{Operation, ScalarKind};
 use crate::terminator::{Callee, Terminator};
-use crate::types::{TupleTypeId, TyirType};
+use crate::types::{OptionalBase, TupleTypeId, TyirType, TypeId};
 use crate::value::ValueId;
 
 struct Checker<'module> {
@@ -233,6 +233,33 @@ impl Checker<'_> {
                 Some(TyirType::Bool)
             }
             Operation::TupleItem { tuple, index } => Some(self.tuple_item(*tuple, *index)?),
+            Operation::NewInstance { class } => {
+                if self.module.classes.get(*class as usize).is_none() {
+                    return Err(self.error(format!("class#{class} is not a class of the module")));
+                }
+                Some(TyirType::Object(TypeId::class(*class)))
+            }
+            Operation::Field { object, index } => Some(self.field(*object, *index)?),
+            Operation::SetField {
+                object,
+                index,
+                value,
+            } => {
+                let ty = self.field(*object, *index)?;
+                self.expect(*value, ty, "the attribute's value")?;
+                None
+            }
+            Operation::Identical { left, right } => {
+                for value in [left, right] {
+                    if !matches!(
+                        self.ty(*value)?,
+                        TyirType::Object(_) | TyirType::Optional(OptionalBase::Object(_))
+                    ) {
+                        return Err(self.error(format!("v{} is not an object", value.0)));
+                    }
+                }
+                Some(TyirType::Bool)
+            }
             Operation::Increment(value) | Operation::Decrement(value) => {
                 if !self.module.tuple_types.is_counted(self.ty(*value)?) {
                     return Err(self.error(format!("v{} is not counted", value.0)));
@@ -248,6 +275,24 @@ impl Checker<'_> {
             TyirType::Optional(base) => Ok(self.module.tuple_types.optional_value(base)),
             other => Err(self.error(format!("v{} of type {other} is not optional", value.0))),
         }
+    }
+
+    /// Returns the type of an attribute of an instance of a class of the module.
+    fn field(&self, object: ValueId, index: u32) -> Result<TyirType, VerifyError> {
+        let ty = self.ty(object)?;
+        let TyirType::Object(id) = ty else {
+            return Err(self.error(format!("v{} of type {ty} is not an instance", object.0)));
+        };
+        let class = self
+            .module
+            .class(id)
+            .ok_or_else(|| self.error(format!("v{} of type {ty} is not an instance", object.0)))?;
+        self.module
+            .tuple_types
+            .items(class.fields)
+            .and_then(|items| items.get(index as usize))
+            .copied()
+            .ok_or_else(|| self.error(format!("{} has no attribute {index}", class.name)))
     }
 
     /// A tuple's items have the types of its tuple type, one for each.

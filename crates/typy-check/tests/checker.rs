@@ -181,7 +181,7 @@ fn rejected_programs_give_their_codes() {
         ("def f(x: Thing) -> None:\n    pass\n", &["E0205"]),
         ("print(undefined)\n", &["E0205"]),
         ("print(eval(\"1\"))\n", &["E0202"]),
-        ("class C:\n    pass\n", &["E0201"]),
+        ("class C(B):\n    pass\n", &["E0201"]),
         ("x = 2j\n", &["E0104"]),
         ("n = 3\nprint(2 ** n)\n", &["E0302"]),
         ("print(1 + \"a\")\n", &["E0401"]),
@@ -1568,4 +1568,160 @@ fn methods_builtins_and_tests_of_each_type_are_accepted() {
     ] {
         accepted(source);
     }
+}
+
+#[test]
+#[allow(clippy::too_many_lines, reason = "one row per class rule")]
+fn classes_give_their_codes() {
+    let cases: &[(&str, &[&str])] = &[
+        ("class P:\n    pass\np = P()\np.z = 1\n", &["E0414"]),
+        ("class P:\n    pass\nP().move()\n", &["E0414"]),
+        (
+            "class P:\n    def m(self) -> None:\n        pass\nf = P().m\n",
+            &["E0201"],
+        ),
+        (
+            "class P:\n    def __init__(self) -> None:\n        self.x = 1\nP().x()\n",
+            &["E0414"],
+        ),
+        ("x = 1\nprint(x.real)\n", &["E0412"]),
+        ("x = 1\nx.y = 2\n", &["E0412"]),
+        (
+            "class A:\n    def __init__(self, b: \"B\") -> None:\n        self.v = b.w\nclass B:\n    def __init__(self) -> None:\n        self.w = 1\n",
+            &["E0310"],
+        ),
+        (
+            "class A:\n    def __init__(self, b: \"B\") -> None:\n        b.w = 2\n        self.v = 1\nclass B:\n    def __init__(self) -> None:\n        self.w = 1\n",
+            &["E0310"],
+        ),
+        (
+            "class A:\n    def __init__(self) -> None:\n        self.v = None\n",
+            &["E0410"],
+        ),
+        (
+            "class A:\n    x: int\n    def __init__(self) -> None:\n        self.x: str = ''\n",
+            &["E0402"],
+        ),
+        (
+            "class A:\n    def __init__(self) -> None:\n        self.x = 1\nA().x = 's'\n",
+            &["E0402"],
+        ),
+        (
+            "class A:\n    def __init__(self) -> None:\n        self.x = 1\na = A()\na.x += 's'\n",
+            &["E0401"],
+        ),
+        (
+            "class A:\n    def __init__(self) -> None:\n        self.x = 1\na = A()\na.x /= 2\nprint(a.x)\n",
+            &["E0402"],
+        ),
+        ("class A:\n    pass\nclass A:\n    pass\n", &["E0202"]),
+        (
+            "class A:\n    pass\ndef A() -> None:\n    pass\n",
+            &["E0202"],
+        ),
+        ("class A:\n    pass\nA = 1\n", &["E0202"]),
+        ("class A:\n    x: int\n    x: str\n", &["E0202"]),
+        (
+            "class A:\n    x: int\n    def x(self) -> None:\n        pass\n",
+            &["E0202"],
+        ),
+        (
+            "class A:\n    def m(self) -> None:\n        pass\n    def m(self) -> None:\n        pass\n",
+            &["E0202"],
+        ),
+        ("class A:\n    def m() -> None:\n        pass\n", &["E0201"]),
+        (
+            "class A:\n    def __str__(self) -> int:\n        return 1\n",
+            &["E0404"],
+        ),
+        (
+            "class A:\n    def __repr__(self, x: int) -> str:\n        return ''\n",
+            &["E0404"],
+        ),
+        (
+            "class A:\n    def __init__(self) -> int:\n        return 1\n",
+            &["E0405"],
+        ),
+        (
+            "class A:\n    def m(self: int) -> None:\n        pass\n",
+            &["E0404"],
+        ),
+        ("class A:\n    pass\nA(1)\n", &["E0404"]),
+        ("class A:\n    pass\nA(x=1)\n", &["E0404"]),
+        (
+            "class A:\n    def __init__(self, x: int) -> None:\n        self.x = x\nA('s')\n",
+            &["E0404"],
+        ),
+        (
+            "class A:\n    def __init__(self) -> None:\n        print(self.x)\n        self.x = 1\n",
+            &["E0309"],
+        ),
+        (
+            "class A:\n    def __init__(self, c: bool) -> None:\n        if c:\n            return\n        self.x = 1\n",
+            &["E0309"],
+        ),
+        ("class A:\n    pass\nprint(A)\n", &["E0201"]),
+        ("x = A()\nclass A:\n    pass\n", &["E0306"]),
+        (
+            "def f() -> None:\n    A()\nf()\nclass A:\n    pass\n",
+            &["E0306"],
+        ),
+        ("class A:\n    pass\nprint(A() < A())\n", &["E0407"]),
+        (
+            "class A:\n    def m(self, other: A) -> None:\n        pass\n",
+            &["E0306"],
+        ),
+        ("x: list[A] = []\nclass A:\n    pass\n", &[]),
+    ];
+    for (source, expected) in cases {
+        if expected.is_empty() {
+            accepted(source);
+        } else {
+            assert_eq!(&rejected(source), expected, "\n{source}");
+        }
+    }
+}
+
+#[test]
+fn classes_build_typed_instances() {
+    for source in [
+        "class P:\n    \"\"\"A point.\"\"\"\n    x: int\n    def __init__(self, x: int) -> None:\n        self.x = x\n        self.y, self.z = 1, 2\n    def __repr__(self) -> str:\n        return 'P'\np = P(1)\nq: P | None = p\nprint(p.x + p.y, p is q, q is not None, [p], {p}, p != p)\n",
+        "class N:\n    def __init__(self, n: \"N | None\") -> None:\n        self.n = n\n        for i in range(2):\n            self.k = i\n        self.k = 0\na = N(None)\nb = N(a)\nprint(b.n is a)\n",
+        "class C:\n    def __init__(self) -> None:\n        self.items: list[int] = []\n        self.count = 0\n    def add(self, v: int) -> None:\n        self.items += [v]\n        self.count += 1\n    def __str__(self) -> str:\n        return str(self.count)\nc = C()\nc.add(1)\nprint(c, str(c), repr(c) != '')\n",
+        "class E:\n    pass\ne = E()\nprint(bool(e), e == e)\n",
+        "class P:\n    def __init__(self) -> None:\n        self.x: int = 0\n    def get(self) -> int:\n        return self.x\nprint(P().get(), P().x)\n",
+    ] {
+        accepted(source);
+    }
+}
+
+#[test]
+fn a_floor_that_defers_annotations_lets_a_signature_name_a_later_class() {
+    let source = "def f(t: Tree) -> None:\n    pass\nclass Tree:\n    def __init__(self, parent: Tree | None) -> None:\n        self.parent = parent\nf(Tree(None))\n";
+    let directory = tempfile_dir::Dir::new();
+    std::fs::write(directory.path.join("app.py"), source).unwrap();
+    let mut settings = ProjectSettings::new(directory.path.clone());
+    settings.python_floor = typy_source::PythonFloor::V3_14;
+    let project = Project::load(&directory.path.join("app.py"), settings)
+        .unwrap_or_else(|failure| panic!("does not parse: {:?}", failure.diagnostics));
+    assert!(TypeChecker::check(&project).is_ok());
+    assert_eq!(rejected(source), ["E0306"]);
+}
+
+#[test]
+fn class_statements_outside_the_subset_give_their_codes() {
+    let cases: &[(&str, &[&str])] = &[
+        ("@d\nclass C:\n    pass\n", &["E0201"]),
+        ("class C[T]:\n    pass\n", &["E0201"]),
+        ("class C(metaclass=M):\n    pass\n", &["E0202"]),
+        ("def f() -> None:\n    class C:\n        pass\n", &["E0202"]),
+        ("class C:\n    if True:\n        pass\n", &["E0202"]),
+        ("class C:\n    x: int = 1\n", &["E0201"]),
+        ("class C(B, object):\n    pass\n", &["E0201"]),
+        ("class C:\n    x: 'int('\n", &["E0202"]),
+    ];
+    for (source, expected) in cases {
+        assert_eq!(&rejected(source), expected, "\n{source}");
+    }
+    accepted("class C(object):\n    'Text.'\n    pass\nclass D():\n    pass\n");
 }

@@ -23,6 +23,9 @@ impl BodyChecker<'_> {
         if receiver.ty.has_error() {
             return Self::invalid_call(span);
         }
+        if let Type::Instance(class, _) = receiver.ty {
+            return self.instance_method_call(receiver, class, name, arguments, keywords, span);
+        }
         let Some(method) = Method::of(&receiver.ty, &name.name) else {
             return self.error(
                 Diagnostic::new(
@@ -111,7 +114,7 @@ impl BodyChecker<'_> {
         )
     }
 
-    fn invalid_call(span: Span) -> TypedExpr {
+    pub(super) fn invalid_call(span: Span) -> TypedExpr {
         Self::typed(
             TypedExprKind::Constant(TypedConstant::None),
             Type::Error,

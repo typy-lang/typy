@@ -40,6 +40,14 @@ impl BodyChecker<'_> {
                     )),
                 );
             }
+            if let Some(initializing) = self.initializing
+                && initializing.instance == symbol
+                && !self.reported_incomplete
+                && !self.instance_is_complete(initializing)
+            {
+                self.reported_incomplete = true;
+                self.incomplete_instance(initializing, span, false);
+            }
             let ty = self.types.get(&symbol).cloned().unwrap_or(Type::Error);
             let read = Self::typed(TypedExprKind::Local(symbol), ty.clone(), span);
             // A test before this point showed the optional variable is not `None` (TYP-13).
@@ -67,7 +75,10 @@ impl BodyChecker<'_> {
                 span,
             );
         }
-        if self.program.function_ids.contains_key(id) || Builtin::named(id).is_some() {
+        if self.program.function_ids.contains_key(id)
+            || self.program.class_ids.contains_key(id)
+            || Builtin::named(id).is_some()
+        {
             return self.error(
                 Diagnostic::new(
                     DiagnosticCode::error(201),

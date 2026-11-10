@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy detailed design |
-| Version | 1.38 |
+| Version | 1.39 |
 | Status | Approved |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-10 |
@@ -73,7 +73,7 @@ crates/
                               refcount, word, compare, int, float,
                               string, list, tuple, slice, zip, message,
                               io, exception, range, stack, set, dict,
-                              hash, type_object
+                              hash, type_object, instance
   typy-conformance/src/       expectation, observation, oracle, subject,
                               suite, test_case, verdict
 tests/
@@ -272,6 +272,8 @@ it enforces and its status. `typy explain` (0.3) reads the same table.
 | E0306 | Variable read before it is assigned on every path | TYP-12 |
 | E0307 | Tuple indexed other than by an integer literal inside it | DAT-08 |
 | E0308 | Unpacking into a different number of targets | SMT-02 |
+| E0309 | Instance used, or an attribute read, before `__init__` assigns every attribute; `__init__` that can end without assigning one | CLS-01 |
+| E0310 | Attribute whose type is not known yet, because the `__init__` that assigns it is checked later | CLS-01 |
 | E0401 | Operator not defined for these operand types | EXP-02 |
 | E0402 | Assignment changes the type of a variable | TYP-03 |
 | E0403 | `Any`, `cast` or an untyped value | TYP-10 |
@@ -285,6 +287,7 @@ it enforces and its status. `typy explain` (0.3) reads the same table.
 | E0411 | `for` over a value that cannot be iterated | CST-03 |
 | E0412 | Method a built-in type does not have | LIB-03 |
 | E0413 | Set item or dict key of a type without a hash: a list, a set, a dict, a view, or a tuple that holds one | DAT-09, DAT-10 |
+| E0414 | Attribute or method a class does not have | CLS-02 |
 | E0701 | C toolchain program not found | A-01 |
 | E0702 | Link failed | A-01 |
 | E0703 | Runtime archive missing, or from another TyPy version | None |
@@ -713,6 +716,46 @@ E0413, and a dict comprehension `dict[K, V]`; an expected type gives the
 element, as it gives a display's items, so `[[] for _ in xs]` takes an
 annotation. An `async for` clause is E0201, as `async` is.
 
+Classes (CLS-01, CLS-02, CLS-08, ADR-0012) are collected before any
+signature: `collect_classes` gives each `class` statement at the top of the
+module a `ClassId` in source order, and an annotation names a class through
+an `AnnotationScope`. A bare class name may be used only where the `class`
+statement has already run when CPython evaluates the annotation: in a
+signature after it, never in its own class. Any other use is E0306, with a
+help that quotes the name. A quoted annotation, `"Node | None"`, which the
+parser reads into `Expr::Quoted`, may name any class, and a program whose
+floor is 3.14 or later may name any class bare, since those versions
+evaluate annotations only when they are read. `collect_members` gives each
+class its `ClassInfo`: the attributes the class body declares with an
+annotation, then those `__init__` assigns on its first parameter, in source
+order, and its methods. A method is a `Definition` whose first parameter is
+the instance, `Type::Instance(class, name)`, without an annotation, and
+whose qualified name is `Class.method`. `__init__` may leave out its return
+annotation and returns `None`, E0405 otherwise; `__str__` and `__repr__`
+take only `self` and return a `str`, E0404 otherwise; any other name with
+two leading and trailing underscores is E0201, planned for 0.4 (CLS-07).
+A second class, attribute or method of one name is E0202, as is a class
+whose name is also a function or a variable.
+
+Each `__init__` is checked first, so the attributes it assigns without a
+declaration take the type of their first value; a first value of `None`
+gives none, E0410. An attribute whose type is still unknown where another
+`__init__` reads it is E0310, with a help that declares it. Inside
+`__init__` the flow state also holds `Fact::Attribute(index)` for each
+attribute assigned on every path, and the instance is used only to assign
+and read assigned attributes until every attribute holds a value: a read
+before the assignment, any other use of `self`, and a `return` or the end
+of `__init__` with an attribute unassigned are E0309. So no program reads
+an attribute that holds no value. Calling a class checks the arguments of
+its `__init__` after the instance, or none when it has no `__init__`, and
+gives `TypedExprKind::New { class, init, arguments }`. `object.name` reads
+`TypedExprKind::Attribute { object, index }`, `object.method(arguments)`
+is a `Call` of the method with the instance as its first argument, and an
+assignment to an attribute is `AssignTarget::Attribute`; a name the class
+does not have is E0414 (CLS-02). An instance is equal only to itself, has a
+hash and no order, and is true; `is` compares two instances, or optional
+instances.
+
 `TypedStmt::AugAssign` takes an `AssignTarget`: a name, or an item of a list,
 `xs[i] += 1`. An item of a `str` or a tuple cannot be assigned, E0401, and the
 result must have the item type, E0402.
@@ -793,8 +836,17 @@ Function fn0 __main__.twice(n: int) -> int @1:1
 the null address, or for a tuple a two-item tuple of a presence flag and the
 tuple, which `TupleTypes` interns. `Wrap { value, ty }`, `Unwrap(value)`
 and `IsNone(value)` make, read and test one, and `Constant::NoneOf(base)`
-is its `None`. An optional `bool` is a byte; every other optional has its
-base's layout, and is counted as its base is. `TyirType` is `Copy`: a tuple
+is its `None`. An instance of class `n` of the module is
+`Object(TypeId::class(n))`, and `TyirModule::classes` holds each
+`TyirClass`: its name, its module, the tuple type that lays out its
+attributes and its `__repr__`. `NewInstance { class }` makes an instance
+with every attribute zero, `Field { object, index }` borrows an attribute,
+`SetField { object, index, value }` stores one, taking over the value's
+reference without releasing the old value, and `Identical { left, right }`
+compares two objects by address. `Constant::NoInstance(id)` is the null
+address, the first value of a slot of a class type. An optional `bool` is
+a byte; every other optional has its base's layout, and is counted as its
+base is. `TyirType` is `Copy`: a tuple
 type is a number in the module's `TupleTypes`, which interns each distinct
 list of item types and says whether a type is counted. A tuple is a value
 with its items in place, not an object, as ADR-0001 decides, so `is` cannot
@@ -940,6 +992,7 @@ graph, symbol names and the string pool.
 | Dicts | Every dict operation is a runtime call that borrows its arguments; a dict adds its own references to a key and a value it stores. A display creates the dict presized for its entries, as CPython's `BUILD_MAP` does, then sets each key and value in order. `d[k]` borrows the value, which gets its own reference when the dict is a temporary; `d[k] = v` evaluates the value, then the dict and the key. `get`, `setdefault` and `pop` give a value with a reference of its own, and `popitem` builds its pair from the key and value the dict gives up. `keys()`, `values()` and `items()` make a view object that holds the dict, so a view reads the dict as it changes and keeps its own type ID for `in`, `len` and its text, also inside a list or a tuple. `for` over a dict or a view keeps the source, the next entry, the number of entries when the loop began and the entries visited in hidden slots, and `typy_rt_dict_next` raises CPython's `RuntimeError` when the size or the keys changed. `\|` copies and updates, and `\|=` updates in place. A dict slot starts as the placeholder dict, and a view slot as a view of it |
 | Comprehensions | A comprehension creates its list, set or dict, then lowers its clauses as loops, each around the next. A clause starts its iterator, binds its target and tests each condition, going back for the next value when one fails; the innermost loop evaluates the element and appends or adds it, or evaluates the key, then the value, and sets the entry, as CPython does. The collection is a temporary throughout, so an exception from an element releases it |
 | Ranges | A `range` source evaluates its arguments once, in order, and raises `ValueError` for a step that is not a nonzero constant and is zero. It keeps a counter, a limit and the step, and gives each value with a reference of its own before the counter moves on. `reversed(range(...))` starts from `typy_rt_range_last` and steps back to `start - step`, as CPython's `range_reverse` does |
+| Classes | `Class(arguments)` evaluates the arguments, makes the instance, then calls `__init__` with the instance first. An attribute is read with `Field`, borrowed from the instance, and gets a reference of its own when the instance is a temporary. Assigning an attribute evaluates the value, then the instance, stores the value with `SetField` and releases the value the attribute held; `object.attribute op= value` reads the attribute once, with a reference of its own, before the value. `str` of an instance calls `__str__`, then `__repr__`, and `repr` calls `__repr__`; a class with neither is written by `typy_rt_instance_text`. `==`, `!=`, `is` and `is not` on instances are `Identical`, and an instance is true. A slot of a class type starts as `NoInstance` |
 | Optional values | `None` where `T \| None` is expected is the constant `NoneOf`, and a value of `T` is wrapped; wrapping and unwrapping hand the reference on with the value. `is None` and `is not None` on an optional value test `IsNone`, and on any other value are constants. `str`, `repr` and truth tests branch on `IsNone` and read the value only where it is not `None`, so a null object never reaches the runtime. An optional slot starts as `None`, and an optional parameter's default is `None` or its wrapped constant. `dict.get(key)` finds the key and wraps its value with a reference of its own, or gives `None` |
 | Builtins | Each builtin of 0.1 becomes runtime calls. `print` evaluates every argument in source order, then converts and writes each value. `min` and `max` keep the first value on a tie, as CPython does |
 | Stack | A function in a cycle of calls invokes the runtime's stack check on entry (FUN-02) |
@@ -993,8 +1046,9 @@ comparisons, calls and counting, terminators, and emission.
 | `int` | A 64-bit word. An inline value has its lowest bit set and holds the number shifted left by one; any other word is the address of a large integer. Every `int` argument of a runtime function is such a word |
 | `float`, `bool`, objects | A double, an `i1`, a pointer. A `bool` returned by the runtime is one byte |
 | Object header | 8 bytes: `reference_count: u32`, then `type_id: u32`. A count of `u32::MAX` marks an immortal object, whose header the runtime never writes |
-| Type IDs | `str` is 1, an exception is 2, a large integer is 3, a list is 4, a `tuple[T, ...]` is 5, a `bytes` is 6, a set is 7, a dict is 8, a view of a dict is 9 and a type object is 10 |
-| Type object | Header, `name: ptr` to UTF-8 bytes, `name_length: u64`, `base: ptr` (null only for `object`), then five nullable function pointers with the C calling convention: `truth(object) -> bool`, `hash(object) -> i64`, `equal(left, right) -> bool`, `order(left, right, comparison) -> bool` and `repr(object) -> { str, exception }`. An absent function means what it means for `object`: true, equal only to itself, and no hash, order or text. The runtime frees its own objects by type ID, so the type objects stay out of a program that never tests, compares or writes an object of unknown type (ADR-0012) |
+| Type IDs | `str` is 1, an exception is 2, a large integer is 3, a list is 4, a `tuple[T, ...]` is 5, a `bytes` is 6, a set is 7, a dict is 8, a view of a dict is 9, a type object is 10 and an instance of a class is 11 |
+| Instance | Header, `class: ptr` to the class's type object, then the attributes laid out as the class's tuple descriptor says. `typy_rt_instance_new(class)` makes one with every attribute zero; the runtime frees it by releasing each attribute the descriptor counts. A class's type object is a private constant `typy.classN`, whose base is the runtime's `typy_rt_object`, whose hash is `typy_rt_identity_hash` and whose `repr` is `typy_rt_instance_repr`, or `typy.classN.repr`, which calls the class's `__repr__` and adds a null exception when it cannot raise |
+| Type object | Header, `name: ptr` to UTF-8 bytes, `name_length: u64`, `base: ptr` (null only for `object`), then five nullable function pointers with the C calling convention: `truth(object) -> bool`, `hash(object) -> i64`, `equal(left, right) -> bool`, `order(left, right, comparison) -> bool` and `repr(object) -> { str, exception }`, then `module: ptr` to UTF-8 bytes, `module_length: u64` and `fields: ptr` to the tuple descriptor of a class's attributes, null for the runtime's own types. An absent function means what it means for `object`: true, equal only to itself, and no hash, order or text. The runtime frees its own objects by type ID, so the type objects stay out of a program that never tests, compares or writes an object of unknown type (ADR-0012) |
 | `str` object | Header, `length: u64` in code points, `kind: u32` (1, 2 or 4 bytes per code point), 4 bytes of padding, then the code points |
 | Large integer | Header, `sign_and_length: i32`, 4 bytes of padding, then that many `u64` limbs, least significant first |
 | Constants | Strings, `bytes` and large integers are immortal static objects in read-only memory; a `bytes` constant is a one-byte `str` object with the `bytes` type ID |
@@ -1109,7 +1163,8 @@ installed `typy` finds `<prefix>/lib/typy/` and a `typy` in
 | Type | Layout | Rule |
 | --- | --- | --- |
 | `ObjectHeader` | `reference_count: u32`, `type_id: u32` | The first 8 bytes of every heap object (NFR-12) |
-| `TypeDescriptor` | `size: u32`, `flags: u32`, `drop: unsafe extern "C" fn(*mut ObjectHeader)`, `name: *const u8` | Generated by the compiler or built into the runtime; never changed |
+| `TypeObject` | Header, `name`, `name_length`, `base`, the functions `truth`, `hash`, `equal`, `order` and `repr`, then `module`, `module_length` and `fields`, as in section 10.2 | An immortal object of type `type`; every chain of bases ends at `object`, which has none (ADR-0012, CLS-10). The runtime's own types are statics, and the compiler emits one for each class |
+| `InstanceObject` | Header, `class: *const TypeObject`, then the attributes | An instance of a class, under the type ID 11; its class's `fields` lays out the attributes |
 | `Int` | One `u64` word, as in section 8.1 | Arithmetic on two inline values that does not overflow never calls the runtime |
 | `BigInt` | Header, `sign_and_length: i32`, then that many `u64` limbs, least significant first | Normalised: no leading zero limb, and a value that fits inline is never a `BigInt` |
 | `Str` | Header, `length: u64` in code points, `kind: StrKind`, then the data | `kind` is `Latin1`, `Ucs2` or `Ucs4`, the narrowest that holds every code point, as in PEP 393 |

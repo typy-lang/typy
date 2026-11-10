@@ -61,7 +61,7 @@ impl<'context> FunctionLowerer<'context> {
         let symbol_name = if entry {
             ENTRY_SYMBOL.to_owned()
         } else {
-            symbol(&function.module, &function.name)
+            symbol(&function.module, &function.qualified_name)
         };
         let return_type = tyir_type(&function.signature.returns, tuple_types);
         let mut builder = FunctionBuilder::new(

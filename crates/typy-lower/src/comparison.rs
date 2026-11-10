@@ -4,7 +4,8 @@ use typy_check::TypedExpr;
 use typy_diagnostics::Span;
 use typy_source::syntax::CompareOperator;
 use typy_tyir::{
-    Comparison, Constant, Operation, RuntimeFunction, ScalarKind, Terminator, TyirType, ValueId,
+    Comparison, Constant, Operation, OptionalBase, RuntimeFunction, ScalarKind, Terminator,
+    TyirType, ValueId,
 };
 
 use crate::function::FunctionLowerer;
@@ -129,6 +130,30 @@ impl FunctionLowerer<'_> {
         found
     }
 
+    /// Returns `left is right`, or `left is not right` when `is` is false.
+    fn identity(&mut self, is: bool, left: Lowered, right: Lowered, span: Span) -> ValueId {
+        // Two objects are compared by address, and `None` of an optional object is
+        // the null address. Otherwise an optional value is `None` when its spare
+        // value says so; any other value is `None` only when its type is (ADR-0011).
+        let holds = match (left.ty, right.ty) {
+            (
+                TyirType::Object(_) | TyirType::Optional(OptionalBase::Object(_)),
+                TyirType::Object(_) | TyirType::Optional(OptionalBase::Object(_)),
+            ) => self.identical(left, right, span),
+            (TyirType::Optional(_), _) => self.is_none(left, span),
+            (_, TyirType::Optional(_)) => self.is_none(right, span),
+            (left, right) => self.constant(
+                Constant::Bool(left == TyirType::Unit && right == TyirType::Unit),
+                span,
+            ),
+        };
+        if is {
+            return holds;
+        }
+        self.builder
+            .push_value(Operation::BoolNot(holds), TyirType::Bool, span)
+    }
+
     /// Compares two values whose types the checker accepted; the operands are not released.
     pub(crate) fn compare(
         &mut self,
@@ -145,22 +170,7 @@ impl FunctionLowerer<'_> {
             CompareOperator::Gt => Comparison::Greater,
             CompareOperator::GtE => Comparison::GreaterEqual,
             CompareOperator::Is | CompareOperator::IsNot => {
-                // An optional value is `None` when its spare value says so; any other value
-                // is `None` only when its type is (ADR-0011).
-                let none = match (left.ty, right.ty) {
-                    (TyirType::Optional(_), _) => self.is_none(left, span),
-                    (_, TyirType::Optional(_)) => self.is_none(right, span),
-                    (left, right) => self.constant(
-                        Constant::Bool(left == TyirType::Unit && right == TyirType::Unit),
-                        span,
-                    ),
-                };
-                if operator == CompareOperator::Is {
-                    return none;
-                }
-                return self
-                    .builder
-                    .push_value(Operation::BoolNot(none), TyirType::Bool, span);
+                return self.identity(operator == CompareOperator::Is, left, right, span);
             }
             CompareOperator::In | CompareOperator::NotIn => {
                 let found = self.contains(left, right, span);
@@ -174,6 +184,10 @@ impl FunctionLowerer<'_> {
         };
         let kind = match (left.ty, right.ty) {
             (TyirType::Tuple(_), _) => return self.compare_tuples(operator, left, right, span),
+            // An instance of a class without `__eq__` is equal only to itself (CLS-07).
+            (TyirType::Object(id), _) if id.class_index().is_some() => {
+                return self.instance_equality(comparison == Comparison::Equal, left, right, span);
+            }
             (TyirType::LIST, _) => {
                 if matches!(comparison, Comparison::Equal | Comparison::NotEqual) {
                     return self.list_equality(comparison, left, right, span);

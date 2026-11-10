@@ -1,4 +1,5 @@
-//! Checks calls of program functions: arity, keywords, defaults and argument types.
+//! Checks calls of program functions and classes: arity, keywords, defaults and argument
+//! types.
 
 use typy_diagnostics::{Diagnostic, DiagnosticCode, RuleId, Span};
 use typy_source::syntax::{Expr, Keyword};
@@ -32,6 +33,9 @@ impl BodyChecker<'_> {
         if let Some(function) = self.program.function_ids.get(name).copied() {
             return self.call_function(function, name, arguments, keywords, span);
         }
+        if let Some(class) = self.program.class_ids.get(name).copied() {
+            return self.new_instance(class, arguments, keywords, span);
+        }
         if let Some(builtin) = Builtin::named(name) {
             return self.call_builtin(builtin, arguments, keywords, span);
         }
@@ -53,28 +57,51 @@ impl BodyChecker<'_> {
         keywords: &[Keyword],
         span: Span,
     ) -> TypedExpr {
+        match self.bind_arguments(function, 0, name, arguments, keywords, span) {
+            Ok(bound) => Self::typed(
+                TypedExprKind::Call {
+                    function,
+                    arguments: bound,
+                },
+                self.program.signatures[function.0 as usize].returns.clone(),
+                span,
+            ),
+            Err(error) => error,
+        }
+    }
+
+    /// Binds the arguments of a call of `function` to its parameters after the first `skip`,
+    /// which a method's instance fills; returns the bound arguments, or the error expression
+    /// after reporting what does not fit.
+    pub(super) fn bind_arguments(
+        &mut self,
+        function: FunctionId,
+        skip: usize,
+        name: &str,
+        arguments: &[Expr],
+        keywords: &[Keyword],
+        span: Span,
+    ) -> Result<Vec<Argument>, TypedExpr> {
         let signature = self.program.signatures[function.0 as usize].clone();
+        let parameters = &signature.parameters[skip.min(signature.parameters.len())..];
         let mut bound: Vec<Argument> = Vec::new();
-        let mut filled = vec![false; signature.parameters.len()];
+        let mut filled = vec![false; parameters.len()];
         for (index, argument) in arguments.iter().enumerate() {
-            let expected = signature
-                .parameters
-                .get(index)
-                .map(|parameter| &parameter.ty);
+            let expected = parameters.get(index).map(|parameter| &parameter.ty);
             let value = self.expression_expecting(argument, expected);
-            let Some(parameter) = signature.parameters.get(index) else {
-                return self.error(
+            let Some(parameter) = parameters.get(index) else {
+                return Err(self.error(
                     Diagnostic::new(
                         DiagnosticCode::error(404),
                         value.span,
                         format!(
                             "`{name}` takes {} arguments, and more are given",
-                            signature.parameters.len()
+                            parameters.len()
                         ),
                     )
                     .with_rule(RuleId::TYP_01),
                     span,
-                );
+                ));
             };
             self.expect(
                 &value,
@@ -83,24 +110,23 @@ impl BodyChecker<'_> {
             );
             filled[index] = true;
             bound.push(Argument {
-                parameter: index,
+                parameter: index + skip,
                 value,
             });
         }
         for keyword in keywords {
             let position = keyword.name.as_ref().and_then(|keyword_name| {
-                signature
-                    .parameters
+                parameters
                     .iter()
                     .position(|parameter| parameter.name == keyword_name.name)
             });
-            let expected = position.map(|index| &signature.parameters[index].ty);
+            let expected = position.map(|index| &parameters[index].ty);
             let value = self.expression_expecting(&keyword.value, expected);
             let Some(keyword_name) = &keyword.name else {
                 continue;
             };
             let Some(index) = position else {
-                return self.error(
+                return Err(self.error(
                     Diagnostic::new(
                         DiagnosticCode::error(404),
                         keyword_name.span,
@@ -108,10 +134,10 @@ impl BodyChecker<'_> {
                     )
                     .with_rule(RuleId::TYP_01),
                     span,
-                );
+                ));
             };
             if filled[index] {
-                return self.error(
+                return Err(self.error(
                     Diagnostic::new(
                         DiagnosticCode::error(404),
                         keyword_name.span,
@@ -119,22 +145,22 @@ impl BodyChecker<'_> {
                     )
                     .with_rule(RuleId::TYP_01),
                     span,
-                );
+                ));
             }
             self.expect(
                 &value,
-                signature.parameters[index].ty.clone(),
+                parameters[index].ty.clone(),
                 &format!("argument `{}`", keyword_name.name),
             );
             filled[index] = true;
             bound.push(Argument {
-                parameter: index,
+                parameter: index + skip,
                 value,
             });
         }
-        for (parameter, is_filled) in signature.parameters.iter().zip(&filled) {
+        for (parameter, is_filled) in parameters.iter().zip(&filled) {
             if !is_filled && parameter.default.is_none() {
-                return self.error(
+                return Err(self.error(
                     Diagnostic::new(
                         DiagnosticCode::error(404),
                         span,
@@ -142,16 +168,9 @@ impl BodyChecker<'_> {
                     )
                     .with_rule(RuleId::TYP_01),
                     span,
-                );
+                ));
             }
         }
-        Self::typed(
-            TypedExprKind::Call {
-                function,
-                arguments: bound,
-            },
-            signature.returns,
-            span,
-        )
+        Ok(bound)
     }
 }

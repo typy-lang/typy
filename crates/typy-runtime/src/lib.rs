@@ -20,6 +20,7 @@ mod exception;
 mod float;
 mod hash;
 mod header;
+mod instance;
 mod int;
 mod io;
 mod libc;

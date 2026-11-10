@@ -224,8 +224,6 @@ fn operators_are_converted() {
 #[test]
 fn constructs_beyond_the_release_keep_their_kind_and_span() {
     let source = "\
-class C:
-    pass
 async def a():
     pass
 type X = int
@@ -253,7 +251,6 @@ global g
     assert_eq!(
         kinds,
         [
-            NodeKind::ClassDef,
             NodeKind::AsyncFunctionDef,
             NodeKind::TypeAlias,
             NodeKind::Match,
@@ -435,6 +432,65 @@ fn template_strings_need_floor_3_14() {
             ..
         }
     ));
+}
+
+#[test]
+fn classes_keep_their_bases_keywords_decorators_and_body() {
+    let source =
+        "@d\nclass C[T](B, metaclass=M):\n    x: int\n    def f(self) -> None:\n        pass\n";
+    let parsed = parse(&file(source), PythonFloor::V3_12).unwrap();
+    let Stmt::ClassDef {
+        name,
+        bases,
+        keyword_count,
+        body,
+        decorators,
+        type_parameter_count,
+        ..
+    } = &parsed.body[0]
+    else {
+        panic!("a class: {:?}", parsed.body[0]);
+    };
+    assert_eq!(name.name, "C");
+    assert_eq!((bases.len(), *keyword_count, body.len()), (1, 1, 2));
+    assert_eq!((decorators.len(), *type_parameter_count), (1, 1));
+    let dumped = dump(&parsed, &file(source));
+    for line in [
+        "ClassDef C @1:1",
+        "  decorator",
+        "  type_params 1",
+        "  base",
+        "    Name B",
+        "  keywords 1",
+        "  body",
+        "    AnnAssign @3:5",
+    ] {
+        assert!(dumped.contains(line), "{line} in\n{dumped}");
+    }
+    let plain = parse(&file("class D:\n    pass\n"), PythonFloor::V3_12).unwrap();
+    assert_eq!(
+        dump(&plain, &file("class D:\n    pass\n")),
+        "Module\n  ClassDef D @1:1\n    body\n      Pass @2:5\n"
+    );
+    assert!(
+        matches!(&plain.body[0], Stmt::ClassDef { bases, keyword_count: 0, .. } if bases.is_empty())
+    );
+}
+
+#[test]
+fn string_annotations_hold_the_expression_they_quote() {
+    let source = "def f(a: \"Node | None\") -> 'int':\n    b: \"x(\" = 1\n";
+    let parsed = parse(&file(source), PythonFloor::V3_12).unwrap();
+    let dumped = dump(&parsed, &file(source));
+    for line in [
+        "Quoted @1:10",
+        "BinOp BitOr @1:11",
+        "Name Node @1:11",
+        "Quoted @1:28",
+    ] {
+        assert!(dumped.contains(line), "{line} in\n{dumped}");
+    }
+    assert!(dumped.contains("Constant Str(\"x(\")"), "{dumped}");
 }
 
 #[test]

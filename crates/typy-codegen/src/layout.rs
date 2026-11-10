@@ -10,6 +10,8 @@ pub const BYTES_TYPE_ID: u32 = 6;
 pub const EXCEPTION_TYPE_ID: u32 = 2;
 /// The type ID of large integers.
 pub const BIG_INT_TYPE_ID: u32 = 3;
+/// The type ID of a type object, such as a class's (ADR-0012).
+pub(crate) const TYPE_TYPE_ID: u32 = 10;
 /// The smallest integer held inline: -2^62.
 pub const INLINE_MIN: i128 = -(1 << 62);
 /// The largest integer held inline: 2^62 - 1.

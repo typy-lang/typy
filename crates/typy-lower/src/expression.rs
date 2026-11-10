@@ -129,6 +129,12 @@ impl FunctionLowerer<'_> {
                     .collect();
                 self.call_function(*function, values, ty, span)
             }
+            TypedExprKind::New {
+                class,
+                init,
+                arguments,
+            } => self.new_instance(*class, *init, arguments, span),
+            TypedExprKind::Attribute { object, index } => self.attribute(object, *index, span),
             TypedExprKind::Print { values, sep, end } => {
                 self.print(values, sep.as_deref(), end.as_deref(), span)
             }
@@ -210,6 +216,10 @@ impl FunctionLowerer<'_> {
                     TyirType::Bool,
                     span,
                 );
+            }
+            // An instance of a class without `__bool__` or `__len__` is true (CLS-07).
+            TyirType::Object(id) if id.class_index().is_some() => {
+                return self.constant(Constant::Bool(true), span);
             }
             TyirType::Object(_) => ScalarKind::Str,
             TyirType::Bits => unreachable!("list items are converted before they are tested"),
@@ -311,7 +321,7 @@ impl FunctionLowerer<'_> {
     }
 
     /// Calls a program function: arguments were evaluated in source order; missing ones take their constant defaults (EXP-16).
-    fn call_function(
+    pub(crate) fn call_function(
         &mut self,
         function: FunctionId,
         arguments: Vec<(usize, Lowered)>,

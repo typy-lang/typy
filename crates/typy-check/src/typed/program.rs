@@ -1,5 +1,6 @@
 //! The whole program after checking.
 
+use super::class::{ClassId, TypedClass};
 use super::function::{FunctionId, TypedFunction};
 use super::symbol::{Symbol, SymbolId};
 
@@ -10,6 +11,8 @@ pub struct TypedProgram {
     pub symbols: Vec<Symbol>,
     /// Every function, indexed by `FunctionId`; the module body is one of them.
     pub functions: Vec<TypedFunction>,
+    /// Every class, indexed by `ClassId`.
+    pub classes: Vec<TypedClass>,
     /// The module body of `__main__`.
     pub entry: FunctionId,
 }
@@ -19,6 +22,12 @@ impl TypedProgram {
     #[must_use]
     pub fn symbol(&self, id: SymbolId) -> &Symbol {
         &self.symbols[id.0 as usize]
+    }
+
+    /// Returns a class by its ID.
+    #[must_use]
+    pub fn class(&self, id: ClassId) -> &TypedClass {
+        &self.classes[id.0 as usize]
     }
 
     /// Returns a function by its ID.

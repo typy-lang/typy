@@ -15,8 +15,8 @@ pub use builtin::Builtin;
 pub use check::TypeChecker;
 pub use method::Method;
 pub use typed::{
-    Argument, AssignTarget, FunctionId, FunctionSignature, Generator, LoopSource,
-    SignatureParameter, Symbol, SymbolId, SymbolKind, TypedConstant, TypedExpr, TypedExprKind,
-    TypedFunction, TypedProgram, TypedStmt, dump,
+    Argument, AssignTarget, Attribute, ClassId, FunctionId, FunctionSignature, Generator,
+    LoopSource, SignatureParameter, Symbol, SymbolId, SymbolKind, TypedClass, TypedConstant,
+    TypedExpr, TypedExprKind, TypedFunction, TypedProgram, TypedStmt, dump,
 };
 pub use types::{Type, View};

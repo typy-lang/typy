@@ -135,7 +135,7 @@ pub(super) fn visit_expression(expression: &Expr, visit: &mut dyn FnMut(&Expr)) 
                 visit_expression(bound, visit);
             }
         }
-        Expr::Constant { .. } | Expr::Name { .. } | Expr::Other { .. } => {}
+        Expr::Constant { .. } | Expr::Name { .. } | Expr::Quoted { .. } | Expr::Other { .. } => {}
     }
 }
 

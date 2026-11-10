@@ -111,6 +111,12 @@ pub enum Expr {
         id: String,
         span: Span,
     },
+    /// An annotation written as a string, such as `"Node | None"`, with the expression the
+    /// string holds; only annotations are read this way.
+    Quoted {
+        annotation: Box<Expr>,
+        span: Span,
+    },
     Tuple {
         elements: Vec<Expr>,
         span: Span,
@@ -181,6 +187,7 @@ impl Expr {
             | Self::Constant { span, .. }
             | Self::Subscript { span, .. }
             | Self::Name { span, .. }
+            | Self::Quoted { span, .. }
             | Self::Tuple { span, .. }
             | Self::List { span, .. }
             | Self::Set { span, .. }

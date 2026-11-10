@@ -5,6 +5,7 @@ mod arithmetic;
 mod augmented;
 mod builtin;
 mod call_graph;
+mod class;
 mod comparison;
 mod comprehension;
 mod conversion;

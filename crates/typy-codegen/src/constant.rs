@@ -25,6 +25,13 @@ impl<'ctx> FunctionEmitter<'_, '_, 'ctx> {
             }
             Constant::Float(value) => Some(context.f64_type().const_float(*value).into()),
             Constant::NoneOf(base) => Some(self.none_of(*base)?),
+            Constant::NoInstance(_) => Some(
+                self.shared
+                    .context
+                    .ptr_type(inkwell::AddressSpace::default())
+                    .const_null()
+                    .into(),
+            ),
             Constant::Bool(value) => Some(
                 context
                     .bool_type()

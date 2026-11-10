@@ -11,8 +11,22 @@ impl RuleId {
     pub const A_01: Self = Self("A-01");
     /// Classes with methods and an `__init__` shall be accepted, with each instance attribute assigned in `__init__` or declared in the class body.
     pub const CLS_01: Self = Self("CLS-01");
+    /// Adding an attribute that the class does not declare shall be rejected.
+    pub const CLS_02: Self = Self("CLS-02");
+    /// Single inheritance between user classes shall be accepted, with overriding methods type checked against the base.
+    pub const CLS_04: Self = Self("CLS-04");
+    /// `@dataclass`, including `frozen`, `order` and `field(default=...)`, shall be accepted.
+    pub const CLS_05: Self = Self("CLS-05");
+    /// `@property`, `@staticmethod` and `@classmethod` shall be accepted.
+    pub const CLS_06: Self = Self("CLS-06");
+    /// Operator methods such as `__add__`, `__eq__`, `__lt__`, `__len__`, `__getitem__` and `__contains__` shall be called for the matching operators.
+    pub const CLS_07: Self = Self("CLS-07");
+    /// `__str__` and `__repr__` shall be used by `str()`, `repr()`, `print()` and f-strings.
+    pub const CLS_08: Self = Self("CLS-08");
     /// `isinstance` shall be accepted with a class or a tuple of classes.
     pub const CLS_09: Self = Self("CLS-09");
+    /// Class variables, given a value in the class body, shall be accepted.
+    pub const CLS_11: Self = Self("CLS-11");
     /// `for` shall iterate over `range`, `str`, `bytes`, `list`, `tuple`, `dict`, `set` and any class with `__iter__` and `__next__`.
     pub const CST_03: Self = Self("CST-03");
     /// `try` with `except`, `else` and `finally` clauses shall be accepted, and `finally` shall run on `return`, `break`, `continue` and exceptions.
@@ -162,7 +176,14 @@ impl RuleId {
     pub const ALL: &'static [Self] = &[
         Self::A_01,
         Self::CLS_01,
+        Self::CLS_02,
+        Self::CLS_04,
+        Self::CLS_05,
+        Self::CLS_06,
+        Self::CLS_07,
+        Self::CLS_08,
         Self::CLS_09,
+        Self::CLS_11,
         Self::CST_03,
         Self::CST_04,
         Self::CST_05,

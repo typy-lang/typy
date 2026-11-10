@@ -1,5 +1,6 @@
 //! Finds constructs that the current release does not compile (detailed design section 7.2, step 1).
 
+mod class;
 mod expression;
 mod feature;
 mod statement;
@@ -25,6 +26,8 @@ enum Place {
     ModuleTop,
     ModuleBlock,
     Function,
+    /// The body of a class, which holds its methods.
+    Class,
 }
 
 struct Walker {

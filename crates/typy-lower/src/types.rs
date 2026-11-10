@@ -1,7 +1,7 @@
 //! Maps checked types to TyIR types.
 
 use typy_check::Type;
-use typy_tyir::{OptionalBase, TupleTypes, TyirType};
+use typy_tyir::{OptionalBase, TupleTypes, TyirType, TypeId};
 
 /// Returns the TyIR type of a checked type; `None` maps to `unit`, and a tuple to the module's
 /// tuple type with the same items. A checked program has no error types.
@@ -19,6 +19,7 @@ pub(crate) fn tyir_type(ty: &Type, tuples: &mut TupleTypes) -> TyirType {
         Type::Set(_) => TyirType::SET,
         Type::Dict(..) => TyirType::DICT,
         Type::DictView(..) => TyirType::VIEW,
+        Type::Instance(class, _) => TyirType::Object(TypeId::class(class.0)),
         Type::Tuple(items) => {
             let items = items.iter().map(|item| tyir_type(item, tuples)).collect();
             tuples.intern(items)

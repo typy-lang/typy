@@ -219,6 +219,35 @@ pub enum Operation {
     Unwrap(ValueId),
     /// Whether an optional value is `None`.
     IsNone(ValueId),
+    /// A new instance of class `class`, with one reference and every attribute zero (CLS-01).
+    NewInstance {
+        /// The class's index in the module.
+        class: u32,
+    },
+    /// The attribute at a position of an instance, borrowed from the instance.
+    Field {
+        /// The instance.
+        object: ValueId,
+        /// The attribute's position.
+        index: u32,
+    },
+    /// Stores a value in an attribute of an instance, which takes over its reference; the
+    /// value the attribute held is not released.
+    SetField {
+        /// The instance.
+        object: ValueId,
+        /// The attribute's position.
+        index: u32,
+        /// The value.
+        value: ValueId,
+    },
+    /// Whether two objects, or optional objects, are the same object (EXP-08).
+    Identical {
+        /// One object.
+        left: ValueId,
+        /// The other.
+        right: ValueId,
+    },
     /// Adds one to the count of a counted value (ADR-0001).
     Increment(ValueId),
     /// Takes one from the count of a counted value, and frees it at zero.

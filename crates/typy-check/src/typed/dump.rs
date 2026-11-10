@@ -20,6 +20,26 @@ pub fn dump(program: &TypedProgram, lookup: &dyn SourceLookup) -> String {
         text: String::new(),
     };
     let _ = writeln!(writer.text, "Program entry fn{}", program.entry.0);
+    for class in &program.classes {
+        let attributes: Vec<String> = class
+            .attributes
+            .iter()
+            .map(|attribute| format!("{}: {}", attribute.name, attribute.ty))
+            .collect();
+        let methods: Vec<String> = class
+            .methods
+            .iter()
+            .map(|(name, id)| format!("{name} fn{}", id.0))
+            .collect();
+        let _ = writeln!(
+            writer.text,
+            "Class {}.{}({}) methods [{}]",
+            class.module,
+            class.name,
+            attributes.join(", "),
+            methods.join(", ")
+        );
+    }
     for function in &program.functions {
         writer.function(function);
     }
@@ -39,6 +59,15 @@ impl Dump<'_> {
         let _ = writeln!(self.text, "{indent}{label} @{}:{}", at.line, at.column);
     }
 
+    /// Returns `attribute NAME: TYPE` for the attribute at `index` of an instance of `ty`.
+    fn attribute(&self, ty: &crate::types::Type, index: usize) -> String {
+        let crate::types::Type::Instance(class, _) = ty else {
+            return format!("attribute {index}");
+        };
+        let attribute = &self.program.class(*class).attributes[index];
+        format!("attribute {}: {}", attribute.name, attribute.ty)
+    }
+
     fn symbol(&self, id: SymbolId) -> String {
         let symbol = self.program.symbol(id);
         format!("{}: {}", symbol.name, symbol.ty)
@@ -54,7 +83,7 @@ impl Dump<'_> {
             "Function fn{} {}.{}({}) -> {}",
             function.id.0,
             function.module,
-            function.name,
+            function.qualified_name,
             parameters.join(", "),
             function.signature.returns
         );
@@ -86,6 +115,7 @@ impl Dump<'_> {
             }
             AssignTarget::Item { list, .. } => format!("item of {}", list.ty),
             AssignTarget::Entry { dict, .. } => format!("entry of {}", dict.ty),
+            AssignTarget::Attribute { object, index } => self.attribute(&object.ty, *index),
         }
     }
 
@@ -203,8 +233,12 @@ impl Dump<'_> {
             TypedExprKind::Compare { operators, .. } => format!("Compare {operators:?}"),
             TypedExprKind::IfExp { .. } => "IfExp".to_owned(),
             TypedExprKind::Call { function, .. } => {
-                format!("Call {}", self.program.function(*function).name)
+                format!("Call {}", self.program.function(*function).qualified_name)
             }
+            TypedExprKind::New { class, .. } => {
+                format!("New {}", self.program.class(*class).name)
+            }
+            TypedExprKind::Attribute { object, index } => self.attribute(&object.ty, *index),
             TypedExprKind::Print { sep, end, .. } => {
                 format!("Print sep={} end={}", sep.is_some(), end.is_some())
             }
@@ -315,9 +349,10 @@ fn children(expression: &TypedExpr) -> Vec<&TypedExpr> {
             left, comparators, ..
         } => std::iter::once(left.as_ref()).chain(comparators).collect(),
         TypedExprKind::IfExp { test, body, orelse } => vec![test, body, orelse],
-        TypedExprKind::Call { arguments, .. } => {
+        TypedExprKind::Call { arguments, .. } | TypedExprKind::New { arguments, .. } => {
             arguments.iter().map(|argument| &argument.value).collect()
         }
+        TypedExprKind::Attribute { object, .. } => vec![object],
         TypedExprKind::Print { values, sep, end } => values
             .iter()
             .chain(sep.as_deref())

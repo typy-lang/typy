@@ -181,7 +181,12 @@ impl BodyChecker<'_> {
         }
         match operator {
             CompareOperator::Is | CompareOperator::IsNot => {
-                if l != Type::NoneType && r != Type::NoneType {
+                // Two instances, or optional instances, are the same object or not (EXP-08).
+                let instance = |ty: &Type| match ty {
+                    Type::Optional(inner) => matches!(inner.as_ref(), Type::Instance(..)),
+                    other => matches!(other, Type::Instance(..)),
+                };
+                if l != Type::NoneType && r != Type::NoneType && !(instance(&l) && instance(&r)) {
                     self.diagnostics.push(
                         Diagnostic::new(
                             DiagnosticCode::error(301),

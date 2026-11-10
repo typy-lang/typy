@@ -11,6 +11,21 @@ use crate::syntax::{
 };
 
 impl Converter<'_> {
+    /// Converts an annotation; a string that holds an expression becomes `Quoted`, so the
+    /// checker can tell a forward reference from a name that is already bound.
+    pub(super) fn annotation(&self, annotation: &ast::Expr) -> Expr {
+        if let ast::Expr::StringLiteral(node) = annotation
+            && let Some(literal) = node.as_single_part_string()
+            && let Ok(parsed) = ruff_python_parser::parse_string_annotation(self.text, literal)
+        {
+            return Expr::Quoted {
+                annotation: Box::new(self.expression(parsed.expr())),
+                span: self.span(node.range),
+            };
+        }
+        self.expression(annotation)
+    }
+
     /// Converts the `for` clauses of a comprehension.
     fn generators(&self, generators: &[ast::Comprehension]) -> Vec<Comprehension> {
         generators

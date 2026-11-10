@@ -23,6 +23,14 @@ pub enum AssignTarget {
         /// The position, counted from the end when negative.
         index: Box<TypedExpr>,
     },
+    /// An attribute of an instance, `object.name = value`, by its position in the class's
+    /// attributes; the object is evaluated after the value, as CPython does (CLS-01).
+    Attribute {
+        /// The instance.
+        object: Box<TypedExpr>,
+        /// The attribute's position.
+        index: usize,
+    },
     /// An entry of a dict, `dict[key] = value`; the dict and the key are evaluated after the
     /// value, as CPython does (DAT-09).
     Entry {

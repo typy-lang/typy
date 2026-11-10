@@ -29,7 +29,6 @@ pub(super) const fn planned(what: &'static str, release: &'static str, rule: Rul
 /// Classifies every node kind the syntax tree does not convert in detail; the match has no wildcard, so a new kind does not compile until it is classified.
 pub(super) fn feature(kind: NodeKind) -> Feature {
     match kind {
-        NodeKind::ClassDef => planned("classes", "0.2", RuleId::CLS_01),
         NodeKind::JoinedStr => planned("f-strings", "0.2", RuleId::LEX_07),
         NodeKind::Delete => planned("`del` statements", "0.3", RuleId::SMT_05),
         NodeKind::Raise => planned("`raise` statements", "0.3", RuleId::SMT_06),

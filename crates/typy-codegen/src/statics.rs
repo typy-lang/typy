@@ -19,6 +19,7 @@ pub(crate) struct Statics<'ctx> {
     big_ints: BTreeMap<String, PointerValue<'ctx>>,
     bytes: BTreeMap<String, PointerValue<'ctx>>,
     descriptors: BTreeMap<u32, PointerValue<'ctx>>,
+    type_objects: BTreeMap<u32, PointerValue<'ctx>>,
 }
 
 impl<'ctx> Statics<'ctx> {
@@ -30,6 +31,7 @@ impl<'ctx> Statics<'ctx> {
             big_ints: BTreeMap::new(),
             bytes: BTreeMap::new(),
             descriptors: BTreeMap::new(),
+            type_objects: BTreeMap::new(),
         }
     }
 
@@ -41,6 +43,16 @@ impl<'ctx> Statics<'ctx> {
     /// Records the descriptor of tuple type `id`.
     pub(crate) fn add_descriptor(&mut self, id: u32, pointer: PointerValue<'ctx>) {
         self.descriptors.insert(id, pointer);
+    }
+
+    /// Returns the type object of class `index`, if it was emitted already.
+    pub(crate) fn type_object(&self, index: u32) -> Option<PointerValue<'ctx>> {
+        self.type_objects.get(&index).copied()
+    }
+
+    /// Records the type object of class `index`.
+    pub(crate) fn add_type_object(&mut self, index: u32, pointer: PointerValue<'ctx>) {
+        self.type_objects.insert(index, pointer);
     }
 
     /// Adds a private constant global holding `value`, and returns its address.

@@ -68,6 +68,18 @@ pub enum TypedExprKind {
         function: FunctionId,
         arguments: Vec<Argument>,
     },
+    /// A new instance of a class, made by calling the class: the instance is made, then
+    /// `__init__` runs on it with the arguments (CLS-01).
+    New {
+        class: super::class::ClassId,
+        init: Option<FunctionId>,
+        arguments: Vec<Argument>,
+    },
+    /// An attribute of an instance, by its position in the class's attributes (CLS-01).
+    Attribute {
+        object: Box<TypedExpr>,
+        index: usize,
+    },
     /// `print(values, sep=sep, end=end)`; `sep` and `end` are present only when written.
     Print {
         values: Vec<TypedExpr>,

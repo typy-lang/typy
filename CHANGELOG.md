@@ -133,6 +133,19 @@ All notable changes to TyPy are recorded here. The format follows
 - `range(...)` and `reversed(range(...))` wherever an iterable is read: in
   comprehensions, `list`, `set`, `dict`, `sum`, `sorted`, `enumerate`,
   `zip` and the set methods, as well as in `for` (CST-03).
+- Classes: `class` statements with `__init__`, methods, attributes declared
+  in the class body or assigned in `__init__`, and instances in variables,
+  parameters, returns, lists, sets, dicts and tuples (CLS-01). Assigning or
+  calling a name the class does not have is rejected (CLS-02), and so is
+  any use of `self` in `__init__` before every attribute is assigned.
+  `__str__` and `__repr__` write instances for `print`, `str`, `repr` and
+  containers, and a class without them is written as CPython writes it
+  (CLS-08). Instances are equal only to themselves, hashed by identity and
+  compared with `is`. A signature names a class defined below it, or its
+  own class, in quotes, such as `"Node | None"`.
+- Every type has a type object whose bases end at `object`, the base of
+  each class, ready for inheritance and `isinstance` in 0.4 (CLS-10,
+  ADR-0012).
 
 ### Changed
 

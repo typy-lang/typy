@@ -116,6 +116,7 @@ fn assign_target(target: &AssignTarget, callees: &mut BTreeSet<FunctionId>) {
             expression(dict, callees);
             expression(key, callees);
         }
+        AssignTarget::Attribute { object, .. } => expression(object, callees),
     }
 }
 
@@ -246,6 +247,15 @@ fn expression(expression_value: &TypedExpr, callees: &mut BTreeSet<FunctionId>) 
             expression(value, callees);
             expression(index, callees);
         }
+        TypedExprKind::New {
+            init, arguments, ..
+        } => {
+            callees.extend(*init);
+            for argument in arguments {
+                expression(&argument.value, callees);
+            }
+        }
+        TypedExprKind::Attribute { object, .. } => expression(object, callees),
         TypedExprKind::Constant(_) | TypedExprKind::Local(_) | TypedExprKind::ModuleName => {}
     }
 }

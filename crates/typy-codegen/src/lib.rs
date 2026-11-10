@@ -5,6 +5,7 @@ mod abi;
 mod arithmetic;
 mod bits;
 mod call;
+mod class;
 mod comparison;
 mod constant;
 mod descriptor;

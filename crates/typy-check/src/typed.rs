@@ -1,5 +1,6 @@
 //! The typed program that checking produces and lowering consumes.
 
+mod class;
 mod constant;
 mod dump;
 mod expression;
@@ -9,6 +10,7 @@ mod signature;
 mod statement;
 mod symbol;
 
+pub use class::{Attribute, ClassId, TypedClass};
 pub use constant::TypedConstant;
 pub use dump::dump;
 pub use expression::{Argument, TypedExpr, TypedExprKind};

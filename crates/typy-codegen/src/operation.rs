@@ -80,6 +80,17 @@ impl<'ctx> FunctionEmitter<'_, '_, 'ctx> {
             Operation::Wrap { value, ty } => Some(self.wrap(*value, *ty)?),
             Operation::Unwrap(value) => Some(self.unwrap(*value)?),
             Operation::IsNone(value) => Some(self.is_none(*value)?),
+            Operation::NewInstance { class } => Some(self.new_instance(*class)?),
+            Operation::Field { object, index } => self.field(*object, *index)?,
+            Operation::SetField {
+                object,
+                index,
+                value,
+            } => {
+                self.set_field(*object, *index, *value)?;
+                None
+            }
+            Operation::Identical { left, right } => Some(self.identical(*left, *right)?),
             Operation::Increment(value) => {
                 self.count(*value, true)?;
                 None

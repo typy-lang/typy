@@ -5,7 +5,7 @@ use typy_source::syntax::{Expr, Stmt};
 
 use super::BodyChecker;
 use super::flow::Fact;
-use crate::check::annotation_type;
+use crate::check::{AnnotationScope, annotation_type};
 use crate::typed::{AssignTarget, SymbolId, SymbolKind, TypedConstant, TypedExpr, TypedExprKind};
 use crate::types::Type;
 
@@ -62,11 +62,22 @@ impl BodyChecker<'_> {
         }
     }
 
+    /// Returns the type an annotation in a body names. CPython never evaluates the annotation
+    /// of a variable in a function, and evaluates one in the module body after every class it
+    /// can reach is defined (TYP-12), so it may name any class.
+    pub(super) fn annotation(&mut self, annotation: &Expr) -> Type {
+        let scope = AnnotationScope {
+            classes: &self.program.class_ids,
+            bound: u32::MAX,
+        };
+        annotation_type(annotation, &scope, self.diagnostics)
+    }
+
     pub(super) fn declare(&mut self, target: &Expr, annotation: &Expr) {
         let Expr::Name { id, span } = target else {
             return;
         };
-        let ty = annotation_type(annotation, self.diagnostics);
+        let ty = self.annotation(annotation);
         let symbol = self.locals[id];
         match self.declared.get(&symbol) {
             Some(existing) if *existing != ty => self.diagnostics.push(
@@ -96,6 +107,12 @@ impl BodyChecker<'_> {
     /// Returns the type a name target already has, declared by an annotation or fixed by an
     /// earlier assignment, which a value without a type of its own, such as `[]`, takes.
     pub(super) fn known_type(&self, target: &Expr) -> Option<Type> {
+        if let Expr::Attribute {
+            value, attribute, ..
+        } = target
+        {
+            return self.attribute_type(value, attribute);
+        }
         let Expr::Name { id, .. } = target else {
             return None;
         };
@@ -118,6 +135,14 @@ impl BodyChecker<'_> {
         } = target
         {
             return self.item_target(list, index, &ty, *span);
+        }
+        if let Expr::Attribute {
+            value: object,
+            attribute,
+            span,
+        } = target
+        {
+            return self.attribute_target(object, attribute, &ty, None, *span);
         }
         let (Expr::Tuple { elements, span } | Expr::List { elements, span }) = target else {
             return self.assign(target, ty, value).map(AssignTarget::Name);
@@ -187,6 +212,23 @@ impl BodyChecker<'_> {
                 self.checked_item_target(*list, *index, ty, span)
             }
             TypedExprKind::DictItem { dict, key } => self.entry_target(*dict, *key, ty, span),
+            TypedExprKind::Attribute { object, index } => {
+                if !ty.is_assignable_to(&current.ty) {
+                    self.diagnostics.push(
+                        Diagnostic::new(
+                            DiagnosticCode::error(402),
+                            span,
+                            format!(
+                                "an attribute of type {} is assigned {}",
+                                current.ty,
+                                ty.with_article()
+                            ),
+                        )
+                        .with_rule(RuleId::TYP_03),
+                    );
+                }
+                Some(AssignTarget::Attribute { object, index })
+            }
             TypedExprKind::TupleItem { tuple, .. } => {
                 self.unassignable_item(&tuple.ty, span);
                 None

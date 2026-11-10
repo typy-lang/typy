@@ -59,6 +59,14 @@ impl FunctionLowerer<'_> {
                         typy_check::Type::Dict(_, value) => value.as_ref().clone(),
                         _ => unreachable!("the checker allows an entry target only on a dict"),
                     },
+                    typy_check::AssignTarget::Attribute { object, index } => match &object.ty {
+                        typy_check::Type::Instance(class, _) => {
+                            self.program.class(*class).attributes[*index].ty.clone()
+                        }
+                        _ => unreachable!(
+                            "the checker allows an attribute target only on an instance"
+                        ),
+                    },
                     typy_check::AssignTarget::Tuple(_) => typy_check::Type::Error,
                 };
                 self.augmented_assignment(target, *operator, value, &result, *span);

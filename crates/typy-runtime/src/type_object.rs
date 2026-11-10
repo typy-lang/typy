@@ -14,9 +14,11 @@ pub(crate) use builtin::{
 use crate::Raising;
 use crate::header::{
     BIG_INT_TYPE_ID, BYTES_TYPE_ID, DICT_TYPE_ID, DICT_VIEW_TYPE_ID, EXCEPTION_TYPE_ID, IMMORTAL,
-    LIST_TYPE_ID, ObjectHeader, SET_TYPE_ID, STR_TYPE_ID, TUPLE_TYPE_ID, TYPE_TYPE_ID,
+    INSTANCE_TYPE_ID, LIST_TYPE_ID, ObjectHeader, SET_TYPE_ID, STR_TYPE_ID, TUPLE_TYPE_ID,
+    TYPE_TYPE_ID,
 };
 use crate::string::StrObject;
+use crate::tuple::TupleType;
 
 /// Returns whether an object is true.
 pub type Truth = unsafe extern "C" fn(*mut ObjectHeader) -> bool;
@@ -51,6 +53,14 @@ pub struct TypeObject {
     pub order: Option<Order>,
     /// Writes an object as `repr` does; absent for a type with no text of its own.
     pub repr: Option<Repr>,
+    /// The UTF-8 bytes of the name of the module that defines a class; empty for the
+    /// runtime's own types, which `builtins` defines.
+    pub module: *const u8,
+    /// The number of bytes of the module's name.
+    pub module_length: u64,
+    /// The layout of a class's attributes, after the instance's header and class; null for
+    /// the runtime's own types.
+    pub fields: *const TupleType,
 }
 
 // SAFETY: a type object is immortal and never written after it is built, so threads may share it.
@@ -72,15 +82,23 @@ impl TypeObject {
             equal: None,
             order: None,
             repr: None,
+            module: "".as_ptr(),
+            module_length: 0,
+            fields: core::ptr::null(),
         }
     }
 
     /// Returns the type's name.
-    #[cfg(test)]
     pub(crate) fn name(&self) -> &str {
-        let length = usize::try_from(self.name_length).unwrap_or(0);
         // SAFETY: `name` points to `name_length` bytes of UTF-8 that live as long as the type.
-        unsafe { core::str::from_utf8_unchecked(core::slice::from_raw_parts(self.name, length)) }
+        unsafe { text(self.name, self.name_length) }
+    }
+
+    /// Returns the name of the module that defines the type, empty for the runtime's own.
+    pub(crate) fn module(&self) -> &str {
+        // SAFETY: `module` points to `module_length` bytes of UTF-8 that live as long as the
+        // type.
+        unsafe { text(self.module, self.module_length) }
     }
 
     /// Returns the base type, or `None` for `object`.
@@ -91,7 +109,20 @@ impl TypeObject {
     }
 }
 
+/// Returns the UTF-8 text of `length` bytes at `bytes`.
+///
+/// # Safety
+///
+/// `bytes` points to `length` bytes of UTF-8 that live for the rest of the program.
+unsafe fn text(bytes: *const u8, length: u64) -> &'static str {
+    let length = usize::try_from(length).unwrap_or(0);
+    // SAFETY: the caller's guarantee.
+    unsafe { core::str::from_utf8_unchecked(core::slice::from_raw_parts(bytes, length)) }
+}
+
 /// The root of every type: its objects are true, equal only to themselves, and have no base.
+/// Generated code names it as the base of each class.
+#[unsafe(export_name = "typy_rt_object")]
 pub(crate) static OBJECT: TypeObject = TypeObject::new("object", core::ptr::null());
 
 /// The type of every type object.
@@ -124,6 +155,7 @@ pub(crate) unsafe fn type_of(object: *const ObjectHeader) -> &'static TypeObject
             },
             EXCEPTION_TYPE_ID => &BASE_EXCEPTION,
             TYPE_TYPE_ID => &TYPE,
+            INSTANCE_TYPE_ID => crate::instance::class_of(object.cast()),
             _ => crate::libc::abort_with(b"typy runtime: an object has an unknown type\n"),
         }
     }

@@ -9,11 +9,18 @@ package "typy_runtime" as RuntimeCrate {
         +reference_count : u32
         +type_id : u32
     }
-    class TypeDescriptor <<repr(C)>> {
-        +size : u32
-        +flags : u32
-        +drop : unsafe extern "C" fn
+    class TypeObject <<repr(C)>> {
+        +header : ObjectHeader
         +name : *const u8
+        +base : *const TypeObject
+        +truth, hash, equal, order, repr : Option<fn>
+        +module : *const u8
+        +fields : *const TupleType
+    }
+    class InstanceObject <<repr(C)>> {
+        +header : ObjectHeader
+        +class : *const TypeObject
+        +attributes : [u64]
     }
     class Int <<repr(transparent)>> {
         +word : u64
@@ -51,7 +58,11 @@ BigInt *-- ObjectHeader
 Str *-- ObjectHeader
 ExceptionObject *-- ObjectHeader
 ExceptionObject *-- TracebackEntry
-ObjectHeader --> TypeDescriptor : type_id indexes the type table
+InstanceObject *-- ObjectHeader
+TypeObject *-- ObjectHeader
+TypeObject --> TypeObject : base, up to object
+InstanceObject --> TypeObject : class
+ObjectHeader ..> TypeObject : type_id finds
 Int ..> BigInt : points to when not inline
 Allocator ..> ObjectHeader : allocates objects that start with
 @enduml

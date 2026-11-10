@@ -1,24 +1,47 @@
 //! The types that annotations name: `int`, `float`, `bool`, `str`, `None`, and from 0.2
 //! `tuple[...]`.
 
+use std::collections::BTreeMap;
+
 use typy_diagnostics::{Diagnostic, DiagnosticCode, Diagnostics, RuleId};
 use typy_source::syntax::{Constant, Expr};
 
+use crate::typed::ClassId;
 use crate::types::Type;
 
+/// The classes an annotation may name. A class whose ID is below `bound` is bound where the
+/// annotation is evaluated, so its bare name may be used; any class may be named in a string.
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct AnnotationScope<'classes> {
+    pub(crate) classes: &'classes BTreeMap<String, ClassId>,
+    pub(crate) bound: u32,
+}
+
 /// Returns the type an annotation names.
-pub(crate) fn annotation_type(annotation: &Expr, diagnostics: &mut Diagnostics) -> Type {
+pub(crate) fn annotation_type(
+    annotation: &Expr,
+    scope: &AnnotationScope<'_>,
+    diagnostics: &mut Diagnostics,
+) -> Type {
     match annotation {
         Expr::Constant {
             value: Constant::None,
             ..
         } => Type::NoneType,
-        Expr::Name { id, span } => named_type(id, *span, diagnostics),
+        Expr::Name { id, span } => named_type(id, *span, scope, diagnostics),
+        // A string is read when the annotation is, so it may name any class (CLS-01).
+        Expr::Quoted { annotation, .. } => {
+            let deferred = AnnotationScope {
+                bound: u32::MAX,
+                ..*scope
+            };
+            annotation_type(annotation, &deferred, diagnostics)
+        }
         Expr::Subscript { value, index, .. } if matches!(value.as_ref(), Expr::Name { id, .. } if id == "tuple") => {
-            tuple_annotation(index, diagnostics)
+            tuple_annotation(index, scope, diagnostics)
         }
         Expr::Subscript { value, index, .. } if matches!(value.as_ref(), Expr::Name { id, .. } if id == "list") => {
-            Type::List(Box::new(annotation_type(index, diagnostics)))
+            Type::List(Box::new(annotation_type(index, scope, diagnostics)))
         }
         Expr::BinOp {
             operator: typy_source::syntax::BinaryOperator::BitOr,
@@ -34,14 +57,14 @@ pub(crate) fn annotation_type(annotation: &Expr, diagnostics: &mut Diagnostics) 
                 } => right,
                 _ => left,
             };
-            Type::optional(annotation_type(inner, diagnostics))
+            Type::optional(annotation_type(inner, scope, diagnostics))
         }
         Expr::Subscript { value, index, span } if matches!(value.as_ref(), Expr::Name { id, .. } if id == "dict") => {
-            dict_annotation(index, *span, diagnostics)
+            dict_annotation(index, *span, scope, diagnostics)
         }
         Expr::Subscript { value, index, .. } if matches!(value.as_ref(), Expr::Name { id, .. } if id == "set") =>
         {
-            let item = annotation_type(index, diagnostics);
+            let item = annotation_type(index, scope, diagnostics);
             if !item.is_hashable() {
                 diagnostics.push(unhashable(&item, index.span()));
                 return Type::Error;
@@ -64,7 +87,27 @@ pub(crate) fn annotation_type(annotation: &Expr, diagnostics: &mut Diagnostics) 
 
 /// Returns the type a bare name names: a scalar, or an error for a name that is not a type or
 /// needs its item types.
-fn named_type(id: &str, span: typy_diagnostics::Span, diagnostics: &mut Diagnostics) -> Type {
+fn named_type(
+    id: &str,
+    span: typy_diagnostics::Span,
+    scope: &AnnotationScope<'_>,
+    diagnostics: &mut Diagnostics,
+) -> Type {
+    if let Some(class) = scope.classes.get(id) {
+        if class.0 >= scope.bound {
+            diagnostics.push(
+                Diagnostic::new(
+                    DiagnosticCode::error(306),
+                    span,
+                    format!("this annotation is evaluated before the `class {id}` statement runs"),
+                )
+                .with_rule(RuleId::TYP_12)
+                .with_help(format!("write the annotation as a string, `\"{id}\"`")),
+            );
+            return Type::Error;
+        }
+        return Type::Instance(*class, id.to_owned());
+    }
     match id {
         "int" => Type::Int,
         "float" => Type::Float,
@@ -139,6 +182,7 @@ fn named_type(id: &str, span: typy_diagnostics::Span, diagnostics: &mut Diagnost
 fn dict_annotation(
     index: &Expr,
     span: typy_diagnostics::Span,
+    scope: &AnnotationScope<'_>,
     diagnostics: &mut Diagnostics,
 ) -> Type {
     let Expr::Tuple { elements, .. } = index else {
@@ -150,8 +194,8 @@ fn dict_annotation(
         return Type::Error;
     };
     let (key_type, value_type) = (
-        annotation_type(key, diagnostics),
-        annotation_type(value, diagnostics),
+        annotation_type(key, scope, diagnostics),
+        annotation_type(value, scope, diagnostics),
     );
     if !key_type.is_hashable() {
         diagnostics.push(unhashable_key(&key_type, key.span()));
@@ -199,7 +243,11 @@ fn unhashable_as(
 
 /// Returns the type `tuple[...]` names: one type per item, `tuple[()]` for the empty tuple. A
 /// tuple of any length, `tuple[T, ...]`, is a sequence like a list and arrives with lists.
-fn tuple_annotation(index: &Expr, diagnostics: &mut Diagnostics) -> Type {
+fn tuple_annotation(
+    index: &Expr,
+    scope: &AnnotationScope<'_>,
+    diagnostics: &mut Diagnostics,
+) -> Type {
     let items: Vec<&Expr> = match index {
         Expr::Tuple { elements, .. } => elements.iter().collect(),
         single => vec![single],
@@ -217,7 +265,7 @@ fn tuple_annotation(index: &Expr, diagnostics: &mut Diagnostics) -> Type {
         && is_ellipsis(ellipsis)
         && !is_ellipsis(item)
     {
-        return Type::TupleOf(Box::new(annotation_type(item, diagnostics)));
+        return Type::TupleOf(Box::new(annotation_type(item, scope, diagnostics)));
     }
     if items.iter().any(|item| is_ellipsis(item)) {
         diagnostics.push(
@@ -233,7 +281,7 @@ fn tuple_annotation(index: &Expr, diagnostics: &mut Diagnostics) -> Type {
     Type::Tuple(
         items
             .into_iter()
-            .map(|item| annotation_type(item, diagnostics))
+            .map(|item| annotation_type(item, scope, diagnostics))
             .collect(),
     )
 }

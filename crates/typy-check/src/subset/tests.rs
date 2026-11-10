@@ -54,6 +54,12 @@ def f(a: int, b: int = 1) -> int:
         x -= 1
     return x
 print(f(1), not True, -1, 1 if True else 2, 'abc'[0], 1 < 2)
+class C(object):
+    \"\"\"A class.\"\"\"
+    x: int
+    pass
+    def m(self, y: 'C') -> None:
+        self.x = y.x
 ";
     assert_eq!(diagnostics(source), []);
 }
@@ -63,8 +69,24 @@ print(f(1), not True, -1, 1 if True else 2, 'abc'[0], 1 < 2)
 fn later_features_name_their_release_and_rule() {
     let cases = [
         (
-            "class C:\n    pass\n",
-            "classes are planned for TyPy 0.2 (CLS-01)",
+            "class C(B):\n    pass\n",
+            "base classes other than `object` are planned for TyPy 0.4 (CLS-04)",
+        ),
+        (
+            "@d\nclass C:\n    pass\n",
+            "class decorators are planned for TyPy 0.4 (CLS-05)",
+        ),
+        (
+            "class C[T]:\n    pass\n",
+            "type parameters are planned for TyPy 0.4 (GEN-01)",
+        ),
+        (
+            "class C:\n    x = 1\n",
+            "class variables are planned for TyPy 0.4 (CLS-11)",
+        ),
+        (
+            "class C:\n    x: int = 1\n",
+            "class variables are planned for TyPy 0.4 (CLS-11)",
         ),
         (
             "x = {**y}\n",
@@ -175,7 +197,6 @@ fn later_features_name_their_release_and_rule() {
             "def f(x: int | str) -> None:\n    pass\n",
             "union annotations such as `int | str` are planned for TyPy 0.4 (TYP-14)",
         ),
-        ("x.y = 1\n", "attributes are planned for TyPy 0.2 (CLS-01)"),
         (
             "f()()\n",
             "calls of values that are not names are planned for TyPy 1.0 (FUN-05)",
@@ -227,8 +248,20 @@ fn excluded_features_say_they_cannot_be_compiled() {
             "`...` as a value cannot be compiled by TyPy with CPython's meaning",
         ),
         (
-            "def f(x: 'int') -> None:\n    pass\n",
+            "def f(x: 'int(') -> None:\n    pass\n",
             "annotations written as strings cannot be compiled by TyPy with CPython's meaning",
+        ),
+        (
+            "def f() -> None:\n    class C:\n        pass\n",
+            "classes defined inside functions, classes or blocks cannot be compiled by TyPy with CPython's meaning",
+        ),
+        (
+            "class C(metaclass=M):\n    pass\n",
+            "class keywords such as `metaclass` cannot be compiled by TyPy with CPython's meaning",
+        ),
+        (
+            "class C:\n    if x:\n        pass\n",
+            "statements other than attribute annotations and methods in a class body cannot be compiled by TyPy with CPython's meaning",
         ),
     ];
     for (source, expected) in cases {

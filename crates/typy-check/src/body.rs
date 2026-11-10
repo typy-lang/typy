@@ -2,6 +2,7 @@
 
 mod builtin_call;
 mod call;
+mod class;
 mod comprehension;
 mod dict;
 mod expression;
@@ -48,6 +49,10 @@ pub(crate) struct BodyChecker<'program> {
     breaks: Vec<Vec<Assigned>>,
     reported_unassigned: BTreeSet<SymbolId>,
     returns: Option<Type>,
+    /// The class and instance of the `__init__` being checked.
+    initializing: Option<class::Initializing>,
+    /// Whether a use of the incomplete instance has been reported, so one cause gives one error.
+    reported_incomplete: bool,
 }
 
 impl<'program> BodyChecker<'program> {
@@ -67,6 +72,8 @@ impl<'program> BodyChecker<'program> {
             breaks: Vec::new(),
             reported_unassigned: BTreeSet::new(),
             returns,
+            initializing: None,
+            reported_incomplete: false,
         }
     }
 
@@ -99,9 +106,20 @@ impl<'program> BodyChecker<'program> {
                 .insert(flow::Fact::Assigned(symbol));
             parameters.push(symbol);
         }
+        if let (Some(class), "__init__", Some(instance)) = (
+            definition.class,
+            definition.name.as_str(),
+            parameters.first(),
+        ) {
+            checker.initializing = Some(class::Initializing {
+                class,
+                instance: *instance,
+            });
+        }
         let statements: Vec<&Stmt> = definition.body.iter().collect();
         checker.collect_locals(&statements);
         let body = checker.statements(&statements);
+        checker.check_instance_complete(definition.span);
         if checker.assigned.is_some() && returns != Type::NoneType && returns != Type::Error {
             checker.diagnostics.push(
                 Diagnostic::new(
@@ -120,6 +138,7 @@ impl<'program> BodyChecker<'program> {
         program.functions[function.0 as usize] = Some(TypedFunction {
             id: function,
             name: definition.name.clone(),
+            qualified_name: definition.qualified_name.clone(),
             module: program.module.clone(),
             signature: definition.signature.clone(),
             parameters,
@@ -147,6 +166,7 @@ impl<'program> BodyChecker<'program> {
         program.functions.push(Some(TypedFunction {
             id: entry,
             name: "<module>".to_owned(),
+            qualified_name: "<module>".to_owned(),
             module: program.module.clone(),
             signature: FunctionSignature {
                 parameters: Vec::new(),
@@ -158,6 +178,15 @@ impl<'program> BodyChecker<'program> {
             span,
         }));
         entry
+    }
+
+    /// Reports an `__init__` that can end, here, without assigning every attribute.
+    pub(super) fn check_instance_complete(&mut self, span: Span) {
+        if let Some(initializing) = self.initializing
+            && !self.instance_is_complete(initializing)
+        {
+            self.incomplete_instance(initializing, span, true);
+        }
     }
 
     pub(super) fn in_function(&self) -> bool {

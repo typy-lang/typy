@@ -29,7 +29,7 @@ impl Walker {
                             what: "functions defined inside `if`, `for` or `while` blocks",
                         },
                     ),
-                    Place::ModuleTop => {}
+                    Place::ModuleTop | Place::Class => {}
                 }
                 if let Some(decorator) = decorators.first() {
                     self.report(
@@ -74,6 +74,25 @@ impl Walker {
                 self.statements(body, Place::Function);
                 self.loop_depth = outer_loops;
             }
+            Stmt::ClassDef {
+                bases,
+                keyword_count,
+                body,
+                decorators,
+                type_parameter_count,
+                span,
+                ..
+            } => self.class(
+                &super::class::ClassParts {
+                    bases,
+                    keyword_count: *keyword_count,
+                    body,
+                    decorators,
+                    type_parameter_count: *type_parameter_count,
+                    span: *span,
+                },
+                place,
+            ),
             Stmt::Return { value, span } => {
                 if place != Place::Function {
                     self.syntax_error(*span, "`return` outside a function");
@@ -172,9 +191,8 @@ impl Walker {
                     self.name_target(element);
                 }
             }
-            Expr::Attribute { span, .. } => {
-                self.report(*span, planned("attributes", "0.2", RuleId::CLS_01));
-            }
+            // An attribute of an instance; the checker decides which may be assigned (CLS-02).
+            Expr::Attribute { value, .. } => self.expression(value),
             other => self.expression(other),
         }
     }

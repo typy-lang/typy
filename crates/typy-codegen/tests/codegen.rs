@@ -41,6 +41,10 @@ const PROGRAMS: &[&str] = &[
     "x = 0\n",
     "def less(a: int, b: int) -> bool:\n    return a < b\npair = (less(1, 2), (\"x\", 2.5), None)\na, (b, c), d = pair\nprint(pair, a, b, c, d, pair[1][0], len(pair), pair == pair, pair < pair)\n",
     "",
+    "class E:\n    pass\ne = E()\nprint(e == e, e != E(), e is e, bool(e), str(e) == repr(e), [e] == [e])\n",
+    "class P:\n    \"\"\"A point.\"\"\"\n    def __init__(self, x: int, s: str) -> None:\n        self.x = x\n        self.s = s\n        self.none: None = None\n        self.items: list[int] = []\n        self.next: P | None = None\n    def add(self, v: int) -> None:\n        self.items += [v]\n        self.x += v\n        self.s *= 2\n    def __repr__(self) -> str:\n        return 'P' + str(self.x)\np = P(1, 'a')\np.add(2)\nq = P(2, 'b')\nq.next = p\nn = q.next\nprint(P(3, 'c').x, P(4, 'd').s, p.none, p.items, p, repr(q), [p, q], n is p, n is not None, p is q)\n",
+    "class R:\n    def __init__(self, n: int) -> None:\n        self.n = n\n    def __str__(self) -> str:\n        return str(10 // self.n)\n    def __repr__(self) -> str:\n        return 'R' + str(10 // self.n)\nr = R(2)\nprint(r, repr(r), [r], {r: r.n})\nr.n = 0\nprint(r)\n",
+    "class T:\n    def __init__(self, pair: tuple[int, str], flag: bool, ratio: float) -> None:\n        self.pair = pair\n        self.flag = flag\n        self.ratio = ratio\n        self.maybe: bool | None = None\nt = T((1, 'x'), True, 0.5)\nt.maybe = False\nt.ratio /= 2.0\nprint(t.pair, t.flag, t.ratio, t.maybe, {t} == {t})\n",
 ];
 
 #[test]

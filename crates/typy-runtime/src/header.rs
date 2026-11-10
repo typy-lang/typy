@@ -22,6 +22,8 @@ pub const DICT_TYPE_ID: u32 = 8;
 pub const DICT_VIEW_TYPE_ID: u32 = 9;
 /// The type ID of a type object (ADR-0012).
 pub const TYPE_TYPE_ID: u32 = 10;
+/// The type ID of an instance of a class, whose type object follows the header (ADR-0012).
+pub const INSTANCE_TYPE_ID: u32 = 11;
 
 /// The first 8 bytes of every heap object.
 #[repr(C)]
