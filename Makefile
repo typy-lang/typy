@@ -81,8 +81,12 @@ bless: dev ## Rewrite the golden files from the current compiler; review the dif
 miri: dev ## Run the runtime's unit tests under Miri with the pinned nightly toolchain (ADR-0006)
 	@$(EXEC) scripts/miri.sh
 
+# `docker compose exec` passes no variable of the host's environment, so the
+# fuzzing time is handed to the container by name.
+FUZZ_SECONDS ?= 60
+
 fuzz: dev ## Fuzz the source, checking and lowering stages for FUZZ_SECONDS seconds, 60 by default (NFR-09)
-	@$(EXEC) scripts/fuzz.sh
+	@$(COMPOSE) exec -T -e FUZZ_SECONDS=$(FUZZ_SECONDS) dev scripts/fuzz.sh
 
 runtime-size: build ## Fail when the runtime a hello world links is over the size budgets of NFR-02
 	@$(EXEC) python3 scripts/check-runtime-size.py
