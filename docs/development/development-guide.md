@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy development guide |
-| Version | 0.13 |
+| Version | 0.14 |
 | Status | Draft |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-10 |
@@ -91,8 +91,10 @@ its build. Both leave out `typy-conformance`, which is test code; NFR-11
 covers the compiler and the runtime. The runtime's branches are measured by
 its unit tests, because the programs the other tests build link the runtime
 archive without instrumentation. `make bench` arrives with the build-time
-benchmarks of NFR-04 and NFR-05 in 1.0, and `make docs` with the user
-documentation site.
+benchmarks of NFR-04 and NFR-05 in 1.0. The user documentation in
+`docs/user` is Markdown that `make docs-lint` checks, and
+`crates/typy-conformance/tests/documentation.rs` judges its samples
+(DOC-04).
 
 ## 4. Repository layout
 
@@ -202,7 +204,10 @@ maintainer's approval.
    a run of `ci.yml` started by hand (NFR-07, NFR-09).
 2. A commit titled "Prepare X.Y.Z" sets the version in `Cargo.toml`,
    renames the changelog's "Unreleased" section to `[X.Y.Z] - DATE`, and
-   opens a new empty "Unreleased" section above it.
+   opens a new empty "Unreleased" section above it. For a new minor
+   release it adds the release to `RELEASES` in
+   `crates/typy-conformance/tests/suite.rs`, so the suite requires an
+   accepted and a rejected test of every requirement up to it.
 3. A tag `vX.Y.Z` on that commit starts `release.yml`.
 4. `scripts/check-release.sh` checks that the tag names the version and that
    the changelog has a dated section for it, whose text becomes the release
