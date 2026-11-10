@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy test plan |
-| Version | 0.23 |
+| Version | 0.24 |
 | Status | Draft |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-10 |
@@ -415,7 +415,7 @@ that the specification does not define.
 | NFR-03 | 1.0 | Benchmark | `tests/bench/` suite against its C versions, geometric mean within 1.5 times |
 | NFR-04 | 1.0 | Benchmark | `tests/bench/build_time`: debug build of the 10,000-line project under 2 s |
 | NFR-05 | 1.0 | Benchmark | `tests/bench/build_time`: release build of the 10,000-line project under 20 s |
-| NFR-06 | 0.1 | E2E | Determinism job: every conformance program built twice, bytes compared |
+| NFR-06 | 0.1 | E2E | `crates/typy-conformance/tests/determinism.rs`: every accepted conformance program built twice, in debug and in release mode, and the executables compared byte for byte |
 | NFR-07 | 0.1 | IT | `tests/sanitized.rs`: the conformance suite with the runtime under AddressSanitizer; `make miri`; `make fuzz` |
 | NFR-08 | 0.1 | IT | `tests/sanitized.rs`: the conformance suite under LeakSanitizer |
 | NFR-09 | 0.1 | Fuzz | `make fuzz`, target `stages` over parsing, checking and lowering; 30 minutes with zero crashes before a release |
