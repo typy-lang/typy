@@ -1,6 +1,6 @@
 //! Lowers one function, or the module body, and writes its prologue.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 use typy_check::{SymbolId, TypedFunction, TypedProgram};
 use typy_diagnostics::Span;
@@ -31,6 +31,9 @@ pub(crate) struct FunctionLowerer<'context> {
     pub(crate) temporaries: Vec<ValueId>,
     pub(crate) loops: Vec<LoopTargets>,
     pub(crate) raises: bool,
+    /// The slots of parameters the function never assigns, which borrow the caller's
+    /// reference and are never counted (MEM-04).
+    pub(crate) borrowed: BTreeSet<SlotId>,
     parameters: Vec<(ValueId, SlotId)>,
     recursive: bool,
     body_start: BlockId,
@@ -72,6 +75,8 @@ impl<'context> FunctionLowerer<'context> {
         );
         let mut slots = BTreeMap::new();
         let mut parameters = Vec::new();
+        let assigned = crate::borrow::assigned_symbols(&function.body);
+        let mut borrowed = BTreeSet::new();
         for symbol_id in &function.parameters {
             let symbol = program.symbol(*symbol_id);
             let ty = tyir_type(&symbol.ty, tuple_types);
@@ -79,6 +84,9 @@ impl<'context> FunctionLowerer<'context> {
             let slot = builder.add_slot(symbol.name.clone(), ty);
             slots.insert(*symbol_id, slot);
             parameters.push((value, slot));
+            if !assigned.contains(symbol_id) {
+                borrowed.insert(slot);
+            }
         }
         for symbol_id in &function.locals {
             let symbol = program.symbol(*symbol_id);
@@ -97,6 +105,7 @@ impl<'context> FunctionLowerer<'context> {
             temporaries: Vec::new(),
             loops: Vec::new(),
             raises: false,
+            borrowed,
             parameters,
             recursive,
             body_start,
@@ -139,7 +148,7 @@ impl<'context> FunctionLowerer<'context> {
         self.builder.switch_to(BlockId(0));
         let parameter_slots: Vec<(ValueId, SlotId)> = self.parameters.clone();
         for (value, slot) in &parameter_slots {
-            if self.counted(self.builder.slot_type(*slot)) {
+            if self.counted(self.builder.slot_type(*slot)) && !self.borrowed.contains(slot) {
                 self.builder.push(Operation::Increment(*value), span);
             }
             self.builder.push(

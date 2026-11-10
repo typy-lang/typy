@@ -3,6 +3,7 @@
 
 mod arithmetic;
 mod augmented;
+mod borrow;
 mod builtin;
 mod call_graph;
 mod class;

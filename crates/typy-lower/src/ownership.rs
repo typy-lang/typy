@@ -100,8 +100,17 @@ impl FunctionLowerer<'_> {
 
     /// Releases the value of every counted slot, on the way out of the function.
     pub(crate) fn release_slots(&mut self, span: Span) {
+        self.release_slots_but(None, span);
+    }
+
+    /// Releases the value of every counted slot but `kept`, whose reference a `return` hands
+    /// to the caller, and but the parameters that borrow their caller's reference (MEM-04).
+    pub(crate) fn release_slots_but(&mut self, kept: Option<SlotId>, span: Span) {
         for index in 0..self.builder.slot_count() {
             let slot = SlotId(u32::try_from(index).unwrap_or(u32::MAX));
+            if Some(slot) == kept || self.borrowed.contains(&slot) {
+                continue;
+            }
             let ty = self.builder.slot_type(slot);
             if self.counted(ty) {
                 let value = self.builder.push_value(Operation::Load(slot), ty, span);

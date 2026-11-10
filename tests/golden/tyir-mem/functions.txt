@@ -16,8 +16,8 @@ b0(v0: int, v1: int):
   store s0, v0
   inc v1
   store s1, v1
-  v22 = const int 0
-  store s2, v22
+  v21 = const int 0
+  store s2, v21
   jump b1()
 b1():
   jump b2()
@@ -34,13 +34,10 @@ b4():
   jump b5()
 b5():
   v18 = load s0
-  inc v18
-  v19 = load s0
+  v19 = load s1
   dec v19
-  v20 = load s1
+  v20 = load s2
   dec v20
-  v21 = load s2
-  dec v21
   return v18
 b6(v2: bool):
   branch v2, b3, b4
@@ -72,7 +69,6 @@ b8(v9: exception):
 fn _TY8__main__8describe(v0: int) -> str raises {  # describe
   slot s0 n: int
 b0(v0: int):
-  inc v0
   store s0, v0
   jump b1()
 b1():
@@ -85,46 +81,37 @@ b2(v1: bool):
 b3():
   v5 = const str s0
   inc v5
-  v6 = load s0
-  dec v6
   return v5
 b4():
-  v8 = load s0
-  v9 = const int 0
-  v10 = cmp.int.eq v8, v9
-  jump b6(v10)
+  v7 = load s0
+  v8 = const int 0
+  v9 = cmp.int.eq v7, v8
+  jump b6(v9)
 b5():
-  v13 = const str s2
-  v14 = load s0
-  invoke rt.int_to_str(v14) to b10 unwind b11
-b6(v7: bool):
-  branch v7, b7, b8
-b7():
-  v11 = const str s1
-  inc v11
+  v11 = const str s2
   v12 = load s0
-  dec v12
-  return v11
+  invoke rt.int_to_str(v12) to b10 unwind b11
+b6(v6: bool):
+  branch v6, b7, b8
+b7():
+  v10 = const str s1
+  inc v10
+  return v10
 b8():
   jump b9()
 b9():
   jump b5()
-b10(v15: str):
-  v18 = call rt.str_concat(v13, v15)
-  dec v15
-  v19 = load s0
-  dec v19
-  return v18
-b11(v16: exception):
-  v17 = load s0
-  dec v17
-  return_error v16
+b10(v13: str):
+  v15 = call rt.str_concat(v11, v13)
+  dec v13
+  return v15
+b11(v14: exception):
+  return_error v14
 }
 
 fn _TY8__main__6report(v0: int) -> unit raises {  # report
   slot s0 n: int
 b0(v0: int):
-  inc v0
   store s0, v0
   jump b1()
 b1():
@@ -136,36 +123,30 @@ b2(v1: bool):
   branch v1, b3, b4
 b3():
   v5 = const unit
-  v6 = load s0
-  dec v6
   return v5
 b4():
   jump b5()
 b5():
-  v7 = const str s3
-  v8 = load s0
-  v9 = const str s4
-  call rt.write_stdout(v7)
+  v6 = const str s3
+  v7 = load s0
+  v8 = const str s4
+  call rt.write_stdout(v6)
+  v9 = const unit
+  call rt.write_stdout(v8)
   v10 = const unit
-  call rt.write_stdout(v9)
-  v11 = const unit
-  invoke rt.int_to_str(v8) to b6 unwind b7
-b6(v12: str):
-  call rt.write_stdout(v12)
+  invoke rt.int_to_str(v7) to b6 unwind b7
+b6(v11: str):
+  call rt.write_stdout(v11)
+  v13 = const unit
+  dec v11
+  v14 = const str s5
+  call rt.write_stdout(v14)
   v15 = const unit
-  dec v12
-  v16 = const str s5
-  call rt.write_stdout(v16)
+  v16 = const unit
   v17 = const unit
-  v18 = const unit
-  v19 = const unit
-  v20 = load s0
-  dec v20
-  return v19
-b7(v13: exception):
-  v14 = load s0
-  dec v14
-  return_error v13
+  return v17
+b7(v12: exception):
+  return_error v12
 }
 
 fn __typy_main() -> unit raises {  # <module>

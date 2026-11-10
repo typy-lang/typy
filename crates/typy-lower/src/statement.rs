@@ -76,14 +76,23 @@ impl FunctionLowerer<'_> {
                 self.release(lowered, *span);
             }
             TypedStmt::Return { value, span } => {
-                let value = match value {
-                    Some(value) => {
+                // A returned variable hands its slot's reference to the caller (MEM-04).
+                let moved = match value.as_ref().map(|value| &value.kind) {
+                    Some(typy_check::TypedExprKind::Local(symbol)) => {
+                        let slot = self.slots[symbol];
+                        (!self.borrowed.contains(&slot)).then_some(slot)
+                    }
+                    _ => None,
+                };
+                let value = match (value, moved) {
+                    (Some(_), Some(slot)) => self.load(slot, *span).value,
+                    (Some(value), None) => {
                         let lowered = self.expression(value);
                         self.take_reference(lowered, *span)
                     }
-                    None => self.constant(Constant::Unit, *span),
+                    (None, _) => self.constant(Constant::Unit, *span),
                 };
-                self.release_slots(*span);
+                self.release_slots_but(moved, *span);
                 self.builder.terminate(Terminator::Return(value));
             }
             TypedStmt::If {

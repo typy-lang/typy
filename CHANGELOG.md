@@ -158,6 +158,10 @@ All notable changes to TyPy are recorded here. The format follows
   `x`, `X`, `n`, `e`, `E`, `f`, `F`, `g`, `G`, `%` and `s`. Every result
   and error message matches CPython 3.12 to 3.15 on a table of 4,628
   cases, and `float` digits are rounded exactly (LEX-07).
+- Passing a variable or a constant as an argument no longer counts a
+  reference, and `return name` moves the variable's value to the caller
+  (MEM-04). An argument read from a container is kept alive for the call,
+  so a callee that empties the container still sees it, as in CPython.
 
 ### Changed
 

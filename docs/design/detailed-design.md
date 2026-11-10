@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy detailed design |
-| Version | 1.41 |
+| Version | 1.42 |
 | Status | Approved |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-10 |
@@ -1023,10 +1023,18 @@ graph, symbol names and the string pool.
 | Builtins | Each builtin of 0.1 becomes runtime calls. `print` evaluates every argument in source order, then converts and writes each value. `min` and `max` keep the first value on a tie, as CPython does |
 | Stack | A function in a cycle of calls invokes the runtime's stack check on entry (FUN-02) |
 
-In 0.1 the counting is correct but not optimised: every store counts and
-every temporary is released. Removing the counts that borrows and moves
-make unnecessary is MEM-04, in 0.2. `EscapeAnalysis` is planned for 0.4
-and `CycleAnalysis` for 1.0.
+Arguments are borrowed (MEM-04). A parameter the function never assigns
+keeps the reference its caller holds: its slot is not counted on entry and
+not released on the way out, so passing an argument counts nothing. The
+caller keeps every argument alive for the call: a variable or a constant
+already is, because no callee can assign a caller's variable, and any other
+borrowed argument, such as an item read from a list or an attribute, gets
+a reference of the caller's own, released after the call, since the callee
+could free it by changing the container. A `return` of a variable hands its
+slot's reference to the caller and skips that slot when the others are
+released. Moving a variable at its last use in other places is MEM-06,
+planned for 0.3. `EscapeAnalysis` is planned for 0.4 and `CycleAnalysis`
+for 1.0.
 
 ## 10. typy-codegen
 

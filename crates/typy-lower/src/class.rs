@@ -21,7 +21,13 @@ impl FunctionLowerer<'_> {
     ) -> Lowered {
         let values: Vec<(usize, Lowered)> = arguments
             .iter()
-            .map(|argument| (argument.parameter, self.expression(&argument.value)))
+            .map(|argument| {
+                let lowered = self.expression(&argument.value);
+                (
+                    argument.parameter,
+                    self.kept_for_call(&argument.value, lowered, span),
+                )
+            })
             .collect();
         let ty = TyirType::Object(TypeId::class(class.0));
         let value = self

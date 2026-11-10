@@ -132,9 +132,10 @@ fn error_paths_release_the_slots_and_return_the_exception() {
         .iter()
         .filter(|instruction| matches!(instruction.operation, Operation::Decrement(_)))
         .count();
+    // `t` is released; `s` borrows its caller's reference and is not (MEM-04).
     assert!(
-        decrements >= 2,
-        "both string slots are released:\n{}",
+        decrements >= 1,
+        "the slot of `t` is released:\n{}",
         print(&module)
     );
 }
@@ -221,4 +222,41 @@ fn only_displays_of_three_to_thirty_constants_are_copied_as_cpython_merges_them(
     ] {
         assert_eq!(copies(&display), copied, "{display}");
     }
+}
+
+/// Returns the text of one function of a program, with its counting.
+fn function_text(source: &str, name: &str) -> String {
+    let text = text(source);
+    let start = text
+        .find(&format!("# {name}\n"))
+        .unwrap_or_else(|| panic!("no function {name} in\n{text}"));
+    let rest = &text[start..];
+    rest[..rest.find("\n}\n").unwrap_or(rest.len())].to_owned()
+}
+
+#[test]
+fn a_parameter_the_body_never_assigns_is_not_counted() {
+    let source = "def size(items: list[int]) -> int:\n    return len(items)\nprint(size([1]))\n";
+    let size = function_text(source, "size");
+    assert!(!size.contains("inc ") && !size.contains("dec "), "{size}");
+    let source = "def size(items: list[int]) -> int:\n    items = [2]\n    return len(items)\nprint(size([1]))\n";
+    let size = function_text(source, "size");
+    assert!(size.contains("inc v0"), "{size}");
+}
+
+#[test]
+fn a_returned_variable_moves_to_the_caller() {
+    let source = "def make() -> str:\n    text = 'a' + str(1)\n    return text\nprint(make())\n";
+    let make = function_text(source, "make");
+    let after_load = make.split("return").next().unwrap_or_default();
+    assert_eq!(make.matches("inc ").count(), 0, "{make}");
+    assert!(after_load.contains("load s0"), "{make}");
+}
+
+#[test]
+fn an_argument_read_from_a_container_is_kept_for_the_call() {
+    let source = "def first(word: str) -> str:\n    return word\nwords = ['a']\nprint(first(words[0]), first('b'))\n";
+    let main = function_text(source, "<module>");
+    let call = main.find("first").unwrap_or(0);
+    assert!(main[..call].matches("inc ").count() >= 1, "{main}");
 }
