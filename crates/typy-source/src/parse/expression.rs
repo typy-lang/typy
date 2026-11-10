@@ -7,7 +7,8 @@ use super::Converter;
 use super::operator::{binary_operator, compare_operator};
 use crate::int_literal::decimal_digits;
 use crate::syntax::{
-    BoolOperator, Comprehension, Constant, Expr, Keyword, NodeKind, UnaryOperator,
+    BoolOperator, Comprehension, Constant, Expr, FStringPart, Keyword, NodeKind, ReplacementField,
+    UnaryOperator,
 };
 
 impl Converter<'_> {
@@ -24,6 +25,38 @@ impl Converter<'_> {
             };
         }
         self.expression(annotation)
+    }
+
+    /// Converts the elements of an f-string or of a format specification.
+    fn fstring_parts(&self, elements: &ast::InterpolatedStringElements) -> Vec<FStringPart> {
+        elements
+            .iter()
+            .map(|element| match element {
+                ast::InterpolatedStringElement::Literal(literal) => {
+                    FStringPart::Literal(literal.value.to_string())
+                }
+                ast::InterpolatedStringElement::Interpolation(field) => {
+                    FStringPart::Field(Box::new(ReplacementField {
+                        value: self.expression(&field.expression),
+                        debug: field
+                            .debug_text
+                            .as_ref()
+                            .map(|text| text.as_str().to_owned()),
+                        conversion: match field.conversion {
+                            ast::ConversionFlag::None => None,
+                            ast::ConversionFlag::Str => Some('s'),
+                            ast::ConversionFlag::Repr => Some('r'),
+                            ast::ConversionFlag::Ascii => Some('a'),
+                        },
+                        spec: field
+                            .format_spec
+                            .as_ref()
+                            .map(|spec| self.fstring_parts(&spec.elements)),
+                        span: self.span(field.range),
+                    }))
+                }
+            })
+            .collect()
     }
 
     /// Converts the `for` clauses of a comprehension.
@@ -192,7 +225,21 @@ impl Converter<'_> {
             ast::Expr::Await(node) => self.other(NodeKind::Await, node.range),
             ast::Expr::Yield(node) => self.other(NodeKind::Yield, node.range),
             ast::Expr::YieldFrom(node) => self.other(NodeKind::YieldFrom, node.range),
-            ast::Expr::FString(node) => self.other(NodeKind::JoinedStr, node.range),
+            ast::Expr::FString(node) => Expr::FString {
+                parts: node
+                    .value
+                    .iter()
+                    .flat_map(|part| match part {
+                        ast::FStringPartRef::Literal(literal) => {
+                            vec![FStringPart::Literal(literal.value.to_string())]
+                        }
+                        ast::FStringPartRef::FString(fstring) => {
+                            self.fstring_parts(&fstring.elements)
+                        }
+                    })
+                    .collect(),
+                span,
+            },
             ast::Expr::TString(node) => self.other(NodeKind::TemplateStr, node.range),
             ast::Expr::Attribute(node) => Expr::Attribute {
                 value: Box::new(self.expression(&node.value)),

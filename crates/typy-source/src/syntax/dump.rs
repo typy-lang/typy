@@ -4,7 +4,7 @@ use std::fmt::Write as _;
 
 use typy_diagnostics::Span;
 
-use super::expression::{Comprehension, Expr};
+use super::expression::{Comprehension, Expr, FStringPart};
 use super::statement::Stmt;
 use super::tree::SyntaxTree;
 use crate::source_file::SourceFile;
@@ -248,6 +248,31 @@ impl Dump<'_> {
         }
     }
 
+    /// Writes the literal text and replacement fields of an f-string or a format spec.
+    fn fstring_parts(&mut self, depth: usize, parts: &[FStringPart]) {
+        for part in parts {
+            match part {
+                FStringPart::Literal(text) => self.line(depth, &format!("Literal {text:?}"), None),
+                FStringPart::Field(field) => {
+                    let conversion = field
+                        .conversion
+                        .map_or(String::new(), |conversion| format!(" !{conversion}"));
+                    let debug = field
+                        .debug
+                        .as_ref()
+                        .map_or(String::new(), |debug| format!(" debug {debug:?}"));
+                    let label = format!("Field{conversion}{debug}");
+                    self.line(depth, &label, Some(field.span));
+                    self.expression(depth + 1, &field.value);
+                    if let Some(spec) = &field.spec {
+                        self.line(depth + 1, "spec", None);
+                        self.fstring_parts(depth + 2, spec);
+                    }
+                }
+            }
+        }
+    }
+
     /// Writes a dict display: each key, or `Unpack` for a `**` item, then its value.
     fn dict(&mut self, depth: usize, keys: &[Option<Expr>], values: &[Expr], span: Option<Span>) {
         self.line(depth, "Dict", span);
@@ -384,6 +409,10 @@ impl Dump<'_> {
                 self.expression(depth + 1, index);
             }
             Expr::Name { id, .. } => self.line(depth, &format!("Name {id}"), span),
+            Expr::FString { parts, .. } => {
+                self.line(depth, "FString", span);
+                self.fstring_parts(depth + 1, parts);
+            }
             Expr::Quoted { annotation, .. } => {
                 self.line(depth, "Quoted", span);
                 self.expression(depth + 1, annotation);

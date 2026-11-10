@@ -4,8 +4,8 @@ use super::{parse, sentence};
 use crate::settings::PythonFloor;
 use crate::source_file::SourceFile;
 use crate::syntax::{
-    BinaryOperator, BoolOperator, CompareOperator, Constant, Expr, NodeKind, ParameterKind, Stmt,
-    dump,
+    BinaryOperator, BoolOperator, CompareOperator, Constant, Expr, FStringPart, NodeKind,
+    ParameterKind, Stmt, dump,
 };
 use typy_diagnostics::FileId;
 
@@ -269,7 +269,6 @@ fn expressions_beyond_the_release_keep_their_kind() {
     let cases = [
         ("(x for x in y)\n", NodeKind::GeneratorExp),
         ("lambda: 1\n", NodeKind::Lambda),
-        ("f'{x}'\n", NodeKind::JoinedStr),
         ("(y := 1)\n", NodeKind::NamedExpr),
     ];
     for (source, expected) in cases {
@@ -277,6 +276,48 @@ fn expressions_beyond_the_release_keep_their_kind() {
             matches!(only_expression(source), Expr::Other { kind, .. } if kind == expected),
             "{source}"
         );
+    }
+}
+
+#[test]
+fn fstrings_keep_their_text_fields_conversions_specs_and_debug_text() {
+    let source = "f'a{{{x!r:>{w}.2f}' 'b' f'{y = }{z:}'\n";
+    let Expr::FString { parts, .. } = only_expression(source) else {
+        panic!("an f-string");
+    };
+    assert_eq!(parts.len(), 5);
+    assert_eq!(parts[0], FStringPart::Literal("a{".to_owned()));
+    let FStringPart::Field(field) = &parts[1] else {
+        panic!("a field");
+    };
+    assert_eq!(field.conversion, Some('r'));
+    assert!(matches!(&field.value, Expr::Name { id, .. } if id == "x"));
+    let spec = field.spec.as_ref().expect("a spec");
+    assert_eq!(spec[0], FStringPart::Literal(">".to_owned()));
+    assert!(matches!(&spec[1], FStringPart::Field(_)));
+    assert_eq!(spec[2], FStringPart::Literal(".2f".to_owned()));
+    assert_eq!(parts[2], FStringPart::Literal("b".to_owned()));
+    let FStringPart::Field(debug) = &parts[3] else {
+        panic!("a field");
+    };
+    assert_eq!(debug.debug.as_deref(), Some("y = "));
+    assert_eq!(debug.spec, None);
+    let FStringPart::Field(empty) = &parts[4] else {
+        panic!("a field");
+    };
+    assert_eq!(empty.spec, Some(Vec::new()));
+    let dumped = dump(
+        &parse(&file(source), PythonFloor::V3_12).unwrap(),
+        &file(source),
+    );
+    for line in [
+        "FString @1:1",
+        "Literal \"a{\"",
+        "Field !r @1:6",
+        "spec",
+        "Field debug \"y = \"",
+    ] {
+        assert!(dumped.contains(line), "{line} in\n{dumped}");
     }
 }
 

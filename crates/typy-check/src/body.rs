@@ -7,6 +7,7 @@ mod comprehension;
 mod dict;
 mod expression;
 mod flow;
+mod fstring;
 mod iterable_call;
 mod list;
 mod list_call;

@@ -1748,3 +1748,13 @@ fn type_objects_give_their_codes() {
         accepted(source);
     }
 }
+
+#[test]
+fn fstrings_check_every_field() {
+    accepted(
+        "x = 1\nname = 'a'\nprint(f'', f'{x}', f'{x!r:>{x}}', f'{name!a}', f'{x = }', f'{x=:5}', f'{{}}')\n",
+    );
+    assert_eq!(rejected("print(f'{undefined}')\n"), ["E0205"]);
+    assert_eq!(rejected("print(f'{1:{undefined}}')\n"), ["E0205"]);
+    assert_eq!(rejected("print(f'{1 + \"a\"}')\n"), ["E0401"]);
+}

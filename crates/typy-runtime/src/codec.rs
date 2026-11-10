@@ -104,7 +104,7 @@ impl ByteBuilder {
 
 /// Writes `\x`, `\u` or `\U` and the hexadecimal digits of a code point, as CPython escapes one
 /// in a message and in `backslashreplace`.
-fn escape(point: u32, push: &mut impl FnMut(u32)) {
+pub(crate) fn escape(point: u32, push: &mut impl FnMut(u32)) {
     let (letter, digits) = if point <= 0xff {
         (b'x', 2)
     } else if point <= 0xffff {

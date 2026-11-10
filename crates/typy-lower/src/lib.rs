@@ -11,6 +11,7 @@ mod comprehension;
 mod conversion;
 mod dict;
 mod expression;
+mod fstring;
 mod function;
 mod invoke;
 mod iterable_builtin;

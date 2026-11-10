@@ -111,6 +111,12 @@ pub enum Expr {
         id: String,
         span: Span,
     },
+    /// An f-string: its literal text and replacement fields, in order, the parts of an
+    /// implicit concatenation joined (LEX-07).
+    FString {
+        parts: Vec<FStringPart>,
+        span: Span,
+    },
     /// An annotation written as a string, such as `"Node | None"`, with the expression the
     /// string holds; only annotations are read this way.
     Quoted {
@@ -188,6 +194,7 @@ impl Expr {
             | Self::Subscript { span, .. }
             | Self::Name { span, .. }
             | Self::Quoted { span, .. }
+            | Self::FString { span, .. }
             | Self::Tuple { span, .. }
             | Self::List { span, .. }
             | Self::Set { span, .. }
@@ -200,4 +207,30 @@ impl Expr {
             | Self::Other { span, .. } => *span,
         }
     }
+}
+
+/// One piece of an f-string or of a format specification.
+#[derive(Clone, Debug, PartialEq)]
+pub enum FStringPart {
+    /// Literal text, with its escapes already applied and `{{` and `}}` already halved.
+    Literal(String),
+    /// A replacement field, `{value!conversion:spec}`.
+    Field(Box<ReplacementField>),
+}
+
+/// A replacement field of an f-string.
+#[derive(Clone, Debug, PartialEq)]
+pub struct ReplacementField {
+    /// The expression whose value is formatted.
+    pub value: Expr,
+    /// For a field such as `{x = }`, the text from the brace through the `=`, written before the
+    /// value.
+    pub debug: Option<String>,
+    /// The conversion: `s`, `r` or `a`.
+    pub conversion: Option<char>,
+    /// The format specification after `:`, itself literal text and replacement fields; `None`
+    /// when the field has no `:`.
+    pub spec: Option<Vec<FStringPart>>,
+    /// Where the field is, braces included.
+    pub span: Span,
 }

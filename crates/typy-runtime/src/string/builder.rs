@@ -27,6 +27,12 @@ impl StrBuilder {
         }
     }
 
+    /// Returns the code points appended so far.
+    pub(crate) fn points(&self) -> &[u32] {
+        // SAFETY: the buffer holds `length` code points that were written.
+        unsafe { core::slice::from_raw_parts(self.points, self.length) }
+    }
+
     /// Appends one code point.
     #[allow(
         clippy::cast_ptr_alignment,

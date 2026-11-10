@@ -100,10 +100,6 @@ fn later_features_name_their_release_and_rule() {
             "x = (i for i in range(3))\n",
             "generator expressions are planned for TyPy 1.0 (EXP-15)",
         ),
-        (
-            "x = f'{1}'\n",
-            "f-strings are planned for TyPy 0.2 (LEX-07)",
-        ),
         ("import os\n", "imports are planned for TyPy 0.3 (SMT-07)"),
         (
             "try:\n    pass\nexcept E:\n    pass\n",

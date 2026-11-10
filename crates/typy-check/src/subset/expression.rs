@@ -7,6 +7,18 @@ use super::Walker;
 use super::feature::{Feature, feature, planned};
 
 impl Walker {
+    /// Checks the fields of an f-string and of its format specifications.
+    fn fstring(&mut self, parts: &[typy_source::syntax::FStringPart]) {
+        for part in parts {
+            if let typy_source::syntax::FStringPart::Field(field) = part {
+                self.expression(&field.value);
+                if let Some(spec) = &field.spec {
+                    self.fstring(spec);
+                }
+            }
+        }
+    }
+
     /// Checks each clause of a comprehension: its target, its source and its conditions; an
     /// `async for` clause is refused as `async` is.
     fn generators(&mut self, generators: &[Comprehension]) {
@@ -252,6 +264,7 @@ impl Walker {
             }
             Expr::Attribute { value, .. } => self.expression(value),
             Expr::Quoted { annotation, .. } => self.annotation(annotation),
+            Expr::FString { parts, .. } => self.fstring(parts),
             Expr::Other { kind, span } => self.report(*span, feature(*kind)),
         }
     }

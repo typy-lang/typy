@@ -135,7 +135,19 @@ pub(super) fn visit_expression(expression: &Expr, visit: &mut dyn FnMut(&Expr)) 
                 visit_expression(bound, visit);
             }
         }
+        Expr::FString { parts, .. } => visit_fstring(parts, visit),
         Expr::Constant { .. } | Expr::Name { .. } | Expr::Quoted { .. } | Expr::Other { .. } => {}
+    }
+}
+
+fn visit_fstring(parts: &[typy_source::syntax::FStringPart], visit: &mut dyn FnMut(&Expr)) {
+    for part in parts {
+        if let typy_source::syntax::FStringPart::Field(field) = part {
+            visit_expression(&field.value, visit);
+            if let Some(spec) = &field.spec {
+                visit_fstring(spec, visit);
+            }
+        }
     }
 }
 

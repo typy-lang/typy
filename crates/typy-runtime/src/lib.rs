@@ -18,6 +18,7 @@ mod dict;
 mod entry;
 mod exception;
 mod float;
+mod format;
 mod hash;
 mod header;
 mod instance;

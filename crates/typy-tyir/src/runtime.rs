@@ -168,6 +168,12 @@ pub enum RuntimeFunction {
     InstanceText,
     TypeText,
     TypeName,
+    FormatInt,
+    FormatBool,
+    FormatFloat,
+    FormatStr,
+    FormatOther,
+    Ascii,
 }
 
 /// The parameter types, result type and raising behaviour of a runtime function.
@@ -198,7 +204,7 @@ const FLOAT_FLOAT: &[TyirType] = &[TyirType::Float, TyirType::Float];
 
 impl RuntimeFunction {
     /// Every runtime function.
-    pub const ALL: [Self; 159] = [
+    pub const ALL: [Self; 165] = [
         Self::IntFloorDivide,
         Self::IntModulo,
         Self::IntPower,
@@ -358,6 +364,12 @@ impl RuntimeFunction {
         Self::InstanceText,
         Self::TypeText,
         Self::TypeName,
+        Self::FormatInt,
+        Self::FormatBool,
+        Self::FormatFloat,
+        Self::FormatStr,
+        Self::FormatOther,
+        Self::Ascii,
     ];
 
     #[allow(
@@ -400,7 +412,7 @@ impl RuntimeFunction {
             Self::StrRepeat | Self::StrIndex => signature(&[STR, Int], STR, true),
             Self::StrLength => signature(&[STR], Int, false),
             Self::StrCompare => signature(&[STR, STR, Int], Bool, false),
-            Self::StrRepr => signature(&[STR], STR, false),
+            Self::StrRepr | Self::Ascii => signature(&[STR], STR, false),
             Self::Ord => signature(&[STR], Int, true),
             Self::WriteStdout => signature(&[STR], Unit, false),
             Self::CheckStack => signature(&[], Unit, true),
@@ -507,6 +519,10 @@ impl RuntimeFunction {
             Self::RangeLast => signature(&[Int, Int, Int], Int, false),
             Self::InstanceText => signature(&[Bits], STR, false),
             Self::TypeText | Self::TypeName => signature(&[TYPE], STR, false),
+            Self::FormatInt | Self::FormatBool => signature(&[Int, STR], STR, true),
+            Self::FormatFloat => signature(&[Float, STR], STR, true),
+            Self::FormatStr => signature(&[STR, STR], STR, true),
+            Self::FormatOther => signature(&[STR, STR, STR], STR, true),
             Self::StrEncode => signature(&[STR, Int, Int], BYTES, true),
             Self::BytesDecode => signature(&[BYTES, Int, Int], STR, true),
             Self::BytesSearch => signature(&[BYTES, BYTES, Int, Int, Int], Int, true),
@@ -696,6 +712,12 @@ impl RuntimeFunction {
             Self::InstanceText => "instance_text",
             Self::TypeText => "type_text",
             Self::TypeName => "type_name",
+            Self::FormatInt => "format_int",
+            Self::FormatBool => "format_bool",
+            Self::FormatFloat => "format_float",
+            Self::FormatStr => "format_str",
+            Self::FormatOther => "format_other",
+            Self::Ascii => "ascii",
         }
     }
 }

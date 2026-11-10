@@ -299,6 +299,7 @@ impl BodyChecker<'_> {
             Expr::Attribute {
                 value, attribute, ..
             } => self.attribute(value, attribute, span),
+            Expr::FString { parts, .. } => self.fstring(parts, span),
             // The subset check refuses every other expression, and a quoted expression is
             // only read as an annotation.
             Expr::Quoted { .. } | Expr::Other { .. } => Self::typed(

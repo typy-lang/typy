@@ -51,7 +51,7 @@ pub extern "C" fn typy_rt_float_round(value: f64) -> Raising<i64> {
 }
 
 /// Returns `10 ** exponent`.
-fn power_of_ten(exponent: u64) -> Limbs {
+pub(crate) fn power_of_ten(exponent: u64) -> Limbs {
     let mut result = Limbs::from_slice(&[1]);
     let mut base = Limbs::from_slice(&[10]);
     let mut remaining = exponent;
@@ -68,7 +68,7 @@ fn power_of_ten(exponent: u64) -> Limbs {
 }
 
 /// Returns `numerator / denominator` rounded to an integer, a half to the even one.
-fn round_quotient(numerator: &[u64], denominator: &[u64]) -> Limbs {
+pub(crate) fn round_quotient(numerator: &[u64], denominator: &[u64]) -> Limbs {
     let (quotient, remainder) = divide(numerator, denominator);
     let twice = shift_left(remainder.as_slice(), 1);
     let order = crate::int::natural::compare(twice.as_slice(), denominator);

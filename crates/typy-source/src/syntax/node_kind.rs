@@ -18,7 +18,6 @@ pub enum NodeKind {
     GeneratorExp,
     Global,
     IpyEscapeCommand,
-    JoinedStr,
     Lambda,
     Match,
     NamedExpr,

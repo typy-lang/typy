@@ -10,7 +10,7 @@ MARKDOWN := "**/*.md" "\#.tmp/**" "\#target/**" "\#dist/**"
 
 
 .PHONY: dev image shell runtime fmt fmt-check lint type test coverage docs-lint ascii-check traceability test-int test-e2e test-all \
-	build dist bless coverage-branches miri fuzz runtime-size diagrams diagrams-check unicode-tables unicode-tables-check check hooks clean
+	build dist bless coverage-branches miri fuzz runtime-size diagrams diagrams-check unicode-tables unicode-tables-check format-cases format-cases-check check hooks clean
 
 dev: ## Start the dev service, building its image the first time
 	@$(COMPOSE) up -d --quiet-pull dev 2>/dev/null
@@ -93,7 +93,13 @@ unicode-tables: dev ## Write the runtime's Unicode tables from CPython 3.15's un
 unicode-tables-check: dev ## Fail when the committed Unicode tables differ from CPython 3.15's
 	@$(EXEC) python3.15 scripts/generate-unicode-tables.py --check
 
-check: fmt-check lint coverage-branches docs-lint ascii-check traceability diagrams-check unicode-tables-check runtime-size ## Run the whole quality gate
+format-cases: dev ## Write the runtime's table of format() results from CPython 3.12 to 3.15 (LEX-07)
+	@$(EXEC) python3.15 scripts/generate-format-cases.py
+
+format-cases-check: dev ## Fail when the committed table of format() results differs from CPython's
+	@$(EXEC) python3.15 scripts/generate-format-cases.py --check
+
+check: fmt-check lint coverage-branches docs-lint ascii-check traceability diagrams-check unicode-tables-check format-cases-check runtime-size ## Run the whole quality gate
 
 hooks: ## Use the hooks in .githooks for this clone
 	git config core.hooksPath .githooks

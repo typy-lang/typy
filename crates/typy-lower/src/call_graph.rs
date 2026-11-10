@@ -258,9 +258,22 @@ fn expression(expression_value: &TypedExpr, callees: &mut BTreeSet<FunctionId>) 
         TypedExprKind::Attribute { object, .. }
         | TypedExprKind::TypeOf(object)
         | TypedExprKind::TypeName(object) => expression(object, callees),
+        TypedExprKind::FString(parts) => fstring(parts, callees),
         TypedExprKind::TypeObject(_)
         | TypedExprKind::Constant(_)
         | TypedExprKind::Local(_)
         | TypedExprKind::ModuleName => {}
+    }
+}
+
+/// Finds calls in the fields of an f-string and of its specifications.
+fn fstring(parts: &[typy_check::FStringPart], callees: &mut BTreeSet<FunctionId>) {
+    for part in parts {
+        if let typy_check::FStringPart::Field(field) = part {
+            expression(&field.value, callees);
+            if let Some(spec) = &field.spec {
+                fstring(spec, callees);
+            }
+        }
     }
 }

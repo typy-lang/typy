@@ -136,6 +136,7 @@ impl FunctionLowerer<'_> {
             } => self.new_instance(*class, *init, arguments, span),
             TypedExprKind::Attribute { object, index } => self.attribute(object, *index, span),
             TypedExprKind::TypeOf(value) => self.type_of(value, span),
+            TypedExprKind::FString(parts) => self.fstring(parts, span),
             TypedExprKind::TypeObject(of) => self.type_object(of, span),
             TypedExprKind::TypeName(object) => {
                 let object = self.expression(object);

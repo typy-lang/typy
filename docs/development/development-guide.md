@@ -3,10 +3,10 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy development guide |
-| Version | 0.12 |
+| Version | 0.13 |
 | Status | Draft |
 | Owner | typy-lang contributors |
-| Last updated | 2026-11-08 |
+| Last updated | 2026-11-10 |
 
 ## 1. Purpose
 
@@ -73,6 +73,8 @@ Container". VS Code attaches to the same `dev` service.
 | `make diagrams-check` | Renders, then fails when an SVG differs from the one staged |
 | `make unicode-tables` | Writes `crates/typy-runtime/src/string/unicode/tables.rs` from the `unicodedata` of CPython 3.15 (OI-15); never edit that file by hand |
 | `make unicode-tables-check` | Fails when the committed Unicode tables differ from the ones CPython 3.15 gives |
+| `make format-cases` | Writes `crates/typy-runtime/src/format/tests/cases.rs`, the results `format(value, spec)` gives under CPython 3.12 to 3.15 for a table of cases, keeping those all four agree on; never edit that file by hand |
+| `make format-cases-check` | Fails when the committed table of `format()` results differs from the one CPython 3.12 to 3.15 give |
 | `make image` | Rebuilds the dev image after a change under `.devcontainer/` |
 | `make clean` | Stops the containers and removes `.tmp/preview` |
 

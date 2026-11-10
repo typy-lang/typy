@@ -151,6 +151,13 @@ All notable changes to TyPy are recorded here. The format follows
   A type object prints as `<class 'int'>` or `<class '__main__.Point'>`,
   has `__name__`, compares with `is` and `==`, and can be a dict key; the
   annotations `type` and `type[int]` hold one (CLS-12).
+- f-strings, with `!s`, `!r` and `!a`, `{x = }`, nested fields in a format
+  specification, and the whole format specification mini-language for
+  `int`, `bool`, `float` and `str`: fill, alignment, sign, `z`, `#`, `0`,
+  width, `,` and `_` grouping, precision and the types `b`, `c`, `d`, `o`,
+  `x`, `X`, `n`, `e`, `E`, `f`, `F`, `g`, `G`, `%` and `s`. Every result
+  and error message matches CPython 3.12 to 3.15 on a table of 4,628
+  cases, and `float` digits are rounded exactly (LEX-07).
 
 ### Changed
 

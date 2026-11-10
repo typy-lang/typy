@@ -86,6 +86,8 @@ pub enum TypedExprKind {
     TypeObject(Box<crate::types::TypeObjectOf>),
     /// `__name__` of a type object.
     TypeName(Box<TypedExpr>),
+    /// An f-string: its literal text and formatted fields, joined in order (LEX-07).
+    FString(Vec<FStringPart>),
     /// `print(values, sep=sep, end=end)`; `sep` and `end` are present only when written.
     Print {
         values: Vec<TypedExpr>,
@@ -175,4 +177,35 @@ pub enum TypedExprKind {
         tuple: Box<TypedExpr>,
         index: usize,
     },
+}
+
+/// One piece of an f-string or of a format specification after checking.
+#[derive(Clone, Debug, PartialEq)]
+pub enum FStringPart {
+    /// Literal text.
+    Literal(String),
+    /// A formatted value.
+    Field(Box<FormattedValue>),
+}
+
+/// A conversion a replacement field applies before it formats.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Conversion {
+    /// `!s`: `str(value)`.
+    Str,
+    /// `!r`: `repr(value)`.
+    Repr,
+    /// `!a`: `ascii(value)`.
+    Ascii,
+}
+
+/// A replacement field after checking: `format(conversion(value), spec)`.
+#[derive(Clone, Debug, PartialEq)]
+pub struct FormattedValue {
+    /// The value.
+    pub value: TypedExpr,
+    /// The conversion, if any.
+    pub conversion: Option<Conversion>,
+    /// The format specification, if the field has one, itself text and fields.
+    pub spec: Option<Vec<FStringPart>>,
 }

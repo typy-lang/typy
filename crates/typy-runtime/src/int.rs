@@ -13,6 +13,8 @@ pub(crate) use arithmetic::{
     ZERO_DIVISION, typy_rt_int_add, typy_rt_int_compare, typy_rt_int_floor_divide,
     typy_rt_int_multiply, typy_rt_int_negate, typy_rt_int_subtract,
 };
+#[cfg(test)]
+pub(crate) use text::typy_rt_int_from_str;
 pub(crate) use text::typy_rt_int_to_str;
 
 use crate::header::ObjectHeader;

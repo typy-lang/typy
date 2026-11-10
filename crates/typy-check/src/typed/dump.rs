@@ -240,6 +240,7 @@ impl Dump<'_> {
             }
             TypedExprKind::Attribute { object, index } => self.attribute(&object.ty, *index),
             TypedExprKind::TypeOf(_) => "TypeOf".to_owned(),
+            TypedExprKind::FString(_) => "FString".to_owned(),
             TypedExprKind::TypeObject(of) => format!("TypeObject {}", of.name()),
             TypedExprKind::TypeName(_) => "TypeName".to_owned(),
             TypedExprKind::Print { sep, end, .. } => {
@@ -359,10 +360,25 @@ fn children(expression: &TypedExpr) -> Vec<&TypedExpr> {
         | TypedExprKind::TypeOf(object)
         | TypedExprKind::TypeName(object) => vec![object],
         TypedExprKind::TypeObject(_) => Vec::new(),
+        TypedExprKind::FString(parts) => fstring_values(parts),
         TypedExprKind::Print { values, sep, end } => values
             .iter()
             .chain(sep.as_deref())
             .chain(end.as_deref())
             .collect(),
     }
+}
+
+/// Returns the values an f-string formats, in order, those of its specifications included.
+fn fstring_values(parts: &[super::expression::FStringPart]) -> Vec<&TypedExpr> {
+    let mut values = Vec::new();
+    for part in parts {
+        if let super::expression::FStringPart::Field(field) = part {
+            values.push(&field.value);
+            if let Some(spec) = &field.spec {
+                values.extend(fstring_values(spec));
+            }
+        }
+    }
+    values
 }
