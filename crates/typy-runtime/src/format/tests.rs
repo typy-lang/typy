@@ -82,7 +82,10 @@ fn format(value: Value, spec: &str) -> (String, String) {
 #[test]
 fn every_value_formats_as_cpython_formats_it() {
     let mut failures = Vec::new();
-    for (value, spec, kind, expected) in cases::CASES {
+    // Miri interprets every step of the large-integer arithmetic, so it checks a sample that
+    // still reaches every formatter; the native run checks every case.
+    let step = if cfg!(miri) { 97 } else { 1 };
+    for (value, spec, kind, expected) in cases::CASES.iter().step_by(step) {
         let actual = format(*value, spec);
         if actual != ((*kind).to_owned(), (*expected).to_owned()) {
             failures.push(format!(
