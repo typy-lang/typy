@@ -5,10 +5,10 @@ title Lifecycle of an exception
 [*] --> Created : exception object allocated
 Created --> Propagating : raise
 Propagating --> Propagating : frame cleanup runs,\nTracebackEntry added,\nreturned to caller
-Propagating --> Handled : matching except clause
+Propagating --> Handled : except clause names its class\nor a base of its class
 Propagating --> Uncaught : main module returns it
 Propagating --> AtExportBoundary : reaches a function exported to C
-Handled --> Propagating : raise inside the handler
+Handled --> Propagating : bare raise
 Handled --> Released : handler ends
 Uncaught --> Reported : printed, last line as in CPython
 Reported --> [*] : exit status 1

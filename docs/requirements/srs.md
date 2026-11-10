@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy software requirements specification |
-| Version | 1.29 |
+| Version | 1.30 |
 | Status | Approved |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-10 |
@@ -284,6 +284,8 @@ formatter applies; Ruff's formatter is the project's recommendation.
 | CLS-10 | Every type, built in or a class, shall have a type object that names it and its base, and the chain of bases of every type shall end at `object`. | M | 0.2 | |
 | CLS-11 | Class variables, given a value in the class body, shall be accepted. | S | 0.4 | |
 | CLS-12 | `type(x)` shall give the type object of the value `x`, and a class name or the name of a built-in type shall be its type object as a value; a type object shall print as `<class 'name'>`, give its name as `__name__`, and compare with `is`, `is not`, `==` and `!=`. | M | 0.2 | |
+| CLS-13 | A class derived from an exception class shall be accepted with new methods and attributes and with its own `__init__`, `__str__` and `__repr__`; redefining another method of a base shall be rejected until CLS-04. | M | 0.3 | 8.8 |
+| CLS-14 | `super().__init__(...)` shall be accepted in the `__init__` of an exception class and shall set the exception's arguments; any other use of `super()` shall be rejected until 0.4. | M | 0.3 | |
 
 ### 3.11 Generics and protocols (GEN)
 
@@ -304,6 +306,13 @@ formatter applies; Ruff's formatter is the project's recommendation.
 | EXC-03 | An exception that is not raised shall cost no more than a compare and branch at each call that may raise. | M | 0.3 | |
 | EXC-04 | Exception chaining with `from` and the implicit context shall be kept, and shown in the uncaught exception output. | S | 0.3 | 7.8 |
 | EXC-05 | An exception shall not cross a function exported to C (FFI-05); the program shall abort with the exception printed. | M | 0.5 | |
+| EXC-06 | A `return`, `break` or `continue` that leaves a `finally` block shall be rejected, as PEP 765 makes CPython 3.14 warn about it (ADR-0013). | M | 0.3 | 8.4 |
+| EXC-07 | A `raise` without an expression shall re-raise the exception being handled, and shall be rejected outside an `except` clause. | M | 0.3 | 7.8 |
+| EXC-08 | `str()`, `repr()`, `print()` and f-strings of an exception shall give CPython's text, computed from the arguments it was built with. | M | 0.3 | |
+| EXC-09 | An `except` clause shall name one exception class or a tuple of them, with or without `as`, or none for a bare `except`; any other expression shall be rejected. | M | 0.3 | 8.4 |
+| EXC-10 | `NotImplementedError` and `AttributeError` shall exist with their Python names and bases, for programs to raise. | M | 0.3 | |
+| EXC-11 | The `args` attribute of an exception shall give the tuple of its arguments. | S | 0.4 | |
+| EXC-12 | Calling `UnicodeDecodeError` or `UnicodeEncodeError`, or deriving a class from them, shall be rejected; catching them shall be accepted. | S | 0.3 | |
 
 ### 3.13 Modules and imports (MOD)
 

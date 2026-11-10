@@ -3,10 +3,10 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy domain model |
-| Version | 1.1 |
+| Version | 1.2 |
 | Status | Approved |
 | Owner | typy-lang contributors |
-| Last updated | 2026-11-06 |
+| Last updated | 2026-11-10 |
 
 ## 1. Purpose
 
@@ -190,7 +190,9 @@ Rules that always hold:
 | `HeapObject` | Entity | An object allocated on the heap, identified by its address while it lives. |
 | `ObjectHeader` | Value object | The 8 bytes at the start of every `HeapObject`: a 32-bit reference count and a 32-bit type ID (NFR-12). |
 | `TypeDescriptor` | Value object | What the runtime knows about one type: its size, how to release its fields, and whether it may form a cycle. |
-| `ExceptionObject` | Entity | A `HeapObject` that carries a raised exception, its traceback and its cause. |
+| `TypeObject` | Value object | An immortal object that names a type, its base and the functions that test, hash, compare and write its objects (ADR-0012). |
+| `ExceptionObject` | Entity | A `HeapObject` whose class is an exception class: it carries the arguments it was built with, its traceback, its cause and its context (ADR-0013). |
+| `HandledException` | Entity | The exception an `except` clause is handling, kept by the runtime while the clause runs. |
 | `TracebackEntry` | Value object | One frame an exception passed through: the function and the line. |
 | `Allocator` | Domain service | Hands out and takes back memory, through three replaceable functions (MEM-08). |
 | `CycleCollector` | Domain service | Frees cycles of objects whose type may form a cycle, by trial deletion (ADR-0001). |
@@ -208,6 +210,11 @@ Rules that always hold:
 - An `ExceptionObject` gains one `TracebackEntry` per frame it passes
   through, in the order of the frames.
 - No `ExceptionObject` crosses a function exported to C (EXC-05).
+- The chain of bases of every `TypeObject` ends at `object`, and the
+  chain of every exception class passes through `BaseException`.
+- An `ExceptionObject` raised while a `HandledException` is kept takes it
+  as its context, unless that would form a cycle (EXC-04).
+- Every way out of an `except` clause ends its `HandledException`.
 
 ### 5.2 Conformance context
 
@@ -257,8 +264,11 @@ count from outside is 0 is part of a garbage cycle, and it is freed.
 ![Lifecycle of an exception](../diagrams/state-exception.svg)
 
 An exception is created as an `ExceptionObject` and raised. While it
-propagates, each frame it leaves runs its cleanup, adds a `TracebackEntry`
-and returns the exception to its caller (ADR-0004). It ends in one of three
+propagates, each frame it leaves runs its cleanup and its `finally` blocks,
+adds a `TracebackEntry` and returns the exception to its caller (ADR-0004).
+An `except` clause matches it when the clause names its class or one of
+the bases of its class (ADR-0013). A bare `raise` in the clause sends it on
+again. It ends in one of three
 ways: an `except` clause handles it and it is released; it leaves the main
 module uncaught and is reported, with exit status 1 (STD-05); or it reaches
 a function exported to C and the program aborts (EXC-05).

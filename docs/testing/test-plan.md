@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy test plan |
-| Version | 0.25 |
+| Version | 0.26 |
 | Status | Draft |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-10 |
@@ -354,6 +354,8 @@ that the specification does not define.
 | CLS-10 | 0.2 | UT, IT | `typy-runtime` type object unit tests; `tests/conformance/cls/CLS-10_*.py` |
 | CLS-11 | 0.4 | IT | `tests/conformance/cls/CLS-11_*.py` |
 | CLS-12 | 0.2 | UT, IT | `typy-runtime` type object unit tests; `tests/conformance/cls/CLS-12_*.py` |
+| CLS-13 | 0.3 | IT | `tests/conformance/cls/CLS-13_*.py` |
+| CLS-14 | 0.3 | IT | `tests/conformance/cls/CLS-14_*.py` |
 | GEN-01 | 0.4 | IT | `tests/conformance/gen/GEN-01_*.py` |
 | GEN-02 | 0.4 | IT | `tests/conformance/gen/GEN-02_*.py` |
 | GEN-03 | 0.4 | IT | `tests/conformance/gen/GEN-03_*.py` |
@@ -364,6 +366,13 @@ that the specification does not define.
 | EXC-03 | 0.3 | IT | `tests/conformance/exc/EXC-03_*.py` |
 | EXC-04 | 0.3 | IT | `tests/conformance/exc/EXC-04_*.py` |
 | EXC-05 | 0.5 | IT | `tests/conformance/exc/EXC-05_*.py` |
+| EXC-06 | 0.3 | IT | `tests/conformance/exc/EXC-06_*.py` |
+| EXC-07 | 0.3 | IT | `tests/conformance/exc/EXC-07_*.py` |
+| EXC-08 | 0.3 | IT | `tests/conformance/exc/EXC-08_*.py` |
+| EXC-09 | 0.3 | IT | `tests/conformance/exc/EXC-09_*.py` |
+| EXC-10 | 0.3 | IT | `tests/conformance/exc/EXC-10_*.py` |
+| EXC-11 | 0.4 | IT | `tests/conformance/exc/EXC-11_*.py` |
+| EXC-12 | 0.3 | IT | `tests/conformance/exc/EXC-12_*.py` |
 | MOD-01 | 0.3 | IT | `tests/conformance/mod/MOD-01_*.py` |
 | MOD-02 | 0.3 | IT | `tests/conformance/mod/MOD-02_*.py` |
 | MOD-03 | 0.3 | IT | `tests/conformance/mod/MOD-03_*.py` |
