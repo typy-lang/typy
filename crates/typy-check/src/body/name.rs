@@ -75,10 +75,10 @@ impl BodyChecker<'_> {
                 span,
             );
         }
-        if self.program.function_ids.contains_key(id)
-            || self.program.class_ids.contains_key(id)
-            || Builtin::named(id).is_some()
-        {
+        if let Some(type_object) = self.type_object_named(id, span) {
+            return type_object;
+        }
+        if self.program.function_ids.contains_key(id) || Builtin::named(id).is_some() {
             return self.error(
                 Diagnostic::new(
                     DiagnosticCode::error(201),

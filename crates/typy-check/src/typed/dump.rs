@@ -239,6 +239,9 @@ impl Dump<'_> {
                 format!("New {}", self.program.class(*class).name)
             }
             TypedExprKind::Attribute { object, index } => self.attribute(&object.ty, *index),
+            TypedExprKind::TypeOf(_) => "TypeOf".to_owned(),
+            TypedExprKind::TypeObject(of) => format!("TypeObject {}", of.name()),
+            TypedExprKind::TypeName(_) => "TypeName".to_owned(),
             TypedExprKind::Print { sep, end, .. } => {
                 format!("Print sep={} end={}", sep.is_some(), end.is_some())
             }
@@ -352,7 +355,10 @@ fn children(expression: &TypedExpr) -> Vec<&TypedExpr> {
         TypedExprKind::Call { arguments, .. } | TypedExprKind::New { arguments, .. } => {
             arguments.iter().map(|argument| &argument.value).collect()
         }
-        TypedExprKind::Attribute { object, .. } => vec![object],
+        TypedExprKind::Attribute { object, .. }
+        | TypedExprKind::TypeOf(object)
+        | TypedExprKind::TypeName(object) => vec![object],
+        TypedExprKind::TypeObject(_) => Vec::new(),
         TypedExprKind::Print { values, sep, end } => values
             .iter()
             .chain(sep.as_deref())

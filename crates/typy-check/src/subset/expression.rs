@@ -26,7 +26,7 @@ impl Walker {
     /// `set[...]` or `dict[...]`; the checker reports any other name.
     pub(super) fn annotation(&mut self, annotation: &Expr) {
         match annotation {
-            Expr::Subscript { value, index, .. } if matches!(value.as_ref(), Expr::Name { id, .. } if matches!(id.as_str(), "tuple" | "list" | "set" | "dict")) =>
+            Expr::Subscript { value, index, .. } if matches!(value.as_ref(), Expr::Name { id, .. } if matches!(id.as_str(), "tuple" | "list" | "set" | "dict" | "type")) =>
             {
                 match index.as_ref() {
                     // `tuple[int, ...]` is checked, and reported, by the checker.

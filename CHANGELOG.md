@@ -146,6 +146,11 @@ All notable changes to TyPy are recorded here. The format follows
 - Every type has a type object whose bases end at `object`, the base of
   each class, ready for inheritance and `isinstance` in 0.4 (CLS-10,
   ADR-0012).
+- `type(x)` gives the type object of a value, and class names and the
+  built-in type names, such as `int` and `dict`, are type objects as values.
+  A type object prints as `<class 'int'>` or `<class '__main__.Point'>`,
+  has `__name__`, compares with `is` and `==`, and can be a dict key; the
+  annotations `type` and `type[int]` hold one (CLS-12).
 
 ### Changed
 

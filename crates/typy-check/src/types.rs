@@ -36,8 +36,115 @@ pub enum Type {
     Optional(Box<Type>),
     /// An instance of a class of the program, with the class's name for messages (CLS-01).
     Instance(crate::typed::ClassId, String),
+    /// A type object, of the type it stands for, or of any type when that is known only
+    /// when the program runs, as for `type(x)` of an optional `x` (CLS-12).
+    TypeObject(Option<Box<TypeObjectOf>>),
     /// The type of an expression that already has a diagnostic; every check accepts it, so one cause gives one error (DIA-04).
     Error,
+}
+
+/// The type a type object stands for (CLS-12). Each is one type object of the program, so
+/// two type objects of one `TypeObjectOf` are the same object.
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub enum TypeObjectOf {
+    /// `int`.
+    Int,
+    /// `float`.
+    Float,
+    /// `bool`.
+    Bool,
+    /// `str`.
+    Str,
+    /// `bytes`.
+    Bytes,
+    /// The type of `None`, `NoneType`.
+    NoneType,
+    /// `list`, whatever its items.
+    List,
+    /// `tuple`, of a fixed or any number of items.
+    Tuple,
+    /// `set`.
+    Set,
+    /// `dict`.
+    Dict,
+    /// The type of one kind of view of a dict.
+    View(View),
+    /// `object`, the root of every type.
+    Object,
+    /// `type`, the type of every type object.
+    Type,
+    /// A class of the program, with its name.
+    Instance(crate::typed::ClassId, String),
+}
+
+impl TypeObjectOf {
+    /// Returns the type of type objects of `of`, any type object when it is `None`.
+    #[must_use]
+    pub fn type_of(of: Option<Self>) -> Type {
+        Type::TypeObject(of.map(Box::new))
+    }
+
+    /// Returns the type object of the values of `ty`, or `None` when it depends on the value,
+    /// as it does for an optional type.
+    #[must_use]
+    pub fn of(ty: &Type) -> Option<Self> {
+        Some(match ty {
+            Type::Int => Self::Int,
+            Type::Float => Self::Float,
+            Type::Bool => Self::Bool,
+            Type::Str => Self::Str,
+            Type::Bytes => Self::Bytes,
+            Type::NoneType => Self::NoneType,
+            Type::List(_) => Self::List,
+            Type::Tuple(_) | Type::TupleOf(_) => Self::Tuple,
+            Type::Set(_) => Self::Set,
+            Type::Dict(..) => Self::Dict,
+            Type::DictView(view, ..) => Self::View(*view),
+            Type::Instance(class, name) => Self::Instance(*class, name.clone()),
+            Type::TypeObject(_) => Self::Type,
+            Type::Optional(_) | Type::Error => return None,
+        })
+    }
+
+    /// Returns the type object a built-in name gives as a value, such as `int`.
+    #[must_use]
+    pub fn named(name: &str) -> Option<Self> {
+        Some(match name {
+            "int" => Self::Int,
+            "float" => Self::Float,
+            "bool" => Self::Bool,
+            "str" => Self::Str,
+            "bytes" => Self::Bytes,
+            "list" => Self::List,
+            "tuple" => Self::Tuple,
+            "set" => Self::Set,
+            "dict" => Self::Dict,
+            "object" => Self::Object,
+            "type" => Self::Type,
+            _ => return None,
+        })
+    }
+
+    /// Returns the type's `__name__`.
+    #[must_use]
+    pub fn name(&self) -> &str {
+        match self {
+            Self::Int => "int",
+            Self::Float => "float",
+            Self::Bool => "bool",
+            Self::Str => "str",
+            Self::Bytes => "bytes",
+            Self::NoneType => "NoneType",
+            Self::List => "list",
+            Self::Tuple => "tuple",
+            Self::Set => "set",
+            Self::Dict => "dict",
+            Self::View(view) => view.name(),
+            Self::Object => "object",
+            Self::Type => "type",
+            Self::Instance(_, name) => name,
+        }
+    }
 }
 
 /// What a view of a dict shows.
@@ -100,7 +207,10 @@ impl Type {
     #[must_use]
     pub fn is_assignable_to(&self, target: &Self) -> bool {
         match (self, target) {
-            (Self::Error, _) | (_, Self::Error) | (Self::NoneType, Self::Optional(_)) => true,
+            (Self::Error, _)
+            | (_, Self::Error)
+            | (Self::NoneType, Self::Optional(_))
+            | (Self::TypeObject(_), Self::TypeObject(None)) => true,
             (Self::Optional(_), _) => self.matches(target),
             (_, Self::Optional(inner)) => self.is_assignable_to(inner),
             _ => self.matches(target),
@@ -156,7 +266,10 @@ impl Type {
     #[must_use]
     pub fn can_test_equality(&self, other: &Self) -> bool {
         match (self, other) {
-            (Self::Error, _) | (_, Self::Error) => true,
+            // Two type objects are equal when they are one object (CLS-12).
+            (Self::Error, _) | (_, Self::Error) | (Self::TypeObject(_), Self::TypeObject(_)) => {
+                true
+            }
             // The runtime compares items by the list's own item kind, so two lists compare when
             // their items have one type.
             (Self::List(left), Self::List(right))
@@ -206,7 +319,8 @@ impl Type {
                 | Self::Dict(..)
                 | Self::DictView(..)
                 | Self::Optional(_)
-                | Self::Instance(..),
+                | Self::Instance(..)
+                | Self::TypeObject(_),
                 _,
             )
             | (
@@ -215,7 +329,8 @@ impl Type {
                 | Self::Dict(..)
                 | Self::DictView(..)
                 | Self::Optional(_)
-                | Self::Instance(..),
+                | Self::Instance(..)
+                | Self::TypeObject(_),
             ) => false,
             _ => self == other || (self.is_numeric() && other.is_numeric()),
         }
@@ -312,6 +427,8 @@ impl fmt::Display for Type {
             }
             Self::Optional(inner) => write!(formatter, "{inner} | None"),
             Self::Instance(_, name) => formatter.write_str(name),
+            Self::TypeObject(Some(of)) => write!(formatter, "type[{}]", of.name()),
+            Self::TypeObject(None) => formatter.write_str("type"),
             Self::Error => formatter.write_str("<error>"),
         }
     }

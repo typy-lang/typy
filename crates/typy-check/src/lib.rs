@@ -19,4 +19,4 @@ pub use typed::{
     LoopSource, SignatureParameter, Symbol, SymbolId, SymbolKind, TypedClass, TypedConstant,
     TypedExpr, TypedExprKind, TypedFunction, TypedProgram, TypedStmt, dump,
 };
-pub use types::{Type, View};
+pub use types::{Type, TypeObjectOf, View};

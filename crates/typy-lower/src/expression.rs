@@ -135,6 +135,14 @@ impl FunctionLowerer<'_> {
                 arguments,
             } => self.new_instance(*class, *init, arguments, span),
             TypedExprKind::Attribute { object, index } => self.attribute(object, *index, span),
+            TypedExprKind::TypeOf(value) => self.type_of(value, span),
+            TypedExprKind::TypeObject(of) => self.type_object(of, span),
+            TypedExprKind::TypeName(object) => {
+                let object = self.expression(object);
+                let name = self.call_runtime(RuntimeFunction::TypeName, vec![object.value], span);
+                self.release(object, span);
+                name
+            }
             TypedExprKind::Print { values, sep, end } => {
                 self.print(values, sep.as_deref(), end.as_deref(), span)
             }
@@ -217,8 +225,9 @@ impl FunctionLowerer<'_> {
                     span,
                 );
             }
-            // An instance of a class without `__bool__` or `__len__` is true (CLS-07).
-            TyirType::Object(id) if id.class_index().is_some() => {
+            // An instance of a class without `__bool__` or `__len__` is true (CLS-07), and so
+            // is a type object.
+            TyirType::Object(id) if id.class_index().is_some() || id == typy_tyir::TypeId::TYPE => {
                 return self.constant(Constant::Bool(true), span);
             }
             TyirType::Object(_) => ScalarKind::Str,

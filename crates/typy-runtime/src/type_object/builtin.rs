@@ -217,9 +217,11 @@ const fn builtin(name: &'static str) -> TypeObject {
 }
 
 /// The type of an `int`, whose large values are heap objects.
+#[unsafe(export_name = "typy_rt_type_int")]
 pub(crate) static INT: TypeObject = builtin("int");
 
 /// The type of a `str`.
+#[unsafe(export_name = "typy_rt_type_str")]
 pub(crate) static STR: TypeObject = TypeObject {
     truth: Some(text_is_true),
     hash: Some(text_hash),
@@ -230,6 +232,7 @@ pub(crate) static STR: TypeObject = TypeObject {
 };
 
 /// The type of a `bytes`.
+#[unsafe(export_name = "typy_rt_type_bytes")]
 pub(crate) static BYTES: TypeObject = TypeObject {
     truth: Some(text_is_true),
     hash: Some(text_hash),
@@ -240,6 +243,7 @@ pub(crate) static BYTES: TypeObject = TypeObject {
 };
 
 /// The type of a `list`.
+#[unsafe(export_name = "typy_rt_type_list")]
 pub(crate) static LIST: TypeObject = TypeObject {
     truth: Some(list_is_true),
     equal: Some(list_equal),
@@ -249,6 +253,7 @@ pub(crate) static LIST: TypeObject = TypeObject {
 };
 
 /// The type of a `tuple[T, ...]`.
+#[unsafe(export_name = "typy_rt_type_tuple")]
 pub(crate) static TUPLE: TypeObject = TypeObject {
     truth: Some(list_is_true),
     hash: Some(tuple_hash),
@@ -259,6 +264,7 @@ pub(crate) static TUPLE: TypeObject = TypeObject {
 };
 
 /// The type of a `set`.
+#[unsafe(export_name = "typy_rt_type_set")]
 pub(crate) static SET: TypeObject = TypeObject {
     truth: Some(set_is_true),
     equal: Some(set_equal),
@@ -268,6 +274,7 @@ pub(crate) static SET: TypeObject = TypeObject {
 };
 
 /// The type of a `dict`.
+#[unsafe(export_name = "typy_rt_type_dict")]
 pub(crate) static DICT: TypeObject = TypeObject {
     truth: Some(dict_is_true),
     equal: Some(dict_equal),
@@ -285,11 +292,27 @@ const fn view(name: &'static str) -> TypeObject {
 }
 
 /// The type of `dict.keys()`.
+#[unsafe(export_name = "typy_rt_type_dict_keys")]
 pub(crate) static DICT_KEYS: TypeObject = view("dict_keys");
 /// The type of `dict.values()`.
+#[unsafe(export_name = "typy_rt_type_dict_values")]
 pub(crate) static DICT_VALUES: TypeObject = view("dict_values");
 /// The type of `dict.items()`.
+#[unsafe(export_name = "typy_rt_type_dict_items")]
 pub(crate) static DICT_ITEMS: TypeObject = view("dict_items");
 
 /// The type of an exception.
+#[unsafe(export_name = "typy_rt_type_base_exception")]
 pub(crate) static BASE_EXCEPTION: TypeObject = builtin("BaseException");
+
+/// The type of a `float`, whose values are never objects; `type(1.5)` gives it.
+#[unsafe(export_name = "typy_rt_type_float")]
+pub(crate) static FLOAT: TypeObject = builtin("float");
+
+/// The type of a `bool`, whose values are never objects; `type(True)` gives it.
+#[unsafe(export_name = "typy_rt_type_bool")]
+pub(crate) static BOOL: TypeObject = builtin("bool");
+
+/// The type of `None`.
+#[unsafe(export_name = "typy_rt_type_none")]
+pub(crate) static NONE_TYPE: TypeObject = builtin("NoneType");

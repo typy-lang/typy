@@ -40,6 +40,11 @@ pub(crate) fn annotation_type(
         Expr::Subscript { value, index, .. } if matches!(value.as_ref(), Expr::Name { id, .. } if id == "tuple") => {
             tuple_annotation(index, scope, diagnostics)
         }
+        Expr::Subscript { value, index, .. } if matches!(value.as_ref(), Expr::Name { id, .. } if id == "type") =>
+        {
+            let of = annotation_type(index, scope, diagnostics);
+            crate::types::TypeObjectOf::type_of(crate::types::TypeObjectOf::of(&of))
+        }
         Expr::Subscript { value, index, .. } if matches!(value.as_ref(), Expr::Name { id, .. } if id == "list") => {
             Type::List(Box::new(annotation_type(index, scope, diagnostics)))
         }
@@ -110,6 +115,8 @@ fn named_type(
     }
     match id {
         "int" => Type::Int,
+        // `type` holds any type object; `type[X]` the one of `X` (CLS-12).
+        "type" => Type::TypeObject(None),
         "float" => Type::Float,
         "bool" => Type::Bool,
         "str" => Type::Str,

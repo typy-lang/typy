@@ -166,6 +166,8 @@ pub enum RuntimeFunction {
     DictViewText,
     RangeLast,
     InstanceText,
+    TypeText,
+    TypeName,
 }
 
 /// The parameter types, result type and raising behaviour of a runtime function.
@@ -196,7 +198,7 @@ const FLOAT_FLOAT: &[TyirType] = &[TyirType::Float, TyirType::Float];
 
 impl RuntimeFunction {
     /// Every runtime function.
-    pub const ALL: [Self; 157] = [
+    pub const ALL: [Self; 159] = [
         Self::IntFloorDivide,
         Self::IntModulo,
         Self::IntPower,
@@ -354,6 +356,8 @@ impl RuntimeFunction {
         Self::DictViewText,
         Self::RangeLast,
         Self::InstanceText,
+        Self::TypeText,
+        Self::TypeName,
     ];
 
     #[allow(
@@ -370,6 +374,7 @@ impl RuntimeFunction {
         const SET: TyirType = TyirType::SET;
         const DICT: TyirType = TyirType::DICT;
         const VIEW: TyirType = TyirType::VIEW;
+        const TYPE: TyirType = TyirType::TYPE;
         match self {
             Self::IntFloorDivide
             | Self::IntModulo
@@ -501,6 +506,7 @@ impl RuntimeFunction {
             Self::DictViewText => signature(&[VIEW], STR, true),
             Self::RangeLast => signature(&[Int, Int, Int], Int, false),
             Self::InstanceText => signature(&[Bits], STR, false),
+            Self::TypeText | Self::TypeName => signature(&[TYPE], STR, false),
             Self::StrEncode => signature(&[STR, Int, Int], BYTES, true),
             Self::BytesDecode => signature(&[BYTES, Int, Int], STR, true),
             Self::BytesSearch => signature(&[BYTES, BYTES, Int, Int, Int], Int, true),
@@ -688,6 +694,8 @@ impl RuntimeFunction {
             Self::DictViewText => "dict_view_text",
             Self::RangeLast => "range_last",
             Self::InstanceText => "instance_text",
+            Self::TypeText => "type_text",
+            Self::TypeName => "type_name",
         }
     }
 }

@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy test plan |
-| Version | 0.19 |
+| Version | 0.20 |
 | Status | Draft |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-10 |
@@ -352,6 +352,7 @@ that the specification does not define.
 | CLS-09 | 0.4 | IT | `tests/conformance/cls/CLS-09_*.py` |
 | CLS-10 | 0.2 | UT, IT | `typy-runtime` type object unit tests; `tests/conformance/cls/CLS-10_*.py` |
 | CLS-11 | 0.4 | IT | `tests/conformance/cls/CLS-11_*.py` |
+| CLS-12 | 0.2 | UT, IT | `typy-runtime` type object unit tests; `tests/conformance/cls/CLS-12_*.py` |
 | GEN-01 | 0.4 | IT | `tests/conformance/gen/GEN-01_*.py` |
 | GEN-02 | 0.4 | IT | `tests/conformance/gen/GEN-02_*.py` |
 | GEN-03 | 0.4 | IT | `tests/conformance/gen/GEN-03_*.py` |

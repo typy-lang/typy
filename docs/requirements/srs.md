@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy software requirements specification |
-| Version | 1.26 |
+| Version | 1.27 |
 | Status | Approved |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-10 |
@@ -177,7 +177,7 @@ formatter applies; Ruff's formatter is the project's recommendation.
 | TYP-08 | A name annotated `Final` shall not be assigned again. | M | 0.4 | |
 | TYP-09 | An `int` value shall be rejected where a `float` is declared, because CPython keeps it an `int`: `x: float = 1` prints `1`. Arithmetic that mixes `int` and `float` gives a `float`, as in Python (EXP-02). | M | 0.1 | |
 | TYP-10 | `typing.Any`, `typing.cast` and unannotated `object` values shall be rejected. | M | 0.1 | |
-| TYP-11 | The type of an expression shall be fixed when the program is compiled, and no run-time type information shall be generated except for classes used with `isinstance` or in `except` clauses. | M | 0.1 | |
+| TYP-11 | The type of an expression shall be fixed when the program is compiled, and a value shall carry no type information of its own beyond the type object a heap object refers to (ADR-0012). | M | 0.1 | |
 | TYP-12 | A read of a local variable shall be rejected unless the variable is assigned on every path that reaches the read, so `UnboundLocalError` cannot occur. | M | 0.1 | 4.2.2 |
 | TYP-13 | A local variable or parameter of type `T \| None` shall narrow to `T` where an `is None` or `is not None` test, or a truth test that holds, shows it is not `None`, and using it as `T` anywhere else shall be rejected. | M | 0.2 | |
 | TYP-14 | Annotations that join two or more types other than `None` with `\|`, such as `int \| str`, shall be accepted, with narrowing by `isinstance` (TYP-07). | M | 0.4 | 3.3.5 |
@@ -282,6 +282,7 @@ formatter applies; Ruff's formatter is the project's recommendation.
 | CLS-09 | `isinstance` shall be accepted with a class or a tuple of classes. | M | 0.4 | |
 | CLS-10 | Every type, built in or a class, shall have a type object that names it and its base, and the chain of bases of every type shall end at `object`. | M | 0.2 | |
 | CLS-11 | Class variables, given a value in the class body, shall be accepted. | S | 0.4 | |
+| CLS-12 | `type(x)` shall give the type object of the value `x`, and a class name or the name of a built-in type shall be its type object as a value; a type object shall print as `<class 'name'>`, give its name as `__name__`, and compare with `is`, `is not`, `==` and `!=`. | M | 0.2 | |
 
 ### 3.11 Generics and protocols (GEN)
 

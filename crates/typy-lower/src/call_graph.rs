@@ -255,7 +255,12 @@ fn expression(expression_value: &TypedExpr, callees: &mut BTreeSet<FunctionId>) 
                 expression(&argument.value, callees);
             }
         }
-        TypedExprKind::Attribute { object, .. } => expression(object, callees),
-        TypedExprKind::Constant(_) | TypedExprKind::Local(_) | TypedExprKind::ModuleName => {}
+        TypedExprKind::Attribute { object, .. }
+        | TypedExprKind::TypeOf(object)
+        | TypedExprKind::TypeName(object) => expression(object, callees),
+        TypedExprKind::TypeObject(_)
+        | TypedExprKind::Constant(_)
+        | TypedExprKind::Local(_)
+        | TypedExprKind::ModuleName => {}
     }
 }

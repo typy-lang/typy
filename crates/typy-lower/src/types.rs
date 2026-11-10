@@ -20,6 +20,7 @@ pub(crate) fn tyir_type(ty: &Type, tuples: &mut TupleTypes) -> TyirType {
         Type::Dict(..) => TyirType::DICT,
         Type::DictView(..) => TyirType::VIEW,
         Type::Instance(class, _) => TyirType::Object(TypeId::class(class.0)),
+        Type::TypeObject(_) => TyirType::TYPE,
         Type::Tuple(items) => {
             let items = items.iter().map(|item| tyir_type(item, tuples)).collect();
             tuples.intern(items)

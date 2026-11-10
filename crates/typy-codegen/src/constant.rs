@@ -25,6 +25,12 @@ impl<'ctx> FunctionEmitter<'_, '_, 'ctx> {
             }
             Constant::Float(value) => Some(context.f64_type().const_float(*value).into()),
             Constant::NoneOf(base) => Some(self.none_of(*base)?),
+            Constant::TypeObject(typy_tyir::TypeObjectRef::Runtime(ty)) => {
+                Some(crate::class::runtime_global(self.shared, ty.symbol()).into())
+            }
+            Constant::TypeObject(typy_tyir::TypeObjectRef::Class(index)) => {
+                Some(crate::class::type_object(self.shared, *index)?.into())
+            }
             Constant::NoInstance(_) => Some(
                 self.shared
                     .context

@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy detailed design |
-| Version | 1.39 |
+| Version | 1.40 |
 | Status | Approved |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-10 |
@@ -756,6 +756,20 @@ does not have is E0414 (CLS-02). An instance is equal only to itself, has a
 hash and no order, and is true; `is` compares two instances, or optional
 instances.
 
+Type objects (CLS-12) are `Type::TypeObject(Some(TypeObjectOf))`, written
+`type[int]`, or `Type::TypeObject(None)`, written `type`, when the type is
+known only when the program runs. `type(x)` is `TypedExprKind::TypeOf(x)`;
+without inheritance the checker knows the type object of every value but an
+optional one, whose type object is `NoneType` or its base's. A class name,
+or one of `int`, `float`, `bool`, `str`, `bytes`, `list`, `tuple`, `set`,
+`dict`, `object` and `type` read as a value, is `TypedExprKind::TypeObject`,
+and `__name__` of a type object is `TypedExprKind::TypeName`; any other
+attribute is E0412. Two type objects compare with `is`, `is not`, `==` and
+`!=`, have a hash and no order, and are true; a display of different type
+objects holds `type`. The annotation `type` holds any type object and
+`type[X]` the one of `X`. `type` with three arguments makes a class while
+the program runs, E0202.
+
 `TypedStmt::AugAssign` takes an `AssignTarget`: a name, or an item of a list,
 `xs[i] += 1`. An item of a `str` or a tuple cannot be assigned, E0401, and the
 result must have the item type, E0402.
@@ -843,12 +857,14 @@ attributes and its `__repr__`. `NewInstance { class }` makes an instance
 with every attribute zero, `Field { object, index }` borrows an attribute,
 `SetField { object, index, value }` stores one, taking over the value's
 reference without releasing the old value, and `Identical { left, right }`
-compares two objects by address. `Constant::NoInstance(id)` is the null
-address, the first value of a slot of a class type. An optional `bool` is
-a byte; every other optional has its base's layout, and is counted as its
-base is. `TyirType` is `Copy`: a tuple
-type is a number in the module's `TupleTypes`, which interns each distinct
-list of item types and says whether a type is counted. A tuple is a value
+compares two objects by address. A type object is `TyirType::TYPE`, and
+`Constant::TypeObject` is the address of a runtime type object, by the
+symbol of its `RuntimeType`, or of a class's. `Constant::NoInstance(id)`
+is the null address, the first value of a slot of a class type. An
+optional `bool` is a byte; every other optional has its base's layout, and
+is counted as its base is. `TyirType` is `Copy`: a tuple type is a number
+in the module's `TupleTypes`, which interns each distinct list of item
+types and says whether a type is counted. A tuple is a value
 with its items in place, not an object, as ADR-0001 decides, so `is` cannot
 observe a copy (EXP-08), and it is counted when an item is.
 
@@ -993,6 +1009,7 @@ graph, symbol names and the string pool.
 | Comprehensions | A comprehension creates its list, set or dict, then lowers its clauses as loops, each around the next. A clause starts its iterator, binds its target and tests each condition, going back for the next value when one fails; the innermost loop evaluates the element and appends or adds it, or evaluates the key, then the value, and sets the entry, as CPython does. The collection is a temporary throughout, so an exception from an element releases it |
 | Ranges | A `range` source evaluates its arguments once, in order, and raises `ValueError` for a step that is not a nonzero constant and is zero. It keeps a counter, a limit and the step, and gives each value with a reference of its own before the counter moves on. `reversed(range(...))` starts from `typy_rt_range_last` and steps back to `start - step`, as CPython's `range_reverse` does |
 | Classes | `Class(arguments)` evaluates the arguments, makes the instance, then calls `__init__` with the instance first. An attribute is read with `Field`, borrowed from the instance, and gets a reference of its own when the instance is a temporary. Assigning an attribute evaluates the value, then the instance, stores the value with `SetField` and releases the value the attribute held; `object.attribute op= value` reads the attribute once, with a reference of its own, before the value. `str` of an instance calls `__str__`, then `__repr__`, and `repr` calls `__repr__`; a class with neither is written by `typy_rt_instance_text`. `==`, `!=`, `is` and `is not` on instances are `Identical`, and an instance is true. A slot of a class type starts as `NoInstance` |
+| Type objects | `type(x)` evaluates `x`, releases it and gives the constant type object of its type; for an optional value it selects `NoneType` or its base's by `IsNone`. A type object is immortal and never counted. `str` and `repr` of one call `typy_rt_type_text`, `__name__` calls `typy_rt_type_name`, `==` and `is` are `Identical`, and a type object is true |
 | Optional values | `None` where `T \| None` is expected is the constant `NoneOf`, and a value of `T` is wrapped; wrapping and unwrapping hand the reference on with the value. `is None` and `is not None` on an optional value test `IsNone`, and on any other value are constants. `str`, `repr` and truth tests branch on `IsNone` and read the value only where it is not `None`, so a null object never reaches the runtime. An optional slot starts as `None`, and an optional parameter's default is `None` or its wrapped constant. `dict.get(key)` finds the key and wraps its value with a reference of its own, or gives `None` |
 | Builtins | Each builtin of 0.1 becomes runtime calls. `print` evaluates every argument in source order, then converts and writes each value. `min` and `max` keep the first value on a tie, as CPython does |
 | Stack | A function in a cycle of calls invokes the runtime's stack check on entry (FUN-02) |
@@ -1047,6 +1064,7 @@ comparisons, calls and counting, terminators, and emission.
 | `float`, `bool`, objects | A double, an `i1`, a pointer. A `bool` returned by the runtime is one byte |
 | Object header | 8 bytes: `reference_count: u32`, then `type_id: u32`. A count of `u32::MAX` marks an immortal object, whose header the runtime never writes |
 | Type IDs | `str` is 1, an exception is 2, a large integer is 3, a list is 4, a `tuple[T, ...]` is 5, a `bytes` is 6, a set is 7, a dict is 8, a view of a dict is 9, a type object is 10 and an instance of a class is 11 |
+| Type objects | The runtime exports its type objects as `typy_rt_object` and `typy_rt_type_` followed by `int`, `float`, `bool`, `str`, `bytes`, `none`, `list`, `tuple`, `set`, `dict`, `dict_keys`, `dict_values`, `dict_items` or `type`. The type `type` hashes a type object by identity and writes it as `<class 'name'>`, or `<class 'module.Name'>` for a class |
 | Instance | Header, `class: ptr` to the class's type object, then the attributes laid out as the class's tuple descriptor says. `typy_rt_instance_new(class)` makes one with every attribute zero; the runtime frees it by releasing each attribute the descriptor counts. A class's type object is a private constant `typy.classN`, whose base is the runtime's `typy_rt_object`, whose hash is `typy_rt_identity_hash` and whose `repr` is `typy_rt_instance_repr`, or `typy.classN.repr`, which calls the class's `__repr__` and adds a null exception when it cannot raise |
 | Type object | Header, `name: ptr` to UTF-8 bytes, `name_length: u64`, `base: ptr` (null only for `object`), then five nullable function pointers with the C calling convention: `truth(object) -> bool`, `hash(object) -> i64`, `equal(left, right) -> bool`, `order(left, right, comparison) -> bool` and `repr(object) -> { str, exception }`, then `module: ptr` to UTF-8 bytes, `module_length: u64` and `fields: ptr` to the tuple descriptor of a class's attributes, null for the runtime's own types. An absent function means what it means for `object`: true, equal only to itself, and no hash, order or text. The runtime frees its own objects by type ID, so the type objects stay out of a program that never tests, compares or writes an object of unknown type (ADR-0012) |
 | `str` object | Header, `length: u64` in code points, `kind: u32` (1, 2 or 4 bytes per code point), 4 bytes of padding, then the code points |

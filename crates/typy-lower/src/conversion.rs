@@ -34,6 +34,9 @@ impl FunctionLowerer<'_> {
             TyirType::Object(id) if id.class_index().is_some() => {
                 self.instance_text(lowered, false, span)
             }
+            TyirType::TYPE => {
+                self.call_runtime(RuntimeFunction::TypeText, vec![lowered.value], span)
+            }
             TyirType::Object(_) => Self::borrowed(lowered.value, lowered.ty),
             TyirType::Bits => unreachable!("list items are converted before they are written"),
             TyirType::Unit => {

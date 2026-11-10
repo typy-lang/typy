@@ -32,6 +32,7 @@ pub enum Builtin {
     Str,
     Sum,
     Tuple,
+    Type,
     Zip,
 }
 
@@ -65,6 +66,7 @@ impl Builtin {
             "str" => Self::Str,
             "sum" => Self::Sum,
             "tuple" => Self::Tuple,
+            "type" => Self::Type,
             "zip" => Self::Zip,
             _ => return None,
         })
@@ -99,6 +101,7 @@ impl Builtin {
             Self::Str => "str",
             Self::Sum => "sum",
             Self::Tuple => "tuple",
+            Self::Type => "type",
             Self::Zip => "zip",
         }
     }

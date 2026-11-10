@@ -21,6 +21,8 @@ impl TypeId {
     pub const DICT: Self = Self(8);
     /// A view of a dict's keys, values or items.
     pub const DICT_VIEW: Self = Self(9);
+    /// A type object (ADR-0012, CLS-12).
+    pub const TYPE: Self = Self(10);
     /// The first ID of the program's classes; class `n` of the module is this plus `n`.
     const FIRST_CLASS: u32 = 1 << 16;
 
@@ -93,6 +95,8 @@ impl TyirType {
     pub const DICT: Self = Self::Object(TypeId::DICT);
     /// A view of a dict.
     pub const VIEW: Self = Self::Object(TypeId::DICT_VIEW);
+    /// A type object.
+    pub const TYPE: Self = Self::Object(TypeId::TYPE);
 }
 
 impl fmt::Display for TyirType {
@@ -108,6 +112,7 @@ impl fmt::Display for TyirType {
             Self::Object(TypeId::SET) => formatter.write_str("set"),
             Self::Object(TypeId::DICT) => formatter.write_str("dict"),
             Self::Object(TypeId::DICT_VIEW) => formatter.write_str("view"),
+            Self::Object(TypeId::TYPE) => formatter.write_str("type"),
             Self::Bits => formatter.write_str("bits"),
             Self::Object(id) if id.class_index().is_some() => {
                 write!(formatter, "class#{}", id.class_index().unwrap_or(0))
@@ -170,5 +175,71 @@ mod tests {
                 "optional tuple#2"
             ]
         );
+    }
+}
+
+/// A type object a program names (CLS-12): one of the runtime's, or a class's.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum TypeObjectRef {
+    /// A type object of the runtime, by the symbol it exports.
+    Runtime(RuntimeType),
+    /// The type object of class `n` of the module.
+    Class(u32),
+}
+
+/// The runtime's type objects that a program names.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[allow(
+    missing_docs,
+    reason = "each variant is the Python type of the same name"
+)]
+pub enum RuntimeType {
+    Int,
+    Float,
+    Bool,
+    Str,
+    Bytes,
+    NoneType,
+    List,
+    Tuple,
+    Set,
+    Dict,
+    DictKeys,
+    DictValues,
+    DictItems,
+    Object,
+    Type,
+}
+
+impl RuntimeType {
+    /// Returns the symbol the runtime exports the type object under.
+    #[must_use]
+    pub const fn symbol(self) -> &'static str {
+        match self {
+            Self::Int => "typy_rt_type_int",
+            Self::Float => "typy_rt_type_float",
+            Self::Bool => "typy_rt_type_bool",
+            Self::Str => "typy_rt_type_str",
+            Self::Bytes => "typy_rt_type_bytes",
+            Self::NoneType => "typy_rt_type_none",
+            Self::List => "typy_rt_type_list",
+            Self::Tuple => "typy_rt_type_tuple",
+            Self::Set => "typy_rt_type_set",
+            Self::Dict => "typy_rt_type_dict",
+            Self::DictKeys => "typy_rt_type_dict_keys",
+            Self::DictValues => "typy_rt_type_dict_values",
+            Self::DictItems => "typy_rt_type_dict_items",
+            Self::Object => "typy_rt_object",
+            Self::Type => "typy_rt_type_type",
+        }
+    }
+}
+
+impl fmt::Display for TypeObjectRef {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Runtime(ty) => formatter.write_str(ty.symbol()),
+            Self::Class(index) => write!(formatter, "class#{index}"),
+        }
     }
 }

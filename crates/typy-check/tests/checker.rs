@@ -241,7 +241,7 @@ fn rejected_programs_give_their_codes() {
         ("for i in range(\"a\"):\n    pass\n", &["E0404"]),
         ("x: int = 1\nx: str = \"a\"\n", &["E0402"]),
         ("print(__file__)\n", &["E0202"]),
-        ("print(list)\n", &["E0201"]),
+        ("print(len)\n", &["E0201"]),
         ("print(int(1, 2, 3))\n", &["E0404"]),
         ("print(str(1, 2))\n", &["E0404"]),
         ("print(ord(1))\n", &["E0404"]),
@@ -305,8 +305,8 @@ fn messages_use_the_right_article_and_python_names() {
         ["`+` is not defined for int and str"]
     );
     assert_eq!(
-        messages("print(list)\n"),
-        ["using `list` as a value is planned for TyPy 1.0 (FUN-05)"]
+        messages("print(len)\n"),
+        ["using `len` as a value is planned for TyPy 1.0 (FUN-05)"]
     );
     assert_eq!(
         messages("print(undefined)\n"),
@@ -1660,7 +1660,7 @@ fn classes_give_their_codes() {
             "class A:\n    def __init__(self, c: bool) -> None:\n        if c:\n            return\n        self.x = 1\n",
             &["E0309"],
         ),
-        ("class A:\n    pass\nprint(A)\n", &["E0201"]),
+        ("class A:\n    pass\nprint(A())\nA()()\n", &["E0201"]),
         ("x = A()\nclass A:\n    pass\n", &["E0306"]),
         (
             "def f() -> None:\n    A()\nf()\nclass A:\n    pass\n",
@@ -1724,4 +1724,27 @@ fn class_statements_outside_the_subset_give_their_codes() {
         assert_eq!(&rejected(source), expected, "\n{source}");
     }
     accepted("class C(object):\n    'Text.'\n    pass\nclass D():\n    pass\n");
+}
+
+#[test]
+fn type_objects_give_their_codes() {
+    let cases: &[(&str, &[&str])] = &[
+        ("print(type(1, 2, 3))\n", &["E0202"]),
+        ("print(type())\n", &["E0404"]),
+        ("print(type(x=1))\n", &["E0404"]),
+        ("print(int.foo)\n", &["E0412"]),
+        ("print(int < str)\n", &["E0407"]),
+        ("t = type(1)\nt = str\n", &["E0402"]),
+        ("print(type(1) is 1)\n", &["E0301"]),
+        ("print(type(u))\n", &["E0205"]),
+    ];
+    for (source, expected) in cases {
+        assert_eq!(&rejected(source), expected, "\n{source}");
+    }
+    for source in [
+        "class P:\n    pass\np = P()\nx: int | None = 1\nprint(type(p), type(1), type(p) is P, type(1) == int, type(1) != str, P.__name__, type(x), type(type(1)), {P}, bool(int))\n",
+        "def f(t: type, u: type[int]) -> None:\n    print(t is u, t.__name__)\nf(str, int)\nx: list[type] = [int]\nprint([int, str], [type(1), bool], object, type({1: 2}.items()), type((1, 'a')), type(b''), type(1.5), type(None), type([1]), type({1}))\n",
+    ] {
+        accepted(source);
+    }
 }

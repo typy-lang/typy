@@ -29,6 +29,21 @@ fn runtime_symbol<'ctx>(
     })
 }
 
+/// Returns the address of a static the runtime exports, such as a type object, declared on
+/// first use.
+pub(crate) fn runtime_global<'ctx>(shared: &Shared<'_, 'ctx>, name: &str) -> PointerValue<'ctx> {
+    shared.module.get_global(name).map_or_else(
+        || {
+            let global = shared
+                .module
+                .add_global(shared.context.i8_type(), None, name);
+            global.set_linkage(Linkage::External);
+            global.as_pointer_value()
+        },
+        inkwell::values::GlobalValue::as_pointer_value,
+    )
+}
+
 /// Returns the type of the functions that write an object for `repr`: the object in, then a
 /// string and an exception out.
 fn repr_type<'ctx>(shared: &Shared<'_, 'ctx>) -> inkwell::types::FunctionType<'ctx> {

@@ -390,6 +390,8 @@ pub(super) fn joined_type(items: &[TypedExpr]) -> Option<Type> {
                 (_, other) if other.is_assignable_to(&joined) => joined,
                 (current, _) if current.is_assignable_to(&item.ty) => item.ty.clone(),
                 (Type::NoneType, other) | (other, Type::NoneType) => Type::optional(other.clone()),
+                // Type objects of different types join as `type` (CLS-12).
+                (Type::TypeObject(_), Type::TypeObject(_)) => Type::TypeObject(None),
                 _ => joined,
             }),
     )

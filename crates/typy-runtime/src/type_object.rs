@@ -10,6 +10,8 @@ mod tests;
 pub(crate) use builtin::{
     BASE_EXCEPTION, BYTES, DICT, DICT_ITEMS, DICT_KEYS, DICT_VALUES, INT, LIST, SET, STR, TUPLE,
 };
+#[cfg(test)]
+pub(crate) use builtin::{BOOL, FLOAT, NONE_TYPE};
 
 use crate::Raising;
 use crate::header::{
@@ -125,8 +127,46 @@ unsafe fn text(bytes: *const u8, length: u64) -> &'static str {
 #[unsafe(export_name = "typy_rt_object")]
 pub(crate) static OBJECT: TypeObject = TypeObject::new("object", core::ptr::null());
 
-/// The type of every type object.
-pub(crate) static TYPE: TypeObject = TypeObject::new("type", &raw const OBJECT);
+/// The type of every type object. Type objects are equal only to themselves, hashed by
+/// identity, and written as `<class 'name'>` (CLS-12).
+#[unsafe(export_name = "typy_rt_type_type")]
+pub(crate) static TYPE: TypeObject = TypeObject {
+    hash: Some(crate::instance::typy_rt_identity_hash),
+    repr: Some(type_repr),
+    ..TypeObject::new("type", &raw const OBJECT)
+};
+
+/// Writes a type object for `repr`.
+unsafe extern "C" fn type_repr(object: *mut ObjectHeader) -> Raising<*mut StrObject> {
+    // SAFETY: the type of the object says it is a type object.
+    Raising::ok(unsafe { typy_rt_type_text(object.cast()) })
+}
+
+/// Returns `<class 'name'>` for a runtime type, or `<class 'module.Name'>` for a class, as
+/// CPython writes a type.
+///
+/// # Safety
+///
+/// `ty` points to a live type object.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn typy_rt_type_text(ty: *const TypeObject) -> *mut StrObject {
+    // SAFETY: the caller's guarantee.
+    let ty = unsafe { &*ty };
+    let module = ty.module();
+    let dot = if module.is_empty() { "" } else { "." };
+    crate::string::from_parts(&["<class '", module, dot, ty.name(), "'>"])
+}
+
+/// Returns a type's `__name__`.
+///
+/// # Safety
+///
+/// `ty` points to a live type object.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn typy_rt_type_name(ty: *const TypeObject) -> *mut StrObject {
+    // SAFETY: the caller's guarantee.
+    crate::string::from_str(unsafe { &*ty }.name())
+}
 
 /// Returns the type of a heap object.
 ///

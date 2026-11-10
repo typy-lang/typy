@@ -20,6 +20,7 @@ mod round_call;
 mod set;
 mod slice;
 mod statement;
+mod type_object;
 
 pub(crate) use program::Program;
 

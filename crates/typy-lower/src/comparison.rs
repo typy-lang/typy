@@ -185,7 +185,9 @@ impl FunctionLowerer<'_> {
         let kind = match (left.ty, right.ty) {
             (TyirType::Tuple(_), _) => return self.compare_tuples(operator, left, right, span),
             // An instance of a class without `__eq__` is equal only to itself (CLS-07).
-            (TyirType::Object(id), _) if id.class_index().is_some() => {
+            (TyirType::Object(id), _)
+                if id.class_index().is_some() || id == typy_tyir::TypeId::TYPE =>
+            {
                 return self.instance_equality(comparison == Comparison::Equal, left, right, span);
             }
             (TyirType::LIST, _) => {

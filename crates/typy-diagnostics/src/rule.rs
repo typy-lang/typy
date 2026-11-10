@@ -27,6 +27,8 @@ impl RuleId {
     pub const CLS_09: Self = Self("CLS-09");
     /// Class variables, given a value in the class body, shall be accepted.
     pub const CLS_11: Self = Self("CLS-11");
+    /// `type(x)` shall give the type object of the value `x`, and a class name or the name of a built-in type shall be its type object as a value; a type object shall print as `<class 'name'>`, give its name as `__name__`, and compare with `is`, `is not`, `==` and `!=`.
+    pub const CLS_12: Self = Self("CLS-12");
     /// `for` shall iterate over `range`, `str`, `bytes`, `list`, `tuple`, `dict`, `set` and any class with `__iter__` and `__next__`.
     pub const CST_03: Self = Self("CST-03");
     /// `try` with `except`, `else` and `finally` clauses shall be accepted, and `finally` shall run on `return`, `break`, `continue` and exceptions.
@@ -184,6 +186,7 @@ impl RuleId {
         Self::CLS_08,
         Self::CLS_09,
         Self::CLS_11,
+        Self::CLS_12,
         Self::CST_03,
         Self::CST_04,
         Self::CST_05,

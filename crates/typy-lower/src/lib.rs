@@ -27,6 +27,7 @@ mod statement;
 mod str_method;
 mod strings;
 mod tuple;
+mod type_object;
 mod types;
 
 pub use program::lower;

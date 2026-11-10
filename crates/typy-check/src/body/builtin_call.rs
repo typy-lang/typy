@@ -36,6 +36,9 @@ impl BodyChecker<'_> {
         if builtin == Builtin::Dict {
             return self.call_dict(arguments, keywords, None, span);
         }
+        if builtin == Builtin::Type {
+            return self.call_type(arguments, keywords, span);
+        }
         if builtin == Builtin::Round {
             return self.call_round(arguments, keywords, span);
         }
@@ -76,11 +79,14 @@ impl BodyChecker<'_> {
             | Builtin::Set
             | Builtin::Dict
             | Builtin::Round
+            | Builtin::Type
             | Builtin::Sorted
             | Builtin::Sum
             | Builtin::Any
             | Builtin::All => {
-                unreachable!("print, round and the builtins of one iterable are checked above")
+                unreachable!(
+                    "print, round, type and the builtins of one iterable are checked above"
+                )
             }
             Builtin::Enumerate | Builtin::Zip | Builtin::Reversed => {
                 return self.error(

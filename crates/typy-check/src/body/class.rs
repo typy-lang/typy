@@ -80,7 +80,14 @@ impl BodyChecker<'_> {
     /// Checks the instance an attribute expression reads or assigns, and returns it with its
     /// class.
     fn instance(&mut self, value: &Expr) -> Option<(TypedExpr, ClassId)> {
-        let object = match self.initialized_instance(value) {
+        let object = self.instance_object(value);
+        self.as_instance(object)
+    }
+
+    /// Checks the value an attribute expression reads or assigns; the instance `__init__` is
+    /// building is read without the check that it is complete.
+    fn instance_object(&mut self, value: &Expr) -> TypedExpr {
+        match self.initialized_instance(value) {
             Some((initializing, span)) => {
                 let name = self.program.classes[initializing.class.0 as usize]
                     .name
@@ -92,7 +99,11 @@ impl BodyChecker<'_> {
                 )
             }
             None => self.expression(value),
-        };
+        }
+    }
+
+    /// Returns an instance with its class, after reporting a value that is not an instance.
+    fn as_instance(&mut self, object: TypedExpr) -> Option<(TypedExpr, ClassId)> {
         match &object.ty {
             Type::Instance(class, _) => {
                 let class = *class;
@@ -145,7 +156,11 @@ impl BodyChecker<'_> {
         attribute: &Identifier,
         span: Span,
     ) -> TypedExpr {
-        let Some((object, class)) = self.instance(value) else {
+        let object = self.instance_object(value);
+        if let Type::TypeObject(_) = object.ty {
+            return self.type_object_attribute(object, attribute, span);
+        }
+        let Some((object, class)) = self.as_instance(object) else {
             return Self::invalid_call(span);
         };
         let Some(index) = self.attribute_index(class, attribute) else {

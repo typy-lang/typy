@@ -80,6 +80,12 @@ pub enum TypedExprKind {
         object: Box<TypedExpr>,
         index: usize,
     },
+    /// `type(value)`: the value is evaluated, and its type object is the result (CLS-12).
+    TypeOf(Box<TypedExpr>),
+    /// The type object a class name or a built-in type name gives as a value.
+    TypeObject(Box<crate::types::TypeObjectOf>),
+    /// `__name__` of a type object.
+    TypeName(Box<TypedExpr>),
     /// `print(values, sep=sep, end=end)`; `sep` and `end` are present only when written.
     Print {
         values: Vec<TypedExpr>,

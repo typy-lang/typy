@@ -1,8 +1,9 @@
 //! Tests of the type objects and of the functions each gives.
 
 use super::{
-    BASE_EXCEPTION, BYTES, DICT, DICT_ITEMS, DICT_KEYS, DICT_VALUES, INT, LIST, OBJECT, SET, STR,
-    TUPLE, TYPE, TypeObject, type_of,
+    BASE_EXCEPTION, BOOL, BYTES, DICT, DICT_ITEMS, DICT_KEYS, DICT_VALUES, FLOAT, INT, LIST,
+    NONE_TYPE, OBJECT, SET, STR, TUPLE, TYPE, TypeObject, type_of, typy_rt_type_name,
+    typy_rt_type_text,
 };
 use crate::header::{IMMORTAL, ObjectHeader, TYPE_TYPE_ID};
 
@@ -11,7 +12,7 @@ fn same(left: &TypeObject, right: &TypeObject) -> bool {
     core::ptr::from_ref(left) == core::ptr::from_ref(right)
 }
 
-const EVERY_TYPE: [&TypeObject; 13] = [
+const EVERY_TYPE: [&TypeObject; 16] = [
     &OBJECT,
     &TYPE,
     &INT,
@@ -25,6 +26,9 @@ const EVERY_TYPE: [&TypeObject; 13] = [
     &DICT_VALUES,
     &DICT_ITEMS,
     &BASE_EXCEPTION,
+    &FLOAT,
+    &BOOL,
+    &NONE_TYPE,
 ];
 
 #[test]
@@ -73,7 +77,10 @@ fn types_have_python_names() {
             "dict_keys",
             "dict_values",
             "dict_items",
-            "BaseException"
+            "BaseException",
+            "float",
+            "bool",
+            "NoneType"
         ]
     );
 }
@@ -164,5 +171,39 @@ fn each_runtime_type_tests_hashes_compares_and_writes_its_objects() {
             crate::refcount::typy_rt_decrement(written.value.cast());
             crate::refcount::typy_rt_decrement(object);
         }
+    }
+}
+
+/// Returns the text of a runtime string, and releases it.
+fn text(string: *mut crate::string::StrObject) -> String {
+    use crate::string::{code_point, length};
+    // SAFETY: the runtime returns a live string, and every index is in bounds.
+    let text = (0..unsafe { length(string) })
+        .map(|index| char::from_u32(unsafe { code_point(string, index) }).unwrap_or('?'))
+        .collect();
+    // SAFETY: the string is no longer used.
+    unsafe { crate::refcount::typy_rt_decrement(string.cast()) };
+    text
+}
+
+#[test]
+fn types_are_written_as_cpython_writes_them() {
+    let mut class = TypeObject::new("Point", &raw const OBJECT);
+    class.module = "__main__".as_ptr();
+    class.module_length = 8;
+    // SAFETY: each type object is live for the whole test.
+    unsafe {
+        assert_eq!(text(typy_rt_type_text(&raw const INT)), "<class 'int'>");
+        assert_eq!(
+            text(typy_rt_type_text(&raw const class)),
+            "<class '__main__.Point'>"
+        );
+        assert_eq!(text(typy_rt_type_name(&raw const class)), "Point");
+        assert_eq!(text(typy_rt_type_name(&raw const NONE_TYPE)), "NoneType");
+        let header = (&raw const FLOAT).cast_mut().cast();
+        let written = (TYPE.repr.expect("a type is written"))(header);
+        assert_eq!(text(written.value), "<class 'float'>");
+        let hash = TYPE.hash.expect("a type has a hash");
+        assert_eq!(hash(header), hash(header));
     }
 }
