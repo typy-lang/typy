@@ -319,6 +319,13 @@ impl FunctionLowerer<'_> {
             TyirType::Object(id) if id.class_index().is_some() => {
                 self.constant(Constant::NoInstance(id), span)
             }
+            // A type object slot starts as `object`, which is immortal.
+            TyirType::Object(typy_tyir::TypeId::TYPE) => self.constant(
+                Constant::TypeObject(typy_tyir::TypeObjectRef::Runtime(
+                    typy_tyir::RuntimeType::Object,
+                )),
+                span,
+            ),
             TyirType::Object(_) => self.string("", span),
             TyirType::Bits => unreachable!("no slot holds list item bytes"),
             TyirType::Optional(_) => self.none_of(ty, span),
