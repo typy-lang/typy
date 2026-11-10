@@ -24,6 +24,8 @@ shell: dev ## Open a shell in the dev service
 runtime: dev ## Build the runtime archive for each target and stage it where <target>/*/typy finds it
 	@$(EXEC) scripts/build-runtime.sh
 
+# The conformance, determinism and documentation tests run <target>/debug/typy as a
+# program, so every test target builds it first.
 build: runtime ## Build the typy compiler, <target>/debug/typy, with its runtime archive staged
 	@$(EXEC) cargo build -p typy-cli --locked
 
@@ -39,22 +41,22 @@ lint: dev ## Run Clippy on every crate and test, with warnings as errors
 type: dev ## Type check every crate and test
 	@$(EXEC) cargo check --workspace --all-targets --locked
 
-test: runtime ## Run the unit tests
+test: build ## Run the unit tests
 	@$(EXEC) cargo nextest run --workspace --locked
 
-test-int: runtime ## Run the integration tests: the conformance suite, its sanitizer run, golden files and the pipeline
+test-int: build ## Run the integration tests: the conformance suite, its sanitizer run, golden files and the pipeline
 	@$(EXEC) cargo nextest run -p typy-conformance -p typy-driver --locked
 
 test-e2e: runtime ## Run the end-to-end tests of the typy executable
 	@$(EXEC) cargo nextest run -p typy-cli --test cli --locked
 
 test-all: test miri ## Run every test level that runs on each commit, and Miri
-coverage: runtime ## Run the tests with coverage; fail below 95 percent of lines (NFR-11)
+coverage: build ## Run the tests with coverage; fail below 95 percent of lines (NFR-11)
 	@$(EXEC) cargo llvm-cov nextest --workspace --locked --status-level fail \
 		--final-status-level fail --fail-under-lines 95 --summary-only \
 		--ignore-filename-regex 'typy-conformance/'
 
-coverage-branches: runtime ## Measure line and branch coverage with nightly; fail below 95 percent of either (NFR-11)
+coverage-branches: build ## Measure line and branch coverage with nightly; fail below 95 percent of either (NFR-11)
 	@$(EXEC) scripts/coverage-branches.sh
 
 docs-lint: dev ## Lint every Markdown file with markdownlint-cli2
