@@ -54,6 +54,7 @@ fn on_point(body: impl FnOnce(ValueId, ValueId) -> Body) -> TyirModule {
             module: "__main__".to_owned(),
             fields,
             repr: None,
+            str: None,
         }],
         entry: FunctionId(0),
     }

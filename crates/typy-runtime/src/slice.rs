@@ -187,6 +187,6 @@ mod tests {
         );
         let zero = select(word(0), word(0), word(0), word(STEP), 5).unwrap_err();
         // SAFETY: the exception is live.
-        assert_eq!(unsafe { (*zero).kind }, crate::ExceptionKind::ValueError);
+        assert_eq!(unsafe { (*zero).kind() }, crate::ExceptionKind::ValueError);
     }
 }

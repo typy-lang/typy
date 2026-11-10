@@ -31,6 +31,23 @@ pub struct Field {
     pub tuple: *const TupleType,
 }
 
+// SAFETY: a descriptor is never written after it is built, so threads may share it.
+unsafe impl Sync for TupleType {}
+
+// SAFETY: a field is never written after it is built, so threads may share it.
+unsafe impl Sync for Field {}
+
+impl Field {
+    /// Returns an eight-byte field of `kind` at `offset`, which holds no nested tuple.
+    pub(crate) const fn plain(kind: ItemKind, offset: u32) -> Self {
+        Self {
+            kind: kind as u32,
+            offset,
+            tuple: core::ptr::null(),
+        }
+    }
+}
+
 impl TupleType {
     /// Returns the number of eight-byte words an item takes.
     pub(crate) fn words(&self) -> usize {
@@ -92,6 +109,16 @@ impl Field {
 pub(crate) unsafe fn field(tuple: *const TupleType, address: u64, index: usize) -> u64 {
     // SAFETY: the caller's guarantee.
     unsafe { (*tuple).fields()[index].value(address) }
+}
+
+/// Returns the type of item `index` of a tuple type.
+///
+/// # Safety
+///
+/// `tuple` is a descriptor the compiler emitted, with more than `index` items.
+pub(crate) unsafe fn field_type(tuple: *const TupleType, index: usize) -> ItemType {
+    // SAFETY: the caller's guarantee.
+    unsafe { (*tuple).fields()[index].item_type() }
 }
 
 /// Returns the descriptor of item `index` of a tuple type, a tuple itself.

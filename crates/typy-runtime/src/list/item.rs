@@ -441,6 +441,39 @@ impl ItemType {
     }
 }
 
+impl ItemType {
+    /// Returns `str(item)`: the text of a `str`, the `str` of an object whose type writes one,
+    /// and otherwise `repr(item)`.
+    ///
+    /// # Safety
+    ///
+    /// `item` is a live item of this type.
+    pub(crate) unsafe fn str(self, item: u64) -> Raising<*mut StrObject> {
+        // SAFETY: the caller passes a live item of this type.
+        let (kind, value) = match unsafe { self.held(item) } {
+            Held::Value(base, value) => (base.kind, value),
+            Held::Plain => (self.kind, item),
+            Held::None => return Raising::ok(crate::string::from_str("None")),
+        };
+        if kind != ItemKind::Object {
+            // SAFETY: the caller passes a live item of this type.
+            return unsafe { self.repr(item) };
+        }
+        let object = pointer(value);
+        // SAFETY: the item points to a live object, and its type's function takes it.
+        unsafe {
+            if (*object).type_id == crate::header::STR_TYPE_ID {
+                crate::refcount::typy_rt_increment(object);
+                return Raising::ok(object.cast());
+            }
+            match type_of(object).str {
+                Some(str) => str(object),
+                None => object_repr(object),
+            }
+        }
+    }
+}
+
 /// What an item holds, as `ItemType::held` reads it.
 enum Held {
     /// An item of a type that is not optional.

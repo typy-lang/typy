@@ -7,11 +7,11 @@ mod builtin;
 #[cfg(test)]
 mod tests;
 
-pub(crate) use builtin::{
-    BASE_EXCEPTION, BYTES, DICT, DICT_ITEMS, DICT_KEYS, DICT_VALUES, INT, LIST, SET, STR, TUPLE,
-};
 #[cfg(test)]
 pub(crate) use builtin::{BOOL, FLOAT, NONE_TYPE};
+pub(crate) use builtin::{
+    BYTES, DICT, DICT_ITEMS, DICT_KEYS, DICT_VALUES, INT, LIST, SET, STR, TUPLE,
+};
 
 use crate::Raising;
 use crate::header::{
@@ -63,6 +63,8 @@ pub struct TypeObject {
     /// The layout of a class's attributes, after the instance's header and class; null for
     /// the runtime's own types.
     pub fields: *const TupleType,
+    /// Writes an object as `str` does; absent for a type whose `str` is its `repr`.
+    pub str: Option<Repr>,
 }
 
 // SAFETY: a type object is immortal and never written after it is built, so threads may share it.
@@ -87,6 +89,7 @@ impl TypeObject {
             module: "".as_ptr(),
             module_length: 0,
             fields: core::ptr::null(),
+            str: None,
         }
     }
 
@@ -193,7 +196,7 @@ pub(crate) unsafe fn type_of(object: *const ObjectHeader) -> &'static TypeObject
                 1 => &DICT_VALUES,
                 _ => &DICT_ITEMS,
             },
-            EXCEPTION_TYPE_ID => &BASE_EXCEPTION,
+            EXCEPTION_TYPE_ID => crate::exception::class_of(object.cast()),
             TYPE_TYPE_ID => &TYPE,
             INSTANCE_TYPE_ID => crate::instance::class_of(object.cast()),
             _ => crate::libc::abort_with(b"typy runtime: an object has an unknown type\n"),

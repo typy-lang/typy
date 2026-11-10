@@ -16,6 +16,7 @@ package "typy_runtime" as RuntimeCrate {
         +truth, hash, equal, order, repr : Option<fn>
         +module : *const u8
         +fields : *const TupleType
+        +str : Option<fn>
     }
     class InstanceObject <<repr(C)>> {
         +header : ObjectHeader
@@ -38,9 +39,14 @@ package "typy_runtime" as RuntimeCrate {
     }
     class ExceptionObject <<repr(C)>> {
         +header : ObjectHeader
+        +class : *const TypeObject
         +message : *mut Str
+        +arguments_type : *const TupleType
+        +arguments : *mut u8
         +traceback : TracebackBuffer
-        +cause : *mut ExceptionObject
+        +cause, context : *mut ExceptionObject
+        +suppress_context : u64
+        +attributes : [u64]
     }
     class TracebackEntry <<repr(C)>> {
         +function : *const u8
@@ -62,6 +68,7 @@ InstanceObject *-- ObjectHeader
 TypeObject *-- ObjectHeader
 TypeObject --> TypeObject : base, up to object
 InstanceObject --> TypeObject : class
+ExceptionObject --> TypeObject : class, an exception class
 ObjectHeader ..> TypeObject : type_id finds
 Int ..> BigInt : points to when not inline
 Allocator ..> ObjectHeader : allocates objects that start with

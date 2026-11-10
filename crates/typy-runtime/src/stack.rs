@@ -64,7 +64,7 @@ mod tests {
         assert!(!exception.is_null());
         // SAFETY: the exception was just raised and nothing else refers to it.
         unsafe {
-            assert_eq!((*exception).kind, crate::ExceptionKind::RecursionError);
+            assert_eq!((*exception).kind(), crate::ExceptionKind::RecursionError);
             crate::refcount::typy_rt_decrement(exception.cast());
         }
     }

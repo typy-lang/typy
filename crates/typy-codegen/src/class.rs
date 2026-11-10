@@ -68,18 +68,50 @@ fn text_global<'ctx>(
     (pointer, text.len() as u64)
 }
 
-/// Returns the function the type object of class `index` names to write an instance: one
-/// that calls the class's `__repr__`, or the runtime's default.
+/// Returns the function the type object of class `index` names to write an instance for
+/// `repr`: one that calls the class's `__repr__`, or the runtime's default.
 fn repr_function<'ctx>(
     shared: &Shared<'_, 'ctx>,
     index: u32,
 ) -> Result<FunctionValue<'ctx>, CodegenError> {
+    match shared.tyir.classes[index as usize].repr {
+        Some(method) => method_writer(shared, index, method, "repr"),
+        None => Ok(runtime_symbol(
+            shared,
+            "typy_rt_instance_repr",
+            repr_type(shared),
+        )),
+    }
+}
+
+/// Returns the function the type object of class `index` names to write an instance for
+/// `str`, one that calls the class's `__str__`, or null when it has none and `str` is `repr`.
+fn str_function<'ctx>(
+    shared: &Shared<'_, 'ctx>,
+    index: u32,
+) -> Result<PointerValue<'ctx>, CodegenError> {
+    match shared.tyir.classes[index as usize].str {
+        Some(method) => Ok(method_writer(shared, index, method, "str")?
+            .as_global_value()
+            .as_pointer_value()),
+        None => Ok(shared
+            .context
+            .ptr_type(AddressSpace::default())
+            .const_null()),
+    }
+}
+
+/// Returns a function of the writer type that calls `method`, `__repr__` or `__str__` of
+/// class `index`, and adds a null exception to its string when the method cannot raise.
+fn method_writer<'ctx>(
+    shared: &Shared<'_, 'ctx>,
+    index: u32,
+    method: typy_tyir::FunctionId,
+    slot: &str,
+) -> Result<FunctionValue<'ctx>, CodegenError> {
     let ty = repr_type(shared);
-    let Some(method) = shared.tyir.classes[index as usize].repr else {
-        return Ok(runtime_symbol(shared, "typy_rt_instance_repr", ty));
-    };
     let function = shared.module.add_function(
-        &format!("typy.class{index}.repr"),
+        &format!("typy.class{index}.{slot}"),
         ty,
         Some(Linkage::Private),
     );
@@ -93,11 +125,11 @@ fn repr_function<'ctx>(
         .build_call(callee, &[instance.into()], "")?
         .try_as_basic_value()
         .basic()
-        .ok_or_else(|| CodegenError("`__repr__` returns a string".to_owned()))?;
+        .ok_or_else(|| CodegenError("the method returns a string".to_owned()))?;
     let result = if shared.raising[method.0 as usize] {
         result
     } else {
-        // `__repr__` cannot raise, so the writer adds a null exception to its string.
+        // The method cannot raise, so the writer adds a null exception to its string.
         let pair = ty
             .get_return_type()
             .ok_or_else(|| CodegenError("the writer returns a pair".to_owned()))?
@@ -145,6 +177,7 @@ pub(crate) fn type_object<'ctx>(
         word.fn_type(&[pointer.into()], false),
     );
     let repr = repr_function(shared, index)?;
+    let str = str_function(shared, index)?;
     let header = context.const_struct(
         &[
             half.const_int(u64::from(IMMORTAL), false).into(),
@@ -167,6 +200,7 @@ pub(crate) fn type_object<'ctx>(
             module.into(),
             word.const_int(module_length, false).into(),
             fields.into(),
+            str.into(),
         ],
         false,
     );

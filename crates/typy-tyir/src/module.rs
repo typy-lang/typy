@@ -32,6 +32,8 @@ pub struct TyirClass {
     pub fields: TupleTypeId,
     /// `__repr__`, which writes an instance inside a container, when the class has one.
     pub repr: Option<FunctionId>,
+    /// `__str__`, which `str` of an exception's argument calls, when the class has one.
+    pub str: Option<FunctionId>,
 }
 
 impl TyirModule {

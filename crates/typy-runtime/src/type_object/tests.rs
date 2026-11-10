@@ -1,9 +1,8 @@
 //! Tests of the type objects and of the functions each gives.
 
 use super::{
-    BASE_EXCEPTION, BOOL, BYTES, DICT, DICT_ITEMS, DICT_KEYS, DICT_VALUES, FLOAT, INT, LIST,
-    NONE_TYPE, OBJECT, SET, STR, TUPLE, TYPE, TypeObject, type_of, typy_rt_type_name,
-    typy_rt_type_text,
+    BOOL, BYTES, DICT, DICT_ITEMS, DICT_KEYS, DICT_VALUES, FLOAT, INT, LIST, NONE_TYPE, OBJECT,
+    SET, STR, TUPLE, TYPE, TypeObject, type_of, typy_rt_type_name, typy_rt_type_text,
 };
 use crate::header::{IMMORTAL, ObjectHeader, TYPE_TYPE_ID};
 
@@ -25,7 +24,7 @@ const EVERY_TYPE: [&TypeObject; 16] = [
     &DICT_KEYS,
     &DICT_VALUES,
     &DICT_ITEMS,
-    &BASE_EXCEPTION,
+    &crate::exception::classes::BASE_EXCEPTION,
     &FLOAT,
     &BOOL,
     &NONE_TYPE,

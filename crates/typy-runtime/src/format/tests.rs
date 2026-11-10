@@ -41,7 +41,7 @@ fn outcome(result: Raising<*mut StrObject>) -> (String, String) {
     }
     // SAFETY: the runtime returned a live exception, released here.
     unsafe {
-        let kind = (*result.exception).kind.name().to_owned();
+        let kind = (*result.exception).class().name().to_owned();
         let message = (*result.exception).message;
         crate::refcount::typy_rt_increment(message.cast());
         crate::refcount::typy_rt_decrement(result.exception.cast());

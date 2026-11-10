@@ -5,8 +5,10 @@
 
 use crate::Raising;
 use crate::exception::{ExceptionKind, ExceptionObject};
+use crate::list::ItemKind;
 use crate::message::MessageBuffer;
 use crate::string::{StrBuilder, StrObject, code_point, length};
+use crate::tuple::{Field, TupleType};
 use crate::word::inline_value;
 
 /// A codec, numbered as the compiler passes it.
@@ -149,7 +151,10 @@ fn encode_error(
     }
     message.push_str(": ");
     message.push_str(reason);
-    message.raise(ExceptionKind::UnicodeEncodeError)
+    let exception = message.raise(ExceptionKind::UnicodeEncodeError);
+    // SAFETY: the exception is new, and the caller passes a live string.
+    unsafe { unicode_arguments(exception, codec, text, start, end, reason) };
+    exception
 }
 
 fn decode_error(
@@ -183,7 +188,62 @@ fn decode_error(
     }
     message.push_str(": ");
     message.push_str(reason);
-    message.raise(ExceptionKind::UnicodeDecodeError)
+    let exception = message.raise(ExceptionKind::UnicodeDecodeError);
+    // SAFETY: the exception is new, and the caller passes live bytes.
+    unsafe { unicode_arguments(exception, codec, data, start, end, reason) };
+    exception
+}
+
+/// The layout of the arguments of a Unicode error: the codec's name, the text or the bytes,
+/// the start, the end and the reason.
+static UNICODE_ARGUMENTS: TupleType = TupleType {
+    size: 40,
+    length: 5,
+    fields: UNICODE_FIELDS.as_ptr(),
+};
+
+static UNICODE_FIELDS: [Field; 5] = [
+    Field::plain(ItemKind::Object, 0),
+    Field::plain(ItemKind::Object, 8),
+    Field::plain(ItemKind::Int, 16),
+    Field::plain(ItemKind::Int, 24),
+    Field::plain(ItemKind::Object, 32),
+];
+
+/// Gives a Unicode error CPython's five arguments, which its `repr` shows:
+/// `UnicodeDecodeError('utf-8', b'\xff', 0, 1, 'invalid start byte')`.
+///
+/// # Safety
+///
+/// `exception` is new and has no arguments, and `object` points to a live `str` or `bytes`.
+unsafe fn unicode_arguments(
+    exception: *mut ExceptionObject,
+    codec: Codec,
+    object: *const StrObject,
+    start: usize,
+    end: usize,
+    reason: &str,
+) {
+    let position = |value: usize| {
+        crate::word::inline(i64::try_from(value).unwrap_or(i64::MAX))
+            .unwrap_or(0)
+            .cast_unsigned()
+    };
+    // SAFETY: the caller's guarantee; the exception takes the new references.
+    unsafe {
+        crate::refcount::typy_rt_increment(object.cast_mut().cast());
+        crate::exception::set_arguments(
+            exception,
+            &UNICODE_ARGUMENTS,
+            &[
+                crate::string::from_str(codec.name()).expose_provenance() as u64,
+                object.expose_provenance() as u64,
+                position(start),
+                position(end),
+                crate::string::from_str(reason).expose_provenance() as u64,
+            ],
+        );
+    }
 }
 
 /// Returns the bytes of `point` in UTF-8, which the caller has checked is not a surrogate.

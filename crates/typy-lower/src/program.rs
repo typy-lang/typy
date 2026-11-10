@@ -51,16 +51,19 @@ pub fn lower(program: &TypedProgram) -> Result<TyirModule, Diagnostics> {
                 let TyirType::Tuple(fields) = tuple_types.intern(fields) else {
                     unreachable!("interning gives a tuple type");
                 };
-                let repr = class
-                    .methods
-                    .iter()
-                    .find(|(name, _)| name == "__repr__")
-                    .map(|(_, id)| FunctionId(id.0));
+                let method = |wanted: &str| {
+                    class
+                        .methods
+                        .iter()
+                        .find(|(name, _)| name == wanted)
+                        .map(|(_, id)| FunctionId(id.0))
+                };
                 TyirClass {
                     name: class.name.clone(),
                     module: class.module.clone(),
                     fields,
-                    repr,
+                    repr: method("__repr__"),
+                    str: method("__str__"),
                 }
             })
             .collect();

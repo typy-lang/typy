@@ -301,10 +301,6 @@ pub(crate) static DICT_VALUES: TypeObject = view("dict_values");
 #[unsafe(export_name = "typy_rt_type_dict_items")]
 pub(crate) static DICT_ITEMS: TypeObject = view("dict_items");
 
-/// The type of an exception.
-#[unsafe(export_name = "typy_rt_type_base_exception")]
-pub(crate) static BASE_EXCEPTION: TypeObject = builtin("BaseException");
-
 /// The type of a `float`, whose values are never objects; `type(1.5)` gives it.
 #[unsafe(export_name = "typy_rt_type_float")]
 pub(crate) static FLOAT: TypeObject = builtin("float");
