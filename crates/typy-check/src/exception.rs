@@ -148,6 +148,25 @@ impl ExceptionClass {
     }
 }
 
+/// Returns the nearest class every one of `classes` derives from, `BaseException` at the
+/// farthest, as the type of the name an `except` clause with several classes binds.
+#[must_use]
+pub(crate) fn common_base(classes: &[ExceptionClass]) -> ExceptionClass {
+    let Some(ExceptionClass::Builtin(first)) = classes.first() else {
+        return ExceptionClass::Builtin(BuiltinException::BaseException);
+    };
+    let mut candidate = Some(*first);
+    while let Some(base) = candidate {
+        let base = ExceptionClass::Builtin(base);
+        if classes.iter().all(|class| class.derives_from(&base)) {
+            return base;
+        }
+        let ExceptionClass::Builtin(builtin) = base;
+        candidate = builtin.base();
+    }
+    ExceptionClass::Builtin(BuiltinException::BaseException)
+}
+
 impl fmt::Display for ExceptionClass {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter.write_str(self.name())
@@ -196,6 +215,47 @@ mod tests {
             BuiltinException::Exception,
             BuiltinException::ValueError
         ));
+    }
+
+    #[test]
+    fn the_common_base_is_the_nearest_class_all_derive_from() {
+        let common = |classes: &[BuiltinException]| {
+            let classes: Vec<_> = classes
+                .iter()
+                .copied()
+                .map(ExceptionClass::Builtin)
+                .collect();
+            super::common_base(&classes)
+        };
+        let cases: [(&[BuiltinException], BuiltinException); 5] = [
+            (
+                &[BuiltinException::KeyError, BuiltinException::IndexError],
+                BuiltinException::LookupError,
+            ),
+            (
+                &[
+                    BuiltinException::KeyError,
+                    BuiltinException::ZeroDivisionError,
+                ],
+                BuiltinException::Exception,
+            ),
+            (
+                &[BuiltinException::ValueError],
+                BuiltinException::ValueError,
+            ),
+            (
+                &[BuiltinException::UnicodeError, BuiltinException::ValueError],
+                BuiltinException::ValueError,
+            ),
+            (&[], BuiltinException::BaseException),
+        ];
+        for (classes, expected) in cases {
+            assert_eq!(
+                common(classes),
+                ExceptionClass::Builtin(expected),
+                "{classes:?}"
+            );
+        }
     }
 
     #[test]

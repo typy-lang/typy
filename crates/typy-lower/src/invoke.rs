@@ -7,7 +7,7 @@ use crate::function::FunctionLowerer;
 use crate::ownership::Lowered;
 
 impl FunctionLowerer<'_> {
-    /// Calls a function that may raise, and returns its result. The error path releases the live temporaries and the slots, then returns the exception.
+    /// Calls a function that may raise, and returns its result. The error path releases the live temporaries and goes on as `propagate` says.
     pub(crate) fn invoke(
         &mut self,
         callee: Callee,
@@ -27,9 +27,7 @@ impl FunctionLowerer<'_> {
             span,
         });
         self.builder.switch_to(error);
-        self.release_live_temporaries(span);
-        self.release_slots(span);
-        self.builder.terminate(Terminator::ReturnError(exception));
+        self.propagate(exception, span);
         self.builder.switch_to(normal);
         self.raises = true;
         value

@@ -18,6 +18,37 @@ use crate::types::tyir_type;
 pub(crate) struct LoopTargets {
     pub(crate) break_target: BlockId,
     pub(crate) continue_target: BlockId,
+    /// How many cleanups were open where the loop starts; `break` and `continue` run those
+    /// opened since.
+    pub(crate) cleanups: usize,
+}
+
+/// What leaving a region of code must do, innermost last (ADR-0013).
+#[derive(Clone, Copy, Debug)]
+pub(crate) enum Cleanup {
+    /// The body of a `try`: an exception raised in it goes to the block that matches it
+    /// against the `except` clauses, with nothing to do on the way out otherwise.
+    Handlers {
+        /// The block, whose one parameter is the exception.
+        dispatch: BlockId,
+    },
+    /// An `except` clause: leaving it restores the exception handled before and drops this
+    /// one, as CPython deletes the clause's name.
+    Handling {
+        /// The exception handled before, as bits.
+        previous: ValueId,
+        /// Where the clause keeps the exception.
+        exception: Handled,
+    },
+}
+
+/// Where an `except` clause keeps the exception it handles.
+#[derive(Clone, Copy, Debug)]
+pub(crate) enum Handled {
+    /// In the variable its `as` names.
+    Slot(SlotId),
+    /// As a value the clause owns, when it names no variable.
+    Value(ValueId),
 }
 
 /// Lowers one function. Its slots own their values; owned temporaries are tracked so an error path can release them.
@@ -30,6 +61,7 @@ pub(crate) struct FunctionLowerer<'context> {
     pub(crate) slots: BTreeMap<SymbolId, SlotId>,
     pub(crate) temporaries: Vec<ValueId>,
     pub(crate) loops: Vec<LoopTargets>,
+    pub(crate) cleanups: Vec<Cleanup>,
     pub(crate) raises: bool,
     /// The slots of parameters the function never assigns, which borrow the caller's
     /// reference and are never counted (MEM-04).
@@ -104,6 +136,7 @@ impl<'context> FunctionLowerer<'context> {
             slots,
             temporaries: Vec::new(),
             loops: Vec::new(),
+            cleanups: Vec::new(),
             raises: false,
             borrowed,
             parameters,
@@ -113,9 +146,15 @@ impl<'context> FunctionLowerer<'context> {
         };
         lowerer.statements(&function.body);
         if !lowerer.builder.is_terminated() {
-            let unit = lowerer.constant(Constant::Unit, function.span);
-            lowerer.release_slots(function.span);
-            lowerer.builder.terminate(Terminator::Return(unit));
+            if function.signature.returns == typy_check::Type::NoneType {
+                let unit = lowerer.constant(Constant::Unit, function.span);
+                lowerer.release_slots(function.span);
+                lowerer.builder.terminate(Terminator::Return(unit));
+            } else {
+                // The checker rejects a function that returns a value and can reach its end
+                // (TYP-01), so this point follows only paths that returned or raised.
+                lowerer.builder.terminate(Terminator::Unreachable);
+            }
         }
         lowerer.prologue();
         lowerer.builder.set_may_raise(lowerer.raises);

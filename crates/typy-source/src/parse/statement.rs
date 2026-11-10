@@ -5,7 +5,7 @@ use ruff_text_size::{Ranged, TextRange};
 
 use super::Converter;
 use super::operator::binary_operator;
-use crate::syntax::{Alias, NodeKind, Parameter, ParameterKind, Stmt};
+use crate::syntax::{Alias, ExceptHandler, NodeKind, Parameter, ParameterKind, Stmt};
 
 impl Converter<'_> {
     pub(super) fn statements(&self, statements: &[ast::Stmt]) -> Vec<Stmt> {
@@ -143,7 +143,25 @@ impl Converter<'_> {
             ast::Stmt::Try(node) if node.is_star => {
                 self.other_statement(NodeKind::TryStar, node.range)
             }
-            ast::Stmt::Try(node) => self.other_statement(NodeKind::Try, node.range),
+            ast::Stmt::Try(node) => Stmt::Try {
+                body: self.statements(&node.body),
+                handlers: node
+                    .handlers
+                    .iter()
+                    .map(|handler| {
+                        let ast::ExceptHandler::ExceptHandler(handler) = handler;
+                        ExceptHandler {
+                            class: handler.type_.as_deref().map(|class| self.expression(class)),
+                            name: handler.name.as_ref().map(|name| self.identifier(name)),
+                            body: self.statements(&handler.body),
+                            span: self.span(handler.range),
+                        }
+                    })
+                    .collect(),
+                orelse: self.statements(&node.orelse),
+                finalbody: self.statements(&node.finalbody),
+                span,
+            },
             ast::Stmt::Assert(node) => self.other_statement(NodeKind::Assert, node.range),
             ast::Stmt::Import(node) => Stmt::Import {
                 names: node.names.iter().map(|alias| self.alias(alias)).collect(),

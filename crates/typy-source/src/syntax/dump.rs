@@ -221,6 +221,29 @@ impl Dump<'_> {
                     self.expression(depth + 1, value);
                 }
             }
+            Stmt::Try {
+                body,
+                handlers,
+                orelse,
+                finalbody,
+                ..
+            } => {
+                self.line(depth, "Try", span);
+                self.block(depth + 1, "body", body);
+                for handler in handlers {
+                    let name = handler
+                        .name
+                        .as_ref()
+                        .map_or(String::new(), |name| format!(" as {}", name.name));
+                    self.line(depth + 1, &format!("except{name}"), Some(handler.span));
+                    if let Some(class) = &handler.class {
+                        self.expression(depth + 2, class);
+                    }
+                    self.block(depth + 2, "body", &handler.body);
+                }
+                self.block(depth + 1, "orelse", orelse);
+                self.block(depth + 1, "finally", finalbody);
+            }
             Stmt::Pass { .. } => self.line(depth, "Pass", span),
             Stmt::Break { .. } => self.line(depth, "Break", span),
             Stmt::Continue { .. } => self.line(depth, "Continue", span),

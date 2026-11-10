@@ -58,6 +58,19 @@ pub(crate) fn assigned_symbols(body: &[TypedStmt]) -> BTreeSet<SymbolId> {
                     statements(body, found);
                     statements(orelse, found);
                 }
+                TypedStmt::Try {
+                    body,
+                    handlers,
+                    orelse,
+                    ..
+                } => {
+                    statements(body, found);
+                    for handler in handlers {
+                        found.extend(handler.name);
+                        statements(&handler.body, found);
+                    }
+                    statements(orelse, found);
+                }
                 TypedStmt::Expr { .. }
                 | TypedStmt::Return { .. }
                 | TypedStmt::Raise { .. }

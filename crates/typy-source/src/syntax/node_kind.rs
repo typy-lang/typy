@@ -24,7 +24,6 @@ pub enum NodeKind {
     Nonlocal,
     Starred,
     TemplateStr,
-    Try,
     TryStar,
     TypeAlias,
     With,

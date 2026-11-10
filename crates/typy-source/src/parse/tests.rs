@@ -230,10 +230,6 @@ type X = int
 match v:
     case _:
         pass
-try:
-    pass
-except E:
-    pass
 with f:
     pass
 del x
@@ -253,7 +249,6 @@ global g
             NodeKind::AsyncFunctionDef,
             NodeKind::TypeAlias,
             NodeKind::Match,
-            NodeKind::Try,
             NodeKind::With,
             NodeKind::Delete,
             NodeKind::Assert,
@@ -708,6 +703,14 @@ fn every_node_kind_is_dumped_at_its_depth_with_its_position() {
 fn each_form_of_raise_is_dumped_with_its_operands() {
     let source = "raise\nraise E\nraise E(1) from c\n";
     let expected = "Module\n  Raise @1:1\n  Raise @2:1\n    Name E @2:7\n  Raise from @3:1\n    Call @3:7\n      Name E @3:7\n      Constant Int(\"1\") @3:9\n    Name c @3:17\n";
+    let parsed = parse(&file(source), PythonFloor::V3_12).unwrap();
+    assert_eq!(dump(&parsed, &file(source)), expected);
+}
+
+#[test]
+fn a_try_statement_keeps_its_clauses_in_order() {
+    let source = "try:\n    pass\nexcept (A, B) as e:\n    raise\nexcept:\n    pass\nelse:\n    pass\nfinally:\n    pass\n";
+    let expected = "Module\n  Try @1:1\n    body\n      Pass @2:5\n    except as e @3:1\n      Tuple @3:8\n        Name A @3:9\n        Name B @3:12\n      body\n        Raise @4:5\n    except @5:1\n      body\n        Pass @6:5\n    orelse\n      Pass @8:5\n    finally\n      Pass @10:5\n";
     let parsed = parse(&file(source), PythonFloor::V3_12).unwrap();
     assert_eq!(dump(&parsed, &file(source)), expected);
 }

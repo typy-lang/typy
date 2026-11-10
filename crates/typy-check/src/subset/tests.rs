@@ -102,10 +102,6 @@ fn later_features_name_their_release_and_rule() {
         ),
         ("import os\n", "imports are planned for TyPy 0.3 (SMT-07)"),
         (
-            "try:\n    pass\nexcept E:\n    pass\n",
-            "`try` statements are planned for TyPy 0.3 (CST-04)",
-        ),
-        (
             "with f:\n    pass\n",
             "`with` statements are planned for TyPy 0.3 (CST-05)",
         ),

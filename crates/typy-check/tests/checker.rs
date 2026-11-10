@@ -62,6 +62,29 @@ fn check(source: &str) -> Result<TypedProgram, Vec<String>> {
 }
 
 #[test]
+fn a_try_statement_types_each_clause_and_its_name() {
+    let source = "def f(n: int) -> int:\n    try:\n        return 10 // n\n    except (KeyError, IndexError) as e:\n        raise\n    except ZeroDivisionError:\n        return 0\n    except:\n        raise ValueError('other') from None\n    else:\n        pass\n";
+    let (_directory, project) = load(source);
+    let program = TypeChecker::check(&project).expect("the program is accepted");
+    let dump = typy_check::dump(&program, &project);
+    for expected in [
+        "Try @2:5",
+        "except KeyError, IndexError as e @4:5",
+        "except ZeroDivisionError @6:5",
+        "except BaseException @8:5",
+        "Raise @5:9",
+    ] {
+        assert!(dump.contains(expected), "{expected} in\n{dump}");
+    }
+    let e = program
+        .symbols
+        .iter()
+        .find(|symbol| symbol.name == "e")
+        .expect("the clause's name is a symbol");
+    assert_eq!(e.ty.to_string(), "LookupError");
+}
+
+#[test]
 fn raise_ends_the_path_it_is_on() {
     let source = "def f(n: int) -> int:\n    if n > 0:\n        return n\n    raise ValueError('n', n)\n\
          def g() -> str:\n    raise KeyError from None\n\
@@ -1573,6 +1596,23 @@ fn statements_and_expressions_outside_the_subset_give_their_codes() {
         ("e = ValueError(message='v')\n", &["E0404"]),
         ("e: KeyError = ValueError('v')\n", &["E0402"]),
         ("raise u\n", &["E0205"]),
+        // An `except` clause names classes; `finally` comes later (CST-04, EXC-09).
+        ("try:\n    pass\nexcept 1:\n    pass\n", &["E0418"]),
+        (
+            "try:\n    pass\nexcept (ValueError, 'x'):\n    pass\n",
+            &["E0418"],
+        ),
+        ("try:\n    pass\nexcept u:\n    pass\n", &["E0205"]),
+        ("try:\n    pass\nfinally:\n    pass\n", &["E0201"]),
+        // The name `as` binds is deleted after its clause (EXC-01).
+        (
+            "try:\n    pass\nexcept ValueError as e:\n    pass\nprint(e)\n",
+            &["E0205"],
+        ),
+        (
+            "e = 1\ntry:\n    pass\nexcept ValueError as e:\n    pass\nprint(e)\n",
+            &["E0306"],
+        ),
         ("for i in range(u):\n    print(i)\n", &["E0205"]),
         ("print({1: u for x in [1]})\n", &["E0205"]),
         (

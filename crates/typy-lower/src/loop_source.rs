@@ -98,6 +98,7 @@ impl FunctionLowerer<'_> {
         self.loops.push(LoopTargets {
             break_target: exit,
             continue_target: header,
+            cleanups: self.cleanups.len(),
         });
         self.statements(body);
         self.loops.pop();

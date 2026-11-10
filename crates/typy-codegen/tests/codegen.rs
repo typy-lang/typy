@@ -49,6 +49,8 @@ const PROGRAMS: &[&str] = &[
     "class P:\n    pass\nx = 1\nf = 2.5\nb = True\ns = 'h\\u00e9'\nm: int | None = None\nn: int | None = 4\nitems = [1]\nprint(f'', f'{x}', f'{x:>5}', f'{f:.2f}', f'{b}', f'{b:d}', f'{s:^7}', f'{m}', f'{m:>4}', f'{n:03}', f'{items}', f'{items:}', f'{P():}', f'{x!s}', f'{s!r:>8}', f'{s!a}', f'{x = }', f'{f=:.1e}', f'{x:{x}}', f'{{}}')\n",
     "def check(n: int) -> int:\n    if n < 0:\n        raise ValueError('negative', n, [n])\n    return n\ne: LookupError = KeyError('k')\nprint(e, repr(e), f'{e}', type(e), [e], check(1))\nraise RuntimeError('r') from e\n",
     "def fail() -> str:\n    raise TypeError from None\nraise NotImplementedError\n",
+    "def sign(b: bool) -> int:\n    if b:\n        return 1\n    else:\n        return -1\nprint(sign(True), sign(False))\n",
+    "def first(items: list[int]) -> int:\n    try:\n        return items[0]\n    except KeyError:\n        return -1\n    except LookupError as e:\n        print(repr(e))\n    return 0\ntotal = 0\nfor n in [1, 0, 2]:\n    try:\n        total += 10 // n\n    except ZeroDivisionError as e:\n        print(e)\n        continue\n    except:\n        break\n    else:\n        print(total)\ntry:\n    print(first([]))\nexcept ValueError:\n    raise\n",
 ];
 
 #[test]

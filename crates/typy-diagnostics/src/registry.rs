@@ -188,6 +188,11 @@ pub const CODES: &[CodeInfo] = &[
         "call of an exception class TyPy does not let a program build",
         RuleId::EXC_12,
     ),
+    active(
+        418,
+        "`except` clause that names something other than exception classes",
+        RuleId::EXC_09,
+    ),
     active(701, "C toolchain program not found", RuleId::A_01),
     active(702, "link failed", RuleId::A_01),
     CodeInfo {

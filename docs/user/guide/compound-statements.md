@@ -1,14 +1,15 @@
 # Compound statements
 
-## What TyPy 0.2 accepts
+## What TyPy accepts
 
 | Item | Rule |
 | --- | --- |
 | `if`, `elif` and `else` | CST-01 |
 | `while` and `for`, each with an optional `else` | CST-02 |
 | `for` over `range`, `str`, `bytes`, `list`, `tuple`, `dict`, `set`, the views of a dict, and `enumerate`, `zip` and `reversed` of them | CST-03 |
+| `try` with `except` clauses and `else`, described in [Exceptions](exceptions.md) | CST-04 |
 
-`try` and `with` come in 0.3 (CST-04, CST-05), `match` in 0.5 (CST-06),
+`finally` and `with` come in 0.3 (CST-04, CST-05), `match` in 0.5 (CST-06),
 `for` over a class with `__iter__` in 0.3 (CST-08), and `iter` and `next`
 in 0.3 (CST-09).
 

@@ -76,9 +76,10 @@ impl FunctionLowerer<'_> {
                 self.release(lowered, *span);
             }
             TypedStmt::Return { value, span } => {
-                // A returned variable hands its slot's reference to the caller (MEM-04).
+                // A returned variable hands its slot's reference to the caller (MEM-04), unless
+                // an `except` clause is open, whose cleanup may release the variable's value.
                 let moved = match value.as_ref().map(|value| &value.kind) {
-                    Some(typy_check::TypedExprKind::Local(symbol)) => {
+                    Some(typy_check::TypedExprKind::Local(symbol)) if self.cleanups.is_empty() => {
                         let slot = self.slots[symbol];
                         (!self.borrowed.contains(&slot)).then_some(slot)
                     }
@@ -92,6 +93,7 @@ impl FunctionLowerer<'_> {
                     }
                     (None, _) => self.constant(Constant::Unit, *span),
                 };
+                self.run_cleanups(0, *span);
                 self.release_slots_but(moved, *span);
                 self.builder.terminate(Terminator::Return(value));
             }
@@ -149,14 +151,22 @@ impl FunctionLowerer<'_> {
             TypedStmt::Pass { .. } => {}
             TypedStmt::Break { span } => {
                 if let Some(targets) = self.loops.last().copied() {
+                    self.run_cleanups(targets.cleanups, *span);
                     self.jump_if_open(targets.break_target, *span);
                 }
             }
             TypedStmt::Continue { span } => {
                 if let Some(targets) = self.loops.last().copied() {
+                    self.run_cleanups(targets.cleanups, *span);
                     self.jump_if_open(targets.continue_target, *span);
                 }
             }
+            TypedStmt::Try {
+                body,
+                handlers,
+                orelse,
+                span,
+            } => self.try_statement(body, handlers, orelse, *span),
         }
     }
 
@@ -200,6 +210,7 @@ impl FunctionLowerer<'_> {
         self.loops.push(LoopTargets {
             break_target: exit,
             continue_target: header,
+            cleanups: self.cleanups.len(),
         });
         self.statements(body);
         self.loops.pop();
@@ -264,6 +275,7 @@ impl FunctionLowerer<'_> {
         self.loops.push(LoopTargets {
             break_target: exit,
             continue_target: advance,
+            cleanups: self.cleanups.len(),
         });
         self.statements(body);
         self.loops.pop();

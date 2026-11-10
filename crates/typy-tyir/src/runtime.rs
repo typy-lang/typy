@@ -174,6 +174,9 @@ pub enum RuntimeFunction {
     ExceptionHandled,
     ExceptionClass,
     ExceptionText,
+    ExceptionMatches,
+    ExceptionEnter,
+    ExceptionLeave,
     FormatInt,
     FormatBool,
     FormatFloat,
@@ -210,7 +213,7 @@ const FLOAT_FLOAT: &[TyirType] = &[TyirType::Float, TyirType::Float];
 
 impl RuntimeFunction {
     /// Every runtime function.
-    pub const ALL: [Self; 171] = [
+    pub const ALL: [Self; 174] = [
         Self::IntFloorDivide,
         Self::IntModulo,
         Self::IntPower,
@@ -376,6 +379,9 @@ impl RuntimeFunction {
         Self::ExceptionHandled,
         Self::ExceptionClass,
         Self::ExceptionText,
+        Self::ExceptionMatches,
+        Self::ExceptionEnter,
+        Self::ExceptionLeave,
         Self::FormatInt,
         Self::FormatBool,
         Self::FormatFloat,
@@ -538,6 +544,11 @@ impl RuntimeFunction {
             Self::ExceptionHandled => signature(&[], EXCEPTION, false),
             Self::ExceptionClass => signature(&[EXCEPTION], TYPE, false),
             Self::ExceptionText => signature(&[EXCEPTION, Int], STR, true),
+            Self::ExceptionMatches => signature(&[EXCEPTION, TYPE], Bool, false),
+            // The exception handled before is null or borrowed, so it travels as bits and is
+            // never counted.
+            Self::ExceptionEnter => signature(&[EXCEPTION], Bits, false),
+            Self::ExceptionLeave => signature(&[Bits], Unit, false),
             Self::FormatInt | Self::FormatBool => signature(&[Int, STR], STR, true),
             Self::FormatFloat => signature(&[Float, STR], STR, true),
             Self::FormatStr => signature(&[STR, STR], STR, true),
@@ -737,6 +748,9 @@ impl RuntimeFunction {
             Self::ExceptionHandled => "exception_handled",
             Self::ExceptionClass => "exception_class",
             Self::ExceptionText => "exception_text",
+            Self::ExceptionMatches => "exception_matches",
+            Self::ExceptionEnter => "exception_enter",
+            Self::ExceptionLeave => "exception_leave",
             Self::FormatInt => "format_int",
             Self::FormatBool => "format_bool",
             Self::FormatFloat => "format_float",

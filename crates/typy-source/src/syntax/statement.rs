@@ -46,6 +46,19 @@ pub struct Alias {
     pub as_name: Option<Identifier>,
 }
 
+/// One `except` clause of a `try` statement.
+#[derive(Clone, Debug, PartialEq)]
+pub struct ExceptHandler {
+    /// What the clause catches: a class, a tuple of classes, or nothing for a bare `except`.
+    pub class: Option<Expr>,
+    /// The name after `as`, if any.
+    pub name: Option<Identifier>,
+    /// The clause's body.
+    pub body: Vec<Stmt>,
+    /// The whole clause.
+    pub span: Span,
+}
+
 /// A statement.
 #[derive(Clone, Debug, PartialEq)]
 #[allow(
@@ -130,6 +143,14 @@ pub enum Stmt {
         value: Expr,
         span: Span,
     },
+    /// `try` with its `except` clauses, its `else` block and its `finally` block.
+    Try {
+        body: Vec<Stmt>,
+        handlers: Vec<ExceptHandler>,
+        orelse: Vec<Stmt>,
+        finalbody: Vec<Stmt>,
+        span: Span,
+    },
     /// `raise`, `raise exception` or `raise exception from cause`.
     Raise {
         exception: Option<Expr>,
@@ -152,6 +173,27 @@ pub enum Stmt {
 }
 
 impl Stmt {
+    /// Returns the blocks of a `try` statement in source order: its body, the body of each
+    /// `except` clause, its `else` block and its `finally` block; none for another statement.
+    #[must_use]
+    pub fn try_blocks(&self) -> Vec<&[Self]> {
+        let Self::Try {
+            body,
+            handlers,
+            orelse,
+            finalbody,
+            ..
+        } = self
+        else {
+            return Vec::new();
+        };
+        let mut blocks = vec![body.as_slice()];
+        blocks.extend(handlers.iter().map(|handler| handler.body.as_slice()));
+        blocks.push(orelse);
+        blocks.push(finalbody);
+        blocks
+    }
+
     /// Returns the span of the whole statement.
     #[must_use]
     pub fn span(&self) -> Span {
@@ -169,6 +211,7 @@ impl Stmt {
             | Self::ImportFrom { span, .. }
             | Self::Expr { span, .. }
             | Self::Raise { span, .. }
+            | Self::Try { span, .. }
             | Self::Pass { span }
             | Self::Break { span }
             | Self::Continue { span }

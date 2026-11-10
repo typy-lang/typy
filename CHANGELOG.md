@@ -19,9 +19,23 @@ All notable changes to TyPy are recorded here. The format follows
 - `str`, `repr`, `print` and f-strings of an exception give CPython's text,
   computed from its arguments; `repr` of a `UnicodeDecodeError` shows its
   five arguments (EXC-08).
+- `try` with `except` clauses and `else`: `except C`, `except (A, B)`,
+  `except C as name` and a bare `except`. A clause catches its classes and
+  every class derived from them, the name after `as` is deleted when the
+  clause ends, and a bare `raise` inside a clause re-raises the exception.
+  An exception raised while another is handled keeps it as its context,
+  and an uncaught one prints it first (CST-04, EXC-01, EXC-04, EXC-07,
+  EXC-09).
+- E0418 for an `except` clause that names something other than exception
+  classes (EXC-09).
 - E0415 for `raise` of a value that is not an exception, E0416 for a bare
   `raise` outside an `except` clause, and E0417 for a call of
   `UnicodeDecodeError` or `UnicodeEncodeError` (EXC-07, EXC-12).
+
+### Fixed
+
+- A function that returns a value on both branches of an `if` and `else`,
+  with nothing after them, compiles; it stopped with E9001.
 
 ## [0.2.0] - 2026-11-10
 

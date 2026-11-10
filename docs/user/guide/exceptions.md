@@ -1,8 +1,9 @@
 # Exceptions
 
 Exceptions are standard Python exceptions. You raise them with `raise`,
-build them by calling an exception class, and an exception nothing catches
-ends the program as CPython ends it.
+catch them with `try` and `except`, build them by calling an exception
+class, and an exception nothing catches ends the program as CPython ends
+it.
 
 ## What TyPy accepts
 
@@ -10,15 +11,29 @@ ends the program as CPython ends it.
 | --- | --- |
 | `raise` with an exception, or with a class, which is called with no arguments | SMT-06 |
 | `raise ... from cause` and `raise ... from None` | EXC-04 |
+| `try` with `except` clauses and `else` | CST-04 |
+| `except C`, `except (A, B)`, `except C as name` and a bare `except` | EXC-01, EXC-09 |
+| A bare `raise` inside an `except` clause, which re-raises the exception | EXC-07 |
 | The built-in exception classes below, as values, annotations and calls | EXC-02, EXC-10 |
 | An exception stored where one of its bases is declared | EXC-01 |
 | `str`, `repr`, `print` and f-strings of an exception, from its arguments | EXC-08 |
 | `type(e)`, the class the exception was made from | CLS-12 |
 
-An uncaught exception prints a traceback on standard error whose last line
+An `except` clause catches an exception of the class it names or of any
+class derived from it, so `except LookupError` catches a `KeyError`. The
+clauses are tried in order. The name after `as` holds the exception while
+the clause runs and is deleted when it ends, as in CPython; with several
+classes it has the type of their nearest common base. An exception no
+clause catches goes on to the code around the `try`. `else` runs when the
+body raised nothing.
+
+An exception raised while another is handled keeps it as its context. An
+uncaught exception prints a traceback on standard error whose last line
 matches CPython's, and the program exits with status 1 (STD-05). A cause
 named with `from` is printed first, followed by `The above exception was
-the direct cause of the following exception:`, as CPython prints it.
+the direct cause of the following exception:`, and a context is printed
+first, followed by `During handling of the above exception, another
+exception occurred:`, as CPython prints them.
 
 ## Built-in exception classes
 
@@ -49,9 +64,17 @@ def withdraw(balance: int, amount: int) -> int:
     return balance - amount
 
 
+def try_withdraw(balance: int, amount: int) -> int:
+    try:
+        return withdraw(balance, amount)
+    except ValueError as error:
+        print("refused:", error)
+        return balance
+
+
 error: LookupError = KeyError("owner")
 print(error, repr(error), type(error).__name__)
-print(withdraw(10, 3))
+print(try_withdraw(10, 3), try_withdraw(10, 30))
 ```
 
 ## What TyPy refuses
@@ -64,21 +87,22 @@ fails with E0415:
 raise "insufficient funds"
 ```
 
-A bare `raise` re-raises the exception being handled, so it is refused
-outside an `except` clause with E0416. `UnicodeDecodeError` and
+An `except` clause names classes, so `except "ValueError":` fails with
+E0418. A bare `raise` re-raises the exception being handled, so it is
+refused outside an `except` clause with E0416. `UnicodeDecodeError` and
 `UnicodeEncodeError` take five arguments that TyPy does not check, so a
 program cannot call them (E0417); it can still catch them.
 
 ## Planned
 
-`try`, `except`, `else` and `finally` come in 0.3 (CST-04), with exception
-classes of your own (CLS-03, CLS-13, CLS-14) and `assert` (SMT-04):
+`finally` comes in 0.3 (CST-04), with exception classes of your own
+(CLS-03, CLS-13, CLS-14) and `assert` (SMT-04):
 
-<!-- typy-expect: rejected E0201 at 1:1 -->
+<!-- typy-expect: rejected E0201 at 4:5 -->
 ```python
 try:
     print(1)
-except ValueError:
+finally:
     print(2)
 ```
 

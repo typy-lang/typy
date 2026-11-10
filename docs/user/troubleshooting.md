@@ -227,6 +227,13 @@ exception to raise.
 TyPy does not check, so a program cannot call them (EXC-12). It can still
 catch them. Raise `ValueError` or a class of your own instead.
 
+## E0418: `except` clause that names something other than classes
+
+An `except` clause names one exception class, such as `except KeyError:`,
+or a tuple of them, such as `except (KeyError, IndexError):` (EXC-09). An
+instance, a string or a variable that holds a class is refused. Name the
+class itself.
+
 ## E0701: C toolchain program not found
 
 TyPy links programs with the system C toolchain, which is not installed

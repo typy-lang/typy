@@ -71,6 +71,8 @@ impl RuleId {
     pub const EXC_01: Self = Self("EXC-01");
     /// A `raise` without an expression shall re-raise the exception being handled, and shall be rejected outside an `except` clause.
     pub const EXC_07: Self = Self("EXC-07");
+    /// An `except` clause shall name one exception class or a tuple of them, with or without `as`, or none for a bare `except`; any other expression shall be rejected.
+    pub const EXC_09: Self = Self("EXC-09");
     /// Calling `UnicodeDecodeError` or `UnicodeEncodeError`, or deriving a class from them, shall be rejected; catching them shall be accepted.
     pub const EXC_12: Self = Self("EXC-12");
     /// `+`, `-`, `*`, `/`, `//`, `%` and `**` shall give Python's results for `int` and `float`, including `/` on two `int` values returning `float` and `%` taking the sign of the divisor.
@@ -216,6 +218,7 @@ impl RuleId {
         Self::DAT_17,
         Self::EXC_01,
         Self::EXC_07,
+        Self::EXC_09,
         Self::EXC_12,
         Self::EXP_02,
         Self::EXP_04,

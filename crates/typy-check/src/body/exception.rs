@@ -2,11 +2,12 @@
 //! ADR-0013).
 
 use typy_diagnostics::{Diagnostic, DiagnosticCode, RuleId, Span};
-use typy_source::syntax::{Constant, Expr, Keyword};
+use typy_source::syntax::{Constant, ExceptHandler, Expr, Keyword, Stmt};
 
 use super::BodyChecker;
-use crate::exception::{BuiltinException, ExceptionClass};
-use crate::typed::{RaiseCause, TypedExpr, TypedExprKind, TypedStmt};
+use super::flow::{Fact, meet};
+use crate::exception::{BuiltinException, ExceptionClass, common_base};
+use crate::typed::{RaiseCause, SymbolKind, TypedExpr, TypedExprKind, TypedHandler, TypedStmt};
 use crate::types::{Type, TypeObjectOf};
 
 impl BodyChecker<'_> {
@@ -144,5 +145,124 @@ impl BodyChecker<'_> {
             Type::Exception(class),
             span,
         )
+    }
+
+    /// Checks `try` with its `except` clauses and its `else` block. The body may stop at any
+    /// statement, so each clause starts from what held before the body, less what the body
+    /// may have set to `None`; `else` follows the body.
+    pub(super) fn try_statement(
+        &mut self,
+        body: &[Stmt],
+        handlers: &[ExceptHandler],
+        orelse: &[Stmt],
+        finalbody: &[Stmt],
+        span: Span,
+    ) -> TypedStmt {
+        if let Some(first) = finalbody.first() {
+            self.diagnostics.push(
+                Diagnostic::new(
+                    DiagnosticCode::error(201),
+                    first.span(),
+                    "`finally` clauses are planned for TyPy 0.3 (CST-04)",
+                )
+                .with_rule(RuleId::CST_04),
+            );
+        }
+        let before = self.assigned.clone();
+        let typed_body = self.block(body);
+        let orelse = self.block(orelse);
+        let mut ends = self.assigned.take();
+        let mut typed_handlers = Vec::new();
+        for handler in handlers {
+            self.assigned.clone_from(&before);
+            self.forget_not_none(body);
+            typed_handlers.push(self.handler(handler));
+            ends = meet(ends, self.assigned.take());
+        }
+        self.assigned = ends;
+        TypedStmt::Try {
+            body: typed_body,
+            handlers: typed_handlers,
+            orelse,
+            span,
+        }
+    }
+
+    /// Checks one `except` clause. Its name is a variable of the clause alone, as CPython
+    /// deletes it when the clause ends, so a variable of that name outside is unassigned after.
+    fn handler(&mut self, handler: &ExceptHandler) -> TypedHandler {
+        let classes = self.handler_classes(handler.class.as_ref());
+        let bound = handler.name.as_ref().map(|name| {
+            let ty = Type::Exception(common_base(&classes));
+            let symbol =
+                self.program
+                    .add_symbol(&name.name, SymbolKind::Local, ty.clone(), name.span);
+            self.local_order.push(symbol);
+            self.types.insert(symbol, ty);
+            if let Some(known) = &mut self.assigned {
+                known.insert(Fact::Assigned(symbol));
+            }
+            let outer = self.locals.insert(name.name.clone(), symbol);
+            (name.name.clone(), symbol, outer)
+        });
+        self.handling += 1;
+        let body = self.block(&handler.body);
+        self.handling -= 1;
+        let name = bound.map(|(name, symbol, outer)| {
+            match outer {
+                Some(outer) => {
+                    self.locals.insert(name, outer);
+                    if let Some(known) = &mut self.assigned {
+                        known.remove(&Fact::Assigned(outer));
+                    }
+                }
+                None => {
+                    self.locals.remove(&name);
+                }
+            }
+            symbol
+        });
+        TypedHandler {
+            classes,
+            name,
+            body,
+            span: handler.span,
+        }
+    }
+
+    /// Returns the classes an `except` clause names: one, a tuple of them, or `BaseException`
+    /// for a bare `except`. Anything else is E0418 (EXC-09).
+    fn handler_classes(&mut self, class: Option<&Expr>) -> Vec<ExceptionClass> {
+        let Some(class) = class else {
+            return vec![ExceptionClass::Builtin(BuiltinException::BaseException)];
+        };
+        let named: Vec<&Expr> = match class {
+            Expr::Tuple { elements, .. } => elements.iter().collect(),
+            other => vec![other],
+        };
+        named
+            .into_iter()
+            .filter_map(|expression| {
+                let value = self.expression(expression);
+                if let Type::TypeObject(Some(of)) = &value.ty
+                    && let TypeObjectOf::Exception(class) = of.as_ref()
+                {
+                    return Some(class.clone());
+                }
+                if value.ty == Type::Error {
+                    return None;
+                }
+                let message = format!(
+                    "an `except` clause names exception classes, and this is {}",
+                    value.ty.with_article()
+                );
+                self.diagnostics.push(
+                    Diagnostic::new(DiagnosticCode::error(418), value.span, message)
+                        .with_rule(RuleId::EXC_09)
+                        .with_help("name a class such as `ValueError`, or a tuple of classes"),
+                );
+                None
+            })
+            .collect()
     }
 }

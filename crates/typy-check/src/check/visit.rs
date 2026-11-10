@@ -47,6 +47,14 @@ pub(super) fn visit_statement(statement: &Stmt, visit: &mut dyn FnMut(&Expr)) {
                 .chain(orelse)
                 .for_each(|inner| visit_statement(inner, visit));
         }
+        Stmt::Try { handlers, .. } => {
+            for class in handlers.iter().filter_map(|handler| handler.class.as_ref()) {
+                visit_expression(class, visit);
+            }
+            for inner in statement.try_blocks().into_iter().flatten() {
+                visit_statement(inner, visit);
+            }
+        }
         _ => {}
     }
 }

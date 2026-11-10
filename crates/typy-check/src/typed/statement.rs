@@ -162,6 +162,13 @@ pub enum TypedStmt {
         value: Option<TypedExpr>,
         span: Span,
     },
+    /// `try` with its `except` clauses and its `else` block (CST-04).
+    Try {
+        body: Vec<TypedStmt>,
+        handlers: Vec<TypedHandler>,
+        orelse: Vec<TypedStmt>,
+        span: Span,
+    },
     /// `raise exception`, with its cause; a class is called with no arguments first. A bare
     /// `raise`, with no exception, raises the one being handled again (SMT-06, EXC-07).
     Raise {
@@ -219,4 +226,18 @@ pub enum RaiseCause {
     None,
     /// `from cause`: an exception, or a class called with no arguments.
     Exception(TypedExpr),
+}
+
+/// One `except` clause: the classes it catches, in order, with `BaseException` for a bare
+/// `except`; the name it binds, for its body only; and its body (EXC-01, EXC-09).
+#[derive(Clone, Debug, PartialEq)]
+pub struct TypedHandler {
+    /// The classes the clause catches.
+    pub classes: Vec<crate::exception::ExceptionClass>,
+    /// The variable `as` binds, which holds the exception while the body runs.
+    pub name: Option<SymbolId>,
+    /// The clause's body.
+    pub body: Vec<TypedStmt>,
+    /// The whole clause.
+    pub span: Span,
 }

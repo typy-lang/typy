@@ -116,6 +116,13 @@ impl BodyChecker<'_> {
                 cause,
                 span,
             } => self.raise_statement(exception.as_ref(), cause.as_ref(), *span),
+            Stmt::Try {
+                body,
+                handlers,
+                orelse,
+                finalbody,
+                span,
+            } => self.try_statement(body, handlers, orelse, finalbody, *span),
             Stmt::If {
                 test,
                 body,
@@ -419,6 +426,11 @@ fn assigned_names<'tree>(statements: &'tree [Stmt], names: &mut BTreeSet<&'tree 
             Stmt::While { body, orelse, .. } | Stmt::If { body, orelse, .. } => {
                 assigned_names(body, names);
                 assigned_names(orelse, names);
+            }
+            Stmt::Try { .. } => {
+                for block in statement.try_blocks() {
+                    assigned_names(block, names);
+                }
             }
             _ => {}
         }

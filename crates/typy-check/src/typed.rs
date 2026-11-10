@@ -17,5 +17,5 @@ pub use expression::{Argument, Conversion, FStringPart, FormattedValue, TypedExp
 pub use function::{FunctionId, TypedFunction};
 pub use program::TypedProgram;
 pub use signature::{FunctionSignature, SignatureParameter};
-pub use statement::{AssignTarget, Generator, LoopSource, RaiseCause, TypedStmt};
+pub use statement::{AssignTarget, Generator, LoopSource, RaiseCause, TypedHandler, TypedStmt};
 pub use symbol::{Symbol, SymbolId, SymbolKind};

@@ -157,6 +157,14 @@ impl Walker {
                 self.block(body, place);
                 self.block(orelse, place);
             }
+            Stmt::Try { handlers, .. } => {
+                for class in handlers.iter().filter_map(|handler| handler.class.as_ref()) {
+                    self.expression(class);
+                }
+                for block in statement.try_blocks() {
+                    self.block(block, place);
+                }
+            }
             Stmt::Import {
                 is_lazy: true,
                 span,

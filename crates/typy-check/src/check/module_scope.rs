@@ -41,6 +41,11 @@ pub(super) fn module_variables(statements: &[Stmt], names: &mut BTreeMap<String,
                 module_variables(body, names);
                 module_variables(orelse, names);
             }
+            Stmt::Try { .. } => {
+                for block in statement.try_blocks() {
+                    module_variables(block, names);
+                }
+            }
             _ => {}
         }
     }

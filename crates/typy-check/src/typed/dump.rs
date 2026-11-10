@@ -221,6 +221,29 @@ impl Dump<'_> {
                 cause,
                 span,
             } => self.raise_statement(depth, exception.as_ref(), cause, *span),
+            TypedStmt::Try {
+                body,
+                handlers,
+                orelse,
+                span,
+            } => {
+                self.line(depth, "Try", *span);
+                self.block(depth + 1, "body", body);
+                for handler in handlers {
+                    let classes: Vec<String> =
+                        handler.classes.iter().map(ToString::to_string).collect();
+                    let name = handler.name.map_or(String::new(), |symbol| {
+                        format!(" as {}", self.program.symbol(symbol).name)
+                    });
+                    self.line(
+                        depth + 1,
+                        &format!("except {}{name}", classes.join(", ")),
+                        handler.span,
+                    );
+                    self.block(depth + 2, "body", &handler.body);
+                }
+                self.block(depth + 1, "orelse", orelse);
+            }
             TypedStmt::Pass { span } => self.line(depth, "Pass", *span),
             TypedStmt::Break { span } => self.line(depth, "Break", *span),
             TypedStmt::Continue { span } => self.line(depth, "Continue", *span),

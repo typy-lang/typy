@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy detailed design |
-| Version | 1.44 |
+| Version | 1.45 |
 | Status | Approved |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-10 |
@@ -798,6 +798,20 @@ only inside an `except` clause, E0416 (EXC-07). Like `return`, `raise`
 makes the point after it unreachable for the flow state, so a function
 that ends with it needs no `return`.
 
+`try` gives `TypedStmt::Try { body, handlers, orelse }`, with one
+`TypedHandler { classes, name, body }` per `except` clause. A clause names
+an exception class or a tuple of them, and a bare `except` catches
+`BaseException`; anything else is E0418 (EXC-09). The name after `as` is a
+new symbol of the clause alone, whose type is the nearest common base of
+the classes, so two clauses may bind one name to different classes; when
+the clause ends the name is unbound again, and a variable of that name
+outside the clause counts as unassigned after it, as CPython deletes the
+name. The body may stop at any statement, so each clause starts from the
+flow state before the `try`, less the `NotNone` facts of variables the
+body assigns; `else` continues from the end of the body, and the state
+after the `try` is the meet of the ends of `else` and of every clause.
+A bare `raise` is accepted inside a clause. `finally` is planned, E0201.
+
 `TypedStmt::AugAssign` takes an `AssignTarget`: a name, or an item of a list,
 `xs[i] += 1`. An item of a `str` or a tuple cannot be assigned, E0401, and the
 result must have the item type, E0402.
@@ -1040,6 +1054,7 @@ graph, symbol names and the string pool.
 | Ranges | A `range` source evaluates its arguments once, in order, and raises `ValueError` for a step that is not a nonzero constant and is zero. It keeps a counter, a limit and the step, and gives each value with a reference of its own before the counter moves on. `reversed(range(...))` starts from `typy_rt_range_last` and steps back to `start - step`, as CPython's `range_reverse` does |
 | Classes | `Class(arguments)` evaluates the arguments, makes the instance, then calls `__init__` with the instance first. An attribute is read with `Field`, borrowed from the instance, and gets a reference of its own when the instance is a temporary. Assigning an attribute evaluates the value, then the instance, stores the value with `SetField` and releases the value the attribute held; `object.attribute op= value` reads the attribute once, with a reference of its own, before the value. `str` of an instance calls `__str__`, then `__repr__`, and `repr` calls `__repr__`; a class with neither is written by `typy_rt_instance_text`. `==`, `!=`, `is` and `is not` on instances are `Identical`, and an instance is true. A slot of a class type starts as `NoInstance` |
 | f-strings | The pieces are joined left to right with `str_concat`. A field evaluates its value; with a conversion it is written by `str`, `repr` or `repr` and `ascii`, and then formatted as a `str` when a specification follows. Without a conversion a field with no specification is `str(value)`, and one with a specification calls the formatter of the value's type: `format_int`, `format_bool` with the `bool` as an `int` word, `format_float` or `format_str`, an optional value branching on `IsNone`, and any other type `format_other` with its `str` and its type's name. The specification is itself an f-string, evaluated after the value, as CPython evaluates it |
+| `try` | The lowerer keeps a stack of `Cleanup`s. A `try` body pushes `Handlers { dispatch }`, so the error path of a call inside it releases the live temporaries, runs the cleanups opened inside the body and jumps to `dispatch` with the exception; an error path outside every `try` body releases the slots and returns the exception. `dispatch` tests the clauses in order with `exception_matches` against each class. A matching clause calls `exception_enter`, keeps the result, and stores the exception in its variable or holds it, then pushes `Handling { previous, exception }`. Leaving the clause, by its end, `return`, `break`, `continue` or an error, calls `exception_leave(previous)` and drops the exception: the variable is set to null and its value released. `break` and `continue` run the cleanups opened since their loop started, and `return` runs them all, after it has taken its own reference to the value it returns. An exception no clause matches takes the error path from after the `try`. `else` runs after the body, outside its clauses. A function that returns a value ends in `unreachable` where its body ends, since the checker rejects one that can reach its end |
 | Exceptions | A call of an exception class evaluates the arguments in order into a tuple and calls `exception_new` with the class, the tuple's descriptor and its address; the runtime copies the tuple and retains its items, and the tuple is released. `raise` evaluates the exception, or calls `exception_handled` for a bare `raise`, sets the cause with `exception_set_cause`, null for `from None`, then invokes `exception_throw`, which always returns the exception as an error, so the call's error path adds the line of the `raise` to the traceback and releases what the frame owns; the normal block is unreachable. `str` and `repr` of an exception call `exception_text`, which goes through the class's `str` and `repr`, and `type(e)` calls `exception_class` |
 | Type objects | `type(x)` evaluates `x`, releases it and gives the constant type object of its type; for an optional value it selects `NoneType` or its base's by `IsNone`. A type object is immortal and never counted. `str` and `repr` of one call `typy_rt_type_text`, `__name__` calls `typy_rt_type_name`, `==` and `is` are `Identical`, and a type object is true |
 | Optional values | `None` where `T \| None` is expected is the constant `NoneOf`, and a value of `T` is wrapped; wrapping and unwrapping hand the reference on with the value. `is None` and `is not None` on an optional value test `IsNone`, and on any other value are constants. `str`, `repr` and truth tests branch on `IsNone` and read the value only where it is not `None`, so a null object never reaches the runtime. An optional slot starts as `None`, and an optional parameter's default is `None` or its wrapped constant. `dict.get(key)` finds the key and wraps its value with a reference of its own, or gives `None` |

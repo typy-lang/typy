@@ -32,7 +32,9 @@ impl FunctionLowerer<'_> {
         }
     }
 
-    fn untrack(&mut self, value: ValueId) {
+    /// Stops tracking a value whose reference has gone elsewhere, such as an exception the
+    /// error path of a `raise` released.
+    pub(crate) fn untrack(&mut self, value: ValueId) {
         if let Some(position) = self
             .temporaries
             .iter()

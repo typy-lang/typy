@@ -69,6 +69,18 @@ fn statements(body: &[TypedStmt], callees: &mut BTreeSet<FunctionId>) {
             TypedStmt::Return {
                 value: Some(value), ..
             } => expression(value, callees),
+            TypedStmt::Try {
+                body,
+                handlers,
+                orelse,
+                ..
+            } => {
+                statements(body, callees);
+                for handler in handlers {
+                    statements(&handler.body, callees);
+                }
+                statements(orelse, callees);
+            }
             TypedStmt::Raise {
                 exception, cause, ..
             } => {
