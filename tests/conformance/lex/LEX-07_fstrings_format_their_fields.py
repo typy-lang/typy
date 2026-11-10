@@ -10,7 +10,7 @@ class Item:
         return f"Item({self.name!r}, {self.price}, {self.count})"
 
 
-items = [Item("tea", 3.5, 12), Item("café", 12.25, 3), Item("cake", 1234.5, 1500)]
+items = [Item("tea", 3.5, 12), Item("caf\u00e9", 12.25, 3), Item("cake", 1234.5, 1500)]
 width = 8
 for item in items:
     total = item.price * item.count
