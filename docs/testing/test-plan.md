@@ -3,10 +3,10 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy test plan |
-| Version | 0.17 |
+| Version | 0.18 |
 | Status | Draft |
 | Owner | typy-lang contributors |
-| Last updated | 2026-11-09 |
+| Last updated | 2026-11-10 |
 
 ## 1. Purpose
 
@@ -350,6 +350,7 @@ that the specification does not define.
 | CLS-07 | 0.4 | IT | `tests/conformance/cls/CLS-07_*.py` |
 | CLS-08 | 0.2 | IT | `tests/conformance/cls/CLS-08_*.py` |
 | CLS-09 | 0.4 | IT | `tests/conformance/cls/CLS-09_*.py` |
+| CLS-10 | 0.2 | UT, IT | `typy-runtime` type object unit tests; `tests/conformance/cls/CLS-10_*.py` |
 | GEN-01 | 0.4 | IT | `tests/conformance/gen/GEN-01_*.py` |
 | GEN-02 | 0.4 | IT | `tests/conformance/gen/GEN-02_*.py` |
 | GEN-03 | 0.4 | IT | `tests/conformance/gen/GEN-03_*.py` |

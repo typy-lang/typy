@@ -4,12 +4,10 @@
 //! says, and crosses the runtime's interface as the address of its bytes (ADR-0001, ADR-0009).
 
 use crate::Raising;
-use crate::header::{
-    BYTES_TYPE_ID, DICT_TYPE_ID, DICT_VIEW_TYPE_ID, LIST_TYPE_ID, ObjectHeader, SET_TYPE_ID,
-    STR_TYPE_ID, TUPLE_TYPE_ID,
-};
+use crate::header::ObjectHeader;
 use crate::string::StrObject;
 use crate::tuple::TupleType;
+use crate::type_object::type_of;
 use crate::word::inline;
 
 /// How a list stores its items. The compiler passes the code of the kind it chooses.
@@ -467,134 +465,89 @@ fn pointer(item: u64) -> *mut ObjectHeader {
     core::ptr::with_exposed_provenance_mut(usize::try_from(item).unwrap_or(0))
 }
 
-/// Returns whether a string, a list, a set or a dict is not empty.
-#[allow(
-    clippy::cast_ptr_alignment,
-    reason = "every object comes from malloc, aligned for every type, and starts with its header"
-)]
+/// Returns whether an object is true: with its type's test, or true when it has none.
 ///
 /// # Safety
 ///
-/// `object` points to a live string, list, set or dict.
+/// `object` points to a live object.
 unsafe fn object_is_true(object: *mut ObjectHeader) -> bool {
-    // SAFETY: the caller passes a live object; the type ID says which it is.
+    // SAFETY: the caller passes a live object, and its type's function takes it.
     unsafe {
-        match (*object).type_id {
-            STR_TYPE_ID | BYTES_TYPE_ID => (*object.cast::<StrObject>()).length != 0,
-            LIST_TYPE_ID | TUPLE_TYPE_ID => (*object.cast::<super::ListObject>()).length != 0,
-            SET_TYPE_ID => (*object.cast::<crate::set::SetObject>()).used != 0,
-            DICT_TYPE_ID => (*object.cast::<crate::dict::DictObject>()).used != 0,
-            DICT_VIEW_TYPE_ID => crate::dict::view_length(object.cast()) != 0,
-            _ => crate::libc::abort_with(b"typy runtime: a list holds an object it cannot test\n"),
+        match type_of(object).truth {
+            Some(truth) => truth(object),
+            None => true,
         }
     }
 }
 
-/// Returns the hash of a string, `bytes` or a `tuple[T, ...]`.
-#[allow(
-    clippy::cast_ptr_alignment,
-    reason = "every object comes from malloc, aligned for every type, and starts with its header"
-)]
+/// Returns the hash of an object of a hashable type.
 ///
 /// # Safety
 ///
-/// `object` points to a live string, `bytes` or sealed tuple.
+/// `object` points to a live object.
 unsafe fn object_hash(object: *mut ObjectHeader) -> i64 {
-    // SAFETY: the caller passes a live object; the type ID says which it is.
+    // SAFETY: the caller passes a live object, and its type's function takes it.
     unsafe {
-        match (*object).type_id {
-            STR_TYPE_ID | BYTES_TYPE_ID => crate::hash::text(object.cast::<StrObject>()),
-            TUPLE_TYPE_ID => {
-                let tuple = &*object.cast::<super::ListObject>();
-                let item_type = tuple.item_type();
-                let hashes = (0..tuple.length).map(|index| item_type.hash(tuple.item(index)));
-                crate::hash::tuple(hashes, tuple.length)
-            }
-            _ => crate::libc::abort_with(b"typy runtime: a hash was asked of a list\n"),
+        match type_of(object).hash {
+            Some(hash) => hash(object),
+            None => crate::libc::abort_with(
+                b"typy runtime: a hash was asked of an object without one\n",
+            ),
         }
     }
 }
 
-/// Returns `left == right` for two objects of one type: strings, lists, sets or dicts.
-#[allow(
-    clippy::cast_ptr_alignment,
-    reason = "every object comes from malloc, aligned for every type, and starts with its header"
-)]
+/// Returns `left == right` for two objects of one type; without a test of its own, a type's
+/// objects are equal only to themselves.
 ///
 /// # Safety
 ///
 /// Both point to live objects of one type.
 unsafe fn objects_equal(left: *mut ObjectHeader, right: *mut ObjectHeader) -> bool {
-    // SAFETY: the caller passes live objects; the type ID says which they are.
+    // SAFETY: the caller passes live objects of one type, and its function takes them.
     unsafe {
-        match (*left).type_id {
-            STR_TYPE_ID | BYTES_TYPE_ID => crate::string::typy_rt_str_compare(
-                left.cast::<StrObject>(),
-                right.cast::<StrObject>(),
-                inline(0).unwrap_or(1),
-            ),
-            LIST_TYPE_ID | TUPLE_TYPE_ID => super::typy_rt_list_equal(left.cast(), right.cast()),
-            SET_TYPE_ID => {
-                crate::set::typy_rt_set_compare(left.cast(), right.cast(), inline(0).unwrap_or(1))
-            }
-            DICT_TYPE_ID => crate::dict::typy_rt_dict_equal(left.cast(), right.cast()),
-            _ => {
-                crate::libc::abort_with(b"typy runtime: a list holds an object it cannot compare\n")
-            }
+        match type_of(left).equal {
+            Some(equal) => equal(left, right),
+            None => core::ptr::eq(left, right),
         }
     }
 }
 
-/// Returns whether two strings, two lists or two sets stand in the comparison `comparison`;
-/// sets order as subsets and supersets.
-#[allow(
-    clippy::cast_ptr_alignment,
-    reason = "every object comes from malloc, aligned for every type, and starts with its header"
-)]
+/// Returns whether two objects of one type stand in the comparison `comparison`; sets order as
+/// subsets and supersets.
+///
+/// # Safety
+///
+/// Both point to live objects of one ordered type.
 unsafe fn objects_order(
     left: *mut ObjectHeader,
     right: *mut ObjectHeader,
     comparison: i64,
 ) -> bool {
-    // SAFETY: the caller passes live objects; the type ID says which they are.
+    // SAFETY: the caller passes live objects of one type, and its function takes them.
     unsafe {
-        match (*left).type_id {
-            STR_TYPE_ID | BYTES_TYPE_ID => crate::string::typy_rt_str_compare(
-                left.cast::<StrObject>(),
-                right.cast::<StrObject>(),
-                comparison,
-            ),
-            LIST_TYPE_ID | TUPLE_TYPE_ID => {
-                super::typy_rt_list_compare(left.cast(), right.cast(), comparison)
+        match type_of(left).order {
+            Some(order) => order(left, right, comparison),
+            None => {
+                crate::libc::abort_with(b"typy runtime: a list holds an object it cannot order\n")
             }
-            SET_TYPE_ID => crate::set::typy_rt_set_compare(left.cast(), right.cast(), comparison),
-            _ => crate::libc::abort_with(b"typy runtime: a list holds an object it cannot order\n"),
         }
     }
 }
 
-/// Returns `repr(object)` for a string, a list, a set or a dict.
-#[allow(
-    clippy::cast_ptr_alignment,
-    reason = "every object comes from malloc, aligned for every type, and starts with its header"
-)]
+/// Returns `repr(object)` with the function of the object's type.
 ///
 /// # Safety
 ///
-/// `object` points to a live string, list, set or dict.
+/// `object` points to a live object.
 unsafe fn object_repr(object: *mut ObjectHeader) -> Raising<*mut StrObject> {
-    // SAFETY: the caller passes a live object; the type ID says which it is.
+    // SAFETY: the caller passes a live object, and its type's function takes it.
     unsafe {
-        match (*object).type_id {
-            STR_TYPE_ID => Raising::ok(crate::string::typy_rt_str_repr(object.cast::<StrObject>())),
-            BYTES_TYPE_ID => {
-                Raising::ok(crate::bytes::typy_rt_bytes_repr(object.cast::<StrObject>()))
+        match type_of(object).repr {
+            Some(repr) => repr(object),
+            None => {
+                crate::libc::abort_with(b"typy runtime: a list holds an object it cannot write\n")
             }
-            LIST_TYPE_ID | TUPLE_TYPE_ID => super::typy_rt_list_repr(object.cast()),
-            SET_TYPE_ID => crate::set::typy_rt_set_repr(object.cast()),
-            DICT_TYPE_ID => crate::dict::typy_rt_dict_repr(object.cast()),
-            DICT_VIEW_TYPE_ID => crate::dict::typy_rt_dict_view_text(object.cast()),
-            _ => crate::libc::abort_with(b"typy runtime: a list holds an object it cannot write\n"),
         }
     }
 }

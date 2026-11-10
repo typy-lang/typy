@@ -22,9 +22,9 @@ pub(crate) use methods::{
     typy_rt_list_insert, typy_rt_list_pop, typy_rt_list_remove,
 };
 pub(crate) use operations::join_reprs;
-#[cfg(test)]
-pub(crate) use operations::typy_rt_list_contains;
 pub(crate) use operations::{typy_rt_list_append, typy_rt_list_equal, typy_rt_list_repr};
+#[cfg(test)]
+pub(crate) use operations::{typy_rt_list_contains, typy_rt_list_new};
 pub(crate) use order::typy_rt_list_compare;
 #[cfg(test)]
 pub(crate) use order::{typy_rt_list_concat, typy_rt_list_repeat};

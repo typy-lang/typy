@@ -20,6 +20,8 @@ pub const SET_TYPE_ID: u32 = 7;
 pub const DICT_TYPE_ID: u32 = 8;
 /// The type ID of a view of a dict: its keys, values or items.
 pub const DICT_VIEW_TYPE_ID: u32 = 9;
+/// The type ID of a type object (ADR-0012).
+pub const TYPE_TYPE_ID: u32 = 10;
 
 /// The first 8 bytes of every heap object.
 #[repr(C)]

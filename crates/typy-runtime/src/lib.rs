@@ -33,6 +33,7 @@ mod slice;
 mod stack;
 mod string;
 mod tuple;
+mod type_object;
 mod version;
 mod word;
 mod zip;
