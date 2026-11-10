@@ -135,7 +135,11 @@ impl Converter<'_> {
             }
             ast::Stmt::With(node) => self.other_statement(NodeKind::With, node.range),
             ast::Stmt::Match(node) => self.other_statement(NodeKind::Match, node.range),
-            ast::Stmt::Raise(node) => self.other_statement(NodeKind::Raise, node.range),
+            ast::Stmt::Raise(node) => Stmt::Raise {
+                exception: node.exc.as_deref().map(|value| self.expression(value)),
+                cause: node.cause.as_deref().map(|value| self.expression(value)),
+                span,
+            },
             ast::Stmt::Try(node) if node.is_star => {
                 self.other_statement(NodeKind::TryStar, node.range)
             }

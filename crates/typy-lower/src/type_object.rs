@@ -27,6 +27,7 @@ fn reference(of: &TypeObjectOf) -> TypeObjectRef {
         TypeObjectOf::Object => RuntimeType::Object,
         TypeObjectOf::Type => RuntimeType::Type,
         TypeObjectOf::Instance(class, _) => return TypeObjectRef::Class(class.0),
+        TypeObjectOf::Exception(class) => return crate::exception::exception_class(class),
     })
 }
 
@@ -42,6 +43,7 @@ impl FunctionLowerer<'_> {
     pub(crate) fn type_of(&mut self, value: &TypedExpr, span: Span) -> Lowered {
         let lowered = self.expression(value);
         let result = match (&value.ty, TypeObjectOf::of(&value.ty)) {
+            (Type::Exception(_), _) => self.exception_type(&lowered, span),
             (_, Some(of)) => self.type_object(&of, span),
             (Type::Optional(inner), None) => {
                 let none = self.is_none(lowered, span);

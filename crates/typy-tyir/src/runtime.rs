@@ -168,6 +168,12 @@ pub enum RuntimeFunction {
     InstanceText,
     TypeText,
     TypeName,
+    ExceptionNew,
+    ExceptionSetCause,
+    ExceptionThrow,
+    ExceptionHandled,
+    ExceptionClass,
+    ExceptionText,
     FormatInt,
     FormatBool,
     FormatFloat,
@@ -204,7 +210,7 @@ const FLOAT_FLOAT: &[TyirType] = &[TyirType::Float, TyirType::Float];
 
 impl RuntimeFunction {
     /// Every runtime function.
-    pub const ALL: [Self; 165] = [
+    pub const ALL: [Self; 171] = [
         Self::IntFloorDivide,
         Self::IntModulo,
         Self::IntPower,
@@ -364,6 +370,12 @@ impl RuntimeFunction {
         Self::InstanceText,
         Self::TypeText,
         Self::TypeName,
+        Self::ExceptionNew,
+        Self::ExceptionSetCause,
+        Self::ExceptionThrow,
+        Self::ExceptionHandled,
+        Self::ExceptionClass,
+        Self::ExceptionText,
         Self::FormatInt,
         Self::FormatBool,
         Self::FormatFloat,
@@ -387,6 +399,7 @@ impl RuntimeFunction {
         const DICT: TyirType = TyirType::DICT;
         const VIEW: TyirType = TyirType::VIEW;
         const TYPE: TyirType = TyirType::TYPE;
+        const EXCEPTION: TyirType = TyirType::EXCEPTION;
         match self {
             Self::IntFloorDivide
             | Self::IntModulo
@@ -519,6 +532,12 @@ impl RuntimeFunction {
             Self::RangeLast => signature(&[Int, Int, Int], Int, false),
             Self::InstanceText => signature(&[Bits], STR, false),
             Self::TypeText | Self::TypeName => signature(&[TYPE], STR, false),
+            Self::ExceptionNew => signature(&[TYPE, Bits, Bits], EXCEPTION, false),
+            Self::ExceptionSetCause => signature(&[EXCEPTION, Bits], Unit, false),
+            Self::ExceptionThrow => signature(&[EXCEPTION], Unit, true),
+            Self::ExceptionHandled => signature(&[], EXCEPTION, false),
+            Self::ExceptionClass => signature(&[EXCEPTION], TYPE, false),
+            Self::ExceptionText => signature(&[EXCEPTION, Int], STR, true),
             Self::FormatInt | Self::FormatBool => signature(&[Int, STR], STR, true),
             Self::FormatFloat => signature(&[Float, STR], STR, true),
             Self::FormatStr => signature(&[STR, STR], STR, true),
@@ -712,6 +731,12 @@ impl RuntimeFunction {
             Self::InstanceText => "instance_text",
             Self::TypeText => "type_text",
             Self::TypeName => "type_name",
+            Self::ExceptionNew => "exception_new",
+            Self::ExceptionSetCause => "exception_set_cause",
+            Self::ExceptionThrow => "exception_throw",
+            Self::ExceptionHandled => "exception_handled",
+            Self::ExceptionClass => "exception_class",
+            Self::ExceptionText => "exception_text",
             Self::FormatInt => "format_int",
             Self::FormatBool => "format_bool",
             Self::FormatFloat => "format_float",
@@ -750,6 +775,7 @@ mod tests {
             RuntimeFunction::CheckStack,
             RuntimeFunction::IntToStr,
             RuntimeFunction::RangeCheckStep,
+            RuntimeFunction::ExceptionThrow,
         ];
         for function in raising {
             assert!(function.signature().may_raise, "{function:?}");

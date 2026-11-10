@@ -8,7 +8,7 @@ use typy_diagnostics::{SourceLookup, Span};
 use super::expression::{TypedExpr, TypedExprKind};
 use super::function::TypedFunction;
 use super::program::TypedProgram;
-use super::statement::{AssignTarget, LoopSource, TypedStmt};
+use super::statement::{AssignTarget, LoopSource, RaiseCause, TypedStmt};
 use super::symbol::SymbolId;
 
 /// Returns the program as text: each function with its signature and locals, then its body.
@@ -119,6 +119,7 @@ impl Dump<'_> {
         }
     }
 
+    #[allow(clippy::too_many_lines, reason = "one arm per statement kind")]
     fn statement(&mut self, depth: usize, statement: &TypedStmt) {
         match statement {
             TypedStmt::Assign {
@@ -215,9 +216,33 @@ impl Dump<'_> {
                 self.block(depth + 1, "body", body);
                 self.block(depth + 1, "orelse", orelse);
             }
+            TypedStmt::Raise {
+                exception,
+                cause,
+                span,
+            } => self.raise_statement(depth, exception.as_ref(), cause, *span),
             TypedStmt::Pass { span } => self.line(depth, "Pass", *span),
             TypedStmt::Break { span } => self.line(depth, "Break", *span),
             TypedStmt::Continue { span } => self.line(depth, "Continue", *span),
+        }
+    }
+
+    /// Writes `raise`, with `from` or `from None`, then the exception and the cause.
+    fn raise_statement(
+        &mut self,
+        depth: usize,
+        exception: Option<&TypedExpr>,
+        cause: &RaiseCause,
+        span: Span,
+    ) {
+        let (from, cause) = match cause {
+            RaiseCause::Absent => ("", None),
+            RaiseCause::None => (" from None", None),
+            RaiseCause::Exception(cause) => (" from", Some(cause)),
+        };
+        self.line(depth, &format!("Raise{from}"), span);
+        for value in exception.into_iter().chain(cause) {
+            self.expression(depth + 1, value);
         }
     }
 
@@ -232,6 +257,7 @@ impl Dump<'_> {
             TypedExprKind::BoolOp { operator, .. } => format!("BoolOp {operator:?}"),
             TypedExprKind::Compare { operators, .. } => format!("Compare {operators:?}"),
             TypedExprKind::IfExp { .. } => "IfExp".to_owned(),
+            TypedExprKind::NewException { class, .. } => format!("NewException {class}"),
             TypedExprKind::Call { function, .. } => {
                 format!("Call {}", self.program.function(*function).qualified_name)
             }
@@ -360,6 +386,7 @@ fn children(expression: &TypedExpr) -> Vec<&TypedExpr> {
         | TypedExprKind::TypeOf(object)
         | TypedExprKind::TypeName(object) => vec![object],
         TypedExprKind::TypeObject(_) => Vec::new(),
+        TypedExprKind::NewException { arguments, .. } => arguments.iter().collect(),
         TypedExprKind::FString(parts) => fstring_values(parts),
         TypedExprKind::Print { values, sep, end } => values
             .iter()

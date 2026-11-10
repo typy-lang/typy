@@ -212,6 +212,15 @@ impl Dump<'_> {
                 self.line(depth, "Expr", span);
                 self.expression(depth + 1, value);
             }
+            Stmt::Raise {
+                exception, cause, ..
+            } => {
+                let from = if cause.is_some() { " from" } else { "" };
+                self.line(depth, &format!("Raise{from}"), span);
+                for value in exception.iter().chain(cause) {
+                    self.expression(depth + 1, value);
+                }
+            }
             Stmt::Pass { .. } => self.line(depth, "Pass", span),
             Stmt::Break { .. } => self.line(depth, "Break", span),
             Stmt::Continue { .. } => self.line(depth, "Continue", span),

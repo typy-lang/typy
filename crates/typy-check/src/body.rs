@@ -5,6 +5,7 @@ mod call;
 mod class;
 mod comprehension;
 mod dict;
+mod exception;
 mod expression;
 mod flow;
 mod fstring;
@@ -55,6 +56,8 @@ pub(crate) struct BodyChecker<'program> {
     initializing: Option<class::Initializing>,
     /// Whether a use of the incomplete instance has been reported, so one cause gives one error.
     reported_incomplete: bool,
+    /// How many `except` clauses enclose the statement being checked, in this function.
+    handling: usize,
 }
 
 impl<'program> BodyChecker<'program> {
@@ -76,6 +79,7 @@ impl<'program> BodyChecker<'program> {
             returns,
             initializing: None,
             reported_incomplete: false,
+            handling: 0,
         }
     }
 

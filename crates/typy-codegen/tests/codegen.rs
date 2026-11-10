@@ -47,6 +47,8 @@ const PROGRAMS: &[&str] = &[
     "class T:\n    def __init__(self, pair: tuple[int, str], flag: bool, ratio: float) -> None:\n        self.pair = pair\n        self.flag = flag\n        self.ratio = ratio\n        self.maybe: bool | None = None\nt = T((1, 'x'), True, 0.5)\nt.maybe = False\nt.ratio /= 2.0\nprint(t.pair, t.flag, t.ratio, t.maybe, {t} == {t})\n",
     "class P:\n    pass\nx: int | None = None\nkinds = [int, P, type(P()), type(x)]\nprint(kinds, type(1) == int, int != str, P.__name__, type(x).__name__, bool(int), {str: 1}[type('a')], type({1: 1}.values()), object, type(int))\n",
     "class P:\n    pass\nx = 1\nf = 2.5\nb = True\ns = 'h\\u00e9'\nm: int | None = None\nn: int | None = 4\nitems = [1]\nprint(f'', f'{x}', f'{x:>5}', f'{f:.2f}', f'{b}', f'{b:d}', f'{s:^7}', f'{m}', f'{m:>4}', f'{n:03}', f'{items}', f'{items:}', f'{P():}', f'{x!s}', f'{s!r:>8}', f'{s!a}', f'{x = }', f'{f=:.1e}', f'{x:{x}}', f'{{}}')\n",
+    "def check(n: int) -> int:\n    if n < 0:\n        raise ValueError('negative', n, [n])\n    return n\ne: LookupError = KeyError('k')\nprint(e, repr(e), f'{e}', type(e), [e], check(1))\nraise RuntimeError('r') from e\n",
+    "def fail() -> str:\n    raise TypeError from None\nraise NotImplementedError\n",
 ];
 
 #[test]

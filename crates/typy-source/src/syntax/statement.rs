@@ -130,6 +130,12 @@ pub enum Stmt {
         value: Expr,
         span: Span,
     },
+    /// `raise`, `raise exception` or `raise exception from cause`.
+    Raise {
+        exception: Option<Expr>,
+        cause: Option<Expr>,
+        span: Span,
+    },
     Pass {
         span: Span,
     },
@@ -162,6 +168,7 @@ impl Stmt {
             | Self::Import { span, .. }
             | Self::ImportFrom { span, .. }
             | Self::Expr { span, .. }
+            | Self::Raise { span, .. }
             | Self::Pass { span }
             | Self::Break { span }
             | Self::Continue { span }

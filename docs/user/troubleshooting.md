@@ -208,6 +208,25 @@ The class has no attribute or method of that name, and an attribute
 cannot be added outside `__init__` (CLS-02). Declare the attribute in the
 class body or assign it in `__init__`.
 
+## E0415: `raise` of a value that is not an exception
+
+`raise` and `from` take an exception, such as `ValueError("bad input")`,
+or an exception class, which is called with no arguments (SMT-06). Raise
+an exception, not a message: `raise ValueError("bad input")` rather than
+`raise "bad input"`.
+
+## E0416: bare `raise` outside an `except` clause
+
+A `raise` with nothing after it raises the exception being handled again,
+so it belongs inside an `except` clause (EXC-07). Elsewhere, name the
+exception to raise.
+
+## E0417: exception class a program cannot build
+
+`UnicodeDecodeError` and `UnicodeEncodeError` take five arguments that
+TyPy does not check, so a program cannot call them (EXC-12). It can still
+catch them. Raise `ValueError` or a class of your own instead.
+
 ## E0701: C toolchain program not found
 
 TyPy links programs with the system C toolchain, which is not installed

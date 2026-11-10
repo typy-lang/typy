@@ -185,6 +185,20 @@ pub enum TypeObjectRef {
     Runtime(RuntimeType),
     /// The type object of class `n` of the module.
     Class(u32),
+    /// A built-in exception class of the runtime, by its name, such as `ValueError`.
+    Exception(&'static str),
+}
+
+impl TypeObjectRef {
+    /// Returns the runtime's symbol for the type object, or `None` for a class of the module.
+    #[must_use]
+    pub fn runtime_symbol(self) -> Option<String> {
+        match self {
+            Self::Runtime(ty) => Some(ty.symbol().to_owned()),
+            Self::Exception(name) => Some(format!("typy_rt_exception_{name}")),
+            Self::Class(_) => None,
+        }
+    }
 }
 
 /// The runtime's type objects that a program names.
@@ -239,6 +253,7 @@ impl fmt::Display for TypeObjectRef {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Runtime(ty) => formatter.write_str(ty.symbol()),
+            Self::Exception(name) => write!(formatter, "typy_rt_exception_{name}"),
             Self::Class(index) => write!(formatter, "class#{index}"),
         }
     }

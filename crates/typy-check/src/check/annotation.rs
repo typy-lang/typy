@@ -6,6 +6,7 @@ use std::collections::BTreeMap;
 use typy_diagnostics::{Diagnostic, DiagnosticCode, Diagnostics, RuleId};
 use typy_source::syntax::{Constant, Expr};
 
+use crate::exception::{BuiltinException, ExceptionClass};
 use crate::typed::ClassId;
 use crate::types::Type;
 
@@ -168,6 +169,9 @@ fn named_type(
         "dict" => {
             diagnostics.push(dict_arity(span));
             Type::Error
+        }
+        _ if let Some(class) = BuiltinException::named(id) => {
+            Type::Exception(ExceptionClass::Builtin(class))
         }
         _ => {
             diagnostics.push(

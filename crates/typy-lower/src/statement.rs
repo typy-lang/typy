@@ -95,6 +95,11 @@ impl FunctionLowerer<'_> {
                 self.release_slots_but(moved, *span);
                 self.builder.terminate(Terminator::Return(value));
             }
+            TypedStmt::Raise {
+                exception,
+                cause,
+                span,
+            } => self.raise_statement(exception.as_ref(), cause, *span),
             TypedStmt::If {
                 test,
                 body,

@@ -316,7 +316,10 @@ impl FunctionLowerer<'_> {
                     .value
             }
             TyirType::Object(typy_tyir::TypeId::BYTES) => self.bytes_constant(&[], span),
-            TyirType::Object(id) if id.class_index().is_some() => {
+            // An instance or exception slot starts as null, which counting passes over.
+            TyirType::Object(id)
+                if id.class_index().is_some() || id == typy_tyir::TypeId::EXCEPTION =>
+            {
                 self.constant(Constant::NoInstance(id), span)
             }
             // A type object slot starts as `object`, which is immortal.

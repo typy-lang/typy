@@ -173,6 +173,21 @@ pub const CODES: &[CodeInfo] = &[
         "attribute or method a class does not have",
         RuleId::CLS_02,
     ),
+    active(
+        415,
+        "`raise` or `from` of a value that is not an exception",
+        RuleId::SMT_06,
+    ),
+    active(
+        416,
+        "bare `raise` outside an `except` clause",
+        RuleId::EXC_07,
+    ),
+    active(
+        417,
+        "call of an exception class TyPy does not let a program build",
+        RuleId::EXC_12,
+    ),
     active(701, "C toolchain program not found", RuleId::A_01),
     active(702, "link failed", RuleId::A_01),
     CodeInfo {

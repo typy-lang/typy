@@ -37,6 +37,7 @@ impl FunctionLowerer<'_> {
             TyirType::TYPE => {
                 self.call_runtime(RuntimeFunction::TypeText, vec![lowered.value], span)
             }
+            TyirType::EXCEPTION => self.exception_text(lowered, false, span),
             TyirType::Object(_) => Self::borrowed(lowered.value, lowered.ty),
             TyirType::Bits => unreachable!("list items are converted before they are written"),
             TyirType::Unit => {
@@ -59,6 +60,8 @@ impl FunctionLowerer<'_> {
     pub(crate) fn repr_of(&mut self, lowered: Lowered, span: Span) -> Lowered {
         if lowered.ty == TyirType::STR {
             self.call_runtime(RuntimeFunction::StrRepr, vec![lowered.value], span)
+        } else if lowered.ty == TyirType::EXCEPTION {
+            self.exception_text(lowered, true, span)
         } else if let TyirType::Optional(_) = lowered.ty {
             self.optional_text(lowered, true, span)
         } else if let TyirType::Object(id) = lowered.ty

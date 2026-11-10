@@ -1,15 +1,16 @@
 # Simple statements
 
-## What TyPy 0.2 accepts
+## What TyPy accepts
 
 | Item | Rule |
 | --- | --- |
 | Assignment, annotated assignment and augmented assignment | SMT-01 |
 | Unpacking into several targets from a tuple or a list, nested as in Python | SMT-02 |
 | `pass`, `return`, `break` and `continue` | SMT-03 |
+| `raise`, described in [Exceptions](exceptions.md) | SMT-06 |
 
-`assert`, `del`, `raise`, `import` and `global` come in 0.3 (SMT-04 to
-SMT-08), and `nonlocal` in 1.0 (SMT-09).
+`assert`, `del`, `import` and `global` come in 0.3 (SMT-04, SMT-05,
+SMT-07, SMT-08), and `nonlocal` in 1.0 (SMT-09).
 
 ## Example
 

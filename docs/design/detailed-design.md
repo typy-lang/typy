@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy detailed design |
-| Version | 1.43 |
+| Version | 1.44 |
 | Status | Approved |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-10 |
@@ -778,6 +778,26 @@ objects holds `type`. The annotation `type` holds any type object and
 `type[X]` the one of `X`. `type` with three arguments makes a class while
 the program runs, E0202.
 
+Exceptions (ADR-0013) are `Type::Exception(ExceptionClass)`, written with
+the class name. `ExceptionClass::Builtin` holds a `BuiltinException`, one
+of the classes of EXC-02 and EXC-10, each with its CPython base, so
+`derives_from` walks the chain; an exception is assignable where its class
+or any base is declared. A class name read as a value is
+`TypeObjectOf::Exception`, and in an annotation it names the exception
+type. Calling a class takes positional arguments of any type and gives
+`TypedExprKind::NewException { class, arguments }`; a keyword is E0404,
+and a call of `UnicodeDecodeError` or `UnicodeEncodeError` is E0417
+(EXC-12). The type object of an exception is read when the program runs,
+since its class may derive from the static one, so `type(e)` has the type
+`type`. `raise` gives `TypedStmt::Raise { exception, cause }`: the
+exception is an exception, or a class, which becomes a `NewException`
+with no arguments; anything else is E0415. `from None` is
+`RaiseCause::None`, `from x` is `RaiseCause::Exception` under the same
+rule, and no `from` is `RaiseCause::Absent`. A bare `raise` is accepted
+only inside an `except` clause, E0416 (EXC-07). Like `return`, `raise`
+makes the point after it unreachable for the flow state, so a function
+that ends with it needs no `return`.
+
 `TypedStmt::AugAssign` takes an `AssignTarget`: a name, or an item of a list,
 `xs[i] += 1`. An item of a `str` or a tuple cannot be assigned, E0401, and the
 result must have the item type, E0402.
@@ -868,7 +888,9 @@ reference without releasing the old value, and `Identical { left, right }`
 compares two objects by address. A type object is `TyirType::TYPE`, and
 `Constant::TypeObject` is the address of a runtime type object, by the
 symbol of its `RuntimeType`, or of a class's. `Constant::NoInstance(id)`
-is the null address, the first value of a slot of a class type. An
+is the null address, the first value of a slot of a class or exception
+type. `TypeObjectRef::Exception(name)` is a runtime exception class, by
+the symbol `typy_rt_exception_` and its name. An
 optional `bool` is a byte; every other optional has its base's layout, and
 is counted as its base is. `TyirType` is `Copy`: a tuple type is a number
 in the module's `TupleTypes`, which interns each distinct list of item
@@ -1018,6 +1040,7 @@ graph, symbol names and the string pool.
 | Ranges | A `range` source evaluates its arguments once, in order, and raises `ValueError` for a step that is not a nonzero constant and is zero. It keeps a counter, a limit and the step, and gives each value with a reference of its own before the counter moves on. `reversed(range(...))` starts from `typy_rt_range_last` and steps back to `start - step`, as CPython's `range_reverse` does |
 | Classes | `Class(arguments)` evaluates the arguments, makes the instance, then calls `__init__` with the instance first. An attribute is read with `Field`, borrowed from the instance, and gets a reference of its own when the instance is a temporary. Assigning an attribute evaluates the value, then the instance, stores the value with `SetField` and releases the value the attribute held; `object.attribute op= value` reads the attribute once, with a reference of its own, before the value. `str` of an instance calls `__str__`, then `__repr__`, and `repr` calls `__repr__`; a class with neither is written by `typy_rt_instance_text`. `==`, `!=`, `is` and `is not` on instances are `Identical`, and an instance is true. A slot of a class type starts as `NoInstance` |
 | f-strings | The pieces are joined left to right with `str_concat`. A field evaluates its value; with a conversion it is written by `str`, `repr` or `repr` and `ascii`, and then formatted as a `str` when a specification follows. Without a conversion a field with no specification is `str(value)`, and one with a specification calls the formatter of the value's type: `format_int`, `format_bool` with the `bool` as an `int` word, `format_float` or `format_str`, an optional value branching on `IsNone`, and any other type `format_other` with its `str` and its type's name. The specification is itself an f-string, evaluated after the value, as CPython evaluates it |
+| Exceptions | A call of an exception class evaluates the arguments in order into a tuple and calls `exception_new` with the class, the tuple's descriptor and its address; the runtime copies the tuple and retains its items, and the tuple is released. `raise` evaluates the exception, or calls `exception_handled` for a bare `raise`, sets the cause with `exception_set_cause`, null for `from None`, then invokes `exception_throw`, which always returns the exception as an error, so the call's error path adds the line of the `raise` to the traceback and releases what the frame owns; the normal block is unreachable. `str` and `repr` of an exception call `exception_text`, which goes through the class's `str` and `repr`, and `type(e)` calls `exception_class` |
 | Type objects | `type(x)` evaluates `x`, releases it and gives the constant type object of its type; for an optional value it selects `NoneType` or its base's by `IsNone`. A type object is immortal and never counted. `str` and `repr` of one call `typy_rt_type_text`, `__name__` calls `typy_rt_type_name`, `==` and `is` are `Identical`, and a type object is true |
 | Optional values | `None` where `T \| None` is expected is the constant `NoneOf`, and a value of `T` is wrapped; wrapping and unwrapping hand the reference on with the value. `is None` and `is not None` on an optional value test `IsNone`, and on any other value are constants. `str`, `repr` and truth tests branch on `IsNone` and read the value only where it is not `None`, so a null object never reaches the runtime. An optional slot starts as `None`, and an optional parameter's default is `None` or its wrapped constant. `dict.get(key)` finds the key and wraps its value with a reference of its own, or gives `None` |
 | Builtins | Each builtin of 0.1 becomes runtime calls. `print` evaluates every argument in source order, then converts and writes each value. `min` and `max` keep the first value on a tie, as CPython does |
@@ -1084,7 +1107,7 @@ comparisons, calls and counting, terminators, and emission.
 | Type objects | The runtime exports its type objects as `typy_rt_object` and `typy_rt_type_` followed by `int`, `float`, `bool`, `str`, `bytes`, `none`, `list`, `tuple`, `set`, `dict`, `dict_keys`, `dict_values`, `dict_items` or `type`, and its exception classes as `typy_rt_exception_` followed by the class name, such as `typy_rt_exception_ValueError`. The type `type` hashes a type object by identity and writes it as `<class 'name'>`, or `<class 'module.Name'>` for a class |
 | Instance | Header, `class: ptr` to the class's type object, then the attributes laid out as the class's tuple descriptor says. `typy_rt_instance_new(class)` makes one with every attribute zero; the runtime frees it by releasing each attribute the descriptor counts. A class's type object is a private constant `typy.classN`, whose base is the runtime's `typy_rt_object`, whose hash is `typy_rt_identity_hash` and whose `repr` is `typy_rt_instance_repr`, or `typy.classN.repr`, which calls the class's `__repr__` and adds a null exception when it cannot raise |
 | Type object | Header, `name: ptr` to UTF-8 bytes, `name_length: u64`, `base: ptr` (null only for `object`), then five nullable function pointers with the C calling convention: `truth(object) -> bool`, `hash(object) -> i64`, `equal(left, right) -> bool`, `order(left, right, comparison) -> bool` and `repr(object) -> { str, exception }`, then `module: ptr` to UTF-8 bytes, `module_length: u64`, `fields: ptr` to the tuple descriptor of a class's attributes, null for the runtime's own types, and last `str(object) -> { str, exception }`, null when `str` is `repr`. An absent function means what it means for `object`: true, equal only to itself, and no hash, order or text. A class's `str` is `typy.classN.str`, which calls its `__str__`, or null when it has none. The runtime frees its own objects by type ID, so the type objects stay out of a program that never tests, compares or writes an object of unknown type (ADR-0012) |
-| Exception | Header, `class: ptr` at the offset an instance keeps its class, `message: ptr` to the `str` the runtime gave it or null, `arguments_type: ptr` to the tuple descriptor of the arguments the program built it with or null, `arguments: ptr` to them or null when there are none, the traceback, `cause: ptr`, `context: ptr` and `suppress_context: u64`, then a class's attributes as its descriptor lays them out (ADR-0013). `typy_rt_exception_new(class, arguments_type, arguments)` makes one and takes over the arguments' references |
+| Exception | Header, `class: ptr` at the offset an instance keeps its class, `message: ptr` to the `str` the runtime gave it or null, `arguments_type: ptr` to the tuple descriptor of the arguments the program built it with or null, `arguments: ptr` to them or null when there are none, the traceback, `cause: ptr`, `context: ptr` and `suppress_context: u64`, then a class's attributes as its descriptor lays them out (ADR-0013). `typy_rt_exception_new(class, arguments_type, arguments)` makes one with a copy of the arguments, whose items it retains |
 | `str` object | Header, `length: u64` in code points, `kind: u32` (1, 2 or 4 bytes per code point), 4 bytes of padding, then the code points |
 | Large integer | Header, `sign_and_length: i32`, 4 bytes of padding, then that many `u64` limbs, least significant first |
 | Constants | Strings, `bytes` and large integers are immortal static objects in read-only memory; a `bytes` constant is a one-byte `str` object with the `bytes` type ID |
@@ -1093,7 +1116,7 @@ comparisons, calls and counting, terminators, and emission.
 | A function that cannot raise | Returns its result directly |
 | `invoke` | When the exception is not null, generated code calls `typy_rt_traceback_add(exception, function, file, line)` with C strings, then takes the error path |
 | Entry | The runtime's `main` calls `__typy_main`, the body of `__main__` |
-| Runtime functions | `typy_rt_` and the name from TyIR's `RuntimeFunction`, plus `increment`, `decrement`, `int_increment`, `int_decrement`, `int_add`, `int_subtract`, `int_multiply`, `int_and`, `int_or`, `int_xor`, `int_negate`, `int_invert`, `int_compare`, `traceback_add`, `exception_new`, `exception_raise`, `exception_set_cause`, `exception_enter`, `exception_leave`, `exception_handled` and `exception_matches`, with the C calling convention |
+| Runtime functions | `typy_rt_` and the name from TyIR's `RuntimeFunction`, plus `increment`, `decrement`, `int_increment`, `int_decrement`, `int_add`, `int_subtract`, `int_multiply`, `int_and`, `int_or`, `int_xor`, `int_negate`, `int_invert`, `int_compare`, `traceback_add`, `exception_raise`, `exception_enter`, `exception_leave` and `exception_matches`, with the C calling convention. TyIR's `ExceptionNew`, `ExceptionSetCause`, `ExceptionThrow`, `ExceptionHandled`, `ExceptionClass` and `ExceptionText` are `exception_new(class, descriptor, arguments)`, `exception_set_cause(exception, cause)`, `exception_throw(exception)`, `exception_handled()`, `exception_class(exception)` and `exception_text(exception, repr)`; each borrows its arguments |
 
 In 0.1 every `int` operation calls the runtime. Inline fast paths for
 inline values come with the benchmarks of NFR-03.

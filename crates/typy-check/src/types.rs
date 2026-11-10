@@ -2,6 +2,8 @@
 
 use std::fmt;
 
+use crate::exception::{BuiltinException, ExceptionClass};
+
 /// The static type of a value (TYP-11). Types built from others, such as a tuple, hold their
 /// parts, and two types are equal when their structure is.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
@@ -36,6 +38,8 @@ pub enum Type {
     Optional(Box<Type>),
     /// An instance of a class of the program, with the class's name for messages (CLS-01).
     Instance(crate::typed::ClassId, String),
+    /// An exception of a class (ADR-0013).
+    Exception(ExceptionClass),
     /// A type object, of the type it stands for, or of any type when that is known only
     /// when the program runs, as for `type(x)` of an optional `x` (CLS-12).
     TypeObject(Option<Box<TypeObjectOf>>),
@@ -75,6 +79,8 @@ pub enum TypeObjectOf {
     Type,
     /// A class of the program, with its name.
     Instance(crate::typed::ClassId, String),
+    /// An exception class.
+    Exception(ExceptionClass),
 }
 
 impl TypeObjectOf {
@@ -102,7 +108,9 @@ impl TypeObjectOf {
             Type::DictView(view, ..) => Self::View(*view),
             Type::Instance(class, name) => Self::Instance(*class, name.clone()),
             Type::TypeObject(_) => Self::Type,
-            Type::Optional(_) | Type::Error => return None,
+            // An exception's class may derive from its static class, so it is read from the
+            // exception when the program runs.
+            Type::Exception(_) | Type::Optional(_) | Type::Error => return None,
         })
     }
 
@@ -121,7 +129,7 @@ impl TypeObjectOf {
             "dict" => Self::Dict,
             "object" => Self::Object,
             "type" => Self::Type,
-            _ => return None,
+            _ => Self::Exception(ExceptionClass::Builtin(BuiltinException::named(name)?)),
         })
     }
 
@@ -143,6 +151,7 @@ impl TypeObjectOf {
             Self::Object => "object",
             Self::Type => "type",
             Self::Instance(_, name) => name,
+            Self::Exception(class) => class.name(),
         }
     }
 }
@@ -211,6 +220,8 @@ impl Type {
             | (_, Self::Error)
             | (Self::NoneType, Self::Optional(_))
             | (Self::TypeObject(_), Self::TypeObject(None)) => true,
+            // An exception of a class is one of each of its bases (EXC-01).
+            (Self::Exception(class), Self::Exception(base)) => class.derives_from(base),
             (Self::Optional(_), _) => self.matches(target),
             (_, Self::Optional(inner)) => self.is_assignable_to(inner),
             _ => self.matches(target),
@@ -320,6 +331,7 @@ impl Type {
                 | Self::DictView(..)
                 | Self::Optional(_)
                 | Self::Instance(..)
+                | Self::Exception(_)
                 | Self::TypeObject(_),
                 _,
             )
@@ -330,6 +342,7 @@ impl Type {
                 | Self::DictView(..)
                 | Self::Optional(_)
                 | Self::Instance(..)
+                | Self::Exception(_)
                 | Self::TypeObject(_),
             ) => false,
             _ => self == other || (self.is_numeric() && other.is_numeric()),
@@ -387,6 +400,9 @@ impl Type {
             Self::Instance(_, name) if name.starts_with(['A', 'E', 'I', 'O', 'U']) => {
                 format!("an {name}")
             }
+            Self::Exception(class) if class.name().starts_with(['A', 'E', 'I', 'O', 'U']) => {
+                format!("an {class}")
+            }
             other => format!("a {other}"),
         }
     }
@@ -427,6 +443,7 @@ impl fmt::Display for Type {
             }
             Self::Optional(inner) => write!(formatter, "{inner} | None"),
             Self::Instance(_, name) => formatter.write_str(name),
+            Self::Exception(class) => write!(formatter, "{class}"),
             Self::TypeObject(Some(of)) => write!(formatter, "type[{}]", of.name()),
             Self::TypeObject(None) => formatter.write_str("type"),
             Self::Error => formatter.write_str("<error>"),

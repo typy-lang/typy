@@ -82,10 +82,18 @@ static TEXT_AND_INT: TupleType = TupleType {
     fields: TEXT_AND_INT_FIELDS.as_ptr(),
 };
 
-/// Returns an exception of `class` built from `words` laid out as `layout`.
+/// Returns an exception of `class` built from `words` laid out as `layout`, whose references
+/// pass to the exception.
 fn built(class: &TypeObject, layout: &TupleType, words: &[u64]) -> *mut ExceptionObject {
-    // SAFETY: the words are live items of the layout, whose references pass to the exception.
-    unsafe { typy_rt_exception_new(class, layout, words.as_ptr().cast()) }
+    // SAFETY: the words are live items of the layout; the exception retains its copy, and the
+    // test's references are released after.
+    unsafe {
+        let exception = typy_rt_exception_new(class, layout, words.as_ptr().cast());
+        if layout.length > 0 {
+            crate::tuple::release(layout, words.as_ptr().expose_provenance() as u64);
+        }
+        exception
+    }
 }
 
 /// Returns the item of a new `str`.
@@ -126,10 +134,7 @@ fn freeing_an_exception_releases_its_cause() {
     let cause = raise(ExceptionKind::ZeroDivisionError, "division by zero");
     let exception = raise(ExceptionKind::ValueError, "bad");
     // SAFETY: both exceptions are live, and the outer one takes a reference to its cause.
-    unsafe {
-        typy_rt_increment(cause.cast());
-        typy_rt_exception_set_cause(exception, cause);
-    }
+    unsafe { typy_rt_exception_set_cause(exception, cause) };
     release(&[exception]);
     assert_eq!(count(cause), 1);
     release(&[cause]);
@@ -337,13 +342,15 @@ fn a_new_cause_replaces_the_old_one() {
     let first = raise(ExceptionKind::KeyError, "'a'");
     let second = raise(ExceptionKind::KeyError, "'b'");
     let exception = raise(ExceptionKind::ValueError, "v");
-    // SAFETY: the exceptions are live, and each cause's reference passes to `exception`.
+    // SAFETY: the exceptions are live, and `exception` takes a reference to each cause.
     unsafe {
         typy_rt_exception_set_cause(exception, first);
         typy_rt_exception_set_cause(exception, second);
         assert_eq!((*exception).cause, second);
     }
     release(&[exception]);
+    assert_eq!((count(first), count(second)), (1, 1));
+    release(&[first, second]);
 }
 
 #[test]
@@ -515,4 +522,57 @@ fn fields_are_built_at_run_time_as_at_compile_time() {
     assert!(field.tuple.is_null());
     let class = super::classes::class_for_test("Probe");
     assert!(class.str.is_some() && class.repr.is_some());
+}
+
+#[test]
+fn throwing_gives_a_new_reference_with_the_handled_context() {
+    let handled = raise(ExceptionKind::KeyError, "'k'");
+    let exception = built(&VALUE_ERROR, &NOTHING, &[0]);
+    // SAFETY: both exceptions are live, and the handled one outlives the clause.
+    unsafe {
+        let previous = typy_rt_exception_enter(handled);
+        let thrown = super::typy_rt_exception_throw(exception);
+        typy_rt_exception_leave(previous);
+        assert_eq!(thrown, exception);
+        assert_eq!(count(exception), 2);
+        assert_eq!((*exception).context, handled);
+    }
+    release(&[exception, exception, handled]);
+}
+
+#[test]
+fn the_class_of_an_exception_is_its_type_object() {
+    let exception = raise(ExceptionKind::KeyError, "'k'");
+    // SAFETY: the exception is live.
+    let class = unsafe { super::typy_rt_exception_class(exception) };
+    assert!(core::ptr::eq(class, &raw const KEY_ERROR));
+    release(&[exception]);
+}
+
+/// A class with no functions of its own to write its objects.
+static PLAIN_ERROR: TypeObject = TypeObject::new("PlainError", &raw const VALUE_ERROR);
+
+/// A class whose `repr` is its only writer.
+static REPR_ERROR: TypeObject = TypeObject {
+    repr: Some(typy_rt_exception_repr),
+    ..TypeObject::new("ReprError", &raw const VALUE_ERROR)
+};
+
+#[test]
+fn the_text_of_an_exception_comes_through_its_class() {
+    let cases: [(&TypeObject, i64, &str); 5] = [
+        (&VALUE_ERROR, 0, "x"),
+        (&VALUE_ERROR, 1, "ValueError('x')"),
+        (&REPR_ERROR, 0, "ReprError('x')"),
+        (&PLAIN_ERROR, 0, "PlainError"),
+        (&PLAIN_ERROR, 1, "PlainError"),
+    ];
+    for (class, repr, expected) in cases {
+        let exception = built(class, &ONE_OBJECT, &[word_of("x")]);
+        // SAFETY: the exception is live.
+        let result =
+            unsafe { super::typy_rt_exception_text(exception, int_word(repr).cast_signed()) };
+        assert_eq!(text(result), expected, "{} {repr}", class.name());
+        release(&[exception]);
+    }
 }

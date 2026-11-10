@@ -21,6 +21,13 @@ pub(super) fn visit_statement(statement: &Stmt, visit: &mut dyn FnMut(&Expr)) {
             visit_expression(target, visit);
             visit_expression(value, visit);
         }
+        Stmt::Raise {
+            exception, cause, ..
+        } => {
+            for value in exception.iter().chain(cause) {
+                visit_expression(value, visit);
+            }
+        }
         Stmt::For {
             iter, body, orelse, ..
         } => {

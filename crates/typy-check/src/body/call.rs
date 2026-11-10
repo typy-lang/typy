@@ -6,6 +6,7 @@ use typy_source::syntax::{Expr, Keyword};
 
 use super::BodyChecker;
 use crate::builtin::Builtin;
+use crate::exception::BuiltinException;
 use crate::typed::{Argument, FunctionId, TypedExpr, TypedExprKind};
 use crate::types::Type;
 
@@ -38,6 +39,9 @@ impl BodyChecker<'_> {
         }
         if let Some(builtin) = Builtin::named(name) {
             return self.call_builtin(builtin, arguments, keywords, span);
+        }
+        if let Some(class) = BuiltinException::named(name) {
+            return self.new_exception(class, arguments, keywords, span);
         }
         if self.in_function() && self.program.module_variables.contains(name) {
             return self.name(name, name_span);

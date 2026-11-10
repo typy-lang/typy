@@ -132,13 +132,14 @@ fn new(
     object
 }
 
-/// Returns a new exception of `class`, not yet raised, that takes over the arguments the
-/// program built it with: `size` bytes at `arguments`, laid out as `arguments_type` says.
+/// Returns a new exception of `class`, not yet raised, with a copy of the arguments the
+/// program built it with, laid out as `arguments_type` says; the copy takes its own
+/// references, so the caller keeps its tuple.
 ///
 /// # Safety
 ///
 /// `class` is an exception class, `arguments_type` a descriptor the compiler emitted, and
-/// `arguments` points to a live tuple of it whose references pass to the exception.
+/// `arguments` points to a live tuple of it, or is anything when the tuple has no items.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn typy_rt_exception_new(
     class: *const TypeObject,
@@ -152,8 +153,12 @@ pub unsafe extern "C" fn typy_rt_exception_new(
         core::ptr::null_mut()
     } else {
         let owned = allocate(size);
-        // SAFETY: both blocks hold `size` bytes and do not overlap.
-        unsafe { core::ptr::copy_nonoverlapping(arguments, owned, size) };
+        // SAFETY: both blocks hold `size` bytes and do not overlap, and the copy is a live
+        // tuple of the descriptor.
+        unsafe {
+            core::ptr::copy_nonoverlapping(arguments, owned, size);
+            crate::tuple::retain(arguments_type, owned.expose_provenance() as u64);
+        }
         owned
     };
     // SAFETY: the caller passes a live, immortal class.
@@ -228,8 +233,8 @@ pub unsafe extern "C" fn typy_rt_exception_raise(exception: *mut ExceptionObject
 ///
 /// # Safety
 ///
-/// `exception` points to a live exception, and `cause` is null or a live exception whose
-/// reference passes to `exception`.
+/// `exception` points to a live exception, and `cause` is null or a live exception, which
+/// `exception` takes a reference to.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn typy_rt_exception_set_cause(
     exception: *mut ExceptionObject,
@@ -237,11 +242,71 @@ pub unsafe extern "C" fn typy_rt_exception_set_cause(
 ) {
     // SAFETY: the caller's guarantee.
     unsafe {
+        if !cause.is_null() {
+            typy_rt_increment(cause.cast());
+        }
         let old = core::mem::replace(&mut (*exception).cause, cause);
         if !old.is_null() {
             typy_rt_decrement(old.cast());
         }
         (*exception).suppress_context = 1;
+    }
+}
+
+/// Raises `exception`, as `raise` does: it takes the exception being handled as its context,
+/// and the result is a new reference to it, which the error path of the call carries.
+///
+/// # Safety
+///
+/// `exception` points to a live exception.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn typy_rt_exception_throw(
+    exception: *mut ExceptionObject,
+) -> *mut ExceptionObject {
+    // SAFETY: the caller's guarantee.
+    unsafe {
+        typy_rt_exception_raise(exception);
+        typy_rt_increment(exception.cast());
+    }
+    exception
+}
+
+/// Returns the class of `exception`, as `type(exception)` gives it.
+///
+/// # Safety
+///
+/// `exception` points to a live exception.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn typy_rt_exception_class(
+    exception: *const ExceptionObject,
+) -> *const TypeObject {
+    // SAFETY: the caller's guarantee.
+    unsafe { (*exception).class }
+}
+
+/// Returns `repr(exception)` when `repr` is the `int` word of 1, and `str(exception)` when it
+/// is that of 0, through the exception's class, so a class's own `__str__` and `__repr__`
+/// are called whatever the static type (EXC-08).
+///
+/// # Safety
+///
+/// `exception` points to a live exception.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn typy_rt_exception_text(
+    exception: *mut ExceptionObject,
+    repr: i64,
+) -> crate::Raising<*mut StrObject> {
+    // SAFETY: the caller's guarantee.
+    let class = unsafe { (*exception).class() };
+    let writer = if crate::word::inline_value(repr) == 0 {
+        class.str.or(class.repr)
+    } else {
+        class.repr
+    };
+    match writer {
+        // SAFETY: the class's function takes an exception of the class.
+        Some(writer) => unsafe { writer(exception.cast()) },
+        None => crate::Raising::ok(from_str(class.name())),
     }
 }
 

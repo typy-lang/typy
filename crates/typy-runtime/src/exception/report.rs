@@ -304,8 +304,11 @@ mod tests {
         frame(cause, 2);
         let exception = raise(ExceptionKind::ValueError, "bad");
         frame(exception, 4);
-        // SAFETY: both exceptions are live; the cause's reference passes to the exception.
-        unsafe { typy_rt_exception_set_cause(exception, cause) };
+        // SAFETY: both exceptions are live; the exception takes a reference to its cause.
+        unsafe {
+            typy_rt_exception_set_cause(exception, cause);
+            crate::refcount::typy_rt_decrement(cause.cast());
+        }
         assert_eq!(
             report(exception),
             "Traceback (most recent call last):\n  File \"app.py\", line 2, in <module>\n\
@@ -366,9 +369,7 @@ mod tests {
         let second = raise(ExceptionKind::ValueError, "b");
         // SAFETY: both exceptions are live; each takes a reference to the other as its cause.
         unsafe {
-            crate::refcount::typy_rt_increment(first.cast());
             typy_rt_exception_set_cause(second, first);
-            crate::refcount::typy_rt_increment(second.cast());
             typy_rt_exception_set_cause(first, second);
         }
         let mut bytes = Vec::new();

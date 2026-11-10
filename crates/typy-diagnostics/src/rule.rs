@@ -69,6 +69,10 @@ impl RuleId {
     pub const DAT_17: Self = Self("DAT-17");
     /// Raising and catching exceptions shall follow the Language Reference, including matching on base classes.
     pub const EXC_01: Self = Self("EXC-01");
+    /// A `raise` without an expression shall re-raise the exception being handled, and shall be rejected outside an `except` clause.
+    pub const EXC_07: Self = Self("EXC-07");
+    /// Calling `UnicodeDecodeError` or `UnicodeEncodeError`, or deriving a class from them, shall be rejected; catching them shall be accepted.
+    pub const EXC_12: Self = Self("EXC-12");
     /// `+`, `-`, `*`, `/`, `//`, `%` and `**` shall give Python's results for `int` and `float`, including `/` on two `int` values returning `float` and `%` taking the sign of the divisor.
     pub const EXP_02: Self = Self("EXP-02");
     /// `int ** int` shall be accepted only when the exponent is a non-negative integer literal, because CPython returns `float` for a negative exponent.
@@ -211,6 +215,8 @@ impl RuleId {
         Self::DAT_16,
         Self::DAT_17,
         Self::EXC_01,
+        Self::EXC_07,
+        Self::EXC_12,
         Self::EXP_02,
         Self::EXP_04,
         Self::EXP_06,

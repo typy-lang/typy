@@ -75,6 +75,12 @@ pub enum TypedExprKind {
         init: Option<FunctionId>,
         arguments: Vec<Argument>,
     },
+    /// A new exception of a class, made by calling the class with positional arguments of
+    /// any type, which the exception keeps (ADR-0013).
+    NewException {
+        class: crate::exception::ExceptionClass,
+        arguments: Vec<TypedExpr>,
+    },
     /// An attribute of an instance, by its position in the class's attributes (CLS-01).
     Attribute {
         object: Box<TypedExpr>,

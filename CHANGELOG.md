@@ -6,6 +6,23 @@ All notable changes to TyPy are recorded here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- `raise` with an exception or an exception class, and `raise ... from
+  cause` and `raise ... from None`. An uncaught exception prints its cause
+  or its context first, with CPython's line between them (SMT-06, EXC-04,
+  STD-05).
+- The built-in exception classes as values, annotations and calls, with
+  CPython's bases, so a `KeyError` may be stored where a `LookupError` is
+  declared; `NotImplementedError` and `AttributeError` are new (EXC-01,
+  EXC-02, EXC-10).
+- `str`, `repr`, `print` and f-strings of an exception give CPython's text,
+  computed from its arguments; `repr` of a `UnicodeDecodeError` shows its
+  five arguments (EXC-08).
+- E0415 for `raise` of a value that is not an exception, E0416 for a bare
+  `raise` outside an `except` clause, and E0417 for a call of
+  `UnicodeDecodeError` or `UnicodeEncodeError` (EXC-07, EXC-12).
+
 ## [0.2.0] - 2026-11-10
 
 ### Added

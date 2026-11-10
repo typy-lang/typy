@@ -11,6 +11,7 @@ mod comparison;
 mod comprehension;
 mod conversion;
 mod dict;
+mod exception;
 mod expression;
 mod fstring;
 mod function;

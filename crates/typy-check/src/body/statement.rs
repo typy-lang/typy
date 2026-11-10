@@ -111,6 +111,11 @@ impl BodyChecker<'_> {
                 span: *span,
             },
             Stmt::Return { value, span } => self.return_statement(value.as_ref(), *span),
+            Stmt::Raise {
+                exception,
+                cause,
+                span,
+            } => self.raise_statement(exception.as_ref(), cause.as_ref(), *span),
             Stmt::If {
                 test,
                 body,

@@ -2,7 +2,9 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use typy_check::{AssignTarget, FunctionId, TypedExpr, TypedExprKind, TypedProgram, TypedStmt};
+use typy_check::{
+    AssignTarget, FunctionId, RaiseCause, TypedExpr, TypedExprKind, TypedProgram, TypedStmt,
+};
 
 /// Returns the functions that can call themselves, directly or through others.
 pub(crate) fn recursive_functions(program: &TypedProgram) -> BTreeSet<FunctionId> {
@@ -67,6 +69,17 @@ fn statements(body: &[TypedStmt], callees: &mut BTreeSet<FunctionId>) {
             TypedStmt::Return {
                 value: Some(value), ..
             } => expression(value, callees),
+            TypedStmt::Raise {
+                exception, cause, ..
+            } => {
+                let cause = match cause {
+                    RaiseCause::Exception(cause) => Some(cause),
+                    RaiseCause::Absent | RaiseCause::None => None,
+                };
+                for value in exception.iter().chain(cause) {
+                    expression(value, callees);
+                }
+            }
             TypedStmt::If {
                 test, body, orelse, ..
             }
@@ -246,6 +259,11 @@ fn expression(expression_value: &TypedExpr, callees: &mut BTreeSet<FunctionId>) 
         TypedExprKind::Index { value, index } => {
             expression(value, callees);
             expression(index, callees);
+        }
+        TypedExprKind::NewException { arguments, .. } => {
+            for argument in arguments {
+                expression(argument, callees);
+            }
         }
         TypedExprKind::New {
             init, arguments, ..

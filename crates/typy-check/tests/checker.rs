@@ -61,6 +61,28 @@ fn check(source: &str) -> Result<TypedProgram, Vec<String>> {
     TypeChecker::check(&project).map_err(|diagnostics| codes(&diagnostics, &project))
 }
 
+#[test]
+fn raise_ends_the_path_it_is_on() {
+    let source = "def f(n: int) -> int:\n    if n > 0:\n        return n\n    raise ValueError('n', n)\n\
+         def g() -> str:\n    raise KeyError from None\n\
+         e: LookupError = IndexError()\n\
+         t = type(e)\n\
+         raise RuntimeError('r') from e\n";
+    let (_directory, project) = load(source);
+    let program = TypeChecker::check(&project).expect("the program is accepted");
+    let dump = typy_check::dump(&program, &project);
+    for expected in [
+        "Raise @4:5",
+        "NewException ValueError : ValueError",
+        "Raise from None @6:5",
+        "NewException KeyError : KeyError",
+        "Raise from @9:1",
+        "Local e : LookupError",
+    ] {
+        assert!(dump.contains(expected), "{expected} in\n{dump}");
+    }
+}
+
 fn accepted(source: &str) -> TypedProgram {
     check(source).unwrap_or_else(|codes| panic!("rejected with {codes:?}:\n{source}"))
 }
@@ -629,11 +651,11 @@ fn each_builtin_call_name_and_statement_rule_gives_its_code() {
         // Module variables inside functions need `global`, which arrives in 0.3.
         ("count = 1\ndef f() -> int:\n    return count\n", &["E0201"]),
         ("count = 1\ndef f() -> None:\n    count()\n", &["E0201"]),
-        // Functions, builtins and exception classes are not values in 0.1.
+        // Functions and builtins are not values; no requirement provides warnings or
+        // exception groups.
         ("x = len\n", &["E0201"]),
-        ("x = BaseException\n", &["E0201"]),
-        ("x = UserWarning\n", &["E0201"]),
-        ("x = ExceptionGroup\n", &["E0201"]),
+        ("x = UserWarning\n", &["E0202"]),
+        ("x = ExceptionGroup\n", &["E0202"]),
         // A return value of another type (TYP-03, TYP-09).
         ("def f() -> str:\n    return 1\n", &["E0405"]),
         ("def f() -> float:\n    return 1\n", &["E0405"]),
@@ -1539,10 +1561,18 @@ fn statements_and_expressions_outside_the_subset_give_their_codes() {
         ("continue\n", &["E0103"]),
         ("print([x for x in 1 for y in x])\n", &["E0411"]),
         ("print({u: 1 for x in [1]})\n", &["E0205"]),
-        ("print(ValueError)\n", &["E0201"]),
-        ("print(Exception)\n", &["E0201"]),
-        ("print(UserWarning)\n", &["E0201"]),
-        ("print(ExceptionGroup)\n", &["E0201"]),
+        ("print(UserWarning)\n", &["E0202"]),
+        ("print(ExceptionGroup)\n", &["E0202"]),
+        // `raise` takes an exception or an exception class (SMT-06, EXC-07, EXC-12).
+        ("raise 1\n", &["E0415"]),
+        ("raise int\n", &["E0415"]),
+        ("raise ValueError('v') from 'cause'\n", &["E0415"]),
+        ("raise\n", &["E0416"]),
+        ("e = UnicodeDecodeError()\n", &["E0417"]),
+        ("raise UnicodeEncodeError\n", &["E0417"]),
+        ("e = ValueError(message='v')\n", &["E0404"]),
+        ("e: KeyError = ValueError('v')\n", &["E0402"]),
+        ("raise u\n", &["E0205"]),
         ("for i in range(u):\n    print(i)\n", &["E0205"]),
         ("print({1: u for x in [1]})\n", &["E0205"]),
         (

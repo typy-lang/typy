@@ -101,6 +101,13 @@ impl Walker {
                     self.expression(value);
                 }
             }
+            Stmt::Raise {
+                exception, cause, ..
+            } => {
+                for value in exception.iter().chain(cause) {
+                    self.expression(value);
+                }
+            }
             Stmt::Assign { targets, value, .. } => {
                 for target in targets {
                     self.name_target(target);

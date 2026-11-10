@@ -238,7 +238,6 @@ with f:
     pass
 del x
 assert x
-raise E
 global g
 ";
     let kinds: Vec<NodeKind> = body(source)
@@ -258,7 +257,6 @@ global g
             NodeKind::With,
             NodeKind::Delete,
             NodeKind::Assert,
-            NodeKind::Raise,
             NodeKind::Global,
         ]
     );
@@ -702,6 +700,14 @@ fn lists_and_attributes_are_converted() {
 fn every_node_kind_is_dumped_at_its_depth_with_its_position() {
     let source = "@trace\nclass Box(Base, metaclass=M):\n    size: int\n\n    def put[T](self, item: int, /, *rest: int, flag: bool = True, **more: int) -> None:\n        self.items = [x * 2 for x in rest if x if not x]\n        pairs = {k: v for k, v in more.items()}\n        unique = {y async for y in rest}\n        text = f\"{item!r:>{size}.2f} {flag=}\"\n        part = rest[1:2:3]\n        same = {1, 2}\n        table = {\"a\": 1, **more}\n        print(a < b <= c, -item, item if flag else 0, x or y, lambda: 1)\n";
     let expected = "Module\n  ClassDef Box @1:1\n    decorator\n      Name trace @1:2\n    base\n      Name Base @2:11\n    keywords 1\n    body\n      AnnAssign @3:5\n        Name size @3:5\n        Name int @3:11\n      FunctionDef put @5:5\n        type_params 1\n        Parameter self PositionalOnly @5:16\n        Parameter item PositionalOnly @5:22\n          Name int @5:28\n        Parameter rest VarPositional @5:36\n          Name int @5:43\n        Parameter flag KeywordOnly @5:48\n          Name bool @5:54\n          default\n            Constant Bool(true) @5:61\n        Parameter more VarKeyword @5:67\n          Name int @5:75\n        returns\n          Constant None @5:83\n        body\n          Assign @6:9\n            Attribute items @6:9\n              Name self @6:9\n            ListComp @6:22\n              BinOp Mult @6:23\n                Name x @6:23\n                Constant Int(\"2\") @6:27\n              Comprehension @6:29\n                Name x @6:33\n                Name rest @6:38\n                Name x @6:46\n                UnaryOp Not @6:51\n                  Name x @6:55\n          Assign @7:9\n            Name pairs @7:9\n            DictComp @7:17\n              Name k @7:18\n              Name v @7:21\n              Comprehension @7:23\n                Tuple @7:27\n                  Name k @7:27\n                  Name v @7:30\n                Call @7:35\n                  Attribute items @7:35\n                    Name more @7:35\n          Assign @8:9\n            Name unique @8:9\n            SetComp @8:18\n              Name y @8:19\n              AsyncComprehension @8:21\n                Name y @8:31\n                Name rest @8:36\n          Assign @9:9\n            Name text @9:9\n            FString @9:16\n              Field !r @9:18\n                Name item @9:19\n                spec\n                  Literal \">\"\n                  Field @9:27\n                    Name size @9:28\n                  Literal \".2f\"\n              Literal \" \"\n              Field debug \"flag=\" @9:38\n                Name flag @9:39\n          Assign @10:9\n            Name part @10:9\n            Subscript @10:16\n              Name rest @10:16\n              Slice @10:21\n                Constant Int(\"1\") @10:21\n                Constant Int(\"2\") @10:23\n                Constant Int(\"3\") @10:25\n          Assign @11:9\n            Name same @11:9\n            Set @11:16\n              Constant Int(\"1\") @11:17\n              Constant Int(\"2\") @11:20\n          Assign @12:9\n            Name table @12:9\n            Dict @12:17\n              Constant Str(\"a\") @12:18\n              Constant Int(\"1\") @12:23\n              Unpack @12:28\n              Name more @12:28\n          Expr @13:9\n            Call @13:9\n              Name print @13:9\n              Compare [Lt, LtE] @13:15\n                Name a @13:15\n                Name b @13:19\n                Name c @13:24\n              UnaryOp USub @13:27\n                Name item @13:28\n              IfExp @13:34\n                Name flag @13:42\n                Name item @13:34\n                Constant Int(\"0\") @13:52\n              BoolOp Or @13:55\n                Name x @13:55\n                Name y @13:60\n              Lambda @13:63\n";
+    let parsed = parse(&file(source), PythonFloor::V3_12).unwrap();
+    assert_eq!(dump(&parsed, &file(source)), expected);
+}
+
+#[test]
+fn each_form_of_raise_is_dumped_with_its_operands() {
+    let source = "raise\nraise E\nraise E(1) from c\n";
+    let expected = "Module\n  Raise @1:1\n  Raise @2:1\n    Name E @2:7\n  Raise from @3:1\n    Call @3:7\n      Name E @3:7\n      Constant Int(\"1\") @3:9\n    Name c @3:17\n";
     let parsed = parse(&file(source), PythonFloor::V3_12).unwrap();
     assert_eq!(dump(&parsed, &file(source)), expected);
 }

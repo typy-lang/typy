@@ -162,6 +162,13 @@ pub enum TypedStmt {
         value: Option<TypedExpr>,
         span: Span,
     },
+    /// `raise exception`, with its cause; a class is called with no arguments first. A bare
+    /// `raise`, with no exception, raises the one being handled again (SMT-06, EXC-07).
+    Raise {
+        exception: Option<TypedExpr>,
+        cause: RaiseCause,
+        span: Span,
+    },
     If {
         test: TypedExpr,
         body: Vec<TypedStmt>,
@@ -201,4 +208,15 @@ pub enum TypedStmt {
     Continue {
         span: Span,
     },
+}
+
+/// What `from` gives a raised exception (EXC-04).
+#[derive(Clone, Debug, PartialEq)]
+pub enum RaiseCause {
+    /// No `from`: the exception keeps the context it is raised in.
+    Absent,
+    /// `from None`: no cause, and the context is left out of the report.
+    None,
+    /// `from cause`: an exception, or a class called with no arguments.
+    Exception(TypedExpr),
 }

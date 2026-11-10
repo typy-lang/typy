@@ -22,7 +22,6 @@ pub enum NodeKind {
     Match,
     NamedExpr,
     Nonlocal,
-    Raise,
     Starred,
     TemplateStr,
     Try,

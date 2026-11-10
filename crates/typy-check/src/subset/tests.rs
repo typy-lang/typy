@@ -106,10 +106,6 @@ fn later_features_name_their_release_and_rule() {
             "`try` statements are planned for TyPy 0.3 (CST-04)",
         ),
         (
-            "raise E\n",
-            "`raise` statements are planned for TyPy 0.3 (SMT-06)",
-        ),
-        (
             "with f:\n    pass\n",
             "`with` statements are planned for TyPy 0.3 (CST-05)",
         ),

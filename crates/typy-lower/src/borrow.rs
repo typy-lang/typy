@@ -60,6 +60,7 @@ pub(crate) fn assigned_symbols(body: &[TypedStmt]) -> BTreeSet<SymbolId> {
                 }
                 TypedStmt::Expr { .. }
                 | TypedStmt::Return { .. }
+                | TypedStmt::Raise { .. }
                 | TypedStmt::Pass { .. }
                 | TypedStmt::Break { .. }
                 | TypedStmt::Continue { .. } => {}
