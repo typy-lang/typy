@@ -237,6 +237,8 @@ impl BodyChecker<'_> {
                 Type::DictView(view, key, value) if l.is_assignable_to(&view.item(key, value)) => {}
                 // A substring test: `in` on a `str` needs a `str` on its left.
                 Type::Str if l == Type::Str => {}
+                // `in` on a range tests an `int` without stepping (DAT-17).
+                Type::Range if l == Type::Int => {}
                 // `in` on `bytes` looks for a byte, an `int`, or for `bytes` within them.
                 Type::Bytes if matches!(l, Type::Int | Type::Bytes) => {}
                 // A tuple compares the value with each item for equality, so each item has to

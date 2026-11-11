@@ -20,6 +20,8 @@ pub(crate) struct Selection {
     pub(crate) step: i64,
     /// The number of positions.
     pub(crate) count: usize,
+    /// The stop, adjusted to the sequence as `slice.indices` gives it.
+    pub(crate) stop: i64,
 }
 
 impl Selection {
@@ -113,6 +115,7 @@ pub(crate) fn select(
         start,
         step: stride,
         count: usize::try_from(count).unwrap_or(0),
+        stop,
     })
 }
 
@@ -181,7 +184,8 @@ mod tests {
             Selection {
                 start: 0,
                 step: 1,
-                count: 5
+                count: 5,
+                stop: 5,
             }
         );
         assert_eq!(

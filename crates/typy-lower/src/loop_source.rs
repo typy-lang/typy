@@ -204,6 +204,9 @@ impl FunctionLowerer<'_> {
                     item: self.lowered_type(item),
                 }
             }
+            LoopSource::Items(sequence) if sequence.ty == typy_check::Type::Range => {
+                self.start_range_value(sequence, false, span)
+            }
             LoopSource::Items(sequence) => self.start_sequence(sequence, false, span),
             LoopSource::Range {
                 start,
@@ -211,6 +214,9 @@ impl FunctionLowerer<'_> {
                 step,
                 reversed,
             } => self.start_range([start, stop, step], *reversed, span),
+            LoopSource::Reversed(sequence) if sequence.ty == typy_check::Type::Range => {
+                self.start_range_value(sequence, true, span)
+            }
             LoopSource::Reversed(sequence) => self.start_sequence(sequence, true, span),
             LoopSource::Protocol {
                 iterable,
@@ -328,6 +334,35 @@ impl FunctionLowerer<'_> {
             let value = self.load(stride, span);
             self.call_runtime(RuntimeFunction::RangeCheckStep, vec![value.value], span);
         }
+        self.finish_range([counter, limit, stride], constant, reversed, span)
+    }
+
+    /// Reads a range value, keeps its start, stop and step as a range loop does, and steps it
+    /// forwards or, for `reversed`, backwards (DAT-17). Its step is never zero.
+    fn start_range_value(&mut self, range: &TypedExpr, reversed: bool, span: Span) -> Iterator {
+        let lowered = self.expression(range);
+        let slots =
+            ["counter", "limit", "stride"].map(|name| self.hidden_slot(name, TyirType::Int));
+        for (which, slot) in slots.into_iter().enumerate() {
+            let code = self.constant(Constant::Int(which.to_string()), span);
+            let bound =
+                self.call_runtime(RuntimeFunction::RangeBound, vec![lowered.value, code], span);
+            self.store(slot, bound, span);
+        }
+        self.release(lowered, span);
+        self.finish_range(slots, None, reversed, span)
+    }
+
+    /// Turns the start, stop and step in `slots` into the counter, limit and step a range loop
+    /// reads: unchanged forwards, or for `reversed` from the last value back to
+    /// `start - step`, as CPython's `range_reverse` does.
+    fn finish_range(
+        &mut self,
+        [counter, limit, stride]: [SlotId; 3],
+        constant: Option<bool>,
+        reversed: bool,
+        span: Span,
+    ) -> Iterator {
         if reversed {
             let (first, end, increment) = (
                 self.load(counter, span),

@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy software requirements specification |
-| Version | 1.32 |
+| Version | 1.33 |
 | Status | Approved |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-11 |
@@ -468,6 +468,7 @@ TyPy rejects them (STD-04):
 | Multiple inheritance | |
 | `__del__` | |
 | A language server | |
+| `enumerate`, `zip` and `reversed` objects held as values | |
 
 ## 7. Open issues
 

@@ -26,6 +26,7 @@ fn reference(of: &TypeObjectOf) -> TypeObjectRef {
         TypeObjectOf::View(View::Items) => RuntimeType::DictItems,
         TypeObjectOf::Object => RuntimeType::Object,
         TypeObjectOf::Type => RuntimeType::Type,
+        TypeObjectOf::Range => RuntimeType::Range,
         TypeObjectOf::Instance(class, _) => return TypeObjectRef::Class(class.0),
         TypeObjectOf::Exception(class) => return crate::exception::exception_class(class),
     })

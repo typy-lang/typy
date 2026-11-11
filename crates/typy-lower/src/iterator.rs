@@ -18,6 +18,7 @@ fn iterator_kind(ty: &Type) -> i64 {
         Type::Set(_) => 4,
         Type::DictView(View::Values, ..) => 6,
         Type::DictView(View::Items, ..) => 7,
+        Type::Range => 9,
         _ => 5,
     }
 }

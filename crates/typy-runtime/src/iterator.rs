@@ -37,6 +37,11 @@ pub(crate) enum IteratorKind {
     DictItems = 7,
     /// A `str` of ASCII code points only, which CPython iterates with a type of its own.
     StrAscii = 8,
+    /// A range whose bounds and length fit a C `long`.
+    Range = 9,
+    /// A range with a bound or a length past a C `long`, which CPython iterates with a type
+    /// of its own.
+    LongRange = 10,
 }
 
 impl IteratorKind {
@@ -52,6 +57,7 @@ impl IteratorKind {
             6 => Self::DictValues,
             7 => Self::DictItems,
             8 => Self::StrAscii,
+            9 => Self::Range,
             _ => crate::libc::abort_with(b"typy runtime: an iterator has an unknown kind\n"),
         }
     }
@@ -76,6 +82,8 @@ pub(crate) struct IteratorObject {
     current: u64,
     /// The current item of a `str`, a string of one code point the iterator owns.
     held: *mut StrObject,
+    /// The current item of a range, an `int` word the iterator owns; 0 when there is none.
+    number: i64,
     /// The layout of a dict's items, and room for the current one.
     pair_type: *const TupleType,
     pair: *mut u8,
@@ -100,6 +108,8 @@ static SET_ITERATOR: TypeObject = iterator_type("set_iterator");
 static DICT_KEY_ITERATOR: TypeObject = iterator_type("dict_keyiterator");
 static DICT_VALUE_ITERATOR: TypeObject = iterator_type("dict_valueiterator");
 static DICT_ITEM_ITERATOR: TypeObject = iterator_type("dict_itemiterator");
+static RANGE_ITERATOR: TypeObject = iterator_type("range_iterator");
+static LONG_RANGE_ITERATOR: TypeObject = iterator_type("longrange_iterator");
 
 /// Returns the type of an iterator.
 ///
@@ -118,6 +128,8 @@ pub(crate) unsafe fn type_of(iterator: *const IteratorObject) -> &'static TypeOb
         IteratorKind::DictKeys => &DICT_KEY_ITERATOR,
         IteratorKind::DictValues => &DICT_VALUE_ITERATOR,
         IteratorKind::DictItems => &DICT_ITEM_ITERATOR,
+        IteratorKind::Range => &RANGE_ITERATOR,
+        IteratorKind::LongRange => &LONG_RANGE_ITERATOR,
     }
 }
 
@@ -136,7 +148,7 @@ unsafe extern "C" fn iterator_repr(object: *mut ObjectHeader) -> Raising<*mut St
 /// # Safety
 ///
 /// `source` points to a live object of the kind's type: a list or tuple, a `str`, a `bytes`, a
-/// set or a dict, and `kind` is an `int` word of an `IteratorKind`.
+/// set, a dict or a range, and `kind` is an `int` word of an `IteratorKind`.
 #[allow(
     clippy::cast_ptr_alignment,
     reason = "every object comes from malloc, aligned for every type, and starts with its header"
@@ -160,6 +172,12 @@ pub unsafe extern "C" fn typy_rt_iterator_new(
                 let text = source.cast::<StrObject>();
                 if (0..length(text)).all(|index| code_point(text, index) < 0x80) {
                     kind = IteratorKind::StrAscii;
+                }
+                0
+            }
+            IteratorKind::Range => {
+                if !crate::range::fits_long(source.cast()) {
+                    kind = IteratorKind::LongRange;
                 }
                 0
             }
@@ -189,6 +207,7 @@ pub unsafe extern "C" fn typy_rt_iterator_new(
             visited: 0,
             current: 0,
             held: core::ptr::null_mut(),
+            number: 0,
             pair_type,
             pair,
         });
@@ -297,6 +316,16 @@ unsafe fn step(iterator: &mut IteratorObject) -> Result<bool, *mut crate::Except
             IteratorKind::DictKeys | IteratorKind::DictValues | IteratorKind::DictItems => {
                 return dict_step(iterator, source.cast());
             }
+            IteratorKind::Range | IteratorKind::LongRange => {
+                let Some(value) = crate::range::item(source.cast(), position) else {
+                    return Ok(false);
+                };
+                crate::refcount::typy_rt_int_decrement(core::mem::replace(
+                    &mut iterator.number,
+                    value,
+                ));
+                iterator.current = value.cast_unsigned();
+            }
         }
     }
     iterator.position = position + 1;
@@ -375,6 +404,7 @@ pub(crate) unsafe fn destroy(iterator: *mut IteratorObject) {
         if !object.held.is_null() {
             typy_rt_decrement(object.held.cast());
         }
+        crate::refcount::typy_rt_int_decrement(object.number);
         if !object.pair.is_null() {
             crate::allocator::free(object.pair);
         }

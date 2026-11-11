@@ -16,8 +16,8 @@ pub(crate) use builtin::{
 use crate::Raising;
 use crate::header::{
     BIG_INT_TYPE_ID, BYTES_TYPE_ID, DICT_TYPE_ID, DICT_VIEW_TYPE_ID, EXCEPTION_TYPE_ID, IMMORTAL,
-    INSTANCE_TYPE_ID, ITERATOR_TYPE_ID, LIST_TYPE_ID, ObjectHeader, SET_TYPE_ID, STR_TYPE_ID,
-    TRACEBACK_TYPE_ID, TUPLE_TYPE_ID, TYPE_TYPE_ID,
+    INSTANCE_TYPE_ID, ITERATOR_TYPE_ID, LIST_TYPE_ID, ObjectHeader, RANGE_TYPE_ID, SET_TYPE_ID,
+    STR_TYPE_ID, TRACEBACK_TYPE_ID, TUPLE_TYPE_ID, TYPE_TYPE_ID,
 };
 use crate::string::StrObject;
 use crate::tuple::TupleType;
@@ -255,6 +255,7 @@ pub(crate) unsafe fn type_of(object: *const ObjectHeader) -> &'static TypeObject
             INSTANCE_TYPE_ID => crate::instance::class_of(object.cast()),
             ITERATOR_TYPE_ID => crate::iterator::type_of(object.cast()),
             TRACEBACK_TYPE_ID => &TRACEBACK_TYPE,
+            RANGE_TYPE_ID => &crate::range::RANGE,
             _ => crate::libc::abort_with(b"typy runtime: an object has an unknown type\n"),
         }
     }

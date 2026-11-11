@@ -379,7 +379,7 @@ fn rejected_programs_give_their_codes() {
         ("print(abs(\"a\"))\n", &["E0401"]),
         ("print(1, file=None)\n", &["E0201"]),
         ("print(1, color=1)\n", &["E0404"]),
-        ("x = range(3)\n", &["E0201"]),
+        ("x = enumerate([1])\n", &["E0201"]),
         ("print(1[0])\n", &["E0401"]),
         ("print(\"a\"[\"b\"])\n", &["E0404"]),
         ("print(\"%d\" % 1)\n", &["E0201"]),
@@ -1536,7 +1536,9 @@ fn comprehension_and_range_rules_give_their_codes() {
         ("h = [missing for q in range(2)]\n", &["E0205"]),
         ("i = {missing: 1 for q in range(2)}\n", &["E0205"]),
         ("j = [q for q, r in range(2)]\n", &["E0308"]),
-        ("k = range(3)\n", &["E0201"]),
+        ("k = range(3) < range(4)\n", &["E0407"]),
+        ("q: range = [1]\n", &["E0402"]),
+        ("u = 'a' in range(3)\n", &["E0407"]),
         ("m = list(range('a'))\n", &["E0404"]),
         ("n = list(range(1, 2, 3, 4))\n", &["E0404"]),
         ("o = list(range(x=1))\n", &["E0404"]),
@@ -1561,11 +1563,16 @@ g = [(i, j) for i in range(3) for j in range(i) if i if j]
 h = sum(range(10)) + len(list(reversed(range(1, 9, 2))))
 k = [v for v in enumerate(range(2))]
 m = x + 'a'
+r: range = range(1, 9, 2)
+n = (len(r), r[-1], 3 in r, r == range(4), [v for v in reversed(r)])
+s = r[1:]
 ";
     let (_directory, project) = load(source);
     let program = TypeChecker::check(&project).expect("the program is accepted");
     let dump = typy_check::dump(&program, &project);
     for node in [
+        "Assign n: tuple[int, int, bool, bool, list[int]]",
+        "Assign s: range",
         "Comprehension : list[int]",
         "Comprehension : list[list[str]]",
         "Comprehension : set[int]",

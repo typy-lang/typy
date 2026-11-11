@@ -2,8 +2,8 @@
 
 use crate::header::{
     BIG_INT_TYPE_ID, BYTES_TYPE_ID, DICT_TYPE_ID, DICT_VIEW_TYPE_ID, EXCEPTION_TYPE_ID, IMMORTAL,
-    INSTANCE_TYPE_ID, ITERATOR_TYPE_ID, LIST_TYPE_ID, ObjectHeader, SET_TYPE_ID, STR_TYPE_ID,
-    TUPLE_TYPE_ID,
+    INSTANCE_TYPE_ID, ITERATOR_TYPE_ID, LIST_TYPE_ID, ObjectHeader, RANGE_TYPE_ID, SET_TYPE_ID,
+    STR_TYPE_ID, TUPLE_TYPE_ID,
 };
 
 /// Adds a reference to an object; the null address, `None` of an optional object, has none.
@@ -102,6 +102,8 @@ unsafe fn destroy(object: *mut ObjectHeader, type_id: u32) {
         INSTANCE_TYPE_ID => unsafe { crate::instance::destroy(object.cast()) },
         // SAFETY: the type ID says the object is an iterator.
         ITERATOR_TYPE_ID => unsafe { crate::iterator::destroy(object.cast()) },
+        // SAFETY: the type ID says the object is a range.
+        RANGE_TYPE_ID => unsafe { crate::range::destroy(object.cast()) },
         _ => crate::libc::abort_with(b"typy runtime: an object has an unknown type\n"),
     }
 }

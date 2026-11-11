@@ -252,6 +252,23 @@ impl FunctionLowerer<'_> {
             TyirType::Object(id) if id.class_index().is_some() || id == typy_tyir::TypeId::TYPE => {
                 return self.constant(Constant::Bool(true), span);
             }
+            // A range is true when it holds its own start; its length may pass `sys.maxsize`,
+            // where CPython's truth test still answers.
+            TyirType::RANGE => {
+                let which = self.constant(Constant::Int("0".to_owned()), span);
+                let start = self.call_runtime(
+                    RuntimeFunction::RangeBound,
+                    vec![lowered.value, which],
+                    span,
+                );
+                let inside = self.call_runtime(
+                    RuntimeFunction::RangeContains,
+                    vec![lowered.value, start.value],
+                    span,
+                );
+                self.release(start, span);
+                return inside.value;
+            }
             TyirType::Object(_) => ScalarKind::Str,
             TyirType::Bits => unreachable!("list items are converted before they are tested"),
             TyirType::Optional(_) => return self.optional_truth(lowered, span),

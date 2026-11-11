@@ -10,6 +10,32 @@ use crate::function::FunctionLowerer;
 use crate::ownership::Lowered;
 
 impl FunctionLowerer<'_> {
+    /// Returns the runtime function that gives the length of a `bytes`, set, dict, view or
+    /// range.
+    fn length_function(ty: TyirType) -> Option<RuntimeFunction> {
+        Some(match ty {
+            TyirType::BYTES => RuntimeFunction::BytesLength,
+            TyirType::SET => RuntimeFunction::SetLength,
+            TyirType::DICT => RuntimeFunction::DictLength,
+            TyirType::VIEW => RuntimeFunction::DictViewLength,
+            TyirType::RANGE => RuntimeFunction::RangeLength,
+            _ => return None,
+        })
+    }
+
+    /// Makes a range value of one to three bounds, which start at 0 and step by 1 when not
+    /// given, as `range()` does (DAT-17).
+    fn range_value(&mut self, bounds: &[Lowered], span: Span) -> Lowered {
+        let mut words: Vec<_> = bounds.iter().map(|bound| bound.value).collect();
+        if words.len() == 1 {
+            words.insert(0, self.constant(Constant::Int("0".to_owned()), span));
+        }
+        if words.len() == 2 {
+            words.push(self.constant(Constant::Int("1".to_owned()), span));
+        }
+        self.call_runtime(RuntimeFunction::RangeNew, words, span)
+    }
+
     /// Calls a builtin with arguments already evaluated in order; the arguments are released afterwards.
     pub(crate) fn builtin(
         &mut self,
@@ -57,17 +83,9 @@ impl FunctionLowerer<'_> {
                 Self::borrowed(self.constant(Constant::Int(length), span), TyirType::Int)
             }
             (Builtin::Len, [list]) if list.ty == TyirType::LIST => self.list_length(*list, span),
-            (Builtin::Len, [data]) if data.ty == TyirType::BYTES => {
-                self.call_runtime(RuntimeFunction::BytesLength, vec![data.value], span)
-            }
-            (Builtin::Len, [set]) if set.ty == TyirType::SET => {
-                self.call_runtime(RuntimeFunction::SetLength, vec![set.value], span)
-            }
-            (Builtin::Len, [dict]) if dict.ty == TyirType::DICT => {
-                self.call_runtime(RuntimeFunction::DictLength, vec![dict.value], span)
-            }
-            (Builtin::Len, [view]) if view.ty == TyirType::VIEW => {
-                self.call_runtime(RuntimeFunction::DictViewLength, vec![view.value], span)
+            (Builtin::Range, bounds) => self.range_value(bounds, span),
+            (Builtin::Len, [sized]) if let Some(function) = Self::length_function(sized.ty) => {
+                self.call_runtime(function, vec![sized.value], span)
             }
             (Builtin::Bytes, [count]) if count.ty == TyirType::Int => {
                 self.call_runtime(RuntimeFunction::BytesZeros, vec![count.value], span)

@@ -33,6 +33,10 @@ All notable changes to TyPy are recorded here. The format follows
 - `del` of list items, list slices with or without a step, and dict keys,
   with CPython's errors; E0421 for `del` of a variable, an attribute or
   part of a tuple, `str` or `bytes` (SMT-05).
+- `range` as a value and an annotation: `len`, indexing, slicing, `in`,
+  `==`, use as a dict key or set item, and CPython's text. `for`,
+  `reversed`, `iter` and `next` read it, and its bounds may be of any size
+  (DAT-17).
 - `with`, with one or more context managers and `as` targets, calling
   `__exit__` on every way out of the body; a true result of `__exit__`
   suppresses the exception. The parameters of `__exit__` may be left

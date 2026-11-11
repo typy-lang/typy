@@ -44,6 +44,8 @@ pub enum Type {
     Iterator(Box<Type>),
     /// The traceback `__exit__` receives, which holds no frames in TyPy (CST-10).
     Traceback,
+    /// `range` held as a value: a sequence of `int` (DAT-17).
+    Range,
     /// A type object, of the type it stands for, or of any type when that is known only
     /// when the program runs, as for `type(x)` of an optional `x` (CLS-12).
     TypeObject(Option<Box<TypeObjectOf>>),
@@ -81,6 +83,8 @@ pub enum TypeObjectOf {
     Object,
     /// `type`, the type of every type object.
     Type,
+    /// `range`.
+    Range,
     /// A class of the program, with its name.
     Instance(crate::typed::ClassId, String),
     /// An exception class.
@@ -112,6 +116,7 @@ impl TypeObjectOf {
             Type::DictView(view, ..) => Self::View(*view),
             Type::Instance(class, name) => Self::Instance(*class, name.clone()),
             Type::TypeObject(_) => Self::Type,
+            Type::Range => Self::Range,
             // An exception's class may derive from its static class, so it is read from the
             // exception when the program runs.
             Type::Exception(_)
@@ -139,6 +144,7 @@ impl TypeObjectOf {
             "dict" => Self::Dict,
             "object" => Self::Object,
             "type" => Self::Type,
+            "range" => Self::Range,
             _ => Self::Exception(ExceptionClass::Builtin(BuiltinException::named(name)?)),
         })
     }
@@ -160,6 +166,7 @@ impl TypeObjectOf {
             Self::View(view) => view.name(),
             Self::Object => "object",
             Self::Type => "type",
+            Self::Range => "range",
             Self::Instance(_, name) => name,
             Self::Exception(class) => class.name(),
         }
@@ -359,6 +366,7 @@ impl Type {
                 | Self::Exception(_)
                 | Self::Iterator(_)
                 | Self::Traceback
+                | Self::Range
                 | Self::TypeObject(_),
                 _,
             )
@@ -372,6 +380,7 @@ impl Type {
                 | Self::Exception(_)
                 | Self::Iterator(_)
                 | Self::Traceback
+                | Self::Range
                 | Self::TypeObject(_),
             ) => false,
             _ => self == other || (self.is_numeric() && other.is_numeric()),
@@ -476,6 +485,7 @@ impl fmt::Display for Type {
             Self::Exception(class) => write!(formatter, "{class}"),
             Self::Iterator(item) => write!(formatter, "Iterator[{item}]"),
             Self::Traceback => formatter.write_str("TracebackType"),
+            Self::Range => formatter.write_str("range"),
             Self::TypeObject(Some(of)) => write!(formatter, "type[{}]", of.name()),
             Self::TypeObject(None) => formatter.write_str("type"),
             Self::Error => formatter.write_str("<error>"),

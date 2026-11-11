@@ -65,6 +65,14 @@ impl FunctionLowerer<'_> {
             TyirType::Tuple(_) => self.tuple_contains(item, container, span),
             TyirType::LIST => self.list_contains(item, container, span),
             TyirType::DICT | TyirType::VIEW => self.dict_contains(item, container, span),
+            TyirType::RANGE => {
+                self.call_runtime(
+                    RuntimeFunction::RangeContains,
+                    vec![container.value, item.value],
+                    span,
+                )
+                .value
+            }
             TyirType::SET => {
                 let bits = self.bits(item, span);
                 self.call_runtime(
@@ -206,6 +214,7 @@ impl FunctionLowerer<'_> {
             (TyirType::DICT | TyirType::SET, _) => {
                 return self.compare_collections(comparison, left, right, span);
             }
+            (TyirType::RANGE, _) => return self.compare_ranges(comparison, left, right, span),
             (TyirType::Bits, _) => {
                 unreachable!("list items are converted before they are compared")
             }
@@ -249,6 +258,29 @@ impl FunctionLowerer<'_> {
             TyirType::Bool,
             span,
         )
+    }
+
+    /// Compares two ranges with `==` or `!=`, by the values they hold (DAT-17).
+    fn compare_ranges(
+        &mut self,
+        comparison: Comparison,
+        left: Lowered,
+        right: Lowered,
+        span: Span,
+    ) -> ValueId {
+        let equal = self
+            .call_runtime(
+                RuntimeFunction::RangeEqual,
+                vec![left.value, right.value],
+                span,
+            )
+            .value;
+        if comparison == Comparison::Equal {
+            equal
+        } else {
+            self.builder
+                .push_value(Operation::BoolNot(equal), TyirType::Bool, span)
+        }
     }
 
     /// Compares two dicts for equality, or two sets, which order as subsets and supersets;

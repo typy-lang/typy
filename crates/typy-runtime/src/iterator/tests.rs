@@ -246,3 +246,71 @@ fn an_iterator_is_written_with_its_type_and_address() {
     release(items);
     release(list);
 }
+
+/// Returns the range from `first` up to `end` by `step`, of `int` words.
+fn range(first: i64, end: i64, step: i64) -> *mut ObjectHeader {
+    // SAFETY: the words are live.
+    let made = unsafe { crate::range::object::typy_rt_range_new(first, end, step) };
+    assert!(made.exception.is_null());
+    made.value.cast()
+}
+
+#[test]
+fn a_range_iterator_gives_each_value_and_names_its_type_as_cpython() {
+    let source = range(word(10), word(0), word(-4));
+    let values = iterator(source, 9, core::ptr::null());
+    release(source);
+    assert_eq!(type_name(values), "range_iterator");
+    let items: Vec<i64> = core::iter::from_fn(|| next(values))
+        .map(|item| inline_value(item.cast_signed()))
+        .collect();
+    assert_eq!(items, [10, 6, 2]);
+    assert_eq!(next(values), None);
+    release(values);
+}
+
+#[test]
+#[allow(
+    clippy::similar_names,
+    reason = "start and stop are a range's own names"
+)]
+fn a_range_past_a_c_long_gets_a_longrange_iterator_that_owns_its_values() {
+    let start = crate::int::value::Integer::from_i128(1 << 70).into_word();
+    let stop = crate::int::value::Integer::from_i128((1 << 70) + 4).into_word();
+    let source = range(start, stop, word(3));
+    // SAFETY: the range holds references of its own to the bounds.
+    unsafe {
+        crate::refcount::typy_rt_int_decrement(start);
+        crate::refcount::typy_rt_int_decrement(stop);
+    }
+    let values = iterator(source, 9, core::ptr::null());
+    release(source);
+    assert_eq!(type_name(values), "longrange_iterator");
+    let first = next(values).unwrap().cast_signed();
+    let second = next(values).unwrap().cast_signed();
+    // SAFETY: each item is live until the next step.
+    unsafe {
+        let expected = crate::int::value::Integer::from_i128((1 << 70) + 3).into_word();
+        assert!(crate::int::typy_rt_int_compare(second, expected, word(0)));
+        crate::refcount::typy_rt_int_decrement(expected);
+    }
+    assert!(!crate::word::is_inline(first));
+    assert_eq!(next(values), None);
+    release(values);
+}
+
+#[test]
+fn a_range_of_small_bounds_past_a_c_long_in_length_is_a_longrange() {
+    let low = crate::int::value::Integer::from_i128(i128::from(i64::MIN)).into_word();
+    let high = crate::int::value::Integer::from_i128(i128::from(i64::MAX)).into_word();
+    let source = range(low, high, word(1));
+    // SAFETY: the range holds references of its own to the bounds.
+    unsafe {
+        crate::refcount::typy_rt_int_decrement(low);
+        crate::refcount::typy_rt_int_decrement(high);
+    }
+    let values = iterator(source, 9, core::ptr::null());
+    release(source);
+    assert_eq!(type_name(values), "longrange_iterator");
+    release(values);
+}

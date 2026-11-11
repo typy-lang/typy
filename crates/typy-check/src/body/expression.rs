@@ -243,7 +243,7 @@ impl BodyChecker<'_> {
                         span,
                     );
                 }
-                if value.ty == Type::Bytes {
+                if matches!(value.ty, Type::Bytes | Type::Range) {
                     self.expect(&index, Type::Int, "an index");
                     return Self::typed(
                         TypedExprKind::Index {

@@ -24,6 +24,7 @@ pub(crate) fn tyir_type(ty: &Type, tuples: &mut TupleTypes) -> TyirType {
         Type::Exception(_) => TyirType::EXCEPTION,
         Type::Iterator(_) => TyirType::ITERATOR,
         Type::Traceback => TyirType::TRACEBACK,
+        Type::Range => TyirType::RANGE,
         Type::Tuple(items) => {
             let items = items.iter().map(|item| tyir_type(item, tuples)).collect();
             tuples.intern(items)

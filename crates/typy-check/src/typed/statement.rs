@@ -146,7 +146,7 @@ impl LoopSource {
             Self::Range { .. } => Type::Int,
             Self::Protocol { item, .. } => item.clone(),
             Self::Items(sequence) | Self::Reversed(sequence) => match &sequence.ty {
-                Type::Bytes => Type::Int,
+                Type::Bytes | Type::Range => Type::Int,
                 Type::Set(item) | Type::Dict(item, _) | Type::Iterator(item) => {
                     item.as_ref().clone()
                 }

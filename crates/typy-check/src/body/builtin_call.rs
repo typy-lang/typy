@@ -102,24 +102,27 @@ impl BodyChecker<'_> {
                         DiagnosticCode::error(201),
                         span,
                         format!(
-                            "`{}` outside a `for` loop gives an iterator, which is planned for TyPy 0.3 (CST-08)",
+                            "`{}` outside a `for` loop, a comprehension or an iterable argument \
+                             is planned for after TyPy 1.0",
                             builtin.name()
                         ),
                     )
-                    .with_rule(RuleId::CST_08),
+                    .with_rule(RuleId::CST_09),
                     span,
                 );
             }
             Builtin::Range => {
-                return self.error(
-                    Diagnostic::new(
-                        DiagnosticCode::error(201),
+                if !self.arity(builtin, values.len(), 1..=3, span) {
+                    return Self::typed(
+                        TypedExprKind::Constant(TypedConstant::None),
+                        Type::Error,
                         span,
-                        "a `range` value outside a loop, a comprehension or an iterable argument is planned for TyPy 0.3 (DAT-17)",
-                    )
-                    .with_rule(RuleId::DAT_17),
-                    span,
-                );
+                    );
+                }
+                for value in &values {
+                    self.expect(value, Type::Int, "an argument of `range`");
+                }
+                Type::Range
             }
             Builtin::Len => {
                 if !self.arity(builtin, values.len(), 1..=1, span) {
@@ -132,6 +135,7 @@ impl BodyChecker<'_> {
                 if !matches!(
                     values[0].ty,
                     Type::Tuple(_)
+                        | Type::Range
                         | Type::List(_)
                         | Type::TupleOf(_)
                         | Type::Set(_)

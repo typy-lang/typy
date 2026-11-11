@@ -127,6 +127,7 @@ fn named_type(
         "bool" => Type::Bool,
         "str" => Type::Str,
         "bytes" => Type::Bytes,
+        "range" => Type::Range,
         "Any" | "object" => {
             diagnostics.push(
                 Diagnostic::new(
