@@ -77,6 +77,20 @@ pub(crate) fn raise(kind: ExceptionKind, message: &str) -> *mut ExceptionObject 
     raise_with_message(kind, from_str(message))
 }
 
+/// Returns a new exception of `kind` with no arguments, as `raise StopIteration` makes, with
+/// the exception being handled as its context.
+pub(crate) fn raise_bare(kind: ExceptionKind) -> *mut ExceptionObject {
+    let exception = new(
+        kind.class(),
+        core::ptr::null_mut(),
+        core::ptr::null(),
+        core::ptr::null_mut(),
+    );
+    // SAFETY: the exception is new and live.
+    unsafe { typy_rt_exception_raise(exception) };
+    exception
+}
+
 /// Returns a new exception of `kind` that takes over the reference to `message`, with the
 /// exception being handled as its context.
 pub(crate) fn raise_with_message(

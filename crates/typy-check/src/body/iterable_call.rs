@@ -260,6 +260,7 @@ impl BodyChecker<'_> {
             Type::DictView(view, key, value) => view.item(key, value),
             Type::Str => Type::Str,
             Type::Bytes => Type::Int,
+            Type::Iterator(item) => item.as_ref().clone(),
             Type::Error => Type::Error,
             // A tuple whose items have one type is read as a `tuple[T, ...]` before it gets
             // here; the items of this one differ, or there are none.

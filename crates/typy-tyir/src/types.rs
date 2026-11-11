@@ -23,6 +23,8 @@ impl TypeId {
     pub const DICT_VIEW: Self = Self(9);
     /// A type object (ADR-0012, CLS-12).
     pub const TYPE: Self = Self(10);
+    /// An iterator that `iter()` makes (ADR-0014).
+    pub const ITERATOR: Self = Self(12);
     /// The first ID of the program's classes; class `n` of the module is this plus `n`.
     const FIRST_CLASS: u32 = 1 << 16;
 
@@ -97,6 +99,8 @@ impl TyirType {
     pub const VIEW: Self = Self::Object(TypeId::DICT_VIEW);
     /// A type object.
     pub const TYPE: Self = Self::Object(TypeId::TYPE);
+    /// An iterator.
+    pub const ITERATOR: Self = Self::Object(TypeId::ITERATOR);
 }
 
 impl fmt::Display for TyirType {
@@ -113,6 +117,7 @@ impl fmt::Display for TyirType {
             Self::Object(TypeId::DICT) => formatter.write_str("dict"),
             Self::Object(TypeId::DICT_VIEW) => formatter.write_str("view"),
             Self::Object(TypeId::TYPE) => formatter.write_str("type"),
+            Self::Object(TypeId::ITERATOR) => formatter.write_str("iterator"),
             Self::Bits => formatter.write_str("bits"),
             Self::Object(id) if id.class_index().is_some() => {
                 write!(formatter, "class#{}", id.class_index().unwrap_or(0))

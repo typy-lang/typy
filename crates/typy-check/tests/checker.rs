@@ -146,6 +146,44 @@ fn assert_builds_an_assertion_error_and_narrows_after_it() {
 }
 
 #[test]
+fn iterators_type_their_items_and_next_its_default() {
+    let source = "class C:\n    def __iter__(self) -> 'C':\n        return self\n    def __next__(self) -> int:\n        raise StopIteration\n\
+                  items = iter({'a': 1}.items())\n\
+                  first = next(items)\n\
+                  maybe = next(iter([1]), None)\n\
+                  same = next(iter(iter('ab')))\n\
+                  counted = next(C(), 0)\n\
+                  for n in iter(C()):\n    print(n, first, maybe, same, counted, type(items), items is items)\n";
+    let (_directory, project) = load(source);
+    let program = TypeChecker::check(&project).expect("the program is accepted");
+    let types: Vec<String> = ["items", "first", "maybe", "same", "counted"]
+        .iter()
+        .map(|name| {
+            let symbol = program
+                .symbols
+                .iter()
+                .find(|symbol| symbol.name == *name)
+                .unwrap();
+            symbol.ty.to_string()
+        })
+        .collect();
+    assert_eq!(
+        types,
+        [
+            "Iterator[tuple[str, int]]",
+            "tuple[str, int]",
+            "int | None",
+            "str",
+            "int"
+        ]
+    );
+    let dump = typy_check::dump(&program, &project);
+    for expected in ["Iter : Iterator", "Next __next__", "Next : int | None"] {
+        assert!(dump.contains(expected), "{expected} in\n{dump}");
+    }
+}
+
+#[test]
 fn raise_ends_the_path_it_is_on() {
     let source = "def f(n: int) -> int:\n    if n > 0:\n        return n\n    raise ValueError('n', n)\n\
          def g() -> str:\n    raise KeyError from None\n\
@@ -1727,6 +1765,30 @@ fn statements_and_expressions_outside_the_subset_give_their_codes() {
         ),
         ("x: set[Thing] = {1}\n", &["E0205"]),
         ("print(sorted([{1: 2}]))\n", &["E0407"]),
+    ];
+    for (source, expected) in cases {
+        assert_eq!(&rejected(source), expected, "\n{source}");
+    }
+}
+
+#[test]
+fn iterators_used_wrongly_give_their_codes() {
+    let cases: &[(&str, &[&str])] = &[
+        // `iter` and `next` take iterables and iterators; a class iterates with `__iter__`
+        // and `__next__` (CST-08, CST-09).
+        ("print(iter(1))\n", &["E0411"]),
+        ("print(iter())\n", &["E0404"]),
+        ("print(next())\n", &["E0404"]),
+        ("print(iter([1], x=1))\n", &["E0404"]),
+        ("print(next(iter([1]), 'a'))\n", &["E0404"]),
+        ("print(next(5))\n", &["E0404"]),
+        ("class A:\n    pass\nprint(iter(A()))\n", &["E0411"]),
+        (
+            "class A:\n    def __iter__(self, n: int) -> 'A':\n        return self\n",
+            &["E0404"],
+        ),
+        ("print(iter(u))\n", &["E0205"]),
+        ("i = iter([1])\nprint(i == i)\n", &["E0407"]),
     ];
     for (source, expected) in cases {
         assert_eq!(&rejected(source), expected, "\n{source}");

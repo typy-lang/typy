@@ -166,10 +166,11 @@ fn base_planned(span: Span) -> Diagnostic {
 /// The methods an exception class may define again over its base's (CLS-13).
 const REDEFINABLE: [&str; 3] = ["__init__", "__str__", "__repr__"];
 
-/// The methods a class may define in 0.2 besides its own: `__init__`, `__str__` and
-/// `__repr__`. Any other name that starts and ends with two underscores changes how Python
-/// treats the instances, and waits for the operator methods of 0.4 (CLS-07).
-const SPECIAL_METHODS: [&str; 3] = ["__init__", "__str__", "__repr__"];
+/// The special methods a class may define: `__init__`, `__str__` and `__repr__`, and from 0.3
+/// `__iter__` and `__next__` (CST-08). Any other name that starts and ends with two
+/// underscores changes how Python treats the instances, and waits for the operator methods of
+/// 0.4 (CLS-07).
+const SPECIAL_METHODS: [&str; 5] = ["__init__", "__str__", "__repr__", "__iter__", "__next__"];
 
 /// Collects each class's attributes and methods; the methods become definitions whose IDs
 /// follow `first_function`.
@@ -235,6 +236,18 @@ pub(super) fn collect_members<'tree>(
                     let method = definition(&parts, Some(&owner), &scope, diagnostics);
                     if matches!(name.as_str(), "__str__" | "__repr__") {
                         check_text_method(&method, parts.name, diagnostics);
+                    }
+                    if matches!(name.as_str(), "__iter__" | "__next__")
+                        && method.signature.parameters.len() != 1
+                    {
+                        diagnostics.push(
+                            Diagnostic::new(
+                                DiagnosticCode::error(404),
+                                parts.name.span,
+                                format!("`{name}` takes only `self`"),
+                            )
+                            .with_rule(RuleId::CST_08),
+                        );
                     }
                     methods.push(method);
                 }
@@ -381,7 +394,7 @@ fn check_text_method(method: &Definition<'_>, name: &Identifier, diagnostics: &m
     }
 }
 
-/// Reports a special method other than `__init__`, `__str__` and `__repr__`.
+/// Reports a special method a class may not define yet.
 fn planned_method(name: &Identifier) -> Diagnostic {
     Diagnostic::new(
         DiagnosticCode::error(201),

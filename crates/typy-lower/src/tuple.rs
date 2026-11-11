@@ -316,9 +316,12 @@ impl FunctionLowerer<'_> {
                     .value
             }
             TyirType::Object(typy_tyir::TypeId::BYTES) => self.bytes_constant(&[], span),
-            // An instance or exception slot starts as null, which counting passes over.
+            // An instance, exception or iterator slot starts as null, which counting passes
+            // over.
             TyirType::Object(id)
-                if id.class_index().is_some() || id == typy_tyir::TypeId::EXCEPTION =>
+                if id.class_index().is_some()
+                    || id == typy_tyir::TypeId::EXCEPTION
+                    || id == typy_tyir::TypeId::ITERATOR =>
             {
                 self.constant(Constant::NoInstance(id), span)
             }

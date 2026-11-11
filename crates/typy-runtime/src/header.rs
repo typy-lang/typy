@@ -24,6 +24,8 @@ pub const DICT_VIEW_TYPE_ID: u32 = 9;
 pub const TYPE_TYPE_ID: u32 = 10;
 /// The type ID of an instance of a class, whose type object follows the header (ADR-0012).
 pub const INSTANCE_TYPE_ID: u32 = 11;
+/// The type ID of an iterator that `iter()` makes of a built-in iterable (ADR-0014).
+pub const ITERATOR_TYPE_ID: u32 = 12;
 
 /// The first 8 bytes of every heap object.
 #[repr(C)]

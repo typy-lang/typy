@@ -80,6 +80,20 @@ pub enum LoopSource {
         /// The first count.
         start: TypedExpr,
     },
+    /// An instance of a class with `__iter__`: `__iter__` is called once, then the `__next__`
+    /// of what it returns until that raises `StopIteration` (CST-08).
+    Protocol {
+        /// The instance.
+        iterable: Box<TypedExpr>,
+        /// Its class's `__iter__`.
+        iter: super::function::FunctionId,
+        /// The `__next__` of the class `__iter__` returns.
+        next: super::function::FunctionId,
+        /// What `__iter__` returns.
+        iterator: Type,
+        /// What `__next__` returns.
+        item: Type,
+    },
     /// `zip(first, second, ...)`: a tuple of one value from each source, until one ends. With
     /// `strict` true, sources of different lengths raise `ValueError`.
     Zip {
@@ -96,6 +110,7 @@ impl LoopSource {
     pub fn expressions(&self) -> Vec<&TypedExpr> {
         match self {
             Self::Items(sequence) | Self::Reversed(sequence) => vec![sequence],
+            Self::Protocol { iterable, .. } => vec![iterable],
             Self::Range {
                 start, stop, step, ..
             } => vec![start, stop, step],
@@ -117,9 +132,12 @@ impl LoopSource {
     pub fn item_type(&self) -> Type {
         match self {
             Self::Range { .. } => Type::Int,
+            Self::Protocol { item, .. } => item.clone(),
             Self::Items(sequence) | Self::Reversed(sequence) => match &sequence.ty {
                 Type::Bytes => Type::Int,
-                Type::Set(item) | Type::Dict(item, _) => item.as_ref().clone(),
+                Type::Set(item) | Type::Dict(item, _) | Type::Iterator(item) => {
+                    item.as_ref().clone()
+                }
                 Type::DictView(view, key, value) => view.item(key, value),
                 other => other
                     .sequence_item()

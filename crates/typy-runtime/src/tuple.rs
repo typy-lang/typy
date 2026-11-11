@@ -121,6 +121,39 @@ pub(crate) unsafe fn field_type(tuple: *const TupleType, index: usize) -> ItemTy
     unsafe { (*tuple).fields()[index].item_type() }
 }
 
+/// Stores `item` as field `index` of the tuple at `address`, taking `item` as `field` gives
+/// it: eight bytes, one byte for a `bool`, nothing for `None`, and for a nested tuple the
+/// address of the bytes to copy. No reference is counted.
+///
+/// # Safety
+///
+/// `tuple` is a descriptor the compiler emitted with more than `index` items, `address` is
+/// the address of room for a tuple of it, and `item` is a live item of the field's type.
+pub(crate) unsafe fn store_field(tuple: *const TupleType, address: u64, index: usize, item: u64) {
+    // SAFETY: the caller's guarantee; the field lies inside the tuple's room.
+    unsafe {
+        let field = &(*tuple).fields()[index];
+        let at = core::ptr::with_exposed_provenance_mut::<u8>(
+            usize::try_from(address + u64::from(field.offset)).unwrap_or(0),
+        );
+        match ItemKind::from_code(field.kind) {
+            ItemKind::Bool | ItemKind::OptionalBool => *at = (item & 0xff) as u8,
+            ItemKind::NoneValue => {}
+            ItemKind::Tuple | ItemKind::OptionalTuple => {
+                let size = usize::try_from((*field.tuple).size).unwrap_or(0);
+                let from =
+                    core::ptr::with_exposed_provenance::<u8>(usize::try_from(item).unwrap_or(0));
+                core::ptr::copy_nonoverlapping(from, at, size);
+            }
+            #[allow(
+                clippy::cast_ptr_alignment,
+                reason = "the compiler places an eight-byte field at an offset that is a multiple of eight"
+            )]
+            _ => at.cast::<u64>().write(item),
+        }
+    }
+}
+
 /// Returns the descriptor of item `index` of a tuple type, a tuple itself.
 ///
 /// # Safety

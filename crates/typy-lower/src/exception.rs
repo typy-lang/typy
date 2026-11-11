@@ -440,4 +440,72 @@ impl FunctionLowerer<'_> {
             });
         }
     }
+
+    /// Calls the `__next__` of an iterator class on `iterator` and returns what it gives. A
+    /// `StopIteration` it raises is released and goes to `exhausted`, and any other exception
+    /// takes the error path, as CPython's `for` and `next()` treat them (CST-08).
+    pub(crate) fn call_next(
+        &mut self,
+        next: typy_check::FunctionId,
+        iterator: ValueId,
+        item: TyirType,
+        exhausted: BlockId,
+        span: Span,
+    ) -> Lowered {
+        let callee = typy_tyir::FunctionId(next.0);
+        if !self
+            .may_raise
+            .get(next.0 as usize)
+            .copied()
+            .unwrap_or(false)
+        {
+            let value = self.builder.push_value(
+                Operation::Call {
+                    function: callee,
+                    arguments: vec![iterator],
+                },
+                item,
+                span,
+            );
+            return self.produced(value, item);
+        }
+        let normal = self.builder.create_block();
+        let value = self.builder.add_block_parameter(normal, item);
+        let error = self.builder.create_block();
+        let exception = self.builder.add_block_parameter(error, TyirType::EXCEPTION);
+        self.builder.terminate(Terminator::Invoke {
+            callee: typy_tyir::Callee::Function(callee),
+            arguments: vec![iterator],
+            normal,
+            error,
+            span,
+        });
+        self.builder.switch_to(error);
+        let stop = self.constant(
+            Constant::TypeObject(TypeObjectRef::Exception("StopIteration")),
+            span,
+        );
+        let stopped = self
+            .call_runtime(
+                RuntimeFunction::ExceptionMatches,
+                vec![exception, stop],
+                span,
+            )
+            .value;
+        let caught = self.builder.create_block();
+        let other = self.builder.create_block();
+        self.builder.terminate(Terminator::Branch {
+            condition: stopped,
+            then: caught,
+            otherwise: other,
+        });
+        self.builder.switch_to(caught);
+        self.builder.push(Operation::Decrement(exception), span);
+        self.jump_open(exhausted);
+        self.builder.switch_to(other);
+        self.propagate(exception, span);
+        self.builder.switch_to(normal);
+        self.raises = true;
+        self.produced(value, item)
+    }
 }

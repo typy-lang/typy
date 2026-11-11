@@ -40,6 +40,8 @@ pub enum Type {
     Instance(crate::typed::ClassId, String),
     /// An exception of a class (ADR-0013).
     Exception(ExceptionClass),
+    /// An iterator that `iter()` makes, of the type of its items (ADR-0014).
+    Iterator(Box<Type>),
     /// A type object, of the type it stands for, or of any type when that is known only
     /// when the program runs, as for `type(x)` of an optional `x` (CLS-12).
     TypeObject(Option<Box<TypeObjectOf>>),
@@ -110,7 +112,9 @@ impl TypeObjectOf {
             Type::TypeObject(_) => Self::Type,
             // An exception's class may derive from its static class, so it is read from the
             // exception when the program runs.
-            Type::Exception(_) | Type::Optional(_) | Type::Error => return None,
+            Type::Exception(_) | Type::Iterator(_) | Type::Optional(_) | Type::Error => {
+                return None;
+            }
         })
     }
 
@@ -236,6 +240,7 @@ impl Type {
         match (self, other) {
             (Self::Error, _) | (_, Self::Error) => true,
             (Self::List(item), Self::List(other))
+            | (Self::Iterator(item), Self::Iterator(other))
             | (Self::TupleOf(item), Self::TupleOf(other))
             | (Self::Set(item), Self::Set(other))
             | (Self::Optional(item), Self::Optional(other)) => item.matches(other),
@@ -273,7 +278,9 @@ impl Type {
         match self {
             Self::Error => true,
             Self::Tuple(items) => items.iter().any(Self::has_error),
-            Self::List(item) | Self::TupleOf(item) | Self::Set(item) => item.has_error(),
+            Self::List(item) | Self::TupleOf(item) | Self::Set(item) | Self::Iterator(item) => {
+                item.has_error()
+            }
             Self::Dict(key, value) | Self::DictView(_, key, value) => {
                 key.has_error() || value.has_error()
             }
@@ -297,10 +304,10 @@ impl Type {
             | (Self::TupleOf(left), Self::TupleOf(right))
             | (Self::Set(left), Self::Set(right)) => left == right,
             (Self::Dict(..), Self::Dict(..)) => self == other,
-            // Comparing views is planned with their set operations (DAT-16), and an optional
-            // value is compared with `None` by `is`.
-            (Self::DictView(..) | Self::Optional(_), _)
-            | (_, Self::DictView(..) | Self::Optional(_)) => false,
+            // Comparing views is planned with their set operations (DAT-16), an optional value
+            // is compared with `None` by `is`, and iterators by `is`.
+            (Self::DictView(..) | Self::Optional(_) | Self::Iterator(_), _)
+            | (_, Self::DictView(..) | Self::Optional(_) | Self::Iterator(_)) => false,
             (Self::Tuple(left), Self::Tuple(right)) => {
                 left.len() == right.len()
                     && left
@@ -342,6 +349,7 @@ impl Type {
                 | Self::Optional(_)
                 | Self::Instance(..)
                 | Self::Exception(_)
+                | Self::Iterator(_)
                 | Self::TypeObject(_),
                 _,
             )
@@ -353,6 +361,7 @@ impl Type {
                 | Self::Optional(_)
                 | Self::Instance(..)
                 | Self::Exception(_)
+                | Self::Iterator(_)
                 | Self::TypeObject(_),
             ) => false,
             _ => self == other || (self.is_numeric() && other.is_numeric()),
@@ -413,6 +422,7 @@ impl Type {
             Self::Exception(class) if class.name().starts_with(['A', 'E', 'I', 'O', 'U']) => {
                 format!("an {class}")
             }
+            Self::Iterator(_) => format!("an {self}"),
             other => format!("a {other}"),
         }
     }
@@ -454,6 +464,7 @@ impl fmt::Display for Type {
             Self::Optional(inner) => write!(formatter, "{inner} | None"),
             Self::Instance(_, name) => formatter.write_str(name),
             Self::Exception(class) => write!(formatter, "{class}"),
+            Self::Iterator(item) => write!(formatter, "Iterator[{item}]"),
             Self::TypeObject(Some(of)) => write!(formatter, "type[{}]", of.name()),
             Self::TypeObject(None) => formatter.write_str("type"),
             Self::Error => formatter.write_str("<error>"),

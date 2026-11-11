@@ -6,7 +6,9 @@ mod algebra;
 mod operations;
 mod others;
 
-pub(crate) use operations::{key_error, typy_rt_set_compare, typy_rt_set_repr};
+pub(crate) use operations::{
+    key_error, typy_rt_set_compare, typy_rt_set_item, typy_rt_set_next, typy_rt_set_repr,
+};
 #[cfg(test)]
 pub(crate) use operations::{typy_rt_set_add, typy_rt_set_new};
 #[cfg(test)]

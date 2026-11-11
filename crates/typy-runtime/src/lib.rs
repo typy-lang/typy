@@ -24,6 +24,7 @@ mod header;
 mod instance;
 mod int;
 mod io;
+mod iterator;
 mod libc;
 mod libm;
 mod list;

@@ -90,6 +90,16 @@ pub enum TypedExprKind {
         exception: Box<TypedExpr>,
         arguments: Vec<TypedExpr>,
     },
+    /// `iter(source)` of a built-in iterable: a new iterator over it (CST-09).
+    Iter(Box<TypedExpr>),
+    /// `next(iterator)` or `next(iterator, default)`: the next item of an iterator, or of an
+    /// instance whose class's `__next__` is `method`; at the end, the default, or
+    /// `StopIteration` without one (CST-08, CST-09).
+    Next {
+        iterator: Box<TypedExpr>,
+        method: Option<super::function::FunctionId>,
+        default: Option<Box<TypedExpr>>,
+    },
     /// An attribute of an instance, by its position in the class's attributes (CLS-01).
     Attribute {
         object: Box<TypedExpr>,

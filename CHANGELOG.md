@@ -26,6 +26,13 @@ All notable changes to TyPy are recorded here. The format follows
   arguments, and `super().__init__(...)` in `__init__` calls the base's.
   `except` catches it by any of its bases, and `is` compares exceptions
   (CLS-03, CLS-13, CLS-14, EXP-08).
+- `for` over an instance of a class that defines `__iter__` and
+  `__next__`, which ends when `__next__` raises `StopIteration` (CST-08).
+- `iter()` and `next()`, with or without a default, for lists, tuples,
+  `str`, `bytes`, sets, dicts and views of dicts, and for classes with
+  `__iter__` and `__next__`, with CPython's iterator behaviour: a list
+  iterator sees appended items, and a set or dict that changes size raises
+  `RuntimeError` (CST-09).
 - `assert test` and `assert test, message`, which raise `AssertionError`
   when the test is false in every build mode, evaluating the message only
   then; what the test shows holds after it (SMT-04).

@@ -18,8 +18,8 @@ has the same with `decode` and `hex`. Lists have `append`, `pop`,
 `discard`, `pop` and the methods that combine sets.
 
 `sys`, `input` and `open` come in 0.3 (LIB-04), the `math` module in 0.3
-(LIB-05), `%` formatting of strings in 0.3 (LIB-10), and `iter` and `next`
-in 0.3 (CST-09).
+(LIB-05), and `%` formatting of strings in 0.3 (LIB-10). `iter` and `next`
+are described in [Compound statements](compound-statements.md#iterators).
 
 ## Example
 

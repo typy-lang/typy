@@ -10,6 +10,7 @@ mod expression;
 mod flow;
 mod fstring;
 mod iterable_call;
+mod iterator;
 mod list;
 mod list_call;
 mod locals;

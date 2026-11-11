@@ -182,6 +182,7 @@ impl Dump<'_> {
             } => {
                 let label = match source {
                     LoopSource::Items(_) => "",
+                    LoopSource::Protocol { .. } => " protocol",
                     LoopSource::Enumerate { .. } => " enumerate",
                     LoopSource::Zip { .. } => " zip",
                     LoopSource::Reversed(_) | LoopSource::Range { reversed: true, .. } => {
@@ -293,6 +294,13 @@ impl Dump<'_> {
             TypedExprKind::IfExp { .. } => "IfExp".to_owned(),
             TypedExprKind::NewException { class, .. } => format!("NewException {class}"),
             TypedExprKind::SetArguments { .. } => "SetArguments".to_owned(),
+            TypedExprKind::Iter(_) => "Iter".to_owned(),
+            TypedExprKind::Next { method, .. } => if method.is_some() {
+                "Next __next__"
+            } else {
+                "Next"
+            }
+            .to_owned(),
             TypedExprKind::Call { function, .. } => {
                 format!("Call {}", self.program.function(*function).qualified_name)
             }
@@ -430,6 +438,12 @@ fn children(expression: &TypedExpr) -> Vec<&TypedExpr> {
                 init.iter()
                     .flat_map(|init| init.arguments.iter().map(|argument| &argument.value)),
             )
+            .collect(),
+        TypedExprKind::Iter(source) => vec![source],
+        TypedExprKind::Next {
+            iterator, default, ..
+        } => std::iter::once(iterator.as_ref())
+            .chain(default.as_deref())
             .collect(),
         TypedExprKind::SetArguments {
             exception,

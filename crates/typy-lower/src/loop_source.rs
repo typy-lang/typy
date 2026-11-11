@@ -69,6 +69,15 @@ enum Iterator {
         inner: Box<Iterator>,
         ty: TyirType,
     },
+    /// An iterator that `iter()` made: its slot, and the type of its items (CST-09).
+    Object { iterator: SlotId, item: TyirType },
+    /// An instance of an iterator class: the slot of what `__iter__` returned, and its
+    /// `__next__` (CST-08).
+    Protocol {
+        iterator: SlotId,
+        next: typy_check::FunctionId,
+        item: TyirType,
+    },
     /// `zip`: the iterators, and the slot of `strict` when it is given.
     Zip {
         inners: Vec<Iterator>,
@@ -188,6 +197,13 @@ impl FunctionLowerer<'_> {
     /// Evaluates the source's expressions in order and keeps them in hidden slots.
     fn start_iterator(&mut self, source: &LoopSource, span: Span) -> Iterator {
         match source {
+            LoopSource::Items(sequence) if let typy_check::Type::Iterator(item) = &sequence.ty => {
+                let iterator = self.kept(sequence, "iterator", span);
+                Iterator::Object {
+                    iterator,
+                    item: self.lowered_type(item),
+                }
+            }
             LoopSource::Items(sequence) => self.start_sequence(sequence, false, span),
             LoopSource::Range {
                 start,
@@ -196,6 +212,27 @@ impl FunctionLowerer<'_> {
                 reversed,
             } => self.start_range([start, stop, step], *reversed, span),
             LoopSource::Reversed(sequence) => self.start_sequence(sequence, true, span),
+            LoopSource::Protocol {
+                iterable,
+                iter,
+                next,
+                iterator,
+                item,
+            } => {
+                // CPython calls `__iter__` once, when the loop starts.
+                let lowered = self.expression(iterable);
+                let iterable_value = Self::borrowed(lowered.value, lowered.ty);
+                let ty = self.lowered_type(iterator);
+                let made = self.call_function(*iter, vec![(0, iterable_value)], ty, span);
+                self.release(lowered, span);
+                let slot = self.hidden_slot("iterator", ty);
+                self.store(slot, made, span);
+                Iterator::Protocol {
+                    iterator: slot,
+                    next: *next,
+                    item: self.lowered_type(item),
+                }
+            }
             LoopSource::Enumerate {
                 source: inner,
                 start,
@@ -563,6 +600,31 @@ impl FunctionLowerer<'_> {
                 rising,
             } => self.next_in_range([*counter, *limit, *stride], *rising, exhausted, span),
             Iterator::Dict { .. } => self.next_dict_entry(iterator, exhausted, span),
+            Iterator::Protocol {
+                iterator,
+                next,
+                item,
+            } => {
+                let current = self.load(*iterator, span);
+                self.call_next(*next, current.value, *item, exhausted, span)
+            }
+            Iterator::Object { iterator, item } => {
+                let current = self.load(*iterator, span);
+                let keep_going = self.constant(Constant::Int("0".to_owned()), span);
+                let found = self.call_runtime(
+                    RuntimeFunction::IteratorAdvance,
+                    vec![current.value, keep_going],
+                    span,
+                );
+                let fetch = self.builder.create_block();
+                self.builder.terminate(Terminator::Branch {
+                    condition: found.value,
+                    then: fetch,
+                    otherwise: exhausted,
+                });
+                self.builder.switch_to(fetch);
+                self.current_item(current.value, *item, span)
+            }
             Iterator::Set {
                 set,
                 slot,

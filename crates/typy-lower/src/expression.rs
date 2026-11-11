@@ -32,6 +32,12 @@ impl FunctionLowerer<'_> {
                 exception,
                 arguments,
             } => self.set_arguments(exception, arguments, span),
+            TypedExprKind::Iter(source) => self.iter_of(source, span),
+            TypedExprKind::Next {
+                iterator,
+                method,
+                default,
+            } => self.next_of(iterator, *method, default.as_deref(), ty, span),
             TypedExprKind::List(items) => {
                 let item = match &expression.ty {
                     typy_check::Type::List(item) => self.lowered_type(item),

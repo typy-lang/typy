@@ -45,6 +45,9 @@ impl BodyChecker<'_> {
         });
         let Some((builtin, arguments, keywords)) = call else {
             let sequence = self.sequence(iter);
+            if sequence.ty.class_id().is_some() {
+                return self.protocol_source(sequence, user);
+            }
             let item = self.iterated_item(&sequence, user);
             return (LoopSource::Items(sequence), item);
         };
@@ -57,6 +60,48 @@ impl BodyChecker<'_> {
         };
         let ty = source.item_type();
         (source, ty)
+    }
+
+    /// Checks iterating over an instance: its class's `__iter__` gives an instance of a class
+    /// with `__next__`, whose result is each value (CST-08).
+    fn protocol_source(&mut self, iterable: TypedExpr, user: &str) -> (LoopSource, Type) {
+        let class = iterable.ty.class_id().unwrap_or(crate::typed::ClassId(0));
+        let not_iterable = |reason: String| {
+            Diagnostic::new(
+                DiagnosticCode::error(411),
+                iterable.span,
+                format!("{user} over {} {reason}", iterable.ty.with_article()),
+            )
+            .with_rule(RuleId::CST_08)
+        };
+        let Some(iter) = self.program.method(class, "__iter__") else {
+            self.diagnostics
+                .push(not_iterable("needs `__iter__` in its class".to_owned()));
+            return (LoopSource::Items(iterable), Type::Error);
+        };
+        let iterator = self.program.signatures[iter.0 as usize].returns.clone();
+        let next = iterator
+            .class_id()
+            .and_then(|class| self.program.method(class, "__next__"));
+        let Some(next) = next else {
+            if !iterator.has_error() {
+                self.diagnostics.push(not_iterable(format!(
+                    "needs `__iter__` to return an instance of a class with `__next__`, and it \
+                     returns {}",
+                    iterator.with_article()
+                )));
+            }
+            return (LoopSource::Items(iterable), Type::Error);
+        };
+        let item = self.program.signatures[next.0 as usize].returns.clone();
+        let source = LoopSource::Protocol {
+            iterable: Box::new(iterable),
+            iter,
+            next,
+            iterator,
+            item: item.clone(),
+        };
+        (source, item)
     }
 
     fn enumerate(&mut self, arguments: &[Expr], keywords: &[Keyword], span: Span) -> LoopSource {
@@ -216,7 +261,7 @@ impl BodyChecker<'_> {
 
     /// Checks a sequence a loop reads. A fixed tuple whose items have one type is read as a
     /// `tuple[T, ...]` (DAT-14).
-    fn sequence(&mut self, expression: &Expr) -> TypedExpr {
+    pub(super) fn sequence(&mut self, expression: &Expr) -> TypedExpr {
         let value = self.expression(expression);
         let Type::Tuple(items) = &value.ty else {
             return value;

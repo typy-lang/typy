@@ -14,7 +14,9 @@ pub(crate) use text::typy_rt_dict_view_text;
 pub(crate) use view::typy_rt_dict_view;
 pub(crate) use view::{ViewObject, destroy as destroy_view, length as view_length};
 
-pub(crate) use operations::typy_rt_dict_equal;
+pub(crate) use operations::{
+    typy_rt_dict_equal, typy_rt_dict_key, typy_rt_dict_next, typy_rt_dict_value,
+};
 #[cfg(test)]
 pub(crate) use operations::{typy_rt_dict_new, typy_rt_dict_set};
 pub(crate) use text::typy_rt_dict_repr;

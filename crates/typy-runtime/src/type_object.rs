@@ -16,8 +16,8 @@ pub(crate) use builtin::{
 use crate::Raising;
 use crate::header::{
     BIG_INT_TYPE_ID, BYTES_TYPE_ID, DICT_TYPE_ID, DICT_VIEW_TYPE_ID, EXCEPTION_TYPE_ID, IMMORTAL,
-    INSTANCE_TYPE_ID, LIST_TYPE_ID, ObjectHeader, SET_TYPE_ID, STR_TYPE_ID, TUPLE_TYPE_ID,
-    TYPE_TYPE_ID,
+    INSTANCE_TYPE_ID, ITERATOR_TYPE_ID, LIST_TYPE_ID, ObjectHeader, SET_TYPE_ID, STR_TYPE_ID,
+    TUPLE_TYPE_ID, TYPE_TYPE_ID,
 };
 use crate::string::StrObject;
 use crate::tuple::TupleType;
@@ -171,6 +171,18 @@ pub unsafe extern "C" fn typy_rt_type_name(ty: *const TypeObject) -> *mut StrObj
     crate::string::from_str(unsafe { &*ty }.name())
 }
 
+/// Returns the type object of a heap object, as `type(value)` gives it for a value whose
+/// type only the object knows, such as an iterator (CLS-12).
+///
+/// # Safety
+///
+/// `object` points to a live object with a valid header.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn typy_rt_object_type(object: *const ObjectHeader) -> *const TypeObject {
+    // SAFETY: the caller's guarantee.
+    unsafe { type_of(object) }
+}
+
 /// Returns the type of a heap object.
 ///
 /// # Safety
@@ -199,6 +211,7 @@ pub(crate) unsafe fn type_of(object: *const ObjectHeader) -> &'static TypeObject
             EXCEPTION_TYPE_ID => crate::exception::class_of(object.cast()),
             TYPE_TYPE_ID => &TYPE,
             INSTANCE_TYPE_ID => crate::instance::class_of(object.cast()),
+            ITERATOR_TYPE_ID => crate::iterator::type_of(object.cast()),
             _ => crate::libc::abort_with(b"typy runtime: an object has an unknown type\n"),
         }
     }

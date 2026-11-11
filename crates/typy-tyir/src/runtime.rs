@@ -178,6 +178,10 @@ pub enum RuntimeFunction {
     ExceptionEnter,
     ExceptionLeave,
     ExceptionSetArguments,
+    IteratorNew,
+    IteratorAdvance,
+    IteratorItem,
+    ObjectType,
     FormatInt,
     FormatBool,
     FormatFloat,
@@ -214,7 +218,7 @@ const FLOAT_FLOAT: &[TyirType] = &[TyirType::Float, TyirType::Float];
 
 impl RuntimeFunction {
     /// Every runtime function.
-    pub const ALL: [Self; 175] = [
+    pub const ALL: [Self; 179] = [
         Self::IntFloorDivide,
         Self::IntModulo,
         Self::IntPower,
@@ -384,6 +388,10 @@ impl RuntimeFunction {
         Self::ExceptionEnter,
         Self::ExceptionLeave,
         Self::ExceptionSetArguments,
+        Self::IteratorNew,
+        Self::IteratorAdvance,
+        Self::IteratorItem,
+        Self::ObjectType,
         Self::FormatInt,
         Self::FormatBool,
         Self::FormatFloat,
@@ -408,6 +416,7 @@ impl RuntimeFunction {
         const VIEW: TyirType = TyirType::VIEW;
         const TYPE: TyirType = TyirType::TYPE;
         const EXCEPTION: TyirType = TyirType::EXCEPTION;
+        const ITERATOR: TyirType = TyirType::ITERATOR;
         match self {
             Self::IntFloorDivide
             | Self::IntModulo
@@ -552,6 +561,10 @@ impl RuntimeFunction {
             Self::ExceptionEnter => signature(&[EXCEPTION], Bits, false),
             Self::ExceptionLeave => signature(&[Bits], Unit, false),
             Self::ExceptionSetArguments => signature(&[EXCEPTION, Bits, Bits], Unit, false),
+            Self::IteratorNew => signature(&[Bits, Int, Bits], ITERATOR, false),
+            Self::IteratorAdvance => signature(&[ITERATOR, Int], Bool, true),
+            Self::IteratorItem => signature(&[ITERATOR], Bits, false),
+            Self::ObjectType => signature(&[Bits], TYPE, false),
             Self::FormatInt | Self::FormatBool => signature(&[Int, STR], STR, true),
             Self::FormatFloat => signature(&[Float, STR], STR, true),
             Self::FormatStr => signature(&[STR, STR], STR, true),
@@ -755,6 +768,10 @@ impl RuntimeFunction {
             Self::ExceptionEnter => "exception_enter",
             Self::ExceptionLeave => "exception_leave",
             Self::ExceptionSetArguments => "exception_set_arguments",
+            Self::IteratorNew => "iterator_new",
+            Self::IteratorAdvance => "iterator_advance",
+            Self::IteratorItem => "iterator_item",
+            Self::ObjectType => "object_type",
             Self::FormatInt => "format_int",
             Self::FormatBool => "format_bool",
             Self::FormatFloat => "format_float",

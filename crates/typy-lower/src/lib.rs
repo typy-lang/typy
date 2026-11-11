@@ -17,6 +17,7 @@ mod fstring;
 mod function;
 mod invoke;
 mod iterable_builtin;
+mod iterator;
 mod list;
 mod list_method;
 mod loop_source;

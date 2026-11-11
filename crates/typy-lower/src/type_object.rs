@@ -3,7 +3,7 @@
 
 use typy_check::{Type, TypeObjectOf, TypedExpr, View};
 use typy_diagnostics::Span;
-use typy_tyir::{Constant, RuntimeType, TyirType, TypeObjectRef};
+use typy_tyir::{Constant, RuntimeFunction, RuntimeType, TyirType, TypeObjectRef};
 
 use crate::function::FunctionLowerer;
 use crate::ownership::Lowered;
@@ -44,6 +44,11 @@ impl FunctionLowerer<'_> {
         let lowered = self.expression(value);
         let result = match (&value.ty, TypeObjectOf::of(&value.ty)) {
             (Type::Exception(_), _) => self.exception_type(&lowered, span),
+            (Type::Iterator(_), _) => {
+                let object = self.bits(Self::borrowed(lowered.value, lowered.ty), span);
+                let class = self.call_runtime(RuntimeFunction::ObjectType, vec![object], span);
+                self.borrowed_result(class)
+            }
             (_, Some(of)) => self.type_object(&of, span),
             (Type::Optional(inner), None) => {
                 let none = self.is_none(lowered, span);

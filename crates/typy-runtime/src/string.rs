@@ -15,6 +15,7 @@ use crate::allocator::{allocate, array_size};
 use crate::header::{ObjectHeader, STR_TYPE_ID};
 
 pub(crate) use builder::StrBuilder;
+pub(crate) use character::typy_rt_chr;
 pub(crate) use methods::{
     typy_rt_str_expandtabs, typy_rt_str_isascii, typy_rt_str_match, typy_rt_str_match_any,
     typy_rt_str_pad, typy_rt_str_remove_affix, typy_rt_str_replace, typy_rt_str_search,

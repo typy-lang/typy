@@ -3,7 +3,8 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use typy_check::{
-    AssignTarget, FunctionId, RaiseCause, TypedExpr, TypedExprKind, TypedProgram, TypedStmt,
+    AssignTarget, FunctionId, LoopSource, RaiseCause, TypedExpr, TypedExprKind, TypedProgram,
+    TypedStmt,
 };
 
 /// Returns the functions that can call themselves, directly or through others.
@@ -59,9 +60,7 @@ fn statements(body: &[TypedStmt], callees: &mut BTreeSet<FunctionId>) {
                 orelse,
                 ..
             } => {
-                for value in source.expressions() {
-                    expression(value, callees);
-                }
+                loop_source(source, callees);
                 assign_target(target, callees);
                 statements(body, callees);
                 statements(orelse, callees);
@@ -196,6 +195,7 @@ fn expression(expression_value: &TypedExpr, callees: &mut BTreeSet<FunctionId>) 
             }
             for generator in generators {
                 assign_target(&generator.target, callees);
+                protocol_calls(&generator.source, callees);
                 for value in generator
                     .source
                     .expressions()
@@ -214,9 +214,7 @@ fn expression(expression_value: &TypedExpr, callees: &mut BTreeSet<FunctionId>) 
         TypedExprKind::ListOf(source)
         | TypedExprKind::SetOf(source)
         | TypedExprKind::DictOf(source) => {
-            for value in source.expressions() {
-                expression(value, callees);
-            }
+            loop_source(source, callees);
         }
         TypedExprKind::Slice {
             value,
@@ -293,6 +291,18 @@ fn expression(expression_value: &TypedExpr, callees: &mut BTreeSet<FunctionId>) 
                 }
             }
         }
+        TypedExprKind::Iter(source) => expression(source, callees),
+        TypedExprKind::Next {
+            iterator,
+            method,
+            default,
+        } => {
+            callees.extend(*method);
+            expression(iterator, callees);
+            if let Some(default) = default {
+                expression(default, callees);
+            }
+        }
         TypedExprKind::SetArguments {
             exception,
             arguments,
@@ -330,5 +340,31 @@ fn fstring(parts: &[typy_check::FStringPart], callees: &mut BTreeSet<FunctionId>
                 fstring(spec, callees);
             }
         }
+    }
+}
+
+/// Adds the calls a loop source makes: its expressions', and a class's `__iter__` and
+/// `__next__`.
+fn loop_source(source: &LoopSource, callees: &mut BTreeSet<FunctionId>) {
+    for value in source.expressions() {
+        expression(value, callees);
+    }
+    protocol_calls(source, callees);
+}
+
+/// Adds the `__iter__` and `__next__` of every class a loop source iterates over.
+fn protocol_calls(source: &LoopSource, callees: &mut BTreeSet<FunctionId>) {
+    match source {
+        LoopSource::Protocol { iter, next, .. } => {
+            callees.insert(*iter);
+            callees.insert(*next);
+        }
+        LoopSource::Enumerate { source, .. } => protocol_calls(source, callees),
+        LoopSource::Zip { sources, .. } => {
+            for source in sources {
+                protocol_calls(source, callees);
+            }
+        }
+        LoopSource::Items(_) | LoopSource::Reversed(_) | LoopSource::Range { .. } => {}
     }
 }

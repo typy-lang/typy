@@ -184,12 +184,16 @@ impl BodyChecker<'_> {
             CompareOperator::Is | CompareOperator::IsNot => {
                 // Two instances, or optional instances, are the same object or not (EXP-08).
                 let instance = |ty: &Type| match ty {
-                    Type::Optional(inner) => {
-                        matches!(inner.as_ref(), Type::Instance(..) | Type::Exception(_))
-                    }
+                    Type::Optional(inner) => matches!(
+                        inner.as_ref(),
+                        Type::Instance(..) | Type::Exception(_) | Type::Iterator(_)
+                    ),
                     other => matches!(
                         other,
-                        Type::Instance(..) | Type::Exception(_) | Type::TypeObject(_)
+                        Type::Instance(..)
+                            | Type::Exception(_)
+                            | Type::Iterator(_)
+                            | Type::TypeObject(_)
                     ),
                 };
                 if l != Type::NoneType && r != Type::NoneType && !(instance(&l) && instance(&r)) {
