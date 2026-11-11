@@ -177,8 +177,9 @@ fn views_compare_by_their_sizes_and_items_as_in_cpython() {
     let int = word(ItemKind::Int as i64);
     let tuple = word(ItemKind::Tuple as i64);
     let pair = pair().expose_provenance() as u64;
-    let cases: [(u64, u64, i64, i64, u64, bool); 14] = [
+    let cases: [(u64, u64, i64, i64, u64, bool); 15] = [
         (a, address(small), 5, int, 0, true),
+        (address(small), a, 5, int, 0, false),
         (address(small), a, 2, int, 0, true),
         (a, b, 0, int, 0, false),
         (b, a, 4, int, 0, false),

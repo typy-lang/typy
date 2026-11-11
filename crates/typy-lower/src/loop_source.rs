@@ -196,6 +196,68 @@ impl FunctionLowerer<'_> {
         self.builder.switch_to(exit);
     }
 
+    /// Starts `source`, calls `between`, then calls `visit` with each value, as `each_value`
+    /// does, and returns what `between` gave. This is the order of a call that evaluates its
+    /// arguments before it iterates one, as `dict(source, name=value)` does: the source's
+    /// expressions first, then `between`, and a class's `__iter__` only after it (DAT-16).
+    pub(crate) fn each_value_after<T>(
+        &mut self,
+        source: &LoopSource,
+        span: Span,
+        between: impl FnOnce(&mut Self) -> T,
+        mut visit: impl FnMut(&mut Self, &T, Lowered),
+    ) -> T {
+        let (iterator, given) = if let LoopSource::Protocol {
+            iterable,
+            iter,
+            next,
+            iterator,
+            item,
+        } = source
+        {
+            let kept = self.kept(iterable, "iterable", span);
+            let given = between(self);
+            let iterable = self.load(kept, span);
+            let started = self.protocol_iterator(iterable, (*iter, *next), iterator, item, span);
+            (started, given)
+        } else {
+            let started = self.start_iterator(source, span);
+            (started, between(self))
+        };
+        let header = self.builder.create_block();
+        let exit = self.builder.create_block();
+        self.jump_to(header);
+        self.builder.switch_to(header);
+        let value = self.next_value(&iterator, exit, span);
+        visit(self, &given, value);
+        self.release(value, span);
+        self.jump_to(header);
+        self.builder.switch_to(exit);
+        given
+    }
+
+    /// Calls `__iter__` of a borrowed iterable and keeps what it returns, the iterator that
+    /// `__next__` steps (CST-08).
+    fn protocol_iterator(
+        &mut self,
+        iterable: Lowered,
+        (iter, next): (typy_check::FunctionId, typy_check::FunctionId),
+        iterator: &typy_check::Type,
+        item: &typy_check::Type,
+        span: Span,
+    ) -> Iterator {
+        let iterable = Self::borrowed(iterable.value, iterable.ty);
+        let ty = self.lowered_type(iterator);
+        let made = self.call_function(iter, vec![(0, iterable)], ty, span);
+        let slot = self.hidden_slot("iterator", ty);
+        self.store(slot, made, span);
+        Iterator::Protocol {
+            iterator: slot,
+            next,
+            item: self.lowered_type(item),
+        }
+    }
+
     /// Evaluates the source's expressions in order and keeps them in hidden slots.
     fn start_iterator(&mut self, source: &LoopSource, span: Span) -> Iterator {
         match source {
@@ -229,17 +291,9 @@ impl FunctionLowerer<'_> {
             } => {
                 // CPython calls `__iter__` once, when the loop starts.
                 let lowered = self.expression(iterable);
-                let iterable_value = Self::borrowed(lowered.value, lowered.ty);
-                let ty = self.lowered_type(iterator);
-                let made = self.call_function(*iter, vec![(0, iterable_value)], ty, span);
+                let started = self.protocol_iterator(lowered, (*iter, *next), iterator, item, span);
                 self.release(lowered, span);
-                let slot = self.hidden_slot("iterator", ty);
-                self.store(slot, made, span);
-                Iterator::Protocol {
-                    iterator: slot,
-                    next: *next,
-                    item: self.lowered_type(item),
-                }
+                started
             }
             LoopSource::Enumerate {
                 source: inner,

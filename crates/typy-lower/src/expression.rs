@@ -56,6 +56,12 @@ impl FunctionLowerer<'_> {
                 self.dict_display(keys, values, &expression.ty, span)
             }
             TypedExprKind::DictOf(source) => self.dict_of(source, &expression.ty, span),
+            TypedExprKind::DictWith { source, entries } => {
+                self.dict_with(source.as_deref(), entries, &expression.ty, span)
+            }
+            TypedExprKind::DictFromKeys { source, value } => {
+                self.dict_from_keys(source, value.as_deref(), &expression.ty, span)
+            }
             TypedExprKind::Comprehension {
                 element,
                 value,

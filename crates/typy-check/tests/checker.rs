@@ -1436,7 +1436,19 @@ fn dict_rules_give_their_codes() {
         ("d = dict([1, 2])\n", &["E0404"]),
         ("d = dict([(1, 2, 3)])\n", &["E0404"]),
         ("d = dict([([1], 2)])\n", &["E0413"]),
-        ("d = dict(a=1)\n", &["E0201"]),
+        ("d = dict(a=1, a=2)\n", &["E0404"]),
+        ("d = dict({1: 2}, a=3)\n", &["E0404"]),
+        ("d = dict(a=1, b='x')\n", &["E0409"]),
+        ("d = dict([1], a=1)\n", &["E0404"]),
+        ("d = dict([], [], a=1)\n", &["E0404"]),
+        ("d = dict.fromkeys([[1]])\n", &["E0413"]),
+        ("d = dict.fromkeys([1], value=2)\n", &["E0404"]),
+        ("d = dict.fromkeys()\n", &["E0404"]),
+        ("d = dict.fromkeys(1)\n", &["E0411"]),
+        ("d = dict.fromkeys([1], missing)\n", &["E0205"]),
+        ("d = dict.fromkeys(missing)\n", &["E0205"]),
+        ("d: dict[int, int] = dict(a=1)\n", &["E0402"]),
+        ("d = dict(a=missing)\n", &["E0205"]),
         ("d = dict([(1, 2)], [(3, 4)])\n", &["E0404"]),
         ("d = dict(missing)\n", &["E0205"]),
         ("d = {1: 2}.keys() == {1: 2}.values()\n", &["E0407"]),
@@ -1446,6 +1458,10 @@ fn dict_rules_give_their_codes() {
         ("d = {1: 2}.values() <= {1: 2}.values()\n", &["E0407"]),
         ("d = {1: 2}.keys() == [1]\n", &["E0407"]),
         ("d = {1: 2}.keys() | 1\n", &["E0401"]),
+        (
+            "t: tuple[str, ...] = ('a',)\nd = {1: 2}.keys() | t\n",
+            &["E0401"],
+        ),
         ("d = {1: 2}.values() == {1: 'a'}.values()\n", &["E0407"]),
         ("p = {1: 2}\np['a'] = 3\n", &["E0404"]),
         ("p = {1: 2}\np[1] = 'b'\n", &["E0402"]),
@@ -1572,6 +1588,9 @@ k = [v for v in enumerate(range(2))]
 m = x + 'a'
 v = {1: 'a'}
 w = (v.keys() & [1], v.items() | {(2, 'b')}, v.keys() <= {1}, v.values() == v.values())
+z = (dict(a=1), dict({'k': 2}, b=3), dict.fromkeys('ab'), dict.fromkeys([1], 2.5))
+y: dict[str, float] = dict(a=1.5)
+u: dict[str, list[int]] = dict([('k', [1])], b=[])
 r: range = range(1, 9, 2)
 n = (len(r), r[-1], 3 in r, r == range(4), [v for v in reversed(r)])
 s = r[1:]
@@ -1582,6 +1601,7 @@ s = r[1:]
     for node in [
         "Assign n: tuple[int, int, bool, bool, list[int]]",
         "Assign s: range",
+        "Assign z: tuple[dict[str, int], dict[str, int], dict[str, None], dict[int, float]]",
         "Assign w: tuple[set[int], set[tuple[int, str]], bool, bool]",
         "Comprehension : list[int]",
         "Comprehension : list[list[str]]",

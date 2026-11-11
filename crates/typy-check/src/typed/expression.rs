@@ -155,6 +155,18 @@ pub enum TypedExprKind {
     /// `dict(source)`: a copy of a dict, or a dict of the `(key, value)` pairs the source gives,
     /// set in order (DAT-09).
     DictOf(Box<super::statement::LoopSource>),
+    /// `dict(name=value, ...)` or `dict(source, name=value, ...)`: the source's pairs, then
+    /// each name as a `str` key with its value, in order (DAT-16).
+    DictWith {
+        source: Option<Box<super::statement::LoopSource>>,
+        entries: Vec<(String, TypedExpr)>,
+    },
+    /// `dict.fromkeys(source, value)`: each item of the source as a key, mapped to the one
+    /// value, or to `None` when none is given (DAT-16).
+    DictFromKeys {
+        source: Box<super::statement::LoopSource>,
+        value: Option<Box<TypedExpr>>,
+    },
     /// `dict[key]`, which raises `KeyError` for a missing key (DAT-09).
     DictItem {
         dict: Box<TypedExpr>,

@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy detailed design |
-| Version | 1.56 |
+| Version | 1.57 |
 | Status | Approved |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-11 |
@@ -657,9 +657,19 @@ a display have one type and the values one type, or E0409; `{}` and
 `dict()` take the expected type as `[]` does, also beside a dict in a
 comparison, and are E0410 elsewhere. `dict(source)` takes a dict, which is
 merged, or any loop source of two-item tuples, whose pairs are set in
-order; any other item is E0404, and keyword arguments are E0201, planned
-for 0.3 with DAT-16. `d[k]` and `d[k] = v` check the key against the key
-type and the value against the value type, E0404 and E0402, and
+order; any other item is E0404. Keyword arguments, with or without a
+source, give `TypedExprKind::DictWith { source, names, values }`, a dict of
+`str` keys whose values have the source's value type, the expected one or
+one type, E0409 otherwise; a name given twice is E0404, as CPython's
+`keyword argument repeated`. `dict.fromkeys(source, value)` gives
+`DictFromKeys`, of the source's items and the value's type, or `None`
+without a value; it takes no keywords. Both are checked in
+`body/dict_call.rs`. Lowering in `dict_call.rs` keeps CPython's order:
+every argument is evaluated, then the source is read through
+`each_value_after`, which calls a class's `__iter__` only then, and each
+keyword is set last, as `dict_vectorcall` does. `d[k]` and `d[k] = v`
+check the key against the key type and the value against the value type,
+E0404 and E0402, and
 `d[k] op= v` reads and writes the one entry. `in` finds a key in a dict, a
 key, a value or a `(key, value)` pair in a view; `for`, `len`, `bool`,
 `print` and the builtins of one iterable read a dict's keys or a view's

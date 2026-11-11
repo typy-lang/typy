@@ -260,3 +260,37 @@ fn an_argument_read_from_a_container_is_kept_for_the_call() {
     let call = main.find("first").unwrap_or(0);
     assert!(main[..call].matches("inc ").count() >= 1, "{main}");
 }
+
+#[test]
+fn dict_calls_evaluate_every_argument_before_calling_iter() {
+    let source = "\
+class Pairs:
+    def __iter__(self) -> 'Pairs':
+        return self
+
+    def __next__(self) -> tuple[str, int]:
+        raise StopIteration
+
+
+def note() -> int:
+    return 1
+
+
+made = dict(Pairs(), k=note())
+keys = dict.fromkeys(Pairs(), note())
+";
+    let text = text(source);
+    let calls: Vec<&str> = text
+        .lines()
+        .filter_map(|line| {
+            let callee = line.split("call _TY8__main__").nth(1)?;
+            callee.split('(').next()
+        })
+        .collect();
+    // CPython's `dict` and `dict.fromkeys` call `__iter__` once their arguments are evaluated.
+    assert_eq!(
+        calls,
+        ["4note", "14Pairs.__iter__", "4note", "14Pairs.__iter__"],
+        "{text}"
+    );
+}

@@ -23,6 +23,7 @@ the same exceptions.
 | The set methods that combine a set with other collections | DAT-15 |
 | `range` as a value: `len`, indexing, slicing, `in`, `==` and its text | DAT-17 |
 | `dict.keys()` and `dict.items()` as sets: `\|`, `&`, `-`, `^` and comparisons | DAT-16 |
+| `reversed` of a dict, `dict(name=value)` and `dict.fromkeys` | DAT-16 |
 
 A slice without a step, or with a step of 1, takes any number of items,
 and the list grows or shrinks to fit: `xs[:0] = items` inserts at the
@@ -62,8 +63,16 @@ A set needs items with a hash, so `d.items()` of a dict whose values are
 lists compares with another view but makes no set. `d.values()` is no
 set: it compares only with itself, by identity, as in CPython.
 `reversed(d)`, and `reversed` of a view, give the entries from the last
-to the first. `dict` with keyword arguments and `dict.fromkeys` are
-planned for 0.3 (DAT-16).
+to the first. `dict(name=value)` makes a dict of `str` keys, after the
+pairs of a source when one is given, and `dict.fromkeys(keys, value)`
+maps every key to the one value, or to `None`:
+
+<!-- typy-expect: accepted -->
+```python
+defaults = {"color": "red", "size": "m"}
+print(dict(defaults, size="l"), list(reversed(defaults)))
+print(dict.fromkeys(["ada", "alan"], 0), dict.fromkeys("ab"))
+```
 
 ## Example
 

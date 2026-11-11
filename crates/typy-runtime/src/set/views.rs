@@ -14,7 +14,7 @@ fn size(operand: &Other<'_>) -> usize {
     match operand {
         Other::Set(set) => set.used,
         // SAFETY: a view holds a reference to its live dict.
-        Other::View(view) => unsafe { (*view.dict).used },
+        Other::Keys(view) | Other::Pairs(view) => unsafe { (*view.dict).used },
         Other::Dict(_) | Other::Items(_) => {
             unreachable!("a comparison has a set or a view on each side")
         }
@@ -31,7 +31,7 @@ unsafe fn holds(operand: &Other<'_>, result: *const SetObject, item: u64, hash: 
     unsafe {
         match operand {
             Other::Set(set) => lookup(*set, item, hash).is_some(),
-            Other::View(view) => {
+            Other::Keys(view) | Other::Pairs(view) => {
                 typy_rt_dict_view_contains(*view, item, (*result).tuple.expose_provenance() as u64)
             }
             Other::Dict(_) | Other::Items(_) => {
@@ -133,8 +133,14 @@ unsafe fn intersect(view: *const ViewObject, other: u64, result: *mut SetObject)
                 crate::refcount::typy_rt_decrement(common.cast());
                 return;
             }
-            Other::View(larger) if (*larger.dict).used > length => {
-                (core::ptr::from_ref(larger), Other::View(&*view))
+            Other::Keys(larger) | Other::Pairs(larger) if (*larger.dict).used > length => {
+                let first = &*view;
+                let first = if first.kind == 0 {
+                    Other::Keys(first)
+                } else {
+                    Other::Pairs(first)
+                };
+                (core::ptr::from_ref(larger), first)
             }
             operand => (view, operand),
         };
@@ -214,7 +220,7 @@ pub unsafe extern "C" fn typy_rt_dict_view_compare(
         let (left_size, right_size) = (size(&left), size(&right));
         // An item tested against a view is looked up by its key, so it needs no hash.
         let contained = |inner: &Other<'_>, outer: &Other<'_>| match (inner, outer) {
-            (Other::View(view), Other::View(_)) if view.kind == 2 => {
+            (Other::Pairs(view), Other::Pairs(_)) => {
                 each_pair(pair, &*view.dict, false, |item, hash| {
                     holds(outer, pair, item, hash)
                 })

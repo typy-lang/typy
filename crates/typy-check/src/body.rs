@@ -6,6 +6,7 @@ mod class;
 mod comprehension;
 mod delete;
 mod dict;
+mod dict_call;
 mod exception;
 mod expression;
 mod flow;

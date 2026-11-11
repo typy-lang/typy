@@ -317,7 +317,7 @@ impl Type {
             | (Self::TupleOf(left), Self::TupleOf(right))
             | (Self::Set(left), Self::Set(right)) => left == right,
             (Self::Dict(..), Self::Dict(..)) => self == other,
-            // Comparing views is planned with their set operations (DAT-16), an optional value
+            // Views compare by the rules of `body/view_operator.rs` (DAT-16), an optional value
             // is compared with `None` by `is`, and iterators by `is`.
             (Self::DictView(..) | Self::Optional(_) | Self::Iterator(_) | Self::Traceback, _)
             | (_, Self::DictView(..) | Self::Optional(_) | Self::Iterator(_) | Self::Traceback) => {

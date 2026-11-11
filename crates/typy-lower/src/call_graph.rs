@@ -249,6 +249,20 @@ fn expression(expression_value: &TypedExpr, callees: &mut BTreeSet<FunctionId>) 
         | TypedExprKind::DictOf(source) => {
             loop_source(source, callees);
         }
+        TypedExprKind::DictWith { source, entries } => {
+            if let Some(source) = source {
+                loop_source(source, callees);
+            }
+            for (_, value) in entries {
+                expression(value, callees);
+            }
+        }
+        TypedExprKind::DictFromKeys { source, value } => {
+            loop_source(source, callees);
+            if let Some(value) = value {
+                expression(value, callees);
+            }
+        }
         TypedExprKind::Slice {
             value,
             lower,

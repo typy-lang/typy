@@ -19,8 +19,10 @@ pub(super) enum Other<'a> {
     Dict(&'a DictObject),
     /// A list or `tuple[T, ...]` of the set's items, read in order.
     Items(&'a ListObject),
-    /// A view of a dict's keys or items, read in order as CPython reads any iterable.
-    View(&'a ViewObject),
+    /// A view of a dict's keys, read in order as CPython reads any iterable.
+    Keys(&'a ViewObject),
+    /// A view of a dict's items, read in order as `(key, value)` pairs.
+    Pairs(&'a ViewObject),
 }
 
 /// Returns the operand at `address`.
@@ -41,7 +43,14 @@ pub(super) unsafe fn other<'a>(address: u64) -> Other<'a> {
         match (*header).type_id {
             SET_TYPE_ID => Other::Set(&*header.cast::<SetObject>()),
             DICT_TYPE_ID => Other::Dict(&*header.cast::<DictObject>()),
-            DICT_VIEW_TYPE_ID => Other::View(&*header.cast::<ViewObject>()),
+            DICT_VIEW_TYPE_ID => {
+                let view = &*header.cast::<ViewObject>();
+                if view.kind == 0 {
+                    Other::Keys(view)
+                } else {
+                    Other::Pairs(view)
+                }
+            }
             _ => Other::Items(&*header.cast::<ListObject>()),
         }
     }
@@ -73,12 +82,12 @@ pub(super) unsafe fn each_item(
             Other::Dict(dict) => dict
                 .live_entries()
                 .all(|index| visit(dict.key(index), dict.hash(index))),
-            Other::View(view) if view.kind == 0 => {
+            Other::Keys(view) => {
                 let dict = &*view.dict;
                 dict.live_entries()
                     .all(|index| visit(dict.key(index), dict.hash(index)))
             }
-            Other::View(view) => each_pair(set, &*view.dict, true, visit),
+            Other::Pairs(view) => each_pair(set, &*view.dict, true, visit),
             Other::Set(source) => source
                 .active()
                 .all(|slot| visit(source.item(slot), source.hash(slot))),
@@ -110,11 +119,24 @@ pub(super) unsafe fn each_pair(
         let all = dict.live_entries().all(|index| {
             crate::tuple::store_field(pair_type, address, 0, dict.key(index));
             crate::tuple::store_field(pair_type, address, 1, dict.value(index));
-            visit(address, if hashed { item_type.hash(address) } else { 0 })
+            visit(address, pair_hash(item_type, address, hashed))
         });
         crate::allocator::free(room);
         all
     }
+}
+
+/// Returns the hash of the pair at `address`, or 0 when it is read `hashed` false.
+///
+/// # Safety
+///
+/// `address` holds a live pair of `item_type`.
+unsafe fn pair_hash(item_type: crate::list::ItemType, address: u64, hashed: bool) -> i64 {
+    if !hashed {
+        return 0;
+    }
+    // SAFETY: the caller's guarantee.
+    unsafe { item_type.hash(address) }
 }
 
 /// Adds each item of `other` to `set`, CPython's `set_update_internal`: nothing when `other`
@@ -143,7 +165,7 @@ pub unsafe extern "C" fn typy_rt_set_extend(set: *mut SetObject, other: u64, ski
                 }
                 add_each(set, &operand);
             }
-            Other::Items(_) | Other::View(_) => add_each(set, &operand),
+            Other::Items(_) | Other::Keys(_) | Other::Pairs(_) => add_each(set, &operand),
         }
     }
 }
@@ -312,7 +334,7 @@ pub unsafe extern "C" fn typy_rt_set_toggle(set: *mut SetObject, other: u64) {
                     true
                 });
             }
-            Other::Items(_) | Other::View(_) => {
+            Other::Items(_) | Other::Keys(_) | Other::Pairs(_) => {
                 let source = new_set((*set).item_type());
                 typy_rt_set_extend(source, other, 0);
                 algebra::symmetric_difference_update(set, source);

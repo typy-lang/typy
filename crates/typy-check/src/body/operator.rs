@@ -291,7 +291,7 @@ impl BodyChecker<'_> {
         Type::Error
     }
 
-    /// Reports a comparison or a set operation of a dict view, planned for 0.3 (DAT-16).
+    /// Reports arithmetic on `bool` values, which TyPy refuses (DAT-03).
     pub(super) fn bool_arithmetic(&mut self, span: Span) -> Type {
         self.diagnostics.push(
             Diagnostic::new(

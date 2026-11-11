@@ -26,6 +26,12 @@ impl BodyChecker<'_> {
         if receiver.ty.has_error() {
             return Self::invalid_call(span);
         }
+        if name.name == "fromkeys"
+            && let Type::TypeObject(Some(of)) = &receiver.ty
+            && **of == crate::types::TypeObjectOf::Dict
+        {
+            return self.call_fromkeys(arguments, keywords, None, span);
+        }
         if let Some(class) = receiver.ty.class_id() {
             return self.instance_method_call(receiver, class, name, arguments, keywords, span);
         }

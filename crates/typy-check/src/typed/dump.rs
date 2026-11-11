@@ -353,6 +353,11 @@ impl Dump<'_> {
             TypedExprKind::Unwrap(_) => "Unwrap".to_owned(),
             TypedExprKind::Comprehension { .. } => "Comprehension".to_owned(),
             TypedExprKind::DictOf(_) => "DictOf".to_owned(),
+            TypedExprKind::DictWith { entries, .. } => {
+                let names: Vec<&str> = entries.iter().map(|(name, _)| name.as_str()).collect();
+                format!("DictWith {}", names.join(" "))
+            }
+            TypedExprKind::DictFromKeys { .. } => "DictFromKeys".to_owned(),
             TypedExprKind::DictItem { .. } => "DictItem".to_owned(),
             TypedExprKind::TupleOf(_) => "TupleOf".to_owned(),
             TypedExprKind::ListItem { .. } => "ListItem".to_owned(),
@@ -395,6 +400,16 @@ fn children(expression: &TypedExpr) -> Vec<&TypedExpr> {
         TypedExprKind::ListOf(source)
         | TypedExprKind::SetOf(source)
         | TypedExprKind::DictOf(source) => source.expressions(),
+        TypedExprKind::DictWith { source, entries } => source
+            .iter()
+            .flat_map(|source| source.expressions())
+            .chain(entries.iter().map(|(_, value)| value))
+            .collect(),
+        TypedExprKind::DictFromKeys { source, value } => source
+            .expressions()
+            .into_iter()
+            .chain(value.as_deref())
+            .collect(),
         TypedExprKind::Dict { keys, values } => keys
             .iter()
             .zip(values)
