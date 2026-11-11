@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy detailed design |
-| Version | 1.59 |
+| Version | 1.60 |
 | Status | Approved |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-11 |
@@ -944,8 +944,12 @@ result must have the item type, E0402.
 
 ### 7.2 Behaviour
 
-`TypeChecker::check(project) -> Result<TypedProgram, Diagnostics>` runs, for
-each module in name order:
+`TypeChecker::check(project) -> Result<TypedProgram, Diagnostics>` checks
+every module into one `Program`, each after the modules its module-level
+imports need, in `Project::order`. A module's functions and classes are
+numbered after those of the modules before it, and `begin_module` gives the
+bodies its own tables of names, so `TypedProgram::modules` lists each
+module with the function of its body. For each module it runs:
 
 1. `SubsetChecker::check` walks the syntax tree and looks up each node kind
    in the feature table of `ProjectSettings::release`. A node planned for a

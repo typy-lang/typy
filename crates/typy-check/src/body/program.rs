@@ -8,7 +8,7 @@ use crate::check::{ClassInfo, Definition};
 use crate::exception::ExceptionClass;
 use crate::typed::{
     Attribute, ClassId, FunctionId, FunctionSignature, Symbol, SymbolId, SymbolKind, TypedClass,
-    TypedFunction, TypedProgram,
+    TypedFunction, TypedModule, TypedProgram,
 };
 use crate::types::Type;
 
@@ -30,44 +30,89 @@ pub(crate) struct Program {
     /// them, while the `__init__` methods are checked.
     pub(super) provisional: bool,
     pub(super) classes: Vec<ClassInfo>,
+    /// The module of each class, indexed by `ClassId`.
+    pub(super) class_modules: Vec<String>,
     pub(super) class_ids: BTreeMap<String, ClassId>,
     /// The classes that derive from an exception class (CLS-03).
     pub(super) exceptions: BTreeMap<ClassId, ExceptionClass>,
+    /// The modules checked so far, in the order they were checked.
+    pub(super) modules: Vec<TypedModule>,
 }
 
 impl Program {
-    pub(crate) fn new(
+    /// Returns a program with no module checked yet.
+    pub(crate) fn empty() -> Self {
+        Self {
+            module: String::new(),
+            symbols: Vec::new(),
+            functions: Vec::new(),
+            function_ids: BTreeMap::new(),
+            signatures: Vec::new(),
+            module_variables: BTreeSet::new(),
+            module_symbols: BTreeMap::new(),
+            assigned_in_functions: BTreeSet::new(),
+            provisional: false,
+            classes: Vec::new(),
+            class_modules: Vec::new(),
+            class_ids: BTreeMap::new(),
+            exceptions: BTreeMap::new(),
+            modules: Vec::new(),
+        }
+    }
+
+    /// Returns how many classes the modules checked so far define, the first ID of the next.
+    pub(crate) fn class_count(&self) -> usize {
+        self.classes.len()
+    }
+
+    /// Returns how many functions the modules checked so far define, the first ID of the next.
+    pub(crate) fn function_count(&self) -> usize {
+        self.functions.len()
+    }
+
+    /// Starts checking a module: its functions and classes follow those of the modules
+    /// before it, and its names replace theirs in the tables bodies read.
+    pub(crate) fn begin_module(
+        &mut self,
         module: &str,
         definitions: &[Definition<'_>],
         module_variables: BTreeSet<String>,
         classes: Vec<ClassInfo>,
         class_ids: BTreeMap<String, ClassId>,
         exceptions: BTreeMap<ClassId, ExceptionClass>,
-    ) -> Self {
+    ) {
+        let first = self.functions.len();
         // Methods are reached through their instances, so only module functions have names.
-        let function_ids = definitions
+        self.function_ids = definitions
             .iter()
             .enumerate()
             .filter(|(_, definition)| definition.class.is_none())
-            .map(|(index, definition)| (definition.name.clone(), FunctionId(id(index))))
+            .map(|(index, definition)| (definition.name.clone(), FunctionId(id(first + index))))
             .collect();
-        Self {
-            module: module.to_owned(),
-            symbols: Vec::new(),
-            functions: vec![None; definitions.len()],
-            function_ids,
-            signatures: definitions
+        self.functions
+            .extend(std::iter::repeat_n(None, definitions.len()));
+        self.signatures.extend(
+            definitions
                 .iter()
-                .map(|definition| definition.signature.clone())
-                .collect(),
-            module_variables,
-            module_symbols: BTreeMap::new(),
-            assigned_in_functions: BTreeSet::new(),
-            provisional: false,
-            classes,
-            class_ids,
-            exceptions,
-        }
+                .map(|definition| definition.signature.clone()),
+        );
+        module.clone_into(&mut self.module);
+        self.module_variables = module_variables;
+        self.module_symbols = BTreeMap::new();
+        self.assigned_in_functions = BTreeSet::new();
+        self.class_modules
+            .extend(std::iter::repeat_n(module.to_owned(), classes.len()));
+        self.classes.extend(classes);
+        self.class_ids = class_ids;
+        self.exceptions.extend(exceptions);
+    }
+
+    /// Ends checking a module whose body is the function `body`.
+    pub(crate) fn end_module(&mut self, body: FunctionId) {
+        self.modules.push(TypedModule {
+            name: self.module.clone(),
+            body,
+        });
     }
 
     /// Returns the type of the instances of a class: an exception for an exception class.
@@ -161,7 +206,13 @@ impl Program {
         symbol
     }
 
-    pub(crate) fn finish(self, entry: FunctionId) -> TypedProgram {
+    /// Returns the typed program, whose entry is the body of the module named `main`.
+    pub(crate) fn finish(self, main: &str) -> TypedProgram {
+        let entry = self
+            .modules
+            .iter()
+            .find(|module| module.name == main)
+            .map_or(FunctionId(0), |module| module.body);
         let classes = self
             .classes
             .iter()
@@ -169,7 +220,7 @@ impl Program {
             .map(|(index, class)| TypedClass {
                 id: ClassId(id(index)),
                 name: class.name.clone(),
-                module: self.module.clone(),
+                module: self.class_modules[index].clone(),
                 base: class.base,
                 exception: class.exception.clone(),
                 attributes: class
@@ -192,6 +243,7 @@ impl Program {
             symbols: self.symbols,
             functions: self.functions.into_iter().flatten().collect(),
             classes,
+            modules: self.modules,
             entry,
         }
     }

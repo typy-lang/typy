@@ -13,8 +13,19 @@ pub struct TypedProgram {
     pub functions: Vec<TypedFunction>,
     /// Every class, indexed by `ClassId`.
     pub classes: Vec<TypedClass>,
+    /// Every module, each after the modules its module-level imports need (ADR-0015).
+    pub modules: Vec<TypedModule>,
     /// The module body of `__main__`.
     pub entry: FunctionId,
+}
+
+/// A module of the program after checking.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct TypedModule {
+    /// The module's qualified name, `__main__` for the main file.
+    pub name: String,
+    /// The function of its module-level code.
+    pub body: FunctionId,
 }
 
 impl TypedProgram {

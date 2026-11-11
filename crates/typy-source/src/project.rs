@@ -117,6 +117,11 @@ impl Project {
         &self.order
     }
 
+    /// Returns the modules in the order of `order`.
+    pub fn modules_in_order(&self) -> impl Iterator<Item = &Module> {
+        self.order.iter().filter_map(|name| self.modules.get(name))
+    }
+
     /// Returns the modules a module's imports need, in source order.
     #[must_use]
     pub fn imports(&self, name: &ModuleName) -> &[Import] {

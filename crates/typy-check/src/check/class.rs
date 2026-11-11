@@ -64,9 +64,11 @@ pub(super) struct ClassStatement<'tree> {
     pub(super) span: Span,
 }
 
-/// Collects the module's classes in source order.
+/// Collects the module's classes in source order, numbered from `first`, the number of
+/// classes of the modules checked before it.
 pub(super) fn collect_classes<'tree>(
     statements: &'tree [Stmt],
+    first: usize,
     diagnostics: &mut Diagnostics,
 ) -> Vec<ClassStatement<'tree>> {
     let mut classes: Vec<ClassStatement<'tree>> = Vec::new();
@@ -86,7 +88,7 @@ pub(super) fn collect_classes<'tree>(
             continue;
         }
         classes.push(ClassStatement {
-            id: ClassId(u32::try_from(classes.len()).unwrap_or(u32::MAX)),
+            id: ClassId(u32::try_from(first + classes.len()).unwrap_or(u32::MAX)),
             name,
             base: bases.first(),
             body,
@@ -353,9 +355,8 @@ fn refused_method(
 /// Returns true when `base`, or a class it derives from, defines the method `name`.
 fn inherited_method(infos: &[ClassInfo], base: Option<ClassId>, name: &str) -> bool {
     let mut current = base;
-    while let Some(class) = current {
-        // A base is defined before the class, so its information is already collected.
-        let info = &infos[class.0 as usize];
+    // A base is defined before the class, so its information is already collected.
+    while let Some(info) = current.and_then(|class| infos.iter().find(|info| info.id == class)) {
         if info.method(name).is_some() {
             return true;
         }

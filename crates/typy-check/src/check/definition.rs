@@ -71,16 +71,18 @@ pub(super) fn defined_twice(name: &Identifier) -> Diagnostic {
 }
 
 /// Collects the module's functions in source order, with their signatures (TYP-01). Each
-/// signature may name the classes whose `class` statements come before its `def`.
+/// signature may name the classes whose `class` statements come before its `def`, and the
+/// classes of the modules checked before it, numbered below `first_class`.
 pub(super) fn collect_functions<'tree>(
     statements: &'tree [Stmt],
+    first_class: usize,
     classes: &BTreeMap<String, ClassId>,
     exceptions: &BTreeMap<ClassId, crate::exception::ExceptionClass>,
     floor_defers: bool,
     diagnostics: &mut Diagnostics,
 ) -> Vec<Definition<'tree>> {
     let mut functions: Vec<Definition<'tree>> = Vec::new();
-    let mut classes_before = 0;
+    let mut classes_before = u32::try_from(first_class).unwrap_or(u32::MAX);
     for statement in statements {
         if matches!(statement, Stmt::ClassDef { .. }) {
             classes_before += 1;
