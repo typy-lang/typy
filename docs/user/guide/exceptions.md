@@ -11,7 +11,7 @@ it.
 | --- | --- |
 | `raise` with an exception, or with a class, which is called with no arguments | SMT-06 |
 | `raise ... from cause` and `raise ... from None` | EXC-04 |
-| `try` with `except` clauses and `else` | CST-04 |
+| `try` with `except` clauses, `else` and `finally` | CST-04 |
 | `except C`, `except (A, B)`, `except C as name` and a bare `except` | EXC-01, EXC-09 |
 | A bare `raise` inside an `except` clause, which re-raises the exception | EXC-07 |
 | The built-in exception classes below, as values, annotations and calls | EXC-02, EXC-10 |
@@ -25,7 +25,10 @@ clauses are tried in order. The name after `as` holds the exception while
 the clause runs and is deleted when it ends, as in CPython; with several
 classes it has the type of their nearest common base. An exception no
 clause catches goes on to the code around the `try`. `else` runs when the
-body raised nothing.
+body raised nothing. `finally` runs on every way out of the `try`: after
+the body, a clause or `else`, on `return`, `break` and `continue`, and
+before an exception goes on. While an exception waits for `finally`, an
+exception raised in the block keeps it as its context.
 
 An exception raised while another is handled keeps it as its context. An
 uncaught exception prints a traceback on standard error whose last line
@@ -88,22 +91,23 @@ raise "insufficient funds"
 ```
 
 An `except` clause names classes, so `except "ValueError":` fails with
-E0418. A bare `raise` re-raises the exception being handled, so it is
-refused outside an `except` clause with E0416. `UnicodeDecodeError` and
-`UnicodeEncodeError` take five arguments that TyPy does not check, so a
-program cannot call them (E0417); it can still catch them.
+E0418. A `return`, `break` or `continue` that would leave a `finally`
+block drops the exception on its way out, so it fails with E0419, as
+CPython 3.14 warns about it. A bare `raise` re-raises the exception being
+handled, so it is refused outside an `except` clause with E0416.
+`UnicodeDecodeError` and `UnicodeEncodeError` take five arguments that
+TyPy does not check, so a program cannot call them (E0417); it can still
+catch them.
 
 ## Planned
 
-`finally` comes in 0.3 (CST-04), with exception classes of your own
-(CLS-03, CLS-13, CLS-14) and `assert` (SMT-04):
+Exception classes of your own come in 0.3 (CLS-03, CLS-13, CLS-14), with
+`assert` (SMT-04):
 
-<!-- typy-expect: rejected E0201 at 4:5 -->
+<!-- typy-expect: rejected E0201 at 1:16 -->
 ```python
-try:
-    print(1)
-finally:
-    print(2)
+class AppError(ValueError):
+    pass
 ```
 
 The `args` attribute comes in 0.4 (EXC-11). Exception groups and

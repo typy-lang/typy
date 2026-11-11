@@ -234,6 +234,13 @@ or a tuple of them, such as `except (KeyError, IndexError):` (EXC-09). An
 instance, a string or a variable that holds a class is refused. Name the
 class itself.
 
+## E0419: `return`, `break` or `continue` that leaves a `finally` block
+
+Leaving a `finally` block with `return`, `break` or `continue` drops an
+exception that is on its way out, so TyPy refuses it, as CPython 3.14
+warns about it (EXC-06). Move the statement after the `try` statement. A
+`break` or `continue` of a loop inside the `finally` block is accepted.
+
 ## E0701: C toolchain program not found
 
 TyPy links programs with the system C toolchain, which is not installed

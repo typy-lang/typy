@@ -162,11 +162,12 @@ pub enum TypedStmt {
         value: Option<TypedExpr>,
         span: Span,
     },
-    /// `try` with its `except` clauses and its `else` block (CST-04).
+    /// `try` with its `except` clauses, its `else` block and its `finally` block (CST-04).
     Try {
         body: Vec<TypedStmt>,
         handlers: Vec<TypedHandler>,
         orelse: Vec<TypedStmt>,
+        finalbody: Vec<TypedStmt>,
         span: Span,
     },
     /// `raise exception`, with its cause; a class is called with no arguments first. A bare

@@ -51,6 +51,7 @@ const PROGRAMS: &[&str] = &[
     "def fail() -> str:\n    raise TypeError from None\nraise NotImplementedError\n",
     "def sign(b: bool) -> int:\n    if b:\n        return 1\n    else:\n        return -1\nprint(sign(True), sign(False))\n",
     "def first(items: list[int]) -> int:\n    try:\n        return items[0]\n    except KeyError:\n        return -1\n    except LookupError as e:\n        print(repr(e))\n    return 0\ntotal = 0\nfor n in [1, 0, 2]:\n    try:\n        total += 10 // n\n    except ZeroDivisionError as e:\n        print(e)\n        continue\n    except:\n        break\n    else:\n        print(total)\ntry:\n    print(first([]))\nexcept ValueError:\n    raise\n",
+    "def label(n: int) -> str:\n    text = str(n)\n    try:\n        if n > 1:\n            return text * 2\n        print(10 // n)\n    except ZeroDivisionError as e:\n        return str(e)\n    finally:\n        print('done', n)\n    return text\nfor n in range(4):\n    try:\n        if n == 1:\n            continue\n        if n == 3:\n            break\n    finally:\n        print(label(n))\ntry:\n    raise KeyError('k')\nfinally:\n    raise RuntimeError('r')\n",
 ];
 
 #[test]

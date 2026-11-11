@@ -8,6 +8,8 @@ use typy_tyir::{
     ValueId,
 };
 
+use std::rc::Rc;
+
 use crate::function::{Cleanup, FunctionLowerer, Handled};
 use crate::ownership::Lowered;
 
@@ -114,11 +116,39 @@ impl FunctionLowerer<'_> {
         self.borrowed_result(class)
     }
 
-    /// Lowers `try` with its `except` clauses and its `else` block. An exception raised in the
-    /// body goes to a dispatch block, which tests the clauses in order; one that no clause
-    /// matches goes on as if raised after the `try`. `else` runs after the body completes,
-    /// outside the body's clauses.
+    /// Lowers `try` with its `except` clauses, its `else` block and its `finally` block.
+    /// While the `try` runs, a `Finally` cleanup makes every way out run a copy of the
+    /// `finally` block; falling through runs it after the rest.
     pub(crate) fn try_statement(
+        &mut self,
+        body: &[TypedStmt],
+        handlers: &[TypedHandler],
+        orelse: &[TypedStmt],
+        finalbody: &[TypedStmt],
+        span: Span,
+    ) {
+        if !finalbody.is_empty() {
+            self.cleanups.push(Cleanup::Finally(Rc::from(finalbody)));
+        }
+        if handlers.is_empty() {
+            self.statements(body);
+            self.statements(orelse);
+        } else {
+            self.try_except(body, handlers, orelse, span);
+        }
+        if !finalbody.is_empty() {
+            self.cleanups.pop();
+            if !self.builder.is_terminated() {
+                self.statements(finalbody);
+            }
+        }
+    }
+
+    /// Lowers the body, the `except` clauses and the `else` block of a `try`. An exception
+    /// raised in the body goes to a dispatch block, which tests the clauses in order; one that
+    /// no clause matches goes on as if raised after the clauses. `else` runs after the body
+    /// completes, outside the body's clauses.
+    fn try_except(
         &mut self,
         body: &[TypedStmt],
         handlers: &[TypedHandler],
@@ -199,52 +229,103 @@ impl FunctionLowerer<'_> {
     /// Runs, innermost first, the cleanups opened after the first `depth`, as a way out of
     /// them does; they stay open for the other ways out.
     pub(crate) fn run_cleanups(&mut self, depth: usize, span: Span) {
-        let open: Vec<Cleanup> = self.cleanups[depth..].iter().rev().copied().collect();
-        for cleanup in open {
-            if let Cleanup::Handling {
-                previous,
-                exception,
-            } = cleanup
-            {
-                self.call_runtime(RuntimeFunction::ExceptionLeave, vec![previous], span);
-                match exception {
-                    Handled::Value(value) => {
-                        self.builder.push(Operation::Decrement(value), span);
-                    }
-                    Handled::Slot(slot) => {
-                        let held = self.builder.push_value(
-                            Operation::Load(slot),
-                            TyirType::EXCEPTION,
-                            span,
-                        );
-                        let none = self.constant(Constant::NoInstance(TypeId::EXCEPTION), span);
-                        self.builder
-                            .push(Operation::Store { slot, value: none }, span);
-                        self.builder.push(Operation::Decrement(held), span);
-                    }
-                }
+        for index in (depth..self.cleanups.len()).rev() {
+            match self.cleanups[index].clone() {
+                Cleanup::Handlers { .. } => {}
+                Cleanup::Handling {
+                    previous,
+                    exception,
+                } => self.leave_clause(previous, exception, span),
+                Cleanup::Finally(block) => self.run_finally(index, &block, None, span),
+            }
+            if self.builder.is_terminated() {
+                return;
             }
         }
     }
 
-    /// Ends an error path: releases the live temporaries, leaves every `except` clause on the
-    /// way out, then hands the exception to the nearest enclosing `try` body's clauses, or
-    /// releases the slots and returns it to the caller.
+    /// Ends an error path: releases the live temporaries, then, innermost first, leaves each
+    /// `except` clause and runs each `finally` block on the way out, until the clauses of an
+    /// enclosing `try` body take the exception or the slots are released and it returns to
+    /// the caller.
     pub(crate) fn propagate(&mut self, exception: ValueId, span: Span) {
         self.release_live_temporaries(span);
-        let target = self
-            .cleanups
-            .iter()
-            .rposition(|cleanup| matches!(cleanup, Cleanup::Handlers { .. }));
-        self.run_cleanups(target.map_or(0, |index| index + 1), span);
-        if let Some(Cleanup::Handlers { dispatch }) = target.map(|index| self.cleanups[index]) {
-            self.builder.terminate(Terminator::Jump {
-                target: dispatch,
-                arguments: vec![exception],
+        // The path released them, so code it runs on the way out must not release them again.
+        let released = std::mem::take(&mut self.temporaries);
+        for index in (0..self.cleanups.len()).rev() {
+            match self.cleanups[index].clone() {
+                Cleanup::Handlers { dispatch } => {
+                    self.builder.terminate(Terminator::Jump {
+                        target: dispatch,
+                        arguments: vec![exception],
+                    });
+                }
+                Cleanup::Handling {
+                    previous,
+                    exception: handled,
+                } => self.leave_clause(previous, handled, span),
+                Cleanup::Finally(block) => {
+                    self.run_finally(index, &block, Some(exception), span);
+                }
+            }
+            if self.builder.is_terminated() {
+                self.temporaries = released;
+                return;
+            }
+        }
+        self.release_slots(span);
+        self.builder.terminate(Terminator::ReturnError(exception));
+        self.temporaries = released;
+    }
+
+    /// Runs a copy of the `finally` block of cleanup `index`, with only the cleanups outside
+    /// it open. On an error path, the pending exception is the one being handled while the
+    /// block runs, as in CPython, and an exception the block raises releases it.
+    fn run_finally(
+        &mut self,
+        index: usize,
+        block: &[TypedStmt],
+        pending: Option<ValueId>,
+        span: Span,
+    ) {
+        let inner = self.cleanups.split_off(index);
+        let previous = pending.map(|exception| {
+            let previous = self
+                .call_runtime(RuntimeFunction::ExceptionEnter, vec![exception], span)
+                .value;
+            self.cleanups.push(Cleanup::Handling {
+                previous,
+                exception: Handled::Value(exception),
             });
-        } else {
-            self.release_slots(span);
-            self.builder.terminate(Terminator::ReturnError(exception));
+            previous
+        });
+        self.statements(block);
+        if let Some(previous) = previous {
+            self.cleanups.pop();
+            if !self.builder.is_terminated() {
+                self.call_runtime(RuntimeFunction::ExceptionLeave, vec![previous], span);
+            }
+        }
+        self.cleanups.extend(inner);
+    }
+
+    /// Leaves an `except` clause: restores the exception handled before it and drops the
+    /// clause's exception, setting its variable to null.
+    fn leave_clause(&mut self, previous: ValueId, exception: Handled, span: Span) {
+        self.call_runtime(RuntimeFunction::ExceptionLeave, vec![previous], span);
+        match exception {
+            Handled::Value(value) => {
+                self.builder.push(Operation::Decrement(value), span);
+            }
+            Handled::Slot(slot) => {
+                let held =
+                    self.builder
+                        .push_value(Operation::Load(slot), TyirType::EXCEPTION, span);
+                let none = self.constant(Constant::NoInstance(TypeId::EXCEPTION), span);
+                self.builder
+                    .push(Operation::Store { slot, value: none }, span);
+                self.builder.push(Operation::Decrement(held), span);
+            }
         }
     }
 

@@ -73,6 +73,7 @@ fn statements(body: &[TypedStmt], callees: &mut BTreeSet<FunctionId>) {
                 body,
                 handlers,
                 orelse,
+                finalbody,
                 ..
             } => {
                 statements(body, callees);
@@ -80,6 +81,7 @@ fn statements(body: &[TypedStmt], callees: &mut BTreeSet<FunctionId>) {
                     statements(&handler.body, callees);
                 }
                 statements(orelse, callees);
+                statements(finalbody, callees);
             }
             TypedStmt::Raise {
                 exception, cause, ..

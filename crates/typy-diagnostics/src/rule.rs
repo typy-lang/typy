@@ -69,6 +69,8 @@ impl RuleId {
     pub const DAT_17: Self = Self("DAT-17");
     /// Raising and catching exceptions shall follow the Language Reference, including matching on base classes.
     pub const EXC_01: Self = Self("EXC-01");
+    /// A `return`, `break` or `continue` that leaves a `finally` block shall be rejected, as PEP 765 makes CPython 3.14 warn about it (ADR-0013).
+    pub const EXC_06: Self = Self("EXC-06");
     /// A `raise` without an expression shall re-raise the exception being handled, and shall be rejected outside an `except` clause.
     pub const EXC_07: Self = Self("EXC-07");
     /// An `except` clause shall name one exception class or a tuple of them, with or without `as`, or none for a bare `except`; any other expression shall be rejected.
@@ -217,6 +219,7 @@ impl RuleId {
         Self::DAT_16,
         Self::DAT_17,
         Self::EXC_01,
+        Self::EXC_06,
         Self::EXC_07,
         Self::EXC_09,
         Self::EXC_12,

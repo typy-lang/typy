@@ -179,6 +179,7 @@ impl BodyChecker<'_> {
             } => self.for_statement(target, iter, body, orelse, *span)?,
             Stmt::Pass { span } => TypedStmt::Pass { span: *span },
             Stmt::Break { span } => {
+                self.check_stays_in_finally("break", *span);
                 let state = self.assigned.take();
                 if let Some(breaks) = self.breaks.last_mut() {
                     breaks.push(state);
@@ -186,6 +187,7 @@ impl BodyChecker<'_> {
                 TypedStmt::Break { span: *span }
             }
             Stmt::Continue { span } => {
+                self.check_stays_in_finally("continue", *span);
                 self.assigned = None;
                 TypedStmt::Continue { span: *span }
             }
@@ -366,6 +368,7 @@ impl BodyChecker<'_> {
 
     pub(super) fn return_statement(&mut self, value: Option<&Expr>, span: Span) -> TypedStmt {
         self.check_instance_complete(span);
+        self.check_stays_in_finally("return", span);
         let expected = self.returns.clone().unwrap_or(Type::NoneType);
         let value = value.map(|value| self.expression_expecting(value, Some(&expected)));
         let actual = value

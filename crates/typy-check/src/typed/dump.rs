@@ -225,6 +225,7 @@ impl Dump<'_> {
                 body,
                 handlers,
                 orelse,
+                finalbody,
                 span,
             } => {
                 self.line(depth, "Try", *span);
@@ -243,6 +244,7 @@ impl Dump<'_> {
                     self.block(depth + 2, "body", &handler.body);
                 }
                 self.block(depth + 1, "orelse", orelse);
+                self.block(depth + 1, "finally", finalbody);
             }
             TypedStmt::Pass { span } => self.line(depth, "Pass", *span),
             TypedStmt::Break { span } => self.line(depth, "Break", *span),

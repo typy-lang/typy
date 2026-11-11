@@ -19,6 +19,10 @@ All notable changes to TyPy are recorded here. The format follows
 - `str`, `repr`, `print` and f-strings of an exception give CPython's text,
   computed from its arguments; `repr` of a `UnicodeDecodeError` shows its
   five arguments (EXC-08).
+- `finally`, which runs on every way out of a `try`: falling through,
+  `return`, `break`, `continue` and an exception, which keeps going after
+  it. E0419 refuses a `return`, `break` or `continue` that would leave a
+  `finally` block, as CPython 3.14 warns about it (CST-04, EXC-06).
 - `try` with `except` clauses and `else`: `except C`, `except (A, B)`,
   `except C as name` and a bare `except`. A clause catches its classes and
   every class derived from them, the name after `as` is deleted when the

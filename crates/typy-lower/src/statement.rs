@@ -93,7 +93,17 @@ impl FunctionLowerer<'_> {
                     }
                     (None, _) => self.constant(Constant::Unit, *span),
                 };
+                // A `finally` block runs after the value is computed, and an error in it
+                // releases the value with the other temporaries.
+                let returned = self.builder.return_type();
+                let held = !self.cleanups.is_empty() && self.counted(returned);
+                if held {
+                    self.temporaries.push(value);
+                }
                 self.run_cleanups(0, *span);
+                if held {
+                    self.untrack(value);
+                }
                 self.release_slots_but(moved, *span);
                 self.builder.terminate(Terminator::Return(value));
             }
@@ -165,8 +175,9 @@ impl FunctionLowerer<'_> {
                 body,
                 handlers,
                 orelse,
+                finalbody,
                 span,
-            } => self.try_statement(body, handlers, orelse, *span),
+            } => self.try_statement(body, handlers, orelse, finalbody, *span),
         }
     }
 

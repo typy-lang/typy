@@ -193,6 +193,11 @@ pub const CODES: &[CodeInfo] = &[
         "`except` clause that names something other than exception classes",
         RuleId::EXC_09,
     ),
+    active(
+        419,
+        "`return`, `break` or `continue` that leaves a `finally` block",
+        RuleId::EXC_06,
+    ),
     active(701, "C toolchain program not found", RuleId::A_01),
     active(702, "link failed", RuleId::A_01),
     CodeInfo {

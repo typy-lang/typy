@@ -147,9 +147,11 @@ impl BodyChecker<'_> {
         )
     }
 
-    /// Checks `try` with its `except` clauses and its `else` block. The body may stop at any
-    /// statement, so each clause starts from what held before the body, less what the body
-    /// may have set to `None`; `else` follows the body.
+    /// Checks `try` with its `except` clauses, its `else` block and its `finally` block. The
+    /// body may stop at any statement, so each clause starts from what held before the body,
+    /// less what the body may have set to `None`; `else` follows the body. `finally` runs on
+    /// every way out, so it starts from what held before the `try`, and what it assigns holds
+    /// after the `try` too.
     pub(super) fn try_statement(
         &mut self,
         body: &[Stmt],
@@ -158,19 +160,9 @@ impl BodyChecker<'_> {
         finalbody: &[Stmt],
         span: Span,
     ) -> TypedStmt {
-        if let Some(first) = finalbody.first() {
-            self.diagnostics.push(
-                Diagnostic::new(
-                    DiagnosticCode::error(201),
-                    first.span(),
-                    "`finally` clauses are planned for TyPy 0.3 (CST-04)",
-                )
-                .with_rule(RuleId::CST_04),
-            );
-        }
         let before = self.assigned.clone();
         let typed_body = self.block(body);
-        let orelse = self.block(orelse);
+        let orelse_typed = self.block(orelse);
         let mut ends = self.assigned.take();
         let mut typed_handlers = Vec::new();
         for handler in handlers {
@@ -179,13 +171,52 @@ impl BodyChecker<'_> {
             typed_handlers.push(self.handler(handler));
             ends = meet(ends, self.assigned.take());
         }
-        self.assigned = ends;
+        self.assigned.clone_from(&before);
+        for block in [body, orelse] {
+            self.forget_not_none(block);
+        }
+        for handler in handlers {
+            self.forget_not_none(&handler.body);
+        }
+        self.finally_loops.push(self.breaks.len());
+        let finalbody = self.block(finalbody);
+        self.finally_loops.pop();
+        let after_finally = self.assigned.take();
+        self.assigned = match (ends, after_finally, before) {
+            // A `finally` that always raises leaves nothing after the `try` reachable.
+            (_, None, _) => None,
+            (Some(ends), Some(finally), Some(before)) => {
+                Some(ends.union(&(&finally - &before)).copied().collect())
+            }
+            (ends, _, _) => ends,
+        };
         TypedStmt::Try {
             body: typed_body,
             handlers: typed_handlers,
-            orelse,
+            orelse: orelse_typed,
+            finalbody,
             span,
         }
+    }
+
+    /// Reports a `return`, `break` or `continue` that would leave a `finally` block, which
+    /// would drop an exception on its way out (EXC-06).
+    pub(super) fn check_stays_in_finally(&mut self, statement: &str, span: Span) {
+        let Some(loops) = self.finally_loops.last() else {
+            return;
+        };
+        if statement != "return" && *loops < self.breaks.len() {
+            return;
+        }
+        self.diagnostics.push(
+            Diagnostic::new(
+                DiagnosticCode::error(419),
+                span,
+                format!("`{statement}` cannot leave a `finally` block"),
+            )
+            .with_rule(RuleId::EXC_06)
+            .with_help("move it after the `try` statement, as CPython 3.14 warns about it"),
+        );
     }
 
     /// Checks one `except` clause. Its name is a variable of the clause alone, as CPython

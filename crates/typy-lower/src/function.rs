@@ -24,7 +24,7 @@ pub(crate) struct LoopTargets {
 }
 
 /// What leaving a region of code must do, innermost last (ADR-0013).
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Debug)]
 pub(crate) enum Cleanup {
     /// The body of a `try`: an exception raised in it goes to the block that matches it
     /// against the `except` clauses, with nothing to do on the way out otherwise.
@@ -40,6 +40,8 @@ pub(crate) enum Cleanup {
         /// Where the clause keeps the exception.
         exception: Handled,
     },
+    /// A `try` with a `finally` block: every way out of the `try` runs a copy of the block.
+    Finally(std::rc::Rc<[typy_check::TypedStmt]>),
 }
 
 /// Where an `except` clause keeps the exception it handles.

@@ -85,6 +85,16 @@ fn a_try_statement_types_each_clause_and_its_name() {
 }
 
 #[test]
+fn finally_runs_on_every_path_and_what_it_assigns_holds_after() {
+    let source = "def f(n: int) -> int:\n    try:\n        n += 1\n    finally:\n        done = True\n        for i in range(2):\n            if i:\n                break\n    print(done)\n    return n\n\
+                  def g() -> int:\n    try:\n        return 1\n    finally:\n        raise ValueError\n";
+    let (_directory, project) = load(source);
+    let program = TypeChecker::check(&project).expect("the program is accepted");
+    let dump = typy_check::dump(&program, &project);
+    assert!(dump.contains("    finally\n"), "{dump}");
+}
+
+#[test]
 fn raise_ends_the_path_it_is_on() {
     let source = "def f(n: int) -> int:\n    if n > 0:\n        return n\n    raise ValueError('n', n)\n\
          def g() -> str:\n    raise KeyError from None\n\
@@ -1603,7 +1613,19 @@ fn statements_and_expressions_outside_the_subset_give_their_codes() {
             &["E0418"],
         ),
         ("try:\n    pass\nexcept u:\n    pass\n", &["E0205"]),
-        ("try:\n    pass\nfinally:\n    pass\n", &["E0201"]),
+        // `return`, `break` or `continue` cannot leave a `finally` block (EXC-06).
+        (
+            "def f() -> None:\n    try:\n        pass\n    finally:\n        return\n",
+            &["E0419"],
+        ),
+        (
+            "while True:\n    try:\n        pass\n    finally:\n        continue\n",
+            &["E0419"],
+        ),
+        (
+            "try:\n    x = 1\nexcept ValueError:\n    pass\nfinally:\n    pass\nprint(x)\n",
+            &["E0306"],
+        ),
         // The name `as` binds is deleted after its clause (EXC-01).
         (
             "try:\n    pass\nexcept ValueError as e:\n    pass\nprint(e)\n",
