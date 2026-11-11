@@ -192,6 +192,12 @@ pub enum TypedStmt {
         body: Vec<TypedStmt>,
         span: Span,
     },
+    /// `del target, ...`: each target, a list item, a list slice or a dict key, is removed in
+    /// order (SMT-05).
+    Delete {
+        targets: Vec<TypedExpr>,
+        span: Span,
+    },
     /// `assert test, message`: when the test is false, the exception, an `AssertionError` of
     /// the message, is raised (SMT-04).
     Assert {

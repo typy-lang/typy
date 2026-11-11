@@ -13,7 +13,6 @@ pub enum NodeKind {
     AsyncFunctionDef,
     AsyncWith,
     Await,
-    Delete,
     GeneratorExp,
     Global,
     IpyEscapeCommand,

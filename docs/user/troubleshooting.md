@@ -247,6 +247,13 @@ A `with` statement needs a context manager: an instance of a class that
 defines `__enter__` and `__exit__` (CST-05). Define both in the class, or
 use `try` and `finally` for a value that has none.
 
+## E0421: `del` of something other than an item, a slice or a key
+
+`del` removes a list item, a list slice or a dict key (SMT-05). A
+variable or an attribute stays bound once assigned in TyPy, and a tuple,
+a `str` or `bytes` cannot change. Assign a new value instead, or keep the
+values in a list or a dict.
+
 ## E0701: C toolchain program not found
 
 TyPy links programs with the system C toolchain, which is not installed

@@ -203,6 +203,11 @@ pub const CODES: &[CodeInfo] = &[
         "`with` on a value whose class has no `__enter__` and `__exit__`",
         RuleId::CST_05,
     ),
+    active(
+        421,
+        "`del` of something other than a list item, a list slice or a dict key",
+        RuleId::SMT_05,
+    ),
     active(701, "C toolchain program not found", RuleId::A_01),
     active(702, "link failed", RuleId::A_01),
     CodeInfo {

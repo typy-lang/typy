@@ -84,7 +84,14 @@ impl Converter<'_> {
                 value: node.value.as_deref().map(|value| self.expression(value)),
                 span,
             },
-            ast::Stmt::Delete(node) => self.other_statement(NodeKind::Delete, node.range),
+            ast::Stmt::Delete(node) => Stmt::Delete {
+                targets: node
+                    .targets
+                    .iter()
+                    .map(|target| self.expression(target))
+                    .collect(),
+                span,
+            },
             ast::Stmt::TypeAlias(node) => self.other_statement(NodeKind::TypeAlias, node.range),
             ast::Stmt::Assign(node) => Stmt::Assign {
                 targets: node

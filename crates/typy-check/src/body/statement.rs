@@ -122,6 +122,7 @@ impl BodyChecker<'_> {
                 span,
             } => self.assert_statement(test, message.as_ref(), *span),
             Stmt::With { items, body, span } => self.with_statement(items, body, *span)?,
+            Stmt::Delete { targets, span } => self.delete_statement(targets, *span),
             Stmt::Try {
                 body,
                 handlers,

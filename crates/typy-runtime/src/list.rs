@@ -3,6 +3,7 @@
 //! NFR-13, ADR-0001, ADR-0009).
 
 mod aggregate;
+mod delete;
 mod item;
 mod methods;
 mod operations;

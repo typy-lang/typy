@@ -230,7 +230,6 @@ type X = int
 match v:
     case _:
         pass
-del x
 global g
 ";
     let kinds: Vec<NodeKind> = body(source)
@@ -246,7 +245,6 @@ global g
             NodeKind::AsyncFunctionDef,
             NodeKind::TypeAlias,
             NodeKind::Match,
-            NodeKind::Delete,
             NodeKind::Global,
         ]
     );
@@ -722,6 +720,14 @@ fn assert_keeps_its_test_and_message() {
 fn a_with_statement_keeps_each_item_and_its_target() {
     let source = "with a() as (x, y), b:\n    pass\n";
     let expected = "Module\n  With @1:1\n    Call @1:6\n      Name a @1:6\n    as\n      Tuple @1:13\n        Name x @1:14\n        Name y @1:17\n    Name b @1:21\n    body\n      Pass @2:5\n";
+    let parsed = parse(&file(source), PythonFloor::V3_12).unwrap();
+    assert_eq!(dump(&parsed, &file(source)), expected);
+}
+
+#[test]
+fn del_keeps_each_target() {
+    let source = "del xs[0], d['k']\n";
+    let expected = "Module\n  Delete @1:1\n    Subscript @1:5\n      Name xs @1:5\n      Constant Int(\"0\") @1:8\n    Subscript @1:12\n      Name d @1:12\n      Constant Str(\"k\") @1:14\n";
     let parsed = parse(&file(source), PythonFloor::V3_12).unwrap();
     assert_eq!(dump(&parsed, &file(source)), expected);
 }

@@ -85,6 +85,11 @@ fn statements(body: &[TypedStmt], callees: &mut BTreeSet<FunctionId>) {
                 }
                 statements(body, callees);
             }
+            TypedStmt::Delete { targets, .. } => {
+                for target in targets {
+                    expression(target, callees);
+                }
+            }
             TypedStmt::Assert {
                 test, exception, ..
             } => {

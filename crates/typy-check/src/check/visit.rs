@@ -32,6 +32,11 @@ pub(super) fn visit_statement(statement: &Stmt, visit: &mut dyn FnMut(&Expr)) {
                 visit_statement(inner, visit);
             }
         }
+        Stmt::Delete { targets, .. } => {
+            for target in targets {
+                visit_expression(target, visit);
+            }
+        }
         Stmt::Assert { test, message, .. } => {
             for value in std::iter::once(test).chain(message) {
                 visit_expression(value, visit);

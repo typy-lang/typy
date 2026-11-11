@@ -110,6 +110,11 @@ impl Walker {
                 }
                 self.block(body, place);
             }
+            Stmt::Delete { targets, .. } => {
+                for target in targets {
+                    self.expression(target);
+                }
+            }
             Stmt::Assert { test, message, .. } => {
                 for value in std::iter::once(test).chain(message) {
                     self.expression(value);

@@ -166,6 +166,11 @@ pub enum Stmt {
         body: Vec<Stmt>,
         span: Span,
     },
+    /// `del target, ...`.
+    Delete {
+        targets: Vec<Expr>,
+        span: Span,
+    },
     /// `assert test` or `assert test, message`.
     Assert {
         test: Expr,
@@ -234,6 +239,7 @@ impl Stmt {
             | Self::Raise { span, .. }
             | Self::Assert { span, .. }
             | Self::With { span, .. }
+            | Self::Delete { span, .. }
             | Self::Try { span, .. }
             | Self::Pass { span }
             | Self::Break { span }

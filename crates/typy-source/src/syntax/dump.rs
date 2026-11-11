@@ -255,6 +255,12 @@ impl Dump<'_> {
                 }
                 self.block(depth + 1, "body", body);
             }
+            Stmt::Delete { targets, .. } => {
+                self.line(depth, "Delete", span);
+                for target in targets {
+                    self.expression(depth + 1, target);
+                }
+            }
             Stmt::Assert { test, message, .. } => {
                 self.line(depth, "Assert", span);
                 for value in std::iter::once(test).chain(message) {

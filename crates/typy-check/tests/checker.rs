@@ -1793,6 +1793,14 @@ fn statements_and_expressions_outside_the_subset_give_their_codes() {
 #[test]
 fn iterators_used_wrongly_give_their_codes() {
     let cases: &[(&str, &[&str])] = &[
+        // `del` removes list items, slices and dict keys only (SMT-05).
+        ("x = 1\ndel x\n", &["E0421"]),
+        ("t = (1, 2)\ndel t[0]\n", &["E0421"]),
+        ("t = (1, 2)\ndel t[0:1]\n", &["E0421"]),
+        ("s = 'ab'\ndel s[0]\n", &["E0421"]),
+        ("s = 'ab'\ndel s[0:1]\n", &["E0421"]),
+        ("t: tuple[int, ...] = (1, 2)\ndel t[0]\n", &["E0421"]),
+        ("del u[0]\n", &["E0205"]),
         // `with` needs `__enter__` and `__exit__` of the right shapes (CST-05, CST-10).
         ("with 1:\n    pass\n", &["E0420"]),
         ("with u:\n    pass\n", &["E0205"]),

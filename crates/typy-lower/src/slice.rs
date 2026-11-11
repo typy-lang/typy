@@ -2,9 +2,9 @@
 //! receives each slice bound as an `int` word, and a mask of the bounds written, so a missing
 //! bound takes Python's default.
 
-use typy_check::TypedExpr;
+use typy_check::{TypedExpr, TypedExprKind};
 use typy_diagnostics::Span;
-use typy_tyir::{Constant, RuntimeFunction, TyirType};
+use typy_tyir::{Constant, Operation, RuntimeFunction, TyirType};
 
 use crate::function::FunctionLowerer;
 use crate::ownership::Lowered;
@@ -42,6 +42,24 @@ impl FunctionLowerer<'_> {
         ty: TyirType,
         span: Span,
     ) -> Lowered {
+        let function = match ty {
+            TyirType::STR => RuntimeFunction::StrSlice,
+            TyirType::BYTES => RuntimeFunction::BytesSlice,
+            _ => RuntimeFunction::ListSlice,
+        };
+        self.call_with_slice(function, value, bounds, span)
+    }
+
+    /// Calls `function` with `value`, each bound as an `int` word, 0 when missing, and the
+    /// mask of the bounds written; the bounds are evaluated in order after the value, and
+    /// everything is released afterwards.
+    pub(crate) fn call_with_slice(
+        &mut self,
+        function: RuntimeFunction,
+        value: &TypedExpr,
+        bounds: [Option<&TypedExpr>; 3],
+        span: Span,
+    ) -> Lowered {
         let sliced = self.expression(value);
         let mut mask = 0;
         let mut lowered = Vec::with_capacity(3);
@@ -60,16 +78,60 @@ impl FunctionLowerer<'_> {
             arguments.push(word);
         }
         arguments.push(self.constant(Constant::Int(mask.to_string()), span));
-        let function = match ty {
-            TyirType::STR => RuntimeFunction::StrSlice,
-            TyirType::BYTES => RuntimeFunction::BytesSlice,
-            _ => RuntimeFunction::ListSlice,
-        };
         let result = self.call_runtime(function, arguments, span);
         for bound in lowered.into_iter().flatten() {
             self.release(bound, span);
         }
         self.release(sliced, span);
         result
+    }
+
+    /// Lowers one target of `del`: a list item, a list slice or a dict key, which is removed
+    /// and released (SMT-05).
+    pub(crate) fn delete(&mut self, target: &TypedExpr, span: Span) {
+        match &target.kind {
+            TypedExprKind::ListItem { list, index } => {
+                let list = self.expression(list);
+                let index = self.expression(index);
+                self.call_runtime(
+                    RuntimeFunction::ListDelete,
+                    vec![list.value, index.value],
+                    span,
+                );
+                self.release(index, span);
+                self.release(list, span);
+            }
+            TypedExprKind::Slice {
+                value,
+                lower,
+                upper,
+                step,
+            } => {
+                let bounds = [lower.as_deref(), upper.as_deref(), step.as_deref()];
+                self.call_with_slice(RuntimeFunction::ListDeleteSlice, value, bounds, span);
+            }
+            TypedExprKind::DictItem { dict, key } => {
+                let dict = self.expression(dict);
+                let key = self.expression(key);
+                let bits = self.bits(key, span);
+                let value =
+                    self.call_runtime(RuntimeFunction::DictPop, vec![dict.value, bits], span);
+                // The dict gives up its reference to the value, which `del` drops.
+                let ty = self.lowered_type(&target.ty);
+                let dropped = self.builder.push_value(
+                    Operation::FromBits {
+                        bits: value.value,
+                        ty,
+                    },
+                    ty,
+                    span,
+                );
+                let owned = self.produced(dropped, ty);
+                self.release(owned, span);
+                self.release(key, span);
+                self.release(dict, span);
+            }
+            _ => unreachable!("the checker allows `del` only of list items, slices and dict keys"),
+        }
     }
 }

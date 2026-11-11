@@ -184,6 +184,8 @@ pub enum RuntimeFunction {
     ObjectType,
     ObjectRepr,
     Traceback,
+    ListDelete,
+    ListDeleteSlice,
     FormatInt,
     FormatBool,
     FormatFloat,
@@ -220,7 +222,7 @@ const FLOAT_FLOAT: &[TyirType] = &[TyirType::Float, TyirType::Float];
 
 impl RuntimeFunction {
     /// Every runtime function.
-    pub const ALL: [Self; 181] = [
+    pub const ALL: [Self; 183] = [
         Self::IntFloorDivide,
         Self::IntModulo,
         Self::IntPower,
@@ -396,6 +398,8 @@ impl RuntimeFunction {
         Self::ObjectType,
         Self::ObjectRepr,
         Self::Traceback,
+        Self::ListDelete,
+        Self::ListDeleteSlice,
         Self::FormatInt,
         Self::FormatBool,
         Self::FormatFloat,
@@ -571,6 +575,8 @@ impl RuntimeFunction {
             Self::ObjectType => signature(&[Bits], TYPE, false),
             Self::ObjectRepr => signature(&[Bits], STR, true),
             Self::Traceback => signature(&[], TyirType::TRACEBACK, false),
+            Self::ListDelete => signature(&[LIST, Int], Unit, true),
+            Self::ListDeleteSlice => signature(&[LIST, Int, Int, Int, Int], Unit, true),
             Self::FormatInt | Self::FormatBool => signature(&[Int, STR], STR, true),
             Self::FormatFloat => signature(&[Float, STR], STR, true),
             Self::FormatStr => signature(&[STR, STR], STR, true),
@@ -780,6 +786,8 @@ impl RuntimeFunction {
             Self::ObjectType => "object_type",
             Self::ObjectRepr => "object_repr",
             Self::Traceback => "traceback",
+            Self::ListDelete => "list_delete",
+            Self::ListDeleteSlice => "list_delete_slice",
             Self::FormatInt => "format_int",
             Self::FormatBool => "format_bool",
             Self::FormatFloat => "format_float",

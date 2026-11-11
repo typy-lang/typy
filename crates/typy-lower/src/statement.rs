@@ -129,6 +129,11 @@ impl FunctionLowerer<'_> {
                 body,
                 *span,
             ),
+            TypedStmt::Delete { targets, span } => {
+                for target in targets {
+                    self.delete(target, *span);
+                }
+            }
             TypedStmt::Assert {
                 test,
                 exception,

@@ -26,6 +26,9 @@ All notable changes to TyPy are recorded here. The format follows
   arguments, and `super().__init__(...)` in `__init__` calls the base's.
   `except` catches it by any of its bases, and `is` compares exceptions
   (CLS-03, CLS-13, CLS-14, EXP-08).
+- `del` of list items, list slices with or without a step, and dict keys,
+  with CPython's errors; E0421 for `del` of a variable, an attribute or
+  part of a tuple, `str` or `bytes` (SMT-05).
 - `with`, with one or more context managers and `as` targets, calling
   `__exit__` on every way out of the body; a true result of `__exit__`
   suppresses the exception. The parameters of `__exit__` may be left

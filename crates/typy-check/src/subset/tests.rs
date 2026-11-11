@@ -102,10 +102,6 @@ fn later_features_name_their_release_and_rule() {
         ),
         ("import os\n", "imports are planned for TyPy 0.3 (SMT-07)"),
         (
-            "del x\n",
-            "`del` statements are planned for TyPy 0.3 (SMT-05)",
-        ),
-        (
             "global x\n",
             "`global` statements are planned for TyPy 0.3 (SMT-08)",
         ),

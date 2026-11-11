@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy detailed design |
-| Version | 1.50 |
+| Version | 1.51 |
 | Status | Approved |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-10 |
@@ -778,38 +778,49 @@ objects holds `type`. The annotation `type` holds any type object and
 `type[X]` the one of `X`. `type` with three arguments makes a class while
 the program runs, E0202.
 
-Exceptions (ADR-0013) are `Type::Exception(ExceptionClass)`, written with
-the class name. `ExceptionClass::Builtin` holds a `BuiltinException`, one
-of the classes of EXC-02 and EXC-10, each with its CPython base.
+Exceptions (ADR-0013) are `Type::Exception(ExceptionClass)`, written with the
+class name. `ExceptionClass::Builtin` holds a `BuiltinException`, one of the
+classes of EXC-02 and EXC-10, each with its CPython base.
 `ExceptionClass::Class` holds a shared `ProgramException`: a class of the
-program, its ancestors that are classes of the program, nearest first, and
-the built-in class its chain reaches. `derives_from` compares the IDs of
-the program's classes and walks the built-in chain, so an exception is
-assignable where its class or any base is declared without the class
-table. A class's base is resolved in source order: `object`, a built-in
-exception class, or a class defined before it that is an exception class
-(CLS-03). A base defined after the class is E0306, `UnicodeDecodeError`
-and `UnicodeEncodeError` are E0417, any other base is E0201 (CLS-04), and
-several bases are E0201, planned for after 1.0. An exception class whose
-base is the program's holds its base's attributes first, counted in
-`ClassInfo::inherited`, and the type of an inherited attribute is read
-from the class that declares it. A method is looked up in the class, then
-in each base; redefining a method of a base other than `__init__`,
-`__str__` and `__repr__` is E0201 (CLS-13). Calling an exception class
-without an `__init__` of the program's takes positional arguments of any
-type; with one, its arguments are bound as for a call and
-`TypedExprKind::NewException` carries an `InitCall` with them and the
-count of those written by position, which become the exception's
-arguments. In an exception class's `__init__`, `super().__init__(...)` is
-a `Call` of the nearest base's `__init__` on the instance, or
-`TypedExprKind::SetArguments` when no base of the program's has one, and
-after it the inherited attributes count as assigned; any other `super()`
-is E0201 (CLS-14). `is` compares two exceptions. `assert test, message`
-gives `TypedStmt::Assert { test, exception }`, whose exception is an
-`AssertionError` of the message, and the facts the test gives hold after
-it (SMT-04). Where `T | None` is expected, a display, a comprehension or
-a collection call is checked against `T`, then wrapped like any other
-value.
+program, its ancestors that are classes of the program, nearest first, and the
+built-in class its chain reaches. `derives_from` compares the IDs of the
+program's classes and walks the built-in chain, so an exception is assignable
+where its class or any base is declared without the class table. A class's base
+is resolved in source order: `object`, a built-in exception class, or a class
+defined before it that is an exception class (CLS-03). A base defined after the
+class is E0306, `UnicodeDecodeError` and `UnicodeEncodeError` are E0417, any
+other base is E0201 (CLS-04), and several bases are E0201, planned for after
+1.0. An exception class whose base is the program's holds its base's attributes
+first, counted in `ClassInfo::inherited`, and the type of an inherited attribute
+is read from the class that declares it. A method is looked up in the class,
+then in each base; redefining a method of a base other than `__init__`,
+`__str__` and `__repr__` is E0201 (CLS-13). Calling an exception class without
+an `__init__` of the program's takes positional arguments of any type; with one,
+its arguments are bound as for a call and `TypedExprKind::NewException` carries
+an `InitCall` with them and the count of those written by position, which become
+the exception's arguments. In an exception class's `__init__`,
+`super().__init__(...)` is a `Call` of the nearest base's `__init__` on the
+instance, or `TypedExprKind::SetArguments` when no base of the program's has
+one, and after it the inherited attributes count as assigned; any other
+`super()` is E0201 (CLS-14). `is` compares two exceptions. A class name read as
+a value is `TypeObjectOf::Exception`, and in an annotation it names the
+exception type. Calling a class takes positional arguments of any type and gives
+`TypedExprKind::NewException { class, arguments }`; a keyword is E0404, and a
+call of `UnicodeDecodeError` or `UnicodeEncodeError` is E0417 (EXC-12). The type
+object of an exception is read when the program runs, since its class may derive
+from the static one, so `type(e)` has the type `type`. `raise` gives
+`TypedStmt::Raise { exception, cause }`: the exception is an exception, or a
+class, which becomes a `NewException` with no arguments; anything else is E0415.
+`from None` is `RaiseCause::None`, `from x` is `RaiseCause::Exception` under the
+same rule, and no `from` is `RaiseCause::Absent`. A bare `raise` is accepted
+only inside an `except` clause, E0416 (EXC-07). Like `return`, `raise` makes the
+point after it unreachable for the flow state, so a function that ends with it
+needs no `return`.
+
+`assert test, message` gives `TypedStmt::Assert { test, exception }`, whose
+exception is an `AssertionError` of the message, and the facts the test gives
+hold after it (SMT-04). Where `T | None` is expected, a display, a comprehension
+or a collection call is checked against `T`, then wrapped like any other value.
 
 Iterators (ADR-0014) are `Type::Iterator(T)`, written `Iterator[T]`. A
 class may define `__iter__` and `__next__`, each taking only the instance.
@@ -837,21 +848,12 @@ either method is E0420 (CST-05). `suppresses` is true when `__exit__` may
 return a true value, and then the point after the `with` meets the state
 before its body with the state at its end, since a suppressed exception
 may stop the body anywhere. `Type::Traceback` is the traceback, which
-compares with `is` only. A class name read as a value is
-`TypeObjectOf::Exception`, and in an annotation it names the exception
-type. Calling a class takes positional arguments of any type and gives
-`TypedExprKind::NewException { class, arguments }`; a keyword is E0404,
-and a call of `UnicodeDecodeError` or `UnicodeEncodeError` is E0417
-(EXC-12). The type object of an exception is read when the program runs,
-since its class may derive from the static one, so `type(e)` has the type
-`type`. `raise` gives `TypedStmt::Raise { exception, cause }`: the
-exception is an exception, or a class, which becomes a `NewException`
-with no arguments; anything else is E0415. `from None` is
-`RaiseCause::None`, `from x` is `RaiseCause::Exception` under the same
-rule, and no `from` is `RaiseCause::Absent`. A bare `raise` is accepted
-only inside an `except` clause, E0416 (EXC-07). Like `return`, `raise`
-makes the point after it unreachable for the flow state, so a function
-that ends with it needs no `return`.
+compares with `is` only.
+
+`del target, ...` gives `TypedStmt::Delete { targets }`, each target the checked
+subscript: a `ListItem` or a `Slice` of a list, or a `DictItem`; a tuple or list
+of targets is flattened in order. A name, an attribute, or part of a tuple,
+`str` or `bytes` is E0421 (SMT-05).
 
 `try` gives `TypedStmt::Try { body, handlers, orelse }`, with one
 `TypedHandler { classes, name, body }` per `except` clause. A clause names
@@ -1115,6 +1117,7 @@ graph, symbol names and the string pool.
 | Classes | `Class(arguments)` evaluates the arguments, makes the instance, then calls `__init__` with the instance first. An attribute is read with `Field`, borrowed from the instance, and gets a reference of its own when the instance is a temporary. Assigning an attribute evaluates the value, then the instance, stores the value with `SetField` and releases the value the attribute held; `object.attribute op= value` reads the attribute once, with a reference of its own, before the value. `str` of an instance calls `__str__`, then `__repr__`, and `repr` calls `__repr__`; a class with neither is written by `typy_rt_instance_text`. `==`, `!=`, `is` and `is not` on instances are `Identical`, and an instance is true. A slot of a class type starts as `NoInstance` |
 | f-strings | The pieces are joined left to right with `str_concat`. A field evaluates its value; with a conversion it is written by `str`, `repr` or `repr` and `ascii`, and then formatted as a `str` when a specification follows. Without a conversion a field with no specification is `str(value)`, and one with a specification calls the formatter of the value's type: `format_int`, `format_bool` with the `bool` as an `int` word, `format_float` or `format_str`, an optional value branching on `IsNone`, and any other type `format_other` with its `str` and its type's name. The specification is itself an f-string, evaluated after the value, as CPython evaluates it |
 | `try` | The lowerer keeps a stack of `Cleanup`s. A `try` body pushes `Handlers { dispatch }`, so the error path of a call inside it releases the live temporaries, runs the cleanups opened inside the body and jumps to `dispatch` with the exception; an error path outside every `try` body releases the slots and returns the exception. `dispatch` tests the clauses in order with `exception_matches` against each class. A matching clause calls `exception_enter`, keeps the result, and stores the exception in its variable or holds it, then pushes `Handling { previous, exception }`. Leaving the clause, by its end, `return`, `break`, `continue` or an error, calls `exception_leave(previous)` and drops the exception: the variable is set to null and its value released. `break` and `continue` run the cleanups opened since their loop started, and `return` runs them all, after it has taken its own reference to the value it returns. An exception no clause matches takes the error path from after the `try`. `else` runs after the body, outside its clauses. A `finally` block pushes `Finally` with a copy of its statements, so every way out runs it: falling through lowers it after the rest, `return`, `break` and `continue` run it as a cleanup, and an error path runs it with the pending exception entered as the one being handled, so an exception the block raises takes it as its context and releases it, and otherwise leaves it and goes on. While a copy runs, only the cleanups outside the `try` are open. `return` holds its value as a live temporary while cleanups run, and an error path sets aside the temporaries it released before it runs any `finally` block. A function that returns a value ends in `unreachable` where its body ends, since the checker rejects one that can reach its end |
+| `del` | A list item calls `list_delete`, which raises `IndexError: list assignment index out of range` outside the list; a slice calls `list_delete_slice` with the bounds and mask a slice read passes, which compacts the list and releases what the slice selects; a dict key calls `dict_pop` and releases the value |
 | `with` | The manager is kept in a hidden slot, `__enter__` is called on it and its result bound to the target, and the body runs inside a `With` cleanup. Falling through, `return`, `break` and `continue` call `__exit__` with three `None` values. An exception calls it with `exception_class` of the exception, the exception and `traceback`, each wrapped as optional, while the exception is entered as the one being handled; when `__exit__` may suppress, a true result releases the exception and jumps after the `with`, and otherwise the exception goes on. An exception `__exit__` raises releases the first. `str` and `repr` of an iterator or of the traceback call `object_repr` |
 | Iterators | `for` over a class keeps what `__iter__` returned in a hidden slot and calls `__next__` at each step through `call_next`, whose error path releases a `StopIteration` and leaves the loop, and takes the error path for any other exception. `iter()` calls `iterator_new` with the source, or a view's dict, the kind's code and, for a dict's items, the descriptor of the pair. `next()` calls `iterator_advance`, which raises `StopIteration` at the end when told to, and `iterator_item`, whose borrowed bits become a value with a reference of its own; with a default the two ends meet in a block whose parameter is the result. `for` over an iterator steps it the same way, and `type()` of one calls `object_type` |
 | `assert` | The test branches to the rest of the code when true; when false, the exception is built, which evaluates the message, and raised as by `raise`, in every build mode |

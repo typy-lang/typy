@@ -263,6 +263,12 @@ impl Dump<'_> {
                 self.expression(depth + 1, manager);
                 self.block(depth + 1, "body", body);
             }
+            TypedStmt::Delete { targets, span } => {
+                self.line(depth, "Delete", *span);
+                for target in targets {
+                    self.expression(depth + 1, target);
+                }
+            }
             TypedStmt::Assert {
                 test,
                 exception,

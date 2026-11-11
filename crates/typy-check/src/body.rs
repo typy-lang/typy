@@ -4,6 +4,7 @@ mod builtin_call;
 mod call;
 mod class;
 mod comprehension;
+mod delete;
 mod dict;
 mod exception;
 mod expression;

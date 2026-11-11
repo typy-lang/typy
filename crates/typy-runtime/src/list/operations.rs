@@ -54,7 +54,11 @@ pub unsafe extern "C" fn typy_rt_list_length(list: *const ListObject) -> i64 {
 
 /// Returns the position an `int` word names in a list of `length` items, counting a negative
 /// one from the end, or the `IndexError` CPython raises with `message` (DAT-11).
-fn position(index: i64, length: usize, message: &str) -> Result<usize, *mut ExceptionObject> {
+pub(super) fn position(
+    index: i64,
+    length: usize,
+    message: &str,
+) -> Result<usize, *mut ExceptionObject> {
     if !is_inline(index) {
         return Err(raise(
             ExceptionKind::IndexError,
