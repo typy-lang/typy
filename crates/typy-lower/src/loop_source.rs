@@ -37,7 +37,8 @@ enum Iterator {
         item: TyirType,
     },
     /// A dict or a view of one: the next entry, the number of entries when the loop began, and
-    /// how many entries it has given, which CPython's dict iterator checks at every step.
+    /// how many entries it has given, which CPython's dict iterator checks at every step. For
+    /// `reversed` the next entry counts down from the last (DAT-16).
     Dict {
         source: SlotId,
         position: SlotId,
@@ -46,6 +47,7 @@ enum Iterator {
         shows: typy_check::View,
         through_view: bool,
         ty: TyirType,
+        backwards: bool,
     },
     /// A `range`: the next value, the limit it stops at and the step, and whether the step
     /// rises when it is a constant.
@@ -278,7 +280,7 @@ impl FunctionLowerer<'_> {
     /// CPython's `reversed` reads the length once when it is called.
     fn start_sequence(&mut self, sequence: &TypedExpr, backwards: bool, span: Span) -> Iterator {
         if let typy_check::Type::Dict(_, _) | typy_check::Type::DictView(..) = &sequence.ty {
-            return self.start_dict(sequence, span);
+            return self.start_dict(sequence, backwards, span);
         }
         if let typy_check::Type::Set(item) = &sequence.ty {
             let item = self.lowered_type(item);
@@ -440,8 +442,8 @@ impl FunctionLowerer<'_> {
     }
 
     /// Keeps a dict or a view of one, the first entry to look at, the number of entries and
-    /// none visited.
-    fn start_dict(&mut self, source: &TypedExpr, span: Span) -> Iterator {
+    /// none visited. `reversed` starts at the last entry, as CPython's `dictreviter_new` does.
+    fn start_dict(&mut self, source: &TypedExpr, backwards: bool, span: Span) -> Iterator {
         let (shows, through_view, item) = match &source.ty {
             typy_check::Type::DictView(view, key, value) => (*view, true, view.item(key, value)),
             typy_check::Type::Dict(key, _) => (typy_check::View::Keys, false, key.as_ref().clone()),
@@ -451,13 +453,17 @@ impl FunctionLowerer<'_> {
         let source = self.kept(source, "dict", span);
         let zero = || Constant::Int("0".to_owned());
         let position = self.hidden_slot("position", TyirType::Int);
-        let start = Self::borrowed(self.constant(zero(), span), TyirType::Int);
+        let dict = self.iterated_dict(source, through_view, span);
+        let start = if backwards {
+            self.call_runtime(RuntimeFunction::DictLastEntry, vec![dict], span)
+        } else {
+            Self::borrowed(self.constant(zero(), span), TyirType::Int)
+        };
         self.store(position, start, span);
         let visited = self.hidden_slot("visited", TyirType::Int);
         let none = Self::borrowed(self.constant(zero(), span), TyirType::Int);
         self.store(visited, none, span);
         let length = self.hidden_slot("length", TyirType::Int);
-        let dict = self.iterated_dict(source, through_view, span);
         let count = self.call_runtime(RuntimeFunction::DictLength, vec![dict], span);
         self.store(length, count, span);
         Iterator::Dict {
@@ -468,6 +474,7 @@ impl FunctionLowerer<'_> {
             shows,
             through_view,
             ty,
+            backwards,
         }
     }
 
@@ -492,6 +499,7 @@ impl FunctionLowerer<'_> {
             shows,
             through_view,
             ty,
+            backwards,
         } = iterator
         else {
             unreachable!("a dict iterator")
@@ -499,12 +507,20 @@ impl FunctionLowerer<'_> {
         let dict = self.iterated_dict(*source, *through_view, span);
         let at = self.load(*position, span);
         let count = self.load(*length, span);
-        let seen = self.load(*visited, span);
-        let found = self.call_runtime(
-            RuntimeFunction::DictNext,
-            vec![dict, at.value, count.value, seen.value],
-            span,
-        );
+        let found = if *backwards {
+            self.call_runtime(
+                RuntimeFunction::DictPrevious,
+                vec![dict, at.value, count.value],
+                span,
+            )
+        } else {
+            let seen = self.load(*visited, span);
+            self.call_runtime(
+                RuntimeFunction::DictNext,
+                vec![dict, at.value, count.value, seen.value],
+                span,
+            )
+        };
         let zero = self.constant(Constant::Int("0".to_owned()), span);
         let more = self.int_compare(Comparison::GreaterEqual, found.value, zero, span);
         let fetch = self.builder.create_block();
@@ -539,7 +555,7 @@ impl FunctionLowerer<'_> {
                 self.make_tuple(*ty, vec![key, value], span)
             }
         };
-        let next = self.add_int(found, 1, span);
+        let next = self.add_int(found, if *backwards { -1 } else { 1 }, span);
         self.store(*position, next, span);
         let seen = self.load(*visited, span);
         let seen = self.add_int(seen, 1, span);

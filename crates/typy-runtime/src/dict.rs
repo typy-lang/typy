@@ -4,6 +4,7 @@
 //! CPython's. Keys and values are stored by their types, as a list stores items (ADR-0009).
 
 mod operations;
+mod reverse;
 #[cfg(test)]
 mod tests;
 mod text;

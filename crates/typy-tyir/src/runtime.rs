@@ -155,6 +155,8 @@ pub enum RuntimeFunction {
     DictLength,
     DictClear,
     DictNext,
+    DictLastEntry,
+    DictPrevious,
     DictCopy,
     DictUpdate,
     DictEqual,
@@ -232,7 +234,7 @@ const FLOAT_FLOAT: &[TyirType] = &[TyirType::Float, TyirType::Float];
 
 impl RuntimeFunction {
     /// Every runtime function.
-    pub const ALL: [Self; 193] = [
+    pub const ALL: [Self; 195] = [
         Self::IntFloorDivide,
         Self::IntModulo,
         Self::IntPower,
@@ -379,6 +381,8 @@ impl RuntimeFunction {
         Self::DictLength,
         Self::DictClear,
         Self::DictNext,
+        Self::DictLastEntry,
+        Self::DictPrevious,
         Self::DictCopy,
         Self::DictUpdate,
         Self::DictEqual,
@@ -562,9 +566,10 @@ impl RuntimeFunction {
             }
             Self::DictKey | Self::DictValue => signature(&[DICT, Int], Bits, false),
             Self::DictPopitem => signature(&[DICT], Int, true),
-            Self::DictLength => signature(&[DICT], Int, false),
+            Self::DictLength | Self::DictLastEntry => signature(&[DICT], Int, false),
             Self::DictClear => signature(&[DICT], Unit, false),
             Self::DictNext => signature(&[DICT, Int, Int, Int], Int, true),
+            Self::DictPrevious => signature(&[DICT, Int, Int], Int, true),
             Self::DictCopy => signature(&[DICT], DICT, false),
             Self::DictUpdate => signature(&[DICT, Bits], Unit, false),
             Self::DictEqual => signature(&[DICT, DICT], Bool, false),
@@ -791,6 +796,8 @@ impl RuntimeFunction {
             Self::DictLength => "dict_length",
             Self::DictClear => "dict_clear",
             Self::DictNext => "dict_next",
+            Self::DictLastEntry => "dict_last_entry",
+            Self::DictPrevious => "dict_previous",
             Self::DictCopy => "dict_copy",
             Self::DictUpdate => "dict_update",
             Self::DictEqual => "dict_equal",

@@ -60,9 +60,10 @@ print(stock.items() & {(3, 7), (4, 1)}, stock.keys() <= {1, 2, 3, 4})
 
 A set needs items with a hash, so `d.items()` of a dict whose values are
 lists compares with another view but makes no set. `d.values()` is no
-set: it compares only with itself, by identity, as in CPython. `reversed`
-of a dict or a view, `dict` with keyword arguments and `dict.fromkeys`
-are planned for 0.3 (DAT-16).
+set: it compares only with itself, by identity, as in CPython.
+`reversed(d)`, and `reversed` of a view, give the entries from the last
+to the first. `dict` with keyword arguments and `dict.fromkeys` are
+planned for 0.3 (DAT-16).
 
 ## Example
 

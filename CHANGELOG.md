@@ -40,6 +40,9 @@ All notable changes to TyPy are recorded here. The format follows
   set, another view or a list give a new set in CPython's order, and `==`,
   `<` and the other comparisons compare their items. `dict.values()`
   compares by identity, as in CPython (DAT-16).
+- `reversed` of a dict, of `dict.keys()`, `dict.values()` and
+  `dict.items()`, from the last entry to the first; a dict that changes
+  size raises `RuntimeError`, as in CPython (DAT-16).
 - `range` as a value and an annotation: `len`, indexing, slicing, `in`,
   `==`, use as a dict key or set item, and CPython's text. `for`,
   `reversed`, `iter` and `next` read it, and its bounds may be of any size

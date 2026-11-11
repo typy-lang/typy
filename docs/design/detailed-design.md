@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy detailed design |
-| Version | 1.55 |
+| Version | 1.56 |
 | Status | Approved |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-11 |
@@ -671,8 +671,11 @@ list of the same items give `set[T]`, E0413 for items without a hash and
 E0401 for other items, and each comparison with a set or such a view gives
 `bool`. Views of values compare only with `==` and `!=`, by identity. Both
 are checked in `body/view_operator.rs` and lowered in `view_set.rs`.
-`reversed` of a dict or a view is E0201, planned with DAT-16. The methods
-are `get` and
+`reversed` of a dict or a view reads it from its last entry: lowering
+starts at `typy_rt_dict_last_entry` and steps with `typy_rt_dict_previous`,
+which raises `RuntimeError` when the size changed, as CPython's
+`dictreviter_iternext` does; it does not notice keys changed at the same
+size. The methods are `get` and
 `setdefault` with a default, `pop` with or without one, `popitem`, `keys`,
 `values`, `items`, `update`, `clear` and `copy`. `get` and `setdefault`
 without a default would give `V | None`, E0201 until TYP-06 brings it.
