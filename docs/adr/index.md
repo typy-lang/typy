@@ -19,3 +19,4 @@ supersedes it.
 | [ADR-0011](0011-hold-none-in-a-value-each-type-never-takes.md) | Hold None in a value each type never takes | Accepted | 2026-11-09 |
 | [ADR-0012](0012-root-every-type-at-object-with-a-type-object-for-each.md) | Root every type at object, with a type object for each | Accepted | 2026-11-10 |
 | [ADR-0013](0013-make-exceptions-objects-of-exception-classes.md) | Make exceptions objects of exception classes | Accepted | 2026-11-10 |
+| [ADR-0014](0014-iterate-with-runtime-iterator-objects-and-the-iterator-protocol.md) | Iterate with runtime iterator objects and the iterator protocol | Accepted | 2026-11-11 |

@@ -3,10 +3,10 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy software requirements specification |
-| Version | 1.30 |
+| Version | 1.31 |
 | Status | Approved |
 | Owner | typy-lang contributors |
-| Last updated | 2026-11-10 |
+| Last updated | 2026-11-11 |
 
 ## 1. Introduction
 
@@ -181,6 +181,7 @@ formatter applies; Ruff's formatter is the project's recommendation.
 | TYP-12 | A read of a local variable shall be rejected unless the variable is assigned on every path that reaches the read, so `UnboundLocalError` cannot occur. | M | 0.1 | 4.2.2 |
 | TYP-13 | A local variable or parameter of type `T \| None` shall narrow to `T` where an `is None` or `is not None` test, or a truth test that holds, shows it is not `None`, and using it as `T` anywhere else shall be rejected. | M | 0.2 | |
 | TYP-14 | Annotations that join two or more types other than `None` with `\|`, such as `int \| str`, shall be accepted, with narrowing by `isinstance` (TYP-07). | M | 0.4 | 3.3.5 |
+| TYP-15 | The annotations `Iterator[T]` and `Iterable[T]`, imported from `collections.abc` or `typing`, shall be accepted for iterators and for the built-in iterables of items of type `T` (ADR-0014). | S | 0.3 | |
 
 ### 3.5 Built-in types and values (DAT)
 
