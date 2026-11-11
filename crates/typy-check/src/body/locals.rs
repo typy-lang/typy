@@ -63,12 +63,48 @@ impl BodyChecker<'_> {
         let Expr::Name { id, span } = target else {
             return;
         };
-        if !self.locals.contains_key(id) {
-            let symbol = self
+        if self.locals.contains_key(id) {
+            return;
+        }
+        // A name the module body binds is the module's variable, made before any body.
+        let symbol = match self.program.module_symbols.get(id) {
+            Some(symbol) if !self.in_function() => *symbol,
+            _ => self
                 .program
-                .add_symbol(id, SymbolKind::Local, Type::Error, *span);
-            self.locals.insert(id.clone(), symbol);
-            self.local_order.push(symbol);
+                .add_symbol(id, SymbolKind::Local, Type::Error, *span),
+        };
+        self.locals.insert(id.clone(), symbol);
+        self.local_order.push(symbol);
+    }
+
+    /// Makes each name a function declares `global` the module's variable in it: its reads
+    /// and assignments reach the module variable, with the module's type for it (SMT-08). A
+    /// name the module never binds at module level is E0423.
+    pub(super) fn declare_globals(&mut self, body: &[Stmt]) {
+        for name in crate::check::declared_globals(body) {
+            let Some(symbol) = self.program.module_symbols.get(&name.name).copied() else {
+                self.diagnostics.push(
+                    Diagnostic::new(
+                        DiagnosticCode::error(423),
+                        name.span,
+                        format!(
+                            "`global {}` names a variable the module does not bind",
+                            name.name
+                        ),
+                    )
+                    .with_rule(RuleId::SMT_08)
+                    .with_help(format!(
+                        "assign `{}` at module level, or declare its type there, such as `{}: int`",
+                        name.name, name.name
+                    )),
+                );
+                continue;
+            };
+            let ty = self.program.symbols[symbol.0 as usize].ty.clone();
+            self.global_names.insert(name.name.clone());
+            self.locals.insert(name.name.clone(), symbol);
+            self.declared.insert(symbol, ty.clone());
+            self.types.insert(symbol, ty);
         }
     }
 

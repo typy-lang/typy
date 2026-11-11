@@ -177,6 +177,11 @@ pub enum Stmt {
         message: Option<Expr>,
         span: Span,
     },
+    /// `global name, ...`: the names are the module's variables in this function (SMT-08).
+    Global {
+        names: Vec<Identifier>,
+        span: Span,
+    },
     /// `raise`, `raise exception` or `raise exception from cause`.
     Raise {
         exception: Option<Expr>,
@@ -241,6 +246,7 @@ impl Stmt {
             | Self::With { span, .. }
             | Self::Delete { span, .. }
             | Self::Try { span, .. }
+            | Self::Global { span, .. }
             | Self::Pass { span }
             | Self::Break { span }
             | Self::Continue { span }

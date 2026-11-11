@@ -8,6 +8,7 @@ use crate::types::tyir_type;
 
 use crate::call_graph::recursive_functions;
 use crate::function::FunctionLowerer;
+use crate::module_variable::ModuleGlobals;
 use crate::strings::StringPool;
 
 /// Returns the program in TyIR, verified. A function may raise when its lowered code contains an `invoke`, so lowering repeats until that set stops growing (detailed design section 9).
@@ -17,6 +18,7 @@ pub fn lower(program: &TypedProgram) -> Result<TyirModule, Diagnostics> {
     loop {
         let mut strings = StringPool::default();
         let mut tuple_types = TupleTypes::default();
+        let module_globals = ModuleGlobals::new(program, &mut tuple_types);
         let functions: Vec<_> = program
             .functions
             .iter()
@@ -27,6 +29,7 @@ pub fn lower(program: &TypedProgram) -> Result<TyirModule, Diagnostics> {
                     &may_raise,
                     &mut strings,
                     &mut tuple_types,
+                    &module_globals,
                     recursive.contains(&function.id),
                 )
             })
@@ -80,6 +83,7 @@ pub fn lower(program: &TypedProgram) -> Result<TyirModule, Diagnostics> {
             .collect();
         let module = TyirModule {
             functions,
+            globals: module_globals.globals,
             strings: strings.into_strings(),
             tuple_types,
             classes,

@@ -309,6 +309,9 @@ impl Dump<'_> {
         let label = match &expression.kind {
             TypedExprKind::Constant(constant) => format!("Constant {constant:?}"),
             TypedExprKind::Local(id) => format!("Local {}", self.program.symbol(*id).name),
+            TypedExprKind::ModuleVariable(id) => {
+                format!("ModuleVariable {}", self.program.symbol(*id).name)
+            }
             TypedExprKind::ModuleName => "ModuleName".to_owned(),
             TypedExprKind::Binary { operator, .. } => format!("Binary {operator:?}"),
             TypedExprKind::Unary { operator, .. } => format!("Unary {operator:?}"),
@@ -377,9 +380,11 @@ impl Dump<'_> {
 #[allow(clippy::too_many_lines, reason = "one arm per expression kind")]
 fn children(expression: &TypedExpr) -> Vec<&TypedExpr> {
     match &expression.kind {
-        TypedExprKind::Constant(_) | TypedExprKind::Local(_) | TypedExprKind::ModuleName => {
-            Vec::new()
-        }
+        TypedExprKind::Constant(_)
+        | TypedExprKind::Local(_)
+        | TypedExprKind::ModuleVariable(_)
+        | TypedExprKind::ModuleName
+        | TypedExprKind::TypeObject(_) => Vec::new(),
         TypedExprKind::Binary { left, right, .. }
         | TypedExprKind::Index {
             value: left,
@@ -467,7 +472,6 @@ fn children(expression: &TypedExpr) -> Vec<&TypedExpr> {
         TypedExprKind::Attribute { object, .. }
         | TypedExprKind::TypeOf(object)
         | TypedExprKind::TypeName(object) => vec![object],
-        TypedExprKind::TypeObject(_) => Vec::new(),
         TypedExprKind::NewException {
             arguments, init, ..
         } => arguments

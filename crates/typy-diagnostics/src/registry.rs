@@ -208,6 +208,16 @@ pub const CODES: &[CodeInfo] = &[
         "`del` of something other than a list item, a list slice or a dict key",
         RuleId::SMT_05,
     ),
+    active(
+        423,
+        "`global` of a name the module does not bind",
+        RuleId::SMT_08,
+    ),
+    active(
+        424,
+        "module variable an `__init__` reads before the module's code gives it a type",
+        RuleId::SMT_08,
+    ),
     active(701, "C toolchain program not found", RuleId::A_01),
     active(702, "link failed", RuleId::A_01),
     CodeInfo {

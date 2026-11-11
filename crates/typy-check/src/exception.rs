@@ -17,9 +17,11 @@ pub enum BuiltinException {
     ArithmeticError,
     AssertionError,
     AttributeError,
+    ImportError,
     LookupError,
     IndexError,
     KeyError,
+    NameError,
     OverflowError,
     RuntimeError,
     NotImplementedError,
@@ -35,15 +37,17 @@ pub enum BuiltinException {
 
 impl BuiltinException {
     /// Every built-in exception class.
-    pub const ALL: [Self; 19] = [
+    pub const ALL: [Self; 21] = [
         Self::BaseException,
         Self::Exception,
         Self::ArithmeticError,
         Self::AssertionError,
         Self::AttributeError,
+        Self::ImportError,
         Self::LookupError,
         Self::IndexError,
         Self::KeyError,
+        Self::NameError,
         Self::OverflowError,
         Self::RuntimeError,
         Self::NotImplementedError,
@@ -72,6 +76,8 @@ impl BuiltinException {
             Self::ArithmeticError => "ArithmeticError",
             Self::AssertionError => "AssertionError",
             Self::AttributeError => "AttributeError",
+            Self::ImportError => "ImportError",
+            Self::NameError => "NameError",
             Self::LookupError => "LookupError",
             Self::IndexError => "IndexError",
             Self::KeyError => "KeyError",
@@ -98,6 +104,8 @@ impl BuiltinException {
             Self::ArithmeticError
             | Self::AssertionError
             | Self::AttributeError
+            | Self::ImportError
+            | Self::NameError
             | Self::LookupError
             | Self::RuntimeError
             | Self::StopIteration

@@ -11,8 +11,11 @@ use crate::type_object::TypeObject;
 )]
 pub enum ExceptionKind {
     AssertionError,
+    AttributeError,
+    ImportError,
     IndexError,
     KeyError,
+    NameError,
     OverflowError,
     RecursionError,
     RuntimeError,
@@ -27,10 +30,13 @@ pub enum ExceptionKind {
 impl ExceptionKind {
     /// Every kind, in the order of the variants.
     #[cfg(test)]
-    pub(crate) const ALL: [Self; 12] = [
+    pub(crate) const ALL: [Self; 15] = [
         Self::AssertionError,
+        Self::AttributeError,
+        Self::ImportError,
         Self::IndexError,
         Self::KeyError,
+        Self::NameError,
         Self::OverflowError,
         Self::RecursionError,
         Self::RuntimeError,
@@ -47,6 +53,9 @@ impl ExceptionKind {
     pub fn class(self) -> &'static TypeObject {
         match self {
             Self::AssertionError => &classes::ASSERTION_ERROR,
+            Self::AttributeError => &classes::ATTRIBUTE_ERROR,
+            Self::ImportError => &classes::IMPORT_ERROR,
+            Self::NameError => &classes::NAME_ERROR,
             Self::IndexError => &classes::INDEX_ERROR,
             Self::KeyError => &classes::KEY_ERROR,
             Self::OverflowError => &classes::OVERFLOW_ERROR,

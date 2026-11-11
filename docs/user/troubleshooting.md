@@ -257,6 +257,20 @@ variable or an attribute stays bound once assigned in TyPy, and a tuple,
 a `str` or `bytes` cannot change. Assign a new value instead, or keep the
 values in a list or a dict.
 
+## E0423: `global` of a name the module does not bind
+
+A module variable keeps one type, which the module's own code gives it
+(SMT-08), so a function cannot create one with `global`. Assign the
+variable at module level, or declare its type there without a value,
+such as `total: int`.
+
+## E0424: an `__init__` reads a module variable before its type is known
+
+Each `__init__` is checked before the module's code, because the module
+reads the attributes it assigns. A module variable whose value needs
+those attributes has no type yet when the `__init__` reads it. Declare
+its type at module level, such as `LIMIT: int = c.v`.
+
 ## E0701: C toolchain program not found
 
 TyPy links programs with the system C toolchain, which is not installed

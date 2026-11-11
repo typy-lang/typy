@@ -8,7 +8,7 @@ use inkwell::targets::{
     CodeModel, FileType, InitializationConfig, RelocMode, Target as LlvmTarget, TargetMachine,
     TargetTriple as LlvmTriple,
 };
-use inkwell::values::FunctionValue;
+use inkwell::values::{FunctionValue, PointerValue};
 use typy_diagnostics::SourceLookup;
 use typy_tyir::{TyirModule, TyirType};
 
@@ -48,6 +48,27 @@ fn target_machine(
         .ok_or_else(|| CodegenError(format!("LLVM cannot generate code for {}", target.triple)))
 }
 
+/// Declares each global of the module as an internal LLVM variable of zeros, which the entry
+/// function fills before any module code runs; a global of a type with no value has none.
+fn declare_globals<'ctx>(
+    context: &'ctx Context,
+    llvm_module: &Module<'ctx>,
+    module: &TyirModule,
+) -> Vec<Option<PointerValue<'ctx>>> {
+    module
+        .globals
+        .iter()
+        .enumerate()
+        .map(|(index, global)| {
+            let ty = crate::abi::value_type(context, &module.tuple_types, global.ty)?;
+            let variable = llvm_module.add_global(ty, None, &format!("typy.global.{index}"));
+            variable.set_initializer(&ty.const_zero());
+            variable.set_linkage(Linkage::Internal);
+            Some(variable.as_pointer_value())
+        })
+        .collect()
+}
+
 /// Returns the bytes of the requested output for `module`.
 pub(crate) fn generate(
     module: &TyirModule,
@@ -70,6 +91,7 @@ pub(crate) fn generate(
     if optimization.minimise_size() {
         mark_minimum_size(&context, &functions);
     }
+    let globals = declare_globals(&context, &llvm_module, module);
     let mut statics = Statics::new(&context);
     let mut shared = Shared {
         context: &context,
@@ -77,6 +99,7 @@ pub(crate) fn generate(
         statics: &mut statics,
         tyir: module,
         functions: &functions,
+        globals: &globals,
         raising: &raising,
         lookup,
     };

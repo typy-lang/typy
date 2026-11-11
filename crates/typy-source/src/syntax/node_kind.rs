@@ -14,7 +14,6 @@ pub enum NodeKind {
     AsyncWith,
     Await,
     GeneratorExp,
-    Global,
     IpyEscapeCommand,
     Lambda,
     Match,

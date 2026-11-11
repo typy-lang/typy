@@ -13,6 +13,7 @@ use crate::typed::{
 use crate::types::Type;
 
 /// The program being built: symbols, finished functions, and what every body may refer to.
+#[derive(Clone)]
 pub(crate) struct Program {
     pub(super) module: String,
     pub(super) symbols: Vec<Symbol>,
@@ -20,6 +21,14 @@ pub(crate) struct Program {
     pub(super) function_ids: BTreeMap<String, FunctionId>,
     pub(super) signatures: Vec<FunctionSignature>,
     pub(super) module_variables: BTreeSet<String>,
+    /// The symbol of each module variable, made before any body is checked (SMT-08).
+    pub(super) module_symbols: BTreeMap<String, SymbolId>,
+    /// The module variables some function declares `global`, which a test cannot narrow,
+    /// because a call may assign them.
+    pub(super) assigned_in_functions: BTreeSet<String>,
+    /// Whether the module variables have only the types a first look at the module body gave
+    /// them, while the `__init__` methods are checked.
+    pub(super) provisional: bool,
     pub(super) classes: Vec<ClassInfo>,
     pub(super) class_ids: BTreeMap<String, ClassId>,
     /// The classes that derive from an exception class (CLS-03).
@@ -52,6 +61,9 @@ impl Program {
                 .map(|definition| definition.signature.clone())
                 .collect(),
             module_variables,
+            module_symbols: BTreeMap::new(),
+            assigned_in_functions: BTreeSet::new(),
+            provisional: false,
             classes,
             class_ids,
             exceptions,
@@ -96,6 +108,39 @@ impl Program {
     pub(super) fn attribute_ty(&self, class: ClassId, index: usize) -> Option<Type> {
         let owner = self.declaring(class, index);
         self.classes[owner.0 as usize].attributes[index].ty.clone()
+    }
+
+    /// Makes the symbol of each module variable, before any body is checked, and notes those
+    /// a function declares `global`.
+    pub(crate) fn declare_module_variables(
+        &mut self,
+        variables: &BTreeMap<String, Span>,
+        definitions: &[Definition<'_>],
+    ) {
+        for (name, span) in variables {
+            let symbol = self.add_symbol(name, SymbolKind::ModuleVariable, Type::Error, *span);
+            self.module_symbols.insert(name.clone(), symbol);
+        }
+        for definition in definitions {
+            for name in crate::check::declared_globals(definition.body) {
+                self.assigned_in_functions.insert(name.name.clone());
+            }
+        }
+    }
+
+    /// Gives each module variable the type it has in `other`, a copy of this program in which
+    /// the module body was checked, while the `__init__` methods are checked.
+    pub(crate) fn take_module_types(&mut self, other: &Self) {
+        for symbol in self.module_symbols.values() {
+            let index = symbol.0 as usize;
+            self.symbols[index].ty = other.symbols[index].ty.clone();
+        }
+        self.provisional = true;
+    }
+
+    /// Ends the first look: the module body is checked next, and gives the final types.
+    pub(crate) fn end_first_look(&mut self) {
+        self.provisional = false;
     }
 
     pub(super) fn add_symbol(

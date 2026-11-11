@@ -30,6 +30,12 @@ pub(crate) static ASSERTION_ERROR: TypeObject = class("AssertionError", &EXCEPTI
 /// An attribute that is missing.
 #[unsafe(export_name = "typy_rt_exception_AttributeError")]
 pub(crate) static ATTRIBUTE_ERROR: TypeObject = class("AttributeError", &EXCEPTION);
+/// An import that cannot find the module or the name it imports.
+#[unsafe(export_name = "typy_rt_exception_ImportError")]
+pub(crate) static IMPORT_ERROR: TypeObject = class("ImportError", &EXCEPTION);
+/// A name read while it is not bound.
+#[unsafe(export_name = "typy_rt_exception_NameError")]
+pub(crate) static NAME_ERROR: TypeObject = class("NameError", &EXCEPTION);
 /// The base of the errors of a missing index or key.
 #[unsafe(export_name = "typy_rt_exception_LookupError")]
 pub(crate) static LOOKUP_ERROR: TypeObject = class("LookupError", &EXCEPTION);
@@ -75,12 +81,14 @@ pub(crate) static ZERO_DIVISION_ERROR: TypeObject = class("ZeroDivisionError", &
 
 /// Every built-in exception class.
 #[cfg(test)]
-pub(crate) const EVERY_CLASS: [&TypeObject; 19] = [
+pub(crate) const EVERY_CLASS: [&TypeObject; 21] = [
     &BASE_EXCEPTION,
     &EXCEPTION,
     &ARITHMETIC_ERROR,
     &ASSERTION_ERROR,
     &ATTRIBUTE_ERROR,
+    &IMPORT_ERROR,
+    &NAME_ERROR,
     &LOOKUP_ERROR,
     &INDEX_ERROR,
     &KEY_ERROR,

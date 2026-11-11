@@ -68,6 +68,15 @@ impl Checker<'_> {
             .ok_or_else(|| self.error(format!("v{} has no type", value.0)))
     }
 
+    /// Returns the type of a global, or an error when the module has no such global.
+    fn global(&self, global: crate::module::GlobalId) -> Result<TyirType, VerifyError> {
+        self.module
+            .globals
+            .get(global.0 as usize)
+            .map(|global| global.ty)
+            .ok_or_else(|| self.error(format!("global g{} does not exist", global.0)))
+    }
+
     fn expect(&self, value: ValueId, expected: TyirType, what: &str) -> Result<(), VerifyError> {
         let actual = self.ty(value)?;
         if actual == expected {
@@ -150,6 +159,12 @@ impl Checker<'_> {
                     .get(slot.0 as usize)
                     .ok_or_else(|| self.error(format!("slot s{} does not exist", slot.0)))?;
                 self.expect(*value, slot.ty, "the stored value")?;
+                None
+            }
+            Operation::LoadGlobal(global) => Some(self.global(*global)?),
+            Operation::StoreGlobal { global, value } => {
+                let ty = self.global(*global)?;
+                self.expect(*value, ty, "the stored value")?;
                 None
             }
             Operation::IntBinary { left, right, .. } => {

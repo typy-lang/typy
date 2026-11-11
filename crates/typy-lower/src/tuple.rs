@@ -143,10 +143,7 @@ impl FunctionLowerer<'_> {
     /// target, from left to right, then releases the tuple (SMT-02).
     pub(crate) fn assign_target(&mut self, target: &AssignTarget, value: Lowered, span: Span) {
         match target {
-            AssignTarget::Name(symbol) => {
-                let slot = self.slots[symbol];
-                self.store(slot, value, span);
-            }
+            AssignTarget::Name(symbol) => self.assign_name(*symbol, value, span),
             AssignTarget::Item { list, index } => self.assign_item(list, index, value, span),
             AssignTarget::Slice {
                 list,

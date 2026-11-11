@@ -80,6 +80,11 @@ pub(crate) struct FunctionLowerer<'context> {
     /// reference and are never counted (MEM-04).
     pub(crate) borrowed: BTreeSet<SlotId>,
     parameters: Vec<(ValueId, SlotId)>,
+    /// The globals of the program's module variables (ADR-0015).
+    pub(crate) module_globals: &'context crate::module_variable::ModuleGlobals,
+    /// Whether this is the code of a module, which reads its own variables without testing
+    /// that they are bound, since definite assignment shows they are.
+    pub(crate) module_body: bool,
     recursive: bool,
     body_start: BlockId,
     span: Span,
@@ -103,6 +108,7 @@ impl<'context> FunctionLowerer<'context> {
         may_raise: &'context [bool],
         strings: &'context mut StringPool,
         tuple_types: &'context mut TupleTypes,
+        module_globals: &'context crate::module_variable::ModuleGlobals,
         recursive: bool,
     ) -> TyirFunction {
         let entry = function.id == program.entry;
@@ -135,6 +141,10 @@ impl<'context> FunctionLowerer<'context> {
         }
         for symbol_id in &function.locals {
             let symbol = program.symbol(*symbol_id);
+            // A module variable lives in a global, not in a slot.
+            if module_globals.of.contains_key(symbol_id) {
+                continue;
+            }
             let slot = builder.add_slot(symbol.name.clone(), tyir_type(&symbol.ty, tuple_types));
             slots.insert(*symbol_id, slot);
         }
@@ -153,6 +163,8 @@ impl<'context> FunctionLowerer<'context> {
             raises: false,
             borrowed,
             parameters,
+            module_globals,
+            module_body: entry,
             recursive,
             body_start,
             span: function.span,
@@ -225,6 +237,9 @@ impl<'context> FunctionLowerer<'context> {
             if let Some(value) = initial {
                 self.builder.push(Operation::Store { slot, value }, span);
             }
+        }
+        if self.module_body {
+            self.initialize_module_variables(span);
         }
         if self.recursive {
             self.call_runtime(RuntimeFunction::CheckStack, Vec::new(), span);

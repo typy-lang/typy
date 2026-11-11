@@ -64,6 +64,8 @@ pub(crate) struct BodyChecker<'program> {
     handling: usize,
     /// For each `finally` block being checked, how many loops were open where it starts.
     finally_loops: Vec<usize>,
+    /// The module variables the function declares `global`, which it assigns (SMT-08).
+    global_names: BTreeSet<String>,
 }
 
 impl<'program> BodyChecker<'program> {
@@ -87,6 +89,7 @@ impl<'program> BodyChecker<'program> {
             reported_incomplete: false,
             handling: 0,
             finally_loops: Vec::new(),
+            global_names: BTreeSet::new(),
         }
     }
 
@@ -129,6 +132,7 @@ impl<'program> BodyChecker<'program> {
                 instance: *instance,
             });
         }
+        checker.declare_globals(definition.body);
         let statements: Vec<&Stmt> = definition.body.iter().collect();
         checker.collect_locals(&statements);
         let body = checker.statements(&statements);

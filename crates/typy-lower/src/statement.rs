@@ -16,10 +16,6 @@ impl FunctionLowerer<'_> {
         }
     }
 
-    fn slot(&self, symbol: SymbolId) -> SlotId {
-        self.slots[&symbol]
-    }
-
     #[allow(clippy::too_many_lines, reason = "one arm per statement kind")]
     fn statement(&mut self, statement: &TypedStmt) {
         match statement {
@@ -323,8 +319,7 @@ impl FunctionLowerer<'_> {
         });
         self.builder.switch_to(inside);
         let value = self.load(counter, span);
-        let target_slot = self.slot(target);
-        self.store(target_slot, value, span);
+        self.assign_name(target, value, span);
         self.loops.push(LoopTargets {
             break_target: exit,
             continue_target: advance,

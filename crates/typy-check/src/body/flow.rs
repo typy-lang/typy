@@ -33,7 +33,11 @@ pub(super) fn meet(left: Assigned, right: Assigned) -> Assigned {
 /// Returns the optional variable an expression reads, if it reads one.
 fn optional_variable(expression: &TypedExpr) -> Option<SymbolId> {
     match &expression.kind {
-        TypedExprKind::Local(symbol) if matches!(expression.ty, Type::Optional(_)) => Some(*symbol),
+        TypedExprKind::Local(symbol) | TypedExprKind::ModuleVariable(symbol)
+            if matches!(expression.ty, Type::Optional(_)) =>
+        {
+            Some(*symbol)
+        }
         TypedExprKind::Unwrap(inner) => optional_variable(inner),
         _ => None,
     }

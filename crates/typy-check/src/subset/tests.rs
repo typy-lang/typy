@@ -102,10 +102,6 @@ fn later_features_name_their_release_and_rule() {
         ),
         ("import os\n", "imports are planned for TyPy 0.3 (SMT-07)"),
         (
-            "global x\n",
-            "`global` statements are planned for TyPy 0.3 (SMT-08)",
-        ),
-        (
             "type X = int\n",
             "`type` statements are planned for TyPy 0.4 (SMT-10)",
         ),
@@ -275,5 +271,46 @@ fn return_break_and_continue_out_of_place_are_syntax_errors() {
                 .any(|(code, message)| code == "E0103" && message == expected),
             "{source:?} gave {found:?}"
         );
+    }
+}
+
+#[test]
+fn global_after_a_use_an_assignment_or_an_annotation_is_a_syntax_error() {
+    let cases = [
+        (
+            "def f() -> None:\n    print(x)\n    global x\n",
+            Some("name 'x' is used prior to global declaration"),
+        ),
+        (
+            "def f() -> None:\n    x = 1\n    global x\n",
+            Some("name 'x' is assigned to before global declaration"),
+        ),
+        (
+            "def f(x: int) -> None:\n    global x\n",
+            Some("name 'x' is parameter and global"),
+        ),
+        (
+            "def f() -> None:\n    x: int = 1\n    global x\n",
+            Some("annotated name 'x' can't be global"),
+        ),
+        (
+            "def f() -> None:\n    global x\n    x: int = 1\n",
+            Some("annotated name 'x' can't be global"),
+        ),
+        ("def f() -> None:\n    global x\n    x = 1\n", None),
+        ("global x\nx = 1\n", None),
+    ];
+    for (source, expected) in cases {
+        let found: Vec<(String, String)> = diagnostics(source)
+            .into_iter()
+            .filter(|(code, _)| code == "E0103")
+            .collect();
+        match expected {
+            Some(message) => assert!(
+                found.iter().any(|(_, found)| found == message),
+                "{source:?} gave {found:?}"
+            ),
+            None => assert!(found.is_empty(), "{source:?} gave {found:?}"),
+        }
     }
 }

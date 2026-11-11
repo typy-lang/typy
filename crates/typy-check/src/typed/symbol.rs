@@ -13,8 +13,11 @@ pub struct SymbolId(pub u32);
 pub enum SymbolKind {
     /// A parameter of a function.
     Parameter,
-    /// A variable of a function, or of the module body.
+    /// A variable of a function.
     Local,
+    /// A variable of a module, bound at module level and kept for the whole run: module code
+    /// reads it as a local, and a function reads it, or assigns it after `global` (SMT-08).
+    ModuleVariable,
 }
 
 /// A name bound in one function or in the module body, with the one type it keeps (TYP-03).

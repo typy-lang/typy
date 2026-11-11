@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy detailed design |
-| Version | 1.57 |
+| Version | 1.58 |
 | Status | Approved |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-11 |
@@ -288,6 +288,15 @@ it enforces and its status. `typy explain` (0.3) reads the same table.
 | E0412 | Method a built-in type does not have | LIB-03 |
 | E0413 | Set item or dict key of a type without a hash: a list, a set, a dict, a view, or a tuple that holds one | DAT-09, DAT-10 |
 | E0414 | Attribute or method a class does not have | CLS-02 |
+| E0415 | `raise` or `from` of a value that is not an exception | SMT-06 |
+| E0416 | Bare `raise` outside an `except` clause | EXC-07 |
+| E0417 | Call of an exception class TyPy does not let a program build | EXC-12 |
+| E0418 | `except` clause that names something other than exception classes | EXC-09 |
+| E0419 | `return`, `break` or `continue` that leaves a `finally` block | EXC-06 |
+| E0420 | `with` on a value whose class has no `__enter__` and `__exit__` | CST-05 |
+| E0421 | `del` of something other than a list item, a list slice or a dict key | SMT-05 |
+| E0423 | `global` of a name the module does not bind | SMT-08 |
+| E0424 | Module variable an `__init__` reads before the module's code gives it a type | SMT-08 |
 | E0701 | C toolchain program not found | A-01 |
 | E0702 | Link failed | A-01 |
 | E0703 | Runtime archive missing, or from another TyPy version | None |
@@ -923,9 +932,16 @@ each module in name order:
    "dicts are planned for TyPy 0.2 (DAT-09)". A node that is excluded from
    TyPy gives E0202 with rule STD-04.
 2. The resolver binds names. A name assigned anywhere in a function is a
-   local of that function, as LR 4.2.2 defines. In 0.1 a function may read
-   module-level functions and builtins, but not module-level variables;
-   that needs `global` and is planned for 0.3 (SMT-08).
+   local of that function, as LR 4.2.2 defines. A name the module binds
+   at module level is a module variable, `SymbolKind::ModuleVariable`,
+   whose symbol `Program::declare_module_variables` makes before any body
+   is checked. A function reads it as `TypedExprKind::ModuleVariable`,
+   which no test narrows, and after `global` assigns it (SMT-08); a
+   `global` of a name the module does not bind is E0423. In the module
+   body it is read with definite assignment, and narrowed unless some
+   function declares it `global`. The subset walker reports CPython's
+   `SyntaxError`s for `global`: a name used or assigned before it, a
+   parameter, or an annotated name, E0103.
 3. Inference gives each local the type of its first assignment (TYP-02) and
    refuses a later assignment of another type with E0402.
 4. The definite assignment pass follows every path through each function
@@ -949,9 +965,15 @@ The subset walker also reports `return` outside a function and `break` or
 `continue` outside a loop as E0103, because CPython's compiler rejects them
 but the parser does not.
 
-In 0.1, functions are checked one after another, and their diagnostics are
-sorted before they are returned. Parallel checking (architecture section
-7.5) is added when the build-time benchmarks of NFR-04 call for it.
+Functions are checked one after another, and their diagnostics are
+sorted before they are returned. Each `__init__` comes first, since it
+gives the attributes it assigns their types, then the module body, which
+gives the module variables theirs, then the other functions. An
+`__init__` reads a module variable with the type a first check of the
+module body gives it, on a copy of the program whose diagnostics are
+dropped; one whose type needs an attribute is E0424. Parallel checking
+(architecture section 7.5) is added when the build-time benchmarks of
+NFR-04 call for it.
 
 The 0.1 feature table accepts: module-level `def` without decorators or
 type parameters; positional and keyword parameters with constant defaults;
@@ -1137,6 +1159,7 @@ graph, symbol names and the string pool.
 | Concern | Behaviour |
 | --- | --- |
 | Locals | Each parameter and local gets a slot. The entry block, written last, stores every parameter and gives every counted slot an immortal value, so every error path can release every slot |
+| Module variables | Each is a `TyirGlobal`, an internal LLVM variable of zeros, with a second `bool` global that is true once it is bound (ADR-0015). The entry function's first block gives every counted one an immortal value, so a store can release the value it replaces. `LoadGlobal` and `StoreGlobal` read and write them; a function tests the flag first and calls `typy_rt_name_error`, which raises `NameError: name 'x' is not defined`, while the module's own code does not, since definite assignment shows the variable is bound |
 | Ownership | A lowered value is owned or borrowed. Constants are immortal and borrowed, and so are slot values; results of calls and of `int` arithmetic are owned. A store moves an owned value or counts a borrowed one, then releases the slot's old value. Owned temporaries are tracked until they are released or moved |
 | Raising | A call of a runtime function or program function that may raise is an `invoke`. Its error block releases the live owned temporaries and every slot, then returns the exception (ADR-0004) |
 | `RaiseAnalysis` | A function may raise when its lowered code contains an `invoke`. Lowering runs again until that set of functions stops growing, so the analysis always agrees with the code; the verifier checks it |

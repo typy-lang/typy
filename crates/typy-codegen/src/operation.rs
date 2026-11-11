@@ -23,6 +23,14 @@ impl<'ctx> FunctionEmitter<'_, '_, 'ctx> {
                 }
                 None
             }
+            Operation::LoadGlobal(global) => self.load_global(*global)?,
+            Operation::StoreGlobal { global, value } => {
+                if let Some(pointer) = self.shared.globals[global.0 as usize] {
+                    let value = self.value(*value)?;
+                    self.builder.build_store(pointer, value)?;
+                }
+                None
+            }
             Operation::IntBinary {
                 operator,
                 left,
@@ -105,6 +113,23 @@ impl<'ctx> FunctionEmitter<'_, '_, 'ctx> {
                 None
             }
         })
+    }
+
+    /// Loads a global's value, or gives none for a global of a type with no value.
+    fn load_global(
+        &mut self,
+        global: typy_tyir::GlobalId,
+    ) -> Result<Option<BasicValueEnum<'ctx>>, CodegenError> {
+        let Some(pointer) = self.shared.globals[global.0 as usize] else {
+            return Ok(None);
+        };
+        let ty = crate::abi::value_type(
+            self.shared.context,
+            &self.shared.tyir.tuple_types,
+            self.shared.tyir.globals[global.0 as usize].ty,
+        )
+        .ok_or_else(|| CodegenError("a global with a value has a type".to_owned()))?;
+        Ok(Some(self.builder.build_load(ty, pointer, "")?))
     }
 
     fn load(

@@ -230,7 +230,7 @@ type X = int
 match v:
     case _:
         pass
-global g
+nonlocal g
 ";
     let kinds: Vec<NodeKind> = body(source)
         .iter()
@@ -245,7 +245,7 @@ global g
             NodeKind::AsyncFunctionDef,
             NodeKind::TypeAlias,
             NodeKind::Match,
-            NodeKind::Global,
+            NodeKind::Nonlocal,
         ]
     );
 }

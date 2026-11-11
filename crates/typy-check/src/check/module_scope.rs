@@ -3,7 +3,7 @@
 use std::collections::BTreeMap;
 
 use typy_diagnostics::{Diagnostic, DiagnosticCode, Diagnostics, RuleId, Span};
-use typy_source::syntax::{Expr, Stmt};
+use typy_source::syntax::{Expr, Identifier, Stmt};
 
 use super::definition::Definition;
 use crate::typed::ClassId;
@@ -15,7 +15,7 @@ pub(super) fn module_variables(statements: &[Stmt], names: &mut BTreeMap<String,
             Expr::Name { id, span } => {
                 names.entry(id.clone()).or_insert(*span);
             }
-            Expr::Tuple { elements, .. } => {
+            Expr::Tuple { elements, .. } | Expr::List { elements, .. } => {
                 for element in elements {
                     bind(names, element);
                 }
@@ -55,6 +55,32 @@ pub(super) fn module_variables(statements: &[Stmt], names: &mut BTreeMap<String,
             _ => {}
         }
     }
+}
+
+/// Returns the names a function's body declares `global`, at any depth of its blocks (SMT-08).
+pub(crate) fn declared_globals(statements: &[Stmt]) -> Vec<&Identifier> {
+    let mut names = Vec::new();
+    for statement in statements {
+        match statement {
+            Stmt::Global {
+                names: declared, ..
+            } => names.extend(declared),
+            Stmt::For { body, orelse, .. }
+            | Stmt::While { body, orelse, .. }
+            | Stmt::If { body, orelse, .. } => {
+                names.extend(declared_globals(body));
+                names.extend(declared_globals(orelse));
+            }
+            Stmt::With { body, .. } => names.extend(declared_globals(body)),
+            Stmt::Try { .. } => {
+                for block in statement.try_blocks() {
+                    names.extend(declared_globals(block));
+                }
+            }
+            _ => {}
+        }
+    }
+    names
 }
 
 /// A name may be a module-level function, a class or a module-level variable, only one of

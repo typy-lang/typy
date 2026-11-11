@@ -8,6 +8,10 @@ All notable changes to TyPy are recorded here. The format follows
 
 ### Added
 
+- `global` in a function, and functions that read the variables of their
+  module. A read before the module binds the variable raises CPython's
+  `NameError`, and CPython's `SyntaxError`s for `global` are E0103 (SMT-08).
+- `NameError` and `ImportError` as built-in exception classes (EXC-01).
 - `raise` with an exception or an exception class, and `raise ... from
   cause` and `raise ... from None`. An uncaught exception prints its cause
   or its context first, with CPython's line between them (SMT-06, EXC-04,

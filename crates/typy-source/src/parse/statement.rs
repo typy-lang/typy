@@ -200,7 +200,14 @@ impl Converter<'_> {
                 is_lazy: node.is_lazy,
                 span,
             },
-            ast::Stmt::Global(node) => self.other_statement(NodeKind::Global, node.range),
+            ast::Stmt::Global(node) => Stmt::Global {
+                names: node
+                    .names
+                    .iter()
+                    .map(|name| self.identifier(name))
+                    .collect(),
+                span,
+            },
             ast::Stmt::Nonlocal(node) => self.other_statement(NodeKind::Nonlocal, node.range),
             ast::Stmt::Expr(node) => Stmt::Expr {
                 value: self.expression(&node.value),

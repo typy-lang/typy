@@ -71,7 +71,14 @@ impl Walker {
                     self.annotation(returns);
                 }
                 let outer_loops = std::mem::take(&mut self.loop_depth);
+                let names = parameters
+                    .iter()
+                    .map(|parameter| parameter.name.name.as_str());
+                let outer_scope = self
+                    .scope
+                    .replace(super::global_scope::GlobalScope::of_parameters(names));
                 self.statements(body, Place::Function);
+                self.scope = outer_scope;
                 self.loop_depth = outer_loops;
             }
             Stmt::ClassDef {
@@ -143,6 +150,9 @@ impl Walker {
                 value,
                 ..
             } => {
+                if let Expr::Name { id, span } = target {
+                    self.annotated_name(id, *span);
+                }
                 self.name_target(target);
                 self.annotation(annotation);
                 if let Some(value) = value {
@@ -206,6 +216,7 @@ impl Walker {
             Stmt::Continue { span } if self.loop_depth == 0 => {
                 self.syntax_error(*span, "`continue` outside a loop");
             }
+            Stmt::Global { names, .. } => self.global_statement(names),
             Stmt::Pass { .. } | Stmt::Break { .. } | Stmt::Continue { .. } => {}
             Stmt::Other { kind, span } => self.report(*span, feature(*kind)),
         }
@@ -213,7 +224,7 @@ impl Walker {
 
     pub(super) fn name_target(&mut self, target: &Expr) {
         match target {
-            Expr::Name { .. } => {}
+            Expr::Name { id, .. } => self.assigned_name(id),
             // An item of a list; the checker decides what may be indexed (DAT-07).
             Expr::Subscript { value, index, .. } => {
                 self.expression(value);

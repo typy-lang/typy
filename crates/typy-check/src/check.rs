@@ -25,6 +25,7 @@ use crate::typed::{ClassId, FunctionId, TypedProgram};
 use class::{collect_classes, collect_members, exception_classes};
 use definition::collect_functions;
 use definition_order::check_calls_follow_definitions;
+pub(crate) use module_scope::declared_globals;
 use module_scope::{check_names_are_functions_or_variables, module_variables};
 
 /// Resolves names, checks types and the subset rules, and builds the typed program.
@@ -67,6 +68,7 @@ impl TypeChecker {
         );
         let mut variables = BTreeMap::new();
         module_variables(&tree.body, &mut variables);
+        let module_variable_spans = variables.clone();
         check_names_are_functions_or_variables(
             &definitions,
             &class_ids,
@@ -84,15 +86,7 @@ impl TypeChecker {
             class_ids,
             exceptions,
         );
-        // Each `__init__` is checked first, since it gives the attributes it assigns their types.
-        let (initializers, others): (Vec<_>, Vec<_>) =
-            definitions.iter().enumerate().partition(|(_, definition)| {
-                definition.class.is_some() && definition.name == "__init__"
-            });
-        for (index, definition) in initializers.into_iter().chain(others) {
-            let id = FunctionId(u32::try_from(index).unwrap_or(u32::MAX));
-            BodyChecker::check_function(&mut program, id, definition, &mut diagnostics);
-        }
+        program.declare_module_variables(&module_variable_spans, &definitions);
         let module_body: Vec<&Stmt> = tree
             .body
             .iter()
@@ -100,7 +94,36 @@ impl TypeChecker {
                 !matches!(statement, Stmt::FunctionDef { .. } | Stmt::ClassDef { .. })
             })
             .collect();
+        // Each `__init__` is checked first, since it gives the attributes it assigns their
+        // types; the module body comes next, since it gives the module variables theirs, and
+        // the other functions last. An `__init__` reads a module variable with the type a
+        // first look at the module body gives it, on a copy whose diagnostics are dropped.
+        let mut first_look = program.clone();
+        BodyChecker::check_module(&mut first_look, &module_body, &mut Diagnostics::new());
+        program.take_module_types(&first_look);
+        let (initializers, others): (Vec<_>, Vec<_>) =
+            definitions.iter().enumerate().partition(|(_, definition)| {
+                definition.class.is_some() && definition.name == "__init__"
+            });
+        let function_id = |index: usize| FunctionId(u32::try_from(index).unwrap_or(u32::MAX));
+        for (index, definition) in initializers {
+            BodyChecker::check_function(
+                &mut program,
+                function_id(index),
+                definition,
+                &mut diagnostics,
+            );
+        }
+        program.end_first_look();
         let entry = BodyChecker::check_module(&mut program, &module_body, &mut diagnostics);
+        for (index, definition) in others {
+            BodyChecker::check_function(
+                &mut program,
+                function_id(index),
+                definition,
+                &mut diagnostics,
+            );
+        }
 
         if diagnostics.has_errors() {
             return Err(diagnostics);

@@ -118,6 +118,9 @@ impl Walker {
 
     #[allow(clippy::too_many_lines, reason = "one arm per expression kind")]
     pub(super) fn expression(&mut self, expression: &Expr) {
+        if let Expr::Name { id, .. } = expression {
+            self.used_name(id);
+        }
         match expression {
             Expr::BoolOp { values, .. } => {
                 for value in values {

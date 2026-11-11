@@ -46,6 +46,7 @@ fn on_point(body: impl FnOnce(ValueId, ValueId) -> Body) -> TyirModule {
         unreachable!("interning gives a tuple type");
     };
     TyirModule {
+        globals: Vec::new(),
         functions: vec![builder.finish()],
         strings: Vec::new(),
         tuple_types,
@@ -204,6 +205,7 @@ fn on_exception(parameter: TyirType, operation: Operation) -> TyirModule {
         unreachable!("interning gives a tuple type");
     };
     TyirModule {
+        globals: Vec::new(),
         functions: vec![builder.finish()],
         strings: Vec::new(),
         tuple_types,

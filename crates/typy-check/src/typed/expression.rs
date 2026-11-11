@@ -38,6 +38,9 @@ pub struct Argument {
 pub enum TypedExprKind {
     Constant(TypedConstant),
     Local(SymbolId),
+    /// A module variable, read as it is now; outside the module's own code it may be unbound
+    /// and raise `NameError`, and a call may assign it (SMT-08, ADR-0015).
+    ModuleVariable(SymbolId),
     /// `__name__`, which is `"__main__"` in the main module (STD-06).
     ModuleName,
     Binary {

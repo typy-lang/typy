@@ -27,6 +27,9 @@ fn print_with(module: &TyirModule, counting: bool) -> String {
     for (index, string) in module.strings.iter().enumerate() {
         let _ = writeln!(text, "string s{index} = {string:?}");
     }
+    for (index, global) in module.globals.iter().enumerate() {
+        let _ = writeln!(text, "global g{index}: {} = {:?}", global.ty, global.name);
+    }
     let _ = writeln!(text, "entry fn{}", module.entry.0);
     for function in &module.functions {
         text.push('\n');
@@ -147,6 +150,10 @@ fn operation(module: &TyirModule, operation: &Operation) -> String {
         Operation::Constant(constant) => format!("const {constant}"),
         Operation::Load(slot) => format!("load s{}", slot.0),
         Operation::Store { slot, value } => format!("store s{}, v{}", slot.0, value.0),
+        Operation::LoadGlobal(global) => format!("load_global g{}", global.0),
+        Operation::StoreGlobal { global, value } => {
+            format!("store_global g{}, v{}", global.0, value.0)
+        }
         Operation::IntBinary {
             operator,
             left,

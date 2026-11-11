@@ -23,6 +23,7 @@ mod list;
 mod list_method;
 mod loop_source;
 mod mangle;
+mod module_variable;
 mod optional;
 mod ownership;
 mod program;

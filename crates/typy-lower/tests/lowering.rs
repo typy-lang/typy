@@ -294,3 +294,44 @@ keys = dict.fromkeys(Pairs(), note())
         "{text}"
     );
 }
+
+#[test]
+fn only_functions_test_that_a_module_variable_is_bound() {
+    let source = "\
+count = 0
+names: list[str] = []
+
+
+def bump() -> int:
+    global count
+    count += 1
+    names.append('x')
+    return count
+
+
+bump()
+print(count, names)
+";
+    let module = lower(source);
+    assert_eq!(
+        module
+            .globals
+            .iter()
+            .map(|global| global.name.as_str())
+            .collect::<Vec<_>>(),
+        ["count", "count bound", "names", "names bound"]
+    );
+    let text = text(source);
+    let bump = text
+        .split("fn ")
+        .find(|function| function.contains("# bump"))
+        .unwrap();
+    let main = text
+        .split("fn ")
+        .find(|function| function.contains("# <module>"))
+        .unwrap();
+    // The function tests the flag at each of its three reads; the module's code never does.
+    assert_eq!(bump.matches("rt.name_error(").count(), 3, "{bump}");
+    assert_eq!(main.matches("rt.name_error(").count(), 0, "{main}");
+    assert!(main.contains("store_global g1"), "{main}");
+}

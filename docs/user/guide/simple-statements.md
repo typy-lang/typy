@@ -9,6 +9,7 @@
 | `pass`, `return`, `break` and `continue` | SMT-03 |
 | `raise` and `assert`, described in [Exceptions](exceptions.md) | SMT-04, SMT-06 |
 | `del` of list items, list slices and dict keys | SMT-05 |
+| `global` in a function, for the module's variables | SMT-08 |
 
 `del` removes what each target names, in order: `del xs[i]` with
 `IndexError` outside the list, `del xs[a:b:c]` what the slice selects, and
@@ -25,8 +26,35 @@ del ages["bob"]
 print(queue, ages)
 ```
 
-`import` and `global` come in 0.3 (SMT-07, SMT-08), and
-`nonlocal` in 1.0 (SMT-09).
+A function reads the variables of its module, and assigns them after
+`global`. A read before the module binds the variable raises
+`NameError`, as in CPython:
+
+<!-- typy-expect: accepted -->
+```python
+count = 0
+
+
+def bump() -> int:
+    global count
+    count += 1
+    return count
+
+
+bump()
+print(bump(), count)
+```
+
+The name must be bound or annotated at module level, such as
+`count: int`, which gives the variable its type, E0423 otherwise. CPython's
+rules for `global` hold: it comes before any use of the name in the
+function, and names no parameter, E0103.
+
+A test such as `if label is not None:` does not narrow a module variable
+that a function declares `global`, since any call may assign it. Copy
+the value to a local variable and test that.
+
+`import` comes in 0.3 (SMT-07), and `nonlocal` in 1.0 (SMT-09).
 
 ## Example
 

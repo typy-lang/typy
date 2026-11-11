@@ -267,6 +267,10 @@ impl Dump<'_> {
                     self.expression(depth + 1, value);
                 }
             }
+            Stmt::Global { names, .. } => {
+                let names: Vec<&str> = names.iter().map(|name| name.name.as_str()).collect();
+                self.line(depth, &format!("Global {}", names.join(", ")), span);
+            }
             Stmt::Pass { .. } => self.line(depth, "Pass", span),
             Stmt::Break { .. } => self.line(depth, "Break", span),
             Stmt::Continue { .. } => self.line(depth, "Continue", span),

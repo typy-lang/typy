@@ -84,7 +84,7 @@ except HttpError as error:
 | --- | --- |
 | `BaseException` | `object` |
 | `Exception` | `BaseException` |
-| `ArithmeticError`, `AssertionError`, `AttributeError`, `LookupError` | `Exception` |
+| `ArithmeticError`, `AssertionError`, `AttributeError`, `ImportError`, `LookupError`, `NameError` | `Exception` |
 | `RuntimeError`, `StopIteration`, `TypeError`, `ValueError` | `Exception` |
 | `OverflowError`, `ZeroDivisionError` | `ArithmeticError` |
 | `IndexError`, `KeyError` | `LookupError` |

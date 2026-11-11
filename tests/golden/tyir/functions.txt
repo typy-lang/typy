@@ -5,6 +5,8 @@ string s3 = "small"
 string s4 = " "
 string s5 = "\n"
 string s6 = ": "
+global g0: int = "i"
+global g1: bool = "i bound"
 entry fn3
 
 fn _TY8__main__3gcd(v0: int, v1: int) -> int raises {  # gcd
@@ -134,154 +136,146 @@ b7(v12: exception):
 }
 
 fn __typy_main() -> unit raises {  # <module>
-  slot s0 i: int
-  slot s1 $counter: int
-  slot s2 $limit: int
-  slot s3 $stride: int
+  slot s0 $counter: int
+  slot s1 $limit: int
+  slot s2 $stride: int
 b0():
-  v95 = const int 0
-  store s0, v95
-  v96 = const int 0
-  store s1, v96
-  v97 = const int 0
-  store s2, v97
-  v98 = const int 0
-  store s3, v98
+  v87 = const int 0
+  store s0, v87
+  v88 = const int 0
+  store s1, v88
+  v89 = const int 0
+  store s2, v89
+  v90 = const int 0
+  store_global g0, v90
   jump b1()
 b1():
   v0 = const int 1
   v1 = int.neg v0
-  v2 = load s1
-  store s1, v1
+  v2 = load s0
+  store s0, v1
   v3 = const int 3
-  v4 = load s2
-  store s2, v3
+  v4 = load s1
+  store s1, v3
   v5 = const int 1
-  v6 = load s3
-  store s3, v5
+  v6 = load s2
+  store s2, v5
   jump b2()
 b2():
-  v7 = load s1
-  v8 = load s2
+  v7 = load s0
+  v8 = load s1
   v9 = cmp.int.lt v7, v8
   branch v9, b3, b5
 b3():
-  v10 = load s1
-  v11 = load s0
-  store s0, v10
-  v12 = load s0
-  invoke _TY8__main__8describe(v12) to b7 unwind b8
+  v10 = load s0
+  v11 = load_global g0
+  store_global g0, v10
+  v12 = const bool true
+  store_global g1, v12
+  v13 = load_global g0
+  invoke _TY8__main__8describe(v13) to b7 unwind b8
 b4():
-  v49 = load s1
-  v50 = load s3
-  v51 = int.add v49, v50
-  v52 = load s1
-  store s1, v51
+  v46 = load s0
+  v47 = load s2
+  v48 = int.add v46, v47
+  v49 = load s0
+  store s0, v48
   jump b2()
 b5():
   jump b6()
 b6():
-  v53 = const int 2
-  v54 = const int 70
-  invoke rt.int_power(v53, v54) to b15 unwind b16
-b7(v13: str):
-  v19 = load s0
+  v50 = const int 2
+  v51 = const int 70
+  invoke rt.int_power(v50, v51) to b15 unwind b16
+b7(v14: str):
+  v19 = load_global g0
   v20 = const int 18
   v21 = int.mul v19, v20
   v22 = const int 12
   invoke _TY8__main__3gcd(v21, v22) to b9 unwind b10
-b8(v14: exception):
-  v15 = load s0
-  v16 = load s1
-  v17 = load s2
-  v18 = load s3
-  return_error v14
+b8(v15: exception):
+  v16 = load s0
+  v17 = load s1
+  v18 = load s2
+  return_error v15
 b9(v23: int):
-  v29 = const str s6
-  call rt.write_stdout(v13)
+  v28 = const str s6
+  call rt.write_stdout(v14)
+  v29 = const unit
+  call rt.write_stdout(v28)
   v30 = const unit
-  call rt.write_stdout(v29)
-  v31 = const unit
   invoke rt.int_to_str(v23) to b11 unwind b12
 b10(v24: exception):
   v25 = load s0
   v26 = load s1
   v27 = load s2
-  v28 = load s3
   return_error v24
-b11(v32: str):
-  call rt.write_stdout(v32)
+b11(v31: str):
+  call rt.write_stdout(v31)
+  v36 = const unit
+  v37 = const str s5
+  call rt.write_stdout(v37)
   v38 = const unit
-  v39 = const str s5
-  call rt.write_stdout(v39)
-  v40 = const unit
-  v41 = const unit
-  v42 = load s0
-  invoke _TY8__main__6report(v42) to b13 unwind b14
-b12(v33: exception):
-  v34 = load s0
-  v35 = load s1
-  v36 = load s2
-  v37 = load s3
-  return_error v33
-b13(v43: unit):
+  v39 = const unit
+  v40 = load_global g0
+  invoke _TY8__main__6report(v40) to b13 unwind b14
+b12(v32: exception):
+  v33 = load s0
+  v34 = load s1
+  v35 = load s2
+  return_error v32
+b13(v41: unit):
   jump b4()
-b14(v44: exception):
-  v45 = load s0
-  v46 = load s1
-  v47 = load s2
-  v48 = load s3
-  return_error v44
-b15(v55: int):
-  v61 = const int 3
-  invoke rt.int_floor_divide(v55, v61) to b17 unwind b18
-b16(v56: exception):
-  v57 = load s0
-  v58 = load s1
-  v59 = load s2
-  v60 = load s3
-  return_error v56
-b17(v62: int):
-  v68 = const int 7
-  v69 = const int 2
-  invoke rt.int_true_divide(v68, v69) to b19 unwind b20
-b18(v63: exception):
-  v64 = load s0
-  v65 = load s1
-  v66 = load s2
-  v67 = load s3
-  return_error v63
-b19(v70: float):
-  v76 = const str s4
-  invoke rt.int_to_str(v62) to b21 unwind b22
-b20(v71: exception):
-  v72 = load s0
-  v73 = load s1
-  v74 = load s2
-  v75 = load s3
-  return_error v71
-b21(v77: str):
-  call rt.write_stdout(v77)
+b14(v42: exception):
+  v43 = load s0
+  v44 = load s1
+  v45 = load s2
+  return_error v42
+b15(v52: int):
+  v57 = const int 3
+  invoke rt.int_floor_divide(v52, v57) to b17 unwind b18
+b16(v53: exception):
+  v54 = load s0
+  v55 = load s1
+  v56 = load s2
+  return_error v53
+b17(v58: int):
+  v63 = const int 7
+  v64 = const int 2
+  invoke rt.int_true_divide(v63, v64) to b19 unwind b20
+b18(v59: exception):
+  v60 = load s0
+  v61 = load s1
+  v62 = load s2
+  return_error v59
+b19(v65: float):
+  v70 = const str s4
+  invoke rt.int_to_str(v58) to b21 unwind b22
+b20(v66: exception):
+  v67 = load s0
+  v68 = load s1
+  v69 = load s2
+  return_error v66
+b21(v71: str):
+  call rt.write_stdout(v71)
+  v76 = const unit
+  call rt.write_stdout(v70)
+  v77 = const unit
+  v78 = call rt.float_to_str(v65)
+  call rt.write_stdout(v78)
+  v79 = const unit
+  v80 = const str s5
+  call rt.write_stdout(v80)
+  v81 = const unit
+  v82 = const unit
   v83 = const unit
-  call rt.write_stdout(v76)
-  v84 = const unit
-  v85 = call rt.float_to_str(v70)
-  call rt.write_stdout(v85)
-  v86 = const unit
-  v87 = const str s5
-  call rt.write_stdout(v87)
-  v88 = const unit
-  v89 = const unit
-  v90 = const unit
-  v91 = load s0
-  v92 = load s1
-  v93 = load s2
-  v94 = load s3
-  return v90
-b22(v78: exception):
-  v79 = load s0
-  v80 = load s1
-  v81 = load s2
-  v82 = load s3
-  return_error v78
+  v84 = load s0
+  v85 = load s1
+  v86 = load s2
+  return v83
+b22(v72: exception):
+  v73 = load s0
+  v74 = load s1
+  v75 = load s2
+  return_error v72
 }

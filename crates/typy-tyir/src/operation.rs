@@ -114,6 +114,15 @@ pub enum Operation {
         /// The value.
         value: ValueId,
     },
+    /// The value a global holds, borrowed from the global.
+    LoadGlobal(crate::module::GlobalId),
+    /// Stores a value in a global; the global takes over the reference.
+    StoreGlobal {
+        /// The global.
+        global: crate::module::GlobalId,
+        /// The value.
+        value: ValueId,
+    },
     /// An `int` operation that cannot raise.
     IntBinary {
         /// The operator.

@@ -218,7 +218,7 @@ fn raise_ends_the_path_it_is_on() {
         "Raise from None @6:5",
         "NewException KeyError : KeyError",
         "Raise from @9:1",
-        "Local e : LookupError",
+        "ModuleVariable e : LookupError",
     ] {
         assert!(dump.contains(expected), "{expected} in\n{dump}");
     }
@@ -369,7 +369,7 @@ fn rejected_programs_give_their_codes() {
             &["E0202"],
         ),
         ("def f() -> None:\n    pass\nf = 1\n", &["E0202"]),
-        ("x = 1\ndef f() -> int:\n    return x\n", &["E0201"]),
+        ("x = 1\ndef f() -> str:\n    return x\n", &["E0405"]),
         ("def f() -> int:\n    return 1\ng = f\n", &["E0201"]),
         ("x = 1\nx()\n", &["E0401"]),
         ("print(min(1, 2.0))\n", &["E0404"]),
@@ -621,7 +621,7 @@ Function fn1 __main__.<module>() -> None @5:1
         If @6:5
           BoolOp And : bool @6:8
             Compare [Gt] : bool @6:8
-              Local i : int @6:8
+              ModuleVariable i : int @6:8
               Constant Int("0") : int @6:12
             Unary Not : bool @6:18
               Constant Bool(false) : bool @6:22
@@ -629,7 +629,7 @@ Function fn1 __main__.<module>() -> None @5:1
             Expr @7:9
               Print sep=true end=false : None @7:9
                 Call twice : int @7:15
-                  Local i : int @7:21
+                  ModuleVariable i : int @7:21
                 Index : str @7:25
                   Constant Str("x") : str @7:25
                   Constant Int("0") : int @7:29
@@ -791,9 +791,39 @@ fn each_builtin_call_name_and_statement_rule_gives_its_code() {
         ("print(max())\n", &["E0404"]),
         ("print(len(missing))\n", &["E0205"]),
         ("print(1 and \"a\")\n", &["E0303"]),
-        // Module variables inside functions need `global`, which arrives in 0.3.
-        ("count = 1\ndef f() -> int:\n    return count\n", &["E0201"]),
-        ("count = 1\ndef f() -> None:\n    count()\n", &["E0201"]),
+        // A function reads module variables, and assigns them after `global` (SMT-08).
+        (
+            "def f() -> None:\n    global missing\n    missing = 1\n",
+            &["E0423"],
+        ),
+        (
+            "count = 1\ndef f() -> None:\n    count = 2\n    global count\n",
+            &["E0103"],
+        ),
+        (
+            "count = 1\ndef f() -> None:\n    print(count)\n    global count\n",
+            &["E0103"],
+        ),
+        (
+            "count = 1\ndef f(count: int) -> None:\n    global count\n",
+            &["E0103"],
+        ),
+        (
+            "count = 1\ndef f() -> None:\n    global count\n    count: int = 2\n",
+            &["E0103"],
+        ),
+        (
+            "count = 1\ndef f() -> None:\n    count: int = 2\n    global count\n",
+            &["E0103"],
+        ),
+        (
+            "count = 1\ndef f() -> None:\n    global count\n    count = 'a'\n",
+            &["E0402"],
+        ),
+        (
+            "class C:\n    def __init__(self) -> None:\n        self.v = LIMIT\nc = C()\nLIMIT = c.v\n",
+            &["E0424"],
+        ),
         // Functions and builtins are not values; no requirement provides warnings or
         // exception groups.
         ("x = len\n", &["E0201"]),

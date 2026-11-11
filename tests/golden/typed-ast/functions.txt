@@ -63,15 +63,15 @@ Function fn3 __main__.<module>() -> None @23:1
         Expr @24:5
           Print sep=true end=false : None @24:5
             Call describe : str @24:11
-              Local i : int @24:20
+              ModuleVariable i : int @24:20
             Call gcd : int @24:24
               Binary Mult : int @24:28
-                Local i : int @24:28
+                ModuleVariable i : int @24:28
                 Constant Int("18") : int @24:32
             Constant Str(": ") : str @24:41
         Expr @25:5
           Call report : None @25:5
-            Local i : int @25:12
+            ModuleVariable i : int @25:12
     Expr @26:1
       Print sep=false end=false : None @26:1
         Binary FloorDiv : int @26:7

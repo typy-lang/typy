@@ -374,6 +374,7 @@ fn expression(expression_value: &TypedExpr, callees: &mut BTreeSet<FunctionId>) 
         TypedExprKind::TypeObject(_)
         | TypedExprKind::Constant(_)
         | TypedExprKind::Local(_)
+        | TypedExprKind::ModuleVariable(_)
         | TypedExprKind::ModuleName => {}
     }
 }

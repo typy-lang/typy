@@ -98,8 +98,12 @@ pub(super) fn check(function: &TyirFunction) -> Result<(), VerifyError> {
 /// Returns the values an operation reads.
 pub(super) fn operands(operation: &Operation) -> Vec<ValueId> {
     match operation {
-        Operation::Constant(_) | Operation::Load(_) | Operation::NewInstance { .. } => Vec::new(),
+        Operation::Constant(_)
+        | Operation::Load(_)
+        | Operation::LoadGlobal(_)
+        | Operation::NewInstance { .. } => Vec::new(),
         Operation::Store { value, .. }
+        | Operation::StoreGlobal { value, .. }
         | Operation::IntUnary { operand: value, .. }
         | Operation::FloatNegate(value)
         | Operation::BoolNot(value)

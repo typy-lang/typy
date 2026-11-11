@@ -29,6 +29,7 @@ mod libc;
 mod libm;
 mod list;
 mod message;
+mod module;
 mod range;
 mod refcount;
 mod set;

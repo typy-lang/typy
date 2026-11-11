@@ -18,9 +18,8 @@ impl FunctionLowerer<'_> {
         let ty = self.lowered_type(&expression.ty);
         match &expression.kind {
             TypedExprKind::Constant(constant) => self.typed_constant(constant, span),
-            TypedExprKind::Local(symbol) => {
-                let slot = self.slots[symbol];
-                self.load(slot, span)
+            TypedExprKind::Local(symbol) | TypedExprKind::ModuleVariable(symbol) => {
+                self.read_name(*symbol, span)
             }
             TypedExprKind::Tuple(items) => self.tuple_display(items, ty, span),
             TypedExprKind::NewException {

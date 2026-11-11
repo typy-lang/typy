@@ -39,6 +39,7 @@ pub enum RuntimeFunction {
     WriteStdout,
     CheckStack,
     RangeCheckStep,
+    NameError,
     ListNew,
     ListAppend,
     ListLength,
@@ -234,7 +235,7 @@ const FLOAT_FLOAT: &[TyirType] = &[TyirType::Float, TyirType::Float];
 
 impl RuntimeFunction {
     /// Every runtime function.
-    pub const ALL: [Self; 195] = [
+    pub const ALL: [Self; 196] = [
         Self::IntFloorDivide,
         Self::IntModulo,
         Self::IntPower,
@@ -265,6 +266,7 @@ impl RuntimeFunction {
         Self::WriteStdout,
         Self::CheckStack,
         Self::RangeCheckStep,
+        Self::NameError,
         Self::ListNew,
         Self::ListAppend,
         Self::ListLength,
@@ -479,6 +481,7 @@ impl RuntimeFunction {
             Self::WriteStdout => signature(&[STR], Unit, false),
             Self::CheckStack => signature(&[], Unit, true),
             Self::RangeCheckStep => signature(&[Int], Unit, true),
+            Self::NameError => signature(&[STR], Unit, true),
             Self::ListNew => signature(&[Int, Int, Bits], LIST, false),
             Self::ListAppend => signature(&[LIST, Bits], Unit, false),
             Self::ListLength => signature(&[LIST], Int, false),
@@ -680,6 +683,7 @@ impl RuntimeFunction {
             Self::WriteStdout => "write_stdout",
             Self::CheckStack => "check_stack",
             Self::RangeCheckStep => "range_check_step",
+            Self::NameError => "name_error",
             Self::ListNew => "list_new",
             Self::ListAppend => "list_append",
             Self::ListLength => "list_length",
