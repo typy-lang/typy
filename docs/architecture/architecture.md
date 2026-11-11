@@ -56,6 +56,7 @@ follows these decision records:
 | ADR-0013 | Exceptions as objects of exception classes | Accepted |
 | ADR-0014 | Runtime iterator objects and the iterator protocol | Accepted |
 | ADR-0015 | Modules compiled into one program, with module objects | Accepted |
+| ADR-0016 | Each module compiled separately, interfaces verified at link time | Proposed |
 
 ## 3. System context
 

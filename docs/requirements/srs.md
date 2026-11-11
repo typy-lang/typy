@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy software requirements specification |
-| Version | 1.36 |
+| Version | 1.37 |
 | Status | Approved |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-11 |
@@ -474,8 +474,12 @@ TyPy rejects them (STD-04):
 
 ## 7. Open issues
 
-There are no open issues. A new question gets the next unused issue number,
-after the last of the resolved issues below.
+A new question gets the next unused issue number, after the last of the
+resolved issues below.
+
+| ID | Question | Raised |
+| --- | --- | --- |
+| OI-23 | Which ABI lets TyPy modules link dynamically: the layouts of objects, the exception state, the identity of type objects across shared libraries, and one runtime shared by every library (ADR-0016)? It is settled after 1.0, once those layouts are fixed. | 2026-11-11 |
 
 ## 8. Resolved issues
 
