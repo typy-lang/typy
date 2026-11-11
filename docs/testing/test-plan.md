@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy test plan |
-| Version | 0.29 |
+| Version | 0.30 |
 | Status | Draft |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-11 |
@@ -98,15 +98,17 @@ test (NFR-10). Each test is designed with:
   versions agree, or kept as a documented record of the difference.
 
 A test file is named after its first requirement and its behaviour, such as
-`EXP-03_float_division_by_zero_raises.py`.
+`EXP-03_float_division_by_zero_raises.py`. A test of several modules is a
+directory named so, whose `main.py` holds the header and whose other files
+are its modules, such as `mod/MOD-02_packages_and_relative_imports/`.
 
 Two requirements have no rejected file: LEX-01, because a source that is
 not UTF-8 would break the repository's ASCII rule, and LEX-09, because a
 source over 16 MiB is too large to commit. Unit tests in `typy-source` build
 those inputs when they run and check E0102 and E0101. Where a 0.1 program
 cannot show the rejection a requirement describes, its rejected test records
-what 0.1 does instead: an import is E0201 until imports arrive in 0.3, and a
-function used as a truth value is E0201 until functions are values in 1.0.
+what 0.1 does instead, such as a function used as a truth value, E0201
+until functions are values in 1.0.
 
 The test `crates/typy-conformance/tests/suite.rs` runs the suite on every
 commit and fails when a test does not pass or a 0.1 requirement of the

@@ -319,7 +319,13 @@ print(count, names)
             .iter()
             .map(|global| global.name.as_str())
             .collect::<Vec<_>>(),
-        ["count", "count bound", "names", "names bound"]
+        [
+            "count",
+            "count bound",
+            "names",
+            "names bound",
+            "__main__ state"
+        ]
     );
     let text = text(source);
     let bump = text
@@ -334,4 +340,50 @@ print(count, names)
     assert_eq!(bump.matches("rt.name_error(").count(), 3, "{bump}");
     assert_eq!(main.matches("rt.name_error(").count(), 0, "{main}");
     assert!(main.contains("store_global g1"), "{main}");
+}
+
+#[test]
+fn imports_initialise_each_module_once_and_test_what_they_read() {
+    use typy_check::TypeChecker;
+    let directory = std::env::temp_dir().join(format!("typy-lower-modules-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&directory);
+    std::fs::create_dir_all(directory.join("pkg")).unwrap();
+    let files = [
+        (
+            "app.py",
+            "import pkg.data\nfrom pkg.data import value\nprint(pkg.data.value, value, pkg.data)\n",
+        ),
+        ("pkg/__init__.py", ""),
+        ("pkg/data.py", "value = 1\n"),
+    ];
+    for (path, text) in files {
+        std::fs::write(directory.join(path), text).unwrap();
+    }
+    let root = Utf8PathBuf::from_path_buf(directory.clone()).unwrap();
+    let project = Project::load(&root.join("app.py"), ProjectSettings::new(root)).unwrap();
+    let program = TypeChecker::check(&project).unwrap();
+    let module = typy_lower::lower(&program).unwrap();
+    let _ = std::fs::remove_dir_all(directory);
+    let names: Vec<&str> = module
+        .modules
+        .iter()
+        .map(|module| module.name.as_str())
+        .collect();
+    assert_eq!(names, ["pkg", "pkg.data", "__main__"]);
+    assert_eq!(module.modules[1].path, "pkg/data.py");
+    let text = print(&module);
+    let main = text
+        .split("fn ")
+        .find(|function| function.contains("__typy_main"))
+        .unwrap();
+    // Each import calls the code of `pkg` and `pkg.data` behind a test of their states, so
+    // they run once; a read through the module object or `from` tests the variable.
+    assert_eq!(
+        main.matches("call _TY").count() + main.matches("invoke _TY").count(),
+        4,
+        "{main}"
+    );
+    assert!(main.contains("rt.module_import_error("), "{main}");
+    assert!(main.contains("rt.module_attribute_error("), "{main}");
+    assert!(main.contains("const module m1"), "{main}");
 }

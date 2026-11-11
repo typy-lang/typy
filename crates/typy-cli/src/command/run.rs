@@ -22,8 +22,8 @@ pub(super) fn run(
         Ok(request) => request.with_mode(mode),
         Err(error) => return super::usage(&error),
     };
-    let Ok(source) = std::fs::read(request.main()) else {
-        // Checking reads the file again and reports why it cannot be read (E0105).
+    let Some(files) = pipeline.sources(request.main()) else {
+        // Checking loads the program again and reports why it does not load.
         return match pipeline.check(request.main()) {
             Ok(_) => ExitStatus::ProgramErrors,
             Err(failure) => report(failure),
@@ -31,7 +31,7 @@ pub(super) fn run(
     };
     let name = request.main().file_stem().unwrap_or("program").to_owned();
     let executable = cache::directory()
-        .join(cache::key(&request, &source))
+        .join(cache::key(&request, &files, &cache::compiler_identity()))
         .join(name);
     if !executable.exists() {
         if let Some(parent) = executable.parent()

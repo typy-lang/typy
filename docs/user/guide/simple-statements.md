@@ -54,7 +54,8 @@ A test such as `if label is not None:` does not narrow a module variable
 that a function declares `global`, since any call may assign it. Copy
 the value to a local variable and test that.
 
-`import` comes in 0.3 (SMT-07), and `nonlocal` in 1.0 (SMT-09).
+`import` is described in [Modules](modules.md), and `nonlocal` comes in
+1.0 (SMT-09).
 
 ## Example
 

@@ -14,6 +14,7 @@ global g4: str = "name"
 global g5: bool = "name bound"
 global g6: int = "total"
 global g7: bool = "total bound"
+global g8: int = "__main__ state"
 entry fn0
 
 fn __typy_main() -> unit raises {  # <module>
@@ -28,13 +29,15 @@ b0():
   v114 = const int 0
   store s2, v114
   v115 = const int 0
-  store_global g0, v115
-  v116 = const str s7
-  store_global g2, v116
+  store_global g8, v115
+  v116 = const int 0
+  store_global g0, v116
   v117 = const str s7
-  store_global g4, v117
-  v118 = const int 0
-  store_global g6, v118
+  store_global g2, v117
+  v118 = const str s7
+  store_global g4, v118
+  v119 = const int 0
+  store_global g6, v119
   jump b1()
 b1():
   v0 = const str s0

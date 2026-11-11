@@ -198,13 +198,14 @@ impl BodyChecker<'_> {
                 self.assigned = None;
                 TypedStmt::Continue { span: *span }
             }
+            Stmt::Import { span, .. } | Stmt::ImportFrom { span, .. } => {
+                return self.import_statement(statement, *span);
+            }
             // `global` changes where names resolve, which `declare_globals` did.
             Stmt::AnnAssign { value: None, .. }
             | Stmt::Global { .. }
             | Stmt::FunctionDef { .. }
             | Stmt::ClassDef { .. }
-            | Stmt::Import { .. }
-            | Stmt::ImportFrom { .. }
             | Stmt::Other { .. } => return None,
         })
     }

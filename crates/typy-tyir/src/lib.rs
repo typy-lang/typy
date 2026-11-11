@@ -22,7 +22,7 @@ pub use builder::FunctionBuilder;
 pub use constant::{Constant, StringId};
 pub use function::{FunctionId, TyirFunction};
 pub use instruction::Instruction;
-pub use module::{GlobalId, TyirClass, TyirGlobal, TyirModule};
+pub use module::{GlobalId, TyirClass, TyirGlobal, TyirModule, TyirModuleObject};
 pub use operation::{
     BoolOperator, Comparison, FloatOperator, IntOperator, IntUnaryOperator, Operation, ScalarKind,
 };

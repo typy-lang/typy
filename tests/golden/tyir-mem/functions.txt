@@ -7,6 +7,7 @@ string s5 = "\n"
 string s6 = ": "
 global g0: int = "i"
 global g1: bool = "i bound"
+global g2: int = "__main__ state"
 entry fn3
 
 fn _TY8__main__3gcd(v0: int, v1: int) -> int raises {  # gcd
@@ -163,7 +164,9 @@ b0():
   v89 = const int 0
   store s2, v89
   v90 = const int 0
-  store_global g0, v90
+  store_global g2, v90
+  v91 = const int 0
+  store_global g0, v91
   jump b1()
 b1():
   v0 = const int 1

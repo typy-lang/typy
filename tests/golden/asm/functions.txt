@@ -286,6 +286,7 @@ __typy_main:
 	movq	$1, 368(%rsp)
 	movq	$1, 360(%rsp)
 	movq	$1, 352(%rsp)
+	movq	$1, typy.global.2(%rip)
 	movq	$1, typy.global.0(%rip)
 	movl	$3, %edi
 	callq	typy_rt_int_negate@PLT
@@ -679,6 +680,9 @@ __typy_main:
 	.type	typy.global.1,@object
 	.local	typy.global.1
 	.comm	typy.global.1,1,1
+	.type	typy.global.2,@object
+	.local	typy.global.2
+	.comm	typy.global.2,8,8
 	.type	.Ltypy.cstr.0,@object
 	.section	.rodata.str1.1,"aMS",@progbits,1
 .Ltypy.cstr.0:

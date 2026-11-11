@@ -30,6 +30,8 @@ pub const ITERATOR_TYPE_ID: u32 = 12;
 pub const TRACEBACK_TYPE_ID: u32 = 13;
 /// The type ID of a `range` held as a value (DAT-17).
 pub const RANGE_TYPE_ID: u32 = 14;
+/// The type ID of a module object, which is immortal (MOD-10).
+pub const MODULE_TYPE_ID: u32 = 15;
 
 /// The first 8 bytes of every heap object.
 #[repr(C)]

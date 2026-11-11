@@ -911,7 +911,7 @@ impl FunctionLowerer<'_> {
         self.call_runtime(RuntimeFunction::ZipUnequal, vec![index, longer], span);
     }
 
-    fn int_compare(
+    pub(crate) fn int_compare(
         &mut self,
         comparison: Comparison,
         left: ValueId,

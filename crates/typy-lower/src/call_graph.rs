@@ -145,7 +145,9 @@ fn statements(body: &[TypedStmt], callees: &mut BTreeSet<FunctionId>) {
                 statements(body, callees);
                 statements(orelse, callees);
             }
+            // A module's code runs once and never recursively, so an import adds no edge.
             TypedStmt::Return { value: None, .. }
+            | TypedStmt::Import { .. }
             | TypedStmt::Pass { .. }
             | TypedStmt::Break { .. }
             | TypedStmt::Continue { .. } => {}
@@ -375,6 +377,8 @@ fn expression(expression_value: &TypedExpr, callees: &mut BTreeSet<FunctionId>) 
         | TypedExprKind::Constant(_)
         | TypedExprKind::Local(_)
         | TypedExprKind::ModuleVariable(_)
+        | TypedExprKind::ModuleAttribute { .. }
+        | TypedExprKind::Submodule(_)
         | TypedExprKind::ModuleName => {}
     }
 }

@@ -21,6 +21,8 @@ pub(crate) struct ModuleGlobal {
     pub(crate) value: GlobalId,
     /// The global that is true once the variable is bound.
     pub(crate) bound: GlobalId,
+    /// The function of the code of the module the variable belongs to.
+    pub(crate) owner: typy_check::FunctionId,
 }
 
 /// The globals of the program's module variables.
@@ -30,12 +32,27 @@ pub(crate) struct ModuleGlobals {
     pub(crate) globals: Vec<TyirGlobal>,
     /// The globals of each module variable.
     pub(crate) of: BTreeMap<SymbolId, ModuleGlobal>,
+    /// The state global of each module, as `TypedProgram::modules` lists them: not
+    /// started, running or done (MOD-03).
+    pub(crate) states: Vec<GlobalId>,
 }
 
 impl ModuleGlobals {
     /// Makes the two globals of every module variable of the program.
     pub(crate) fn new(program: &TypedProgram, tuple_types: &mut TupleTypes) -> Self {
         let mut made = Self::default();
+        // A module's code holds its module variables among its locals.
+        let owners: BTreeMap<SymbolId, typy_check::FunctionId> = program
+            .modules
+            .iter()
+            .flat_map(|module| {
+                program
+                    .function(module.body)
+                    .locals
+                    .iter()
+                    .map(move |symbol| (*symbol, module.body))
+            })
+            .collect();
         for symbol in program
             .symbols
             .iter()
@@ -44,7 +61,22 @@ impl ModuleGlobals {
             let ty = tyir_type(&symbol.ty, tuple_types);
             let value = made.add(symbol.name.clone(), ty);
             let bound = made.add(format!("{} bound", symbol.name), TyirType::Bool);
-            made.of.insert(symbol.id, ModuleGlobal { value, bound });
+            let owner = owners
+                .get(&symbol.id)
+                .copied()
+                .unwrap_or(typy_check::FunctionId(u32::MAX));
+            made.of.insert(
+                symbol.id,
+                ModuleGlobal {
+                    value,
+                    bound,
+                    owner,
+                },
+            );
+        }
+        for module in &program.modules {
+            let state = made.add(format!("{} state", module.name), TyirType::Int);
+            made.states.push(state);
         }
         made
     }
@@ -60,6 +92,10 @@ impl FunctionLowerer<'_> {
     /// Gives every counted module variable the zero value of its type, before any module code
     /// runs, so each store can release the value it replaces.
     pub(crate) fn initialize_module_variables(&mut self, span: Span) {
+        // A state is an `int`, whose zero is not the word of zeros a global starts with.
+        for state in self.module_globals.states.clone() {
+            self.store_state(state, "0", span);
+        }
         let globals: Vec<ModuleGlobal> = self.module_globals.of.values().copied().collect();
         for global in globals {
             let ty = self.module_globals.globals[global.value.0 as usize].ty;
@@ -82,7 +118,7 @@ impl FunctionLowerer<'_> {
             let slot = self.slots[&symbol];
             return self.load(slot, span);
         };
-        if !self.module_body {
+        if self.function_id != global.owner {
             self.check_bound(symbol, global, span);
         }
         let ty = self.module_globals.globals[global.value.0 as usize].ty;

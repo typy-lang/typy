@@ -206,8 +206,15 @@ impl Walker {
             } => {
                 self.report(*span, planned("lazy imports", "0.3", RuleId::MOD_06));
             }
-            Stmt::Import { span, .. } | Stmt::ImportFrom { span, .. } => {
-                self.report(*span, planned("imports", "0.3", RuleId::SMT_07));
+            Stmt::ImportFrom { names, span, .. }
+                if names.iter().any(|alias| alias.name.name == "*") =>
+            {
+                self.report(
+                    *span,
+                    Feature::AfterOne {
+                        what: "imports of every name with `from module import *`",
+                    },
+                );
             }
             Stmt::Expr { value, .. } => self.expression(value),
             Stmt::Break { span } if self.loop_depth == 0 => {
@@ -217,7 +224,12 @@ impl Walker {
                 self.syntax_error(*span, "`continue` outside a loop");
             }
             Stmt::Global { names, .. } => self.global_statement(names),
-            Stmt::Pass { .. } | Stmt::Break { .. } | Stmt::Continue { .. } => {}
+            // The checker resolves each import against the modules of the program.
+            Stmt::Import { .. }
+            | Stmt::ImportFrom { .. }
+            | Stmt::Pass { .. }
+            | Stmt::Break { .. }
+            | Stmt::Continue { .. } => {}
             Stmt::Other { kind, span } => self.report(*span, feature(*kind)),
         }
     }

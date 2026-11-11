@@ -78,6 +78,7 @@ pub(super) fn collect_functions<'tree>(
     first_class: usize,
     classes: &BTreeMap<String, ClassId>,
     exceptions: &BTreeMap<ClassId, crate::exception::ExceptionClass>,
+    modules: &BTreeMap<String, BTreeMap<String, ClassId>>,
     floor_defers: bool,
     diagnostics: &mut Diagnostics,
 ) -> Vec<Definition<'tree>> {
@@ -100,6 +101,7 @@ pub(super) fn collect_functions<'tree>(
         let scope = AnnotationScope {
             classes,
             exceptions,
+            modules,
             bound: if floor_defers {
                 u32::MAX
             } else {

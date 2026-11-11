@@ -37,11 +37,11 @@ pub struct Import {
 }
 
 /// Returns the absolute name of the module a relative import names: `level` dots counted
-/// from the importing module's package, then `name`. A module outside a package, such as
-/// `__main__`, has no package to start from, and too many dots leave the top package; both
-/// give CPython's message.
+/// from `package`, the importing module's package, then `name`. A module outside a package,
+/// such as `__main__`, has no package to start from, and too many dots leave the top
+/// package; both give CPython's message.
 pub fn absolute_name(
-    importer: &Module,
+    package: Option<&ModuleName>,
     level: u32,
     name: Option<&str>,
 ) -> Result<ModuleName, &'static str> {
@@ -50,8 +50,8 @@ pub fn absolute_name(
             .and_then(|name| ModuleName::new(name).ok())
             .ok_or("an import names a module");
     }
-    let mut base = importer
-        .package()
+    let mut base = package
+        .cloned()
         .ok_or("attempted relative import with no known parent package")?;
     for _ in 1..level {
         base = base
@@ -106,7 +106,7 @@ impl Collector {
                 ..
             } => {
                 let from_name = from.as_ref().map(|name| name.name.as_str());
-                match absolute_name(module, *level, from_name) {
+                match absolute_name(module.package().as_ref(), *level, from_name) {
                     Ok(base) => self.imported_names(&base, names, *span, at_module_level),
                     Err(message) => self.diagnostics.push(not_found(*span, message.to_owned())),
                 }
@@ -213,8 +213,9 @@ pub(crate) fn not_found(span: Span, message: String) -> Diagnostic {
         ))
 }
 
-/// Returns the modules in the order a module's dependencies come before it, by the imports
-/// that run while modules initialise, and a diagnostic for each cycle among them (MOD-05).
+/// Returns the modules in the order a module's dependencies come before it, and a diagnostic
+/// for each cycle of the imports that run while modules initialise (MOD-05). An import inside
+/// a function orders its module first too, unless that would close a cycle.
 pub(crate) fn initialisation_order(
     modules: &BTreeMap<ModuleName, Vec<Import>>,
 ) -> (Vec<ModuleName>, Vec<Diagnostic>) {
@@ -253,10 +254,15 @@ fn visit(
         return;
     }
     let imports = modules.get(name).map(Vec::as_slice).unwrap_or_default();
-    for import in imports {
-        if !import.at_module_level
-            || import.module == *name
+    // Module-level imports come first, so a cycle through them is found whatever else the
+    // module imports; an import inside a function that would close a cycle is passed over.
+    let (module_level, in_functions): (Vec<&Import>, Vec<&Import>) =
+        imports.iter().partition(|import| import.at_module_level);
+    for import in module_level.into_iter().chain(in_functions) {
+        let on_path = path.iter().any(|(on_path, _)| *on_path == import.module);
+        if import.module == *name
             || !modules.contains_key(&import.module)
+            || (!import.at_module_level && on_path)
         {
             continue;
         }

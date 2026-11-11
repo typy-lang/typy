@@ -46,6 +46,9 @@ pub enum Type {
     Traceback,
     /// `range` held as a value: a sequence of `int` (DAT-17).
     Range,
+    /// The module object of the module of this qualified name, whose attributes are known
+    /// when the program is checked (MOD-10, ADR-0015).
+    Module(String),
     /// A type object, of the type it stands for, or of any type when that is known only
     /// when the program runs, as for `type(x)` of an optional `x` (CLS-12).
     TypeObject(Option<Box<TypeObjectOf>>),
@@ -122,6 +125,7 @@ impl TypeObjectOf {
             Type::Exception(_)
             | Type::Iterator(_)
             | Type::Traceback
+            | Type::Module(_)
             | Type::Optional(_)
             | Type::Error => {
                 return None;
@@ -486,6 +490,7 @@ impl fmt::Display for Type {
             Self::Iterator(item) => write!(formatter, "Iterator[{item}]"),
             Self::Traceback => formatter.write_str("TracebackType"),
             Self::Range => formatter.write_str("range"),
+            Self::Module(name) => write!(formatter, "module `{name}`"),
             Self::TypeObject(Some(of)) => write!(formatter, "type[{}]", of.name()),
             Self::TypeObject(None) => formatter.write_str("type"),
             Self::Error => formatter.write_str("<error>"),

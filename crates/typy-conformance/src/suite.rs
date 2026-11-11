@@ -174,11 +174,14 @@ impl Suite {
     }
 }
 
-/// Adds every `.py` file under `directory` to `files`.
+/// Adds every `.py` file under `directory` to `files`, and the `main.py` of each test of
+/// several modules, whose other files are its modules.
 fn collect(directory: &Utf8Path, files: &mut Vec<Utf8PathBuf>) -> std::io::Result<()> {
     for entry in directory.read_dir_utf8()? {
         let path = entry?.into_path();
-        if path.is_dir() {
+        if path.is_dir() && crate::test_case::is_case_directory(&path) {
+            files.push(path.join("main.py"));
+        } else if path.is_dir() {
             collect(&path, files)?;
         } else if path.extension() == Some("py") {
             files.push(path);

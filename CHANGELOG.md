@@ -8,6 +8,17 @@ All notable changes to TyPy are recorded here. The format follows
 
 ### Added
 
+- Programs of several modules: `import m`, `import a.b as c` and
+  `from m import name` for functions, classes, module variables and
+  submodules, packages with `__init__.py`, and relative imports. Each
+  module runs once, at its first import, and runs again at the next import
+  when its code raised. A module object prints as
+  `<module 'm' from 'm.py'>`, with the path from the main file's directory
+  (SMT-07, MOD-01 to MOD-03, MOD-10).
+- E0206 for a module the program does not have, E0422 for a circular
+  import at module level with each import shown, and E0425 for a name a
+  module does not define; standard library modules TyPy provides later
+  are E0201 (MOD-05, LIB-08).
 - `global` in a function, and functions that read the variables of their
   module. A read before the module binds the variable raises CPython's
   `NameError`, and CPython's `SyntaxError`s for `global` are E0103 (SMT-08).
@@ -90,6 +101,9 @@ All notable changes to TyPy are recorded here. The format follows
 
 ### Fixed
 
+- `typy run` no longer reuses an executable built from other versions of
+  the program's modules or by another build of the compiler: the cache key
+  covers every file of the program and the compiler executable.
 - A list, set or dict display, a comprehension, or a `list`, `set`,
   `tuple` or `dict` call is accepted where an optional collection is
   expected, such as `items: list[int] | None = []` or an argument of type

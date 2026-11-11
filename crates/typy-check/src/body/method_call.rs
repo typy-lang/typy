@@ -10,6 +10,23 @@ use crate::typed::{Argument, TypedConstant, TypedExpr, TypedExprKind};
 use crate::types::Type;
 
 impl BodyChecker<'_> {
+    /// Checks a call through `super()` or a module object, which names a method of a base or
+    /// a function of the module rather than a method of a value.
+    fn call_through(
+        &mut self,
+        receiver: &Expr,
+        name: &Identifier,
+        arguments: &[Expr],
+        keywords: &[Keyword],
+        span: Span,
+    ) -> Option<TypedExpr> {
+        if is_super(receiver) {
+            return Some(self.super_call(name, arguments, keywords, span));
+        }
+        let module = self.module_of(receiver)?;
+        Some(self.module_call(&module, name, arguments, keywords, span))
+    }
+
     /// Checks `receiver.name(arguments)`, a method of a built-in type (LIB-03).
     pub(super) fn method_call(
         &mut self,
@@ -19,8 +36,8 @@ impl BodyChecker<'_> {
         keywords: &[Keyword],
         span: Span,
     ) -> TypedExpr {
-        if is_super(receiver) {
-            return self.super_call(name, arguments, keywords, span);
+        if let Some(call) = self.call_through(receiver, name, arguments, keywords, span) {
+            return call;
         }
         let receiver = self.expression(receiver);
         if receiver.ty.has_error() {

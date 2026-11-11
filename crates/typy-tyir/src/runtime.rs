@@ -40,6 +40,8 @@ pub enum RuntimeFunction {
     CheckStack,
     RangeCheckStep,
     NameError,
+    ModuleAttributeError,
+    ModuleImportError,
     ListNew,
     ListAppend,
     ListLength,
@@ -235,7 +237,7 @@ const FLOAT_FLOAT: &[TyirType] = &[TyirType::Float, TyirType::Float];
 
 impl RuntimeFunction {
     /// Every runtime function.
-    pub const ALL: [Self; 196] = [
+    pub const ALL: [Self; 198] = [
         Self::IntFloorDivide,
         Self::IntModulo,
         Self::IntPower,
@@ -267,6 +269,8 @@ impl RuntimeFunction {
         Self::CheckStack,
         Self::RangeCheckStep,
         Self::NameError,
+        Self::ModuleAttributeError,
+        Self::ModuleImportError,
         Self::ListNew,
         Self::ListAppend,
         Self::ListLength,
@@ -482,6 +486,9 @@ impl RuntimeFunction {
             Self::CheckStack => signature(&[], Unit, true),
             Self::RangeCheckStep => signature(&[Int], Unit, true),
             Self::NameError => signature(&[STR], Unit, true),
+            Self::ModuleAttributeError | Self::ModuleImportError => {
+                signature(&[TyirType::MODULE, STR, Int], Unit, true)
+            }
             Self::ListNew => signature(&[Int, Int, Bits], LIST, false),
             Self::ListAppend => signature(&[LIST, Bits], Unit, false),
             Self::ListLength => signature(&[LIST], Int, false),
@@ -684,6 +691,8 @@ impl RuntimeFunction {
             Self::CheckStack => "check_stack",
             Self::RangeCheckStep => "range_check_step",
             Self::NameError => "name_error",
+            Self::ModuleAttributeError => "module_attribute_error",
+            Self::ModuleImportError => "module_import_error",
             Self::ListNew => "list_new",
             Self::ListAppend => "list_append",
             Self::ListLength => "list_length",

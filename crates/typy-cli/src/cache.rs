@@ -30,17 +30,22 @@ pub(crate) fn directory() -> Utf8PathBuf {
 }
 
 /// Returns the SHA-256, in hexadecimal, of everything a build's output depends on: the compiler
-/// version, the mode, the target, the main file's name and its text. Each part is preceded by
-/// its length, so no two different inputs run together into the same bytes.
-pub(crate) fn key(request: &BuildRequest, source: &[u8]) -> String {
+/// version and `compiler`, which tells one build of it from another, the mode, the target, the
+/// main file's name, and the path and text of every file of the program (ADR-0015). Each part
+/// is preceded by its length, so no two different inputs run together into the same bytes.
+pub(crate) fn key(request: &BuildRequest, files: &[(String, String)], compiler: &[u8]) -> String {
     let name = request.main().file_name().unwrap_or("");
-    let parts: [&[u8]; 5] = [
+    let mut parts: Vec<&[u8]> = vec![
         env!("CARGO_PKG_VERSION").as_bytes(),
+        compiler,
         request.mode().name().as_bytes(),
         request.target().triple.as_str().as_bytes(),
         name.as_bytes(),
-        source,
     ];
+    for (path, text) in files {
+        parts.push(path.as_bytes());
+        parts.push(text.as_bytes());
+    }
     let mut hash = Sha256::new();
     for part in parts {
         hash.update((part.len() as u64).to_le_bytes());
@@ -53,32 +58,71 @@ pub(crate) fn key(request: &BuildRequest, source: &[u8]) -> String {
     text
 }
 
+/// Returns what tells this build of the compiler from another of the same version: the size
+/// and the modification time of its executable, or nothing when they cannot be read.
+pub(crate) fn compiler_identity() -> Vec<u8> {
+    let metadata = std::env::current_exe()
+        .ok()
+        .and_then(|path| std::fs::metadata(path).ok());
+    let length = metadata.as_ref().map_or(0, std::fs::Metadata::len);
+    let modified = metadata
+        .and_then(|metadata| metadata.modified().ok())
+        .and_then(|time| time.duration_since(std::time::UNIX_EPOCH).ok())
+        .map_or(0, |since| since.as_nanos());
+    let mut identity = length.to_le_bytes().to_vec();
+    identity.extend_from_slice(&modified.to_le_bytes());
+    identity
+}
+
 #[cfg(test)]
 mod tests {
     use super::key;
     use typy_build::{BuildMode, BuildRequest};
 
+    fn files(texts: &[(&str, &str)]) -> Vec<(String, String)> {
+        texts
+            .iter()
+            .map(|(path, text)| ((*path).to_owned(), (*text).to_owned()))
+            .collect()
+    }
+
     #[test]
     fn the_key_changes_with_each_input() {
         let request = BuildRequest::new("app.py").unwrap();
-        let base = key(&request, b"print(1)\n");
+        let program = files(&[("app.py", "import tools\n"), ("tools.py", "x = 1\n")]);
+        let base = key(&request, &program, b"build");
         assert_eq!(base.len(), 64);
-        assert_eq!(base, key(&request, b"print(1)\n"));
-        assert_ne!(base, key(&request, b"print(2)\n"));
-        assert_ne!(
-            base,
+        assert_eq!(base, key(&request, &program, b"build"));
+        let others = [
+            key(
+                &request,
+                &files(&[("app.py", "import tools\n"), ("tools.py", "x = 2\n")]),
+                b"build",
+            ),
+            key(
+                &request,
+                &files(&[("app.py", "import tools\n"), ("other.py", "x = 1\n")]),
+                b"build",
+            ),
+            key(&request, &program, b"another build"),
             key(
                 &request.clone().with_mode(BuildMode::Release),
-                b"print(1)\n"
-            )
-        );
-        assert_ne!(
-            base,
-            key(&BuildRequest::new("other.py").unwrap(), b"print(1)\n")
-        );
+                &program,
+                b"build",
+            ),
+            key(&BuildRequest::new("other.py").unwrap(), &program, b"build"),
+        ];
+        for other in others {
+            assert_ne!(base, other);
+        }
         assert_eq!(
             base,
-            key(&BuildRequest::new("src/app.py").unwrap(), b"print(1)\n")
+            key(
+                &BuildRequest::new("src/app.py").unwrap(),
+                &program,
+                b"build"
+            )
         );
+        assert_eq!(super::compiler_identity().len(), 24);
     }
 }

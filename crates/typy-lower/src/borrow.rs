@@ -35,6 +35,13 @@ pub(crate) fn assigned_symbols(body: &[TypedStmt]) -> BTreeSet<SymbolId> {
                     }
                 }
                 TypedStmt::AugAssign { target: each, .. } => target(each, found),
+                TypedStmt::Import { bindings, .. } => {
+                    for binding in bindings {
+                        let (typy_check::ImportBinding::Module { target, .. }
+                        | typy_check::ImportBinding::Value { target, .. }) = binding;
+                        found.insert(*target);
+                    }
+                }
                 TypedStmt::If { body, orelse, .. } | TypedStmt::While { body, orelse, .. } => {
                     statements(body, found);
                     statements(orelse, found);

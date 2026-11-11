@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy detailed design |
-| Version | 1.60 |
+| Version | 1.61 |
 | Status | Approved |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-11 |
@@ -297,6 +297,8 @@ it enforces and its status. `typy explain` (0.3) reads the same table.
 | E0421 | `del` of something other than a list item, a list slice or a dict key | SMT-05 |
 | E0423 | `global` of a name the module does not bind | SMT-08 |
 | E0424 | Module variable an `__init__` reads before the module's code gives it a type | SMT-08 |
+| E0425 | Import of a name its module does not define | SMT-07 |
+| E0426 | Import inside a function of a module that the imported module imports | MOD-05 |
 | E0701 | C toolchain program not found | A-01 |
 | E0702 | Link failed | A-01 |
 | E0703 | Runtime archive missing, or from another TyPy version | None |
@@ -949,7 +951,23 @@ every module into one `Program`, each after the modules its module-level
 imports need, in `Project::order`. A module's functions and classes are
 numbered after those of the modules before it, and `begin_module` gives the
 bodies its own tables of names, so `TypedProgram::modules` lists each
-module with the function of its body. For each module it runs:
+module with the function of its body and its path. Before a module's
+functions are collected, `module_imports` resolves its module-level
+imports with `Program::resolve_import`: a function or a class imported by
+name enters the module's tables, so calls and annotations find it, and a
+name bound to a module or to a module variable's value becomes a module
+variable of the importer, typed `Type::Module` or with the source's type.
+A function's own imports enter the tables while it is checked. An import
+statement is `TypedStmt::Import { modules, bindings }`: the modules to
+initialise, each package before its submodules, and each `ImportBinding`,
+a module object or a copied value. `module_of` sees through a name of type
+`Type::Module`, so `m.x` is `ModuleAttribute`, `m.f()` a call of `m`'s
+function, `m.C()` an instance, `m.x = v` an assignment of `m`'s variable,
+`pkg.sub` a `Submodule`, and `m.C` an annotation. A name a module does not
+define is E0425, and an import of a module not checked yet, which only an
+import inside a function that closes a cycle can make, is E0426 (OI-22).
+A standard library module gives E0201 when a later release provides it,
+and E0206 otherwise (LIB-08). For each module it runs:
 
 1. `SubsetChecker::check` walks the syntax tree and looks up each node kind
    in the feature table of `ProjectSettings::release`. A node planned for a
@@ -1184,6 +1202,7 @@ graph, symbol names and the string pool.
 | Concern | Behaviour |
 | --- | --- |
 | Locals | Each parameter and local gets a slot. The entry block, written last, stores every parameter and gives every counted slot an immortal value, so every error path can release every slot |
+| Imports | Each module has a state global, an `int`: 0 not started, 1 running, 2 done, all 0 from the entry's first block. An import tests it and, when 0, stores 1, calls the module's code under `Cleanup::Initialising`, which stores 0 on the error path, and stores 2 (MOD-03). A binding stores `Constant::Module`, the module's immortal object, or the source variable's value after testing its flag, else `typy_rt_module_import_error`. `ModuleAttribute` tests the flag and calls `typy_rt_module_attribute_error`, and `Submodule` tests that the submodule is done; both pass the module's state, which says whether it is still initialising. A function tests a module variable's flag unless it is its own module's code |
 | Module variables | Each is a `TyirGlobal`, an internal LLVM variable of zeros, with a second `bool` global that is true once it is bound (ADR-0015). The entry function's first block gives every counted one an immortal value, so a store can release the value it replaces. `LoadGlobal` and `StoreGlobal` read and write them; a function tests the flag first and calls `typy_rt_name_error`, which raises `NameError: name 'x' is not defined`, while the module's own code does not, since definite assignment shows the variable is bound |
 | Ownership | A lowered value is owned or borrowed. Constants are immortal and borrowed, and so are slot values; results of calls and of `int` arithmetic are owned. A store moves an owned value or counts a borrowed one, then releases the slot's old value. Owned temporaries are tracked until they are released or moved |
 | Raising | A call of a runtime function or program function that may raise is an `invoke`. Its error block releases the live owned temporaries and every slot, then returns the exception (ADR-0004) |
@@ -1429,6 +1448,7 @@ installed `typy` finds `<prefix>/lib/typy/` and a `typy` in
 | `hash` | The hashes CPython gives (ADR-0010): an `int` is its magnitude modulo 2^61 - 1 with its sign, a large one reduced limb by limb since 2^64 is 8 modulo that prime; a `float` follows `_Py_HashDouble` on its mantissa and exponent, so it hashes as an equal `int`, an infinity as 314159 with its sign, and a NaN as 0 (OI-18); `None` is 4238894112 and a `bool` 0 or 1; a tuple combines its items' hashes with xxHash's rounds, its length and CPython's constants. A `str` or `bytes` is SipHash-1-3 under a key of zeros of its code points one, two or four bytes each, as CPython stores them, so its hash is the one CPython gives with `PYTHONHASHSEED=0`, and an empty one hashes to 0. A hash of -1 becomes -2, as in CPython |
 | `set` | `typy_rt_set_new(kind, descriptor)`, `_add`, `_contains`, `_discard`, `_remove`, `_pop`, `_clear`, `_length`, `_next`, `_item`, `_repr`, `_copy` and `_compare`, a port of CPython's `setobject.c` (ADR-0010). A probe visits a run of ten slots, or one near the end of the table, then jumps to `(slot * 5 + 1 + perturb) & mask` with `perturb` shifted right by 5 from the hash. An item goes to the first empty slot of its probe, or to the last dummy slot before it; when `fill * 5 >= mask * 3` the table is rebuilt for four times the items, or twice above 50000, at the smallest power of two above that, which drops the dummies. A merge into an empty set copies the slots when the tables have one size and no dummies, and otherwise places each item in its first empty slot. `_extend(set, other, skip)`, `_intersect`, `_subtract`, `_remove_all`, `_symmetric`, `_toggle`, `_replace` and `_relation` take another collection by its address and read its type ID, as CPython's `PyAnySet_Check` and `PyDict_CheckExact` do: a set is combined table by table, a dict key by key with the hashes it stored, and a list or `tuple[T, ...]` item by item, in order (DAT-15). With a dict, `_extend` first resizes for every key, `_subtract` tests each item of a set at most four times larger than the dict and otherwise copies and removes, and `_toggle` removes or adds each key directly. They follow CPython's choices: an intersection tests the items of the smaller set, a difference copies and removes when the set is four times larger than the other, a difference update first intersects a set eight times larger and then rebuilds a table more than a quarter dummy, and `^` merges the right operand and updates with the left. With a list, an intersection adds each item the set holds until it is as large as the set, a difference copies the set and removes each item then rebuilds a table more than a quarter dummy, a symmetric difference update first makes a set of the list, and `issubset` intersects and compares sizes. `_remove` raises `KeyError` with the `repr` of the item, and `_pop` raises `KeyError: 'pop from an empty set'`. `_next(set, slot, length)` returns the next active slot or -1, and raises `RuntimeError: Set changed size during iteration` when the set no longer has `length` items |
 | `dict` | `typy_rt_dict_new(key_kind, key_descriptor, value_kind, value_descriptor, capacity)`, `_set`, `_find`, `_contains`, `_get`, `_get_or`, `_key`, `_value`, `_pop`, `_pop_or`, `_popitem`, `_setdefault`, `_length`, `_clear`, `_next`, `_copy`, `_update`, `_equal`, `_has_value`, `_has_item`, `_repr` and `_view_repr`, a port of CPython's `dictobject.c` for a combined table (ADR-0010). A probe starts at `hash & mask` and jumps to `(slot * 5 + perturb + 1) & mask`, `perturb` shifted right by 5 each time. Setting a key that is there keeps its key and position and replaces the value; a new key is written after the last entry, and when no entry is usable the table is rebuilt for `used * 3` slots, at least eight, at the next power of two, which drops the holes; a table holds two thirds of its slots in entries. `capacity` presizes a display's table, as CPython's `BUILD_MAP` does. Removing a key leaves a hole; `popitem` takes the last item and drops the entries after it. `_copy` clones a table at most a third holes and otherwise merges into a new dict; a merge into an empty dict clones a source without holes that is at the minimum size or more than half full, and otherwise resizes the target for both first when it has too few usable entries. `_update` takes a dict or a list of `(key, value)` tuples by its address. `_next(dict, position, length, visited)` returns the next entry that holds an item, or -1, and raises `RuntimeError: dictionary changed size during iteration` when the dict no longer has `length` items, and `dictionary keys changed during iteration` when it finds an item after `visited` reached `length`. `_get` and `_pop` raise `KeyError` with the `repr` of the key, and `_popitem` raises `KeyError: 'popitem(): dictionary is empty'`. `_view_repr` writes `dict_keys([...])`, `dict_values([...])` or `dict_items([(key, value), ...])`. `typy_rt_dict_view(dict, kind)` makes a view, and `_view_dict`, `_view_length`, `_view_contains(view, item, pair)` and `_view_text` read one; a pair looked for among the items is read through its tuple descriptor. `typy_rt_dict_view_combine(left, right, operator, result)` fills an empty set with `\|`, `&`, `-` or `^` of two operands, one a view, as CPython's `dictviews_or`, `_PyDictView_Intersect`, `dictviews_sub` and `dictviews_xor` do: the left operand becomes a set, a keys view from its dict, and is updated with the right one, read item by item; `&` intersects a set at least as large as the view with the view, puts the larger of two views first, and otherwise adds each item of the other operand that the view holds; `^` of two items views copies the left dict, takes out each key the right maps to an equal value, adds the right's other pairs, then the copy's pairs. `typy_rt_dict_view_compare(left, right, comparison, kind, descriptor)` compares by sizes, then by whether each item of the smaller side is in the other, as `dictview_richcompare` does; a pair tested against a view is looked up by its key, so its value needs no hash. The set functions read a view operand by its type ID, like a list |
+| `module` | A module object is an immortal static object codegen emits for each module: header with the type ID 15, then its name and its path from the project root as `str` objects. The type `typy_rt_type_module` writes it `<module 'm' from 'm.py'>` (OI-20). `typy_rt_module_attribute_error` and `typy_rt_module_import_error` raise CPython's `module 'm' has no attribute 'x'` and `cannot import name 'x' from 'm' (m.py)`; while the module initialises they add CPython 3.13 to 3.15's note `(consider renaming 'm.py' if it has the same name as a library you intended to import)`, the newest oracle's wording (OI-14). `typy_rt_name_error` raises `name 'x' is not defined` |
 | `range` | `typy_rt_range_check_step` raises `ValueError: range() arg 3 must not be zero`, and `typy_rt_range_last(start, stop, step)` returns `start + (n - 1) * step` for the `n` values of the range, by CPython's `compute_range_length`, on `int` words of any size: the last value, or `start - step` for an empty range. `typy_rt_range_new` makes a range value, with the same `ValueError` for a zero step; `_length` raises `OverflowError: Python int too large to convert to C ssize_t` for a length that is not inline, as `len()` does; `_bound` gives the start, stop or step; `_get` raises `IndexError: range object index out of range`; `_slice` builds a range from the slice's indices, as CPython's `compute_slice` does; `_contains` tests an `int` by arithmetic without stepping; `_equal` compares as `==` does. A slice of a range whose length passes `sys.maxsize` raises `OverflowError`, where CPython computes it with large integers |
 | `zip` | `typy_rt_zip_unequal(index, longer)` raises CPython's `ValueError` for a strict `zip`: `zip() argument 2 is shorter than argument 1`, or `zip() argument 3 is longer than arguments 1-2` |
 | `stack` | The check at the start of recursive functions reads the stack pointer register and compares it with the recorded limit; the register is read rather than the address of a local, because a sanitizer may keep locals on a separate fake stack. The limit leaves 64 KiB of stack unused; past it the check raises `RecursionError: maximum recursion depth exceeded` |
@@ -1480,9 +1500,14 @@ print(2 ** n)
 | `typy-python` | Optional; the test's Python floor, `3.12` when absent |
 
 The file name starts with the first requirement ID, such as
-`EXP-03_float_division_by_zero_raises.py`. For an accepted test, the suite
-runs `python3.X -I -X utf8 FILE` for each oracle version from the test's
-Python floor up, builds the file
+`EXP-03_float_division_by_zero_raises.py`. A test of several modules is a
+directory named so, such as `MOD-01_modules_import_names/`, whose
+`main.py` holds the header and whose other files are its modules. For an
+accepted test, the suite runs `python3.X -E -s -B -X utf8 FILE` in the file's
+directory for each oracle version from the test's Python floor up, which
+keeps that directory first on the module path as `-I` would not, removes
+the directory's absolute path from what CPython shows (OI-20), builds the
+file
 with `Pipeline::run` in debug and in release mode, and compares standard
 output, exit status and the last line of standard error (UC-09). The
 second test above is a valid Python program that CPython runs; TyPy rejects
@@ -1493,7 +1518,7 @@ it because the exponent is a variable.
 | `test_case` | `TestCase::parse(path, text)` reads the comment lines at the top of the file; a missing or malformed field, or a file name that does not start with the first ID, is a `CaseError` |
 | `expectation` | `Expectation::Accepted`, or `Rejected` with a `DiagnosticCode`, a line and a column |
 | `observation` | `Observation::of(command)` runs a program with no standard input, reads both pipes on their own threads, and keeps standard output, the exit status and the last line of standard error; a program that runs longer than 60 seconds is stopped, a limit set far above the run time of any conformance program so that an oracle slowed by a loaded machine is not taken for a hang |
-| `oracle` | Runs `python3.X -I -X utf8 FILE` in the file's directory for each oracle version from the floor up |
+| `oracle` | Runs `python3.X -E -s -B -X utf8 FILE` in the file's directory for each oracle version from the floor up, and removes that directory's absolute path from its output |
 | `subject` | Builds an accepted test in debug and release mode into a temporary directory and runs each build, and with `Suite::with_sanitizers` also links its debug object file with `cc -fsanitize=address` and runs it with leak detection, where a report ends the run with status 86; checks a rejected test with `Pipeline::check`, which passes when exactly one diagnostic is reported, with that code at that line and column |
 | `verdict` | `Pass`, `Fail` with the reason, or `Invalid` when the oracles disagree, an oracle cannot run the file, or the header is not valid (STD-03) |
 | `suite` | `Suite::run(root)` judges every `.py` file under `root`, as many at once as the machine has cores, and returns a `Report` with each verdict and, for each requirement ID, how many accepted and rejected tests name it |

@@ -17,6 +17,9 @@ pub(crate) struct AnnotationScope<'classes> {
     pub(crate) classes: &'classes BTreeMap<String, ClassId>,
     /// The classes that derive from an exception class, whose instances are exceptions.
     pub(crate) exceptions: &'classes BTreeMap<ClassId, ExceptionClass>,
+    /// For each name bound to a module at module level, that module's classes, which an
+    /// annotation such as `shapes.Point` names (MOD-10).
+    pub(crate) modules: &'classes BTreeMap<String, BTreeMap<String, ClassId>>,
     pub(crate) bound: u32,
 }
 
@@ -32,6 +35,38 @@ pub(crate) fn annotation_type(
             ..
         } => Type::NoneType,
         Expr::Name { id, span } => named_type(id, *span, scope, diagnostics),
+        Expr::Attribute {
+            value,
+            attribute,
+            span,
+        } if let Expr::Name { id, .. } = value.as_ref()
+            && let Some(classes) = scope.modules.get(id) =>
+        {
+            let only = BTreeMap::from([(
+                attribute.name.clone(),
+                classes
+                    .get(&attribute.name)
+                    .copied()
+                    .unwrap_or(ClassId(u32::MAX)),
+            )]);
+            if classes.contains_key(&attribute.name) {
+                let inner = AnnotationScope {
+                    classes: &only,
+                    bound: u32::MAX,
+                    ..*scope
+                };
+                return named_type(&attribute.name, *span, &inner, diagnostics);
+            }
+            diagnostics.push(
+                Diagnostic::new(
+                    DiagnosticCode::error(425),
+                    attribute.span,
+                    format!("the module `{id}` has no class `{}`", attribute.name),
+                )
+                .with_rule(RuleId::SMT_07),
+            );
+            Type::Error
+        }
         // A string is read when the annotation is, so it may name any class (CLS-01).
         Expr::Quoted { annotation, .. } => {
             let deferred = AnnotationScope {

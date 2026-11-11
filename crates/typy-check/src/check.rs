@@ -6,12 +6,13 @@ mod class;
 pub(crate) use annotation::{unhashable, unhashable_key};
 mod definition;
 mod definition_order;
+mod module_imports;
 mod module_scope;
 mod visit;
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
-use typy_diagnostics::Diagnostics;
+use typy_diagnostics::{Diagnostics, SourceLookup};
 use typy_source::syntax::Stmt;
 use typy_source::{Module, ModuleName, Project};
 
@@ -46,9 +47,27 @@ impl TypeChecker {
         // name a class defined below it.
         let floor_defers = project.settings().python_floor.minor() >= 14;
         let mut program = Program::empty();
+        let mut assigned = BTreeSet::new();
+        for module in project.modules_in_order() {
+            assigned.extend(module_imports::assigned_through_modules(
+                &module.syntax.body,
+            ));
+        }
+        program.set_project(
+            project
+                .modules()
+                .map(|module| module.name.as_str().to_owned())
+                .collect(),
+            project
+                .standard_modules()
+                .map(|module| module.as_str().to_owned())
+                .collect(),
+            assigned,
+        );
         // Each module is checked after the modules its module-level imports need.
         for module in project.modules_in_order() {
-            check_module(&mut program, module, floor_defers, &mut diagnostics);
+            let path = project.path(module.file).to_owned();
+            check_module(&mut program, module, &path, floor_defers, &mut diagnostics);
         }
         if diagnostics.has_errors() {
             return Err(diagnostics);
@@ -62,23 +81,31 @@ impl TypeChecker {
 fn check_module(
     program: &mut Program,
     module: &Module,
+    path: &str,
     floor_defers: bool,
     diagnostics: &mut Diagnostics,
 ) {
     let tree = &module.syntax;
     let first_class = program.class_count();
     let first_function = program.function_count();
+    program.prepare_module(module);
+    let imports = module_imports::module_imports(program, &tree.body);
+    let module_classes = program.module_classes_of(&imports.modules);
     let classes = collect_classes(&tree.body, first_class, diagnostics);
-    let class_ids: BTreeMap<String, ClassId> = classes
-        .iter()
-        .map(|class| (class.name.name.clone(), class.id))
-        .collect();
-    let exceptions = exception_classes(&classes, diagnostics);
+    let mut class_ids: BTreeMap<String, ClassId> = imports.classes.clone();
+    class_ids.extend(
+        classes
+            .iter()
+            .map(|class| (class.name.name.clone(), class.id)),
+    );
+    let mut exceptions = program.known_exceptions();
+    exceptions.extend(exception_classes(&classes, diagnostics));
     let mut definitions = collect_functions(
         &tree.body,
         first_class,
         &class_ids,
         &exceptions,
+        &module_classes,
         floor_defers,
         diagnostics,
     );
@@ -86,11 +113,12 @@ fn check_module(
         &classes,
         &class_ids,
         &exceptions,
+        &module_classes,
         floor_defers,
         first_function + definitions.len(),
         diagnostics,
     );
-    let mut variables = BTreeMap::new();
+    let mut variables = imports.variables.clone();
     module_variables(&tree.body, &mut variables);
     let module_variable_spans = variables.clone();
     check_names_are_functions_or_variables(&definitions, &class_ids, &variables, diagnostics);
@@ -98,13 +126,15 @@ fn check_module(
     definitions.extend(methods);
 
     program.begin_module(
-        module.name.as_str(),
+        module,
+        path,
         &definitions,
         variables.into_keys().collect(),
         class_infos,
         class_ids,
         exceptions,
     );
+    program.import_names(&imports.functions, module_classes);
     program.declare_module_variables(&module_variable_spans, &definitions);
     let module_body: Vec<&Stmt> = tree
         .body

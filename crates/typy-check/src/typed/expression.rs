@@ -41,6 +41,15 @@ pub enum TypedExprKind {
     /// A module variable, read as it is now; outside the module's own code it may be unbound
     /// and raise `NameError`, and a call may assign it (SMT-08, ADR-0015).
     ModuleVariable(SymbolId),
+    /// `module.name`, a module variable of another module read through its module object;
+    /// it raises `AttributeError` while unbound (MOD-10).
+    ModuleAttribute {
+        module: String,
+        symbol: SymbolId,
+    },
+    /// `package.module`, the module object of a submodule, which raises `AttributeError`
+    /// until the submodule is initialised.
+    Submodule(String),
     /// `__name__`, which is `"__main__"` in the main module (STD-06).
     ModuleName,
     Binary {

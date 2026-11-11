@@ -119,7 +119,8 @@ fn the_main_file_imported_by_name_is_a_second_module_of_the_same_file() {
     let project = load(&[("app.py", "def f() -> None:\n    import app\n")]).unwrap();
     let app = project.module(&ModuleName::new("app").unwrap()).unwrap();
     assert_eq!(app.file, project.main_module().file);
-    assert_eq!(names(&project), ["__main__", "app"]);
+    // An import inside a function orders its module first.
+    assert_eq!(names(&project), ["app", "__main__"]);
 }
 
 #[test]

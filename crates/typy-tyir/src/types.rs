@@ -29,6 +29,8 @@ impl TypeId {
     pub const TRACEBACK: Self = Self(13);
     /// A `range` held as a value (DAT-17).
     pub const RANGE: Self = Self(14);
+    /// A module object, immortal (MOD-10, ADR-0015).
+    pub const MODULE: Self = Self(15);
     /// The first ID of the program's classes; class `n` of the module is this plus `n`.
     const FIRST_CLASS: u32 = 1 << 16;
 
@@ -109,6 +111,8 @@ impl TyirType {
     pub const TRACEBACK: Self = Self::Object(TypeId::TRACEBACK);
     /// A range.
     pub const RANGE: Self = Self::Object(TypeId::RANGE);
+    /// A module object.
+    pub const MODULE: Self = Self::Object(TypeId::MODULE);
 }
 
 impl fmt::Display for TyirType {
@@ -128,6 +132,7 @@ impl fmt::Display for TyirType {
             Self::Object(TypeId::ITERATOR) => formatter.write_str("iterator"),
             Self::Object(TypeId::TRACEBACK) => formatter.write_str("traceback"),
             Self::Object(TypeId::RANGE) => formatter.write_str("range"),
+            Self::Object(TypeId::MODULE) => formatter.write_str("module"),
             Self::Bits => formatter.write_str("bits"),
             Self::Object(id) if id.class_index().is_some() => {
                 write!(formatter, "class#{}", id.class_index().unwrap_or(0))

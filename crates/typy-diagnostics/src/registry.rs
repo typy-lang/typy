@@ -219,6 +219,16 @@ pub const CODES: &[CodeInfo] = &[
         "module variable an `__init__` reads before the module's code gives it a type",
         RuleId::SMT_08,
     ),
+    active(
+        425,
+        "import of a name its module does not define",
+        RuleId::SMT_07,
+    ),
+    active(
+        426,
+        "import inside a function of a module that the imported module imports",
+        RuleId::MOD_05,
+    ),
     active(701, "C toolchain program not found", RuleId::A_01),
     active(702, "link failed", RuleId::A_01),
     CodeInfo {

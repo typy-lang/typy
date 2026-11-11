@@ -21,6 +21,7 @@ fn span() -> Span {
 fn module(function: TyirFunction) -> TyirModule {
     TyirModule {
         globals: Vec::new(),
+        modules: Vec::new(),
         functions: vec![function],
         tuple_types: crate::TupleTypes::default(),
         strings: vec!["hi\n".to_owned()],
@@ -428,6 +429,7 @@ fn every_operation() -> TyirModule {
     builder.push_value(Operation::Constant(Constant::Unit), TyirType::Unit, span());
     TyirModule {
         globals: Vec::new(),
+        modules: Vec::new(),
         functions: vec![builder.finish(), callee.finish()],
         tuple_types: crate::TupleTypes::default(),
         strings: vec!["a".to_owned()],

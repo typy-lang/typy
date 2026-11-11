@@ -279,6 +279,34 @@ impl Dump<'_> {
                 self.expression(depth + 1, test);
                 self.expression(depth + 1, exception);
             }
+            TypedStmt::Import {
+                modules,
+                bindings,
+                span,
+            } => {
+                let names: Vec<String> = bindings
+                    .iter()
+                    .map(|binding| match binding {
+                        crate::typed::ImportBinding::Module { target, module } => {
+                            format!("{} = {module}", self.program.symbol(*target).name)
+                        }
+                        crate::typed::ImportBinding::Value {
+                            target,
+                            module,
+                            source,
+                        } => format!(
+                            "{} = {module}.{}",
+                            self.program.symbol(*target).name,
+                            self.program.symbol(*source).name
+                        ),
+                    })
+                    .collect();
+                self.line(
+                    depth,
+                    &format!("Import {} binds {}", modules.join(" "), names.join(", ")),
+                    *span,
+                );
+            }
             TypedStmt::Pass { span } => self.line(depth, "Pass", *span),
             TypedStmt::Break { span } => self.line(depth, "Break", *span),
             TypedStmt::Continue { span } => self.line(depth, "Continue", *span),
@@ -312,6 +340,13 @@ impl Dump<'_> {
             TypedExprKind::ModuleVariable(id) => {
                 format!("ModuleVariable {}", self.program.symbol(*id).name)
             }
+            TypedExprKind::ModuleAttribute { module, symbol } => {
+                format!(
+                    "ModuleAttribute {module}.{}",
+                    self.program.symbol(*symbol).name
+                )
+            }
+            TypedExprKind::Submodule(module) => format!("Submodule {module}"),
             TypedExprKind::ModuleName => "ModuleName".to_owned(),
             TypedExprKind::Binary { operator, .. } => format!("Binary {operator:?}"),
             TypedExprKind::Unary { operator, .. } => format!("Unary {operator:?}"),
@@ -383,6 +418,8 @@ fn children(expression: &TypedExpr) -> Vec<&TypedExpr> {
         TypedExprKind::Constant(_)
         | TypedExprKind::Local(_)
         | TypedExprKind::ModuleVariable(_)
+        | TypedExprKind::ModuleAttribute { .. }
+        | TypedExprKind::Submodule(_)
         | TypedExprKind::ModuleName
         | TypedExprKind::TypeObject(_) => Vec::new(),
         TypedExprKind::Binary { left, right, .. }

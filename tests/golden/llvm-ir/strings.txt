@@ -11,6 +11,7 @@ target triple = "x86_64-unknown-linux-gnu"
 @typy.global.5 = internal global i1 false
 @typy.global.6 = internal global i64 0
 @typy.global.7 = internal global i1 false
+@typy.global.8 = internal global i64 0
 @typy.str.0 = private unnamed_addr constant { i32, i32, i64, i32, i32, [0 x i8] } { i32 -1, i32 1, i64 0, i32 1, i32 0, [0 x i8] zeroinitializer }
 @typy.str.1 = private unnamed_addr constant { i32, i32, i64, i32, i32, [3 x i8] } { i32 -1, i32 1, i64 3, i32 1, i32 0, [3 x i8] c"caf" }
 @typy.cstr.0 = private unnamed_addr constant [9 x i8] c"<module>\00"
@@ -30,6 +31,7 @@ b0:
   store i64 1, ptr %s0, align 8
   store i64 1, ptr %s1, align 8
   store i64 1, ptr %s2, align 8
+  store i64 1, ptr @typy.global.8, align 8
   store i64 1, ptr @typy.global.0, align 8
   store ptr @typy.str.0, ptr @typy.global.2, align 8
   store ptr @typy.str.0, ptr @typy.global.4, align 8

@@ -36,6 +36,25 @@ impl Pipeline {
         Ok(Outcome::Checked(Sources::Project(Box::new(project))))
     }
 
+    /// Returns the path from the root and the text of every file of the program whose main
+    /// file is `main`, the main file first, or `None` when it does not load.
+    #[must_use]
+    pub fn sources(&self, main: &Utf8Path) -> Option<Vec<(String, String)>> {
+        use typy_diagnostics::SourceLookup as _;
+        let project = load(main).ok()?;
+        let mut files: Vec<(String, String)> = Vec::new();
+        let modules = std::iter::once(project.main_module()).chain(project.modules());
+        for (module, file) in
+            modules.filter_map(|module| Some((module, project.file(module.file)?)))
+        {
+            let path = project.path(module.file).to_owned();
+            if !files.iter().any(|(known, _)| *known == path) {
+                files.push((path, file.text().to_owned()));
+            }
+        }
+        Some(files)
+    }
+
     /// Runs the build `request` asks for: the output of one stage, or a linked executable.
     pub fn run(&self, request: &BuildRequest) -> Result<Outcome, Failure> {
         match request.emit() {

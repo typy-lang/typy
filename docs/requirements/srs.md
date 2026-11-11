@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy software requirements specification |
-| Version | 1.35 |
+| Version | 1.36 |
 | Status | Approved |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-11 |
@@ -470,6 +470,7 @@ TyPy rejects them (STD-04):
 | `__del__` | |
 | A language server | |
 | `enumerate`, `zip` and `reversed` objects held as values | |
+| `from module import *` | |
 
 ## 7. Open issues
 
@@ -501,6 +502,7 @@ after the last of the resolved issues below.
 | OI-19 | In which order does a set display of constant items iterate, when the oracle versions build it differently? A display of three to thirty items that are all constants compiles to a frozenset of the items, which is merged into a new set, and the merge can place the items in other slots than adding them one by one does. CPython 3.12 and 3.13 also rebuild the frozenset once more from its own order when they merge the code's constants, and CPython 3.14 iterates a `for` loop over such a display in the order of the items added one by one. | The order of the newest oracle, CPython 3.15, as OI-14 decides for messages: such a display, and a loop over it, holds the items added in order to a set, then merged into a new set. A constant item is a literal, `None`, `True`, `False`, a number with a sign, or a tuple of constant items; CPython also folds arithmetic on constants, which TyPy computes when the program runs, so a display such as `{1 + 2, 4, 5}` may iterate in another order than CPython's. A conformance test of such a display is invalid unless every oracle prints it alike (STD-03, DAT-10, ADR-0010). | 2026-11-09 |
 | OI-20 | What does the text of a module object show, when CPython's `<module 'm' from '/abs/path/m.py'>` names the absolute path of the file, which would make the build depend on its directory (NFR-06)? | The path from the project root, `<module 'a.b' from 'a/b.py'>`. It is the one known difference from CPython's text, named in the user documentation (MOD-10, ADR-0015). | 2026-11-11 |
 | OI-21 | Which imports form the cycle MOD-05 rejects, when an import inside a function runs only once the function is called? | The imports at module level. An import inside a function adds no edge and may find a module still initialising, as in CPython, whose names not yet bound raise CPython's `NameError`, `AttributeError` or `ImportError` (ADR-0015). | 2026-11-11 |
+| OI-22 | How is a module checked whose function imports a module that imports it at module level, when each module is checked after the modules it imports? | Such an import is E0426, planned for 0.4: TyPy checks the modules in the order their imports give, an import inside a function counting when it closes no cycle, so the importing function's module comes first and cannot see the other's names yet (ADR-0015). | 2026-11-11 |
 
 ## Appendix A. Disposition of the specification pack
 

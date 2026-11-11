@@ -18,8 +18,8 @@ pub use exception::{BuiltinException, ExceptionClass, ProgramException};
 pub use method::Method;
 pub use typed::{
     Argument, AssignTarget, Attribute, ClassId, Conversion, FStringPart, FormattedValue,
-    FunctionId, FunctionSignature, Generator, InitCall, LoopSource, RaiseCause, SignatureParameter,
-    Symbol, SymbolId, SymbolKind, TypedClass, TypedConstant, TypedExpr, TypedExprKind,
-    TypedFunction, TypedHandler, TypedModule, TypedProgram, TypedStmt, dump,
+    FunctionId, FunctionSignature, Generator, ImportBinding, InitCall, LoopSource, RaiseCause,
+    SignatureParameter, Symbol, SymbolId, SymbolKind, TypedClass, TypedConstant, TypedExpr,
+    TypedExprKind, TypedFunction, TypedHandler, TypedModule, TypedProgram, TypedStmt, dump,
 };
 pub use types::{Type, TypeObjectOf, View};

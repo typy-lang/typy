@@ -162,6 +162,28 @@ impl LoopSource {
     }
 }
 
+/// A name an import binds to a value.
+#[derive(Clone, Debug, PartialEq)]
+pub enum ImportBinding {
+    /// A variable bound to a module object.
+    Module {
+        /// The variable.
+        target: SymbolId,
+        /// The module.
+        module: String,
+    },
+    /// A variable bound to the value a module variable of `module` has, which raises
+    /// `ImportError` while unbound.
+    Value {
+        /// The variable.
+        target: SymbolId,
+        /// The module that holds the value.
+        module: String,
+        /// The module variable whose value it takes.
+        source: SymbolId,
+    },
+}
+
 /// A statement after checking.
 #[derive(Clone, Debug, PartialEq)]
 #[allow(
@@ -260,6 +282,13 @@ pub enum TypedStmt {
         step: TypedExpr,
         body: Vec<TypedStmt>,
         orelse: Vec<TypedStmt>,
+        span: Span,
+    },
+    /// `import` or `from ... import`: each module, in order, is initialised unless it has
+    /// begun, then each binding takes its value (SMT-07, MOD-03).
+    Import {
+        modules: Vec<String>,
+        bindings: Vec<ImportBinding>,
         span: Span,
     },
     Pass {

@@ -11,6 +11,7 @@ mod exception;
 mod expression;
 mod flow;
 mod fstring;
+mod import;
 mod iterable_call;
 mod iterator;
 mod list;
@@ -28,6 +29,7 @@ mod statement;
 mod type_object;
 mod view_operator;
 
+pub(crate) use import::Imported;
 pub(crate) use program::Program;
 
 use std::collections::{BTreeMap, BTreeSet};
@@ -133,9 +135,11 @@ impl<'program> BodyChecker<'program> {
             });
         }
         checker.declare_globals(definition.body);
+        let saved = checker.import_names_of(definition.body);
         let statements: Vec<&Stmt> = definition.body.iter().collect();
         checker.collect_locals(&statements);
         let body = checker.statements(&statements);
+        checker.restore_names(saved);
         checker.check_instance_complete(definition.span);
         if checker.assigned.is_some() && returns != Type::NoneType && returns != Type::Error {
             checker.diagnostics.push(
@@ -180,6 +184,11 @@ impl<'program> BodyChecker<'program> {
             || Span::empty(typy_diagnostics::FileId(0), typy_diagnostics::TextOffset(0)),
             |first| first.span(),
         );
+        // The module body takes an ID as a function does, so it has a signature too.
+        program.signatures.push(FunctionSignature {
+            parameters: Vec::new(),
+            returns: Type::NoneType,
+        });
         program.functions.push(Some(TypedFunction {
             id: entry,
             name: "<module>".to_owned(),

@@ -34,6 +34,19 @@ impl ModuleName {
         &self.0
     }
 
+    /// Returns the submodule `name` of this package, `a.b` for `b` of `a`; `name` is an
+    /// identifier, as the parser gives it.
+    #[must_use]
+    pub fn child(&self, name: &str) -> Self {
+        Self(format!("{}.{name}", self.0))
+    }
+
+    /// Returns the top package of the name, `a` for `a.b.c`.
+    #[must_use]
+    pub fn top(&self) -> Self {
+        Self(self.0.split('.').next().unwrap_or_default().to_owned())
+    }
+
     /// Returns the package that holds the module, `a` for `a.b`, or `None` at the top.
     #[must_use]
     pub fn parent(&self) -> Option<Self> {

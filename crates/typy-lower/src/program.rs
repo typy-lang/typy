@@ -84,6 +84,14 @@ pub fn lower(program: &TypedProgram) -> Result<TyirModule, Diagnostics> {
         let module = TyirModule {
             functions,
             globals: module_globals.globals,
+            modules: program
+                .modules
+                .iter()
+                .map(|module| typy_tyir::TyirModuleObject {
+                    name: module.name.clone(),
+                    path: module.path.clone(),
+                })
+                .collect(),
             strings: strings.into_strings(),
             tuple_types,
             classes,

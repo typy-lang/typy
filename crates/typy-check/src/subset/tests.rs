@@ -100,7 +100,6 @@ fn later_features_name_their_release_and_rule() {
             "x = (i for i in range(3))\n",
             "generator expressions are planned for TyPy 1.0 (EXP-15)",
         ),
-        ("import os\n", "imports are planned for TyPy 0.3 (SMT-07)"),
         (
             "type X = int\n",
             "`type` statements are planned for TyPy 0.4 (SMT-10)",

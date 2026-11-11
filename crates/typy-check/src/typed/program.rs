@@ -24,6 +24,8 @@ pub struct TypedProgram {
 pub struct TypedModule {
     /// The module's qualified name, `__main__` for the main file.
     pub name: String,
+    /// The path of its file from the project root, which its text shows (OI-20).
+    pub path: String,
     /// The function of its module-level code.
     pub body: FunctionId,
 }

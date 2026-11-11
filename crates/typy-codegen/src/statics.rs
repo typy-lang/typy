@@ -20,6 +20,7 @@ pub(crate) struct Statics<'ctx> {
     bytes: BTreeMap<String, PointerValue<'ctx>>,
     descriptors: BTreeMap<u32, PointerValue<'ctx>>,
     type_objects: BTreeMap<u32, PointerValue<'ctx>>,
+    modules: BTreeMap<u32, PointerValue<'ctx>>,
 }
 
 impl<'ctx> Statics<'ctx> {
@@ -32,6 +33,7 @@ impl<'ctx> Statics<'ctx> {
             bytes: BTreeMap::new(),
             descriptors: BTreeMap::new(),
             type_objects: BTreeMap::new(),
+            modules: BTreeMap::new(),
         }
     }
 
@@ -139,6 +141,45 @@ impl<'ctx> Statics<'ctx> {
             false,
         );
         Self::global(module, value.into(), name)
+    }
+
+    /// Returns the module object of the module at `index`: an immortal header, then its name
+    /// and its path as `str` objects (MOD-10). Each module has one, so `is` compares them.
+    pub(crate) fn module_object(
+        &mut self,
+        module: &Module<'ctx>,
+        index: u32,
+        name: &str,
+        path: &str,
+    ) -> PointerValue<'ctx> {
+        if let Some(pointer) = self.modules.get(&index) {
+            return *pointer;
+        }
+        let name = self.string(module, name);
+        let path = self.string(module, path);
+        let context = self.context;
+        let value = context.const_struct(
+            &[
+                context
+                    .i32_type()
+                    .const_int(u64::from(IMMORTAL), false)
+                    .into(),
+                context
+                    .i32_type()
+                    .const_int(u64::from(crate::layout::MODULE_TYPE_ID), false)
+                    .into(),
+                name.into(),
+                path.into(),
+            ],
+            false,
+        );
+        let global = module.add_global(value.get_type(), None, &format!("typy.module.{index}"));
+        global.set_initializer(&value);
+        global.set_constant(true);
+        global.set_linkage(Linkage::Private);
+        let pointer = global.as_pointer_value();
+        self.modules.insert(index, pointer);
+        pointer
     }
 
     /// Returns a null-terminated byte string, for the names in traceback entries.

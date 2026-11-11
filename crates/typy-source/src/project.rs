@@ -128,6 +128,11 @@ impl Project {
         self.imports.get(name).map_or(&[], Vec::as_slice)
     }
 
+    /// Returns the standard library modules the program imports, which no file provides.
+    pub fn standard_modules(&self) -> impl Iterator<Item = &ModuleName> {
+        self.standard.iter()
+    }
+
     /// Returns whether a module the program imports is a standard library module, one that
     /// no file under the root provides.
     #[must_use]

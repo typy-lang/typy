@@ -196,6 +196,11 @@ impl FunctionLowerer<'_> {
             } => {
                 self.for_range(*target, [start, stop, step], body, orelse, *span);
             }
+            TypedStmt::Import {
+                modules,
+                bindings,
+                span,
+            } => self.import_statement(modules, bindings, *span),
             TypedStmt::Pass { .. } => {}
             TypedStmt::Break { span } => {
                 if let Some(targets) = self.loops.last().copied() {

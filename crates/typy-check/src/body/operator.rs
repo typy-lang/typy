@@ -204,6 +204,7 @@ impl BodyChecker<'_> {
                             | Type::Exception(_)
                             | Type::Iterator(_)
                             | Type::Traceback
+                            | Type::Module(_)
                             | Type::TypeObject(_)
                     ),
                 };

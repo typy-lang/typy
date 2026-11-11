@@ -283,6 +283,21 @@ reads the attributes it assigns. A module variable whose value needs
 those attributes has no type yet when the `__init__` reads it. Declare
 its type at module level, such as `LIMIT: int = c.v`.
 
+## E0425: import of a name its module does not define
+
+`from m import x` and `m.x` name something the module `m` defines at
+module level: a function, a class, a variable it assigns, or one of its
+submodules (SMT-07). Check the spelling, and that `m` binds the name at
+module level rather than inside a function.
+
+## E0426: import inside a function of a module that imports this one
+
+TyPy checks each module after the modules it imports at module level.
+When module `a` imports `b` at module level and a function of `b` imports
+`a`, `b` is checked before `a`, so its function cannot see `a`'s names
+yet; this is planned for 0.4 (MOD-05). Move the code both modules share
+into a third module that each imports at module level.
+
 ## E0701: C toolchain program not found
 
 TyPy links programs with the system C toolchain, which is not installed

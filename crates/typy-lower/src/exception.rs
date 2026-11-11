@@ -337,7 +337,7 @@ impl FunctionLowerer<'_> {
     pub(crate) fn run_cleanups(&mut self, depth: usize, span: Span) {
         for index in (depth..self.cleanups.len()).rev() {
             match self.cleanups[index].clone() {
-                Cleanup::Handlers { .. } => {}
+                Cleanup::Handlers { .. } | Cleanup::Initialising { .. } => {}
                 Cleanup::Handling {
                     previous,
                     exception,
@@ -371,6 +371,7 @@ impl FunctionLowerer<'_> {
                         arguments: vec![exception],
                     });
                 }
+                Cleanup::Initialising { state } => self.store_state(state, "0", span),
                 Cleanup::Handling {
                     previous,
                     exception: handled,

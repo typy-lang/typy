@@ -37,6 +37,15 @@ impl<'ctx> FunctionEmitter<'_, '_, 'ctx> {
             Constant::TypeObject(typy_tyir::TypeObjectRef::Class(index)) => {
                 Some(crate::class::type_object(self.shared, *index)?.into())
             }
+            Constant::Module(index) => {
+                let object = &self.shared.tyir.modules[*index as usize];
+                Some(
+                    self.shared
+                        .statics
+                        .module_object(self.shared.module, *index, &object.name, &object.path)
+                        .into(),
+                )
+            }
             Constant::NoInstance(_) => Some(
                 self.shared
                     .context

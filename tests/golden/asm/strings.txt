@@ -11,6 +11,7 @@ __typy_main:
 	movq	$1, 416(%rsp)
 	movq	$1, 408(%rsp)
 	movq	$1, 400(%rsp)
+	movq	$1, typy.global.8(%rip)
 	movq	$1, typy.global.0(%rip)
 	leaq	.Ltypy.str.0(%rip), %rax
 	movq	%rax, typy.global.2(%rip)
@@ -481,6 +482,9 @@ __typy_main:
 	.type	typy.global.7,@object
 	.local	typy.global.7
 	.comm	typy.global.7,1,1
+	.type	typy.global.8,@object
+	.local	typy.global.8
+	.comm	typy.global.8,8,8
 	.type	.Ltypy.str.0,@object
 	.section	.rodata,"a",@progbits
 	.p2align	4, 0x0

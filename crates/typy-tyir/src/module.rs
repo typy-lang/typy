@@ -20,6 +20,16 @@ pub struct TyirGlobal {
     pub ty: TyirType,
 }
 
+/// A module object: the module's qualified name and the path of its file from the project
+/// root, which its text shows (OI-20).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct TyirModuleObject {
+    /// The qualified name.
+    pub name: String,
+    /// The path from the project root.
+    pub path: String,
+}
+
 /// Every function of the program, the string pool, and the entry function.
 #[derive(Clone, Debug, PartialEq)]
 pub struct TyirModule {
@@ -27,6 +37,8 @@ pub struct TyirModule {
     pub functions: Vec<TyirFunction>,
     /// The globals, indexed by `GlobalId`.
     pub globals: Vec<TyirGlobal>,
+    /// The module objects, indexed as `Constant::Module` names them.
+    pub modules: Vec<TyirModuleObject>,
     /// The string constants, indexed by `StringId`.
     pub strings: Vec<String>,
     /// The tuple types its values use.

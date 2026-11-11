@@ -111,6 +111,8 @@ impl RuleId {
     pub const EXP_16: Self = Self("EXP-16");
     /// `*args` and `**kwargs` with annotated element types shall be accepted.
     pub const EXP_17: Self = Self("EXP-17");
+    /// A module-level `ctypes.CDLL` or `ctypes.cdll.LoadLibrary` call with a string literal shall link the named library.
+    pub const FFI_01: Self = Self("FFI-01");
     /// Module-level function definitions shall be accepted.
     pub const FUN_01: Self = Self("FUN-01");
     /// Keyword-only and positional-only parameters shall be accepted.
@@ -141,6 +143,12 @@ impl RuleId {
     pub const LIB_03: Self = Self("LIB-03");
     /// `sys.argv`, `sys.exit`, `sys.stdout`, `sys.stderr`, the `file` argument of `print`, `input` and `open` for text files shall be available.
     pub const LIB_04: Self = Self("LIB-04");
+    /// The `math` module shall be available.
+    pub const LIB_05: Self = Self("LIB-05");
+    /// The `dataclasses` names in CLS-05 and the `typing` names in TYP and GEN shall be available.
+    pub const LIB_06: Self = Self("LIB-06");
+    /// `os.environ`, `os.path`, `time` and `random` shall be available.
+    pub const LIB_07: Self = Self("LIB-07");
     /// Importing a standard library module that TyPy does not provide shall be rejected with the list of modules it provides.
     pub const LIB_08: Self = Self("LIB-08");
     /// `str % values`, printf-style formatting with a value, a tuple of values or a dict of named values, shall be accepted with Python's results.
@@ -197,6 +205,8 @@ impl RuleId {
     pub const TYP_13: Self = Self("TYP-13");
     /// Annotations that join two or more types other than `None` with `|`, such as `int | str`, shall be accepted, with narrowing by `isinstance` (TYP-07).
     pub const TYP_14: Self = Self("TYP-14");
+    /// The annotations `Iterator[T]` and `Iterable[T]`, imported from `collections.abc` or `typing`, shall be accepted for iterators and for the built-in iterables of items of type `T`; their use as values is planned for 0.4 (ADR-0014, ADR-0015).
+    pub const TYP_15: Self = Self("TYP-15");
 
     /// Every rule a diagnostic can name, in ID order.
     pub const ALL: &'static [Self] = &[
@@ -252,6 +262,7 @@ impl RuleId {
         Self::EXP_15,
         Self::EXP_16,
         Self::EXP_17,
+        Self::FFI_01,
         Self::FUN_01,
         Self::FUN_03,
         Self::FUN_04,
@@ -267,6 +278,9 @@ impl RuleId {
         Self::LIB_02,
         Self::LIB_03,
         Self::LIB_04,
+        Self::LIB_05,
+        Self::LIB_06,
+        Self::LIB_07,
         Self::LIB_08,
         Self::LIB_10,
         Self::MOD_01,
@@ -295,6 +309,7 @@ impl RuleId {
         Self::TYP_12,
         Self::TYP_13,
         Self::TYP_14,
+        Self::TYP_15,
     ];
 
     /// Returns the ID as text, such as `TYP-03`.

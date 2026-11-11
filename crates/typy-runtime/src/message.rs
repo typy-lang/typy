@@ -81,6 +81,11 @@ impl MessageBuffer {
 
     /// Returns a new exception of `kind` with the message, owned by the caller.
     pub(crate) fn raise(&self, kind: ExceptionKind) -> *mut ExceptionObject {
+        raise_with_message(kind, self.text())
+    }
+
+    /// Returns the message as a new `str`, owned by the caller.
+    pub(crate) fn text(&self) -> *mut StrObject {
         let used = &self.points[..self.used];
         let text_kind = used
             .iter()
@@ -92,7 +97,7 @@ impl MessageBuffer {
             // SAFETY: the string is new, the index is in bounds, and its kind holds every point.
             unsafe { set_code_point(message, index, *point) };
         }
-        raise_with_message(kind, message)
+        message
     }
 }
 

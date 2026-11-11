@@ -47,6 +47,7 @@ fn on_point(body: impl FnOnce(ValueId, ValueId) -> Body) -> TyirModule {
     };
     TyirModule {
         globals: Vec::new(),
+        modules: Vec::new(),
         functions: vec![builder.finish()],
         strings: Vec::new(),
         tuple_types,
@@ -206,6 +207,7 @@ fn on_exception(parameter: TyirType, operation: Operation) -> TyirModule {
     };
     TyirModule {
         globals: Vec::new(),
+        modules: Vec::new(),
         functions: vec![builder.finish()],
         strings: Vec::new(),
         tuple_types,

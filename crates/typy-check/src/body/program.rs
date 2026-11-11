@@ -37,6 +37,29 @@ pub(crate) struct Program {
     pub(super) exceptions: BTreeMap<ClassId, ExceptionClass>,
     /// The modules checked so far, in the order they were checked.
     pub(super) modules: Vec<TypedModule>,
+    /// The names each module checked so far defines, by the module's name (ADR-0015).
+    pub(super) scopes: BTreeMap<String, ModuleScope>,
+    /// The modules of the program's files, and the standard library modules it imports.
+    pub(super) loaded: BTreeSet<String>,
+    pub(super) standard: BTreeSet<String>,
+    /// The package a relative import of the module being checked starts from (MOD-02).
+    pub(super) package: Option<typy_source::ModuleName>,
+    /// The path of the module being checked, from the project root.
+    pub(super) path: String,
+    /// For each name the module binds to a module at module level, the classes of that
+    /// module, which annotations such as `shapes.Point` name.
+    pub(super) module_classes: BTreeMap<String, BTreeMap<String, ClassId>>,
+    /// The module variables some other module assigns through its module object, such as
+    /// `settings.debug = True`, which a test cannot narrow either.
+    pub(super) assigned_elsewhere: BTreeSet<(String, String)>,
+}
+
+/// The names one module defines, which other modules import.
+#[derive(Clone, Debug, Default)]
+pub(crate) struct ModuleScope {
+    pub(super) function_ids: BTreeMap<String, FunctionId>,
+    pub(super) class_ids: BTreeMap<String, ClassId>,
+    pub(super) module_symbols: BTreeMap<String, SymbolId>,
 }
 
 impl Program {
@@ -57,7 +80,27 @@ impl Program {
             class_ids: BTreeMap::new(),
             exceptions: BTreeMap::new(),
             modules: Vec::new(),
+            scopes: BTreeMap::new(),
+            loaded: BTreeSet::new(),
+            standard: BTreeSet::new(),
+            package: None,
+            path: String::new(),
+            module_classes: BTreeMap::new(),
+            assigned_elsewhere: BTreeSet::new(),
         }
+    }
+
+    /// Notes the modules of the program and the standard library modules it imports, and
+    /// the module variables assigned through module objects, before any module is checked.
+    pub(crate) fn set_project(
+        &mut self,
+        loaded: BTreeSet<String>,
+        standard: BTreeSet<String>,
+        assigned_elsewhere: BTreeSet<(String, String)>,
+    ) {
+        self.loaded = loaded;
+        self.standard = standard;
+        self.assigned_elsewhere = assigned_elsewhere;
     }
 
     /// Returns how many classes the modules checked so far define, the first ID of the next.
@@ -72,9 +115,14 @@ impl Program {
 
     /// Starts checking a module: its functions and classes follow those of the modules
     /// before it, and its names replace theirs in the tables bodies read.
+    #[allow(
+        clippy::too_many_arguments,
+        reason = "the parts of a module the collection found"
+    )]
     pub(crate) fn begin_module(
         &mut self,
-        module: &str,
+        module: &typy_source::Module,
+        path: &str,
         definitions: &[Definition<'_>],
         module_variables: BTreeSet<String>,
         classes: Vec<ClassInfo>,
@@ -96,23 +144,78 @@ impl Program {
                 .iter()
                 .map(|definition| definition.signature.clone()),
         );
-        module.clone_into(&mut self.module);
+        module.name.as_str().clone_into(&mut self.module);
+        path.clone_into(&mut self.path);
+        self.package = module.package();
         self.module_variables = module_variables;
         self.module_symbols = BTreeMap::new();
-        self.assigned_in_functions = BTreeSet::new();
+        self.assigned_in_functions = self
+            .assigned_elsewhere
+            .iter()
+            .filter(|(owner, _)| owner == module.name.as_str())
+            .map(|(_, name)| name.clone())
+            .collect();
+        self.module_classes = BTreeMap::new();
         self.class_modules
-            .extend(std::iter::repeat_n(module.to_owned(), classes.len()));
+            .extend(std::iter::repeat_n(self.module.clone(), classes.len()));
         self.classes.extend(classes);
         self.class_ids = class_ids;
         self.exceptions.extend(exceptions);
     }
 
-    /// Ends checking a module whose body is the function `body`.
+    /// Notes the module about to be checked, whose imports resolve against its package.
+    pub(crate) fn prepare_module(&mut self, module: &typy_source::Module) {
+        self.package = module.package();
+        module.name.as_str().clone_into(&mut self.module);
+    }
+
+    /// Returns, for each name bound to a module, that module's classes.
+    pub(crate) fn module_classes_of(
+        &self,
+        modules: &BTreeMap<String, String>,
+    ) -> BTreeMap<String, BTreeMap<String, ClassId>> {
+        modules
+            .iter()
+            .filter_map(|(name, module)| {
+                let scope = self.scopes.get(module)?;
+                Some((name.clone(), scope.class_ids.clone()))
+            })
+            .collect()
+    }
+
+    /// Returns the exception classes of the modules checked so far.
+    pub(crate) fn known_exceptions(&self) -> BTreeMap<ClassId, ExceptionClass> {
+        self.exceptions.clone()
+    }
+
+    /// Adds the functions a module imports by name to its table of functions, and the
+    /// classes of the modules its names bind, for annotations.
+    pub(crate) fn import_names(
+        &mut self,
+        functions: &BTreeMap<String, FunctionId>,
+        module_classes: BTreeMap<String, BTreeMap<String, ClassId>>,
+    ) {
+        self.function_ids
+            .extend(functions.iter().map(|(name, id)| (name.clone(), *id)));
+        self.module_classes = module_classes;
+    }
+
+    /// Ends checking a module whose body is the function `body`, and keeps its names for
+    /// the modules that import it.
     pub(crate) fn end_module(&mut self, body: FunctionId) {
         self.modules.push(TypedModule {
             name: self.module.clone(),
+            path: self.path.clone(),
             body,
         });
+        self.scopes.insert(
+            self.module.clone(),
+            ModuleScope {
+                function_ids: self.function_ids.clone(),
+                class_ids: self.class_ids.clone(),
+                module_symbols: self.module_symbols.clone(),
+            },
+        );
     }
 
     /// Returns the type of the instances of a class: an exception for an exception class.

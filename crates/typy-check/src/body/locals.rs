@@ -48,6 +48,7 @@ impl BodyChecker<'_> {
                     let blocks = statement.try_blocks();
                     self.collect_locals(&blocks.into_iter().flatten().collect::<Vec<_>>());
                 }
+                Stmt::Import { .. } | Stmt::ImportFrom { .. } => self.bind_imported(statement),
                 _ => {}
             }
         }
@@ -115,6 +116,7 @@ impl BodyChecker<'_> {
         let scope = AnnotationScope {
             classes: &self.program.class_ids,
             exceptions: &self.program.exceptions,
+            modules: &self.program.module_classes,
             bound: u32::MAX,
         };
         annotation_type(annotation, &scope, self.diagnostics)
@@ -197,6 +199,9 @@ impl BodyChecker<'_> {
             span,
         } = target
         {
+            if let Some(module) = self.module_of(object) {
+                return self.module_attribute_target(&module, attribute, &ty, value, *span);
+            }
             return self.attribute_target(object, attribute, &ty, None, *span);
         }
         let (Expr::Tuple { elements, span } | Expr::List { elements, span }) = target else {
@@ -285,6 +290,23 @@ impl BodyChecker<'_> {
                     );
                 }
                 Some(AssignTarget::Attribute { object, index })
+            }
+            TypedExprKind::ModuleAttribute { symbol, .. } => {
+                if !ty.is_assignable_to(&current.ty) {
+                    self.diagnostics.push(
+                        Diagnostic::new(
+                            DiagnosticCode::error(402),
+                            span,
+                            format!(
+                                "a module variable of type {} is assigned {}",
+                                current.ty,
+                                ty.with_article()
+                            ),
+                        )
+                        .with_rule(RuleId::TYP_03),
+                    );
+                }
+                Some(AssignTarget::Name(symbol))
             }
             TypedExprKind::TupleItem { tuple, .. } => {
                 self.unassignable_item(&tuple.ty, span);

@@ -26,6 +26,12 @@ pub(crate) struct LoopTargets {
 /// What leaving a region of code must do, innermost last (ADR-0013).
 #[derive(Clone, Debug)]
 pub(crate) enum Cleanup {
+    /// A module's code, run by its first import: an exception leaves the module not
+    /// started, so the next import runs it again (MOD-03).
+    Initialising {
+        /// The module's state global.
+        state: typy_tyir::GlobalId,
+    },
     /// The body of a `try`: an exception raised in it goes to the block that matches it
     /// against the `except` clauses, with nothing to do on the way out otherwise.
     Handlers {
@@ -82,9 +88,13 @@ pub(crate) struct FunctionLowerer<'context> {
     parameters: Vec<(ValueId, SlotId)>,
     /// The globals of the program's module variables (ADR-0015).
     pub(crate) module_globals: &'context crate::module_variable::ModuleGlobals,
-    /// Whether this is the code of a module, which reads its own variables without testing
-    /// that they are bound, since definite assignment shows they are.
-    pub(crate) module_body: bool,
+    /// The qualified name of the module the function belongs to, which `__name__` gives.
+    pub(crate) module: String,
+    /// Whether this is the program's entry, the code of `__main__`, which first gives every
+    /// module variable its zero value.
+    entry: bool,
+    /// The function being lowered.
+    pub(crate) function_id: typy_check::FunctionId,
     recursive: bool,
     body_start: BlockId,
     span: Span,
@@ -164,7 +174,9 @@ impl<'context> FunctionLowerer<'context> {
             borrowed,
             parameters,
             module_globals,
-            module_body: entry,
+            module: function.module.clone(),
+            entry,
+            function_id: function.id,
             recursive,
             body_start,
             span: function.span,
@@ -238,7 +250,7 @@ impl<'context> FunctionLowerer<'context> {
                 self.builder.push(Operation::Store { slot, value }, span);
             }
         }
-        if self.module_body {
+        if self.entry {
             self.initialize_module_variables(span);
         }
         if self.recursive {

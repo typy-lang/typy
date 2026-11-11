@@ -112,9 +112,14 @@ impl FunctionLowerer<'_> {
                 self.tuple_item(tuple, *index, ty, span)
             }
             TypedExprKind::ModuleName => {
-                let value = self.string("__main__", span);
+                let module = self.module.clone();
+                let value = self.string(&module, span);
                 Self::borrowed(value, TyirType::STR)
             }
+            TypedExprKind::ModuleAttribute { module, symbol } => {
+                self.module_attribute(module, *symbol, span)
+            }
+            TypedExprKind::Submodule(module) => self.submodule(module, span),
             TypedExprKind::Binary {
                 left,
                 operator,
