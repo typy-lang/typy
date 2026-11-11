@@ -20,9 +20,20 @@ impl BodyChecker<'_> {
     ) -> TypedExpr {
         // A display or a collection call where `T | None` is expected is built as a `T`,
         // then held as an optional, as any other value is.
-        let target = match expected {
-            Some(Type::Optional(inner)) => Some(inner.as_ref()),
-            other => other,
+        // An empty display where an iterable is expected is a list, or a set, of its items.
+        let iterable_list;
+        let iterable_set;
+        let target = match (expected, expression) {
+            (Some(Type::Optional(inner)), _) => Some(inner.as_ref()),
+            (Some(Type::Iterable(item)), Expr::Set { .. } | Expr::SetComp { .. }) => {
+                iterable_set = Type::Set(item.clone());
+                Some(&iterable_set)
+            }
+            (Some(Type::Iterable(item)), _) => {
+                iterable_list = Type::List(item.clone());
+                Some(&iterable_list)
+            }
+            (other, _) => other,
         };
         let value = match expression {
             Expr::List { elements, span } => self.list_display(elements, target, *span),
@@ -92,6 +103,24 @@ impl BodyChecker<'_> {
             return value;
         };
         match expected {
+            // A collection or an iterator becomes an iterable as it is.
+            Type::Iterable(item)
+                if !matches!(value.ty, Type::Iterable(_) | Type::Error)
+                    && value.ty.is_assignable_to(expected) =>
+            {
+                // A fixed tuple becomes the `tuple[T, ...]` object an iterable can hold.
+                let value = if let Type::Tuple(_) = value.ty {
+                    Self::converted(value, Some(&Type::TupleOf(item.clone())))
+                } else {
+                    value
+                };
+                let span = value.span;
+                Self::typed(
+                    TypedExprKind::AsIterable(Box::new(value)),
+                    expected.clone(),
+                    span,
+                )
+            }
             Type::Optional(inner) if !matches!(value.ty, Type::Optional(_) | Type::Error) => {
                 if value.ty != Type::NoneType && !value.ty.is_assignable_to(inner) {
                     return value;

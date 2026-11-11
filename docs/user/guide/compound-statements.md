@@ -120,5 +120,5 @@ words = iter(["alpha", "beta"])
 print(next(words), next(words), next(words, None))
 ```
 
-A variable holds an iterator by inference until the annotation
-`Iterator[T]` arrives with imports in 0.3 (TYP-15).
+A function takes and returns iterators with the annotations `Iterator[T]`
+and `Iterable[T]`, described in [Types](types.md) (TYP-15).

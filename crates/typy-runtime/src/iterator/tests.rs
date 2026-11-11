@@ -314,3 +314,31 @@ fn a_range_of_small_bounds_past_a_c_long_in_length_is_a_longrange() {
     assert_eq!(type_name(values), "longrange_iterator");
     release(values);
 }
+
+#[test]
+fn an_iterable_gives_the_iterator_its_header_calls_for() {
+    use super::typy_rt_iterable_iterator;
+    let list = int_list(&[1, 2]);
+    let text = from_str("ab");
+    let numbers = range(word(0), word(3), word(1));
+    // SAFETY: every source is live, and the views and iterators are released here.
+    unsafe {
+        let null = core::ptr::null();
+        let cases: [(*mut ObjectHeader, &str); 3] = [
+            (list.cast(), "list_iterator"),
+            (text.cast(), "str_ascii_iterator"),
+            (numbers, "range_iterator"),
+        ];
+        for (source, name) in cases {
+            let made = typy_rt_iterable_iterator(source, null);
+            assert_eq!(type_name(made), name);
+            let again = typy_rt_iterable_iterator(made.cast(), null);
+            assert_eq!(again, made, "an iterator gives itself");
+            release(again);
+            release(made);
+        }
+    }
+    release(list);
+    release(text);
+    release(numbers);
+}

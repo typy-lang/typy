@@ -8,6 +8,13 @@ All notable changes to TyPy are recorded here. The format follows
 
 ### Added
 
+- `Iterator[T]` and `Iterable[T]` annotations from `typing` or
+  `collections.abc`, and `TracebackType` and `ModuleType` from `types`. An
+  `Iterable[T]` takes any built-in iterable or iterator of `T` and keeps
+  the object, so a list passed as one can be read twice (TYP-15, CST-10,
+  MOD-10).
+- A truth test, `not` or `bool()` of a value whose truth TyPy cannot know
+  is E0304 everywhere, not only in a condition (EXP-10).
 - `make bench` times the release-built compiler on generated 10,000-line
   projects, in one file and in 200 modules, against the budgets of NFR-04,
   NFR-05 and NFR-14, and checks that checking time grows linearly with the

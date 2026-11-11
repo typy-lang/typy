@@ -5,6 +5,8 @@ use typy_diagnostics::{Diagnostic, DiagnosticCode, RuleId, Span};
 use typy_source::syntax::{Alias, Expr, Stmt};
 use typy_source::{ModuleName, absolute_name};
 
+use crate::check::{ANNOTATION_MODULES, AnnotationName, annotation_name};
+
 use super::{BodyChecker, Program};
 use crate::typed::{
     ClassId, FunctionId, ImportBinding, SymbolId, TypedExpr, TypedExprKind, TypedStmt,
@@ -22,6 +24,10 @@ pub(crate) enum Imported {
     Variable { module: String, source: SymbolId },
     /// A module object.
     Module(ModuleName),
+    /// A name of `typing`, `collections.abc` or `types`, for annotations only (TYP-15).
+    Annotation(AnnotationName),
+    /// One of those modules, whose names annotations read through it.
+    Standard(String),
 }
 
 /// What a name is in a module's tables.
@@ -71,6 +77,18 @@ impl Program {
                         .map(|module| (alias, module))
                 });
                 for (alias, module) in named {
+                    if ANNOTATION_MODULES.contains(&module.as_str()) {
+                        let (bound, value) = alias.as_name.as_ref().map_or_else(
+                            || (module.top().as_str().to_owned(), module.top()),
+                            |as_name| (as_name.name.clone(), module.clone()),
+                        );
+                        resolved.names.push((
+                            bound,
+                            Imported::Standard(value.as_str().to_owned()),
+                            alias.name.span,
+                        ));
+                        continue;
+                    }
                     self.check_provided(&module, *span)?;
                     resolved.initialise(&module);
                     // `import a.b` binds `a`; `import a.b as c` binds `c` to `a.b`.
@@ -96,6 +114,21 @@ impl Program {
                 let from = module.as_ref().map(|name| name.name.as_str());
                 let base = absolute_name(self.package.as_ref(), *level, from)
                     .map_err(|message| Box::new(imports_nothing(*span, message)))?;
+                if ANNOTATION_MODULES.contains(&base.as_str())
+                    && !self.loaded.contains(base.as_str())
+                {
+                    for alias in names {
+                        let found = annotation_name(base.as_str(), &alias.name.name)
+                            .ok_or_else(|| Box::new(not_given(&base, alias)))?;
+                        let bound = alias.as_name.as_ref().unwrap_or(&alias.name);
+                        resolved.names.push((
+                            bound.name.clone(),
+                            Imported::Annotation(found),
+                            alias.name.span,
+                        ));
+                    }
+                    return Ok(resolved);
+                }
                 self.check_provided(&base, *span)?;
                 resolved.initialise(&base);
                 for alias in names {
@@ -185,8 +218,7 @@ impl Program {
         let planned = match top {
             "sys" => Some(("0.3", RuleId::LIB_04)),
             "math" => Some(("0.3", RuleId::LIB_05)),
-            "typing" | "collections" | "types" => Some(("0.3", RuleId::TYP_15)),
-            "dataclasses" => Some(("0.4", RuleId::LIB_06)),
+            "dataclasses" | "typing" | "collections" => Some(("0.4", RuleId::LIB_06)),
             "ctypes" => Some(("0.5", RuleId::FFI_01)),
             "os" | "time" | "random" => Some(("1.0", RuleId::LIB_07)),
             _ => None,
@@ -207,6 +239,27 @@ impl Program {
             .with_help("TyPy 0.3 provides `sys`, `math`, `typing`, `collections.abc` and `types`"),
         }))
     }
+}
+
+/// Returns the error for a name of `typing`, `collections.abc` or `types` that TyPy 0.3 does
+/// not give: the rest of `typing` and `collections.abc` come in 0.4 (LIB-06).
+fn not_given(module: &ModuleName, alias: &Alias) -> Diagnostic {
+    let name = &alias.name.name;
+    if module.as_str() == "types" {
+        return Diagnostic::new(
+            DiagnosticCode::error(425),
+            alias.name.span,
+            format!("TyPy's `types` gives `TracebackType` and `ModuleType`, not `{name}`"),
+        )
+        .with_rule(RuleId::TYP_15);
+    }
+    Diagnostic::new(
+        DiagnosticCode::error(201),
+        alias.name.span,
+        format!("`{module}.{name}` is planned for TyPy 0.4 (LIB-06)"),
+    )
+    .with_rule(RuleId::LIB_06)
+    .with_help("TyPy 0.3 gives `Iterator` and `Iterable` for annotations")
 }
 
 /// Returns the error for a relative import that names no module, with CPython's message.
@@ -242,7 +295,10 @@ impl BodyChecker<'_> {
         let mut bindings = Vec::new();
         for (name, imported, name_span) in resolved.names {
             let ty = match &imported {
-                Imported::Function(_) | Imported::Class(_) => continue,
+                Imported::Function(_)
+                | Imported::Class(_)
+                | Imported::Annotation(_)
+                | Imported::Standard(_) => continue,
                 Imported::Variable { source, .. } => {
                     self.program.symbols[source.0 as usize].ty.clone()
                 }
@@ -267,7 +323,10 @@ impl BodyChecker<'_> {
                     target,
                     module: module.as_str().to_owned(),
                 }),
-                Imported::Function(_) | Imported::Class(_) => None,
+                Imported::Function(_)
+                | Imported::Class(_)
+                | Imported::Annotation(_)
+                | Imported::Standard(_) => None,
             };
             bindings.extend(self.assign(&target, ty, &value).and_then(binding));
         }
@@ -490,6 +549,14 @@ impl BodyChecker<'_> {
                     Imported::Class(class) => saved
                         .classes
                         .push((name.clone(), self.program.class_ids.insert(name, class))),
+                    Imported::Annotation(found) => saved.annotations.push((
+                        name.clone(),
+                        self.program.annotation_names.insert(name, found),
+                    )),
+                    Imported::Standard(module) => saved.standard.push((
+                        name.clone(),
+                        self.program.annotation_modules.insert(name, module),
+                    )),
                     Imported::Variable { .. } | Imported::Module(_) => {}
                 }
             }
@@ -511,6 +578,18 @@ impl BodyChecker<'_> {
                 None => self.program.class_ids.remove(&name),
             };
         }
+        for (name, previous) in saved.annotations.into_iter().rev() {
+            match previous {
+                Some(found) => self.program.annotation_names.insert(name, found),
+                None => self.program.annotation_names.remove(&name),
+            };
+        }
+        for (name, previous) in saved.standard.into_iter().rev() {
+            match previous {
+                Some(module) => self.program.annotation_modules.insert(name, module),
+                None => self.program.annotation_modules.remove(&name),
+            };
+        }
     }
 }
 
@@ -519,6 +598,8 @@ impl BodyChecker<'_> {
 pub(super) struct SavedNames {
     functions: Vec<(String, Option<FunctionId>)>,
     classes: Vec<(String, Option<ClassId>)>,
+    annotations: Vec<(String, Option<AnnotationName>)>,
+    standard: Vec<(String, Option<String>)>,
 }
 
 /// Collects the import statements of a block, at any depth outside nested definitions.

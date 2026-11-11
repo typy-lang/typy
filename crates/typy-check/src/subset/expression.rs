@@ -62,12 +62,23 @@ impl Walker {
                     single => self.annotation(single),
                 }
             }
-            // Only the generic types of TYP-06 and CLS-12 are provided.
+            // `Iterator[T]` and `Iterable[T]`, by name or through `typing` or
+            // `collections.abc`; the checker resolves where the name comes from (TYP-15).
+            Expr::Subscript { value, index, .. }
+                if matches!(
+                    value.as_ref(),
+                    Expr::Name { id, .. } | Expr::Attribute { attribute: typy_source::syntax::Identifier { name: id, .. }, .. }
+                        if matches!(id.as_str(), "Iterator" | "Iterable")
+                ) =>
+            {
+                self.annotation(index);
+            }
+            // Only the generic types of TYP-06, CLS-12 and TYP-15 are provided.
             Expr::Subscript { span, .. } => {
                 self.report(
                     *span,
                     Feature::Excluded {
-                        what: "generic annotations other than `list`, `dict`, `set`, `tuple` and `type`, such as `frozenset[int]`,",
+                        what: "generic annotations other than `list`, `dict`, `set`, `tuple`, `type`, `Iterator` and `Iterable`, such as `frozenset[int]`,",
                     },
                 );
             }

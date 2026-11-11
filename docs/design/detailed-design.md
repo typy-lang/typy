@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy detailed design |
-| Version | 1.62 |
+| Version | 1.63 |
 | Status | Approved |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-11 |
@@ -896,6 +896,27 @@ default }`, with `method` the `__next__` of an instance's class; with a
 default the result has the item type, or is optional when the default is
 `None`, and any other default is E0404 (CST-09). Iterators compare with
 `is` only.
+
+`typing` and `collections.abc` give `Iterator` and `Iterable`, and `types`
+gives `TracebackType` and `ModuleType`, as `AnnotationName`s that
+`resolve_import` binds for annotations only (TYP-15): a name imported from
+them, or a name bound to one of the modules, such as `typing.Iterable`,
+enters `AnnotationScope::names` or `standard`, and its use as a value is
+E0201, planned for 0.4. `Iterator[T]` is `Type::Iterator(T)`,
+`TracebackType` is `Type::Traceback` and `ModuleType` is `Type::AnyModule`,
+a module whose attributes are unknown, E0412. `Iterable[T]` is
+`Type::Iterable(T)`: any built-in iterable or iterator whose items have
+type `T`, by `Type::iterable_item`, a fixed tuple of one item type first
+becoming a `tuple[T, ...]`. `converted` wraps such a value in
+`TypedExprKind::AsIterable`, which keeps the object, so an iterable list
+reads twice; an empty display where an iterable is expected is a list or a
+set of its items. Its truth and length depend on its collection, so a
+condition, `not`, `bool` and `len` of it are E0304 and E0404, and it
+neither compares nor hashes. Lowering holds it as `TyirType::ITERABLE`, an
+object of any of those types under the type ID 16, and a loop or `iter()`
+over it calls `typy_rt_iterable_iterator`, which makes the iterator its
+header calls for, reading a view through its dict, or gives an iterator
+itself.
 
 A class may define `__enter__`, taking only the instance, and `__exit__`,
 taking the instance and three parameters that may be left without

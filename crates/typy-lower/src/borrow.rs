@@ -114,7 +114,9 @@ pub(crate) fn outlives_call(expression: &TypedExpr) -> bool {
         | TypedExprKind::Constant(_)
         | TypedExprKind::ModuleName
         | TypedExprKind::TypeObject(_) => true,
-        TypedExprKind::Wrap(inner) | TypedExprKind::Unwrap(inner) => outlives_call(inner),
+        TypedExprKind::Wrap(inner)
+        | TypedExprKind::Unwrap(inner)
+        | TypedExprKind::AsIterable(inner) => outlives_call(inner),
         _ => false,
     }
 }

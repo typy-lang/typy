@@ -16,7 +16,18 @@ use typy_diagnostics::{Diagnostics, SourceLookup};
 use typy_source::syntax::Stmt;
 use typy_source::{Module, ModuleName, Project};
 
-pub(crate) use annotation::{AnnotationScope, annotation_type};
+pub(crate) use annotation::{
+    ANNOTATION_MODULES, AnnotationName, AnnotationScope, annotation_name, annotation_type,
+};
+
+/// The names a module's imports give its annotations: each module's classes by the name
+/// bound to it, and the names of `typing`, `collections.abc` and `types` (TYP-15).
+#[derive(Clone, Debug, Default)]
+pub(crate) struct ImportedNames {
+    pub(crate) modules: BTreeMap<String, BTreeMap<String, ClassId>>,
+    pub(crate) names: BTreeMap<String, AnnotationName>,
+    pub(crate) standard: BTreeMap<String, String>,
+}
 pub(crate) use class::ClassInfo;
 pub(crate) use definition::Definition;
 
@@ -90,7 +101,11 @@ fn check_module(
     let first_function = program.function_count();
     program.prepare_module(module);
     let imports = module_imports::module_imports(program, &tree.body);
-    let module_classes = program.module_classes_of(&imports.modules);
+    let annotations = ImportedNames {
+        modules: program.module_classes_of(&imports.modules),
+        names: imports.annotations.clone(),
+        standard: imports.standard.clone(),
+    };
     let classes = collect_classes(&tree.body, first_class, diagnostics);
     let mut class_ids: BTreeMap<String, ClassId> = imports.classes.clone();
     class_ids.extend(
@@ -105,7 +120,7 @@ fn check_module(
         first_class,
         &class_ids,
         &exceptions,
-        &module_classes,
+        &annotations,
         floor_defers,
         diagnostics,
     );
@@ -113,7 +128,7 @@ fn check_module(
         &classes,
         &class_ids,
         &exceptions,
-        &module_classes,
+        &annotations,
         floor_defers,
         first_function + definitions.len(),
         diagnostics,
@@ -134,7 +149,7 @@ fn check_module(
         class_ids,
         exceptions,
     );
-    program.import_names(&imports.functions, module_classes);
+    program.import_names(&imports.functions, annotations);
     program.declare_module_variables(&module_variable_spans, &definitions);
     let module_body: Vec<&Stmt> = tree
         .body

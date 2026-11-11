@@ -188,7 +188,7 @@ pub(super) fn collect_members<'tree>(
     classes: &[ClassStatement<'tree>],
     class_ids: &BTreeMap<String, ClassId>,
     exceptions: &BTreeMap<ClassId, ExceptionClass>,
-    modules: &BTreeMap<String, BTreeMap<String, ClassId>>,
+    names: &crate::check::ImportedNames,
     floor_defers: bool,
     first_function: usize,
     diagnostics: &mut Diagnostics,
@@ -200,7 +200,9 @@ pub(super) fn collect_members<'tree>(
         let scope = AnnotationScope {
             classes: class_ids,
             exceptions,
-            modules,
+            modules: &names.modules,
+            names: &names.names,
+            standard: &names.standard,
             bound: if floor_defers { u32::MAX } else { class.id.0 },
         };
         let mut info = new_info(class, exceptions.get(&class.id).cloned(), &infos);

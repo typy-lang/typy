@@ -50,6 +50,8 @@ pub enum TypedExprKind {
     /// `package.module`, the module object of a submodule, which raises `AttributeError`
     /// until the submodule is initialised.
     Submodule(String),
+    /// A built-in iterable or an iterator held as an `Iterable[T]`: the same object (TYP-15).
+    AsIterable(Box<TypedExpr>),
     /// `__name__`, which is `"__main__"` in the main module (STD-06).
     ModuleName,
     Binary {

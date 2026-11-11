@@ -186,6 +186,7 @@ pub enum RuntimeFunction {
     ExceptionLeave,
     ExceptionSetArguments,
     IteratorNew,
+    IterableIterator,
     IteratorAdvance,
     IteratorItem,
     ObjectType,
@@ -237,7 +238,7 @@ const FLOAT_FLOAT: &[TyirType] = &[TyirType::Float, TyirType::Float];
 
 impl RuntimeFunction {
     /// Every runtime function.
-    pub const ALL: [Self; 198] = [
+    pub const ALL: [Self; 199] = [
         Self::IntFloorDivide,
         Self::IntModulo,
         Self::IntPower,
@@ -415,6 +416,7 @@ impl RuntimeFunction {
         Self::ExceptionLeave,
         Self::ExceptionSetArguments,
         Self::IteratorNew,
+        Self::IterableIterator,
         Self::IteratorAdvance,
         Self::IteratorItem,
         Self::ObjectType,
@@ -607,6 +609,7 @@ impl RuntimeFunction {
             Self::ExceptionLeave => signature(&[Bits], Unit, false),
             Self::ExceptionSetArguments => signature(&[EXCEPTION, Bits, Bits], Unit, false),
             Self::IteratorNew => signature(&[Bits, Int, Bits], ITERATOR, false),
+            Self::IterableIterator => signature(&[TyirType::ITERABLE, Bits], ITERATOR, false),
             Self::IteratorAdvance => signature(&[ITERATOR, Int], Bool, true),
             Self::IteratorItem => signature(&[ITERATOR], Bits, false),
             Self::ObjectType => signature(&[Bits], TYPE, false),
@@ -837,6 +840,7 @@ impl RuntimeFunction {
             Self::ExceptionLeave => "exception_leave",
             Self::ExceptionSetArguments => "exception_set_arguments",
             Self::IteratorNew => "iterator_new",
+            Self::IterableIterator => "iterable_iterator",
             Self::IteratorAdvance => "iterator_advance",
             Self::IteratorItem => "iterator_item",
             Self::ObjectType => "object_type",

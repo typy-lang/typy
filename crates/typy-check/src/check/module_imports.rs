@@ -21,6 +21,10 @@ pub(super) struct ModuleImports {
     pub(super) variables: BTreeMap<String, Span>,
     /// For each name bound to a module, the module.
     pub(super) modules: BTreeMap<String, String>,
+    /// The names of `typing`, `collections.abc` and `types` imported for annotations.
+    pub(super) annotations: BTreeMap<String, crate::check::AnnotationName>,
+    /// For each name bound to one of those modules, the module.
+    pub(super) standard: BTreeMap<String, String>,
 }
 
 /// Returns what the imports at module level bind, in any block outside a `def` or a `class`.
@@ -52,6 +56,12 @@ fn collect(program: &Program, statements: &[Stmt], found: &mut ModuleImports) {
                         }
                         Imported::Variable { .. } => {
                             found.variables.entry(name).or_insert(span);
+                        }
+                        Imported::Annotation(annotation) => {
+                            found.annotations.insert(name, annotation);
+                        }
+                        Imported::Standard(module) => {
+                            found.standard.insert(name, module);
                         }
                     }
                 }

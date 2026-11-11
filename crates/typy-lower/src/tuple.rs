@@ -338,7 +338,8 @@ impl FunctionLowerer<'_> {
                     || id == typy_tyir::TypeId::ITERATOR
                     || id == typy_tyir::TypeId::TRACEBACK
                     || id == typy_tyir::TypeId::RANGE
-                    || id == typy_tyir::TypeId::MODULE =>
+                    || id == typy_tyir::TypeId::MODULE
+                    || id == typy_tyir::TypeId::ITERABLE =>
             {
                 self.constant(Constant::NoInstance(id), span)
             }

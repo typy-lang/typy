@@ -82,6 +82,20 @@ impl BodyChecker<'_> {
         if id == "__name__" {
             return Self::typed(TypedExprKind::ModuleName, Type::Str, span);
         }
+        if self.program.annotation_names.contains_key(id)
+            || self.program.annotation_modules.contains_key(id)
+        {
+            return self.error(
+                Diagnostic::new(
+                    DiagnosticCode::error(201),
+                    span,
+                    format!("using `{id}` as a value is planned for TyPy 0.4 (TYP-15)"),
+                )
+                .with_rule(RuleId::TYP_15)
+                .with_help("TyPy 0.3 reads it in annotations only"),
+                span,
+            );
+        }
         if let Some(type_object) = self.type_object_named(id, span) {
             return type_object;
         }

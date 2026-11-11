@@ -135,7 +135,10 @@ impl BodyChecker<'_> {
         let ty = operand.ty.clone();
         match operator {
             _ if ty == Type::Error => Type::Error,
-            UnaryOperator::Not => Type::Bool,
+            UnaryOperator::Not => {
+                self.check_truth(operand);
+                Type::Bool
+            }
             _ if ty == Type::Bool => self.bool_arithmetic(span),
             UnaryOperator::USub | UnaryOperator::UAdd if ty.is_numeric() => ty,
             UnaryOperator::Invert if ty == Type::Int => Type::Int,
@@ -196,6 +199,8 @@ impl BodyChecker<'_> {
                             | Type::Exception(_)
                             | Type::Iterator(_)
                             | Type::TypeObject(_)
+                            | Type::Module(_)
+                            | Type::AnyModule
                             | Type::Traceback
                     ),
                     other => matches!(
@@ -205,6 +210,7 @@ impl BodyChecker<'_> {
                             | Type::Iterator(_)
                             | Type::Traceback
                             | Type::Module(_)
+                            | Type::AnyModule
                             | Type::TypeObject(_)
                     ),
                 };

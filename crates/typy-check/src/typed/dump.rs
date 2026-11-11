@@ -347,6 +347,7 @@ impl Dump<'_> {
                 )
             }
             TypedExprKind::Submodule(module) => format!("Submodule {module}"),
+            TypedExprKind::AsIterable(_) => "AsIterable".to_owned(),
             TypedExprKind::ModuleName => "ModuleName".to_owned(),
             TypedExprKind::Binary { operator, .. } => format!("Binary {operator:?}"),
             TypedExprKind::Unary { operator, .. } => format!("Unary {operator:?}"),
@@ -458,7 +459,9 @@ fn children(expression: &TypedExpr) -> Vec<&TypedExpr> {
             .flat_map(|(key, value)| [key, value])
             .collect(),
         TypedExprKind::DictItem { dict, key } => vec![dict, key],
-        TypedExprKind::Wrap(inner) | TypedExprKind::Unwrap(inner) => vec![inner],
+        TypedExprKind::Wrap(inner)
+        | TypedExprKind::Unwrap(inner)
+        | TypedExprKind::AsIterable(inner) => vec![inner],
         TypedExprKind::Comprehension {
             element,
             value,

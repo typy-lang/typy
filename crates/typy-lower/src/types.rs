@@ -25,7 +25,8 @@ pub(crate) fn tyir_type(ty: &Type, tuples: &mut TupleTypes) -> TyirType {
         Type::Iterator(_) => TyirType::ITERATOR,
         Type::Traceback => TyirType::TRACEBACK,
         Type::Range => TyirType::RANGE,
-        Type::Module(_) => TyirType::MODULE,
+        Type::Module(_) | Type::AnyModule => TyirType::MODULE,
+        Type::Iterable(_) => TyirType::ITERABLE,
         Type::Tuple(items) => {
             let items = items.iter().map(|item| tyir_type(item, tuples)).collect();
             tuples.intern(items)

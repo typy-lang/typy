@@ -28,6 +28,12 @@ impl FunctionLowerer<'_> {
     /// reference to the source, or to the dict of a view. An iterator of a dict's items gets
     /// the layout of the tuple of a key and a value, which it builds each item in.
     pub(crate) fn iter_of(&mut self, source: &TypedExpr, span: Span) -> Lowered {
+        if let Type::Iterable(item) = &source.ty {
+            let lowered = self.expression(source);
+            let iterator = self.iterable_iterator(lowered, item, span);
+            self.release(lowered, span);
+            return iterator;
+        }
         let lowered = self.expression(source);
         let object = if let Type::DictView(..) = source.ty {
             let dict = self.call_runtime(RuntimeFunction::DictViewDict, vec![lowered.value], span);
@@ -54,6 +60,31 @@ impl FunctionLowerer<'_> {
             self.call_runtime(RuntimeFunction::IteratorNew, vec![object, kind, pair], span);
         self.release(lowered, span);
         iterator
+    }
+
+    /// Returns a new iterator over an `Iterable[T]`, which the runtime makes of the kind the
+    /// object's header says; a pair of a dict's items is built in the layout of `item`.
+    pub(crate) fn iterable_iterator(
+        &mut self,
+        iterable: Lowered,
+        item: &Type,
+        span: Span,
+    ) -> Lowered {
+        let pair = if let Type::Tuple(_) = item {
+            let pair = self.lowered_type(item);
+            let TyirType::Tuple(id) = pair else {
+                unreachable!("a tuple type lowers to a tuple");
+            };
+            self.constant(Constant::TupleDescriptor(id), span)
+        } else {
+            let unit = self.constant(Constant::Unit, span);
+            self.bits(Self::borrowed(unit, TyirType::Unit), span)
+        };
+        self.call_runtime(
+            RuntimeFunction::IterableIterator,
+            vec![iterable.value, pair],
+            span,
+        )
     }
 
     /// Lowers `next(iterator)` and `next(iterator, default)`: the next item, with a reference

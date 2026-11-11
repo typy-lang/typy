@@ -215,6 +215,56 @@ pub unsafe extern "C" fn typy_rt_iterator_new(
     iterator
 }
 
+/// Returns a new iterator over `source`, held as an `Iterable[T]`, of the kind its header
+/// says (TYP-15): a list, a tuple, a `str`, a `bytes`, a set, a dict, a view of a dict, which
+/// the iterator reads through its dict, or a range; an iterator gives itself, with a
+/// reference of its own. `pair_type` is the layout of the items of a view of items.
+///
+/// # Safety
+///
+/// `source` points to a live object of one of those types, and `pair_type` is a live tuple
+/// descriptor when it is a view of items.
+#[unsafe(no_mangle)]
+#[allow(
+    clippy::cast_ptr_alignment,
+    reason = "every object comes from malloc, aligned for every type, and starts with its header"
+)]
+pub unsafe extern "C" fn typy_rt_iterable_iterator(
+    source: *mut ObjectHeader,
+    pair_type: *const TupleType,
+) -> *mut IteratorObject {
+    use crate::header::{
+        BYTES_TYPE_ID, DICT_TYPE_ID, DICT_VIEW_TYPE_ID, RANGE_TYPE_ID, SET_TYPE_ID, STR_TYPE_ID,
+        TUPLE_TYPE_ID,
+    };
+    // SAFETY: the caller's guarantee; the header says what the object is.
+    unsafe {
+        let (object, kind, pair) = match (*source).type_id {
+            ITERATOR_TYPE_ID => {
+                typy_rt_increment(source);
+                return source.cast();
+            }
+            TUPLE_TYPE_ID => (source, IteratorKind::Tuple, core::ptr::null()),
+            STR_TYPE_ID => (source, IteratorKind::Str, core::ptr::null()),
+            BYTES_TYPE_ID => (source, IteratorKind::Bytes, core::ptr::null()),
+            SET_TYPE_ID => (source, IteratorKind::Set, core::ptr::null()),
+            DICT_TYPE_ID => (source, IteratorKind::DictKeys, core::ptr::null()),
+            RANGE_TYPE_ID => (source, IteratorKind::Range, core::ptr::null()),
+            DICT_VIEW_TYPE_ID => {
+                let view = &*source.cast::<crate::dict::view::ViewObject>();
+                let (kind, pair) = match view.kind {
+                    0 => (IteratorKind::DictKeys, core::ptr::null()),
+                    1 => (IteratorKind::DictValues, core::ptr::null()),
+                    _ => (IteratorKind::DictItems, pair_type),
+                };
+                (view.dict.cast::<ObjectHeader>(), kind, pair)
+            }
+            _ => (source, IteratorKind::List, core::ptr::null()),
+        };
+        typy_rt_iterator_new(object, word(kind as usize), pair)
+    }
+}
+
 /// Moves an iterator to its next item and returns true, or returns false when it has none:
 /// then it drops its source, and raises `StopIteration` when `stop` is the `int` word of 1, as
 /// `next()` without a default does. A set or dict that changed size raises `RuntimeError`.

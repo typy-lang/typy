@@ -380,6 +380,7 @@ fn expression(expression_value: &TypedExpr, callees: &mut BTreeSet<FunctionId>) 
         | TypedExprKind::ModuleAttribute { .. }
         | TypedExprKind::Submodule(_)
         | TypedExprKind::ModuleName => {}
+        TypedExprKind::AsIterable(inner) => expression(inner, callees),
     }
 }
 

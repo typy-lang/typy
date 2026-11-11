@@ -147,9 +147,10 @@ impl LoopSource {
             Self::Protocol { item, .. } => item.clone(),
             Self::Items(sequence) | Self::Reversed(sequence) => match &sequence.ty {
                 Type::Bytes | Type::Range => Type::Int,
-                Type::Set(item) | Type::Dict(item, _) | Type::Iterator(item) => {
-                    item.as_ref().clone()
-                }
+                Type::Set(item)
+                | Type::Dict(item, _)
+                | Type::Iterator(item)
+                | Type::Iterable(item) => item.as_ref().clone(),
                 Type::DictView(view, key, value) => view.item(key, value),
                 other => other
                     .sequence_item()

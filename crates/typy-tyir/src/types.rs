@@ -31,6 +31,9 @@ impl TypeId {
     pub const RANGE: Self = Self(14);
     /// A module object, immortal (MOD-10, ADR-0015).
     pub const MODULE: Self = Self(15);
+    /// An object of any built-in iterable type, or an iterator, held as an `Iterable[T]`; its
+    /// header says which (TYP-15).
+    pub const ITERABLE: Self = Self(16);
     /// The first ID of the program's classes; class `n` of the module is this plus `n`.
     const FIRST_CLASS: u32 = 1 << 16;
 
@@ -113,6 +116,8 @@ impl TyirType {
     pub const RANGE: Self = Self::Object(TypeId::RANGE);
     /// A module object.
     pub const MODULE: Self = Self::Object(TypeId::MODULE);
+    /// An iterable.
+    pub const ITERABLE: Self = Self::Object(TypeId::ITERABLE);
 }
 
 impl fmt::Display for TyirType {
@@ -133,6 +138,7 @@ impl fmt::Display for TyirType {
             Self::Object(TypeId::TRACEBACK) => formatter.write_str("traceback"),
             Self::Object(TypeId::RANGE) => formatter.write_str("range"),
             Self::Object(TypeId::MODULE) => formatter.write_str("module"),
+            Self::Object(TypeId::ITERABLE) => formatter.write_str("iterable"),
             Self::Bits => formatter.write_str("bits"),
             Self::Object(id) if id.class_index().is_some() => {
                 write!(formatter, "class#{}", id.class_index().unwrap_or(0))

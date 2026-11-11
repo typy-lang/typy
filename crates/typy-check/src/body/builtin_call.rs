@@ -255,6 +255,9 @@ impl BodyChecker<'_> {
                         span,
                     );
                 }
+                if let Some(value) = values.first() {
+                    self.check_truth(value);
+                }
                 Type::Bool
             }
             Builtin::Ord => {

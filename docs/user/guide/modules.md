@@ -54,8 +54,10 @@ imports into the function that uses the module breaks the cycle. A name a
 module does not define is E0425, at compile time.
 
 `from m import *` is planned for after 1.0. Standard library modules come
-with their releases: `sys` and `math` in 0.3, `dataclasses` and `typing`
-in 0.4 (LIB-04 to LIB-07):
+with their releases: `sys` and `math` in 0.3, `dataclasses` and the rest
+of `typing` in 0.4 (LIB-04 to LIB-07). In 0.3, `typing` and
+`collections.abc` give `Iterator` and `Iterable`, and `types` gives
+`TracebackType` and `ModuleType`, for annotations (TYP-15):
 
 <!-- typy-expect: rejected E0201 at 1:1 -->
 ```python

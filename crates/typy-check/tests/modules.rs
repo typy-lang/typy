@@ -142,7 +142,27 @@ fn imports_that_cannot_resolve_give_their_codes() {
         ("import shapes\nshapes.NAME += 1\n", &["E0401"]),
         ("import math\n", &["E0201"]),
         ("import json\n", &["E0206"]),
-        ("from collections.abc import Iterator\n", &["E0201"]),
+        ("from collections.abc import Sized\n", &["E0201"]),
+        ("from types import FrameType\n", &["E0425"]),
+        ("from typing import Iterator\nprint(Iterator)\n", &["E0201"]),
+        ("import typing\nprint(typing)\n", &["E0201"]),
+        ("import collections\n", &["E0201"]),
+        (
+            "from typing import Iterator\nx: Iterator = iter([1])\n",
+            &["E0408"],
+        ),
+        (
+            "from types import ModuleType\ndef f(m: ModuleType) -> None:\n    print(m.x)\n",
+            &["E0412"],
+        ),
+        (
+            "from typing import Iterable\ndef f(xs: Iterable[int]) -> bool:\n    return not xs\n",
+            &["E0304"],
+        ),
+        (
+            "from typing import Iterable\ndef f(xs: Iterable[int]) -> bool:\n    return bool(xs)\n",
+            &["E0304"],
+        ),
         ("import ctypes\n", &["E0201"]),
         ("import shapes\nshapes.Point = 1\n", &["E0402"]),
         (
@@ -190,4 +210,43 @@ fn a_variable_another_module_assigns_is_not_narrowed() {
         ),
     ]);
     assert_eq!(codes, ["E0401"]);
+}
+
+#[test]
+fn typing_collections_abc_and_types_give_annotations() {
+    let dump = accepted(&[
+        (
+            "app.py",
+            "\
+from collections.abc import Iterable
+import typing
+import collections.abc
+import types as kinds
+from types import TracebackType, ModuleType
+import shapes
+
+
+def total(values: Iterable[int], more: typing.Iterable[int]) -> int:
+    from typing import Iterator
+    steps: Iterator[int] = iter(more)
+    return sum(values) + next(steps, 0)
+
+
+def first(values: collections.abc.Iterator[str], trace: kinds.TracebackType | None) -> str:
+    return next(values, 'none')
+
+
+def show(module: ModuleType, trace: TracebackType | None) -> None:
+    print(module, module is shapes)
+
+
+print(total([1], (2, 3)), total([], range(2)), first(iter(['a']), None))
+show(shapes, None)
+",
+        ),
+        ("shapes.py", SHAPES),
+    ]);
+    for node in ["AsIterable", "Iter : Iterator[int]"] {
+        assert!(dump.contains(node), "{node} missing from\n{dump}");
+    }
 }

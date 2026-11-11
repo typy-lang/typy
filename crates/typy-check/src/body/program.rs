@@ -49,6 +49,10 @@ pub(crate) struct Program {
     /// For each name the module binds to a module at module level, the classes of that
     /// module, which annotations such as `shapes.Point` name.
     pub(super) module_classes: BTreeMap<String, BTreeMap<String, ClassId>>,
+    /// The names of `typing`, `collections.abc` and `types` the module imports, and the
+    /// names bound to those modules, which annotations read (TYP-15).
+    pub(super) annotation_names: BTreeMap<String, crate::check::AnnotationName>,
+    pub(super) annotation_modules: BTreeMap<String, String>,
     /// The module variables some other module assigns through its module object, such as
     /// `settings.debug = True`, which a test cannot narrow either.
     pub(super) assigned_elsewhere: BTreeSet<(String, String)>,
@@ -95,6 +99,8 @@ impl Program {
             package: None,
             path: String::new(),
             module_classes: BTreeMap::new(),
+            annotation_names: BTreeMap::new(),
+            annotation_modules: BTreeMap::new(),
             assigned_elsewhere: BTreeSet::new(),
         }
     }
@@ -202,11 +208,13 @@ impl Program {
     pub(crate) fn import_names(
         &mut self,
         functions: &BTreeMap<String, FunctionId>,
-        module_classes: BTreeMap<String, BTreeMap<String, ClassId>>,
+        annotations: crate::check::ImportedNames,
     ) {
         self.function_ids
             .extend(functions.iter().map(|(name, id)| (name.clone(), *id)));
-        self.module_classes = module_classes;
+        self.module_classes = annotations.modules;
+        self.annotation_names = annotations.names;
+        self.annotation_modules = annotations.standard;
     }
 
     /// Ends checking a module whose body is the function `body`, and keeps its names for

@@ -42,6 +42,12 @@ pub enum Type {
     Exception(ExceptionClass),
     /// An iterator that `iter()` makes, of the type of its items (ADR-0014).
     Iterator(Box<Type>),
+    /// `Iterable[T]`: any built-in iterable or iterator of items of type `T`, held as the
+    /// object itself, which a loop or `iter()` reads through an iterator (TYP-15).
+    Iterable(Box<Type>),
+    /// `types.ModuleType`: a module whose attributes are not known when the program is
+    /// checked (MOD-10, ADR-0015).
+    AnyModule,
     /// The traceback `__exit__` receives, which holds no frames in TyPy (CST-10).
     Traceback,
     /// `range` held as a value: a sequence of `int` (DAT-17).
@@ -124,6 +130,8 @@ impl TypeObjectOf {
             // exception when the program runs.
             Type::Exception(_)
             | Type::Iterator(_)
+            | Type::Iterable(_)
+            | Type::AnyModule
             | Type::Traceback
             | Type::Module(_)
             | Type::Optional(_)
@@ -240,11 +248,13 @@ impl Type {
             (Self::Error, _)
             | (_, Self::Error)
             | (Self::NoneType, Self::Optional(_))
+            | (Self::Module(_), Self::AnyModule)
             | (Self::TypeObject(_), Self::TypeObject(None)) => true,
             // An exception of a class is one of each of its bases (EXC-01).
             (Self::Exception(class), Self::Exception(base)) => class.derives_from(base),
             (Self::Optional(_), _) => self.matches(target),
             (_, Self::Optional(inner)) => self.is_assignable_to(inner),
+            (_, Self::Iterable(item)) => self.iterable_item().is_some_and(|own| own.matches(item)),
             _ => self.matches(target),
         }
     }
@@ -258,6 +268,7 @@ impl Type {
             (Self::Error, _) | (_, Self::Error) => true,
             (Self::List(item), Self::List(other))
             | (Self::Iterator(item), Self::Iterator(other))
+            | (Self::Iterable(item), Self::Iterable(other))
             | (Self::TupleOf(item), Self::TupleOf(other))
             | (Self::Set(item), Self::Set(other))
             | (Self::Optional(item), Self::Optional(other)) => item.matches(other),
@@ -295,9 +306,11 @@ impl Type {
         match self {
             Self::Error => true,
             Self::Tuple(items) => items.iter().any(Self::has_error),
-            Self::List(item) | Self::TupleOf(item) | Self::Set(item) | Self::Iterator(item) => {
-                item.has_error()
-            }
+            Self::List(item)
+            | Self::TupleOf(item)
+            | Self::Set(item)
+            | Self::Iterator(item)
+            | Self::Iterable(item) => item.has_error(),
             Self::Dict(key, value) | Self::DictView(_, key, value) => {
                 key.has_error() || value.has_error()
             }
@@ -323,10 +336,26 @@ impl Type {
             (Self::Dict(..), Self::Dict(..)) => self == other,
             // Views compare by the rules of `body/view_operator.rs` (DAT-16), an optional value
             // is compared with `None` by `is`, and iterators by `is`.
-            (Self::DictView(..) | Self::Optional(_) | Self::Iterator(_) | Self::Traceback, _)
-            | (_, Self::DictView(..) | Self::Optional(_) | Self::Iterator(_) | Self::Traceback) => {
-                false
-            }
+            (
+                Self::DictView(..)
+                | Self::Optional(_)
+                | Self::Iterator(_)
+                | Self::Iterable(_)
+                | Self::Module(_)
+                | Self::AnyModule
+                | Self::Traceback,
+                _,
+            )
+            | (
+                _,
+                Self::DictView(..)
+                | Self::Optional(_)
+                | Self::Iterator(_)
+                | Self::Iterable(_)
+                | Self::Module(_)
+                | Self::AnyModule
+                | Self::Traceback,
+            ) => false,
             (Self::Tuple(left), Self::Tuple(right)) => {
                 left.len() == right.len()
                     && left
@@ -369,6 +398,9 @@ impl Type {
                 | Self::Instance(..)
                 | Self::Exception(_)
                 | Self::Iterator(_)
+                | Self::Iterable(_)
+                | Self::Module(_)
+                | Self::AnyModule
                 | Self::Traceback
                 | Self::Range
                 | Self::TypeObject(_),
@@ -383,6 +415,9 @@ impl Type {
                 | Self::Instance(..)
                 | Self::Exception(_)
                 | Self::Iterator(_)
+                | Self::Iterable(_)
+                | Self::Module(_)
+                | Self::AnyModule
                 | Self::Traceback
                 | Self::Range
                 | Self::TypeObject(_),
@@ -414,7 +449,12 @@ impl Type {
     #[must_use]
     pub fn is_hashable(&self) -> bool {
         match self {
-            Self::List(_) | Self::Set(_) | Self::Dict(..) | Self::DictView(..) => false,
+            // An iterable may be a list, which has no hash.
+            Self::List(_)
+            | Self::Set(_)
+            | Self::Dict(..)
+            | Self::DictView(..)
+            | Self::Iterable(_) => false,
             Self::Tuple(items) => items.iter().all(Self::is_hashable),
             Self::TupleOf(item) | Self::Optional(item) => item.is_hashable(),
             _ => true,
@@ -430,7 +470,31 @@ impl Type {
     /// Returns true when a value of this type may be used in a truth test (EXP-10).
     #[must_use]
     pub fn is_truth_testable(&self) -> bool {
-        true
+        // An iterable's truth depends on which collection it is, which it does not say.
+        !matches!(self, Self::Iterable(_))
+    }
+
+    /// Returns the type of the items a loop over a value of this type reads, when it is one
+    /// that `Iterable[T]` takes: a built-in iterable or an iterator (TYP-15).
+    #[must_use]
+    pub fn iterable_item(&self) -> Option<Type> {
+        match self {
+            Self::List(item)
+            | Self::TupleOf(item)
+            | Self::Set(item)
+            | Self::Dict(item, _)
+            | Self::Iterator(item)
+            | Self::Iterable(item) => Some(item.as_ref().clone()),
+            Self::DictView(view, key, value) => Some(view.item(key, value)),
+            Self::Str => Some(Self::Str),
+            Self::Bytes | Self::Range => Some(Self::Int),
+            // A fixed tuple whose items have one type is held as a `tuple[T, ...]` first.
+            Self::Tuple(items) => {
+                let (first, rest) = items.split_first()?;
+                rest.iter().all(|item| item == first).then(|| first.clone())
+            }
+            _ => None,
+        }
     }
 
     /// Returns the type's name with its article, for messages: `an int`, `a str`, `None`.
@@ -445,7 +509,7 @@ impl Type {
             Self::Exception(class) if class.name().starts_with(['A', 'E', 'I', 'O', 'U']) => {
                 format!("an {class}")
             }
-            Self::Iterator(_) => format!("an {self}"),
+            Self::Iterator(_) | Self::Iterable(_) => format!("an {self}"),
             other => format!("a {other}"),
         }
     }
@@ -488,6 +552,8 @@ impl fmt::Display for Type {
             Self::Instance(_, name) => formatter.write_str(name),
             Self::Exception(class) => write!(formatter, "{class}"),
             Self::Iterator(item) => write!(formatter, "Iterator[{item}]"),
+            Self::Iterable(item) => write!(formatter, "Iterable[{item}]"),
+            Self::AnyModule => formatter.write_str("ModuleType"),
             Self::Traceback => formatter.write_str("TracebackType"),
             Self::Range => formatter.write_str("range"),
             Self::Module(name) => write!(formatter, "module `{name}`"),

@@ -261,6 +261,17 @@ impl FunctionLowerer<'_> {
     /// Evaluates the source's expressions in order and keeps them in hidden slots.
     fn start_iterator(&mut self, source: &LoopSource, span: Span) -> Iterator {
         match source {
+            LoopSource::Items(sequence) if let typy_check::Type::Iterable(item) = &sequence.ty => {
+                let lowered = self.expression(sequence);
+                let made = self.iterable_iterator(lowered, item, span);
+                self.release(lowered, span);
+                let slot = self.hidden_slot("iterator", TyirType::ITERATOR);
+                self.store(slot, made, span);
+                Iterator::Object {
+                    iterator: slot,
+                    item: self.lowered_type(item),
+                }
+            }
             LoopSource::Items(sequence) if let typy_check::Type::Iterator(item) = &sequence.ty => {
                 let iterator = self.kept(sequence, "iterator", span);
                 Iterator::Object {
