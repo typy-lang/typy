@@ -22,6 +22,7 @@ the same exceptions.
 | Assigning a list to a slice of a list, `xs[a:b] = items` | DAT-13 |
 | The set methods that combine a set with other collections | DAT-15 |
 | `range` as a value: `len`, indexing, slicing, `in`, `==` and its text | DAT-17 |
+| `dict.keys()` and `dict.items()` as sets: `\|`, `&`, `-`, `^` and comparisons | DAT-16 |
 
 A slice without a step, or with a step of 1, takes any number of items,
 and the list grows or shrinks to fit: `xs[:0] = items` inserts at the
@@ -44,8 +45,24 @@ print(numbers, len(numbers), numbers[-1], numbers[1:3], 4 in numbers)
 print(list(reversed(numbers)), numbers == range(0, 9, 2))
 ```
 
-The comparisons of dict views and the views' set operations are planned
-for 0.3 (DAT-16).
+The views `d.keys()` and `d.items()` act as sets of their items. `|`,
+`&`, `-` and `^` with a set, another view, or a list of the same items
+give a new `set`, in CPython's order. `==`, `<` and the other comparisons
+with a set or another view compare the items:
+
+<!-- typy-expect: accepted -->
+```python
+stock = {1: 10, 2: 0, 3: 7}
+wanted = {2, 3, 4}
+print(stock.keys() & wanted, stock.keys() - wanted)
+print(stock.items() & {(3, 7), (4, 1)}, stock.keys() <= {1, 2, 3, 4})
+```
+
+A set needs items with a hash, so `d.items()` of a dict whose values are
+lists compares with another view but makes no set. `d.values()` is no
+set: it compares only with itself, by identity, as in CPython. `reversed`
+of a dict or a view, `dict` with keyword arguments and `dict.fromkeys`
+are planned for 0.3 (DAT-16).
 
 ## Example
 

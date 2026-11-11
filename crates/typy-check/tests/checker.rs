@@ -1439,8 +1439,14 @@ fn dict_rules_give_their_codes() {
         ("d = dict(a=1)\n", &["E0201"]),
         ("d = dict([(1, 2)], [(3, 4)])\n", &["E0404"]),
         ("d = dict(missing)\n", &["E0205"]),
-        ("d = {1: 2}.keys() == {1: 2}.keys()\n", &["E0201"]),
-        ("d = {1: 2}.keys() & {1}\n", &["E0201"]),
+        ("d = {1: 2}.keys() == {1: 2}.values()\n", &["E0407"]),
+        ("d = {1: 2}.keys() & {'a'}\n", &["E0401"]),
+        ("d = {1: 2}.values() - {2}\n", &["E0401"]),
+        ("d = {1: [2]}.items() ^ {1: [2]}.items()\n", &["E0413"]),
+        ("d = {1: 2}.values() <= {1: 2}.values()\n", &["E0407"]),
+        ("d = {1: 2}.keys() == [1]\n", &["E0407"]),
+        ("d = {1: 2}.keys() | 1\n", &["E0401"]),
+        ("d = {1: 2}.values() == {1: 'a'}.values()\n", &["E0407"]),
         ("for x in reversed({1: 2}):\n    pass\n", &["E0201"]),
         ("p = {1: 2}\np['a'] = 3\n", &["E0404"]),
         ("p = {1: 2}\np[1] = 'b'\n", &["E0402"]),
@@ -1565,6 +1571,8 @@ g = [(i, j) for i in range(3) for j in range(i) if i if j]
 h = sum(range(10)) + len(list(reversed(range(1, 9, 2))))
 k = [v for v in enumerate(range(2))]
 m = x + 'a'
+v = {1: 'a'}
+w = (v.keys() & [1], v.items() | {(2, 'b')}, v.keys() <= {1}, v.values() == v.values())
 r: range = range(1, 9, 2)
 n = (len(r), r[-1], 3 in r, r == range(4), [v for v in reversed(r)])
 s = r[1:]
@@ -1575,6 +1583,7 @@ s = r[1:]
     for node in [
         "Assign n: tuple[int, int, bool, bool, list[int]]",
         "Assign s: range",
+        "Assign w: tuple[set[int], set[tuple[int, str]], bool, bool]",
         "Comprehension : list[int]",
         "Comprehension : list[list[str]]",
         "Comprehension : set[int]",

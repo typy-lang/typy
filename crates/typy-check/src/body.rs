@@ -25,6 +25,7 @@ mod set;
 mod slice;
 mod statement;
 mod type_object;
+mod view_operator;
 
 pub(crate) use program::Program;
 

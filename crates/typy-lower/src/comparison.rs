@@ -26,9 +26,13 @@ impl FunctionLowerer<'_> {
         let join = self.builder.create_block();
         let result = self.builder.add_block_parameter(join, TyirType::Bool);
         let mut left = self.expression(first);
+        let mut left_type = &first.ty;
         for (position, (operator, comparator)) in operators.iter().zip(comparators).enumerate() {
             let right = self.expression(comparator);
-            let outcome = self.compare(*operator, left, right, span);
+            let outcome = self
+                .compare_views(*operator, (left, left_type), (right, &comparator.ty), span)
+                .unwrap_or_else(|| self.compare(*operator, left, right, span));
+            left_type = &comparator.ty;
             self.release(left, span);
             if position + 1 == operators.len() {
                 self.release(right, span);

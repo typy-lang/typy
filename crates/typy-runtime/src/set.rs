@@ -5,6 +5,7 @@
 mod algebra;
 mod operations;
 mod others;
+mod views;
 
 pub(crate) use operations::{
     key_error, typy_rt_set_compare, typy_rt_set_item, typy_rt_set_next, typy_rt_set_repr,

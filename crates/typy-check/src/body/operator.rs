@@ -4,6 +4,7 @@ use typy_diagnostics::{Diagnostic, DiagnosticCode, RuleId, Span};
 use typy_source::syntax::{BinaryOperator, CompareOperator, UnaryOperator};
 
 use super::BodyChecker;
+use super::view_operator::is_set_view;
 use crate::typed::{TypedConstant, TypedExpr, TypedExprKind};
 use crate::types::Type;
 
@@ -36,9 +37,9 @@ impl BodyChecker<'_> {
         }
         let symbol = binary_symbol(operator);
         if matches!(operator, Op::BitOr | Op::BitAnd | Op::Sub | Op::BitXor)
-            && (matches!(l, Type::DictView(..)) || matches!(r, Type::DictView(..)))
+            && (is_set_view(&l) || is_set_view(&r))
         {
-            return self.planned_view_operation(span);
+            return self.view_operation(symbol, &l, &r, span);
         }
         if let (Op::Add, Type::Tuple(first), Type::Tuple(second)) = (operator, &l, &r) {
             return Type::Tuple(first.iter().chain(second).cloned().collect());
@@ -177,7 +178,10 @@ impl BodyChecker<'_> {
                 | CompareOperator::IsNot
         );
         if compares && (matches!(l, Type::DictView(..)) || matches!(r, Type::DictView(..))) {
-            self.planned_view_operation(span);
+            let equality = matches!(operator, CompareOperator::Eq | CompareOperator::NotEq);
+            if !Self::view_comparison(&l, &r, equality) {
+                self.comparison_error(&l, &r, span);
+            }
             return;
         }
         match operator {
@@ -288,18 +292,6 @@ impl BodyChecker<'_> {
     }
 
     /// Reports a comparison or a set operation of a dict view, planned for 0.3 (DAT-16).
-    fn planned_view_operation(&mut self, span: Span) -> Type {
-        self.diagnostics.push(
-            Diagnostic::new(
-                DiagnosticCode::error(201),
-                span,
-                "comparisons and set operations of dict views are planned for TyPy 0.3 (DAT-16)",
-            )
-            .with_rule(RuleId::DAT_16),
-        );
-        Type::Error
-    }
-
     pub(super) fn bool_arithmetic(&mut self, span: Span) -> Type {
         self.diagnostics.push(
             Diagnostic::new(

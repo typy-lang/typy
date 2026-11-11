@@ -36,6 +36,10 @@ All notable changes to TyPy are recorded here. The format follows
 - `is` and `is not` between `bool` and `bool | None` values, such as
   `done is True` or `flag is False`. `True`, `False` and `None` are each a
   single object, as in CPython, so the result is that of `==` (EXP-08).
+- `dict.keys()` and `dict.items()` as sets: `|`, `&`, `-` and `^` with a
+  set, another view or a list give a new set in CPython's order, and `==`,
+  `<` and the other comparisons compare their items. `dict.values()`
+  compares by identity, as in CPython (DAT-16).
 - `range` as a value and an annotation: `len`, indexing, slicing, `in`,
   `==`, use as a dict key or set item, and CPython's text. `for`,
   `reversed`, `iter` and `next` read it, and its bounds may be of any size

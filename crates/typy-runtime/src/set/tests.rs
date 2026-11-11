@@ -4,6 +4,7 @@
 mod dicts;
 mod lists;
 mod steps;
+mod views;
 
 use super::SetObject;
 use super::operations::{

@@ -52,6 +52,9 @@ impl FunctionLowerer<'_> {
                 );
                 Self::borrowed(value, TyirType::Bool)
             }
+            (TyirType::VIEW, _) | (_, TyirType::VIEW) => {
+                self.view_combine(operator, left.value, right.value, result, span)
+            }
             (TyirType::DICT, TyirType::DICT) => self.dict_merge(left.value, right.value, span),
             (TyirType::SET, TyirType::SET) => {
                 self.set_combine(operator, left.value, right.value, span)

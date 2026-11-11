@@ -164,6 +164,8 @@ pub enum RuntimeFunction {
     DictViewContains,
     DictViewLength,
     DictViewText,
+    DictViewCombine,
+    DictViewCompare,
     RangeLast,
     InstanceText,
     TypeText,
@@ -230,7 +232,7 @@ const FLOAT_FLOAT: &[TyirType] = &[TyirType::Float, TyirType::Float];
 
 impl RuntimeFunction {
     /// Every runtime function.
-    pub const ALL: [Self; 191] = [
+    pub const ALL: [Self; 193] = [
         Self::IntFloorDivide,
         Self::IntModulo,
         Self::IntPower,
@@ -386,6 +388,8 @@ impl RuntimeFunction {
         Self::DictViewContains,
         Self::DictViewLength,
         Self::DictViewText,
+        Self::DictViewCombine,
+        Self::DictViewCompare,
         Self::RangeLast,
         Self::InstanceText,
         Self::TypeText,
@@ -570,6 +574,8 @@ impl RuntimeFunction {
             Self::DictViewContains => signature(&[VIEW, Bits, Bits], Bool, false),
             Self::DictViewLength => signature(&[VIEW], Int, false),
             Self::DictViewText => signature(&[VIEW], STR, true),
+            Self::DictViewCombine => signature(&[Bits, Bits, Int, SET], Unit, false),
+            Self::DictViewCompare => signature(&[Bits, Bits, Int, Int, Bits], Bool, false),
             Self::RangeLast => signature(&[Int, Int, Int], Int, false),
             Self::InstanceText => signature(&[Bits], STR, false),
             Self::TypeText | Self::TypeName => signature(&[TYPE], STR, false),
@@ -794,6 +800,8 @@ impl RuntimeFunction {
             Self::DictViewContains => "dict_view_contains",
             Self::DictViewLength => "dict_view_length",
             Self::DictViewText => "dict_view_text",
+            Self::DictViewCombine => "dict_view_combine",
+            Self::DictViewCompare => "dict_view_compare",
             Self::RangeLast => "range_last",
             Self::InstanceText => "instance_text",
             Self::TypeText => "type_text",

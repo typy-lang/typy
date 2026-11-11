@@ -33,5 +33,6 @@ mod strings;
 mod tuple;
 mod type_object;
 mod types;
+mod view_set;
 
 pub use program::lower;
