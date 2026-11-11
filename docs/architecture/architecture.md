@@ -49,6 +49,13 @@ follows these decision records:
 | ADR-0006 | The runtime in Rust without the standard library | Accepted |
 | ADR-0007 | Standard library modules in Python, compiled by TyPy | Accepted |
 | ADR-0008 | Each program judged by CPython from its own Python floor | Accepted |
+| ADR-0009 | Collections held in the runtime, with the runtime a program links measured | Accepted |
+| ADR-0010 | Sets and dicts hashed and ordered as CPython does | Accepted |
+| ADR-0011 | `None` held in a value each type never takes | Accepted |
+| ADR-0012 | Every type rooted at `object`, with a type object for each | Accepted |
+| ADR-0013 | Exceptions as objects of exception classes | Accepted |
+| ADR-0014 | Runtime iterator objects and the iterator protocol | Accepted |
+| ADR-0015 | Modules compiled into one program, with module objects | Accepted |
 
 ## 3. System context
 

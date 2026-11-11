@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy test plan |
-| Version | 0.28 |
+| Version | 0.29 |
 | Status | Draft |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-11 |
@@ -384,6 +384,7 @@ that the specification does not define.
 | MOD-07 | 0.3 | IT | `tests/conformance/mod/MOD-07_*.py` |
 | MOD-08 | 0.3 | IT | `tests/conformance/mod/MOD-08_*.py` |
 | MOD-09 | 0.3 | IT | `tests/conformance/mod/MOD-09_*.py` |
+| MOD-10 | 0.3 | IT | `tests/conformance/mod/MOD-10_*.py` |
 | LIB-01 | 0.1 | IT | `tests/conformance/lib/LIB-01_*.py` |
 | LIB-02 | 0.2 | IT | `tests/conformance/lib/LIB-02_*.py` |
 | LIB-03 | 0.2 | IT | `tests/conformance/lib/LIB-03_*.py` |
