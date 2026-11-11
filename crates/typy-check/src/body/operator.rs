@@ -182,7 +182,8 @@ impl BodyChecker<'_> {
         }
         match operator {
             CompareOperator::Is | CompareOperator::IsNot => {
-                // Two instances, or optional instances, are the same object or not (EXP-08).
+                // Two instances, or optional instances, are the same object or not, and two
+                // `bool` values are, since `True` and `False` are the only ones (EXP-08).
                 let instance = |ty: &Type| match ty {
                     Type::Optional(inner) => matches!(
                         inner.as_ref(),
@@ -201,12 +202,17 @@ impl BodyChecker<'_> {
                             | Type::TypeObject(_)
                     ),
                 };
-                if l != Type::NoneType && r != Type::NoneType && !(instance(&l) && instance(&r)) {
+                let booleans = l == Type::Bool && r == Type::Bool;
+                if l != Type::NoneType
+                    && r != Type::NoneType
+                    && !booleans
+                    && !(instance(&l) && instance(&r))
+                {
                     self.diagnostics.push(
                         Diagnostic::new(
                             DiagnosticCode::error(301),
                             span,
-                            format!("`is` compares identity, which is defined only against None here; these are {l} and {r}"),
+                            format!("`is` compares identity, which is defined only against None, between two bools or between objects here; these are {l} and {r}"),
                         )
                         .with_rule(RuleId::EXP_08)
                         .with_help("use `==` to compare values"),

@@ -33,6 +33,9 @@ All notable changes to TyPy are recorded here. The format follows
 - `del` of list items, list slices with or without a step, and dict keys,
   with CPython's errors; E0421 for `del` of a variable, an attribute or
   part of a tuple, `str` or `bytes` (SMT-05).
+- `is` and `is not` between two `bool` values, such as `done is True`;
+  they give the same result as `==` and `!=`, as in CPython, where `True`
+  and `False` are the only `bool` objects (EXP-08).
 - `range` as a value and an annotation: `len`, indexing, slicing, `in`,
   `==`, use as a dict key or set item, and CPython's text. `for`,
   `reversed`, `iter` and `next` read it, and its bounds may be of any size

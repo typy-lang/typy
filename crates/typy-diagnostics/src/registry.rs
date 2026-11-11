@@ -79,7 +79,7 @@ pub const CODES: &[CodeInfo] = &[
     ),
     active(
         301,
-        "`is` used on values other than `None` or class instances",
+        "`is` used on values other than `None`, two `bool` values or class instances",
         RuleId::EXP_08,
     ),
     active(

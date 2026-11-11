@@ -144,6 +144,15 @@ impl FunctionLowerer<'_> {
         // the null address. Otherwise an optional value is `None` when its spare
         // value says so; any other value is `None` only when its type is (ADR-0011).
         let holds = match (left.ty, right.ty) {
+            // `True` and `False` are the only `bool` objects, so identity is equality.
+            (TyirType::Bool, TyirType::Bool) => {
+                let operator = if is {
+                    CompareOperator::Eq
+                } else {
+                    CompareOperator::NotEq
+                };
+                return self.compare(operator, left, right, span);
+            }
             (
                 TyirType::Object(_) | TyirType::Optional(OptionalBase::Object(_)),
                 TyirType::Object(_) | TyirType::Optional(OptionalBase::Object(_)),

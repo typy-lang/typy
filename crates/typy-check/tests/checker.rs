@@ -380,6 +380,8 @@ fn rejected_programs_give_their_codes() {
         ("print(1, file=None)\n", &["E0201"]),
         ("print(1, color=1)\n", &["E0404"]),
         ("x = enumerate([1])\n", &["E0201"]),
+        ("print(1 is True)\n", &["E0301"]),
+        ("b: bool | None = None\nprint(b is False)\n", &["E0301"]),
         ("print(1[0])\n", &["E0401"]),
         ("print(\"a\"[\"b\"])\n", &["E0404"]),
         ("print(\"%d\" % 1)\n", &["E0201"]),
