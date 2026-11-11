@@ -38,6 +38,12 @@ impl BodyChecker<'_> {
                 Stmt::While { body, orelse, .. } | Stmt::If { body, orelse, .. } => {
                     self.collect_locals(&body.iter().chain(orelse).collect::<Vec<_>>());
                 }
+                Stmt::With { items, body, .. } => {
+                    for target in items.iter().filter_map(|item| item.target.as_ref()) {
+                        self.bind_local(target);
+                    }
+                    self.collect_locals(&body.iter().collect::<Vec<_>>());
+                }
                 Stmt::Try { .. } => {
                     let blocks = statement.try_blocks();
                     self.collect_locals(&blocks.into_iter().flatten().collect::<Vec<_>>());

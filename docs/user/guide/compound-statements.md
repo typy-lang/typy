@@ -10,8 +10,9 @@
 | `try` with `except` clauses, `else` and `finally`, described in [Exceptions](exceptions.md) | CST-04 |
 | `for` over an instance of a class with `__iter__`, whose result has `__next__` | CST-08 |
 | `iter` and `next`, with or without a default, and `for` over an iterator | CST-09 |
+| `with`, with one or more context managers and `as` targets | CST-05, CST-10 |
 
-`with` comes in 0.3 (CST-05), and `match` in 0.5 (CST-06).
+`match` comes in 0.5 (CST-06).
 
 ## Example
 
@@ -42,6 +43,41 @@ refused:
 for item in (1, "a"):
     print(item)
 ```
+
+## Context managers
+
+`with manager as target:` calls the manager's `__enter__`, binds what it
+returns to the target, and calls `__exit__` on every way out of the body:
+at its end, on `return`, `break` and `continue`, and when an exception
+leaves it. `__exit__` takes the class of the exception, the exception and
+its traceback, or three `None` values; its parameters may be left without
+annotations (CST-10). When it returns a true value, the exception is
+suppressed and the code after the `with` runs. Several managers in one
+`with` nest, the first outermost.
+
+<!-- typy-expect: accepted -->
+```python
+class Section:
+    def __init__(self, title: str) -> None:
+        self.title = title
+
+    def __enter__(self) -> str:
+        print("begin", self.title)
+        return self.title.upper()
+
+    def __exit__(self, kind, error, trace) -> bool:
+        print("end", self.title, error)
+        return kind is ValueError
+
+
+with Section("intro") as heading:
+    print(heading)
+    raise ValueError("handled by __exit__")
+print("after")
+```
+
+TyPy keeps no frames in a traceback object, so `trace` is one object
+written as `<traceback object at 0x...>`, or `None`.
 
 ## Iterators
 

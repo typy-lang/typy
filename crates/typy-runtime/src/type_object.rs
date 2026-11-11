@@ -17,7 +17,7 @@ use crate::Raising;
 use crate::header::{
     BIG_INT_TYPE_ID, BYTES_TYPE_ID, DICT_TYPE_ID, DICT_VIEW_TYPE_ID, EXCEPTION_TYPE_ID, IMMORTAL,
     INSTANCE_TYPE_ID, ITERATOR_TYPE_ID, LIST_TYPE_ID, ObjectHeader, SET_TYPE_ID, STR_TYPE_ID,
-    TUPLE_TYPE_ID, TYPE_TYPE_ID,
+    TRACEBACK_TYPE_ID, TUPLE_TYPE_ID, TYPE_TYPE_ID,
 };
 use crate::string::StrObject;
 use crate::tuple::TupleType;
@@ -171,6 +171,48 @@ pub unsafe extern "C" fn typy_rt_type_name(ty: *const TypeObject) -> *mut StrObj
     crate::string::from_str(unsafe { &*ty }.name())
 }
 
+/// The type of the traceback `__exit__` receives: hashed by identity and written as
+/// `<traceback object at 0x...>` (CST-10).
+static TRACEBACK_TYPE: TypeObject = TypeObject {
+    hash: Some(crate::instance::typy_rt_identity_hash),
+    repr: Some(traceback_repr),
+    ..TypeObject::new("traceback", &raw const OBJECT)
+};
+
+/// The one traceback, an immortal object that holds no frames, since TyPy keeps them in the
+/// exception for its report (CST-10).
+static TRACEBACK: ObjectHeader = ObjectHeader {
+    reference_count: IMMORTAL,
+    type_id: TRACEBACK_TYPE_ID,
+};
+
+/// Returns the traceback `__exit__` receives with an exception.
+#[unsafe(no_mangle)]
+pub extern "C" fn typy_rt_traceback() -> *const ObjectHeader {
+    &raw const TRACEBACK
+}
+
+/// Writes the traceback as CPython's `object.__repr__` does.
+unsafe extern "C" fn traceback_repr(object: *mut ObjectHeader) -> Raising<*mut StrObject> {
+    Raising::ok(crate::instance::object_text(object, "", "traceback"))
+}
+
+/// Returns `repr(object)` through the object's type, for a value whose type only the object
+/// knows.
+///
+/// # Safety
+///
+/// `object` points to a live object whose type writes it.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn typy_rt_object_repr(object: *mut ObjectHeader) -> Raising<*mut StrObject> {
+    // SAFETY: the caller's guarantee.
+    match unsafe { type_of(object) }.repr {
+        // SAFETY: the type's function takes an object of the type.
+        Some(repr) => unsafe { repr(object) },
+        None => Raising::ok(crate::string::from_str("")),
+    }
+}
+
 /// Returns the type object of a heap object, as `type(value)` gives it for a value whose
 /// type only the object knows, such as an iterator (CLS-12).
 ///
@@ -212,6 +254,7 @@ pub(crate) unsafe fn type_of(object: *const ObjectHeader) -> &'static TypeObject
             TYPE_TYPE_ID => &TYPE,
             INSTANCE_TYPE_ID => crate::instance::class_of(object.cast()),
             ITERATOR_TYPE_ID => crate::iterator::type_of(object.cast()),
+            TRACEBACK_TYPE_ID => &TRACEBACK_TYPE,
             _ => crate::libc::abort_with(b"typy runtime: an object has an unknown type\n"),
         }
     }

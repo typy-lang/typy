@@ -37,6 +37,7 @@ pub(crate) fn recursive_functions(program: &TypedProgram) -> BTreeSet<FunctionId
         .collect()
 }
 
+#[allow(clippy::too_many_lines, reason = "one arm per statement kind")]
 fn statements(body: &[TypedStmt], callees: &mut BTreeSet<FunctionId>) {
     for statement in body {
         match statement {
@@ -68,6 +69,22 @@ fn statements(body: &[TypedStmt], callees: &mut BTreeSet<FunctionId>) {
             TypedStmt::Return {
                 value: Some(value), ..
             } => expression(value, callees),
+            TypedStmt::With {
+                manager,
+                enter,
+                exit,
+                target,
+                body,
+                ..
+            } => {
+                expression(manager, callees);
+                callees.insert(*enter);
+                callees.insert(*exit);
+                if let Some(target) = target {
+                    assign_target(target, callees);
+                }
+                statements(body, callees);
+            }
             TypedStmt::Assert {
                 test, exception, ..
             } => {

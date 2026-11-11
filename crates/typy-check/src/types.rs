@@ -42,6 +42,8 @@ pub enum Type {
     Exception(ExceptionClass),
     /// An iterator that `iter()` makes, of the type of its items (ADR-0014).
     Iterator(Box<Type>),
+    /// The traceback `__exit__` receives, which holds no frames in TyPy (CST-10).
+    Traceback,
     /// A type object, of the type it stands for, or of any type when that is known only
     /// when the program runs, as for `type(x)` of an optional `x` (CLS-12).
     TypeObject(Option<Box<TypeObjectOf>>),
@@ -112,7 +114,11 @@ impl TypeObjectOf {
             Type::TypeObject(_) => Self::Type,
             // An exception's class may derive from its static class, so it is read from the
             // exception when the program runs.
-            Type::Exception(_) | Type::Iterator(_) | Type::Optional(_) | Type::Error => {
+            Type::Exception(_)
+            | Type::Iterator(_)
+            | Type::Traceback
+            | Type::Optional(_)
+            | Type::Error => {
                 return None;
             }
         })
@@ -306,8 +312,10 @@ impl Type {
             (Self::Dict(..), Self::Dict(..)) => self == other,
             // Comparing views is planned with their set operations (DAT-16), an optional value
             // is compared with `None` by `is`, and iterators by `is`.
-            (Self::DictView(..) | Self::Optional(_) | Self::Iterator(_), _)
-            | (_, Self::DictView(..) | Self::Optional(_) | Self::Iterator(_)) => false,
+            (Self::DictView(..) | Self::Optional(_) | Self::Iterator(_) | Self::Traceback, _)
+            | (_, Self::DictView(..) | Self::Optional(_) | Self::Iterator(_) | Self::Traceback) => {
+                false
+            }
             (Self::Tuple(left), Self::Tuple(right)) => {
                 left.len() == right.len()
                     && left
@@ -350,6 +358,7 @@ impl Type {
                 | Self::Instance(..)
                 | Self::Exception(_)
                 | Self::Iterator(_)
+                | Self::Traceback
                 | Self::TypeObject(_),
                 _,
             )
@@ -362,6 +371,7 @@ impl Type {
                 | Self::Instance(..)
                 | Self::Exception(_)
                 | Self::Iterator(_)
+                | Self::Traceback
                 | Self::TypeObject(_),
             ) => false,
             _ => self == other || (self.is_numeric() && other.is_numeric()),
@@ -465,6 +475,7 @@ impl fmt::Display for Type {
             Self::Instance(_, name) => formatter.write_str(name),
             Self::Exception(class) => write!(formatter, "{class}"),
             Self::Iterator(item) => write!(formatter, "Iterator[{item}]"),
+            Self::Traceback => formatter.write_str("TracebackType"),
             Self::TypeObject(Some(of)) => write!(formatter, "type[{}]", of.name()),
             Self::TypeObject(None) => formatter.write_str("type"),
             Self::Error => formatter.write_str("<error>"),

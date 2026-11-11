@@ -25,6 +25,8 @@ impl TypeId {
     pub const TYPE: Self = Self(10);
     /// An iterator that `iter()` makes (ADR-0014).
     pub const ITERATOR: Self = Self(12);
+    /// The traceback `__exit__` receives (CST-10).
+    pub const TRACEBACK: Self = Self(13);
     /// The first ID of the program's classes; class `n` of the module is this plus `n`.
     const FIRST_CLASS: u32 = 1 << 16;
 
@@ -101,6 +103,8 @@ impl TyirType {
     pub const TYPE: Self = Self::Object(TypeId::TYPE);
     /// An iterator.
     pub const ITERATOR: Self = Self::Object(TypeId::ITERATOR);
+    /// The traceback.
+    pub const TRACEBACK: Self = Self::Object(TypeId::TRACEBACK);
 }
 
 impl fmt::Display for TyirType {
@@ -118,6 +122,7 @@ impl fmt::Display for TyirType {
             Self::Object(TypeId::DICT_VIEW) => formatter.write_str("view"),
             Self::Object(TypeId::TYPE) => formatter.write_str("type"),
             Self::Object(TypeId::ITERATOR) => formatter.write_str("iterator"),
+            Self::Object(TypeId::TRACEBACK) => formatter.write_str("traceback"),
             Self::Bits => formatter.write_str("bits"),
             Self::Object(id) if id.class_index().is_some() => {
                 write!(formatter, "class#{}", id.class_index().unwrap_or(0))

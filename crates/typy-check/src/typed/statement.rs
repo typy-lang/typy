@@ -180,6 +180,18 @@ pub enum TypedStmt {
         value: Option<TypedExpr>,
         span: Span,
     },
+    /// `with manager as target: body`: `__enter__` gives what the target binds, and `__exit__`
+    /// runs on every way out of the body; when it may return a true value, it may suppress an
+    /// exception (CST-05). Several items nest.
+    With {
+        manager: TypedExpr,
+        enter: super::function::FunctionId,
+        exit: super::function::FunctionId,
+        suppresses: bool,
+        target: Option<AssignTarget>,
+        body: Vec<TypedStmt>,
+        span: Span,
+    },
     /// `assert test, message`: when the test is false, the exception, an `AssertionError` of
     /// the message, is raised (SMT-04).
     Assert {

@@ -26,6 +26,13 @@ All notable changes to TyPy are recorded here. The format follows
   arguments, and `super().__init__(...)` in `__init__` calls the base's.
   `except` catches it by any of its bases, and `is` compares exceptions
   (CLS-03, CLS-13, CLS-14, EXP-08).
+- `with`, with one or more context managers and `as` targets, calling
+  `__exit__` on every way out of the body; a true result of `__exit__`
+  suppresses the exception. The parameters of `__exit__` may be left
+  without annotations, and its traceback is an object that holds no
+  frames (CST-05, CST-10).
+- E0420 for `with` on a value whose class has no `__enter__` and
+  `__exit__` (CST-05).
 - `for` over an instance of a class that defines `__iter__` and
   `__next__`, which ends when `__next__` raises `StopIteration` (CST-08).
 - `iter()` and `next()`, with or without a default, for lists, tuples,

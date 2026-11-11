@@ -26,6 +26,8 @@ pub const TYPE_TYPE_ID: u32 = 10;
 pub const INSTANCE_TYPE_ID: u32 = 11;
 /// The type ID of an iterator that `iter()` makes of a built-in iterable (ADR-0014).
 pub const ITERATOR_TYPE_ID: u32 = 12;
+/// The type ID of the traceback `__exit__` receives, which holds no frames (CST-10).
+pub const TRACEBACK_TYPE_ID: u32 = 13;
 
 /// The first 8 bytes of every heap object.
 #[repr(C)]

@@ -167,10 +167,18 @@ fn base_planned(span: Span) -> Diagnostic {
 const REDEFINABLE: [&str; 3] = ["__init__", "__str__", "__repr__"];
 
 /// The special methods a class may define: `__init__`, `__str__` and `__repr__`, and from 0.3
-/// `__iter__` and `__next__` (CST-08). Any other name that starts and ends with two
+/// `__iter__` and `__next__` (CST-08) and `__enter__` and `__exit__` (CST-05). Any other name that starts and ends with two
 /// underscores changes how Python treats the instances, and waits for the operator methods of
 /// 0.4 (CLS-07).
-const SPECIAL_METHODS: [&str; 5] = ["__init__", "__str__", "__repr__", "__iter__", "__next__"];
+const SPECIAL_METHODS: [&str; 7] = [
+    "__init__",
+    "__str__",
+    "__repr__",
+    "__iter__",
+    "__next__",
+    "__enter__",
+    "__exit__",
+];
 
 /// Collects each class's attributes and methods; the methods become definitions whose IDs
 /// follow `first_function`.
@@ -237,7 +245,10 @@ pub(super) fn collect_members<'tree>(
                     if matches!(name.as_str(), "__str__" | "__repr__") {
                         check_text_method(&method, parts.name, diagnostics);
                     }
-                    if matches!(name.as_str(), "__iter__" | "__next__")
+                    if name == "__exit__" {
+                        check_exit(&method, parts.name, diagnostics);
+                    }
+                    if matches!(name.as_str(), "__iter__" | "__next__" | "__enter__")
                         && method.signature.parameters.len() != 1
                     {
                         diagnostics.push(
@@ -394,6 +405,33 @@ fn check_text_method(method: &Definition<'_>, name: &Identifier, diagnostics: &m
     }
 }
 
+/// `__exit__` takes `self` and the three parameters of CST-10, which accept the types CPython
+/// passes, and returns `None`, a `bool` or `bool | None`, a true value suppressing the
+/// exception (CST-05).
+fn check_exit(method: &Definition<'_>, name: &Identifier, diagnostics: &mut Diagnostics) {
+    let signature = &method.signature;
+    let parameters_fit = signature.parameters.len() == 4
+        && signature.parameters[1..]
+            .iter()
+            .enumerate()
+            .all(|(index, parameter)| {
+                super::definition::exit_parameter(index + 1).is_assignable_to(&parameter.ty)
+            });
+    let returns_fit = matches!(signature.returns, Type::NoneType | Type::Bool | Type::Error)
+        || signature.returns == Type::optional(Type::Bool);
+    if !parameters_fit || !returns_fit {
+        diagnostics.push(
+            Diagnostic::new(
+                DiagnosticCode::error(404),
+                name.span,
+                "`__exit__` takes `self`, the class of the exception, the exception and its \
+                 traceback, and returns `None` or a `bool`",
+            )
+            .with_rule(RuleId::CST_05),
+        );
+    }
+}
+
 /// Reports a special method a class may not define yet.
 fn planned_method(name: &Identifier) -> Diagnostic {
     Diagnostic::new(
@@ -460,6 +498,7 @@ fn initialized_attributes(parts: &FunctionParts<'_>) -> Vec<String> {
                         statements(block, instance, found);
                     }
                 }
+                Stmt::With { body, .. } => statements(body, instance, found),
                 _ => {}
             }
         }

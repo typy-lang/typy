@@ -25,7 +25,6 @@ pub enum NodeKind {
     TemplateStr,
     TryStar,
     TypeAlias,
-    With,
     Yield,
     YieldFrom,
 }

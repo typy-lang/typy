@@ -184,6 +184,25 @@ fn iterators_type_their_items_and_next_its_default() {
 }
 
 #[test]
+fn with_binds_what_enter_returns_and_knows_whether_exit_suppresses() {
+    let source = "class M:\n    def __enter__(self) -> int:\n        return 1\n    def __exit__(self, kind, error, trace) -> bool:\n        print(kind, error, trace)\n        return True\n\
+                  class N:\n    def __enter__(self) -> str:\n        return 'n'\n    def __exit__(self, kind, error, trace) -> None:\n        pass\n\
+                  with M() as number, N() as text:\n    print(number, text)\n";
+    let (_directory, project) = load(source);
+    let program = TypeChecker::check(&project).expect("the program is accepted");
+    let dump = typy_check::dump(&program, &project);
+    for expected in ["With as number: int suppresses", "With as text: str @"] {
+        assert!(dump.contains(expected), "{expected} in\n{dump}");
+    }
+    let trace = program
+        .symbols
+        .iter()
+        .find(|symbol| symbol.name == "trace")
+        .unwrap();
+    assert_eq!(trace.ty.to_string(), "TracebackType | None");
+}
+
+#[test]
 fn raise_ends_the_path_it_is_on() {
     let source = "def f(n: int) -> int:\n    if n > 0:\n        return n\n    raise ValueError('n', n)\n\
          def g() -> str:\n    raise KeyError from None\n\
@@ -1774,6 +1793,25 @@ fn statements_and_expressions_outside_the_subset_give_their_codes() {
 #[test]
 fn iterators_used_wrongly_give_their_codes() {
     let cases: &[(&str, &[&str])] = &[
+        // `with` needs `__enter__` and `__exit__` of the right shapes (CST-05, CST-10).
+        ("with 1:\n    pass\n", &["E0420"]),
+        ("with u:\n    pass\n", &["E0205"]),
+        (
+            "class M:\n    def __enter__(self) -> None:\n        pass\nwith M():\n    pass\n",
+            &["E0420"],
+        ),
+        (
+            "class M:\n    def __enter__(self, x: int) -> None:\n        pass\n",
+            &["E0404"],
+        ),
+        (
+            "class M:\n    def __exit__(self, a, b, c) -> int:\n        return 1\n",
+            &["E0404"],
+        ),
+        (
+            "class M:\n    def __enter__(self) -> int:\n        return 1\n    def __exit__(self, a, b, c) -> None:\n        pass\nwith M() as (x, y):\n    pass\n",
+            &["E0308"],
+        ),
         // `iter` and `next` take iterables and iterators; a class iterates with `__iter__`
         // and `__next__` (CST-08, CST-09).
         ("print(iter(1))\n", &["E0411"]),

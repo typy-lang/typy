@@ -46,6 +46,12 @@ pub(super) fn module_variables(statements: &[Stmt], names: &mut BTreeMap<String,
                     module_variables(block, names);
                 }
             }
+            Stmt::With { items, body, .. } => {
+                for target in items.iter().filter_map(|item| item.target.as_ref()) {
+                    bind(names, target);
+                }
+                module_variables(body, names);
+            }
             _ => {}
         }
     }

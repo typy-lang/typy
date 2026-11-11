@@ -45,6 +45,8 @@ impl RuleId {
     pub const CST_08: Self = Self("CST-08");
     /// `iter` and `next`, with and without a default, shall be available for the built-in iterables.
     pub const CST_09: Self = Self("CST-09");
+    /// The parameters of `__exit__` after `self` may be left without annotations, and shall then have the types `type[BaseException] \| None`, `BaseException \| None` and `TracebackType \| None`; the traceback shall be one object of type `traceback`, written as CPython writes one, which holds no frames.
+    pub const CST_10: Self = Self("CST-10");
     /// `bool` shall have the values `True` and `False`.
     pub const DAT_03: Self = Self("DAT-03");
     /// `str` shall be an immutable sequence of Unicode code points. `len()` and indexing shall count code points, and indexing shall return a `str` of length 1.
@@ -211,6 +213,7 @@ impl RuleId {
         Self::CST_06,
         Self::CST_08,
         Self::CST_09,
+        Self::CST_10,
         Self::DAT_03,
         Self::DAT_05,
         Self::DAT_06,

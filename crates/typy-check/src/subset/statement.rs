@@ -101,6 +101,15 @@ impl Walker {
                     self.expression(value);
                 }
             }
+            Stmt::With { items, body, .. } => {
+                for item in items {
+                    self.expression(&item.context);
+                    if let Some(target) = &item.target {
+                        self.name_target(target);
+                    }
+                }
+                self.block(body, place);
+            }
             Stmt::Assert { test, message, .. } => {
                 for value in std::iter::once(test).chain(message) {
                     self.expression(value);

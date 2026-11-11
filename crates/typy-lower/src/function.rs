@@ -42,6 +42,17 @@ pub(crate) enum Cleanup {
     },
     /// A `try` with a `finally` block: every way out of the `try` runs a copy of the block.
     Finally(std::rc::Rc<[typy_check::TypedStmt]>),
+    /// The body of a `with`: every way out calls the manager's `__exit__` (CST-05).
+    With {
+        /// The slot that holds the context manager.
+        manager: SlotId,
+        /// Its class's `__exit__`.
+        exit: typy_check::FunctionId,
+        /// Whether `__exit__` may return a true value, which suppresses an exception.
+        suppresses: bool,
+        /// Where execution goes on after an exception is suppressed.
+        after: BlockId,
+    },
 }
 
 /// Where an `except` clause keeps the exception it handles.

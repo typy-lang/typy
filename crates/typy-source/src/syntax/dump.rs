@@ -244,6 +244,17 @@ impl Dump<'_> {
                 self.block(depth + 1, "orelse", orelse);
                 self.block(depth + 1, "finally", finalbody);
             }
+            Stmt::With { items, body, .. } => {
+                self.line(depth, "With", span);
+                for item in items {
+                    self.expression(depth + 1, &item.context);
+                    if let Some(target) = &item.target {
+                        self.line(depth + 1, "as", None);
+                        self.expression(depth + 2, target);
+                    }
+                }
+                self.block(depth + 1, "body", body);
+            }
             Stmt::Assert { test, message, .. } => {
                 self.line(depth, "Assert", span);
                 for value in std::iter::once(test).chain(message) {

@@ -1,14 +1,18 @@
 //! Lowers exceptions: a call of an exception class, `raise`, `try` with its `except` clauses,
-//! and `str` and `repr` of an exception (SMT-06, CST-04, EXC-01, EXC-04, EXC-08, ADR-0013).
-
-use typy_check::{ExceptionClass, InitCall, RaiseCause, Type, TypedExpr, TypedHandler, TypedStmt};
-use typy_diagnostics::Span;
-use typy_tyir::{
-    BlockId, Constant, Operation, RuntimeFunction, Terminator, TyirType, TypeId, TypeObjectRef,
-    ValueId,
-};
+//! `with`, and `str` and `repr` of an exception (SMT-06, CST-04, CST-05, EXC-01, EXC-04,
+//! EXC-08, ADR-0013).
 
 use std::rc::Rc;
+
+use typy_check::{
+    AssignTarget, ExceptionClass, FunctionId, InitCall, RaiseCause, Type, TypedExpr, TypedHandler,
+    TypedStmt,
+};
+use typy_diagnostics::Span;
+use typy_tyir::{
+    BlockId, Constant, Operation, RuntimeFunction, SlotId, Terminator, TyirType, TypeId,
+    TypeObjectRef, ValueId,
+};
 
 use crate::function::{Cleanup, FunctionLowerer, Handled};
 use crate::ownership::Lowered;
@@ -339,6 +343,11 @@ impl FunctionLowerer<'_> {
                     exception,
                 } => self.leave_clause(previous, exception, span),
                 Cleanup::Finally(block) => self.run_finally(index, &block, None, span),
+                Cleanup::With { manager, exit, .. } => {
+                    let inner = self.cleanups.split_off(index);
+                    self.call_exit(manager, exit, None, span);
+                    self.cleanups.extend(inner);
+                }
             }
             if self.builder.is_terminated() {
                 return;
@@ -369,6 +378,13 @@ impl FunctionLowerer<'_> {
                 Cleanup::Finally(block) => {
                     self.run_finally(index, &block, Some(exception), span);
                 }
+                Cleanup::With {
+                    manager,
+                    exit,
+                    suppresses,
+                    after,
+                } => self
+                    .exit_with_exception(index, manager, exit, suppresses, after, exception, span),
             }
             if self.builder.is_terminated() {
                 self.temporaries = released;
@@ -507,5 +523,148 @@ impl FunctionLowerer<'_> {
         self.builder.switch_to(normal);
         self.raises = true;
         self.produced(value, item)
+    }
+
+    /// Lowers `with manager as target: body`: the manager is kept in a hidden slot, its
+    /// `__enter__` gives what the target binds, and every way out of the body calls its
+    /// `__exit__`, falling through and `return`, `break` and `continue` with three `None`
+    /// values (CST-05).
+    #[allow(
+        clippy::too_many_arguments,
+        reason = "the parts of one `with` statement, each used once"
+    )]
+    pub(crate) fn with_statement(
+        &mut self,
+        manager: &TypedExpr,
+        enter: FunctionId,
+        exit: FunctionId,
+        suppresses: bool,
+        target: Option<&AssignTarget>,
+        body: &[TypedStmt],
+        span: Span,
+    ) {
+        let lowered = self.expression(manager);
+        let slot = self.hidden_slot("manager", lowered.ty);
+        self.store(slot, lowered, span);
+        let current = self.load(slot, span);
+        let entered_type = self.lowered_type(&self.program.function(enter).signature.returns);
+        let entered = self.call_function(enter, vec![(0, current)], entered_type, span);
+        match target {
+            Some(target) => self.assign_target(target, entered, span),
+            None => self.release(entered, span),
+        }
+        let after = self.builder.create_block();
+        self.cleanups.push(Cleanup::With {
+            manager: slot,
+            exit,
+            suppresses,
+            after,
+        });
+        self.statements(body);
+        let cleanup = self.cleanups.pop();
+        if !self.builder.is_terminated()
+            && let Some(Cleanup::With { manager, exit, .. }) = cleanup
+        {
+            self.call_exit(manager, exit, None, span);
+        }
+        self.jump_open(after);
+        self.builder.switch_to(after);
+    }
+
+    /// Calls `__exit__` on the manager in `manager`, with the exception's class, the exception
+    /// and the traceback, or three `None` values, and returns what it returns.
+    fn call_exit(
+        &mut self,
+        manager: SlotId,
+        exit: FunctionId,
+        exception: Option<ValueId>,
+        span: Span,
+    ) -> Lowered {
+        let signature = self.program.function(exit).signature.clone();
+        let types: Vec<TyirType> = signature.parameters[1..]
+            .iter()
+            .map(|parameter| self.lowered_type(&parameter.ty))
+            .collect();
+        let values: Vec<ValueId> = match exception {
+            None => types.iter().map(|ty| self.none_of(*ty, span)).collect(),
+            Some(exception) => {
+                let class = self
+                    .call_runtime(RuntimeFunction::ExceptionClass, vec![exception], span)
+                    .value;
+                let traceback = self
+                    .call_runtime(RuntimeFunction::Traceback, Vec::new(), span)
+                    .value;
+                [class, exception, traceback]
+                    .into_iter()
+                    .zip(&types)
+                    .map(|(value, ty)| {
+                        self.builder
+                            .push_value(Operation::Wrap { value, ty: *ty }, *ty, span)
+                    })
+                    .collect()
+            }
+        };
+        let current = self.load(manager, span);
+        let mut arguments = vec![(0, current)];
+        for (index, (value, ty)) in values.into_iter().zip(types).enumerate() {
+            arguments.push((index + 1, Self::borrowed(value, ty)));
+        }
+        let returns = self.lowered_type(&signature.returns);
+        let result = self.call_function(exit, arguments, returns, span);
+        if exception.is_none() {
+            self.release(result, span);
+            let unit = self.constant(Constant::Unit, span);
+            return Self::borrowed(unit, TyirType::Unit);
+        }
+        result
+    }
+
+    /// Calls `__exit__` of the `with` of cleanup `index` for an exception on its way out, with
+    /// the exception being handled while it runs. A true result suppresses the exception,
+    /// which is released, and execution goes on after the `with`; otherwise the exception goes
+    /// on. An exception `__exit__` raises takes this one as its context and releases it.
+    #[allow(
+        clippy::too_many_arguments,
+        reason = "the parts of one `with` cleanup, each used once"
+    )]
+    fn exit_with_exception(
+        &mut self,
+        index: usize,
+        manager: SlotId,
+        exit: FunctionId,
+        suppresses: bool,
+        after: BlockId,
+        exception: ValueId,
+        span: Span,
+    ) {
+        let inner = self.cleanups.split_off(index);
+        let previous = self
+            .call_runtime(RuntimeFunction::ExceptionEnter, vec![exception], span)
+            .value;
+        self.cleanups.push(Cleanup::Handling {
+            previous,
+            exception: Handled::Value(exception),
+        });
+        let result = self.call_exit(manager, exit, Some(exception), span);
+        self.cleanups.pop();
+        self.call_runtime(RuntimeFunction::ExceptionLeave, vec![previous], span);
+        if suppresses {
+            let true_result = self.truth(result, span);
+            self.release(result, span);
+            let swallow = self.builder.create_block();
+            let go_on = self.builder.create_block();
+            self.builder.terminate(Terminator::Branch {
+                condition: true_result,
+                then: swallow,
+                otherwise: go_on,
+            });
+            self.builder.switch_to(swallow);
+            self.builder.push(Operation::Decrement(exception), span);
+            self.jump_open(after);
+            self.builder.switch_to(go_on);
+        } else {
+            self.release(result, span);
+        }
+        self.cleanups.extend(inner);
     }
 }

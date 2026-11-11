@@ -241,6 +241,12 @@ exception that is on its way out, so TyPy refuses it, as CPython 3.14
 warns about it (EXC-06). Move the statement after the `try` statement. A
 `break` or `continue` of a loop inside the `finally` block is accepted.
 
+## E0420: `with` on a value without `__enter__` and `__exit__`
+
+A `with` statement needs a context manager: an instance of a class that
+defines `__enter__` and `__exit__` (CST-05). Define both in the class, or
+use `try` and `finally` for a value that has none.
+
 ## E0701: C toolchain program not found
 
 TyPy links programs with the system C toolchain, which is not installed

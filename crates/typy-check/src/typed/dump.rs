@@ -247,6 +247,22 @@ impl Dump<'_> {
                 self.block(depth + 1, "orelse", orelse);
                 self.block(depth + 1, "finally", finalbody);
             }
+            TypedStmt::With {
+                manager,
+                suppresses,
+                target,
+                body,
+                span,
+                ..
+            } => {
+                let target = target.as_ref().map_or(String::new(), |target| {
+                    format!(" as {}", self.target(target))
+                });
+                let suppresses = if *suppresses { " suppresses" } else { "" };
+                self.line(depth, &format!("With{target}{suppresses}"), *span);
+                self.expression(depth + 1, manager);
+                self.block(depth + 1, "body", body);
+            }
             TypedStmt::Assert {
                 test,
                 exception,

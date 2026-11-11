@@ -150,6 +150,10 @@ pub(super) fn definition<'tree>(
                 instance
             }
             (_, Some(annotation)) => annotation_type(annotation, scope, diagnostics),
+            // The parameters of `__exit__` have the types CPython gives them (CST-10).
+            (Some(_), None) if name == "__exit__" && (1..=3).contains(&index) => {
+                exit_parameter(index)
+            }
             (_, None) => {
                 diagnostics.push(
                     Diagnostic::new(
@@ -260,4 +264,18 @@ fn default_value(
         diagnostics.push(diagnostic);
     }
     Some(constant)
+}
+
+/// Returns the type of parameter `index` of `__exit__` after `self`: the class of the
+/// exception, the exception and its traceback, each `None` when the block raised nothing
+/// (CST-10).
+pub(crate) fn exit_parameter(index: usize) -> Type {
+    use crate::exception::{BuiltinException, ExceptionClass};
+    Type::optional(match index {
+        // The class of an exception is known only when the program runs, so
+        // `type[BaseException]` holds any type object, as it does in an annotation.
+        1 => Type::TypeObject(None),
+        2 => Type::Exception(ExceptionClass::Builtin(BuiltinException::BaseException)),
+        _ => Type::Traceback,
+    })
 }

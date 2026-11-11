@@ -186,13 +186,18 @@ impl BodyChecker<'_> {
                 let instance = |ty: &Type| match ty {
                     Type::Optional(inner) => matches!(
                         inner.as_ref(),
-                        Type::Instance(..) | Type::Exception(_) | Type::Iterator(_)
+                        Type::Instance(..)
+                            | Type::Exception(_)
+                            | Type::Iterator(_)
+                            | Type::TypeObject(_)
+                            | Type::Traceback
                     ),
                     other => matches!(
                         other,
                         Type::Instance(..)
                             | Type::Exception(_)
                             | Type::Iterator(_)
+                            | Type::Traceback
                             | Type::TypeObject(_)
                     ),
                 };

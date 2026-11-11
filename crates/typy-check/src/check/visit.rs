@@ -21,6 +21,17 @@ pub(super) fn visit_statement(statement: &Stmt, visit: &mut dyn FnMut(&Expr)) {
             visit_expression(target, visit);
             visit_expression(value, visit);
         }
+        Stmt::With { items, body, .. } => {
+            for item in items {
+                visit_expression(&item.context, visit);
+                if let Some(target) = &item.target {
+                    visit_expression(target, visit);
+                }
+            }
+            for inner in body {
+                visit_statement(inner, visit);
+            }
+        }
         Stmt::Assert { test, message, .. } => {
             for value in std::iter::once(test).chain(message) {
                 visit_expression(value, visit);

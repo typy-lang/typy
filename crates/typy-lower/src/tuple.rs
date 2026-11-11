@@ -321,7 +321,8 @@ impl FunctionLowerer<'_> {
             TyirType::Object(id)
                 if id.class_index().is_some()
                     || id == typy_tyir::TypeId::EXCEPTION
-                    || id == typy_tyir::TypeId::ITERATOR =>
+                    || id == typy_tyir::TypeId::ITERATOR
+                    || id == typy_tyir::TypeId::TRACEBACK =>
             {
                 self.constant(Constant::NoInstance(id), span)
             }

@@ -121,6 +121,7 @@ impl BodyChecker<'_> {
                 message,
                 span,
             } => self.assert_statement(test, message.as_ref(), *span),
+            Stmt::With { items, body, span } => self.with_statement(items, body, *span)?,
             Stmt::Try {
                 body,
                 handlers,
@@ -439,6 +440,12 @@ fn assigned_names<'tree>(statements: &'tree [Stmt], names: &mut BTreeSet<&'tree 
                 for block in statement.try_blocks() {
                     assigned_names(block, names);
                 }
+            }
+            Stmt::With { items, body, .. } => {
+                for target in items.iter().filter_map(|item| item.target.as_ref()) {
+                    target_names(target, names);
+                }
+                assigned_names(body, names);
             }
             _ => {}
         }

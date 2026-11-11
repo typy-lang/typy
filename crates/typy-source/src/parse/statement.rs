@@ -5,7 +5,7 @@ use ruff_text_size::{Ranged, TextRange};
 
 use super::Converter;
 use super::operator::binary_operator;
-use crate::syntax::{Alias, ExceptHandler, NodeKind, Parameter, ParameterKind, Stmt};
+use crate::syntax::{Alias, ExceptHandler, NodeKind, Parameter, ParameterKind, Stmt, WithItem};
 
 impl Converter<'_> {
     pub(super) fn statements(&self, statements: &[ast::Stmt]) -> Vec<Stmt> {
@@ -133,7 +133,21 @@ impl Converter<'_> {
             ast::Stmt::With(node) if node.is_async => {
                 self.other_statement(NodeKind::AsyncWith, node.range)
             }
-            ast::Stmt::With(node) => self.other_statement(NodeKind::With, node.range),
+            ast::Stmt::With(node) => Stmt::With {
+                items: node
+                    .items
+                    .iter()
+                    .map(|item| WithItem {
+                        context: self.expression(&item.context_expr),
+                        target: item
+                            .optional_vars
+                            .as_deref()
+                            .map(|target| self.expression(target)),
+                    })
+                    .collect(),
+                body: self.statements(&node.body),
+                span,
+            },
             ast::Stmt::Match(node) => self.other_statement(NodeKind::Match, node.range),
             ast::Stmt::Raise(node) => Stmt::Raise {
                 exception: node.exc.as_deref().map(|value| self.expression(value)),

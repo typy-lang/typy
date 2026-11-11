@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy test plan |
-| Version | 0.27 |
+| Version | 0.28 |
 | Status | Draft |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-11 |
@@ -336,6 +336,7 @@ that the specification does not define.
 | CST-07 | 0.5 | IT | `tests/conformance/cst/CST-07_*.py` |
 | CST-08 | 0.3 | IT | `tests/conformance/cst/CST-08_*.py` |
 | CST-09 | 0.3 | IT | `tests/conformance/cst/CST-09_*.py` |
+| CST-10 | 0.3 | IT | `tests/conformance/cst/CST-10_*.py` |
 | FUN-01 | 0.1 | IT | `tests/conformance/fun/FUN-01_*.py` |
 | FUN-02 | 0.1 | IT | `tests/conformance/fun/FUN-02_*.py` |
 | FUN-03 | 1.0 | IT | `tests/conformance/fun/FUN-03_*.py` |

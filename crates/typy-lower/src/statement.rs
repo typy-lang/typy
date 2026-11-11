@@ -112,6 +112,23 @@ impl FunctionLowerer<'_> {
                 cause,
                 span,
             } => self.raise_statement(exception.as_ref(), cause, *span),
+            TypedStmt::With {
+                manager,
+                enter,
+                exit,
+                suppresses,
+                target,
+                body,
+                span,
+            } => self.with_statement(
+                manager,
+                *enter,
+                *exit,
+                *suppresses,
+                target.as_ref(),
+                body,
+                *span,
+            ),
             TypedStmt::Assert {
                 test,
                 exception,

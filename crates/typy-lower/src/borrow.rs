@@ -58,6 +58,14 @@ pub(crate) fn assigned_symbols(body: &[TypedStmt]) -> BTreeSet<SymbolId> {
                     statements(body, found);
                     statements(orelse, found);
                 }
+                TypedStmt::With {
+                    target: each, body, ..
+                } => {
+                    if let Some(each) = each {
+                        target(each, found);
+                    }
+                    statements(body, found);
+                }
                 TypedStmt::Try {
                     body,
                     handlers,

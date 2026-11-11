@@ -230,8 +230,6 @@ type X = int
 match v:
     case _:
         pass
-with f:
-    pass
 del x
 global g
 ";
@@ -248,7 +246,6 @@ global g
             NodeKind::AsyncFunctionDef,
             NodeKind::TypeAlias,
             NodeKind::Match,
-            NodeKind::With,
             NodeKind::Delete,
             NodeKind::Global,
         ]
@@ -717,6 +714,14 @@ fn a_try_statement_keeps_its_clauses_in_order() {
 fn assert_keeps_its_test_and_message() {
     let source = "assert x\nassert x, 'm'\n";
     let expected = "Module\n  Assert @1:1\n    Name x @1:8\n  Assert @2:1\n    Name x @2:8\n    Constant Str(\"m\") @2:11\n";
+    let parsed = parse(&file(source), PythonFloor::V3_12).unwrap();
+    assert_eq!(dump(&parsed, &file(source)), expected);
+}
+
+#[test]
+fn a_with_statement_keeps_each_item_and_its_target() {
+    let source = "with a() as (x, y), b:\n    pass\n";
+    let expected = "Module\n  With @1:1\n    Call @1:6\n      Name a @1:6\n    as\n      Tuple @1:13\n        Name x @1:14\n        Name y @1:17\n    Name b @1:21\n    body\n      Pass @2:5\n";
     let parsed = parse(&file(source), PythonFloor::V3_12).unwrap();
     assert_eq!(dump(&parsed, &file(source)), expected);
 }

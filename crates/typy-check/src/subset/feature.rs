@@ -30,7 +30,6 @@ pub(super) const fn planned(what: &'static str, release: &'static str, rule: Rul
 pub(super) fn feature(kind: NodeKind) -> Feature {
     match kind {
         NodeKind::Delete => planned("`del` statements", "0.3", RuleId::SMT_05),
-        NodeKind::With => planned("`with` statements", "0.3", RuleId::CST_05),
         NodeKind::Global => planned("`global` statements", "0.3", RuleId::SMT_08),
         NodeKind::TypeAlias => planned("`type` statements", "0.4", RuleId::SMT_10),
         NodeKind::Match => planned("`match` statements", "0.5", RuleId::CST_06),

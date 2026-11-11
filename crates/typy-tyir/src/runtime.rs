@@ -182,6 +182,8 @@ pub enum RuntimeFunction {
     IteratorAdvance,
     IteratorItem,
     ObjectType,
+    ObjectRepr,
+    Traceback,
     FormatInt,
     FormatBool,
     FormatFloat,
@@ -218,7 +220,7 @@ const FLOAT_FLOAT: &[TyirType] = &[TyirType::Float, TyirType::Float];
 
 impl RuntimeFunction {
     /// Every runtime function.
-    pub const ALL: [Self; 179] = [
+    pub const ALL: [Self; 181] = [
         Self::IntFloorDivide,
         Self::IntModulo,
         Self::IntPower,
@@ -392,6 +394,8 @@ impl RuntimeFunction {
         Self::IteratorAdvance,
         Self::IteratorItem,
         Self::ObjectType,
+        Self::ObjectRepr,
+        Self::Traceback,
         Self::FormatInt,
         Self::FormatBool,
         Self::FormatFloat,
@@ -565,6 +569,8 @@ impl RuntimeFunction {
             Self::IteratorAdvance => signature(&[ITERATOR, Int], Bool, true),
             Self::IteratorItem => signature(&[ITERATOR], Bits, false),
             Self::ObjectType => signature(&[Bits], TYPE, false),
+            Self::ObjectRepr => signature(&[Bits], STR, true),
+            Self::Traceback => signature(&[], TyirType::TRACEBACK, false),
             Self::FormatInt | Self::FormatBool => signature(&[Int, STR], STR, true),
             Self::FormatFloat => signature(&[Float, STR], STR, true),
             Self::FormatStr => signature(&[STR, STR], STR, true),
@@ -772,6 +778,8 @@ impl RuntimeFunction {
             Self::IteratorAdvance => "iterator_advance",
             Self::IteratorItem => "iterator_item",
             Self::ObjectType => "object_type",
+            Self::ObjectRepr => "object_repr",
+            Self::Traceback => "traceback",
             Self::FormatInt => "format_int",
             Self::FormatBool => "format_bool",
             Self::FormatFloat => "format_float",

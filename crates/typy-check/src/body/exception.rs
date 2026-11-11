@@ -2,13 +2,14 @@
 //! ADR-0013).
 
 use typy_diagnostics::{Diagnostic, DiagnosticCode, RuleId, Span};
-use typy_source::syntax::{Constant, ExceptHandler, Expr, Identifier, Keyword, Stmt};
+use typy_source::syntax::{Constant, ExceptHandler, Expr, Identifier, Keyword, Stmt, WithItem};
 
 use super::BodyChecker;
 use super::flow::{Fact, meet};
 use crate::exception::{BuiltinException, ExceptionClass, common_base};
 use crate::typed::{
-    Argument, RaiseCause, SymbolKind, TypedExpr, TypedExprKind, TypedHandler, TypedStmt,
+    Argument, RaiseCause, SymbolKind, TypedConstant, TypedExpr, TypedExprKind, TypedHandler,
+    TypedStmt,
 };
 use crate::types::{Type, TypeObjectOf};
 
@@ -417,5 +418,66 @@ impl BodyChecker<'_> {
             exception,
             span,
         }
+    }
+
+    /// Checks `with item, ...: body` as nested `with` statements of one item each (CST-05).
+    pub(super) fn with_statement(
+        &mut self,
+        items: &[WithItem],
+        body: &[Stmt],
+        span: Span,
+    ) -> Option<TypedStmt> {
+        let (first, rest) = items.split_first()?;
+        let manager = self.expression(&first.context);
+        let methods = manager.ty.class_id().and_then(|class| {
+            Some((
+                self.program.method(class, "__enter__")?,
+                self.program.method(class, "__exit__")?,
+            ))
+        });
+        let Some((enter, exit)) = methods else {
+            if !manager.ty.has_error() {
+                let message = format!(
+                    "`with` needs `__enter__` and `__exit__`, and {} has no such methods",
+                    manager.ty.with_article()
+                );
+                self.diagnostics.push(
+                    Diagnostic::new(DiagnosticCode::error(420), manager.span, message)
+                        .with_rule(RuleId::CST_05),
+                );
+            }
+            return None;
+        };
+        let entered = self.program.signatures[enter.0 as usize].returns.clone();
+        let suppresses = self.program.signatures[exit.0 as usize].returns != Type::NoneType;
+        let binding = Self::typed(
+            TypedExprKind::Constant(TypedConstant::None),
+            entered.clone(),
+            manager.span,
+        );
+        let target = match &first.target {
+            Some(target) => Some(self.assign_target(target, entered, &binding)?),
+            None => None,
+        };
+        // An exception that `__exit__` suppresses may stop the body anywhere.
+        self.forget_not_none(body);
+        let before = self.assigned.clone();
+        let body = if rest.is_empty() {
+            self.block(body)
+        } else {
+            vec![self.with_statement(rest, body, span)?]
+        };
+        if suppresses {
+            self.assigned = meet(self.assigned.take(), before);
+        }
+        Some(TypedStmt::With {
+            manager,
+            enter,
+            exit,
+            suppresses,
+            target,
+            body,
+            span,
+        })
     }
 }

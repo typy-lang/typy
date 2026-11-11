@@ -38,6 +38,10 @@ impl FunctionLowerer<'_> {
                 self.call_runtime(RuntimeFunction::TypeText, vec![lowered.value], span)
             }
             TyirType::EXCEPTION => self.exception_text(lowered, false, span),
+            TyirType::TRACEBACK | TyirType::ITERATOR => {
+                let object = self.bits(Self::borrowed(lowered.value, lowered.ty), span);
+                self.call_runtime(RuntimeFunction::ObjectRepr, vec![object], span)
+            }
             TyirType::Object(_) => Self::borrowed(lowered.value, lowered.ty),
             TyirType::Bits => unreachable!("list items are converted before they are written"),
             TyirType::Unit => {

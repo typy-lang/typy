@@ -46,6 +46,15 @@ pub struct Alias {
     pub as_name: Option<Identifier>,
 }
 
+/// One item of a `with` statement: a context manager, and the target `as` binds.
+#[derive(Clone, Debug, PartialEq)]
+pub struct WithItem {
+    /// The expression that gives the context manager.
+    pub context: Expr,
+    /// The target after `as`, if any.
+    pub target: Option<Expr>,
+}
+
 /// One `except` clause of a `try` statement.
 #[derive(Clone, Debug, PartialEq)]
 pub struct ExceptHandler {
@@ -151,6 +160,12 @@ pub enum Stmt {
         finalbody: Vec<Stmt>,
         span: Span,
     },
+    /// `with item, ...: body`.
+    With {
+        items: Vec<WithItem>,
+        body: Vec<Stmt>,
+        span: Span,
+    },
     /// `assert test` or `assert test, message`.
     Assert {
         test: Expr,
@@ -218,6 +233,7 @@ impl Stmt {
             | Self::Expr { span, .. }
             | Self::Raise { span, .. }
             | Self::Assert { span, .. }
+            | Self::With { span, .. }
             | Self::Try { span, .. }
             | Self::Pass { span }
             | Self::Break { span }
