@@ -80,6 +80,15 @@ pub enum TypedExprKind {
     NewException {
         class: crate::exception::ExceptionClass,
         arguments: Vec<TypedExpr>,
+        /// The `__init__` of a class of the program, which takes the arguments in place of
+        /// `arguments`.
+        init: Option<Box<InitCall>>,
+    },
+    /// `super().__init__(arguments)` in the `__init__` of an exception class whose bases have
+    /// no `__init__` of the program's: the exception's arguments become these (CLS-14).
+    SetArguments {
+        exception: Box<TypedExpr>,
+        arguments: Vec<TypedExpr>,
     },
     /// An attribute of an instance, by its position in the class's attributes (CLS-01).
     Attribute {
@@ -214,4 +223,17 @@ pub struct FormattedValue {
     pub conversion: Option<Conversion>,
     /// The format specification, if the field has one, itself text and fields.
     pub spec: Option<Vec<FStringPart>>,
+}
+
+/// A call of the `__init__` of an exception class on the new exception (CLS-03). The arguments
+/// written by position, which come first, are also the exception's arguments, as CPython's
+/// `BaseException.__new__` keeps them.
+#[derive(Clone, Debug, PartialEq)]
+pub struct InitCall {
+    /// The `__init__`, the class's own or the nearest base's.
+    pub function: super::function::FunctionId,
+    /// Its arguments after the instance, in source order.
+    pub arguments: Vec<Argument>,
+    /// How many of them come first, written by position.
+    pub positional: usize,
 }

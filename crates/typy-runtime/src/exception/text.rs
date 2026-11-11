@@ -18,7 +18,8 @@ use crate::string::{StrObject, from_str};
     clippy::cast_ptr_alignment,
     reason = "every object comes from malloc, aligned for every type, and starts with its header"
 )]
-pub(crate) unsafe extern "C" fn typy_rt_exception_str(
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn typy_rt_exception_str(
     object: *mut ObjectHeader,
 ) -> Raising<*mut StrObject> {
     // SAFETY: the caller's guarantee.
@@ -53,7 +54,8 @@ pub(crate) unsafe extern "C" fn typy_rt_exception_str(
     clippy::cast_ptr_alignment,
     reason = "every object comes from malloc, aligned for every type, and starts with its header"
 )]
-pub(crate) unsafe extern "C" fn typy_rt_exception_repr(
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn typy_rt_exception_repr(
     object: *mut ObjectHeader,
 ) -> Raising<*mut StrObject> {
     // SAFETY: the caller's guarantee.

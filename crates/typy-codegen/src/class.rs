@@ -74,13 +74,15 @@ fn repr_function<'ctx>(
     shared: &Shared<'_, 'ctx>,
     index: u32,
 ) -> Result<FunctionValue<'ctx>, CodegenError> {
-    match shared.tyir.classes[index as usize].repr {
+    let class = &shared.tyir.classes[index as usize];
+    let default = if class.exception_base.is_some() {
+        "typy_rt_exception_repr"
+    } else {
+        "typy_rt_instance_repr"
+    };
+    match class.repr {
         Some(method) => method_writer(shared, index, method, "repr"),
-        None => Ok(runtime_symbol(
-            shared,
-            "typy_rt_instance_repr",
-            repr_type(shared),
-        )),
+        None => Ok(runtime_symbol(shared, default, repr_type(shared))),
     }
 }
 
@@ -90,11 +92,18 @@ fn str_function<'ctx>(
     shared: &Shared<'_, 'ctx>,
     index: u32,
 ) -> Result<PointerValue<'ctx>, CodegenError> {
-    match shared.tyir.classes[index as usize].str {
-        Some(method) => Ok(method_writer(shared, index, method, "str")?
+    let class = &shared.tyir.classes[index as usize];
+    match (class.str, class.exception_base) {
+        (Some(method), _) => Ok(method_writer(shared, index, method, "str")?
             .as_global_value()
             .as_pointer_value()),
-        None => Ok(shared
+        // An exception's `str` comes from its arguments (EXC-08).
+        (None, Some(_)) => Ok(
+            runtime_symbol(shared, "typy_rt_exception_str", repr_type(shared))
+                .as_global_value()
+                .as_pointer_value(),
+        ),
+        (None, None) => Ok(shared
             .context
             .ptr_type(AddressSpace::default())
             .const_null()),
@@ -161,16 +170,16 @@ pub(crate) fn type_object<'ctx>(
     let (name, name_length) = text_global(shared, &class.name, &format!("typy.class{index}.name"));
     let (module, module_length) =
         text_global(shared, &class.module, &format!("typy.class{index}.module"));
-    let base = shared.module.get_global("typy_rt_object").map_or_else(
-        || {
-            let global = shared
-                .module
-                .add_global(context.i8_type(), None, "typy_rt_object");
-            global.set_linkage(Linkage::External);
-            global.as_pointer_value()
-        },
-        inkwell::values::GlobalValue::as_pointer_value,
-    );
+    let base = match class.exception_base {
+        Some(typy_tyir::TypeObjectRef::Class(base)) => type_object(shared, base)?,
+        Some(reference) => {
+            let symbol = reference
+                .runtime_symbol()
+                .ok_or_else(|| CodegenError("a runtime class has a symbol".to_owned()))?;
+            runtime_global(shared, &symbol)
+        }
+        None => runtime_global(shared, "typy_rt_object"),
+    };
     let hash = runtime_symbol(
         shared,
         "typy_rt_identity_hash",
@@ -215,14 +224,17 @@ pub(crate) fn type_object<'ctx>(
 
 impl<'ctx> FunctionEmitter<'_, '_, 'ctx> {
     /// Returns the layout of an instance of the class of `object`: its header, its class, then
-    /// its attributes as a tuple, with the attributes' types.
+    /// its attributes as a tuple, with the attributes' types and the position of the tuple. An
+    /// exception of class `class` holds its fixed part, then its attributes (ADR-0013).
     fn instance_layout(
         &self,
         object: ValueId,
-    ) -> Result<(StructType<'ctx>, Vec<TyirType>), CodegenError> {
+        class: Option<u32>,
+    ) -> Result<(StructType<'ctx>, Vec<TyirType>, u32), CodegenError> {
         let ty = self.function.value(object).ty;
-        let class = match ty {
-            TyirType::Object(id) => self.shared.tyir.class(id),
+        let class = match (ty, class) {
+            (_, Some(index)) => self.shared.tyir.classes.get(index as usize),
+            (TyirType::Object(id), None) => self.shared.tyir.class(id),
             _ => None,
         }
         .ok_or_else(|| CodegenError(format!("v{} is not an instance", object.0)))?;
@@ -231,6 +243,13 @@ impl<'ctx> FunctionEmitter<'_, '_, 'ctx> {
         let fields = value_type(self.shared.context, tuples, TyirType::Tuple(class.fields))
             .ok_or_else(|| CodegenError("attributes have a type".to_owned()))?;
         let context = self.shared.context;
+        if class.exception_base.is_some() {
+            let fixed = context
+                .i8_type()
+                .array_type(crate::layout::EXCEPTION_PREFIX);
+            let layout = context.struct_type(&[fixed.into(), fields], false);
+            return Ok((layout, items, 1));
+        }
         let layout = context.struct_type(
             &[
                 context.i64_type().into(),
@@ -239,7 +258,7 @@ impl<'ctx> FunctionEmitter<'_, '_, 'ctx> {
             ],
             false,
         );
-        Ok((layout, items))
+        Ok((layout, items, 2))
     }
 
     /// Returns the address of the attribute at `index` of `object`, with its type, or `None`
@@ -247,21 +266,24 @@ impl<'ctx> FunctionEmitter<'_, '_, 'ctx> {
     fn field_address(
         &self,
         object: ValueId,
+        class: Option<u32>,
         index: u32,
     ) -> Result<Option<(PointerValue<'ctx>, BasicTypeEnum<'ctx>)>, CodegenError> {
-        let (layout, items) = self.instance_layout(object)?;
+        let (layout, items, position) = self.instance_layout(object, class)?;
         let Some(field) = tuple_field(&items, index as usize) else {
             return Ok(None);
         };
         let fields = layout
-            .get_field_type_at_index(2)
+            .get_field_type_at_index(position)
             .ok_or_else(|| CodegenError("an instance has attributes".to_owned()))?
             .into_struct_type();
         let field_type = fields
             .get_field_type_at_index(field)
             .ok_or_else(|| CodegenError(format!("attribute {index} has a type")))?;
         let pointer = self.value(object)?.into_pointer_value();
-        let attributes = self.builder.build_struct_gep(layout, pointer, 2, "")?;
+        let attributes = self
+            .builder
+            .build_struct_gep(layout, pointer, position, "")?;
         let address = self
             .builder
             .build_struct_gep(fields, attributes, field, "")?;
@@ -291,9 +313,10 @@ impl<'ctx> FunctionEmitter<'_, '_, 'ctx> {
     pub(crate) fn field(
         &mut self,
         object: ValueId,
+        class: Option<u32>,
         index: u32,
     ) -> Result<Option<BasicValueEnum<'ctx>>, CodegenError> {
-        let Some((address, ty)) = self.field_address(object, index)? else {
+        let Some((address, ty)) = self.field_address(object, class, index)? else {
             return Ok(None);
         };
         Ok(Some(self.builder.build_load(ty, address, "")?))
@@ -303,10 +326,11 @@ impl<'ctx> FunctionEmitter<'_, '_, 'ctx> {
     pub(crate) fn set_field(
         &mut self,
         object: ValueId,
+        class: Option<u32>,
         index: u32,
         value: ValueId,
     ) -> Result<(), CodegenError> {
-        if let Some((address, _)) = self.field_address(object, index)? {
+        if let Some((address, _)) = self.field_address(object, class, index)? {
             let value = self.value(value)?;
             self.builder.build_store(address, value)?;
         }

@@ -2,12 +2,14 @@
 //! ADR-0013).
 
 use typy_diagnostics::{Diagnostic, DiagnosticCode, RuleId, Span};
-use typy_source::syntax::{Constant, ExceptHandler, Expr, Keyword, Stmt};
+use typy_source::syntax::{Constant, ExceptHandler, Expr, Identifier, Keyword, Stmt};
 
 use super::BodyChecker;
 use super::flow::{Fact, meet};
 use crate::exception::{BuiltinException, ExceptionClass, common_base};
-use crate::typed::{RaiseCause, SymbolKind, TypedExpr, TypedExprKind, TypedHandler, TypedStmt};
+use crate::typed::{
+    Argument, RaiseCause, SymbolKind, TypedExpr, TypedExprKind, TypedHandler, TypedStmt,
+};
 use crate::types::{Type, TypeObjectOf};
 
 impl BodyChecker<'_> {
@@ -20,11 +22,10 @@ impl BodyChecker<'_> {
         keywords: &[Keyword],
         span: Span,
     ) -> TypedExpr {
-        let values: Vec<TypedExpr> = arguments
-            .iter()
-            .map(|value| self.expression(value))
-            .collect();
         if !class.can_be_called() {
+            for argument in arguments {
+                self.expression(argument);
+            }
             return self.error(
                 Diagnostic::new(
                     DiagnosticCode::error(417),
@@ -39,6 +40,22 @@ impl BodyChecker<'_> {
                 span,
             );
         }
+        self.exception_with_arguments(ExceptionClass::Builtin(class), arguments, keywords, span)
+    }
+
+    /// Checks a call of an exception class without `__init__` of the program's: positional
+    /// arguments of any type, which the exception keeps.
+    pub(super) fn exception_with_arguments(
+        &mut self,
+        class: ExceptionClass,
+        arguments: &[Expr],
+        keywords: &[Keyword],
+        span: Span,
+    ) -> TypedExpr {
+        let values: Vec<TypedExpr> = arguments
+            .iter()
+            .map(|value| self.expression(value))
+            .collect();
         if let Some(keyword) = keywords.first() {
             return self.error(
                 Diagnostic::new(
@@ -50,11 +67,11 @@ impl BodyChecker<'_> {
                 span,
             );
         }
-        let class = ExceptionClass::Builtin(class);
         Self::typed(
             TypedExprKind::NewException {
                 class: class.clone(),
                 arguments: values,
+                init: None,
             },
             Type::Exception(class),
             span,
@@ -115,7 +132,7 @@ impl BodyChecker<'_> {
                 let TypeObjectOf::Exception(class) = (**of).clone() else {
                     unreachable!("matched above");
                 };
-                self.called_class(class, value.span)
+                self.called_class(&class, value.span)
             }
             other => {
                 let message = format!(
@@ -132,19 +149,11 @@ impl BodyChecker<'_> {
     }
 
     /// Returns a new exception of `class`, called with no arguments, in place of the class.
-    fn called_class(&mut self, class: ExceptionClass, span: Span) -> TypedExpr {
-        let ExceptionClass::Builtin(builtin) = &class;
-        if !builtin.can_be_called() {
-            return self.new_exception(*builtin, &[], &[], span);
+    fn called_class(&mut self, class: &ExceptionClass, span: Span) -> TypedExpr {
+        match class {
+            ExceptionClass::Builtin(builtin) => self.new_exception(*builtin, &[], &[], span),
+            ExceptionClass::Class(class) => self.new_instance(class.id, &[], &[], span),
         }
-        Self::typed(
-            TypedExprKind::NewException {
-                class: class.clone(),
-                arguments: Vec::new(),
-            },
-            Type::Exception(class),
-            span,
-        )
     }
 
     /// Checks `try` with its `except` clauses, its `else` block and its `finally` block. The
@@ -295,5 +304,93 @@ impl BodyChecker<'_> {
                 None
             })
             .collect()
+    }
+
+    /// Checks `super().name(arguments)`, accepted as `super().__init__(...)` in the `__init__`
+    /// of an exception class (CLS-14). With a base of the program that has `__init__`, it calls
+    /// that `__init__` on the instance; otherwise it sets the exception's arguments, as
+    /// `BaseException.__init__` does. Either way the inherited attributes are assigned after.
+    pub(super) fn super_call(
+        &mut self,
+        name: &Identifier,
+        arguments: &[Expr],
+        keywords: &[Keyword],
+        span: Span,
+    ) -> TypedExpr {
+        let exception_init = self.initializing.filter(|initializing| {
+            name.name == "__init__" && self.program.exceptions.contains_key(&initializing.class)
+        });
+        let Some(initializing) = exception_init else {
+            for argument in arguments {
+                self.expression(argument);
+            }
+            return self.error(
+                Diagnostic::new(
+                    DiagnosticCode::error(201),
+                    span,
+                    "`super()` is planned for TyPy 0.4, beyond `super().__init__(...)` in the \
+                     `__init__` of an exception class (CLS-14)",
+                )
+                .with_rule(RuleId::CLS_14),
+                span,
+            );
+        };
+        let instance = Self::typed(
+            TypedExprKind::Local(initializing.instance),
+            self.program.instance_type(initializing.class),
+            span,
+        );
+        let info = &self.program.classes[initializing.class.0 as usize];
+        let (base, inherited) = (info.base, info.inherited);
+        let base_init = base.and_then(|base| self.program.method(base, "__init__"));
+        let call = if let (Some(function), Some(base)) = (base_init, base) {
+            let qualified = format!("{}.__init__", self.program.instance_type(base));
+            match self.bind_arguments(function, 1, &qualified, arguments, keywords, span) {
+                Ok(bound) => {
+                    let mut all = vec![Argument {
+                        parameter: 0,
+                        value: instance,
+                    }];
+                    all.extend(bound);
+                    Self::typed(
+                        TypedExprKind::Call {
+                            function,
+                            arguments: all,
+                        },
+                        Type::NoneType,
+                        span,
+                    )
+                }
+                Err(error) => return error,
+            }
+        } else {
+            let values: Vec<TypedExpr> = arguments
+                .iter()
+                .map(|value| self.expression(value))
+                .collect();
+            if let Some(keyword) = keywords.first() {
+                return self.error(
+                    Diagnostic::new(
+                        DiagnosticCode::error(404),
+                        keyword.span,
+                        "`BaseException.__init__` takes positional arguments only",
+                    )
+                    .with_rule(RuleId::CLS_14),
+                    span,
+                );
+            }
+            Self::typed(
+                TypedExprKind::SetArguments {
+                    exception: Box::new(instance),
+                    arguments: values,
+                },
+                Type::NoneType,
+                span,
+            )
+        };
+        if let Some(facts) = &mut self.assigned {
+            facts.extend((0..inherited).map(Fact::Attribute));
+        }
+        call
     }
 }

@@ -576,3 +576,34 @@ fn the_text_of_an_exception_comes_through_its_class() {
         release(&[exception]);
     }
 }
+
+#[test]
+fn setting_the_arguments_replaces_and_releases_the_old_ones() {
+    let old = from_str("old");
+    let exception = built(&VALUE_ERROR, &ONE_OBJECT, &[old.expose_provenance() as u64]);
+    // SAFETY: the string is live; the exception holds a reference to it.
+    unsafe { typy_rt_increment(old.cast()) };
+    let words = [word_of("new"), int_word(2)];
+    // SAFETY: the exception is live and the words are live items of the layout.
+    unsafe {
+        super::typy_rt_exception_set_arguments(
+            exception,
+            &raw const TEXT_AND_INT,
+            words.as_ptr().cast(),
+        );
+        crate::tuple::release(
+            &raw const TEXT_AND_INT,
+            words.as_ptr().expose_provenance() as u64,
+        );
+        assert_eq!((*old).header.reference_count, 1);
+        typy_rt_decrement(old.cast());
+    }
+    assert_eq!(texts(exception).0, "('new', 2)");
+    release(&[exception]);
+}
+
+#[test]
+fn the_fixed_part_of_an_exception_is_eighty_bytes() {
+    // The compiler's `EXCEPTION_PREFIX` places a class's attributes after this many bytes.
+    assert_eq!(super::PREFIX, 80);
+}

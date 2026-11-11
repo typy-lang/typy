@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy detailed design |
-| Version | 1.46 |
+| Version | 1.47 |
 | Status | Approved |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-10 |
@@ -780,9 +780,31 @@ the program runs, E0202.
 
 Exceptions (ADR-0013) are `Type::Exception(ExceptionClass)`, written with
 the class name. `ExceptionClass::Builtin` holds a `BuiltinException`, one
-of the classes of EXC-02 and EXC-10, each with its CPython base, so
-`derives_from` walks the chain; an exception is assignable where its class
-or any base is declared. A class name read as a value is
+of the classes of EXC-02 and EXC-10, each with its CPython base.
+`ExceptionClass::Class` holds a shared `ProgramException`: a class of the
+program, its ancestors that are classes of the program, nearest first, and
+the built-in class its chain reaches. `derives_from` compares the IDs of
+the program's classes and walks the built-in chain, so an exception is
+assignable where its class or any base is declared without the class
+table. A class's base is resolved in source order: `object`, a built-in
+exception class, or a class defined before it that is an exception class
+(CLS-03). A base defined after the class is E0306, `UnicodeDecodeError`
+and `UnicodeEncodeError` are E0417, any other base is E0201 (CLS-04), and
+several bases are E0201, planned for after 1.0. An exception class whose
+base is the program's holds its base's attributes first, counted in
+`ClassInfo::inherited`, and the type of an inherited attribute is read
+from the class that declares it. A method is looked up in the class, then
+in each base; redefining a method of a base other than `__init__`,
+`__str__` and `__repr__` is E0201 (CLS-13). Calling an exception class
+without an `__init__` of the program's takes positional arguments of any
+type; with one, its arguments are bound as for a call and
+`TypedExprKind::NewException` carries an `InitCall` with them and the
+count of those written by position, which become the exception's
+arguments. In an exception class's `__init__`, `super().__init__(...)` is
+a `Call` of the nearest base's `__init__` on the instance, or
+`TypedExprKind::SetArguments` when no base of the program's has one, and
+after it the inherited attributes count as assigned; any other `super()`
+is E0201 (CLS-14). `is` compares two exceptions. A class name read as a value is
 `TypeObjectOf::Exception`, and in an annotation it names the exception
 type. Calling a class takes positional arguments of any type and gives
 `TypedExprKind::NewException { class, arguments }`; a keyword is E0404,
@@ -1060,6 +1082,7 @@ graph, symbol names and the string pool.
 | Classes | `Class(arguments)` evaluates the arguments, makes the instance, then calls `__init__` with the instance first. An attribute is read with `Field`, borrowed from the instance, and gets a reference of its own when the instance is a temporary. Assigning an attribute evaluates the value, then the instance, stores the value with `SetField` and releases the value the attribute held; `object.attribute op= value` reads the attribute once, with a reference of its own, before the value. `str` of an instance calls `__str__`, then `__repr__`, and `repr` calls `__repr__`; a class with neither is written by `typy_rt_instance_text`. `==`, `!=`, `is` and `is not` on instances are `Identical`, and an instance is true. A slot of a class type starts as `NoInstance` |
 | f-strings | The pieces are joined left to right with `str_concat`. A field evaluates its value; with a conversion it is written by `str`, `repr` or `repr` and `ascii`, and then formatted as a `str` when a specification follows. Without a conversion a field with no specification is `str(value)`, and one with a specification calls the formatter of the value's type: `format_int`, `format_bool` with the `bool` as an `int` word, `format_float` or `format_str`, an optional value branching on `IsNone`, and any other type `format_other` with its `str` and its type's name. The specification is itself an f-string, evaluated after the value, as CPython evaluates it |
 | `try` | The lowerer keeps a stack of `Cleanup`s. A `try` body pushes `Handlers { dispatch }`, so the error path of a call inside it releases the live temporaries, runs the cleanups opened inside the body and jumps to `dispatch` with the exception; an error path outside every `try` body releases the slots and returns the exception. `dispatch` tests the clauses in order with `exception_matches` against each class. A matching clause calls `exception_enter`, keeps the result, and stores the exception in its variable or holds it, then pushes `Handling { previous, exception }`. Leaving the clause, by its end, `return`, `break`, `continue` or an error, calls `exception_leave(previous)` and drops the exception: the variable is set to null and its value released. `break` and `continue` run the cleanups opened since their loop started, and `return` runs them all, after it has taken its own reference to the value it returns. An exception no clause matches takes the error path from after the `try`. `else` runs after the body, outside its clauses. A `finally` block pushes `Finally` with a copy of its statements, so every way out runs it: falling through lowers it after the rest, `return`, `break` and `continue` run it as a cleanup, and an error path runs it with the pending exception entered as the one being handled, so an exception the block raises takes it as its context and releases it, and otherwise leaves it and goes on. While a copy runs, only the cleanups outside the `try` are open. `return` holds its value as a live temporary while cleanups run, and an error path sets aside the temporaries it released before it runs any `finally` block. A function that returns a value ends in `unreachable` where its body ends, since the checker rejects one that can reach its end |
+| Exception classes | A class of the program derived from an exception class has a `TyirClass` whose `exception_base` names its base's type object, the runtime's or a class's, and whose `repr` and `str` are its own or its nearest base's methods. Its instances are exceptions: `NewException` with an `InitCall` evaluates the arguments in order, makes the exception with those written by position as its arguments, then calls `__init__` with it first. `Field` and `SetField` on an exception carry the class, since every exception has the type `exception`, and reach the attributes past the fixed part. `SetArguments` evaluates the arguments into a tuple and calls `exception_set_arguments` |
 | Exceptions | A call of an exception class evaluates the arguments in order into a tuple and calls `exception_new` with the class, the tuple's descriptor and its address; the runtime copies the tuple and retains its items, and the tuple is released. `raise` evaluates the exception, or calls `exception_handled` for a bare `raise`, sets the cause with `exception_set_cause`, null for `from None`, then invokes `exception_throw`, which always returns the exception as an error, so the call's error path adds the line of the `raise` to the traceback and releases what the frame owns; the normal block is unreachable. `str` and `repr` of an exception call `exception_text`, which goes through the class's `str` and `repr`, and `type(e)` calls `exception_class` |
 | Type objects | `type(x)` evaluates `x`, releases it and gives the constant type object of its type; for an optional value it selects `NoneType` or its base's by `IsNone`. A type object is immortal and never counted. `str` and `repr` of one call `typy_rt_type_text`, `__name__` calls `typy_rt_type_name`, `==` and `is` are `Identical`, and a type object is true |
 | Optional values | `None` where `T \| None` is expected is the constant `NoneOf`, and a value of `T` is wrapped; wrapping and unwrapping hand the reference on with the value. `is None` and `is not None` on an optional value test `IsNone`, and on any other value are constants. `str`, `repr` and truth tests branch on `IsNone` and read the value only where it is not `None`, so a null object never reaches the runtime. An optional slot starts as `None`, and an optional parameter's default is `None` or its wrapped constant. `dict.get(key)` finds the key and wraps its value with a reference of its own, or gives `None` |
@@ -1125,6 +1148,7 @@ comparisons, calls and counting, terminators, and emission.
 | Object header | 8 bytes: `reference_count: u32`, then `type_id: u32`. A count of `u32::MAX` marks an immortal object, whose header the runtime never writes |
 | Type IDs | `str` is 1, an exception is 2, a large integer is 3, a list is 4, a `tuple[T, ...]` is 5, a `bytes` is 6, a set is 7, a dict is 8, a view of a dict is 9, a type object is 10 and an instance of a class is 11 |
 | Type objects | The runtime exports its type objects as `typy_rt_object` and `typy_rt_type_` followed by `int`, `float`, `bool`, `str`, `bytes`, `none`, `list`, `tuple`, `set`, `dict`, `dict_keys`, `dict_values`, `dict_items` or `type`, and its exception classes as `typy_rt_exception_` followed by the class name, such as `typy_rt_exception_ValueError`. The type `type` hashes a type object by identity and writes it as `<class 'name'>`, or `<class 'module.Name'>` for a class |
+| Exception class | A class derived from an exception class has a type object whose base is the runtime's class, such as `typy_rt_exception_ValueError`, or its base's `typy.classN`; whose `repr` and `str` are `typy_rt_exception_repr` and `typy_rt_exception_str` unless it or a base defines `__repr__` or `__str__`; and whose descriptor lays out its attributes after the exception's fixed part of `EXCEPTION_PREFIX`, 80 bytes |
 | Instance | Header, `class: ptr` to the class's type object, then the attributes laid out as the class's tuple descriptor says. `typy_rt_instance_new(class)` makes one with every attribute zero; the runtime frees it by releasing each attribute the descriptor counts. A class's type object is a private constant `typy.classN`, whose base is the runtime's `typy_rt_object`, whose hash is `typy_rt_identity_hash` and whose `repr` is `typy_rt_instance_repr`, or `typy.classN.repr`, which calls the class's `__repr__` and adds a null exception when it cannot raise |
 | Type object | Header, `name: ptr` to UTF-8 bytes, `name_length: u64`, `base: ptr` (null only for `object`), then five nullable function pointers with the C calling convention: `truth(object) -> bool`, `hash(object) -> i64`, `equal(left, right) -> bool`, `order(left, right, comparison) -> bool` and `repr(object) -> { str, exception }`, then `module: ptr` to UTF-8 bytes, `module_length: u64`, `fields: ptr` to the tuple descriptor of a class's attributes, null for the runtime's own types, and last `str(object) -> { str, exception }`, null when `str` is `repr`. An absent function means what it means for `object`: true, equal only to itself, and no hash, order or text. A class's `str` is `typy.classN.str`, which calls its `__str__`, or null when it has none. The runtime frees its own objects by type ID, so the type objects stay out of a program that never tests, compares or writes an object of unknown type (ADR-0012) |
 | Exception | Header, `class: ptr` at the offset an instance keeps its class, `message: ptr` to the `str` the runtime gave it or null, `arguments_type: ptr` to the tuple descriptor of the arguments the program built it with or null, `arguments: ptr` to them or null when there are none, the traceback, `cause: ptr`, `context: ptr` and `suppress_context: u64`, then a class's attributes as its descriptor lays them out (ADR-0013). `typy_rt_exception_new(class, arguments_type, arguments)` makes one with a copy of the arguments, whose items it retains |

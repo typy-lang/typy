@@ -29,6 +29,10 @@ impl RuleId {
     pub const CLS_11: Self = Self("CLS-11");
     /// `type(x)` shall give the type object of the value `x`, and a class name or the name of a built-in type shall be its type object as a value; a type object shall print as `<class 'name'>`, give its name as `__name__`, and compare with `is`, `is not`, `==` and `!=`.
     pub const CLS_12: Self = Self("CLS-12");
+    /// A class derived from an exception class shall be accepted with new methods and attributes and with its own `__init__`, `__str__` and `__repr__`; redefining another method of a base shall be rejected until CLS-04.
+    pub const CLS_13: Self = Self("CLS-13");
+    /// `super().__init__(...)` shall be accepted in the `__init__` of an exception class and shall set the exception's arguments; any other use of `super()` shall be rejected until 0.4.
+    pub const CLS_14: Self = Self("CLS-14");
     /// `for` shall iterate over `range`, `str`, `bytes`, `list`, `tuple`, `dict`, `set` and any class with `__iter__` and `__next__`.
     pub const CST_03: Self = Self("CST-03");
     /// `try` with `except`, `else` and `finally` clauses shall be accepted, and `finally` shall run on `return`, `break`, `continue` and exceptions.
@@ -199,6 +203,8 @@ impl RuleId {
         Self::CLS_09,
         Self::CLS_11,
         Self::CLS_12,
+        Self::CLS_13,
+        Self::CLS_14,
         Self::CST_03,
         Self::CST_04,
         Self::CST_05,

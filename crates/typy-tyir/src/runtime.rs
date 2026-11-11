@@ -177,6 +177,7 @@ pub enum RuntimeFunction {
     ExceptionMatches,
     ExceptionEnter,
     ExceptionLeave,
+    ExceptionSetArguments,
     FormatInt,
     FormatBool,
     FormatFloat,
@@ -213,7 +214,7 @@ const FLOAT_FLOAT: &[TyirType] = &[TyirType::Float, TyirType::Float];
 
 impl RuntimeFunction {
     /// Every runtime function.
-    pub const ALL: [Self; 174] = [
+    pub const ALL: [Self; 175] = [
         Self::IntFloorDivide,
         Self::IntModulo,
         Self::IntPower,
@@ -382,6 +383,7 @@ impl RuntimeFunction {
         Self::ExceptionMatches,
         Self::ExceptionEnter,
         Self::ExceptionLeave,
+        Self::ExceptionSetArguments,
         Self::FormatInt,
         Self::FormatBool,
         Self::FormatFloat,
@@ -549,6 +551,7 @@ impl RuntimeFunction {
             // never counted.
             Self::ExceptionEnter => signature(&[EXCEPTION], Bits, false),
             Self::ExceptionLeave => signature(&[Bits], Unit, false),
+            Self::ExceptionSetArguments => signature(&[EXCEPTION, Bits, Bits], Unit, false),
             Self::FormatInt | Self::FormatBool => signature(&[Int, STR], STR, true),
             Self::FormatFloat => signature(&[Float, STR], STR, true),
             Self::FormatStr => signature(&[STR, STR], STR, true),
@@ -751,6 +754,7 @@ impl RuntimeFunction {
             Self::ExceptionMatches => "exception_matches",
             Self::ExceptionEnter => "exception_enter",
             Self::ExceptionLeave => "exception_leave",
+            Self::ExceptionSetArguments => "exception_set_arguments",
             Self::FormatInt => "format_int",
             Self::FormatBool => "format_bool",
             Self::FormatFloat => "format_float",

@@ -75,6 +75,7 @@ pub(super) fn defined_twice(name: &Identifier) -> Diagnostic {
 pub(super) fn collect_functions<'tree>(
     statements: &'tree [Stmt],
     classes: &BTreeMap<String, ClassId>,
+    exceptions: &BTreeMap<ClassId, crate::exception::ExceptionClass>,
     floor_defers: bool,
     diagnostics: &mut Diagnostics,
 ) -> Vec<Definition<'tree>> {
@@ -96,6 +97,7 @@ pub(super) fn collect_functions<'tree>(
         }
         let scope = AnnotationScope {
             classes,
+            exceptions,
             bound: if floor_defers {
                 u32::MAX
             } else {
@@ -108,16 +110,17 @@ pub(super) fn collect_functions<'tree>(
 }
 
 /// The class a method belongs to, which types its first parameter.
-pub(super) struct Owner<'class> {
+pub(super) struct Owner {
     pub(super) id: ClassId,
-    pub(super) name: &'class str,
+    /// The type of the class's instances.
+    pub(super) instance: Type,
 }
 
 /// Returns the definition of a function, or of a method of `owner`, whose first parameter is
 /// the instance and needs no annotation.
 pub(super) fn definition<'tree>(
     parts: &FunctionParts<'tree>,
-    owner: Option<&Owner<'_>>,
+    owner: Option<&Owner>,
     scope: &AnnotationScope<'_>,
     diagnostics: &mut Diagnostics,
 ) -> Definition<'tree> {
@@ -127,7 +130,7 @@ pub(super) fn definition<'tree>(
     for (index, parameter) in parts.parameters.iter().enumerate() {
         let ty = match (owner, &parameter.annotation) {
             (Some(owner), annotation) if index == 0 => {
-                let instance = Type::Instance(owner.id, owner.name.to_owned());
+                let instance = owner.instance.clone();
                 if let Some(annotation) = annotation {
                     let annotated = annotation_type(annotation, scope, diagnostics);
                     if !annotated.matches(&instance) {
@@ -204,8 +207,10 @@ pub(super) fn definition<'tree>(
     }
     Definition {
         name: name.clone(),
-        qualified_name: owner
-            .map_or_else(|| name.clone(), |owner| format!("{}.{name}", owner.name)),
+        qualified_name: owner.map_or_else(
+            || name.clone(),
+            |owner| format!("{}.{name}", owner.instance),
+        ),
         class: owner.map(|owner| owner.id),
         signature: FunctionSignature {
             parameters: signature_parameters,

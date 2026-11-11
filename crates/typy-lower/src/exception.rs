@@ -1,7 +1,7 @@
 //! Lowers exceptions: a call of an exception class, `raise`, `try` with its `except` clauses,
 //! and `str` and `repr` of an exception (SMT-06, CST-04, EXC-01, EXC-04, EXC-08, ADR-0013).
 
-use typy_check::{ExceptionClass, RaiseCause, Type, TypedExpr, TypedHandler, TypedStmt};
+use typy_check::{ExceptionClass, InitCall, RaiseCause, Type, TypedExpr, TypedHandler, TypedStmt};
 use typy_diagnostics::Span;
 use typy_tyir::{
     BlockId, Constant, Operation, RuntimeFunction, Terminator, TyirType, TypeId, TypeObjectRef,
@@ -15,8 +15,10 @@ use crate::ownership::Lowered;
 
 /// Returns the type object of an exception class.
 pub(crate) fn exception_class(class: &ExceptionClass) -> TypeObjectRef {
-    let ExceptionClass::Builtin(builtin) = class;
-    TypeObjectRef::Exception(builtin.name())
+    match class {
+        ExceptionClass::Builtin(builtin) => TypeObjectRef::Exception(builtin.name()),
+        ExceptionClass::Class(class) => TypeObjectRef::Class(class.id.0),
+    }
 }
 
 impl FunctionLowerer<'_> {
@@ -26,8 +28,12 @@ impl FunctionLowerer<'_> {
         &mut self,
         class: &ExceptionClass,
         arguments: &[TypedExpr],
+        init: Option<&InitCall>,
         span: Span,
     ) -> Lowered {
+        if let Some(init) = init {
+            return self.new_exception_with_init(class, init, span);
+        }
         let class = self.constant(Constant::TypeObject(exception_class(class)), span);
         let types = arguments.iter().map(|value| value.ty.clone()).collect();
         let layout = self.lowered_type(&Type::Tuple(types));
@@ -53,6 +59,102 @@ impl FunctionLowerer<'_> {
         );
         self.release(tuple, span);
         exception
+    }
+
+    /// Lowers a call of an exception class with an `__init__` of the program's: the arguments
+    /// are evaluated in order, the exception is made with those written by position as its
+    /// arguments, then `__init__` runs on it, as CPython's `BaseException.__new__` and the
+    /// class's `__init__` do (CLS-03).
+    fn new_exception_with_init(
+        &mut self,
+        class: &ExceptionClass,
+        init: &InitCall,
+        span: Span,
+    ) -> Lowered {
+        let values: Vec<(usize, Lowered)> = init
+            .arguments
+            .iter()
+            .map(|argument| {
+                let lowered = self.expression(&argument.value);
+                (
+                    argument.parameter,
+                    self.kept_for_call(&argument.value, lowered, span),
+                )
+            })
+            .collect();
+        let positional = &init.arguments[..init.positional];
+        let types = positional
+            .iter()
+            .map(|argument| argument.value.ty.clone())
+            .collect();
+        let layout = self.lowered_type(&Type::Tuple(types));
+        let TyirType::Tuple(id) = layout else {
+            unreachable!("a tuple type lowers to a tuple");
+        };
+        let items: Vec<ValueId> = values[..init.positional]
+            .iter()
+            .map(|(_, lowered)| {
+                if self.counted(lowered.ty) {
+                    self.builder.push(Operation::Increment(lowered.value), span);
+                }
+                lowered.value
+            })
+            .collect();
+        let tuple = self
+            .builder
+            .push_value(Operation::MakeTuple { ty: id, items }, layout, span);
+        let tuple = self.produced(tuple, layout);
+        let class = self.constant(Constant::TypeObject(exception_class(class)), span);
+        let descriptor = self.constant(Constant::TupleDescriptor(id), span);
+        let address = if init.positional == 0 {
+            let unit = self.constant(Constant::Unit, span);
+            self.bits(Self::borrowed(unit, TyirType::Unit), span)
+        } else {
+            self.bits(Self::borrowed(tuple.value, tuple.ty), span)
+        };
+        let exception = self.call_runtime(
+            RuntimeFunction::ExceptionNew,
+            vec![class, descriptor, address],
+            span,
+        );
+        self.release(tuple, span);
+        let mut values = values;
+        values.insert(0, (0, Self::borrowed(exception.value, TyirType::EXCEPTION)));
+        let done = self.call_function(init.function, values, TyirType::Unit, span);
+        self.release(done, span);
+        exception
+    }
+
+    /// Lowers `super().__init__(arguments)` that sets an exception's arguments (CLS-14).
+    pub(crate) fn set_arguments(
+        &mut self,
+        exception: &TypedExpr,
+        arguments: &[TypedExpr],
+        span: Span,
+    ) -> Lowered {
+        let exception = self.expression(exception);
+        let types = arguments.iter().map(|value| value.ty.clone()).collect();
+        let layout = self.lowered_type(&Type::Tuple(types));
+        let TyirType::Tuple(id) = layout else {
+            unreachable!("a tuple type lowers to a tuple");
+        };
+        let descriptor = self.constant(Constant::TupleDescriptor(id), span);
+        let tuple = self.tuple_display(arguments, layout, span);
+        let address = if arguments.is_empty() {
+            let unit = self.constant(Constant::Unit, span);
+            self.bits(Self::borrowed(unit, TyirType::Unit), span)
+        } else {
+            self.bits(Self::borrowed(tuple.value, tuple.ty), span)
+        };
+        self.call_runtime(
+            RuntimeFunction::ExceptionSetArguments,
+            vec![exception.value, descriptor, address],
+            span,
+        );
+        self.release(tuple, span);
+        self.release(exception, span);
+        let unit = self.constant(Constant::Unit, span);
+        Self::borrowed(unit, TyirType::Unit)
     }
 
     /// Lowers `raise`: the exception, or the one being handled for a bare `raise`, takes its

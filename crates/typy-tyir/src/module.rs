@@ -34,6 +34,9 @@ pub struct TyirClass {
     pub repr: Option<FunctionId>,
     /// `__str__`, which `str` of an exception's argument calls, when the class has one.
     pub str: Option<FunctionId>,
+    /// The base of an exception class, whose instances are exceptions; `None` for a class
+    /// whose base is `object` (ADR-0013).
+    pub exception_base: Option<crate::types::TypeObjectRef>,
 }
 
 impl TyirModule {

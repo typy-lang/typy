@@ -61,10 +61,10 @@ impl Dump<'_> {
 
     /// Returns `attribute NAME: TYPE` for the attribute at `index` of an instance of `ty`.
     fn attribute(&self, ty: &crate::types::Type, index: usize) -> String {
-        let crate::types::Type::Instance(class, _) = ty else {
+        let Some(class) = ty.class_id() else {
             return format!("attribute {index}");
         };
-        let attribute = &self.program.class(*class).attributes[index];
+        let attribute = &self.program.class(class).attributes[index];
         format!("attribute {}: {}", attribute.name, attribute.ty)
     }
 
@@ -283,6 +283,7 @@ impl Dump<'_> {
             TypedExprKind::Compare { operators, .. } => format!("Compare {operators:?}"),
             TypedExprKind::IfExp { .. } => "IfExp".to_owned(),
             TypedExprKind::NewException { class, .. } => format!("NewException {class}"),
+            TypedExprKind::SetArguments { .. } => "SetArguments".to_owned(),
             TypedExprKind::Call { function, .. } => {
                 format!("Call {}", self.program.function(*function).qualified_name)
             }
@@ -328,6 +329,7 @@ impl Dump<'_> {
 }
 
 /// Returns an expression's operands in source order.
+#[allow(clippy::too_many_lines, reason = "one arm per expression kind")]
 fn children(expression: &TypedExpr) -> Vec<&TypedExpr> {
     match &expression.kind {
         TypedExprKind::Constant(_) | TypedExprKind::Local(_) | TypedExprKind::ModuleName => {
@@ -411,7 +413,21 @@ fn children(expression: &TypedExpr) -> Vec<&TypedExpr> {
         | TypedExprKind::TypeOf(object)
         | TypedExprKind::TypeName(object) => vec![object],
         TypedExprKind::TypeObject(_) => Vec::new(),
-        TypedExprKind::NewException { arguments, .. } => arguments.iter().collect(),
+        TypedExprKind::NewException {
+            arguments, init, ..
+        } => arguments
+            .iter()
+            .chain(
+                init.iter()
+                    .flat_map(|init| init.arguments.iter().map(|argument| &argument.value)),
+            )
+            .collect(),
+        TypedExprKind::SetArguments {
+            exception,
+            arguments,
+        } => std::iter::once(exception.as_ref())
+            .chain(arguments)
+            .collect(),
         TypedExprKind::FString(parts) => fstring_values(parts),
         TypedExprKind::Print { values, sep, end } => values
             .iter()

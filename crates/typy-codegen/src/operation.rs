@@ -81,13 +81,18 @@ impl<'ctx> FunctionEmitter<'_, '_, 'ctx> {
             Operation::Unwrap(value) => Some(self.unwrap(*value)?),
             Operation::IsNone(value) => Some(self.is_none(*value)?),
             Operation::NewInstance { class } => Some(self.new_instance(*class)?),
-            Operation::Field { object, index } => self.field(*object, *index)?,
+            Operation::Field {
+                object,
+                class,
+                index,
+            } => self.field(*object, *class, *index)?,
             Operation::SetField {
                 object,
+                class,
                 index,
                 value,
             } => {
-                self.set_field(*object, *index, *value)?;
+                self.set_field(*object, *class, *index, *value)?;
                 None
             }
             Operation::Identical { left, right } => Some(self.identical(*left, *right)?),

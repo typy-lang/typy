@@ -23,9 +23,15 @@ impl FunctionLowerer<'_> {
                 self.load(slot, span)
             }
             TypedExprKind::Tuple(items) => self.tuple_display(items, ty, span),
-            TypedExprKind::NewException { class, arguments } => {
-                self.new_exception(class, arguments, span)
-            }
+            TypedExprKind::NewException {
+                class,
+                arguments,
+                init,
+            } => self.new_exception(class, arguments, init.as_deref(), span),
+            TypedExprKind::SetArguments {
+                exception,
+                arguments,
+            } => self.set_arguments(exception, arguments, span),
             TypedExprKind::List(items) => {
                 let item = match &expression.ty {
                     typy_check::Type::List(item) => self.lowered_type(item),

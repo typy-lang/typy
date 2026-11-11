@@ -60,8 +60,8 @@ impl FunctionLowerer<'_> {
                         _ => unreachable!("the checker allows an entry target only on a dict"),
                     },
                     typy_check::AssignTarget::Attribute { object, index } => match &object.ty {
-                        typy_check::Type::Instance(class, _) => {
-                            self.program.class(*class).attributes[*index].ty.clone()
+                        ty if let Some(class) = ty.class_id() => {
+                            self.program.class(class).attributes[*index].ty.clone()
                         }
                         _ => unreachable!(
                             "the checker allows an attribute target only on an instance"

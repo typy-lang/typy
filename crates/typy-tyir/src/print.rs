@@ -198,14 +198,29 @@ fn operation(module: &TyirModule, operation: &Operation) -> String {
         Operation::IsNone(value) => format!("is_none v{}", value.0),
         Operation::FromBits { bits, ty } => format!("from_bits v{}, {ty}", bits.0),
         Operation::NewInstance { class } => format!("new class#{class}"),
-        Operation::Field { object, index } => format!("field v{}, {index}", object.0),
+        Operation::Field {
+            object,
+            class,
+            index,
+        } => format!("field v{}{}, {index}", object.0, of_class(*class)),
         Operation::SetField {
             object,
+            class,
             index,
             value,
-        } => format!("set_field v{}, {index}, v{}", object.0, value.0),
+        } => format!(
+            "set_field v{}{}, {index}, v{}",
+            object.0,
+            of_class(*class),
+            value.0
+        ),
         Operation::Identical { left, right } => format!("identical v{}, v{}", left.0, right.0),
         Operation::Increment(value) => format!("inc v{}", value.0),
         Operation::Decrement(value) => format!("dec v{}", value.0),
     }
+}
+
+/// Returns ` of class#n` for the class of an exception's attribute, or nothing.
+fn of_class(class: Option<u32>) -> String {
+    class.map_or_else(String::new, |class| format!(" of class#{class}"))
 }

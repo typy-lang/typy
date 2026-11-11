@@ -95,6 +95,41 @@ fn finally_runs_on_every_path_and_what_it_assigns_holds_after() {
 }
 
 #[test]
+fn an_exception_class_builds_exceptions_and_keeps_its_base_s_attributes() {
+    let source = "class Base(LookupError):\n    def __init__(self, code: int) -> None:\n        super().__init__(code, 'x')\n        self.code = code\n\
+                  class Child(Base):\n    def __init__(self, code: int, extra: str) -> None:\n        super().__init__(code)\n        self.extra = extra\n    def __str__(self) -> str:\n        return self.extra\n\
+                  class Plain(Child):\n    pass\n\
+                  e: LookupError = Plain(1, extra='e')\n\
+                  c = Child(2, 'c')\n\
+                  c.code += 1\n\
+                  print(c.code, c.extra, type(Base), e is c)\n\
+                  try:\n    raise Plain(3, 'p')\nexcept Base as caught:\n    print(caught.code)\n";
+    let (_directory, project) = load(source);
+    let program = TypeChecker::check(&project);
+    let program = program.expect("the program is accepted");
+    let dump = typy_check::dump(&program, &project);
+    for expected in ["SetArguments", "NewException Plain", "NewException Child"] {
+        assert!(dump.contains(expected), "{expected} in\n{dump}");
+    }
+    let child = &program.classes[1];
+    let names: Vec<&str> = child
+        .attributes
+        .iter()
+        .map(|attribute| attribute.name.as_str())
+        .collect();
+    assert_eq!(names, ["code", "extra"]);
+    assert_eq!(child.base, Some(program.classes[0].id));
+}
+
+#[test]
+fn clauses_and_super_after_a_return_are_still_checked() {
+    accepted(
+        "def f() -> None:\n    return\n    try:\n        pass\n    except ValueError as e:\n        print(e)\n\
+         class A(Exception):\n    def __init__(self) -> None:\n        return\n        super().__init__()\n",
+    );
+}
+
+#[test]
 fn raise_ends_the_path_it_is_on() {
     let source = "def f(n: int) -> int:\n    if n > 0:\n        return n\n    raise ValueError('n', n)\n\
          def g() -> str:\n    raise KeyError from None\n\
@@ -1625,6 +1660,39 @@ fn statements_and_expressions_outside_the_subset_give_their_codes() {
         (
             "try:\n    x = 1\nexcept ValueError:\n    pass\nfinally:\n    pass\nprint(x)\n",
             &["E0306"],
+        ),
+        // A class derives from an exception class defined before it, and redefines only
+        // `__init__`, `__str__` and `__repr__` (CLS-03, CLS-13, CLS-14, EXC-12).
+        ("class A(Exception, ValueError):\n    pass\n", &["E0201"]),
+        ("class B:\n    pass\nclass A(B):\n    pass\n", &["E0201"]),
+        ("class A(int):\n    pass\n", &["E0201"]),
+        (
+            "class A(B):\n    pass\nclass B(Exception):\n    pass\n",
+            &["E0306"],
+        ),
+        ("class A(UnicodeEncodeError):\n    pass\n", &["E0417"]),
+        (
+            "class A(Exception):\n    def f(self) -> None:\n        pass\nclass B(A):\n    def f(self) -> None:\n        pass\n",
+            &["E0201"],
+        ),
+        (
+            "class A(Exception):\n    def f(self) -> None:\n        super().__init__()\n",
+            &["E0201"],
+        ),
+        (
+            "class A(Exception):\n    def __init__(self) -> None:\n        super().__init__(x=1)\n",
+            &["E0404"],
+        ),
+        ("class A(Exception):\n    pass\nA(x=1)\n", &["E0404"]),
+        (
+            "class A(Exception):\n    def __init__(self, n: int) -> None:\n        self.n = n\nA('n')\n",
+            &["E0404"],
+        ),
+        ("class A(Exception):\n    pass\nA().n\n", &["E0414"]),
+        ("try:\n    pass\nexcept int:\n    pass\n", &["E0418"]),
+        (
+            "class A:\n    def __init__(self) -> None:\n        super().__init__()\n",
+            &["E0201"],
         ),
         // The name `as` binds is deleted after its clause (EXC-01).
         (

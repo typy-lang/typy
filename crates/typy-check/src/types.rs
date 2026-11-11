@@ -257,6 +257,16 @@ impl Type {
         }
     }
 
+    /// Returns the class of an instance, or of an exception of a class of the program.
+    #[must_use]
+    pub fn class_id(&self) -> Option<crate::typed::ClassId> {
+        match self {
+            Self::Instance(class, _) => Some(*class),
+            Self::Exception(exception) => exception.class_id(),
+            _ => None,
+        }
+    }
+
     /// Returns true when the type is `Error`, or holds it, so a check of it would repeat an error.
     #[must_use]
     pub fn has_error(&self) -> bool {

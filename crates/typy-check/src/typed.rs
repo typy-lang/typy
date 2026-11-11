@@ -13,7 +13,9 @@ mod symbol;
 pub use class::{Attribute, ClassId, TypedClass};
 pub use constant::TypedConstant;
 pub use dump::dump;
-pub use expression::{Argument, Conversion, FStringPart, FormattedValue, TypedExpr, TypedExprKind};
+pub use expression::{
+    Argument, Conversion, FStringPart, FormattedValue, InitCall, TypedExpr, TypedExprKind,
+};
 pub use function::{FunctionId, TypedFunction};
 pub use program::TypedProgram;
 pub use signature::{FunctionSignature, SignatureParameter};

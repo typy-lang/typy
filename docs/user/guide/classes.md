@@ -21,8 +21,9 @@ the name, such as `"Node | None"`.
 Instances are equal only to themselves and hashed by identity; operator
 methods such as `__eq__` come in 0.4 (CLS-07), with inheritance (CLS-04),
 `@dataclass` (CLS-05), `@property` (CLS-06) and `isinstance` (CLS-09).
-Exception classes come in 0.3 (CLS-03), and class variables in 0.4
-(CLS-11).
+A class may derive from an exception class, as
+[Exceptions](exceptions.md) describes (CLS-03); class variables come in
+0.4 (CLS-11).
 
 ## Example
 

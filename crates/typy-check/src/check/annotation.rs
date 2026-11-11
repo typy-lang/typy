@@ -15,6 +15,8 @@ use crate::types::Type;
 #[derive(Clone, Copy, Debug)]
 pub(crate) struct AnnotationScope<'classes> {
     pub(crate) classes: &'classes BTreeMap<String, ClassId>,
+    /// The classes that derive from an exception class, whose instances are exceptions.
+    pub(crate) exceptions: &'classes BTreeMap<ClassId, ExceptionClass>,
     pub(crate) bound: u32,
 }
 
@@ -111,6 +113,9 @@ fn named_type(
                 .with_help(format!("write the annotation as a string, `\"{id}\"`")),
             );
             return Type::Error;
+        }
+        if let Some(exception) = scope.exceptions.get(class) {
+            return Type::Exception(exception.clone());
         }
         return Type::Instance(*class, id.to_owned());
     }

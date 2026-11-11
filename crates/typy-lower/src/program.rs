@@ -51,19 +51,30 @@ pub fn lower(program: &TypedProgram) -> Result<TyirModule, Diagnostics> {
                 let TyirType::Tuple(fields) = tuple_types.intern(fields) else {
                     unreachable!("interning gives a tuple type");
                 };
+                // A method of the class, or of the nearest base that has it.
                 let method = |wanted: &str| {
-                    class
-                        .methods
-                        .iter()
-                        .find(|(name, _)| name == wanted)
-                        .map(|(_, id)| FunctionId(id.0))
+                    let mut current = Some(class);
+                    while let Some(each) = current {
+                        if let Some((_, id)) = each.methods.iter().find(|(name, _)| name == wanted)
+                        {
+                            return Some(FunctionId(id.0));
+                        }
+                        current = each.base.map(|base| program.class(base));
+                    }
+                    None
                 };
+                let exception_base = class
+                    .exception
+                    .as_ref()
+                    .and_then(typy_check::ExceptionClass::base)
+                    .map(|base| crate::exception::exception_class(&base));
                 TyirClass {
                     name: class.name.clone(),
                     module: class.module.clone(),
                     fields,
                     repr: method("__repr__"),
                     str: method("__str__"),
+                    exception_base,
                 }
             })
             .collect();

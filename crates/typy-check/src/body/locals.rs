@@ -72,6 +72,7 @@ impl BodyChecker<'_> {
     pub(super) fn annotation(&mut self, annotation: &Expr) -> Type {
         let scope = AnnotationScope {
             classes: &self.program.class_ids,
+            exceptions: &self.program.exceptions,
             bound: u32::MAX,
         };
         annotation_type(annotation, &scope, self.diagnostics)

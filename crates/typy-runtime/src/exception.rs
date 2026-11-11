@@ -195,6 +195,36 @@ pub(crate) unsafe fn set_arguments(
     }
 }
 
+/// Replaces the arguments of `exception` with a copy of `arguments`, laid out as
+/// `arguments_type` says, as `BaseException.__init__` does when `super().__init__(...)` calls
+/// it (CLS-14); the copy retains its items, and the old arguments are released.
+///
+/// # Safety
+///
+/// `exception` points to a live exception the program built, `arguments_type` is a descriptor
+/// the compiler emitted, and `arguments` points to a live tuple of it, or is anything when the
+/// tuple has no items.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn typy_rt_exception_set_arguments(
+    exception: *mut ExceptionObject,
+    arguments_type: *const TupleType,
+    arguments: *const u8,
+) {
+    // SAFETY: the caller's guarantee.
+    unsafe {
+        let replacement = typy_rt_exception_new(
+            &raw const classes::BASE_EXCEPTION,
+            arguments_type,
+            arguments,
+        );
+        let object = &mut *exception;
+        let new = &mut *replacement;
+        core::mem::swap(&mut object.arguments, &mut new.arguments);
+        core::mem::swap(&mut object.arguments_type, &mut new.arguments_type);
+        typy_rt_decrement(replacement.cast());
+    }
+}
+
 /// Gives a raised exception the exception being handled as its context, unless it is that
 /// exception, and cuts any link back to it from the context's own chain, as CPython does, so
 /// the chain never forms a cycle.

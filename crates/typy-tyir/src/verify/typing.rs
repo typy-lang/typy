@@ -239,13 +239,18 @@ impl Checker<'_> {
                 }
                 Some(TyirType::Object(TypeId::class(*class)))
             }
-            Operation::Field { object, index } => Some(self.field(*object, *index)?),
+            Operation::Field {
+                object,
+                class,
+                index,
+            } => Some(self.field(*object, *class, *index)?),
             Operation::SetField {
                 object,
+                class,
                 index,
                 value,
             } => {
-                let ty = self.field(*object, *index)?;
+                let ty = self.field(*object, *class, *index)?;
                 self.expect(*value, ty, "the attribute's value")?;
                 None
             }
@@ -278,15 +283,23 @@ impl Checker<'_> {
     }
 
     /// Returns the type of an attribute of an instance of a class of the module.
-    fn field(&self, object: ValueId, index: u32) -> Result<TyirType, VerifyError> {
+    fn field(
+        &self,
+        object: ValueId,
+        class: Option<u32>,
+        index: u32,
+    ) -> Result<TyirType, VerifyError> {
         let ty = self.ty(object)?;
-        let TyirType::Object(id) = ty else {
-            return Err(self.error(format!("v{} of type {ty} is not an instance", object.0)));
+        let not_instance = || self.error(format!("v{} of type {ty} is not an instance", object.0));
+        let class = match (ty, class) {
+            (TyirType::EXCEPTION, Some(class)) => self
+                .module
+                .classes
+                .get(class as usize)
+                .ok_or_else(not_instance)?,
+            (TyirType::Object(id), None) => self.module.class(id).ok_or_else(not_instance)?,
+            _ => return Err(not_instance()),
         };
-        let class = self
-            .module
-            .class(id)
-            .ok_or_else(|| self.error(format!("v{} of type {ty} is not an instance", object.0)))?;
         self.module
             .tuple_types
             .items(class.fields)

@@ -18,6 +18,9 @@ it.
 | An exception stored where one of its bases is declared | EXC-01 |
 | `str`, `repr`, `print` and f-strings of an exception, from its arguments | EXC-08 |
 | `type(e)`, the class the exception was made from | CLS-12 |
+| Classes of your own derived from an exception class, with attributes and methods | CLS-03 |
+| `__init__`, `__str__` and `__repr__` defined again in such a class | CLS-13 |
+| `super().__init__(...)` in the `__init__` of such a class | CLS-14 |
 
 An `except` clause catches an exception of the class it names or of any
 class derived from it, so `except LookupError` catches a `KeyError`. The
@@ -37,6 +40,36 @@ named with `from` is printed first, followed by `The above exception was
 the direct cause of the following exception:`, and a context is printed
 first, followed by `During handling of the above exception, another
 exception occurred:`, as CPython prints them.
+
+## Exception classes of your own
+
+A class derived from a built-in exception class, or from another such
+class defined before it, is an exception class. It holds its base's
+attributes first, then its own, and finds a method it does not define in
+its nearest base. Calling it makes an exception whose arguments are the
+values passed by position, as CPython's `BaseException` keeps them, then
+runs `__init__`. `super().__init__(...)` in `__init__` calls the base's
+`__init__`, or sets the arguments when the base is built in, and after it
+the base's attributes count as assigned.
+
+<!-- typy-expect: accepted -->
+```python
+class HttpError(Exception):
+    def __init__(self, status: int, reason: str) -> None:
+        super().__init__(f"{status} {reason}")
+        self.status = status
+
+
+class NotFound(HttpError):
+    def __str__(self) -> str:
+        return f"not found ({self.status})"
+
+
+try:
+    raise NotFound(404, "missing")
+except HttpError as error:
+    print(error, repr(error), error.status)
+```
 
 ## Built-in exception classes
 
@@ -101,14 +134,14 @@ catch them.
 
 ## Planned
 
-Exception classes of your own come in 0.3 (CLS-03, CLS-13, CLS-14), with
-`assert` (SMT-04):
+`assert` comes in 0.3 (SMT-04):
 
-<!-- typy-expect: rejected E0201 at 1:16 -->
+<!-- typy-expect: rejected E0201 at 1:1 -->
 ```python
-class AppError(ValueError):
-    pass
+assert 1 + 1 == 2
 ```
 
-The `args` attribute comes in 0.4 (EXC-11). Exception groups and
-`except*` are planned for after 1.0.
+Redefining a method of a base other than `__init__`, `__str__` and
+`__repr__`, and `super()` beyond `super().__init__(...)`, come with
+inheritance in 0.4 (CLS-04). The `args` attribute comes in 0.4 (EXC-11).
+Exception groups and `except*` are planned for after 1.0.

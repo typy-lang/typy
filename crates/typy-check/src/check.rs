@@ -22,7 +22,7 @@ pub(crate) use definition::Definition;
 use crate::body::{BodyChecker, Program};
 use crate::subset;
 use crate::typed::{ClassId, FunctionId, TypedProgram};
-use class::{collect_classes, collect_members};
+use class::{collect_classes, collect_members, exception_classes};
 use definition::collect_functions;
 use definition_order::check_calls_follow_definitions;
 use module_scope::{check_names_are_functions_or_variables, module_variables};
@@ -49,11 +49,18 @@ impl TypeChecker {
             .iter()
             .map(|class| (class.name.name.clone(), class.id))
             .collect();
-        let mut definitions =
-            collect_functions(&tree.body, &class_ids, floor_defers, &mut diagnostics);
+        let exceptions = exception_classes(&classes, &mut diagnostics);
+        let mut definitions = collect_functions(
+            &tree.body,
+            &class_ids,
+            &exceptions,
+            floor_defers,
+            &mut diagnostics,
+        );
         let (class_infos, methods) = collect_members(
             &classes,
             &class_ids,
+            &exceptions,
             floor_defers,
             definitions.len(),
             &mut diagnostics,
@@ -75,6 +82,7 @@ impl TypeChecker {
             variables.into_keys().collect(),
             class_infos,
             class_ids,
+            exceptions,
         );
         // Each `__init__` is checked first, since it gives the attributes it assigns their types.
         let (initializers, others): (Vec<_>, Vec<_>) =

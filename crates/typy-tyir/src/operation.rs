@@ -228,6 +228,9 @@ pub enum Operation {
     Field {
         /// The instance.
         object: ValueId,
+        /// The class of an exception, whose attributes follow its fixed part; `None` for an
+        /// instance, whose type names its class.
+        class: Option<u32>,
         /// The attribute's position.
         index: u32,
     },
@@ -236,6 +239,8 @@ pub enum Operation {
     SetField {
         /// The instance.
         object: ValueId,
+        /// The class of an exception, as for `Field`.
+        class: Option<u32>,
         /// The attribute's position.
         index: u32,
         /// The value.

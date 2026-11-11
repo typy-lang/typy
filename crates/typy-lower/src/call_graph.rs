@@ -274,7 +274,24 @@ fn expression(expression_value: &TypedExpr, callees: &mut BTreeSet<FunctionId>) 
             expression(value, callees);
             expression(index, callees);
         }
-        TypedExprKind::NewException { arguments, .. } => {
+        TypedExprKind::NewException {
+            arguments, init, ..
+        } => {
+            for argument in arguments {
+                expression(argument, callees);
+            }
+            if let Some(init) = init {
+                callees.insert(init.function);
+                for argument in &init.arguments {
+                    expression(&argument.value, callees);
+                }
+            }
+        }
+        TypedExprKind::SetArguments {
+            exception,
+            arguments,
+        } => {
+            expression(exception, callees);
             for argument in arguments {
                 expression(argument, callees);
             }

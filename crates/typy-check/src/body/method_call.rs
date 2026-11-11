@@ -19,11 +19,14 @@ impl BodyChecker<'_> {
         keywords: &[Keyword],
         span: Span,
     ) -> TypedExpr {
+        if is_super(receiver) {
+            return self.super_call(name, arguments, keywords, span);
+        }
         let receiver = self.expression(receiver);
         if receiver.ty.has_error() {
             return Self::invalid_call(span);
         }
-        if let Type::Instance(class, _) = receiver.ty {
+        if let Some(class) = receiver.ty.class_id() {
             return self.instance_method_call(receiver, class, name, arguments, keywords, span);
         }
         let Some(method) = Method::of(&receiver.ty, &name.name) else {
@@ -368,4 +371,15 @@ fn counted(count: usize, noun: &str) -> String {
     } else {
         format!("{count} {noun}s")
     }
+}
+
+/// Returns true for `super()` with no arguments.
+fn is_super(receiver: &Expr) -> bool {
+    matches!(
+        receiver,
+        Expr::Call { function, arguments, keywords, .. }
+            if matches!(function.as_ref(), Expr::Name { id, .. } if id == "super")
+                && arguments.is_empty()
+                && keywords.is_empty()
+    )
 }

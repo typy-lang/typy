@@ -8,7 +8,7 @@ use typy_source::syntax::{Expr, Identifier, Keyword};
 
 use super::BodyChecker;
 use super::flow::Fact;
-use crate::typed::{Argument, AssignTarget, ClassId, SymbolId, TypedExpr, TypedExprKind};
+use crate::typed::{Argument, AssignTarget, ClassId, InitCall, SymbolId, TypedExpr, TypedExprKind};
 use crate::types::Type;
 
 /// The `__init__` being checked: its class, and the parameter that holds the new instance.
@@ -88,16 +88,11 @@ impl BodyChecker<'_> {
     /// building is read without the check that it is complete.
     fn instance_object(&mut self, value: &Expr) -> TypedExpr {
         match self.initialized_instance(value) {
-            Some((initializing, span)) => {
-                let name = self.program.classes[initializing.class.0 as usize]
-                    .name
-                    .clone();
-                Self::typed(
-                    TypedExprKind::Local(initializing.instance),
-                    Type::Instance(initializing.class, name),
-                    span,
-                )
-            }
+            Some((initializing, span)) => Self::typed(
+                TypedExprKind::Local(initializing.instance),
+                self.program.instance_type(initializing.class),
+                span,
+            ),
             None => self.expression(value),
         }
     }
@@ -105,10 +100,7 @@ impl BodyChecker<'_> {
     /// Returns an instance with its class, after reporting a value that is not an instance.
     fn as_instance(&mut self, object: TypedExpr) -> Option<(TypedExpr, ClassId)> {
         match &object.ty {
-            Type::Instance(class, _) => {
-                let class = *class;
-                Some((object, class))
-            }
+            _ if let Some(class) = object.ty.class_id() => Some((object, class)),
             Type::Error => None,
             other => {
                 let message = format!("{} has no attributes in TyPy", other.with_article());
@@ -128,7 +120,7 @@ impl BodyChecker<'_> {
         if let Some(index) = info.attribute(&attribute.name) {
             return Some(index);
         }
-        let (message, rule) = if info.method(&attribute.name).is_some() {
+        let (message, rule) = if self.program.method(class, &attribute.name).is_some() {
             (
                 format!(
                     "using the method `{}.{}` as a value is planned for TyPy 1.0 (FUN-05)",
@@ -183,7 +175,7 @@ impl BodyChecker<'_> {
             );
         }
         let info = &self.program.classes[class.0 as usize];
-        let Some(ty) = info.attributes[index].ty.clone() else {
+        let Some(ty) = self.program.attribute_ty(class, index) else {
             let message = format!(
                 "the type of `{}.{}` is not known here, because `{}.__init__` gives it and is \
                  checked later",
@@ -218,13 +210,10 @@ impl BodyChecker<'_> {
         };
         let class = match self.initialized_instance(value) {
             Some((initializing, _)) => initializing.class,
-            None => match self.types.get(self.locals.get(id)?)? {
-                Type::Instance(class, _) => *class,
-                _ => return None,
-            },
+            None => self.types.get(self.locals.get(id)?)?.class_id()?,
         };
-        let info = &self.program.classes[class.0 as usize];
-        info.attributes[info.attribute(&attribute.name)?].ty.clone()
+        let index = self.program.classes[class.0 as usize].attribute(&attribute.name)?;
+        self.program.attribute_ty(class, index)
     }
 
     /// Checks `value.attribute = ...` with a value of type `ty`, or with the annotation
@@ -247,7 +236,9 @@ impl BodyChecker<'_> {
         if initializing && let Some(facts) = &mut self.assigned {
             facts.insert(Fact::Attribute(index));
         }
-        let info = &mut self.program.classes[class.0 as usize];
+        // An inherited attribute takes its type from the class that declares it.
+        let owner = self.program.declaring(class, index);
+        let info = &mut self.program.classes[owner.0 as usize];
         let attribute_type = match (&info.attributes[index].ty, declared) {
             (None, Some(declared)) if initializing => {
                 info.attributes[index].ty = Some(declared.clone());
@@ -328,7 +319,8 @@ impl BodyChecker<'_> {
     }
 
     /// Checks `Class(arguments)`: the arguments of `__init__`, without the instance, or none
-    /// for a class without `__init__`.
+    /// for a class without `__init__`. An exception class without `__init__` takes positional
+    /// arguments of any type, as its built-in base does.
     pub(super) fn new_instance(
         &mut self,
         class: ClassId,
@@ -336,9 +328,33 @@ impl BodyChecker<'_> {
         keywords: &[Keyword],
         span: Span,
     ) -> TypedExpr {
-        let info = &self.program.classes[class.0 as usize];
-        let (name, init) = (info.name.clone(), info.init);
-        let ty = Type::Instance(class, name.clone());
+        let name = self.program.classes[class.0 as usize].name.clone();
+        let init = self.program.method(class, "__init__");
+        let ty = self.program.instance_type(class);
+        if let Type::Exception(exception) = &ty {
+            let exception = exception.clone();
+            return match init {
+                Some(function) => {
+                    match self.bind_arguments(function, 1, &name, arguments, keywords, span) {
+                        Ok(bound) => Self::typed(
+                            TypedExprKind::NewException {
+                                class: exception,
+                                arguments: Vec::new(),
+                                init: Some(Box::new(InitCall {
+                                    function,
+                                    arguments: bound,
+                                    positional: arguments.len(),
+                                })),
+                            },
+                            ty,
+                            span,
+                        ),
+                        Err(error) => error,
+                    }
+                }
+                None => self.exception_with_arguments(exception, arguments, keywords, span),
+            };
+        }
         let arguments = match init {
             Some(init) => match self.bind_arguments(init, 1, &name, arguments, keywords, span) {
                 Ok(arguments) => arguments,
@@ -382,8 +398,9 @@ impl BodyChecker<'_> {
         keywords: &[Keyword],
         span: Span,
     ) -> TypedExpr {
+        let found = self.program.method(class, &name.name);
         let info = &self.program.classes[class.0 as usize];
-        let Some(method) = info.method(&name.name) else {
+        let Some(method) = found else {
             let message = if info.attribute(&name.name).is_some() {
                 format!(
                     "`{}.{}` is an attribute, and calling the value it holds is planned for \
