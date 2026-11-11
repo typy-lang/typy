@@ -21,6 +21,7 @@ it.
 | Classes of your own derived from an exception class, with attributes and methods | CLS-03 |
 | `__init__`, `__str__` and `__repr__` defined again in such a class | CLS-13 |
 | `super().__init__(...)` in the `__init__` of such a class | CLS-14 |
+| `assert test` and `assert test, message`, in every build mode | SMT-04 |
 
 An `except` clause catches an exception of the class it names or of any
 class derived from it, so `except LookupError` catches a `KeyError`. The
@@ -40,6 +41,12 @@ named with `from` is printed first, followed by `The above exception was
 the direct cause of the following exception:`, and a context is printed
 first, followed by `During handling of the above exception, another
 exception occurred:`, as CPython prints them.
+
+`assert test, message` raises `AssertionError(message)` when the test is
+false, and evaluates the message only then. TyPy keeps every `assert` in
+every build mode, as CPython does without `-O`. What the test shows holds
+after it, so `assert value is not None` lets the code below use `value`
+as its base type.
 
 ## Exception classes of your own
 
@@ -134,14 +141,21 @@ catch them.
 
 ## Planned
 
-`assert` comes in 0.3 (SMT-04):
-
-<!-- typy-expect: rejected E0201 at 1:1 -->
-```python
-assert 1 + 1 == 2
-```
-
 Redefining a method of a base other than `__init__`, `__str__` and
 `__repr__`, and `super()` beyond `super().__init__(...)`, come with
-inheritance in 0.4 (CLS-04). The `args` attribute comes in 0.4 (EXC-11).
-Exception groups and `except*` are planned for after 1.0.
+inheritance in 0.4 (CLS-04):
+
+<!-- typy-expect: rejected E0201 at 7:9 -->
+```python
+class AppError(Exception):
+    def code(self) -> int:
+        return 1
+
+
+class OtherError(AppError):
+    def code(self) -> int:
+        return 2
+```
+
+The `args` attribute comes in 0.4 (EXC-11). Exception groups and
+`except*` are planned for after 1.0.

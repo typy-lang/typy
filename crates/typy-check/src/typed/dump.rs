@@ -246,6 +246,15 @@ impl Dump<'_> {
                 self.block(depth + 1, "orelse", orelse);
                 self.block(depth + 1, "finally", finalbody);
             }
+            TypedStmt::Assert {
+                test,
+                exception,
+                span,
+            } => {
+                self.line(depth, "Assert", *span);
+                self.expression(depth + 1, test);
+                self.expression(depth + 1, exception);
+            }
             TypedStmt::Pass { span } => self.line(depth, "Pass", *span),
             TypedStmt::Break { span } => self.line(depth, "Break", *span),
             TypedStmt::Continue { span } => self.line(depth, "Continue", *span),

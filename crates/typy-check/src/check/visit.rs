@@ -21,6 +21,11 @@ pub(super) fn visit_statement(statement: &Stmt, visit: &mut dyn FnMut(&Expr)) {
             visit_expression(target, visit);
             visit_expression(value, visit);
         }
+        Stmt::Assert { test, message, .. } => {
+            for value in std::iter::once(test).chain(message) {
+                visit_expression(value, visit);
+            }
+        }
         Stmt::Raise {
             exception, cause, ..
         } => {

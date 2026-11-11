@@ -106,10 +106,6 @@ fn later_features_name_their_release_and_rule() {
             "`with` statements are planned for TyPy 0.3 (CST-05)",
         ),
         (
-            "assert True\n",
-            "`assert` statements are planned for TyPy 0.3 (SMT-04)",
-        ),
-        (
             "del x\n",
             "`del` statements are planned for TyPy 0.3 (SMT-05)",
         ),

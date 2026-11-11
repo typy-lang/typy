@@ -162,7 +162,11 @@ impl Converter<'_> {
                 finalbody: self.statements(&node.finalbody),
                 span,
             },
-            ast::Stmt::Assert(node) => self.other_statement(NodeKind::Assert, node.range),
+            ast::Stmt::Assert(node) => Stmt::Assert {
+                test: self.expression(&node.test),
+                message: node.msg.as_deref().map(|message| self.expression(message)),
+                span,
+            },
             ast::Stmt::Import(node) => Stmt::Import {
                 names: node.names.iter().map(|alias| self.alias(alias)).collect(),
                 is_lazy: node.is_lazy,

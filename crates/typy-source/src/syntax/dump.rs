@@ -244,6 +244,12 @@ impl Dump<'_> {
                 self.block(depth + 1, "orelse", orelse);
                 self.block(depth + 1, "finally", finalbody);
             }
+            Stmt::Assert { test, message, .. } => {
+                self.line(depth, "Assert", span);
+                for value in std::iter::once(test).chain(message) {
+                    self.expression(depth + 1, value);
+                }
+            }
             Stmt::Pass { .. } => self.line(depth, "Pass", span),
             Stmt::Break { .. } => self.line(depth, "Break", span),
             Stmt::Continue { .. } => self.line(depth, "Continue", span),

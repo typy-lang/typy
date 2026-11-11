@@ -12,7 +12,6 @@ pub enum NodeKind {
     AsyncFor,
     AsyncFunctionDef,
     AsyncWith,
-    Assert,
     Await,
     Delete,
     GeneratorExp,

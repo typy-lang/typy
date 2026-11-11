@@ -393,4 +393,29 @@ impl BodyChecker<'_> {
         }
         call
     }
+
+    /// Checks `assert test, message`, which raises `AssertionError(message)` when the test is
+    /// false, in every build mode (SMT-04). What the test shows holds after it, as it does for
+    /// an `if` whose other branch raises.
+    pub(super) fn assert_statement(
+        &mut self,
+        test: &Expr,
+        message: Option<&Expr>,
+        span: Span,
+    ) -> TypedStmt {
+        let test = self.truth_test(test);
+        let (holds, _) = super::flow::test_facts(&test);
+        let exception = self.new_exception(
+            BuiltinException::AssertionError,
+            message.map(std::slice::from_ref).unwrap_or_default(),
+            &[],
+            span,
+        );
+        self.add_facts(holds);
+        TypedStmt::Assert {
+            test,
+            exception,
+            span,
+        }
+    }
 }

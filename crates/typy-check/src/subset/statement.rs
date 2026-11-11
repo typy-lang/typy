@@ -101,6 +101,11 @@ impl Walker {
                     self.expression(value);
                 }
             }
+            Stmt::Assert { test, message, .. } => {
+                for value in std::iter::once(test).chain(message) {
+                    self.expression(value);
+                }
+            }
             Stmt::Raise {
                 exception, cause, ..
             } => {

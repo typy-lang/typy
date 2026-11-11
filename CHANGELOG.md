@@ -19,6 +19,16 @@ All notable changes to TyPy are recorded here. The format follows
 - `str`, `repr`, `print` and f-strings of an exception give CPython's text,
   computed from its arguments; `repr` of a `UnicodeDecodeError` shows its
   five arguments (EXC-08).
+- Exception classes of your own: a class derived from a built-in
+  exception class, or from such a class defined before it, with
+  attributes, methods and its own `__init__`, `__str__` and `__repr__`.
+  Calling it keeps the arguments passed by position as the exception's
+  arguments, and `super().__init__(...)` in `__init__` calls the base's.
+  `except` catches it by any of its bases, and `is` compares exceptions
+  (CLS-03, CLS-13, CLS-14, EXP-08).
+- `assert test` and `assert test, message`, which raise `AssertionError`
+  when the test is false in every build mode, evaluating the message only
+  then; what the test shows holds after it (SMT-04).
 - `finally`, which runs on every way out of a `try`: falling through,
   `return`, `break`, `continue` and an exception, which keeps going after
   it. E0419 refuses a `return`, `break` or `continue` that would leave a
@@ -38,6 +48,10 @@ All notable changes to TyPy are recorded here. The format follows
 
 ### Fixed
 
+- A list, set or dict display, a comprehension, or a `list`, `set`,
+  `tuple` or `dict` call is accepted where an optional collection is
+  expected, such as `items: list[int] | None = []` or an argument of type
+  `list[int] | None`; it stopped with E9001 or E0410.
 - A function that returns a value on both branches of an `if` and `else`,
   with nothing after them, compiles; it stopped with E9001.
 

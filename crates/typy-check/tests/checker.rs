@@ -130,6 +130,22 @@ fn clauses_and_super_after_a_return_are_still_checked() {
 }
 
 #[test]
+fn assert_builds_an_assertion_error_and_narrows_after_it() {
+    let source = "def f(x: int | None) -> int:\n    assert x is not None, 'needed'\n    assert x > 0\n    return x + 1\n";
+    let (_directory, project) = load(source);
+    let program = TypeChecker::check(&project).expect("the program is accepted");
+    let dump = typy_check::dump(&program, &project);
+    for expected in [
+        "Assert @2:5",
+        "NewException AssertionError : AssertionError",
+        "Assert @3:5",
+        "Unwrap",
+    ] {
+        assert!(dump.contains(expected), "{expected} in\n{dump}");
+    }
+}
+
+#[test]
 fn raise_ends_the_path_it_is_on() {
     let source = "def f(n: int) -> int:\n    if n > 0:\n        return n\n    raise ValueError('n', n)\n\
          def g() -> str:\n    raise KeyError from None\n\

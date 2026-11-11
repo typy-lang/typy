@@ -116,6 +116,11 @@ impl BodyChecker<'_> {
                 cause,
                 span,
             } => self.raise_statement(exception.as_ref(), cause.as_ref(), *span),
+            Stmt::Assert {
+                test,
+                message,
+                span,
+            } => self.assert_statement(test, message.as_ref(), *span),
             Stmt::Try {
                 body,
                 handlers,

@@ -112,6 +112,24 @@ impl FunctionLowerer<'_> {
                 cause,
                 span,
             } => self.raise_statement(exception.as_ref(), cause, *span),
+            TypedStmt::Assert {
+                test,
+                exception,
+                span,
+            } => {
+                // The message is evaluated only when the test is false, as in CPython.
+                let condition = self.condition(test);
+                let passed = self.builder.create_block();
+                let failed = self.builder.create_block();
+                self.builder.terminate(Terminator::Branch {
+                    condition,
+                    then: passed,
+                    otherwise: failed,
+                });
+                self.builder.switch_to(failed);
+                self.raise_statement(Some(exception), &typy_check::RaiseCause::Absent, *span);
+                self.builder.switch_to(passed);
+            }
             TypedStmt::If {
                 test,
                 body,

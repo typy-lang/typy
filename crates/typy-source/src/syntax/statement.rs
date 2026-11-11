@@ -151,6 +151,12 @@ pub enum Stmt {
         finalbody: Vec<Stmt>,
         span: Span,
     },
+    /// `assert test` or `assert test, message`.
+    Assert {
+        test: Expr,
+        message: Option<Expr>,
+        span: Span,
+    },
     /// `raise`, `raise exception` or `raise exception from cause`.
     Raise {
         exception: Option<Expr>,
@@ -211,6 +217,7 @@ impl Stmt {
             | Self::ImportFrom { span, .. }
             | Self::Expr { span, .. }
             | Self::Raise { span, .. }
+            | Self::Assert { span, .. }
             | Self::Try { span, .. }
             | Self::Pass { span }
             | Self::Break { span }

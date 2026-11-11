@@ -162,6 +162,13 @@ pub enum TypedStmt {
         value: Option<TypedExpr>,
         span: Span,
     },
+    /// `assert test, message`: when the test is false, the exception, an `AssertionError` of
+    /// the message, is raised (SMT-04).
+    Assert {
+        test: TypedExpr,
+        exception: TypedExpr,
+        span: Span,
+    },
     /// `try` with its `except` clauses, its `else` block and its `finally` block (CST-04).
     Try {
         body: Vec<TypedStmt>,

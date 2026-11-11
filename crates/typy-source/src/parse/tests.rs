@@ -233,7 +233,6 @@ match v:
 with f:
     pass
 del x
-assert x
 global g
 ";
     let kinds: Vec<NodeKind> = body(source)
@@ -251,7 +250,6 @@ global g
             NodeKind::Match,
             NodeKind::With,
             NodeKind::Delete,
-            NodeKind::Assert,
             NodeKind::Global,
         ]
     );
@@ -711,6 +709,14 @@ fn each_form_of_raise_is_dumped_with_its_operands() {
 fn a_try_statement_keeps_its_clauses_in_order() {
     let source = "try:\n    pass\nexcept (A, B) as e:\n    raise\nexcept:\n    pass\nelse:\n    pass\nfinally:\n    pass\n";
     let expected = "Module\n  Try @1:1\n    body\n      Pass @2:5\n    except as e @3:1\n      Tuple @3:8\n        Name A @3:9\n        Name B @3:12\n      body\n        Raise @4:5\n    except @5:1\n      body\n        Pass @6:5\n    orelse\n      Pass @8:5\n    finally\n      Pass @10:5\n";
+    let parsed = parse(&file(source), PythonFloor::V3_12).unwrap();
+    assert_eq!(dump(&parsed, &file(source)), expected);
+}
+
+#[test]
+fn assert_keeps_its_test_and_message() {
+    let source = "assert x\nassert x, 'm'\n";
+    let expected = "Module\n  Assert @1:1\n    Name x @1:8\n  Assert @2:1\n    Name x @2:8\n    Constant Str(\"m\") @2:11\n";
     let parsed = parse(&file(source), PythonFloor::V3_12).unwrap();
     assert_eq!(dump(&parsed, &file(source)), expected);
 }
