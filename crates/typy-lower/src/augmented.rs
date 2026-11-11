@@ -67,6 +67,9 @@ impl FunctionLowerer<'_> {
             AssignTarget::Tuple(_) => {
                 unreachable!("Python refuses a tuple as the target of an augmented assignment")
             }
+            AssignTarget::Slice { .. } => {
+                unreachable!("the checker refuses an augmented assignment to a slice")
+            }
         }
     }
 

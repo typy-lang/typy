@@ -19,7 +19,14 @@ the same exceptions.
 | `set[T]`, in CPython's order for `int`, `str` and `bytes` items | DAT-10 |
 | Negative indexes and `IndexError` outside a sequence | DAT-11 |
 | Slices with start, stop and step | DAT-12 |
+| Assigning a list to a slice of a list, `xs[a:b] = items` | DAT-13 |
 | The set methods that combine a set with other collections | DAT-15 |
+
+A slice without a step, or with a step of 1, takes any number of items,
+and the list grows or shrinks to fit: `xs[:0] = items` inserts at the
+front and `xs[:] = []` empties the list. A slice with any other step takes
+exactly as many items as it selects, or raises `ValueError`, as CPython
+does.
 
 The comparisons of dict views and the views' set operations are planned
 for 0.3 (DAT-16).

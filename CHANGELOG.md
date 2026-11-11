@@ -26,6 +26,10 @@ All notable changes to TyPy are recorded here. The format follows
   arguments, and `super().__init__(...)` in `__init__` calls the base's.
   `except` catches it by any of its bases, and `is` compares exceptions
   (CLS-03, CLS-13, CLS-14, EXP-08).
+- Assigning a list to a slice of a list, `xs[a:b:c] = items`, with
+  CPython's results: a simple slice grows or shrinks the list, and an
+  extended slice takes exactly as many items or raises `ValueError`
+  (DAT-13).
 - `del` of list items, list slices with or without a step, and dict keys,
   with CPython's errors; E0421 for `del` of a variable, an attribute or
   part of a tuple, `str` or `bytes` (SMT-05).

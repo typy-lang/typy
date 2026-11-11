@@ -148,6 +148,23 @@ impl FunctionLowerer<'_> {
                 self.store(slot, value, span);
             }
             AssignTarget::Item { list, index } => self.assign_item(list, index, value, span),
+            AssignTarget::Slice {
+                list,
+                lower,
+                upper,
+                step,
+            } => {
+                // The value is evaluated first; the list and the bounds after it (DAT-13).
+                let bounds = [lower.as_deref(), upper.as_deref(), step.as_deref()];
+                self.call_with_slice(
+                    RuntimeFunction::ListAssignSlice,
+                    list,
+                    bounds,
+                    vec![value.value],
+                    span,
+                );
+                self.release(value, span);
+            }
             AssignTarget::Entry { dict, key } => self.assign_entry(dict, key, value, span),
             AssignTarget::Attribute { object, index } => {
                 self.assign_attribute(object, *index, value, span);

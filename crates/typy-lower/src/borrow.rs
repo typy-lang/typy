@@ -21,6 +21,7 @@ pub(crate) fn assigned_symbols(body: &[TypedStmt]) -> BTreeSet<SymbolId> {
                 }
             }
             AssignTarget::Item { .. }
+            | AssignTarget::Slice { .. }
             | AssignTarget::Entry { .. }
             | AssignTarget::Attribute { .. } => {}
         }

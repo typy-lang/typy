@@ -114,6 +114,7 @@ impl Dump<'_> {
                 format!("({})", parts.join(", "))
             }
             AssignTarget::Item { list, .. } => format!("item of {}", list.ty),
+            AssignTarget::Slice { list, .. } => format!("slice of {}", list.ty),
             AssignTarget::Entry { dict, .. } => format!("entry of {}", dict.ty),
             AssignTarget::Attribute { object, index } => self.attribute(&object.ty, *index),
         }

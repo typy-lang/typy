@@ -934,7 +934,6 @@ fn slice_and_list_method_rules_give_their_codes() {
         ("x = 1\ny = x[1:2]\n", &["E0401"]),
         ("y = missing[1:2]\n", &["E0205"]),
         ("x = [[1]]\ny = x[0:1, 0]\n", &["E0401"]),
-        ("x = [1]\nx[0:1] = [2]\n", &["E0201"]),
         ("x = [1]\nx[0:1] += [2]\n", &["E0201"]),
         ("x = (1, 2)\nx[0] += 1\n", &["E0401"]),
         ("x = 'ab'\nx[0] += 'c'\n", &["E0401"]),
@@ -1793,6 +1792,12 @@ fn statements_and_expressions_outside_the_subset_give_their_codes() {
 #[test]
 fn iterators_used_wrongly_give_their_codes() {
     let cases: &[(&str, &[&str])] = &[
+        // A slice of a list takes a list of its items (DAT-13).
+        ("xs = [1]\nws = ['a']\nxs[0:1] = ws\n", &["E0402"]),
+        ("s = 'ab'\ns[0:1] = ['a']\n", &["E0401"]),
+        ("xs = [1]\nxs[0:'a'] = [2]\n", &["E0404"]),
+        ("xs = [1]\nxs[0:1] += [2]\n", &["E0201"]),
+        ("xs = [1]\nu[0:1] = [2]\n", &["E0205"]),
         // `del` removes list items, slices and dict keys only (SMT-05).
         ("x = 1\ndel x\n", &["E0421"]),
         ("t = (1, 2)\ndel t[0]\n", &["E0421"]),

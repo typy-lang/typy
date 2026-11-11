@@ -47,7 +47,7 @@ impl FunctionLowerer<'_> {
             TyirType::BYTES => RuntimeFunction::BytesSlice,
             _ => RuntimeFunction::ListSlice,
         };
-        self.call_with_slice(function, value, bounds, span)
+        self.call_with_slice(function, value, bounds, Vec::new(), span)
     }
 
     /// Calls `function` with `value`, each bound as an `int` word, 0 when missing, and the
@@ -58,6 +58,7 @@ impl FunctionLowerer<'_> {
         function: RuntimeFunction,
         value: &TypedExpr,
         bounds: [Option<&TypedExpr>; 3],
+        extra: Vec<typy_tyir::ValueId>,
         span: Span,
     ) -> Lowered {
         let sliced = self.expression(value);
@@ -78,6 +79,7 @@ impl FunctionLowerer<'_> {
             arguments.push(word);
         }
         arguments.push(self.constant(Constant::Int(mask.to_string()), span));
+        arguments.extend(extra);
         let result = self.call_runtime(function, arguments, span);
         for bound in lowered.into_iter().flatten() {
             self.release(bound, span);
@@ -108,7 +110,13 @@ impl FunctionLowerer<'_> {
                 step,
             } => {
                 let bounds = [lower.as_deref(), upper.as_deref(), step.as_deref()];
-                self.call_with_slice(RuntimeFunction::ListDeleteSlice, value, bounds, span);
+                self.call_with_slice(
+                    RuntimeFunction::ListDeleteSlice,
+                    value,
+                    bounds,
+                    Vec::new(),
+                    span,
+                );
             }
             TypedExprKind::DictItem { dict, key } => {
                 let dict = self.expression(dict);

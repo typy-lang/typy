@@ -124,6 +124,14 @@ impl BodyChecker<'_> {
         {
             return self.attribute_type(value, attribute);
         }
+        // A slice of a list takes a list of the same type, which an empty `[]` gets.
+        if let Expr::Subscript { value, index, .. } = target
+            && let Expr::Slice { .. } = index.as_ref()
+        {
+            return self
+                .known_type(value)
+                .filter(|ty| matches!(ty, Type::List(_)));
+        }
         let Expr::Name { id, .. } = target else {
             return None;
         };
@@ -201,9 +209,11 @@ impl BodyChecker<'_> {
             let key = self.expression_expecting(index, Some(&key));
             return self.entry_target(list, key, ty, span);
         }
-        if let Expr::Slice { .. } = index {
-            self.slice_assignment(span);
-            return None;
+        if let Expr::Slice {
+            lower, upper, step, ..
+        } = index
+        {
+            return self.slice_target(list, [lower, upper, step], ty, span);
         }
         let index = self.expression(index);
         self.checked_item_target(list, index, ty, span)
@@ -306,10 +316,57 @@ impl BodyChecker<'_> {
             Diagnostic::new(
                 DiagnosticCode::error(201),
                 span,
-                "assigning to a slice is planned for TyPy 0.3 (DAT-13)",
+                "an augmented assignment to a slice is planned for after TyPy 1.0",
             )
             .with_rule(RuleId::DAT_13),
         );
+    }
+
+    /// Checks `list[lower:upper:step] = items`: a slice of a list takes a list of its item
+    /// type, and each bound is an `int` (DAT-13).
+    fn slice_target(
+        &mut self,
+        list: TypedExpr,
+        bounds: [&Option<Box<Expr>>; 3],
+        ty: &Type,
+        span: Span,
+    ) -> Option<AssignTarget> {
+        let [lower, upper, step] = bounds.map(|bound| {
+            bound.as_deref().map(|bound| {
+                let value = self.expression(bound);
+                self.expect(&value, Type::Int, "a slice bound");
+                Box::new(value)
+            })
+        });
+        match &list.ty {
+            Type::List(_) => {}
+            Type::Error => return None,
+            other => {
+                let other = other.clone();
+                self.unassignable_item(&other, span);
+                return None;
+            }
+        }
+        if !ty.is_assignable_to(&list.ty) {
+            self.diagnostics.push(
+                Diagnostic::new(
+                    DiagnosticCode::error(402),
+                    span,
+                    format!(
+                        "a slice of {} is assigned {}, and takes a list of its items",
+                        list.ty,
+                        ty.with_article()
+                    ),
+                )
+                .with_rule(RuleId::DAT_13),
+            );
+        }
+        Some(AssignTarget::Slice {
+            list: Box::new(list),
+            lower,
+            upper,
+            step,
+        })
     }
 
     /// Binds a name target to a value of type `ty`; the first binding fixes the variable's type (TYP-02, TYP-03).

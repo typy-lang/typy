@@ -67,7 +67,9 @@ impl FunctionLowerer<'_> {
                             "the checker allows an attribute target only on an instance"
                         ),
                     },
-                    typy_check::AssignTarget::Tuple(_) => typy_check::Type::Error,
+                    typy_check::AssignTarget::Tuple(_) | typy_check::AssignTarget::Slice { .. } => {
+                        typy_check::Type::Error
+                    }
                 };
                 self.augmented_assignment(target, *operator, value, &result, *span);
             }

@@ -186,6 +186,7 @@ pub enum RuntimeFunction {
     Traceback,
     ListDelete,
     ListDeleteSlice,
+    ListAssignSlice,
     FormatInt,
     FormatBool,
     FormatFloat,
@@ -222,7 +223,7 @@ const FLOAT_FLOAT: &[TyirType] = &[TyirType::Float, TyirType::Float];
 
 impl RuntimeFunction {
     /// Every runtime function.
-    pub const ALL: [Self; 183] = [
+    pub const ALL: [Self; 184] = [
         Self::IntFloorDivide,
         Self::IntModulo,
         Self::IntPower,
@@ -400,6 +401,7 @@ impl RuntimeFunction {
         Self::Traceback,
         Self::ListDelete,
         Self::ListDeleteSlice,
+        Self::ListAssignSlice,
         Self::FormatInt,
         Self::FormatBool,
         Self::FormatFloat,
@@ -577,6 +579,7 @@ impl RuntimeFunction {
             Self::Traceback => signature(&[], TyirType::TRACEBACK, false),
             Self::ListDelete => signature(&[LIST, Int], Unit, true),
             Self::ListDeleteSlice => signature(&[LIST, Int, Int, Int, Int], Unit, true),
+            Self::ListAssignSlice => signature(&[LIST, Int, Int, Int, Int, LIST], Unit, true),
             Self::FormatInt | Self::FormatBool => signature(&[Int, STR], STR, true),
             Self::FormatFloat => signature(&[Float, STR], STR, true),
             Self::FormatStr => signature(&[STR, STR], STR, true),
@@ -788,6 +791,7 @@ impl RuntimeFunction {
             Self::Traceback => "traceback",
             Self::ListDelete => "list_delete",
             Self::ListDeleteSlice => "list_delete_slice",
+            Self::ListAssignSlice => "list_assign_slice",
             Self::FormatInt => "format_int",
             Self::FormatBool => "format_bool",
             Self::FormatFloat => "format_float",

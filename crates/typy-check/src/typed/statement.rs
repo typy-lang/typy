@@ -23,6 +23,18 @@ pub enum AssignTarget {
         /// The position, counted from the end when negative.
         index: Box<TypedExpr>,
     },
+    /// A slice of a list, `list[lower:upper:step] = items`, which the items of a list replace;
+    /// the list and the bounds are evaluated after the value, as CPython does (DAT-13).
+    Slice {
+        /// The list.
+        list: Box<TypedExpr>,
+        /// The start, if given.
+        lower: Option<Box<TypedExpr>>,
+        /// The stop, if given.
+        upper: Option<Box<TypedExpr>>,
+        /// The step, if given.
+        step: Option<Box<TypedExpr>>,
+    },
     /// An attribute of an instance, `object.name = value`, by its position in the class's
     /// attributes; the object is evaluated after the value, as CPython does (CLS-01).
     Attribute {

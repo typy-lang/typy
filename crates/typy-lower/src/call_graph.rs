@@ -162,6 +162,17 @@ fn assign_target(target: &AssignTarget, callees: &mut BTreeSet<FunctionId>) {
                 assign_target(target, callees);
             }
         }
+        AssignTarget::Slice {
+            list,
+            lower,
+            upper,
+            step,
+        } => {
+            expression(list, callees);
+            for bound in [lower, upper, step].into_iter().flatten() {
+                expression(bound, callees);
+            }
+        }
         AssignTarget::Item { list, index } => {
             expression(list, callees);
             expression(index, callees);

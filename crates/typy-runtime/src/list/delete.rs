@@ -1,6 +1,7 @@
-//! `del` of a list item and of a list slice (SMT-05), with CPython's results and messages.
+//! `del` of a list item and of a list slice (SMT-05), and assignment to a list slice (DAT-13),
+//! with CPython's results and messages.
 
-use super::{ListObject, take_out};
+use super::{ListObject, reserve, take_out};
 use crate::exception::ExceptionObject;
 use crate::slice::select;
 
@@ -83,6 +84,131 @@ pub unsafe extern "C" fn typy_rt_list_delete_slice(
     }
 }
 
+/// Replaces what `list[start:stop:step]` selects with the items of `source`, as assigning to
+/// a slice does (DAT-13). A slice without a step, or with a step of 1, takes any number of
+/// items, and the list grows or shrinks; any other step takes exactly as many items as it
+/// selects, or raises `ValueError`. The source's items are counted before the list changes,
+/// so a list may be assigned to a slice of itself.
+///
+/// # Safety
+///
+/// `list` and `source` point to live lists of one item type, and the bounds are `int` words.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn typy_rt_list_assign_slice(
+    list: *mut ListObject,
+    start: i64,
+    stop: i64,
+    stride: i64,
+    present: i64,
+    source: *const ListObject,
+) -> *mut ExceptionObject {
+    // SAFETY: the caller passes live lists; every position read or written is inside them.
+    unsafe {
+        let selection = match select(start, stop, stride, present, (*list).length) {
+            Ok(selection) => selection,
+            Err(error) => return error,
+        };
+        let count = (*source).length;
+        let words = (*list).words();
+        let item_type = (*list).item_type();
+        // The new items, each with a reference of its own, copied before the list changes.
+        let size = crate::allocator::array_size(count.max(1), 8 * words, 0);
+        #[allow(
+            clippy::cast_ptr_alignment,
+            reason = "malloc returns memory aligned for every type"
+        )]
+        let incoming = crate::allocator::allocate(size).cast::<u64>();
+        for index in 0..count {
+            item_type.retain((*source).item(index));
+            core::ptr::copy_nonoverlapping(
+                (*source).slot(index),
+                incoming.add(index * words),
+                words,
+            );
+        }
+        if selection.step == 1 {
+            replace_run(
+                list,
+                selection.start_position(),
+                selection.count,
+                incoming,
+                count,
+            );
+        } else if count != selection.count {
+            for index in 0..count {
+                item_type.release(item_at(incoming, index, words, item_type));
+            }
+            crate::allocator::free(incoming.cast());
+            let mut message = crate::message::MessageBuffer::new();
+            message.push_str("attempt to assign sequence of size ");
+            message.push_number(i64::try_from(count).unwrap_or(i64::MAX));
+            message.push_str(" to extended slice of size ");
+            message.push_number(i64::try_from(selection.count).unwrap_or(i64::MAX));
+            return message.raise(crate::ExceptionKind::ValueError);
+        } else {
+            for index in 0..count {
+                let slot = (*list).slot(selection.position(index));
+                item_type.release((*list).item(selection.position(index)));
+                core::ptr::copy_nonoverlapping(incoming.add(index * words), slot, words);
+            }
+        }
+        crate::allocator::free(incoming.cast());
+        core::ptr::null_mut()
+    }
+}
+
+/// Returns item `index` of a run of items laid out as a list stores them.
+///
+/// # Safety
+///
+/// The run holds more than `index` items of `item_type`.
+unsafe fn item_at(run: *mut u64, index: usize, words: usize, item_type: super::ItemType) -> u64 {
+    // SAFETY: the caller's guarantee.
+    unsafe {
+        let slot = run.add(index * words);
+        if item_type.kind() == super::ItemKind::Tuple {
+            slot.expose_provenance() as u64
+        } else {
+            *slot
+        }
+    }
+}
+
+/// Replaces the `removed` items from `start` with the `count` items of `incoming`, which hold
+/// their own references, moving the rest of the list to fit.
+///
+/// # Safety
+///
+/// `list` is live, `start + removed` is within it, and `incoming` holds `count` items of its type.
+unsafe fn replace_run(
+    list: *mut ListObject,
+    start: usize,
+    removed: usize,
+    incoming: *mut u64,
+    count: usize,
+) {
+    // SAFETY: the caller's guarantee; `reserve` makes room before the tail moves right.
+    unsafe {
+        let item_type = (*list).item_type();
+        let words = (*list).words();
+        for index in start..start + removed {
+            item_type.release((*list).item(index));
+        }
+        let length = (*list).length;
+        let tail = length - start - removed;
+        if count > removed {
+            reserve(list, count - removed);
+        }
+        core::ptr::copy(
+            (*list).slot(start + removed),
+            (*list).slot(start + count),
+            tail * words,
+        );
+        core::ptr::copy_nonoverlapping(incoming, (*list).slot(start), count * words);
+        (*list).length = length - removed + count;
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::{typy_rt_list_delete, typy_rt_list_delete_slice};
@@ -152,6 +278,80 @@ mod tests {
             assert_eq!(values(list), kept, "{start}:{stop}:{stride} mask {mask}");
             release(list);
         }
+    }
+
+    /// A slice's start, stop, step and mask, the items assigned to it, and the list after.
+    type Assignment = (i64, i64, i64, i64, &'static [i64], &'static [i64]);
+
+    #[test]
+    fn assigning_a_slice_replaces_what_it_selects() {
+        let cases: [Assignment; 6] = [
+            (1, 3, 0, 3, &[9], &[0, 9, 3, 4]),
+            (1, 1, 0, 3, &[7, 8], &[0, 7, 8, 1, 2, 3, 4]),
+            (0, 0, 0, 0, &[], &[]),
+            (0, 0, 2, 4, &[5, 6, 7], &[5, 1, 6, 3, 7]),
+            (0, 0, -2, 4, &[5, 6, 7], &[7, 1, 6, 3, 5]),
+            (3, 1, 0, 3, &[9], &[0, 1, 2, 9, 3, 4]),
+        ];
+        for (start, stop, stride, mask, items, expected) in cases {
+            let list = list_of(&[0, 1, 2, 3, 4]);
+            let source = list_of(items);
+            // SAFETY: both lists are live and the bounds are `int` words.
+            let error = unsafe {
+                super::typy_rt_list_assign_slice(
+                    list,
+                    word(start),
+                    word(stop),
+                    word(stride),
+                    word(mask),
+                    source,
+                )
+            };
+            assert!(error.is_null());
+            assert_eq!(
+                values(list),
+                expected,
+                "{start}:{stop}:{stride} mask {mask}"
+            );
+            release(source);
+            release(list);
+        }
+    }
+
+    #[test]
+    fn a_list_assigned_to_a_slice_of_itself_is_copied_first() {
+        let list = list_of(&[1, 2, 3]);
+        // SAFETY: the list is live.
+        let error = unsafe {
+            super::typy_rt_list_assign_slice(list, word(1), word(0), word(0), word(1), list)
+        };
+        assert!(error.is_null());
+        assert_eq!(values(list), [1, 1, 2, 3]);
+        release(list);
+    }
+
+    #[test]
+    fn an_extended_slice_takes_exactly_as_many_items() {
+        let list = list_of(&[0, 1, 2, 3]);
+        let source = list_of(&[9]);
+        // SAFETY: both lists are live.
+        unsafe {
+            let error =
+                super::typy_rt_list_assign_slice(list, word(0), word(0), word(2), word(4), source);
+            assert_eq!((*error).kind(), crate::ExceptionKind::ValueError);
+            let message = (*error).message;
+            let text: String = (0..crate::string::length(message))
+                .map(|index| char::from_u32(crate::string::code_point(message, index)).unwrap())
+                .collect();
+            assert_eq!(
+                text,
+                "attempt to assign sequence of size 1 to extended slice of size 2"
+            );
+            crate::refcount::typy_rt_decrement(error.cast());
+        }
+        assert_eq!(values(list), [0, 1, 2, 3]);
+        release(source);
+        release(list);
     }
 
     #[test]

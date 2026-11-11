@@ -23,6 +23,11 @@ pub(crate) struct Selection {
 }
 
 impl Selection {
+    /// Returns where a slice of step 1 starts, which is also where nothing is selected.
+    pub(crate) fn start_position(self) -> usize {
+        usize::try_from(self.start).unwrap_or(0)
+    }
+
     /// Returns the `index`-th position the slice selects.
     pub(crate) fn position(self, index: usize) -> usize {
         let offset = i64::try_from(index).unwrap_or(i64::MAX) * self.step;
