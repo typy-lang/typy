@@ -10,7 +10,7 @@ MARKDOWN := "**/*.md" "\#.tmp/**" "\#target/**" "\#dist/**"
 
 
 .PHONY: dev image shell runtime fmt fmt-check lint type test coverage docs-lint ascii-check traceability test-int test-e2e test-all \
-	build dist bless coverage-branches miri fuzz runtime-size diagrams diagrams-check unicode-tables unicode-tables-check format-cases format-cases-check stdlib-names stdlib-names-check check hooks clean
+	build dist bless coverage-branches miri fuzz runtime-size diagrams diagrams-check unicode-tables unicode-tables-check format-cases format-cases-check stdlib-names stdlib-names-check bench check hooks clean
 
 dev: ## Start the dev service, building its image the first time
 	@$(COMPOSE) up -d --quiet-pull dev 2>/dev/null
@@ -89,6 +89,10 @@ FUZZ_SECONDS ?= 60
 
 fuzz: dev ## Fuzz the source, checking and lowering stages for FUZZ_SECONDS seconds, 60 by default (NFR-09)
 	@$(COMPOSE) exec -T -e FUZZ_SECONDS=$(FUZZ_SECONDS) dev scripts/fuzz.sh
+
+bench: runtime ## Time the release-built compiler on generated 10,000-line projects against the budgets of NFR-04, NFR-05 and NFR-14
+	@$(EXEC) cargo build --release -p typy-cli --locked
+	@$(EXEC) python3 tests/bench/build_time.py
 
 runtime-size: build ## Fail when the runtime a hello world links is over the size budgets of NFR-02
 	@$(EXEC) python3 scripts/check-runtime-size.py

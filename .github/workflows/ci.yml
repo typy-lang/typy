@@ -36,6 +36,9 @@ jobs:
         run: make check
       - name: Release archive
         run: make dist
+      # After the archive, whose release build of the compiler it reuses.
+      - name: Build-time benchmark
+        run: make bench
 
   weekly:
     name: Miri and fuzzing

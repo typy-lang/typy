@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy development guide |
-| Version | 0.14 |
+| Version | 0.15 |
 | Status | Draft |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-10 |
@@ -56,6 +56,8 @@ Container". VS Code attaches to the same `dev` service.
 | `make miri` | Runs the runtime's unit tests under Miri with the pinned nightly toolchain, in about 8 minutes |
 | `make fuzz` | Fuzzes the source, checking and lowering stages for `FUZZ_SECONDS` seconds, 60 by default; a crash leaves its input in `fuzz/artifacts/` |
 | `make runtime-size` | Links a hello world for each target and fails when the runtime it links is over the size budgets of NFR-02 |
+| `make bench` | Builds the compiler in release mode and times it on generated 10,000-line projects, in one file and in 200 modules, against the budgets of NFR-04, NFR-05 and NFR-14, with a check that checking time grows linearly with the modules |
+| `make stdlib-names` | Writes `crates/typy-source/src/stdlib_names.rs`, the standard library module names of CPython 3.12 to 3.15, which the loader leaves to the checker (LIB-08); `make check` runs `make stdlib-names-check` |
 | `make check` | Runs the whole quality gate: formatting, Clippy, the tests with line and branch coverage, the four documentation checks below, the Unicode table check and the runtime size check |
 | `make fmt` | Formats the Rust code |
 | `make lint` | Runs Clippy on every crate and test, with warnings as errors |
@@ -84,17 +86,17 @@ AddressSanitizer; every other command uses the stable toolchain of
 `rust-toolchain.toml`. The fuzz targets in `fuzz/` are a Cargo workspace of
 their own, so the main workspace never needs nightly.
 
-`cargo llvm-cov` measures branch coverage only on a nightly toolchain, so
-`make coverage-branches` uses the pinned nightly in a target directory of
-its own; profiles from the stable build of `make coverage` would not match
-its build. Both leave out `typy-conformance`, which is test code; NFR-11
-covers the compiler and the runtime. The runtime's branches are measured by
-its unit tests, because the programs the other tests build link the runtime
-archive without instrumentation. `make bench` arrives with the build-time
-benchmarks of NFR-04 and NFR-05 in 1.0. The user documentation in
+`cargo llvm-cov` measures branch coverage only on a nightly toolchain, so `make
+coverage-branches` uses the pinned nightly in a target directory of its own;
+profiles from the stable build of `make coverage` would not match its build.
+Both leave out `typy-conformance`, which is test code; NFR-11 covers the
+compiler and the runtime. The runtime's branches are measured by its unit tests,
+because the programs the other tests build link the runtime archive without
+instrumentation. `make bench` builds the compiler in release mode and times it
+on generated 10,000-line projects against the budgets of NFR-04, NFR-05 and
+NFR-14; CI runs it after the release archive. The user documentation in
 `docs/user` is Markdown that `make docs-lint` checks, and
-`crates/typy-conformance/tests/documentation.rs` judges its samples
-(DOC-04).
+`crates/typy-conformance/tests/documentation.rs` judges its samples (DOC-04).
 
 ## 4. Repository layout
 

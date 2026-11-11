@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy test plan |
-| Version | 0.30 |
+| Version | 0.31 |
 | Status | Draft |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-11 |
@@ -33,7 +33,7 @@ Each test sits at the lowest level that can prove its behaviour.
 | Integration (IT) | The compiler, runtime and C toolchain together on one program, compared with CPython; the conformance suite | `tests/conformance/<area>/` through `typy-conformance`, which drives `typy-driver` in process | Every commit |
 | End-to-end (E2E) | The `typy` executable as a user runs it: arguments, exit status, files written, and the built program run as a subprocess | `crates/typy-cli/tests/cli.rs` | Every commit |
 | Fuzz | No input crashes the compiler (NFR-09) | `fuzz/` | 30 minutes before each release; 60 seconds on demand |
-| Benchmark | The numbered budgets of NFR-03 to NFR-05, NFR-13 and NFR-14 | `tests/bench/` | Before a release, from 1.0 |
+| Benchmark | The numbered budgets of NFR-03 to NFR-05, NFR-13 and NFR-14 | `tests/bench/` | `make bench` in CI from 0.3 for NFR-04, NFR-05 and NFR-14; the run-time suite of NFR-03 before a release, from 1.0 |
 | Mutation | Tests fail when the code they cover is changed | `cargo-mutants` over the compiler crates, in a container with a memory limit, since a mutant can turn a bounded loop into one that allocates until memory runs out | Before a release, from 0.3 |
 
 ## 3. Test design
@@ -219,7 +219,11 @@ A release ships when all of these hold:
 - Large inputs, such as the 16 MiB source file and the 10,000-line
   project, are generated when the tests start, from a seed committed with
   the test.
-- The benchmark programs and their C versions are committed as source.
+- The benchmark programs and their C versions are committed as source. The
+  build-time projects are written by `tests/bench/build_time.py` when it
+  starts: a 10,000-line project in one file and in 200 modules, and 50 and
+  200 modules whose check times it compares. Each figure is the best of three
+  runs, and memory is the peak resident size of each build.
 
 ## 7. Risks
 
@@ -427,8 +431,8 @@ that the specification does not define.
 | NFR-01 | 0.1 | IT | `crates/typy-driver/tests/size.rs`: hello world, `--release-small`, linked statically with musl, run, and under 100 KB (75 KB in 0.1, 17 KB stripped) |
 | NFR-02 | 0.1 | Static | `make runtime-size`, `scripts/check-runtime-size.py`: a hello world built with `--release-small` and linked for each target with a link map; the runtime sections linked are under 48 KB, and under 32 KB less the large-integer sections (10.3 KB and 10.3 KB in 0.2, ADR-0009) |
 | NFR-03 | 1.0 | Benchmark | `tests/bench/` suite against its C versions, geometric mean within 1.5 times |
-| NFR-04 | 1.0 | Benchmark | `tests/bench/build_time`: debug build of the 10,000-line project under 2 s |
-| NFR-05 | 1.0 | Benchmark | `tests/bench/build_time`: release build of the 10,000-line project under 20 s |
+| NFR-04 | 1.0 | Benchmark | `tests/bench/build_time.py`: debug build of a 10,000-line project, in one file and in 200 modules, under 2 s; checking 200 modules at most 6 times as long as 50 |
+| NFR-05 | 1.0 | Benchmark | `tests/bench/build_time.py`: release build of both 10,000-line projects under 20 s |
 | NFR-06 | 0.1 | E2E | `crates/typy-conformance/tests/determinism.rs`: every accepted conformance program built twice, in debug and in release mode, and the executables compared byte for byte |
 | NFR-07 | 0.1 | IT | `tests/sanitized.rs`: the conformance suite with the runtime under AddressSanitizer; `make miri`; `make fuzz` |
 | NFR-08 | 0.1 | IT | `tests/sanitized.rs`: the conformance suite under LeakSanitizer |
@@ -437,7 +441,7 @@ that the specification does not define.
 | NFR-11 | 0.1 | CI gate | `make coverage-branches`, run by `make check`: `cargo llvm-cov` with the pinned nightly over the compiler and runtime crates, with subprocesses, at least 95 percent of lines and of branches (97.6 and 95.1 in 0.1) |
 | NFR-12 | 0.2 | UT | `typy-runtime` layout test: `size_of::<ObjectHeader>() == 8` |
 | NFR-13 | 0.2 | UT | `typy-runtime` list test: a million `int` values appended one at a time; the list and its buffer take at most 8.5 MB |
-| NFR-14 | 1.0 | Benchmark | `tests/bench/build_time`: peak memory of the 10,000-line build within 1 GB |
+| NFR-14 | 1.0 | Benchmark | `tests/bench/build_time.py`: peak memory of each build within 1 GB |
 | NFR-15 | 0.1 | IT | Conformance suite: debug and release runs compared |
 | C-01 | 0.1 | CI gate | Workspace builds with the pinned Rust toolchain only |
 | C-02 | 0.1 | CI gate | `scripts/check-pins.sh`: `ruff_python_parser` pinned with `=` in `Cargo.toml` |

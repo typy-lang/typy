@@ -8,6 +8,10 @@ All notable changes to TyPy are recorded here. The format follows
 
 ### Added
 
+- `make bench` times the release-built compiler on generated 10,000-line
+  projects, in one file and in 200 modules, against the budgets of NFR-04,
+  NFR-05 and NFR-14, and checks that checking time grows linearly with the
+  number of modules; CI runs it.
 - Programs of several modules: `import m`, `import a.b as c` and
   `from m import name` for functions, classes, module variables and
   submodules, packages with `__init__.py`, and relative imports. Each
