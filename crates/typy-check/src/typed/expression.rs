@@ -50,6 +50,12 @@ pub enum TypedExprKind {
     /// `package.module`, the module object of a submodule, which raises `AttributeError`
     /// until the submodule is initialised.
     Submodule(String),
+    /// `value`, a call or a class read through a lazy import, which first runs the import
+    /// when its statement ran and its names were not used yet (MOD-06).
+    Lazy {
+        reify: FunctionId,
+        value: Box<TypedExpr>,
+    },
     /// A built-in iterable or an iterator held as an `Iterable[T]`: the same object (TYP-15).
     AsIterable(Box<TypedExpr>),
     /// `__name__`, which is `"__main__"` in the main module (STD-06).

@@ -15,6 +15,9 @@ pub struct TypedProgram {
     pub classes: Vec<TypedClass>,
     /// Every module, each after the modules its module-level imports need (ADR-0015).
     pub modules: Vec<TypedModule>,
+    /// Each function that runs a lazy import for one name, with the variable it binds; one
+    /// for a function or a class binds none (MOD-06).
+    pub lazy_imports: std::collections::BTreeMap<FunctionId, Option<SymbolId>>,
     /// The module body of `__main__`.
     pub entry: FunctionId,
 }

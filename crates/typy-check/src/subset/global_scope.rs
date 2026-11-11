@@ -85,4 +85,37 @@ impl Walker {
             self.syntax_error(span, &message);
         }
     }
+
+    /// Checks where a lazy import stands, by CPython 3.15's rules: only outside functions,
+    /// classes and `try` statements, and never of every name or from `__future__` (MOD-06).
+    pub(super) fn lazy_import(
+        &mut self,
+        statement: &typy_source::syntax::Stmt,
+        span: Span,
+        place: super::Place,
+    ) {
+        use typy_source::syntax::Stmt;
+        let message = match (place, statement) {
+            (super::Place::Function, _) => Some("lazy import not allowed inside functions"),
+            (super::Place::Class, _) => Some("lazy import not allowed inside classes"),
+            _ if self.try_depth > 0 => Some("lazy import not allowed inside try/except blocks"),
+            (_, Stmt::ImportFrom { names, .. })
+                if names.iter().any(|alias| alias.name.name == "*") =>
+            {
+                Some("lazy from ... import * is not allowed")
+            }
+            (
+                _,
+                Stmt::ImportFrom {
+                    module: Some(module),
+                    level: 0,
+                    ..
+                },
+            ) if module.name == "__future__" => Some("lazy from __future__ import is not allowed"),
+            _ => None,
+        };
+        if let Some(message) = message {
+            self.syntax_error(span, message);
+        }
+    }
 }

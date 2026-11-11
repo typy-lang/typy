@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy software requirements specification |
-| Version | 1.37 |
+| Version | 1.38 |
 | Status | Approved |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-11 |
@@ -330,6 +330,7 @@ formatter applies; Ruff's formatter is the project's recommendation.
 | MOD-08 | An exception raised while a lazily imported module initialises shall be raised at the first use of the name, and a later use shall try the initialisation again, as PEP 810 defines. | S | 0.3 | |
 | MOD-09 | `sys.set_lazy_imports`, `sys.set_lazy_imports_filter` and `sys.lazy_modules` shall be rejected, because they change import behaviour from outside the importing module. | S | 0.3 | |
 | MOD-10 | An imported module shall be an object of type `module` whose attributes are its module-level names: `m.x` shall read and `m.x = v` assign them, the object may be bound to other names and compared with `is`, and its text shall name its path from the project root (OI-20, ADR-0015). | M | 0.3 | 5.3 |
+| MOD-11 | A name a module binds by a lazy import shall be usable from another module, a module variable shall be assignable as `m.x = v` through a lazily imported module `m`, and a name shall be bindable by more than one lazy import of the module. | S | 0.4 | |
 
 ### 3.14 Built-in functions and standard library (LIB)
 

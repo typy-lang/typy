@@ -175,11 +175,12 @@ impl<'program> BodyChecker<'program> {
         statements: &[&Stmt],
         diagnostics: &mut Diagnostics,
     ) -> FunctionId {
-        let entry = FunctionId(id(program.functions.len()));
         let mut checker = BodyChecker::new(program, diagnostics, None);
         checker.collect_locals(statements);
         let body = checker.statements(statements);
         let locals = checker.finish_locals();
+        // A lazy import adds the function that runs it, so the body's ID comes after those.
+        let entry = FunctionId(id(program.functions.len()));
         let span = statements.first().map_or_else(
             || Span::empty(typy_diagnostics::FileId(0), typy_diagnostics::TextOffset(0)),
             |first| first.span(),

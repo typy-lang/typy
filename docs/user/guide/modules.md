@@ -46,6 +46,50 @@ if __name__ == "__main__":
     main()
 ```
 
+## Lazy imports
+
+A lazy import binds its names without running the module: the module runs
+at the first use of one of them, as PEP 810 defines for Python 3.15
+(MOD-06). `lazy import m` and `lazy from m import name` need the Python
+floor 3.15. At any floor, a module-level `__lazy_modules__` list makes
+the imports of the modules it names lazy (MOD-07):
+
+<!-- typy-expect: accepted -->
+```python
+__lazy_modules__ = ["json_tools"]
+```
+
+In this program of two files, `main.py` prints `before use`, then
+`heavy runs`, then `42`:
+
+```text
+# heavy.py
+print("heavy runs")
+VALUE = 42
+
+# main.py
+__lazy_modules__ = ["heavy"]
+import heavy
+
+print("before use")
+print(heavy.VALUE)
+```
+
+An exception the module raises while it runs reaches the first use of the
+name, and the next use runs the module again (MOD-08). Assigning the name
+before its first use cancels its import, and the module does not run for
+it. CPython 3.12 to 3.14 ignore `__lazy_modules__` and run such a module
+at its import, so a program whose output depends on when a module runs
+prints differently there.
+
+A lazy import is allowed at module level, also inside `if`, `for`,
+`while` and `with`. As in CPython, it is E0103 inside a function, a
+`try` statement, or with `*` or `__future__`; inside a class it is E0202,
+since a class body holds only its methods. TyPy 0.4 adds what 0.3 refuses
+with E0201 (MOD-11): using a name another module imports lazily, such as
+`from app import heavy`, assigning `m.x = v` through a lazily imported
+`m`, and binding one name by two lazy imports.
+
 ## What is refused
 
 Two modules that import each other at module level are a circular import,

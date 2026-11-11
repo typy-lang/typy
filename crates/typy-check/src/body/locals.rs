@@ -202,6 +202,19 @@ impl BodyChecker<'_> {
         } = target
         {
             if let Some(module) = self.module_of(object) {
+                if self.lazy_module_function(object).is_some() {
+                    self.diagnostics.push(
+                        Diagnostic::new(
+                            DiagnosticCode::error(201),
+                            *span,
+                            "assigning to an attribute of a module imported lazily is planned \
+                             for TyPy 0.4 (MOD-11)",
+                        )
+                        .with_rule(RuleId::MOD_11)
+                        .with_help("use the name in an expression first, or import it eagerly"),
+                    );
+                    return None;
+                }
                 return self.module_attribute_target(&module, attribute, &ty, value, *span);
             }
             return self.attribute_target(object, attribute, &ty, None, *span);
@@ -310,6 +323,8 @@ impl BodyChecker<'_> {
                 }
                 Some(AssignTarget::Name(symbol))
             }
+            // The read runs the lazy import, so the assignment goes to the variable it read.
+            TypedExprKind::Lazy { value, .. } => self.augmented_item(*value, ty, span),
             TypedExprKind::TupleItem { tuple, .. } => {
                 self.unassignable_item(&tuple.ty, span);
                 None

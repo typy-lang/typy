@@ -17,6 +17,7 @@ pub(crate) fn check(tree: &SyntaxTree) -> Diagnostics {
     let mut walker = Walker {
         diagnostics: Diagnostics::new(),
         loop_depth: 0,
+        try_depth: 0,
         scope: None,
     };
     walker.statements(&tree.body, Place::ModuleTop);
@@ -35,6 +36,9 @@ enum Place {
 struct Walker {
     diagnostics: Diagnostics,
     loop_depth: usize,
+    /// How many `try` statements enclose the statement being walked, where CPython refuses
+    /// a lazy import.
+    try_depth: usize,
     /// The names of the function being walked, for CPython's rules of `global`.
     scope: Option<global_scope::GlobalScope>,
 }

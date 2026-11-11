@@ -2,6 +2,7 @@
 #![forbid(unsafe_code)]
 
 mod int_literal;
+mod lazy;
 mod line_index;
 mod loader;
 mod module;
@@ -12,6 +13,7 @@ mod source_file;
 mod stdlib_names;
 pub mod syntax;
 
+pub use lazy::{is_lazy, lazy_modules};
 pub use line_index::LineIndex;
 pub use loader::{ANNOTATION_MODULES, Import, absolute_name};
 pub use module::{Module, ModuleName, ModuleNameError};

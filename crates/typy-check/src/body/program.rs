@@ -8,7 +8,7 @@ use crate::check::{ClassInfo, Definition};
 use crate::exception::ExceptionClass;
 use crate::typed::{
     Attribute, ClassId, FunctionId, FunctionSignature, Symbol, SymbolId, SymbolKind, TypedClass,
-    TypedFunction, TypedModule, TypedProgram,
+    TypedFunction, TypedModule, TypedProgram, TypedStmt,
 };
 use crate::types::Type;
 
@@ -53,6 +53,15 @@ pub(crate) struct Program {
     /// names bound to those modules, which annotations read (TYP-15).
     pub(super) annotation_names: BTreeMap<String, crate::check::AnnotationName>,
     pub(super) annotation_modules: BTreeMap<String, String>,
+    /// The modules the module's `__lazy_modules__` lists, whose imports are lazy (MOD-07).
+    pub(super) lazy_modules: BTreeSet<String>,
+    /// Each function that runs a lazy import for one name, with the variable it binds; a
+    /// function or a class imported lazily binds none (MOD-06).
+    pub(super) lazy_imports: BTreeMap<FunctionId, Option<SymbolId>>,
+    /// Each name a module binds by a lazy import, with the module, and the function that runs
+    /// the import for it. Its IDs are the same in the first look and in the final check of a
+    /// module body, since only module bodies add functions while checking.
+    pub(super) lazy_names: BTreeMap<(String, String), FunctionId>,
     /// The module variables some other module assigns through its module object, such as
     /// `settings.debug = True`, which a test cannot narrow either.
     pub(super) assigned_elsewhere: BTreeSet<(String, String)>,
@@ -101,6 +110,9 @@ impl Program {
             module_classes: BTreeMap::new(),
             annotation_names: BTreeMap::new(),
             annotation_modules: BTreeMap::new(),
+            lazy_modules: BTreeSet::new(),
+            lazy_imports: BTreeMap::new(),
+            lazy_names: BTreeMap::new(),
             assigned_elsewhere: BTreeSet::new(),
         }
     }
@@ -182,6 +194,44 @@ impl Program {
     pub(crate) fn prepare_module(&mut self, module: &typy_source::Module) {
         self.package = module.package();
         module.name.as_str().clone_into(&mut self.module);
+        self.lazy_modules = typy_source::lazy_modules(&module.syntax.body);
+    }
+
+    /// Returns the ID the next function added while checking a module body takes.
+    pub(super) fn next_function(&self) -> FunctionId {
+        FunctionId(id(self.functions.len()))
+    }
+
+    /// Adds the function that runs a lazy import for the name `name`, when its first use
+    /// needs it: its body is the import, run eagerly, binding `target` if the name is a
+    /// variable (MOD-06).
+    pub(super) fn add_lazy_import(
+        &mut self,
+        name: String,
+        import: TypedStmt,
+        target: Option<SymbolId>,
+        span: Span,
+    ) -> FunctionId {
+        let id = self.next_function();
+        let signature = FunctionSignature {
+            parameters: Vec::new(),
+            returns: Type::NoneType,
+        };
+        self.signatures.push(signature.clone());
+        self.functions.push(Some(TypedFunction {
+            id,
+            name: "<lazy import>".to_owned(),
+            qualified_name: format!("<lazy import {}>", id.0),
+            module: self.module.clone(),
+            signature,
+            parameters: Vec::new(),
+            locals: Vec::new(),
+            body: vec![import],
+            span,
+        }));
+        self.lazy_imports.insert(id, target);
+        self.lazy_names.insert((self.module.clone(), name), id);
+        id
     }
 
     /// Returns, for each name bound to a module, that module's classes.
@@ -315,6 +365,9 @@ impl Program {
             .map(|symbol| self.symbols[symbol.0 as usize].ty.clone())
             .collect();
         self.symbols.truncate(snapshot.symbols);
+        let first_new = FunctionId(id(snapshot.functions));
+        self.lazy_imports
+            .retain(|function, _| *function < first_new);
         self.functions.truncate(snapshot.functions);
         self.signatures.truncate(snapshot.signatures);
         self.classes.truncate(snapshot.first_class);
@@ -387,6 +440,7 @@ impl Program {
             functions: self.functions.into_iter().flatten().collect(),
             classes,
             modules: self.modules,
+            lazy_imports: self.lazy_imports,
             entry,
         }
     }

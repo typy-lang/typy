@@ -149,7 +149,8 @@ impl BodyChecker<'_> {
         span: Span,
     ) -> TypedExpr {
         if let Some(module) = self.module_of(value) {
-            return self.module_attribute(&module, &attribute.name, span);
+            let read = self.module_attribute(&module, &attribute.name, span);
+            return self.through_lazy_module(value, read);
         }
         let object = self.instance_object(value);
         if let Type::TypeObject(_) = object.ty {

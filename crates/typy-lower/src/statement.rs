@@ -201,6 +201,11 @@ impl FunctionLowerer<'_> {
                 bindings,
                 span,
             } => self.import_statement(modules, bindings, *span),
+            TypedStmt::LazyImport {
+                reifies,
+                targets,
+                span,
+            } => self.lazy_import_statement(reifies, targets, *span),
             TypedStmt::Pass { .. } => {}
             TypedStmt::Break { span } => {
                 if let Some(targets) = self.loops.last().copied() {

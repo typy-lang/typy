@@ -69,7 +69,10 @@ pub fn absolute_name(
 /// Returns every module the imports of `module` need, in source order, with the packages
 /// above each; an import that names no module it can find gives a diagnostic.
 pub(crate) fn imports(module: &Module) -> (Vec<Import>, Vec<Diagnostic>) {
-    let mut found = Collector::default();
+    let mut found = Collector {
+        lazy: crate::lazy::lazy_modules(&module.syntax.body),
+        ..Collector::default()
+    };
     found.statements(module, &module.syntax.body, true);
     (found.imports, found.diagnostics)
 }
@@ -78,6 +81,8 @@ pub(crate) fn imports(module: &Module) -> (Vec<Import>, Vec<Diagnostic>) {
 struct Collector {
     imports: Vec<Import>,
     diagnostics: Vec<Diagnostic>,
+    /// The modules `__lazy_modules__` lists.
+    lazy: std::collections::BTreeSet<String>,
 }
 
 impl Collector {
@@ -88,6 +93,8 @@ impl Collector {
     }
 
     fn statement(&mut self, module: &Module, statement: &Stmt, at_module_level: bool) {
+        // A lazy import runs when its name is first used, not while its module initialises.
+        let at_module_level = at_module_level && !crate::lazy::is_lazy(statement, &self.lazy);
         match statement {
             Stmt::Import { names, span, .. } => {
                 // The parser gives identifiers, so each dotted name is a module name.

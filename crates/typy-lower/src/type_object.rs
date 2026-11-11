@@ -45,7 +45,15 @@ impl FunctionLowerer<'_> {
         let lowered = self.expression(value);
         let result = match (&value.ty, TypeObjectOf::of(&value.ty)) {
             (Type::Exception(_), _) => self.exception_type(&lowered, span),
-            (Type::Iterator(_), _) => {
+            // These objects carry their type in their header.
+            (
+                Type::Iterator(_)
+                | Type::Iterable(_)
+                | Type::Module(_)
+                | Type::AnyModule
+                | Type::Traceback,
+                _,
+            ) => {
                 let object = self.bits(Self::borrowed(lowered.value, lowered.ty), span);
                 let class = self.call_runtime(RuntimeFunction::ObjectType, vec![object], span);
                 self.borrowed_result(class)

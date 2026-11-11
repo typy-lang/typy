@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy test plan |
-| Version | 0.31 |
+| Version | 0.32 |
 | Status | Draft |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-11 |
@@ -386,11 +386,12 @@ that the specification does not define.
 | MOD-03 | 0.3 | IT | `tests/conformance/mod/MOD-03_*.py` |
 | MOD-04 | 0.3 | IT | `tests/conformance/mod/MOD-04_*.py` |
 | MOD-05 | 0.3 | IT | `tests/conformance/mod/MOD-05_*.py` |
-| MOD-06 | 0.3 | IT | `tests/conformance/mod/MOD-06_*.py` |
-| MOD-07 | 0.3 | IT | `tests/conformance/mod/MOD-07_*.py` |
-| MOD-08 | 0.3 | IT | `tests/conformance/mod/MOD-08_*.py` |
+| MOD-06 | 0.3 | IT | `crates/typy-check/tests/lazy_imports.rs`; `crates/typy-check/src/subset/tests.rs`, tests named for lazy imports; `tests/conformance/mod/MOD-06_*` with floor 3.15, once `python-floor` lets a test choose it (CLI-12) |
+| MOD-07 | 0.3 | IT | `crates/typy-check/tests/lazy_imports.rs` and `crates/typy-driver/tests/lazy_imports.rs`, whose expected output is CPython 3.15's: CPython 3.12 to 3.14 ignore `__lazy_modules__`, so a conformance test of it is invalid below floor 3.15 (ADR-0008) |
+| MOD-08 | 0.3 | IT | `crates/typy-driver/tests/lazy_imports.rs`; `tests/conformance/mod/MOD-08_*` with floor 3.15, once `python-floor` lets a test choose it (CLI-12) |
 | MOD-09 | 0.3 | IT | `tests/conformance/mod/MOD-09_*.py` |
 | MOD-10 | 0.3 | IT | `tests/conformance/mod/MOD-10_*.py` |
+| MOD-11 | 0.4 | IT | `tests/conformance/mod/MOD-11_*` |
 | LIB-01 | 0.1 | IT | `tests/conformance/lib/LIB-01_*.py` |
 | LIB-02 | 0.2 | IT | `tests/conformance/lib/LIB-02_*.py` |
 | LIB-03 | 0.2 | IT | `tests/conformance/lib/LIB-03_*.py` |

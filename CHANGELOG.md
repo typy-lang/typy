@@ -8,6 +8,11 @@ All notable changes to TyPy are recorded here. The format follows
 
 ### Added
 
+- Lazy imports: `lazy import m` and `lazy from m import name` with the
+  Python floor 3.15, and a module-level `__lazy_modules__` at every floor.
+  The module runs at the first use of a name, an error it raises reaches
+  that use, and the next use runs it again. Using such a name from another
+  module is E0201, planned for 0.4 (MOD-06 to MOD-08, MOD-11).
 - `Iterator[T]` and `Iterable[T]` annotations from `typing` or
   `collections.abc`, and `TracebackType` and `ModuleType` from `types`. An
   `Iterable[T]` takes any built-in iterable or iterator of `T` and keeps
@@ -111,6 +116,9 @@ All notable changes to TyPy are recorded here. The format follows
   `UnicodeDecodeError` or `UnicodeEncodeError` (EXC-07, EXC-12).
 
 ### Fixed
+
+- `type(m)` of a module, an `Iterable[T]` or a traceback gives its type
+  object; it stopped the compiler with E9001 before.
 
 - `typy run` no longer reuses an executable built from other versions of
   the program's modules or by another build of the compiler: the cache key

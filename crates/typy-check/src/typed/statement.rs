@@ -3,6 +3,7 @@
 use typy_diagnostics::Span;
 use typy_source::syntax::BinaryOperator;
 
+use super::FunctionId;
 use super::expression::TypedExpr;
 use super::symbol::SymbolId;
 use crate::types::Type;
@@ -290,6 +291,13 @@ pub enum TypedStmt {
     Import {
         modules: Vec<String>,
         bindings: Vec<ImportBinding>,
+        span: Span,
+    },
+    /// A lazy import: its names wait, unbound, until the first use of one runs its function
+    /// in `reifies`, which runs the import for that name (MOD-06).
+    LazyImport {
+        reifies: Vec<FunctionId>,
+        targets: Vec<SymbolId>,
         span: Span,
     },
     Pass {

@@ -187,16 +187,40 @@ fn later_features_name_their_release_and_rule() {
 }
 
 #[test]
-fn lazy_imports_name_their_release_with_floor_3_15() {
-    let found = diagnostics_with_floor(
-        "lazy import json\nlazy from os import path\n",
-        PythonFloor::V3_15,
-    );
-    let messages: Vec<&str> = found.iter().map(|(_, message)| message.as_str()).collect();
-    assert_eq!(
-        messages,
-        ["lazy imports are planned for TyPy 0.3 (MOD-06)"; 2]
-    );
+fn lazy_imports_at_module_level_pass_with_floor_3_15() {
+    let source =
+        "lazy import json\nif True:\n    lazy from os import path\nwith x:\n    lazy import a\n";
+    assert_eq!(diagnostics_with_floor(source, PythonFloor::V3_15), []);
+}
+
+#[test]
+fn lazy_imports_cpython_refuses_give_its_messages() {
+    let cases = [
+        (
+            "def f() -> None:\n    lazy import json\n",
+            "lazy import not allowed inside functions",
+        ),
+        (
+            "try:\n    lazy import json\nexcept ImportError:\n    pass\n",
+            "lazy import not allowed inside try/except blocks",
+        ),
+        (
+            "lazy from os import *\n",
+            "lazy from ... import * is not allowed",
+        ),
+        (
+            "lazy from __future__ import annotations\n",
+            "lazy from __future__ import is not allowed",
+        ),
+    ];
+    for (source, message) in cases {
+        let found = diagnostics_with_floor(source, PythonFloor::V3_15);
+        assert_eq!(
+            found,
+            [("E0103".to_owned(), message.to_owned())],
+            "{source}"
+        );
+    }
 }
 
 #[test]

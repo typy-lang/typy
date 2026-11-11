@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy detailed design |
-| Version | 1.63 |
+| Version | 1.64 |
 | Status | Approved |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-11 |
@@ -418,9 +418,13 @@ Vec<Diagnostic>>` calls
 target version, 3.12 in 0.1. Each entry of `Parsed::errors()` and
 `Parsed::unsupported_syntax_errors()` becomes an E0103 diagnostic, so
 syntax that the floor version does not accept is refused (STD-01). The
-parser already reads PEP 810 lazy imports and marks them `is_lazy`; they
-reach the syntax tree in 0.3 (MOD-06). The tree is converted only when
-there are no errors.
+parser reads PEP 810 lazy imports and marks them `is_lazy`, which the
+syntax tree keeps (MOD-06). `typy_source::lazy_modules` reads a module's
+`__lazy_modules__` list, and `typy_source::is_lazy` says whether an import
+statement is lazy by its keyword or by that list (MOD-07); the loader
+orders the modules of lazy imports as it orders imports inside a
+function, so they close no cycle. The tree is converted only when there
+are no errors.
 
 ## 6. typy-stdlib
 
@@ -1006,6 +1010,21 @@ and E0206 otherwise (LIB-08). For each module it runs:
    function declares it `global`. The subset walker reports CPython's
    `SyntaxError`s for `global`: a name used or assigned before it, a
    parameter, or an annotated name, E0103.
+   A lazy import at module level becomes `TypedStmt::LazyImport`. Each
+   name it binds gets a function, `Program::add_lazy_import`, whose body
+   is the eager `TypedStmt::Import` of that name alone, so assigning one
+   name cancels only its own import. A call of a function or a class
+   imported lazily, a class read as a value, and `m.f()` or `m.x` through
+   a module bound lazily become `TypedExprKind::Lazy`, which names that
+   function. `Program::lazy_names` maps each module and name to it; its
+   IDs are the same in the first look and the final check of a module
+   body, since only module bodies add functions while they are checked. A
+   function's own import of the name hides it. Using such a name from
+   another module, assigning through such a module and binding a name by
+   two lazy imports are E0201 (MOD-11). The subset walker reports
+   CPython's `SyntaxError`s for `lazy` inside a function or a `try`, and
+   with `*` or `__future__`, as E0103; a class body holds only methods,
+   so one there is E0202.
 3. Inference gives each local the type of its first assignment (TYP-02) and
    refuses a later assignment of another type with E0402.
 4. The definite assignment pass follows every path through each function
@@ -1226,6 +1245,7 @@ graph, symbol names and the string pool.
 | --- | --- |
 | Locals | Each parameter and local gets a slot. The entry block, written last, stores every parameter and gives every counted slot an immortal value, so every error path can release every slot |
 | Imports | Each module has a state global, an `int`: 0 not started, 1 running, 2 done, all 0 from the entry's first block. An import tests it and, when 0, stores 1, calls the module's code under `Cleanup::Initialising`, which stores 0 on the error path, and stores 2 (MOD-03). A binding stores `Constant::Module`, the module's immortal object, or the source variable's value after testing its flag, else `typy_rt_module_import_error`. `ModuleAttribute` tests the flag and calls `typy_rt_module_attribute_error`, and `Submodule` tests that the submodule is done; both pass the module's state, which says whether it is still initialising. A function tests a module variable's flag unless it is its own module's code |
+| Lazy imports | Each function of a lazy import has an armed `bool` global, false from the start. `LazyImport` stores true in each and unbinds each variable: its value is released and its bound flag cleared. A read of a variable bound lazily, also in its own module's code, calls the function when the flag is armed and the variable is unbound, then tests the bound flag. `Lazy` calls the function when it is armed. The function clears its flag only when the import returns, so after an error the next use tries again (MOD-06, MOD-08) |
 | Module variables | Each is a `TyirGlobal`, an internal LLVM variable of zeros, with a second `bool` global that is true once it is bound (ADR-0015). The entry function's first block gives every counted one an immortal value, so a store can release the value it replaces. `LoadGlobal` and `StoreGlobal` read and write them; a function tests the flag first and calls `typy_rt_name_error`, which raises `NameError: name 'x' is not defined`, while the module's own code does not, since definite assignment shows the variable is bound |
 | Ownership | A lowered value is owned or borrowed. Constants are immortal and borrowed, and so are slot values; results of calls and of `int` arithmetic are owned. A store moves an owned value or counts a borrowed one, then releases the slot's old value. Owned temporaries are tracked until they are released or moved |
 | Raising | A call of a runtime function or program function that may raise is an `invoke`. Its error block releases the live owned temporaries and every slot, then returns the exception (ADR-0004) |

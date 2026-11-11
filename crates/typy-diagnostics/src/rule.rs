@@ -161,6 +161,8 @@ impl RuleId {
     pub const MOD_05: Self = Self("MOD-05");
     /// `lazy import` and `lazy from ... import` are accepted at module level when the Python floor is 3.15 or later.
     pub const MOD_06: Self = Self("MOD-06");
+    /// A name bound by a lazy import shall be usable from another module, assignable through a lazily imported module, and bindable by more than one lazy import.
+    pub const MOD_11: Self = Self("MOD-11");
     /// The compiler shall not crash on any input; an internal error shall be reported as `E9xxx` with a hint to report it.
     pub const NFR_09: Self = Self("NFR-09");
     /// Unpacking assignment to several targets shall be accepted for tuples and lists.
@@ -287,6 +289,7 @@ impl RuleId {
         Self::MOD_02,
         Self::MOD_05,
         Self::MOD_06,
+        Self::MOD_11,
         Self::NFR_09,
         Self::SMT_02,
         Self::SMT_04,

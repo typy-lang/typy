@@ -97,7 +97,7 @@ impl BodyChecker<'_> {
             );
         }
         if let Some(type_object) = self.type_object_named(id, span) {
-            return type_object;
+            return self.through_lazy(id, type_object);
         }
         if self.program.function_ids.contains_key(id) || Builtin::named(id).is_some() {
             return self.error(

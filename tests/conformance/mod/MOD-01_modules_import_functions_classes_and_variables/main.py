@@ -34,3 +34,4 @@ try:
 except ImportError as error:
     print("ImportError", error)
 print(describe(shapes), describe(counter))
+print(type(shapes).__name__, type(shapes) is type(counter))

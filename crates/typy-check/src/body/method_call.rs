@@ -24,7 +24,8 @@ impl BodyChecker<'_> {
             return Some(self.super_call(name, arguments, keywords, span));
         }
         let module = self.module_of(receiver)?;
-        Some(self.module_call(&module, name, arguments, keywords, span))
+        let call = self.module_call(&module, name, arguments, keywords, span);
+        Some(self.through_lazy_module(receiver, call))
     }
 
     /// Checks `receiver.name(arguments)`, a method of a built-in type (LIB-03).

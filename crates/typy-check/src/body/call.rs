@@ -32,10 +32,12 @@ impl BodyChecker<'_> {
             );
         }
         if let Some(function) = self.program.function_ids.get(name).copied() {
-            return self.call_function(function, name, arguments, keywords, span);
+            let call = self.call_function(function, name, arguments, keywords, span);
+            return self.through_lazy(name, call);
         }
         if let Some(class) = self.program.class_ids.get(name).copied() {
-            return self.new_instance(class, arguments, keywords, span);
+            let instance = self.new_instance(class, arguments, keywords, span);
+            return self.through_lazy(name, instance);
         }
         if let Some(builtin) = Builtin::named(name) {
             return self.call_builtin(builtin, arguments, keywords, span);

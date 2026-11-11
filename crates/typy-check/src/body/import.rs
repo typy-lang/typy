@@ -9,7 +9,7 @@ use crate::check::{ANNOTATION_MODULES, AnnotationName, annotation_name};
 
 use super::{BodyChecker, Program};
 use crate::typed::{
-    ClassId, FunctionId, ImportBinding, SymbolId, TypedExpr, TypedExprKind, TypedStmt,
+    ClassId, FunctionId, ImportBinding, SymbolId, SymbolKind, TypedExpr, TypedExprKind, TypedStmt,
 };
 use crate::types::Type;
 
@@ -182,6 +182,7 @@ impl Program {
         if base.as_str() == self.module && self.loaded.contains(child.as_str()) {
             return Ok(Imported::Module(child));
         }
+        self.check_not_lazy(base.as_str(), name, alias.name.span)?;
         match self.named(base.as_str(), name) {
             None => return Err(Box::new(checked_later(span, base))),
             Some(Named::Function(function)) => return Ok(Imported::Function(function)),
@@ -204,6 +205,37 @@ impl Program {
                 format!("module `{base}` has no name `{name}`"),
             )
             .with_rule(RuleId::SMT_07),
+        ))
+    }
+
+    /// Fails for a name another module binds by a lazy import: reaching it from outside
+    /// would run that import first, which is planned for 0.4 (MOD-11).
+    pub(super) fn check_not_lazy(
+        &self,
+        module: &str,
+        name: &str,
+        span: Span,
+    ) -> Result<(), Box<Diagnostic>> {
+        if module == self.module
+            || !self
+                .lazy_names
+                .contains_key(&(module.to_owned(), name.to_owned()))
+        {
+            return Ok(());
+        }
+        Err(Box::new(
+            Diagnostic::new(
+                DiagnosticCode::error(201),
+                span,
+                format!(
+                    "using `{module}.{name}`, which `{module}` imports lazily, from another module \
+                     is planned for TyPy 0.4 (MOD-11)"
+                ),
+            )
+            .with_rule(RuleId::MOD_11)
+            .with_help(format!(
+                "import it eagerly in `{module}`, or import it from its own module"
+            )),
         ))
     }
 
@@ -293,12 +325,14 @@ impl BodyChecker<'_> {
             }
         };
         let mut bindings = Vec::new();
+        let mut lazy_callables = Vec::new();
         for (name, imported, name_span) in resolved.names {
             let ty = match &imported {
-                Imported::Function(_)
-                | Imported::Class(_)
-                | Imported::Annotation(_)
-                | Imported::Standard(_) => continue,
+                Imported::Function(_) | Imported::Class(_) => {
+                    lazy_callables.push(name);
+                    continue;
+                }
+                Imported::Annotation(_) | Imported::Standard(_) => continue,
                 Imported::Variable { source, .. } => {
                     self.program.symbols[source.0 as usize].ty.clone()
                 }
@@ -330,11 +364,135 @@ impl BodyChecker<'_> {
             };
             bindings.extend(self.assign(&target, ty, &value).and_then(binding));
         }
-        Some(TypedStmt::Import {
+        let import = TypedStmt::Import {
             modules: resolved.modules,
             bindings,
             span,
+        };
+        if self.in_function() || !typy_source::is_lazy(statement, &self.program.lazy_modules) {
+            return Some(import);
+        }
+        self.lazy_import(import, lazy_callables, span)
+    }
+
+    /// Makes a lazy import of an import statement. Each name it binds gets its own function,
+    /// which runs the import for that name alone, so rebinding one name cancels only its own
+    /// import, as in CPython. A name bound by two lazy imports is refused, since its first
+    /// use would have to know which of them ran last.
+    fn lazy_import(
+        &mut self,
+        import: TypedStmt,
+        callables: Vec<String>,
+        span: Span,
+    ) -> Option<TypedStmt> {
+        let TypedStmt::Import {
+            modules, bindings, ..
+        } = import
+        else {
+            return None;
+        };
+        let mut names: Vec<(String, Option<ImportBinding>)> = bindings
+            .into_iter()
+            .map(|binding| {
+                let (ImportBinding::Module { target, .. } | ImportBinding::Value { target, .. }) =
+                    &binding;
+                (
+                    self.program.symbols[target.0 as usize].name.clone(),
+                    Some(binding),
+                )
+            })
+            .collect();
+        names.extend(callables.into_iter().map(|name| (name, None)));
+        let first = self.program.next_function().0;
+        let module = self.program.module.clone();
+        let twice = names.iter().zip(first..).find(|((name, _), id)| {
+            self.program
+                .lazy_names
+                .get(&(module.clone(), name.clone()))
+                .is_some_and(|known| known.0 != *id)
+        });
+        if let Some(((name, _), _)) = twice {
+            self.diagnostics.push(
+                Diagnostic::new(
+                    DiagnosticCode::error(201),
+                    span,
+                    format!(
+                        "binding `{name}` by a second lazy import is planned for TyPy 0.4 (MOD-11)"
+                    ),
+                )
+                .with_rule(RuleId::MOD_11),
+            );
+            return None;
+        }
+        let mut reifies = Vec::new();
+        let mut targets = Vec::new();
+        for (name, binding) in names {
+            let target = binding.as_ref().map(
+                |(ImportBinding::Module { target, .. } | ImportBinding::Value { target, .. })| {
+                    *target
+                },
+            );
+            targets.extend(target);
+            let import = TypedStmt::Import {
+                modules: modules.clone(),
+                bindings: binding.into_iter().collect(),
+                span,
+            };
+            reifies.push(self.program.add_lazy_import(name, import, target, span));
+        }
+        Some(TypedStmt::LazyImport {
+            reifies,
+            targets,
+            span,
         })
+    }
+
+    /// Returns the function that runs the lazy import binding `name` in this module, when
+    /// it binds it. A variable of a function with the same name hides it.
+    pub(super) fn lazy_function(&self, name: &str) -> Option<FunctionId> {
+        if let Some(symbol) = self.locals.get(name)
+            && self.program.symbols[symbol.0 as usize].kind != SymbolKind::ModuleVariable
+        {
+            return None;
+        }
+        let key = (self.program.module.clone(), name.to_owned());
+        self.program.lazy_names.get(&key).copied()
+    }
+
+    /// Returns the function of the lazy import binding the first name of a module
+    /// expression, such as `m` in `m.f()`.
+    pub(super) fn lazy_module_function(&self, module: &Expr) -> Option<FunctionId> {
+        match module {
+            Expr::Name { id, .. } => self.lazy_function(id),
+            Expr::Attribute { value, .. } => self.lazy_module_function(value),
+            _ => None,
+        }
+    }
+
+    /// Wraps a call or a read through `name`, so it first runs the lazy import binding the
+    /// name while the import waits (MOD-06).
+    pub(super) fn through_lazy(&self, name: &str, value: TypedExpr) -> TypedExpr {
+        Self::lazy_value(self.lazy_function(name), value)
+    }
+
+    /// Wraps a call or a read through a module expression, as `through_lazy` does.
+    pub(super) fn through_lazy_module(&self, module: &Expr, value: TypedExpr) -> TypedExpr {
+        Self::lazy_value(self.lazy_module_function(module), value)
+    }
+
+    fn lazy_value(reify: Option<FunctionId>, value: TypedExpr) -> TypedExpr {
+        let Some(reify) = reify else {
+            return value;
+        };
+        let (ty, span) = (value.ty.clone(), value.span);
+        Self::typed(
+            TypedExprKind::Lazy {
+                reify,
+                value: Box::new(value),
+            },
+            ty,
+            span,
+        )
     }
 
     /// Binds as locals the names an import binds to values, as `collect_locals` binds an
@@ -353,6 +511,9 @@ impl BodyChecker<'_> {
     /// Reads `module.name` through a module object: a module variable, read as it is now; a
     /// class, as a type object; or a submodule (MOD-10).
     pub(super) fn module_attribute(&mut self, module: &str, name: &str, span: Span) -> TypedExpr {
+        if let Err(diagnostic) = self.program.check_not_lazy(module, name, span) {
+            return self.error(*diagnostic, span);
+        }
         let Some(found) = self.program.named(module, name) else {
             let module = ModuleName::new(module).unwrap_or_else(|_| ModuleName::main());
             return self.error(checked_later(span, &module), span);
@@ -453,6 +614,9 @@ impl BodyChecker<'_> {
         keywords: &[typy_source::syntax::Keyword],
         span: Span,
     ) -> TypedExpr {
+        if let Err(diagnostic) = self.program.check_not_lazy(module, &name.name, name.span) {
+            return self.error(*diagnostic, span);
+        }
         match self.program.named(module, &name.name) {
             None => {
                 let module = ModuleName::new(module).unwrap_or_else(|_| ModuleName::main());
@@ -541,6 +705,11 @@ impl BodyChecker<'_> {
                 continue;
             };
             for (name, imported, _) in resolved.names {
+                // A function's own import of a name hides the module's lazy import of it.
+                let key = (self.program.module.clone(), name.clone());
+                if let Some(lazy) = self.program.lazy_names.remove(&key) {
+                    saved.lazy.push((name.clone(), lazy));
+                }
                 match imported {
                     Imported::Function(function) => saved.functions.push((
                         name.clone(),
@@ -566,6 +735,10 @@ impl BodyChecker<'_> {
 
     /// Puts back the names `import_names_of` replaced, newest first.
     pub(super) fn restore_names(&mut self, saved: SavedNames) {
+        for (name, lazy) in saved.lazy {
+            let key = (self.program.module.clone(), name);
+            self.program.lazy_names.insert(key, lazy);
+        }
         for (name, previous) in saved.functions.into_iter().rev() {
             match previous {
                 Some(function) => self.program.function_ids.insert(name, function),
@@ -600,6 +773,7 @@ pub(super) struct SavedNames {
     classes: Vec<(String, Option<ClassId>)>,
     annotations: Vec<(String, Option<AnnotationName>)>,
     standard: Vec<(String, Option<String>)>,
+    lazy: Vec<(String, FunctionId)>,
 }
 
 /// Collects the import statements of a block, at any depth outside nested definitions.

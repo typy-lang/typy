@@ -35,6 +35,11 @@ pub(crate) struct ModuleGlobals {
     /// The state global of each module, as `TypedProgram::modules` lists them: not
     /// started, running or done (MOD-03).
     pub(crate) states: Vec<GlobalId>,
+    /// The flag of each function that runs a lazy import for one name, true while the
+    /// import waits for the name's first use (MOD-06).
+    pub(crate) armed: BTreeMap<typy_check::FunctionId, GlobalId>,
+    /// For each variable bound by a lazy import, the function that runs the import.
+    pub(crate) lazy: BTreeMap<SymbolId, typy_check::FunctionId>,
 }
 
 impl ModuleGlobals {
@@ -78,6 +83,13 @@ impl ModuleGlobals {
             let state = made.add(format!("{} state", module.name), TyirType::Int);
             made.states.push(state);
         }
+        for (reify, target) in &program.lazy_imports {
+            let armed = made.add(format!("lazy import {} armed", reify.0), TyirType::Bool);
+            made.armed.insert(*reify, armed);
+            if let Some(target) = target {
+                made.lazy.insert(*target, *reify);
+            }
+        }
         made
     }
 
@@ -118,7 +130,11 @@ impl FunctionLowerer<'_> {
             let slot = self.slots[&symbol];
             return self.load(slot, span);
         };
-        if self.function_id != global.owner {
+        // A lazy import leaves its name unbound in the module's own code too.
+        if let Some(reify) = self.module_globals.lazy.get(&symbol).copied() {
+            self.run_lazy_import(reify, span);
+            self.check_bound(symbol, global, span);
+        } else if self.function_id != global.owner {
             self.check_bound(symbol, global, span);
         }
         let ty = self.module_globals.globals[global.value.0 as usize].ty;
@@ -145,6 +161,34 @@ impl FunctionLowerer<'_> {
         self.call_runtime(RuntimeFunction::NameError, vec![name], span);
         self.builder.terminate(Terminator::Unreachable);
         self.builder.switch_to(read);
+    }
+
+    /// Unbinds a module variable: the value it held, if counted, is released and replaced by
+    /// its type's zero value, so a later store can release what it replaces.
+    pub(crate) fn unbind_name(&mut self, symbol: SymbolId, span: Span) {
+        let global = self.module_globals.of[&symbol];
+        let ty = self.module_globals.globals[global.value.0 as usize].ty;
+        if let Some(zero) = self.initial_value(ty, span) {
+            let old = self
+                .builder
+                .push_value(Operation::LoadGlobal(global.value), ty, span);
+            self.builder.push(
+                Operation::StoreGlobal {
+                    global: global.value,
+                    value: zero,
+                },
+                span,
+            );
+            self.builder.push(Operation::Decrement(old), span);
+        }
+        let unbound = self.constant(Constant::Bool(false), span);
+        self.builder.push(
+            Operation::StoreGlobal {
+                global: global.bound,
+                value: unbound,
+            },
+            span,
+        );
     }
 
     /// Stores into a variable, which takes over the value's reference: a local's slot, or a

@@ -182,6 +182,7 @@ impl<'context> FunctionLowerer<'context> {
             span: function.span,
         };
         lowerer.statements(&function.body);
+        lowerer.finish_lazy_import(function.span);
         if !lowerer.builder.is_terminated() {
             if function.signature.returns == typy_check::Type::NoneType {
                 let unit = lowerer.constant(Constant::Unit, function.span);

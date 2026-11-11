@@ -148,6 +148,7 @@ fn statements(body: &[TypedStmt], callees: &mut BTreeSet<FunctionId>) {
             // A module's code runs once and never recursively, so an import adds no edge.
             TypedStmt::Return { value: None, .. }
             | TypedStmt::Import { .. }
+            | TypedStmt::LazyImport { .. }
             | TypedStmt::Pass { .. }
             | TypedStmt::Break { .. }
             | TypedStmt::Continue { .. } => {}
@@ -381,6 +382,10 @@ fn expression(expression_value: &TypedExpr, callees: &mut BTreeSet<FunctionId>) 
         | TypedExprKind::Submodule(_)
         | TypedExprKind::ModuleName => {}
         TypedExprKind::AsIterable(inner) => expression(inner, callees),
+        TypedExprKind::Lazy { reify, value } => {
+            callees.insert(*reify);
+            expression(value, callees);
+        }
     }
 }
 

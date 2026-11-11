@@ -190,9 +190,11 @@ impl Walker {
                 for class in handlers.iter().filter_map(|handler| handler.class.as_ref()) {
                     self.expression(class);
                 }
+                self.try_depth += 1;
                 for block in statement.try_blocks() {
                     self.block(block, place);
                 }
+                self.try_depth -= 1;
             }
             Stmt::Import {
                 is_lazy: true,
@@ -203,9 +205,7 @@ impl Walker {
                 is_lazy: true,
                 span,
                 ..
-            } => {
-                self.report(*span, planned("lazy imports", "0.3", RuleId::MOD_06));
-            }
+            } => self.lazy_import(statement, *span, place),
             Stmt::ImportFrom { names, span, .. }
                 if names.iter().any(|alias| alias.name.name == "*") =>
             {

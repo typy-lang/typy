@@ -42,6 +42,7 @@ pub(crate) fn assigned_symbols(body: &[TypedStmt]) -> BTreeSet<SymbolId> {
                         found.insert(*target);
                     }
                 }
+                TypedStmt::LazyImport { targets, .. } => found.extend(targets.iter().copied()),
                 TypedStmt::If { body, orelse, .. } | TypedStmt::While { body, orelse, .. } => {
                     statements(body, found);
                     statements(orelse, found);

@@ -307,6 +307,26 @@ impl Dump<'_> {
                     *span,
                 );
             }
+            TypedStmt::LazyImport {
+                reifies,
+                targets,
+                span,
+            } => {
+                let reifies: Vec<String> = reifies.iter().map(|id| id.0.to_string()).collect();
+                let names: Vec<&str> = targets
+                    .iter()
+                    .map(|target| self.program.symbol(*target).name.as_str())
+                    .collect();
+                self.line(
+                    depth,
+                    &format!(
+                        "LazyImport {} binds {}",
+                        reifies.join(" "),
+                        names.join(", ")
+                    ),
+                    *span,
+                );
+            }
             TypedStmt::Pass { span } => self.line(depth, "Pass", *span),
             TypedStmt::Break { span } => self.line(depth, "Break", *span),
             TypedStmt::Continue { span } => self.line(depth, "Continue", *span),
@@ -348,6 +368,7 @@ impl Dump<'_> {
             }
             TypedExprKind::Submodule(module) => format!("Submodule {module}"),
             TypedExprKind::AsIterable(_) => "AsIterable".to_owned(),
+            TypedExprKind::Lazy { reify, .. } => format!("Lazy {}", reify.0),
             TypedExprKind::ModuleName => "ModuleName".to_owned(),
             TypedExprKind::Binary { operator, .. } => format!("Binary {operator:?}"),
             TypedExprKind::Unary { operator, .. } => format!("Unary {operator:?}"),
@@ -461,7 +482,8 @@ fn children(expression: &TypedExpr) -> Vec<&TypedExpr> {
         TypedExprKind::DictItem { dict, key } => vec![dict, key],
         TypedExprKind::Wrap(inner)
         | TypedExprKind::Unwrap(inner)
-        | TypedExprKind::AsIterable(inner) => vec![inner],
+        | TypedExprKind::AsIterable(inner)
+        | TypedExprKind::Lazy { value: inner, .. } => vec![inner],
         TypedExprKind::Comprehension {
             element,
             value,
