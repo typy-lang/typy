@@ -24,6 +24,15 @@ pub(crate) enum Imported {
     Module(ModuleName),
 }
 
+/// What a name is in a module's tables.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum Named {
+    Function(FunctionId),
+    Class(ClassId),
+    Variable(SymbolId),
+    Nothing,
+}
+
 /// An import statement resolved: the modules it initialises, in order, and each name it
 /// binds with what the name stands for.
 #[derive(Clone, Debug, Default)]
@@ -105,17 +114,25 @@ impl Program {
         Ok(resolved)
     }
 
-    /// Returns the names of a module checked before, or of the module being checked, which
-    /// its own functions may import by name.
-    pub(crate) fn scope_of(&self, module: &str) -> Option<super::program::ModuleScope> {
-        if module == self.module {
-            return Some(super::program::ModuleScope {
-                function_ids: self.function_ids.clone(),
-                class_ids: self.class_ids.clone(),
-                module_symbols: self.module_symbols.clone(),
-            });
-        }
-        self.scopes.get(module).cloned()
+    /// Returns what `name` is in a module checked before, or in the module being checked,
+    /// which its own functions may import by name; `None` when the module is not checked
+    /// yet. The tables are read in place, so a lookup costs the same in any module.
+    pub(crate) fn named(&self, module: &str, name: &str) -> Option<Named> {
+        let (functions, classes, symbols) = if module == self.module {
+            (&self.function_ids, &self.class_ids, &self.module_symbols)
+        } else {
+            let scope = self.scopes.get(module)?;
+            (&scope.function_ids, &scope.class_ids, &scope.module_symbols)
+        };
+        Some(if let Some(function) = functions.get(name) {
+            Named::Function(*function)
+        } else if let Some(class) = classes.get(name) {
+            Named::Class(*class)
+        } else if let Some(symbol) = symbols.get(name) {
+            Named::Variable(*symbol)
+        } else {
+            Named::Nothing
+        })
     }
 
     /// Returns what `from base import name` binds: the module's own name first, as CPython
@@ -132,20 +149,17 @@ impl Program {
         if base.as_str() == self.module && self.loaded.contains(child.as_str()) {
             return Ok(Imported::Module(child));
         }
-        let Some(scope) = self.scope_of(base.as_str()) else {
-            return Err(Box::new(checked_later(span, base)));
-        };
-        if let Some(function) = scope.function_ids.get(name) {
-            return Ok(Imported::Function(*function));
-        }
-        if let Some(class) = scope.class_ids.get(name) {
-            return Ok(Imported::Class(*class));
-        }
-        if let Some(source) = scope.module_symbols.get(name) {
-            return Ok(Imported::Variable {
-                module: base.as_str().to_owned(),
-                source: *source,
-            });
+        match self.named(base.as_str(), name) {
+            None => return Err(Box::new(checked_later(span, base))),
+            Some(Named::Function(function)) => return Ok(Imported::Function(function)),
+            Some(Named::Class(class)) => return Ok(Imported::Class(class)),
+            Some(Named::Variable(source)) => {
+                return Ok(Imported::Variable {
+                    module: base.as_str().to_owned(),
+                    source,
+                });
+            }
+            Some(Named::Nothing) => {}
         }
         if self.loaded.contains(child.as_str()) {
             return Ok(Imported::Module(child));
@@ -280,7 +294,7 @@ impl BodyChecker<'_> {
     /// Reads `module.name` through a module object: a module variable, read as it is now; a
     /// class, as a type object; or a submodule (MOD-10).
     pub(super) fn module_attribute(&mut self, module: &str, name: &str, span: Span) -> TypedExpr {
-        let Some(scope) = self.program.scope_of(module) else {
+        let Some(found) = self.program.named(module, name) else {
             let module = ModuleName::new(module).unwrap_or_else(|_| ModuleName::main());
             return self.error(checked_later(span, &module), span);
         };
@@ -291,19 +305,19 @@ impl BodyChecker<'_> {
                 span,
             );
         }
-        if let Some(symbol) = scope.module_symbols.get(name) {
+        if let Named::Variable(symbol) = found {
             let ty = self.program.symbols[symbol.0 as usize].ty.clone();
             return Self::typed(
                 TypedExprKind::ModuleAttribute {
                     module: module.to_owned(),
-                    symbol: *symbol,
+                    symbol,
                 },
                 ty,
                 span,
             );
         }
-        if let Some(class) = scope.class_ids.get(name) {
-            return self.class_object(*class, name, span);
+        if let Named::Class(class) = found {
+            return self.class_object(class, name, span);
         }
         let child = format!("{module}.{name}");
         if self.program.loaded.contains(&child) {
@@ -313,15 +327,18 @@ impl BodyChecker<'_> {
                 span,
             );
         }
-        let message = if scope.function_ids.contains_key(name) {
-            format!("using `{module}.{name}` as a value is planned for TyPy 1.0 (FUN-05)")
+        let (code, rule, message) = if let Named::Function(_) = found {
+            (
+                201,
+                RuleId::FUN_05,
+                format!("using `{module}.{name}` as a value is planned for TyPy 1.0 (FUN-05)"),
+            )
         } else {
-            format!("module `{module}` has no name `{name}`")
-        };
-        let (code, rule) = if scope.function_ids.contains_key(name) {
-            (201, RuleId::FUN_05)
-        } else {
-            (425, RuleId::SMT_07)
+            (
+                425,
+                RuleId::SMT_07,
+                format!("module `{module}` has no name `{name}`"),
+            )
         };
         self.error(
             Diagnostic::new(DiagnosticCode::error(code), span, message).with_rule(rule),
@@ -377,15 +394,18 @@ impl BodyChecker<'_> {
         keywords: &[typy_source::syntax::Keyword],
         span: Span,
     ) -> TypedExpr {
-        let Some(scope) = self.program.scope_of(module) else {
-            let module = ModuleName::new(module).unwrap_or_else(|_| ModuleName::main());
-            return self.error(checked_later(span, &module), span);
-        };
-        if let Some(function) = scope.function_ids.get(&name.name) {
-            return self.call_function(*function, &name.name, arguments, keywords, span);
-        }
-        if let Some(class) = scope.class_ids.get(&name.name) {
-            return self.new_instance(*class, arguments, keywords, span);
+        match self.program.named(module, &name.name) {
+            None => {
+                let module = ModuleName::new(module).unwrap_or_else(|_| ModuleName::main());
+                return self.error(checked_later(span, &module), span);
+            }
+            Some(Named::Function(function)) => {
+                return self.call_function(function, &name.name, arguments, keywords, span);
+            }
+            Some(Named::Class(class)) => {
+                return self.new_instance(class, arguments, keywords, span);
+            }
+            Some(Named::Variable(_) | Named::Nothing) => {}
         }
         for argument in arguments {
             self.expression(argument);

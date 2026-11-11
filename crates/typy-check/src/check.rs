@@ -144,10 +144,11 @@ fn check_module(
     // Each `__init__` is checked first, since it gives the attributes it assigns their
     // types; the module body comes next, since it gives the module variables theirs, and
     // the other functions last. An `__init__` reads a module variable with the type a
-    // first look at the module body gives it, on a copy whose diagnostics are dropped.
-    let mut first_look = program.clone();
-    BodyChecker::check_module(&mut first_look, &module_body, &mut Diagnostics::new());
-    program.take_module_types(&first_look);
+    // first look at the module body gives it, whose diagnostics are dropped and whose other
+    // effects are undone, so the cost of a module does not grow with the modules before it.
+    let snapshot = program.snapshot(first_class);
+    BodyChecker::check_module(program, &module_body, &mut Diagnostics::new());
+    program.keep_module_types(snapshot);
     let (initializers, others): (Vec<_>, Vec<_>) = definitions
         .iter()
         .enumerate()

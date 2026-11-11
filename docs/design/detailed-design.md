@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy detailed design |
-| Version | 1.61 |
+| Version | 1.62 |
 | Status | Approved |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-11 |
@@ -1013,8 +1013,10 @@ sorted before they are returned. Each `__init__` comes first, since it
 gives the attributes it assigns their types, then the module body, which
 gives the module variables theirs, then the other functions. An
 `__init__` reads a module variable with the type a first check of the
-module body gives it, on a copy of the program whose diagnostics are
-dropped; one whose type needs an attribute is E0424. Parallel checking
+module body gives it. That check runs on the program itself, and
+`Program::snapshot` and `keep_module_types` undo all it did but those
+types, dropping its diagnostics, so a module costs the same however many
+modules come before it; one whose type needs an attribute is E0424. Parallel checking
 (architecture section 7.5) is added when the build-time benchmarks of
 NFR-04 call for it.
 

@@ -54,6 +54,15 @@ pub(crate) struct Program {
     pub(super) assigned_elsewhere: BTreeSet<(String, String)>,
 }
 
+/// What a first look at a module body may change, which `keep_module_types` undoes.
+pub(crate) struct Snapshot {
+    symbols: usize,
+    functions: usize,
+    signatures: usize,
+    classes: Vec<ClassInfo>,
+    first_class: usize,
+}
+
 /// The names one module defines, which other modules import.
 #[derive(Clone, Debug, Default)]
 pub(crate) struct ModuleScope {
@@ -276,12 +285,35 @@ impl Program {
         }
     }
 
-    /// Gives each module variable the type it has in `other`, a copy of this program in which
-    /// the module body was checked, while the `__init__` methods are checked.
-    pub(crate) fn take_module_types(&mut self, other: &Self) {
-        for symbol in self.module_symbols.values() {
-            let index = symbol.0 as usize;
-            self.symbols[index].ty = other.symbols[index].ty.clone();
+    /// Returns what checking the module body changes, so `keep_module_types` can undo it:
+    /// how many symbols, functions and signatures there are, and the module's own classes,
+    /// numbered from `first_class`.
+    pub(crate) fn snapshot(&self, first_class: usize) -> Snapshot {
+        Snapshot {
+            symbols: self.symbols.len(),
+            functions: self.functions.len(),
+            signatures: self.signatures.len(),
+            classes: self.classes[first_class..].to_vec(),
+            first_class,
+        }
+    }
+
+    /// Undoes a first look at the module body but the types it gave the module variables,
+    /// which the `__init__` methods read until the module body is checked again.
+    pub(crate) fn keep_module_types(&mut self, snapshot: Snapshot) {
+        let found: Vec<Type> = self
+            .module_symbols
+            .values()
+            .map(|symbol| self.symbols[symbol.0 as usize].ty.clone())
+            .collect();
+        self.symbols.truncate(snapshot.symbols);
+        self.functions.truncate(snapshot.functions);
+        self.signatures.truncate(snapshot.signatures);
+        self.classes.truncate(snapshot.first_class);
+        self.classes.extend(snapshot.classes);
+        let symbols: Vec<SymbolId> = self.module_symbols.values().copied().collect();
+        for (symbol, ty) in symbols.into_iter().zip(found) {
+            self.symbols[symbol.0 as usize].ty = ty;
         }
         self.provisional = true;
     }
