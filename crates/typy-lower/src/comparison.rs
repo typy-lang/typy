@@ -11,6 +11,9 @@ use typy_tyir::{
 use crate::function::FunctionLowerer;
 use crate::ownership::Lowered;
 
+/// `bool | None`, a byte with 2 for `None` (ADR-0011).
+const BOOL_OR_NONE: TyirType = TyirType::Optional(OptionalBase::Bool);
+
 impl FunctionLowerer<'_> {
     /// `a < b <= c`: each operand is evaluated once, and evaluation stops at the first false link.
     pub(crate) fn comparison_chain(
@@ -144,14 +147,10 @@ impl FunctionLowerer<'_> {
         // the null address. Otherwise an optional value is `None` when its spare
         // value says so; any other value is `None` only when its type is (ADR-0011).
         let holds = match (left.ty, right.ty) {
-            // `True` and `False` are the only `bool` objects, so identity is equality.
-            (TyirType::Bool, TyirType::Bool) => {
-                let operator = if is {
-                    CompareOperator::Eq
-                } else {
-                    CompareOperator::NotEq
-                };
-                return self.compare(operator, left, right, span);
+            // `True`, `False` and `None` are each the only object of its value, so identity
+            // is equality, and `None` is never a `bool`.
+            (TyirType::Bool | BOOL_OR_NONE, TyirType::Bool | BOOL_OR_NONE) => {
+                self.same_singleton(left, right, span)
             }
             (
                 TyirType::Object(_) | TyirType::Optional(OptionalBase::Object(_)),
@@ -169,6 +168,64 @@ impl FunctionLowerer<'_> {
         }
         self.builder
             .push_value(Operation::BoolNot(holds), TyirType::Bool, span)
+    }
+
+    /// Returns whether two `bool` or `bool | None` values are the same object: both `None`,
+    /// or both the same `bool` (EXP-08).
+    fn same_singleton(&mut self, left: Lowered, right: Lowered, span: Span) -> ValueId {
+        match (left.ty, right.ty) {
+            (TyirType::Bool, TyirType::Bool) => {
+                self.compare(CompareOperator::Eq, left, right, span)
+            }
+            (TyirType::Bool, _) => self.same_singleton(right, left, span),
+            (_, TyirType::Bool) => {
+                self.optional_branch(
+                    left,
+                    TyirType::Bool,
+                    span,
+                    |lowerer| {
+                        Self::borrowed(
+                            lowerer.constant(Constant::Bool(false), span),
+                            TyirType::Bool,
+                        )
+                    },
+                    |lowerer, value| {
+                        let same = lowerer.same_singleton(value, right, span);
+                        Self::borrowed(same, TyirType::Bool)
+                    },
+                )
+                .value
+            }
+            _ => {
+                self.optional_branch(
+                    left,
+                    TyirType::Bool,
+                    span,
+                    |lowerer| Self::borrowed(lowerer.is_none(right, span), TyirType::Bool),
+                    |lowerer, value| {
+                        let same = lowerer
+                            .optional_branch(
+                                right,
+                                TyirType::Bool,
+                                span,
+                                |lowerer| {
+                                    Self::borrowed(
+                                        lowerer.constant(Constant::Bool(false), span),
+                                        TyirType::Bool,
+                                    )
+                                },
+                                |lowerer, other| {
+                                    let same = lowerer.same_singleton(value, other, span);
+                                    Self::borrowed(same, TyirType::Bool)
+                                },
+                            )
+                            .value;
+                        Self::borrowed(same, TyirType::Bool)
+                    },
+                )
+                .value
+            }
+        }
     }
 
     /// Compares two values whose types the checker accepted; the operands are not released.

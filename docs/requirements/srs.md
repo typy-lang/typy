@@ -216,7 +216,7 @@ formatter applies; Ruff's formatter is the project's recommendation.
 | EXP-05 | Shifts and bitwise operators shall give Python's results for `int`, and a negative shift count shall raise `ValueError`. | M | 0.1 | 6.8 |
 | EXP-06 | Comparisons shall be accepted between values of the same type, and between `int` and `float`. Chained comparisons shall evaluate each operand once. | M | 0.1 | 6.10 |
 | EXP-07 | `in` and `not in` shall be accepted on `str`, `bytes`, `list`, `tuple`, `dict` and `set`. | M | 0.2 | 6.10.2 |
-| EXP-08 | `is` and `is not` shall be accepted only when one operand is `None`, both operands are `bool`, or both operands are class instances. | M | 0.1 | 6.10.3 |
+| EXP-08 | `is` and `is not` shall be accepted only when one operand is `None`, both operands are `bool` or `bool \| None`, or both operands are class instances. | M | 0.1 | 6.10.3 |
 | EXP-09 | `and` and `or` shall short-circuit and return one of their operands, and shall be accepted only when both operands have the same type. | M | 0.1 | 6.11 |
 | EXP-10 | A value shall be accepted in a truth test when its type is `bool`, `int`, `float`, `str`, `bytes`, a built-in container, `T \| None`, or a class that defines `__bool__` or `__len__`. Other values shall be rejected. | M | 0.1 | 6.11 |
 | EXP-11 | Conditional expressions `x if c else y` shall be accepted when both branches have the same type. | M | 0.1 | 6.13 |

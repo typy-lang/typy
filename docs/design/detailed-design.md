@@ -264,7 +264,7 @@ it enforces and its status. `typy explain` (0.3) reads the same table.
 | E0204 | Function without a return annotation | TYP-01 |
 | E0205 | Name is not defined | STD-04 |
 | E0206 | Import of a module TyPy does not provide | LIB-08 |
-| E0301 | `is` used on values other than `None`, two `bool` values or class instances | EXP-08 |
+| E0301 | `is` used on values other than `None`, `bool` values or class instances | EXP-08 |
 | E0302 | `**` whose CPython result could be a `float` for `int ** int`, or `complex` | EXP-04 |
 | E0303 | `and` or `or` with operands of different types | EXP-09 |
 | E0304 | Truth test on a value of an unsupported type | EXP-10 |
@@ -688,11 +688,13 @@ display, and a conditional expression with a `None` branch, join their
 items' types, so `[1, None]` is `list[int | None]`. An optional value is
 compared with `None` by `is`, tested for truth and written as text; `==`,
 ordering, operators and methods on it are E0407, E0401 and E0412, with a
-help that says how to narrow it. Two `bool` values also compare by `is`,
-which lowering compiles as `==`, since `True` and `False` are the only
-`bool` objects (EXP-08). The flow state of definite assignment holds
-`Fact::Assigned(symbol)` and `Fact::NotNone(symbol)`, joined by
-intersection, so a fact holds only where it holds on every path.
+help that says how to narrow it. `True`, `False` and `None` are each the
+only object of its value, so two `bool` or `bool | None` values also
+compare by `is`: lowering compiles it as `==` of two `bool` values, after
+testing an optional one for `None`, which is never a `bool` (EXP-08). The flow
+state of definite assignment holds `Fact::Assigned(symbol)` and
+`Fact::NotNone(symbol)`, joined by intersection, so a fact holds only where it
+holds on every path.
 `test_facts` gives the facts a test shows when it holds and when it fails:
 `x is not None` and a truth test of `x` show `x` is not `None` when they
 hold, `x is None` when it fails, `not` exchanges them, and `and` and `or`

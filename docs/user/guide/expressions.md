@@ -14,7 +14,7 @@ order.
 | Shifts and bitwise operators on `int` | EXP-05 |
 | Comparisons between values of one type and between `int` and `float`, chained | EXP-06 |
 | `in` and `not in` on `str`, `bytes`, `list`, `tuple`, `dict` and `set` | EXP-07 |
-| `is` and `is not` when one side is `None`, both are `bool`, or both are instances or type objects | EXP-08 |
+| `is` and `is not` when one side is `None`, both are `bool` or `bool \| None`, or both are instances or type objects | EXP-08 |
 | `and` and `or` with operands of one type | EXP-09 |
 | Truth tests of numbers, strings, containers, optional values and instances | EXP-10 |
 | `x if c else y` with branches of one type | EXP-11 |

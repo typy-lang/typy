@@ -72,10 +72,11 @@ The program imports a standard library module that TyPy does not provide
 (LIB-08). Use the modules the message lists, or write the code without the
 module.
 
-## E0301: `is` used on values other than `None`, two `bool` values or class instances
+## E0301: `is` used on values other than `None`, `bool` values or class instances
 
-`is` compares identity, which TyPy defines only against `None`, between two
-`bool` values, and between instances or type objects (EXP-08). Compare
+`is` compares identity, which TyPy defines only against `None`, between
+`bool` and `bool | None` values, and between instances or type objects
+(EXP-08). Compare
 other values with `==`: CPython's identity of numbers and strings depends
 on its caches, so the same program could print different results.
 
