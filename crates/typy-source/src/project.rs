@@ -1,22 +1,28 @@
 //! A loaded program: its settings, its source files and its parsed modules.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 use camino::Utf8Path;
-use typy_diagnostics::{Diagnostics, FileId, Position, SourceLookup, TextOffset};
+use typy_diagnostics::{Diagnostics, FileId, Position, SourceLookup, Span, TextOffset};
 
+use crate::loader::{
+    Import, Location, imports, initialisation_order, is_standard, locate, not_found,
+};
 use crate::module::{Module, ModuleName};
 use crate::parse::parse;
 use crate::settings::ProjectSettings;
 use crate::source_file::SourceFile;
 
-/// The program being built: settings, files and modules.
+/// The program being built: settings, files, modules, and the imports between them.
 #[derive(Clone, Debug)]
 pub struct Project {
     settings: ProjectSettings,
     main: ModuleName,
     modules: BTreeMap<ModuleName, Module>,
     files: Vec<SourceFile>,
+    imports: BTreeMap<ModuleName, Vec<Import>>,
+    order: Vec<ModuleName>,
+    standard: BTreeSet<ModuleName>,
 }
 
 /// Why a project did not load: the diagnostics, and the files they point into.
@@ -28,46 +34,57 @@ pub struct LoadFailure {
 }
 
 impl Project {
-    /// Reads and parses the main file, `main_path`, relative to `settings.root`; returns every diagnostic of every file together.
+    /// Reads and parses the main file, `main_path`, relative to `settings.root`, and every
+    /// module its imports reach, found under the root (MOD-01, MOD-02); returns every
+    /// diagnostic of every file together.
     pub fn load(main_path: &Utf8Path, settings: ProjectSettings) -> Result<Self, LoadFailure> {
         let relative = main_path
             .strip_prefix(&settings.root)
             .unwrap_or(main_path)
             .to_owned();
-        let (file, read_error) = SourceFile::read(FileId(0), &settings.root, &relative);
-        let mut diagnostics = Diagnostics::new();
-        if let Some(diagnostic) = read_error {
-            diagnostics.push(diagnostic);
-            return Err(LoadFailure {
-                diagnostics,
-                files: vec![file],
-            });
+        let mut loader = Loader {
+            settings: &settings,
+            files: Vec::new(),
+            modules: BTreeMap::new(),
+            imports: BTreeMap::new(),
+            standard: BTreeSet::new(),
+            diagnostics: Diagnostics::new(),
+            pending: Vec::new(),
+        };
+        let main = ModuleName::main();
+        let location = Location {
+            path: relative,
+            is_package: false,
+        };
+        if !loader.read(main.clone(), &location, None) {
+            return Err(loader.failure());
         }
-        match parse(&file, settings.python_floor) {
-            Ok(syntax) => {
-                let main = ModuleName::main();
-                let module = Module {
-                    name: main.clone(),
-                    file: file.id(),
-                    syntax,
-                };
-                Ok(Self {
-                    settings,
-                    modules: BTreeMap::from([(main.clone(), module)]),
-                    main,
-                    files: vec![file],
-                })
-            }
-            Err(errors) => {
-                for error in errors {
-                    diagnostics.push(error);
-                }
-                Err(LoadFailure {
-                    diagnostics,
-                    files: vec![file],
-                })
-            }
+        while let Some(name) = loader.pending.pop() {
+            loader.follow_imports(&name);
         }
+        let (order, cycles) = initialisation_order(&loader.imports);
+        for cycle in cycles {
+            loader.diagnostics.push(cycle);
+        }
+        if loader.diagnostics.has_errors() {
+            return Err(loader.failure());
+        }
+        let Loader {
+            files,
+            modules,
+            imports,
+            standard,
+            ..
+        } = loader;
+        Ok(Self {
+            settings,
+            main,
+            modules,
+            files,
+            imports,
+            order,
+            standard,
+        })
     }
 
     /// Returns the settings.
@@ -87,10 +104,144 @@ impl Project {
         self.modules.values()
     }
 
+    /// Returns a module of the program by its name.
+    #[must_use]
+    pub fn module(&self, name: &ModuleName) -> Option<&Module> {
+        self.modules.get(name)
+    }
+
+    /// Returns the modules with each one's module-level imports before it, the order in which
+    /// they are checked.
+    #[must_use]
+    pub fn order(&self) -> &[ModuleName] {
+        &self.order
+    }
+
+    /// Returns the modules a module's imports need, in source order.
+    #[must_use]
+    pub fn imports(&self, name: &ModuleName) -> &[Import] {
+        self.imports.get(name).map_or(&[], Vec::as_slice)
+    }
+
+    /// Returns whether a module the program imports is a standard library module, one that
+    /// no file under the root provides.
+    #[must_use]
+    pub fn imports_standard(&self, name: &ModuleName) -> bool {
+        self.standard.contains(name)
+    }
+
     /// Returns a file by its ID.
     #[must_use]
     pub fn file(&self, id: FileId) -> Option<&SourceFile> {
         self.files.get(id.0 as usize)
+    }
+}
+
+/// The state of a load: the files and modules read so far, and those whose imports are
+/// still to be followed.
+struct Loader<'settings> {
+    settings: &'settings ProjectSettings,
+    files: Vec<SourceFile>,
+    modules: BTreeMap<ModuleName, Module>,
+    imports: BTreeMap<ModuleName, Vec<Import>>,
+    standard: BTreeSet<ModuleName>,
+    diagnostics: Diagnostics,
+    pending: Vec<ModuleName>,
+}
+
+impl Loader<'_> {
+    /// Reads and parses a module from its location, reusing a file already read, as for the
+    /// main file imported by its own name; returns false when it cannot be read or parsed.
+    fn read(&mut self, name: ModuleName, location: &Location, importer: Option<Span>) -> bool {
+        let existing = self
+            .files
+            .iter()
+            .find(|file| file.path() == location.path)
+            .map(SourceFile::id);
+        let mut unreadable = false;
+        let id = existing.unwrap_or_else(|| {
+            let id = FileId(u32::try_from(self.files.len()).unwrap_or(u32::MAX));
+            let (file, read_error) = SourceFile::read(id, &self.settings.root, &location.path);
+            self.files.push(file);
+            if let Some(mut diagnostic) = read_error {
+                if let Some(span) = importer {
+                    diagnostic = diagnostic.with_label(span, "imported here");
+                }
+                self.diagnostics.push(diagnostic);
+                unreadable = true;
+            }
+            id
+        });
+        // A file that cannot be read has no text to parse, so it gives one error.
+        if unreadable {
+            return false;
+        }
+        let file = &self.files[id.0 as usize];
+        match parse(file, self.settings.python_floor) {
+            Ok(syntax) => {
+                self.modules.insert(
+                    name.clone(),
+                    Module {
+                        name: name.clone(),
+                        file: id,
+                        syntax,
+                        is_package: location.is_package,
+                    },
+                );
+                self.pending.push(name);
+                true
+            }
+            // A file read before parsed then, so only a new file can fail to parse here.
+            Err(errors) => {
+                for error in errors {
+                    self.diagnostics.push(error);
+                }
+                false
+            }
+        }
+    }
+
+    /// Loads each module the imports of `name` need that is not loaded yet.
+    fn follow_imports(&mut self, name: &ModuleName) {
+        let (imports, errors) = imports(&self.modules[name]);
+        for error in errors {
+            self.diagnostics.push(error);
+        }
+        for import in &imports {
+            if self.modules.contains_key(&import.module) || self.standard.contains(&import.module) {
+                continue;
+            }
+            if let Some(location) = locate(&self.settings.root, &import.module) {
+                self.read(import.module.clone(), &location, Some(import.span));
+            } else if is_standard(&import.module) {
+                // The checker says whether TyPy provides it (LIB-08).
+                self.standard.insert(import.module.clone());
+            } else if !import.optional {
+                let message = match import.module.parent() {
+                    Some(parent)
+                        if self
+                            .modules
+                            .get(&parent)
+                            .is_some_and(|module| !module.is_package) =>
+                    {
+                        format!(
+                            "no module named `{}`; `{parent}` is not a package",
+                            import.module
+                        )
+                    }
+                    _ => format!("no module named `{}`", import.module),
+                };
+                self.diagnostics.push(not_found(import.span, message));
+            }
+        }
+        self.imports.insert(name.clone(), imports);
+    }
+
+    fn failure(self) -> LoadFailure {
+        LoadFailure {
+            diagnostics: self.diagnostics,
+            files: self.files,
+        }
     }
 }
 

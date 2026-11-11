@@ -208,6 +208,7 @@ pub const CODES: &[CodeInfo] = &[
         "`del` of something other than a list item, a list slice or a dict key",
         RuleId::SMT_05,
     ),
+    active(422, "circular import at module level", RuleId::MOD_05),
     active(
         423,
         "`global` of a name the module does not bind",

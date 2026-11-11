@@ -3,14 +3,17 @@
 
 mod int_literal;
 mod line_index;
+mod loader;
 mod module;
 mod parse;
 mod project;
 mod settings;
 mod source_file;
+mod stdlib_names;
 pub mod syntax;
 
 pub use line_index::LineIndex;
+pub use loader::{ANNOTATION_MODULES, Import, absolute_name};
 pub use module::{Module, ModuleName, ModuleNameError};
 pub use parse::parse;
 pub use project::{LoadFailure, Project};

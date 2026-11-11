@@ -145,6 +145,12 @@ impl RuleId {
     pub const LIB_08: Self = Self("LIB-08");
     /// `str % values`, printf-style formatting with a value, a tuple of values or a dict of named values, shall be accepted with Python's results.
     pub const LIB_10: Self = Self("LIB-10");
+    /// A program shall be built from several `.py` files, found from the main file's directory and from paths set in `typy.toml`.
+    pub const MOD_01: Self = Self("MOD-01");
+    /// Packages with `__init__.py` and relative imports shall be accepted.
+    pub const MOD_02: Self = Self("MOD-02");
+    /// A circular import shall be rejected with the cycle shown.
+    pub const MOD_05: Self = Self("MOD-05");
     /// `lazy import` and `lazy from ... import` are accepted at module level when the Python floor is 3.15 or later.
     pub const MOD_06: Self = Self("MOD-06");
     /// The compiler shall not crash on any input; an internal error shall be reported as `E9xxx` with a hint to report it.
@@ -263,6 +269,9 @@ impl RuleId {
         Self::LIB_04,
         Self::LIB_08,
         Self::LIB_10,
+        Self::MOD_01,
+        Self::MOD_02,
+        Self::MOD_05,
         Self::MOD_06,
         Self::NFR_09,
         Self::SMT_02,

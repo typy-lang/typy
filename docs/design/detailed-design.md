@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy detailed design |
-| Version | 1.58 |
+| Version | 1.59 |
 | Status | Approved |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-11 |
@@ -345,6 +345,7 @@ not an identifier.
 | `name` | `ModuleName` | none | `__main__` for the main file (STD-06) |
 | `file` | `FileId` | none | Its `SourceFile` |
 | `syntax` | `SyntaxTree` | none | Built by `parse` |
+| `is_package` | `bool` | none | Read from an `__init__.py` (MOD-02); `package()` gives the package a relative import starts from |
 
 `Project`
 
@@ -352,16 +353,36 @@ not an identifier.
 | --- | --- | --- | --- |
 | `settings` | `ProjectSettings` | none | Immutable after load |
 | `main` | `ModuleName` | `__main__` | A key of `modules` |
-| `modules` | `BTreeMap<ModuleName, Module>` | none | The main module in 0.1; imported modules from 0.3 |
-| `files` | `Vec<SourceFile>` | none | Indexed by `FileId` |
+| `modules` | `BTreeMap<ModuleName, Module>` | none | The main module and every module its imports reach |
+| `files` | `Vec<SourceFile>` | none | Indexed by `FileId`; a file imported under two names, as the main file by its own name, is read once |
+| `imports` | `BTreeMap<ModuleName, Vec<Import>>` | none | Each module's imports, with the packages above each module they name |
+| `order` | `Vec<ModuleName>` | none | Each module after the modules its module-level imports need, in name order otherwise |
+| `standard` | `BTreeSet<ModuleName>` | none | The standard library modules imported, which no file under the root provides |
 
 `Project::load(main_path, settings) -> Result<Project, LoadFailure>` reads
-and parses the main file, and returns every diagnostic of every file
-together. `LoadFailure` holds the `Diagnostics` and the files they point
-into, and implements `SourceLookup`, so a failed load can still be
-rendered. The checker reads the declarations of `builtins` from
-`typy-stdlib` (section 6). Imports between modules are
-planned for 0.3 (MOD-01); in 0.1 an `import` statement gives E0201.
+and parses the main file and every module its imports reach, and returns
+every diagnostic of every file together. `LoadFailure` holds the
+`Diagnostics` and the files they point into, and implements
+`SourceLookup`, so a failed load can still be rendered. The checker reads
+the declarations of `builtins` from `typy-stdlib` (section 6).
+
+`loader.rs` finds the imports of each module at any depth, in function and
+class bodies too. An `Import` names the module, its span, whether it runs
+while the module initialises, which an import in a function does not, and
+whether it is optional: `from a import b` needs the submodule `a.b` only
+when it exists. `import a.b` needs `a`, then `a.b`. `absolute_name` turns a
+relative import into an absolute name from the importing module's
+package, with CPython's messages for a module outside a package and for
+too many dots. `locate` finds `a.b` as the package `a/b/__init__.py`, or
+else `a/b.py`, under the main file's directory, as CPython's file finder
+prefers a package. A module no file provides is a standard library module
+when its top-level name is in `STDLIB_NAMES`, CPython 3.12 to 3.15's
+`sys.stdlib_module_names` written by `scripts/generate-stdlib-names.py`;
+the checker says whether TyPy provides it. Any other is E0206, `no module
+named 'x'`, with `; 'a' is not a package` when `a` is a module.
+`initialisation_order` follows the module-level imports depth first; an
+import that leads back to a module on the path is E0422, with each import
+of the cycle shown, MOD-05 (ADR-0015).
 
 ### 5.2 The syntax tree
 

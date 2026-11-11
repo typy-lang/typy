@@ -33,6 +33,14 @@ impl ModuleName {
     pub fn as_str(&self) -> &str {
         &self.0
     }
+
+    /// Returns the package that holds the module, `a` for `a.b`, or `None` at the top.
+    #[must_use]
+    pub fn parent(&self) -> Option<Self> {
+        self.0
+            .rsplit_once('.')
+            .map(|(parent, _)| Self(parent.to_owned()))
+    }
 }
 
 impl fmt::Display for ModuleName {
@@ -78,6 +86,22 @@ pub struct Module {
     pub file: FileId,
     /// Its parsed form.
     pub syntax: SyntaxTree,
+    /// Whether it is a package, read from an `__init__.py` (MOD-02).
+    pub is_package: bool,
+}
+
+impl Module {
+    /// Returns the package a relative import starts from: the module itself when it is a
+    /// package, the package that holds it otherwise, and `None` for a module outside any
+    /// package, such as `__main__` (MOD-02).
+    #[must_use]
+    pub fn package(&self) -> Option<ModuleName> {
+        if self.is_package {
+            Some(self.name.clone())
+        } else {
+            self.name.parent()
+        }
+    }
 }
 
 #[cfg(test)]

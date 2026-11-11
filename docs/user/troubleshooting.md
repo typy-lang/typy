@@ -68,9 +68,13 @@ name before the line that uses it.
 
 ## E0206: import of a module TyPy does not provide
 
-The program imports a standard library module that TyPy does not provide
-(LIB-08). Use the modules the message lists, or write the code without the
-module.
+The program imports a module that neither the program nor TyPy provides
+(LIB-08). A module of the program is a `.py` file, or a package directory
+with an `__init__.py`, under the main file's directory: `import tools.text`
+reads `tools/__init__.py` and `tools/text.py`. A relative import such as
+`from . import helper` works only inside a package, as in CPython. For the
+standard library, use the modules the message lists, or write the code
+without the module.
 
 ## E0301: `is` used on values other than `None`, `bool` values or class instances
 
@@ -256,6 +260,14 @@ use `try` and `finally` for a value that has none.
 variable or an attribute stays bound once assigned in TyPy, and a tuple,
 a `str` or `bytes` cannot change. Assign a new value instead, or keep the
 values in a list or a dict.
+
+## E0422: circular import at module level
+
+Two or more modules import each other at module level (MOD-05), so one of
+them would run while another is half initialised. The message shows each
+import of the cycle. Move one import into the function that uses the
+module: an import inside a function runs when the function is called, and
+makes no cycle.
 
 ## E0423: `global` of a name the module does not bind
 
