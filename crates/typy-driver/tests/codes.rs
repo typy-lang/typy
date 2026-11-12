@@ -3,8 +3,9 @@
 use camino::Utf8PathBuf;
 use typy_diagnostics::{DiagnosticCode, lookup};
 
-/// Returns the numbers of every `DiagnosticCode::error(N)` in the source of `directory`.
-fn reported(directory: &Utf8PathBuf, found: &mut Vec<(u16, Utf8PathBuf)>) {
+/// Returns every `DiagnosticCode::error(N)` and `DiagnosticCode::warning(N)` in the source of
+/// `directory`.
+fn reported(directory: &Utf8PathBuf, found: &mut Vec<(DiagnosticCode, Utf8PathBuf)>) {
     for entry in directory.read_dir_utf8().unwrap() {
         let path = entry.unwrap().into_path();
         if path.is_dir() {
@@ -15,10 +16,18 @@ fn reported(directory: &Utf8PathBuf, found: &mut Vec<(u16, Utf8PathBuf)>) {
             continue;
         }
         let text = std::fs::read_to_string(&path).unwrap();
-        for piece in text.split("DiagnosticCode::error(").skip(1) {
-            let digits: String = piece.chars().take_while(char::is_ascii_digit).collect();
-            if let Ok(number) = digits.parse() {
-                found.push((number, path.clone()));
+        for (call, make) in [
+            (
+                "DiagnosticCode::error(",
+                DiagnosticCode::error as fn(u16) -> DiagnosticCode,
+            ),
+            ("DiagnosticCode::warning(", DiagnosticCode::warning),
+        ] {
+            for piece in text.split(call).skip(1) {
+                let digits: String = piece.chars().take_while(char::is_ascii_digit).collect();
+                if let Ok(number) = digits.parse() {
+                    found.push((make(number), path.clone()));
+                }
             }
         }
     }
@@ -45,8 +54,8 @@ fn every_reported_code_is_registered() {
     assert_ne!(found.len(), 0, "the sources report codes");
     let missing: Vec<String> = found
         .iter()
-        .filter(|(number, _)| lookup(DiagnosticCode::error(*number)).is_none())
-        .map(|(number, path)| format!("E{number:04} in {path}"))
+        .filter(|(code, _)| lookup(*code).is_none())
+        .map(|(code, path)| format!("{code} in {path}"))
         .collect();
     assert!(
         missing.is_empty(),

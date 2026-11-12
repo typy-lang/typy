@@ -4,6 +4,7 @@ use camino::{Utf8Path, Utf8PathBuf};
 use typy_build::{Artifact, BuildRequest, EmitStage, Linker, RuntimeArchive};
 use typy_check::{TypeChecker, TypedProgram};
 use typy_codegen::{assembly, llvm_ir, object};
+use typy_diagnostics::Diagnostics;
 use typy_source::{Project, ProjectSettings, SETTINGS_FILE, SettingOverrides};
 use typy_tyir::TyirModule;
 
@@ -11,6 +12,7 @@ use crate::emission::Emission;
 use crate::failure::Failure;
 use crate::outcome::Outcome;
 use crate::sources::Sources;
+use crate::success::{Success, Warnings};
 
 /// Runs builds and checks. It holds the compiler's location, which finds the runtime
 /// archive, and the settings the command line gives, so one pipeline runs any number of
@@ -19,6 +21,7 @@ use crate::sources::Sources;
 pub struct Pipeline {
     compiler: Utf8PathBuf,
     overrides: SettingOverrides,
+    deny_warnings: bool,
 }
 
 impl Pipeline {
@@ -29,7 +32,16 @@ impl Pipeline {
         Self {
             compiler: compiler.into(),
             overrides: SettingOverrides::default(),
+            deny_warnings: false,
         }
+    }
+
+    /// Returns the pipeline with warnings that fail a build or a check, before any code is
+    /// generated (DIA-07).
+    #[must_use]
+    pub const fn with_deny_warnings(mut self, deny: bool) -> Self {
+        self.deny_warnings = deny;
+        self
     }
 
     /// Returns the pipeline with settings that win over each project's `typy.toml` (CLI-07).
@@ -40,10 +52,13 @@ impl Pipeline {
     }
 
     /// Loads and checks the program whose main file is `main`, without generating code (CLI-03).
-    pub fn check(&self, main: &Utf8Path) -> Result<Outcome, Failure> {
+    pub fn check(&self, main: &Utf8Path) -> Result<Success, Failure> {
         let project = self.load(main)?;
-        check(&project)?;
-        Ok(Outcome::Checked(Sources::Project(Box::new(project))))
+        let (_, warnings) = self.check_program(&project)?;
+        Ok(Success {
+            outcome: Outcome::Checked(Sources::Project(Box::new(project))),
+            warnings,
+        })
     }
 
     /// Returns the path from the root and the text of every file of the program whose main
@@ -70,29 +85,39 @@ impl Pipeline {
     }
 
     /// Runs the build `request` asks for: the output of one stage, or a linked executable.
-    pub fn run(&self, request: &BuildRequest) -> Result<Outcome, Failure> {
-        match request.emit() {
-            Some(stage) => self.emit(stage, request).map(Outcome::Emitted),
-            None => self.build(request).map(Outcome::Executable),
-        }
+    pub fn run(&self, request: &BuildRequest) -> Result<Success, Failure> {
+        let (outcome, warnings) = if let Some(stage) = request.emit() {
+            let (emission, warnings) = self.emit(stage, request)?;
+            (Outcome::Emitted(emission), warnings)
+        } else {
+            let (artifact, warnings) = self.build(request)?;
+            (Outcome::Executable(artifact), warnings)
+        };
+        Ok(Success { outcome, warnings })
     }
 
     /// Runs the stages up to `stage` and returns its output; each stage runs only when the
     /// stages before it found no errors.
-    fn emit(&self, stage: EmitStage, request: &BuildRequest) -> Result<Emission, Failure> {
+    fn emit(
+        &self,
+        stage: EmitStage,
+        request: &BuildRequest,
+    ) -> Result<(Emission, Warnings), Failure> {
         let project = self.load(request.main())?;
         if stage == EmitStage::Ast {
-            return Ok(syntax_text(&project));
+            let warnings = self.warnings(project.warnings().clone(), &project)?;
+            return Ok((syntax_text(&project), warnings));
         }
-        let program = check(&project)?;
+        let (program, warnings) = self.check_program(&project)?;
         if stage == EmitStage::TypedAst {
-            return Ok(Emission::Text(typy_check::dump(&program, &project)));
+            let text = typy_check::dump(&program, &project);
+            return Ok((Emission::Text(text), warnings));
         }
         let module = lower(&program, &project)?;
         let target = request.target();
         let optimization = request.mode().optimization();
         let failed = |diagnostics| with_project(diagnostics, &project);
-        Ok(match stage {
+        let emission = match stage {
             EmitStage::Ast => syntax_text(&project),
             EmitStage::TypedAst => Emission::Text(typy_check::dump(&program, &project)),
             EmitStage::Tyir => Emission::Text(typy_tyir::print_without_counting(&module)),
@@ -108,15 +133,16 @@ impl Pipeline {
                     .map_err(failed)?
                     .bytes,
             ),
-        })
+        };
+        Ok((emission, warnings))
     }
 
     /// Builds and links the executable. The runtime archive is opened first, so a broken
     /// installation fails before any work.
-    fn build(&self, request: &BuildRequest) -> Result<Artifact, Failure> {
+    fn build(&self, request: &BuildRequest) -> Result<(Artifact, Warnings), Failure> {
         let linker = self.linker(request)?;
         let project = self.load(request.main())?;
-        let program = check(&project)?;
+        let (program, warnings) = self.check_program(&project)?;
         let module = lower(&program, &project)?;
         let failed = |diagnostics| with_project(diagnostics, &project);
         let object = object(
@@ -126,9 +152,35 @@ impl Pipeline {
             &project,
         )
         .map_err(failed)?;
-        linker
+        let artifact = linker
             .link(&object, &request.executable_path())
-            .map_err(failed)
+            .map_err(failed)?;
+        Ok((artifact, warnings))
+    }
+
+    /// Checks the program, and returns it with every warning of loading and checking it.
+    fn check_program(&self, project: &Project) -> Result<(TypedProgram, Warnings), Failure> {
+        let program = TypeChecker::check(project)
+            .map_err(|diagnostics| with_project(diagnostics, project))?;
+        let mut found = project.warnings().clone();
+        found.extend(program.warnings.clone());
+        let warnings = self.warnings(found, project)?;
+        Ok((program, warnings))
+    }
+
+    /// Returns the warnings, or a failure when there are some and warnings are denied
+    /// (DIA-07).
+    fn warnings(&self, diagnostics: Diagnostics, project: &Project) -> Result<Warnings, Failure> {
+        if diagnostics.iter().next().is_none() {
+            return Ok(Warnings::default());
+        }
+        if self.deny_warnings {
+            return Err(with_project(diagnostics, project));
+        }
+        Ok(Warnings {
+            diagnostics,
+            sources: Sources::Project(Box::new(project.clone())),
+        })
     }
 
     fn linker(&self, request: &BuildRequest) -> Result<Linker, Failure> {
@@ -171,10 +223,6 @@ fn root_of(main: &Utf8Path) -> Utf8PathBuf {
         Some(parent) if !parent.as_str().is_empty() => parent.to_owned(),
         _ => Utf8PathBuf::from("."),
     }
-}
-
-fn check(project: &Project) -> Result<TypedProgram, Failure> {
-    TypeChecker::check(project).map_err(|diagnostics| with_project(diagnostics, project))
 }
 
 fn lower(program: &TypedProgram, project: &Project) -> Result<TyirModule, Failure> {

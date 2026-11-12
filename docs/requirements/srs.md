@@ -3,10 +3,10 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy software requirements specification |
-| Version | 1.38 |
+| Version | 1.39 |
 | Status | Approved |
 | Owner | typy-lang contributors |
-| Last updated | 2026-11-11 |
+| Last updated | 2026-11-12 |
 
 ## 1. Introduction
 
@@ -388,6 +388,7 @@ direct calls and links the library when the program is built.
 | DIA-05 | `--error-format=json` shall write the same diagnostics as JSON, one object per line. | S | 0.3 |
 | DIA-06 | A code shall never be reused, and a retired code shall stay reserved. | M | 0.1 |
 | DIA-07 | Warnings shall not fail a build unless `--deny-warnings` is given. | M | 0.3 |
+| DIA-08 | Where CPython 3.12 to 3.15 give a `SyntaxWarning` while compiling a program TyPy accepts, TyPy shall give a warning: for an invalid escape sequence and for an assertion that is always true. | S | 0.3 |
 
 Code ranges follow the pack: `E01xx` lexical, `E02xx` declarations, `E03xx`
 expressions and statements, `E04xx` types, `E05xx` exceptions and control

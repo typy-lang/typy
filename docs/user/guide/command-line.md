@@ -11,6 +11,7 @@ The `typy` command checks, builds and runs a program from its main file.
 | `typy run FILE [-- ARGS]` | Builds the program and runs it with `ARGS` | CLI-02 |
 | `typy build --emit=STAGE FILE` | Writes one stage as text: `ast`, `typed-ast`, `tyir`, `tyir-mem`, `llvm-ir` or `asm`, or `obj` | CLI-04 |
 | `--release`, `--release-small` | Optimise for speed or for size; the default is a debug build | CLI-05 |
+| `--deny-warnings` | Fails with status 1 when there are warnings | DIA-07 |
 | `--error-format=json` | Writes diagnostics as one JSON object per line | DIA-05 |
 | `--python-floor VERSION` | Sets the Python floor for this command, over `typy.toml` | CLI-07, CLI-12 |
 

@@ -12,9 +12,9 @@ use crate::exit_status::ExitStatus;
 use crate::output::Reporter;
 
 /// Runs the command and returns the status `typy` exits with.
-pub(crate) fn run(command: Command, reporter: Reporter) -> ExitStatus {
+pub(crate) fn run(command: Command, deny_warnings: bool, reporter: Reporter) -> ExitStatus {
     let pipeline = match compiler() {
-        Ok(path) => Pipeline::new(path),
+        Ok(path) => Pipeline::new(path).with_deny_warnings(deny_warnings),
         Err(message) => {
             reporter.internal(&message);
             return ExitStatus::Internal;
@@ -50,6 +50,7 @@ pub(crate) fn run(command: Command, reporter: Reporter) -> ExitStatus {
             file,
             mode.build_mode(),
             settings.overrides(),
+            deny_warnings,
             &arguments,
             reporter,
         ),

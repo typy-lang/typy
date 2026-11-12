@@ -77,6 +77,8 @@ impl RuleId {
     pub const DAT_16: Self = Self("DAT-16");
     /// `range` shall be a value as well as a loop source: a sequence of `int` with `len`, indexing, slicing, `in`, `==` and `repr`, as in Python.
     pub const DAT_17: Self = Self("DAT-17");
+    /// Where CPython 3.12 to 3.15 give a `SyntaxWarning` while compiling a program TyPy accepts, TyPy shall give a warning: for an invalid escape sequence and for an assertion that is always true.
+    pub const DIA_08: Self = Self("DIA-08");
     /// Raising and catching exceptions shall follow the Language Reference, including matching on base classes.
     pub const EXC_01: Self = Self("EXC-01");
     /// A `return`, `break` or `continue` that leaves a `finally` block shall be rejected, as PEP 765 makes CPython 3.14 warn about it (ADR-0013).
@@ -157,6 +159,7 @@ impl RuleId {
     pub const LIB_08: Self = Self("LIB-08");
     /// `str % values`, printf-style formatting with a value, a tuple of values or a dict of named values, shall be accepted with Python's results.
     pub const LIB_10: Self = Self("LIB-10");
+    /// A program shall be built from several `.py` files, found from the main file's directory and from paths set in `typy.toml`.
     /// A program shall be built from several `.py` files, found from the main file's directory and from paths set in `typy.toml`.
     pub const MOD_01: Self = Self("MOD-01");
     /// Packages with `__init__.py` and relative imports shall be accepted.
@@ -251,6 +254,7 @@ impl RuleId {
         Self::DAT_15,
         Self::DAT_16,
         Self::DAT_17,
+        Self::DIA_08,
         Self::EXC_01,
         Self::EXC_06,
         Self::EXC_07,

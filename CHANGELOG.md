@@ -8,6 +8,11 @@ All notable changes to TyPy are recorded here. The format follows
 
 ### Added
 
+- Warnings, where CPython warns while compiling: W0101 for an invalid
+  escape sequence such as `"\d"`, with the doubled backslash as its fix,
+  and W0301 for `assert (test, "message")`, which is always true. They
+  never fail a build unless `--deny-warnings` is given (DIA-07, DIA-08,
+  ADR-0017).
 - `--error-format=json` writes each diagnostic as one JSON object per
   line, with the same keys every time, for editors and CI (DIA-05).
 - `typy.toml` beside the main file sets `python-floor` and `module-paths`,

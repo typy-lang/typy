@@ -20,6 +20,8 @@ pub struct TypedProgram {
     pub lazy_imports: std::collections::BTreeMap<FunctionId, Option<SymbolId>>,
     /// The module body of `__main__`.
     pub entry: FunctionId,
+    /// The warnings of checking the program, such as W0301 (DIA-08).
+    pub warnings: typy_diagnostics::Diagnostics,
 }
 
 /// A module of the program after checking.

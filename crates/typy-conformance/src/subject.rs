@@ -100,7 +100,7 @@ pub(crate) fn judge_sanitized(
         Ok(request) => request.with_emit(EmitStage::Obj),
         Err(error) => return Verdict::Invalid(error.to_string()),
     };
-    let object = match pipeline.run(&request) {
+    let object = match pipeline.run(&request).map(|success| success.outcome) {
         Ok(Outcome::Emitted(Emission::Bytes(bytes))) => bytes,
         Ok(_) => return Verdict::Fail("no object file was emitted".to_owned()),
         Err(failure) => {

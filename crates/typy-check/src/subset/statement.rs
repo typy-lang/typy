@@ -1,6 +1,6 @@
 //! Checks statements against the feature table.
 
-use typy_diagnostics::RuleId;
+use typy_diagnostics::{Diagnostic, DiagnosticCode, RuleId};
 use typy_source::syntax::{Expr, ParameterKind, Stmt};
 
 use super::feature::{Feature, feature, planned};
@@ -123,6 +123,23 @@ impl Walker {
                 }
             }
             Stmt::Assert { test, message, .. } => {
+                // CPython warns, since a tuple with items is always true (DIA-08).
+                if let Expr::Tuple { elements, span } = test
+                    && !elements.is_empty()
+                {
+                    self.diagnostics.push(
+                        Diagnostic::new(
+                            DiagnosticCode::warning(301),
+                            *span,
+                            "this assertion is always true, since a tuple with items is true",
+                        )
+                        .with_rule(RuleId::DIA_08)
+                        .with_help(
+                            "remove the parentheses to give the test and its message: \
+                             `assert test, message`",
+                        ),
+                    );
+                }
                 for value in std::iter::once(test).chain(message) {
                     self.expression(value);
                 }

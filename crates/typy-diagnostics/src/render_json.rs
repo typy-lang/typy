@@ -203,6 +203,14 @@ mod tests {
         );
     }
 
+    #[test]
+    fn control_characters_are_escaped_as_code_points() {
+        assert_eq!(
+            string("tab\there\u{1}\u{7f}\r\u{e9}"),
+            "\"tab\\there\\u0001\\u007f\\r\u{e9}\""
+        );
+    }
+
     proptest! {
         #[test]
         fn every_string_reads_back_as_itself(value in any::<String>()) {

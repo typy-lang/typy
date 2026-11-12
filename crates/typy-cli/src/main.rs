@@ -13,5 +13,9 @@ use clap::Parser as _;
 fn main() -> std::process::ExitCode {
     let arguments = arguments::Arguments::parse();
     let reporter = output::Reporter::new(arguments.error_format);
-    guard::guarded(reporter, || command::run(arguments.command, reporter)).into()
+    let deny_warnings = arguments.deny_warnings;
+    guard::guarded(reporter, || {
+        command::run(arguments.command, deny_warnings, reporter)
+    })
+    .into()
 }

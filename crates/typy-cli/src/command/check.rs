@@ -9,7 +9,10 @@ use crate::output::Reporter;
 /// Checks the program and reports every diagnostic; nothing is written.
 pub(super) fn check(pipeline: &Pipeline, file: &Utf8Path, reporter: Reporter) -> ExitStatus {
     match pipeline.check(file) {
-        Ok(_) => ExitStatus::Success,
+        Ok(success) => {
+            reporter.warnings(success.warnings);
+            ExitStatus::Success
+        }
         Err(failure) => reporter.report(failure),
     }
 }

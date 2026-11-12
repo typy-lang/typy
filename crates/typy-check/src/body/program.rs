@@ -442,6 +442,7 @@ impl Program {
             modules: self.modules,
             lazy_imports: self.lazy_imports,
             entry,
+            warnings: typy_diagnostics::Diagnostics::new(),
         }
     }
 }

@@ -557,3 +557,40 @@ fn dia_05_json_diagnostics_are_one_object_per_line() {
     let clean = workspace.typy(&["run", "app.py", "--error-format=json"]);
     assert_eq!((status(&clean), stderr(&clean).as_str()), (0, ""));
 }
+
+#[test]
+fn dia_07_warnings_are_shown_and_fail_only_with_deny_warnings() {
+    let workspace = Workspace::new("print('\\d')\nassert (1, 'always')\n");
+    let built = workspace.typy(&["build", "app.py"]);
+    let text = stderr(&built);
+    assert_eq!(status(&built), 0, "{text}");
+    assert!(
+        text.starts_with("warning[W0101]: `\\d` is an invalid escape sequence"),
+        "{text}"
+    );
+    assert!(text.contains("warning[W0301]: "), "{text}");
+    assert!(workspace.root.join("app").exists());
+    let checked = workspace.typy(&["check", "app.py", "--error-format=json"]);
+    assert_eq!(status(&checked), 0);
+    assert_eq!(stderr(&checked).lines().count(), 2, "{}", stderr(&checked));
+    for _ in 0..2 {
+        let run = workspace.typy(&["run", "app.py"]);
+        assert_eq!((status(&run), stdout(&run).as_str()), (0, "\\d\n"));
+        assert!(
+            stderr(&run).starts_with("warning[W0101]"),
+            "{}",
+            stderr(&run)
+        );
+    }
+    std::fs::remove_file(workspace.root.join("app")).unwrap();
+    for command in ["check", "build", "run"] {
+        let denied = workspace.typy(&[command, "app.py", "--deny-warnings"]);
+        assert_eq!(status(&denied), 1, "{command}");
+        assert!(
+            stderr(&denied).starts_with("warning[W0101]"),
+            "{}",
+            stderr(&denied)
+        );
+    }
+    assert!(!workspace.root.join("app").exists());
+}

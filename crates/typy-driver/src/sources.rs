@@ -5,9 +5,10 @@ use typy_source::{LoadFailure, Project};
 
 /// The source files of a build: a loaded project, the files of one that failed to load, or none
 /// when the build stopped before reading any.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 pub enum Sources {
     /// Nothing was read; only diagnostics without a location occur.
+    #[default]
     None,
     /// The project loaded.
     Project(Box<Project>),

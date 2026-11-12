@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy detailed design |
-| Version | 1.66 |
+| Version | 1.67 |
 | Status | Approved |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-12 |
@@ -321,6 +321,8 @@ it enforces and its status. `typy explain` (0.3) reads the same table.
 | E0702 | Link failed | A-01 |
 | E0703 | Runtime archive missing, or from another TyPy version | None |
 | E9001 | Internal compiler error | NFR-09 |
+| W0101 | Invalid escape sequence | DIA-08 |
+| W0301 | Assertion that is always true, of a tuple with items | DIA-08 |
 
 ## 5. typy-source
 
@@ -1439,9 +1441,12 @@ gives E0702 with the directory. None of them has a source location. An
 ## 12. typy-driver
 
 `Pipeline::new(compiler)` takes the path of the `typy` executable, which
-finds the runtime archives (section 11); it holds nothing else, so one
-pipeline runs any number of builds, and the conformance suite runs many in
-one process.
+finds the runtime archives (section 11). `with_overrides` adds the
+settings of the command line (CLI-07) and `with_deny_warnings` makes
+warnings fail (DIA-07); the pipeline holds nothing else, so one pipeline
+runs any number of builds, and the conformance suite runs many in one
+process. Each method returns a `Success`, the `Outcome` with the
+`Warnings` of loading and checking the program, or a `Failure`.
 
 | Method | Behaviour |
 | --- | --- |
@@ -1456,6 +1461,15 @@ files of a program that did not, and `Sources::None` when the build stopped
 before reading any file, as a missing runtime archive does. Each stage runs
 only when the stages before it found no errors.
 
+Warnings come from two places (ADR-0017). `parse_with_warnings` scans the
+parser's tokens for invalid escapes, W0101, and `Project::warnings` keeps
+them; the subset walker gives W0301, and `TypedProgram::warnings` keeps
+the checker's. After checking, the pipeline joins them. With
+`deny_warnings` set, any warning makes a `Failure` before lowering, so no
+code is generated; otherwise `Warnings` holds them with the project's
+`Sources`, and with `Sources::None` when there are none, so a clean build
+copies nothing.
+
 ## 13. typy-cli
 
 | Item | Design |
@@ -1464,6 +1478,7 @@ only when the stages before it found no errors.
 | Output | `Reporter` writes diagnostics in the `--error-format` the command line chose, a global flag: sorted, rendered with `render_text` and written to standard error with a blank line between two of them, or with `render_json` one per line. The panic guard and internal errors use the same reporter, so a tool reading JSON also gets E9001 as JSON (UC-10). `--emit` output goes to `-o`, or to standard output without it. A file that cannot be written gives E0106 |
 | Exit status | `ExitStatus` is `Success = 0`, `ProgramErrors = 1`, `Usage = 2` and `Internal = 101` (CLI-06); a failure with any `E9xxx` diagnostic is `Internal`. `typy run` exits with the program's status, or 128 plus the signal that ended it |
 | Panic guard | The command runs inside `std::panic::catch_unwind`, with a panic hook that records the location in a thread-local; a panic becomes E9001 with the location and message, and exit status 101 |
+| Warnings | `Reporter::warnings` writes the warnings of a `Success` before the command's output. `--deny-warnings` is a global flag. `typy run` checks a program whose build it takes from the cache, so its warnings show on every run, and the cache key includes `--deny-warnings` |
 | `typy run` | Builds into `cache/<key>/<name>`, where the cache is `$TYPY_HOME/cache`, else `$XDG_CACHE_HOME/typy` or `~/.cache/typy`, and `key` is the SHA-256 of the compiler version, the mode, the target, the main file's name and its text, each preceded by its length. A build already in the cache is run again without compiling. The executable gets the arguments after `--` and the same standard input, output and error |
 | Logging | `--log-level` arrives in 0.3 with UC-10; the 0.1 compiler has no log events |
 
@@ -1571,7 +1586,8 @@ The file name starts with the first requirement ID, such as
 `EXP-03_float_division_by_zero_raises.py`. A test of several modules is a
 directory named so, such as `MOD-01_modules_import_names/`, whose
 `main.py` holds the header and whose other files are its modules. For an
-accepted test, the suite runs `python3.X -E -s -B -X utf8 FILE` in the file's
+accepted test, the suite runs
+`python3.X -E -s -B -X utf8 -W ignore::SyntaxWarning FILE` in the file's
 directory for each oracle version from the test's Python floor up, which
 keeps that directory first on the module path as `-I` would not, removes
 the directory's absolute path from what CPython shows (OI-20), builds the
@@ -1586,7 +1602,7 @@ it because the exponent is a variable.
 | `test_case` | `TestCase::parse(path, text)` reads the comment lines at the top of the file; a missing or malformed field, or a file name that does not start with the first ID, is a `CaseError` |
 | `expectation` | `Expectation::Accepted`, or `Rejected` with a `DiagnosticCode`, a line and a column |
 | `observation` | `Observation::of(command)` runs a program with no standard input, reads both pipes on their own threads, and keeps standard output, the exit status and the last line of standard error; a program that runs longer than 60 seconds is stopped, a limit set far above the run time of any conformance program so that an oracle slowed by a loaded machine is not taken for a hang |
-| `oracle` | Runs `python3.X -E -s -B -X utf8 FILE` in the file's directory for each oracle version from the floor up, and removes that directory's absolute path from its output |
+| `oracle` | Runs `python3.X -E -s -B -X utf8 -W ignore::SyntaxWarning FILE` in the file's directory for each oracle version from the floor up, and removes that directory's absolute path from its output |
 | `subject` | Builds an accepted test in debug and release mode into a temporary directory and runs each build, and with `Suite::with_sanitizers` also links its debug object file with `cc -fsanitize=address` and runs it with leak detection, where a report ends the run with status 86; checks a rejected test with `Pipeline::check`, which passes when exactly one diagnostic is reported, with that code at that line and column |
 | `verdict` | `Pass`, `Fail` with the reason, or `Invalid` when the oracles disagree, an oracle cannot run the file, or the header is not valid (STD-03) |
 | `suite` | `Suite::run(root)` judges every `.py` file under `root`, as many at once as the machine has cores, and returns a `Report` with each verdict and, for each requirement ID, how many accepted and rejected tests name it |

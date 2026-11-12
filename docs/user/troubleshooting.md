@@ -328,3 +328,17 @@ and run its own `bin/typy`.
 
 TyPy itself failed. This is a defect in TyPy: please report it with the
 program that caused it.
+
+## W0101: invalid escape sequence
+
+A string or bytes literal holds a backslash before a character that does
+not start an escape, such as `"\d"`, or an octal escape above `\377`.
+CPython keeps the backslash and warns while compiling, and so does TyPy
+(DIA-08). Write the backslash twice, `"\\d"`, which keeps the same value
+and which the diagnostic shows, or use a raw string, `r"\d"`.
+
+## W0301: assertion that is always true
+
+`assert (test, "message")` asserts a tuple with two items, which is always
+true, so the assertion never fails (DIA-08). Remove the parentheses:
+`assert test, "message"`.

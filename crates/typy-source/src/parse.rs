@@ -2,6 +2,7 @@
 //!
 //! No type of `ruff_python_parser` or `ruff_python_ast` leaves this module (ADR-0005).
 
+mod escape;
 mod expression;
 mod operator;
 mod statement;
@@ -15,8 +16,25 @@ use crate::settings::PythonFloor;
 use crate::source_file::SourceFile;
 use crate::syntax::{Identifier, SyntaxTree};
 
+/// A parsed file: its syntax tree and the warnings CPython would give while compiling it.
+#[derive(Clone, Debug)]
+pub struct Parsed {
+    /// The syntax tree.
+    pub tree: SyntaxTree,
+    /// The warnings, such as W0101 for an invalid escape sequence (DIA-08).
+    pub warnings: Vec<Diagnostic>,
+}
+
 /// Parses `file` with `floor` as the target version; any syntax error, or syntax newer than the floor, is an E0103 (STD-01).
 pub fn parse(file: &SourceFile, floor: PythonFloor) -> Result<SyntaxTree, Vec<Diagnostic>> {
+    parse_with_warnings(file, floor).map(|parsed| parsed.tree)
+}
+
+/// Parses `file` as `parse` does, and also returns its warnings.
+pub fn parse_with_warnings(
+    file: &SourceFile,
+    floor: PythonFloor,
+) -> Result<Parsed, Vec<Diagnostic>> {
     let version = PythonVersion {
         major: 3,
         minor: floor.minor(),
@@ -42,11 +60,15 @@ pub fn parse(file: &SourceFile, floor: PythonFloor) -> Result<SyntaxTree, Vec<Di
     if !errors.is_empty() {
         return Err(errors);
     }
+    let warnings = converter.escape_warnings(parsed.tokens());
     let ast::Mod::Module(module) = parsed.into_syntax() else {
         unreachable!("Mode::Module always produces a module");
     };
-    Ok(SyntaxTree {
-        body: converter.statements(&module.body),
+    Ok(Parsed {
+        tree: SyntaxTree {
+            body: converter.statements(&module.body),
+        },
+        warnings,
     })
 }
 

@@ -6,7 +6,7 @@ use camino::Utf8Path;
 use typy_diagnostics::{
     Diagnostic, DiagnosticCode, RuleId, SourceLookup, render_json, render_text,
 };
-use typy_driver::{Emission, Failure, Sources};
+use typy_driver::{Emission, Failure, Sources, Warnings};
 
 use crate::exit_status::ExitStatus;
 
@@ -69,6 +69,15 @@ impl Reporter {
         let sorted = failure.diagnostics.into_sorted(&failure.sources);
         self.write(&sorted, &failure.sources);
         status
+    }
+
+    /// Writes the warnings of a build or check that succeeded (DIA-07).
+    pub(crate) fn warnings(self, warnings: Warnings) {
+        if warnings.diagnostics.iter().next().is_none() {
+            return;
+        }
+        let sorted = warnings.diagnostics.into_sorted(&warnings.sources);
+        self.write(&sorted, &warnings.sources);
     }
 
     /// Reports an internal error with no place in the source (NFR-09).

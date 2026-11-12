@@ -17,6 +17,7 @@ pub(super) fn run(
     file: Utf8PathBuf,
     mode: BuildMode,
     overrides: typy_source::SettingOverrides,
+    deny_warnings: bool,
     arguments: &[String],
     reporter: Reporter,
 ) -> ExitStatus {
@@ -37,6 +38,7 @@ pub(super) fn run(
             &request,
             &files,
             overrides,
+            deny_warnings,
             &cache::compiler_identity(),
         ))
         .join(name);
@@ -46,9 +48,13 @@ pub(super) fn run(
         {
             return reporter.unwritable(parent, &error);
         }
-        if let Err(failure) = pipeline.run(&request.with_output(executable.clone())) {
-            return reporter.report(failure);
+        match pipeline.run(&request.with_output(executable.clone())) {
+            Ok(success) => reporter.warnings(success.warnings),
+            Err(failure) => return reporter.report(failure),
         }
+    } else if let Ok(success) = pipeline.check(request.main()) {
+        // A build from the cache shows the warnings its program has, as a new build does.
+        reporter.warnings(success.warnings);
     }
     match Command::new(&executable).args(arguments).status() {
         Ok(status) => ExitStatus::Program(program_status(status)),

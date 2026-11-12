@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy test plan |
-| Version | 0.34 |
+| Version | 0.35 |
 | Status | Draft |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-12 |
@@ -424,7 +424,8 @@ that the specification does not define.
 | DIA-04 | 0.1 | UT, IT | `typy-diagnostics` unit tests; `tests/golden/diagnostics/DIA-04_*` |
 | DIA-05 | 0.3 | UT, E2E | `crates/typy-diagnostics/src/render_json.rs` unit and property tests; `crates/typy-cli/tests/cli.rs`, tests named for DIA-05 |
 | DIA-06 | 0.1 | UT | `typy-diagnostics` unit tests of the code registry |
-| DIA-07 | 0.3 | UT, IT | `typy-diagnostics` unit tests; `tests/golden/diagnostics/DIA-07_*` |
+| DIA-07 | 0.3 | E2E | `crates/typy-cli/tests/cli.rs`, tests named for DIA-07 |
+| DIA-08 | 0.3 | UT | `crates/typy-source/src/parse/tests.rs` for W0101; `crates/typy-check/src/subset/tests.rs` for W0301 |
 | DOC-01 | 0.2 | Static | `make docs-lint`; review against the release |
 | DOC-02 | 0.2 | Static, IT | `make docs-lint`; every rule ID on the pages is checked to exist by `make traceability`; samples by DOC-04 |
 | DOC-03 | 0.2 | IT | `crates/typy-conformance/tests/documentation.rs` lists every active code of the registry and fails when `docs/user/troubleshooting.md` has no section for one |

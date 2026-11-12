@@ -69,9 +69,8 @@ impl FunctionLowerer<'_> {
     /// Ends the function of a lazy import: the import succeeded, so its name no longer
     /// waits. A function of any other kind is left as it is.
     pub(crate) fn finish_lazy_import(&mut self, span: Span) {
-        if let Some(armed) = self.module_globals.armed.get(&self.function_id).copied()
-            && !self.builder.is_terminated()
-        {
+        // Its body is one import, whose normal path always reaches the end.
+        if let Some(armed) = self.module_globals.armed.get(&self.function_id).copied() {
             self.store_flag(armed, false, span);
         }
     }

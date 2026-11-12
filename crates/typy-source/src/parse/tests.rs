@@ -739,3 +739,66 @@ fn every_statement_kind_is_dumped_at_its_depth_with_its_position() {
     let parsed = parse(&file(source), PythonFloor::V3_12).unwrap();
     assert_eq!(dump(&parsed, &file(source)), expected);
 }
+
+/// Returns each warning of `source` as its code, its message and its byte range.
+fn warnings(source: &str) -> Vec<(String, String, u32, u32)> {
+    super::parse_with_warnings(&file(source), PythonFloor::V3_12)
+        .expect("the source is valid")
+        .warnings
+        .iter()
+        .map(|warning| {
+            let span = warning.span().expect("a warning has a place");
+            (
+                warning.code().to_string(),
+                warning.message().to_owned(),
+                span.start().0,
+                span.end().0,
+            )
+        })
+        .collect()
+}
+
+#[test]
+fn escapes_cpython_accepts_give_no_warning() {
+    for source in [
+        "x = '\\\\ \\' \\\" \\a \\b \\f \\n \\r \\t \\v \\x41 \\0 \\377 \\N{BULLET} \\u0041 \\U00000041'\n",
+        "x = b'\\\\ \\' \\a \\x41 \\0 \\377'\n",
+        "x = 'joined \\\nline'\n",
+        "x = r'\\d' + rb'\\q' + R'\\w' + f'{1}' + fr'\\d{2}'\n",
+        "x = '''\\n\\t'''\n",
+    ] {
+        assert_eq!(warnings(source), [], "{source}");
+    }
+}
+
+#[test]
+fn an_invalid_escape_is_w0101_at_the_escape_with_its_fix() {
+    let found = warnings("x = '\\d' + b'\\q' + f'{1}\\w' + '\\777' + b'\\N'\n");
+    let expected = [
+        ("W0101", "`\\d` is an invalid escape sequence", 5, 7),
+        ("W0101", "`\\q` is an invalid escape sequence", 13, 15),
+        ("W0101", "`\\w` is an invalid escape sequence", 24, 26),
+        (
+            "W0101",
+            "`\\777` is an invalid octal escape sequence",
+            31,
+            35,
+        ),
+        ("W0101", "`\\N` is an invalid escape sequence", 41, 43),
+    ];
+    let expected: Vec<(String, String, u32, u32)> = expected
+        .iter()
+        .map(|(code, message, start, end)| {
+            ((*code).to_owned(), (*message).to_owned(), *start, *end)
+        })
+        .collect();
+    assert_eq!(found, expected);
+    let field = warnings("x = 1\ny = f'\\{x}' + f'a\\{x}b'\n");
+    let braces: Vec<(u32, u32)> = field.iter().map(|found| (found.2, found.3)).collect();
+    assert_eq!(braces, [(12, 14), (23, 25)]);
+    let parsed = super::parse_with_warnings(&file("x = '\\d'\n"), PythonFloor::V3_12).unwrap();
+    let fix = parsed.warnings[0]
+        .fix()
+        .expect("doubling the backslash keeps the value");
+    assert_eq!(fix.replacement, "\\\\d");
+}

@@ -32,13 +32,14 @@ pub(crate) fn directory() -> Utf8PathBuf {
 
 /// Returns the SHA-256, in hexadecimal, of everything a build's output depends on: the compiler
 /// version and `compiler`, which tells one build of it from another, the mode, the target, the
-/// main file's name, the settings flags, and the path and text of every file of the program,
+/// main file's name, the settings flags and `--deny-warnings`, and the path and text of every file of the program,
 /// `typy.toml` included (ADR-0015). Each part is preceded by its length, so no two different
 /// inputs run together into the same bytes.
 pub(crate) fn key(
     request: &BuildRequest,
     files: &[(String, String)],
     overrides: SettingOverrides,
+    deny_warnings: bool,
     compiler: &[u8],
 ) -> String {
     let name = request.main().file_name().unwrap_or("");
@@ -50,6 +51,7 @@ pub(crate) fn key(
         request.target().triple.as_str().as_bytes(),
         name.as_bytes(),
         floor.as_bytes(),
+        if deny_warnings { b"deny" } else { b"" },
     ];
     for (path, text) in files {
         parts.push(path.as_bytes());
@@ -89,7 +91,7 @@ mod tests {
 
     /// The key without settings flags.
     fn key(request: &BuildRequest, files: &[(String, String)], compiler: &[u8]) -> String {
-        super::key(request, files, SettingOverrides::default(), compiler)
+        super::key(request, files, SettingOverrides::default(), false, compiler)
     }
     use typy_build::{BuildMode, BuildRequest};
 
@@ -131,6 +133,14 @@ mod tests {
                 SettingOverrides {
                     python_floor: Some(PythonFloor::V3_15),
                 },
+                false,
+                b"build",
+            ),
+            super::key(
+                &request,
+                &program,
+                SettingOverrides::default(),
+                true,
                 b"build",
             ),
         ];

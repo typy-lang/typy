@@ -23,6 +23,9 @@ pub(crate) struct Arguments {
         value_name = "FORMAT"
     )]
     pub(crate) error_format: ErrorFormat,
+    /// Fail with status 1 when there are warnings, before any code is generated.
+    #[arg(long, global = true)]
+    pub(crate) deny_warnings: bool,
 }
 
 /// The commands of 0.1.
@@ -222,6 +225,8 @@ mod tests {
             ErrorFormat::Json
         );
         assert!(format(&["check", "a.py", "--error-format=xml"]).is_err());
+        let deny = Arguments::try_parse_from(["typy", "build", "a.py", "--deny-warnings"]);
+        assert!(deny.unwrap().deny_warnings);
     }
 
     #[test]

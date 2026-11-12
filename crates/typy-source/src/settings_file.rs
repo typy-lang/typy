@@ -267,6 +267,42 @@ mod tests {
     }
 
     #[test]
+    fn each_wrong_value_names_what_it_is() {
+        for (text, message) in [
+            (
+                "python-floor = \"3.11\"\n",
+                "`python-floor` is the string \"3.11\"",
+            ),
+            ("python-floor = [1]\n", "`python-floor` is an array"),
+            (
+                "module-paths = \"lib\"\n",
+                "`module-paths` is the string \"lib\"",
+            ),
+            ("module-paths = [true]\n", "a module path is a boolean"),
+            (
+                "module-paths = [\"lib\", \"\"]\n",
+                "the module path `` is not",
+            ),
+            (
+                "module-paths = [\"missing\"]\n",
+                "`missing` is not a directory",
+            ),
+            ("[python-floor\n", "is not valid TOML"),
+        ] {
+            let (_guard, root) = root(Some(text));
+            let failure = ProjectSettings::read(&root, SettingOverrides::default()).unwrap_err();
+            let found = failure
+                .diagnostics
+                .iter()
+                .next()
+                .unwrap()
+                .message()
+                .to_owned();
+            assert!(found.contains(message), "{text}: {found}");
+        }
+    }
+
+    #[test]
     fn a_settings_file_that_cannot_be_read_is_e0107() {
         let (_guard, root) = root(None);
         std::fs::create_dir(root.join(SETTINGS_FILE)).unwrap();

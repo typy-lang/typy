@@ -18,7 +18,7 @@ pub use lazy::{is_lazy, lazy_modules};
 pub use line_index::LineIndex;
 pub use loader::{ANNOTATION_MODULES, Import, absolute_name};
 pub use module::{Module, ModuleName, ModuleNameError};
-pub use parse::parse;
+pub use parse::{Parsed, parse, parse_with_warnings};
 pub use project::{LoadFailure, Project};
 pub use settings::{ProjectSettings, PythonFloor, Release};
 pub use settings_file::{SETTINGS_FILE, SettingOverrides};

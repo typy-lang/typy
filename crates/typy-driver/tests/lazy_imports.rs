@@ -19,7 +19,9 @@ fn run(files: &[(&str, &str)]) -> (String, String) {
         Utf8PathBuf::from,
     );
     let request = BuildRequest::new(root.join("main.py")).unwrap();
-    let outcome = Pipeline::new(target.join("debug/typy")).run(&request);
+    let outcome = Pipeline::new(target.join("debug/typy"))
+        .run(&request)
+        .map(|success| success.outcome);
     let Ok(Outcome::Executable(artifact)) = outcome else {
         panic!("no executable: {outcome:?}");
     };

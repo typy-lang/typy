@@ -26,9 +26,13 @@ pub(super) fn build(
     if let Some(path) = output {
         request = request.with_output(path);
     }
-    match pipeline.run(&request) {
-        Ok(Outcome::Emitted(emission)) => reporter.emission(&emission, output),
-        Ok(Outcome::Executable(_) | Outcome::Checked(_)) => ExitStatus::Success,
-        Err(failure) => reporter.report(failure),
+    let success = match pipeline.run(&request) {
+        Ok(success) => success,
+        Err(failure) => return reporter.report(failure),
+    };
+    reporter.warnings(success.warnings);
+    match success.outcome {
+        Outcome::Emitted(emission) => reporter.emission(&emission, output),
+        Outcome::Executable(_) | Outcome::Checked(_) => ExitStatus::Success,
     }
 }

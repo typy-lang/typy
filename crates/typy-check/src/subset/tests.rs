@@ -337,3 +337,14 @@ fn global_after_a_use_an_assignment_or_an_annotation_is_a_syntax_error() {
         }
     }
 }
+
+#[test]
+fn an_assertion_of_a_tuple_with_items_is_w0301() {
+    assert_eq!(
+        diagnostics("x = 1\nassert (x, 'message')\nassert ()\nassert x, 'message'\n"),
+        [(
+            "W0301".to_owned(),
+            "this assertion is always true, since a tuple with items is true".to_owned()
+        )]
+    );
+}

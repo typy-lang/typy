@@ -9,7 +9,7 @@ use crate::loader::{
     Import, Location, imports, initialisation_order, is_standard, locate, not_found,
 };
 use crate::module::{Module, ModuleName};
-use crate::parse::parse;
+use crate::parse::parse_with_warnings;
 use crate::settings::ProjectSettings;
 use crate::source_file::SourceFile;
 
@@ -23,6 +23,7 @@ pub struct Project {
     imports: BTreeMap<ModuleName, Vec<Import>>,
     order: Vec<ModuleName>,
     standard: BTreeSet<ModuleName>,
+    warnings: Diagnostics,
 }
 
 /// Why a project did not load: the diagnostics, and the files they point into.
@@ -74,6 +75,7 @@ impl Project {
             modules,
             imports,
             standard,
+            diagnostics,
             ..
         } = loader;
         Ok(Self {
@@ -84,7 +86,14 @@ impl Project {
             imports,
             order,
             standard,
+            warnings: diagnostics,
         })
+    }
+
+    /// Returns the warnings of reading and parsing the program's files (DIA-08).
+    #[must_use]
+    pub const fn warnings(&self) -> &Diagnostics {
+        &self.warnings
     }
 
     /// Returns the settings.
@@ -187,8 +196,12 @@ impl Loader<'_> {
             return false;
         }
         let file = &self.files[id.0 as usize];
-        match parse(file, self.settings.python_floor) {
-            Ok(syntax) => {
+        match parse_with_warnings(file, self.settings.python_floor) {
+            Ok(parsed) => {
+                for warning in parsed.warnings {
+                    self.diagnostics.push(warning);
+                }
+                let syntax = parsed.tree;
                 self.modules.insert(
                     name.clone(),
                     Module {

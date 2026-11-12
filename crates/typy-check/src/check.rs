@@ -45,7 +45,8 @@ use module_scope::{check_names_are_functions_or_variables, module_variables};
 pub struct TypeChecker;
 
 impl TypeChecker {
-    /// Returns the typed program, or every diagnostic found; a program with errors is never returned (TYP-11).
+    /// Returns the typed program with the warnings of checking it, or every diagnostic found; a
+    /// program with errors is never returned (TYP-11).
     pub fn check(project: &Project) -> Result<TypedProgram, Diagnostics> {
         let mut diagnostics = Diagnostics::new();
         for module in project.modules_in_order() {
@@ -83,7 +84,9 @@ impl TypeChecker {
         if diagnostics.has_errors() {
             return Err(diagnostics);
         }
-        Ok(program.finish(ModuleName::main().as_str()))
+        let mut program = program.finish(ModuleName::main().as_str());
+        program.warnings = diagnostics;
+        Ok(program)
     }
 }
 

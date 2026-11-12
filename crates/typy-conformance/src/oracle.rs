@@ -23,8 +23,18 @@ pub(crate) fn run_oracles(
             // Ignoring the environment and the user's site packages, without the isolated
             // mode's `-P`, keeps the test's directory first on the module path, so a test of
             // several modules imports its own; `-B` writes no bytecode beside them, and UTF-8
-            // mode makes the output encoding the same on every machine.
-            command.args(["-E", "-s", "-B", "-X", "utf8", file.as_str()]);
+            // mode makes the output encoding the same on every machine. A `SyntaxWarning` is
+            // printed while compiling, which TyPy reports at compile time instead (ADR-0017).
+            command.args([
+                "-E",
+                "-s",
+                "-B",
+                "-X",
+                "utf8",
+                "-W",
+                "ignore::SyntaxWarning",
+                file.as_str(),
+            ]);
             let directory = file.parent().map(Utf8Path::to_owned);
             if let Some(directory) = &directory {
                 command.current_dir(directory);

@@ -11,9 +11,28 @@ TyPy reports every problem it finds in one run, each as a diagnostic.
 | A diagnostic that refuses valid Python names the rule the program falls outside | DIA-03 |
 | One root cause gives one error | DIA-04 |
 | `--error-format=json` writes each diagnostic as one JSON object per line | DIA-05 |
+| Warnings never fail a build unless `--deny-warnings` is given | DIA-07 |
+| A warning where CPython warns while compiling: W0101, W0301 | DIA-08 |
 | A code is never reused | DIA-06 |
 
 [Troubleshooting](../troubleshooting.md) explains every code.
+
+## Warnings
+
+A warning reports a program TyPy accepts, with CPython's meaning, that is
+probably not what you meant. TyPy warns where CPython 3.12 to 3.15 give a
+`SyntaxWarning` while compiling (ADR-0017): an invalid escape sequence,
+W0101, and an assertion that is always true, W0301. This program builds,
+runs and prints `\d`, with a warning that shows `"\\d"` as the fix:
+
+<!-- typy-expect: accepted -->
+```python
+print("\d")
+```
+
+`typy check`, `build` and `run` exit with status 0 when there are only
+warnings. With `--deny-warnings` they exit with status 1 and write no
+executable, which suits CI.
 
 ## Diagnostics as JSON
 

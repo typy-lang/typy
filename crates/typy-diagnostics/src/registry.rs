@@ -37,6 +37,15 @@ const fn active(number: u16, summary: &'static str, rule: RuleId) -> CodeInfo {
     }
 }
 
+const fn warning(number: u16, summary: &'static str, rule: RuleId) -> CodeInfo {
+    CodeInfo {
+        code: DiagnosticCode::warning(number),
+        summary,
+        rule: Some(rule),
+        status: CodeStatus::Active,
+    }
+}
+
 /// Every diagnostic code, sorted by code (detailed design section 4.3).
 pub const CODES: &[CodeInfo] = &[
     active(101, "source file larger than 16 MiB", RuleId::LEX_09),
@@ -239,6 +248,12 @@ pub const CODES: &[CodeInfo] = &[
         status: CodeStatus::Active,
     },
     active(9001, "internal compiler error", RuleId::NFR_09),
+    warning(101, "invalid escape sequence", RuleId::DIA_08),
+    warning(
+        301,
+        "assertion that is always true, of a tuple with items",
+        RuleId::DIA_08,
+    ),
 ];
 
 /// Returns what the registry knows about `code`, or `None` for an unknown code.
@@ -277,7 +292,7 @@ mod tests {
     #[test]
     fn unknown_code_is_not_found() {
         assert_eq!(lookup(DiagnosticCode::error(9999)), None);
-        assert_eq!(lookup(DiagnosticCode::warning(101)), None);
+        assert_eq!(lookup(DiagnosticCode::warning(9999)), None);
     }
 
     #[test]
