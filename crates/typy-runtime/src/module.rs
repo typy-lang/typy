@@ -19,7 +19,8 @@ pub(crate) struct ModuleObject {
     path: *const StrObject,
 }
 
-/// The type `module`: its objects are written `<module 'm' from 'm.py'>` (OI-20).
+/// The type `module`: its objects are written `<module 'm' from 'm.py'>` (OI-20), or
+/// `<module 'math' (built-in)>` for a module without a file.
 #[unsafe(export_name = "typy_rt_type_module")]
 pub(crate) static MODULE: TypeObject = TypeObject {
     hash: Some(crate::instance::typy_rt_identity_hash),
@@ -39,6 +40,11 @@ unsafe extern "C" fn module_repr(object: *mut ObjectHeader) -> Raising<*mut StrO
         let mut text = MessageBuffer::new();
         text.push_str("<module ");
         text.push_repr(module.name);
+        // A built-in module, such as `math`, has no file (ADR-0018).
+        if crate::string::length(module.path) == 0 {
+            text.push_str(" (built-in)>");
+            return Raising::ok(text.text());
+        }
         text.push_str(" from ");
         text.push_repr(module.path);
         text.push_str(">");

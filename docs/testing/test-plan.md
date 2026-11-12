@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy test plan |
-| Version | 0.36 |
+| Version | 0.37 |
 | Status | Draft |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-12 |
@@ -396,13 +396,14 @@ that the specification does not define.
 | LIB-02 | 0.2 | IT | `tests/conformance/lib/LIB-02_*.py` |
 | LIB-03 | 0.2 | IT | `tests/conformance/lib/LIB-03_*.py` |
 | LIB-04 | 0.3 | IT | `tests/conformance/lib/LIB-04_*.py` |
-| LIB-05 | 0.3 | IT | `tests/conformance/lib/LIB-05_*.py` |
+| LIB-05 | 0.3 | UT, IT | `crates/typy-runtime/src/math/tests.rs` and `tests/more.rs`, tables of CPython 3.15's results bit for bit; `crates/typy-check/tests/math.rs` for each refusal and the floor of each name; `tests/conformance/lib/LIB-05_*.py` |
 | LIB-06 | 0.4 | IT | `tests/conformance/lib/LIB-06_*.py` |
 | LIB-07 | 1.0 | IT | `tests/conformance/lib/LIB-07_*.py` |
 | LIB-08 | 0.3 | IT | `tests/conformance/lib/LIB-08_*.py` |
 | LIB-09 | 0.1 | IT | `tests/conformance/lib/LIB-09_*.py` |
 | LIB-10 | 0.3 | UT, IT | `crates/typy-runtime/src/format/percent/tests.rs`, a table of CPython 3.12's results; `crates/typy-check/tests/percent.rs` for each refusal message; `tests/conformance/lib/LIB-10_*.py` |
 | LIB-11 | 0.4 | IT | `tests/conformance/lib/LIB-11_*.py` |
+| LIB-12 | 0.4 | IT | `tests/conformance/lib/LIB-12_*.py` |
 | MEM-01 | 0.1 | UT, IT | `typy-runtime` unit tests; `tests/conformance/mem/MEM-01_*.py` under sanitizers |
 | MEM-02 | 0.2 | UT, IT | `typy-runtime` list unit tests; `tests/conformance/dat/DAT-07_*.py`, which name MEM-02, also under the sanitizers |
 | MEM-03 | 0.4 | UT, IT | `typy-runtime` unit tests; `tests/conformance/mem/MEM-03_*.py` under sanitizers |

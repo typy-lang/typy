@@ -299,6 +299,9 @@ impl Dump<'_> {
                             self.program.symbol(*target).name,
                             self.program.symbol(*source).name
                         ),
+                        crate::typed::ImportBinding::Constant { target, value } => {
+                            format!("{} = {value:?}", self.program.symbol(*target).name)
+                        }
                     })
                     .collect();
                 self.line(
@@ -368,6 +371,7 @@ impl Dump<'_> {
             }
             TypedExprKind::Submodule(module) => format!("Submodule {module}"),
             TypedExprKind::AsIterable(_) => "AsIterable".to_owned(),
+            TypedExprKind::MathCall { function, .. } => format!("MathCall {}", function.name()),
             TypedExprKind::PercentFormat { parts, .. } => {
                 let fields = parts
                     .iter()
@@ -492,6 +496,7 @@ fn children(expression: &TypedExpr) -> Vec<&TypedExpr> {
         | TypedExprKind::AsIterable(inner)
         | TypedExprKind::Lazy { value: inner, .. } => vec![inner],
         TypedExprKind::PercentFormat { values, .. } => vec![values],
+        TypedExprKind::MathCall { arguments, .. } => arguments.iter().collect(),
         TypedExprKind::Comprehension {
             element,
             value,

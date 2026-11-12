@@ -212,6 +212,68 @@ pub enum RuntimeFunction {
     PercentStr,
     PercentChar,
     PercentCharStr,
+    MathAcos,
+    MathAcosh,
+    MathAsin,
+    MathAsinh,
+    MathAtan,
+    MathAtanh,
+    MathCbrt,
+    MathCos,
+    MathCosh,
+    MathErf,
+    MathErfc,
+    MathExp,
+    MathExp2,
+    MathExpm1,
+    MathLog1p,
+    MathSin,
+    MathSinh,
+    MathSqrt,
+    MathTan,
+    MathTanh,
+    MathLogFloat,
+    MathLog2Float,
+    MathLog10Float,
+    MathFabs,
+    MathDegrees,
+    MathRadians,
+    MathFloor,
+    MathCeil,
+    MathFrexpMantissa,
+    MathModfFraction,
+    MathModfIntegral,
+    MathUlp,
+    MathFrexpExponent,
+    MathIsfinite,
+    MathIsinf,
+    MathIsnan,
+    MathIsnormal,
+    MathIssubnormal,
+    MathSignbit,
+    MathAtan2,
+    MathCopysign,
+    MathFmod,
+    MathRemainder,
+    MathPow,
+    MathLogDivide,
+    MathFmax,
+    MathFmin,
+    MathFma,
+    MathLdexp,
+    MathNextafter,
+    MathIsclose,
+    MathHypot,
+    MathLogInt,
+    MathLog2Int,
+    MathLog10Int,
+    MathFactorial,
+    MathIsqrt,
+    MathPermAll,
+    MathComb,
+    MathPerm,
+    MathGcd,
+    MathLcm,
     Ascii,
 }
 
@@ -243,7 +305,7 @@ const FLOAT_FLOAT: &[TyirType] = &[TyirType::Float, TyirType::Float];
 
 impl RuntimeFunction {
     /// Every runtime function.
-    pub const ALL: [Self; 204] = [
+    pub const ALL: [Self; 266] = [
         Self::IntFloorDivide,
         Self::IntModulo,
         Self::IntPower,
@@ -447,6 +509,68 @@ impl RuntimeFunction {
         Self::PercentStr,
         Self::PercentChar,
         Self::PercentCharStr,
+        Self::MathAcos,
+        Self::MathAcosh,
+        Self::MathAsin,
+        Self::MathAsinh,
+        Self::MathAtan,
+        Self::MathAtanh,
+        Self::MathCbrt,
+        Self::MathCos,
+        Self::MathCosh,
+        Self::MathErf,
+        Self::MathErfc,
+        Self::MathExp,
+        Self::MathExp2,
+        Self::MathExpm1,
+        Self::MathLog1p,
+        Self::MathSin,
+        Self::MathSinh,
+        Self::MathSqrt,
+        Self::MathTan,
+        Self::MathTanh,
+        Self::MathLogFloat,
+        Self::MathLog2Float,
+        Self::MathLog10Float,
+        Self::MathFabs,
+        Self::MathDegrees,
+        Self::MathRadians,
+        Self::MathFloor,
+        Self::MathCeil,
+        Self::MathFrexpMantissa,
+        Self::MathModfFraction,
+        Self::MathModfIntegral,
+        Self::MathUlp,
+        Self::MathFrexpExponent,
+        Self::MathIsfinite,
+        Self::MathIsinf,
+        Self::MathIsnan,
+        Self::MathIsnormal,
+        Self::MathIssubnormal,
+        Self::MathSignbit,
+        Self::MathAtan2,
+        Self::MathCopysign,
+        Self::MathFmod,
+        Self::MathRemainder,
+        Self::MathPow,
+        Self::MathLogDivide,
+        Self::MathFmax,
+        Self::MathFmin,
+        Self::MathFma,
+        Self::MathLdexp,
+        Self::MathNextafter,
+        Self::MathIsclose,
+        Self::MathHypot,
+        Self::MathLogInt,
+        Self::MathLog2Int,
+        Self::MathLog10Int,
+        Self::MathFactorial,
+        Self::MathIsqrt,
+        Self::MathPermAll,
+        Self::MathComb,
+        Self::MathPerm,
+        Self::MathGcd,
+        Self::MathLcm,
         Self::Ascii,
     ];
 
@@ -472,7 +596,9 @@ impl RuntimeFunction {
             | Self::IntModulo
             | Self::IntPower
             | Self::IntLeftShift
-            | Self::IntRightShift => signature(INT_INT, Int, true),
+            | Self::IntRightShift
+            | Self::MathComb
+            | Self::MathPerm => signature(INT_INT, Int, true),
             Self::IntTrueDivide => signature(INT_INT, Float, true),
             Self::IntToFloat => signature(&[Int], Float, true),
             Self::IntAbsolute => signature(&[Int], Int, false),
@@ -484,7 +610,16 @@ impl RuntimeFunction {
             Self::FloatDivide | Self::FloatFloorDivide | Self::FloatModulo | Self::FloatPower => {
                 signature(FLOAT_FLOAT, Float, true)
             }
-            Self::FloatAbsolute => signature(&[Float], Float, false),
+            Self::FloatAbsolute
+            | Self::MathFabs
+            | Self::MathDegrees
+            | Self::MathRadians
+            | Self::MathFloor
+            | Self::MathCeil
+            | Self::MathFrexpMantissa
+            | Self::MathModfFraction
+            | Self::MathModfIntegral
+            | Self::MathUlp => signature(&[Float], Float, false),
             Self::FloatToInt | Self::FloatRound => signature(&[Float], Int, true),
             Self::FloatToStr => signature(&[Float], STR, false),
             Self::FloatFromStr => signature(&[STR], Float, true),
@@ -529,8 +664,8 @@ impl RuntimeFunction {
             Self::ListSumFloat => signature(&[LIST, Float], Float, false),
             Self::ListAny | Self::ListAll => signature(&[LIST], Bool, false),
             Self::ZipUnequal => signature(INT_INT, Unit, true),
-            Self::FloatRoundDigits => signature(&[Float, Int], Float, true),
-            Self::IntRoundDigits => signature(INT_INT, Int, false),
+            Self::FloatRoundDigits | Self::MathLdexp => signature(&[Float, Int], Float, true),
+            Self::IntRoundDigits | Self::MathGcd | Self::MathLcm => signature(INT_INT, Int, false),
             Self::StrContains => signature(&[STR, STR], Bool, false),
             Self::StrSearch => signature(&[STR, STR, Int, Int, Int], Int, true),
             Self::StrMatch => signature(&[STR, STR, Int, Int, Int], Bool, false),
@@ -645,6 +780,53 @@ impl RuntimeFunction {
             Self::FormatStr | Self::PercentStr => signature(&[STR, STR], STR, true),
             Self::FormatOther | Self::PercentCharStr => signature(&[STR, STR, STR], STR, true),
             Self::PercentInt => signature(&[Int, STR, Int], STR, true),
+            Self::MathAcos
+            | Self::MathAcosh
+            | Self::MathAsin
+            | Self::MathAsinh
+            | Self::MathAtan
+            | Self::MathAtanh
+            | Self::MathCbrt
+            | Self::MathCos
+            | Self::MathCosh
+            | Self::MathErf
+            | Self::MathErfc
+            | Self::MathExp
+            | Self::MathExp2
+            | Self::MathExpm1
+            | Self::MathLog1p
+            | Self::MathSin
+            | Self::MathSinh
+            | Self::MathSqrt
+            | Self::MathTan
+            | Self::MathTanh
+            | Self::MathLogFloat
+            | Self::MathLog2Float
+            | Self::MathLog10Float => signature(&[Float], Float, true),
+            Self::MathFrexpExponent => signature(&[Float], Int, false),
+            Self::MathIsfinite
+            | Self::MathIsinf
+            | Self::MathIsnan
+            | Self::MathIsnormal
+            | Self::MathIssubnormal
+            | Self::MathSignbit => signature(&[Float], Bool, false),
+            Self::MathAtan2
+            | Self::MathCopysign
+            | Self::MathFmod
+            | Self::MathRemainder
+            | Self::MathPow
+            | Self::MathLogDivide => signature(FLOAT_FLOAT, Float, true),
+            Self::MathFmax | Self::MathFmin => signature(FLOAT_FLOAT, Float, false),
+            Self::MathFma => signature(&[Float, Float, Float], Float, true),
+            Self::MathNextafter => signature(&[Float, Float, Int], Float, true),
+            Self::MathIsclose => signature(&[Float, Float, Float, Float], Bool, true),
+            Self::MathHypot => signature(&[LIST], Float, false),
+            Self::MathLogInt | Self::MathLog2Int | Self::MathLog10Int => {
+                signature(&[Int], Float, true)
+            }
+            Self::MathFactorial | Self::MathIsqrt | Self::MathPermAll => {
+                signature(&[Int], Int, true)
+            }
             Self::PercentFloat => signature(&[Float, STR, Int], STR, true),
             Self::StrEncode => signature(&[STR, Int, Int], BYTES, true),
             Self::BytesDecode => signature(&[BYTES, Int, Int], STR, true),
@@ -879,6 +1061,68 @@ impl RuntimeFunction {
             Self::PercentStr => "percent_str",
             Self::PercentChar => "percent_char",
             Self::PercentCharStr => "percent_char_str",
+            Self::MathAcos => "math_acos",
+            Self::MathAcosh => "math_acosh",
+            Self::MathAsin => "math_asin",
+            Self::MathAsinh => "math_asinh",
+            Self::MathAtan => "math_atan",
+            Self::MathAtanh => "math_atanh",
+            Self::MathCbrt => "math_cbrt",
+            Self::MathCos => "math_cos",
+            Self::MathCosh => "math_cosh",
+            Self::MathErf => "math_erf",
+            Self::MathErfc => "math_erfc",
+            Self::MathExp => "math_exp",
+            Self::MathExp2 => "math_exp2",
+            Self::MathExpm1 => "math_expm1",
+            Self::MathLog1p => "math_log1p",
+            Self::MathSin => "math_sin",
+            Self::MathSinh => "math_sinh",
+            Self::MathSqrt => "math_sqrt",
+            Self::MathTan => "math_tan",
+            Self::MathTanh => "math_tanh",
+            Self::MathLogFloat => "math_log_float",
+            Self::MathLog2Float => "math_log2_float",
+            Self::MathLog10Float => "math_log10_float",
+            Self::MathFabs => "math_fabs",
+            Self::MathDegrees => "math_degrees",
+            Self::MathRadians => "math_radians",
+            Self::MathFloor => "math_floor",
+            Self::MathCeil => "math_ceil",
+            Self::MathFrexpMantissa => "math_frexp_mantissa",
+            Self::MathModfFraction => "math_modf_fraction",
+            Self::MathModfIntegral => "math_modf_integral",
+            Self::MathUlp => "math_ulp",
+            Self::MathFrexpExponent => "math_frexp_exponent",
+            Self::MathIsfinite => "math_isfinite",
+            Self::MathIsinf => "math_isinf",
+            Self::MathIsnan => "math_isnan",
+            Self::MathIsnormal => "math_isnormal",
+            Self::MathIssubnormal => "math_issubnormal",
+            Self::MathSignbit => "math_signbit",
+            Self::MathAtan2 => "math_atan2",
+            Self::MathCopysign => "math_copysign",
+            Self::MathFmod => "math_fmod",
+            Self::MathRemainder => "math_remainder",
+            Self::MathPow => "math_pow",
+            Self::MathLogDivide => "math_log_divide",
+            Self::MathFmax => "math_fmax",
+            Self::MathFmin => "math_fmin",
+            Self::MathFma => "math_fma",
+            Self::MathLdexp => "math_ldexp",
+            Self::MathNextafter => "math_nextafter",
+            Self::MathIsclose => "math_isclose",
+            Self::MathHypot => "math_hypot",
+            Self::MathLogInt => "math_log_int",
+            Self::MathLog2Int => "math_log2_int",
+            Self::MathLog10Int => "math_log10_int",
+            Self::MathFactorial => "math_factorial",
+            Self::MathIsqrt => "math_isqrt",
+            Self::MathPermAll => "math_perm_all",
+            Self::MathComb => "math_comb",
+            Self::MathPerm => "math_perm",
+            Self::MathGcd => "math_gcd",
+            Self::MathLcm => "math_lcm",
             Self::Ascii => "ascii",
         }
     }
@@ -894,11 +1138,13 @@ mod tests {
             .iter()
             .map(|function| function.name())
             .collect();
-        assert!(
-            names
-                .iter()
-                .all(|name| name.chars().all(|c| c.is_ascii_lowercase() || c == '_'))
-        );
+        // The C names of `math`, such as `log10`, hold digits after a letter.
+        assert!(names.iter().all(|name| {
+            name.starts_with(|c: char| c.is_ascii_lowercase())
+                && name
+                    .chars()
+                    .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '_')
+        }));
         names.sort_unstable();
         names.dedup();
         assert_eq!(names.len(), RuntimeFunction::ALL.len());

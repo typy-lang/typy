@@ -84,14 +84,7 @@ pub fn lower(program: &TypedProgram) -> Result<TyirModule, Diagnostics> {
         let module = TyirModule {
             functions,
             globals: module_globals.globals,
-            modules: program
-                .modules
-                .iter()
-                .map(|module| typy_tyir::TyirModuleObject {
-                    name: module.name.clone(),
-                    path: module.path.clone(),
-                })
-                .collect(),
+            modules: module_objects(program),
             strings: strings.into_strings(),
             tuple_types,
             classes,
@@ -113,4 +106,26 @@ pub fn lower(program: &TypedProgram) -> Result<TyirModule, Diagnostics> {
             }
         };
     }
+}
+
+/// Returns the module object of each module: the program's, then the built-in modules it
+/// imports, which have no file, so their text names none (ADR-0018).
+fn module_objects(program: &TypedProgram) -> Vec<typy_tyir::TyirModuleObject> {
+    program
+        .modules
+        .iter()
+        .map(|module| typy_tyir::TyirModuleObject {
+            name: module.name.clone(),
+            path: module.path.clone(),
+        })
+        .chain(
+            program
+                .builtin_modules
+                .iter()
+                .map(|name| typy_tyir::TyirModuleObject {
+                    name: name.clone(),
+                    path: String::new(),
+                }),
+        )
+        .collect()
 }

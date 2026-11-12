@@ -23,3 +23,4 @@ supersedes it.
 | [ADR-0015](0015-compile-modules-into-one-program-with-module-objects.md) | Compile modules into one program, with module objects | Accepted | 2026-11-11 |
 | [ADR-0016](0016-compile-each-module-separately-and-verify-interfaces-at-link-time.md) | Compile each module separately and verify interfaces at link time | Proposed | 2026-11-11 |
 | [ADR-0017](0017-warn-where-cpython-warns-while-compiling.md) | Warn where CPython warns while compiling | Accepted | 2026-11-12 |
+| [ADR-0018](0018-provide-math-and-sys-as-checker-tables-over-runtime-functions.md) | Provide math and sys as checker tables over runtime functions | Accepted | 2026-11-12 |

@@ -22,6 +22,10 @@ impl FunctionLowerer<'_> {
                 self.read_name(*symbol, span)
             }
             TypedExprKind::Tuple(items) => self.tuple_display(items, ty, span),
+            TypedExprKind::MathCall {
+                function,
+                arguments,
+            } => self.math_call(*function, arguments, &expression.ty, span),
             TypedExprKind::PercentFormat { values, parts } => {
                 self.percent_format(values, parts, span)
             }

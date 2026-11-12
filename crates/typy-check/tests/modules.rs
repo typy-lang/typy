@@ -140,7 +140,7 @@ fn imports_that_cannot_resolve_give_their_codes() {
         ("import shapes\nshapes.NAME()\n", &["E0401"]),
         ("import shapes\nshapes.missing()\n", &["E0425"]),
         ("import shapes\nshapes.NAME += 1\n", &["E0401"]),
-        ("import math\n", &["E0201"]),
+        ("import dataclasses\n", &["E0201"]),
         ("import json\n", &["E0206"]),
         ("from collections.abc import Sized\n", &["E0201"]),
         ("from types import FrameType\n", &["E0425"]),

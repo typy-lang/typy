@@ -497,7 +497,23 @@ impl Type {
         }
     }
 
-    /// Returns the type's name with its article, for messages: `an int`, `a str`, `None`.
+    /// Returns the name CPython's messages give the class of a value of the type, such as
+    /// `list` for `list[int]`, and `NoneType` for an optional value, which fails when it is
+    /// `None`.
+    #[must_use]
+    pub fn class_name(&self) -> String {
+        match self {
+            Self::List(_) => "list".to_owned(),
+            Self::Tuple(_) | Self::TupleOf(_) => "tuple".to_owned(),
+            Self::Set(_) => "set".to_owned(),
+            Self::Dict(..) => "dict".to_owned(),
+            Self::Optional(_) | Self::NoneType => "NoneType".to_owned(),
+            Self::Instance(_, name) => name.clone(),
+            other => other.to_string(),
+        }
+    }
+
+    /// Returns the spelling with its article, for messages: `an int`, `a str`, `None`.
     #[must_use]
     pub fn with_article(&self) -> String {
         match self {

@@ -14,7 +14,7 @@ use crate::typed::{
 use crate::types::Type;
 
 /// What an import binds a name to.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq)]
 pub(crate) enum Imported {
     /// A function of the module, called by the name.
     Function(FunctionId),
@@ -28,6 +28,10 @@ pub(crate) enum Imported {
     Annotation(AnnotationName),
     /// One of those modules, whose names annotations read through it.
     Standard(String),
+    /// A function of a built-in module, called by the name (ADR-0018).
+    MathFunction(crate::math::MathFunction),
+    /// A constant of a built-in module, whose value the name takes.
+    MathConstant(f64),
 }
 
 /// What a name is in a module's tables.
@@ -89,6 +93,10 @@ impl Program {
                         ));
                         continue;
                     }
+                    if let Some(name) = self.builtin_import(alias, &module, *span)? {
+                        resolved.names.push(name);
+                        continue;
+                    }
                     self.check_provided(&module, *span)?;
                     resolved.initialise(&module);
                     // `import a.b` binds `a`; `import a.b as c` binds `c` to `a.b`.
@@ -129,6 +137,9 @@ impl Program {
                     }
                     return Ok(resolved);
                 }
+                if is_builtin_module(base.as_str()) && !self.loaded.contains(base.as_str()) {
+                    return self.builtin_from(names, resolved);
+                }
                 self.check_provided(&base, *span)?;
                 resolved.initialise(&base);
                 for alias in names {
@@ -166,6 +177,47 @@ impl Program {
         } else {
             Named::Nothing
         })
+    }
+
+    /// Returns the name `import math` binds to a built-in module, or `None` for any other
+    /// module. A built-in module runs no code and has no submodules (ADR-0018).
+    fn builtin_import(
+        &self,
+        alias: &Alias,
+        module: &ModuleName,
+        span: Span,
+    ) -> Result<Option<(String, Imported, Span)>, Box<Diagnostic>> {
+        if !is_builtin_module(module.top().as_str()) || self.loaded.contains(module.as_str()) {
+            return Ok(None);
+        }
+        if module.parent().is_some() {
+            return Err(Box::new(not_a_package(module, span)));
+        }
+        let bound = alias.as_name.as_ref().map_or_else(
+            || module.as_str().to_owned(),
+            |as_name| as_name.name.clone(),
+        );
+        Ok(Some((
+            bound,
+            Imported::Module(module.clone()),
+            alias.name.span,
+        )))
+    }
+
+    /// Resolves `from math import names`.
+    fn builtin_from(
+        &self,
+        names: &[Alias],
+        mut resolved: Resolved,
+    ) -> Result<Resolved, Box<Diagnostic>> {
+        for alias in names {
+            let imported = self.math_import(alias)?;
+            let bound = alias.as_name.as_ref().unwrap_or(&alias.name);
+            resolved
+                .names
+                .push((bound.name.clone(), imported, alias.name.span));
+        }
+        Ok(resolved)
     }
 
     /// Returns what `from base import name` binds: the module's own name first, as CPython
@@ -249,7 +301,6 @@ impl Program {
         }
         let planned = match top {
             "sys" => Some(("0.3", RuleId::LIB_04)),
-            "math" => Some(("0.3", RuleId::LIB_05)),
             "dataclasses" | "typing" | "collections" => Some(("0.4", RuleId::LIB_06)),
             "ctypes" => Some(("0.5", RuleId::FFI_01)),
             "os" | "time" | "random" => Some(("1.0", RuleId::LIB_07)),
@@ -268,9 +319,28 @@ impl Program {
                 format!("TyPy does not provide the standard library module `{module}`"),
             )
             .with_rule(RuleId::LIB_08)
-            .with_help("TyPy 0.3 provides `sys`, `math`, `typing`, `collections.abc` and `types`"),
+            .with_help("TyPy 0.3 provides `math`, `sys`, `typing`, `collections.abc` and `types`"),
         }))
     }
+}
+
+/// The standard library modules TyPy provides as built-in modules (ADR-0018).
+const BUILTIN_MODULES: [&str; 1] = ["math"];
+
+/// Returns whether `module` is a built-in module of TyPy, such as `math`.
+pub(crate) fn is_builtin_module(module: &str) -> bool {
+    BUILTIN_MODULES.contains(&module)
+}
+
+/// Returns E0206 for a submodule of a built-in module, which has none.
+fn not_a_package(module: &ModuleName, span: Span) -> Diagnostic {
+    let top = module.top();
+    Diagnostic::new(
+        DiagnosticCode::error(206),
+        span,
+        format!("no module named `{module}`; `{top}` is not a package"),
+    )
+    .with_rule(RuleId::LIB_08)
 }
 
 /// Returns the error for a name of `typing`, `collections.abc` or `types` that TyPy 0.3 does
@@ -328,15 +398,23 @@ impl BodyChecker<'_> {
         let mut lazy_callables = Vec::new();
         for (name, imported, name_span) in resolved.names {
             let ty = match &imported {
-                Imported::Function(_) | Imported::Class(_) => {
+                Imported::Function(_) | Imported::Class(_) | Imported::MathFunction(_) => {
                     lazy_callables.push(name);
                     continue;
                 }
+                Imported::MathConstant(_) => Type::Float,
                 Imported::Annotation(_) | Imported::Standard(_) => continue,
                 Imported::Variable { source, .. } => {
                     self.program.symbols[source.0 as usize].ty.clone()
                 }
-                Imported::Module(module) => Type::Module(module.as_str().to_owned()),
+                Imported::Module(module) => {
+                    if is_builtin_module(module.as_str()) {
+                        self.program
+                            .builtin_modules
+                            .insert(module.as_str().to_owned());
+                    }
+                    Type::Module(module.as_str().to_owned())
+                }
             };
             let target = Expr::Name {
                 id: name,
@@ -357,10 +435,15 @@ impl BodyChecker<'_> {
                     target,
                     module: module.as_str().to_owned(),
                 }),
+                Imported::MathConstant(value) => Some(ImportBinding::Constant {
+                    target,
+                    value: crate::typed::TypedConstant::Float(value),
+                }),
                 Imported::Function(_)
                 | Imported::Class(_)
                 | Imported::Annotation(_)
-                | Imported::Standard(_) => None,
+                | Imported::Standard(_)
+                | Imported::MathFunction(_) => None,
             };
             bindings.extend(self.assign(&target, ty, &value).and_then(binding));
         }
@@ -394,8 +477,7 @@ impl BodyChecker<'_> {
         let mut names: Vec<(String, Option<ImportBinding>)> = bindings
             .into_iter()
             .map(|binding| {
-                let (ImportBinding::Module { target, .. } | ImportBinding::Value { target, .. }) =
-                    &binding;
+                let target = binding.target();
                 (
                     self.program.symbols[target.0 as usize].name.clone(),
                     Some(binding),
@@ -427,11 +509,7 @@ impl BodyChecker<'_> {
         let mut reifies = Vec::new();
         let mut targets = Vec::new();
         for (name, binding) in names {
-            let target = binding.as_ref().map(
-                |(ImportBinding::Module { target, .. } | ImportBinding::Value { target, .. })| {
-                    *target
-                },
-            );
+            let target = binding.as_ref().map(ImportBinding::target);
             targets.extend(target);
             let import = TypedStmt::Import {
                 modules: modules.clone(),
@@ -502,7 +580,10 @@ impl BodyChecker<'_> {
             return;
         };
         for (name, imported, span) in resolved.names {
-            if matches!(imported, Imported::Variable { .. } | Imported::Module(_)) {
+            if matches!(
+                imported,
+                Imported::Variable { .. } | Imported::Module(_) | Imported::MathConstant(_)
+            ) {
                 self.bind_local(&Expr::Name { id: name, span });
             }
         }
@@ -511,6 +592,9 @@ impl BodyChecker<'_> {
     /// Reads `module.name` through a module object: a module variable, read as it is now; a
     /// class, as a type object; or a submodule (MOD-10).
     pub(super) fn module_attribute(&mut self, module: &str, name: &str, span: Span) -> TypedExpr {
+        if is_builtin_module(module) {
+            return self.math_attribute(name, span);
+        }
         if let Err(diagnostic) = self.program.check_not_lazy(module, name, span) {
             return self.error(*diagnostic, span);
         }
@@ -566,6 +650,27 @@ impl BodyChecker<'_> {
         )
     }
 
+    /// Reads `math.name`: a constant as its value; a function is not a value until 1.0.
+    fn math_attribute(&mut self, name: &str, span: Span) -> TypedExpr {
+        match self.program.math_lookup(name, span) {
+            Ok(crate::math::MathName::Constant(value)) => Self::typed(
+                TypedExprKind::Constant(crate::typed::TypedConstant::Float(value)),
+                Type::Float,
+                span,
+            ),
+            Ok(_) => self.error(
+                Diagnostic::new(
+                    DiagnosticCode::error(201),
+                    span,
+                    format!("using `math.{name}` as a value is planned for TyPy 1.0 (FUN-05)"),
+                )
+                .with_rule(RuleId::FUN_05),
+                span,
+            ),
+            Err(diagnostic) => self.error(*diagnostic, span),
+        }
+    }
+
     /// Returns the type object of a class as a value, an exception class's for one.
     pub(super) fn class_object(&self, class: ClassId, name: &str, span: Span) -> TypedExpr {
         let of = match self.program.exceptions.get(&class) {
@@ -614,6 +719,23 @@ impl BodyChecker<'_> {
         keywords: &[typy_source::syntax::Keyword],
         span: Span,
     ) -> TypedExpr {
+        if is_builtin_module(module) {
+            return match self.program.math_lookup(&name.name, name.span) {
+                Ok(crate::math::MathName::Function(function)) => {
+                    self.math_call(function, arguments, keywords, span)
+                }
+                Ok(_) => self.error(
+                    Diagnostic::new(
+                        DiagnosticCode::error(401),
+                        name.span,
+                        format!("`math.{}` is a float and cannot be called", name.name),
+                    )
+                    .with_rule(RuleId::EXP_02),
+                    span,
+                ),
+                Err(diagnostic) => self.error(*diagnostic, span),
+            };
+        }
         if let Err(diagnostic) = self.program.check_not_lazy(module, &name.name, name.span) {
             return self.error(*diagnostic, span);
         }
@@ -726,7 +848,12 @@ impl BodyChecker<'_> {
                         name.clone(),
                         self.program.annotation_modules.insert(name, module),
                     )),
-                    Imported::Variable { .. } | Imported::Module(_) => {}
+                    Imported::MathFunction(function) => saved.math.push((
+                        name.clone(),
+                        self.program.math_functions.insert(name, function),
+                    )),
+                    Imported::Variable { .. } | Imported::Module(_) | Imported::MathConstant(_) => {
+                    }
                 }
             }
         }
@@ -735,6 +862,12 @@ impl BodyChecker<'_> {
 
     /// Puts back the names `import_names_of` replaced, newest first.
     pub(super) fn restore_names(&mut self, saved: SavedNames) {
+        for (name, previous) in saved.math.into_iter().rev() {
+            match previous {
+                Some(function) => self.program.math_functions.insert(name, function),
+                None => self.program.math_functions.remove(&name),
+            };
+        }
         for (name, lazy) in saved.lazy {
             let key = (self.program.module.clone(), name);
             self.program.lazy_names.insert(key, lazy);
@@ -774,6 +907,7 @@ pub(super) struct SavedNames {
     annotations: Vec<(String, Option<AnnotationName>)>,
     standard: Vec<(String, Option<String>)>,
     lazy: Vec<(String, FunctionId)>,
+    math: Vec<(String, Option<crate::math::MathFunction>)>,
 }
 
 /// Collects the import statements of a block, at any depth outside nested definitions.

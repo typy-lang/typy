@@ -8,6 +8,7 @@
 | `list`, `dict`, `set`, `tuple`, `sorted`, `reversed`, `enumerate`, `zip`, `sum`, `any`, `all`, `round` and `type` | LIB-02, CLS-12 |
 | The methods of `str`, `bytes`, `list`, `tuple`, `dict` and `set`, with CPython's results | LIB-03, DAT-15 |
 | `format % values`, printf-style formatting of a string literal | LIB-10 |
+| The `math` module: its constants and its functions of numbers | LIB-05 |
 
 `str` has `find`, `index`, `count`, `split`, `join`, `strip`, `replace`,
 `startswith`, `upper`, `lower`, `title`, `center`, `zfill`, `encode`, the
@@ -18,8 +19,8 @@ has the same with `decode` and `hex`. Lists have `append`, `pop`,
 `values`, `items`, `update`, `copy` and `clear`; sets `add`, `remove`,
 `discard`, `pop` and the methods that combine sets.
 
-`sys`, `input` and `open` come in 0.3 (LIB-04), and the `math` module in
-0.3 (LIB-05). `iter` and `next` are described in
+`sys`, `input` and `open` come in 0.3 (LIB-04). `iter` and `next` are
+described in
 [Compound statements](compound-statements.md#iterators).
 
 ## Example
@@ -63,3 +64,29 @@ planned for 0.4 (LIB-11); write an f-string for those:
 ```python
 print("%d of %d done" % (3,))
 ```
+
+## The math module
+
+`import math` and `from math import sqrt` give the `math` module of
+CPython (LIB-05): `pi`, `e`, `tau`, `inf` and `nan`, and its functions of
+numbers, with CPython's results to the last bit and its errors, such as
+`ValueError: expected a nonnegative input, got -1.0` for `math.sqrt(-1)`.
+A function that takes a real number takes an `int`, a `bool` or a
+`float`, as in CPython:
+
+<!-- typy-expect: accepted -->
+```python
+import math
+from math import sqrt, gcd
+
+print(sqrt(2), math.floor(-2.5), math.log(8, 2), math.hypot(3, 4))
+print(math.factorial(20), gcd(12, 18, 30), math.isclose(0.1 + 0.2, 0.3))
+print(math.frexp(8.0), math.degrees(math.pi), math.log10(10**400))
+```
+
+A function the module gained after the program's Python floor is E0425
+at that floor: `math.fma` needs `python-floor = "3.13"`, and `fmax`,
+`fmin`, `signbit`, `isnormal` and `issubnormal` need `"3.15"`.
+`fsum`, `prod`, `sumprod`, `dist`, `gamma` and `lgamma` are planned for
+0.4 (LIB-12). A function of `math` is not a value yet: `f = math.sqrt`
+is planned for 1.0 (FUN-05).

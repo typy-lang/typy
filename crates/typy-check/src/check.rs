@@ -59,6 +59,7 @@ impl TypeChecker {
         // name a class defined below it.
         let floor_defers = project.settings().python_floor.minor() >= 14;
         let mut program = Program::empty();
+        program.set_floor(project.settings().python_floor.minor());
         let mut assigned = BTreeSet::new();
         for module in project.modules_in_order() {
             assigned.extend(module_imports::assigned_through_modules(
@@ -153,6 +154,7 @@ fn check_module(
         exceptions,
     );
     program.import_names(&imports.functions, annotations);
+    program.import_math(&imports.math_functions);
     program.declare_module_variables(&module_variable_spans, &definitions);
     let module_body: Vec<&Stmt> = tree
         .body

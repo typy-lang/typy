@@ -6,6 +6,7 @@ mod builtin;
 mod check;
 mod codec;
 mod exception;
+mod math;
 mod method;
 mod percent_format;
 mod subset;
@@ -16,6 +17,7 @@ mod unprovided;
 pub use builtin::Builtin;
 pub use check::TypeChecker;
 pub use exception::{BuiltinException, ExceptionClass, ProgramException};
+pub use math::{MathFunction, MathShape};
 pub use method::Method;
 pub use typed::{
     Argument, AssignTarget, Attribute, ClassId, Conversion, FStringPart, FormattedValue,

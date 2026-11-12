@@ -18,6 +18,9 @@ pub struct TypedProgram {
     /// Each function that runs a lazy import for one name, with the variable it binds; one
     /// for a function or a class binds none (MOD-06).
     pub lazy_imports: std::collections::BTreeMap<FunctionId, Option<SymbolId>>,
+    /// The built-in modules the program imports, such as `math`, whose module objects follow
+    /// those of `modules` (ADR-0018).
+    pub builtin_modules: Vec<String>,
     /// The module body of `__main__`.
     pub entry: FunctionId,
     /// The warnings of checking the program, such as W0301 (DIA-08).

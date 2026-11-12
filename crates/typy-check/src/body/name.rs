@@ -99,7 +99,10 @@ impl BodyChecker<'_> {
         if let Some(type_object) = self.type_object_named(id, span) {
             return self.through_lazy(id, type_object);
         }
-        if self.program.function_ids.contains_key(id) || Builtin::named(id).is_some() {
+        if self.program.function_ids.contains_key(id)
+            || self.program.math_functions.contains_key(id)
+            || Builtin::named(id).is_some()
+        {
             return self.error(
                 Diagnostic::new(
                     DiagnosticCode::error(201),

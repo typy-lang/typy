@@ -53,6 +53,12 @@ pub(crate) struct Program {
     /// names bound to those modules, which annotations read (TYP-15).
     pub(super) annotation_names: BTreeMap<String, crate::check::AnnotationName>,
     pub(super) annotation_modules: BTreeMap<String, String>,
+    /// The functions of `math` the module imports by name, each under its name (ADR-0018).
+    pub(super) math_functions: BTreeMap<String, crate::math::MathFunction>,
+    /// The built-in modules the program imports, whose module objects it holds.
+    pub(super) builtin_modules: BTreeSet<String>,
+    /// The minor version of the program's Python floor, such as 12 for 3.12.
+    pub(super) floor: u8,
     /// The modules the module's `__lazy_modules__` lists, whose imports are lazy (MOD-07).
     pub(super) lazy_modules: BTreeSet<String>,
     /// Each function that runs a lazy import for one name, with the variable it binds; a
@@ -110,6 +116,9 @@ impl Program {
             module_classes: BTreeMap::new(),
             annotation_names: BTreeMap::new(),
             annotation_modules: BTreeMap::new(),
+            math_functions: BTreeMap::new(),
+            builtin_modules: BTreeSet::new(),
+            floor: 12,
             lazy_modules: BTreeSet::new(),
             lazy_imports: BTreeMap::new(),
             lazy_names: BTreeMap::new(),
@@ -195,6 +204,21 @@ impl Program {
         self.package = module.package();
         module.name.as_str().clone_into(&mut self.module);
         self.lazy_modules = typy_source::lazy_modules(&module.syntax.body);
+        self.math_functions = BTreeMap::new();
+    }
+
+    /// Sets the minor version of the program's Python floor.
+    pub(crate) const fn set_floor(&mut self, minor: u8) {
+        self.floor = minor;
+    }
+
+    /// Adds the functions of `math` the module's imports bind by name.
+    pub(crate) fn import_math(&mut self, functions: &BTreeMap<String, crate::math::MathFunction>) {
+        self.math_functions.extend(
+            functions
+                .iter()
+                .map(|(name, function)| (name.clone(), *function)),
+        );
     }
 
     /// Returns the ID the next function added while checking a module body takes.
@@ -441,6 +465,7 @@ impl Program {
             classes,
             modules: self.modules,
             lazy_imports: self.lazy_imports,
+            builtin_modules: self.builtin_modules.into_iter().collect(),
             entry,
             warnings: typy_diagnostics::Diagnostics::new(),
         }

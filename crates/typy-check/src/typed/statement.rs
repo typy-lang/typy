@@ -184,6 +184,25 @@ pub enum ImportBinding {
         /// The module variable whose value it takes.
         source: SymbolId,
     },
+    /// A variable bound to a constant of a built-in module, such as `math.pi`.
+    Constant {
+        /// The variable.
+        target: SymbolId,
+        /// The value.
+        value: super::constant::TypedConstant,
+    },
+}
+
+impl ImportBinding {
+    /// Returns the variable the binding assigns.
+    #[must_use]
+    pub const fn target(&self) -> SymbolId {
+        match self {
+            Self::Module { target, .. }
+            | Self::Value { target, .. }
+            | Self::Constant { target, .. } => *target,
+        }
+    }
 }
 
 /// A statement after checking.

@@ -45,7 +45,7 @@ impl Arguments {
             (PercentValue::Item(index), Type::Int | Type::Bool) => Ok(PercentNumber::Item(index)),
             (_, ty) => Err(format!(
                 "format argument {position}: * requires int, not {}",
-                type_name(&ty)
+                ty.class_name()
             )),
         }
     }
@@ -174,7 +174,7 @@ fn keyed_field(
     let Type::Dict(_, value) = values else {
         return Err(format!(
             "format requires a mapping, not {}",
-            type_name(values)
+            values.class_name()
         ));
     };
     let given = |number: Number| match number {
@@ -251,22 +251,8 @@ fn percent_conversion(kind: char, ty: &Type, label: &str) -> Result<PercentConve
     };
     Err(format!(
         "format argument{label}: %{kind} requires {needs}, not {}",
-        type_name(ty)
+        ty.class_name()
     ))
-}
-
-/// Returns the name CPython's message gives the type of a value: its class's name, and
-/// `NoneType` for an optional value, which fails when it is `None`.
-fn type_name(ty: &Type) -> String {
-    match ty {
-        Type::List(_) => "list".to_owned(),
-        Type::Tuple(_) | Type::TupleOf(_) => "tuple".to_owned(),
-        Type::Set(_) => "set".to_owned(),
-        Type::Dict(..) => "dict".to_owned(),
-        Type::Optional(_) | Type::NoneType => "NoneType".to_owned(),
-        Type::Instance(_, name) => name.clone(),
-        other => other.to_string(),
-    }
 }
 
 /// Returns `text` as `repr` writes a `str`: in single quotes unless it holds one and no

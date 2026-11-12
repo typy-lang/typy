@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy detailed design |
-| Version | 1.69 |
+| Version | 1.70 |
 | Status | Approved |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-12 |
@@ -460,6 +460,21 @@ are no errors.
 TyPy implements (ADR-0007), embedded in the `typy` binary with
 `include_str!`, and the declarations of the private `_typy` module. It is
 created with the first module written in Python, `sys` and `math` in 0.3.
+
+`math` is not written in Python either (ADR-0018): its functions take an
+`int` or a `float` and some any number of arguments, which the 0.3
+subset cannot declare. `crates/typy-check/src/math.rs` lists each name:
+a constant with its value, or a function with its `MathShape`, which
+gives the types of its arguments and its result, and the Python version
+that added it, so a name newer than the program's floor is E0425.
+`import math` binds a built-in module object, which runs no code and
+prints as `<module 'math' (built-in)>`; `TypedProgram::builtin_modules`
+lists the ones a program imports, after its own modules. A call is
+`TypedExprKind::MathCall`, checked by `body/math_call.rs` with CPython's
+messages for an argument of a type it refuses for every value, and
+lowered by `lower/math.rs`, which converts each argument as CPython does,
+an `int` to a `float` for a real-number parameter, and calls the runtime
+function (section 14).
 
 The builtins (LIB-01, LIB-02) are not written in Python. `print`, `min`
 and `max` take any number of arguments, which the 0.1 subset cannot declare
@@ -1438,8 +1453,21 @@ as a subprocess with an argument list and no shell:
 
 | Target | Program | Arguments |
 | --- | --- | --- |
-| `x86_64-unknown-linux-gnu` | `cc` | `-o TEMP OBJECT RUNTIME_ARCHIVE -lm -Wl,--gc-sections` |
+| `x86_64-unknown-linux-gnu` | `cc` | `-o TEMP OBJECT -Wl,--push-state,--no-as-needed -lm -Wl,--pop-state RUNTIME_ARCHIVE -lm -Wl,--gc-sections` |
 | `x86_64-unknown-linux-musl` | `musl-gcc` | `-static`, then the same |
+
+A `--release` or `--release-small` build adds `-Wl,--strip-debug`, so the
+executable holds no debug information, which the runtime archive brings
+from `core` and `compiler_builtins` with LTO; the symbol table stays. A
+debug build keeps it for a debugger.
+
+The C maths library comes before the runtime archive. The archive holds
+Rust's `compiler_builtins`, which defines weak copies of some C maths
+functions, such as `cbrt`, that differ from glibc's in the last bit; the
+linker takes an archive member only for a symbol still undefined, so with
+`-lm` first, and kept by `--no-as-needed`, the program calls the C library
+CPython calls (LIB-05). The second `-lm` serves the static musl link, where
+the order of archives matters the other way.
 
 `TEMP` is created with mode 0755 less the umask, the mode of a new
 executable. On success it is renamed to `output`, so a failed link leaves no
@@ -1532,6 +1560,7 @@ installed `typy` finds `<prefix>/lib/typy/` and a `typy` in
 | `int` | Addition, subtraction, multiplication, floor division, modulo, power, negation, comparison, conversion to and from `str` and `float`, all with Python's results (EXP-02, EXP-05) |
 | `float` | Division, floor division, modulo and power with the special cases of CPython's `float_divmod` and `float_pow`. `int / int`, `float(int)` and `float(str)` round once to the nearest double, ties to even, by CPython's `long_true_divide` method on exact integers. `int(float)` and `int` against `float` comparisons are exact. `round` rounds half to even on the exact value: `round(x)` to an integer, `round(x, n)` by rounding `x * 10**n` exactly and reading the result back with one correct rounding, as CPython's `_Py_dg_dtoa` and `_Py_dg_strtod` do, so `round(2.675, 2)` is `2.67`. Beyond 323 digits a `float` rounds to itself and below -308 to zero; a result too large raises `OverflowError: rounded value too large to represent`. `round` of an `int` with negative `ndigits` gives the even multiple of `10**-ndigits`, as `long_round` does. `repr` writes the shortest digits that read back as the same double, found exactly with large integers, and breaks an exact tie toward the even digit as CPython does; the layout is positional when the decimal exponent is from -4 to 15, otherwise scientific with a sign and at least two exponent digits, and `inf`, `-inf`, `nan` and `-0.0` are written as CPython writes them (DAT-02) |
 | `libm` | `floor`, `fmod`, `pow` and `ldexp` from the C maths library, which is why every link passes `-lm` |
+| `math` | The functions behind the `math` module (LIB-05, ADR-0018), one `typy_rt_math_*` symbol each. A function of the C library runs inside CPython 3.15's `math_1` or `math_2` checks: a NaN from a number is `ValueError`, with the function's 3.15 message such as `expected a nonnegative input, got -1.0`, or `math domain error`, and an infinity from a finite number `OverflowError: math range error` where the function can overflow. `pow`, `fmod`, `remainder`, `ldexp`, `ulp`, `nextafter`, `fma`, `isclose` and `hypot`, with CPython's `vector_norm`, are ported from `mathmodule.c`, and `fmax` and `fmin` keep `x` when the two are equal, as the oracle's Clang build does. A logarithm of an `int` too large for a `float` is that of its top 55 bits, rounded once, plus its bit count times the logarithm of 2, by `fma`, as 3.15 does. `factorial` multiplies by halves, `isqrt` runs Newton's method from a power of two, `comb` and `perm` take exact running quotients, and `gcd` is Euclid's; each refuses what CPython refuses, with its message and its limit of a C `long`. The C functions are named with `#[link(name = "m")]`, so a Rust test binary of the runtime also calls the C library before `compiler_builtins` |
 | `string` | Creation, concatenation, repetition, indexing with negative indexes (DAT-11), slicing into a string as narrow as the code points it selects (DAT-12), length, the methods of LIB-03 that need no Unicode tables, with CPython's index adjustment for `start` and `end` and its rules for an empty substring, whitespace as `str.isspace` defines it, and the line breaks of `str.splitlines`, built through a `StrBuilder` that makes the new string as narrow as its widest code point, and the case methods and `is` tests. Their tables in `string/unicode/case_tables.rs` are read off CPython 3.15 itself, code point by code point, by `scripts/generate-unicode-tables.py`: for each property the code points where it changes, and for each case mapping runs of a constant difference over a stride of one or two, about 200 for each, with the few mappings to more than one code point listed apart. A program links only the tables its methods use. `lower` makes a capital sigma final sigma, when a cased code point comes before it and none after it, skipping case-ignorable ones, as CPython does; both properties are read from CPython by lowering a sigma beside each code point. `title` lowercases a code point after a cased one, comparison, `repr`, `chr` and `ord`. `repr` escapes the code points `str.isprintable` rejects, and `int()` and `float()` read the decimal digits of every script, from tables that `scripts/generate-unicode-tables.py` writes from CPython 3.15's Unicode 17.0 data (OI-15). The tables hold 676 boundaries up to U+FFFF as `u16`, 806 above it as `u32`, and 77 digit zeros, about 4.9 KB |
 | `list` | `typy_rt_list_new(kind, capacity, descriptor)`, `_append`, `_length`, `_get`, `_set`, `_equal`, `_contains`, `_repr`, `_slice`, `_pop`, `_insert`, `_extend`, `_remove`, `_index`, `_count`, `_clear`, `_copy`, `_reverse`, `_concat`, `_repeat`, `_compare`, `_sort`, `_extreme`, `_sum_int`, `_sum_float`, `_any` and `_all`. A list grows to `n + n/8 + 4` items while small and to `n + n/32 + 4` from 65,536 items, so a list of a million `int` values built one `append` at a time takes at most 8.5 MB (NFR-13). A position counts from the end when negative; one outside the list raises `IndexError: list index out of range`, or `list assignment index out of range`, and a large integer `cannot fit 'int' into an index-sized integer`. An `Object` item is compared and written by the type ID in its header, so a list of lists needs nothing from the compiler. `repr` joins the `repr` of each item once, in a string as wide as its widest piece. `pop` takes its index with an `int` flag, 1 when an index is given, so no `bool` crosses into the runtime as an argument, and returns the item with the reference the list held. `insert` clamps its position to the list, as CPython does. `extend` reads the other list's length first, so `xs.extend(xs)` doubles the list once. `clear` sets the length to zero before releasing the items, so an item's `drop` never sees a half-cleared list. `remove` and `index` raise `ValueError` with CPython 3.14's messages, `list.remove(x): x not in list` and `list.index(x): x not in list` (OI-14). `repeat` raises `OverflowError` for a count that does not fit an index. `compare` decides by the first unequal pair, then by length. `sort` is stable and compares only with `<`, as CPython's does: runs of 32 items by binary insertion, then merged bottom up through one buffer of the list's length. With `reverse` it reverses, sorts and reverses again, as CPython does, so equal items keep their order; a `nan` makes the order of a list depend on the algorithm, and CPython's own versions differ on it. `extreme` keeps the first item until a later one is less, for `min`, or greater, for `max`, so the first of equal items wins, and an empty list raises `ValueError: min() iterable argument is empty`. `sum_float` is CPython 3.12's compensated sum, Neumaier's improvement of Kahan's: each rounding error is collected and added once at the end unless it is not finite. A `tuple[T, ...]` is a list object whose header has the tuple type ID, 5, set by `typy_rt_tuple_seal` once its items are in: `repr` writes it between parentheses, `(1,)` for one item, its index error is `tuple index out of range` and `index` raises `tuple.index(x): x not in tuple`, and a slice, `+` or `*` of a tuple is a tuple. `typy_rt_placeholder_list` is an immortal empty list. Freeing a list releases each item |
 | `format` | `typy_rt_format_int`, `_bool`, `_float`, `_str` and `_other` give `format(value, spec)` as f-strings call it (LEX-07), a port of CPython's `formatter_unicode.c`: the specification `[[fill]align][sign][z][#][0][width][grouping][.precision][type]` is read with CPython's checks and `ValueError` messages, the digits of a number are grouped by `,` or `_` with zeros added inside the groups when `0` pads it after its sign, and the number or text is padded and aligned. A `float` is written as `PyOS_double_to_string` writes it for `e`, `f`, `g` and `repr`, from digits rounded half to even on the exact value with large integers, as `_Py_dg_dtoa` rounds them, then laid out as `format_float_short` lays them out. A `bool` comes as an `int` word, and any other type as its `str` and its type's name, which an empty specification gives back and any other raises `TypeError`. `typy_rt_ascii` escapes every code point outside ASCII for `!a`. `scripts/generate-format-cases.py` writes the test table, 4,628 results that CPython 3.12 to 3.15 all give |

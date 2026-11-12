@@ -133,6 +133,12 @@ pub enum TypedExprKind {
     TypeName(Box<TypedExpr>),
     /// An f-string: its literal text and formatted fields, joined in order (LEX-07).
     FString(Vec<FStringPart>),
+    /// A call of a function of `math`, with its arguments in the order the function takes
+    /// them; a keyword not given is `None` (LIB-05).
+    MathCall {
+        function: crate::math::MathFunction,
+        arguments: Vec<TypedExpr>,
+    },
     /// `format % values` with a literal format: the right operand, evaluated once, and the
     /// pieces that make the text (LIB-10).
     PercentFormat {

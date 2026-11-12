@@ -18,6 +18,8 @@ mod list;
 mod list_call;
 mod locals;
 mod loop_source;
+mod math_call;
+mod math_names;
 mod method_call;
 mod name;
 mod operator;

@@ -25,6 +25,8 @@ pub(super) struct ModuleImports {
     pub(super) annotations: BTreeMap<String, crate::check::AnnotationName>,
     /// For each name bound to one of those modules, the module.
     pub(super) standard: BTreeMap<String, String>,
+    /// The functions of `math` imported by name.
+    pub(super) math_functions: BTreeMap<String, crate::math::MathFunction>,
 }
 
 /// Returns what the imports at module level bind, in any block outside a `def` or a `class`.
@@ -54,7 +56,7 @@ fn collect(program: &Program, statements: &[Stmt], found: &mut ModuleImports) {
                             found.variables.entry(name.clone()).or_insert(span);
                             found.modules.insert(name, module.as_str().to_owned());
                         }
-                        Imported::Variable { .. } => {
+                        Imported::Variable { .. } | Imported::MathConstant(_) => {
                             found.variables.entry(name).or_insert(span);
                         }
                         Imported::Annotation(annotation) => {
@@ -62,6 +64,9 @@ fn collect(program: &Program, statements: &[Stmt], found: &mut ModuleImports) {
                         }
                         Imported::Standard(module) => {
                             found.standard.insert(name, module);
+                        }
+                        Imported::MathFunction(function) => {
+                            found.math_functions.insert(name, function);
                         }
                     }
                 }

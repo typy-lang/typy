@@ -45,6 +45,10 @@ impl FunctionLowerer<'_> {
                     let value = self.read_global(*source, span);
                     self.assign_name(*target, value, span);
                 }
+                ImportBinding::Constant { target, value } => {
+                    let value = self.typed_constant(value, span);
+                    self.assign_name(*target, value, span);
+                }
             }
         }
     }
@@ -99,13 +103,20 @@ impl FunctionLowerer<'_> {
         Self::borrowed(value, TyirType::MODULE)
     }
 
-    /// Returns where a module is in the program's list of modules, which holds every module
-    /// the checker resolved an import to.
+    /// Returns where a module is in the program's list of module objects: the program's
+    /// modules, then the built-in modules it imports (ADR-0018).
     fn module_index(&self, module: &str) -> usize {
-        self.program
-            .modules
+        let modules = &self.program.modules;
+        modules
             .iter()
             .position(|known| known.name == module)
+            .or_else(|| {
+                self.program
+                    .builtin_modules
+                    .iter()
+                    .position(|known| known == module)
+                    .map(|index| modules.len() + index)
+            })
             .unwrap_or_default()
     }
 

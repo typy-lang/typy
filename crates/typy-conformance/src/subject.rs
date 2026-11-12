@@ -120,6 +120,10 @@ pub(crate) fn judge_sanitized(
         "-o",
         executable.as_str(),
         object_path.as_str(),
+        // As the program's own link: the C maths library before the runtime archive.
+        "-Wl,--push-state,--no-as-needed",
+        "-lm",
+        "-Wl,--pop-state",
         archive.as_str(),
         "-lm",
     ]));

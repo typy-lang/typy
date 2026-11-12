@@ -15,6 +15,7 @@ use crate::runtime_archive::RuntimeArchive;
 pub struct Linker {
     program: String,
     static_link: bool,
+    strip_debug: bool,
     archive: RuntimeArchive,
 }
 
@@ -37,8 +38,17 @@ impl Linker {
         Self {
             program: program.to_owned(),
             static_link,
+            strip_debug: false,
             archive,
         }
+    }
+
+    /// Returns the linker with the debug information left out of the executable, as a
+    /// release build leaves it out; the symbols stay, so a backtrace still names functions.
+    #[must_use]
+    pub const fn with_strip_debug(mut self, strip: bool) -> Self {
+        self.strip_debug = strip;
+        self
     }
 
     /// Returns the arguments that link `object` into `output`.
@@ -47,14 +57,25 @@ impl Linker {
         if self.static_link {
             arguments.push("-static".to_owned());
         }
+        // The C maths library comes before the runtime archive, whose `compiler_builtins`
+        // has weak copies of some of its functions that differ in the last bit; a member of
+        // an archive is taken only for a symbol still undefined. `--no-as-needed` keeps it
+        // although nothing refers to it yet. The second `-lm` serves a static link, where the
+        // order of archives matters the other way.
         arguments.extend([
             "-o".to_owned(),
             output.to_string(),
             object.to_string(),
+            "-Wl,--push-state,--no-as-needed".to_owned(),
+            "-lm".to_owned(),
+            "-Wl,--pop-state".to_owned(),
             self.archive.path().to_string(),
             "-lm".to_owned(),
             "-Wl,--gc-sections".to_owned(),
         ]);
+        if self.strip_debug {
+            arguments.push("-Wl,--strip-debug".to_owned());
+        }
         arguments
     }
 
@@ -184,10 +205,20 @@ mod tests {
                 "-o",
                 "out",
                 "a.o",
+                "-Wl,--push-state,--no-as-needed",
+                "-lm",
+                "-Wl,--pop-state",
                 expected_archive.as_str(),
                 "-lm",
                 "-Wl,--gc-sections"
             ]
+        );
+        let stripped =
+            Linker::new(TargetTriple::X86_64LinuxGnu, archive(&root)).with_strip_debug(true);
+        let arguments = stripped.arguments(Utf8Path::new("a.o"), Utf8Path::new("out"));
+        assert_eq!(
+            arguments.last().map(String::as_str),
+            Some("-Wl,--strip-debug")
         );
         let musl = Linker::new(TargetTriple::X86_64LinuxMusl, archive(&root));
         assert_eq!(musl.program, "musl-gcc");

@@ -11,7 +11,7 @@ use crate::ownership::Lowered;
 
 impl FunctionLowerer<'_> {
     /// Returns the item types of a tuple type.
-    fn item_types(&self, ty: TyirType) -> (TupleTypeId, Vec<TyirType>) {
+    pub(crate) fn item_types(&self, ty: TyirType) -> (TupleTypeId, Vec<TyirType>) {
         let TyirType::Tuple(id) = ty else {
             unreachable!("the checker gives a tuple operation only tuples")
         };

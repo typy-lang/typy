@@ -28,6 +28,7 @@ mod iterator;
 mod libc;
 mod libm;
 mod list;
+mod math;
 mod message;
 mod module;
 mod range;

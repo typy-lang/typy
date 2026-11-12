@@ -187,7 +187,10 @@ impl Pipeline {
         let triple = request.target().triple;
         let archive =
             RuntimeArchive::beside(&self.compiler, triple).map_err(Failure::without_sources)?;
-        Ok(Linker::new(triple, archive))
+        // A release build leaves out the debug information, which a debug build keeps for a
+        // debugger (CLI-05).
+        let release = request.mode() != typy_build::BuildMode::Debug;
+        Ok(Linker::new(triple, archive).with_strip_debug(release))
     }
 
     /// Loads the program with the settings of its root and of the command line.

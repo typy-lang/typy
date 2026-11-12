@@ -8,6 +8,11 @@ All notable changes to TyPy are recorded here. The format follows
 
 ### Added
 
+- The `math` module: its constants and its functions of numbers, with
+  CPython's results to the last bit and CPython 3.15's error messages;
+  a name newer than the program's Python floor is E0425. `fsum`, `prod`,
+  `sumprod`, `dist`, `gamma` and `lgamma` are planned for 0.4 (LIB-05,
+  LIB-12, ADR-0018).
 - `format % values`, printf-style formatting of a string literal, with
   every conversion, flag, width, precision and `*`, and `%(key)s` with a
   dict, giving CPython's results. A format that does not fit its values
@@ -136,8 +141,16 @@ All notable changes to TyPy are recorded here. The format follows
   `raise` outside an `except` clause, and E0417 for a call of
   `UnicodeDecodeError` or `UnicodeEncodeError` (EXC-07, EXC-12).
 
+### Changed
+
+- `--release` and `--release-small` builds leave out debug information; a
+  static musl hello world is about 30 KB (CLI-05, NFR-01).
+
 ### Fixed
 
+- Programs call the C library's maths functions, as CPython does, and
+  not the copies in the runtime archive, whose `cbrt` differed in the
+  last bit.
 - `typy run` builds again after the runtime archive changes, since the
   cache key now covers the archive as well as the compiler.
 - `type(m)` of a module, an `Iterable[T]` or a traceback gives its type
