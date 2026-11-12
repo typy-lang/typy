@@ -1185,6 +1185,29 @@ import display
 import display
 ```
 
+## E0427: `%` format that does not fit its values
+
+The values of `format % values` do not fit the format: there are too few
+or too many, a conversion gets a value of a type it cannot format, such as
+`%d` of a `str`, or the format itself is not valid (LIB-10). CPython would
+raise `TypeError` or `ValueError` for every run of the program, and the
+message is CPython's. Give one value for each conversion, of a type it
+formats, or use `%s`, which formats any value.
+
+This program gives E0427:
+
+<!-- typy-expect: rejected E0427 at 1:25 -->
+```python
+print("%d of %d done" % (3,))
+```
+
+This one is correct:
+
+<!-- typy-expect: accepted -->
+```python
+print("%d of %d done" % (3, 4))
+```
+
 ## E0701: C toolchain program not found
 
 TyPy links programs with the system C toolchain, which is not installed

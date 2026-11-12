@@ -39,7 +39,7 @@ pub(super) fn run(
             &files,
             overrides,
             deny_warnings,
-            &cache::compiler_identity(),
+            &cache::compiler_identity(&request),
         ))
         .join(name);
     if !executable.exists() {

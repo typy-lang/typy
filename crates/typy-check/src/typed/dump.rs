@@ -368,6 +368,13 @@ impl Dump<'_> {
             }
             TypedExprKind::Submodule(module) => format!("Submodule {module}"),
             TypedExprKind::AsIterable(_) => "AsIterable".to_owned(),
+            TypedExprKind::PercentFormat { parts, .. } => {
+                let fields = parts
+                    .iter()
+                    .filter(|part| matches!(part, super::percent::PercentPart::Field(_)))
+                    .count();
+                format!("PercentFormat {fields} fields")
+            }
             TypedExprKind::Lazy { reify, .. } => format!("Lazy {}", reify.0),
             TypedExprKind::ModuleName => "ModuleName".to_owned(),
             TypedExprKind::Binary { operator, .. } => format!("Binary {operator:?}"),
@@ -484,6 +491,7 @@ fn children(expression: &TypedExpr) -> Vec<&TypedExpr> {
         | TypedExprKind::Unwrap(inner)
         | TypedExprKind::AsIterable(inner)
         | TypedExprKind::Lazy { value: inner, .. } => vec![inner],
+        TypedExprKind::PercentFormat { values, .. } => vec![values],
         TypedExprKind::Comprehension {
             element,
             value,

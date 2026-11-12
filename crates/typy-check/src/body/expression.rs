@@ -36,6 +36,28 @@ impl BodyChecker<'_> {
             Expr::Name { id, .. } => self.name(id, span),
             Expr::BinOp {
                 left,
+                operator: typy_source::syntax::BinaryOperator::Mod,
+                right,
+                ..
+            } if matches!(
+                **left,
+                Expr::Constant {
+                    value: typy_source::syntax::Constant::Str(_),
+                    ..
+                }
+            ) =>
+            {
+                let Expr::Constant {
+                    value: typy_source::syntax::Constant::Str(format),
+                    span: format_span,
+                } = &**left
+                else {
+                    unreachable!("the guard matched a string literal");
+                };
+                self.percent_format(format, *format_span, right, span)
+            }
+            Expr::BinOp {
+                left,
                 operator,
                 right,
                 ..

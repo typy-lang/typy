@@ -5,6 +5,7 @@ mod constant;
 mod dump;
 mod expression;
 mod function;
+mod percent;
 mod program;
 mod signature;
 mod statement;
@@ -17,6 +18,7 @@ pub use expression::{
     Argument, Conversion, FStringPart, FormattedValue, InitCall, TypedExpr, TypedExprKind,
 };
 pub use function::{FunctionId, TypedFunction};
+pub use percent::{PercentConversion, PercentField, PercentNumber, PercentPart, PercentValue};
 pub use program::{TypedModule, TypedProgram};
 pub use signature::{FunctionSignature, SignatureParameter};
 pub use statement::{

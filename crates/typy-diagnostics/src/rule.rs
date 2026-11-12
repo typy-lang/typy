@@ -159,6 +159,8 @@ impl RuleId {
     pub const LIB_08: Self = Self("LIB-08");
     /// `str % values`, printf-style formatting with a value, a tuple of values or a dict of named values, shall be accepted with Python's results.
     pub const LIB_10: Self = Self("LIB-10");
+    /// `format % values` shall be accepted with a format that is not a string literal, and with a `tuple[T, ...]` of values.
+    pub const LIB_11: Self = Self("LIB-11");
     /// A program shall be built from several `.py` files, found from the main file's directory and from paths set in `typy.toml`.
     /// A program shall be built from several `.py` files, found from the main file's directory and from paths set in `typy.toml`.
     pub const MOD_01: Self = Self("MOD-01");
@@ -295,6 +297,7 @@ impl RuleId {
         Self::LIB_07,
         Self::LIB_08,
         Self::LIB_10,
+        Self::LIB_11,
         Self::MOD_01,
         Self::MOD_02,
         Self::MOD_05,

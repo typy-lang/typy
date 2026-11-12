@@ -22,6 +22,9 @@ impl FunctionLowerer<'_> {
                 self.read_name(*symbol, span)
             }
             TypedExprKind::Tuple(items) => self.tuple_display(items, ty, span),
+            TypedExprKind::PercentFormat { values, parts } => {
+                self.percent_format(values, parts, span)
+            }
             TypedExprKind::Lazy { reify, value } => {
                 self.run_lazy_import(*reify, span);
                 self.expression(value)

@@ -69,19 +69,36 @@ pub(crate) fn key(
     text
 }
 
-/// Returns what tells this build of the compiler from another of the same version: the size
-/// and the modification time of its executable, or nothing when they cannot be read.
-pub(crate) fn compiler_identity() -> Vec<u8> {
-    let metadata = std::env::current_exe()
-        .ok()
-        .and_then(|path| std::fs::metadata(path).ok());
+/// Returns what tells this build of the compiler and its runtime from another of the same
+/// version: the size and the modification time of the executable and of the runtime archive
+/// for `request`'s target, each zero when it cannot be read. The archive counts on its own,
+/// since `make runtime` rebuilds it without the compiler.
+pub(crate) fn compiler_identity(request: &BuildRequest) -> Vec<u8> {
+    let executable = std::env::current_exe().ok();
+    let archive = executable.as_ref().and_then(|path| {
+        let path = camino::Utf8Path::from_path(path)?;
+        typy_build::RuntimeArchive::beside(path, request.target().triple)
+            .ok()
+            .map(|archive| archive.path().as_std_path().to_owned())
+    });
+    let mut identity = Vec::with_capacity(48);
+    for path in [executable, archive] {
+        identity.extend_from_slice(&file_identity(path.as_deref()));
+    }
+    identity
+}
+
+/// Returns the size and the modification time of a file, or zeros.
+fn file_identity(path: Option<&std::path::Path>) -> [u8; 24] {
+    let metadata = path.and_then(|path| std::fs::metadata(path).ok());
     let length = metadata.as_ref().map_or(0, std::fs::Metadata::len);
     let modified = metadata
         .and_then(|metadata| metadata.modified().ok())
         .and_then(|time| time.duration_since(std::time::UNIX_EPOCH).ok())
         .map_or(0, |since| since.as_nanos());
-    let mut identity = length.to_le_bytes().to_vec();
-    identity.extend_from_slice(&modified.to_le_bytes());
+    let mut identity = [0; 24];
+    identity[..8].copy_from_slice(&length.to_le_bytes());
+    identity[8..].copy_from_slice(&modified.to_le_bytes());
     identity
 }
 
@@ -155,6 +172,7 @@ mod tests {
                 b"build"
             )
         );
-        assert_eq!(super::compiler_identity().len(), 24);
+        assert_eq!(super::compiler_identity(&request).len(), 48);
+        assert_eq!(super::file_identity(None), [0; 24]);
     }
 }

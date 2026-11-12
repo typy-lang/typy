@@ -207,6 +207,11 @@ pub enum RuntimeFunction {
     FormatFloat,
     FormatStr,
     FormatOther,
+    PercentInt,
+    PercentFloat,
+    PercentStr,
+    PercentChar,
+    PercentCharStr,
     Ascii,
 }
 
@@ -238,7 +243,7 @@ const FLOAT_FLOAT: &[TyirType] = &[TyirType::Float, TyirType::Float];
 
 impl RuntimeFunction {
     /// Every runtime function.
-    pub const ALL: [Self; 199] = [
+    pub const ALL: [Self; 204] = [
         Self::IntFloorDivide,
         Self::IntModulo,
         Self::IntPower,
@@ -437,6 +442,11 @@ impl RuntimeFunction {
         Self::FormatFloat,
         Self::FormatStr,
         Self::FormatOther,
+        Self::PercentInt,
+        Self::PercentFloat,
+        Self::PercentStr,
+        Self::PercentChar,
+        Self::PercentCharStr,
         Self::Ascii,
     ];
 
@@ -630,9 +640,12 @@ impl RuntimeFunction {
             Self::RangeContains => signature(&[TyirType::RANGE, Int], Bool, false),
             Self::RangeEqual => signature(&[TyirType::RANGE, TyirType::RANGE], Bool, false),
             Self::FormatInt | Self::FormatBool => signature(&[Int, STR], STR, true),
+            Self::PercentChar => signature(&[Int, STR, STR], STR, true),
             Self::FormatFloat => signature(&[Float, STR], STR, true),
-            Self::FormatStr => signature(&[STR, STR], STR, true),
-            Self::FormatOther => signature(&[STR, STR, STR], STR, true),
+            Self::FormatStr | Self::PercentStr => signature(&[STR, STR], STR, true),
+            Self::FormatOther | Self::PercentCharStr => signature(&[STR, STR, STR], STR, true),
+            Self::PercentInt => signature(&[Int, STR, Int], STR, true),
+            Self::PercentFloat => signature(&[Float, STR, Int], STR, true),
             Self::StrEncode => signature(&[STR, Int, Int], BYTES, true),
             Self::BytesDecode => signature(&[BYTES, Int, Int], STR, true),
             Self::BytesSearch => signature(&[BYTES, BYTES, Int, Int, Int], Int, true),
@@ -861,6 +874,11 @@ impl RuntimeFunction {
             Self::FormatFloat => "format_float",
             Self::FormatStr => "format_str",
             Self::FormatOther => "format_other",
+            Self::PercentInt => "percent_int",
+            Self::PercentFloat => "percent_float",
+            Self::PercentStr => "percent_str",
+            Self::PercentChar => "percent_char",
+            Self::PercentCharStr => "percent_char_str",
             Self::Ascii => "ascii",
         }
     }

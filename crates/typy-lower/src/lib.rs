@@ -28,6 +28,7 @@ mod mangle;
 mod module_variable;
 mod optional;
 mod ownership;
+mod percent;
 mod program;
 mod set;
 mod slice;

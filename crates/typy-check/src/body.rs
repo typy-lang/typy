@@ -21,6 +21,7 @@ mod loop_source;
 mod method_call;
 mod name;
 mod operator;
+mod percent;
 mod program;
 mod round_call;
 mod set;

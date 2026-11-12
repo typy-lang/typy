@@ -239,6 +239,11 @@ pub const CODES: &[CodeInfo] = &[
         "import inside a function of a module that the imported module imports",
         RuleId::MOD_05,
     ),
+    active(
+        427,
+        "`%` format that does not fit its values",
+        RuleId::LIB_10,
+    ),
     active(701, "C toolchain program not found", RuleId::A_01),
     active(702, "link failed", RuleId::A_01),
     CodeInfo {

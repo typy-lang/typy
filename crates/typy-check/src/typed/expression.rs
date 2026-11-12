@@ -133,6 +133,12 @@ pub enum TypedExprKind {
     TypeName(Box<TypedExpr>),
     /// An f-string: its literal text and formatted fields, joined in order (LEX-07).
     FString(Vec<FStringPart>),
+    /// `format % values` with a literal format: the right operand, evaluated once, and the
+    /// pieces that make the text (LIB-10).
+    PercentFormat {
+        values: Box<TypedExpr>,
+        parts: Vec<super::percent::PercentPart>,
+    },
     /// `print(values, sep=sep, end=end)`; `sep` and `end` are present only when written.
     Print {
         values: Vec<TypedExpr>,

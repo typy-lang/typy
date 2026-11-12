@@ -115,10 +115,11 @@ impl BodyChecker<'_> {
                     Diagnostic::new(
                         DiagnosticCode::error(201),
                         span,
-                        "formatting strings with `%` is planned for TyPy 0.3 (LIB-10)",
+                        "formatting with `%` a format that is not a string literal is planned \
+                         for TyPy 0.4 (LIB-11)",
                     )
-                    .with_rule(RuleId::LIB_10)
-                    .with_help("write an f-string, such as `f\"{count} items\"`"),
+                    .with_rule(RuleId::LIB_11)
+                    .with_help("write the format as a literal, or write an f-string"),
                 );
                 Error
             }

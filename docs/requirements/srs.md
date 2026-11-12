@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy software requirements specification |
-| Version | 1.39 |
+| Version | 1.40 |
 | Status | Approved |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-12 |
@@ -345,7 +345,8 @@ formatter applies; Ruff's formatter is the project's recommendation.
 | LIB-07 | `os.environ`, `os.path`, `time` and `random` shall be available. | S | 1.0 |
 | LIB-08 | Importing a standard library module that TyPy does not provide shall be rejected with the list of modules it provides. | M | 0.3 |
 | LIB-09 | Each standard library module TyPy provides shall be TyPy's own implementation, with the names and results the Python library documentation defines. | M | 0.1 |
-| LIB-10 | `str % values`, printf-style formatting with a value, a tuple of values or a dict of named values, shall be accepted with Python's results. | S | 0.3 |
+| LIB-10 | `str % values`, printf-style formatting of a string literal with a value, a tuple of values or a dict of named values, shall be accepted with Python's results, and a format that does not fit its values shall be rejected with CPython's message. | S | 0.3 |
+| LIB-11 | `format % values` shall be accepted with a format that is not a string literal, and with a `tuple[T, ...]` of values. | S | 0.4 |
 
 ### 3.15 Memory management (MEM)
 

@@ -384,7 +384,7 @@ fn rejected_programs_give_their_codes() {
         ("n: int | None = None\nprint(n is True)\n", &["E0301"]),
         ("print(1[0])\n", &["E0401"]),
         ("print(\"a\"[\"b\"])\n", &["E0404"]),
-        ("print(\"%d\" % 1)\n", &["E0201"]),
+        ("template = \"%d\"\nprint(template % 1)\n", &["E0201"]),
         ("print(~\"a\")\n", &["E0401"]),
         (
             "def f(a: int) -> int:\n    return a\nprint(f(1, 2))\n",

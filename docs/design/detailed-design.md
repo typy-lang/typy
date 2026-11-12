@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy detailed design |
-| Version | 1.68 |
+| Version | 1.69 |
 | Status | Approved |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-12 |
@@ -317,6 +317,7 @@ it enforces and its status. `typy explain` reads the same table.
 | E0424 | Module variable an `__init__` reads before the module's code gives it a type | SMT-08 |
 | E0425 | Import of a name its module does not define | SMT-07 |
 | E0426 | Import inside a function of a module that the imported module imports | MOD-05 |
+| E0427 | `%` format that does not fit its values | LIB-10 |
 | E0701 | C toolchain program not found | A-01 |
 | E0702 | Link failed | A-01 |
 | E0703 | Runtime archive missing, or from another TyPy version | None |
@@ -1052,6 +1053,17 @@ and E0206 otherwise (LIB-08). For each module it runs:
    CPython's `SyntaxError`s for `lazy` inside a function or a `try`, and
    with `*` or `__future__`, as E0103; a class body holds only methods,
    so one there is E0202.
+   `format % values` with a string literal on the left is checked by
+   `body/percent.rs` (LIB-10). `percent_format::parse` reads the format
+   with CPython's grammar and `ValueError` messages; each conversion then
+   takes its value from the right operand: an item of a tuple, the
+   operand itself when it is not a tuple, or a key of a `dict[str, V]`,
+   and `*` takes an `int` item. A conversion that cannot format its
+   value's type, or values that are too few or too many, is E0427 with
+   CPython's message, since CPython raises for every run of such a
+   program. The result is `TypedExprKind::PercentFormat`, the right
+   operand with a `PercentPart` for each piece. A format that is not a
+   literal, and a `tuple[T, ...]` operand, are E0201 (LIB-11).
 3. Inference gives each local the type of its first assignment (TYP-02) and
    refuses a later assignment of another type with E0402.
 4. The definite assignment pass follows every path through each function
@@ -1272,6 +1284,7 @@ graph, symbol names and the string pool.
 | --- | --- |
 | Locals | Each parameter and local gets a slot. The entry block, written last, stores every parameter and gives every counted slot an immortal value, so every error path can release every slot |
 | Imports | Each module has a state global, an `int`: 0 not started, 1 running, 2 done, all 0 from the entry's first block. An import tests it and, when 0, stores 1, calls the module's code under `Cleanup::Initialising`, which stores 0 on the error path, and stores 2 (MOD-03). A binding stores `Constant::Module`, the module's immortal object, or the source variable's value after testing its flag, else `typy_rt_module_import_error`. `ModuleAttribute` tests the flag and calls `typy_rt_module_attribute_error`, and `Submodule` tests that the submodule is done; both pass the module's state, which says whether it is still initialising. A function tests a module variable's flag unless it is its own module's code |
+| `%` formatting | `PercentFormat` evaluates the right operand once and borrows each value from it. A field's flags, width and precision become one string, such as `-08.3`, built at run time when a `*` gives a number. `%s`, `%r` and `%a` convert the value, then `typy_rt_percent_str` keeps the precision's code points and pads; integer conversions call `typy_rt_percent_int` with the `int` of the value, which writes at least the precision's digits; float conversions call `typy_rt_percent_float`; `%c` calls `typy_rt_percent_char` or `typy_rt_percent_char_str`. The runtime functions build a format `Spec` and reuse the layout of `format()`. The pieces are joined as an f-string's are (LIB-10) |
 | Lazy imports | Each function of a lazy import has an armed `bool` global, false from the start. `LazyImport` stores true in each and unbinds each variable: its value is released and its bound flag cleared. A read of a variable bound lazily, also in its own module's code, calls the function when the flag is armed and the variable is unbound, then tests the bound flag. `Lazy` calls the function when it is armed. The function clears its flag only when the import returns, so after an error the next use tries again (MOD-06, MOD-08) |
 | Module variables | Each is a `TyirGlobal`, an internal LLVM variable of zeros, with a second `bool` global that is true once it is bound (ADR-0015). The entry function's first block gives every counted one an immortal value, so a store can release the value it replaces. `LoadGlobal` and `StoreGlobal` read and write them; a function tests the flag first and calls `typy_rt_name_error`, which raises `NameError: name 'x' is not defined`, while the module's own code does not, since definite assignment shows the variable is bound |
 | Ownership | A lowered value is owned or borrowed. Constants are immortal and borrowed, and so are slot values; results of calls and of `int` arithmetic are owned. A store moves an owned value or counts a borrowed one, then releases the slot's old value. Owned temporaries are tracked until they are released or moved |

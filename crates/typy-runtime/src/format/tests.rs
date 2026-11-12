@@ -24,7 +24,7 @@ pub(super) enum Value {
 }
 
 /// Returns the text of a runtime string, and releases it.
-fn text(string: *mut StrObject) -> String {
+pub(super) fn text(string: *mut StrObject) -> String {
     // SAFETY: the runtime returns a live string, and every index is in bounds.
     let text = (0..unsafe { length(string) })
         .map(|index| char::from_u32(unsafe { code_point(string, index) }).unwrap_or('?'))
@@ -35,7 +35,7 @@ fn text(string: *mut StrObject) -> String {
 }
 
 /// Returns `ok` and the text, or the exception's type and message, and releases them.
-fn outcome(result: Raising<*mut StrObject>) -> (String, String) {
+pub(super) fn outcome(result: Raising<*mut StrObject>) -> (String, String) {
     if result.exception.is_null() {
         return ("ok".to_owned(), text(result.value));
     }

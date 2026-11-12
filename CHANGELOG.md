@@ -8,6 +8,11 @@ All notable changes to TyPy are recorded here. The format follows
 
 ### Added
 
+- `format % values`, printf-style formatting of a string literal, with
+  every conversion, flag, width, precision and `*`, and `%(key)s` with a
+  dict, giving CPython's results. A format that does not fit its values
+  is E0427 with CPython's message; a format that is not a literal is
+  planned for 0.4 (LIB-10, LIB-11).
 - `typy explain CODE` prints what a diagnostic means, the rule it
   enforces, a program that gives it and the corrected program; the
   troubleshooting page shows the same programs, and the documentation
@@ -133,6 +138,8 @@ All notable changes to TyPy are recorded here. The format follows
 
 ### Fixed
 
+- `typy run` builds again after the runtime archive changes, since the
+  cache key now covers the archive as well as the compiler.
 - `type(m)` of a module, an `Iterable[T]` or a traceback gives its type
   object; it stopped the compiler with E9001 before.
 

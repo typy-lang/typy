@@ -382,6 +382,7 @@ fn expression(expression_value: &TypedExpr, callees: &mut BTreeSet<FunctionId>) 
         | TypedExprKind::Submodule(_)
         | TypedExprKind::ModuleName => {}
         TypedExprKind::AsIterable(inner) => expression(inner, callees),
+        TypedExprKind::PercentFormat { values, .. } => expression(values, callees),
         TypedExprKind::Lazy { reify, value } => {
             callees.insert(*reify);
             expression(value, callees);
