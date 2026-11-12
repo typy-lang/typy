@@ -65,6 +65,21 @@ pub struct Generator {
     pub conditions: Vec<super::expression::TypedExpr>,
 }
 
+/// How a `with` statement enters and leaves its context manager (CST-05).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum WithProtocol {
+    /// An instance of a class with `__enter__` and `__exit__`.
+    Methods {
+        /// Its class's `__enter__`.
+        enter: super::function::FunctionId,
+        /// Its class's `__exit__`.
+        exit: super::function::FunctionId,
+    },
+    /// A text file: entering checks it is open and gives the file, and leaving closes it
+    /// (ADR-0019).
+    TextFile,
+}
+
 /// What a `for` loop goes over (CST-03, LIB-02). A sequence is read as CPython's list
 /// iterator reads it: each step checks the length again, so a list that grows or shrinks in
 /// the body changes how many steps there are.
@@ -148,6 +163,7 @@ impl LoopSource {
             Self::Protocol { item, .. } => item.clone(),
             Self::Items(sequence) | Self::Reversed(sequence) => match &sequence.ty {
                 Type::Bytes | Type::Range => Type::Int,
+                Type::TextFile => Type::Str,
                 Type::Set(item)
                 | Type::Dict(item, _)
                 | Type::Iterator(item)
@@ -240,8 +256,7 @@ pub enum TypedStmt {
     /// exception (CST-05). Several items nest.
     With {
         manager: TypedExpr,
-        enter: super::function::FunctionId,
-        exit: super::function::FunctionId,
+        protocol: WithProtocol,
         suppresses: bool,
         target: Option<AssignTarget>,
         body: Vec<TypedStmt>,

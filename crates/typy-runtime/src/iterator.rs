@@ -42,6 +42,8 @@ pub(crate) enum IteratorKind {
     /// A range with a bound or a length past a C `long`, which CPython iterates with a type
     /// of its own.
     LongRange = 10,
+    /// A text file, which gives its lines; CPython's file is its own iterator.
+    TextFile = 11,
 }
 
 impl IteratorKind {
@@ -58,6 +60,7 @@ impl IteratorKind {
             7 => Self::DictItems,
             8 => Self::StrAscii,
             9 => Self::Range,
+            11 => Self::TextFile,
             _ => crate::libc::abort_with(b"typy runtime: an iterator has an unknown kind\n"),
         }
     }
@@ -110,6 +113,13 @@ static DICT_VALUE_ITERATOR: TypeObject = iterator_type("dict_valueiterator");
 static DICT_ITEM_ITERATOR: TypeObject = iterator_type("dict_itemiterator");
 static RANGE_ITERATOR: TypeObject = iterator_type("range_iterator");
 static LONG_RANGE_ITERATOR: TypeObject = iterator_type("longrange_iterator");
+/// What `iter()` of a text file gives: CPython's file is its own iterator, so the type is
+/// named as the file's is.
+static TEXT_FILE_ITERATOR: TypeObject = TypeObject {
+    module: "_io".as_ptr(),
+    module_length: 3,
+    ..iterator_type("TextIOWrapper")
+};
 
 /// Returns the type of an iterator.
 ///
@@ -130,13 +140,28 @@ pub(crate) unsafe fn type_of(iterator: *const IteratorObject) -> &'static TypeOb
         IteratorKind::DictItems => &DICT_ITEM_ITERATOR,
         IteratorKind::Range => &RANGE_ITERATOR,
         IteratorKind::LongRange => &LONG_RANGE_ITERATOR,
+        IteratorKind::TextFile => &TEXT_FILE_ITERATOR,
     }
 }
 
-/// Writes an iterator as CPython's `object.__repr__` does.
+/// Writes an iterator as CPython's `object.__repr__` does, and a file's as the file.
+#[allow(
+    clippy::cast_ptr_alignment,
+    reason = "every object comes from malloc, aligned for every type, and starts with its header"
+)]
 unsafe extern "C" fn iterator_repr(object: *mut ObjectHeader) -> Raising<*mut StrObject> {
     // SAFETY: the type of the object says it is an iterator.
     let ty = unsafe { type_of(object.cast()) };
+    // SAFETY: the type of the object says it is an iterator, whose source is null or live.
+    let iterator = unsafe { &*object.cast::<IteratorObject>() };
+    // A file is its own iterator, so the iterator shows as the file while it has one.
+    if iterator.kind == IteratorKind::TextFile
+        && !iterator.source.is_null()
+        && let Some(repr) = crate::text_file::TEXT_FILE.repr
+    {
+        // SAFETY: the source of a file's iterator is a live text file.
+        return unsafe { repr(iterator.source) };
+    }
     Raising::ok(crate::instance::object_text(object, "", ty.name()))
 }
 
@@ -250,6 +275,7 @@ pub unsafe extern "C" fn typy_rt_iterable_iterator(
             SET_TYPE_ID => (source, IteratorKind::Set, core::ptr::null()),
             DICT_TYPE_ID => (source, IteratorKind::DictKeys, core::ptr::null()),
             RANGE_TYPE_ID => (source, IteratorKind::Range, core::ptr::null()),
+            crate::header::TEXT_FILE_TYPE_ID => (source, IteratorKind::TextFile, core::ptr::null()),
             DICT_VIEW_TYPE_ID => {
                 let view = &*source.cast::<crate::dict::view::ViewObject>();
                 let (kind, pair) = match view.kind {
@@ -283,8 +309,14 @@ pub unsafe extern "C" fn typy_rt_iterator_advance(
         Err(error) => Raising::error(false, error),
         Ok(true) => Raising::ok(true),
         Ok(false) => {
+            // A file is its own iterator in CPython, so it stays the source and is read
+            // again by the next step.
             // SAFETY: the iterator is live.
-            unsafe { drop_source(&mut *iterator) };
+            unsafe {
+                if (*iterator).kind != IteratorKind::TextFile {
+                    drop_source(&mut *iterator);
+                }
+            }
             if inline_value(stop) == 1 {
                 Raising::error(false, raise_bare(ExceptionKind::StopIteration))
             } else {
@@ -365,6 +397,16 @@ unsafe fn step(iterator: &mut IteratorObject) -> Result<bool, *mut crate::Except
             }
             IteratorKind::DictKeys | IteratorKind::DictValues | IteratorKind::DictItems => {
                 return dict_step(iterator, source.cast());
+            }
+            IteratorKind::TextFile => {
+                let Some(line) = crate::text_file::next_line(source.cast())? else {
+                    return Ok(false);
+                };
+                let old = core::mem::replace(&mut iterator.held, line);
+                if !old.is_null() {
+                    typy_rt_decrement(old.cast());
+                }
+                iterator.current = line.expose_provenance() as u64;
             }
             IteratorKind::Range | IteratorKind::LongRange => {
                 let Some(value) = crate::range::item(source.cast(), position) else {

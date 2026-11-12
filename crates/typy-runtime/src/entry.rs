@@ -19,6 +19,7 @@ mod program {
         let exception = unsafe { __typy_main() };
         crate::io::flush_stdout();
         if exception.is_null() {
+            crate::text_file::close_all();
             0
         } else {
             // SAFETY: a non-null result is a live exception that the program no longer holds;
@@ -30,6 +31,7 @@ mod program {
                     report_uncaught(exception);
                 }
                 crate::refcount::typy_rt_decrement(exception.cast());
+                crate::text_file::close_all();
                 crate::io::flush_stdout();
                 status
             }

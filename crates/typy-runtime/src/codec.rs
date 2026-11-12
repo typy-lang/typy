@@ -194,6 +194,39 @@ fn decode_error(
     exception
 }
 
+/// Returns the `UnicodeDecodeError` of the UTF-8 codec for `data[start..end]`, with a new
+/// `bytes` of `data` as its object, as a text file's decoder raises it (ADR-0019).
+pub(crate) fn utf8_decode_error(
+    data: &[u8],
+    start: usize,
+    end: usize,
+    reason: &str,
+) -> *mut ExceptionObject {
+    let object = crate::bytes::new_bytes(data.len());
+    for (index, byte) in data.iter().enumerate() {
+        // SAFETY: the bytes are new and hold `data.len()` bytes.
+        unsafe { crate::string::set_code_point(object, index, u32::from(*byte)) };
+    }
+    let exception = decode_error(Codec::Utf8, object, start, end, reason);
+    // SAFETY: the exception holds a reference of its own to the bytes.
+    unsafe { crate::refcount::typy_rt_decrement(object.cast()) };
+    exception
+}
+
+/// Returns the `UnicodeEncodeError` of the UTF-8 codec for the surrogates of `text` from
+/// `start` to `end`, as a text file's encoder raises it (ADR-0019).
+///
+/// # Safety
+///
+/// `text` points to a live `str` with surrogates from `start` to `end`.
+pub(crate) unsafe fn utf8_encode_error(
+    text: *const StrObject,
+    start: usize,
+    end: usize,
+) -> *mut ExceptionObject {
+    encode_error(Codec::Utf8, text, start, end, "surrogates not allowed")
+}
+
 /// The layout of the arguments of a Unicode error: the codec's name, the text or the bytes,
 /// the start, the end and the reason.
 static UNICODE_ARGUMENTS: TupleType = TupleType {

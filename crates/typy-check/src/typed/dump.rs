@@ -378,6 +378,7 @@ impl Dump<'_> {
             TypedExprKind::SysValue(value) => format!("SysValue {value:?}"),
             TypedExprKind::SysExit(_) => "SysExit".to_owned(),
             TypedExprKind::Input(_) => "Input".to_owned(),
+            TypedExprKind::Open { mode, access, .. } => format!("Open {mode:?} {access:?}"),
             TypedExprKind::PercentFormat { parts, .. } => {
                 let fields = parts
                     .iter()
@@ -508,6 +509,7 @@ fn children(expression: &TypedExpr) -> Vec<&TypedExpr> {
         | TypedExprKind::Lazy { value: inner, .. } => vec![inner],
         TypedExprKind::PercentFormat { values, .. } => vec![values],
         TypedExprKind::MathCall { arguments, .. } => arguments.iter().collect(),
+        TypedExprKind::Open { path, .. } => vec![path],
         TypedExprKind::SysExit(value) | TypedExprKind::Input(value) => {
             value.iter().map(Box::as_ref).collect()
         }

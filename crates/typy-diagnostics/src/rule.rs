@@ -89,6 +89,8 @@ impl RuleId {
     pub const EXC_09: Self = Self("EXC-09");
     /// Calling `UnicodeDecodeError` or `UnicodeEncodeError`, or deriving a class from them, shall be rejected; catching them shall be accepted.
     pub const EXC_12: Self = Self("EXC-12");
+    /// `OSError` and its subclasses built with two to five arguments shall give the subclass for the `errno`, and the attributes `errno`, `strerror` and `filename`, as CPython does.
+    pub const EXC_14: Self = Self("EXC-14");
     /// `+`, `-`, `*`, `/`, `//`, `%` and `**` shall give Python's results for `int` and `float`, including `/` on two `int` values returning `float` and `%` taking the sign of the divisor.
     pub const EXP_02: Self = Self("EXP-02");
     /// `int ** int` shall be accepted only when the exponent is a non-negative integer literal, because CPython returns `float` for a negative exponent.
@@ -141,6 +143,8 @@ impl RuleId {
     pub const LEX_08: Self = Self("LEX-08");
     /// A source file larger than 16 MiB shall be rejected with a diagnostic before it is parsed, so input size cannot exhaust the compiler's memory.
     pub const LEX_09: Self = Self("LEX-09");
+    /// A `\u` or `\U` escape of a surrogate code point, U+D800 to U+DFFF, in a `str` literal shall give that code point, as CPython keeps it.
+    pub const LEX_10: Self = Self("LEX-10");
     /// `print` with `sep` and `end`, `len`, `range`, `abs`, `min`, `max`, `int`, `float`, `str`, `bool`, `repr`, `ord` and `chr` shall be available.
     pub const LIB_01: Self = Self("LIB-01");
     /// `list`, `dict`, `set`, `tuple`, `sorted`, `reversed`, `enumerate`, `zip`, `sum`, `any`, `all` and `round` shall be available.
@@ -165,6 +169,8 @@ impl RuleId {
     pub const LIB_12: Self = Self("LIB-12");
     /// `sys.maxsize`, `sys.byteorder`, `sys.platform`, `sys.version`, `sys.version_info`, `sys.hexversion`, `sys.maxunicode`, `sys.getrecursionlimit`, `sys.setrecursionlimit` and `sys.stdin` shall be available.
     pub const LIB_13: Self = Self("LIB-13");
+    /// `open` shall accept binary modes, `+` modes, a mode that is not a literal, encodings other than UTF-8 and the arguments `buffering`, `errors`, `newline`, `closefd` and `opener`; a text file shall have `seek`, `tell`, `truncate`, `fileno`, `isatty`, `readable`, `writable` and `seekable`, and the attributes `name`, `mode` and `closed`; closing `sys.stdout` or `sys.stderr` shall close it.
+    pub const LIB_14: Self = Self("LIB-14");
     /// A program shall be built from several `.py` files, found from the main file's directory and from paths set in `typy.toml`.
     /// A program shall be built from several `.py` files, found from the main file's directory and from paths set in `typy.toml`.
     pub const MOD_01: Self = Self("MOD-01");
@@ -268,6 +274,7 @@ impl RuleId {
         Self::EXC_07,
         Self::EXC_09,
         Self::EXC_12,
+        Self::EXC_14,
         Self::EXP_02,
         Self::EXP_04,
         Self::EXP_06,
@@ -294,6 +301,7 @@ impl RuleId {
         Self::LEX_07,
         Self::LEX_08,
         Self::LEX_09,
+        Self::LEX_10,
         Self::LIB_01,
         Self::LIB_02,
         Self::LIB_03,
@@ -306,6 +314,7 @@ impl RuleId {
         Self::LIB_11,
         Self::LIB_12,
         Self::LIB_13,
+        Self::LIB_14,
         Self::MOD_01,
         Self::MOD_02,
         Self::MOD_05,

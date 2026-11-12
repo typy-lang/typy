@@ -184,6 +184,16 @@ pub enum Method {
     TextWrite,
     /// `file.flush()`: writes out what the file holds.
     TextFlush,
+    /// `file.read(size=-1)`: `size` characters, or the rest of the file (ADR-0019).
+    TextRead,
+    /// `file.readline(size=-1)`: the next line with its `\n`.
+    TextReadline,
+    /// `file.readlines()`: the list of the lines left.
+    TextReadlines,
+    /// `file.writelines(lines)`: writes each `str` of an iterable.
+    TextWritelines,
+    /// `file.close()`: writes out what the file holds and closes it.
+    TextClose,
 }
 
 /// The methods of `str` that `bytes` has too, with ASCII meaning.
@@ -345,6 +355,11 @@ impl Method {
             return match name {
                 "write" => Some(Self::TextWrite),
                 "flush" => Some(Self::TextFlush),
+                "read" => Some(Self::TextRead),
+                "readline" => Some(Self::TextReadline),
+                "readlines" => Some(Self::TextReadlines),
+                "writelines" => Some(Self::TextWritelines),
+                "close" => Some(Self::TextClose),
                 _ => None,
             };
         }
@@ -453,6 +468,11 @@ impl Method {
             Self::BytesHex => "hex",
             Self::TextWrite => "write",
             Self::TextFlush => "flush",
+            Self::TextRead => "read",
+            Self::TextReadline => "readline",
+            Self::TextReadlines => "readlines",
+            Self::TextWritelines => "writelines",
+            Self::TextClose => "close",
         }
     }
 }

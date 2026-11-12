@@ -83,14 +83,24 @@ except HttpError as error:
 | Class | Base |
 | --- | --- |
 | `BaseException` | `object` |
-| `Exception` | `BaseException` |
-| `ArithmeticError`, `AssertionError`, `AttributeError`, `ImportError`, `LookupError`, `NameError` | `Exception` |
-| `RuntimeError`, `StopIteration`, `TypeError`, `ValueError` | `Exception` |
+| `Exception`, `SystemExit` | `BaseException` |
+| `ArithmeticError`, `AssertionError`, `AttributeError`, `EOFError`, `ImportError`, `LookupError`, `NameError` | `Exception` |
+| `OSError`, `RuntimeError`, `StopIteration`, `TypeError`, `ValueError` | `Exception` |
 | `OverflowError`, `ZeroDivisionError` | `ArithmeticError` |
 | `IndexError`, `KeyError` | `LookupError` |
 | `NotImplementedError`, `RecursionError` | `RuntimeError` |
 | `UnicodeError` | `ValueError` |
 | `UnicodeDecodeError`, `UnicodeEncodeError` | `UnicodeError` |
+| `BlockingIOError`, `ChildProcessError`, `ConnectionError`, `FileExistsError`, `FileNotFoundError`, `InterruptedError` | `OSError` |
+| `IsADirectoryError`, `NotADirectoryError`, `PermissionError`, `ProcessLookupError`, `TimeoutError` | `OSError` |
+| `BrokenPipeError`, `ConnectionAbortedError`, `ConnectionRefusedError`, `ConnectionResetError` | `ConnectionError` |
+
+`IOError` and `EnvironmentError` are other names of `OSError`, as in
+CPython. An `OSError` that `open` raises reads as CPython's, such as
+`[Errno 2] No such file or directory: 'notes.txt'`, and the class is the
+one the error number gives, such as `FileNotFoundError`. Reading a file
+opened for writing raises `io.UnsupportedOperation: not readable`, which
+both `except OSError` and `except ValueError` catch.
 
 An exception class takes positional arguments of any type. The text of the
 exception follows them as in CPython: no argument gives an empty text, one
@@ -157,5 +167,9 @@ class OtherError(AppError):
         return 2
 ```
 
-The `args` attribute comes in 0.4 (EXC-11). Exception groups and
-`except*` are planned for after 1.0.
+The `args` attribute comes in 0.4 (EXC-11), and so does `code` of a
+`SystemExit` (EXC-13). An `OSError` built with two to five arguments,
+which CPython reads as `errno`, `strerror` and `filename`, is planned for
+0.4 too (EXC-14), so `OSError(2, "missing")` is E0201 in 0.3; give it one
+argument, the message. Exception groups and `except*` are planned for
+after 1.0.

@@ -65,8 +65,13 @@ pub extern "C" fn typy_rt_sys_argv() -> *mut ListObject {
                     }
                     core::slice::from_raw_parts(start, end)
                 };
-                // SAFETY: the list is live and takes the new string's reference.
-                unsafe { crate::list::push_retained(list, decode(bytes) as u64) };
+                let text = decode(bytes);
+                // SAFETY: the list is live with room for the item, and takes a reference of
+                // its own, so this one is dropped.
+                unsafe {
+                    crate::list::push_retained(list, text as u64);
+                    crate::refcount::typy_rt_decrement(text.cast());
+                }
             }
             arguments.list = list;
         }
@@ -113,7 +118,7 @@ fn read_line(
     input: &mut Input,
     mut read: impl FnMut(&mut [u8]) -> usize,
 ) -> Raising<*mut StrObject> {
-    let mut line = Line::new();
+    let mut line = crate::byte_buffer::ByteBuffer::new();
     let mut read_any = false;
     loop {
         if input.start == input.end {
@@ -143,50 +148,6 @@ fn read_line(
     let text = decode(line.bytes());
     line.discard();
     Raising::ok(text)
-}
-
-/// The bytes of a line `input` reads, in memory of their own.
-struct Line {
-    bytes: *mut u8,
-    length: usize,
-    capacity: usize,
-}
-
-impl Line {
-    fn new() -> Self {
-        Self {
-            bytes: crate::allocator::allocate(64),
-            length: 0,
-            capacity: 64,
-        }
-    }
-
-    fn extend(&mut self, bytes: &[u8]) {
-        let needed = self.length + bytes.len();
-        if needed > self.capacity {
-            self.capacity = needed.next_power_of_two();
-            self.bytes = crate::allocator::reallocate(self.bytes, self.capacity);
-        }
-        // SAFETY: the allocation holds `capacity` bytes, at least `length` more than the
-        // bytes copied, and the source is a different allocation.
-        unsafe {
-            core::ptr::copy_nonoverlapping(
-                bytes.as_ptr(),
-                self.bytes.add(self.length),
-                bytes.len(),
-            );
-        }
-        self.length = needed;
-    }
-
-    fn bytes(&self) -> &[u8] {
-        // SAFETY: the first `length` bytes are written.
-        unsafe { core::slice::from_raw_parts(self.bytes, self.length) }
-    }
-
-    fn discard(self) {
-        crate::allocator::free(self.bytes);
-    }
 }
 
 /// Returns the exit status an uncaught exception gives, and whether it is reported: a

@@ -10,6 +10,7 @@
 | `format % values`, printf-style formatting of a string literal | LIB-10 |
 | The `math` module: its constants and its functions of numbers | LIB-05 |
 | `sys.argv`, `sys.exit`, `sys.stdout` and `sys.stderr`, `print` with `file` and `flush`, and `input` | LIB-04 |
+| `open` for text files in UTF-8, with `read`, `readline`, `readlines`, `write`, `writelines`, `flush`, `close`, iteration and `with` | LIB-04 |
 
 `str` has `find`, `index`, `count`, `split`, `join`, `strip`, `replace`,
 `startswith`, `upper`, `lower`, `title`, `center`, `zfill`, `encode`, the
@@ -20,7 +21,7 @@ has the same with `decode` and `hex`. Lists have `append`, `pop`,
 `values`, `items`, `update`, `copy` and `clear`; sets `add`, `remove`,
 `discard`, `pop` and the methods that combine sets.
 
-`open` comes in 0.3 (LIB-04). `iter` and `next` are
+`iter` and `next` are
 described in
 [Compound statements](compound-statements.md#iterators).
 
@@ -142,3 +143,70 @@ on the interpreter and is E0202. The switches of lazy imports,
 `sys.set_lazy_imports` and its companions, are E0202 as well (MOD-09):
 make an import lazy in its own module, as
 [Modules](modules.md) describes.
+
+## Text files
+
+`open(file, mode)` opens a text file in UTF-8, as CPython 3.15 does by
+default (LIB-04, ADR-0019). `mode` is a string literal: `"r"` reads an
+existing file, `"w"` empties or creates one, `"a"` writes at the end and
+`"x"` creates a new file; each may add `"t"`. A file reads and writes as
+CPython's does:
+
+- `read(size)` gives `size` characters, or the rest of the file without
+  `size`; `readline()` gives the next line with its `\n`, and an empty
+  string at the end; `readlines()` gives the list of the lines left.
+- Reading turns `\r\n` and a lone `\r` into `\n`, as CPython's
+  universal newlines do.
+- `write(text)` returns the number of characters, and `writelines`
+  writes each `str` of a list, a tuple or any iterable.
+- Iterating over a file gives its lines, so a file goes where an
+  `Iterable[str]` is expected, and `next(file)` gives the next line.
+- `with open(...) as file:` closes the file on every way out of the
+  block. A file whose last reference goes is closed, and the files still
+  open when the program ends are closed then.
+
+<!-- typy-expect: accepted -->
+```python
+with open("notes.txt", "w") as notes:
+    notes.write("first line\n")
+    print("second line", file=notes)
+
+with open("notes.txt") as notes:
+    for number, line in enumerate(notes, 1):
+        print(number, line.rstrip())
+
+try:
+    open("missing.txt")
+except FileNotFoundError as error:
+    print(error)
+```
+
+Opening, reading and writing raise CPython's exceptions with CPython's
+text: `FileNotFoundError: [Errno 2] No such file or directory:
+'missing.txt'`, `IsADirectoryError`, `FileExistsError` for `"x"`, a
+`UnicodeDecodeError` for bytes that are not UTF-8, `ValueError: I/O
+operation on closed file.`, and `io.UnsupportedOperation: not readable`
+for reading a file opened for writing.
+
+Writes wait in a buffer until it fills, until `flush()` or `close()`, or
+until the program ends. Another file object that reads the file before
+then sees only what was written out, and CPython's buffer sizes differ
+between versions, so flush or close a file before reading it again.
+
+A mode CPython refuses for every file, such as `"rw"`, is E0404 with
+CPython's message. TyPy 0.4 adds what 0.3 refuses with E0201 (LIB-14):
+
+- binary modes such as `"rb"`, modes with `+`, and a mode that is not a
+  literal;
+- encodings other than UTF-8, and the arguments `buffering`, `errors`,
+  `newline`, `closefd` and `opener` other than their defaults;
+- `seek`, `tell`, `truncate`, `fileno`, `isatty`, `readable`, `writable`
+  and `seekable`, and the attributes `name`, `mode` and `closed`.
+
+`close()` of `sys.stdout` or `sys.stderr` writes it out and leaves it
+open in 0.3; closing them comes with the rest of LIB-14.
+
+<!-- typy-expect: rejected E0201 at 1:22 -->
+```python
+data = open("x.bin", "rb")
+```

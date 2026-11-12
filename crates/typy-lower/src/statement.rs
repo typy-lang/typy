@@ -112,16 +112,14 @@ impl FunctionLowerer<'_> {
             } => self.raise_statement(exception.as_ref(), cause, *span),
             TypedStmt::With {
                 manager,
-                enter,
-                exit,
+                protocol,
                 suppresses,
                 target,
                 body,
                 span,
             } => self.with_statement(
                 manager,
-                *enter,
-                *exit,
+                *protocol,
                 *suppresses,
                 target.as_ref(),
                 body,

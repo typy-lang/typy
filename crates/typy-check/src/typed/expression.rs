@@ -139,6 +139,13 @@ pub enum TypedExprKind {
     SysExit(Option<Box<TypedExpr>>),
     /// `input(prompt)`: a line of standard input (LIB-04).
     Input(Option<Box<TypedExpr>>),
+    /// `open(path, mode)` in a text mode: `mode` as written, which the file's `repr` shows,
+    /// and how it opens the file (LIB-04, ADR-0019).
+    Open {
+        path: Box<TypedExpr>,
+        mode: String,
+        access: crate::open::OpenAccess,
+    },
     /// A call of a function of `math`, with its arguments in the order the function takes
     /// them; a keyword not given is `None` (LIB-05).
     MathCall {

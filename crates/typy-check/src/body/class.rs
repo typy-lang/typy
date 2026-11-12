@@ -160,6 +160,9 @@ impl BodyChecker<'_> {
         if let Type::TypeObject(_) = object.ty {
             return self.type_object_attribute(object, attribute, span);
         }
+        if object.ty == Type::TextFile {
+            return self.missing_file_name(&attribute.name, attribute.span, span);
+        }
         let Some((object, class)) = self.as_instance(object) else {
             return Self::invalid_call(span);
         };

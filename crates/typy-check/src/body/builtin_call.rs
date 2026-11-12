@@ -48,6 +48,9 @@ impl BodyChecker<'_> {
         if builtin == Builtin::Next {
             return self.call_next(arguments, keywords, span);
         }
+        if builtin == Builtin::Open {
+            return self.call_open(arguments, keywords, span);
+        }
         if takes_one_iterable(builtin, arguments.len()) {
             return self.call_over_iterable(builtin, arguments, keywords, span);
         }
@@ -87,6 +90,7 @@ impl BodyChecker<'_> {
             | Builtin::Round
             | Builtin::Iter
             | Builtin::Next
+            | Builtin::Open
             | Builtin::Type
             | Builtin::Sorted
             | Builtin::Sum

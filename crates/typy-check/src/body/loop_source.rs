@@ -154,7 +154,11 @@ impl BodyChecker<'_> {
             return self.range(range_arguments, range_keywords, true, span);
         }
         let sequence = self.sequence(&arguments[0]);
-        if let Type::Set(_) = sequence.ty {
+        // A set has no order, and a file or an iterator gives its items once, front first.
+        if matches!(
+            sequence.ty,
+            Type::Set(_) | Type::TextFile | Type::Iterator(_)
+        ) {
             self.diagnostics.push(
                 Diagnostic::new(
                     DiagnosticCode::error(411),

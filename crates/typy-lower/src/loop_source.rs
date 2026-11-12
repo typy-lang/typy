@@ -282,6 +282,15 @@ impl FunctionLowerer<'_> {
             LoopSource::Items(sequence) if sequence.ty == typy_check::Type::Range => {
                 self.start_range_value(sequence, false, span)
             }
+            LoopSource::Items(sequence) if sequence.ty == typy_check::Type::TextFile => {
+                let made = self.iter_of(sequence, span);
+                let slot = self.hidden_slot("iterator", TyirType::ITERATOR);
+                self.store(slot, made, span);
+                Iterator::Object {
+                    iterator: slot,
+                    item: TyirType::STR,
+                }
+            }
             LoopSource::Items(sequence) => self.start_sequence(sequence, false, span),
             LoopSource::Range {
                 start,

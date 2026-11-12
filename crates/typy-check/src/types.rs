@@ -490,7 +490,7 @@ impl Type {
             | Self::Iterator(item)
             | Self::Iterable(item) => Some(item.as_ref().clone()),
             Self::DictView(view, key, value) => Some(view.item(key, value)),
-            Self::Str => Some(Self::Str),
+            Self::Str | Self::TextFile => Some(Self::Str),
             Self::Bytes | Self::Range => Some(Self::Int),
             // A fixed tuple whose items have one type is held as a `tuple[T, ...]` first.
             Self::Tuple(items) => {

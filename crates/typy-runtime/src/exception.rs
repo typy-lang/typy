@@ -98,12 +98,16 @@ pub(crate) fn raise_with_message(
     kind: ExceptionKind,
     message: *mut StrObject,
 ) -> *mut ExceptionObject {
-    let exception = new(
-        kind.class(),
-        message,
-        core::ptr::null(),
-        core::ptr::null_mut(),
-    );
+    raise_class(kind.class(), message)
+}
+
+/// Returns a new exception of `class` that takes over the reference to `message`, with the
+/// exception being handled as its context.
+pub(crate) fn raise_class(
+    class: &'static TypeObject,
+    message: *mut StrObject,
+) -> *mut ExceptionObject {
+    let exception = new(class, message, core::ptr::null(), core::ptr::null_mut());
     // SAFETY: the exception is new and live.
     unsafe { typy_rt_exception_raise(exception) };
     exception

@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy test plan |
-| Version | 0.38 |
+| Version | 0.39 |
 | Status | Draft |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-12 |
@@ -273,6 +273,7 @@ that the specification does not define.
 | LEX-07 | 0.2 | IT | `tests/conformance/lex/LEX-07_*.py` |
 | LEX-08 | 0.1 | IT | `tests/conformance/lex/LEX-08_*.py` |
 | LEX-09 | 0.1 | IT | `tests/conformance/lex/LEX-09_*.py` |
+| LEX-10 | 0.4 | IT | `tests/conformance/lex/LEX-10_*.py` |
 | TYP-01 | 0.1 | IT | `tests/conformance/typ/TYP-01_*.py` |
 | TYP-02 | 0.1 | IT | `tests/conformance/typ/TYP-02_*.py` |
 | TYP-03 | 0.1 | IT | `tests/conformance/typ/TYP-03_*.py` |
@@ -382,6 +383,7 @@ that the specification does not define.
 | EXC-11 | 0.4 | IT | `tests/conformance/exc/EXC-11_*.py` |
 | EXC-12 | 0.3 | IT | `tests/conformance/exc/EXC-12_*.py` |
 | EXC-13 | 0.4 | IT | `tests/conformance/exc/EXC-13_*.py` |
+| EXC-14 | 0.4 | IT | `tests/conformance/exc/EXC-14_*.py` |
 | MOD-01 | 0.3 | IT, E2E | `tests/conformance/mod/MOD-01_*`; module paths in `crates/typy-cli/tests/cli.rs`, tests named for MOD-01 |
 | MOD-02 | 0.3 | IT | `tests/conformance/mod/MOD-02_*.py` |
 | MOD-03 | 0.3 | IT | `tests/conformance/mod/MOD-03_*.py` |
@@ -396,7 +398,7 @@ that the specification does not define.
 | LIB-01 | 0.1 | IT | `tests/conformance/lib/LIB-01_*.py` |
 | LIB-02 | 0.2 | IT | `tests/conformance/lib/LIB-02_*.py` |
 | LIB-03 | 0.2 | IT | `tests/conformance/lib/LIB-03_*.py` |
-| LIB-04 | 0.3 | UT, IT, E2E | `crates/typy-runtime/src/sys/tests.rs` for decoding the arguments and each exit status; `crates/typy-check/tests/sys.rs` for each refusal; `crates/typy-cli/tests/sys.rs` for real arguments, piped standard input and the exit status; `tests/conformance/lib/LIB-04_*.py` |
+| LIB-04 | 0.3 | UT, IT, E2E | `crates/typy-runtime/src/sys/tests.rs` for decoding the arguments and each exit status; `crates/typy-runtime/src/text_file/tests.rs` for chunked reading, newline translation, decode and encode errors, buffered writing, each `OSError` and files on disk; `crates/typy-check/src/open.rs` for each mode and encoding name; `crates/typy-check/tests/sys.rs` and `tests/open.rs` for each refusal; `crates/typy-cli/tests/sys.rs` for real arguments, piped standard input and the exit status, and `tests/files.rs` for what a program leaves on disk when it ends; `tests/conformance/lib/LIB-04_*.py` |
 | LIB-05 | 0.3 | UT, IT | `crates/typy-runtime/src/math/tests.rs` and `tests/more.rs`, tables of CPython 3.15's results bit for bit; `crates/typy-check/tests/math.rs` for each refusal and the floor of each name; `tests/conformance/lib/LIB-05_*.py` |
 | LIB-06 | 0.4 | IT | `tests/conformance/lib/LIB-06_*.py` |
 | LIB-07 | 1.0 | IT | `tests/conformance/lib/LIB-07_*.py` |
@@ -406,6 +408,7 @@ that the specification does not define.
 | LIB-11 | 0.4 | IT | `tests/conformance/lib/LIB-11_*.py` |
 | LIB-12 | 0.4 | IT | `tests/conformance/lib/LIB-12_*.py` |
 | LIB-13 | 0.4 | IT | `tests/conformance/lib/LIB-13_*.py` |
+| LIB-14 | 0.4 | IT | `tests/conformance/lib/LIB-14_*.py` |
 | MEM-01 | 0.1 | UT, IT | `typy-runtime` unit tests; `tests/conformance/mem/MEM-01_*.py` under sanitizers |
 | MEM-02 | 0.2 | UT, IT | `typy-runtime` list unit tests; `tests/conformance/dat/DAT-07_*.py`, which name MEM-02, also under the sanitizers |
 | MEM-03 | 0.4 | UT, IT | `typy-runtime` unit tests; `tests/conformance/mem/MEM-03_*.py` under sanitizers |

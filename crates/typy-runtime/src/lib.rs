@@ -1,7 +1,7 @@
 //! The library linked into every TyPy program (ADR-0006): memory, integers, floats, strings, exceptions and output.
 //!
-//! The library has no standard library and no `alloc` crate; it calls only `malloc`, `realloc`, `free`, `write`, `abort`,
-//! `getrlimit` and `floor`, `fmod`, `pow` and `ldexp` from `libm`. Unit tests build it with the standard library, so its logic is tested like any other crate.
+//! The library has no standard library and no `alloc` crate; it calls only `malloc`, `realloc`, `free`, `open`, `read`,
+//! `write`, `close`, `fstat`, `__errno_location`, `abort`, `getrlimit` and `floor`, `fmod`, `pow` and `ldexp` from `libm`. Unit tests build it with the standard library, so its logic is tested like any other crate.
 #![cfg_attr(not(test), no_std)]
 #![warn(clippy::undocumented_unsafe_blocks)]
 #![allow(
@@ -10,6 +10,7 @@
 )]
 
 mod allocator;
+mod byte_buffer;
 mod bytes;
 mod cell;
 mod codec;

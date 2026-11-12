@@ -802,3 +802,31 @@ fn an_invalid_escape_is_w0101_at_the_escape_with_its_fix() {
         .expect("doubling the backslash keeps the value");
     assert_eq!(fix.replacement, "\\\\d");
 }
+
+#[test]
+fn a_surrogate_escape_in_a_str_is_refused_and_any_other_is_not() {
+    let refused = [
+        (r#"x = "\ud800""#, r"`\ud800`"),
+        (r#"x = "a\uDFFF""#, r"`\uDFFF`"),
+        (r#"x = "\U0000dc80""#, r"`\U0000dc80`"),
+        (r#"x = f"{1}\udc80""#, r"`\udc80`"),
+    ];
+    for (source, escape) in refused {
+        let errors = parse(&file(source), PythonFloor::V3_12).unwrap_err();
+        assert_eq!(errors.len(), 1, "{source}");
+        assert_eq!(errors[0].code().to_string(), "E0201", "{source}");
+        assert!(
+            errors[0].message().contains(escape),
+            "{}",
+            errors[0].message()
+        );
+    }
+    for source in [
+        r#"x = r"\ud800""#,
+        r#"x = "\\ud800""#,
+        r#"x = b"\\ud800""#,
+        r#"x = "\ud7ff\ue000\U0010ffff""#,
+    ] {
+        assert!(parse(&file(source), PythonFloor::V3_12).is_ok(), "{source}");
+    }
+}

@@ -60,7 +60,10 @@ pub fn parse_with_warnings(
     if !errors.is_empty() {
         return Err(errors);
     }
-    let warnings = converter.escape_warnings(parsed.tokens());
+    let (warnings, errors) = converter.escape_diagnostics(parsed.tokens());
+    if !errors.is_empty() {
+        return Err(errors);
+    }
     let ast::Mod::Module(module) = parsed.into_syntax() else {
         unreachable!("Mode::Module always produces a module");
     };

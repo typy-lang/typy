@@ -24,5 +24,6 @@ pub use program::{TypedModule, TypedProgram};
 pub use signature::{FunctionSignature, SignatureParameter};
 pub use statement::{
     AssignTarget, Generator, ImportBinding, LoopSource, RaiseCause, TypedHandler, TypedStmt,
+    WithProtocol,
 };
 pub use symbol::{Symbol, SymbolId, SymbolKind};

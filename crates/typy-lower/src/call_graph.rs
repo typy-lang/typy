@@ -71,15 +71,16 @@ fn statements(body: &[TypedStmt], callees: &mut BTreeSet<FunctionId>) {
             } => expression(value, callees),
             TypedStmt::With {
                 manager,
-                enter,
-                exit,
+                protocol,
                 target,
                 body,
                 ..
             } => {
                 expression(manager, callees);
-                callees.insert(*enter);
-                callees.insert(*exit);
+                if let typy_check::WithProtocol::Methods { enter, exit } = protocol {
+                    callees.insert(*enter);
+                    callees.insert(*exit);
+                }
                 if let Some(target) = target {
                     assign_target(target, callees);
                 }
@@ -391,6 +392,7 @@ fn expression(expression_value: &TypedExpr, callees: &mut BTreeSet<FunctionId>) 
         | TypedExprKind::SysValue(_) => {}
         TypedExprKind::AsIterable(inner) => expression(inner, callees),
         TypedExprKind::PercentFormat { values, .. } => expression(values, callees),
+        TypedExprKind::Open { path, .. } => expression(path, callees),
         TypedExprKind::SysExit(value) | TypedExprKind::Input(value) => {
             if let Some(value) = value {
                 expression(value, callees);

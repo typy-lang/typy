@@ -57,21 +57,55 @@ impl FunctionLowerer<'_> {
         line
     }
 
-    /// Calls `write` or `flush` of a text file.
+    /// Calls a method of a text file; a `size` not given is -1, as in CPython.
     pub(crate) fn text_method(
         &mut self,
         file: typy_tyir::ValueId,
         method: typy_check::Method,
-        arguments: &[Lowered],
+        given: &[Option<Lowered>],
         span: Span,
     ) -> Lowered {
-        if method == typy_check::Method::TextWrite {
-            return self.call_runtime(
+        use typy_check::Method;
+        let argument = given.first().copied().flatten().map(|value| value.value);
+        let (function, arguments) = match method {
+            Method::TextWrite => (
                 RuntimeFunction::TextWrite,
-                vec![file, arguments[0].value],
-                span,
-            );
-        }
-        self.call_runtime(RuntimeFunction::TextFlush, vec![file], span)
+                vec![file, argument.unwrap_or(file)],
+            ),
+            Method::TextWritelines => (
+                RuntimeFunction::TextWritelines,
+                vec![file, argument.unwrap_or(file)],
+            ),
+            Method::TextRead | Method::TextReadline => {
+                let size =
+                    argument.unwrap_or_else(|| self.constant(Constant::Int("-1".to_owned()), span));
+                let function = if method == Method::TextRead {
+                    RuntimeFunction::TextRead
+                } else {
+                    RuntimeFunction::TextReadline
+                };
+                (function, vec![file, size])
+            }
+            Method::TextReadlines => (RuntimeFunction::TextReadlines, vec![file]),
+            Method::TextClose => (RuntimeFunction::TextClose, vec![file]),
+            _ => (RuntimeFunction::TextFlush, vec![file]),
+        };
+        self.call_runtime(function, arguments, span)
+    }
+
+    /// Lowers `open(path, mode)`: a new text file, or the `OSError` of opening it.
+    pub(crate) fn open(
+        &mut self,
+        path: &TypedExpr,
+        mode: &str,
+        access: typy_check::OpenAccess,
+        span: Span,
+    ) -> Lowered {
+        let path = self.expression(path);
+        let mode = self.string(mode, span);
+        let access = self.constant(Constant::Int((access as i64).to_string()), span);
+        let file = self.call_runtime(RuntimeFunction::Open, vec![path.value, mode, access], span);
+        self.release(path, span);
+        file
     }
 }

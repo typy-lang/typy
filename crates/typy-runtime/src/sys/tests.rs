@@ -52,6 +52,7 @@ fn sys_argv_is_built_once_from_the_arguments_main_receives() {
         assert_eq!((*list).length, 2);
         let second = (*list).item(1) as *const StrObject;
         assert_eq!(points(second), [0x63, 0x61, 0x66, 0xe9]);
+        assert_eq!((*second).header.reference_count, 1);
     }
 }
 

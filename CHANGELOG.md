@@ -8,6 +8,15 @@ All notable changes to TyPy are recorded here. The format follows
 
 ### Added
 
+- `open` for text files in UTF-8, in the modes `r`, `w`, `a` and `x`:
+  `read`, `readline`, `readlines`, `write`, `writelines`, `flush` and
+  `close`, iteration over the lines, and `with`. Reading translates
+  newlines and decodes as CPython does, files still open are written out
+  when the program ends, and errors are CPython's `OSError` subclasses
+  with its text, such as `[Errno 2] No such file or directory:
+  'notes.txt'`. `OSError` and all its subclasses can be caught and
+  raised. Binary and `+` modes, other encodings, `seek` and the file's
+  attributes are planned for 0.4 (LIB-04, LIB-14, EXC-14, ADR-0019).
 - The `sys` module's `argv`, `exit`, `stdout` and `stderr`, `print` with
   `file` and `flush`, and `input`, which raises `EOFError` at the end of
   standard input. An uncaught `SystemExit` ends the program with its
@@ -154,6 +163,8 @@ All notable changes to TyPy are recorded here. The format follows
 
 ### Fixed
 
+- A `\u` or `\U` escape of a surrogate in a `str` literal is E0201,
+  planned for 0.4 (LEX-10); it gave U+FFFD instead of the surrogate.
 - Programs call the C library's maths functions, as CPython does, and
   not the copies in the runtime archive, whose `cbrt` differed in the
   last bit.

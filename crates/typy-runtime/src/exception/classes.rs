@@ -85,11 +85,89 @@ pub(crate) static UNICODE_ENCODE_ERROR: TypeObject = class("UnicodeEncodeError",
 #[unsafe(export_name = "typy_rt_exception_ZeroDivisionError")]
 pub(crate) static ZERO_DIVISION_ERROR: TypeObject = class("ZeroDivisionError", &ARITHMETIC_ERROR);
 
+/// An error the operating system reports, with its `errno` (ADR-0019).
+#[unsafe(export_name = "typy_rt_exception_OSError")]
+pub(crate) static OS_ERROR: TypeObject = class("OSError", &EXCEPTION);
+/// An operation that would block.
+#[unsafe(export_name = "typy_rt_exception_BlockingIOError")]
+pub(crate) static BLOCKING_IO_ERROR: TypeObject = class("BlockingIOError", &OS_ERROR);
+/// An operation on a child process that failed.
+#[unsafe(export_name = "typy_rt_exception_ChildProcessError")]
+pub(crate) static CHILD_PROCESS_ERROR: TypeObject = class("ChildProcessError", &OS_ERROR);
+/// The base of the errors of a connection.
+#[unsafe(export_name = "typy_rt_exception_ConnectionError")]
+pub(crate) static CONNECTION_ERROR: TypeObject = class("ConnectionError", &OS_ERROR);
+/// A write to a pipe or socket whose other end is closed.
+#[unsafe(export_name = "typy_rt_exception_BrokenPipeError")]
+pub(crate) static BROKEN_PIPE_ERROR: TypeObject = class("BrokenPipeError", &CONNECTION_ERROR);
+/// A connection the other end aborted.
+#[unsafe(export_name = "typy_rt_exception_ConnectionAbortedError")]
+pub(crate) static CONNECTION_ABORTED_ERROR: TypeObject =
+    class("ConnectionAbortedError", &CONNECTION_ERROR);
+/// A connection the other end refused.
+#[unsafe(export_name = "typy_rt_exception_ConnectionRefusedError")]
+pub(crate) static CONNECTION_REFUSED_ERROR: TypeObject =
+    class("ConnectionRefusedError", &CONNECTION_ERROR);
+/// A connection the other end reset.
+#[unsafe(export_name = "typy_rt_exception_ConnectionResetError")]
+pub(crate) static CONNECTION_RESET_ERROR: TypeObject =
+    class("ConnectionResetError", &CONNECTION_ERROR);
+/// A file created that exists already.
+#[unsafe(export_name = "typy_rt_exception_FileExistsError")]
+pub(crate) static FILE_EXISTS_ERROR: TypeObject = class("FileExistsError", &OS_ERROR);
+/// A file or directory that does not exist.
+#[unsafe(export_name = "typy_rt_exception_FileNotFoundError")]
+pub(crate) static FILE_NOT_FOUND_ERROR: TypeObject = class("FileNotFoundError", &OS_ERROR);
+/// A call a signal interrupted.
+#[unsafe(export_name = "typy_rt_exception_InterruptedError")]
+pub(crate) static INTERRUPTED_ERROR: TypeObject = class("InterruptedError", &OS_ERROR);
+/// A file operation on a directory.
+#[unsafe(export_name = "typy_rt_exception_IsADirectoryError")]
+pub(crate) static IS_A_DIRECTORY_ERROR: TypeObject = class("IsADirectoryError", &OS_ERROR);
+/// A directory operation on something that is not a directory.
+#[unsafe(export_name = "typy_rt_exception_NotADirectoryError")]
+pub(crate) static NOT_A_DIRECTORY_ERROR: TypeObject = class("NotADirectoryError", &OS_ERROR);
+/// An operation without the access rights it needs.
+#[unsafe(export_name = "typy_rt_exception_PermissionError")]
+pub(crate) static PERMISSION_ERROR: TypeObject = class("PermissionError", &OS_ERROR);
+/// A process that does not exist.
+#[unsafe(export_name = "typy_rt_exception_ProcessLookupError")]
+pub(crate) static PROCESS_LOOKUP_ERROR: TypeObject = class("ProcessLookupError", &OS_ERROR);
+/// An operation that timed out.
+#[unsafe(export_name = "typy_rt_exception_TimeoutError")]
+pub(crate) static TIMEOUT_ERROR: TypeObject = class("TimeoutError", &OS_ERROR);
+/// `io.UnsupportedOperation`: reading a file opened for writing, or the other way round. Its
+/// bases in CPython are `OSError` and `ValueError`; `derives_from` adds the second.
+pub(crate) static UNSUPPORTED_OPERATION: TypeObject = TypeObject {
+    module: "io".as_ptr(),
+    module_length: 2,
+    ..class("UnsupportedOperation", &OS_ERROR)
+};
+
 /// Every built-in exception class.
 #[cfg(test)]
-pub(crate) const EVERY_CLASS: [&TypeObject; 21] = [
+pub(crate) const EVERY_CLASS: [&TypeObject; 40] = [
     &BASE_EXCEPTION,
     &EXCEPTION,
+    &SYSTEM_EXIT,
+    &EOF_ERROR,
+    &OS_ERROR,
+    &BLOCKING_IO_ERROR,
+    &CHILD_PROCESS_ERROR,
+    &CONNECTION_ERROR,
+    &BROKEN_PIPE_ERROR,
+    &CONNECTION_ABORTED_ERROR,
+    &CONNECTION_REFUSED_ERROR,
+    &CONNECTION_RESET_ERROR,
+    &FILE_EXISTS_ERROR,
+    &FILE_NOT_FOUND_ERROR,
+    &INTERRUPTED_ERROR,
+    &IS_A_DIRECTORY_ERROR,
+    &NOT_A_DIRECTORY_ERROR,
+    &PERMISSION_ERROR,
+    &PROCESS_LOOKUP_ERROR,
+    &TIMEOUT_ERROR,
+    &UNSUPPORTED_OPERATION,
     &ARITHMETIC_ERROR,
     &ASSERTION_ERROR,
     &ATTRIBUTE_ERROR,
@@ -117,11 +195,17 @@ pub(crate) fn class_for_test(name: &'static str) -> TypeObject {
     class(name, &EXCEPTION)
 }
 
-/// Returns whether `class` is `base` or has `base` among its bases.
+/// Returns whether `class` is `base` or has `base` among its bases, `ValueError` counting as
+/// a base of `io.UnsupportedOperation`, as in CPython.
 pub(crate) fn derives_from(class: &TypeObject, base: &TypeObject) -> bool {
     let mut current: *const TypeObject = class;
     while !current.is_null() {
         if core::ptr::eq(current, base) {
+            return true;
+        }
+        if core::ptr::eq(current, &raw const UNSUPPORTED_OPERATION)
+            && derives_from(&VALUE_ERROR, base)
+        {
             return true;
         }
         // SAFETY: a base is null or a live, immortal type object.
@@ -133,8 +217,10 @@ pub(crate) fn derives_from(class: &TypeObject, base: &TypeObject) -> bool {
 #[cfg(test)]
 mod tests {
     use super::{
-        ARITHMETIC_ERROR, BASE_EXCEPTION, EVERY_CLASS, EXCEPTION, KEY_ERROR, LOOKUP_ERROR, OBJECT,
-        TYPE_ERROR, UNICODE_DECODE_ERROR, VALUE_ERROR, ZERO_DIVISION_ERROR, derives_from,
+        ARITHMETIC_ERROR, BASE_EXCEPTION, BROKEN_PIPE_ERROR, CONNECTION_ERROR, EVERY_CLASS,
+        EXCEPTION, FILE_NOT_FOUND_ERROR, KEY_ERROR, LOOKUP_ERROR, OBJECT, OS_ERROR, TYPE_ERROR,
+        UNICODE_DECODE_ERROR, UNSUPPORTED_OPERATION, VALUE_ERROR, ZERO_DIVISION_ERROR,
+        derives_from,
     };
 
     #[test]
@@ -156,6 +242,15 @@ mod tests {
             (&KEY_ERROR, &TYPE_ERROR, false),
             (&EXCEPTION, &KEY_ERROR, false),
             (&OBJECT, &BASE_EXCEPTION, false),
+            (&FILE_NOT_FOUND_ERROR, &OS_ERROR, true),
+            (&BROKEN_PIPE_ERROR, &CONNECTION_ERROR, true),
+            (&BROKEN_PIPE_ERROR, &OS_ERROR, true),
+            (&FILE_NOT_FOUND_ERROR, &VALUE_ERROR, false),
+            (&UNSUPPORTED_OPERATION, &OS_ERROR, true),
+            (&UNSUPPORTED_OPERATION, &VALUE_ERROR, true),
+            (&UNSUPPORTED_OPERATION, &EXCEPTION, true),
+            (&UNSUPPORTED_OPERATION, &KEY_ERROR, false),
+            (&UNSUPPORTED_OPERATION, &FILE_NOT_FOUND_ERROR, false),
         ];
         for (class, base, expected) in cases {
             assert_eq!(

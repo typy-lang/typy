@@ -10,7 +10,7 @@ MARKDOWN := "**/*.md" "\#.tmp/**" "\#target/**" "\#dist/**"
 
 
 .PHONY: dev image shell runtime fmt fmt-check lint type test coverage docs-lint ascii-check traceability test-int test-e2e test-all \
-	build dist bless coverage-branches miri fuzz runtime-size diagrams diagrams-check unicode-tables unicode-tables-check format-cases format-cases-check stdlib-names stdlib-names-check bench check hooks clean
+	build dist bless coverage-branches miri fuzz runtime-size diagrams diagrams-check unicode-tables unicode-tables-check format-cases format-cases-check stdlib-names stdlib-names-check errno-texts errno-texts-check bench check hooks clean
 
 dev: ## Start the dev service, building its image the first time
 	@$(COMPOSE) up -d --quiet-pull dev 2>/dev/null
@@ -115,7 +115,13 @@ stdlib-names: dev ## Write the loader's table of CPython 3.12 to 3.15's standard
 stdlib-names-check: dev ## Fail when the committed table of standard library module names differs from CPython's
 	@$(EXEC) python3.15 scripts/generate-stdlib-names.py --check
 
-check: fmt-check lint coverage-branches docs-lint ascii-check traceability diagrams-check unicode-tables-check format-cases-check stdlib-names-check runtime-size ## Run the whole quality gate
+errno-texts: dev ## Write the runtime's table of glibc's error texts, which OSError shows (ADR-0019)
+	@$(EXEC) python3.15 scripts/generate-errno-texts.py
+
+errno-texts-check: dev ## Fail when the committed table of error texts differs from glibc's
+	@$(EXEC) python3.15 scripts/generate-errno-texts.py --check
+
+check: fmt-check lint coverage-branches docs-lint ascii-check traceability diagrams-check unicode-tables-check format-cases-check stdlib-names-check errno-texts-check runtime-size ## Run the whole quality gate
 
 hooks: ## Use the hooks in .githooks for this clone
 	git config core.hooksPath .githooks

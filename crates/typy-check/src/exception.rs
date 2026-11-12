@@ -35,11 +35,27 @@ pub enum BuiltinException {
     UnicodeDecodeError,
     UnicodeEncodeError,
     ZeroDivisionError,
+    OSError,
+    BlockingIOError,
+    ChildProcessError,
+    ConnectionError,
+    BrokenPipeError,
+    ConnectionAbortedError,
+    ConnectionRefusedError,
+    ConnectionResetError,
+    FileExistsError,
+    FileNotFoundError,
+    InterruptedError,
+    IsADirectoryError,
+    NotADirectoryError,
+    PermissionError,
+    ProcessLookupError,
+    TimeoutError,
 }
 
 impl BuiltinException {
     /// Every built-in exception class.
-    pub const ALL: [Self; 23] = [
+    pub const ALL: [Self; 39] = [
         Self::BaseException,
         Self::SystemExit,
         Self::Exception,
@@ -63,11 +79,31 @@ impl BuiltinException {
         Self::UnicodeDecodeError,
         Self::UnicodeEncodeError,
         Self::ZeroDivisionError,
+        Self::OSError,
+        Self::BlockingIOError,
+        Self::ChildProcessError,
+        Self::ConnectionError,
+        Self::BrokenPipeError,
+        Self::ConnectionAbortedError,
+        Self::ConnectionRefusedError,
+        Self::ConnectionResetError,
+        Self::FileExistsError,
+        Self::FileNotFoundError,
+        Self::InterruptedError,
+        Self::IsADirectoryError,
+        Self::NotADirectoryError,
+        Self::PermissionError,
+        Self::ProcessLookupError,
+        Self::TimeoutError,
     ];
 
-    /// Returns the class a built-in name names, such as `ValueError`.
+    /// Returns the class a built-in name names, such as `ValueError`; `IOError` and
+    /// `EnvironmentError` name `OSError`, as in CPython.
     #[must_use]
     pub fn named(name: &str) -> Option<Self> {
+        if matches!(name, "IOError" | "EnvironmentError") {
+            return Some(Self::OSError);
+        }
         Self::ALL.into_iter().find(|class| class.name() == name)
     }
 
@@ -98,6 +134,22 @@ impl BuiltinException {
             Self::UnicodeDecodeError => "UnicodeDecodeError",
             Self::UnicodeEncodeError => "UnicodeEncodeError",
             Self::ZeroDivisionError => "ZeroDivisionError",
+            Self::OSError => "OSError",
+            Self::BlockingIOError => "BlockingIOError",
+            Self::ChildProcessError => "ChildProcessError",
+            Self::ConnectionError => "ConnectionError",
+            Self::BrokenPipeError => "BrokenPipeError",
+            Self::ConnectionAbortedError => "ConnectionAbortedError",
+            Self::ConnectionRefusedError => "ConnectionRefusedError",
+            Self::ConnectionResetError => "ConnectionResetError",
+            Self::FileExistsError => "FileExistsError",
+            Self::FileNotFoundError => "FileNotFoundError",
+            Self::InterruptedError => "InterruptedError",
+            Self::IsADirectoryError => "IsADirectoryError",
+            Self::NotADirectoryError => "NotADirectoryError",
+            Self::PermissionError => "PermissionError",
+            Self::ProcessLookupError => "ProcessLookupError",
+            Self::TimeoutError => "TimeoutError",
         }
     }
 
@@ -117,12 +169,28 @@ impl BuiltinException {
             | Self::RuntimeError
             | Self::StopIteration
             | Self::TypeError
-            | Self::ValueError => Self::Exception,
+            | Self::ValueError
+            | Self::OSError => Self::Exception,
             Self::IndexError | Self::KeyError => Self::LookupError,
             Self::OverflowError | Self::ZeroDivisionError => Self::ArithmeticError,
             Self::NotImplementedError | Self::RecursionError => Self::RuntimeError,
             Self::UnicodeError => Self::ValueError,
             Self::UnicodeDecodeError | Self::UnicodeEncodeError => Self::UnicodeError,
+            Self::BrokenPipeError
+            | Self::ConnectionAbortedError
+            | Self::ConnectionRefusedError
+            | Self::ConnectionResetError => Self::ConnectionError,
+            Self::BlockingIOError
+            | Self::ChildProcessError
+            | Self::ConnectionError
+            | Self::FileExistsError
+            | Self::FileNotFoundError
+            | Self::InterruptedError
+            | Self::IsADirectoryError
+            | Self::NotADirectoryError
+            | Self::PermissionError
+            | Self::ProcessLookupError
+            | Self::TimeoutError => Self::OSError,
         })
     }
 
@@ -131,6 +199,22 @@ impl BuiltinException {
     #[must_use]
     pub const fn can_be_called(self) -> bool {
         !matches!(self, Self::UnicodeDecodeError | Self::UnicodeEncodeError)
+    }
+
+    /// Returns true for `OSError` and its subclasses, whose arguments CPython reads as
+    /// `errno`, `strerror` and `filename` when there are two to five (EXC-14).
+    #[must_use]
+    pub const fn is_os_error(self) -> bool {
+        let mut class = self;
+        loop {
+            if matches!(class, Self::OSError) {
+                return true;
+            }
+            match class.base() {
+                Some(base) => class = base,
+                None => return false,
+            }
+        }
     }
 }
 

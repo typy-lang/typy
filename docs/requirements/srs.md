@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy software requirements specification |
-| Version | 1.41 |
+| Version | 1.42 |
 | Status | Approved |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-12 |
@@ -162,6 +162,7 @@ formatter applies; Ruff's formatter is the project's recommendation.
 | LEX-07 | f-strings, with conversions and format specifications, shall be accepted. | M | 0.2 | 2.4.3 |
 | LEX-08 | Imaginary literals shall be rejected. | M | 0.1 | 2.4.7 |
 | LEX-09 | A source file larger than 16 MiB shall be rejected with a diagnostic before it is parsed, so input size cannot exhaust the compiler's memory (NFR-09, NFR-14). | M | 0.1 | |
+| LEX-10 | A `\u` or `\U` escape of a surrogate code point, U+D800 to U+DFFF, in a `str` literal shall give that code point, as CPython keeps it. | S | 0.4 | 2.4.1.1 |
 
 ### 3.4 Types and annotations (TYP)
 
@@ -304,7 +305,7 @@ formatter applies; Ruff's formatter is the project's recommendation.
 | ID | Requirement | Priority | Release | LR |
 | --- | --- | --- | --- | --- |
 | EXC-01 | Raising and catching exceptions shall follow the Language Reference, including matching on base classes. | M | 0.3 | 4.3 |
-| EXC-02 | The built-in exception classes the runtime raises shall exist with their Python names: `ArithmeticError`, `AssertionError`, `EOFError`, `IndexError`, `KeyError`, `OverflowError`, `RecursionError`, `RuntimeError`, `StopIteration`, `SystemExit`, `TypeError`, `UnicodeDecodeError`, `UnicodeEncodeError`, `ValueError`, `ZeroDivisionError` and their bases. | M | 0.3 | 4.3 |
+| EXC-02 | The built-in exception classes the runtime raises shall exist with their Python names: `ArithmeticError`, `AssertionError`, `EOFError`, `IndexError`, `KeyError`, `OverflowError`, `RecursionError`, `RuntimeError`, `StopIteration`, `SystemExit`, `TypeError`, `UnicodeDecodeError`, `UnicodeEncodeError`, `ValueError`, `ZeroDivisionError`, `OSError` with each of its subclasses, and their bases. | M | 0.3 | 4.3 |
 | EXC-03 | An exception that is not raised shall cost no more than a compare and branch at each call that may raise. | M | 0.3 | |
 | EXC-04 | Exception chaining with `from` and the implicit context shall be kept, and shown in the uncaught exception output. | S | 0.3 | 7.8 |
 | EXC-05 | An exception shall not cross a function exported to C (FFI-05); the program shall abort with the exception printed. | M | 0.5 | |
@@ -316,6 +317,7 @@ formatter applies; Ruff's formatter is the project's recommendation.
 | EXC-11 | The `args` attribute of an exception shall give the tuple of its arguments. | S | 0.4 | |
 | EXC-12 | Calling `UnicodeDecodeError` or `UnicodeEncodeError`, or deriving a class from them, shall be rejected; catching them shall be accepted. | S | 0.3 | |
 | EXC-13 | The `code` attribute of `SystemExit` shall give the argument it was built with, or `None` without one. | S | 0.4 | |
+| EXC-14 | `OSError` and its subclasses built with two to five arguments shall give the subclass for the `errno`, and the attributes `errno`, `strerror` and `filename`, as CPython does. | S | 0.4 | |
 
 ### 3.13 Modules and imports (MOD)
 
@@ -350,6 +352,7 @@ formatter applies; Ruff's formatter is the project's recommendation.
 | LIB-11 | `format % values` shall be accepted with a format that is not a string literal, and with a `tuple[T, ...]` of values. | S | 0.4 |
 | LIB-12 | `math.fsum`, `math.prod`, `math.sumprod`, `math.dist`, `math.gamma` and `math.lgamma` shall be available. | S | 0.4 |
 | LIB-13 | `sys.maxsize`, `sys.byteorder`, `sys.platform`, `sys.version`, `sys.version_info`, `sys.hexversion`, `sys.maxunicode`, `sys.getrecursionlimit`, `sys.setrecursionlimit` and `sys.stdin` shall be available. | S | 0.4 |
+| LIB-14 | `open` shall accept binary modes, `+` modes, a mode that is not a literal, encodings other than UTF-8 and the arguments `buffering`, `errors`, `newline`, `closefd` and `opener`; a text file shall have `seek`, `tell`, `truncate`, `fileno`, `isatty`, `readable`, `writable` and `seekable`, and the attributes `name`, `mode` and `closed`; closing `sys.stdout` or `sys.stderr` shall close it. | S | 0.4 |
 
 ### 3.15 Memory management (MEM)
 

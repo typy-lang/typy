@@ -36,9 +36,13 @@ pub(crate) fn run_oracles(
                 file.as_str(),
             ]);
             let directory = file.parent().map(Utf8Path::to_owned);
-            if let Some(directory) = &directory {
-                command.current_dir(directory);
-            }
+            // Each run works in an empty directory of its own, so a test that writes files
+            // neither writes into the test tree nor meets another version's files; modules
+            // are found beside the test, which leads the module path whatever the directory.
+            let Ok(working) = tempfile::tempdir() else {
+                return (version, Err("cannot make a working directory".to_owned()));
+            };
+            command.current_dir(working.path());
             // CPython names a file by its resolved absolute path.
             let resolved = directory
                 .as_ref()

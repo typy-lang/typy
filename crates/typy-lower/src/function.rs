@@ -52,8 +52,8 @@ pub(crate) enum Cleanup {
     With {
         /// The slot that holds the context manager.
         manager: SlotId,
-        /// Its class's `__exit__`.
-        exit: typy_check::FunctionId,
+        /// How the manager is entered and left: its class's `__exit__`, or a file's `close`.
+        protocol: typy_check::WithProtocol,
         /// Whether `__exit__` may return a true value, which suppresses an exception.
         suppresses: bool,
         /// Where execution goes on after an exception is suppressed.

@@ -9,7 +9,7 @@ use super::flow::{Fact, meet};
 use crate::exception::{BuiltinException, ExceptionClass, common_base};
 use crate::typed::{
     Argument, RaiseCause, SymbolKind, TypedConstant, TypedExpr, TypedExprKind, TypedHandler,
-    TypedStmt,
+    TypedStmt, WithProtocol,
 };
 use crate::types::{Type, TypeObjectOf};
 
@@ -68,6 +68,9 @@ impl BodyChecker<'_> {
                 span,
             );
         }
+        if let Some(error) = self.os_error_arguments(class.builtin(), &values, span) {
+            return error;
+        }
         Self::typed(
             TypedExprKind::NewException {
                 class: class.clone(),
@@ -76,6 +79,32 @@ impl BodyChecker<'_> {
             },
             Type::Exception(class),
             span,
+        )
+    }
+
+    /// Refuses two or more arguments to `OSError` or a class derived from it: CPython reads
+    /// them as `errno`, `strerror` and `filename`, which is planned for 0.4 (EXC-14).
+    fn os_error_arguments(
+        &mut self,
+        builtin: BuiltinException,
+        values: &[TypedExpr],
+        span: Span,
+    ) -> Option<TypedExpr> {
+        if !builtin.is_os_error() || values.len() < 2 {
+            return None;
+        }
+        Some(
+            self.error(
+                Diagnostic::new(
+                    DiagnosticCode::error(201),
+                    values[1].span,
+                    "an `OSError` of two or more arguments, which CPython reads as `errno`, \
+                     `strerror` and `filename`, is planned for TyPy 0.4 (EXC-14)",
+                )
+                .with_rule(RuleId::EXC_14)
+                .with_help("give one argument, the message"),
+                span,
+            ),
         )
     }
 
@@ -380,6 +409,10 @@ impl BodyChecker<'_> {
                     span,
                 );
             }
+            let builtin = self.program.exceptions[&initializing.class].builtin();
+            if let Some(error) = self.os_error_arguments(builtin, &values, span) {
+                return error;
+            }
             Self::typed(
                 TypedExprKind::SetArguments {
                     exception: Box::new(instance),
@@ -429,6 +462,18 @@ impl BodyChecker<'_> {
     ) -> Option<TypedStmt> {
         let (first, rest) = items.split_first()?;
         let manager = self.expression(&first.context);
+        if manager.ty == Type::TextFile {
+            return self.with_body(
+                manager,
+                WithProtocol::TextFile,
+                Type::TextFile,
+                false,
+                first,
+                rest,
+                body,
+                span,
+            );
+        }
         let methods = manager.ty.class_id().and_then(|class| {
             Some((
                 self.program.method(class, "__enter__")?,
@@ -450,6 +495,34 @@ impl BodyChecker<'_> {
         };
         let entered = self.program.signatures[enter.0 as usize].returns.clone();
         let suppresses = self.program.signatures[exit.0 as usize].returns != Type::NoneType;
+        self.with_body(
+            manager,
+            WithProtocol::Methods { enter, exit },
+            entered,
+            suppresses,
+            first,
+            rest,
+            body,
+            span,
+        )
+    }
+
+    /// Checks the target and the body of a `with` whose manager is checked.
+    #[allow(
+        clippy::too_many_arguments,
+        reason = "the parts of one `with` item and its body, each used once"
+    )]
+    fn with_body(
+        &mut self,
+        manager: TypedExpr,
+        protocol: WithProtocol,
+        entered: Type,
+        suppresses: bool,
+        first: &WithItem,
+        rest: &[WithItem],
+        body: &[Stmt],
+        span: Span,
+    ) -> Option<TypedStmt> {
         let binding = Self::typed(
             TypedExprKind::Constant(TypedConstant::None),
             entered.clone(),
@@ -472,8 +545,7 @@ impl BodyChecker<'_> {
         }
         Some(TypedStmt::With {
             manager,
-            enter,
-            exit,
+            protocol,
             suppresses,
             target,
             body,

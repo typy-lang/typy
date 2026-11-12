@@ -5,8 +5,8 @@
 use std::rc::Rc;
 
 use typy_check::{
-    AssignTarget, ExceptionClass, FunctionId, InitCall, RaiseCause, Type, TypedExpr, TypedHandler,
-    TypedStmt,
+    AssignTarget, ExceptionClass, InitCall, RaiseCause, Type, TypedExpr, TypedHandler, TypedStmt,
+    WithProtocol,
 };
 use typy_diagnostics::Span;
 use typy_tyir::{
@@ -343,9 +343,11 @@ impl FunctionLowerer<'_> {
                     exception,
                 } => self.leave_clause(previous, exception, span),
                 Cleanup::Finally(block) => self.run_finally(index, &block, None, span),
-                Cleanup::With { manager, exit, .. } => {
+                Cleanup::With {
+                    manager, protocol, ..
+                } => {
                     let inner = self.cleanups.split_off(index);
-                    self.call_exit(manager, exit, None, span);
+                    self.call_exit(manager, protocol, None, span);
                     self.cleanups.extend(inner);
                 }
             }
@@ -381,11 +383,12 @@ impl FunctionLowerer<'_> {
                 }
                 Cleanup::With {
                     manager,
-                    exit,
+                    protocol,
                     suppresses,
                     after,
-                } => self
-                    .exit_with_exception(index, manager, exit, suppresses, after, exception, span),
+                } => self.exit_with_exception(
+                    index, manager, protocol, suppresses, after, exception, span,
+                ),
             }
             if self.builder.is_terminated() {
                 self.temporaries = released;
@@ -537,8 +540,7 @@ impl FunctionLowerer<'_> {
     pub(crate) fn with_statement(
         &mut self,
         manager: &TypedExpr,
-        enter: FunctionId,
-        exit: FunctionId,
+        protocol: WithProtocol,
         suppresses: bool,
         target: Option<&AssignTarget>,
         body: &[TypedStmt],
@@ -548,8 +550,18 @@ impl FunctionLowerer<'_> {
         let slot = self.hidden_slot("manager", lowered.ty);
         self.store(slot, lowered, span);
         let current = self.load(slot, span);
-        let entered_type = self.lowered_type(&self.program.function(enter).signature.returns);
-        let entered = self.call_function(enter, vec![(0, current)], entered_type, span);
+        let entered = match protocol {
+            WithProtocol::Methods { enter, .. } => {
+                let entered_type =
+                    self.lowered_type(&self.program.function(enter).signature.returns);
+                self.call_function(enter, vec![(0, current)], entered_type, span)
+            }
+            // A file enters as itself, once it is checked to be open.
+            WithProtocol::TextFile => {
+                self.call_runtime(RuntimeFunction::TextEnter, vec![current.value], span);
+                current
+            }
+        };
         match target {
             Some(target) => self.assign_target(target, entered, span),
             None => self.release(entered, span),
@@ -557,16 +569,18 @@ impl FunctionLowerer<'_> {
         let after = self.builder.create_block();
         self.cleanups.push(Cleanup::With {
             manager: slot,
-            exit,
+            protocol,
             suppresses,
             after,
         });
         self.statements(body);
         let cleanup = self.cleanups.pop();
         if !self.builder.is_terminated()
-            && let Some(Cleanup::With { manager, exit, .. }) = cleanup
+            && let Some(Cleanup::With {
+                manager, protocol, ..
+            }) = cleanup
         {
-            self.call_exit(manager, exit, None, span);
+            self.call_exit(manager, protocol, None, span);
         }
         self.jump_open(after);
         self.builder.switch_to(after);
@@ -577,10 +591,18 @@ impl FunctionLowerer<'_> {
     fn call_exit(
         &mut self,
         manager: SlotId,
-        exit: FunctionId,
+        protocol: WithProtocol,
         exception: Option<ValueId>,
         span: Span,
     ) -> Lowered {
+        let exit = match protocol {
+            WithProtocol::Methods { exit, .. } => exit,
+            // Leaving a file's `with` closes it, which suppresses no exception.
+            WithProtocol::TextFile => {
+                let file = self.load(manager, span);
+                return self.call_runtime(RuntimeFunction::TextClose, vec![file.value], span);
+            }
+        };
         let signature = self.program.function(exit).signature.clone();
         let types: Vec<TyirType> = signature.parameters[1..]
             .iter()
@@ -632,7 +654,7 @@ impl FunctionLowerer<'_> {
         &mut self,
         index: usize,
         manager: SlotId,
-        exit: FunctionId,
+        protocol: WithProtocol,
         suppresses: bool,
         after: BlockId,
         exception: ValueId,
@@ -646,7 +668,7 @@ impl FunctionLowerer<'_> {
             previous,
             exception: Handled::Value(exception),
         });
-        let result = self.call_exit(manager, exit, Some(exception), span);
+        let result = self.call_exit(manager, protocol, Some(exception), span);
         self.cleanups.pop();
         self.call_runtime(RuntimeFunction::ExceptionLeave, vec![previous], span);
         if suppresses {

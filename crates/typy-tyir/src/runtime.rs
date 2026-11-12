@@ -217,6 +217,13 @@ pub enum RuntimeFunction {
     SysStderr,
     TextWrite,
     TextFlush,
+    Open,
+    TextClose,
+    TextEnter,
+    TextRead,
+    TextReadline,
+    TextReadlines,
+    TextWritelines,
     Input,
     MathAcos,
     MathAcosh,
@@ -311,7 +318,7 @@ const FLOAT_FLOAT: &[TyirType] = &[TyirType::Float, TyirType::Float];
 
 impl RuntimeFunction {
     /// Every runtime function.
-    pub const ALL: [Self; 272] = [
+    pub const ALL: [Self; 279] = [
         Self::IntFloorDivide,
         Self::IntModulo,
         Self::IntPower,
@@ -520,6 +527,13 @@ impl RuntimeFunction {
         Self::SysStderr,
         Self::TextWrite,
         Self::TextFlush,
+        Self::Open,
+        Self::TextClose,
+        Self::TextEnter,
+        Self::TextRead,
+        Self::TextReadline,
+        Self::TextReadlines,
+        Self::TextWritelines,
         Self::Input,
         Self::MathAcos,
         Self::MathAcosh,
@@ -795,7 +809,15 @@ impl RuntimeFunction {
             Self::SysArgv => signature(&[], LIST, false),
             Self::SysStdout | Self::SysStderr => signature(&[], TyirType::TEXT_FILE, false),
             Self::TextWrite => signature(&[TyirType::TEXT_FILE, STR], Int, true),
-            Self::TextFlush => signature(&[TyirType::TEXT_FILE], Unit, true),
+            Self::TextFlush | Self::TextClose | Self::TextEnter => {
+                signature(&[TyirType::TEXT_FILE], Unit, true)
+            }
+            Self::Open => signature(&[STR, STR, Int], TyirType::TEXT_FILE, true),
+            Self::TextRead | Self::TextReadline => {
+                signature(&[TyirType::TEXT_FILE, Int], STR, true)
+            }
+            Self::TextReadlines => signature(&[TyirType::TEXT_FILE], LIST, true),
+            Self::TextWritelines => signature(&[TyirType::TEXT_FILE, LIST], Unit, true),
             Self::Input => signature(&[STR], STR, true),
             Self::MathAcos
             | Self::MathAcosh
@@ -1083,6 +1105,13 @@ impl RuntimeFunction {
             Self::SysStderr => "sys_stderr",
             Self::TextWrite => "text_write",
             Self::TextFlush => "text_flush",
+            Self::Open => "open",
+            Self::TextClose => "text_close",
+            Self::TextEnter => "text_enter",
+            Self::TextRead => "text_read",
+            Self::TextReadline => "text_readline",
+            Self::TextReadlines => "text_readlines",
+            Self::TextWritelines => "text_writelines",
             Self::Input => "input",
             Self::MathAcos => "math_acos",
             Self::MathAcosh => "math_acosh",

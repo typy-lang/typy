@@ -61,7 +61,12 @@ pub(crate) fn judge_accepted(
                 describe(&failure).join("; ")
             ));
         }
-        let observed = match Observation::of(&mut Command::new(&executable)) {
+        // Each build runs in an empty directory of its own, as each oracle run does.
+        let Ok(working) = tempfile::tempdir() else {
+            return Verdict::Invalid("cannot make a working directory".to_owned());
+        };
+        let observed = match Observation::of(Command::new(&executable).current_dir(working.path()))
+        {
             Ok(observed) => observed,
             Err(reason) => return Verdict::Fail(format!("the {} build {reason}", mode.name())),
         };
@@ -133,8 +138,13 @@ pub(crate) fn judge_sanitized(
         Err(reason) => return Verdict::Invalid(format!("the sanitized link {reason}")),
     }
     // A sanitizer report ends the program with status 86 and its summary as the last line.
+    let Ok(working) = tempfile::tempdir() else {
+        return Verdict::Invalid("cannot make a working directory".to_owned());
+    };
     let observed = Observation::of(
-        Command::new(&executable).env("ASAN_OPTIONS", "detect_leaks=1:exitcode=86"),
+        Command::new(&executable)
+            .env("ASAN_OPTIONS", "detect_leaks=1:exitcode=86")
+            .current_dir(working.path()),
     );
     match observed {
         Ok(observed) if observed == *expected => Verdict::Pass,
