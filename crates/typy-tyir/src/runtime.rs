@@ -224,6 +224,11 @@ pub enum RuntimeFunction {
     TextReadline,
     TextReadlines,
     TextWritelines,
+    ListAppendMoved,
+    ListSetMoved,
+    ListInsertMoved,
+    SetAddMoved,
+    DictSetMoved,
     Input,
     MathAcos,
     MathAcosh,
@@ -318,7 +323,7 @@ const FLOAT_FLOAT: &[TyirType] = &[TyirType::Float, TyirType::Float];
 
 impl RuntimeFunction {
     /// Every runtime function.
-    pub const ALL: [Self; 279] = [
+    pub const ALL: [Self; 284] = [
         Self::IntFloorDivide,
         Self::IntModulo,
         Self::IntPower,
@@ -534,6 +539,11 @@ impl RuntimeFunction {
         Self::TextReadline,
         Self::TextReadlines,
         Self::TextWritelines,
+        Self::ListAppendMoved,
+        Self::ListSetMoved,
+        Self::ListInsertMoved,
+        Self::SetAddMoved,
+        Self::DictSetMoved,
         Self::Input,
         Self::MathAcos,
         Self::MathAcosh,
@@ -663,17 +673,17 @@ impl RuntimeFunction {
                 signature(&[TyirType::MODULE, STR, Int], Unit, true)
             }
             Self::ListNew => signature(&[Int, Int, Bits], LIST, false),
-            Self::ListAppend => signature(&[LIST, Bits], Unit, false),
+            Self::ListAppend | Self::ListAppendMoved => signature(&[LIST, Bits], Unit, false),
             Self::ListLength => signature(&[LIST], Int, false),
             Self::ListGet | Self::ListExtreme => signature(&[LIST, Int], Bits, true),
-            Self::ListSet => signature(&[LIST, Int, Bits], Unit, true),
+            Self::ListSet | Self::ListSetMoved => signature(&[LIST, Int, Bits], Unit, true),
             Self::ListEqual => signature(&[LIST, LIST], Bool, false),
             Self::ListContains => signature(&[LIST, Bits], Bool, false),
             Self::ListRepr => signature(&[LIST], STR, true),
             Self::ListSlice => signature(&[LIST, Int, Int, Int, Int], LIST, true),
             Self::StrSlice => signature(&[STR, Int, Int, Int, Int], STR, true),
             Self::ListPop => signature(&[LIST, Int, Int], Bits, true),
-            Self::ListInsert => signature(&[LIST, Int, Bits], Unit, false),
+            Self::ListInsert | Self::ListInsertMoved => signature(&[LIST, Int, Bits], Unit, false),
             Self::ListExtend => signature(&[LIST, LIST], Unit, false),
             Self::ListRemove => signature(&[LIST, Bits], Unit, true),
             Self::ListIndex => signature(&[LIST, Bits], Int, true),
@@ -720,9 +730,11 @@ impl RuntimeFunction {
             Self::BytesFromList => signature(&[LIST], BYTES, true),
             Self::BytesRepr | Self::BytesHex => signature(&[BYTES], STR, false),
             Self::SetNew => signature(&[Int, Bits], SET, false),
-            Self::SetAdd | Self::SetDiscard | Self::SetRemoveAll | Self::SetToggle => {
-                signature(&[SET, Bits], Unit, false)
-            }
+            Self::SetAdd
+            | Self::SetAddMoved
+            | Self::SetDiscard
+            | Self::SetRemoveAll
+            | Self::SetToggle => signature(&[SET, Bits], Unit, false),
             Self::SetContains => signature(&[SET, Bits], Bool, false),
             Self::SetRemove => signature(&[SET, Bits], Unit, true),
             Self::SetPop => signature(&[SET], Bits, true),
@@ -740,7 +752,7 @@ impl RuntimeFunction {
             Self::SetReplace => signature(&[SET, SET], Unit, false),
             Self::SetRelation => signature(&[SET, Bits, Int], Bool, false),
             Self::DictNew => signature(&[Int, Bits, Int, Bits, Int], DICT, false),
-            Self::DictSet => signature(&[DICT, Bits, Bits], Unit, false),
+            Self::DictSet | Self::DictSetMoved => signature(&[DICT, Bits, Bits], Unit, false),
             Self::DictFind => signature(&[DICT, Bits], Int, false),
             Self::DictContains => signature(&[DICT, Bits], Bool, false),
             Self::DictGet | Self::DictPop => signature(&[DICT, Bits], Bits, true),
@@ -1112,6 +1124,11 @@ impl RuntimeFunction {
             Self::TextReadline => "text_readline",
             Self::TextReadlines => "text_readlines",
             Self::TextWritelines => "text_writelines",
+            Self::ListAppendMoved => "list_append_moved",
+            Self::ListSetMoved => "list_set_moved",
+            Self::ListInsertMoved => "list_insert_moved",
+            Self::SetAddMoved => "set_add_moved",
+            Self::DictSetMoved => "dict_set_moved",
             Self::Input => "input",
             Self::MathAcos => "math_acos",
             Self::MathAcosh => "math_acosh",

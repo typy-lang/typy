@@ -316,3 +316,147 @@ pub struct InitCall {
     /// How many of them come first, written by position.
     pub positional: usize,
 }
+
+impl TypedExpr {
+    /// Returns the expression's operands in source order, the expressions it evaluates directly.
+    #[must_use]
+    #[allow(clippy::too_many_lines, reason = "one arm per expression kind")]
+    pub fn operands(&self) -> Vec<&TypedExpr> {
+        match &self.kind {
+            TypedExprKind::Constant(_)
+            | TypedExprKind::Local(_)
+            | TypedExprKind::ModuleVariable(_)
+            | TypedExprKind::ModuleAttribute { .. }
+            | TypedExprKind::Submodule(_)
+            | TypedExprKind::ModuleName
+            | TypedExprKind::TypeObject(_)
+            | TypedExprKind::SysValue(_) => Vec::new(),
+            TypedExprKind::Binary { left, right, .. }
+            | TypedExprKind::Index {
+                value: left,
+                index: right,
+            } => {
+                vec![left, right]
+            }
+            TypedExprKind::Unary { operand, .. }
+            | TypedExprKind::TupleOf(operand)
+            | TypedExprKind::TupleItem { tuple: operand, .. }
+            | TypedExprKind::TupleSlice { tuple: operand, .. } => {
+                vec![operand]
+            }
+            TypedExprKind::Tuple(items)
+            | TypedExprKind::List(items)
+            | TypedExprKind::Set(items) => items.iter().collect(),
+            TypedExprKind::ListItem { list, index } => vec![list, index],
+            TypedExprKind::ListOf(source)
+            | TypedExprKind::SetOf(source)
+            | TypedExprKind::DictOf(source) => source.expressions(),
+            TypedExprKind::DictWith { source, entries } => source
+                .iter()
+                .flat_map(|source| source.expressions())
+                .chain(entries.iter().map(|(_, value)| value))
+                .collect(),
+            TypedExprKind::DictFromKeys { source, value } => source
+                .expressions()
+                .into_iter()
+                .chain(value.as_deref())
+                .collect(),
+            TypedExprKind::Dict { keys, values } => keys
+                .iter()
+                .zip(values)
+                .flat_map(|(key, value)| [key, value])
+                .collect(),
+            TypedExprKind::DictItem { dict, key } => vec![dict, key],
+            TypedExprKind::Wrap(inner)
+            | TypedExprKind::Unwrap(inner)
+            | TypedExprKind::AsIterable(inner)
+            | TypedExprKind::Lazy { value: inner, .. } => vec![inner],
+            TypedExprKind::PercentFormat { values, .. } => vec![values],
+            TypedExprKind::MathCall { arguments, .. } => arguments.iter().collect(),
+            TypedExprKind::Open { path, .. } => vec![path],
+            TypedExprKind::SysExit(value) | TypedExprKind::Input(value) => {
+                value.iter().map(Box::as_ref).collect()
+            }
+            TypedExprKind::Comprehension {
+                element,
+                value,
+                generators,
+            } => std::iter::once(element.as_ref())
+                .chain(value.as_deref())
+                .chain(generators.iter().flat_map(|generator| {
+                    generator
+                        .source
+                        .expressions()
+                        .into_iter()
+                        .chain(&generator.conditions)
+                }))
+                .collect(),
+            TypedExprKind::IterableBuiltin {
+                iterable, option, ..
+            } => std::iter::once(iterable.as_ref())
+                .chain(option.as_deref())
+                .collect(),
+            TypedExprKind::Slice {
+                value,
+                lower,
+                upper,
+                step,
+            } => std::iter::once(value.as_ref())
+                .chain(lower.as_deref())
+                .chain(upper.as_deref())
+                .chain(step.as_deref())
+                .collect(),
+            TypedExprKind::Method {
+                receiver,
+                arguments,
+                ..
+            } => std::iter::once(receiver.as_ref())
+                .chain(arguments.iter().map(|argument| &argument.value))
+                .collect(),
+            TypedExprKind::BoolOp { values, .. }
+            | TypedExprKind::Builtin {
+                arguments: values, ..
+            } => values.iter().collect(),
+            TypedExprKind::Compare {
+                left, comparators, ..
+            } => std::iter::once(left.as_ref()).chain(comparators).collect(),
+            TypedExprKind::IfExp { test, body, orelse } => vec![test, body, orelse],
+            TypedExprKind::Call { arguments, .. } | TypedExprKind::New { arguments, .. } => {
+                arguments.iter().map(|argument| &argument.value).collect()
+            }
+            TypedExprKind::Attribute { object, .. }
+            | TypedExprKind::TypeOf(object)
+            | TypedExprKind::TypeName(object) => vec![object],
+            TypedExprKind::NewException {
+                arguments, init, ..
+            } => arguments
+                .iter()
+                .chain(
+                    init.iter()
+                        .flat_map(|init| init.arguments.iter().map(|argument| &argument.value)),
+                )
+                .collect(),
+            TypedExprKind::Iter(source) => vec![source],
+            TypedExprKind::Next {
+                iterator, default, ..
+            } => std::iter::once(iterator.as_ref())
+                .chain(default.as_deref())
+                .collect(),
+            TypedExprKind::SetArguments {
+                exception,
+                arguments,
+            } => std::iter::once(exception.as_ref())
+                .chain(arguments)
+                .collect(),
+            TypedExprKind::FString(parts) => crate::typed::dump::fstring_values(parts),
+            TypedExprKind::Print(call) => call
+                .values
+                .iter()
+                .chain(&call.sep)
+                .chain(&call.end)
+                .chain(&call.file)
+                .chain(&call.flush)
+                .collect(),
+        }
+    }
+}

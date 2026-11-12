@@ -158,11 +158,18 @@ All notable changes to TyPy are recorded here. The format follows
 
 ### Changed
 
+- The last use of a variable moves its value into an assignment, a
+  display, `append`, `insert`, `add` or a dict entry, and a new value such
+  as a call's result goes into a collection without being counted, so
+  building a collection in a loop does no reference counting of its items
+  (MEM-09).
 - `--release` and `--release-small` builds leave out debug information; a
   static musl hello world is about 30 KB (CLI-05, NFR-01).
 
 ### Fixed
 
+- A function whose only `try` has a body that cannot raise compiles;
+  it failed with E9001.
 - A `\u` or `\U` escape of a surrogate in a `str` literal is E0201,
   planned for 0.4 (LEX-10); it gave U+FFFD instead of the surrogate.
 - Programs call the C library's maths functions, as CPython does, and

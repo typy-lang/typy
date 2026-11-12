@@ -85,6 +85,11 @@ pub(crate) struct FunctionLowerer<'context> {
     /// The slots of parameters the function never assigns, which borrow the caller's
     /// reference and are never counted (MEM-04).
     pub(crate) borrowed: BTreeSet<SlotId>,
+    /// The reads of a variable that move its value out of its slot, by the variable and the
+    /// read's span (MEM-09).
+    pub(crate) moves: BTreeSet<(SymbolId, Span)>,
+    /// The owned values a store has taken the reference of, which are not released after it.
+    pub(crate) handed_over: BTreeSet<ValueId>,
     parameters: Vec<(ValueId, SlotId)>,
     /// The globals of the program's module variables (ADR-0015).
     pub(crate) module_globals: &'context crate::module_variable::ModuleGlobals,
@@ -158,6 +163,20 @@ impl<'context> FunctionLowerer<'context> {
             let slot = builder.add_slot(symbol.name.clone(), tyir_type(&symbol.ty, tuple_types));
             slots.insert(*symbol_id, slot);
         }
+        let excluded = crate::last_use::handler_names(&function.body);
+        let mut candidates = BTreeSet::new();
+        for (symbol, slot) in &slots {
+            let ty = &program.symbol(*symbol).ty;
+            let lowered = tyir_type(ty, tuple_types);
+            if !borrowed.contains(slot)
+                && !excluded.contains(symbol)
+                && crate::last_use::movable_type(ty)
+                && tuple_types.is_counted(lowered)
+            {
+                candidates.insert(*symbol);
+            }
+        }
+        let moves = crate::last_use::last_uses(&function.body, &candidates);
         let body_start = builder.create_block();
         builder.switch_to(body_start);
         let mut lowerer = FunctionLowerer {
@@ -172,6 +191,8 @@ impl<'context> FunctionLowerer<'context> {
             cleanups: Vec::new(),
             raises: false,
             borrowed,
+            moves,
+            handed_over: BTreeSet::new(),
             parameters,
             module_globals,
             module: function.module.clone(),

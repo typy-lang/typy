@@ -32,6 +32,8 @@ mod list;
 mod math;
 mod message;
 mod module;
+#[cfg(test)]
+mod moved_tests;
 mod range;
 mod refcount;
 mod set;

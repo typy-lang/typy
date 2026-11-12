@@ -10,10 +10,28 @@ reference goes, with no garbage collector and no pauses.
 | An object is freed when its last reference goes | MEM-01 |
 | `float`, `bool` and inline `int` values are held without a heap allocation, in variables, attributes and containers, so a `list[float]` stores 8 bytes per item | MEM-02 |
 | Passing a variable or a constant as an argument counts nothing, and `return name` moves the value to the caller | MEM-04 |
+| The last use of a variable moves its value into an assignment or a collection, and a new value, such as a call's result, goes into a collection without being counted | MEM-09 |
 | An object header takes 8 bytes, and a million small `int` items fit in 8.5 MB | NFR-12, NFR-13 |
 
-Moving a variable at its last use elsewhere comes in 0.3 (MEM-09),
-allocation on the stack in 0.4 (MEM-03), and the collection of reference
+A move changes no result: the value goes where CPython would put it, and
+an object is still freed when its last reference goes. In this loop,
+`row` and `name` move into the lists, so nothing is counted:
+
+<!-- typy-expect: accepted -->
+```python
+def table(count: int) -> list[list[str]]:
+    rows: list[list[str]] = []
+    for index in range(count):
+        name = "row " + str(index)
+        row = [name]
+        rows.append(row)
+    return rows
+
+
+print(table(3))
+```
+
+Allocation on the stack comes in 0.4 (MEM-03), and the collection of reference
 cycles in 1.0 (MEM-06). Until then, objects that refer to each other in a
 cycle stay allocated until the program ends.
 

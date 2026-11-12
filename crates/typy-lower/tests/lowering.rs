@@ -387,3 +387,20 @@ fn imports_initialise_each_module_once_and_test_what_they_read() {
     assert!(main.contains("rt.module_attribute_error("), "{main}");
     assert!(main.contains("const module m1"), "{main}");
 }
+
+#[test]
+fn a_try_whose_body_cannot_raise_lowers_and_verifies() {
+    let module = lower(concat!(
+        "def f() -> list[str]:\n",
+        "    out: list[str] = []\n",
+        "    try:\n",
+        "        out.append(\"a\")\n",
+        "    except ValueError:\n",
+        "        print(\"never\")\n",
+        "    return out\n",
+        "\n",
+        "\n",
+        "print(f())\n",
+    ));
+    assert!(function(&module, "f").may_raise);
+}

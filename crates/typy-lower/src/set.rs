@@ -57,7 +57,13 @@ impl FunctionLowerer<'_> {
         for element in items {
             let value = self.expression(element);
             let bits = self.bits(value, span);
-            self.call_runtime(RuntimeFunction::SetAdd, vec![set.value, bits], span);
+            self.store_call(
+                RuntimeFunction::SetAdd,
+                RuntimeFunction::SetAddMoved,
+                vec![set.value, bits],
+                value,
+                span,
+            );
             self.release(value, span);
         }
         if !(CONSTANT_DISPLAY.contains(&items.len()) && items.iter().all(is_constant)) {
@@ -204,9 +210,18 @@ impl FunctionLowerer<'_> {
     ) -> Lowered {
         let others: Vec<ValueId> = arguments.iter().map(|argument| argument.value).collect();
         match (method, others.as_slice()) {
-            (Method::SetAdd | Method::SetRemove | Method::SetDiscard, [_]) => {
+            (Method::SetAdd, [_]) => {
+                let bits = self.bits(arguments[0], span);
+                self.store_call(
+                    RuntimeFunction::SetAdd,
+                    RuntimeFunction::SetAddMoved,
+                    vec![set, bits],
+                    arguments[0],
+                    span,
+                )
+            }
+            (Method::SetRemove | Method::SetDiscard, [_]) => {
                 let function = match method {
-                    Method::SetAdd => RuntimeFunction::SetAdd,
                     Method::SetRemove => RuntimeFunction::SetRemove,
                     _ => RuntimeFunction::SetDiscard,
                 };

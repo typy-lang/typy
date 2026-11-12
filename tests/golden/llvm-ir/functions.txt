@@ -72,12 +72,12 @@ b7:                                               ; preds = %b3
   store i64 %v8, ptr %s2, align 8
   call void @typy_rt_int_decrement(i64 %16)
   %17 = load i64, ptr %s1, align 8
-  call void @typy_rt_int_increment(i64 %17)
+  store i64 1, ptr %s1, align 8
   %18 = load i64, ptr %s0, align 8
   store i64 %17, ptr %s0, align 8
   call void @typy_rt_int_decrement(i64 %18)
   %19 = load i64, ptr %s2, align 8
-  call void @typy_rt_int_increment(i64 %19)
+  store i64 1, ptr %s2, align 8
   %20 = load i64, ptr %s1, align 8
   store i64 %19, ptr %s1, align 8
   call void @typy_rt_int_decrement(i64 %20)

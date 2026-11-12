@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy detailed design |
-| Version | 1.72 |
+| Version | 1.73 |
 | Status | Approved |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-12 |
@@ -1371,9 +1371,30 @@ borrowed argument, such as an item read from a list or an attribute, gets
 a reference of the caller's own, released after the call, since the callee
 could free it by changing the container. A `return` of a variable hands its
 slot's reference to the caller and skips that slot when the others are
-released. Moving a variable at its last use in other places is MEM-09,
-planned for 0.3. `EscapeAnalysis` is planned for 0.4 and `CycleAnalysis`
-for 1.0.
+released.
+
+A variable's last use moves its value when it is the value of an
+assignment or an item a display, `append`, `insert` or `add` stores
+(MEM-09). `last_use.rs` computes liveness backwards over the function's
+statements: a loop is iterated until what is live at its start stops
+growing, and inside a `try` or a `with` whatever an `except` clause, a
+`finally` block or the code after a suppressing `__exit__` reads stays
+live. A read moves when the statement reads the variable nowhere else, it
+is outside any comprehension, and the variable is not live after the
+statement. Only variables the function owns are moved: not a borrowed
+parameter, not a module variable, not the name of an `except` clause, and
+not a value whose zero value allocates, such as a view of a dict. A moved
+read loads the slot and stores the slot's zero value, so the value is an
+owned temporary and every later release of the slot passes over it.
+
+An owned value, a moved variable or the result of a call, goes into a
+collection through a store that takes over its reference:
+`typy_rt_list_append_moved`, `_list_insert_moved`, `_list_set_moved`,
+`typy_rt_set_add_moved`, which releases an item equal to one the set
+holds, and `typy_rt_dict_set_moved`, which takes the value and counts the
+key. `store_call` chooses the store, and the value is then neither
+counted nor released. `EscapeAnalysis` is planned for 0.4 and
+`CycleAnalysis` for 1.0.
 
 ## 10. typy-codegen
 

@@ -20,6 +20,7 @@ mod import;
 mod invoke;
 mod iterable_builtin;
 mod iterator;
+mod last_use;
 mod lazy;
 mod list;
 mod list_method;

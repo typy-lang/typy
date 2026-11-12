@@ -4,6 +4,8 @@
 //! CPython's. Keys and values are stored by their types, as a list stores items (ADR-0009).
 
 mod operations;
+#[cfg(test)]
+pub(crate) use operations::typy_rt_dict_set_moved;
 mod reverse;
 #[cfg(test)]
 mod tests;
@@ -366,12 +368,31 @@ pub(crate) unsafe fn find(dict: *const DictObject, key: u64, hash: i64) -> Optio
 ///
 /// `dict` points to a live dict, and `key` and `value` are live items of its types.
 pub(crate) unsafe fn insert(dict: *mut DictObject, key: u64, hash: i64, value: u64) {
+    // SAFETY: the caller's guarantee.
+    unsafe { insert_entry(dict, key, hash, value, true) }
+}
+
+/// Sets `key` to `value` as `insert` does, with a reference of its own to the value only when
+/// `retain`; otherwise the dict takes over the caller's reference to it.
+///
+/// # Safety
+///
+/// As for `insert`.
+pub(crate) unsafe fn insert_entry(
+    dict: *mut DictObject,
+    key: u64,
+    hash: i64,
+    value: u64,
+    retain: bool,
+) {
     // SAFETY: the caller's guarantee; the table has a usable entry when one is written.
     unsafe {
         let dict = &mut *dict;
         let value_type = dict.value_type();
         if let Some(position) = find(dict, key, hash) {
-            value_type.retain(value);
+            if retain {
+                value_type.retain(value);
+            }
             let slot = dict.value_slot(position);
             let old = value_type.load(slot);
             // A tuple value is read from its slot, so it is released before it is overwritten.
@@ -384,7 +405,9 @@ pub(crate) unsafe fn insert(dict: *mut DictObject, key: u64, hash: i64, value: u
         }
         let key_type = dict.key_type();
         key_type.retain(key);
-        value_type.retain(value);
+        if retain {
+            value_type.retain(value);
+        }
         let position = dict.filled;
         let entry = dict.entry(position);
         *entry = hash.cast_unsigned();

@@ -61,8 +61,11 @@ impl FunctionLowerer<'_> {
         Self::borrowed(lowered.value, lowered.ty)
     }
 
-    /// Drops the function's reference to a value it owns.
+    /// Drops the function's reference to a value it owns, unless a store took it over.
     pub(crate) fn release(&mut self, lowered: Lowered, span: Span) {
+        if self.handed_over.remove(&lowered.value) {
+            return;
+        }
         if lowered.owned {
             self.builder.push(Operation::Decrement(lowered.value), span);
             self.untrack(lowered.value);
@@ -91,6 +94,38 @@ impl FunctionLowerer<'_> {
         } else {
             self.builder.push(Operation::Store { slot, value }, span);
         }
+    }
+
+    /// Calls the runtime store `retaining` with `arguments`, which count `value` themselves;
+    /// when the function owns `value`, calls `moving` instead, which takes over its reference,
+    /// so it is neither counted nor released afterwards (MEM-09).
+    pub(crate) fn store_call(
+        &mut self,
+        retaining: typy_tyir::RuntimeFunction,
+        moving: typy_tyir::RuntimeFunction,
+        arguments: Vec<ValueId>,
+        value: Lowered,
+        span: Span,
+    ) -> Lowered {
+        if !value.owned || !self.counted(value.ty) {
+            return self.call_runtime(retaining, arguments, span);
+        }
+        self.untrack(value.value);
+        self.handed_over.insert(value.value);
+        self.call_runtime(moving, arguments, span)
+    }
+
+    /// Takes a slot's value at the last use of its variable: the value, with the slot's
+    /// reference, is owned here, and the slot holds its zero value, which releasing passes
+    /// over (MEM-09).
+    pub(crate) fn take_slot(&mut self, slot: SlotId, span: Span) -> Lowered {
+        let ty = self.builder.slot_type(slot);
+        let value = self.builder.push_value(Operation::Load(slot), ty, span);
+        if let Some(zero) = self.initial_value(ty, span) {
+            self.builder
+                .push(Operation::Store { slot, value: zero }, span);
+        }
+        self.produced(value, ty)
     }
 
     /// Loads a slot's value, borrowed from the slot.

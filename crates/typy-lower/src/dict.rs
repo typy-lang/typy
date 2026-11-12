@@ -65,11 +65,18 @@ impl FunctionLowerer<'_> {
         dict
     }
 
-    /// Sets `dict[key] = value`; neither is released.
+    /// Sets `dict[key] = value`; neither is released, and an owned value is handed to the
+    /// dict, which releasing it afterwards passes over (MEM-09).
     pub(crate) fn set_entry(&mut self, dict: ValueId, key: Lowered, value: Lowered, span: Span) {
         let key = self.bits(key, span);
-        let value = self.bits(value, span);
-        self.call_runtime(RuntimeFunction::DictSet, vec![dict, key, value], span);
+        let bits = self.bits(value, span);
+        self.store_call(
+            RuntimeFunction::DictSet,
+            RuntimeFunction::DictSetMoved,
+            vec![dict, key, bits],
+            value,
+            span,
+        );
     }
 
     /// Returns `dict(source)`: a dict merged from a dict, as CPython merges one, or the pairs

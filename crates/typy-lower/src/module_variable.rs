@@ -128,6 +128,9 @@ impl FunctionLowerer<'_> {
     pub(crate) fn read_name(&mut self, symbol: SymbolId, span: Span) -> Lowered {
         let Some(global) = self.module_globals.of.get(&symbol).copied() else {
             let slot = self.slots[&symbol];
+            if self.moves.contains(&(symbol, span)) {
+                return self.take_slot(slot, span);
+            }
             return self.load(slot, span);
         };
         // A lazy import leaves its name unbound in the module's own code too.

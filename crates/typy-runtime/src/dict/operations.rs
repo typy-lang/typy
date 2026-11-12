@@ -57,6 +57,21 @@ pub unsafe extern "C" fn typy_rt_dict_set(dict: *mut DictObject, key: u64, value
     unsafe { insert(dict, key, (*dict).key_type().hash(key), value) }
 }
 
+/// Sets `dict[key] = value`, the dict taking over the caller's reference to the value; the
+/// key is counted as `typy_rt_dict_set` counts it (MEM-09).
+///
+/// # Safety
+///
+/// As for `typy_rt_dict_set`, and the caller owns a reference to `value`.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn typy_rt_dict_set_moved(dict: *mut DictObject, key: u64, value: u64) {
+    // SAFETY: the caller's guarantee.
+    unsafe {
+        let hash = (*dict).key_type().hash(key);
+        crate::dict::insert_entry(dict, key, hash, value, false);
+    }
+}
+
 /// Returns the position of the entry of `key`, as an `int` word, or -1.
 ///
 /// # Safety

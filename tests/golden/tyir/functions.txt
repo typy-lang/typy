@@ -17,8 +17,8 @@ fn _TY8__main__3gcd(v0: int, v1: int) -> int raises {  # gcd
 b0(v0: int, v1: int):
   store s0, v0
   store s1, v1
-  v21 = const int 0
-  store s2, v21
+  v23 = const int 0
+  store s2, v23
   jump b1()
 b1():
   jump b2()
@@ -34,21 +34,25 @@ b3():
 b4():
   jump b5()
 b5():
-  v18 = load s0
-  v19 = load s1
-  v20 = load s2
-  return v18
+  v20 = load s0
+  v21 = load s1
+  v22 = load s2
+  return v20
 b6(v2: bool):
   branch v2, b3, b4
 b7(v8: int):
   v13 = load s2
   store s2, v8
   v14 = load s1
-  v15 = load s0
+  v15 = const int 0
+  store s1, v15
+  v16 = load s0
   store s0, v14
-  v16 = load s2
-  v17 = load s1
-  store s1, v16
+  v17 = load s2
+  v18 = const int 0
+  store s2, v18
+  v19 = load s1
+  store s1, v17
   jump b2()
 b8(v9: exception):
   v10 = load s0
