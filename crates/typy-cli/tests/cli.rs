@@ -523,3 +523,37 @@ fn mod_01_modules_are_found_in_the_module_paths_after_the_main_files_directory()
     let run = workspace.typy(&["run", "app.py"]);
     assert_eq!(stdout(&run), "root vendor\n");
 }
+
+#[test]
+fn dia_05_json_diagnostics_are_one_object_per_line() {
+    let workspace = Workspace::new("x: int = 1\nx = \"a\"\nprint(y)\n");
+    let output = workspace.typy(&["check", "app.py", "--error-format=json"]);
+    assert_eq!(status(&output), 1);
+    let text = stderr(&output);
+    let lines: Vec<&str> = text.lines().collect();
+    assert_eq!(lines.len(), 2, "{text}");
+    assert!(
+        lines[0].starts_with(
+            "{\"code\":\"E0402\",\"severity\":\"error\",\"message\":\"`x` was declared as int"
+        ),
+        "{text}"
+    );
+    assert!(
+        lines[0].contains("\"file\":\"app.py\",\"line\":2,\"column\":5,"),
+        "{text}"
+    );
+    assert!(lines[1].starts_with("{\"code\":\"E0205\""), "{text}");
+    assert!(lines.iter().all(|line| line.ends_with('}')), "{text}");
+    std::fs::write(workspace.root.join("typy.toml"), "floor = 1\n").unwrap();
+    let settings = workspace.typy(&["--error-format", "json", "build", "app.py"]);
+    assert_eq!(status(&settings), 2);
+    assert!(
+        stderr(&settings).starts_with("{\"code\":\"E0107\""),
+        "{}",
+        stderr(&settings)
+    );
+    std::fs::remove_file(workspace.root.join("typy.toml")).unwrap();
+    std::fs::write(workspace.root.join("app.py"), HELLO).unwrap();
+    let clean = workspace.typy(&["run", "app.py", "--error-format=json"]);
+    assert_eq!((status(&clean), stderr(&clean).as_str()), (0, ""));
+}

@@ -6,12 +6,23 @@ use clap::{Args, Parser, Subcommand};
 use typy_build::{BuildMode, EmitStage};
 use typy_source::{PythonFloor, SettingOverrides};
 
+use crate::output::ErrorFormat;
+
 /// Compiles typed Python programs ahead of time to native executables.
 #[derive(Debug, Parser)]
 #[command(name = "typy", version, about)]
 pub(crate) struct Arguments {
     #[command(subcommand)]
     pub(crate) command: Command,
+    /// How to write diagnostics: text, or one JSON object per line.
+    #[arg(
+        long,
+        global = true,
+        value_enum,
+        default_value_t,
+        value_name = "FORMAT"
+    )]
+    pub(crate) error_format: ErrorFormat,
 }
 
 /// The commands of 0.1.
@@ -114,6 +125,7 @@ fn parse_stage(text: &str) -> Result<EmitStage, String> {
 #[cfg(test)]
 mod tests {
     use super::{Arguments, Command};
+    use crate::output::ErrorFormat;
     use clap::Parser as _;
     use typy_build::{BuildMode, EmitStage};
 
@@ -192,6 +204,24 @@ mod tests {
                 Some(typy_source::PythonFloor::V3_15)
             );
         }
+    }
+
+    #[test]
+    fn the_error_format_is_text_unless_json_is_asked_for() {
+        let format = |line: &[&str]| {
+            Arguments::try_parse_from(std::iter::once("typy").chain(line.iter().copied()))
+                .map(|arguments| arguments.error_format)
+        };
+        assert_eq!(format(&["check", "a.py"]).unwrap(), ErrorFormat::Text);
+        assert_eq!(
+            format(&["check", "a.py", "--error-format=json"]).unwrap(),
+            ErrorFormat::Json
+        );
+        assert_eq!(
+            format(&["--error-format", "json", "run", "a.py"]).unwrap(),
+            ErrorFormat::Json
+        );
+        assert!(format(&["check", "a.py", "--error-format=xml"]).is_err());
     }
 
     #[test]

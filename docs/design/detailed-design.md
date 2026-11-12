@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy detailed design |
-| Version | 1.65 |
+| Version | 1.66 |
 | Status | Approved |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-12 |
@@ -243,7 +243,24 @@ error[E0701]: the C toolchain program `cc` was not found
 help: install `cc`, which TyPy runs to link the program
 ```
 
-`render_json` is planned for 0.3 (DIA-05).
+`render_json` writes the same diagnostic as one JSON object on one line
+(DIA-05). Every key is always present, in this order, with `null` where
+the diagnostic has nothing, so a tool reads each line the same way:
+
+| Key | Value |
+| --- | --- |
+| `code` | The code, such as `"E0402"` |
+| `severity` | `"error"` or `"warning"` |
+| `message` | The one sentence of DIA-01 |
+| `file` | The path from the project root, or `null` |
+| `line`, `column`, `end_line`, `end_column` | The span from 1, columns in code points, or `null` |
+| `rule` | The requirement ID, such as `"TYP-03"`, or `null` |
+| `help` | The help line, or `null` |
+| `labels` | An array of `{"line", "column", "text"}` |
+| `fix` | `{"line", "column", "end_line", "end_column", "replacement"}`, or `null` |
+
+A string escapes a quote, a backslash and each control character, and
+keeps every other character as UTF-8.
 
 ### 4.3 Diagnostic codes
 
@@ -1444,7 +1461,7 @@ only when the stages before it found no errors.
 | Item | Design |
 | --- | --- |
 | Arguments | Parsed with `clap`; the commands `check FILE`, `build FILE` and `run FILE [-- ARGS]` in 0.1, `explain` in 0.3. Each of the three takes `--python-floor VERSION`, which becomes `SettingOverrides` for `Pipeline::with_overrides`. `build` takes `--emit=STAGE` and `-o PATH`; `build` and `run` take `--release` or `--release-small`, never both. A main file that is not a `.py` file is wrong usage |
-| Output | Diagnostics are sorted, rendered with `render_text` and written to standard error, with a blank line between two of them. `--emit` output goes to `-o`, or to standard output without it. A file that cannot be written gives E0106 |
+| Output | `Reporter` writes diagnostics in the `--error-format` the command line chose, a global flag: sorted, rendered with `render_text` and written to standard error with a blank line between two of them, or with `render_json` one per line. The panic guard and internal errors use the same reporter, so a tool reading JSON also gets E9001 as JSON (UC-10). `--emit` output goes to `-o`, or to standard output without it. A file that cannot be written gives E0106 |
 | Exit status | `ExitStatus` is `Success = 0`, `ProgramErrors = 1`, `Usage = 2` and `Internal = 101` (CLI-06); a failure with any `E9xxx` diagnostic is `Internal`. `typy run` exits with the program's status, or 128 plus the signal that ended it |
 | Panic guard | The command runs inside `std::panic::catch_unwind`, with a panic hook that records the location in a thread-local; a panic becomes E9001 with the location and message, and exit status 101 |
 | `typy run` | Builds into `cache/<key>/<name>`, where the cache is `$TYPY_HOME/cache`, else `$XDG_CACHE_HOME/typy` or `~/.cache/typy`, and `key` is the SHA-256 of the compiler version, the mode, the target, the main file's name and its text, each preceded by its length. A build already in the cache is run again without compiling. The executable gets the arguments after `--` and the same standard input, output and error |

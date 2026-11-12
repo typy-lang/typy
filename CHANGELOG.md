@@ -8,6 +8,8 @@ All notable changes to TyPy are recorded here. The format follows
 
 ### Added
 
+- `--error-format=json` writes each diagnostic as one JSON object per
+  line, with the same keys every time, for editors and CI (DIA-05).
 - `typy.toml` beside the main file sets `python-floor` and `module-paths`,
   the directories where imports look for modules after the main file's
   directory; `--python-floor` on `check`, `build` and `run` overrides the

@@ -7,23 +7,25 @@ mod run;
 use camino::Utf8PathBuf;
 use typy_driver::Pipeline;
 
-use crate::arguments::{Arguments, Command};
+use crate::arguments::Command;
 use crate::exit_status::ExitStatus;
-use crate::output::report_internal;
+use crate::output::Reporter;
 
 /// Runs the command and returns the status `typy` exits with.
-pub(crate) fn run(arguments: Arguments) -> ExitStatus {
+pub(crate) fn run(command: Command, reporter: Reporter) -> ExitStatus {
     let pipeline = match compiler() {
         Ok(path) => Pipeline::new(path),
         Err(message) => {
-            report_internal(&message);
+            reporter.internal(&message);
             return ExitStatus::Internal;
         }
     };
-    match arguments.command {
-        Command::Check { file, settings } => {
-            check::check(&pipeline.with_overrides(settings.overrides()), &file)
-        }
+    match command {
+        Command::Check { file, settings } => check::check(
+            &pipeline.with_overrides(settings.overrides()),
+            &file,
+            reporter,
+        ),
         Command::Build {
             file,
             emit,
@@ -36,6 +38,7 @@ pub(crate) fn run(arguments: Arguments) -> ExitStatus {
             emit,
             output.as_deref(),
             mode.build_mode(),
+            reporter,
         ),
         Command::Run {
             file,
@@ -48,6 +51,7 @@ pub(crate) fn run(arguments: Arguments) -> ExitStatus {
             mode.build_mode(),
             settings.overrides(),
             &arguments,
+            reporter,
         ),
     }
 }

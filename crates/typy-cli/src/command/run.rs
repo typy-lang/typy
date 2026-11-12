@@ -8,7 +8,7 @@ use typy_driver::Pipeline;
 
 use crate::cache;
 use crate::exit_status::ExitStatus;
-use crate::output::{report, report_internal, report_unwritable};
+use crate::output::Reporter;
 
 /// Builds the program unless the cache holds this build, then runs it with `arguments` and
 /// returns its exit status.
@@ -18,6 +18,7 @@ pub(super) fn run(
     mode: BuildMode,
     overrides: typy_source::SettingOverrides,
     arguments: &[String],
+    reporter: Reporter,
 ) -> ExitStatus {
     let request = match BuildRequest::new(file) {
         Ok(request) => request.with_mode(mode),
@@ -27,7 +28,7 @@ pub(super) fn run(
         // Checking loads the program again and reports why it does not load.
         return match pipeline.check(request.main()) {
             Ok(_) => ExitStatus::ProgramErrors,
-            Err(failure) => report(failure),
+            Err(failure) => reporter.report(failure),
         };
     };
     let name = request.main().file_stem().unwrap_or("program").to_owned();
@@ -43,16 +44,16 @@ pub(super) fn run(
         if let Some(parent) = executable.parent()
             && let Err(error) = std::fs::create_dir_all(parent)
         {
-            return report_unwritable(parent, &error);
+            return reporter.unwritable(parent, &error);
         }
         if let Err(failure) = pipeline.run(&request.with_output(executable.clone())) {
-            return report(failure);
+            return reporter.report(failure);
         }
     }
     match Command::new(&executable).args(arguments).status() {
         Ok(status) => ExitStatus::Program(program_status(status)),
         Err(error) => {
-            report_internal(&format!("cannot start {executable}: {error}"));
+            reporter.internal(&format!("cannot start {executable}: {error}"));
             ExitStatus::Internal
         }
     }

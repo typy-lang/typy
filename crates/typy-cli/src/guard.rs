@@ -4,7 +4,7 @@ use std::cell::RefCell;
 use std::panic::{self, AssertUnwindSafe};
 
 use crate::exit_status::ExitStatus;
-use crate::output::report_internal;
+use crate::output::Reporter;
 
 thread_local! {
     /// Where the last panic on this thread happened, recorded by the panic hook.
@@ -12,7 +12,7 @@ thread_local! {
 }
 
 /// Returns the command's status, or `Internal` after reporting E9001 when it panics.
-pub(crate) fn guarded(command: impl FnOnce() -> ExitStatus) -> ExitStatus {
+pub(crate) fn guarded(reporter: Reporter, command: impl FnOnce() -> ExitStatus) -> ExitStatus {
     let previous = panic::take_hook();
     panic::set_hook(Box::new(|info| {
         let location = info
@@ -33,7 +33,7 @@ pub(crate) fn guarded(command: impl FnOnce() -> ExitStatus) -> ExitStatus {
             let location = LOCATION
                 .with(|cell| cell.borrow_mut().take())
                 .unwrap_or_else(|| "an unknown place".to_owned());
-            report_internal(&format!("the compiler panicked at {location}: {message}"));
+            reporter.internal(&format!("the compiler panicked at {location}: {message}"));
             ExitStatus::Internal
         }
     }
@@ -41,8 +41,12 @@ pub(crate) fn guarded(command: impl FnOnce() -> ExitStatus) -> ExitStatus {
 
 #[cfg(test)]
 mod tests {
-    use super::guarded;
     use crate::exit_status::ExitStatus;
+    use crate::output::{ErrorFormat, Reporter};
+
+    fn guarded(command: impl FnOnce() -> ExitStatus) -> ExitStatus {
+        super::guarded(Reporter::new(ErrorFormat::Text), command)
+    }
 
     #[test]
     fn a_command_that_returns_keeps_its_status() {

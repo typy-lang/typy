@@ -5,7 +5,7 @@ use typy_build::{BuildMode, BuildRequest, EmitStage};
 use typy_driver::{Outcome, Pipeline};
 
 use crate::exit_status::ExitStatus;
-use crate::output::{report, write_emission};
+use crate::output::Reporter;
 
 /// Builds the executable, or writes the output of the stage `emit` names.
 pub(super) fn build(
@@ -14,6 +14,7 @@ pub(super) fn build(
     emit: Option<EmitStage>,
     output: Option<&Utf8Path>,
     mode: BuildMode,
+    reporter: Reporter,
 ) -> ExitStatus {
     let mut request = match BuildRequest::new(file) {
         Ok(request) => request.with_mode(mode),
@@ -26,8 +27,8 @@ pub(super) fn build(
         request = request.with_output(path);
     }
     match pipeline.run(&request) {
-        Ok(Outcome::Emitted(emission)) => write_emission(&emission, output),
+        Ok(Outcome::Emitted(emission)) => reporter.emission(&emission, output),
         Ok(Outcome::Executable(_) | Outcome::Checked(_)) => ExitStatus::Success,
-        Err(failure) => report(failure),
+        Err(failure) => reporter.report(failure),
     }
 }
