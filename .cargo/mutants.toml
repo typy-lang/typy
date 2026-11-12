@@ -1,0 +1,9 @@
+# Settings for cargo-mutants, which `make mutants` runs in the memory-limited `mutants`
+# service (test plan, mutation testing). Tests run with nextest, as in CI.
+test_tool = "nextest"
+# A mutant can turn a bounded loop into an endless one; three times the baseline test time,
+# and at least a minute, ends it.
+timeout_multiplier = 3.0
+minimum_test_timeout = 60
+# Test code, the conformance harness and the fuzz targets are not mutated.
+exclude_globs = ["crates/*/tests/**", "crates/typy-conformance/**", "fuzz/**"]

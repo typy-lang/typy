@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy test plan |
-| Version | 0.40 |
+| Version | 0.41 |
 | Status | Draft |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-12 |
@@ -34,7 +34,7 @@ Each test sits at the lowest level that can prove its behaviour.
 | End-to-end (E2E) | The `typy` executable as a user runs it: arguments, exit status, files written, and the built program run as a subprocess | `crates/typy-cli/tests/cli.rs` | Every commit |
 | Fuzz | No input crashes the compiler (NFR-09) | `fuzz/` | 30 minutes before each release; 60 seconds on demand |
 | Benchmark | The numbered budgets of NFR-03 to NFR-05, NFR-13 and NFR-14 | `tests/bench/` | `make bench` in CI from 0.3 for NFR-04, NFR-05 and NFR-14; the run-time suite of NFR-03 before a release, from 1.0 |
-| Mutation | Tests fail when the code they cover is changed | `cargo-mutants` over the compiler crates, in a container with a memory limit, since a mutant can turn a bounded loop into one that allocates until memory runs out | Before a release, from 0.3 |
+| Mutation | Tests fail when the code they cover is changed | `make mutants` over `typy-diagnostics`, `typy-source`, `typy-check`, `typy-tyir`, `typy-lower`, `typy-codegen` and `typy-runtime`, each with its own tests, in a container limited to 6 GB with no swap, since a mutant can turn a bounded loop into one that allocates until memory runs out. `typy-build`, `typy-driver` and `typy-cli` are left out: their tests need the runtime archives built beside the compiler, and the end-to-end and conformance tests cover them | Before a release, from 0.3 |
 
 ## 3. Test design
 
