@@ -99,6 +99,45 @@ pub unsafe extern "C" fn typy_rt_exception_repr(
     }
 }
 
+/// What the argument of a `SystemExit` is, which decides the program's exit status.
+pub(crate) enum ExitCode {
+    /// No argument, or `None`.
+    None,
+    /// An `int`, or a `bool` as its `int`, given as an `int` word.
+    Int(i64),
+    /// Anything else, or more than one argument.
+    Other,
+}
+
+/// Returns the argument of a `SystemExit`.
+pub(crate) fn exit_code(exception: &ExceptionObject) -> ExitCode {
+    let Some(arguments) = Arguments::of(exception) else {
+        return ExitCode::None;
+    };
+    if arguments.count() != 1 {
+        return ExitCode::Other;
+    }
+    // SAFETY: the exception's arguments are live, laid out as their type says, with one.
+    let (kind, value) = unsafe {
+        (
+            crate::tuple::field_type(arguments.layout, 0).kind(),
+            crate::tuple::field(arguments.layout, arguments.address, 0),
+        )
+    };
+    #[allow(
+        clippy::cast_possible_wrap,
+        reason = "an `int` word is the field's bits"
+    )]
+    match kind {
+        crate::list::ItemKind::NoneValue => ExitCode::None,
+        crate::list::ItemKind::Int => ExitCode::Int(value as i64),
+        crate::list::ItemKind::Bool => {
+            ExitCode::Int(crate::word::inline(i64::from(value & 1 != 0)).unwrap_or(1))
+        }
+        _ => ExitCode::Other,
+    }
+}
+
 /// The arguments of an exception: their layout and their address.
 struct Arguments {
     layout: *const crate::tuple::TupleType,

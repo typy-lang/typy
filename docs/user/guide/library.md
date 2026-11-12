@@ -9,6 +9,7 @@
 | The methods of `str`, `bytes`, `list`, `tuple`, `dict` and `set`, with CPython's results | LIB-03, DAT-15 |
 | `format % values`, printf-style formatting of a string literal | LIB-10 |
 | The `math` module: its constants and its functions of numbers | LIB-05 |
+| `sys.argv`, `sys.exit`, `sys.stdout` and `sys.stderr`, `print` with `file` and `flush`, and `input` | LIB-04 |
 
 `str` has `find`, `index`, `count`, `split`, `join`, `strip`, `replace`,
 `startswith`, `upper`, `lower`, `title`, `center`, `zfill`, `encode`, the
@@ -19,7 +20,7 @@ has the same with `decode` and `hex`. Lists have `append`, `pop`,
 `values`, `items`, `update`, `copy` and `clear`; sets `add`, `remove`,
 `discard`, `pop` and the methods that combine sets.
 
-`sys`, `input` and `open` come in 0.3 (LIB-04). `iter` and `next` are
+`open` comes in 0.3 (LIB-04). `iter` and `next` are
 described in
 [Compound statements](compound-statements.md#iterators).
 
@@ -90,3 +91,54 @@ at that floor: `math.fma` needs `python-floor = "3.13"`, and `fmax`,
 `fsum`, `prod`, `sumprod`, `dist`, `gamma` and `lgamma` are planned for
 0.4 (LIB-12). A function of `math` is not a value yet: `f = math.sqrt`
 is planned for 1.0 (FUN-05).
+
+## The sys module
+
+`import sys` gives four names of CPython's `sys` module (LIB-04):
+
+| Name | What it is |
+| --- | --- |
+| `sys.argv` | A `list[str]`: the path of the executable, then each argument |
+| `sys.exit(code)` | Raises `SystemExit(code)`; `code` may be left out |
+| `sys.stdout`, `sys.stderr` | Text files with `write(text)`, which returns the number of characters, and `flush()` |
+
+An argument that is not valid UTF-8 keeps each stray byte as a
+surrogate, as CPython decodes it, so `b"a\xffb"` becomes `'a\udcffb'`.
+`sys.argv[0]` is the path of the executable, where CPython gives the
+path of the script. The names of `sys` and `math` cannot be assigned:
+`sys.argv = ["x"]` is E0402, so change the list in place, with
+`sys.argv.clear()` and `sys.argv.extend(["x"])`.
+
+A `SystemExit` that nothing catches ends the program without a
+traceback. Its exit status is 0 for no code or `None`, the low byte of
+an `int`, and 1 for any other value, which is written to standard
+error first. `except Exception` does not catch it, since `SystemExit`
+derives from `BaseException`, as in CPython.
+
+`print(..., file=sys.stderr)` writes to standard error, and
+`flush=True` writes out what standard output holds. `input(prompt)`
+writes `str(prompt)`, then reads a line of standard input without its
+`\n`, and raises `EOFError` at the end of the input:
+
+<!-- typy-expect: accepted -->
+```python
+import sys
+
+print("arguments:", sys.argv[1:])
+print("a warning", file=sys.stderr)
+try:
+    name = input("name: ")
+except EOFError:
+    name = "nobody"
+sys.stdout.write("hello, " + name + "\n")
+if name == "nobody":
+    sys.exit("no name given")
+```
+
+`sys.version_info`, `sys.platform`, `sys.maxsize`, `sys.stdin` and the
+other constants listed in LIB-13 are planned for 0.4 (E0201). The rest
+of CPython's `sys`, such as `sys.modules` or `sys.getrefcount`, depends
+on the interpreter and is E0202. The switches of lazy imports,
+`sys.set_lazy_imports` and its companions, are E0202 as well (MOD-09):
+make an import lazy in its own module, as
+[Modules](modules.md) describes.

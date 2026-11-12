@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy software requirements specification |
-| Version | 1.40 |
+| Version | 1.41 |
 | Status | Approved |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-12 |
@@ -304,7 +304,7 @@ formatter applies; Ruff's formatter is the project's recommendation.
 | ID | Requirement | Priority | Release | LR |
 | --- | --- | --- | --- | --- |
 | EXC-01 | Raising and catching exceptions shall follow the Language Reference, including matching on base classes. | M | 0.3 | 4.3 |
-| EXC-02 | The built-in exception classes the runtime raises shall exist with their Python names: `ArithmeticError`, `AssertionError`, `IndexError`, `KeyError`, `OverflowError`, `RecursionError`, `RuntimeError`, `StopIteration`, `TypeError`, `UnicodeDecodeError`, `UnicodeEncodeError`, `ValueError`, `ZeroDivisionError` and their bases. | M | 0.3 | 4.3 |
+| EXC-02 | The built-in exception classes the runtime raises shall exist with their Python names: `ArithmeticError`, `AssertionError`, `EOFError`, `IndexError`, `KeyError`, `OverflowError`, `RecursionError`, `RuntimeError`, `StopIteration`, `SystemExit`, `TypeError`, `UnicodeDecodeError`, `UnicodeEncodeError`, `ValueError`, `ZeroDivisionError` and their bases. | M | 0.3 | 4.3 |
 | EXC-03 | An exception that is not raised shall cost no more than a compare and branch at each call that may raise. | M | 0.3 | |
 | EXC-04 | Exception chaining with `from` and the implicit context shall be kept, and shown in the uncaught exception output. | S | 0.3 | 7.8 |
 | EXC-05 | An exception shall not cross a function exported to C (FFI-05); the program shall abort with the exception printed. | M | 0.5 | |
@@ -315,6 +315,7 @@ formatter applies; Ruff's formatter is the project's recommendation.
 | EXC-10 | `NotImplementedError` and `AttributeError` shall exist with their Python names and bases, for programs to raise. | M | 0.3 | |
 | EXC-11 | The `args` attribute of an exception shall give the tuple of its arguments. | S | 0.4 | |
 | EXC-12 | Calling `UnicodeDecodeError` or `UnicodeEncodeError`, or deriving a class from them, shall be rejected; catching them shall be accepted. | S | 0.3 | |
+| EXC-13 | The `code` attribute of `SystemExit` shall give the argument it was built with, or `None` without one. | S | 0.4 | |
 
 ### 3.13 Modules and imports (MOD)
 
@@ -328,7 +329,7 @@ formatter applies; Ruff's formatter is the project's recommendation.
 | MOD-06 | `lazy import` and `lazy from ... import` (PEP 810) shall be accepted at module level when the program's Python floor is 3.15 or later, and shall bind the name without initialising the module. | S | 0.3 | |
 | MOD-07 | A module-level `__lazy_modules__` list of string literals shall make the listed imports of that module lazy, as PEP 810 defines for Python 3.15, for every Python floor. | S | 0.3 | |
 | MOD-08 | An exception raised while a lazily imported module initialises shall be raised at the first use of the name, and a later use shall try the initialisation again, as PEP 810 defines. | S | 0.3 | |
-| MOD-09 | `sys.set_lazy_imports`, `sys.set_lazy_imports_filter` and `sys.lazy_modules` shall be rejected, because they change import behaviour from outside the importing module. | S | 0.3 | |
+| MOD-09 | `sys.set_lazy_imports`, `sys.set_lazy_imports_filter`, `sys.get_lazy_imports`, `sys.get_lazy_imports_filter` and `sys.lazy_modules` shall be rejected, because they change or depend on import behaviour set from outside the importing module. | S | 0.3 | |
 | MOD-10 | An imported module shall be an object of type `module` whose attributes are its module-level names: `m.x` shall read and `m.x = v` assign them, the object may be bound to other names and compared with `is`, and its text shall name its path from the project root (OI-20, ADR-0015). | M | 0.3 | 5.3 |
 | MOD-11 | A name a module binds by a lazy import shall be usable from another module, a module variable shall be assignable as `m.x = v` through a lazily imported module `m`, and a name shall be bindable by more than one lazy import of the module. | S | 0.4 | |
 
@@ -348,6 +349,7 @@ formatter applies; Ruff's formatter is the project's recommendation.
 | LIB-10 | `str % values`, printf-style formatting of a string literal with a value, a tuple of values or a dict of named values, shall be accepted with Python's results, and a format that does not fit its values shall be rejected with CPython's message. | S | 0.3 |
 | LIB-11 | `format % values` shall be accepted with a format that is not a string literal, and with a `tuple[T, ...]` of values. | S | 0.4 |
 | LIB-12 | `math.fsum`, `math.prod`, `math.sumprod`, `math.dist`, `math.gamma` and `math.lgamma` shall be available. | S | 0.4 |
+| LIB-13 | `sys.maxsize`, `sys.byteorder`, `sys.platform`, `sys.version`, `sys.version_info`, `sys.hexversion`, `sys.maxunicode`, `sys.getrecursionlimit`, `sys.setrecursionlimit` and `sys.stdin` shall be available. | S | 0.4 |
 
 ### 3.15 Memory management (MEM)
 
@@ -511,6 +513,7 @@ resolved issues below.
 | OI-20 | What does the text of a module object show, when CPython's `<module 'm' from '/abs/path/m.py'>` names the absolute path of the file, which would make the build depend on its directory (NFR-06)? | The path from the project root, `<module 'a.b' from 'a/b.py'>`. It is the one known difference from CPython's text, named in the user documentation (MOD-10, ADR-0015). | 2026-11-11 |
 | OI-21 | Which imports form the cycle MOD-05 rejects, when an import inside a function runs only once the function is called? | The imports at module level. An import inside a function adds no edge and may find a module still initialising, as in CPython, whose names not yet bound raise CPython's `NameError`, `AttributeError` or `ImportError` (ADR-0015). | 2026-11-11 |
 | OI-22 | How is a module checked whose function imports a module that imports it at module level, when each module is checked after the modules it imports? | Such an import is E0426, planned for 0.4: TyPy checks the modules in the order their imports give, an import inside a function counting when it closes no cycle, so the importing function's module comes first and cannot see the other's names yet (ADR-0015). | 2026-11-11 |
+| OI-24 | What is `sys.argv[0]`, when CPython gives the path of the script it runs and a TyPy program has no script? | The path of the executable as the operating system passes it to `main`, which is what a C program receives and what a shell user typed. The other items are the arguments, decoded as CPython decodes them. A conformance test does not print `sys.argv[0]`, because the oracle's differs (LIB-04, STD-03). | 2026-11-12 |
 
 ## Appendix A. Disposition of the specification pack
 

@@ -299,8 +299,11 @@ impl Dump<'_> {
                             self.program.symbol(*target).name,
                             self.program.symbol(*source).name
                         ),
-                        crate::typed::ImportBinding::Constant { target, value } => {
-                            format!("{} = {value:?}", self.program.symbol(*target).name)
+                        crate::typed::ImportBinding::Expression { target, .. } => {
+                            format!(
+                                "{} = a value of a built-in module",
+                                self.program.symbol(*target).name
+                            )
                         }
                     })
                     .collect();
@@ -372,6 +375,9 @@ impl Dump<'_> {
             TypedExprKind::Submodule(module) => format!("Submodule {module}"),
             TypedExprKind::AsIterable(_) => "AsIterable".to_owned(),
             TypedExprKind::MathCall { function, .. } => format!("MathCall {}", function.name()),
+            TypedExprKind::SysValue(value) => format!("SysValue {value:?}"),
+            TypedExprKind::SysExit(_) => "SysExit".to_owned(),
+            TypedExprKind::Input(_) => "Input".to_owned(),
             TypedExprKind::PercentFormat { parts, .. } => {
                 let fields = parts
                     .iter()
@@ -406,8 +412,12 @@ impl Dump<'_> {
             TypedExprKind::FString(_) => "FString".to_owned(),
             TypedExprKind::TypeObject(of) => format!("TypeObject {}", of.name()),
             TypedExprKind::TypeName(_) => "TypeName".to_owned(),
-            TypedExprKind::Print { sep, end, .. } => {
-                format!("Print sep={} end={}", sep.is_some(), end.is_some())
+            TypedExprKind::Print(call) => {
+                format!(
+                    "Print sep={} end={}",
+                    call.sep.is_some(),
+                    call.end.is_some()
+                )
             }
             TypedExprKind::Builtin { builtin, .. } => format!("Builtin {builtin:?}"),
             TypedExprKind::IterableBuiltin { builtin, .. } => {
@@ -454,7 +464,8 @@ fn children(expression: &TypedExpr) -> Vec<&TypedExpr> {
         | TypedExprKind::ModuleAttribute { .. }
         | TypedExprKind::Submodule(_)
         | TypedExprKind::ModuleName
-        | TypedExprKind::TypeObject(_) => Vec::new(),
+        | TypedExprKind::TypeObject(_)
+        | TypedExprKind::SysValue(_) => Vec::new(),
         TypedExprKind::Binary { left, right, .. }
         | TypedExprKind::Index {
             value: left,
@@ -497,6 +508,9 @@ fn children(expression: &TypedExpr) -> Vec<&TypedExpr> {
         | TypedExprKind::Lazy { value: inner, .. } => vec![inner],
         TypedExprKind::PercentFormat { values, .. } => vec![values],
         TypedExprKind::MathCall { arguments, .. } => arguments.iter().collect(),
+        TypedExprKind::SysExit(value) | TypedExprKind::Input(value) => {
+            value.iter().map(Box::as_ref).collect()
+        }
         TypedExprKind::Comprehension {
             element,
             value,
@@ -569,10 +583,13 @@ fn children(expression: &TypedExpr) -> Vec<&TypedExpr> {
             .chain(arguments)
             .collect(),
         TypedExprKind::FString(parts) => fstring_values(parts),
-        TypedExprKind::Print { values, sep, end } => values
+        TypedExprKind::Print(call) => call
+            .values
             .iter()
-            .chain(sep.as_deref())
-            .chain(end.as_deref())
+            .chain(&call.sep)
+            .chain(&call.end)
+            .chain(&call.file)
+            .chain(&call.flush)
             .collect(),
     }
 }

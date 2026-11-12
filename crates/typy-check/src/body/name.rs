@@ -100,7 +100,7 @@ impl BodyChecker<'_> {
             return self.through_lazy(id, type_object);
         }
         if self.program.function_ids.contains_key(id)
-            || self.program.math_functions.contains_key(id)
+            || self.program.module_functions.contains_key(id)
             || Builtin::named(id).is_some()
         {
             return self.error(

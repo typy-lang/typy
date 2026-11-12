@@ -6,7 +6,7 @@ use typy_source::syntax::{Expr, Keyword};
 use super::BodyChecker;
 use super::iterable_call::takes_one_iterable;
 use crate::builtin::Builtin;
-use crate::typed::{TypedConstant, TypedExpr, TypedExprKind};
+use crate::typed::{PrintCall, TypedConstant, TypedExpr, TypedExprKind};
 use crate::types::Type;
 
 impl BodyChecker<'_> {
@@ -95,6 +95,17 @@ impl BodyChecker<'_> {
                 unreachable!(
                     "print, round, type and the builtins of one iterable are checked above"
                 )
+            }
+            // `input(prompt)` writes `str(prompt)` first, so the prompt may be any value.
+            Builtin::Input => {
+                if !self.arity(builtin, values.len(), 0..=1, span) {
+                    return Self::invalid_call(span);
+                }
+                return Self::typed(
+                    TypedExprKind::Input(values.into_iter().next().map(Box::new)),
+                    Type::Str,
+                    span,
+                );
             }
             Builtin::Enumerate | Builtin::Zip | Builtin::Reversed => {
                 return self.error(
@@ -305,6 +316,8 @@ impl BodyChecker<'_> {
             .collect();
         let mut sep = None;
         let mut end = None;
+        let mut file = None;
+        let mut flush = None;
         for keyword in keywords {
             let value = self.expression(&keyword.value);
             let Some(name) = &keyword.name else {
@@ -313,25 +326,21 @@ impl BodyChecker<'_> {
             match name.name.as_str() {
                 "sep" => {
                     self.expect(&value, Type::Str, "`sep`");
-                    sep = Some(Box::new(value));
+                    sep = Some(value);
                 }
                 "end" => {
                     self.expect(&value, Type::Str, "`end`");
-                    end = Some(Box::new(value));
+                    end = Some(value);
                 }
-                "file" | "flush" => {
-                    return self.error(
-                        Diagnostic::new(
-                            DiagnosticCode::error(201),
-                            name.span,
-                            format!(
-                                "the `{}` argument of `print` is planned for TyPy 0.3 (LIB-04)",
-                                name.name
-                            ),
-                        )
-                        .with_rule(RuleId::LIB_04),
-                        span,
-                    );
+                // `file=None` is standard output, as no `file` is.
+                "file" if value.ty == Type::NoneType => {}
+                "file" => {
+                    self.expect(&value, Type::TextFile, "`file`");
+                    file = Some(value);
+                }
+                "flush" => {
+                    self.expect(&value, Type::Bool, "`flush`");
+                    flush = Some(value);
                 }
                 other => {
                     return self.error(
@@ -347,7 +356,13 @@ impl BodyChecker<'_> {
             }
         }
         Self::typed(
-            TypedExprKind::Print { values, sep, end },
+            TypedExprKind::Print(Box::new(PrintCall {
+                values,
+                sep,
+                end,
+                file,
+                flush,
+            })),
             Type::NoneType,
             span,
         )

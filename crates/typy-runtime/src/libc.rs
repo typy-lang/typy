@@ -7,11 +7,14 @@ unsafe extern "C" {
     fn realloc(pointer: *mut c_void, size: usize) -> *mut c_void;
     fn free(pointer: *mut c_void);
     fn write(descriptor: i32, buffer: *const c_void, count: usize) -> isize;
+    #[link_name = "read"]
+    fn read_bytes(descriptor: i32, buffer: *mut c_void, count: usize) -> isize;
     fn abort() -> !;
     fn getrlimit(resource: i32, limit: *mut [u64; 2]) -> i32;
 }
 
 /// Standard output.
+pub(crate) const STDIN: i32 = 0;
 pub(crate) const STDOUT: i32 = 1;
 /// Standard error.
 pub(crate) const STDERR: i32 = 2;
@@ -50,6 +53,14 @@ pub(crate) fn write_all(descriptor: i32, mut bytes: &[u8]) {
 }
 
 /// Writes a message to standard error and aborts the process.
+/// Reads up to `buffer.len()` bytes from `descriptor`, and returns how many it read: 0 at the
+/// end of the input, and after an error, which a reader of standard input treats as its end.
+pub(crate) fn read(descriptor: i32, buffer: &mut [u8]) -> usize {
+    // SAFETY: the buffer is writable for its length.
+    let count = unsafe { read_bytes(descriptor, buffer.as_mut_ptr().cast(), buffer.len()) };
+    usize::try_from(count).unwrap_or(0)
+}
+
 pub(crate) fn abort_with(message: &[u8]) -> ! {
     write_all(STDERR, message);
     // SAFETY: `abort` has no preconditions and does not return.
@@ -64,4 +75,14 @@ pub(crate) fn stack_limit() -> Option<u64> {
     // SAFETY: `limit` is a writable pair of 64-bit values, the layout of `struct rlimit` on 64-bit Linux.
     let status = unsafe { getrlimit(RLIMIT_STACK, &raw mut limit) };
     (status == 0 && limit[0] != RLIM_INFINITY).then_some(limit[0])
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    #[cfg_attr(miri, ignore = "Miri does not read a closed descriptor")]
+    fn reading_a_descriptor_that_fails_gives_nothing() {
+        let mut buffer = [0; 4];
+        assert_eq!(super::read(-1, &mut buffer), 0);
+    }
 }

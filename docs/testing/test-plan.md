@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy test plan |
-| Version | 0.37 |
+| Version | 0.38 |
 | Status | Draft |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-12 |
@@ -381,6 +381,7 @@ that the specification does not define.
 | EXC-10 | 0.3 | IT | `tests/conformance/exc/EXC-10_*.py` |
 | EXC-11 | 0.4 | IT | `tests/conformance/exc/EXC-11_*.py` |
 | EXC-12 | 0.3 | IT | `tests/conformance/exc/EXC-12_*.py` |
+| EXC-13 | 0.4 | IT | `tests/conformance/exc/EXC-13_*.py` |
 | MOD-01 | 0.3 | IT, E2E | `tests/conformance/mod/MOD-01_*`; module paths in `crates/typy-cli/tests/cli.rs`, tests named for MOD-01 |
 | MOD-02 | 0.3 | IT | `tests/conformance/mod/MOD-02_*.py` |
 | MOD-03 | 0.3 | IT | `tests/conformance/mod/MOD-03_*.py` |
@@ -389,13 +390,13 @@ that the specification does not define.
 | MOD-06 | 0.3 | IT | `crates/typy-check/tests/lazy_imports.rs`; `crates/typy-check/src/subset/tests.rs`, tests named for lazy imports; `tests/conformance/mod/MOD-06_*`, at floor 3.15 |
 | MOD-07 | 0.3 | IT | `crates/typy-check/tests/lazy_imports.rs` and `crates/typy-driver/tests/lazy_imports.rs`, whose expected output is CPython 3.15's: CPython 3.12 to 3.14 ignore `__lazy_modules__`, so a conformance test of it is invalid below floor 3.15 (ADR-0008) |
 | MOD-08 | 0.3 | IT | `crates/typy-driver/tests/lazy_imports.rs`; `tests/conformance/mod/MOD-08_*`, at floor 3.15 |
-| MOD-09 | 0.3 | IT | `tests/conformance/mod/MOD-09_*.py` |
+| MOD-09 | 0.3 | IT | `crates/typy-check/tests/sys.rs` for each switch, as an attribute and in `from sys import`; `tests/conformance/mod/MOD-09_*.py` |
 | MOD-10 | 0.3 | IT | `tests/conformance/mod/MOD-10_*.py` |
 | MOD-11 | 0.4 | IT | `tests/conformance/mod/MOD-11_*` |
 | LIB-01 | 0.1 | IT | `tests/conformance/lib/LIB-01_*.py` |
 | LIB-02 | 0.2 | IT | `tests/conformance/lib/LIB-02_*.py` |
 | LIB-03 | 0.2 | IT | `tests/conformance/lib/LIB-03_*.py` |
-| LIB-04 | 0.3 | IT | `tests/conformance/lib/LIB-04_*.py` |
+| LIB-04 | 0.3 | UT, IT, E2E | `crates/typy-runtime/src/sys/tests.rs` for decoding the arguments and each exit status; `crates/typy-check/tests/sys.rs` for each refusal; `crates/typy-cli/tests/sys.rs` for real arguments, piped standard input and the exit status; `tests/conformance/lib/LIB-04_*.py` |
 | LIB-05 | 0.3 | UT, IT | `crates/typy-runtime/src/math/tests.rs` and `tests/more.rs`, tables of CPython 3.15's results bit for bit; `crates/typy-check/tests/math.rs` for each refusal and the floor of each name; `tests/conformance/lib/LIB-05_*.py` |
 | LIB-06 | 0.4 | IT | `tests/conformance/lib/LIB-06_*.py` |
 | LIB-07 | 1.0 | IT | `tests/conformance/lib/LIB-07_*.py` |
@@ -404,6 +405,7 @@ that the specification does not define.
 | LIB-10 | 0.3 | UT, IT | `crates/typy-runtime/src/format/percent/tests.rs`, a table of CPython 3.12's results; `crates/typy-check/tests/percent.rs` for each refusal message; `tests/conformance/lib/LIB-10_*.py` |
 | LIB-11 | 0.4 | IT | `tests/conformance/lib/LIB-11_*.py` |
 | LIB-12 | 0.4 | IT | `tests/conformance/lib/LIB-12_*.py` |
+| LIB-13 | 0.4 | IT | `tests/conformance/lib/LIB-13_*.py` |
 | MEM-01 | 0.1 | UT, IT | `typy-runtime` unit tests; `tests/conformance/mem/MEM-01_*.py` under sanitizers |
 | MEM-02 | 0.2 | UT, IT | `typy-runtime` list unit tests; `tests/conformance/dat/DAT-07_*.py`, which name MEM-02, also under the sanitizers |
 | MEM-03 | 0.4 | UT, IT | `typy-runtime` unit tests; `tests/conformance/mem/MEM-03_*.py` under sanitizers |

@@ -133,6 +133,12 @@ pub enum TypedExprKind {
     TypeName(Box<TypedExpr>),
     /// An f-string: its literal text and formatted fields, joined in order (LEX-07).
     FString(Vec<FStringPart>),
+    /// A value of `sys`: `argv`, `stdout` or `stderr` (LIB-04).
+    SysValue(crate::sys::SysValue),
+    /// `sys.exit(code)`, which raises `SystemExit` with `code` (LIB-04).
+    SysExit(Option<Box<TypedExpr>>),
+    /// `input(prompt)`: a line of standard input (LIB-04).
+    Input(Option<Box<TypedExpr>>),
     /// A call of a function of `math`, with its arguments in the order the function takes
     /// them; a keyword not given is `None` (LIB-05).
     MathCall {
@@ -145,12 +151,8 @@ pub enum TypedExprKind {
         values: Box<TypedExpr>,
         parts: Vec<super::percent::PercentPart>,
     },
-    /// `print(values, sep=sep, end=end)`; `sep` and `end` are present only when written.
-    Print {
-        values: Vec<TypedExpr>,
-        sep: Option<Box<TypedExpr>>,
-        end: Option<Box<TypedExpr>>,
-    },
+    /// A call of `print` (LIB-01, LIB-04).
+    Print(Box<PrintCall>),
     /// `sorted`, `sum`, `any`, `all`, or `min` or `max` of one iterable, with the one optional
     /// value the builtin takes: `reverse`, `start` or `default` (LIB-02).
     IterableBuiltin {
@@ -246,6 +248,22 @@ pub enum TypedExprKind {
         tuple: Box<TypedExpr>,
         index: usize,
     },
+}
+
+/// `print(values, sep=sep, end=end, file=file, flush=flush)`; each keyword is present only
+/// when written, and `file` only when it is not `None` (LIB-04).
+#[derive(Clone, Debug, PartialEq)]
+pub struct PrintCall {
+    /// The values printed, in order.
+    pub values: Vec<TypedExpr>,
+    /// What is written between two values.
+    pub sep: Option<TypedExpr>,
+    /// What is written after the last value.
+    pub end: Option<TypedExpr>,
+    /// The text file written to.
+    pub file: Option<TypedExpr>,
+    /// Whether standard output is written out after.
+    pub flush: Option<TypedExpr>,
 }
 
 /// One piece of an f-string or of a format specification after checking.

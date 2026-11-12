@@ -35,8 +35,8 @@ impl BodyChecker<'_> {
             let call = self.call_function(function, name, arguments, keywords, span);
             return self.through_lazy(name, call);
         }
-        if let Some(function) = self.program.math_functions.get(name).copied() {
-            let call = self.math_call(function, arguments, keywords, span);
+        if let Some(function) = self.program.module_functions.get(name).copied() {
+            let call = self.module_function_call(function, arguments, keywords, span);
             return self.through_lazy(name, call);
         }
         if let Some(class) = self.program.class_ids.get(name).copied() {

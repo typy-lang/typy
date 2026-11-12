@@ -319,8 +319,15 @@ fn expression(expression_value: &TypedExpr, callees: &mut BTreeSet<FunctionId>) 
                 expression(value, callees);
             }
         }
-        TypedExprKind::Print { values, sep, end } => {
-            for value in values.iter().chain(sep.as_deref()).chain(end.as_deref()) {
+        TypedExprKind::Print(call) => {
+            for value in call
+                .values
+                .iter()
+                .chain(&call.sep)
+                .chain(&call.end)
+                .chain(&call.file)
+                .chain(&call.flush)
+            {
                 expression(value, callees);
             }
         }
@@ -380,9 +387,15 @@ fn expression(expression_value: &TypedExpr, callees: &mut BTreeSet<FunctionId>) 
         | TypedExprKind::ModuleVariable(_)
         | TypedExprKind::ModuleAttribute { .. }
         | TypedExprKind::Submodule(_)
-        | TypedExprKind::ModuleName => {}
+        | TypedExprKind::ModuleName
+        | TypedExprKind::SysValue(_) => {}
         TypedExprKind::AsIterable(inner) => expression(inner, callees),
         TypedExprKind::PercentFormat { values, .. } => expression(values, callees),
+        TypedExprKind::SysExit(value) | TypedExprKind::Input(value) => {
+            if let Some(value) = value {
+                expression(value, callees);
+            }
+        }
         TypedExprKind::MathCall { arguments, .. } => {
             for argument in arguments {
                 expression(argument, callees);

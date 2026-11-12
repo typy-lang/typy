@@ -24,6 +24,7 @@ pub use kind::ExceptionKind;
     )
 )]
 pub(crate) use report::report_uncaught;
+pub(crate) use text::{ExitCode, exit_code};
 use traceback::Traceback;
 
 /// An exception: a heap object with the exception type ID. A class's own attributes follow

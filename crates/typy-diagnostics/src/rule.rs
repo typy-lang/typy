@@ -163,6 +163,8 @@ impl RuleId {
     pub const LIB_11: Self = Self("LIB-11");
     /// `math.fsum`, `math.prod`, `math.sumprod`, `math.dist`, `math.gamma` and `math.lgamma` shall be available.
     pub const LIB_12: Self = Self("LIB-12");
+    /// `sys.maxsize`, `sys.byteorder`, `sys.platform`, `sys.version`, `sys.version_info`, `sys.hexversion`, `sys.maxunicode`, `sys.getrecursionlimit`, `sys.setrecursionlimit` and `sys.stdin` shall be available.
+    pub const LIB_13: Self = Self("LIB-13");
     /// A program shall be built from several `.py` files, found from the main file's directory and from paths set in `typy.toml`.
     /// A program shall be built from several `.py` files, found from the main file's directory and from paths set in `typy.toml`.
     pub const MOD_01: Self = Self("MOD-01");
@@ -172,6 +174,8 @@ impl RuleId {
     pub const MOD_05: Self = Self("MOD-05");
     /// `lazy import` and `lazy from ... import` are accepted at module level when the Python floor is 3.15 or later.
     pub const MOD_06: Self = Self("MOD-06");
+    /// `sys.set_lazy_imports`, `sys.set_lazy_imports_filter` and `sys.lazy_modules` shall be rejected, because they change import behaviour from outside the importing module.
+    pub const MOD_09: Self = Self("MOD-09");
     /// A name bound by a lazy import shall be usable from another module, assignable through a lazily imported module, and bindable by more than one lazy import.
     pub const MOD_11: Self = Self("MOD-11");
     /// The compiler shall not crash on any input; an internal error shall be reported as `E9xxx` with a hint to report it.
@@ -301,10 +305,12 @@ impl RuleId {
         Self::LIB_10,
         Self::LIB_11,
         Self::LIB_12,
+        Self::LIB_13,
         Self::MOD_01,
         Self::MOD_02,
         Self::MOD_05,
         Self::MOD_06,
+        Self::MOD_09,
         Self::MOD_11,
         Self::NFR_09,
         Self::SMT_02,

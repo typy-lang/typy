@@ -202,6 +202,7 @@ impl BodyChecker<'_> {
                             | Type::TypeObject(_)
                             | Type::Module(_)
                             | Type::AnyModule
+                            | Type::TextFile
                             | Type::Traceback
                     ),
                     other => matches!(
@@ -212,6 +213,7 @@ impl BodyChecker<'_> {
                             | Type::Traceback
                             | Type::Module(_)
                             | Type::AnyModule
+                            | Type::TextFile
                             | Type::TypeObject(_)
                     ),
                 };

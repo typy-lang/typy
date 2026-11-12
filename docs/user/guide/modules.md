@@ -91,6 +91,11 @@ with E0201 (MOD-11): using a name another module imports lazily, such as
 `from app import heavy`, assigning `m.x = v` through a lazily imported
 `m`, and binding one name by two lazy imports.
 
+The switches of `sys` that change lazy imports from outside the module,
+`sys.set_lazy_imports`, `sys.set_lazy_imports_filter`, their `get_`
+companions and `sys.lazy_modules`, are E0202 (MOD-09): whether an import
+is lazy is decided where it is written.
+
 ## What is refused
 
 Two modules that import each other at module level are a circular import,
@@ -103,7 +108,8 @@ with their releases: `math` and `sys` in 0.3, `dataclasses` and the rest
 of `typing` in 0.4 (LIB-04 to LIB-07). In 0.3, `typing` and
 `collections.abc` give `Iterator` and `Iterable`, and `types` gives
 `TracebackType` and `ModuleType`, for annotations (TYP-15). The
-[library](library.md#the-math-module) page describes `math`:
+library page describes [`math`](library.md#the-math-module) and
+[`sys`](library.md#the-sys-module):
 
 <!-- typy-expect: rejected E0201 at 1:1 -->
 ```python

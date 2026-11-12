@@ -317,10 +317,10 @@ fn keyword_arguments_keep_source_order_and_defaults_fill_the_rest() {
     let TypedStmt::Expr { value, .. } = &entry.body[0] else {
         panic!("not an expression")
     };
-    let TypedExprKind::Print { values, .. } = &value.kind else {
+    let TypedExprKind::Print(call) = &value.kind else {
         panic!("not print")
     };
-    let TypedExprKind::Call { arguments, .. } = &values[0].kind else {
+    let TypedExprKind::Call { arguments, .. } = &call.values[0].kind else {
         panic!("not a call")
     };
     let order: Vec<usize> = arguments
@@ -377,7 +377,8 @@ fn rejected_programs_give_their_codes() {
         ("print(len(1))\n", &["E0404"]),
         ("print(len(\"a\", \"b\"))\n", &["E0404"]),
         ("print(abs(\"a\"))\n", &["E0401"]),
-        ("print(1, file=None)\n", &["E0201"]),
+        ("print(1, file=1)\n", &["E0404"]),
+        ("print(1, flush=1)\n", &["E0404"]),
         ("print(1, color=1)\n", &["E0404"]),
         ("x = enumerate([1])\n", &["E0201"]),
         ("print(1 is True)\n", &["E0301"]),

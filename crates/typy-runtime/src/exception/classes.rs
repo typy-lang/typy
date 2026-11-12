@@ -21,6 +21,12 @@ pub(crate) static BASE_EXCEPTION: TypeObject = class("BaseException", &OBJECT);
 /// The base of every exception a program is meant to catch.
 #[unsafe(export_name = "typy_rt_exception_Exception")]
 pub(crate) static EXCEPTION: TypeObject = class("Exception", &BASE_EXCEPTION);
+/// `sys.exit`: the program ends, with the status its argument gives (LIB-04).
+#[unsafe(export_name = "typy_rt_exception_SystemExit")]
+pub(crate) static SYSTEM_EXIT: TypeObject = class("SystemExit", &BASE_EXCEPTION);
+/// `input` at the end of standard input.
+#[unsafe(export_name = "typy_rt_exception_EOFError")]
+pub(crate) static EOF_ERROR: TypeObject = class("EOFError", &EXCEPTION);
 /// The base of the errors of arithmetic.
 #[unsafe(export_name = "typy_rt_exception_ArithmeticError")]
 pub(crate) static ARITHMETIC_ERROR: TypeObject = class("ArithmeticError", &EXCEPTION);

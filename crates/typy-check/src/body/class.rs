@@ -7,6 +7,7 @@ use typy_diagnostics::{Diagnostic, DiagnosticCode, RuleId, Span};
 use typy_source::syntax::{Expr, Identifier, Keyword};
 
 use super::BodyChecker;
+use super::builtin_module::is_builtin_module;
 use super::flow::Fact;
 use crate::typed::{Argument, AssignTarget, ClassId, InitCall, SymbolId, TypedExpr, TypedExprKind};
 use crate::types::Type;
@@ -149,6 +150,9 @@ impl BodyChecker<'_> {
         span: Span,
     ) -> TypedExpr {
         if let Some(module) = self.module_of(value) {
+            if is_builtin_module(&module) {
+                return self.builtin_attribute(&module, attribute, span);
+            }
             let read = self.module_attribute(&module, &attribute.name, span);
             return self.through_lazy_module(value, read);
         }

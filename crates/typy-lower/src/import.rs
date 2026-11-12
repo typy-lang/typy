@@ -45,8 +45,8 @@ impl FunctionLowerer<'_> {
                     let value = self.read_global(*source, span);
                     self.assign_name(*target, value, span);
                 }
-                ImportBinding::Constant { target, value } => {
-                    let value = self.typed_constant(value, span);
+                ImportBinding::Expression { target, value } => {
+                    let value = self.expression(value);
                     self.assign_name(*target, value, span);
                 }
             }

@@ -28,10 +28,8 @@ pub(crate) fn unprovided(name: &str) -> Option<Unprovided> {
             Some(planned("0.4", RuleId::CLS_01))
         }
         "callable" | "map" | "filter" => Some(planned("1.0", RuleId::FUN_05)),
-        "input" | "open" | "OSError" | "FileNotFoundError" | "FileExistsError"
-        | "IsADirectoryError" | "PermissionError" | "EOFError" | "SystemExit" => {
-            Some(planned("0.3", RuleId::LIB_04))
-        }
+        "open" | "OSError" | "FileNotFoundError" | "FileExistsError" | "IsADirectoryError"
+        | "PermissionError" => Some(planned("0.3", RuleId::LIB_04)),
         _ if CPYTHON_3_12_BUILTINS.contains(&name) => Some(Unprovided::Excluded),
         _ => None,
     }
@@ -200,7 +198,7 @@ mod tests {
         let cases = [
             ("open", "0.3", RuleId::LIB_04),
             ("FileNotFoundError", "0.3", RuleId::LIB_04),
-            ("SystemExit", "0.3", RuleId::LIB_04),
+            ("OSError", "0.3", RuleId::LIB_04),
             ("isinstance", "0.4", RuleId::CLS_09),
             ("super", "0.4", RuleId::CLS_01),
             ("map", "1.0", RuleId::FUN_05),

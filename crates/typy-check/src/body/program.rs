@@ -53,8 +53,9 @@ pub(crate) struct Program {
     /// names bound to those modules, which annotations read (TYP-15).
     pub(super) annotation_names: BTreeMap<String, crate::check::AnnotationName>,
     pub(super) annotation_modules: BTreeMap<String, String>,
-    /// The functions of `math` the module imports by name, each under its name (ADR-0018).
-    pub(super) math_functions: BTreeMap<String, crate::math::MathFunction>,
+    /// The functions of built-in modules the module imports by name, each under its name
+    /// (ADR-0018).
+    pub(super) module_functions: BTreeMap<String, super::builtin_module::ModuleFunction>,
     /// The built-in modules the program imports, whose module objects it holds.
     pub(super) builtin_modules: BTreeSet<String>,
     /// The minor version of the program's Python floor, such as 12 for 3.12.
@@ -116,7 +117,7 @@ impl Program {
             module_classes: BTreeMap::new(),
             annotation_names: BTreeMap::new(),
             annotation_modules: BTreeMap::new(),
-            math_functions: BTreeMap::new(),
+            module_functions: BTreeMap::new(),
             builtin_modules: BTreeSet::new(),
             floor: 12,
             lazy_modules: BTreeSet::new(),
@@ -204,7 +205,7 @@ impl Program {
         self.package = module.package();
         module.name.as_str().clone_into(&mut self.module);
         self.lazy_modules = typy_source::lazy_modules(&module.syntax.body);
-        self.math_functions = BTreeMap::new();
+        self.module_functions = BTreeMap::new();
     }
 
     /// Sets the minor version of the program's Python floor.
@@ -212,9 +213,12 @@ impl Program {
         self.floor = minor;
     }
 
-    /// Adds the functions of `math` the module's imports bind by name.
-    pub(crate) fn import_math(&mut self, functions: &BTreeMap<String, crate::math::MathFunction>) {
-        self.math_functions.extend(
+    /// Adds the functions of built-in modules the module's imports bind by name.
+    pub(crate) fn import_module_functions(
+        &mut self,
+        functions: &BTreeMap<String, super::builtin_module::ModuleFunction>,
+    ) {
+        self.module_functions.extend(
             functions
                 .iter()
                 .map(|(name, function)| (name.clone(), *function)),

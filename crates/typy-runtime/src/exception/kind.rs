@@ -12,6 +12,7 @@ use crate::type_object::TypeObject;
 pub enum ExceptionKind {
     AssertionError,
     AttributeError,
+    EOFError,
     ImportError,
     IndexError,
     KeyError,
@@ -30,9 +31,10 @@ pub enum ExceptionKind {
 impl ExceptionKind {
     /// Every kind, in the order of the variants.
     #[cfg(test)]
-    pub(crate) const ALL: [Self; 15] = [
+    pub(crate) const ALL: [Self; 16] = [
         Self::AssertionError,
         Self::AttributeError,
+        Self::EOFError,
         Self::ImportError,
         Self::IndexError,
         Self::KeyError,
@@ -54,6 +56,7 @@ impl ExceptionKind {
         match self {
             Self::AssertionError => &classes::ASSERTION_ERROR,
             Self::AttributeError => &classes::ATTRIBUTE_ERROR,
+            Self::EOFError => &classes::EOF_ERROR,
             Self::ImportError => &classes::IMPORT_ERROR,
             Self::NameError => &classes::NAME_ERROR,
             Self::IndexError => &classes::INDEX_ERROR,

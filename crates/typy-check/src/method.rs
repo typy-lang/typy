@@ -180,6 +180,10 @@ pub enum Method {
     BytesDecode,
     /// `bytes.hex()`.
     BytesHex,
+    /// `file.write(text)`: writes the text and returns the number of code points (LIB-04).
+    TextWrite,
+    /// `file.flush()`: writes out what the file holds.
+    TextFlush,
 }
 
 /// The methods of `str` that `bytes` has too, with ASCII meaning.
@@ -337,6 +341,13 @@ impl Method {
                 .find(|method| method.name() == name)
                 .copied();
         }
+        if *receiver == Type::TextFile {
+            return match name {
+                "write" => Some(Self::TextWrite),
+                "flush" => Some(Self::TextFlush),
+                _ => None,
+            };
+        }
         if let Type::TupleOf(_) = receiver {
             return match name {
                 "index" => Some(Self::TupleIndex),
@@ -440,6 +451,8 @@ impl Method {
             Self::StrEncode => "encode",
             Self::BytesDecode => "decode",
             Self::BytesHex => "hex",
+            Self::TextWrite => "write",
+            Self::TextFlush => "flush",
         }
     }
 }

@@ -257,6 +257,7 @@ pub(crate) unsafe fn type_of(object: *const ObjectHeader) -> &'static TypeObject
             TRACEBACK_TYPE_ID => &TRACEBACK_TYPE,
             RANGE_TYPE_ID => &crate::range::RANGE,
             MODULE_TYPE_ID => &crate::module::MODULE,
+            crate::header::TEXT_FILE_TYPE_ID => &crate::text_file::TEXT_FILE,
             _ => crate::libc::abort_with(b"typy runtime: an object has an unknown type\n"),
         }
     }

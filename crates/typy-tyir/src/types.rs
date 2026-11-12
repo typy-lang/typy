@@ -34,6 +34,9 @@ impl TypeId {
     /// An object of any built-in iterable type, or an iterator, held as an `Iterable[T]`; its
     /// header says which (TYP-15).
     pub const ITERABLE: Self = Self(16);
+    /// A text file, `_io.TextIOWrapper`: `sys.stdout`, `sys.stderr` and the files `open`
+    /// gives (LIB-04).
+    pub const TEXT_FILE: Self = Self(17);
     /// The first ID of the program's classes; class `n` of the module is this plus `n`.
     const FIRST_CLASS: u32 = 1 << 16;
 
@@ -118,6 +121,8 @@ impl TyirType {
     pub const MODULE: Self = Self::Object(TypeId::MODULE);
     /// An iterable.
     pub const ITERABLE: Self = Self::Object(TypeId::ITERABLE);
+    /// A text file (LIB-04).
+    pub const TEXT_FILE: Self = Self::Object(TypeId::TEXT_FILE);
 }
 
 impl fmt::Display for TyirType {
@@ -139,6 +144,7 @@ impl fmt::Display for TyirType {
             Self::Object(TypeId::RANGE) => formatter.write_str("range"),
             Self::Object(TypeId::MODULE) => formatter.write_str("module"),
             Self::Object(TypeId::ITERABLE) => formatter.write_str("iterable"),
+            Self::Object(TypeId::TEXT_FILE) => formatter.write_str("text_file"),
             Self::Bits => formatter.write_str("bits"),
             Self::Object(id) if id.class_index().is_some() => {
                 write!(formatter, "class#{}", id.class_index().unwrap_or(0))

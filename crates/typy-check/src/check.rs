@@ -154,7 +154,7 @@ fn check_module(
         exceptions,
     );
     program.import_names(&imports.functions, annotations);
-    program.import_math(&imports.math_functions);
+    program.import_module_functions(&imports.module_functions);
     program.declare_module_variables(&module_variable_spans, &definitions);
     let module_body: Vec<&Stmt> = tree
         .body

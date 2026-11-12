@@ -212,6 +212,12 @@ pub enum RuntimeFunction {
     PercentStr,
     PercentChar,
     PercentCharStr,
+    SysArgv,
+    SysStdout,
+    SysStderr,
+    TextWrite,
+    TextFlush,
+    Input,
     MathAcos,
     MathAcosh,
     MathAsin,
@@ -305,7 +311,7 @@ const FLOAT_FLOAT: &[TyirType] = &[TyirType::Float, TyirType::Float];
 
 impl RuntimeFunction {
     /// Every runtime function.
-    pub const ALL: [Self; 266] = [
+    pub const ALL: [Self; 272] = [
         Self::IntFloorDivide,
         Self::IntModulo,
         Self::IntPower,
@@ -509,6 +515,12 @@ impl RuntimeFunction {
         Self::PercentStr,
         Self::PercentChar,
         Self::PercentCharStr,
+        Self::SysArgv,
+        Self::SysStdout,
+        Self::SysStderr,
+        Self::TextWrite,
+        Self::TextFlush,
+        Self::Input,
         Self::MathAcos,
         Self::MathAcosh,
         Self::MathAsin,
@@ -780,6 +792,11 @@ impl RuntimeFunction {
             Self::FormatStr | Self::PercentStr => signature(&[STR, STR], STR, true),
             Self::FormatOther | Self::PercentCharStr => signature(&[STR, STR, STR], STR, true),
             Self::PercentInt => signature(&[Int, STR, Int], STR, true),
+            Self::SysArgv => signature(&[], LIST, false),
+            Self::SysStdout | Self::SysStderr => signature(&[], TyirType::TEXT_FILE, false),
+            Self::TextWrite => signature(&[TyirType::TEXT_FILE, STR], Int, true),
+            Self::TextFlush => signature(&[TyirType::TEXT_FILE], Unit, true),
+            Self::Input => signature(&[STR], STR, true),
             Self::MathAcos
             | Self::MathAcosh
             | Self::MathAsin
@@ -1061,6 +1078,12 @@ impl RuntimeFunction {
             Self::PercentStr => "percent_str",
             Self::PercentChar => "percent_char",
             Self::PercentCharStr => "percent_char_str",
+            Self::SysArgv => "sys_argv",
+            Self::SysStdout => "sys_stdout",
+            Self::SysStderr => "sys_stderr",
+            Self::TextWrite => "text_write",
+            Self::TextFlush => "text_flush",
+            Self::Input => "input",
             Self::MathAcos => "math_acos",
             Self::MathAcosh => "math_acosh",
             Self::MathAsin => "math_asin",

@@ -1,6 +1,7 @@
 //! Checks one function body, or the module body: names, types and definite assignment.
 
 mod builtin_call;
+mod builtin_module;
 mod call;
 mod class;
 mod comprehension;
@@ -19,7 +20,6 @@ mod list_call;
 mod locals;
 mod loop_source;
 mod math_call;
-mod math_names;
 mod method_call;
 mod name;
 mod operator;
@@ -29,9 +29,11 @@ mod round_call;
 mod set;
 mod slice;
 mod statement;
+mod sys_call;
 mod type_object;
 mod view_operator;
 
+pub(crate) use builtin_module::ModuleFunction;
 pub(crate) use import::Imported;
 pub(crate) use program::Program;
 

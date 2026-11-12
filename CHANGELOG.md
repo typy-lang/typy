@@ -8,6 +8,12 @@ All notable changes to TyPy are recorded here. The format follows
 
 ### Added
 
+- The `sys` module's `argv`, `exit`, `stdout` and `stderr`, `print` with
+  `file` and `flush`, and `input`, which raises `EOFError` at the end of
+  standard input. An uncaught `SystemExit` ends the program with its
+  code as the exit status and no traceback, as in CPython. Other names
+  of `sys` are E0201 when planned for 0.4 (LIB-13) and E0202 otherwise;
+  the switches of lazy imports are E0202 (LIB-04, MOD-09).
 - The `math` module: its constants and its functions of numbers, with
   CPython's results to the last bit and CPython 3.15's error messages;
   a name newer than the program's Python floor is E0425. `fsum`, `prod`,

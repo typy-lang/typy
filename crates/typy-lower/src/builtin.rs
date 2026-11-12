@@ -1,6 +1,6 @@
 //! Lowers the builtins that take positional values (LIB-01, LIB-02), including `print`.
 
-use typy_check::{Builtin, Type, TypedExpr};
+use typy_check::{Builtin, PrintCall, Type, TypedExpr};
 use typy_diagnostics::Span;
 use typy_tyir::{
     Comparison, Constant, Operation, RuntimeFunction, ScalarKind, Terminator, TyirType,
@@ -204,55 +204,113 @@ impl FunctionLowerer<'_> {
         self.produced(owned, ty)
     }
 
-    /// `print(values, sep=sep, end=end)`: every argument is evaluated in source order first, then each value is converted and written.
-    pub(crate) fn print(
-        &mut self,
-        values: &[TypedExpr],
-        sep: Option<&TypedExpr>,
-        end: Option<&TypedExpr>,
-        span: Span,
-    ) -> Lowered {
-        let lowered: Vec<Lowered> = values.iter().map(|value| self.expression(value)).collect();
-        let mut keywords: Vec<(&str, &TypedExpr)> = sep
-            .map(|value| ("sep", value))
-            .into_iter()
-            .chain(end.map(|value| ("end", value)))
+    /// `print(values, sep=sep, end=end, file=file, flush=flush)`: every argument is evaluated
+    /// in source order first, then each value is converted and written.
+    pub(crate) fn print(&mut self, print: &PrintCall, span: Span) -> Lowered {
+        let lowered: Vec<Lowered> = print
+            .values
+            .iter()
+            .map(|value| self.expression(value))
             .collect();
+        let mut keywords: Vec<(&str, &TypedExpr)> = [
+            ("sep", print.sep.as_ref()),
+            ("end", print.end.as_ref()),
+            ("file", print.file.as_ref()),
+            ("flush", print.flush.as_ref()),
+        ]
+        .into_iter()
+        .filter_map(|(name, value)| Some((name, value?)))
+        .collect();
         keywords.sort_by_key(|(_, value)| value.span.start());
         let mut separator = None;
         let mut ending = None;
+        let mut file = None;
+        let mut flush = None;
         for (name, value) in keywords {
-            let evaluated = self.expression(value);
-            if name == "sep" {
-                separator = Some(evaluated);
-            } else {
-                ending = Some(evaluated);
+            let evaluated = Some(self.expression(value));
+            match name {
+                "sep" => separator = evaluated,
+                "end" => ending = evaluated,
+                "file" => file = evaluated,
+                _ => flush = evaluated,
             }
         }
+        // Without a file, `print` writes to standard output through its buffer.
+        let target = file.map(|file| file.value);
         let separator_value = match separator {
             Some(value) => value.value,
             None => self.string(" ", span),
         };
         for (position, value) in lowered.iter().enumerate() {
             if position > 0 {
-                self.call_runtime(RuntimeFunction::WriteStdout, vec![separator_value], span);
+                self.write_text(target, separator_value, span);
             }
             let text = self.string_of(*value, span);
-            self.call_runtime(RuntimeFunction::WriteStdout, vec![text.value], span);
+            self.write_text(target, text.value, span);
             self.release(text, span);
         }
         let ending_value = match ending {
             Some(value) => value.value,
             None => self.string("\n", span),
         };
-        self.call_runtime(RuntimeFunction::WriteStdout, vec![ending_value], span);
+        self.write_text(target, ending_value, span);
+        if let Some(flush) = flush {
+            self.flush_if(target, flush.value, span);
+        }
         for value in ending
             .into_iter()
             .chain(separator)
+            .chain(file)
+            .chain(flush)
             .chain(lowered.into_iter().rev())
         {
             self.release(value, span);
         }
         Self::borrowed(self.constant(Constant::Unit, span), TyirType::Unit)
+    }
+
+    /// Writes text to a text file, or to standard output when there is none.
+    fn write_text(
+        &mut self,
+        file: Option<typy_tyir::ValueId>,
+        text: typy_tyir::ValueId,
+        span: Span,
+    ) {
+        match file {
+            Some(file) => {
+                self.call_runtime(RuntimeFunction::TextWrite, vec![file, text], span);
+            }
+            None => {
+                self.call_runtime(RuntimeFunction::WriteStdout, vec![text], span);
+            }
+        }
+    }
+
+    /// Writes out what a text file holds, standard output when there is none, when `flush`
+    /// is true.
+    fn flush_if(
+        &mut self,
+        file: Option<typy_tyir::ValueId>,
+        flush: typy_tyir::ValueId,
+        span: Span,
+    ) {
+        let yes = self.builder.create_block();
+        let after = self.builder.create_block();
+        self.builder.terminate(Terminator::Branch {
+            condition: flush,
+            then: yes,
+            otherwise: after,
+        });
+        self.builder.switch_to(yes);
+        let file = match file {
+            Some(file) => file,
+            None => {
+                self.call_runtime(RuntimeFunction::SysStdout, Vec::new(), span)
+                    .value
+            }
+        };
+        self.call_runtime(RuntimeFunction::TextFlush, vec![file], span);
+        self.jump_to(after);
+        self.builder.switch_to(after);
     }
 }

@@ -354,7 +354,7 @@ pub unsafe extern "C" fn typy_rt_str_encode(
 /// its reason, as CPython's decoder finds them: a lead byte outside `C2` to `F4` is an invalid
 /// start byte; a byte after it outside the range the lead allows ends an invalid continuation
 /// before that byte; the data running out first is an unexpected end of data, to the end.
-fn utf8_sequence(
+pub(crate) fn utf8_sequence(
     byte: impl Fn(usize) -> Option<u32>,
     at: usize,
 ) -> Result<(usize, u32), (usize, &'static str)> {

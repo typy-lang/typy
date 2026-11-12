@@ -200,9 +200,10 @@ impl FunctionLowerer<'_> {
                 self.release(object, span);
                 name
             }
-            TypedExprKind::Print { values, sep, end } => {
-                self.print(values, sep.as_deref(), end.as_deref(), span)
-            }
+            TypedExprKind::Print(call) => self.print(call, span),
+            TypedExprKind::SysValue(value) => self.sys_value(*value, span),
+            TypedExprKind::SysExit(code) => self.sys_exit(code.as_deref(), span),
+            TypedExprKind::Input(prompt) => self.input(prompt.as_deref(), span),
             TypedExprKind::IterableBuiltin {
                 builtin,
                 iterable,

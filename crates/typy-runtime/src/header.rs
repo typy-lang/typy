@@ -32,6 +32,8 @@ pub const TRACEBACK_TYPE_ID: u32 = 13;
 pub const RANGE_TYPE_ID: u32 = 14;
 /// The type ID of a module object, which is immortal (MOD-10).
 pub const MODULE_TYPE_ID: u32 = 15;
+/// The type ID of a text file, `_io.TextIOWrapper` (LIB-04).
+pub const TEXT_FILE_TYPE_ID: u32 = 17;
 
 /// The first 8 bytes of every heap object.
 #[repr(C)]

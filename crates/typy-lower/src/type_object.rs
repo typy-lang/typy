@@ -51,6 +51,7 @@ impl FunctionLowerer<'_> {
                 | Type::Iterable(_)
                 | Type::Module(_)
                 | Type::AnyModule
+                | Type::TextFile
                 | Type::Traceback,
                 _,
             ) => {

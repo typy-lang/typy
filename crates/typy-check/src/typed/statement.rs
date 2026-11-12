@@ -184,12 +184,12 @@ pub enum ImportBinding {
         /// The module variable whose value it takes.
         source: SymbolId,
     },
-    /// A variable bound to a constant of a built-in module, such as `math.pi`.
-    Constant {
+    /// A variable bound to a value of a built-in module, such as `math.pi` or `sys.argv`.
+    Expression {
         /// The variable.
         target: SymbolId,
         /// The value.
-        value: super::constant::TypedConstant,
+        value: TypedExpr,
     },
 }
 
@@ -200,7 +200,7 @@ impl ImportBinding {
         match self {
             Self::Module { target, .. }
             | Self::Value { target, .. }
-            | Self::Constant { target, .. } => *target,
+            | Self::Expression { target, .. } => *target,
         }
     }
 }

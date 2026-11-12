@@ -13,10 +13,12 @@ use crate::typed::ClassId;
 )]
 pub enum BuiltinException {
     BaseException,
+    SystemExit,
     Exception,
     ArithmeticError,
     AssertionError,
     AttributeError,
+    EOFError,
     ImportError,
     LookupError,
     IndexError,
@@ -37,12 +39,14 @@ pub enum BuiltinException {
 
 impl BuiltinException {
     /// Every built-in exception class.
-    pub const ALL: [Self; 21] = [
+    pub const ALL: [Self; 23] = [
         Self::BaseException,
+        Self::SystemExit,
         Self::Exception,
         Self::ArithmeticError,
         Self::AssertionError,
         Self::AttributeError,
+        Self::EOFError,
         Self::ImportError,
         Self::LookupError,
         Self::IndexError,
@@ -72,6 +76,8 @@ impl BuiltinException {
     pub const fn name(self) -> &'static str {
         match self {
             Self::BaseException => "BaseException",
+            Self::SystemExit => "SystemExit",
+            Self::EOFError => "EOFError",
             Self::Exception => "Exception",
             Self::ArithmeticError => "ArithmeticError",
             Self::AssertionError => "AssertionError",
@@ -100,10 +106,11 @@ impl BuiltinException {
     pub const fn base(self) -> Option<Self> {
         Some(match self {
             Self::BaseException => return None,
-            Self::Exception => Self::BaseException,
+            Self::Exception | Self::SystemExit => Self::BaseException,
             Self::ArithmeticError
             | Self::AssertionError
             | Self::AttributeError
+            | Self::EOFError
             | Self::ImportError
             | Self::NameError
             | Self::LookupError

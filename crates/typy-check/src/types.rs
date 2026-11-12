@@ -50,6 +50,9 @@ pub enum Type {
     AnyModule,
     /// The traceback `__exit__` receives, which holds no frames in TyPy (CST-10).
     Traceback,
+    /// A text file, `_io.TextIOWrapper`: `sys.stdout`, `sys.stderr` and the files `open`
+    /// gives (LIB-04).
+    TextFile,
     /// `range` held as a value: a sequence of `int` (DAT-17).
     Range,
     /// The module object of the module of this qualified name, whose attributes are known
@@ -132,6 +135,7 @@ impl TypeObjectOf {
             | Type::Iterator(_)
             | Type::Iterable(_)
             | Type::AnyModule
+            | Type::TextFile
             | Type::Traceback
             | Type::Module(_)
             | Type::Optional(_)
@@ -570,6 +574,7 @@ impl fmt::Display for Type {
             Self::Iterator(item) => write!(formatter, "Iterator[{item}]"),
             Self::Iterable(item) => write!(formatter, "Iterable[{item}]"),
             Self::AnyModule => formatter.write_str("ModuleType"),
+            Self::TextFile => formatter.write_str("TextIOWrapper"),
             Self::Traceback => formatter.write_str("TracebackType"),
             Self::Range => formatter.write_str("range"),
             Self::Module(name) => write!(formatter, "module `{name}`"),
