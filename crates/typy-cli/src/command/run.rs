@@ -16,6 +16,7 @@ pub(super) fn run(
     pipeline: &Pipeline,
     file: Utf8PathBuf,
     mode: BuildMode,
+    overrides: typy_source::SettingOverrides,
     arguments: &[String],
 ) -> ExitStatus {
     let request = match BuildRequest::new(file) {
@@ -31,7 +32,12 @@ pub(super) fn run(
     };
     let name = request.main().file_stem().unwrap_or("program").to_owned();
     let executable = cache::directory()
-        .join(cache::key(&request, &files, &cache::compiler_identity()))
+        .join(cache::key(
+            &request,
+            &files,
+            overrides,
+            &cache::compiler_identity(),
+        ))
         .join(name);
     if !executable.exists() {
         if let Some(parent) = executable.parent()

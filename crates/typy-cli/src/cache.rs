@@ -5,6 +5,7 @@ use std::fmt::Write as _;
 use camino::Utf8PathBuf;
 use sha2::{Digest as _, Sha256};
 use typy_build::BuildRequest;
+use typy_source::{PythonFloor, SettingOverrides};
 
 /// Returns the cache directory: `$TYPY_HOME/cache`, else the user's cache directory, which is
 /// `$XDG_CACHE_HOME/typy` or `~/.cache/typy`. Its location never changes a build's output.
@@ -31,16 +32,24 @@ pub(crate) fn directory() -> Utf8PathBuf {
 
 /// Returns the SHA-256, in hexadecimal, of everything a build's output depends on: the compiler
 /// version and `compiler`, which tells one build of it from another, the mode, the target, the
-/// main file's name, and the path and text of every file of the program (ADR-0015). Each part
-/// is preceded by its length, so no two different inputs run together into the same bytes.
-pub(crate) fn key(request: &BuildRequest, files: &[(String, String)], compiler: &[u8]) -> String {
+/// main file's name, the settings flags, and the path and text of every file of the program,
+/// `typy.toml` included (ADR-0015). Each part is preceded by its length, so no two different
+/// inputs run together into the same bytes.
+pub(crate) fn key(
+    request: &BuildRequest,
+    files: &[(String, String)],
+    overrides: SettingOverrides,
+    compiler: &[u8],
+) -> String {
     let name = request.main().file_name().unwrap_or("");
+    let floor = overrides.python_floor.map_or("", PythonFloor::as_str);
     let mut parts: Vec<&[u8]> = vec![
         env!("CARGO_PKG_VERSION").as_bytes(),
         compiler,
         request.mode().name().as_bytes(),
         request.target().triple.as_str().as_bytes(),
         name.as_bytes(),
+        floor.as_bytes(),
     ];
     for (path, text) in files {
         parts.push(path.as_bytes());
@@ -76,7 +85,12 @@ pub(crate) fn compiler_identity() -> Vec<u8> {
 
 #[cfg(test)]
 mod tests {
-    use super::key;
+    use typy_source::{PythonFloor, SettingOverrides};
+
+    /// The key without settings flags.
+    fn key(request: &BuildRequest, files: &[(String, String)], compiler: &[u8]) -> String {
+        super::key(request, files, SettingOverrides::default(), compiler)
+    }
     use typy_build::{BuildMode, BuildRequest};
 
     fn files(texts: &[(&str, &str)]) -> Vec<(String, String)> {
@@ -111,6 +125,14 @@ mod tests {
                 b"build",
             ),
             key(&BuildRequest::new("other.py").unwrap(), &program, b"build"),
+            super::key(
+                &request,
+                &program,
+                SettingOverrides {
+                    python_floor: Some(PythonFloor::V3_15),
+                },
+                b"build",
+            ),
         ];
         for other in others {
             assert_ne!(base, other);

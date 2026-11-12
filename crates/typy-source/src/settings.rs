@@ -75,6 +75,9 @@ pub struct ProjectSettings {
     pub release: Release,
     /// The parser's target version and the lowest oracle version.
     pub python_floor: PythonFloor,
+    /// The directories, relative to the root, searched for modules after the root itself,
+    /// in order (MOD-01).
+    pub module_paths: Vec<Utf8PathBuf>,
 }
 
 impl ProjectSettings {
@@ -85,6 +88,7 @@ impl ProjectSettings {
             root,
             release: Release::V0_1,
             python_floor: PythonFloor::default(),
+            module_paths: Vec::new(),
         }
     }
 }

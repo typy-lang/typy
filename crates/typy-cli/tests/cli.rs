@@ -444,3 +444,82 @@ fn a_c_toolchain_that_cannot_be_started_is_e0702() {
     );
     assert!(!workspace.root.join("app").exists());
 }
+
+#[test]
+fn cli_12_python_floor_in_typy_toml_sets_the_floor_and_the_flag_overrides_it() {
+    let workspace = Workspace::new("lazy import tools\nprint(tools.NAME)\n");
+    std::fs::write(workspace.root.join("tools.py"), "NAME = 'tools'\n").unwrap();
+    let default = workspace.typy(&["check", "app.py"]);
+    assert_eq!(status(&default), 1);
+    assert!(
+        stderr(&default).starts_with("error[E0103]"),
+        "{}",
+        stderr(&default)
+    );
+    std::fs::write(
+        workspace.root.join("typy.toml"),
+        "python-floor = \"3.15\"\n",
+    )
+    .unwrap();
+    let run = workspace.typy(&["run", "app.py"]);
+    assert_eq!((status(&run), stdout(&run).as_str()), (0, "tools\n"));
+    let overridden = workspace.typy(&["check", "app.py", "--python-floor", "3.14"]);
+    assert_eq!(status(&overridden), 1);
+    assert!(stderr(&overridden).starts_with("error[E0103]"));
+}
+
+#[test]
+fn cli_07_a_typy_toml_that_is_not_valid_stops_with_status_2_at_its_line() {
+    let workspace = Workspace::new(HELLO);
+    for (settings, place, text) in [
+        ("python-floor = 3.15\n", "typy.toml:1:16", "is a float"),
+        (
+            "python-floor = \"3.11\"\n",
+            "typy.toml:1:16",
+            "the string \"3.11\"",
+        ),
+        ("\n[x\n", "typy.toml:2:3", "not valid TOML"),
+        ("floor = \"3.15\"\n", "typy.toml:1:1", "no setting `floor`"),
+        (
+            "module-paths = [\"../outside\"]\n",
+            "typy.toml:1:17",
+            "under the project",
+        ),
+        (
+            "module-paths = [\"missing\"]\n",
+            "typy.toml:1:17",
+            "is not a directory",
+        ),
+        ("module-paths = \"lib\"\n", "typy.toml:1:16", "not an array"),
+        ("module-paths = [1]\n", "typy.toml:1:17", "is an integer"),
+    ] {
+        std::fs::write(workspace.root.join("typy.toml"), settings).unwrap();
+        let output = workspace.typy(&["build", "app.py"]);
+        let error = stderr(&output);
+        assert_eq!(status(&output), 2, "{settings}{error}");
+        assert!(error.starts_with("error[E0107]: "), "{error}");
+        assert!(error.contains(place) && error.contains(text), "{error}");
+        assert!(!workspace.root.join("app").exists());
+    }
+}
+
+#[test]
+fn mod_01_modules_are_found_in_the_module_paths_after_the_main_files_directory() {
+    let workspace = Workspace::new("import tools\nimport extra\nprint(tools.NAME, extra.NAME)\n");
+    for (path, name) in [
+        ("lib/tools.py", "lib"),
+        ("vendor/tools.py", "vendor"),
+        ("vendor/extra.py", "vendor"),
+    ] {
+        let path = workspace.root.join(path);
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        std::fs::write(path, format!("NAME = '{name}'\n")).unwrap();
+    }
+    let settings = "module-paths = [\"lib\", \"vendor\"]\n";
+    std::fs::write(workspace.root.join("typy.toml"), settings).unwrap();
+    let run = workspace.typy(&["run", "app.py"]);
+    assert_eq!((status(&run), stdout(&run).as_str()), (0, "lib vendor\n"));
+    std::fs::write(workspace.root.join("tools.py"), "NAME = 'root'\n").unwrap();
+    let run = workspace.typy(&["run", "app.py"]);
+    assert_eq!(stdout(&run), "root vendor\n");
+}

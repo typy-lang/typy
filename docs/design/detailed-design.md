@@ -3,10 +3,10 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy detailed design |
-| Version | 1.64 |
+| Version | 1.65 |
 | Status | Approved |
 | Owner | typy-lang contributors |
-| Last updated | 2026-11-11 |
+| Last updated | 2026-11-12 |
 
 ## 1. Purpose and scope
 
@@ -258,6 +258,7 @@ it enforces and its status. `typy explain` (0.3) reads the same table.
 | E0104 | Imaginary literal | LEX-08 |
 | E0105 | Source file cannot be read | None |
 | E0106 | Output file cannot be written | None |
+| E0107 | `typy.toml` is not valid | CLI-07 |
 | E0201 | Feature planned for a later TyPy release | The feature's own rule |
 | E0202 | Feature TyPy cannot compile with CPython's meaning | STD-04 |
 | E0203 | Parameter without a type annotation | TYP-01 |
@@ -314,10 +315,17 @@ it enforces and its status. `typy explain` (0.3) reads the same table.
 | --- | --- | --- | --- |
 | `root` | `Utf8PathBuf` | Directory of the main file | Absolute; every module path is relative to it |
 | `release` | `Release` | `Release::V0_1` | The release whose feature table the subset checker uses |
-| `python_floor` | `PythonFloor` | `PythonFloor::V3_12` | One of 3.12 to 3.15; the parser's target version and the lowest oracle version (ADR-0008). Read from `typy.toml` from 0.3 (CLI-12) |
+| `python_floor` | `PythonFloor` | `PythonFloor::V3_12` | One of 3.12 to 3.15; the parser's target version and the lowest oracle version (ADR-0008). Read from `python-floor` in `typy.toml` (CLI-12) |
+| `module_paths` | `Vec<Utf8PathBuf>` | empty | Directories relative to `root`, each made only of normal components and existing; the loader looks for a module in `root`, then in each, in order (MOD-01) |
 
-Module search paths, links and exports from `typy.toml` are planned for 0.3
-and 0.5 (CLI-07, FFI-04, FFI-05).
+`ProjectSettings::read(root, overrides)` builds the settings once, when a
+command starts: the defaults, then `root/typy.toml` when it exists, then
+`SettingOverrides`, the flags of the command line (CLI-07). The file is
+parsed with `toml_edit`, whose spans place each E0107 on its line; every
+wrong setting is reported, and the command stops with exit status 2 before
+any module is read (UC-11). The file becomes `SourceFile` 0 of the
+`LoadFailure`, so the diagnostics render with its text. Links and exports
+from `typy.toml` are planned for 0.5 (FFI-04, FFI-05).
 
 `SourceFile`
 
@@ -1435,7 +1443,7 @@ only when the stages before it found no errors.
 
 | Item | Design |
 | --- | --- |
-| Arguments | Parsed with `clap`; the commands `check FILE`, `build FILE` and `run FILE [-- ARGS]` in 0.1, `explain` in 0.3. `build` takes `--emit=STAGE` and `-o PATH`; `build` and `run` take `--release` or `--release-small`, never both. A main file that is not a `.py` file is wrong usage |
+| Arguments | Parsed with `clap`; the commands `check FILE`, `build FILE` and `run FILE [-- ARGS]` in 0.1, `explain` in 0.3. Each of the three takes `--python-floor VERSION`, which becomes `SettingOverrides` for `Pipeline::with_overrides`. `build` takes `--emit=STAGE` and `-o PATH`; `build` and `run` take `--release` or `--release-small`, never both. A main file that is not a `.py` file is wrong usage |
 | Output | Diagnostics are sorted, rendered with `render_text` and written to standard error, with a blank line between two of them. `--emit` output goes to `-o`, or to standard output without it. A file that cannot be written gives E0106 |
 | Exit status | `ExitStatus` is `Success = 0`, `ProgramErrors = 1`, `Usage = 2` and `Internal = 101` (CLI-06); a failure with any `E9xxx` diagnostic is `Internal`. `typy run` exits with the program's status, or 128 plus the signal that ended it |
 | Panic guard | The command runs inside `std::panic::catch_unwind`, with a panic hook that records the location in a thread-local; a panic becomes E9001 with the location and message, and exit status 101 |
@@ -1570,9 +1578,9 @@ The suite runs as the tests `crates/typy-conformance/tests/suite.rs` and,
 with the sanitizers, `tests/sanitized.rs`, so
 `make test` and `make check` run it on every commit. That test fails on any
 verdict but `Pass`, and on any requirement the test plan gives the suite for
-0.1 that lacks an accepted or a rejected test. An accepted test whose floor
-is not 3.12 is `Invalid` until `python-floor` in `typy.toml` sets the floor
-of a build (CLI-12, 0.3).
+0.1 that lacks an accepted or a rejected test. A test is built and checked
+at its own floor, through `Pipeline::with_overrides`, as `python-floor` in
+its `typy.toml` would set it (CLI-12).
 
 ## 16. Design class diagrams
 

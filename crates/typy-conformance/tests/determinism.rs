@@ -28,11 +28,18 @@ fn accepted(directory: &Utf8Path, found: &mut Vec<Utf8PathBuf>) {
     }
 }
 
-/// Builds `program` with `flags` into `output`, and returns the executable's bytes.
+/// Builds `program` with `flags`, at the Python floor its header names, into `output`, and
+/// returns the executable's bytes.
 fn build(compiler: &Utf8Path, program: &Utf8Path, flags: &[&str], output: &Utf8Path) -> Vec<u8> {
+    let text = std::fs::read_to_string(program).unwrap();
+    let floor = text
+        .lines()
+        .find_map(|line| line.strip_prefix("# typy-python: "))
+        .unwrap_or("3.12");
     let status = Command::new(compiler)
         .arg("build")
         .args(flags)
+        .args(["--python-floor", floor])
         .arg(program)
         .arg("-o")
         .arg(output)

@@ -221,7 +221,7 @@ impl Loader<'_> {
             if self.modules.contains_key(&import.module) || self.standard.contains(&import.module) {
                 continue;
             }
-            if let Some(location) = locate(&self.settings.root, &import.module) {
+            if let Some(location) = locate(self.settings, &import.module) {
                 self.read(import.module.clone(), &location, Some(import.span));
             } else if is_standard(&import.module) {
                 // The checker says whether TyPy provides it (LIB-08).
@@ -248,10 +248,14 @@ impl Loader<'_> {
     }
 
     fn failure(self) -> LoadFailure {
-        LoadFailure {
-            diagnostics: self.diagnostics,
-            files: self.files,
-        }
+        LoadFailure::new(self.diagnostics, self.files)
+    }
+}
+
+impl LoadFailure {
+    /// Returns a failure with `diagnostics` that point into `files`.
+    pub(crate) const fn new(diagnostics: Diagnostics, files: Vec<SourceFile>) -> Self {
+        Self { diagnostics, files }
     }
 }
 

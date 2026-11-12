@@ -59,6 +59,7 @@ pub const CODES: &[CodeInfo] = &[
         rule: None,
         status: CodeStatus::Active,
     },
+    active(107, "`typy.toml` is not valid", RuleId::CLI_07),
     active(
         201,
         "feature planned for a later TyPy release",

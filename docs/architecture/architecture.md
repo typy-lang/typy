@@ -3,10 +3,10 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy software architecture |
-| Version | 1.5 |
+| Version | 1.6 |
 | Status | Approved |
 | Owner | typy-lang contributors |
-| Last updated | 2026-11-08 |
+| Last updated | 2026-11-12 |
 
 ## 1. Purpose
 
@@ -97,7 +97,7 @@ driver, the runtime, the standard library and the conformance suite.
 | `typy-codegen` | Code generation | Turn TyIR into LLVM IR and an object file, and lay out each `TypeDescriptor` | `ObjectFile`, `Target` |
 | `typy-build` | Build | Link, write artifacts atomically, write C headers for exports | `BuildRequest`, `BuildMode`, `EmitStage`, `LinkPlan`, `ExportSpec`, `Artifact` |
 | `typy-driver` | All | Run the stages in order for a `BuildRequest`, and stop at an `EmitStage` | None of its own |
-| `typy-cli` | All | Parse the command line and `typy.toml`, print diagnostics, set the exit status | None of its own |
+| `typy-cli` | All | Parse the command line, print diagnostics, set the exit status | None of its own |
 | `typy-runtime` | Runtime | The library linked into every binary (ADR-0006) | `HeapObject`, `ObjectHeader`, `TypeDescriptor`, `ExceptionObject`, `TracebackEntry`, `Allocator`, `CycleCollector` |
 | `typy-conformance` | Conformance | Run the conformance suite against the oracle (UC-09) | `ConformanceTest`, `OracleRun`, `Verdict` |
 
@@ -126,9 +126,10 @@ the shared kernel, and `typy-source` uses them from there.
 
 ![Building an executable](../diagrams/sequence-build-executable.svg)
 
-`typy-cli` reads `typy.toml` once and turns it, with the flags, into a
-`BuildRequest`. `typy-driver` runs each stage in turn and passes on only the
-object that stage returns. When checking finds errors, the driver stops
+`typy-cli` turns the flags into a `BuildRequest` and the settings that
+override `typy.toml`, which `typy-source` reads once, before any module.
+`typy-driver` runs each stage in turn and passes on only the object that
+stage returns. When checking finds errors, the driver stops
 before lowering, so no later stage ever sees a program with errors. The
 linker writes to a temporary path in the output directory, and
 `typy-build` renames the file into place, so a failed build never leaves a

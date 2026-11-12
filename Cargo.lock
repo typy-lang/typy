@@ -1140,6 +1140,7 @@ dependencies = [
  "typy-codegen",
  "typy-diagnostics",
  "typy-driver",
+ "typy-source",
 ]
 
 [[package]]
@@ -1215,6 +1216,7 @@ dependencies = [
  "ruff_python_parser",
  "ruff_text_size",
  "tempfile",
+ "toml_edit",
  "typy-diagnostics",
 ]
 

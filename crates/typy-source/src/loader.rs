@@ -7,6 +7,7 @@ use camino::{Utf8Path, Utf8PathBuf};
 use typy_diagnostics::{Diagnostic, DiagnosticCode, RuleId, Span};
 
 use crate::module::{Module, ModuleName};
+use crate::settings::ProjectSettings;
 use crate::syntax::{Alias, Stmt};
 
 /// The standard library modules TyPy 0.3 gives without a file, whose names serve annotations
@@ -191,10 +192,18 @@ pub(crate) struct Location {
     pub(crate) is_package: bool,
 }
 
-/// Finds a module under `root`: the package `a/b/__init__.py`, or else the file `a/b.py`, as
-/// CPython's file finder prefers a package to a module of the same name.
-pub(crate) fn locate(root: &Utf8Path, name: &ModuleName) -> Option<Location> {
+/// Finds a module in the root, then in each module path in order, as CPython searches the
+/// script's directory, then `PYTHONPATH` (MOD-01). In each directory the package
+/// `a/b/__init__.py` comes before the file `a/b.py`, as CPython's file finder prefers it.
+pub(crate) fn locate(settings: &ProjectSettings, name: &ModuleName) -> Option<Location> {
     let relative: Utf8PathBuf = name.as_str().split('.').collect();
+    std::iter::once(Utf8PathBuf::new())
+        .chain(settings.module_paths.iter().cloned())
+        .find_map(|directory| locate_in(&settings.root, &directory.join(&relative)))
+}
+
+/// Finds the package or the module at `relative` under `root`.
+fn locate_in(root: &Utf8Path, relative: &Utf8Path) -> Option<Location> {
     let package = relative.join("__init__.py");
     if root.join(&package).is_file() {
         return Some(Location {

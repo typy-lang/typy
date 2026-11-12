@@ -19,19 +19,25 @@ fn write_diagnostics(diagnostics: &[Diagnostic], sources: &dyn SourceLookup) {
 }
 
 /// Reports a failure and returns its status: `Internal` when any diagnostic is an `E9xxx`
-/// internal error, `ProgramErrors` otherwise.
+/// internal error, `Usage` when `typy.toml` is not valid (E0107, UC-11), `ProgramErrors`
+/// otherwise.
 pub(crate) fn report(failure: Failure) -> ExitStatus {
-    let internal = failure
-        .diagnostics
-        .iter()
-        .any(|diagnostic| diagnostic.code().to_string().starts_with("E9"));
-    let sorted = failure.diagnostics.into_sorted(&failure.sources);
-    write_diagnostics(&sorted, &failure.sources);
-    if internal {
+    let has = |prefix: &str| {
+        failure
+            .diagnostics
+            .iter()
+            .any(|diagnostic| diagnostic.code().to_string().starts_with(prefix))
+    };
+    let status = if has("E9") {
         ExitStatus::Internal
+    } else if has("E0107") {
+        ExitStatus::Usage
     } else {
         ExitStatus::ProgramErrors
-    }
+    };
+    let sorted = failure.diagnostics.into_sorted(&failure.sources);
+    write_diagnostics(&sorted, &failure.sources);
+    status
 }
 
 /// Reports an internal error with no place in the source (NFR-09).
@@ -91,6 +97,10 @@ mod tests {
         assert_eq!(
             report(failure(DiagnosticCode::error(702))),
             ExitStatus::ProgramErrors
+        );
+        assert_eq!(
+            report(failure(DiagnosticCode::error(107))),
+            ExitStatus::Usage
         );
     }
 }

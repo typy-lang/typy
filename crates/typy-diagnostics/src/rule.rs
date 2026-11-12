@@ -9,6 +9,10 @@ pub struct RuleId(&'static str);
 impl RuleId {
     /// The host has a C toolchain that can link for the target.
     pub const A_01: Self = Self("A-01");
+    /// Project settings shall be read from `typy.toml`, and a command line flag shall override the same setting in the file.
+    pub const CLI_07: Self = Self("CLI-07");
+    /// The setting `python-floor` in `typy.toml` shall set the program's Python floor to one of `3.12`, `3.13`, `3.14` or `3.15`, and any other value shall be rejected.
+    pub const CLI_12: Self = Self("CLI-12");
     /// Classes with methods and an `__init__` shall be accepted, with each instance attribute assigned in `__init__` or declared in the class body.
     pub const CLS_01: Self = Self("CLS-01");
     /// Adding an attribute that the class does not declare shall be rejected.
@@ -213,6 +217,8 @@ impl RuleId {
     /// Every rule a diagnostic can name, in ID order.
     pub const ALL: &'static [Self] = &[
         Self::A_01,
+        Self::CLI_07,
+        Self::CLI_12,
         Self::CLS_01,
         Self::CLS_02,
         Self::CLS_04,

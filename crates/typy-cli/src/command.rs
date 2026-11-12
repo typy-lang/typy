@@ -21,18 +21,34 @@ pub(crate) fn run(arguments: Arguments) -> ExitStatus {
         }
     };
     match arguments.command {
-        Command::Check { file } => check::check(&pipeline, &file),
+        Command::Check { file, settings } => {
+            check::check(&pipeline.with_overrides(settings.overrides()), &file)
+        }
         Command::Build {
             file,
             emit,
             output,
             mode,
-        } => build::build(&pipeline, file, emit, output.as_deref(), mode.build_mode()),
+            settings,
+        } => build::build(
+            &pipeline.with_overrides(settings.overrides()),
+            file,
+            emit,
+            output.as_deref(),
+            mode.build_mode(),
+        ),
         Command::Run {
             file,
             mode,
+            settings,
             arguments,
-        } => run::run(&pipeline, file, mode.build_mode(), &arguments),
+        } => run::run(
+            &pipeline.with_overrides(settings.overrides()),
+            file,
+            mode.build_mode(),
+            settings.overrides(),
+            &arguments,
+        ),
     }
 }
 

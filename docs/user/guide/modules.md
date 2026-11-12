@@ -10,7 +10,7 @@ import, as in CPython (MOD-03).
 | --- | --- |
 | `import m`, `import a.b`, `import a.b as c` | SMT-07 |
 | `from m import name`, with `as`, for a function, a class, a module variable or a submodule | SMT-07 |
-| Modules as `.py` files under the main file's directory, and packages as directories with an `__init__.py` | MOD-01, MOD-02 |
+| Modules as `.py` files under the main file's directory or a directory `module-paths` in `typy.toml` names, and packages as directories with an `__init__.py` | MOD-01, MOD-02 |
 | Relative imports inside a package, such as `from . import helper` and `from ..tools import text` | MOD-02 |
 | A module object: `m.name` reads and assigns a module variable, and the object can be printed, bound to another name and compared with `is` | MOD-10 |
 
@@ -51,8 +51,9 @@ if __name__ == "__main__":
 A lazy import binds its names without running the module: the module runs
 at the first use of one of them, as PEP 810 defines for Python 3.15
 (MOD-06). `lazy import m` and `lazy from m import name` need the Python
-floor 3.15. At any floor, a module-level `__lazy_modules__` list makes
-the imports of the modules it names lazy (MOD-07):
+floor 3.15, set with `python-floor = "3.15"` in `typy.toml`. At any
+floor, a module-level `__lazy_modules__` list makes the imports of the
+modules it names lazy (MOD-07):
 
 <!-- typy-expect: accepted -->
 ```python

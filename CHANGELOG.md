@@ -8,6 +8,11 @@ All notable changes to TyPy are recorded here. The format follows
 
 ### Added
 
+- `typy.toml` beside the main file sets `python-floor` and `module-paths`,
+  the directories where imports look for modules after the main file's
+  directory; `--python-floor` on `check`, `build` and `run` overrides the
+  file. A setting that is not valid is E0107 at its line, with exit status
+  2 (CLI-07, CLI-12, MOD-01).
 - Lazy imports: `lazy import m` and `lazy from m import name` with the
   Python floor 3.15, and a module-level `__lazy_modules__` at every floor.
   The module runs at the first use of a name, an error it raises reaches
