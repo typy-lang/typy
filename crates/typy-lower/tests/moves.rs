@@ -103,6 +103,13 @@ fn a_variable_read_again_is_counted() {
         "def f() -> list[str]:\n    out: list[str] = []\n    word = \"a\" + \"b\"\n    try:\n        out.append(word)\n    except ValueError:\n        print(word)\n    return out\n",
         // A `finally` block reads it after the `return`.
         "def f() -> list[str]:\n    word = \"a\" + \"b\"\n    try:\n        out = [word]\n        return out\n    finally:\n        print(word)\n",
+        // A later `if` test, a loop source or an assignment target reads it.
+        "def f() -> list[str]:\n    word = \"a\" + \"b\"\n    out = [word]\n    if word:\n        print(1)\n    return out\n",
+        "def f() -> list[str]:\n    word = \"a\" + \"b\"\n    out = [word]\n    for c in word:\n        print(c)\n    return out\n",
+        "def f() -> list[str]:\n    word = \"a\" + \"b\"\n    out = [word]\n    table = {\"\": 1}\n    table[word] = 2\n    return out\n",
+        // A clause's name, inside an `if` or a `with`, is released when the clause ends.
+        "def f() -> list[str]:\n    out: list[str] = []\n    if len(out) == 0:\n        try:\n            raise ValueError(\"x\")\n        except ValueError as error:\n            print([error])\n    return out\n",
+        "def f() -> list[str]:\n    out: list[str] = []\n    with open(\"x.txt\", \"w\") as file:\n        try:\n            raise ValueError(\"x\")\n        except ValueError as error:\n            print([error], file=file)\n    return out\n",
         // A comprehension's body runs once for each value.
         "def f() -> list[list[str]]:\n    word = \"a\" + \"b\"\n    return [[word] for _ in range(2)]\n",
     ];
@@ -152,4 +159,59 @@ fn a_borrowed_parameter_a_clause_name_and_a_module_variable_are_not_moved() {
     }
     let text = text("word = \"a\" + \"b\"\nout = [word]\nprint(out)\n");
     assert!(text.contains("rt.list_append("), "{text}");
+}
+
+#[test]
+fn each_display_moves_a_local_item() {
+    let source = concat!(
+        "def f() -> None:\n",
+        "    a = \"a\" + \"1\"\n",
+        "    b = \"b\" + \"1\"\n",
+        "    c = \"c\" + \"1\"\n",
+        "    d = \"d\" + \"1\"\n",
+        "    row = [a]\n",
+        "    found = {b}\n",
+        "    table = {\"k\": c}\n",
+        "    pair = (d, 1)\n",
+        "    print(row, found, table, pair)\n",
+        "\n\nf()\n",
+    );
+    let text = function_text(source, "f");
+    for moved in [
+        "rt.list_append_moved",
+        "rt.set_add_moved",
+        "rt.dict_set_moved",
+    ] {
+        assert!(text.contains(moved), "{moved} missing from\n{text}");
+    }
+    // Each variable moves; the one count left is of the constant `1`, an `int` word.
+    assert_eq!(counts(&text, "inc v"), 1, "{text}");
+}
+
+#[test]
+fn a_tuple_assignment_ends_the_value_a_store_before_it_moves() {
+    let source = concat!(
+        "def f() -> list[str]:\n",
+        "    out: list[str] = []\n",
+        "    word = \"a\" + \"b\"\n",
+        "    out.append(word)\n",
+        "    word, other = \"x\", \"y\"\n",
+        "    print(word, other)\n",
+        "    return out\n",
+        "\n\nprint(f())\n",
+    );
+    let text = function_text(source, "f");
+    assert!(text.contains("rt.list_append_moved"), "{text}");
+}
+
+#[test]
+fn a_view_of_a_dict_is_counted_since_its_zero_value_allocates() {
+    for body in [
+        "    v = d.keys()\n    w = v\n    print(w)\n",
+        "    v = (d.keys(), 1)\n    w = v\n    print(w)\n",
+    ] {
+        let source = format!("def f(d: dict[str, int]) -> None:\n{body}\n\nf({{}})\n");
+        let text = function_text(&source, "f");
+        assert!(text.contains("inc v"), "{body}\n{text}");
+    }
 }

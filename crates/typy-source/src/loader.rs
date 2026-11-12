@@ -238,56 +238,72 @@ pub(crate) fn initialisation_order(
     let mut order = Vec::new();
     let mut diagnostics = Vec::new();
     let mut done = BTreeSet::new();
+    let mut visiting = BTreeSet::new();
     for name in modules.keys() {
         let mut path = Vec::new();
-        visit(
-            name,
+        let mut walk = Walk {
             modules,
-            &mut done,
-            &mut path,
-            &mut order,
-            &mut diagnostics,
-        );
+            done: &mut done,
+            visiting: &mut visiting,
+            order: &mut order,
+            diagnostics: &mut diagnostics,
+        };
+        walk.visit(name, &mut path);
     }
     (order, diagnostics)
 }
 
-/// Visits a module's module-level imports depth first; `path` holds the imports being
-/// followed, so an import of a module already on it closes a cycle.
-fn visit(
-    name: &ModuleName,
-    modules: &BTreeMap<ModuleName, Vec<Import>>,
-    done: &mut BTreeSet<ModuleName>,
-    path: &mut Vec<(ModuleName, Span)>,
-    order: &mut Vec<ModuleName>,
-    diagnostics: &mut Vec<Diagnostic>,
-) {
-    if done.contains(name) {
-        return;
-    }
-    if let Some(start) = path.iter().position(|(on_path, _)| on_path == name) {
-        diagnostics.push(cycle(&path[start..]));
-        return;
-    }
-    let imports = modules.get(name).map(Vec::as_slice).unwrap_or_default();
-    // Module-level imports come first, so a cycle through them is found whatever else the
-    // module imports; an import inside a function that would close a cycle is passed over.
-    let (module_level, in_functions): (Vec<&Import>, Vec<&Import>) =
-        imports.iter().partition(|import| import.at_module_level);
-    for import in module_level.into_iter().chain(in_functions) {
-        let on_path = path.iter().any(|(on_path, _)| *on_path == import.module);
-        if import.module == *name
-            || !modules.contains_key(&import.module)
-            || (!import.at_module_level && on_path)
-        {
-            continue;
+/// What a depth-first walk over the imports keeps: the modules done and the ones being
+/// visited, the order modules initialise in, and the cycles found.
+struct Walk<'walk> {
+    modules: &'walk BTreeMap<ModuleName, Vec<Import>>,
+    done: &'walk mut BTreeSet<ModuleName>,
+    visiting: &'walk mut BTreeSet<ModuleName>,
+    order: &'walk mut Vec<ModuleName>,
+    diagnostics: &'walk mut Vec<Diagnostic>,
+}
+
+impl Walk<'_> {
+    /// Visits a module's imports depth first; `path` holds the module-level imports being
+    /// followed, so a module-level import of a module already on it closes a cycle. An import
+    /// inside a function, or a lazy one, runs once its module has initialised, so it adds no
+    /// edge to a cycle (OI-21): the module it imports starts a path of its own.
+    fn visit(&mut self, name: &ModuleName, path: &mut Vec<(ModuleName, Span)>) {
+        if self.done.contains(name) {
+            return;
         }
-        path.push((name.clone(), import.span));
-        visit(&import.module, modules, done, path, order, diagnostics);
-        path.pop();
+        if let Some(start) = path.iter().position(|(on_path, _)| on_path == name) {
+            self.diagnostics.push(cycle(&path[start..]));
+            return;
+        }
+        // Reached again through an import that adds no edge, while it is still visited.
+        if !self.visiting.insert(name.clone()) {
+            return;
+        }
+        let imports = self
+            .modules
+            .get(name)
+            .map(Vec::as_slice)
+            .unwrap_or_default();
+        // Module-level imports come first, so they decide the order modules initialise in.
+        let (module_level, later): (Vec<&Import>, Vec<&Import>) =
+            imports.iter().partition(|import| import.at_module_level);
+        for import in module_level.into_iter().chain(later) {
+            if import.module == *name || !self.modules.contains_key(&import.module) {
+                continue;
+            }
+            if import.at_module_level {
+                path.push((name.clone(), import.span));
+                self.visit(&import.module, path);
+                path.pop();
+            } else {
+                self.visit(&import.module, &mut Vec::new());
+            }
+        }
+        self.visiting.remove(name);
+        self.done.insert(name.clone());
+        self.order.push(name.clone());
     }
-    done.insert(name.clone());
-    order.push(name.clone());
 }
 
 /// Returns E0422 for a cycle of module-level imports, each import shown (MOD-05).

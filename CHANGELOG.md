@@ -168,6 +168,11 @@ All notable changes to TyPy are recorded here. The format follows
 
 ### Fixed
 
+- `print(..., file=f)` inside an `except` clause compiles; it failed with
+  E9001.
+- An import inside a function, or a lazy one, no longer makes a circular
+  import with a module that imports the importing module back at module
+  level; it gave a false E0422 (MOD-05, OI-21).
 - A function whose only `try` has a body that cannot raise compiles;
   it failed with E9001.
 - A `\u` or `\U` escape of a surrogate in a `str` literal is E0201,

@@ -392,6 +392,41 @@ Module
 }
 
 #[test]
+fn dump_indents_type_parameters_annotations_keywords_and_quoted_annotations() {
+    let source =
+        "def f[T](x: T) -> T:\n    return x\n\n\ny: int = 1\nprint(1, sep=\"\")\nz: \"int\" = 2\n";
+    let tree = parse(&file(source), PythonFloor::V3_12).unwrap();
+    let expected = "\
+Module
+  FunctionDef f @1:1
+    type_params 1
+    Parameter x Normal @1:10
+      Name T @1:13
+    returns
+      Name T @1:19
+    body
+      Return @2:5
+        Name x @2:12
+  AnnAssign @5:1
+    Name y @5:1
+    Name int @5:4
+    Constant Int(\"1\") @5:10
+  Expr @6:1
+    Call @6:1
+      Name print @6:1
+      Constant Int(\"1\") @6:7
+      keyword sep @6:10
+        Constant Str(\"\") @6:14
+  AnnAssign @7:1
+    Name z @7:1
+    Quoted @7:4
+      Name int @7:5
+    Constant Int(\"2\") @7:12
+";
+    assert_eq!(dump(&tree, &file(source)), expected);
+}
+
+#[test]
 fn remaining_statement_and_expression_kinds_are_kept() {
     let source = "\
 async def a():
@@ -806,14 +841,16 @@ fn an_invalid_escape_is_w0101_at_the_escape_with_its_fix() {
 #[test]
 fn a_surrogate_escape_in_a_str_is_refused_and_any_other_is_not() {
     let refused = [
-        (r#"x = "\ud800""#, r"`\ud800`"),
-        (r#"x = "a\uDFFF""#, r"`\uDFFF`"),
-        (r#"x = "\U0000dc80""#, r"`\U0000dc80`"),
-        (r#"x = f"{1}\udc80""#, r"`\udc80`"),
+        (r#"x = "\ud800""#, r"`\ud800`", 5, 11),
+        (r#"x = "a\uDFFF""#, r"`\uDFFF`", 6, 12),
+        (r#"x = "\U0000dc80""#, r"`\U0000dc80`", 5, 15),
+        (r#"x = f"{1}\udc80""#, r"`\udc80`", 9, 15),
     ];
-    for (source, escape) in refused {
+    for (source, escape, start, end) in refused {
         let errors = parse(&file(source), PythonFloor::V3_12).unwrap_err();
         assert_eq!(errors.len(), 1, "{source}");
+        let span = errors[0].span().unwrap();
+        assert_eq!((span.start().0, span.end().0), (start, end), "{source}");
         assert_eq!(errors[0].code().to_string(), "E0201", "{source}");
         assert!(
             errors[0].message().contains(escape),

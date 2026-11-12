@@ -292,3 +292,45 @@ impl fmt::Display for TypeObjectRef {
         }
     }
 }
+
+#[cfg(test)]
+mod type_object_tests {
+    use super::{RuntimeType, TypeId, TypeObjectRef};
+
+    #[test]
+    fn a_class_type_counts_from_the_first_class_and_gives_its_index_back() {
+        for index in [0, 1, 7] {
+            assert_eq!(TypeId::class(index).class_index(), Some(index));
+        }
+        assert_eq!(TypeId::class(3).0, (1 << 16) + 3);
+        assert_eq!(TypeId::LIST.class_index(), None);
+    }
+
+    #[test]
+    fn a_type_object_is_named_by_its_runtime_symbol() {
+        let cases = [
+            (
+                TypeObjectRef::Runtime(RuntimeType::Int),
+                Some("typy_rt_type_int"),
+            ),
+            (
+                TypeObjectRef::Runtime(RuntimeType::Object),
+                Some("typy_rt_object"),
+            ),
+            (
+                TypeObjectRef::Runtime(RuntimeType::Range),
+                Some("typy_rt_type_range"),
+            ),
+            (
+                TypeObjectRef::Exception("ValueError"),
+                Some("typy_rt_exception_ValueError"),
+            ),
+            (TypeObjectRef::Class(2), None),
+        ];
+        for (object, symbol) in cases {
+            assert_eq!(object.runtime_symbol().as_deref(), symbol, "{object:?}");
+            let shown = object.to_string();
+            assert_eq!(shown, symbol.map_or("class#2".to_owned(), str::to_owned));
+        }
+    }
+}

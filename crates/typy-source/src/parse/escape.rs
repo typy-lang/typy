@@ -64,9 +64,8 @@ impl Converter<'_> {
             };
             // A backslash escapes the next character, so `\\u` is no escape of `u`.
             at = backslash + 1 + rest.chars().next().map_or(0, char::len_utf8);
-            let digits = rest
-                .get(1..=width)
-                .filter(|digits| width > 0 && digits.len() == width);
+            // Any other escape has no digits here, and no digits parse as no code point.
+            let digits = rest.get(1..=width);
             let Some(point) = digits.and_then(|digits| u32::from_str_radix(digits, 16).ok()) else {
                 continue;
             };

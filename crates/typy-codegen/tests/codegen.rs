@@ -159,3 +159,54 @@ fn reading_an_item_of_a_value_that_is_not_a_tuple_is_an_internal_error() {
     let text = format!("{error:?}");
     assert!(text.contains("is not a tuple"), "{text}");
 }
+
+#[test]
+fn counting_attributes_placeholders_and_descriptors_reach_the_ir() {
+    let (project, module) = compile(concat!(
+        "class P:\n",
+        "    def __init__(self, x: int) -> None:\n",
+        "        self.x = x\n",
+        "\n\n",
+        "def run() -> None:\n",
+        "    p = P(3)\n",
+        "    p.x = 7\n",
+        "    s = \"a\" + \"b\"\n",
+        "    t = (s, 1, (s, 2.5))\n",
+        "    u = (s, 1, (s, 2.5))\n",
+        "    q = P(4)\n",
+        "    pairs = [t, u]\n",
+        "    items = {\"k\"}\n",
+        "    table = {\"k\": 1}\n",
+        "    print(p.x, q.x, pairs, items, table)\n",
+        "\n\n",
+        "run()\n",
+    ));
+    let ir = llvm_ir(&module, Target::host(), Optimization::None, &project).unwrap();
+    for expected in [
+        "call void @typy_rt_increment(",
+        "call void @typy_rt_decrement(",
+        "call void @typy_rt_int_increment(",
+        "call void @typy_rt_int_decrement(",
+        // `p.x = 7` stores the tagged word of 7.
+        "store i64 15",
+        "@typy_rt_placeholder_list",
+        "@typy_rt_placeholder_set",
+        "@typy_rt_placeholder_dict",
+        // A `str`, an `int` and a nested tuple, then a `str` and a `float`.
+        "{ i32 3, i32 0, ptr null }, { i32, i32, ptr } { i32 0, i32 8, ptr null }, { i32, i32, ptr } { i32 5, i32 16, ptr @typy.tuple0 }",
+        "{ i32 3, i32 0, ptr null }, { i32, i32, ptr } { i32 1, i32 8, ptr null }",
+    ] {
+        assert!(ir.contains(expected), "{expected:?} missing from\n{ir}");
+    }
+    let defined = |name: &str| {
+        ir.lines()
+            .filter(|line| line.starts_with(&format!("{name} = ")))
+            .count()
+    };
+    // Two uses of one tuple type and two instances of one class share their statics.
+    assert_eq!(defined("@typy.tuple0"), 1, "{ir}");
+    assert_eq!(defined("@typy.tuple1"), 1, "{ir}");
+    assert_eq!(defined("@typy.class0"), 1, "{ir}");
+    assert!(!ir.contains("@typy.tuple0.1"), "{ir}");
+    assert!(!ir.contains("@typy.class0.1 "), "{ir}");
+}

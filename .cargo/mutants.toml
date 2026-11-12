@@ -7,3 +7,14 @@ timeout_multiplier = 3.0
 minimum_test_timeout = 60
 # Test code, the conformance harness and the fuzz targets are not mutated.
 exclude_globs = ["crates/*/tests/**", "crates/typy-conformance/**", "fuzz/**"]
+
+# Mutants that cannot change a result, each with the reason. A pattern names the function,
+# not the line, so it stays true as the file changes.
+exclude_re = [
+    # A word shifted left by one has bit 0 clear, so `| 1` and `^ 1` give the same word.
+    "replace \\| with \\^ in FunctionEmitter<'_, '_, 'ctx>::tagged",
+    "replace \\| with \\^ in encode_int",
+    # A negative literal is a negation of a positive constant, so no negative large integer
+    # constant reaches code generation and its sign is never written.
+    "delete - in Statics<'ctx>::int",
+]

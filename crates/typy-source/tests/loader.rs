@@ -258,3 +258,106 @@ fn a_missing_submodule_of_a_package_and_a_missing_main_file_are_reported() {
     let failure = load(&[("other.py", "")]).unwrap_err();
     assert_eq!(errors(&failure)[0].0, "E0105");
 }
+
+#[test]
+fn imports_in_every_kind_of_block_are_loaded() {
+    let block_imports = concat!(
+        "if True:\n    import in_if\nelse:\n    import in_else\n",
+        "for _ in []:\n    import in_for\nelse:\n    import in_for_else\n",
+        "while False:\n    import in_while\n",
+        "class Holder:\n    import in_class\n",
+        "try:\n    import in_try\nexcept ValueError:\n    import in_except\nelse:\n",
+        "    import in_try_else\nfinally:\n    import in_finally\n",
+        "def later() -> None:\n    import in_function\n",
+    );
+    let modules = [
+        "in_if",
+        "in_else",
+        "in_for",
+        "in_for_else",
+        "in_while",
+        "in_class",
+        "in_try",
+        "in_except",
+        "in_try_else",
+        "in_finally",
+        "in_function",
+    ];
+    let mut files: Vec<(String, String)> = vec![("app.py".to_owned(), block_imports.to_owned())];
+    files.extend(
+        modules
+            .iter()
+            .map(|name| (format!("{name}.py"), String::new())),
+    );
+    let borrowed: Vec<(&str, &str)> = files
+        .iter()
+        .map(|(path, text)| (path.as_str(), text.as_str()))
+        .collect();
+    let project = load(&borrowed).unwrap();
+    let loaded = names(&project);
+    for name in modules {
+        assert!(loaded.contains(&name), "{name} in {loaded:?}");
+    }
+    let in_order: Vec<&str> = project
+        .modules_in_order()
+        .map(|module| module.name.as_str())
+        .collect();
+    assert_eq!(in_order, loaded);
+}
+
+#[test]
+fn a_lazy_import_an_import_in_a_function_and_one_of_the_module_itself_make_no_cycle() {
+    for files in [
+        [
+            ("app.py", "import a\n"),
+            ("a.py", "lazy import b\n"),
+            ("b.py", "import a\n"),
+        ],
+        [
+            ("app.py", "import a\n"),
+            ("a.py", "__lazy_modules__ = [\"b\"]\nimport b\n"),
+            ("b.py", "import a\n"),
+        ],
+        [
+            ("app.py", "import a\n"),
+            ("a.py", "import a\n"),
+            ("b.py", ""),
+        ],
+        [
+            ("app.py", "import a\n"),
+            ("a.py", "def use() -> None:\n    import b\n"),
+            ("b.py", "import a\n"),
+        ],
+    ] {
+        let (_directory, root) = project(&files);
+        let mut settings = ProjectSettings::new(root.clone());
+        settings.python_floor = typy_source::PythonFloor::V3_15;
+        let loaded = Project::load(&root.join("app.py"), settings)
+            .unwrap_or_else(|failure| panic!("{files:?}: {:?}", errors(&failure)));
+        assert_eq!(names(&loaded).last(), Some(&"__main__"), "{files:?}");
+    }
+}
+
+#[test]
+fn the_standard_modules_a_program_imports_are_listed() {
+    let project = load(&[
+        ("app.py", "import math\nimport sys\nimport helper\n"),
+        ("helper.py", ""),
+    ])
+    .unwrap();
+    let standard: Vec<&str> = project.standard_modules().map(ModuleName::as_str).collect();
+    assert_eq!(standard, ["math", "sys"]);
+}
+
+#[test]
+fn a_load_failure_gives_the_text_of_each_line() {
+    let failure = load(&[("app.py", "x = 1\nimport missing\n")]).unwrap_err();
+    let span = failure.diagnostics.iter().next().unwrap().span().unwrap();
+    assert_eq!(failure.line_text(span.file(), 2), "import missing");
+    assert_eq!(failure.line_text(span.file(), 1), "x = 1");
+}
+
+#[test]
+fn the_largest_source_file_is_16_mib() {
+    assert_eq!(typy_source::MAX_SOURCE_BYTES, 16_777_216);
+}

@@ -278,7 +278,9 @@ impl FunctionLowerer<'_> {
     ) {
         match file {
             Some(file) => {
-                self.call_runtime(RuntimeFunction::TextWrite, vec![file, text], span);
+                // `print` drops the count `write` returns.
+                let written = self.call_runtime(RuntimeFunction::TextWrite, vec![file, text], span);
+                self.release(written, span);
             }
             None => {
                 self.call_runtime(RuntimeFunction::WriteStdout, vec![text], span);

@@ -404,3 +404,18 @@ fn a_try_whose_body_cannot_raise_lowers_and_verifies() {
     ));
     assert!(function(&module, "f").may_raise);
 }
+
+#[test]
+fn print_to_a_file_inside_an_except_clause_lowers_and_verifies() {
+    lower(concat!(
+        "def f() -> None:\n",
+        "    file = open(\"x.txt\", \"w\")\n",
+        "    try:\n",
+        "        raise ValueError(\"x\")\n",
+        "    except ValueError as error:\n",
+        "        print([error], 1, file=file, sep=\"-\")\n",
+        "\n",
+        "\n",
+        "f()\n",
+    ));
+}

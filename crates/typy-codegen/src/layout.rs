@@ -62,9 +62,7 @@ pub fn encode_int(text: &str) -> IntEncoding {
             limbs.push(u64::try_from(carry).unwrap_or(0));
         }
     }
-    while limbs.len() > 1 && limbs.last() == Some(&0) {
-        limbs.pop();
-    }
+    // A limb is added only for a carry, so the top limb is never zero.
     IntEncoding::Big { negative, limbs }
 }
 

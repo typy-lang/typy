@@ -134,6 +134,51 @@ fn a_value_used_before_its_definition_fails() {
 }
 
 #[test]
+fn a_value_used_by_the_instruction_that_defines_it_fails() {
+    for position in [0, 1] {
+        let mut function = division();
+        let instruction = &mut function.blocks[0].instructions[position];
+        let own = instruction.result.expect("the instruction defines a value");
+        instruction.operation = Operation::Compare {
+            kind: ScalarKind::Int,
+            comparison: Comparison::NotEqual,
+            left: own,
+            right: own,
+        };
+        assert!(
+            message(&module(function)).contains("may not have run"),
+            "instruction {position}"
+        );
+    }
+}
+
+#[test]
+fn the_text_without_counting_leaves_out_inc_and_dec_only() {
+    let mut function = division();
+    function.blocks[0]
+        .instructions
+        .push(crate::instruction::Instruction {
+            result: None,
+            operation: Operation::Increment(ValueId(0)),
+            span: span(),
+        });
+    let module = module(function);
+    let counted = print(&module);
+    let plain = crate::print::print_without_counting(&module);
+    assert!(counted.contains("  inc v0"), "{counted}");
+    assert!(!plain.contains("inc v0"), "{plain}");
+    assert_eq!(
+        plain.lines().count() + 1,
+        counted.lines().count(),
+        "{plain}\n{counted}"
+    );
+    assert!(
+        plain.contains("invoke rt.int_floor_divide(v0, v1)"),
+        "{plain}"
+    );
+}
+
+#[test]
 fn a_value_used_on_a_path_its_definition_is_not_on_fails() {
     let mut function = division();
     function.blocks[2].terminator = Terminator::Return(ValueId(4));
