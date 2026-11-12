@@ -594,3 +594,31 @@ fn dia_07_warnings_are_shown_and_fail_only_with_deny_warnings() {
     }
     assert!(!workspace.root.join("app").exists());
 }
+
+#[test]
+fn cli_10_explain_prints_a_code_with_a_wrong_and_a_corrected_program() {
+    let workspace = Workspace::new(HELLO);
+    let output = workspace.typy(&["explain", "E0402"]);
+    let text = stdout(&output);
+    assert_eq!(status(&output), 0);
+    assert!(
+        text.starts_with("E0402: assignment changes the type of a variable\n"),
+        "{text}"
+    );
+    assert!(
+        text.contains("This program gives E0402:\n\n    count = 0\n"),
+        "{text}"
+    );
+    assert!(text.contains("This one is correct:\n"), "{text}");
+    assert!(text.ends_with("\nRule: TYP-03\n"), "{text}");
+    for (code, message) in [
+        (
+            "e0402",
+            "error: `e0402` is not a diagnostic code, such as E0402\n",
+        ),
+        ("E0999", "error: no diagnostic has the code E0999\n"),
+    ] {
+        let wrong = workspace.typy(&["explain", code]);
+        assert_eq!((status(&wrong), stderr(&wrong).as_str()), (2, message));
+    }
+}

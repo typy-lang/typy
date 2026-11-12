@@ -9,6 +9,7 @@ The `typy` command checks, builds and runs a program from its main file.
 | `typy check FILE` | Reports every diagnostic without generating code | CLI-03 |
 | `typy build FILE` | Writes a native executable beside the file, or at `-o PATH` | CLI-01 |
 | `typy run FILE [-- ARGS]` | Builds the program and runs it with `ARGS` | CLI-02 |
+| `typy explain CODE` | Prints what a diagnostic code means, a program that gives it and the corrected program | CLI-10 |
 | `typy build --emit=STAGE FILE` | Writes one stage as text: `ast`, `typed-ast`, `tyir`, `tyir-mem`, `llvm-ir` or `asm`, or `obj` | CLI-04 |
 | `--release`, `--release-small` | Optimise for speed or for size; the default is a debug build | CLI-05 |
 | `--deny-warnings` | Fails with status 1 when there are warnings | DIA-07 |

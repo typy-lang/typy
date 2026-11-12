@@ -54,6 +54,11 @@ pub(crate) enum Command {
         #[command(flatten)]
         settings: Settings,
     },
+    /// Explain a diagnostic code, with a program that causes it and the corrected program.
+    Explain {
+        /// The code, such as E0402.
+        code: String,
+    },
     /// Build the program and run it, passing the arguments after `--`.
     Run {
         /// The main file of the program.
@@ -201,6 +206,7 @@ mod tests {
                 Command::Check { settings, .. }
                 | Command::Build { settings, .. }
                 | Command::Run { settings, .. } => settings,
+                Command::Explain { .. } => panic!("explain takes no settings"),
             };
             assert_eq!(
                 settings.overrides().python_floor,

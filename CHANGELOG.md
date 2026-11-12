@@ -8,6 +8,10 @@ All notable changes to TyPy are recorded here. The format follows
 
 ### Added
 
+- `typy explain CODE` prints what a diagnostic means, the rule it
+  enforces, a program that gives it and the corrected program; the
+  troubleshooting page shows the same programs, and the documentation
+  test runs them (CLI-10).
 - Warnings, where CPython warns while compiling: W0101 for an invalid
   escape sequence such as `"\d"`, with the doubled backslash as its fix,
   and W0301 for `assert (test, "message")`, which is always true. They

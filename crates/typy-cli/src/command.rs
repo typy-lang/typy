@@ -2,6 +2,7 @@
 
 mod build;
 mod check;
+mod explain;
 mod run;
 
 use camino::Utf8PathBuf;
@@ -21,6 +22,7 @@ pub(crate) fn run(command: Command, deny_warnings: bool, reporter: Reporter) -> 
         }
     };
     match command {
+        Command::Explain { code } => explain::explain(&code),
         Command::Check { file, settings } => check::check(
             &pipeline.with_overrides(settings.overrides()),
             &file,
