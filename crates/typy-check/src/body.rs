@@ -13,6 +13,7 @@ mod expression;
 mod flow;
 mod fstring;
 mod import;
+mod isinstance;
 mod iterable_call;
 mod iterator;
 mod list;
@@ -67,6 +68,9 @@ pub(crate) struct BodyChecker<'program> {
     returns: Option<Type>,
     /// The class and instance of the `__init__` being checked.
     initializing: Option<class::Initializing>,
+    /// The types `isinstance` tests narrow variables to, which `Fact::Narrowed` names by
+    /// position (TYP-07).
+    narrowings: Vec<Type>,
     /// The class and instance of the method being checked, which `super()` reads.
     method: Option<class::Initializing>,
     /// Whether a use of the incomplete instance has been reported, so one cause gives one error.
@@ -98,6 +102,7 @@ impl<'program> BodyChecker<'program> {
             returns,
             initializing: None,
             method: None,
+            narrowings: Vec::new(),
             reported_incomplete: false,
             handling: 0,
             finally_loops: Vec::new(),

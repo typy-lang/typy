@@ -74,6 +74,9 @@ impl BodyChecker<'_> {
                 TypedExprKind::Local(symbol)
             };
             let read = Self::typed(kind, ty.clone(), span);
+            if let Some(narrowed) = self.narrowed_type(symbol, id) {
+                return Self::narrowed_read(read, narrowed, span);
+            }
             // A test before this point showed the optional variable is not `None` (TYP-13);
             // a call may assign a variable a function declares `global`, so it is not narrowed.
             if let Type::Optional(inner) = ty
@@ -173,5 +176,50 @@ impl BodyChecker<'_> {
             .with_rule(RuleId::STD_04),
         };
         self.error(diagnostic, span)
+    }
+}
+
+impl BodyChecker<'_> {
+    /// Returns the narrowest type `isinstance` tests showed the variable holds here, if any;
+    /// a variable a function declares `global` may be assigned by a call, so it is not
+    /// narrowed (TYP-07).
+    fn narrowed_type(&self, symbol: crate::typed::SymbolId, id: &str) -> Option<Type> {
+        if self.program.assigned_in_functions.contains(id) {
+            return None;
+        }
+        let facts = self.assigned.as_ref()?;
+        let mut narrowest: Option<&Type> = None;
+        for fact in facts {
+            let Fact::Narrowed(each, position) = fact else {
+                continue;
+            };
+            let Some(ty) = self
+                .narrowings
+                .get(*position as usize)
+                .filter(|_| *each == symbol)
+            else {
+                continue;
+            };
+            if narrowest.is_none_or(|current| ty.is_assignable_to(current)) {
+                narrowest = Some(ty);
+            }
+        }
+        narrowest.cloned()
+    }
+
+    /// Returns the read of a variable as the type a test narrowed it to: the value an
+    /// optional holds, then the instance as one of a derived class.
+    fn narrowed_read(read: TypedExpr, narrowed: Type, span: Span) -> TypedExpr {
+        let read = match &read.ty {
+            Type::Optional(inner) if !matches!(narrowed, Type::Optional(_)) => {
+                let inner = inner.as_ref().clone();
+                Self::typed(TypedExprKind::Unwrap(Box::new(read)), inner, span)
+            }
+            _ => read,
+        };
+        if read.ty == narrowed {
+            return read;
+        }
+        Self::typed(TypedExprKind::Downcast(Box::new(read)), narrowed, span)
     }
 }

@@ -419,3 +419,95 @@ fn print_to_a_file_inside_an_except_clause_lowers_and_verifies() {
         "f()\n",
     ));
 }
+
+#[test]
+fn classes_with_overrides_dispatch_and_tests_narrow() {
+    let source = "\
+class Shape:
+    def area(self) -> float:
+        return 0.0
+
+    def __str__(self) -> str:
+        return 'shape'
+
+
+class Square(Shape):
+    def __init__(self, side: float) -> None:
+        self.side = side
+
+    def area(self) -> float:
+        if self.side < 0:
+            raise ValueError('negative')
+        return self.side * self.side + super().area()
+
+
+class Count:
+    def __init__(self) -> None:
+        self.at = 0
+
+    def __iter__(self) -> 'Count':
+        return self
+
+    def __next__(self) -> int:
+        raise StopIteration
+
+    def __enter__(self) -> 'Count':
+        return self
+
+    def __exit__(self, kind, error, trace) -> None:
+        pass
+
+
+class Twice(Count):
+    def __next__(self) -> int:
+        if self.at > 1:
+            raise StopIteration
+        self.at += 1
+        return self.at
+
+    def __enter__(self) -> 'Count':
+        return self
+
+
+def area(shape: Shape | None) -> float:
+    if isinstance(shape, Square):
+        return shape.side
+    if isinstance(shape, (Shape, object)):
+        return 0.5
+    return 0.0
+
+
+counts: list[Count] = [Count(), Twice()]
+for count in counts:
+    with count as entered:
+        for value in entered:
+            print(value, next(iter(Twice()), 0))
+maybe: Shape | None = Square(2.0)
+print(area(maybe), area(None), type(maybe).__name__, str(maybe), [maybe])
+print(isinstance(3, (int, str)), isinstance(maybe, object), isinstance(None, int))
+
+
+def kind(shape: Shape | None) -> str:
+    return type(shape).__name__
+
+
+def lookup(error: Exception) -> str:
+    if isinstance(error, KeyError):
+        return str(error)
+    return ''
+
+
+print(kind(None), kind(Square(1.0)), lookup(KeyError('k')), repr(Shape()))
+";
+    let printed = text(source);
+    for expected in [
+        "rt.is_instance",
+        "downcast",
+        "upcast",
+        "call class#",
+        "rt.object_type",
+        "rt.object_str",
+    ] {
+        assert!(printed.contains(expected), "{expected} in\n{printed}");
+    }
+}

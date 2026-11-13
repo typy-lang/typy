@@ -499,6 +499,8 @@ impl BodyChecker<'_> {
             } else {
                 facts.remove(&Fact::NotNone(symbol));
             }
+            // An assignment replaces what an `isinstance` test showed (TYP-07).
+            facts.retain(|fact| !matches!(fact, Fact::Narrowed(each, _) if *each == symbol));
         }
         Some(symbol)
     }

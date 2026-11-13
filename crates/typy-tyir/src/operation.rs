@@ -193,6 +193,14 @@ pub enum Operation {
         /// The arguments, borrowed.
         arguments: Vec<ValueId>,
     },
+    /// An instance, or an optional one, as a value of type `ty`, an instance of a class
+    /// derived from its class, which a test showed it is: the same object (TYP-07).
+    Downcast {
+        /// The instance.
+        value: ValueId,
+        /// The type of the derived class's instances.
+        ty: crate::types::TyirType,
+    },
     /// Calls the method at `slot` of the table of the class of the first argument, which
     /// cannot raise; see `Callee::Method`.
     CallMethod {

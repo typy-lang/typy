@@ -1866,6 +1866,33 @@ fn a_base_must_be_a_class_before_it_and_an_override_must_fit() {
             &["E0202"],
         ),
         ("class A(int):\n    pass\n", &["E0201"]),
+        ("import sys\nclass A(sys.Missing):\n    pass\n", &["E0201"]),
+        ("class A(len(\"x\")):\n    pass\n", &["E0201"]),
+        ("class A(B.C.D):\n    pass\n", &["E0201"]),
+        (
+            "class A:\n    def f(self, n: int = 1) -> int:\n        return n\nclass B(A):\n    def f(self) -> int:\n        return 1\n",
+            &["E0404"],
+        ),
+        (
+            "class A:\n    def f(self, n: int = 1) -> int:\n        return n\nclass B(A):\n    def f(self, m: int = 1) -> int:\n        return m\n",
+            &["E0404"],
+        ),
+        (
+            "class A:\n    def f(self, n: int = 1) -> int:\n        return n\nclass B(A):\n    def f(self, n: bool = True) -> int:\n        return 1\n",
+            &["E0404"],
+        ),
+        (
+            "class A:\n    def f(self, n: int = 1) -> int:\n        return n\nclass B(A):\n    def f(self, n: int) -> int:\n        return n\n",
+            &["E0404"],
+        ),
+        (
+            "class A:\n    def f(self, n: int = 1) -> int:\n        return n\nclass B(A):\n    def f(self, n: int = 1) -> str:\n        return \"\"\n",
+            &["E0404"],
+        ),
+        (
+            "class A:\n    def f(self, n: int = 1) -> int:\n        return n\nclass B(A):\n    def f(self, n: int | None = 1) -> int:\n        return 1\n",
+            &["E0201"],
+        ),
         (
             "class A(Exception):\n    def f(self) -> None:\n        pass\nclass B(A):\n    def f(self) -> int:\n        return 1\n",
             &["E0404"],
@@ -2188,6 +2215,49 @@ fn super_calls_the_nearest_base_s_method_in_any_method() {
             &["E0309"],
         ),
         ("class A:\n    x: int\nA()\n", &["E0309"]),
+    ];
+    for (source, expected) in cases {
+        assert_eq!(&rejected(source), expected, "\n{source}");
+    }
+}
+
+#[test]
+fn isinstance_narrows_variables_where_its_test_holds() {
+    accepted(
+        "class A:\n    pass\nclass B(A):\n    def __init__(self) -> None:\n        self.b = 1\n\
+         class C(B):\n    def __init__(self) -> None:\n        self.b = 2\n        self.c = 3\n\
+         class D(B):\n    def __init__(self) -> None:\n        self.b = 4\n\
+         def f(a: A) -> int:\n    if isinstance(a, (C, D)):\n        return a.b\n    if isinstance(a, B):\n        if isinstance(a, C):\n            return a.c\n        return a.b\n    return 0\n\
+         def g(e: Exception) -> str:\n    if isinstance(e, (KeyError, IndexError)):\n        return 'lookup'\n    return 'other'\n\
+         def h(n: int, b: bool, s: str) -> bool:\n    return isinstance(n, int) and isinstance(b, int) and not isinstance(s, (int, bytes))\n\
+         def k(a: A, e: Exception, o: A | None) -> bool:\n    return isinstance(a, (B, int)) or isinstance(a, A) or isinstance(e, (KeyError, int)) or isinstance(KeyError(), ValueError) or isinstance(o, object) or isinstance(o, B)\n\
+         def m(o: A | None) -> None:\n    if isinstance(o, A):\n        print(o)\n\
+         print(f(C()), g(KeyError()), h(1, True, 'x'), isinstance(iter([1]), list), k(A(), KeyError(), None), C() == B(), A() != D(), isinstance(C(), A), m(None))\n",
+    );
+    let cases: &[(&str, &[&str])] = &[
+        ("print(isinstance(1))\n", &["E0404"]),
+        ("print(issubclass(int, object))\n", &["E0201"]),
+        (
+            "class A:\n    pass\nclass B(A):\n    def f(self) -> None:\n        super().missing(1)\n",
+            &["E0414"],
+        ),
+        (
+            "class A:\n    pass\nclass E(Exception):\n    pass\ndef f(a: A, e: Exception) -> None:\n    print(isinstance(a, E), isinstance(e, ()))\n    if isinstance(a, E):\n        print(a.x)\n",
+            &["E0414"],
+        ),
+        ("print(isinstance(1, int, x=2))\n", &["E0404"]),
+        ("t = int\nprint(isinstance(1, t))\n", &["E0201"]),
+        ("print(isinstance(1, Missing))\n", &["E0205"]),
+        (
+            "class A:\n    pass\nclass B(A):\n    def __init__(self) -> None:\n        self.b = 1\n\
+             def f(a: A) -> int:\n    if isinstance(a, B):\n        a = A()\n        return a.b\n    return 0\n",
+            &["E0414"],
+        ),
+        (
+            "class A:\n    pass\nclass B:\n    def __init__(self) -> None:\n        self.b = 1\n\
+             def f(a: A) -> int:\n    if isinstance(a, B):\n        return a.b\n    return 0\n",
+            &["E0414"],
+        ),
     ];
     for (source, expected) in cases {
         assert_eq!(&rejected(source), expected, "\n{source}");

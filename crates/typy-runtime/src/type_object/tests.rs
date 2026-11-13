@@ -96,6 +96,10 @@ fn objects_find_their_types() {
         assert!(same(type_of(text.cast()), &STR));
         assert!(same(type_of(list.cast()), &LIST));
         assert!(same(type_of(dict.cast()), &DICT));
+        // An object is an instance of its type and of each base, and of nothing else.
+        assert!(super::typy_rt_is_instance(list.cast(), &raw const LIST));
+        assert!(super::typy_rt_is_instance(list.cast(), &raw const OBJECT));
+        assert!(!super::typy_rt_is_instance(list.cast(), &raw const STR));
         for (view, ty) in views
             .into_iter()
             .zip([&DICT_KEYS, &DICT_VALUES, &DICT_ITEMS])

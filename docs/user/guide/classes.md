@@ -21,7 +21,7 @@ the name, such as `"Node | None"`.
 
 Instances are equal only to themselves and hashed by identity; operator
 methods such as `__eq__` come in 0.4 (CLS-07), with `@dataclass`
-(CLS-05), `@property` (CLS-06) and `isinstance` (CLS-09).
+(CLS-05) and `@property` (CLS-06).
 A class may derive from an exception class, as
 [Exceptions](exceptions.md) describes (CLS-03); class variables come in
 0.4 (CLS-11).
@@ -145,7 +145,6 @@ A subclass may declare an attribute of its base again only with the
 same type. The base of a class is `object`, an exception class or a
 class of the program defined before it; a built-in type such as `int` or
 `list` is E0201, and several bases are planned for after 1.0.
-`isinstance` comes later in 0.4.
 
 ## Calling the base with `super()`
 
@@ -194,6 +193,43 @@ E0309.
 class Count(int):
     pass
 ```
+
+## Testing the class with `isinstance`
+
+`isinstance(value, Class)` tests whether a value is an instance of a
+class or of one derived from it, and a tuple of classes tests each
+(CLS-09). The classes are named in the call: classes of the program,
+built-in types such as `int` or `str`, and exception classes. Where a
+test holds, a variable has the tested class's type, so its attributes
+and methods can be used; the narrowing ends when the variable is
+assigned (TYP-07):
+
+<!-- typy-expect: accepted -->
+```python
+class Shape:
+    pass
+
+
+class Circle(Shape):
+    def __init__(self, radius: float) -> None:
+        self.radius = radius
+
+
+def radius(shape: Shape | None) -> float:
+    if isinstance(shape, Circle):
+        return shape.radius
+    return 0.0
+
+
+print(radius(Circle(2.0)), radius(Shape()), radius(None))
+```
+
+A test also narrows after an `if` whose body cannot fall through, such
+as `if not isinstance(shape, Circle): return`, and in the right operand
+of `and`. When the checker can tell the answer, as for
+`isinstance(3, int)`, nothing is tested when the program runs; `bool`
+counts as `int`, as in CPython. A class held in a variable, and
+`issubclass`, are planned for 0.5.
 
 ## Attributes are declared
 

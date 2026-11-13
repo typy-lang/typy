@@ -195,6 +195,11 @@ pub enum TypedExprKind {
     Upcast(Box<TypedExpr>),
     /// The value of a `T | None` that a test showed is not `None` (TYP-13).
     Unwrap(Box<TypedExpr>),
+    /// An instance, or an exception, held as an instance of a class derived from its static
+    /// class, which an `isinstance` test showed it is: the same object (TYP-07).
+    Downcast(Box<TypedExpr>),
+    /// `isinstance(value, classes)` (CLS-09).
+    IsInstance(Box<IsInstanceTest>),
     /// A dict display: each key and its value, in order (DAT-09).
     Dict {
         keys: Vec<TypedExpr>,
@@ -324,6 +329,26 @@ pub struct InitCall {
     pub positional: usize,
 }
 
+/// `isinstance(value, classes)`, with what the checker could decide when the program is
+/// compiled (CLS-09).
+#[derive(Clone, Debug, PartialEq)]
+pub struct IsInstanceTest {
+    /// The value, evaluated once.
+    pub value: TypedExpr,
+    /// Whether `None`, for an optional value, is an instance of one of the classes: `NoneType`
+    /// or `object` is among them.
+    pub none_matches: bool,
+    /// Whether every value of the static type that is not `None` is an instance of one of the
+    /// classes.
+    pub always: bool,
+    /// The classes the value's class decides, tested when the program runs, when `always` is
+    /// false.
+    pub checks: Vec<crate::types::TypeObjectOf>,
+    /// The position, in the function's table of narrowed types, of the type a true test gives
+    /// the variable the value reads, when it narrows one (TYP-07).
+    pub narrowed: Option<u32>,
+}
+
 impl TypedExpr {
     /// Returns the expression's operands in source order, the expressions it evaluates directly.
     #[must_use]
@@ -374,8 +399,10 @@ impl TypedExpr {
                 .flat_map(|(key, value)| [key, value])
                 .collect(),
             TypedExprKind::DictItem { dict, key } => vec![dict, key],
+            TypedExprKind::IsInstance(test) => vec![&test.value],
             TypedExprKind::Wrap(inner)
             | TypedExprKind::Upcast(inner)
+            | TypedExprKind::Downcast(inner)
             | TypedExprKind::Unwrap(inner)
             | TypedExprKind::AsIterable(inner)
             | TypedExprKind::Lazy { value: inner, .. } => vec![inner],

@@ -18,11 +18,11 @@ value.
 | `typing.Any`, `typing.cast` and `object` annotations are refused | TYP-10 |
 | A variable read before it is assigned on every path is refused | TYP-12 |
 | `T \| None` narrows to `T` after `is not None`, a failed `is None` test or a truth test | TYP-13 |
+| A variable narrows to a derived class after `isinstance` | TYP-07 |
 | `Iterator[T]` and `Iterable[T]` from `typing` or `collections.abc` | TYP-15 |
 | `TracebackType` and `ModuleType` from `types` | CST-10, MOD-10 |
 
-Unions of other types, such as `int | str`, come with `isinstance` in 0.4
-(TYP-14).
+Unions of other types, such as `int | str`, come later in 0.4 (TYP-14).
 
 ## Iterators and iterables
 

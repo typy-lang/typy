@@ -328,6 +328,16 @@ fn an_upcast_reaches_a_base_and_nothing_else() {
         )
     });
     assert!(message(&number).contains("v1 of type int is not an instance"));
+    let circle = TyirType::Object(TypeId::class(1));
+    let back = on_circle(|value, _| (Operation::Downcast { value, ty: circle }, circle));
+    assert_eq!(verify(&back), Ok(()));
+    assert!(
+        print(&back).contains("downcast v0, class#1"),
+        "{}",
+        print(&back)
+    );
+    let sideways = on_circle(|value, _| (Operation::Downcast { value, ty: other }, other));
+    assert!(message(&sideways).contains("is not the type of a class derived from"));
     let optional = TyirType::Optional(typy_tyir::OptionalBase::Object(TypeId::class(0)));
     let to_optional = on_circle(|circle, _| {
         (

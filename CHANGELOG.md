@@ -29,6 +29,11 @@ All notable changes to TyPy are recorded here. The format follows
   subclass assigns its own attributes when the base's `__init__` uses
   the instance, which could run an override that reads them, E0309
   otherwise (CLS-04).
+- `isinstance` with a class of the program, a built-in type or an
+  exception class, or a tuple of them; a variable narrows to the tested
+  class where the test holds, also after an `if` that returns and in
+  the right operand of `and`. A class held in a variable and
+  `issubclass` are planned for 0.5 (CLS-09, TYP-07).
 - An exception class may derive from an exception class imported from
   another module, as `from errors import AppError` or `errors.AppError`
   (CLS-03).

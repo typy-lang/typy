@@ -242,8 +242,10 @@ fn expression(expression_value: &TypedExpr, callees: &mut BTreeSet<FunctionId>) 
             expression(left, callees);
             expression(right, callees);
         }
+        TypedExprKind::IsInstance(test) => expression(&test.value, callees),
         TypedExprKind::Wrap(operand)
         | TypedExprKind::Upcast(operand)
+        | TypedExprKind::Downcast(operand)
         | TypedExprKind::Unwrap(operand)
         | TypedExprKind::Unary { operand, .. }
         | TypedExprKind::TupleOf(operand)

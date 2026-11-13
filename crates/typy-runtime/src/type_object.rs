@@ -242,6 +242,21 @@ pub unsafe extern "C" fn typy_rt_object_type(object: *const ObjectHeader) -> *co
     unsafe { type_of(object) }
 }
 
+/// Returns whether the heap object at `object` is an instance of `class`: its type is
+/// `class` or derives from it, as `isinstance` tests (CLS-09).
+///
+/// # Safety
+///
+/// `object` points to a live object with a valid header, and `class` to a live type object.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn typy_rt_is_instance(
+    object: *const ObjectHeader,
+    class: *const TypeObject,
+) -> bool {
+    // SAFETY: the caller's guarantee.
+    unsafe { crate::exception::classes::derives_from(type_of(object), &*class) }
+}
+
 /// Returns the type of a heap object.
 ///
 /// # Safety

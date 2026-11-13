@@ -141,3 +141,19 @@ fn a_missing_runtime_archive_fails_before_the_program_is_read() {
     assert_eq!(codes(&failure), ["E0703"]);
     assert!(matches!(failure.sources, Sources::None));
 }
+
+#[test]
+fn an_overridden_method_is_called_through_the_class_s_table() {
+    let (_guard, main) = program(
+        "class Shape:\n    def area(self) -> float:\n        return 0.0\n    def name(self) -> str:\n        return 'shape'\n\
+         class Square(Shape):\n    def area(self) -> float:\n        raise ValueError('no')\n    def name(self) -> str:\n        return 'square'\n\
+         shapes: list[Shape] = [Shape(), Square()]\nfor shape in shapes:\n    print(shape.name())\n    try:\n        print(shape.area())\n    except ValueError:\n        print('error')\n",
+    );
+    let ir = text(emit(&main, EmitStage::LlvmIr));
+    // A call through a table loads the entry and calls it indirectly.
+    assert!(
+        ir.contains("call ptr %") || ir.contains("call { double, ptr } %"),
+        "{ir}"
+    );
+    assert!(ir.contains("@typy.class1 = "), "{ir}");
+}

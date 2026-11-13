@@ -27,7 +27,7 @@ pub use open::OpenAccess;
 pub use sys::SysValue;
 pub use typed::{
     Argument, AssignTarget, Attribute, ClassId, Conversion, FStringPart, FormattedValue,
-    FunctionId, FunctionSignature, Generator, ImportBinding, InitCall, LoopSource,
+    FunctionId, FunctionSignature, Generator, ImportBinding, InitCall, IsInstanceTest, LoopSource,
     PercentConversion, PercentField, PercentNumber, PercentPart, PercentValue, PrintCall,
     RaiseCause, SignatureParameter, Symbol, SymbolId, SymbolKind, TypedClass, TypedConstant,
     TypedExpr, TypedExprKind, TypedFunction, TypedHandler, TypedModule, TypedProgram, TypedStmt,

@@ -986,7 +986,21 @@ or through its base's; `super().__init__(...)` that runs such an `__init__`
 before the class's own attributes are assigned is E0309, since an override may
 read them. Calling a class whose attributes the `__init__` that runs, its own
 or its nearest base's, does not all assign is E0309, so no instance holds an
-attribute without a value (CLS-01). `is` compares two exceptions. A class name
+attribute without a value (CLS-01). `body::isinstance` checks
+`isinstance(value, classes)` with classes named in the call (CLS-09). For each
+class it decides, from the value's static type, whether every value is an
+instance, none is, or the runtime must check: a class derived from the static
+class, or any class for a value held as a generic object. The result is
+`TypedExprKind::IsInstance(IsInstanceTest)`, which lowers to a constant or to
+`is_instance` calls, which walk the object's type up its bases; `None` gives
+the checker's answer for `NoneType` and `object`. When the value reads a
+variable, the type a true test gives it, the common base of the tested
+classes, takes a place in the function's table of narrowed types, and
+`flow::test_facts` gives `Fact::Narrowed(variable, place)`. Reading the
+variable where the fact holds gives `TypedExprKind::Downcast`, which lowers to
+`Operation::Downcast`, verified like `Upcast` the other way and free when the
+program runs; assigning the variable ends the narrowing (TYP-07). `is`
+compares two exceptions. A class name
 read as a value is `TypeObjectOf::Exception`, and in an annotation it names the
 exception type. Calling a class takes positional arguments of any type and gives
 `TypedExprKind::NewException { class, arguments }`; a keyword is E0404, and a

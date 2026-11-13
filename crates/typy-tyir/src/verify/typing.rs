@@ -272,6 +272,16 @@ impl Checker<'_> {
                 Some(*ty)
             }
             Operation::Unwrap(value) => Some(self.optional_value(*value)?),
+            Operation::Downcast { value, ty } => {
+                let from = self.ty(*value)?;
+                if !self.derives_from(*ty, from) {
+                    return Err(self.error(format!(
+                        "{ty} is not the type of a class derived from v{}'s {from}",
+                        value.0
+                    )));
+                }
+                Some(*ty)
+            }
             Operation::Upcast { value, ty } => {
                 let from = self.ty(*value)?;
                 if !self.derives_from(from, *ty) {

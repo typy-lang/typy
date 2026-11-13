@@ -114,6 +114,7 @@ pub(super) fn operands(operation: &Operation) -> Vec<ValueId> {
         | Operation::ToBits(value)
         | Operation::Wrap { value, .. }
         | Operation::Upcast { value, .. }
+        | Operation::Downcast { value, .. }
         | Operation::Unwrap(value)
         | Operation::IsNone(value)
         | Operation::FromBits { bits: value, .. }

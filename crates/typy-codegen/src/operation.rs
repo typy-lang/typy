@@ -106,7 +106,9 @@ impl<'ctx> FunctionEmitter<'_, '_, 'ctx> {
             Operation::Unwrap(value) => Some(self.unwrap(*value)?),
             // An instance of a class keeps its address as an instance of its base, whose
             // attributes come first (ADR-0021).
-            Operation::Upcast { value, .. } => Some(self.value(*value)?),
+            Operation::Upcast { value, .. } | Operation::Downcast { value, .. } => {
+                Some(self.value(*value)?)
+            }
             Operation::IsNone(value) => Some(self.is_none(*value)?),
             Operation::NewInstance { class } => Some(self.new_instance(*class)?),
             Operation::Field {

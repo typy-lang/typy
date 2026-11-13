@@ -18,6 +18,7 @@ mod fstring;
 mod function;
 mod import;
 mod invoke;
+mod isinstance;
 mod iterable_builtin;
 mod iterator;
 mod last_use;

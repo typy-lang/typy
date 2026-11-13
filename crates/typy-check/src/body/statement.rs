@@ -226,6 +226,7 @@ impl BodyChecker<'_> {
             for name in names {
                 if let Some(symbol) = self.locals.get(name) {
                     known.remove(&Fact::NotNone(*symbol));
+                    known.retain(|fact| !matches!(fact, Fact::Narrowed(each, _) if each == symbol));
                 }
             }
         }
