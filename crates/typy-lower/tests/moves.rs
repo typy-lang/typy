@@ -215,3 +215,21 @@ fn a_view_of_a_dict_is_counted_since_its_zero_value_allocates() {
         assert!(text.contains("inc v"), "{body}\n{text}");
     }
 }
+
+#[test]
+fn item_assignment_and_remove_reach_their_runtime_functions() {
+    let source = concat!(
+        "def f() -> None:\n",
+        "    words = [\"a\", \"b\"]\n",
+        "    words[0] = \"c\" + \"d\"\n",
+        "    words.remove(\"b\")\n",
+        "    found = {\"x\", \"y\"}\n",
+        "    found.remove(\"x\")\n",
+        "    print(words, found)\n",
+        "\n\nf()\n",
+    );
+    let text = function_text(source, "f");
+    for call in ["rt.list_set_moved", "rt.list_remove", "rt.set_remove"] {
+        assert!(text.contains(call), "{call} missing from\n{text}");
+    }
+}

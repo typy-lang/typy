@@ -10,7 +10,7 @@ MARKDOWN := "**/*.md" "\#.tmp/**" "\#target/**" "\#dist/**"
 
 
 .PHONY: dev image shell runtime fmt fmt-check lint type test coverage docs-lint ascii-check traceability test-int test-e2e test-all \
-	build dist bless coverage-branches miri fuzz runtime-size diagrams diagrams-check unicode-tables unicode-tables-check format-cases format-cases-check stdlib-names stdlib-names-check errno-texts errno-texts-check mutants bench check hooks clean
+	build dist bless coverage-branches miri fuzz runtime-size diagrams diagrams-check unicode-tables unicode-tables-check format-cases format-cases-check stdlib-names stdlib-names-check errno-texts errno-texts-check mutants mutants-package bench check hooks clean
 
 dev: ## Start the dev service, building its image the first time
 	@$(COMPOSE) up -d --quiet-pull dev 2>/dev/null
@@ -90,11 +90,14 @@ FUZZ_SECONDS ?= 60
 fuzz: dev ## Fuzz the source, checking and lowering stages for FUZZ_SECONDS seconds, 60 by default (NFR-09)
 	@$(COMPOSE) exec -T -e FUZZ_SECONDS=$(FUZZ_SECONDS) dev scripts/fuzz.sh
 
+MUTANTS_BASE ?= HEAD
 MUTANTS_PACKAGE ?= typy-diagnostics
-MUTANTS_TESTS ?= own
 
-mutants: ## Run cargo-mutants on MUTANTS_PACKAGE in a container limited to 6 GB, without network; MUTANTS_TESTS=suites tests the earlier survivors against the conformance suite; the report goes to .tmp/mutants/
-	@scripts/mutants.sh $(MUTANTS_PACKAGE) $(MUTANTS_TESTS)
+mutants: ## Mutation-test the Rust lines changed since MUTANTS_BASE, by default the uncommitted work, in a container limited to 6 GB; the report goes to .tmp/mutants/diff/
+	@scripts/mutants.sh diff $(MUTANTS_BASE)
+
+mutants-package: ## Mutation-test every mutant of MUTANTS_PACKAGE; hours for a large crate
+	@scripts/mutants.sh package $(MUTANTS_PACKAGE)
 
 bench: runtime ## Time the release-built compiler on generated 10,000-line projects against the budgets of NFR-04, NFR-05 and NFR-14
 	@$(EXEC) cargo build --release -p typy-cli --locked
