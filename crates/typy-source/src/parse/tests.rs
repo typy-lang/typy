@@ -226,7 +226,6 @@ fn constructs_beyond_the_release_keep_their_kind_and_span() {
     let source = "\
 async def a():
     pass
-type X = int
 match v:
     case _:
         pass
@@ -243,7 +242,6 @@ nonlocal g
         kinds,
         [
             NodeKind::AsyncFunctionDef,
-            NodeKind::TypeAlias,
             NodeKind::Match,
             NodeKind::Nonlocal,
         ]
@@ -949,4 +947,20 @@ fn expressions_and_elif_chains_past_the_deepest_nesting_are_refused() {
         "elif x:\n    pass\n".repeat(super::MAX_DEPTH)
     );
     assert_eq!(nesting_error(elif).map(|(message, ..)| message), Some(past));
+}
+
+#[test]
+fn a_type_statement_keeps_its_name_parameters_and_value() {
+    let source = "type Pair[T] = tuple[T, T]\ntype Name = 'str'\n";
+    let dumped = dump(
+        &parse(&file(source), PythonFloor::V3_12).unwrap(),
+        &file(source),
+    );
+    for line in [
+        "TypeAlias Pair [1] @1:1",
+        "TypeAlias Name [0] @2:1",
+        "Quoted",
+    ] {
+        assert!(dumped.contains(line), "{line} in\n{dumped}");
+    }
 }

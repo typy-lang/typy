@@ -141,6 +141,7 @@ pub(super) fn collect_functions<'tree>(
             classes,
             instances,
             modules: &names.modules,
+            module_aliases: &names.module_aliases,
             names: &names.names,
             standard: &names.standard,
             bound: if floor_defers {

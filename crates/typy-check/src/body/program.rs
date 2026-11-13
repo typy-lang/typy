@@ -52,6 +52,11 @@ pub(crate) struct Program {
     /// For each name the module binds to a module at module level, the classes of that
     /// module, which annotations such as `shapes.Point` name.
     pub(super) module_classes: BTreeMap<String, BTreeMap<String, ClassId>>,
+    /// For each name bound to a module of the program, that module's type aliases (SMT-10).
+    pub(super) module_aliases: BTreeMap<String, BTreeSet<String>>,
+    /// The type aliases of the module being checked, which only its annotations read
+    /// (SMT-10).
+    pub(super) type_aliases: BTreeSet<String>,
     /// The names of `typing`, `collections.abc` and `types` the module imports, and the
     /// names bound to those modules, which annotations read (TYP-15).
     pub(super) annotation_names: BTreeMap<String, crate::check::AnnotationName>,
@@ -92,6 +97,7 @@ pub(crate) struct ModuleScope {
     pub(super) function_ids: BTreeMap<String, FunctionId>,
     pub(super) class_ids: BTreeMap<String, ClassId>,
     pub(super) module_symbols: BTreeMap<String, SymbolId>,
+    pub(super) type_aliases: BTreeSet<String>,
 }
 
 impl Program {
@@ -119,6 +125,8 @@ impl Program {
             package: None,
             path: String::new(),
             module_classes: BTreeMap::new(),
+            module_aliases: BTreeMap::new(),
+            type_aliases: BTreeSet::new(),
             annotation_names: BTreeMap::new(),
             annotation_modules: BTreeMap::new(),
             module_functions: BTreeMap::new(),
@@ -197,6 +205,7 @@ impl Program {
             .map(|(_, name)| name.clone())
             .collect();
         self.module_classes = BTreeMap::new();
+        self.module_aliases = BTreeMap::new();
         self.class_modules
             .extend(std::iter::repeat_n(self.module.clone(), classes.len()));
         self.classes.extend(classes);
@@ -206,6 +215,15 @@ impl Program {
 
     /// Notes the module about to be checked, whose imports resolve against its package.
     pub(crate) fn prepare_module(&mut self, module: &typy_source::Module) {
+        self.type_aliases = module
+            .syntax
+            .body
+            .iter()
+            .filter_map(|statement| match statement {
+                typy_source::syntax::Stmt::TypeAlias { name, .. } => Some(name.name.clone()),
+                _ => None,
+            })
+            .collect();
         self.package = module.package();
         module.name.as_str().clone_into(&mut self.module);
         self.lazy_modules = typy_source::lazy_modules(&module.syntax.body);
@@ -280,6 +298,20 @@ impl Program {
             .collect()
     }
 
+    /// Returns, for each name bound to a module of the program, that module's type aliases.
+    pub(crate) fn module_aliases_of(
+        &self,
+        modules: &BTreeMap<String, String>,
+    ) -> BTreeMap<String, BTreeSet<String>> {
+        modules
+            .iter()
+            .filter_map(|(name, module)| {
+                let scope = self.scopes.get(module)?;
+                Some((name.clone(), scope.type_aliases.clone()))
+            })
+            .collect()
+    }
+
     /// Returns the exception classes of the modules checked so far.
     pub(crate) fn known_instances(&self) -> &BTreeMap<ClassId, Type> {
         &self.instances
@@ -313,6 +345,7 @@ impl Program {
         self.function_ids
             .extend(functions.iter().map(|(name, id)| (name.clone(), *id)));
         self.module_classes = annotations.modules;
+        self.module_aliases = annotations.module_aliases;
         self.annotation_names = annotations.names;
         self.annotation_modules = annotations.standard;
     }
@@ -331,6 +364,7 @@ impl Program {
                 function_ids: self.function_ids.clone(),
                 class_ids: self.class_ids.clone(),
                 module_symbols: self.module_symbols.clone(),
+                type_aliases: std::mem::take(&mut self.type_aliases),
             },
         );
     }

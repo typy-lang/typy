@@ -1,4 +1,5 @@
-//! The module's variables, and the rule that a name is a function or a variable, not both.
+//! The module's variables, and the rule that a name is one of a function, a class, a variable
+//! or a type alias.
 
 use std::collections::BTreeMap;
 
@@ -85,7 +86,7 @@ pub(crate) fn declared_globals(statements: &[Stmt]) -> Vec<&Identifier> {
 
 /// A name may be a module-level function, a class or a module-level variable, only one of
 /// them: CPython would rebind it.
-pub(super) fn check_names_are_functions_or_variables(
+fn check_names_are_functions_or_variables(
     functions: &[Definition<'_>],
     classes: &BTreeMap<String, ClassId>,
     variables: &BTreeMap<String, Span>,
@@ -124,4 +125,53 @@ pub(super) fn check_names_are_functions_or_variables(
             );
         }
     }
+}
+
+/// Reports a type alias whose name the module also gives a function, a class or a variable,
+/// since an annotation reads one meaning for the name (SMT-10).
+fn check_type_aliases_are_alone(
+    body: &[Stmt],
+    functions: &[Definition<'_>],
+    classes: &BTreeMap<String, ClassId>,
+    variables: &BTreeMap<String, Span>,
+    diagnostics: &mut Diagnostics,
+) {
+    for statement in body {
+        let Stmt::TypeAlias { name, .. } = statement else {
+            continue;
+        };
+        let what = if functions
+            .iter()
+            .any(|definition| definition.name == name.name)
+        {
+            "a function"
+        } else if classes.contains_key(&name.name) {
+            "a class"
+        } else if variables.contains_key(&name.name) {
+            "a variable"
+        } else {
+            continue;
+        };
+        diagnostics.push(
+            Diagnostic::new(
+                DiagnosticCode::error(202),
+                name.span,
+                format!("`{}` is a type alias and is also {what}", name.name),
+            )
+            .with_rule(RuleId::SMT_10),
+        );
+    }
+}
+
+/// Reports a module-level name given two meanings: a class, a function, a variable or a type
+/// alias.
+pub(super) fn check_module_names(
+    body: &[Stmt],
+    functions: &[Definition<'_>],
+    classes: &BTreeMap<String, ClassId>,
+    variables: &BTreeMap<String, Span>,
+    diagnostics: &mut Diagnostics,
+) {
+    check_names_are_functions_or_variables(functions, classes, variables, diagnostics);
+    check_type_aliases_are_alone(body, functions, classes, variables, diagnostics);
 }

@@ -20,6 +20,8 @@ pub(crate) struct AnnotationScope<'classes> {
     /// For each name bound to a module at module level, that module's classes, which an
     /// annotation such as `shapes.Point` names (MOD-10).
     pub(crate) modules: &'classes BTreeMap<String, BTreeMap<String, ClassId>>,
+    /// For each of those names, that module's type aliases (SMT-10).
+    pub(crate) module_aliases: &'classes BTreeMap<String, std::collections::BTreeSet<String>>,
     /// The names imported from `typing`, `collections.abc` and `types` (TYP-15).
     pub(crate) names: &'classes BTreeMap<String, AnnotationName>,
     /// For each name bound to one of those modules, the module.
@@ -225,6 +227,66 @@ fn qualified<'tree>(
     }
 }
 
+/// Returns the type `module.Class` names, through the name `id` bound to a module of the
+/// program whose classes are `classes` (MOD-10).
+fn module_class_type(
+    id: &str,
+    classes: &BTreeMap<String, ClassId>,
+    attribute: &typy_source::syntax::Identifier,
+    span: typy_diagnostics::Span,
+    scope: &AnnotationScope<'_>,
+    diagnostics: &mut Diagnostics,
+) -> Type {
+    let only = BTreeMap::from([(
+        attribute.name.clone(),
+        classes
+            .get(&attribute.name)
+            .copied()
+            .unwrap_or(ClassId(u32::MAX)),
+    )]);
+    if classes.contains_key(&attribute.name) {
+        let inner = AnnotationScope {
+            classes: &only,
+            bound: u32::MAX,
+            ..*scope
+        };
+        return named_type(&attribute.name, span, &inner, diagnostics);
+    }
+    if scope
+        .module_aliases
+        .get(id)
+        .is_some_and(|aliases| aliases.contains(&attribute.name))
+    {
+        diagnostics.push(other_module_alias(id, &attribute.name, span));
+        return Type::Error;
+    }
+    diagnostics.push(
+        Diagnostic::new(
+            DiagnosticCode::error(425),
+            attribute.span,
+            format!("the module `{id}` has no class `{}`", attribute.name),
+        )
+        .with_rule(RuleId::SMT_07),
+    );
+    Type::Error
+}
+
+/// Reports a type alias of another module, whose expansion in this module is planned
+/// (SMT-12).
+pub(crate) fn other_module_alias(
+    module: &str,
+    name: &str,
+    span: typy_diagnostics::Span,
+) -> Diagnostic {
+    Diagnostic::new(
+        DiagnosticCode::error(201),
+        span,
+        format!("using the type alias `{module}.{name}` of another module is planned for TyPy 0.5 (SMT-12)"),
+    )
+    .with_rule(RuleId::SMT_12)
+    .with_help(format!("define the alias in this module, or annotate with what `{name}` stands for"))
+}
+
 /// Returns the standard module a name, or a dotted name through one, stands for.
 fn standard_module(expression: &Expr, scope: &AnnotationScope<'_>) -> Option<String> {
     match expression {
@@ -262,30 +324,7 @@ pub(crate) fn annotation_type(
         } if let Expr::Name { id, .. } = value.as_ref()
             && let Some(classes) = scope.modules.get(id) =>
         {
-            let only = BTreeMap::from([(
-                attribute.name.clone(),
-                classes
-                    .get(&attribute.name)
-                    .copied()
-                    .unwrap_or(ClassId(u32::MAX)),
-            )]);
-            if classes.contains_key(&attribute.name) {
-                let inner = AnnotationScope {
-                    classes: &only,
-                    bound: u32::MAX,
-                    ..*scope
-                };
-                return named_type(&attribute.name, *span, &inner, diagnostics);
-            }
-            diagnostics.push(
-                Diagnostic::new(
-                    DiagnosticCode::error(425),
-                    attribute.span,
-                    format!("the module `{id}` has no class `{}`", attribute.name),
-                )
-                .with_rule(RuleId::SMT_07),
-            );
-            Type::Error
+            module_class_type(id, classes, attribute, *span, scope, diagnostics)
         }
         // A string is read when the annotation is, so it may name any class (CLS-01).
         Expr::Quoted { annotation, .. } => {

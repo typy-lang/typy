@@ -20,6 +20,7 @@ value.
 | `T \| None` narrows to `T` after `is not None`, a failed `is None` test or a truth test | TYP-13 |
 | A variable narrows to a derived class after `isinstance` | TYP-07 |
 | A name, class variable or attribute declared `Final` is not assigned again | TYP-08 |
+| `type Name = annotation` at module level names an annotation | SMT-10 |
 | `Iterator[T]` and `Iterable[T]` from `typing` or `collections.abc` | TYP-15 |
 | `TracebackType` and `ModuleType` from `types` | CST-10, MOD-10 |
 
@@ -99,6 +100,45 @@ LIMIT: Final = 10
 for step in range(2):
     LIMIT += step
 ```
+
+## Type aliases
+
+`type Name = annotation` at module level makes `Name` stand for the
+annotation in every annotation of the module. As in CPython, the value is
+read only when an annotation uses the alias, so it may name a class
+defined further down, or another alias:
+
+<!-- typy-expect: accepted -->
+```python
+type Score = int
+type Scores = list[Score]
+type Found = Node | None
+
+
+class Node:
+    def __init__(self, value: Score) -> None:
+        self.value = value
+
+
+def best(scores: Scores) -> Score:
+    return max(scores)
+
+
+def first(nodes: list[Node]) -> Found:
+    return nodes[0] if nodes else None
+
+
+print(best([3, 9]), first([]))
+```
+
+An alias that names itself, such as `type Tree = list[Tree]`, is E0201;
+a recursive type is planned for after 1.0. An alias defined twice, E0414,
+and one whose name the module also gives a class, a function or a
+variable, E0202, are refused, since an annotation would read one meaning
+of the name. Type parameters, `type Pair[T] = tuple[T, T]`, come with
+generics later in 0.4 (GEN-01). An alias of another module, an alias read
+as a value, which CPython gives as a `TypeAliasType`, and `type` inside a
+function, a class or a block are planned for 0.5 (SMT-12).
 
 ## Example
 

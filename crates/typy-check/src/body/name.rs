@@ -93,19 +93,8 @@ impl BodyChecker<'_> {
         if id == "__name__" {
             return Self::typed(TypedExprKind::ModuleName, Type::Str, span);
         }
-        if self.program.annotation_names.contains_key(id)
-            || self.program.annotation_modules.contains_key(id)
-        {
-            return self.error(
-                Diagnostic::new(
-                    DiagnosticCode::error(201),
-                    span,
-                    format!("using `{id}` as a value is planned for TyPy 0.4 (TYP-15)"),
-                )
-                .with_rule(RuleId::TYP_15)
-                .with_help("TyPy 0.3 reads it in annotations only"),
-                span,
-            );
+        if let Some(refused) = self.annotation_only(id, span) {
+            return refused;
         }
         if let Some(type_object) = self.type_object_named(id, span) {
             return self.through_lazy(id, type_object);
@@ -221,5 +210,41 @@ impl BodyChecker<'_> {
             return read;
         }
         Self::typed(TypedExprKind::Downcast(Box::new(read)), narrowed, span)
+    }
+
+    /// Reports a name that only annotations read: a type alias of the module, or a name of
+    /// `typing`, `collections.abc` or `types`.
+    fn annotation_only(&mut self, id: &str, span: Span) -> Option<TypedExpr> {
+        if self.program.type_aliases.contains(id) {
+            return Some(self.error(
+                Diagnostic::new(
+                    DiagnosticCode::error(201),
+                    span,
+                    format!(
+                        "using the type alias `{id}` as a value is planned for TyPy 0.5 (SMT-12)"
+                    ),
+                )
+                .with_rule(RuleId::SMT_12)
+                .with_help("TyPy reads a type alias in annotations"),
+                span,
+            ));
+        }
+        if self.program.annotation_names.contains_key(id)
+            || self.program.annotation_modules.contains_key(id)
+        {
+            return Some(
+                self.error(
+                    Diagnostic::new(
+                        DiagnosticCode::error(201),
+                        span,
+                        format!("using `{id}` as a value is planned for TyPy 0.4 (TYP-15)"),
+                    )
+                    .with_rule(RuleId::TYP_15)
+                    .with_help("TyPy 0.3 reads it in annotations only"),
+                    span,
+                ),
+            );
+        }
+        None
     }
 }

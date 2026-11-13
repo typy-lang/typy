@@ -5,7 +5,9 @@ use ruff_text_size::{Ranged, TextRange};
 
 use super::Converter;
 use super::operator::binary_operator;
-use crate::syntax::{Alias, ExceptHandler, NodeKind, Parameter, ParameterKind, Stmt, WithItem};
+use crate::syntax::{
+    Alias, ExceptHandler, Identifier, NodeKind, Parameter, ParameterKind, Stmt, WithItem,
+};
 
 impl Converter<'_> {
     pub(super) fn statements(&self, statements: &[ast::Stmt]) -> Vec<Stmt> {
@@ -100,7 +102,19 @@ impl Converter<'_> {
                     .collect(),
                 span,
             },
-            ast::Stmt::TypeAlias(node) => self.other_statement(NodeKind::TypeAlias, node.range),
+            // The grammar makes the alias's name a name, so its text is the identifier.
+            ast::Stmt::TypeAlias(node) => Stmt::TypeAlias {
+                name: Identifier {
+                    name: self.text[node.name.range()].to_owned(),
+                    span: self.span(node.name.range()),
+                },
+                type_parameter_count: node
+                    .type_params
+                    .as_ref()
+                    .map_or(0, |parameters| parameters.type_params.len()),
+                value: self.annotation(&node.value),
+                span,
+            },
             ast::Stmt::Assign(node) => Stmt::Assign {
                 targets: node
                     .targets

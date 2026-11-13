@@ -65,7 +65,9 @@ impl Walker {
 
     fn class_statement(&mut self, statement: &Stmt) {
         match statement {
-            Stmt::FunctionDef { .. } => self.statement(statement, Place::Class),
+            Stmt::FunctionDef { .. } | Stmt::TypeAlias { .. } => {
+                self.statement(statement, Place::Class);
+            }
             // A name declared with or without a value, and a value given to one name, which
             // the checker reads as a class variable or the default of an attribute (CLS-11).
             Stmt::AnnAssign {

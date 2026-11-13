@@ -292,8 +292,10 @@ impl BodyChecker<'_> {
                 return self.import_statement(statement, *span);
             }
             // `global` changes where names resolve, which `declare_globals` did.
+            // The aliases are expanded in the annotations, and a program reads none as a value.
             Stmt::AnnAssign { value: None, .. }
             | Stmt::Global { .. }
+            | Stmt::TypeAlias { .. }
             | Stmt::FunctionDef { .. }
             | Stmt::ClassDef { .. }
             | Stmt::Other { .. } => return None,

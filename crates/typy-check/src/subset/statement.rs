@@ -244,6 +244,28 @@ impl Walker {
                 self.syntax_error(*span, "`continue` outside a loop");
             }
             Stmt::Global { names, .. } => self.global_statement(names),
+            Stmt::TypeAlias {
+                type_parameter_count,
+                value,
+                span,
+                ..
+            } => {
+                // The checker expands the aliases of the module's top level only.
+                if place != Place::ModuleTop {
+                    self.report(
+                        *span,
+                        planned(
+                            "`type` statements inside functions, classes and blocks",
+                            "0.5",
+                            RuleId::SMT_12,
+                        ),
+                    );
+                }
+                if *type_parameter_count > 0 {
+                    self.report(*span, planned("type parameters", "0.4", RuleId::GEN_01));
+                }
+                self.annotation(value);
+            }
             // The checker resolves each import against the modules of the program.
             Stmt::Import { .. }
             | Stmt::ImportFrom { .. }

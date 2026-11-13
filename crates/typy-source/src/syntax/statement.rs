@@ -177,6 +177,14 @@ pub enum Stmt {
         message: Option<Expr>,
         span: Span,
     },
+    /// `type name = value` or `type name[T, ...] = value`, a type alias whose value is an
+    /// annotation (SMT-10).
+    TypeAlias {
+        name: Identifier,
+        type_parameter_count: usize,
+        value: Expr,
+        span: Span,
+    },
     /// `global name, ...`: the names are the module's variables in this function (SMT-08).
     Global {
         names: Vec<Identifier>,
@@ -247,6 +255,7 @@ impl Stmt {
             | Self::Delete { span, .. }
             | Self::Try { span, .. }
             | Self::Global { span, .. }
+            | Self::TypeAlias { span, .. }
             | Self::Pass { span }
             | Self::Break { span }
             | Self::Continue { span }

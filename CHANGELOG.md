@@ -53,6 +53,12 @@ All notable changes to TyPy are recorded here. The format follows
   class variable or an attribute that `__init__` declares `Final` is
   assigned only by its declaration, and any other assignment is E0414. A
   `Final` without a value is E0408 (TYP-08).
+- The `type` statement at module level: `type Name = annotation` makes
+  `Name` stand for the annotation in the module's annotations, and may
+  name a class defined below it, as CPython reads the value late. An
+  alias with type parameters comes with generics; an alias of another
+  module, read as a value, or defined inside a function, a class or a
+  block is planned for 0.5 (SMT-10, SMT-12).
 - Container methods: `len(x)`, `x[k]`, `x[k] = v`, `del x[k]` and
   `v in x` call `__len__`, `__getitem__`, `__setitem__`, `__delitem__`
   and `__contains__`, and truth tests, `any` and `all` call `__bool__`,

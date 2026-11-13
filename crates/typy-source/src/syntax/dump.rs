@@ -271,6 +271,19 @@ impl Dump<'_> {
                 let names: Vec<&str> = names.iter().map(|name| name.name.as_str()).collect();
                 self.line(depth, &format!("Global {}", names.join(", ")), span);
             }
+            Stmt::TypeAlias {
+                name,
+                type_parameter_count,
+                value,
+                ..
+            } => {
+                self.line(
+                    depth,
+                    &format!("TypeAlias {} [{type_parameter_count}]", name.name),
+                    span,
+                );
+                self.expression(depth + 1, value);
+            }
             Stmt::Pass { .. } => self.line(depth, "Pass", span),
             Stmt::Break { .. } => self.line(depth, "Break", span),
             Stmt::Continue { .. } => self.line(depth, "Continue", span),

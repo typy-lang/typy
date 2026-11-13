@@ -206,6 +206,8 @@ impl RuleId {
     pub const SMT_10: Self = Self("SMT-10");
     /// `yield` shall be accepted in generator functions.
     pub const SMT_11: Self = Self("SMT-11");
+    /// A type alias shall be usable from another module, readable as a value as CPython's `TypeAliasType`, and definable inside a function, a class or a block.
+    pub const SMT_12: Self = Self("SMT-12");
     /// TyPy shall accept only source that every oracle version, from the program's Python floor up, parses without a syntax error.
     pub const STD_01: Self = Self("STD-01");
     /// STD-02 shall cover only behaviour the Language Reference or the library documentation defines.
@@ -336,6 +338,7 @@ impl RuleId {
         Self::SMT_09,
         Self::SMT_10,
         Self::SMT_11,
+        Self::SMT_12,
         Self::STD_01,
         Self::STD_03,
         Self::STD_04,

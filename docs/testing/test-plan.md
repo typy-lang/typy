@@ -335,6 +335,7 @@ that the specification does not define.
 | SMT-09 | 1.0 | IT | `tests/conformance/smt/SMT-09_*.py` |
 | SMT-10 | 0.4 | IT | `tests/conformance/smt/SMT-10_*.py` |
 | SMT-11 | 1.0 | IT | `tests/conformance/smt/SMT-11_*.py` |
+| SMT-12 | 0.5 | IT | `tests/conformance/smt/SMT-12_*.py` |
 | CST-01 | 0.1 | IT | `tests/conformance/cst/CST-01_*.py` |
 | CST-02 | 0.1 | IT | `tests/conformance/cst/CST-02_*.py` |
 | CST-03 | 0.2 | IT | `tests/conformance/cst/CST-03_*.py` |

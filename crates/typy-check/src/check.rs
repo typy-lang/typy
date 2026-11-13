@@ -10,6 +10,7 @@ mod definition_order;
 mod module_imports;
 mod module_scope;
 mod overriding;
+mod type_alias;
 mod visit;
 
 use std::collections::{BTreeMap, BTreeSet};
@@ -27,10 +28,12 @@ pub(crate) use annotation::{
 #[derive(Clone, Debug, Default)]
 pub(crate) struct ImportedNames {
     pub(crate) modules: BTreeMap<String, BTreeMap<String, ClassId>>,
+    /// For each name bound to a module of the program, that module's type aliases (SMT-10).
+    pub(crate) module_aliases: BTreeMap<String, BTreeSet<String>>,
     pub(crate) names: BTreeMap<String, AnnotationName>,
     pub(crate) standard: BTreeMap<String, String>,
 }
-pub(crate) use annotation::{ClassVarAnnotation, final_type};
+pub(crate) use annotation::{ClassVarAnnotation, final_type, other_module_alias};
 pub(crate) use class::{ClassInfo, class_value_variable, class_values};
 pub(crate) use definition::Definition;
 
@@ -41,7 +44,19 @@ use class::{BaseScope, KnownClasses, class_types, collect_classes, collect_membe
 use definition::collect_functions;
 use definition_order::check_calls_follow_definitions;
 pub(crate) use module_scope::declared_globals;
-use module_scope::{check_names_are_functions_or_variables, module_variables};
+use module_scope::{check_module_names, module_variables};
+
+impl ImportedNames {
+    /// Returns the names the module's imports give its annotations.
+    fn of(program: &Program, imports: &module_imports::ModuleImports) -> Self {
+        Self {
+            modules: program.module_classes_of(&imports.modules),
+            module_aliases: program.module_aliases_of(&imports.modules),
+            names: imports.annotations.clone(),
+            standard: imports.standard.clone(),
+        }
+    }
+}
 
 /// Resolves names, checks types and the subset rules, and builds the typed program.
 #[derive(Clone, Copy, Debug, Default)]
@@ -52,11 +67,16 @@ impl TypeChecker {
     /// program with errors is never returned (TYP-11).
     pub fn check(project: &Project) -> Result<TypedProgram, Diagnostics> {
         let mut diagnostics = Diagnostics::new();
-        // A dataclass gets its methods before anything reads the module (CLS-05).
+        // A dataclass gets its methods, and each annotation the types its aliases stand for,
+        // before anything reads the module (CLS-05, SMT-10).
         let mut dataclasses = dataclass::Dataclasses::default();
         let modules: Vec<Module> = project
             .modules_in_order()
-            .map(|module| dataclasses.expand(module, &mut diagnostics))
+            .map(|module| {
+                let mut module = dataclasses.expand(module, &mut diagnostics);
+                type_alias::expand(&mut module.syntax.body, &mut diagnostics);
+                module
+            })
             .collect();
         for module in &modules {
             diagnostics.extend(subset::check(&module.syntax));
@@ -127,11 +147,7 @@ fn check_module(
     let first_function = program.function_count();
     program.prepare_module(module);
     let imports = module_imports::module_imports(program, &tree.body);
-    let annotations = ImportedNames {
-        modules: program.module_classes_of(&imports.modules),
-        names: imports.annotations.clone(),
-        standard: imports.standard.clone(),
-    };
+    let annotations = ImportedNames::of(program, &imports);
     let classes = collect_classes(&tree.body, first_class, diagnostics);
     let mut class_ids: BTreeMap<String, ClassId> = imports.classes.clone();
     class_ids.extend(
@@ -182,7 +198,13 @@ fn check_module(
     module_variables(&tree.body, &mut variables);
     class_value_variables(&classes, &annotations, &mut variables);
     let module_variable_spans = variables.clone();
-    check_names_are_functions_or_variables(&definitions, &class_ids, &variables, diagnostics);
+    check_module_names(
+        &tree.body,
+        &definitions,
+        &class_ids,
+        &variables,
+        diagnostics,
+    );
     check_calls_follow_definitions(&tree.body, &definitions, &methods, diagnostics);
     definitions.extend(methods);
 

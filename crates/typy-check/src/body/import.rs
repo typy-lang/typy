@@ -41,6 +41,8 @@ pub(crate) enum Named {
     Function(FunctionId),
     Class(ClassId),
     Variable(SymbolId),
+    /// A type alias, which only the annotations of its own module read (SMT-10).
+    TypeAlias,
     Nothing,
 }
 
@@ -163,11 +165,21 @@ impl Program {
     /// which its own functions may import by name; `None` when the module is not checked
     /// yet. The tables are read in place, so a lookup costs the same in any module.
     pub(crate) fn named(&self, module: &str, name: &str) -> Option<Named> {
-        let (functions, classes, symbols) = if module == self.module {
-            (&self.function_ids, &self.class_ids, &self.module_symbols)
+        let (functions, classes, symbols, aliases) = if module == self.module {
+            (
+                &self.function_ids,
+                &self.class_ids,
+                &self.module_symbols,
+                &self.type_aliases,
+            )
         } else {
             let scope = self.scopes.get(module)?;
-            (&scope.function_ids, &scope.class_ids, &scope.module_symbols)
+            (
+                &scope.function_ids,
+                &scope.class_ids,
+                &scope.module_symbols,
+                &scope.type_aliases,
+            )
         };
         Some(if let Some(function) = functions.get(name) {
             Named::Function(*function)
@@ -175,6 +187,8 @@ impl Program {
             Named::Class(*class)
         } else if let Some(symbol) = symbols.get(name) {
             Named::Variable(*symbol)
+        } else if aliases.contains(name) {
+            Named::TypeAlias
         } else {
             Named::Nothing
         })
@@ -246,6 +260,13 @@ impl Program {
                     module: base.as_str().to_owned(),
                     source,
                 });
+            }
+            Some(Named::TypeAlias) => {
+                return Err(Box::new(crate::check::other_module_alias(
+                    base.as_str(),
+                    name,
+                    alias.name.span,
+                )));
             }
             Some(Named::Nothing) => {}
         }
@@ -635,6 +656,15 @@ impl BodyChecker<'_> {
                 RuleId::FUN_05,
                 format!("using `{module}.{name}` as a value is planned for TyPy 1.0 (FUN-05)"),
             )
+        } else if let Named::TypeAlias = found {
+            (
+                201,
+                RuleId::SMT_12,
+                format!(
+                    "using the type alias `{module}.{name}` as a value is planned for TyPy 0.5 \
+                     (SMT-12)"
+                ),
+            )
         } else {
             (
                 425,
@@ -759,7 +789,7 @@ impl BodyChecker<'_> {
             Some(Named::Class(class)) => {
                 return self.new_instance(class, arguments, keywords, span);
             }
-            Some(Named::Variable(_) | Named::Nothing) => {}
+            Some(Named::Variable(_) | Named::TypeAlias | Named::Nothing) => {}
         }
         for argument in arguments {
             self.expression(argument);
