@@ -38,6 +38,10 @@ All notable changes to TyPy are recorded here. The format follows
   class body, read through the class or an instance and assigned
   through the class; and attribute defaults, `name: T = value`, which
   each new instance starts with (CLS-11, ADR-0024).
+- `@classmethod`: `Class.name(...)` passes the class, so `cls(...)` in
+  an alternative constructor makes an instance of the class the call
+  names, as in CPython; TyPy compiles a copy for each class of the
+  module that has it (CLS-06, ADR-0025).
 - `@staticmethod`, called through the class or an instance, and
   `@property` with its `@name.setter`: reading the attribute calls the
   getter of the instance's class, and assigning it calls the setter.

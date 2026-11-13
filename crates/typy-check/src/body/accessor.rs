@@ -49,6 +49,9 @@ impl BodyChecker<'_> {
         span: Span,
     ) -> TypedExpr {
         let class_name = self.program.classes[class.0 as usize].name.clone();
+        if let Some(call) = self.class_method_call_of(class, name, arguments, keywords, span) {
+            return call;
+        }
         let function = self.program.method(class, &name.name);
         let Some(function) = function.filter(|_| self.is_static_method(class, &name.name)) else {
             for argument in arguments {
@@ -260,6 +263,109 @@ impl BodyChecker<'_> {
                 ),
             )
             .with_rule(RuleId::CLS_06),
+        );
+        true
+    }
+
+    /// Checks `Class.name(arguments)` for a class method: a call of the copy of `Class`, which
+    /// takes the class first; `None` when `name` is no class method of the class (ADR-0025).
+    fn class_method_call_of(
+        &mut self,
+        class: ClassId,
+        name: &Identifier,
+        arguments: &[Expr],
+        keywords: &[Keyword],
+        span: Span,
+    ) -> Option<TypedExpr> {
+        let info = &self.program.classes[class.0 as usize];
+        let class_name = info.name.clone();
+        if info.remote_class_methods.contains(&name.name) {
+            for argument in arguments {
+                self.expression(argument);
+            }
+            return Some(self.error(
+                Diagnostic::new(
+                    DiagnosticCode::error(201),
+                    name.span,
+                    format!(
+                        "calling the class method `{}` that `{class_name}` inherits from a class \
+                         of another module is planned for TyPy 0.5 (CLS-06)",
+                        name.name
+                    ),
+                )
+                .with_rule(RuleId::CLS_06)
+                .with_help("define the class in the module of its base"),
+                span,
+            ));
+        }
+        let function = info
+            .class_methods
+            .iter()
+            .find(|(each, _)| *each == name.name)
+            .map(|(_, id)| *id)?;
+        let of = match self.program.exception(class) {
+            Some(exception) => crate::types::TypeObjectOf::Exception(exception.clone()),
+            None => crate::types::TypeObjectOf::Instance(class, class_name.clone()),
+        };
+        let class_object = Self::typed(
+            TypedExprKind::TypeObject(Box::new(of.clone())),
+            crate::types::TypeObjectOf::type_of(Some(of)),
+            span,
+        );
+        let qualified = format!("{class_name}.{}", name.name);
+        let bound = match self.bind_arguments(function, 1, &qualified, arguments, keywords, span) {
+            Ok(bound) => bound,
+            Err(error) => return Some(error),
+        };
+        let mut all = vec![Argument {
+            parameter: 0,
+            value: class_object,
+        }];
+        all.extend(bound);
+        let returns = self.program.signatures[function.0 as usize].returns.clone();
+        Some(Self::typed(
+            TypedExprKind::Call {
+                function,
+                arguments: all,
+                dispatch: false,
+            },
+            returns,
+            span,
+        ))
+    }
+
+    /// Reports `instance.name(arguments)` for a class method, which in CPython passes the
+    /// instance's class; returns true when it reports one.
+    pub(super) fn refuse_class_method_through_instance(
+        &mut self,
+        class: ClassId,
+        name: &Identifier,
+    ) -> bool {
+        let info = &self.program.classes[class.0 as usize];
+        let class_method = info
+            .class_methods
+            .iter()
+            .any(|(each, _)| *each == name.name)
+            || info.remote_class_methods.contains(&name.name);
+        if !class_method {
+            return false;
+        }
+        let class_name = info.name.clone();
+        self.diagnostics.push(
+            Diagnostic::new(
+                DiagnosticCode::error(201),
+                name.span,
+                format!(
+                    "calling the class method `{}` through an instance is planned for TyPy 0.5 \
+                     (CLS-06)",
+                    name.name
+                ),
+            )
+            .with_rule(RuleId::CLS_06)
+            .with_help(format!(
+                "call it through its class, `{class_name}.{}(...)`",
+                name.name
+            )),
         );
         true
     }

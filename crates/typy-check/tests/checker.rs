@@ -2342,10 +2342,6 @@ fn static_methods_and_properties_are_checked() {
     ));
     let cases: &[(&str, &[&str])] = &[
         (
-            "class A:\n    @classmethod\n    def f(cls) -> None:\n        pass\n",
-            &["E0201"],
-        ),
-        (
             "class A:\n    @staticmethod\n    def __str__() -> str:\n        return ''\n",
             &["E0404"],
         ),
@@ -2399,6 +2395,39 @@ fn static_methods_and_properties_are_checked() {
         (
             "class A:\n    @staticmethod\n    def f() -> int:\n        return 1\ndef g() -> A:\n    return A()\nprint(g().f())\n",
             &["E0201"],
+        ),
+    ];
+    for (source, expected) in cases {
+        assert_eq!(&rejected(source), expected, "\n{source}");
+    }
+}
+
+#[test]
+fn class_methods_are_called_through_their_class() {
+    let cases: &[(&str, &[&str])] = &[
+        (
+            "class A:\n    @classmethod\n    def f() -> None:\n        pass\n",
+            &["E0404"],
+        ),
+        (
+            "class A:\n    @classmethod\n    def f(cls) -> None:\n        pass\na = A()\na.f()\n",
+            &["E0201"],
+        ),
+        (
+            "class A:\n    count = 0\nclass B(A):\n    pass\nB.count = 1\n",
+            &["E0201"],
+        ),
+        (
+            "class A:\n    def __init__(self, n: int) -> None:\n        self.n = n\n    @classmethod\n    def make(cls) -> 'A':\n        return cls(1)\nclass B(A):\n    def __init__(self) -> None:\n        self.n = 2\n",
+            &["E0404"],
+        ),
+        (
+            "class A:\n    count = 0\nclass B(A):\n    pass\nB.count += 1\n",
+            &["E0201"],
+        ),
+        (
+            "class A:\n    @classmethod\n    def f(cls) -> int:\n        return 'x'\nclass B(A):\n    pass\n",
+            &["E0405"],
         ),
     ];
     for (source, expected) in cases {

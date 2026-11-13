@@ -200,7 +200,7 @@ fn check_module(
     program.end_first_look();
     let body = BodyChecker::check_module(program, &module_body, diagnostics);
     for (index, definition) in others {
-        BodyChecker::check_function(program, function_id(index), definition, diagnostics);
+        check_body(program, function_id(index), definition, diagnostics);
     }
     program.end_module(body);
 }
@@ -221,6 +221,27 @@ fn class_value_variables(
         ) {
             let name = class::class_value_variable(&class.name.name, &value.name);
             variables.entry(name).or_insert(value.assignment.span());
+        }
+    }
+}
+
+/// Checks the body of a function. A copy of an inherited class method reports only what its
+/// own class causes, such as arguments its `__init__` does not take (ADR-0025).
+fn check_body(
+    program: &mut Program,
+    id: FunctionId,
+    definition: &Definition<'_>,
+    diagnostics: &mut Diagnostics,
+) {
+    if definition.copy_of.is_none() {
+        BodyChecker::check_function(program, id, definition, diagnostics);
+        return;
+    }
+    let mut found = Diagnostics::new();
+    BodyChecker::check_function(program, id, definition, &mut found);
+    for diagnostic in found.iter() {
+        if !diagnostics.iter().any(|reported| reported == diagnostic) {
+            diagnostics.push(diagnostic.clone());
         }
     }
 }

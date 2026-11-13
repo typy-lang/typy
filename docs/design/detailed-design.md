@@ -1010,8 +1010,18 @@ planned for 0.5. A property's getter is a method of its name, recorded in
 override and dispatch as methods do. `body::accessor` reads `instance.name` of a
 property as a call of the getter with `dispatch` set, and checks
 `variable.name = value` as a statement that calls the setter; a property without
-a setter is E0414, and calling a property E0201. `@classmethod` is E0201 until
-its copies per class are built. A class body's values follow ADR-0024:
+a setter is E0414, and calling a property E0201. A class method follows
+ADR-0025: `ClassMethodCopies` makes, for each class, a copy of each class
+method it defines or inherits from a class of the same module, whose `cls` has
+the type of that class's type object, recorded in `ClassInfo::class_methods`;
+a class method inherited from another module's class is noted in
+`ClassInfo::remote_class_methods`. An inherited copy's `Definition::copy_of`
+names the copy it repeats, and the checker drops the diagnostics of an
+inherited copy that the original reported. `Class.name(...)` calls the class's
+copy with the class's type object first; calling a variable of `type[C]`, such
+as `cls`, makes an instance of `C`. A class method called through an instance
+or a class of another module, and a class variable assigned through a subclass
+that inherits it, are E0201, planned for 0.5. A class body's values follow ADR-0024:
 `check::class_values` turns `name = value` and `name: ClassVar[T] = value` into
 an assignment to the module variable `Class.name`, and `name: T = value` into
 one that holds the default of the attribute `name`. These module variables are

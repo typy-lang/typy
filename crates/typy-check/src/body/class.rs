@@ -487,6 +487,12 @@ impl BodyChecker<'_> {
         span: Span,
     ) -> TypedExpr {
         let found = self.program.method(class, &name.name);
+        if found.is_none() && self.refuse_class_method_through_instance(class, name) {
+            for argument in arguments {
+                self.expression(argument);
+            }
+            return Self::invalid_call(span);
+        }
         if found.is_some() && self.property_getter(class, &name.name).is_some() {
             return self.uncallable_property(class, name, arguments, span);
         }

@@ -551,3 +551,22 @@ fn properties_call_their_accessors_and_static_methods_take_no_instance() {
     assert!(printed.contains("call class#0.method#"), "{printed}");
     assert!(printed.contains("A.twice"), "{printed}");
 }
+
+#[test]
+fn each_class_has_its_own_copy_of_a_class_method() {
+    let printed = text(concat!(
+        "class Shape:\n",
+        "    count = 0\n",
+        "    def __init__(self) -> None:\n",
+        "        self.n = 1\n",
+        "    @classmethod\n",
+        "    def make(cls) -> 'Shape':\n",
+        "        cls.count += 1\n",
+        "        return cls()\n",
+        "class Square(Shape):\n",
+        "    count = 5\n",
+        "print(Shape.make().n, Square.make().n, Square.count)\n",
+    ));
+    assert!(printed.contains("Shape.make"), "{printed}");
+    assert!(printed.contains("Square.make"), "{printed}");
+}

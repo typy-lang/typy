@@ -21,6 +21,13 @@ impl BodyChecker<'_> {
     ) -> TypedExpr {
         if let Some(symbol) = self.locals.get(name) {
             let ty = self.types.get(symbol).cloned().unwrap_or(Type::Error);
+            // A variable of `type[C]` holds the type object of `C` itself, such as `cls` in a
+            // copy of a class method, so calling it makes an instance of `C` (ADR-0025).
+            if let Type::TypeObject(Some(of)) = &ty
+                && let Some(class) = Self::program_class(of)
+            {
+                return self.new_instance(class, arguments, keywords, span);
+            }
             return self.error(
                 Diagnostic::new(
                     DiagnosticCode::error(401),

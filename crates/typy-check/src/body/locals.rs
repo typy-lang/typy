@@ -230,9 +230,7 @@ impl BodyChecker<'_> {
                 }
                 return self.module_attribute_target(&module, attribute, &ty, value, *span);
             }
-            if let Expr::Name { id, .. } = object.as_ref()
-                && !self.locals.contains_key(id)
-                && let Some(class) = self.program.class_ids.get(id).copied()
+            if let Some(class) = self.class_named_by(object)
                 && let Some(assignment) =
                     self.class_value_target(class, attribute, &ty, value, *span)
             {

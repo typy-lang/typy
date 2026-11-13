@@ -11,7 +11,7 @@ class body or assigned in `__init__`, and has one type.
 | Assigning or calling a name the class does not have is refused | CLS-02 |
 | A class derived from one class of the program, with its attributes and methods, overriding them | CLS-04 |
 | Class variables and attribute defaults given a value in the class body | CLS-11 |
-| `@staticmethod`, and `@property` with its setter | CLS-06 |
+| `@staticmethod`, `@classmethod`, and `@property` with its setter | CLS-06 |
 | `__str__` and `__repr__`, used by `print`, `str`, `repr`, f-strings and containers | CLS-08 |
 | A type object for every type, with `object` as the root | CLS-10 |
 | `type(x)`, class and built-in type names as values, `__name__` | CLS-12 |
@@ -23,7 +23,7 @@ the name, such as `"Node | None"`.
 
 Instances are equal only to themselves and hashed by identity; operator
 methods such as `__eq__` come in 0.4 (CLS-07), with `@dataclass`
-(CLS-05) and `@classmethod` (CLS-06).
+(CLS-05).
 A class may derive from an exception class, as
 [Exceptions](exceptions.md) describes (CLS-03).
 
@@ -317,6 +317,38 @@ for it. A method without `self` is E0404; decorate it with
 `@staticmethod`. Redefining a static method in a subclass, and
 assigning a property other than as `variable.name = value`, are planned
 for 0.5.
+
+## Class methods
+
+`@classmethod` makes a method that takes the class it is called
+through, `cls`, as CPython does: `Square.unit()` passes `Square`, so
+`cls(...)` makes a `Square`. TyPy compiles a copy of the method for
+each class that has it, and checks `cls(...)` against that class's
+`__init__` (CLS-06):
+
+<!-- typy-expect: accepted -->
+```python
+class Shape:
+    def __init__(self, name: str) -> None:
+        self.name = name
+
+    @classmethod
+    def unit(cls) -> "Shape":
+        return cls("unit " + cls.__name__)
+
+
+class Square(Shape):
+    pass
+
+
+print(Shape.unit().name, Square.unit().name, type(Square.unit()).__name__)
+```
+
+A class method is called through its class. Calling it through an
+instance, and through a subclass defined in another module than the
+class that defines the method, are planned for 0.5, and so is
+assigning a class variable through a subclass that inherits it, which
+in CPython gives the subclass a variable of its own.
 
 ## Attributes are declared
 

@@ -35,6 +35,21 @@ impl BodyChecker<'_> {
         }
     }
 
+    /// Returns the class an expression names: a class's name, or a variable that holds a
+    /// class's type object, such as `cls` in a class method (ADR-0025).
+    pub(super) fn class_named_by(&self, object: &Expr) -> Option<ClassId> {
+        let Expr::Name { id, .. } = object else {
+            return None;
+        };
+        match self.locals.get(id) {
+            None => self.program.class_ids.get(id).copied(),
+            Some(symbol) => match self.types.get(symbol)? {
+                Type::TypeObject(Some(of)) => Self::program_class(of),
+                _ => None,
+            },
+        }
+    }
+
     /// Returns the class whose body gives `class`, or the nearest base, a value `name`.
     fn holder(&self, class: ClassId, name: &str) -> Option<Holder> {
         let mut current = Some(class);
@@ -130,6 +145,9 @@ impl BodyChecker<'_> {
             );
             return Some(ClassValueAssignment::Refused);
         }
+        if let Some(refused) = self.inherited_class_variable(class, holder, attribute, span) {
+            return Some(refused);
+        }
         let (variable, module) = self.holder_variable(holder, &attribute.name);
         if module != self.program.module {
             let target = Identifier {
@@ -213,13 +231,7 @@ impl BodyChecker<'_> {
             }
             _ => return None,
         };
-        let class = match object {
-            Expr::Name { id, .. } if !self.locals.contains_key(id) => {
-                self.program.class_ids.get(id).copied()
-            }
-            _ => None,
-        };
-        let Some(class) = class else {
+        let Some(class) = self.class_named_by(object) else {
             // In CPython, `instance.name op= value` gives that instance a value of its own.
             self.diagnostics.push(
                 Diagnostic::new(
@@ -235,8 +247,12 @@ impl BodyChecker<'_> {
             );
             return Some(ClassValueAssignment::Refused);
         };
-        if self.holder(class, &attribute.name)?.default {
+        let holder = self.holder(class, &attribute.name)?;
+        if holder.default {
             return self.class_value_target(class, attribute, ty, current, span);
+        }
+        if let Some(refused) = self.inherited_class_variable(class, holder, attribute, span) {
+            return Some(refused);
         }
         if !ty.is_assignable_to(&current.ty) {
             self.diagnostics.push(
@@ -253,5 +269,39 @@ impl BodyChecker<'_> {
             );
         }
         Some(ClassValueAssignment::Assigned(AssignTarget::Name(symbol)))
+    }
+
+    /// Reports `Subclass.name = value` for a class variable a base gives, which in CPython
+    /// gives the subclass a variable of its own and leaves the base's alone.
+    fn inherited_class_variable(
+        &mut self,
+        class: ClassId,
+        holder: Holder,
+        attribute: &Identifier,
+        span: Span,
+    ) -> Option<ClassValueAssignment> {
+        if holder.class == class {
+            return None;
+        }
+        let class_name = self.program.classes[class.0 as usize].name.clone();
+        let owner = self.program.classes[holder.class.0 as usize].name.clone();
+        self.diagnostics.push(
+            Diagnostic::new(
+                DiagnosticCode::error(201),
+                span,
+                format!(
+                    "assigning `{class_name}.{}`, a class variable of its base `{owner}`, which \
+                     gives `{class_name}` one of its own in CPython, is planned for TyPy 0.5 \
+                     (CLS-11)",
+                    attribute.name
+                ),
+            )
+            .with_rule(RuleId::CLS_11)
+            .with_help(format!(
+                "give `{class_name}` its own `{} = ...`, or assign `{owner}.{}`",
+                attribute.name, attribute.name
+            )),
+        );
+        Some(ClassValueAssignment::Refused)
     }
 }

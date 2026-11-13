@@ -277,3 +277,19 @@ fn class_values_of_another_module_are_read_and_assigned_there() {
         ["E0414"]
     );
 }
+
+#[test]
+fn a_class_method_inherited_from_another_module_is_planned() {
+    let shapes =
+        "class Shape:\n    @classmethod\n    def make(cls) -> 'Shape':\n        return cls()\n";
+    assert_eq!(
+        rejected(&[
+            ("shapes.py", shapes),
+            (
+                "app.py",
+                "from shapes import Shape\nclass Square(Shape):\n    pass\nprint(Shape.make(), Square.make())\n",
+            ),
+        ]),
+        ["E0201"]
+    );
+}

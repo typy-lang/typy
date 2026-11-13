@@ -12,7 +12,7 @@ use super::overriding::Override;
 use crate::class_type::InstanceClass;
 use crate::exception::{BuiltinException, ExceptionClass};
 use crate::typed::{ClassId, FunctionId, FunctionSignature};
-use crate::types::Type;
+use crate::types::{Type, TypeObjectOf};
 
 /// An attribute of a class: declared in the class body, or assigned in `__init__`, whose
 /// check gives it its type.
@@ -40,6 +40,11 @@ pub(crate) struct ClassInfo {
     /// The class variables the class body gives a value, each held as the module variable
     /// `Class.name` (CLS-11, ADR-0024).
     pub(crate) class_variables: Vec<String>,
+    /// The copies of the class methods the class has, each by its name (ADR-0025).
+    pub(crate) class_methods: Vec<(String, FunctionId)>,
+    /// The class methods the class inherits from a base of another module, whose copies are
+    /// planned (ADR-0025).
+    pub(crate) remote_class_methods: Vec<String>,
     /// The static methods the class defines (CLS-06).
     pub(crate) static_methods: Vec<String>,
     /// The properties the class defines, each a getter among the methods, and its setter, when
@@ -282,16 +287,10 @@ pub(super) fn collect_members<'tree>(
 ) -> (Vec<ClassInfo>, Vec<Definition<'tree>>) {
     let mut infos = Vec::new();
     let mut methods: Vec<Definition<'tree>> = Vec::new();
+    let mut copies = ClassMethodCopies::default();
     for class in classes {
-        // The class's own name is bound only after its body runs.
-        let scope = AnnotationScope {
-            classes: known.ids,
-            instances: known.instances,
-            modules: &names.modules,
-            names: &names.names,
-            standard: &names.standard,
-            bound: if floor_defers { u32::MAX } else { class.id.0 },
-        };
+        let mut own_class_methods: Vec<&'tree Stmt> = Vec::new();
+        let scope = class_scope(known, names, floor_defers, class.id);
         let instance = known
             .instances
             .get(&class.id)
@@ -325,19 +324,15 @@ pub(super) fn collect_members<'tree>(
                         diagnostics.push(refused);
                         continue;
                     }
+                    if kind == MethodKind::Class {
+                        own_class_methods.push(statement);
+                        continue;
+                    }
                     let id = FunctionId(
                         u32::try_from(first_function + methods.len()).unwrap_or(u32::MAX),
                     );
                     if name == "__init__" && kind == MethodKind::Instance {
-                        info.init = Some(id);
-                        for attribute in initialized_attributes(&parts) {
-                            if info.attribute(&attribute).is_none() {
-                                info.attributes.push(AttributeInfo {
-                                    name: attribute,
-                                    ty: None,
-                                });
-                            }
-                        }
+                        note_init(&parts, id, &mut info);
                     }
                     let method = method_definition(
                         &parts,
@@ -373,6 +368,17 @@ pub(super) fn collect_members<'tree>(
                 _ => {}
             }
         }
+        copies.make(
+            &own_class_methods,
+            &mut info,
+            classes,
+            &scope,
+            &mut Collected {
+                methods: &mut methods,
+                first_function,
+            },
+            diagnostics,
+        );
         report_name_conflicts(&info, class.name.span, diagnostics);
         infos.push(info);
     }
@@ -423,11 +429,135 @@ fn new_info(class: &ClassStatement<'_>, instance: &Type, classes: Classes<'_>) -
         methods: Vec::new(),
         init: None,
         class_variables: Vec::new(),
+        class_methods: Vec::new(),
+        remote_class_methods: Vec::new(),
         static_methods: Vec::new(),
         properties: Vec::new(),
         defaults: Vec::new(),
         init_uses_instance: false,
         span: class.span,
+    }
+}
+
+/// Returns the classes an annotation in a class body may name; the class's own name is bound
+/// only after its body runs.
+fn class_scope<'known>(
+    known: &KnownClasses<'known>,
+    names: &'known crate::check::ImportedNames,
+    floor_defers: bool,
+    class: ClassId,
+) -> AnnotationScope<'known> {
+    AnnotationScope {
+        classes: known.ids,
+        instances: known.instances,
+        modules: &names.modules,
+        names: &names.names,
+        standard: &names.standard,
+        bound: if floor_defers { u32::MAX } else { class.0 },
+    }
+}
+
+/// Notes a class's `__init__`, and the attributes it assigns that the class body does not
+/// declare.
+fn note_init(parts: &FunctionParts<'_>, id: FunctionId, info: &mut ClassInfo) {
+    info.init = Some(id);
+    for attribute in initialized_attributes(parts) {
+        if info.attribute(&attribute).is_none() {
+            info.attributes.push(AttributeInfo {
+                name: attribute,
+                ty: None,
+            });
+        }
+    }
+}
+
+/// The methods collected so far, whose IDs follow `first_function`.
+struct Collected<'methods, 'tree> {
+    methods: &'methods mut Vec<Definition<'tree>>,
+    first_function: usize,
+}
+
+/// The class methods each class of the module has, its own and those it inherits from a
+/// class of the module, each with the copy of the class that defines it (ADR-0025).
+#[derive(Default)]
+struct ClassMethodCopies<'tree> {
+    by_class: BTreeMap<ClassId, Vec<(&'tree Stmt, FunctionId)>>,
+}
+
+impl<'tree> ClassMethodCopies<'tree> {
+    /// Makes a copy, for the class `info` describes, of each class method it has: its own, and
+    /// each one a base of the module defines that it does not define again. A class method a
+    /// base of another module defines is noted, since its copy is planned (ADR-0025).
+    fn make(
+        &mut self,
+        own: &[&'tree Stmt],
+        info: &mut ClassInfo,
+        classes: Classes<'_>,
+        scope: &AnnotationScope<'_>,
+        collected: &mut Collected<'_, 'tree>,
+        diagnostics: &mut Diagnostics,
+    ) {
+        let name_of = |statement: &Stmt| match statement {
+            Stmt::FunctionDef { name, .. } => name.name.clone(),
+            _ => String::new(),
+        };
+        let own_names: Vec<String> = own.iter().map(|statement| name_of(statement)).collect();
+        let mut visible: Vec<(&'tree Stmt, Option<FunctionId>)> =
+            own.iter().map(|statement| (*statement, None)).collect();
+        if let Some(base) = info.base {
+            if let Some(inherited) = self.by_class.get(&base) {
+                visible.extend(
+                    inherited
+                        .iter()
+                        .filter(|(statement, _)| !own_names.contains(&name_of(statement)))
+                        .map(|(statement, origin)| (*statement, Some(*origin))),
+                );
+            } else if let Some(base_info) = classes.get(base) {
+                let remote = base_info
+                    .class_methods
+                    .iter()
+                    .map(|(name, _)| name)
+                    .chain(&base_info.remote_class_methods)
+                    .filter(|name| !own_names.contains(name))
+                    .cloned()
+                    .collect::<Vec<_>>();
+                info.remote_class_methods.extend(remote);
+            }
+        }
+        let class_object = match &info.exception {
+            Some(exception) => TypeObjectOf::Exception(exception.clone()),
+            None => TypeObjectOf::Instance(info.id, info.name.clone()),
+        };
+        let owner = Owner {
+            id: info.id,
+            instance: TypeObjectOf::type_of(Some(class_object)),
+            takes_instance: true,
+        };
+        let mut made = Vec::new();
+        for (statement, origin) in visible {
+            let Some(parts) = FunctionParts::of(statement) else {
+                continue;
+            };
+            let id = FunctionId(
+                u32::try_from(collected.first_function + collected.methods.len())
+                    .unwrap_or(u32::MAX),
+            );
+            // An inherited copy repeats the signature of the copy it is made from, whose
+            // errors are reported there.
+            let mut repeated = Diagnostics::new();
+            let sink = if origin.is_some() {
+                &mut repeated
+            } else {
+                &mut *diagnostics
+            };
+            let mut method = definition(&parts, Some(&owner), scope, sink);
+            method.qualified_name = format!("{}.{}", info.name, parts.name.name);
+            method.copy_of = origin;
+            info.class_methods.push((parts.name.name.clone(), id));
+            made.push((statement, origin.unwrap_or(id)));
+            collected.methods.push(method);
+        }
+        self.by_class.insert(info.id, made);
     }
 }
 
@@ -503,9 +633,9 @@ fn refused_method(
     }
     let static_in_bases = static_method_in_bases(classes, info.base, name);
     match kind {
-        MethodKind::Class => refuse(
-            201,
-            "`@classmethod` is planned for later in TyPy 0.4 (CLS-06)".to_owned(),
+        MethodKind::Class if parts.parameters.is_empty() => refuse(
+            404,
+            format!("the class method `{name}` takes the class, `cls`, first"),
         ),
         // A static method has no entry in the method tables, so a subclass's own would not run
         // through an instance of it.

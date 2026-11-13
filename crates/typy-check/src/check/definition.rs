@@ -7,7 +7,7 @@ use typy_source::syntax::{Constant, Expr, Identifier, Parameter, Stmt};
 
 use super::annotation::{AnnotationScope, annotation_type};
 use crate::typed::ClassId;
-use crate::typed::{FunctionSignature, SignatureParameter, TypedConstant};
+use crate::typed::{FunctionId, FunctionSignature, SignatureParameter, TypedConstant};
 use crate::types::Type;
 
 /// A function definition with its signature: a module-level function, or a method of a class.
@@ -18,8 +18,12 @@ pub(crate) struct Definition<'tree> {
     pub(crate) qualified_name: String,
     /// The class of a method.
     pub(crate) class: Option<ClassId>,
-    /// Whether the first parameter is the instance: a method other than a static method.
+    /// Whether the first parameter is the instance: a method other than a static method or a
+    /// class method.
     pub(crate) takes_instance: bool,
+    /// For a copy of a class method a class inherits, the copy of the class that defines it,
+    /// whose diagnostics this copy does not repeat (ADR-0025).
+    pub(crate) copy_of: Option<FunctionId>,
     pub(crate) signature: FunctionSignature,
     pub(crate) parameters: Vec<(String, Span)>,
     pub(crate) body: &'tree [Stmt],
@@ -168,7 +172,8 @@ fn instance_parameter(
     diagnostics: &mut Diagnostics,
 ) -> Type {
     let instance = owner.instance.clone();
-    if let Some(annotation) = annotation {
+    // A class method's first parameter is the class each copy is made for (ADR-0025).
+    if let Some(annotation) = annotation.filter(|_| !matches!(instance, Type::TypeObject(_))) {
         let annotated = annotation_type(annotation, scope, diagnostics);
         if !annotated.matches(&instance) {
             diagnostics.push(
@@ -272,7 +277,12 @@ pub(super) fn definition<'tree>(
             |owner| format!("{}.{name}", owner.instance),
         ),
         class: owner.map(|owner| owner.id),
-        takes_instance: owner.is_some_and(|owner| owner.takes_instance),
+        takes_instance: owner.is_some_and(|owner| owner.takes_instance)
+            && !matches!(
+                owner.map(|owner| &owner.instance),
+                Some(Type::TypeObject(_))
+            ),
+        copy_of: None,
         signature: FunctionSignature {
             parameters: signature_parameters,
             returns,
