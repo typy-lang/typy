@@ -22,11 +22,19 @@ impl Converter<'_> {
         }
     }
 
+    /// Converts a statement, one level deeper; past `MAX_DEPTH` it stands in `pass`, and
+    /// parsing fails.
+    pub(super) fn statement(&self, statement: &ast::Stmt) -> Stmt {
+        let span = self.span(statement.range());
+        self.deeper(statement.range(), || self.statement_kind(statement))
+            .unwrap_or(Stmt::Pass { span })
+    }
+
     #[allow(
         clippy::too_many_lines,
         reason = "one arm per statement kind of Python's grammar"
     )]
-    pub(super) fn statement(&self, statement: &ast::Stmt) -> Stmt {
+    fn statement_kind(&self, statement: &ast::Stmt) -> Stmt {
         let span = self.span(statement.range());
         match statement {
             ast::Stmt::FunctionDef(node) if node.is_async => {
@@ -227,7 +235,8 @@ impl Converter<'_> {
         let Some((first, rest)) = clauses.split_first() else {
             return Vec::new();
         };
-        match &first.test {
+        // Each `elif` nests one level deeper, as its `If` node does.
+        self.deeper(first.range, || match &first.test {
             Some(test) => vec![Stmt::If {
                 test: self.expression(test),
                 body: self.statements(&first.body),
@@ -235,7 +244,8 @@ impl Converter<'_> {
                 span: self.span(first.range),
             }],
             None => self.statements(&first.body),
-        }
+        })
+        .unwrap_or_default()
     }
 
     pub(super) fn alias(&self, alias: &ast::Alias) -> Alias {

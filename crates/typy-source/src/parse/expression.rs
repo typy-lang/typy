@@ -77,11 +77,18 @@ impl Converter<'_> {
             .collect()
     }
 
+    /// Converts an expression, one level deeper; past `MAX_DEPTH` it stands in `None`, and
+    /// parsing fails.
+    pub(super) fn expression(&self, expression: &ast::Expr) -> Expr {
+        self.deeper(expression.range(), || self.expression_kind(expression))
+            .unwrap_or_else(|| self.constant(Constant::None, expression.range()))
+    }
+
     #[allow(
         clippy::too_many_lines,
         reason = "one arm per expression kind of Python's grammar"
     )]
-    pub(super) fn expression(&self, expression: &ast::Expr) -> Expr {
+    fn expression_kind(&self, expression: &ast::Expr) -> Expr {
         let span = self.span(expression.range());
         match expression {
             ast::Expr::BoolOp(node) => Expr::BoolOp {

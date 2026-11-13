@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy detailed design |
-| Version | 1.73 |
+| Version | 1.74 |
 | Status | Approved |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-12 |
@@ -453,6 +453,16 @@ statement is lazy by its keyword or by that list (MOD-07); the loader
 orders the modules of lazy imports as it orders imports inside a
 function, so they close no cycle. The tree is converted only when there
 are no errors.
+
+Before parsing, `parse/limits.rs` reads the tokens and refuses the 201st
+nested bracket with "too many nested parentheses" and the 100th nested
+block with "too many levels of indentation", CPython's tokenizer limits
+(LEX-11, ADR-0020). The parser runs with its `stacker` feature, which
+grows its stack on the heap. Converting the tree counts the nesting of
+expressions and statements, an `elif` counting as the `if` it becomes,
+and stops past `MAX_DEPTH`, 25000, with E0103; so every later pass
+recurses at most that deep, and the `typy` command runs the compiler on
+a thread with a 512 MiB stack, which holds it.
 
 ## 6. typy-stdlib
 
@@ -1291,7 +1301,12 @@ the result and the exception; that branch targets take no parameters; that
 only a function marked `may_raise` returns an exception; and that only
 counted values are counted. A `VerifyError` names the function and the
 block, and the caller reports it as E9001 with the pass that ran last. The
-verifier runs after every pass in every build of the compiler.
+verifier runs after every pass in every build of the compiler. Dominance comes
+from the immediate dominators, found with Cooper, Harvey and Kennedy's
+iteration in reverse postorder, and a preorder and postorder numbering of
+the dominator tree answers each query in constant time, so a function of
+many blocks verifies in time and memory in proportion to them
+(ADR-0020).
 
 `print(module) -> String` writes the deterministic text form used by
 `--emit=tyir-mem`, and `print_without_counting(module)` the same text without
@@ -1574,7 +1589,7 @@ copies nothing.
 | Output | `Reporter` writes diagnostics in the `--error-format` the command line chose, a global flag: sorted, rendered with `render_text` and written to standard error with a blank line between two of them, or with `render_json` one per line. The panic guard and internal errors use the same reporter, so a tool reading JSON also gets E9001 as JSON (UC-10). `--emit` output goes to `-o`, or to standard output without it. A file that cannot be written gives E0106 |
 | `typy explain CODE` | Prints the section of `docs/user/troubleshooting.md` for the code, embedded in the binary with `include_str!`, so the page and the command never disagree: its heading and prose, its samples indented by four spaces without their fences and `typy-expect` comments, links as their text, then the rule from the registry (CLI-10, UC-04). A retired code says so and names its replacement. A text that is not a code, or a code the registry lacks, is wrong usage, status 2. Every section of a code whose cause is one program file holds a program that gives it and the corrected program, which the documentation test runs; the codes about files, settings, the C toolchain and imports between modules show their files as text |
 | Exit status | `ExitStatus` is `Success = 0`, `ProgramErrors = 1`, `Usage = 2` and `Internal = 101` (CLI-06); a failure with any `E9xxx` diagnostic is `Internal`. `typy run` exits with the program's status, or 128 plus the signal that ended it |
-| Panic guard | The command runs inside `std::panic::catch_unwind`, with a panic hook that records the location in a thread-local; a panic becomes E9001 with the location and message, and exit status 101 |
+| Panic guard | The command runs on a thread of its own with a 512 MiB stack (ADR-0020), inside `std::panic::catch_unwind`, with a panic hook that records the location in a thread-local; a panic becomes E9001 with the location and message, and exit status 101 |
 | Warnings | `Reporter::warnings` writes the warnings of a `Success` before the command's output. `--deny-warnings` is a global flag. `typy run` checks a program whose build it takes from the cache, so its warnings show on every run, and the cache key includes `--deny-warnings` |
 | `typy run` | Builds into `cache/<key>/<name>`, where the cache is `$TYPY_HOME/cache`, else `$XDG_CACHE_HOME/typy` or `~/.cache/typy`, and `key` is the SHA-256 of the compiler version, the mode, the target, the main file's name and its text, each preceded by its length. A build already in the cache is run again without compiling. The executable gets the arguments after `--` and the same standard input, output and error |
 | Logging | `--log-level` arrives in 0.3 with UC-10; the 0.1 compiler has no log events |

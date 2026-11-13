@@ -824,3 +824,37 @@ fn optional_operations_check_their_types() {
     assert!(message(&tested).contains("is not optional"));
     assert!(print(&wrapped).contains("wrap v0, optional int"));
 }
+
+#[test]
+fn a_function_of_many_blocks_verifies_in_linear_time() {
+    // 100000 blocks in a chain, each passing on one value; dominance sets per block would
+    // hold five billion entries.
+    let mut builder =
+        FunctionBuilder::new(FunctionId(0), "_TY8__main__4long", "long", TyirType::Int);
+    let mut value = builder.push_value(
+        Operation::Constant(Constant::Int("0".to_owned())),
+        TyirType::Int,
+        span(),
+    );
+    for _ in 0..100_000 {
+        let next = builder.create_block();
+        builder.terminate(Terminator::Jump {
+            target: next,
+            arguments: Vec::new(),
+        });
+        builder.switch_to(next);
+        value = builder.push_value(
+            Operation::IntBinary {
+                operator: IntOperator::Add,
+                left: value,
+                right: value,
+            },
+            TyirType::Int,
+            span(),
+        );
+    }
+    builder.terminate(Terminator::Return(value));
+    let started = std::time::Instant::now();
+    assert_eq!(verify(&module(builder.finish())), Ok(()));
+    assert!(started.elapsed() < std::time::Duration::from_secs(10));
+}

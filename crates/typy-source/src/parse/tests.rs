@@ -867,3 +867,86 @@ fn a_surrogate_escape_in_a_str_is_refused_and_any_other_is_not() {
         assert!(parse(&file(source), PythonFloor::V3_12).is_ok(), "{source}");
     }
 }
+
+/// Runs `work` on a stack as large as the one `typy` gives the compiler, which converting a
+/// tree nested `MAX_DEPTH` levels needs.
+fn on_large_stack<T: Send + 'static>(work: impl FnOnce() -> T + Send + 'static) -> T {
+    std::thread::Builder::new()
+        .stack_size(512 * 1024 * 1024)
+        .spawn(work)
+        .unwrap()
+        .join()
+        .unwrap()
+}
+
+/// Returns the message, the line and the column of the one error parsing `source` gives.
+fn nesting_error(source: String) -> Option<(String, u32, u32)> {
+    on_large_stack(move || {
+        let file = file(&source);
+        let errors = parse(&file, PythonFloor::V3_12).err()?;
+        assert_eq!(errors.len(), 1);
+        let error = &errors[0];
+        assert_eq!(error.code().to_string(), "E0103");
+        assert_eq!(
+            error.rule().map(typy_diagnostics::RuleId::as_str),
+            Some("LEX-11")
+        );
+        let span = error.span().unwrap();
+        let position = file.position(span.start());
+        Some((error.message().to_owned(), position.line, position.column))
+    })
+}
+
+#[test]
+fn brackets_past_200_and_blocks_past_99_are_refused_with_cpythons_message() {
+    let brackets = |depth: usize| format!("x = {}1{}\n", "(".repeat(depth), ")".repeat(depth));
+    assert_eq!(nesting_error(brackets(200)), None);
+    assert_eq!(
+        nesting_error(brackets(201)),
+        Some(("too many nested parentheses".to_owned(), 1, 205))
+    );
+    let mixed = format!("y = [{}]\n", "{(".repeat(100));
+    assert_eq!(
+        nesting_error(mixed).map(|(message, ..)| message),
+        Some("too many nested parentheses".to_owned())
+    );
+    let blocks = |depth: usize| {
+        let mut text = String::new();
+        for level in 0..depth {
+            text.push_str(&"    ".repeat(level));
+            text.push_str("if True:\n");
+        }
+        text.push_str(&"    ".repeat(depth));
+        text.push_str("pass\n");
+        text
+    };
+    assert_eq!(nesting_error(blocks(99)), None);
+    assert_eq!(
+        nesting_error(blocks(100)),
+        Some(("too many levels of indentation".to_owned(), 101, 1))
+    );
+}
+
+#[test]
+fn expressions_and_elif_chains_past_the_deepest_nesting_are_refused() {
+    let past = format!(
+        "the program nests more than {} levels deep, past what CPython compiles",
+        super::MAX_DEPTH
+    );
+    let binary = |count: usize| format!("x = 1{}\n", " + 1".repeat(count));
+    assert_eq!(nesting_error(binary(super::MAX_DEPTH - 2)), None);
+    assert_eq!(
+        nesting_error(binary(super::MAX_DEPTH)).map(|(message, ..)| message),
+        Some(past.clone())
+    );
+    let unary = format!("x = {}1\n", "-".repeat(super::MAX_DEPTH));
+    assert_eq!(
+        nesting_error(unary).map(|(message, ..)| message),
+        Some(past.clone())
+    );
+    let elif = format!(
+        "if x:\n    pass\n{}",
+        "elif x:\n    pass\n".repeat(super::MAX_DEPTH)
+    );
+    assert_eq!(nesting_error(elif).map(|(message, ..)| message), Some(past));
+}

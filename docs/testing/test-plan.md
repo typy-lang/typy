@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy test plan |
-| Version | 0.42 |
+| Version | 0.43 |
 | Status | Draft |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-12 |
@@ -274,6 +274,7 @@ that the specification does not define.
 | LEX-08 | 0.1 | IT | `tests/conformance/lex/LEX-08_*.py` |
 | LEX-09 | 0.1 | IT | `tests/conformance/lex/LEX-09_*.py` |
 | LEX-10 | 0.4 | IT | `tests/conformance/lex/LEX-10_*.py` |
+| LEX-11 | 0.3 | UT, IT, E2E | `crates/typy-source/src/parse/tests.rs` for each limit just inside and just past it; `crates/typy-tyir/src/verify/tests.rs` for a function of 100000 blocks; `crates/typy-cli/tests/nesting.rs` for a program as deep as CPython compiles and each refusal; `tests/conformance/lex/LEX-11_*.py` |
 | TYP-01 | 0.1 | IT | `tests/conformance/typ/TYP-01_*.py` |
 | TYP-02 | 0.1 | IT | `tests/conformance/typ/TYP-02_*.py` |
 | TYP-03 | 0.1 | IT | `tests/conformance/typ/TYP-03_*.py` |

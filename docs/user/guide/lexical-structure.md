@@ -47,3 +47,10 @@ surrogate can still be made by decoding, as
 ```python
 escaped = "\udcff"
 ```
+
+Nesting has the limits CPython has, so a program CPython refuses is
+refused with E0103 and the same message: brackets nested more than 200
+deep are "too many nested parentheses", and blocks nested more than 99
+deep are "too many levels of indentation". Expressions and statements
+nested more than 25000 deep, past any program CPython compiles, are E0103
+as well (LEX-11).

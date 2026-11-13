@@ -7,7 +7,23 @@ use camino::Utf8PathBuf;
 use libfuzzer_sys::fuzz_target;
 use typy_source::{Project, ProjectSettings};
 
+/// The stack the stages run on, as large as the one `typy` gives the compiler, since its passes
+/// recurse over trees nested up to `typy_source::MAX_DEPTH` levels.
+const COMPILER_STACK: usize = 512 * 1024 * 1024;
+
 fuzz_target!(|bytes: &[u8]| {
+    let bytes = bytes.to_vec();
+    let stages = std::thread::Builder::new()
+        .stack_size(COMPILER_STACK)
+        .spawn(move || run_stages(&bytes))
+        .expect("the stages' thread starts");
+    if let Err(panic) = stages.join() {
+        std::panic::resume_unwind(panic);
+    }
+});
+
+/// Runs the source, checking and lowering stages on `bytes` as a main file.
+fn run_stages(bytes: &[u8]) {
     let Ok(directory) = tempfile::tempdir() else {
         return;
     };
@@ -30,4 +46,4 @@ fuzz_target!(|bytes: &[u8]| {
             .any(|diagnostic| diagnostic.code().to_string() == "E9001");
         assert!(!internal, "lowering failed internally: {diagnostics:?}");
     }
-});
+}

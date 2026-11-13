@@ -168,6 +168,14 @@ All notable changes to TyPy are recorded here. The format follows
 
 ### Fixed
 
+- A deeply nested program no longer crashes `typy`; it aborted on 1000
+  nested brackets. Brackets nested past 200 and blocks past 99 are E0103
+  with CPython's messages, and expressions or statements nested past
+  25000 are E0103; everything CPython compiles still compiles (LEX-11,
+  ADR-0020).
+- A function of many blocks, such as a long `elif` chain, compiles in
+  time and memory in proportion to its size; 20000 `elif` clauses ran out
+  of memory.
 - `print(..., file=f)` inside an `except` clause compiles; it failed with
   E9001.
 - An import inside a function, or a lazy one, no longer makes a circular

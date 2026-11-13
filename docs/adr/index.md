@@ -25,3 +25,4 @@ supersedes it.
 | [ADR-0017](0017-warn-where-cpython-warns-while-compiling.md) | Warn where CPython warns while compiling | Accepted | 2026-11-12 |
 | [ADR-0018](0018-provide-math-and-sys-as-checker-tables-over-runtime-functions.md) | Provide math and sys as checker tables over runtime functions | Accepted | 2026-11-12 |
 | [ADR-0019](0019-open-text-files-over-buffered-descriptors-with-cpythons-errors.md) | Open text files over buffered descriptors with CPython's errors | Accepted | 2026-11-12 |
+| [ADR-0020](0020-bound-nesting-as-cpython-does-and-compile-on-a-large-stack.md) | Bound nesting as CPython does and compile on a large stack | Accepted | 2026-11-13 |

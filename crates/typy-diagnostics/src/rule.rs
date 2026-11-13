@@ -145,6 +145,8 @@ impl RuleId {
     pub const LEX_09: Self = Self("LEX-09");
     /// A `\u` or `\U` escape of a surrogate code point, U+D800 to U+DFFF, in a `str` literal shall give that code point, as CPython keeps it.
     pub const LEX_10: Self = Self("LEX-10");
+    /// Brackets nested more than 200 deep and blocks nested more than 99 deep shall be rejected with CPython's messages, and expressions and statements nested more than 25000 deep shall be rejected, so that no program nests past what the compiler's stack holds.
+    pub const LEX_11: Self = Self("LEX-11");
     /// `print` with `sep` and `end`, `len`, `range`, `abs`, `min`, `max`, `int`, `float`, `str`, `bool`, `repr`, `ord` and `chr` shall be available.
     pub const LIB_01: Self = Self("LIB-01");
     /// `list`, `dict`, `set`, `tuple`, `sorted`, `reversed`, `enumerate`, `zip`, `sum`, `any`, `all` and `round` shall be available.
@@ -302,6 +304,7 @@ impl RuleId {
         Self::LEX_08,
         Self::LEX_09,
         Self::LEX_10,
+        Self::LEX_11,
         Self::LIB_01,
         Self::LIB_02,
         Self::LIB_03,

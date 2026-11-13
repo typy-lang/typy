@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy software requirements specification |
-| Version | 1.42 |
+| Version | 1.43 |
 | Status | Approved |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-12 |
@@ -163,6 +163,7 @@ formatter applies; Ruff's formatter is the project's recommendation.
 | LEX-08 | Imaginary literals shall be rejected. | M | 0.1 | 2.4.7 |
 | LEX-09 | A source file larger than 16 MiB shall be rejected with a diagnostic before it is parsed, so input size cannot exhaust the compiler's memory (NFR-09, NFR-14). | M | 0.1 | |
 | LEX-10 | A `\u` or `\U` escape of a surrogate code point, U+D800 to U+DFFF, in a `str` literal shall give that code point, as CPython keeps it. | S | 0.4 | 2.4.1.1 |
+| LEX-11 | Brackets nested more than 200 deep and blocks nested more than 99 deep shall be rejected with CPython's messages, and expressions and statements nested more than 25000 deep shall be rejected, so that no program nests past what the compiler's stack holds. | M | 0.3 | 2.1.8 |
 
 ### 3.4 Types and annotations (TYP)
 
