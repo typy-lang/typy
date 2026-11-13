@@ -50,6 +50,11 @@ impl BodyChecker<'_> {
         {
             return self.call_fromkeys(arguments, keywords, None, span);
         }
+        if let Type::TypeObject(Some(of)) = &receiver.ty
+            && let Some(class) = Self::program_class(of)
+        {
+            return self.class_method_call(class, name, arguments, keywords, span);
+        }
         if let Some(class) = receiver.ty.class_id() {
             return self.instance_method_call(receiver, class, name, arguments, keywords, span);
         }

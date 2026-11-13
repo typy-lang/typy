@@ -7,7 +7,7 @@ use typy_diagnostics::{Diagnostic, DiagnosticCode, Diagnostics, RuleId, Span};
 use typy_source::syntax::{Expr, Identifier, Stmt};
 
 use super::annotation::{AnnotationScope, annotation_type};
-use super::definition::{Definition, FunctionParts, Owner, defined_twice, definition};
+use super::definition::{Definition, FunctionParts, MethodKind, Owner, defined_twice, definition};
 use super::overriding::Override;
 use crate::class_type::InstanceClass;
 use crate::exception::{BuiltinException, ExceptionClass};
@@ -40,6 +40,11 @@ pub(crate) struct ClassInfo {
     /// The class variables the class body gives a value, each held as the module variable
     /// `Class.name` (CLS-11, ADR-0024).
     pub(crate) class_variables: Vec<String>,
+    /// The static methods the class defines (CLS-06).
+    pub(crate) static_methods: Vec<String>,
+    /// The properties the class defines, each a getter among the methods, and its setter, when
+    /// it has one, as the method `name.setter` (CLS-06).
+    pub(crate) properties: Vec<String>,
     /// The positions of the class's own attributes the class body gives a default, each held
     /// as the module variable `Class.name`.
     pub(crate) defaults: Vec<usize>,
@@ -300,6 +305,7 @@ pub(super) fn collect_members<'tree>(
         let owner = Owner {
             id: class.id,
             instance,
+            takes_instance: true,
         };
         for statement in class.body {
             match statement {
@@ -311,14 +317,18 @@ pub(super) fn collect_members<'tree>(
                         continue;
                     };
                     let name = &parts.name.name;
-                    if let Some(refused) = refused_method(&parts, &info) {
+                    let kind = parts.method_kind();
+                    let registered = registered_name(&kind, name);
+                    if let Some(refused) =
+                        refused_method(&parts, &kind, &registered, &info, classes)
+                    {
                         diagnostics.push(refused);
                         continue;
                     }
                     let id = FunctionId(
                         u32::try_from(first_function + methods.len()).unwrap_or(u32::MAX),
                     );
-                    if name == "__init__" {
+                    if name == "__init__" && kind == MethodKind::Instance {
                         info.init = Some(id);
                         for attribute in initialized_attributes(&parts) {
                             if info.attribute(&attribute).is_none() {
@@ -329,8 +339,24 @@ pub(super) fn collect_members<'tree>(
                             }
                         }
                     }
-                    info.methods.push((name.clone(), id));
-                    let method = definition(&parts, Some(&owner), &scope, diagnostics);
+                    let method = method_definition(
+                        &parts,
+                        &kind,
+                        id,
+                        &mut info,
+                        &owner,
+                        &scope,
+                        diagnostics,
+                    );
+                    check_accessor(
+                        &kind,
+                        &method,
+                        &info,
+                        &methods,
+                        first_function,
+                        parts.name,
+                        diagnostics,
+                    );
                     let signatures = Signatures {
                         earlier: known.signatures,
                         local: &methods,
@@ -397,34 +423,180 @@ fn new_info(class: &ClassStatement<'_>, instance: &Type, classes: Classes<'_>) -
         methods: Vec::new(),
         init: None,
         class_variables: Vec::new(),
+        static_methods: Vec::new(),
+        properties: Vec::new(),
         defaults: Vec::new(),
         init_uses_instance: false,
         span: class.span,
     }
 }
 
+/// Returns the name a method is held under: its own, or `name.setter` for the setter of the
+/// property `name`, beside its getter, under a name no Python name can be (CLS-06).
+fn registered_name(kind: &MethodKind, name: &str) -> String {
+    match kind {
+        MethodKind::Setter(property) => format!("{property}.setter"),
+        _ => name.to_owned(),
+    }
+}
+
+/// Records a method in its class, under the name it is held under, and returns its
+/// definition; a static method's first parameter is not the instance.
+fn method_definition<'tree>(
+    parts: &FunctionParts<'tree>,
+    kind: &MethodKind,
+    id: FunctionId,
+    info: &mut ClassInfo,
+    owner: &Owner,
+    scope: &AnnotationScope<'_>,
+    diagnostics: &mut Diagnostics,
+) -> Definition<'tree> {
+    let name = &parts.name.name;
+    let registered = registered_name(kind, name);
+    info.methods.push((registered.clone(), id));
+    match kind {
+        MethodKind::Static => info.static_methods.push(name.clone()),
+        MethodKind::Getter => info.properties.push(name.clone()),
+        _ => {}
+    }
+    let method_owner = Owner {
+        id: owner.id,
+        instance: owner.instance.clone(),
+        takes_instance: *kind != MethodKind::Static,
+    };
+    let mut method = definition(parts, Some(&method_owner), scope, diagnostics);
+    if registered != *name {
+        method.qualified_name = format!("{}.{registered}", info.name);
+        method.name = registered;
+    }
+    method
+}
+
 /// Returns why a method cannot be defined, if it cannot: the class already defines it, it is
 /// a special method planned with the operator methods, or it has no `self`.
-fn refused_method(parts: &FunctionParts<'_>, info: &ClassInfo) -> Option<Diagnostic> {
+fn refused_method(
+    parts: &FunctionParts<'_>,
+    kind: &MethodKind,
+    registered: &str,
+    info: &ClassInfo,
+    classes: Classes<'_>,
+) -> Option<Diagnostic> {
     let name = &parts.name.name;
-    if info.method(name).is_some() {
+    let refuse = |code: u16, message: String| {
+        Some(
+            Diagnostic::new(DiagnosticCode::error(code), parts.name.span, message)
+                .with_rule(RuleId::CLS_06),
+        )
+    };
+    if info.method(registered).is_some() {
         return Some(defined_twice(parts.name));
     }
-    if name.starts_with("__") && name.ends_with("__") && !SPECIAL_METHODS.contains(&name.as_str()) {
+    let special = name.starts_with("__") && name.ends_with("__");
+    if special && !SPECIAL_METHODS.contains(&name.as_str()) {
         return Some(planned_method(parts.name));
     }
-    if parts.parameters.is_empty() {
-        return Some(
-            Diagnostic::new(
-                DiagnosticCode::error(201),
-                parts.name.span,
-                "a method without `self` is a static method, which is planned for TyPy 0.4 \
-                 (CLS-06)",
-            )
-            .with_rule(RuleId::CLS_06),
+    if special && *kind != MethodKind::Instance {
+        return refuse(
+            404,
+            format!("the special method `{name}` takes no decorator"),
         );
     }
-    None
+    let static_in_bases = static_method_in_bases(classes, info.base, name);
+    match kind {
+        MethodKind::Class => refuse(
+            201,
+            "`@classmethod` is planned for later in TyPy 0.4 (CLS-06)".to_owned(),
+        ),
+        // A static method has no entry in the method tables, so a subclass's own would not run
+        // through an instance of it.
+        MethodKind::Static if inherited_method(classes, info.base, name).is_some() => refuse(
+            201,
+            format!(
+                "redefining the method `{name}` of a base as a static method is planned for TyPy 0.5 (CLS-06)"
+            ),
+        ),
+        _ if static_in_bases && *kind != MethodKind::Static => refuse(
+            201,
+            format!(
+                "redefining the static method `{name}` of a base is planned for TyPy 0.5 (CLS-06)"
+            ),
+        ),
+        MethodKind::Static => None,
+        MethodKind::Setter(property) if property != name => refuse(
+            404,
+            format!("the setter of the property `{property}` is a method named `{property}`"),
+        ),
+        MethodKind::Setter(property) if !info.properties.contains(property) => refuse(
+            404,
+            format!(
+                "`@{property}.setter` follows the `@property` that defines `{property}` in the same class"
+            ),
+        ),
+        _ if parts.parameters.is_empty() => Some(
+            Diagnostic::new(
+                DiagnosticCode::error(404),
+                parts.name.span,
+                format!("the method `{name}` takes the instance, `self`, first"),
+            )
+            .with_rule(RuleId::CLS_06)
+            .with_help("add `self`, or decorate the function with `@staticmethod`"),
+        ),
+        _ => None,
+    }
+}
+
+/// Returns true when `base`, or a class it derives from, defines `name` as a static method.
+fn static_method_in_bases(classes: Classes<'_>, base: Option<ClassId>, name: &str) -> bool {
+    let mut current = base;
+    while let Some(info) = current.and_then(|class| classes.get(class)) {
+        if info.static_methods.iter().any(|each| each == name) {
+            return true;
+        }
+        current = info.base;
+    }
+    false
+}
+
+/// Checks the signature of a property's getter, which takes only the instance, and of its
+/// setter, which takes the instance and a value of the getter's type and returns `None`.
+fn check_accessor(
+    kind: &MethodKind,
+    method: &Definition<'_>,
+    info: &ClassInfo,
+    methods: &[Definition<'_>],
+    first_function: usize,
+    name: &Identifier,
+    diagnostics: &mut Diagnostics,
+) {
+    let signature = &method.signature;
+    let problem = match kind {
+        MethodKind::Getter if signature.parameters.len() != 1 => {
+            Some(format!("the property `{}` takes only `self`", name.name))
+        }
+        MethodKind::Setter(property) => {
+            let getter = info
+                .method(property)
+                .and_then(|id| (id.0 as usize).checked_sub(first_function))
+                .and_then(|local| methods.get(local))
+                .map(|getter| getter.signature.returns.clone());
+            let fits = signature.parameters.len() == 2
+                && signature.returns.matches(&Type::NoneType)
+                && getter.is_none_or(|ty| signature.parameters[1].ty.matches(&ty));
+            (!fits).then(|| {
+                format!(
+                    "the setter of `{property}` takes `self` and a value of the property's type, \
+                     and returns `None`"
+                )
+            })
+        }
+        _ => None,
+    };
+    if let Some(message) = problem {
+        diagnostics.push(
+            Diagnostic::new(DiagnosticCode::error(404), name.span, message)
+                .with_rule(RuleId::CLS_06),
+        );
+    }
 }
 
 /// The signatures of the functions collected so far: those of the modules checked before,

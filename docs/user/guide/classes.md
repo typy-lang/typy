@@ -11,6 +11,7 @@ class body or assigned in `__init__`, and has one type.
 | Assigning or calling a name the class does not have is refused | CLS-02 |
 | A class derived from one class of the program, with its attributes and methods, overriding them | CLS-04 |
 | Class variables and attribute defaults given a value in the class body | CLS-11 |
+| `@staticmethod`, and `@property` with its setter | CLS-06 |
 | `__str__` and `__repr__`, used by `print`, `str`, `repr`, f-strings and containers | CLS-08 |
 | A type object for every type, with `object` as the root | CLS-10 |
 | `type(x)`, class and built-in type names as values, `__name__` | CLS-12 |
@@ -22,7 +23,7 @@ the name, such as `"Node | None"`.
 
 Instances are equal only to themselves and hashed by identity; operator
 methods such as `__eq__` come in 0.4 (CLS-07), with `@dataclass`
-(CLS-05) and `@property` (CLS-06).
+(CLS-05) and `@classmethod` (CLS-06).
 A class may derive from an exception class, as
 [Exceptions](exceptions.md) describes (CLS-03).
 
@@ -274,6 +275,48 @@ shares. A class variable is assigned through its class, as
 `Counter.created += 1`; assigning it through an instance, which gives
 that one instance a value of its own in CPython, is E0414, and so is
 assigning a default through the class.
+
+## Static methods and properties
+
+`@staticmethod` makes a function of the class that takes no instance,
+called as `Class.name(...)` or through an instance. `@property` makes a
+method that is read as an attribute, and `@name.setter` the method that
+assigning the attribute calls (CLS-06):
+
+<!-- typy-expect: accepted -->
+```python
+class Temperature:
+    def __init__(self, celsius: float) -> None:
+        self._celsius = celsius
+
+    @staticmethod
+    def from_fahrenheit(fahrenheit: float) -> "Temperature":
+        return Temperature((fahrenheit - 32.0) * 5.0 / 9.0)
+
+    @property
+    def celsius(self) -> float:
+        return self._celsius
+
+    @celsius.setter
+    def celsius(self, value: float) -> None:
+        if value < -273.15:
+            raise ValueError("below absolute zero")
+        self._celsius = value
+
+
+boiling = Temperature.from_fahrenheit(212.0)
+boiling.celsius = boiling.celsius - 1.0
+print(boiling.celsius)
+```
+
+A subclass may define a property again, and reading it runs the
+instance's class's getter. A getter takes only `self`; a setter takes
+`self` and a value of the getter's type and returns `None`. Assigning a
+property without a setter is E0414, as CPython raises `AttributeError`
+for it. A method without `self` is E0404; decorate it with
+`@staticmethod`. Redefining a static method in a subclass, and
+assigning a property other than as `variable.name = value`, are planned
+for 0.5.
 
 ## Attributes are declared
 

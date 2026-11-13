@@ -172,6 +172,9 @@ impl BodyChecker<'_> {
         let Some((object, class)) = self.as_instance(object) else {
             return Self::invalid_call(span);
         };
+        if let Some(getter) = self.property_getter(class, &attribute.name) {
+            return self.property_read(object, getter, span);
+        }
         // A class variable is read through an instance; reading it does not evaluate the
         // instance again, which is a variable or an attribute, so it has no effect.
         if self.program.classes[class.0 as usize]
@@ -256,6 +259,9 @@ impl BodyChecker<'_> {
     ) -> Option<AssignTarget> {
         let (object, class) = self.instance(value)?;
         if self.class_variable_through_instance(class, attribute, span) {
+            return None;
+        }
+        if self.refuse_property_target(class, attribute, span) {
             return None;
         }
         let index = self.attribute_index(class, attribute)?;
@@ -481,6 +487,33 @@ impl BodyChecker<'_> {
         span: Span,
     ) -> TypedExpr {
         let found = self.program.method(class, &name.name);
+        if found.is_some() && self.property_getter(class, &name.name).is_some() {
+            return self.uncallable_property(class, name, arguments, span);
+        }
+        if let Some(method) = found.filter(|_| self.is_static_method(class, &name.name)) {
+            // The instance only names the class, so reading it has no effect to keep.
+            if !matches!(
+                receiver.kind,
+                TypedExprKind::Local(_) | TypedExprKind::ModuleVariable(_)
+            ) {
+                for argument in arguments {
+                    self.expression(argument);
+                }
+                return self.error(
+                    Diagnostic::new(
+                        DiagnosticCode::error(201),
+                        name.span,
+                        "calling a static method through an expression other than a variable \
+                         is planned for TyPy 0.5 (CLS-06)",
+                    )
+                    .with_rule(RuleId::CLS_06)
+                    .with_help("call it through its class"),
+                    span,
+                );
+            }
+            let class_name = self.program.classes[class.0 as usize].name.clone();
+            return self.static_call(method, &class_name, name, arguments, keywords, span);
+        }
         let info = &self.program.classes[class.0 as usize];
         let Some(method) = found else {
             let message = if info.attribute(&name.name).is_some() {

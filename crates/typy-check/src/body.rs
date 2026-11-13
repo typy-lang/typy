@@ -1,5 +1,6 @@
 //! Checks one function body, or the module body: names, types and definite assignment.
 
+mod accessor;
 mod builtin_call;
 mod builtin_module;
 mod call;
@@ -140,7 +141,11 @@ impl<'program> BodyChecker<'program> {
                 .insert(flow::Fact::Assigned(symbol));
             parameters.push(symbol);
         }
-        if let (Some(class), Some(instance)) = (definition.class, parameters.first()) {
+        if let (Some(class), true, Some(instance)) = (
+            definition.class,
+            definition.takes_instance,
+            parameters.first(),
+        ) {
             checker.method = Some(class::Initializing {
                 class,
                 instance: *instance,

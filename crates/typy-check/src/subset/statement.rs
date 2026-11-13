@@ -31,7 +31,10 @@ impl Walker {
                     ),
                     Place::ModuleTop | Place::Class => {}
                 }
-                if let Some(decorator) = decorators.first() {
+                // A method may carry one of the decorators of CLS-06; the checker reads which.
+                let method_decorator = place == Place::Class
+                    && matches!(decorators.as_slice(), [one] if is_method_decorator(one));
+                if !method_decorator && let Some(decorator) = decorators.first() {
                     self.report(
                         decorator.span(),
                         planned("decorators", "1.0", RuleId::FUN_06),
@@ -269,5 +272,17 @@ impl Walker {
             Expr::Attribute { value, .. } => self.expression(value),
             other => self.expression(other),
         }
+    }
+}
+
+/// Returns true for `@staticmethod`, `@classmethod`, `@property` and `@name.setter`, the
+/// decorators of a method (CLS-06).
+fn is_method_decorator(decorator: &Expr) -> bool {
+    match decorator {
+        Expr::Name { id, .. } => matches!(id.as_str(), "staticmethod" | "classmethod" | "property"),
+        Expr::Attribute {
+            value, attribute, ..
+        } => attribute.name == "setter" && matches!(value.as_ref(), Expr::Name { .. }),
+        _ => false,
     }
 }

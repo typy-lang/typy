@@ -38,6 +38,10 @@ All notable changes to TyPy are recorded here. The format follows
   class body, read through the class or an instance and assigned
   through the class; and attribute defaults, `name: T = value`, which
   each new instance starts with (CLS-11, ADR-0024).
+- `@staticmethod`, called through the class or an instance, and
+  `@property` with its `@name.setter`: reading the attribute calls the
+  getter of the instance's class, and assigning it calls the setter.
+  A property without a setter cannot be assigned (CLS-06).
 - An exception class may derive from an exception class imported from
   another module, as `from errors import AppError` or `errors.AppError`
   (CLS-03).

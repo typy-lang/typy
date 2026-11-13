@@ -18,6 +18,8 @@ pub(crate) struct Definition<'tree> {
     pub(crate) qualified_name: String,
     /// The class of a method.
     pub(crate) class: Option<ClassId>,
+    /// Whether the first parameter is the instance: a method other than a static method.
+    pub(crate) takes_instance: bool,
     pub(crate) signature: FunctionSignature,
     pub(crate) parameters: Vec<(String, Span)>,
     pub(crate) body: &'tree [Stmt],
@@ -27,13 +29,44 @@ pub(crate) struct Definition<'tree> {
 /// The parts of a `def` statement a definition is built from.
 pub(super) struct FunctionParts<'tree> {
     pub(super) name: &'tree Identifier,
+    /// The decorators, of which a method may have one of CLS-06.
+    pub(super) decorators: &'tree [Expr],
     pub(super) parameters: &'tree [Parameter],
     pub(super) returns: Option<&'tree Expr>,
     pub(super) body: &'tree [Stmt],
     pub(super) span: Span,
 }
 
+/// What a decorator makes of a method (CLS-06).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(super) enum MethodKind {
+    /// A method of the instance, without a decorator.
+    Instance,
+    /// `@staticmethod`: a function of the class, without the instance.
+    Static,
+    /// `@classmethod`: a function of the class, which takes it.
+    Class,
+    /// `@property`: read as the attribute of its name.
+    Getter,
+    /// `@name.setter`: called when the attribute `name` is assigned.
+    Setter(String),
+}
+
 impl<'tree> FunctionParts<'tree> {
+    /// Returns what the method's decorator makes of it.
+    pub(super) fn method_kind(&self) -> MethodKind {
+        match self.decorators.first() {
+            Some(Expr::Name { id, .. }) if id == "staticmethod" => MethodKind::Static,
+            Some(Expr::Name { id, .. }) if id == "classmethod" => MethodKind::Class,
+            Some(Expr::Name { id, .. }) if id == "property" => MethodKind::Getter,
+            Some(Expr::Attribute { value, .. }) => match value.as_ref() {
+                Expr::Name { id, .. } => MethodKind::Setter(id.clone()),
+                _ => MethodKind::Instance,
+            },
+            _ => MethodKind::Instance,
+        }
+    }
+
     /// Returns the parts of a `def` statement, or `None` for any other statement.
     pub(super) fn of(statement: &'tree Stmt) -> Option<Self> {
         let Stmt::FunctionDef {
@@ -41,6 +74,7 @@ impl<'tree> FunctionParts<'tree> {
             parameters,
             returns,
             body,
+            decorators,
             span,
             ..
         } = statement
@@ -49,6 +83,7 @@ impl<'tree> FunctionParts<'tree> {
         };
         Some(Self {
             name,
+            decorators,
             parameters,
             returns: returns.as_ref(),
             body,
@@ -120,6 +155,36 @@ pub(super) struct Owner {
     pub(super) id: ClassId,
     /// The type of the class's instances.
     pub(super) instance: Type,
+    /// Whether the first parameter is the instance: false for a static method (CLS-06).
+    pub(super) takes_instance: bool,
+}
+
+/// Returns the type of a method's first parameter, the instance, after reporting an
+/// annotation that names another type.
+fn instance_parameter(
+    owner: &Owner,
+    annotation: Option<&Expr>,
+    scope: &AnnotationScope<'_>,
+    diagnostics: &mut Diagnostics,
+) -> Type {
+    let instance = owner.instance.clone();
+    if let Some(annotation) = annotation {
+        let annotated = annotation_type(annotation, scope, diagnostics);
+        if !annotated.matches(&instance) {
+            diagnostics.push(
+                Diagnostic::new(
+                    DiagnosticCode::error(404),
+                    annotation.span(),
+                    format!(
+                        "the first parameter of a method is the instance, {}",
+                        instance.with_article()
+                    ),
+                )
+                .with_rule(RuleId::CLS_01),
+            );
+        }
+    }
+    instance
 }
 
 /// Returns the definition of a function, or of a method of `owner`, whose first parameter is
@@ -135,29 +200,14 @@ pub(super) fn definition<'tree>(
     let mut parameter_names = Vec::new();
     for (index, parameter) in parts.parameters.iter().enumerate() {
         let ty = match (owner, &parameter.annotation) {
-            (Some(owner), annotation) if index == 0 => {
-                let instance = owner.instance.clone();
-                if let Some(annotation) = annotation {
-                    let annotated = annotation_type(annotation, scope, diagnostics);
-                    if !annotated.matches(&instance) {
-                        diagnostics.push(
-                            Diagnostic::new(
-                                DiagnosticCode::error(404),
-                                annotation.span(),
-                                format!(
-                                    "the first parameter of a method is the instance, {}",
-                                    instance.with_article()
-                                ),
-                            )
-                            .with_rule(RuleId::CLS_01),
-                        );
-                    }
-                }
-                instance
+            (Some(owner), annotation) if index == 0 && owner.takes_instance => {
+                instance_parameter(owner, annotation.as_ref(), scope, diagnostics)
             }
             (_, Some(annotation)) => annotation_type(annotation, scope, diagnostics),
             // The parameters of `__exit__` have the types CPython gives them (CST-10).
-            (Some(_), None) if name == "__exit__" && (1..=3).contains(&index) => {
+            (Some(owner), None)
+                if owner.takes_instance && name == "__exit__" && (1..=3).contains(&index) =>
+            {
                 exit_parameter(index)
             }
             (_, None) => {
@@ -222,6 +272,7 @@ pub(super) fn definition<'tree>(
             |owner| format!("{}.{name}", owner.instance),
         ),
         class: owner.map(|owner| owner.id),
+        takes_instance: owner.is_some_and(|owner| owner.takes_instance),
         signature: FunctionSignature {
             parameters: signature_parameters,
             returns,

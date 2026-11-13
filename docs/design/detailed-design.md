@@ -1000,7 +1000,18 @@ classes, takes a place in the function's table of narrowed types, and
 variable where the fact holds gives `TypedExprKind::Downcast`, which lowers to
 `Operation::Downcast`, verified like `Upcast` the other way and free when the
 program runs; assigning the variable ends the narrowing (TYP-07). `is`
-compares two exceptions. A class body's values follow ADR-0024:
+compares two exceptions. `FunctionParts::method_kind` reads a method's
+decorator (CLS-06). A static method's definition takes no instance, is recorded
+in `ClassInfo::static_methods`, has no entry in the method tables, and is called
+directly as `Class.name(...)` or through a variable that holds an instance; a
+subclass redefining it, and a static method over a base's method, are E0201,
+planned for 0.5. A property's getter is a method of its name, recorded in
+`ClassInfo::properties`, and its setter the method `name.setter`, so both
+override and dispatch as methods do. `body::accessor` reads `instance.name` of a
+property as a call of the getter with `dispatch` set, and checks
+`variable.name = value` as a statement that calls the setter; a property without
+a setter is E0414, and calling a property E0201. `@classmethod` is E0201 until
+its copies per class are built. A class body's values follow ADR-0024:
 `check::class_values` turns `name = value` and `name: ClassVar[T] = value` into
 an assignment to the module variable `Class.name`, and `name: T = value` into
 one that holds the default of the attribute `name`. These module variables are

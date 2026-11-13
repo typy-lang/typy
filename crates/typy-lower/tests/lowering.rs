@@ -523,3 +523,31 @@ fn class_variables_are_globals_and_defaults_fill_new_instances() {
         assert!(printed.contains(expected), "{expected} in\n{printed}");
     }
 }
+
+#[test]
+fn properties_call_their_accessors_and_static_methods_take_no_instance() {
+    let printed = text(concat!(
+        "class A:\n",
+        "    def __init__(self) -> None:\n",
+        "        self._x = 1\n",
+        "    @staticmethod\n",
+        "    def twice(n: int) -> int:\n",
+        "        return n * 2\n",
+        "    @property\n",
+        "    def x(self) -> int:\n",
+        "        return self._x\n",
+        "    @x.setter\n",
+        "    def x(self, value: int) -> None:\n",
+        "        self._x = value\n",
+        "class B(A):\n",
+        "    @property\n",
+        "    def x(self) -> int:\n",
+        "        return 5\n",
+        "items: list[A] = [A(), B()]\n",
+        "for item in items:\n",
+        "    item.x = A.twice(item.x)\n",
+        "    print(item.x, item.twice(3))\n",
+    ));
+    assert!(printed.contains("call class#0.method#"), "{printed}");
+    assert!(printed.contains("A.twice"), "{printed}");
+}

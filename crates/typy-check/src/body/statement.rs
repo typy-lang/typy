@@ -52,6 +52,17 @@ impl BodyChecker<'_> {
                 value,
                 span,
             } => {
+                if let [
+                    Expr::Attribute {
+                        value: object,
+                        attribute,
+                        ..
+                    },
+                ] = targets.as_slice()
+                    && let Some(call) = self.property_assignment(object, attribute, value, *span)
+                {
+                    return Some(call);
+                }
                 let expected = match targets.as_slice() {
                     [single] => self.known_type(single),
                     _ => None,

@@ -2036,7 +2036,7 @@ fn classes_give_their_codes() {
             "class A:\n    def m(self) -> None:\n        pass\n    def m(self) -> None:\n        pass\n",
             &["E0202"],
         ),
-        ("class A:\n    def m() -> None:\n        pass\n", &["E0201"]),
+        ("class A:\n    def m() -> None:\n        pass\n", &["E0404"]),
         (
             "class A:\n    def __str__(self) -> int:\n        return 1\n",
             &["E0404"],
@@ -2305,4 +2305,103 @@ fn class_bodies_give_class_variables_and_defaults() {
          def bump() -> None:\n    A.count = A.count + 1\n    B.count += 1\n\
          bump()\nprint(A().read(), B().read(), C().size, B.count, C.count, A.label, C.other, A.size)\n",
     );
+}
+
+#[test]
+fn static_methods_and_properties_are_checked() {
+    accepted(concat!(
+        "class A:\n",
+        "    def __init__(self) -> None:\n",
+        "        self._x = 1\n",
+        "    @staticmethod\n",
+        "    def make(n: int) -> int:\n",
+        "        return n\n",
+        "    @property\n",
+        "    def x(self) -> int:\n",
+        "        return self._x\n",
+        "    @x.setter\n",
+        "    def x(self, value: int) -> None:\n",
+        "        self._x = value\n",
+        "class B(A):\n",
+        "    @property\n",
+        "    def x(self) -> int:\n",
+        "        return 2\n",
+        "a = A()\n",
+        "a.x = A.make(3)\n",
+        "print(a.x, a.make(1), B().x)\n",
+        "class D:\n",
+        "    def __init__(self):\n",
+        "        self.v = 1\n",
+        "def loop(a: A) -> None:\n",
+        "    if isinstance(a, B):\n",
+        "        while a.x > 0:\n",
+        "            a = A()\n",
+        "with open('notes.txt', 'w'):\n",
+        "    pass\n",
+        "print(D().v)\n",
+    ));
+    let cases: &[(&str, &[&str])] = &[
+        (
+            "class A:\n    @classmethod\n    def f(cls) -> None:\n        pass\n",
+            &["E0201"],
+        ),
+        (
+            "class A:\n    @staticmethod\n    def __str__() -> str:\n        return ''\n",
+            &["E0404"],
+        ),
+        (
+            "class A:\n    def f(self) -> None:\n        pass\nclass B(A):\n    @staticmethod\n    def f() -> None:\n        pass\n",
+            &["E0201"],
+        ),
+        (
+            "class A:\n    @staticmethod\n    def f() -> None:\n        pass\nclass B(A):\n    def f(self) -> None:\n        pass\n",
+            &["E0201"],
+        ),
+        (
+            "class A:\n    @property\n    def x(self) -> int:\n        return 1\n    @x.setter\n    def y(self, v: int) -> None:\n        pass\n",
+            &["E0404"],
+        ),
+        (
+            "class A:\n    @x.setter\n    def x(self, v: int) -> None:\n        pass\n",
+            &["E0404"],
+        ),
+        (
+            "class A:\n    @property\n    def x(self, n: int) -> int:\n        return n\n",
+            &["E0404"],
+        ),
+        (
+            "class A:\n    @property\n    def x(self) -> int:\n        return 1\n    @x.setter\n    def x(self, v: str) -> None:\n        pass\n",
+            &["E0404"],
+        ),
+        (
+            "class A:\n    @property\n    def x(self) -> int:\n        return 1\na = A()\nprint(a.x())\n",
+            &["E0201"],
+        ),
+        (
+            "class A:\n    @property\n    def x(self) -> int:\n        return 1\n    @x.setter\n    def x(self, v: int) -> None:\n        pass\na = A()\na.x = 'no'\n",
+            &["E0402"],
+        ),
+        (
+            "class A:\n    @property\n    def x(self) -> int:\n        return 1\n    @x.setter\n    def x(self, v: int) -> None:\n        pass\nl = [A()]\nl[0].x = 2\n",
+            &["E0201"],
+        ),
+        (
+            "class A:\n    def f(self) -> None:\n        pass\nA.f()\n",
+            &["E0201"],
+        ),
+        ("class A:\n    pass\nA.g()\n", &["E0414"]),
+        ("from math import *\n", &["E0201"]),
+        ("class C:\n    x: int\n    x = 1\n", &["E0202"]),
+        (
+            "class C:\n    def __iter__(self, n: int) -> 'C':\n        return self\n",
+            &["E0404"],
+        ),
+        (
+            "class A:\n    @staticmethod\n    def f() -> int:\n        return 1\ndef g() -> A:\n    return A()\nprint(g().f())\n",
+            &["E0201"],
+        ),
+    ];
+    for (source, expected) in cases {
+        assert_eq!(&rejected(source), expected, "\n{source}");
+    }
 }
