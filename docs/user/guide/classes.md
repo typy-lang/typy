@@ -10,6 +10,7 @@ class body or assigned in `__init__`, and has one type.
 | Classes with `__init__`, methods and attributes declared in the body or assigned in `__init__` | CLS-01 |
 | Assigning or calling a name the class does not have is refused | CLS-02 |
 | A class derived from one class of the program, with its attributes and methods, overriding them | CLS-04 |
+| Class variables and attribute defaults given a value in the class body | CLS-11 |
 | `__str__` and `__repr__`, used by `print`, `str`, `repr`, f-strings and containers | CLS-08 |
 | A type object for every type, with `object` as the root | CLS-10 |
 | `type(x)`, class and built-in type names as values, `__name__` | CLS-12 |
@@ -23,8 +24,7 @@ Instances are equal only to themselves and hashed by identity; operator
 methods such as `__eq__` come in 0.4 (CLS-07), with `@dataclass`
 (CLS-05) and `@property` (CLS-06).
 A class may derive from an exception class, as
-[Exceptions](exceptions.md) describes (CLS-03); class variables come in
-0.4 (CLS-11).
+[Exceptions](exceptions.md) describes (CLS-03).
 
 ## Example
 
@@ -230,6 +230,50 @@ of `and`. When the checker can tell the answer, as for
 `isinstance(3, int)`, nothing is tested when the program runs; `bool`
 counts as `int`, as in CPython. A class held in a variable, and
 `issubclass`, are planned for 0.5.
+
+## Class variables and defaults
+
+A value in a class body is read as type checkers read it (CLS-11):
+
+| Written as | Meaning |
+| --- | --- |
+| `count = 0` or `count: ClassVar[int] = 0` | A class variable: one value the class holds, read as `Counter.count` or `self.count` |
+| `step: int = 1` | An attribute with a default: each new instance starts with the class's value, then `__init__` may assign it |
+
+<!-- typy-expect: accepted -->
+```python
+from typing import ClassVar
+
+
+class Counter:
+    created = 0
+    label: ClassVar[str] = "counter"
+    step: int = 1
+
+    def __init__(self, start: int) -> None:
+        self.value = start
+        Counter.created += 1
+
+    def advance(self) -> int:
+        self.value += self.step
+        return self.value
+
+
+class Fast(Counter):
+    step: int = 5
+
+
+counter = Counter(0)
+fast = Fast(10)
+print(counter.advance(), fast.advance(), Counter.created, fast.label)
+```
+
+The class body's values are computed where the `class` statement runs,
+as in CPython, and a mutable default is one object that every instance
+shares. A class variable is assigned through its class, as
+`Counter.created += 1`; assigning it through an instance, which gives
+that one instance a value of its own in CPython, is E0414, and so is
+assigning a default through the class.
 
 ## Attributes are declared
 

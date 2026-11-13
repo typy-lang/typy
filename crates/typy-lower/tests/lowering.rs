@@ -511,3 +511,15 @@ print(kind(None), kind(Square(1.0)), lookup(KeyError('k')), repr(Shape()))
         assert!(printed.contains(expected), "{expected} in\n{printed}");
     }
 }
+
+#[test]
+fn class_variables_are_globals_and_defaults_fill_new_instances() {
+    let printed = text(
+        "class A:\n    count = 0\n    size: int = 1\n    def __init__(self) -> None:\n        A.count += 1\n\
+         class B(A):\n    size: int = 2\n\
+         print(A().size, B().size, A.count)\n",
+    );
+    for expected in ["\"A.count\"", "\"B.size\"", "set_field"] {
+        assert!(printed.contains(expected), "{expected} in\n{printed}");
+    }
+}

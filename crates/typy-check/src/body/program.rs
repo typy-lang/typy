@@ -354,6 +354,33 @@ impl Program {
         None
     }
 
+    /// Returns each attribute of `class` with a default, its own or a base's, with the module
+    /// variable that holds the default (ADR-0024).
+    fn default_variables(&self, class: ClassId) -> Vec<(usize, SymbolId)> {
+        let mut found = Vec::new();
+        let mut current = Some(class);
+        while let Some(each) = current {
+            let info = &self.classes[each.0 as usize];
+            let module = &self.class_modules[each.0 as usize];
+            for index in &info.defaults {
+                // The nearest class's default is the one an instance holds.
+                if found.iter().any(|(each, _)| each == index) {
+                    continue;
+                }
+                let name =
+                    crate::check::class_value_variable(&info.name, &info.attributes[*index].name);
+                let symbol = self
+                    .scopes
+                    .get(module)
+                    .and_then(|scope| scope.module_symbols.get(&name))
+                    .copied();
+                found.extend(symbol.map(|symbol| (*index, symbol)));
+            }
+            current = info.base;
+        }
+        found
+    }
+
     /// Returns the class whose own attribute is the attribute at `index` of `class`: the base
     /// that declares an inherited one, whose check gives it its type.
     pub(super) fn declaring(&self, class: ClassId, index: usize) -> ClassId {
@@ -383,6 +410,11 @@ impl Program {
         for (name, span) in variables {
             let symbol = self.add_symbol(name, SymbolKind::ModuleVariable, Type::Error, *span);
             self.module_symbols.insert(name.clone(), symbol);
+            // A class variable, `Class.name`, may be assigned by any function, so a test of it
+            // narrows nothing (ADR-0024).
+            if name.contains('.') {
+                self.assigned_in_functions.insert(name.clone());
+            }
         }
         for definition in definitions {
             for name in crate::check::declared_globals(definition.body) {
@@ -480,6 +512,7 @@ impl Program {
                     .collect(),
                 methods: class.methods.clone(),
                 init: self.method(class.id, "__init__"),
+                defaults: self.default_variables(class.id),
                 span: class.span,
             })
             .collect();

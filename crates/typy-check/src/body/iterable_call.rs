@@ -75,7 +75,9 @@ impl BodyChecker<'_> {
                     DiagnosticCode::error(404),
                     span,
                     format!(
-                        "`{}` takes 1{} positional argument{}, and {} {} given",
+                        // One argument is always accepted, so a refused call has none or
+                        // several.
+                        "`{}` takes 1{} positional argument{}, and {} are given",
                         builtin.name(),
                         if *most == 1 {
                             String::new()
@@ -84,7 +86,6 @@ impl BodyChecker<'_> {
                         },
                         if *most == 1 { "" } else { "s" },
                         arguments.len(),
-                        if arguments.len() == 1 { "is" } else { "are" }
                     ),
                 )
                 .with_rule(RuleId::LIB_02),

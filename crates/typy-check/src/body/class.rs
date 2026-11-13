@@ -157,6 +157,12 @@ impl BodyChecker<'_> {
             return self.through_lazy_module(value, read);
         }
         let object = self.instance_object(value);
+        if let Type::TypeObject(Some(of)) = &object.ty
+            && let Some(class) = Self::program_class(of)
+            && let Some(read) = self.class_value_read(class, attribute, span)
+        {
+            return read;
+        }
         if let Type::TypeObject(_) = object.ty {
             return self.type_object_attribute(object, attribute, span);
         }
@@ -166,6 +172,15 @@ impl BodyChecker<'_> {
         let Some((object, class)) = self.as_instance(object) else {
             return Self::invalid_call(span);
         };
+        // A class variable is read through an instance; reading it does not evaluate the
+        // instance again, which is a variable or an attribute, so it has no effect.
+        if self.program.classes[class.0 as usize]
+            .attribute(&attribute.name)
+            .is_none()
+            && let Some(read) = self.class_value_read(class, attribute, span)
+        {
+            return read;
+        }
         let Some(index) = self.attribute_index(class, attribute) else {
             return Self::invalid_call(span);
         };
@@ -240,6 +255,9 @@ impl BodyChecker<'_> {
         span: Span,
     ) -> Option<AssignTarget> {
         let (object, class) = self.instance(value)?;
+        if self.class_variable_through_instance(class, attribute, span) {
+            return None;
+        }
         let index = self.attribute_index(class, attribute)?;
         let initializing = self.initialized_instance(value).is_some();
         // The attribute counts as assigned even when the value is wrong, so one cause gives
@@ -345,9 +363,14 @@ impl BodyChecker<'_> {
             }
             current = other.base;
         }
-        let missing: Vec<String> = info.attributes[assigned.min(info.attributes.len())..]
+        let defaults = self.defaults(class);
+        let missing: Vec<String> = info
+            .attributes
             .iter()
-            .map(|attribute| format!("`{}`", attribute.name))
+            .enumerate()
+            .skip(assigned)
+            .filter(|(index, _)| !defaults.contains(index))
+            .map(|(_, attribute)| format!("`{}`", attribute.name))
             .collect();
         if missing.is_empty() {
             return None;

@@ -14,6 +14,19 @@ impl BodyChecker<'_> {
     pub(super) fn collect_locals(&mut self, statements: &[&Stmt]) {
         for statement in statements {
             match statement {
+                // A class body's values are module variables, assigned where the class
+                // statement runs (ADR-0024).
+                Stmt::ClassDef { name, body, .. } => {
+                    let values = crate::check::class_values(
+                        &name.name,
+                        body,
+                        &self.program.annotation_names,
+                        &self.program.annotation_modules,
+                    );
+                    let assignments: Vec<&Stmt> =
+                        values.iter().map(|value| &value.assignment).collect();
+                    self.collect_locals(&assignments);
+                }
                 Stmt::Assign { targets, .. } => {
                     for target in targets {
                         self.bind_local(target);
@@ -216,6 +229,17 @@ impl BodyChecker<'_> {
                     return None;
                 }
                 return self.module_attribute_target(&module, attribute, &ty, value, *span);
+            }
+            if let Expr::Name { id, .. } = object.as_ref()
+                && !self.locals.contains_key(id)
+                && let Some(class) = self.program.class_ids.get(id).copied()
+                && let Some(assignment) =
+                    self.class_value_target(class, attribute, &ty, value, *span)
+            {
+                return match assignment {
+                    super::class_value::ClassValueAssignment::Assigned(target) => Some(target),
+                    super::class_value::ClassValueAssignment::Refused => None,
+                };
             }
             return self.attribute_target(object, attribute, &ty, None, *span);
         }

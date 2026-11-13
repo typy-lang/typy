@@ -1000,7 +1000,23 @@ classes, takes a place in the function's table of narrowed types, and
 variable where the fact holds gives `TypedExprKind::Downcast`, which lowers to
 `Operation::Downcast`, verified like `Upcast` the other way and free when the
 program runs; assigning the variable ends the narrowing (TYP-07). `is`
-compares two exceptions. A class name
+compares two exceptions. A class body's values follow ADR-0024:
+`check::class_values` turns `name = value` and `name: ClassVar[T] = value` into
+an assignment to the module variable `Class.name`, and `name: T = value` into
+one that holds the default of the attribute `name`. These module variables are
+declared with the module's others, bound by `collect_locals` and assigned
+where the `class` statement stands in the module body, and every function may
+assign them, so a test of one narrows nothing. `ClassInfo::class_variables`
+and `ClassInfo::defaults` record them, and `body::class_value` reads
+`Class.name` and `instance.name` of a class variable as that module variable,
+through `module_attribute` for a class of another module, and checks
+`Class.name = value` and `Class.name op= value` as its assignment. Assigning a
+class variable through an instance, and a default through the class, are
+E0414; a default of an exception class's attribute is E0201, planned for 0.5.
+`TypedClass::defaults` gives, for each attribute with a default, the variable
+of the nearest class that gives one; `__init__` starts with those attributes
+assigned, and lowering stores each default into a new instance after
+`NewInstance`. A class name
 read as a value is `TypeObjectOf::Exception`, and in an annotation it names the
 exception type. Calling a class takes positional arguments of any type and gives
 `TypedExprKind::NewException { class, arguments }`; a keyword is E0404, and a

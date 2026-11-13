@@ -37,6 +37,12 @@ pub(crate) struct ClassInfo {
     pub(crate) attributes: Vec<AttributeInfo>,
     pub(crate) methods: Vec<(String, FunctionId)>,
     pub(crate) init: Option<FunctionId>,
+    /// The class variables the class body gives a value, each held as the module variable
+    /// `Class.name` (CLS-11, ADR-0024).
+    pub(crate) class_variables: Vec<String>,
+    /// The positions of the class's own attributes the class body gives a default, each held
+    /// as the module variable `Class.name`.
+    pub(crate) defaults: Vec<usize>,
     /// Whether the class's `__init__` uses the instance other than through its attributes,
     /// once checked.
     pub(crate) init_uses_instance: bool,
@@ -297,13 +303,8 @@ pub(super) fn collect_members<'tree>(
         };
         for statement in class.body {
             match statement {
-                Stmt::AnnAssign {
-                    target: Expr::Name { id, span },
-                    annotation,
-                    ..
-                } => {
-                    let ty = annotation_type(annotation, &scope, diagnostics);
-                    declare(&mut info, id, Some(ty), *span, diagnostics);
+                Stmt::AnnAssign { .. } | Stmt::Assign { .. } => {
+                    class_body_name(statement, &mut info, &scope, names, diagnostics);
                 }
                 Stmt::FunctionDef { .. } => {
                     let Some(parts) = FunctionParts::of(statement) else {
@@ -346,18 +347,7 @@ pub(super) fn collect_members<'tree>(
                 _ => {}
             }
         }
-        for (name, _) in &info.methods {
-            if info.attribute(name).is_some() {
-                diagnostics.push(
-                    Diagnostic::new(
-                        DiagnosticCode::error(202),
-                        class.name.span,
-                        format!("`{}.{name}` is both an attribute and a method", info.name),
-                    )
-                    .with_rule(RuleId::STD_04),
-                );
-            }
-        }
+        report_name_conflicts(&info, class.name.span, diagnostics);
         infos.push(info);
     }
     (infos, methods)
@@ -406,6 +396,8 @@ fn new_info(class: &ClassStatement<'_>, instance: &Type, classes: Classes<'_>) -
         attributes,
         methods: Vec::new(),
         init: None,
+        class_variables: Vec::new(),
+        defaults: Vec::new(),
         init_uses_instance: false,
         span: class.span,
     }
@@ -494,6 +486,100 @@ fn inherited_method<'infos>(
         current = info.base;
     }
     None
+}
+
+/// Reports a name a class gives two meanings: a class variable that is also an attribute or a
+/// method, or an attribute that is also a method.
+fn report_name_conflicts(info: &ClassInfo, span: Span, diagnostics: &mut Diagnostics) {
+    for name in &info.class_variables {
+        if info.attribute(name).is_some() || info.method(name).is_some() {
+            diagnostics.push(
+                Diagnostic::new(
+                    DiagnosticCode::error(202),
+                    span,
+                    format!(
+                        "`{}.{name}` is a class variable and also an attribute or a method",
+                        info.name
+                    ),
+                )
+                .with_rule(RuleId::STD_04),
+            );
+        }
+    }
+    for (name, _) in &info.methods {
+        if info.attribute(name).is_some() {
+            diagnostics.push(
+                Diagnostic::new(
+                    DiagnosticCode::error(202),
+                    span,
+                    format!("`{}.{name}` is both an attribute and a method", info.name),
+                )
+                .with_rule(RuleId::STD_04),
+            );
+        }
+    }
+}
+
+/// Declares what an annotation or an assignment in a class body names: an attribute, with
+/// or without a default, or a class variable (CLS-01, CLS-11, ADR-0024).
+fn class_body_name(
+    statement: &Stmt,
+    info: &mut ClassInfo,
+    scope: &AnnotationScope<'_>,
+    names: &crate::check::ImportedNames,
+    diagnostics: &mut Diagnostics,
+) {
+    match statement {
+        Stmt::AnnAssign {
+            target: Expr::Name { id, span },
+            annotation,
+            value,
+            ..
+        } => {
+            let class_var =
+                super::annotation::class_var_type(annotation, &names.names, &names.standard)
+                    .is_some();
+            if class_var && value.is_some() {
+                info.class_variables.push(id.clone());
+                return;
+            }
+            let ty = annotation_type(annotation, scope, diagnostics);
+            declare(info, id, Some(ty), *span, diagnostics);
+            if value.is_some() {
+                default_value(info, id, *span, diagnostics);
+            }
+        }
+        Stmt::Assign { targets, .. } => {
+            if let [Expr::Name { id, .. }] = targets.as_slice() {
+                info.class_variables.push(id.clone());
+            }
+        }
+        _ => {}
+    }
+}
+
+/// Notes that the class body gives the attribute `name` a default. An exception is made by
+/// the runtime's exception path, which copies no defaults, so an exception class's are
+/// planned (ADR-0024).
+fn default_value(info: &mut ClassInfo, name: &str, span: Span, diagnostics: &mut Diagnostics) {
+    if info.exception.is_some() {
+        diagnostics.push(
+            Diagnostic::new(
+                DiagnosticCode::error(201),
+                span,
+                "a default for an attribute of an exception class is planned for TyPy 0.5 \
+                 (CLS-11)",
+            )
+            .with_rule(RuleId::CLS_11)
+            .with_help("assign the attribute in `__init__`"),
+        );
+        return;
+    }
+    // A subclass may give an inherited attribute a default of its own, which its instances
+    // hold in place of the base's.
+    if let Some(index) = info.attribute(name) {
+        info.defaults.push(index);
+    }
 }
 
 /// Declares an attribute in the class body; a second declaration is an error.
@@ -687,4 +773,89 @@ fn initialized_attributes(parts: &FunctionParts<'_>) -> Vec<String> {
         statements(parts.body, &instance.name.name, &mut found);
     }
     found
+}
+
+/// A value a class body gives a name: a class variable, or the default of an instance
+/// attribute, with the assignment that gives it, to the module variable `Class.name` that
+/// holds it, which runs where the `class` statement runs (CLS-11, ADR-0024).
+pub(crate) struct ClassValue {
+    pub(crate) name: String,
+    pub(crate) assignment: Stmt,
+}
+
+/// Returns the name of the module variable that holds a class's value `name`.
+pub(crate) fn class_value_variable(class: &str, name: &str) -> String {
+    format!("{class}.{name}")
+}
+
+/// Returns the values a class body gives, in source order: `name = value`, and
+/// `name: ClassVar[T] = value`, for a class variable, and `name: T = value` for the default
+/// of an instance attribute.
+pub(crate) fn class_values(
+    class: &str,
+    body: &[Stmt],
+    names: &BTreeMap<String, super::annotation::AnnotationName>,
+    standard: &BTreeMap<String, String>,
+) -> Vec<ClassValue> {
+    let renamed = |id: &str, span: Span| Expr::Name {
+        id: class_value_variable(class, id),
+        span,
+    };
+    body.iter()
+        .filter_map(|statement| match statement {
+            Stmt::AnnAssign {
+                target: Expr::Name { id, span },
+                annotation,
+                value: Some(value),
+                simple,
+                span: whole,
+            } => {
+                let target = renamed(id, *span);
+                let assignment =
+                    match super::annotation::class_var_type(annotation, names, standard) {
+                        Some(super::annotation::ClassVarAnnotation::Typed(inner)) => {
+                            Stmt::AnnAssign {
+                                target,
+                                annotation: inner.clone(),
+                                value: Some(value.clone()),
+                                simple: *simple,
+                                span: *whole,
+                            }
+                        }
+                        Some(super::annotation::ClassVarAnnotation::Bare) => Stmt::Assign {
+                            targets: vec![target],
+                            value: value.clone(),
+                            span: *whole,
+                        },
+                        None => Stmt::AnnAssign {
+                            target,
+                            annotation: annotation.clone(),
+                            value: Some(value.clone()),
+                            simple: *simple,
+                            span: *whole,
+                        },
+                    };
+                Some(ClassValue {
+                    name: id.clone(),
+                    assignment,
+                })
+            }
+            Stmt::Assign {
+                targets,
+                value,
+                span,
+            } => match targets.as_slice() {
+                [Expr::Name { id, span: at }] => Some(ClassValue {
+                    name: id.clone(),
+                    assignment: Stmt::Assign {
+                        targets: vec![renamed(id, *at)],
+                        value: value.clone(),
+                        span: *span,
+                    },
+                }),
+                _ => None,
+            },
+            _ => None,
+        })
+        .collect()
 }

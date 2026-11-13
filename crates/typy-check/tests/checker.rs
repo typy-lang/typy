@@ -2123,7 +2123,36 @@ fn class_statements_outside_the_subset_give_their_codes() {
         ("class C(metaclass=M):\n    pass\n", &["E0202"]),
         ("def f() -> None:\n    class C:\n        pass\n", &["E0202"]),
         ("class C:\n    if True:\n        pass\n", &["E0202"]),
-        ("class C:\n    x: int = 1\n", &["E0201"]),
+        ("class C:\n    x, y = 1, 2\n", &["E0202"]),
+        (
+            "from typing import ClassVar\nclass C:\n    x: ClassVar[int]\n",
+            &["E0408"],
+        ),
+        (
+            "from typing import ClassVar\nv: ClassVar[int] = 1\n",
+            &["E0408"],
+        ),
+        ("class E(Exception):\n    code: int = 1\n", &["E0201"]),
+        (
+            "class C:\n    x = 1\n    def x(self) -> None:\n        pass\n",
+            &["E0202"],
+        ),
+        ("class C:\n    x = 1\nC.x = 'a'\n", &["E0402"]),
+        ("class C:\n    x = 1\nC.x += 'a'\n", &["E0401"]),
+        ("class C:\n    x: int = 1\nC.x = 2\n", &["E0414"]),
+        ("class C:\n    x = 1\nC.x += 1.5\n", &["E0402"]),
+        ("x = range()\n", &["E0404"]),
+        ("for i in range(missing):\n    pass\n", &["E0205"]),
+        (
+            "class C:\n    def __init__(self) -> None:\n        self.x = 1\nc = C()\nc.x += 1.5\n",
+            &["E0402"],
+        ),
+        ("class C:\n    x: int = 1\nC.x += 2\n", &["E0414"]),
+        (
+            "class C:\n    x = 1\n    def f(self) -> None:\n        self.x = 2\n",
+            &["E0414"],
+        ),
+        ("class C:\n    x = 1\nc = C()\nc.x += 1\n", &["E0414"]),
         ("class C(B, object):\n    pass\n", &["E0201"]),
         ("class C:\n    x: 'int('\n", &["E0202"]),
     ];
@@ -2232,6 +2261,8 @@ fn isinstance_narrows_variables_where_its_test_holds() {
          def h(n: int, b: bool, s: str) -> bool:\n    return isinstance(n, int) and isinstance(b, int) and not isinstance(s, (int, bytes))\n\
          def k(a: A, e: Exception, o: A | None) -> bool:\n    return isinstance(a, (B, int)) or isinstance(a, A) or isinstance(e, (KeyError, int)) or isinstance(KeyError(), ValueError) or isinstance(o, object) or isinstance(o, B)\n\
          def m(o: A | None) -> None:\n    if isinstance(o, A):\n        print(o)\n\
+         def n(e: KeyError) -> bool:\n    return isinstance(e, (KeyError, ValueError))\n\
+         print(list([1]) == [])\n\
          print(f(C()), g(KeyError()), h(1, True, 'x'), isinstance(iter([1]), list), k(A(), KeyError(), None), C() == B(), A() != D(), isinstance(C(), A), m(None))\n",
     );
     let cases: &[(&str, &[&str])] = &[
@@ -2262,4 +2293,16 @@ fn isinstance_narrows_variables_where_its_test_holds() {
     for (source, expected) in cases {
         assert_eq!(&rejected(source), expected, "\n{source}");
     }
+}
+
+#[test]
+fn class_bodies_give_class_variables_and_defaults() {
+    accepted(
+        "from typing import ClassVar\nimport typing\n\
+         class A:\n    count = 0\n    label: ClassVar[str] = 'a'\n    other: typing.ClassVar = 1.5\n    size: int = 1\n    def __init__(self) -> None:\n        A.count += 1\n        self.size = A.size + A.count\n    def read(self) -> int:\n        return self.count + self.size\n\
+         class B(A):\n    size: int = 2\n    count = 10\n\
+         class C(B):\n    pass\n\
+         def bump() -> None:\n    A.count = A.count + 1\n    B.count += 1\n\
+         bump()\nprint(A().read(), B().read(), C().size, B.count, C.count, A.label, C.other, A.size)\n",
+    );
 }

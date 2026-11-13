@@ -77,14 +77,6 @@ fn later_features_name_their_release_and_rule() {
             "type parameters are planned for TyPy 0.4 (GEN-01)",
         ),
         (
-            "class C:\n    x = 1\n",
-            "class variables are planned for TyPy 0.4 (CLS-11)",
-        ),
-        (
-            "class C:\n    x: int = 1\n",
-            "class variables are planned for TyPy 0.4 (CLS-11)",
-        ),
-        (
             "x = {**y}\n",
             "unpacking with `**` are planned for TyPy 1.0 (EXP-17)",
         ),

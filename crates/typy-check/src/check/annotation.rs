@@ -35,6 +35,8 @@ pub(crate) enum AnnotationName {
     Iterable,
     TracebackType,
     ModuleType,
+    /// `typing.ClassVar`, which declares a class variable in a class body (CLS-11).
+    ClassVar,
 }
 
 /// The modules that give names for annotations only in 0.3.
@@ -47,6 +49,7 @@ pub(crate) fn annotation_name(module: &str, name: &str) -> Option<AnnotationName
         ("typing" | "collections.abc", "Iterable") => Some(AnnotationName::Iterable),
         ("types", "TracebackType") => Some(AnnotationName::TracebackType),
         ("types", "ModuleType") => Some(AnnotationName::ModuleType),
+        ("typing", "ClassVar") => Some(AnnotationName::ClassVar),
         _ => None,
     }
 }
@@ -85,7 +88,13 @@ fn standard_annotation(
                 Type::Iterable(item)
             }
         }
+        Expr::Subscript { value, .. }
+            if standard_name(value, scope) == Some(AnnotationName::ClassVar) =>
+        {
+            class_var_elsewhere(annotation, diagnostics)
+        }
         _ if let Some(name) = standard_name(annotation, scope) => match name {
+            AnnotationName::ClassVar => class_var_elsewhere(annotation, diagnostics),
             AnnotationName::TracebackType => Type::Traceback,
             AnnotationName::ModuleType => Type::AnyModule,
             AnnotationName::Iterator | AnnotationName::Iterable => {
@@ -102,6 +111,54 @@ fn standard_annotation(
         },
         _ => return None,
     })
+}
+
+/// Reports `ClassVar` outside the declaration of a class variable in a class body.
+fn class_var_elsewhere(annotation: &Expr, diagnostics: &mut Diagnostics) -> Type {
+    diagnostics.push(
+        Diagnostic::new(
+            DiagnosticCode::error(408),
+            annotation.span(),
+            "`ClassVar` declares a class variable in a class body, given a value there",
+        )
+        .with_rule(RuleId::CLS_11),
+    );
+    Type::Error
+}
+
+/// The annotation of a class variable (CLS-11).
+pub(crate) enum ClassVarAnnotation<'tree> {
+    /// `ClassVar[T]`, with the annotation of its type.
+    Typed(&'tree Expr),
+    /// `ClassVar`, whose type its value gives.
+    Bare,
+}
+
+/// Returns the annotation of a class variable written `ClassVar[T]` or `ClassVar`, or `None`
+/// for any other annotation (CLS-11).
+pub(crate) fn class_var_type<'tree>(
+    annotation: &'tree Expr,
+    names: &BTreeMap<String, AnnotationName>,
+    standard: &BTreeMap<String, String>,
+) -> Option<ClassVarAnnotation<'tree>> {
+    let is_class_var = |expression: &Expr| match expression {
+        Expr::Name { id, .. } => names.get(id) == Some(&AnnotationName::ClassVar),
+        Expr::Attribute {
+            value, attribute, ..
+        } => {
+            matches!(value.as_ref(), Expr::Name { id, .. }
+                if standard.get(id).map(String::as_str) == Some("typing"))
+                && attribute.name == "ClassVar"
+        }
+        _ => false,
+    };
+    match annotation {
+        Expr::Subscript { value, index, .. } if is_class_var(value) => {
+            Some(ClassVarAnnotation::Typed(index))
+        }
+        other if is_class_var(other) => Some(ClassVarAnnotation::Bare),
+        _ => None,
+    }
 }
 
 /// Returns the standard module a name, or a dotted name through one, stands for.

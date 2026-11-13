@@ -250,3 +250,30 @@ show(shapes, None)
         assert!(dump.contains(node), "{node} missing from\n{dump}");
     }
 }
+
+#[test]
+fn class_values_of_another_module_are_read_and_assigned_there() {
+    let settings = "class Limits:\n    retries = 3\n    timeout: float = 1.5\n";
+    let dump = accepted(&[
+        ("settings.py", settings),
+        (
+            "app.py",
+            "import settings\nfrom settings import Limits\n\
+             class Strict(Limits):\n    retries = 1\n\
+             def bump() -> None:\n    Limits.retries = Limits.retries + 1\n\
+             Limits.retries += 2\nbump()\n\
+             print(Limits.retries, settings.Limits.retries, Limits().retries, Limits.timeout, Strict().timeout)\n",
+        ),
+    ]);
+    assert!(dump.contains("Limits.retries"), "{dump}");
+    assert_eq!(
+        rejected(&[
+            ("settings.py", settings),
+            (
+                "app.py",
+                "from settings import Limits\nLimits.timeout = 2.0\n"
+            ),
+        ]),
+        ["E0414"]
+    );
+}

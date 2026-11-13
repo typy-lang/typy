@@ -29,3 +29,4 @@ supersedes it.
 | [ADR-0021](0021-extend-the-base-layout-and-call-overrides-through-a-method-table.md) | Extend the base layout and call overrides through a method table | Accepted | 2026-11-13 |
 | [ADR-0022](0022-hold-a-union-of-objects-as-a-pointer-and-others-as-a-tag-and-value.md) | Hold a union of objects as a pointer and others as a tag and value | Accepted | 2026-11-13 |
 | [ADR-0023](0023-compile-generics-and-protocol-parameters-to-one-copy-per-concrete-type.md) | Compile generics and protocol parameters to one copy per concrete type | Accepted | 2026-11-13 |
+| [ADR-0024](0024-keep-class-variables-in-globals-and-defaults-in-each-instance.md) | Keep class variables in globals and defaults in each instance | Accepted | 2026-11-13 |

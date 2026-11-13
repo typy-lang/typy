@@ -29,7 +29,7 @@ pub(crate) struct ImportedNames {
     pub(crate) names: BTreeMap<String, AnnotationName>,
     pub(crate) standard: BTreeMap<String, String>,
 }
-pub(crate) use class::ClassInfo;
+pub(crate) use class::{ClassInfo, class_value_variable, class_values};
 pub(crate) use definition::Definition;
 
 use crate::body::{BodyChecker, Program};
@@ -157,6 +157,7 @@ fn check_module(
     );
     let mut variables = imports.variables.clone();
     module_variables(&tree.body, &mut variables);
+    class_value_variables(&classes, &annotations, &mut variables);
     let module_variable_spans = variables.clone();
     check_names_are_functions_or_variables(&definitions, &class_ids, &variables, diagnostics);
     check_calls_follow_definitions(&tree.body, &definitions, &methods, diagnostics);
@@ -177,7 +178,7 @@ fn check_module(
     let module_body: Vec<&Stmt> = tree
         .body
         .iter()
-        .filter(|statement| !matches!(statement, Stmt::FunctionDef { .. } | Stmt::ClassDef { .. }))
+        .filter(|statement| !matches!(statement, Stmt::FunctionDef { .. }))
         .collect();
     // Each `__init__` is checked first, since it gives the attributes it assigns their
     // types; the module body comes next, since it gives the module variables theirs, and
@@ -202,4 +203,24 @@ fn check_module(
         BodyChecker::check_function(program, function_id(index), definition, diagnostics);
     }
     program.end_module(body);
+}
+
+/// Adds the module variables that hold the values the module's class bodies give, each named
+/// after its class (ADR-0024).
+fn class_value_variables(
+    classes: &[class::ClassStatement<'_>],
+    annotations: &ImportedNames,
+    variables: &mut BTreeMap<String, typy_diagnostics::Span>,
+) {
+    for class in classes {
+        for value in class::class_values(
+            &class.name.name,
+            class.body,
+            &annotations.names,
+            &annotations.standard,
+        ) {
+            let name = class::class_value_variable(&class.name.name, &value.name);
+            variables.entry(name).or_insert(value.assignment.span());
+        }
+    }
 }

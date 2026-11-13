@@ -40,6 +40,9 @@ pub struct TypedClass {
     pub methods: Vec<(String, FunctionId)>,
     /// The `__init__` method, the class's own or the nearest base's, when there is one.
     pub init: Option<FunctionId>,
+    /// For each attribute with a default, its position and the module variable that holds
+    /// the default, which a new instance holds before `__init__` runs (ADR-0024).
+    pub defaults: Vec<(usize, super::symbol::SymbolId)>,
     /// The whole definition.
     pub span: Span,
 }

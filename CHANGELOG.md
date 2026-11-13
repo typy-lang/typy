@@ -34,6 +34,10 @@ All notable changes to TyPy are recorded here. The format follows
   class where the test holds, also after an `if` that returns and in
   the right operand of `and`. A class held in a variable and
   `issubclass` are planned for 0.5 (CLS-09, TYP-07).
+- Class variables, `name = value` and `name: ClassVar[T] = value` in a
+  class body, read through the class or an instance and assigned
+  through the class; and attribute defaults, `name: T = value`, which
+  each new instance starts with (CLS-11, ADR-0024).
 - An exception class may derive from an exception class imported from
   another module, as `from errors import AppError` or `errors.AppError`
   (CLS-03).

@@ -4,6 +4,7 @@ mod builtin_call;
 mod builtin_module;
 mod call;
 mod class;
+mod class_value;
 mod comprehension;
 mod delete;
 mod dict;
@@ -154,6 +155,11 @@ impl<'program> BodyChecker<'program> {
                 class,
                 instance: *instance,
             });
+            // An attribute with a default holds it before `__init__` runs (ADR-0024).
+            let defaults = checker.defaults(class);
+            if let Some(facts) = &mut checker.assigned {
+                facts.extend(defaults.into_iter().map(flow::Fact::Attribute));
+            }
         }
         checker.declare_globals(definition.body);
         let saved = checker.import_names_of(definition.body);

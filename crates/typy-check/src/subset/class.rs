@@ -66,14 +66,31 @@ impl Walker {
     fn class_statement(&mut self, statement: &Stmt) {
         match statement {
             Stmt::FunctionDef { .. } => self.statement(statement, Place::Class),
+            // A name declared with or without a value, and a value given to one name, which
+            // the checker reads as a class variable or the default of an attribute (CLS-11).
             Stmt::AnnAssign {
                 target: Expr::Name { .. },
                 annotation,
-                value: None,
+                value,
                 ..
-            } => self.annotation(annotation),
+            } => {
+                self.annotation(annotation);
+                if let Some(value) = value {
+                    self.expression(value);
+                }
+            }
+            Stmt::Assign { targets, value, .. }
+                if matches!(targets.as_slice(), [Expr::Name { .. }]) =>
+            {
+                self.expression(value);
+            }
             Stmt::AnnAssign { span, .. } | Stmt::Assign { span, .. } => {
-                self.report(*span, planned("class variables", "0.4", RuleId::CLS_11));
+                self.report(
+                    *span,
+                    Feature::Excluded {
+                        what: "assignments in a class body to anything but one name",
+                    },
+                );
             }
             Stmt::Expr {
                 value:

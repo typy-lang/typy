@@ -13,9 +13,29 @@ use crate::types::Type;
 
 impl BodyChecker<'_> {
     pub(super) fn statements(&mut self, statements: &[&Stmt]) -> Vec<TypedStmt> {
-        statements
+        let mut typed = Vec::new();
+        for statement in statements {
+            if let Stmt::ClassDef { name, body, .. } = statement {
+                typed.extend(self.class_body_values(&name.name, body));
+            } else {
+                typed.extend(self.statement(statement));
+            }
+        }
+        typed
+    }
+
+    /// Checks the values a class body gives, as assignments to the module variables that hold
+    /// them, where the `class` statement runs (CLS-11, ADR-0024).
+    fn class_body_values(&mut self, class: &str, body: &[Stmt]) -> Vec<TypedStmt> {
+        let values = crate::check::class_values(
+            class,
+            body,
+            &self.program.annotation_names,
+            &self.program.annotation_modules,
+        );
+        values
             .iter()
-            .filter_map(|statement| self.statement(statement))
+            .filter_map(|value| self.statement(&value.assignment))
             .collect()
     }
 
@@ -94,7 +114,20 @@ impl BodyChecker<'_> {
                 let value = self.expression(value);
                 let (current, value) = Self::tuple_operands(*operator, current, value);
                 let result = self.binary_type(*operator, &current, &value, *span);
-                let target = if let Expr::Subscript { .. } | Expr::Attribute { .. } = target {
+                let class_value = match target {
+                    Expr::Attribute {
+                        value: object,
+                        attribute,
+                        ..
+                    } => self.augmented_class_value(object, attribute, &current, &result, *span),
+                    _ => None,
+                };
+                let target = if let Some(assignment) = class_value {
+                    match assignment {
+                        super::class_value::ClassValueAssignment::Assigned(target) => target,
+                        super::class_value::ClassValueAssignment::Refused => return None,
+                    }
+                } else if let Expr::Subscript { .. } | Expr::Attribute { .. } = target {
                     self.augmented_item(current, &result, *span)?
                 } else {
                     AssignTarget::Name(self.assign(target, result, &value)?)
