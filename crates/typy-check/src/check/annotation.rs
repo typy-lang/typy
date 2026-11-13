@@ -271,34 +271,6 @@ fn module_class_type(
     Type::Error
 }
 
-/// Returns a union an annotation names, when TyPy holds it: `T | None`, or a union whose
-/// members are all objects (TYP-14, ADR-0022).
-fn union_annotation(
-    union: Type,
-    span: typy_diagnostics::Span,
-    diagnostics: &mut Diagnostics,
-) -> Type {
-    let members = match &union {
-        Type::Optional(inner) => inner.members(),
-        other => other.members(),
-    };
-    if members.len() < 2 || members.iter().all(Type::is_object) {
-        return union;
-    }
-    diagnostics.push(
-        Diagnostic::new(
-            DiagnosticCode::error(201),
-            span,
-            format!(
-                "a union with a member held by value, such as `int | str`, is planned for \
-                 TyPy 0.4; `{union}` has one (TYP-14)"
-            ),
-        )
-        .with_rule(RuleId::TYP_14),
-    );
-    Type::Error
-}
-
 /// Reports a type alias of another module, whose expansion in this module is planned
 /// (SMT-12).
 pub(crate) fn other_module_alias(
@@ -377,11 +349,11 @@ pub(crate) fn annotation_type(
             operator: typy_source::syntax::BinaryOperator::BitOr,
             left,
             right,
-            span,
+            ..
         } => {
             let left = annotation_type(left, scope, diagnostics);
             let right = annotation_type(right, scope, diagnostics);
-            union_annotation(Type::union(vec![left, right]), *span, diagnostics)
+            Type::union(vec![left, right])
         }
         Expr::Subscript { value, index, span } if matches!(value.as_ref(), Expr::Name { id, .. } if id == "dict") => {
             dict_annotation(index, *span, scope, diagnostics)

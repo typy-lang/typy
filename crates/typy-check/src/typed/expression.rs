@@ -378,10 +378,13 @@ pub struct IsInstanceTest {
     /// The position of the type a false test gives that variable: the members of a union no
     /// tested class takes in every case (TYP-07, TYP-14).
     pub otherwise: Option<u32>,
+    /// For a union, each member in order: whether every value of it is an instance of one of
+    /// the classes, and the classes its value's class decides (TYP-14).
+    pub members: Vec<(bool, Vec<crate::types::TypeObjectOf>)>,
 }
 
 /// An operation on a variable that holds a union of objects, checked once for each member
-/// with the variable narrowed to it (TYP-14, ADR-0022).
+/// with the variable narrowed to it (TYP-14, ADR-0027).
 #[derive(Clone, Debug, PartialEq)]
 pub struct EachMember {
     /// The read of the variable, whose object decides which member it is.

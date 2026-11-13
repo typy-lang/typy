@@ -236,6 +236,8 @@ impl RuleId {
     pub const TYP_14: Self = Self("TYP-14");
     /// The annotations `Iterator[T]` and `Iterable[T]`, imported from `collections.abc` or `typing`, shall be accepted for iterators and for the built-in iterables of items of type `T`; their use as values is planned for 0.4 (ADR-0014, ADR-0015).
     pub const TYP_15: Self = Self("TYP-15");
+    /// One value assigned to several targets, as in `a = b[0] = value`, shall be converted to each target's type, such as the union an item holds.
+    pub const TYP_16: Self = Self("TYP-16");
 
     /// Every rule a diagnostic can name, in ID order.
     pub const ALL: &'static [Self] = &[
@@ -353,6 +355,7 @@ impl RuleId {
         Self::TYP_13,
         Self::TYP_14,
         Self::TYP_15,
+        Self::TYP_16,
     ];
 
     /// Returns the ID as text, such as `TYP-03`.

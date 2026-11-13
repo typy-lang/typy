@@ -49,16 +49,19 @@ All notable changes to TyPy are recorded here. The format follows
   the ordering methods as CPython does, and refuses what CPython
   refuses, such as a mutable default. The hash of a frozen dataclass
   and `default_factory` are planned for 0.5 (CLS-05, LIB-06).
-- Unions of objects, such as `str | list[int]`, `bytes | None` or
-  `Circle | Square`: a value of a member is held as the object itself,
-  and a union can be passed, returned, stored, printed, written with
+- Unions, such as `int | str`, `str | list[int] | None` or
+  `Circle | Square`: a union of objects is held as the object itself, and
+  any other with a tag that names its member, so an `int` stored in an
+  `int | str` allocates nothing. A union can be passed, returned, stored,
+  printed, written with
   `str` and `repr`, given to `type()` and tested for truth. `isinstance`
   narrows it in both branches, and a union of classes that share a base
   has that base's attributes and methods. Any other operation on a
   variable that holds a union, such as `value.upper()`, `len(value)` or
   `value + value`, is checked for each member and runs the one for the
-  object's member. A union with a member held by value, such as
-  `int | str`, comes later in 0.4 (TYP-14, TYP-07, ADR-0022).
+  object's member. Lists, sets and dicts of a union compare and hash
+  each item as its member, so `1` and `1.0` are one key (TYP-14, TYP-07,
+  ADR-0027).
 - `Final` and `Final[T]` from `typing`: a module or function variable, a
   class variable or an attribute that `__init__` declares `Final` is
   assigned only by its declaration, and any other assignment is E0414. A

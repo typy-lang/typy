@@ -42,6 +42,7 @@ mod statement;
 mod str_method;
 mod strings;
 mod sys;
+mod tagged_union;
 mod tuple;
 mod type_object;
 mod types;

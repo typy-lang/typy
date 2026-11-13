@@ -223,6 +223,9 @@ impl BodyChecker<'_> {
             return None;
         };
         self.expect(&key, key_type.as_ref().clone(), "a key");
+        if self.union_item_needs_its_type(ty, value_type, span) {
+            return None;
+        }
         if !ty.is_assignable_to(value_type) {
             self.diagnostics.push(
                 Diagnostic::new(

@@ -3,24 +3,47 @@
 use crate::types::{OptionalBase, TupleTypeId, TyirType};
 
 /// The tuple types a module uses. A tuple is a value of fixed layout, its items held in place,
-/// so counting it counts each counted item.
+/// so counting it counts each counted item. A union with a member held by value is a tuple
+/// too, of an `int` tag and a slot for each member, marked as a union (ADR-0027).
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct TupleTypes {
     items: Vec<Vec<TyirType>>,
+    unions: Vec<bool>,
 }
 
 impl TupleTypes {
     /// Returns the tuple type with these items, adding it when it is new.
     pub fn intern(&mut self, items: Vec<TyirType>) -> TyirType {
+        self.interned(items, false)
+    }
+
+    /// Returns the union whose members are held as `members`: a tuple of an `int` tag and a
+    /// slot for each member, adding it when it is new (TYP-14, ADR-0027).
+    pub fn intern_union(&mut self, members: &[TyirType]) -> TyirType {
+        let items = std::iter::once(TyirType::Int)
+            .chain(members.iter().copied())
+            .collect();
+        self.interned(items, true)
+    }
+
+    fn interned(&mut self, items: Vec<TyirType>, union: bool) -> TyirType {
         let index = self
             .items
             .iter()
-            .position(|known| *known == items)
+            .zip(&self.unions)
+            .position(|(known, known_union)| *known == items && *known_union == union)
             .unwrap_or_else(|| {
                 self.items.push(items);
+                self.unions.push(union);
                 self.items.len() - 1
             });
         TyirType::Tuple(TupleTypeId(u32::try_from(index).unwrap_or(u32::MAX)))
+    }
+
+    /// Returns true when a tuple type is a union of its slots after the tag (ADR-0027).
+    #[must_use]
+    pub fn is_union(&self, id: TupleTypeId) -> bool {
+        self.unions.get(id.0 as usize).copied().unwrap_or(false)
     }
 
     /// Returns the item types of a tuple type, or `None` for a number the module does not use.
@@ -77,6 +100,22 @@ impl TupleTypes {
 mod tests {
     use super::TupleTypes;
     use crate::types::{TupleTypeId, TyirType};
+
+    #[test]
+    fn a_union_is_a_tuple_of_its_own() {
+        let mut types = TupleTypes::default();
+        let tuple = types.intern(vec![TyirType::Int, TyirType::Int, TyirType::STR]);
+        let union = types.intern_union(&[TyirType::Int, TyirType::STR]);
+        assert_ne!(tuple, union);
+        assert_eq!(types.intern_union(&[TyirType::Int, TyirType::STR]), union);
+        let (TyirType::Tuple(tuple), TyirType::Tuple(union)) = (tuple, union) else {
+            unreachable!("interning gives tuple types");
+        };
+        assert!(types.is_union(union));
+        assert!(!types.is_union(tuple));
+        assert!(!types.is_union(TupleTypeId(9)));
+        assert_eq!(types.items(union), types.items(tuple));
+    }
 
     #[test]
     fn equal_item_lists_share_one_number() {

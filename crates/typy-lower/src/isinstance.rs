@@ -34,12 +34,31 @@ impl FunctionLowerer<'_> {
 
     /// Returns whether `value`, which is not `None`, is an instance of one of the classes.
     fn instance_test(&mut self, value: Lowered, test: &IsInstanceTest, span: Span) -> Lowered {
-        if test.always || test.checks.is_empty() {
-            let constant = self.constant(Constant::Bool(test.always), span);
+        // A tagged union is tested as the member it holds (TYP-14).
+        if self.is_tagged(value.ty) {
+            return self.tag_switch(value, TyirType::Bool, span, |this, position, slot| {
+                let (always, checks) = &test.members[position];
+                this.classes_test(slot, *always, checks, span)
+            });
+        }
+        self.classes_test(value, test.always, &test.checks, span)
+    }
+
+    /// Returns whether `value`, which is not `None`, is an instance: always, or when the
+    /// runtime finds its class derives from one of `checks`.
+    fn classes_test(
+        &mut self,
+        value: Lowered,
+        always: bool,
+        checks: &[typy_check::TypeObjectOf],
+        span: Span,
+    ) -> Lowered {
+        if always || checks.is_empty() {
+            let constant = self.constant(Constant::Bool(always), span);
             return Self::borrowed(constant, TyirType::Bool);
         }
         let mut result = None;
-        for class in &test.checks {
+        for class in checks {
             let object = self.bits(Self::borrowed(value.value, value.ty), span);
             let class = self.type_object(class, span).value;
             let found = self

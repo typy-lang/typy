@@ -92,27 +92,34 @@ python-floor = "3.15"
 ## E0201: feature planned for a later TyPy release
 
 The program uses valid Python that a later TyPy release accepts, such as
-`int | str` annotations or class decorators. The message names the release
-and the rule. Write the code without the feature, for example with one type
-in the annotation, or wait for that release.
+a `match` statement or class decorators. The message names the release
+and the rule. Write the code without the feature, for example with `if`
+and `elif`, or wait for that release.
 
 This program gives E0201:
 
-<!-- typy-expect: rejected E0201 at 1:17 -->
+<!-- typy-expect: rejected E0201 at 2:5 -->
 ```python
-def show(value: int | str) -> None:
-    print(value)
+def show(value: int) -> None:
+    match value:
+        case 0:
+            print("zero")
+        case _:
+            print(value)
 ```
 
 This one is correct:
 
 <!-- typy-expect: accepted -->
 ```python
-def show(value: str) -> None:
-    print(value)
+def show(value: int) -> None:
+    if value == 0:
+        print("zero")
+    else:
+        print(value)
 
 
-show("ready")
+show(0)
 ```
 
 ## E0202: feature TyPy cannot compile with CPython's meaning

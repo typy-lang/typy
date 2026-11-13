@@ -1,9 +1,9 @@
 //! Lowers an operation checked for each member of a union: the runtime tests the object
-//! against each member's class in turn, and the first that holds runs (TYP-14, ADR-0022).
+//! against each member's class in turn, and the first that holds runs (TYP-14, ADR-0027).
 
 use typy_check::EachMember;
 use typy_diagnostics::Span;
-use typy_tyir::{Constant, RuntimeFunction, Terminator, TyirType};
+use typy_tyir::{RuntimeFunction, Terminator, TyirType};
 
 use crate::function::FunctionLowerer;
 use crate::ownership::Lowered;
@@ -13,6 +13,14 @@ impl FunctionLowerer<'_> {
     /// distinct classes, so one test holds, and the last member needs none.
     pub(crate) fn each_member(&mut self, each: &EachMember, ty: TyirType, span: Span) -> Lowered {
         let value = self.expression(&each.value);
+        // A tagged union's tag names the member, in the order of the arms (TYP-14).
+        if self.is_tagged(value.ty) {
+            let result = self.tag_switch(value, ty, span, |this, position, _| {
+                this.expression(&each.arms[position].1)
+            });
+            self.release(value, span);
+            return result;
+        }
         let join = self.builder.create_block();
         let gives = ty != TyirType::Unit;
         let result = gives.then(|| self.builder.add_block_parameter(join, ty));
@@ -38,13 +46,9 @@ impl FunctionLowerer<'_> {
                 self.member_arm(body, join, gives, span);
             }
         }
-        self.builder.switch_to(join);
+        let result = self.joined(join, result, ty, span);
         self.release(value, span);
-        if let Some(result) = result {
-            return self.produced(result, ty);
-        }
-        let unit = self.constant(Constant::Unit, span);
-        Self::borrowed(unit, TyirType::Unit)
+        result
     }
 
     /// Lowers one member's operation and passes its result, with its reference, to `join`.
@@ -56,15 +60,6 @@ impl FunctionLowerer<'_> {
         span: Span,
     ) {
         let outcome = self.expression(body);
-        let arguments = if gives {
-            vec![self.take_reference(outcome, span)]
-        } else {
-            self.release(outcome, span);
-            Vec::new()
-        };
-        self.builder.terminate(Terminator::Jump {
-            target: join,
-            arguments,
-        });
+        self.join_with(outcome, join, gives, span);
     }
 }

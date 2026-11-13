@@ -14,8 +14,10 @@ use crate::function::Shared;
 use crate::statics::Statics;
 
 /// The kind codes of the runtime's `ItemKind`, one for each item type a tuple field can have.
-fn kind_code(item: TyirType) -> Result<u64, CodegenError> {
+fn kind_code(item: TyirType, tuples: &typy_tyir::TupleTypes) -> Result<u64, CodegenError> {
     Ok(match item {
+        // A union is a tuple of its tag and its slots, read by the tag (ADR-0027).
+        TyirType::Tuple(id) if tuples.is_union(id) => 11,
         TyirType::Int => 0,
         TyirType::Float => 1,
         TyirType::Bool => 2,
@@ -66,11 +68,14 @@ pub(crate) fn tuple_descriptor<'ctx>(
         let offset = tuple_field(&items, index)
             .and_then(|field| data.offset_of_element(&struct_type, field))
             .unwrap_or(0);
-        fields.push(field_type.const_named_struct(&[
-            half.const_int(kind_code(*item)?, false).into(),
-            half.const_int(offset, false).into(),
-            nested.into(),
-        ]));
+        fields.push(
+            field_type.const_named_struct(&[
+                half.const_int(kind_code(*item, &shared.tyir.tuple_types)?, false)
+                    .into(),
+                half.const_int(offset, false).into(),
+                nested.into(),
+            ]),
+        );
     }
     let table = Statics::global(
         shared.module,

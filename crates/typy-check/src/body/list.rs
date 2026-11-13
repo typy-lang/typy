@@ -298,13 +298,23 @@ impl BodyChecker<'_> {
             let membership = matches!(operator, CompareOperator::In | CompareOperator::NotIn);
             let wanted = if membership {
                 match &right {
-                    Type::Set(item) => Some(item.as_ref().clone()),
+                    Type::Set(item) | Type::Dict(item, _) => Some(item.as_ref().clone()),
                     _ => right.sequence_item().cloned(),
                 }
             } else {
                 Some(right.clone())
             };
-            if let Some(wanted) = wanted.filter(|wanted| matches!(wanted, Type::TupleOf(_))) {
+            // An item of a union, or an optional one, is looked for as a value of the item type,
+            // which the runtime compares as the member it holds (TYP-14).
+            let union_item = |wanted: &Type| {
+                membership
+                    && matches!(wanted, Type::Union(_) | Type::Optional(_))
+                    && left != *wanted
+                    && left.is_assignable_to(wanted)
+            };
+            if let Some(wanted) =
+                wanted.filter(|wanted| matches!(wanted, Type::TupleOf(_)) || union_item(wanted))
+            {
                 let value = typed[position].clone();
                 typed[position] = Self::converted(value, Some(&wanted));
             }

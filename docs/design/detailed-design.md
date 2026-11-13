@@ -816,43 +816,53 @@ without a default would give `V | None`, E0201 until TYP-06 brings it.
 source of pairs of the dict's types. A dict passed to a set method or to
 `set()` stays a dict, so the runtime takes CPython's dict steps.
 
-Unions of objects (TYP-14, ADR-0022) add `Type::Union(members)`, which
-`Type::union` builds in normal form in `union_type`: nested unions flatten,
-`None` makes the union optional, a member another member accepts is dropped, the
-members are sorted by their debug text so `A | B` is `B | A`, and one member is
-that member. `check::annotation::union_annotation` accepts a union whose members
-are all objects (`Type::is_object`) and reports any other as E0201 until tagged
-unions come. A member is assignable to its union, and a union to any type each
-member is assignable to, through `Upcast`. Lowering holds a union as its members
-are when all are held alike, as the class every member derives from when they
-are instances that share one (`Type::union_base`), and otherwise as
-`TypeId::UNION`, an object whose header says what it is, which the verifier lets
-any object become and become again. `body::union::through_union_base` gives the
-receiver of an attribute, a method or `raise` the shared class, or the common
-exception class of a union of exceptions, which an `except (A, B) as name`
-binds. `str`, `repr`, `type()` and a truth test of a `TypeId::UNION` value call
-`typy_rt_object_str`, `typy_rt_object_repr`, `typy_rt_object_type` and
-`typy_rt_object_is_true`, which read the object's type slots; `str` has a `str`
-slot that returns the object itself. `IsInstanceTest::otherwise` gives the
-members no tested class takes in every case, which the flow state holds in the
-branch where the test fails, and a narrowed `T | None` that a test showed is not
-`None` reads as `T`. A truth test of a union held as a base whose members test
-themselves otherwise, or of a member class whose truth comes from `__len__`, is
-E0201, planned for 0.5. `body::each_member` checks an attribute, a method call,
-an operator, an item, a comparison other than `is`, or a builtin call other than
-`print`, `str`, `repr`, `type`, `isinstance` and `bool`, whose operand is a
-variable that holds a union of members with no shared class, once for each
-member with `Fact::Narrowed` set to it, and joins the results with
-`Type::union`; a result held by value for some members only is E0201 until
-tagged unions. `TypedExprKind::EachMember` keeps the variable's read and each
-member's class with its checked expression, and lowering tests the object with
-`typy_rt_is_instance` against each class but the last, whose branch runs when
-none holds; the branches pass their result to one block. Equality and order
-refuse a union that is not a variable, which no split reaches. A container of a
-union of objects stores each as an object item, and the runtime compares two
-objects of different types as CPython does: a built-in type is equal only to its
-own objects, and a class's slot, which tests the other object's class, decides
-for its instances.
+Unions (TYP-14, ADR-0027) add `Type::Union(members)`, which `Type::union` builds
+in normal form in `union_type`: nested unions flatten, `None` makes the union
+optional, a member another member accepts is dropped, the members are sorted by
+their debug text so `A | B` is `B | A`, and one member is that member. A member
+is assignable to its union, and a union to any type each member is assignable
+to, through `Upcast`. Lowering holds a union as its members are when all are
+held alike, as the class every member derives from when they are instances that
+share one (`Type::union_base`), and otherwise as `TypeId::UNION`, an object
+whose header says what it is, which the verifier lets any object become and
+become again. `body::union::through_union_base` gives the receiver of an
+attribute, a method or `raise` the shared class, or the common exception class
+of a union of exceptions, which an `except (A, B) as name` binds. `str`, `repr`,
+`type()` and a truth test of a `TypeId::UNION` value call `typy_rt_object_str`,
+`typy_rt_object_repr`, `typy_rt_object_type` and `typy_rt_object_is_true`, which
+read the object's type slots; `str` has a `str` slot that returns the object
+itself. `IsInstanceTest::otherwise` gives the members no tested class takes in
+every case, which the flow state holds in the branch where the test fails, and a
+narrowed `T | None` that a test showed is not `None` reads as `T`. A truth test
+of a union held as a base whose members test themselves otherwise, or of a
+member class whose truth comes from `__len__`, is E0201, planned for 0.5.
+`body::each_member` checks an attribute, a method call, an operator, an item, a
+comparison other than `is`, or a builtin call other than `print`, `str`, `repr`,
+`type`, `isinstance` and `bool`, whose operand is a variable that holds a union
+of members with no shared class, once for each member with `Fact::Narrowed` set
+to it, and joins the results with `Type::union`. `TypedExprKind::EachMember`
+keeps the variable's read and each member's class with its checked expression,
+and lowering tests the object with `typy_rt_is_instance` against each class but
+the last, whose branch runs when none holds; the branches pass their result to
+one block. Equality and order refuse a union that is not a variable, which no
+split reaches. A container of a union of objects stores each as an object item,
+and the runtime compares two objects of different types as CPython does: a
+built-in type is equal only to its own objects, and a class's slot, which tests
+the other object's class, decides for its instances. A union with a member that
+is not an object (`Type::is_object`) is held as `TupleTypes::intern_union`, a
+tuple of an `int` tag and a slot for each member, which the descriptor marks
+with item kind 11; every slot but the tag's holds the value `zero_value` gives,
+which counting passes over, so owning the tuple is owning its member.
+`lower::tagged_union` tags a member in `widened_to_union`, reads a member's
+slot, or retags a narrower union, in `narrowed_union`, both through an optional,
+and switches on the tag in `tag_switch` for `str`, `repr`, truth, `type()`,
+`isinstance`, whose `IsInstanceTest::members` give each member's outcome, and an
+operation checked for each member. The runtime's `ItemKind::Union` holds a union
+item as the member its tag names, and `values_equal` compares two members as
+CPython does: numbers by value, exactly, tuples item by item, and other types
+never equal. An expected union converts the value given for a method's argument,
+an item, an entry and a needle of `in`; one value assigned to several targets,
+one an item that holds a union, is E0201, planned for 0.5 (TYP-16).
 
 Optional values (TYP-06, TYP-13, ADR-0011) add `Type::Optional(T)`, written `T |
 None` or `None | T`, which `Type::optional` builds so that `T` is never `None`

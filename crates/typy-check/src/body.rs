@@ -12,6 +12,7 @@ mod delete;
 mod dict;
 mod dict_call;
 mod each_member;
+pub use each_member::member_class;
 mod exception;
 mod expression;
 mod flow;

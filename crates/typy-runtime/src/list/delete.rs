@@ -164,14 +164,7 @@ pub unsafe extern "C" fn typy_rt_list_assign_slice(
 /// The run holds more than `index` items of `item_type`.
 unsafe fn item_at(run: *mut u64, index: usize, words: usize, item_type: super::ItemType) -> u64 {
     // SAFETY: the caller's guarantee.
-    unsafe {
-        let slot = run.add(index * words);
-        if item_type.kind() == super::ItemKind::Tuple {
-            slot.expose_provenance() as u64
-        } else {
-            *slot
-        }
-    }
+    unsafe { item_type.load(run.add(index * words)) }
 }
 
 /// Replaces the `removed` items from `start` with the `count` items of `incoming`, which hold

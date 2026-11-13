@@ -38,7 +38,7 @@ impl TypeId {
     /// gives (LIB-04).
     pub const TEXT_FILE: Self = Self(17);
     /// An object of any type, held as a union of objects; its header says which (TYP-14,
-    /// ADR-0022).
+    /// ADR-0027).
     pub const UNION: Self = Self(18);
     /// The first ID of the program's classes; class `n` of the module is this plus `n`.
     const FIRST_CLASS: u32 = 1 << 16;

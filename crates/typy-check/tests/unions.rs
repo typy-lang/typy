@@ -49,8 +49,7 @@ fn isinstance_narrows_each_kind_of_union() {
 #[test]
 fn operations_not_every_member_has_are_refused() {
     let cases: &[(&str, &str)] = &[
-        ("x: int | str = 1\n", "E0201"),
-        ("x: tuple[int, int] | str = 'a'\n", "E0201"),
+        ("x: int | str = 1.5\n", "E0402"),
         (
             "def f(v: str | list[int]) -> bool:\n    return v is v\n",
             "E0301",

@@ -61,8 +61,10 @@ impl FunctionLowerer<'_> {
                 self.set_display(items, item, span)
             }
             TypedExprKind::Wrap(inner) => self.wrap(inner, ty, span),
-            TypedExprKind::Upcast(inner) => self.upcast(inner, ty, span),
-            TypedExprKind::Downcast(inner) => self.downcast(inner, ty, span),
+            TypedExprKind::Upcast(inner) => self.converted(inner, &expression.ty, ty, true, span),
+            TypedExprKind::Downcast(inner) => {
+                self.converted(inner, &expression.ty, ty, false, span)
+            }
             TypedExprKind::IsInstance(test) => self.isinstance(test, span),
             TypedExprKind::EachMember(each) => self.each_member(each, ty, span),
             TypedExprKind::CheckedLength(call) => {
@@ -337,6 +339,15 @@ impl FunctionLowerer<'_> {
             TyirType::Object(_) => ScalarKind::Str,
             TyirType::Bits => unreachable!("list items are converted before they are tested"),
             TyirType::Optional(_) => return self.optional_truth(lowered, span),
+            // A tagged union is as true as the member it holds (TYP-14).
+            TyirType::Tuple(_) if self.is_tagged(lowered.ty) => {
+                return self
+                    .tag_switch(lowered, TyirType::Bool, span, |this, _, slot| {
+                        let truth = this.truth(slot, span);
+                        Self::borrowed(truth, TyirType::Bool)
+                    })
+                    .value;
+            }
             // A tuple's length is fixed by its type, so its truth is too.
             TyirType::Tuple(_) => {
                 let filled = self.tuple_length(lowered.ty) > 0;

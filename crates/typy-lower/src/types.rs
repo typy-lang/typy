@@ -48,9 +48,10 @@ pub(crate) fn tyir_type(ty: &Type, tuples: &mut TupleTypes) -> TyirType {
     }
 }
 
-/// Returns how a union of objects is held: as its members are when each is held alike, as an
+/// Returns how a union is held: one with a member held by value as a tuple of a tag and a
+/// slot for each member; one of objects as its members are when each is held alike, as an
 /// instance of the class every member derives from, or as an object whose header says what
-/// it is (ADR-0022).
+/// it is (ADR-0027).
 fn union_type(ty: &Type, members: &[Type], tuples: &mut TupleTypes) -> TyirType {
     if let Some(base) = ty.union_base() {
         return TyirType::Object(TypeId::class(base.id.0));
@@ -59,6 +60,9 @@ fn union_type(ty: &Type, members: &[Type], tuples: &mut TupleTypes) -> TyirType 
         .iter()
         .map(|member| tyir_type(member, tuples))
         .collect();
+    if !members.iter().all(Type::is_object) {
+        return tuples.intern_union(&held);
+    }
     if held.windows(2).all(|pair| pair[0] == pair[1]) {
         return held[0];
     }

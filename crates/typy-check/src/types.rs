@@ -39,7 +39,7 @@ pub enum Type {
     /// optional itself; `optional` builds the type and keeps that rule.
     Optional(Box<Type>),
     /// `A | B | ...`: a value of one of two or more types other than `None`, in the normal
-    /// form `Type::union` builds (TYP-14, ADR-0022).
+    /// form `Type::union` builds (TYP-14, ADR-0027).
     Union(Vec<Type>),
     /// An instance of a class of the program, or of a class derived from it (CLS-01, CLS-04).
     Instance(Arc<InstanceClass>),
@@ -294,7 +294,8 @@ impl Type {
             (Self::Optional(inner), Self::Optional(base)) => inner.is_upcast_to(base),
             // A value becomes a union, or a wider one, or the class every member derives
             // from, as the object it is (TYP-14).
-            (Self::Union(_), _) | (_, Self::Union(_)) => {
+            // An optional target is converted as an optional is: its base, then wrapped.
+            (Self::Union(_), _) | (_, Self::Union(_)) if !matches!(target, Self::Optional(_)) => {
                 !self.matches(target) && self.is_assignable_to(target)
             }
             _ => false,

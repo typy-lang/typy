@@ -53,6 +53,13 @@ impl FunctionLowerer<'_> {
     pub(crate) fn runtime_type(&mut self, lowered: Lowered, ty: &Type, span: Span) -> Lowered {
         match (ty, TypeObjectOf::of(ty)) {
             (Type::Exception(_), _) => self.exception_type(&lowered, span),
+            // A tagged union's member says its type (TYP-14).
+            (Type::Union(members), _) if self.is_tagged(lowered.ty) => {
+                let members = members.clone();
+                self.tag_switch(lowered, TyirType::TYPE, span, |this, position, slot| {
+                    this.runtime_type(slot, &members[position], span)
+                })
+            }
             // An instance may be of a subclass, whose class it holds (CLS-04).
             (Type::Instance(class), _) if self.program.has_subclass(class.id) => {
                 let object = self.bits(Self::borrowed(lowered.value, lowered.ty), span);

@@ -21,12 +21,9 @@ value.
 | A variable narrows to a derived class after `isinstance` | TYP-07 |
 | A name, class variable or attribute declared `Final` is not assigned again | TYP-08 |
 | `type Name = annotation` at module level names an annotation | SMT-10 |
-| `A \| B` of objects, such as `str \| list[int]`, narrowed by `isinstance` | TYP-14, TYP-07 |
+| `A \| B`, such as `int \| str`, narrowed by `isinstance` | TYP-14, TYP-07 |
 | `Iterator[T]` and `Iterable[T]` from `typing` or `collections.abc` | TYP-15 |
 | `TracebackType` and `ModuleType` from `types` | CST-10, MOD-10 |
-
-A union with a member held by value, such as `int | str`, comes later in
-0.4 (TYP-14).
 
 ## Iterators and iterables
 
@@ -62,12 +59,14 @@ use as values, and the other names of `typing`, come in 0.4 (LIB-06).
 
 ## Unions
 
-`A | B` holds a value of either type. TyPy holds a union of objects, such
-as `str | bytes`, `list[int] | dict[str, int]` or two classes, as the
-object itself, so passing a member where the union is expected costs
-nothing. `A | B` and `B | A` are one type, and a member another member
-takes is dropped: `Circle | Shape` is `Shape` when `Circle` derives from
-`Shape`.
+`A | B` holds a value of either type, such as `int | str`,
+`str | bytes`, `list[int] | dict[str, int]` or two classes. `A | B` and
+`B | A` are one type, and a member another member takes is dropped:
+`Circle | Shape` is `Shape` when `Circle` derives from `Shape`. A union
+of objects is held as the object itself; a union with a number, a `bool`
+or a tuple among its members is held with a tag that says which member it
+holds, so storing an `int` in an `int | str` allocates nothing
+(ADR-0027).
 
 A union can be passed, returned, stored in a container, printed, written
 with `str`, `repr` and f-strings, given to `type()` and tested for truth.
@@ -128,10 +127,12 @@ print(describe("abc"), describe(b"xy"), total([1, 2]), total({3}))
 ```
 
 The results join into one type: `value.upper()` above is a
-`str | bytes`. A result that is held by value for some members and not
-for others, such as `value[0]`, which is a `str` or an `int`, comes with
-tagged unions later in 0.4. A union computed in place, such as `value * 2`,
-is used member by member once it is assigned to a variable. A truth test
+`str | bytes`, and `value[0]` a `str | int`. A union computed in place,
+such as `value * 2`, is used member by member once it is assigned to a
+variable. Lists, sets and dicts of a union compare, hash and write each
+item as the member it holds, so `1` and `1.0` are one key, as in CPython.
+One value assigned to several targets, one of which holds a union, as in
+`a = items[0] = 1`, is planned for 0.5 (TYP-16). A truth test
 whose member classes test themselves with `__len__`, or differently from
 their base, is planned for 0.5.
 

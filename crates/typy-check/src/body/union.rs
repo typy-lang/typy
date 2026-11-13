@@ -1,5 +1,5 @@
 //! Values of a union of objects: their attributes and methods through the class every member
-//! derives from (TYP-14, ADR-0022).
+//! derives from (TYP-14, ADR-0027).
 
 use typy_diagnostics::{Diagnostic, DiagnosticCode, RuleId};
 

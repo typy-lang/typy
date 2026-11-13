@@ -1,5 +1,5 @@
 //! Unions of two or more types other than `None`, such as `str | list[int]` (TYP-14,
-//! ADR-0022).
+//! ADR-0027).
 
 use crate::class_type::InstanceClass;
 use crate::types::Type;
@@ -61,7 +61,7 @@ impl Type {
     }
 
     /// Returns true when a value of the type is held as the address of an object whose header
-    /// says what it is, as each member of a union of objects is (ADR-0022).
+    /// says what it is, as each member of a union of objects is (ADR-0027).
     #[must_use]
     pub const fn is_object(&self) -> bool {
         matches!(
@@ -88,7 +88,7 @@ impl Type {
     }
 
     /// Returns the nearest class every member of a union of instances derives from, when they
-    /// share one; such a union is held as an instance of that class (ADR-0022).
+    /// share one; such a union is held as an instance of that class (ADR-0027).
     #[must_use]
     pub fn union_base(&self) -> Option<InstanceClass> {
         let Self::Union(members) = self else {

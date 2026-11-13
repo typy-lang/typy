@@ -1673,7 +1673,7 @@ fn optional_rules_give_their_codes() {
             "def g(x: str | None) -> str:\n    return x.upper()\n",
             &["E0412"],
         ),
-        ("h: int | str = 1\n", &["E0201"]),
+        ("h: int | str = 1.5\n", &["E0402"]),
         ("j: list[int] = [1]\nk: list[int | None] = j\n", &["E0402"]),
         ("m: int | None = 'a'\n", &["E0402"]),
         ("n = {'a': 1}\nn.setdefault('b')\n", &["E0404"]),

@@ -64,6 +64,11 @@ impl FunctionLowerer<'_> {
                 let value = self.select(lowered.value, yes, no, TyirType::STR);
                 Self::borrowed(value, TyirType::STR)
             }
+            TyirType::Tuple(_) if self.is_tagged(lowered.ty) => {
+                self.tag_switch(lowered, TyirType::STR, span, |this, _, slot| {
+                    this.string_of(slot, span)
+                })
+            }
             TyirType::Tuple(_) => self.tuple_text(lowered, span),
             TyirType::Optional(_) => self.optional_text(lowered, false, span),
         }
@@ -78,6 +83,10 @@ impl FunctionLowerer<'_> {
             self.exception_text(lowered, true, span)
         } else if let TyirType::Optional(_) = lowered.ty {
             self.optional_text(lowered, true, span)
+        } else if self.is_tagged(lowered.ty) {
+            self.tag_switch(lowered, TyirType::STR, span, |this, _, slot| {
+                this.repr_of(slot, span)
+            })
         } else if lowered.ty == TyirType::UNION {
             let object = self.bits(Self::borrowed(lowered.value, lowered.ty), span);
             self.call_runtime(RuntimeFunction::ObjectRepr, vec![object], span)

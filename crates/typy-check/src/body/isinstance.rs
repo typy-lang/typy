@@ -73,6 +73,13 @@ impl BodyChecker<'_> {
             .collect();
         let narrowed = self.narrowing(&value, &inner, &classes, always, none_matches);
         let otherwise = self.union_otherwise(&value, &inner, &classes);
+        let members = match &inner {
+            Type::Union(members) => members
+                .iter()
+                .map(|member| member_outcome(member, &classes))
+                .collect(),
+            _ => Vec::new(),
+        };
         Self::typed(
             TypedExprKind::IsInstance(Box::new(IsInstanceTest {
                 value,
@@ -81,6 +88,7 @@ impl BodyChecker<'_> {
                 checks,
                 narrowed,
                 otherwise,
+                members,
             })),
             Type::Bool,
             span,
@@ -267,6 +275,20 @@ impl BodyChecker<'_> {
         };
         self.narrowing_position(value, rest)
     }
+}
+
+/// Returns, for a member of a union, whether every value of it is an instance of one of the
+/// classes, and the classes its value's class decides.
+fn member_outcome(member: &Type, classes: &[TypeObjectOf]) -> (bool, Vec<TypeObjectOf>) {
+    let outcomes: Vec<Outcome> = classes.iter().map(|class| outcome(member, class)).collect();
+    let always = outcomes.iter().any(|each| matches!(each, Outcome::Always));
+    let checks = classes
+        .iter()
+        .zip(&outcomes)
+        .filter(|(_, each)| matches!(each, Outcome::Checked))
+        .map(|(class, _)| class.clone())
+        .collect();
+    (always, checks)
 }
 
 /// Returns what testing a value of type `ty`, which is not optional, against `class` gives.

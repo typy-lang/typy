@@ -306,7 +306,7 @@ impl FunctionLowerer<'_> {
 
     /// Returns a value of type `ty` that is never freed: zero, false, `None`, the empty string,
     /// or a tuple of such values.
-    fn zero_value(&mut self, ty: TyirType, span: Span) -> ValueId {
+    pub(crate) fn zero_value(&mut self, ty: TyirType, span: Span) -> ValueId {
         match ty {
             TyirType::Int => self.constant(Constant::Int("0".to_owned()), span),
             TyirType::Float => self.constant(Constant::Float(0.0), span),

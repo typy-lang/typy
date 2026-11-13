@@ -1,12 +1,12 @@
 //! Operations on a variable that holds a union of objects, checked once for each member with
-//! the variable narrowed to it; the member the object is runs (TYP-14, ADR-0022).
+//! the variable narrowed to it; the member the object is runs (TYP-14, ADR-0027).
 
 use typy_diagnostics::{Diagnostic, DiagnosticCode, RuleId};
-use typy_source::syntax::{CompareOperator, Expr, UnaryOperator};
+use typy_source::syntax::{CompareOperator, Constant, Expr, UnaryOperator};
 
 use super::BodyChecker;
 use crate::builtin::Builtin;
-use crate::typed::{EachMember, SymbolId, TypedExpr, TypedExprKind};
+use crate::typed::{EachMember, SymbolId, TypedConstant, TypedExpr, TypedExprKind};
 use crate::types::{Type, TypeObjectOf};
 
 impl BodyChecker<'_> {
@@ -17,7 +17,7 @@ impl BodyChecker<'_> {
         let operand = self.member_operand(expression)?;
         let (symbol, members) = self.union_operand(operand)?;
         let span = expression.span();
-        let Some(tests) = members.iter().map(member_test).collect::<Option<Vec<_>>>() else {
+        let Some(tests) = members.iter().map(member_class).collect::<Option<Vec<_>>>() else {
             return Some(
                 self.error(
                     Diagnostic::new(
@@ -34,10 +34,18 @@ impl BodyChecker<'_> {
                 ),
             );
         };
+        let unequal = self.unequal_answer(expression, operand, &members);
         let value = self.expression(operand);
         let before = self.assigned.clone();
         let mut arms = Vec::new();
         for (member, test) in members.into_iter().zip(tests) {
+            if let Some((other, answer)) = &unequal
+                && !member.can_test_equality(other)
+            {
+                let constant = TypedExprKind::Constant(TypedConstant::Bool(*answer));
+                arms.push((test, Self::typed(constant, Type::Bool, span)));
+                continue;
+            }
             // The variable reads as the member while the operation is checked for it, also in
             // code no path reaches, whose flow state holds nothing.
             self.splitting.push((symbol, member));
@@ -46,7 +54,7 @@ impl BodyChecker<'_> {
             self.assigned.clone_from(&before);
             arms.push((test, body));
         }
-        let ty = self.each_member_type(&arms, span);
+        let ty = Self::each_member_type(&arms);
         let arms = arms
             .into_iter()
             .map(|(test, body)| (test, Self::converted(body, Some(&ty))))
@@ -58,38 +66,57 @@ impl BodyChecker<'_> {
         ))
     }
 
-    /// Returns the type of the result: the members' results joined into one type, which is
-    /// held as each of them when they are objects, or one type they all give.
-    fn each_member_type(
-        &mut self,
-        arms: &[(TypeObjectOf, TypedExpr)],
-        span: typy_diagnostics::Span,
-    ) -> Type {
+    /// Returns, for `value == other` or `value != other` whose other operand is a constant or
+    /// a variable, that operand's type and what the comparison gives for a member it cannot
+    /// equal, as CPython's default equality does: `False` for `==` and `True` for `!=`. The
+    /// other operand has no effect to skip. `None` for any other expression, or when no member
+    /// can equal it, which the comparison reports as it reports two such types.
+    fn unequal_answer(
+        &self,
+        expression: &Expr,
+        operand: &Expr,
+        members: &[Type],
+    ) -> Option<(Type, bool)> {
+        let Expr::Compare {
+            left,
+            operators,
+            comparators,
+            ..
+        } = expression
+        else {
+            return None;
+        };
+        let ([operator], [right]) = (operators.as_slice(), comparators.as_slice()) else {
+            return None;
+        };
+        let answer = match operator {
+            CompareOperator::Eq => false,
+            CompareOperator::NotEq => true,
+            _ => return None,
+        };
+        let other = if std::ptr::eq(left.as_ref(), operand) {
+            right
+        } else {
+            left.as_ref()
+        };
+        let ty = match other {
+            Expr::Constant { value, .. } => constant_type(value)?,
+            Expr::Name { .. } => self.peek_type(other)?,
+            _ => return None,
+        };
+        members
+            .iter()
+            .any(|member| member.can_test_equality(&ty))
+            .then_some((ty, answer))
+    }
+
+    /// Returns the type of the result: the members' results joined into one type.
+    fn each_member_type(arms: &[(TypeObjectOf, TypedExpr)]) -> Type {
         let results: Vec<Type> = arms.iter().map(|(_, body)| body.ty.clone()).collect();
         if results.iter().any(Type::has_error) {
             return Type::Error;
         }
-        let joined = Type::union(results);
-        let held = match &joined {
-            Type::Optional(inner) => inner.members().iter().all(Type::is_object),
-            other => other.members().len() == 1 || other.members().iter().all(Type::is_object),
-        };
-        if held {
-            return joined;
-        }
-        self.diagnostics.push(
-            Diagnostic::new(
-                DiagnosticCode::error(201),
-                span,
-                format!(
-                    "an operation whose result is {} for the members of a union, held by \
-                     value, is planned for TyPy 0.4 (TYP-14)",
-                    joined.with_article()
-                ),
-            )
-            .with_rule(RuleId::TYP_14),
-        );
-        Type::Error
+        Type::union(results)
     }
 
     /// Returns the operand whose member an operation needs, if the expression is one.
@@ -186,8 +213,9 @@ const fn takes_any_object(builtin: Builtin) -> bool {
 }
 
 /// Returns the class the runtime tests an object against to find it is of `member`, when
-/// the member has one.
-fn member_test(member: &Type) -> Option<TypeObjectOf> {
+/// the member has one (TYP-14).
+#[must_use]
+pub fn member_class(member: &Type) -> Option<TypeObjectOf> {
     match member {
         Type::Exception(class) => Some(TypeObjectOf::Exception(class.clone())),
         Type::Iterator(_)
@@ -198,4 +226,17 @@ fn member_test(member: &Type) -> Option<TypeObjectOf> {
         | Type::Traceback => None,
         other => TypeObjectOf::of(other),
     }
+}
+
+/// Returns the type of a constant, when it is one TyPy compiles.
+fn constant_type(value: &Constant) -> Option<Type> {
+    Some(match value {
+        Constant::None => Type::NoneType,
+        Constant::Bool(_) => Type::Bool,
+        Constant::Int(_) => Type::Int,
+        Constant::Float(_) => Type::Float,
+        Constant::Str(_) => Type::Str,
+        Constant::Bytes(_) => Type::Bytes,
+        Constant::Complex { .. } | Constant::Ellipsis => return None,
+    })
 }

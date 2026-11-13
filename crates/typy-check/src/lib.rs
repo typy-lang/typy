@@ -18,6 +18,7 @@ mod types;
 mod union_type;
 mod unprovided;
 
+pub use body::member_class;
 pub use builtin::Builtin;
 pub use check::TypeChecker;
 pub use class_type::{InstanceClass, Operators};

@@ -215,6 +215,15 @@ impl BodyChecker<'_> {
                 .known_type(value)
                 .filter(|ty| matches!(ty, Type::List(_)));
         }
+        // An item of a list, or an entry of a dict, takes a value of its own type, which a
+        // member of a union becomes (TYP-14).
+        if let Expr::Subscript { value, .. } = target {
+            return match self.known_type(value)? {
+                Type::List(item) => Some(*item),
+                Type::Dict(_, value) => Some(*value),
+                _ => None,
+            };
+        }
         let Expr::Name { id, .. } = target else {
             return None;
         };
@@ -417,6 +426,9 @@ impl BodyChecker<'_> {
             }
         };
         self.expect(&index, Type::Int, "an index");
+        if self.union_item_needs_its_type(ty, &item, span) {
+            return None;
+        }
         if !ty.is_assignable_to(&item) {
             self.diagnostics.push(
                 Diagnostic::new(
@@ -588,6 +600,33 @@ impl BodyChecker<'_> {
             )
             .with_rule(RuleId::TYP_08)
             .with_label(declared, "declared here"),
+        );
+        true
+    }
+
+    /// Reports a value assigned to an item or an entry that holds a union, when the value is
+    /// not yet of the union's type: only `a = b[0] = value`, whose one value serves several
+    /// targets, gives one, and a union item needs a value of its own type (TYP-14).
+    pub(super) fn union_item_needs_its_type(&mut self, ty: &Type, item: &Type, span: Span) -> bool {
+        let union = match item {
+            Type::Optional(inner) => inner.as_ref(),
+            other => other,
+        };
+        if !matches!(union, Type::Union(_)) || ty.matches(item) || !ty.is_assignable_to(item) {
+            return false;
+        }
+        self.diagnostics.push(
+            Diagnostic::new(
+                DiagnosticCode::error(201),
+                span,
+                format!(
+                    "one value assigned to several targets, one of which holds {}, is planned \
+                     for TyPy 0.5 (TYP-16)",
+                    item.with_article()
+                ),
+            )
+            .with_rule(RuleId::TYP_16)
+            .with_help("assign each target in a statement of its own"),
         );
         true
     }

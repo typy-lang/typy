@@ -90,7 +90,7 @@ impl Field {
             match ItemKind::from_code(self.kind) {
                 ItemKind::Bool | ItemKind::OptionalBool => u64::from(*pointer),
                 ItemKind::NoneValue => 0,
-                ItemKind::Tuple | ItemKind::OptionalTuple => at,
+                ItemKind::Tuple | ItemKind::OptionalTuple | ItemKind::Union => at,
                 #[allow(
                     clippy::cast_ptr_alignment,
                     reason = "the compiler places an eight-byte field at an offset that is a multiple of eight"
@@ -139,7 +139,7 @@ pub(crate) unsafe fn store_field(tuple: *const TupleType, address: u64, index: u
         match ItemKind::from_code(field.kind) {
             ItemKind::Bool | ItemKind::OptionalBool => *at = (item & 0xff) as u8,
             ItemKind::NoneValue => {}
-            ItemKind::Tuple | ItemKind::OptionalTuple => {
+            ItemKind::Tuple | ItemKind::OptionalTuple | ItemKind::Union => {
                 let size = usize::try_from((*field.tuple).size).unwrap_or(0);
                 let from =
                     core::ptr::with_exposed_provenance::<u8>(usize::try_from(item).unwrap_or(0));
@@ -152,16 +152,6 @@ pub(crate) unsafe fn store_field(tuple: *const TupleType, address: u64, index: u
             _ => at.cast::<u64>().write(item),
         }
     }
-}
-
-/// Returns the descriptor of item `index` of a tuple type, a tuple itself.
-///
-/// # Safety
-///
-/// `tuple` is a descriptor the compiler emitted whose item `index` is a tuple.
-pub(crate) unsafe fn field_tuple(tuple: *const TupleType, index: usize) -> *const TupleType {
-    // SAFETY: the caller's guarantee.
-    unsafe { (*tuple).fields()[index].tuple }
 }
 
 /// Adds a reference to every object the tuple at `address` holds.
@@ -223,6 +213,34 @@ pub(crate) unsafe fn equal(tuple: *const TupleType, left: u64, right: u64) -> bo
                 .item_type()
                 .equal(field.value(left), field.value(right))
         })
+    }
+}
+
+/// Returns whether two tuples of two layouts have as many items, each pair equal by `equal`,
+/// which takes each item with its type.
+///
+/// # Safety
+///
+/// Each descriptor is one the compiler emitted, and each address that of a live tuple of it.
+pub(crate) unsafe fn equal_across(
+    left_tuple: *const TupleType,
+    left: u64,
+    right_tuple: *const TupleType,
+    right: u64,
+    equal: impl Fn(ItemType, u64, ItemType, u64) -> bool,
+) -> bool {
+    // SAFETY: the caller's guarantee covers each field.
+    unsafe {
+        let (left_fields, right_fields) = ((*left_tuple).fields(), (*right_tuple).fields());
+        left_fields.len() == right_fields.len()
+            && left_fields.iter().zip(right_fields).all(|(one, other)| {
+                equal(
+                    one.item_type(),
+                    one.value(left),
+                    other.item_type(),
+                    other.value(right),
+                )
+            })
     }
 }
 
