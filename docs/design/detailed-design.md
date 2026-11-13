@@ -1053,7 +1053,15 @@ statement that evaluates the value first; `__delitem__` for `del`; and
 puts `__bool__` in the type object's `truth` slot for `any` and `all`; `any`
 and `all` of instances whose truth comes from `__len__`, and a truth test of a
 class with neither method whose subclass defines one, are E0201. A class body's
-values follow ADR-0024:
+values follow ADR-0024. `check::dataclass` expands each `@dataclass` before the
+subset check reads the module: it finds the fields, its own after a dataclass
+base's, writes `__init__`, `__repr__`, `__eq__` and, with `order=True`, the
+ordering methods as Python source, parses it, moves every node to the
+decorator with `Stmt::relocate`, and gives `__init__` the fields' own
+annotations and defaults; the methods take the first dataclass of the chain,
+and test the other object's class, as CPython does. A frozen dataclass's
+`ClassInfo::frozen` makes assigning a field E0414 outside the `__init__` the
+expansion wrote. Class bodies' values follow ADR-0024:
 `check::class_values` turns `name = value` and `name: ClassVar[T] = value` into
 an assignment to the module variable `Class.name`, and `name: T = value` into
 one that holds the default of the attribute `name`. These module variables are

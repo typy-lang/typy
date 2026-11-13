@@ -140,7 +140,7 @@ fn imports_that_cannot_resolve_give_their_codes() {
         ("import shapes\nshapes.NAME()\n", &["E0401"]),
         ("import shapes\nshapes.missing()\n", &["E0425"]),
         ("import shapes\nshapes.NAME += 1\n", &["E0401"]),
-        ("import dataclasses\n", &["E0201"]),
+        ("import ctypes\n", &["E0201"]),
         ("import json\n", &["E0206"]),
         ("from collections.abc import Sized\n", &["E0201"]),
         ("from types import FrameType\n", &["E0425"]),
@@ -292,4 +292,17 @@ fn a_class_method_inherited_from_another_module_is_planned() {
         ]),
         ["E0201"]
     );
+}
+
+#[test]
+fn a_dataclass_derives_from_one_of_another_module() {
+    let base = "from dataclasses import dataclass\n@dataclass\nclass Base:\n    x: int\n";
+    let dump = accepted(&[
+        ("base.py", base),
+        (
+            "app.py",
+            "from dataclasses import dataclass\nfrom base import Base\n@dataclass\nclass Child(Base):\n    y: int = 2\nprint(Child(1), Child(1) == Child(1, 2))\n",
+        ),
+    ]);
+    assert!(dump.contains("Child.__init__"), "{dump}");
 }

@@ -37,10 +37,14 @@ pub(crate) enum AnnotationName {
     ModuleType,
     /// `typing.ClassVar`, which declares a class variable in a class body (CLS-11).
     ClassVar,
+    /// `dataclasses.dataclass` and `dataclasses.field`, which the dataclass expansion reads
+    /// (CLS-05).
+    Dataclasses,
 }
 
 /// The modules that give names for annotations only in 0.3.
-pub(crate) const ANNOTATION_MODULES: [&str; 3] = ["typing", "collections.abc", "types"];
+pub(crate) const ANNOTATION_MODULES: [&str; 4] =
+    ["typing", "collections.abc", "types", "dataclasses"];
 
 /// Returns the annotation name `name` of the module `module`, if TyPy 0.3 gives it.
 pub(crate) fn annotation_name(module: &str, name: &str) -> Option<AnnotationName> {
@@ -50,6 +54,7 @@ pub(crate) fn annotation_name(module: &str, name: &str) -> Option<AnnotationName
         ("types", "TracebackType") => Some(AnnotationName::TracebackType),
         ("types", "ModuleType") => Some(AnnotationName::ModuleType),
         ("typing", "ClassVar") => Some(AnnotationName::ClassVar),
+        ("dataclasses", "dataclass" | "field") => Some(AnnotationName::Dataclasses),
         _ => None,
     }
 }
@@ -95,6 +100,17 @@ fn standard_annotation(
         }
         _ if let Some(name) = standard_name(annotation, scope) => match name {
             AnnotationName::ClassVar => class_var_elsewhere(annotation, diagnostics),
+            AnnotationName::Dataclasses => {
+                diagnostics.push(
+                    Diagnostic::new(
+                        DiagnosticCode::error(408),
+                        annotation.span(),
+                        "`dataclass` and `field` are not types",
+                    )
+                    .with_rule(RuleId::CLS_05),
+                );
+                Type::Error
+            }
             AnnotationName::TracebackType => Type::Traceback,
             AnnotationName::ModuleType => Type::AnyModule,
             AnnotationName::Iterator | AnnotationName::Iterable => {

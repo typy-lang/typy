@@ -369,4 +369,53 @@ impl BodyChecker<'_> {
         );
         true
     }
+
+    /// Reports an assignment to a field of a frozen dataclass outside the `__init__`
+    /// `@dataclass` writes, where CPython raises `FrozenInstanceError` (CLS-05); returns true
+    /// when it reports one.
+    pub(super) fn refuse_frozen_field(
+        &mut self,
+        class: ClassId,
+        attribute: &Identifier,
+        object: &Expr,
+        span: Span,
+    ) -> bool {
+        let mut current = Some(class);
+        let mut frozen = None;
+        while let Some(each) = current {
+            let info = &self.program.classes[each.0 as usize];
+            if info.frozen {
+                frozen = Some(each);
+                break;
+            }
+            current = info.base;
+        }
+        let Some(frozen) = frozen else {
+            return false;
+        };
+        let initializing = self.initializing.is_some_and(|initializing| {
+            initializing.class == class
+                && self.program.classes[class.0 as usize].generated_init
+                && matches!(object, Expr::Name { id, .. }
+                    if self.locals.get(id) == Some(&initializing.instance))
+        });
+        if initializing {
+            return false;
+        }
+        let name = self.program.classes[frozen.0 as usize].name.clone();
+        self.diagnostics.push(
+            Diagnostic::new(
+                DiagnosticCode::error(414),
+                span,
+                format!(
+                    "`{name}` is a frozen dataclass, so its field `{}` is not assigned, as CPython \
+                     raises `FrozenInstanceError`",
+                    attribute.name
+                ),
+            )
+            .with_rule(RuleId::CLS_05)
+            .with_help("make a new instance with the value instead"),
+        );
+        true
+    }
 }

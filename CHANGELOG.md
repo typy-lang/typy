@@ -44,6 +44,11 @@ All notable changes to TyPy are recorded here. The format follows
   dicts, `in`, `sorted`, `min` and `max` call them through the class's
   type object. A class with `__eq__` and no `__hash__` has no hash
   (CLS-07, ADR-0026).
+- `@dataclass` from `dataclasses`, with `eq`, `order` and `frozen` and
+  `field(default=...)`: it writes `__init__`, `__repr__`, `__eq__` and
+  the ordering methods as CPython does, and refuses what CPython
+  refuses, such as a mutable default. The hash of a frozen dataclass
+  and `default_factory` are planned for 0.5 (CLS-05, LIB-06).
 - Container methods: `len(x)`, `x[k]`, `x[k] = v`, `del x[k]` and
   `v in x` call `__len__`, `__getitem__`, `__setitem__`, `__delitem__`
   and `__contains__`, and truth tests, `any` and `all` call `__bool__`,

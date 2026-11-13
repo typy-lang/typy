@@ -4,6 +4,7 @@ mod dump;
 mod expression;
 mod node_kind;
 mod operator;
+mod relocate;
 mod statement;
 mod tree;
 

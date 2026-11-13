@@ -271,6 +271,9 @@ impl BodyChecker<'_> {
         if initializing && let Some(facts) = &mut self.assigned {
             facts.insert(Fact::Attribute(index));
         }
+        if self.refuse_frozen_field(class, attribute, value, span) {
+            return None;
+        }
         // An inherited attribute takes its type from the class that declares it.
         let owner = self.program.declaring(class, index);
         let info = &mut self.program.classes[owner.0 as usize];

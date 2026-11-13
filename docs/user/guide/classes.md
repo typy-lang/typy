@@ -15,6 +15,7 @@ class body or assigned in `__init__`, and has one type.
 | `__eq__`, `__ne__`, `__lt__`, `__le__`, `__gt__`, `__ge__` and `__hash__` | CLS-07 |
 | `__add__`, `__radd__` and the other arithmetic, bitwise and unary methods | CLS-07 |
 | `__len__`, `__getitem__`, `__setitem__`, `__delitem__`, `__contains__` and `__bool__` | CLS-07 |
+| `@dataclass`, with `eq`, `order`, `frozen` and `field(default=...)` | CLS-05 |
 | `__str__` and `__repr__`, used by `print`, `str`, `repr`, f-strings and containers | CLS-08 |
 | A type object for every type, with `object` as the root | CLS-10 |
 | `type(x)`, class and built-in type names as values, `__name__` | CLS-12 |
@@ -25,8 +26,7 @@ signature that names its own class, or a class defined below it, quotes
 the name, such as `"Node | None"`.
 
 Instances are equal only to themselves, hashed by identity and true
-unless their class defines the methods below (CLS-07); `@dataclass`
-comes later in 0.4 (CLS-05).
+unless their class defines the methods below (CLS-07).
 A class may derive from an exception class, as
 [Exceptions](exceptions.md) describes (CLS-03).
 
@@ -463,6 +463,44 @@ as `x[1:2]`, `any` and `all` of instances whose truth comes from
 `__len__`, and a truth test whose static class has neither method while
 a subclass defines one, are planned for 0.5, and so is `in` without
 `__contains__`, which CPython answers by iterating.
+
+## Dataclasses
+
+`@dataclass` from `dataclasses` writes the methods CPython writes for a
+class: `__init__` taking the fields in order, `__repr__`, and `__eq__`;
+with `order=True` also `__lt__`, `__le__`, `__gt__` and `__ge__`, which
+compare the fields as a tuple; and with `frozen=True` the fields cannot
+be assigned after `__init__` (CLS-05, LIB-06):
+
+<!-- typy-expect: accepted -->
+```python
+from dataclasses import dataclass, field
+
+
+@dataclass(order=True)
+class Version:
+    major: int
+    minor: int = field(default=0)
+
+
+@dataclass(frozen=True)
+class Token:
+    kind: str
+    text: str
+
+
+print(sorted([Version(2), Version(1, 5)]), Version(1) == Version(1, 0))
+print(Token("name", "x"))
+```
+
+The fields are the annotated names of the class body, after those of a
+dataclass base, `ClassVar` ones excepted. As in CPython, a field
+without a default after one with a default, a mutable default such as
+`[]`, `order=True` without `eq`, a frozen dataclass deriving from a
+non-frozen one or the reverse, and assigning a field of a frozen
+instance are errors. A method the class defines itself is kept. The
+hash of a frozen dataclass, `field(default_factory=...)` and the other
+options such as `slots=True` are planned for 0.5.
 
 ## Attributes are declared
 

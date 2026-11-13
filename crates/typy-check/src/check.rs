@@ -2,6 +2,7 @@
 
 mod annotation;
 mod class;
+mod dataclass;
 
 pub(crate) use annotation::{unhashable, unhashable_key};
 mod definition;
@@ -50,7 +51,13 @@ impl TypeChecker {
     /// program with errors is never returned (TYP-11).
     pub fn check(project: &Project) -> Result<TypedProgram, Diagnostics> {
         let mut diagnostics = Diagnostics::new();
-        for module in project.modules_in_order() {
+        // A dataclass gets its methods before anything reads the module (CLS-05).
+        let mut dataclasses = dataclass::Dataclasses::default();
+        let modules: Vec<Module> = project
+            .modules_in_order()
+            .map(|module| dataclasses.expand(module, &mut diagnostics))
+            .collect();
+        for module in &modules {
             diagnostics.extend(subset::check(&module.syntax));
         }
         if diagnostics.has_errors() {
@@ -62,7 +69,7 @@ impl TypeChecker {
         let mut program = Program::empty();
         program.set_floor(project.settings().python_floor.minor());
         let mut assigned = BTreeSet::new();
-        for module in project.modules_in_order() {
+        for module in &modules {
             assigned.extend(module_imports::assigned_through_modules(
                 &module.syntax.body,
             ));
@@ -79,9 +86,21 @@ impl TypeChecker {
             assigned,
         );
         // Each module is checked after the modules its module-level imports need.
-        for module in project.modules_in_order() {
+        for module in &modules {
             let path = project.path(module.file).to_owned();
-            check_module(&mut program, module, &path, floor_defers, &mut diagnostics);
+            let frozen = dataclasses
+                .info
+                .get(module.name.as_str())
+                .cloned()
+                .unwrap_or_default();
+            check_module(
+                &mut program,
+                module,
+                &path,
+                floor_defers,
+                &frozen,
+                &mut diagnostics,
+            );
         }
         if diagnostics.has_errors() {
             return Err(diagnostics);
@@ -99,6 +118,7 @@ fn check_module(
     module: &Module,
     path: &str,
     floor_defers: bool,
+    dataclasses: &BTreeMap<String, dataclass::DataclassInfo>,
     diagnostics: &mut Diagnostics,
 ) {
     let tree = &module.syntax;
@@ -155,6 +175,8 @@ fn check_module(
         first_function + definitions.len(),
         diagnostics,
     );
+    let mut class_infos = class_infos;
+    mark_dataclasses(&mut class_infos, dataclasses);
     let mut variables = imports.variables.clone();
     module_variables(&tree.body, &mut variables);
     class_value_variables(&classes, &annotations, &mut variables);
@@ -242,6 +264,19 @@ fn check_body(
     for diagnostic in found.iter() {
         if !diagnostics.iter().any(|reported| reported == diagnostic) {
             diagnostics.push(diagnostic.clone());
+        }
+    }
+}
+
+/// Notes in each frozen dataclass's information what its expansion wrote (CLS-05).
+fn mark_dataclasses(
+    infos: &mut [ClassInfo],
+    dataclasses: &BTreeMap<String, dataclass::DataclassInfo>,
+) {
+    for info in infos {
+        if let Some(dataclass) = dataclasses.get(&info.name) {
+            info.frozen = dataclass.frozen;
+            info.generated_init = dataclass.generated_init;
         }
     }
 }

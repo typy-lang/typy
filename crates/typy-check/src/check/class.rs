@@ -53,6 +53,11 @@ pub(crate) struct ClassInfo {
     /// The positions of the class's own attributes the class body gives a default, each held
     /// as the module variable `Class.name`.
     pub(crate) defaults: Vec<usize>,
+    /// Whether the class is a frozen dataclass, whose fields only the `__init__` `@dataclass`
+    /// writes assigns (CLS-05).
+    pub(crate) frozen: bool,
+    /// Whether `@dataclass` wrote the class's `__init__`.
+    pub(crate) generated_init: bool,
     /// Whether the class's `__init__` uses the instance other than through its attributes,
     /// once checked.
     pub(crate) init_uses_instance: bool,
@@ -491,6 +496,8 @@ fn new_info(class: &ClassStatement<'_>, instance: &Type, classes: Classes<'_>) -
         static_methods: Vec::new(),
         properties: Vec::new(),
         defaults: Vec::new(),
+        frozen: false,
+        generated_init: false,
         init_uses_instance: false,
         span: class.span,
     }

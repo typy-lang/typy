@@ -2658,3 +2658,119 @@ fn container_methods_are_checked() {
         assert_eq!(&rejected(source), expected, "\n{source}");
     }
 }
+
+#[test]
+fn dataclasses_get_their_methods_and_refuse_what_cpython_refuses() {
+    accepted(concat!(
+        "from dataclasses import dataclass, field\n",
+        "import dataclasses as dc\n",
+        "from typing import ClassVar\n",
+        "@dataclass\n",
+        "class Empty:\n",
+        "    pass\n",
+        "@dc.dataclass(eq=False)\n",
+        "class Plain:\n",
+        "    x: int\n",
+        "    count: ClassVar[int] = 0\n",
+        "    def __repr__(self) -> str:\n",
+        "        return 'plain'\n",
+        "@dataclass(order=True, frozen=True)\n",
+        "class Pair:\n",
+        "    a: int\n",
+        "    b: int = field()\n",
+        "@dataclass(frozen=True)\n",
+        "class Wide(Pair):\n",
+        "    b: int = 2\n",
+        "@dataclass(eq=False)\n",
+        "class Own(Plain):\n",
+        "    def __init__(self, x: int) -> None:\n",
+        "        self.x = x\n",
+        "print(Empty(), Plain(1), Pair(1, 2) < Pair(1, 3), Empty() == Empty())\n",
+    ));
+}
+
+#[test]
+fn dataclass_forms_cpython_refuses_are_refused() {
+    accepted("import typing\nclass C:\n    x: typing.ClassVar = 1\nprint(C.x)\n");
+    let cases: &[(&str, &[&str])] = &[
+        (
+            "import types\nclass C:\n    x: types.ClassVar = 1\n",
+            &["E0205"],
+        ),
+        (
+            "from dataclasses import dataclass\nimport math\n@dataclass\nclass P(math.Base):\n    a: int\n",
+            &["E0201"],
+        ),
+        (
+            "import dataclasses as dc\n@dc.field\nclass P:\n    pass\n",
+            &["E0201"],
+        ),
+        (
+            "import dataclasses as dc\nimport math\n@math.dataclass\nclass P:\n    pass\n",
+            &["E0201"],
+        ),
+        (
+            "from dataclasses import dataclass\n@dataclass(frozen=True)\nclass P:\n    x: int\nclass Q:\n    def __init__(self, p: P) -> None:\n        p.x = 1\n",
+            &["E0414"],
+        ),
+        (
+            "from dataclasses import dataclass\n@dataclass\nclass P:\n    x: int = 1\n    y: int\n",
+            &["E0404"],
+        ),
+        (
+            "from dataclasses import dataclass\n@dataclass(order=True, eq=False)\nclass P:\n    x: int\n",
+            &["E0404"],
+        ),
+        (
+            "from dataclasses import dataclass\n@dataclass\nclass P:\n    x: int = int()\n",
+            &["E0201"],
+        ),
+        (
+            "from dataclasses import dataclass\n@dataclass(True)\nclass P:\n    x: int\n",
+            &["E0201"],
+        ),
+        (
+            "from dataclasses import dataclass\nflags = {}\n@dataclass(**flags)\nclass P:\n    x: int\n",
+            &["E0201"],
+        ),
+        (
+            "from dataclasses import dataclass\n@dataclass(order=1)\nclass P:\n    x: int\n",
+            &["E0201"],
+        ),
+        (
+            "from dataclasses import dataclass, field\n@dataclass\nclass P:\n    x: int = field(1)\n",
+            &["E0201"],
+        ),
+        (
+            "from dataclasses import dataclass, field\nd = {}\n@dataclass\nclass P:\n    x: int = field(**d)\n",
+            &["E0201"],
+        ),
+        (
+            "from dataclasses import dataclass\n@dataclass\nclass P:\n    x: dict[int, int] = {}\n",
+            &["E0404"],
+        ),
+        (
+            "from dataclasses import dataclass\n@dataclass\nclass P:\n    x: set[int] = {1}\n",
+            &["E0404"],
+        ),
+        (
+            "from dataclasses import dataclass\n@dataclass(order=True)\nclass P:\n    x: int\n    def __lt__(self, other: 'P') -> bool:\n        return True\n",
+            &["E0404"],
+        ),
+        (
+            "from dataclasses import dataclass\n@dataclass(frozen=True)\nclass P:\n    x: int\n    def __init__(self) -> None:\n        self.x = 1\n",
+            &["E0414"],
+        ),
+        (
+            "from dataclasses import dataclass\n@dataclass(frozen=True)\nclass P:\n    x: int\n@dataclass\nclass Q(P):\n    y: int = 0\n",
+            &["E0404"],
+        ),
+        (
+            "from dataclasses import dataclass\n@dataclass\nclass P:\n    x: int\n@dataclass(frozen=True)\nclass Q(P):\n    y: int = 0\n",
+            &["E0404"],
+        ),
+    ];
+    for (source, expected) in cases {
+        assert_eq!(&rejected(source), expected, "\n{source}");
+    }
+}
