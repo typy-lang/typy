@@ -61,6 +61,14 @@ impl BodyChecker<'_> {
             .iter()
             .map(|argument| self.expression(argument))
             .collect();
+        // `abs` of an instance calls its class's `__abs__` (CLS-07).
+        if builtin == Builtin::Abs
+            && keywords.is_empty()
+            && let [value] = values.as_slice()
+            && let Some(call) = self.operator_unary("__abs__", value, span)
+        {
+            return call;
+        }
         if let Some(keyword) = keywords.first() {
             return self.error(
                 Diagnostic::new(

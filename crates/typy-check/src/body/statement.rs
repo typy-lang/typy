@@ -123,6 +123,15 @@ impl BodyChecker<'_> {
             } => {
                 let current = self.expression(target);
                 let value = self.expression(value);
+                // Without `__iadd__`, which is planned, `x += y` on an instance is `x = x + y`
+                // (CLS-07).
+                let (current, value) = match self.operator_binary(*operator, current, value, *span)
+                {
+                    super::operator_method::Comparison::Called(call) => {
+                        return self.rebound(target, call, *span);
+                    }
+                    super::operator_method::Comparison::Builtin(current, value) => (current, value),
+                };
                 let (current, value) = Self::tuple_operands(*operator, current, value);
                 let result = self.binary_type(*operator, &current, &value, *span);
                 let class_value = match target {
@@ -251,6 +260,36 @@ impl BodyChecker<'_> {
             | Stmt::FunctionDef { .. }
             | Stmt::ClassDef { .. }
             | Stmt::Other { .. } => return None,
+        })
+    }
+
+    /// Returns `target = value` for an augmented assignment whose operator called a method:
+    /// a variable, or an attribute of one, which reading again has no effect.
+    fn rebound(&mut self, target: &Expr, value: TypedExpr, span: Span) -> Option<TypedStmt> {
+        let simple = match target {
+            Expr::Name { .. } => true,
+            Expr::Attribute { value: object, .. } => matches!(object.as_ref(), Expr::Name { .. }),
+            _ => false,
+        };
+        if !simple {
+            self.diagnostics.push(
+                Diagnostic::new(
+                    DiagnosticCode::error(201),
+                    span,
+                    "an augmented assignment to an item that calls an operator method is planned \
+                     for TyPy 0.5 (CLS-07)",
+                )
+                .with_rule(RuleId::CLS_07)
+                .with_help("write `item = item + value`"),
+            );
+            return None;
+        }
+        let ty = value.ty.clone();
+        let target = self.assign_target(target, ty, &value)?;
+        Some(TypedStmt::Assign {
+            targets: vec![target],
+            value,
+            span,
         })
     }
 

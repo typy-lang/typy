@@ -2522,3 +2522,62 @@ fn comparison_methods_are_checked() {
         assert_eq!(&rejected(source), expected, "\n{source}");
     }
 }
+
+#[test]
+fn arithmetic_methods_are_checked() {
+    accepted(concat!(
+        "class V:\n",
+        "    def __init__(self, n: int) -> None:\n",
+        "        self.n = n\n",
+        "    def __add__(self, other: 'V') -> 'V':\n",
+        "        return V(self.n + other.n)\n",
+        "    def __rmul__(self, factor: int) -> 'V':\n",
+        "        return V(self.n * factor)\n",
+        "    def __neg__(self) -> 'V':\n",
+        "        return V(-self.n)\n",
+        "    def __abs__(self) -> int:\n",
+        "        return 1\n",
+        "class H:\n",
+        "    def __init__(self) -> None:\n",
+        "        self.v = V(1)\n",
+        "v = V(1)\n",
+        "v += V(2)\n",
+        "h = H()\n",
+        "h.v += v\n",
+        "print((v + v).n, (2 * v).n, (-v).n, abs(v), h.v.n)\n",
+    ));
+    let cases: &[(&str, &[&str])] = &[
+        ("print(abs(1, key=2))\n", &["E0404"]),
+        (
+            "class V:\n    def __invert__(self, n: int) -> int:\n        return n\n",
+            &["E0404"],
+        ),
+        (
+            "class V:\n    def __neg__(self, n: int) -> int:\n        return n\n",
+            &["E0404"],
+        ),
+        (
+            "class V:\n    def __rsub__(self) -> int:\n        return 1\n",
+            &["E0404"],
+        ),
+        (
+            "class V:\n    def __call__(self) -> int:\n        return 1\n",
+            &["E0201"],
+        ),
+        (
+            "class V:\n    def __len__(self) -> int:\n        return 1\n",
+            &["E0201"],
+        ),
+        (
+            "class V:\n    def __add__(self, other: 'V') -> 'V':\n        return self\nitems = [V()]\nitems[0] += V()\n",
+            &["E0201"],
+        ),
+        (
+            "class V:\n    def __add__(self, other: 'V') -> int:\n        return 1\n    def __radd__(self, other: 'V') -> str:\n        return ''\nprint(V() + V())\n",
+            &["E0201"],
+        ),
+    ];
+    for (source, expected) in cases {
+        assert_eq!(&rejected(source), expected, "\n{source}");
+    }
+}

@@ -1037,7 +1037,13 @@ table slot, which `Operation::SameMethod` compares. `TyirClass` holds
 `equal`, `order` and `hash`, and codegen fills the type object's slots with
 functions that call them; the `equal` slot compares by identity an object its
 `__eq__` does not take. A slot method that may raise is E0201 when lowering
-ends, planned for 0.5. A class body's values follow ADR-0024:
+ends, planned for 0.5. Arithmetic methods reuse the same call:
+`operator_binary` makes `a op b` an `OperatorCall` with `__add__` and its
+reflected `__radd__`, typed by the method's result, E0201 when the two methods
+return different types; `operator_unary` calls `__neg__`, `__pos__`,
+`__invert__` and, for `abs`, `__abs__`. An augmented assignment whose operator
+calls a method assigns its result to the variable or the variable's
+attribute, E0201 for any other target. A class body's values follow ADR-0024:
 `check::class_values` turns `name = value` and `name: ClassVar[T] = value` into
 an assignment to the module variable `Class.name`, and `name: T = value` into
 one that holds the default of the attribute `name`. These module variables are

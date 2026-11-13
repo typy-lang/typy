@@ -11,7 +11,12 @@ use crate::ownership::Lowered;
 
 impl FunctionLowerer<'_> {
     /// Returns `left op right` through its comparison method.
-    pub(crate) fn operator_call(&mut self, call: &OperatorCall, span: Span) -> Lowered {
+    pub(crate) fn operator_call(
+        &mut self,
+        call: &OperatorCall,
+        ty: TyirType,
+        span: Span,
+    ) -> Lowered {
         let left = self.expression(&call.left);
         let left = self.kept_for_call(&call.left, left, span);
         let right = self.expression(&call.right);
@@ -21,7 +26,7 @@ impl FunctionLowerer<'_> {
             this.call_method(
                 method,
                 vec![(0, borrowed(left)), (1, borrowed(right))],
-                TyirType::Bool,
+                ty,
                 span,
             )
         };
@@ -29,7 +34,7 @@ impl FunctionLowerer<'_> {
             this.call_method(
                 method,
                 vec![(0, borrowed(right)), (1, borrowed(left))],
-                TyirType::Bool,
+                ty,
                 span,
             )
         };
@@ -37,7 +42,7 @@ impl FunctionLowerer<'_> {
             (Some(forward), Some(reflected)) => {
                 let swap = self.reflected_first(call, left, right, span);
                 let join = self.builder.create_block();
-                let value = self.builder.add_block_parameter(join, TyirType::Bool);
+                let value = self.builder.add_block_parameter(join, ty);
                 let first = self.builder.create_block();
                 let second = self.builder.create_block();
                 self.builder.terminate(Terminator::Branch {
@@ -52,13 +57,16 @@ impl FunctionLowerer<'_> {
                     } else {
                         forward_call(self, forward)
                     };
+                    // The result leaves its branch with its reference, as `optional_branch`
+                    // passes one on.
+                    let given = self.take_reference(outcome, span);
                     self.builder.terminate(Terminator::Jump {
                         target: join,
-                        arguments: vec![outcome.value],
+                        arguments: vec![given],
                     });
                 }
                 self.builder.switch_to(join);
-                Self::borrowed(value, TyirType::Bool)
+                self.produced(value, ty)
             }
             (Some(forward), None) => forward_call(self, forward),
             (None, Some(reflected)) => reflected_call(self, reflected),
@@ -88,12 +96,11 @@ impl FunctionLowerer<'_> {
     ) -> typy_tyir::ValueId {
         let left_bits = self.bits(Self::borrowed(left.value, left.ty), span);
         let right_bits = self.bits(Self::borrowed(right.value, right.ty), span);
-        let left_class = self
-            .call_runtime(RuntimeFunction::ObjectType, vec![left_bits], span)
-            .value;
-        let right_class = self
-            .call_runtime(RuntimeFunction::ObjectType, vec![right_bits], span)
-            .value;
+        // A class is immortal, so its type object is borrowed, as `type()` reads it.
+        let left_class = self.call_runtime(RuntimeFunction::ObjectType, vec![left_bits], span);
+        let left_class = self.borrowed_result(left_class).value;
+        let right_class = self.call_runtime(RuntimeFunction::ObjectType, vec![right_bits], span);
+        let right_class = self.borrowed_result(right_class).value;
         let derives = self
             .call_runtime(
                 RuntimeFunction::IsInstance,

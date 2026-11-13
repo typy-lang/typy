@@ -13,6 +13,7 @@ class body or assigned in `__init__`, and has one type.
 | Class variables and attribute defaults given a value in the class body | CLS-11 |
 | `@staticmethod`, `@classmethod`, and `@property` with its setter | CLS-06 |
 | `__eq__`, `__ne__`, `__lt__`, `__le__`, `__gt__`, `__ge__` and `__hash__` | CLS-07 |
+| `__add__`, `__radd__` and the other arithmetic, bitwise and unary methods | CLS-07 |
 | `__str__` and `__repr__`, used by `print`, `str`, `repr`, f-strings and containers | CLS-08 |
 | A type object for every type, with `object` as the root | CLS-10 |
 | `type(x)`, class and built-in type names as values, `__name__` | CLS-12 |
@@ -23,9 +24,9 @@ signature that names its own class, or a class defined below it, quotes
 the name, such as `"Node | None"`.
 
 Instances are equal only to themselves and hashed by identity unless
-their class defines comparison methods, as below; arithmetic and
-container methods such as `__add__` and `__len__` come later in 0.4
-(CLS-07), with `@dataclass` (CLS-05).
+their class defines comparison methods, as below; container methods
+such as `__len__` come later in 0.4 (CLS-07), with `@dataclass`
+(CLS-05).
 A class may derive from an exception class, as
 [Exceptions](exceptions.md) describes (CLS-03).
 
@@ -391,6 +392,39 @@ container compares an instance with an object its `__eq__` does not
 take as unequal. A comparison or hash method that may raise, a chain
 such as `a < b < c` of such instances, and a method returning
 `NotImplemented` are planned for 0.5.
+
+## Arithmetic methods
+
+`__add__`, `__sub__`, `__mul__`, `__truediv__`, `__floordiv__`,
+`__mod__`, `__pow__`, `__matmul__`, `__lshift__`, `__rshift__`,
+`__and__`, `__or__` and `__xor__` give the binary operators, each with
+its reflected form such as `__radd__`; `__neg__`, `__pos__` and
+`__invert__` give `-x`, `+x` and `~x`, and `__abs__` gives `abs(x)`
+(CLS-07):
+
+<!-- typy-expect: accepted -->
+```python
+class Money:
+    def __init__(self, cents: int) -> None:
+        self.cents = cents
+
+    def __add__(self, other: "Money") -> "Money":
+        return Money(self.cents + other.cents)
+
+    def __rmul__(self, times: int) -> "Money":
+        return Money(self.cents * times)
+
+
+total = Money(250)
+total += Money(100)
+print(total.cents, (3 * total).cents)
+```
+
+As in CPython, `3 * total` falls back to the right operand's
+`__rmul__`, and the right operand's reflected method comes first when
+its class derives from the left's and defines it again. `x += y` is
+`x = x + y` for a variable or an attribute of one; the in-place methods
+such as `__iadd__` are planned for 0.5.
 
 ## Attributes are declared
 

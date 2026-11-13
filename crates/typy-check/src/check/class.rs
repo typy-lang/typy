@@ -269,7 +269,7 @@ fn unsupported_base(span: Span) -> Diagnostic {
 /// `__iter__` and `__next__` (CST-08) and `__enter__` and `__exit__` (CST-05). Any other name that starts and ends with two
 /// underscores changes how Python treats the instances, and waits for the operator methods of
 /// 0.4 (CLS-07).
-const SPECIAL_METHODS: [&str; 14] = [
+const SPECIAL_METHODS: [&str; 44] = [
     "__init__",
     "__str__",
     "__repr__",
@@ -284,6 +284,36 @@ const SPECIAL_METHODS: [&str; 14] = [
     "__gt__",
     "__ge__",
     "__hash__",
+    "__add__",
+    "__radd__",
+    "__sub__",
+    "__rsub__",
+    "__mul__",
+    "__rmul__",
+    "__matmul__",
+    "__rmatmul__",
+    "__truediv__",
+    "__rtruediv__",
+    "__floordiv__",
+    "__rfloordiv__",
+    "__mod__",
+    "__rmod__",
+    "__pow__",
+    "__rpow__",
+    "__lshift__",
+    "__rlshift__",
+    "__rshift__",
+    "__rrshift__",
+    "__and__",
+    "__rand__",
+    "__or__",
+    "__ror__",
+    "__xor__",
+    "__rxor__",
+    "__neg__",
+    "__pos__",
+    "__invert__",
+    "__abs__",
 ];
 
 /// The classes a module's class bodies may name: each by its name, the type of each one's
@@ -966,6 +996,28 @@ fn check_special_method(method: &Definition<'_>, name: &Identifier, diagnostics:
         "__eq__" | "__ne__" | "__lt__" | "__le__" | "__gt__" | "__ge__" => {
             check_comparison(method, name, diagnostics);
         }
+        "__neg__" | "__pos__" | "__invert__" | "__abs__"
+            if method.signature.parameters.len() != 1 =>
+        {
+            diagnostics.push(
+                Diagnostic::new(
+                    DiagnosticCode::error(404),
+                    name.span,
+                    format!("`{}` takes only `self`", name.name),
+                )
+                .with_rule(RuleId::CLS_07),
+            );
+        }
+        arithmetic if is_binary_method(arithmetic) && method.signature.parameters.len() != 2 => {
+            diagnostics.push(
+                Diagnostic::new(
+                    DiagnosticCode::error(404),
+                    name.span,
+                    format!("`{}` takes `self` and the other operand", name.name),
+                )
+                .with_rule(RuleId::CLS_07),
+            );
+        }
         "__hash__"
             if method.signature.parameters.len() != 1
                 || !method.signature.returns.matches(&Type::Int) =>
@@ -992,6 +1044,28 @@ fn check_special_method(method: &Definition<'_>, name: &Identifier, diagnostics:
         _ => {}
     }
 }
+
+/// Returns true for the methods of the binary arithmetic and bitwise operators and their
+/// reflected forms, such as `__add__` and `__radd__` (CLS-07).
+fn is_binary_method(name: &str) -> bool {
+    let Some(bare) = name
+        .strip_prefix("__")
+        .and_then(|rest| rest.strip_suffix("__"))
+    else {
+        return false;
+    };
+    let bare = bare
+        .strip_prefix('r')
+        .filter(|rest| BINARY.contains(rest))
+        .unwrap_or(bare);
+    BINARY.contains(&bare)
+}
+
+/// The binary operators' method names without their underscores.
+const BINARY: [&str; 13] = [
+    "add", "sub", "mul", "matmul", "truediv", "floordiv", "mod", "pow", "lshift", "rshift", "and",
+    "or", "xor",
+];
 
 /// A comparison method takes `self` and one more value, of a type that accepts every instance
 /// of its class, so a comparison inside a container always calls it with one, and returns a
@@ -1073,16 +1147,36 @@ fn check_exit(method: &Definition<'_>, name: &Identifier, diagnostics: &mut Diag
 
 /// Reports a special method a class may not define yet.
 fn planned_method(name: &Identifier) -> Diagnostic {
+    let bare = name
+        .name
+        .strip_prefix("__")
+        .and_then(|rest| rest.strip_suffix("__"))
+        .unwrap_or_default();
+    // The container methods come with CLS-07 in 0.4, the in-place operators after them, and
+    // the other special methods, such as `__call__`, after 1.0.
+    let release = if CONTAINER_METHODS.contains(&bare) {
+        "TyPy 0.4"
+    } else if bare
+        .strip_prefix('i')
+        .is_some_and(|rest| BINARY.contains(&rest))
+    {
+        "TyPy 0.5"
+    } else {
+        "a release after TyPy 1.0"
+    };
     Diagnostic::new(
         DiagnosticCode::error(201),
         name.span,
         format!(
-            "the special method `{}` is planned for TyPy 0.4 (CLS-07)",
+            "the special method `{}` is planned for {release} (CLS-07)",
             name.name
         ),
     )
     .with_rule(RuleId::CLS_07)
 }
+
+/// The container methods of CLS-07, without their underscores.
+const CONTAINER_METHODS: [&str; 6] = ["len", "getitem", "setitem", "delitem", "contains", "bool"];
 
 /// Returns the attributes `__init__` assigns on its first parameter, in source order, at any
 /// depth of its blocks; an augmented assignment reads the attribute first, so it assigns none.

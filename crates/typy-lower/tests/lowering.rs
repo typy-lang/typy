@@ -638,3 +638,48 @@ fn a_comparison_method_that_may_raise_is_refused() {
             .any(|diagnostic| diagnostic.message().contains("V.__lt__"))
     );
 }
+
+#[test]
+fn an_operator_whose_reflected_method_is_overridden_decides_in_a_loop() {
+    let printed = text(concat!(
+        "class V:\n",
+        "    def __init__(self, n: int) -> None:\n",
+        "        self.n = n\n",
+        "    def __add__(self, other: 'V') -> 'V':\n",
+        "        return V(self.n + other.n)\n",
+        "    def __radd__(self, other: 'V') -> 'V':\n",
+        "        return V(other.n + self.n)\n",
+        "    def __eq__(self, other: 'V') -> bool:\n",
+        "        return self.n == other.n\n",
+        "class W(V):\n",
+        "    def __radd__(self, other: 'V') -> 'V':\n",
+        "        return V(0)\n",
+        "    def __eq__(self, other: 'V') -> bool:\n",
+        "        return True\n",
+        "total: V = V(0)\n",
+        "for each in [V(1), W(2)]:\n",
+        "    total = total + each\n",
+        "    print(total == each)\n",
+        "print(total.n)\n",
+    ));
+    assert!(printed.contains("same_method"), "{printed}");
+}
+
+#[test]
+fn a_right_operand_typed_as_a_base_is_compared_through_the_left_class_s_table() {
+    let printed = text(concat!(
+        "class B:\n",
+        "    def __eq__(self, other: 'B') -> bool:\n",
+        "        return True\n",
+        "class V(B):\n",
+        "    def __eq__(self, other: 'B') -> bool:\n",
+        "        return False\n",
+        "class W(V):\n",
+        "    def __eq__(self, other: 'B') -> bool:\n",
+        "        return True\n",
+        "left: V = V()\n",
+        "right: B = W()\n",
+        "print(left == right)\n",
+    ));
+    assert!(printed.contains("downcast"), "{printed}");
+}

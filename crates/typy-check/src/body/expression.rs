@@ -64,6 +64,11 @@ impl BodyChecker<'_> {
             } => {
                 let left = self.expression(left);
                 let right = self.expression(right);
+                // An instance's class may define the operator's method (CLS-07).
+                let (left, right) = match self.operator_binary(*operator, left, right, span) {
+                    super::operator_method::Comparison::Called(call) => return call,
+                    super::operator_method::Comparison::Builtin(left, right) => (left, right),
+                };
                 let (left, right) = Self::tuple_operands(*operator, left, right);
                 let ty = self.binary_type(*operator, &left, &right, span);
                 Self::typed(
@@ -80,6 +85,11 @@ impl BodyChecker<'_> {
                 operator, operand, ..
             } => {
                 let operand = self.expression(operand);
+                if let Some(call) = super::operator_method::unary_name(*operator)
+                    .and_then(|name| self.operator_unary(name, &operand, span))
+                {
+                    return call;
+                }
                 let ty = self.unary_type(*operator, &operand, span);
                 Self::typed(
                     TypedExprKind::Unary {

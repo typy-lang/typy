@@ -64,7 +64,7 @@ impl FunctionLowerer<'_> {
             TypedExprKind::Upcast(inner) => self.upcast(inner, ty, span),
             TypedExprKind::Downcast(inner) => self.downcast(inner, ty, span),
             TypedExprKind::IsInstance(test) => self.isinstance(test, span),
-            TypedExprKind::OperatorCall(call) => self.operator_call(call, span),
+            TypedExprKind::OperatorCall(call) => self.operator_call(call, ty, span),
             TypedExprKind::Unwrap(inner) => self.unwrap(inner, ty, span),
             TypedExprKind::Dict { keys, values } => {
                 self.dict_display(keys, values, &expression.ty, span)

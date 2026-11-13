@@ -44,6 +44,11 @@ All notable changes to TyPy are recorded here. The format follows
   dicts, `in`, `sorted`, `min` and `max` call them through the class's
   type object. A class with `__eq__` and no `__hash__` has no hash
   (CLS-07, ADR-0026).
+- Arithmetic methods: the binary operators call `__add__`, `__sub__`,
+  `__mul__` and the others, with their reflected forms such as
+  `__radd__`; `-x`, `+x`, `~x` and `abs(x)` call `__neg__`, `__pos__`,
+  `__invert__` and `__abs__`; and `x += y` rebinds `x` to `x + y`. The
+  in-place methods such as `__iadd__` are planned for 0.5 (CLS-07).
 - `@classmethod`: `Class.name(...)` passes the class, so `cls(...)` in
   an alternative constructor makes an instance of the class the call
   names, as in CPython; TyPy compiles a copy for each class of the
