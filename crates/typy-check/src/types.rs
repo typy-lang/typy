@@ -411,6 +411,11 @@ impl Type {
                 left == right && left.can_order(right)
             }
             (Self::Set(left), Self::Set(right)) => left == right,
+            // Instances order through `__lt__`, or a reflected `__gt__` (CLS-07).
+            (Self::Instance(left), Self::Instance(right)) => {
+                (left.derives_from(right) || right.derives_from(left))
+                    && (left.operators.orders() || right.operators.orders())
+            }
             (Self::Tuple(left), Self::Tuple(right)) => {
                 left.len() == right.len()
                     && left.iter().zip(right).all(|(left, right)| {
@@ -487,6 +492,8 @@ impl Type {
             | Self::Iterable(_) => false,
             Self::Tuple(items) => items.iter().all(Self::is_hashable),
             Self::TupleOf(item) | Self::Optional(item) => item.is_hashable(),
+            // A class that defines `__eq__` and not `__hash__` has no hash (CLS-07).
+            Self::Instance(class) => class.operators.hashable(),
             _ => true,
         }
     }

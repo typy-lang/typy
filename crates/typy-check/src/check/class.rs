@@ -9,7 +9,7 @@ use typy_source::syntax::{Expr, Identifier, Stmt};
 use super::annotation::{AnnotationScope, annotation_type};
 use super::definition::{Definition, FunctionParts, MethodKind, Owner, defined_twice, definition};
 use super::overriding::Override;
-use crate::class_type::InstanceClass;
+use crate::class_type::{InstanceClass, Operators};
 use crate::exception::{BuiltinException, ExceptionClass};
 use crate::typed::{ClassId, FunctionId, FunctionSignature};
 use crate::types::{Type, TypeObjectOf};
@@ -143,7 +143,12 @@ pub(super) fn class_types(
         let ty = class
             .base
             .and_then(|base| derived_type(class, base, scope, &found, diagnostics))
-            .unwrap_or_else(|| Type::instance(InstanceClass::root(class.id, name)));
+            .unwrap_or_else(|| {
+                Type::instance(InstanceClass {
+                    operators: Operators::of(method_names(class.body), Operators::default()),
+                    ..InstanceClass::root(class.id, name)
+                })
+            });
         found.insert(class.id, ty);
     }
     found
@@ -233,10 +238,19 @@ fn derived_type(
                 id: class.id,
                 name,
                 ancestors,
+                operators: Operators::of(method_names(class.body), parent.operators),
             }))
         }
         _ => None,
     }
+}
+
+/// Returns the names of the methods a class body defines.
+fn method_names(body: &[Stmt]) -> impl Iterator<Item = &str> {
+    body.iter().filter_map(|statement| match statement {
+        Stmt::FunctionDef { name, .. } => Some(name.name.as_str()),
+        _ => None,
+    })
 }
 
 /// Returns the error for a base other than `object`, an exception class or a class of the
@@ -255,7 +269,7 @@ fn unsupported_base(span: Span) -> Diagnostic {
 /// `__iter__` and `__next__` (CST-08) and `__enter__` and `__exit__` (CST-05). Any other name that starts and ends with two
 /// underscores changes how Python treats the instances, and waits for the operator methods of
 /// 0.4 (CLS-07).
-const SPECIAL_METHODS: [&str; 7] = [
+const SPECIAL_METHODS: [&str; 14] = [
     "__init__",
     "__str__",
     "__repr__",
@@ -263,6 +277,13 @@ const SPECIAL_METHODS: [&str; 7] = [
     "__next__",
     "__enter__",
     "__exit__",
+    "__eq__",
+    "__ne__",
+    "__lt__",
+    "__le__",
+    "__gt__",
+    "__ge__",
+    "__hash__",
 ];
 
 /// The classes a module's class bodies may name: each by its name, the type of each one's
@@ -942,6 +963,22 @@ fn check_special_method(method: &Definition<'_>, name: &Identifier, diagnostics:
     match name.name.as_str() {
         "__str__" | "__repr__" => check_text_method(method, name, diagnostics),
         "__exit__" => check_exit(method, name, diagnostics),
+        "__eq__" | "__ne__" | "__lt__" | "__le__" | "__gt__" | "__ge__" => {
+            check_comparison(method, name, diagnostics);
+        }
+        "__hash__"
+            if method.signature.parameters.len() != 1
+                || !method.signature.returns.matches(&Type::Int) =>
+        {
+            diagnostics.push(
+                Diagnostic::new(
+                    DiagnosticCode::error(404),
+                    name.span,
+                    "`__hash__` takes only `self` and returns an int",
+                )
+                .with_rule(RuleId::CLS_07),
+            );
+        }
         "__iter__" | "__next__" | "__enter__" if method.signature.parameters.len() != 1 => {
             diagnostics.push(
                 Diagnostic::new(
@@ -953,6 +990,41 @@ fn check_special_method(method: &Definition<'_>, name: &Identifier, diagnostics:
             );
         }
         _ => {}
+    }
+}
+
+/// A comparison method takes `self` and one more value, of a type that accepts every instance
+/// of its class, so a comparison inside a container always calls it with one, and returns a
+/// `bool` (CLS-07, ADR-0026).
+fn check_comparison(method: &Definition<'_>, name: &Identifier, diagnostics: &mut Diagnostics) {
+    let signature = &method.signature;
+    let fits = signature.parameters.len() == 2
+        && signature.parameters[0]
+            .ty
+            .is_assignable_to(&signature.parameters[1].ty)
+        && signature.returns.matches(&Type::Bool);
+    if !fits {
+        let class = signature
+            .parameters
+            .first()
+            .map(|parameter| parameter.ty.clone());
+        diagnostics.push(
+            Diagnostic::new(
+                DiagnosticCode::error(404),
+                name.span,
+                format!(
+                    "`{}` takes `self` and a value its class's instances are, and returns a bool",
+                    name.name
+                ),
+            )
+            .with_rule(RuleId::CLS_07)
+            .with_help(class.map_or_else(String::new, |class| {
+                format!(
+                    "write `def {}(self, other: \"{class}\") -> bool:`",
+                    name.name
+                )
+            })),
+        );
     }
 }
 

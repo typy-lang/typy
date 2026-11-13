@@ -27,6 +27,7 @@ mod method_call;
 mod name;
 mod open_call;
 mod operator;
+mod operator_method;
 mod percent;
 mod program;
 mod round_call;

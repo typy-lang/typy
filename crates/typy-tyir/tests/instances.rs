@@ -58,6 +58,9 @@ fn on_point(body: impl FnOnce(ValueId, ValueId) -> Body) -> TyirModule {
             methods: Vec::new(),
             repr: None,
             str: None,
+            equal: None,
+            order: [None; 4],
+            hash: None,
             base: None,
             exception_base: None,
         }],
@@ -220,6 +223,9 @@ fn on_exception(parameter: TyirType, operation: Operation) -> TyirModule {
             methods: Vec::new(),
             repr: None,
             str: None,
+            equal: None,
+            order: [None; 4],
+            hash: None,
             base: None,
             exception_base: Some(typy_tyir::TypeObjectRef::Exception("ValueError")),
         }],
@@ -271,6 +277,9 @@ fn on_circle(make: impl FnOnce(ValueId, ValueId) -> (Operation, TyirType)) -> Ty
         methods: Vec::new(),
         repr: None,
         str: None,
+        equal: None,
+        order: [None; 4],
+        hash: None,
         base,
         exception_base: None,
     };
@@ -405,6 +414,9 @@ fn dispatching(slot: u32, circle: Vec<FunctionId>, circle_area: TyirType) -> Tyi
         methods,
         repr: None,
         str: None,
+        equal: None,
+        order: [None; 4],
+        hash: None,
         base,
         exception_base: None,
     };
@@ -478,4 +490,42 @@ fn a_method_call_goes_through_a_table_that_extends_its_base_s() {
         let found = message(&module);
         assert!(found.contains(expected), "{expected} in {found}");
     }
+}
+
+#[test]
+fn same_method_compares_two_instances_of_a_class_with_a_table() {
+    let same = |slot: u32, use_number: bool| {
+        let mut module = dispatching(0, vec![FunctionId(2)], TyirType::Int);
+        let entry = &mut module.functions[0];
+        let mut builder = FunctionBuilder::new(FunctionId(0), "entry", "entry", TyirType::Unit);
+        let circle = builder.push_value(
+            Operation::NewInstance { class: 1 },
+            TyirType::Object(TypeId::class(1)),
+            span(),
+        );
+        let number = builder.push_value(
+            Operation::Constant(Constant::Int("1".to_owned())),
+            TyirType::Int,
+            span(),
+        );
+        builder.push_value(
+            Operation::SameMethod {
+                class: 0,
+                slot,
+                left: circle,
+                right: if use_number { number } else { circle },
+            },
+            TyirType::Bool,
+            span(),
+        );
+        let unit = builder.push_value(Operation::Constant(Constant::Unit), TyirType::Unit, span());
+        builder.terminate(Terminator::Return(unit));
+        *entry = builder.finish();
+        module
+    };
+    let valid = same(0, false);
+    assert_eq!(verify(&valid), Ok(()));
+    assert!(print(&valid).contains("same_method class#0.method#0, v0, v0"));
+    assert!(message(&same(4, false)).contains("class#0 has no method#4 in its table"));
+    assert!(message(&same(0, true)).contains("v1 of type int is not an instance of class#0"));
 }

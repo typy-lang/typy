@@ -56,8 +56,33 @@ impl BodyChecker<'_> {
         if let Some(class) = BuiltinException::named(name) {
             return self.new_exception(class, arguments, keywords, span);
         }
+        // A module variable a function reads holds a value, which TyPy calls only when it is
+        // a class's type object; CPython raises `TypeError` for an `int` or a `str`.
         if self.in_function() && self.program.module_variables.contains(name) {
-            return self.name(name, name_span);
+            let read = self.name(name, name_span);
+            if let Type::TypeObject(Some(of)) = &read.ty
+                && let Some(class) = Self::program_class(of)
+            {
+                return self.new_instance(class, arguments, keywords, span);
+            }
+            for argument in arguments {
+                self.expression(argument);
+            }
+            if read.ty == Type::Error {
+                return TypedExpr { span, ..read };
+            }
+            return self.error(
+                Diagnostic::new(
+                    DiagnosticCode::error(401),
+                    name_span,
+                    format!(
+                        "`{name}` is {} and cannot be called",
+                        read.ty.with_article()
+                    ),
+                )
+                .with_rule(RuleId::EXP_02),
+                span,
+            );
         }
         let result = self.unknown_name(name, name_span);
         for argument in arguments {

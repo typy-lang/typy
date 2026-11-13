@@ -63,6 +63,13 @@ pub struct TyirClass {
     pub repr: Option<FunctionId>,
     /// `__str__`, which `str` of an exception's argument calls, when the class has one.
     pub str: Option<FunctionId>,
+    /// `__eq__`, which the type object's `equal` slot calls, with the class whose instances
+    /// its parameter takes, by index (ADR-0026).
+    pub equal: Option<(FunctionId, u32)>,
+    /// `__lt__`, `__le__`, `__gt__` and `__ge__`, which the type object's `order` slot calls.
+    pub order: [Option<FunctionId>; 4],
+    /// `__hash__`, which the type object's `hash` slot calls.
+    pub hash: Option<FunctionId>,
     /// The method table: the methods a subclass may override, its own or a base's, each at
     /// the position it has in the base's table, then those the class adds (ADR-0021).
     pub methods: Vec<FunctionId>,

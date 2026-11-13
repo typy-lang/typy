@@ -2434,3 +2434,91 @@ fn class_methods_are_called_through_their_class() {
         assert_eq!(&rejected(source), expected, "\n{source}");
     }
 }
+
+#[test]
+fn comparison_methods_are_checked() {
+    accepted(concat!(
+        "class V:\n",
+        "    def __init__(self, n: int) -> None:\n",
+        "        self.n = n\n",
+        "    def __eq__(self, other: 'V') -> bool:\n",
+        "        return self.n == other.n\n",
+        "    def __lt__(self, other: 'V') -> bool:\n",
+        "        return self.n < other.n\n",
+        "    def __hash__(self) -> int:\n",
+        "        return self.n\n",
+        "class W(V):\n",
+        "    def __gt__(self, other: 'V') -> bool:\n",
+        "        return False\n",
+        "a = V(1)\n",
+        "b = W(2)\n",
+        "print(a == b, a != b, a < b, a > b, b > a, {a}, sorted([a, b]))\n",
+    ));
+    accepted(
+        "class A:\n    pass\nMaker = A\ndef make() -> A:\n    return Maker()\nprint(make())\n",
+    );
+    accepted("class S:\n    def f(self: 'S') -> None:\n        pass\nS().f()\n");
+    accepted(concat!(
+        "class V:\n",
+        "    def __eq__(self, other: 'V | None') -> bool:\n",
+        "        return other is not None\n",
+        "maybe: V | None = None\n",
+        "print(maybe == V(), V() == maybe)\n",
+    ));
+    let cases: &[(&str, &[&str])] = &[
+        ("x = missing\ndef f() -> None:\n    x()\n", &["E0205"]),
+        ("x = 1\ndef f() -> None:\n    x()\n", &["E0401"]),
+        (
+            "class V:\n    def __eq__(self, other: 'V') -> bool:\n        return True\na = V()\nprint(a == a == a)\n",
+            &["E0201"],
+        ),
+        (
+            "class V:\n    def __eq__(self, a: 'V', b: 'V') -> bool:\n        return True\n",
+            &["E0404"],
+        ),
+        (
+            "class V:\n    @property\n    def x(self) -> int:\n        return 1\n    @x.setter\n    def x(self, a: int, b: int) -> None:\n        pass\n",
+            &["E0404"],
+        ),
+        (
+            "class V:\n    @property\n    def x(self) -> int:\n        return 1\n    @x.setter\n    def x(self, a: int) -> int:\n        return a\n",
+            &["E0404"],
+        ),
+        ("class V:\n    pass\nprint(V() < V())\n", &["E0407"]),
+        (
+            "class V:\n    def __hash__(self, n: int) -> int:\n        return n\n",
+            &["E0404"],
+        ),
+        (
+            "class V:\n    def __eq__(self, other: int) -> bool:\n        return True\n",
+            &["E0404"],
+        ),
+        (
+            "class V:\n    def __lt__(self, other: 'V') -> int:\n        return 1\n",
+            &["E0404"],
+        ),
+        (
+            "class V:\n    def __hash__(self) -> str:\n        return ''\n",
+            &["E0404"],
+        ),
+        (
+            "class V:\n    def __eq__(self, other: 'V') -> bool:\n        return True\nprint({V()})\n",
+            &["E0413"],
+        ),
+        (
+            "class V:\n    def __lt__(self, other: 'V') -> bool:\n        return True\na = V()\nprint(a < a < a)\n",
+            &["E0201"],
+        ),
+        (
+            "class V:\n    def __eq__(self, other: 'V') -> bool:\n        return True\nprint(V() == 1)\n",
+            &["E0407"],
+        ),
+        (
+            "class B:\n    pass\nclass V(B):\n    pass\nclass W(V):\n    def __gt__(self, other: B) -> bool:\n        return True\nclass X(B):\n    def __lt__(self, other: B) -> bool:\n        return True\nv: V = W()\nprint(X() < v)\n",
+            &["E0201"],
+        ),
+    ];
+    for (source, expected) in cases {
+        assert_eq!(&rejected(source), expected, "\n{source}");
+    }
+}

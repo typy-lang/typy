@@ -121,6 +121,7 @@ pub(super) fn operands(operation: &Operation) -> Vec<ValueId> {
         | Operation::Field { object: value, .. } => vec![*value],
         Operation::SetField { object, value, .. } => vec![*object, *value],
         Operation::Identical { left, right }
+        | Operation::SameMethod { left, right, .. }
         | Operation::IntBinary { left, right, .. }
         | Operation::FloatBinary { left, right, .. }
         | Operation::BoolBinary { left, right, .. }

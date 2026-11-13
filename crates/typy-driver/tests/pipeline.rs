@@ -157,3 +157,23 @@ fn an_overridden_method_is_called_through_the_class_s_table() {
     );
     assert!(ir.contains("@typy.class1 = "), "{ir}");
 }
+
+#[test]
+fn a_class_with_comparison_methods_fills_its_type_object_slots() {
+    let (_guard, main) = program(concat!(
+        "class V:\n",
+        "    def __init__(self, n: int) -> None:\n",
+        "        self.n = n\n",
+        "    def __eq__(self, other: 'V') -> bool:\n",
+        "        return self.n == other.n\n",
+        "    def __gt__(self, other: 'V') -> bool:\n",
+        "        return self.n > other.n\n",
+        "    def __hash__(self) -> int:\n",
+        "        return self.n\n",
+        "print(sorted([V(2), V(1)])[0].n, V(1) in {V(1)})\n",
+    ));
+    let ir = text(emit(&main, EmitStage::LlvmIr));
+    for slot in ["typy.class0.equal", "typy.class0.order", "typy.class0.hash"] {
+        assert!(ir.contains(slot), "{slot} in\n{ir}");
+    }
+}

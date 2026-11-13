@@ -1021,7 +1021,23 @@ inherited copy that the original reported. `Class.name(...)` calls the class's
 copy with the class's type object first; calling a variable of `type[C]`, such
 as `cls`, makes an instance of `C`. A class method called through an instance
 or a class of another module, and a class variable assigned through a subclass
-that inherits it, are E0201, planned for 0.5. A class body's values follow ADR-0024:
+that inherits it, are E0201, planned for 0.5. Comparison methods follow
+ADR-0026: `class_types` records in `InstanceClass::operators` which of `__eq__`,
+the ordering methods and `__hash__` a class defines or inherits, so
+`Type::can_order` and `Type::is_hashable` answer for instances, and a class
+with `__eq__` and no `__hash__` has no hash. A comparison method takes `self`
+and a value of a type that accepts its class, E0404 otherwise.
+`body::operator_method` makes a single comparison of instances whose class
+defines the method `TypedExprKind::OperatorCall`, with the left class's method,
+the right class's reflected one, and the left class's reflected one; `!=`
+without `__ne__` negates `__eq__`. Lowering calls the one method, or, with
+both, the reflected one when the right object's class derives from the left
+object's, is another class and has another method at the reflected method's
+table slot, which `Operation::SameMethod` compares. `TyirClass` holds
+`equal`, `order` and `hash`, and codegen fills the type object's slots with
+functions that call them; the `equal` slot compares by identity an object its
+`__eq__` does not take. A slot method that may raise is E0201 when lowering
+ends, planned for 0.5. A class body's values follow ADR-0024:
 `check::class_values` turns `name = value` and `name: ClassVar[T] = value` into
 an assignment to the module variable `Class.name`, and `name: T = value` into
 one that holds the default of the attribute `name`. These module variables are

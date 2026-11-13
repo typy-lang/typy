@@ -146,6 +146,7 @@ fn print_block(
     let _ = writeln!(text, "  {terminator}");
 }
 
+#[allow(clippy::too_many_lines, reason = "one arm per operation")]
 fn operation(module: &TyirModule, operation: &Operation) -> String {
     match operation {
         Operation::Constant(constant) => format!("const {constant}"),
@@ -197,6 +198,15 @@ fn operation(module: &TyirModule, operation: &Operation) -> String {
             "call {}({})",
             callee(module, Callee::Function(*function)),
             names(arguments)
+        ),
+        Operation::SameMethod {
+            class,
+            slot,
+            left,
+            right,
+        } => format!(
+            "same_method class#{class}.method#{slot}, v{}, v{}",
+            left.0, right.0
         ),
         Operation::CallMethod {
             class,

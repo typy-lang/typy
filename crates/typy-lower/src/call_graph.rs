@@ -243,6 +243,12 @@ fn expression(expression_value: &TypedExpr, callees: &mut BTreeSet<FunctionId>) 
             expression(right, callees);
         }
         TypedExprKind::IsInstance(test) => expression(&test.value, callees),
+        TypedExprKind::OperatorCall(call) => {
+            callees.extend(call.forward);
+            callees.extend(call.reflected);
+            expression(&call.left, callees);
+            expression(&call.right, callees);
+        }
         TypedExprKind::Wrap(operand)
         | TypedExprKind::Upcast(operand)
         | TypedExprKind::Downcast(operand)

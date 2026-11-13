@@ -12,6 +12,7 @@ class body or assigned in `__init__`, and has one type.
 | A class derived from one class of the program, with its attributes and methods, overriding them | CLS-04 |
 | Class variables and attribute defaults given a value in the class body | CLS-11 |
 | `@staticmethod`, `@classmethod`, and `@property` with its setter | CLS-06 |
+| `__eq__`, `__ne__`, `__lt__`, `__le__`, `__gt__`, `__ge__` and `__hash__` | CLS-07 |
 | `__str__` and `__repr__`, used by `print`, `str`, `repr`, f-strings and containers | CLS-08 |
 | A type object for every type, with `object` as the root | CLS-10 |
 | `type(x)`, class and built-in type names as values, `__name__` | CLS-12 |
@@ -21,9 +22,10 @@ every attribute holds a value, so no attribute is ever read empty. A
 signature that names its own class, or a class defined below it, quotes
 the name, such as `"Node | None"`.
 
-Instances are equal only to themselves and hashed by identity; operator
-methods such as `__eq__` come in 0.4 (CLS-07), with `@dataclass`
-(CLS-05).
+Instances are equal only to themselves and hashed by identity unless
+their class defines comparison methods, as below; arithmetic and
+container methods such as `__add__` and `__len__` come later in 0.4
+(CLS-07), with `@dataclass` (CLS-05).
 A class may derive from an exception class, as
 [Exceptions](exceptions.md) describes (CLS-03).
 
@@ -349,6 +351,46 @@ instance, and through a subclass defined in another module than the
 class that defines the method, are planned for 0.5, and so is
 assigning a class variable through a subclass that inherits it, which
 in CPython gives the subclass a variable of its own.
+
+## Comparison methods
+
+`__eq__`, `__ne__`, `__lt__`, `__le__`, `__gt__` and `__ge__` give a
+class's instances `==`, `!=`, `<`, `<=`, `>` and `>=`, and `__hash__`
+their hash (CLS-07). Lists, sets, dicts, `in`, `sorted`, `min` and
+`max` call them too, as CPython does:
+
+<!-- typy-expect: accepted -->
+```python
+class Version:
+    def __init__(self, major: int, minor: int) -> None:
+        self.major = major
+        self.minor = minor
+
+    def __eq__(self, other: "Version") -> bool:
+        return (self.major, self.minor) == (other.major, other.minor)
+
+    def __lt__(self, other: "Version") -> bool:
+        return (self.major, self.minor) < (other.major, other.minor)
+
+    def __hash__(self) -> int:
+        return self.major * 1000 + self.minor
+
+
+versions = [Version(2, 0), Version(1, 5)]
+print(Version(1, 5) in versions, sorted(versions)[0].major)
+print(len({Version(1, 5), Version(1, 5)}), Version(2, 0) > Version(1, 5))
+```
+
+A comparison method takes `self` and one value its class's instances
+are, and returns a `bool`; `__hash__` returns an `int`. As in CPython,
+`a > b` falls back to `b.__lt__(a)`, `a != b` to `not a == b`, the
+right operand's method comes first when its class derives from the
+left's and defines it again, and a class that defines `__eq__` without
+`__hash__` has no hash, so a set or a dict key of it is E0413. A
+container compares an instance with an object its `__eq__` does not
+take as unequal. A comparison or hash method that may raise, a chain
+such as `a < b < c` of such instances, and a method returning
+`NotImplemented` are planned for 0.5.
 
 ## Attributes are declared
 

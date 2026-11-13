@@ -200,6 +200,8 @@ pub enum TypedExprKind {
     Downcast(Box<TypedExpr>),
     /// `isinstance(value, classes)` (CLS-09).
     IsInstance(Box<IsInstanceTest>),
+    /// A comparison of instances that calls a comparison method (CLS-07, ADR-0026).
+    OperatorCall(Box<OperatorCall>),
     /// A dict display: each key and its value, in order (DAT-09).
     Dict {
         keys: Vec<TypedExpr>,
@@ -329,6 +331,27 @@ pub struct InitCall {
     pub positional: usize,
 }
 
+/// `left op right` that calls a comparison method: `forward` of the left operand's class, or
+/// `reflected` of the right operand's. With both, the reflected method runs first when the
+/// right operand's class derives from the left's and defines it otherwise, as in CPython;
+/// with one, that one runs (CLS-07, ADR-0026).
+#[derive(Clone, Debug, PartialEq)]
+pub struct OperatorCall {
+    /// The left operand, evaluated first.
+    pub left: TypedExpr,
+    /// The right operand.
+    pub right: TypedExpr,
+    /// The method of the left operand's class, which takes the right operand.
+    pub forward: Option<FunctionId>,
+    /// The reflected method of the right operand's class, which takes the left operand.
+    pub reflected: Option<FunctionId>,
+    /// The reflected method of the left operand's class, whose entry the runtime compares
+    /// with the right operand's to decide which runs.
+    pub left_reflected: Option<FunctionId>,
+    /// Whether the result is negated: `!=` without `__ne__` is `not` of `__eq__`.
+    pub negated: bool,
+}
+
 /// `isinstance(value, classes)`, with what the checker could decide when the program is
 /// compiled (CLS-09).
 #[derive(Clone, Debug, PartialEq)]
@@ -400,6 +423,7 @@ impl TypedExpr {
                 .collect(),
             TypedExprKind::DictItem { dict, key } => vec![dict, key],
             TypedExprKind::IsInstance(test) => vec![&test.value],
+            TypedExprKind::OperatorCall(call) => vec![&call.left, &call.right],
             TypedExprKind::Wrap(inner)
             | TypedExprKind::Upcast(inner)
             | TypedExprKind::Downcast(inner)

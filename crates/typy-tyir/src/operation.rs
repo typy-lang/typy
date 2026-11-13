@@ -201,6 +201,19 @@ pub enum Operation {
         /// The type of the derived class's instances.
         ty: crate::types::TyirType,
     },
+    /// Whether two instances of class `class`, or of classes derived from it, have one method
+    /// at `slot` of their classes' tables, as CPython asks before it calls a reflected
+    /// operator method first (ADR-0026).
+    SameMethod {
+        /// The class whose table the slot is in.
+        class: u32,
+        /// The position in the table.
+        slot: u32,
+        /// One instance.
+        left: ValueId,
+        /// The other.
+        right: ValueId,
+    },
     /// Calls the method at `slot` of the table of the class of the first argument, which
     /// cannot raise; see `Callee::Method`.
     CallMethod {

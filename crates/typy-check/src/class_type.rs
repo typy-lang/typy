@@ -16,6 +16,70 @@ pub struct InstanceClass {
     pub name: String,
     /// Its bases that are classes of the program, nearest first, each with its name.
     pub ancestors: Vec<(ClassId, String)>,
+    /// The operator methods the class defines or inherits (CLS-07, ADR-0026).
+    pub operators: Operators,
+}
+
+/// The comparison and hash methods a class defines or inherits, which decide whether its
+/// instances can be ordered and hashed (CLS-07, ADR-0026).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+pub struct Operators(u8);
+
+impl Operators {
+    const EQ: u8 = 1;
+    const LT: u8 = 2;
+    const GT: u8 = 4;
+    const LE: u8 = 8;
+    const GE: u8 = 16;
+    const HASH: u8 = 32;
+    const UNHASHABLE: u8 = 64;
+
+    /// Returns what a class offers whose body defines the methods `names` and whose base
+    /// offers `base`. A class that defines `__eq__` and not `__hash__` has no hash, as in
+    /// CPython.
+    #[must_use]
+    pub fn of<'name>(names: impl IntoIterator<Item = &'name str>, base: Self) -> Self {
+        let mut own = 0;
+        for name in names {
+            own |= match name {
+                "__eq__" => Self::EQ,
+                "__lt__" => Self::LT,
+                "__gt__" => Self::GT,
+                "__le__" => Self::LE,
+                "__ge__" => Self::GE,
+                "__hash__" => Self::HASH,
+                _ => 0,
+            };
+        }
+        let inherited = base.0 & !(Self::UNHASHABLE | Self::HASH);
+        let hash = if own & Self::HASH != 0 {
+            Self::HASH
+        } else if own & Self::EQ != 0 {
+            Self::UNHASHABLE
+        } else {
+            base.0 & (Self::UNHASHABLE | Self::HASH)
+        };
+        Self(own | inherited | hash)
+    }
+
+    /// Returns true when instances are ordered by `<`, which CPython also reaches through a
+    /// reflected `__gt__`.
+    #[must_use]
+    pub fn orders(self) -> bool {
+        self.0 & (Self::LT | Self::GT) != 0
+    }
+
+    /// Returns true when instances have a hash: their identity's, or `__hash__`'s.
+    #[must_use]
+    pub fn hashable(self) -> bool {
+        self.0 & Self::UNHASHABLE == 0
+    }
+
+    /// Returns true when the class defines or inherits `__eq__`.
+    #[must_use]
+    pub fn compares(self) -> bool {
+        self.0 & Self::EQ != 0
+    }
 }
 
 impl InstanceClass {
@@ -26,6 +90,7 @@ impl InstanceClass {
             id,
             name: name.into(),
             ancestors: Vec::new(),
+            operators: Operators::default(),
         }
     }
 
@@ -44,6 +109,7 @@ impl InstanceClass {
             id: *id,
             name: name.clone(),
             ancestors: rest.to_vec(),
+            operators: Operators::default(),
         })
     }
 
@@ -78,6 +144,7 @@ mod tests {
             id: ClassId(1),
             name: "Circle".to_owned(),
             ancestors: vec![(ClassId(0), "Shape".to_owned())],
+            operators: super::Operators::default(),
         };
         let disc = InstanceClass {
             id: ClassId(2),
@@ -86,6 +153,7 @@ mod tests {
                 (ClassId(1), "Circle".to_owned()),
                 (ClassId(0), "Shape".to_owned()),
             ],
+            operators: super::Operators::default(),
         };
         (shape, circle, disc)
     }
@@ -113,6 +181,7 @@ mod tests {
             id: ClassId(3),
             name: "Square".to_owned(),
             ancestors: vec![(ClassId(0), "Shape".to_owned())],
+            operators: super::Operators::default(),
         };
         assert_eq!(disc.common_base(&circle), Some(circle.clone()));
         assert_eq!(disc.common_base(&square), Some(shape));
@@ -120,5 +189,28 @@ mod tests {
             square.common_base(&InstanceClass::root(ClassId(4), "Other")),
             None
         );
+    }
+
+    #[test]
+    fn a_class_with_eq_and_no_hash_has_no_hash_and_lt_orders() {
+        use super::Operators;
+        let root = Operators::default();
+        let offers = |operators: Operators| {
+            (
+                operators.hashable(),
+                operators.orders(),
+                operators.compares(),
+            )
+        };
+        assert_eq!(offers(root), (true, false, false));
+        let equal = Operators::of(["__eq__"], root);
+        assert_eq!(offers(equal), (false, false, true));
+        let hashed = Operators::of(["__eq__", "__hash__"], root);
+        assert!(hashed.hashable());
+        let child = Operators::of(["__lt__"], hashed);
+        assert_eq!(offers(child), (true, true, true));
+        let redefined = Operators::of(["__eq__"], hashed);
+        assert!(!redefined.hashable());
+        assert!(Operators::of(["__gt__"], equal).orders());
     }
 }

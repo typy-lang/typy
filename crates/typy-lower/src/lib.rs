@@ -30,6 +30,7 @@ mod mangle;
 mod math;
 mod methods;
 mod module_variable;
+mod operator_call;
 mod optional;
 mod ownership;
 mod percent;

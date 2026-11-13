@@ -231,6 +231,34 @@ impl Checker<'_> {
                 function,
                 arguments,
             } => self.call(Callee::Function(*function), arguments)?,
+            Operation::SameMethod {
+                class,
+                slot,
+                left,
+                right,
+            } => {
+                if self
+                    .module
+                    .classes
+                    .get(*class as usize)
+                    .is_none_or(|owner| owner.methods.len() <= *slot as usize)
+                {
+                    return Err(
+                        self.error(format!("class#{class} has no method#{slot} in its table"))
+                    );
+                }
+                let of_class = TyirType::Object(TypeId::class(*class));
+                for value in [left, right] {
+                    let ty = self.ty(*value)?;
+                    if !self.derives_from(ty, of_class) {
+                        return Err(self.error(format!(
+                            "v{} of type {ty} is not an instance of class#{class}",
+                            value.0
+                        )));
+                    }
+                }
+                Some(TyirType::Bool)
+            }
             Operation::CallMethod {
                 class,
                 slot,

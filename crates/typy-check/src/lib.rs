@@ -19,7 +19,7 @@ mod unprovided;
 
 pub use builtin::Builtin;
 pub use check::TypeChecker;
-pub use class_type::InstanceClass;
+pub use class_type::{InstanceClass, Operators};
 pub use exception::{BuiltinException, ExceptionClass, ProgramException};
 pub use math::{MathFunction, MathShape};
 pub use method::Method;
@@ -28,9 +28,9 @@ pub use sys::SysValue;
 pub use typed::{
     Argument, AssignTarget, Attribute, ClassId, Conversion, FStringPart, FormattedValue,
     FunctionId, FunctionSignature, Generator, ImportBinding, InitCall, IsInstanceTest, LoopSource,
-    PercentConversion, PercentField, PercentNumber, PercentPart, PercentValue, PrintCall,
-    RaiseCause, SignatureParameter, Symbol, SymbolId, SymbolKind, TypedClass, TypedConstant,
-    TypedExpr, TypedExprKind, TypedFunction, TypedHandler, TypedModule, TypedProgram, TypedStmt,
-    WithProtocol, dump,
+    OperatorCall, PercentConversion, PercentField, PercentNumber, PercentPart, PercentValue,
+    PrintCall, RaiseCause, SignatureParameter, Symbol, SymbolId, SymbolKind, TypedClass,
+    TypedConstant, TypedExpr, TypedExprKind, TypedFunction, TypedHandler, TypedModule,
+    TypedProgram, TypedStmt, WithProtocol, dump,
 };
 pub use types::{Type, TypeObjectOf, View};

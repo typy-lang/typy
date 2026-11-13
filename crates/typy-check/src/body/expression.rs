@@ -146,8 +146,34 @@ impl BodyChecker<'_> {
                 ..
             } => {
                 let mut operands = self.comparison_operands(left, comparators, operators);
-                let comparators = operands.split_off(1);
-                let left = operands.remove(0);
+                let mut comparators = operands.split_off(1);
+                let mut left = operands.remove(0);
+                // A comparison of instances may call a comparison method (CLS-07).
+                if let ([operator], [right]) = (operators.as_slice(), comparators.as_slice()) {
+                    let right = right.clone();
+                    match self.operator_comparison(*operator, left, right, span) {
+                        super::operator_method::Comparison::Called(call) => return call,
+                        super::operator_method::Comparison::Builtin(back, other) => {
+                            left = back;
+                            comparators = vec![other];
+                        }
+                    }
+                } else if std::iter::once(&left).chain(&comparators).any(|operand| {
+                    matches!(&operand.ty, Type::Instance(class)
+                        if class.operators.compares() || class.operators.orders())
+                }) {
+                    return self.error(
+                        Diagnostic::new(
+                            DiagnosticCode::error(201),
+                            span,
+                            "a chain of comparisons of instances whose classes define comparison \
+                             methods is planned for TyPy 0.5 (CLS-07)",
+                        )
+                        .with_rule(RuleId::CLS_07)
+                        .with_help("write each comparison and join them with `and`"),
+                        span,
+                    );
+                }
                 let mut previous = &left;
                 for (operator, right) in operators.iter().zip(&comparators) {
                     self.compare_types(*operator, previous, right);

@@ -31,3 +31,4 @@ supersedes it.
 | [ADR-0023](0023-compile-generics-and-protocol-parameters-to-one-copy-per-concrete-type.md) | Compile generics and protocol parameters to one copy per concrete type | Accepted | 2026-11-13 |
 | [ADR-0024](0024-keep-class-variables-in-globals-and-defaults-in-each-instance.md) | Keep class variables in globals and defaults in each instance | Accepted | 2026-11-13 |
 | [ADR-0025](0025-compile-a-class-method-once-for-each-class-that-has-it.md) | Compile a class method once for each class that has it | Accepted | 2026-11-13 |
+| [ADR-0026](0026-call-operator-methods-directly-and-from-the-type-object-slots.md) | Call operator methods directly and from the type object slots | Accepted | 2026-11-13 |

@@ -38,6 +38,12 @@ All notable changes to TyPy are recorded here. The format follows
   class body, read through the class or an instance and assigned
   through the class; and attribute defaults, `name: T = value`, which
   each new instance starts with (CLS-11, ADR-0024).
+- Comparison methods `__eq__`, `__ne__`, `__lt__`, `__le__`, `__gt__`
+  and `__ge__`, and `__hash__`: operators call them, with CPython's
+  reflected methods and the subclass's method first, and lists, sets,
+  dicts, `in`, `sorted`, `min` and `max` call them through the class's
+  type object. A class with `__eq__` and no `__hash__` has no hash
+  (CLS-07, ADR-0026).
 - `@classmethod`: `Class.name(...)` passes the class, so `cls(...)` in
   an alternative constructor makes an instance of the class the call
   names, as in CPython; TyPy compiles a copy for each class of the
@@ -61,6 +67,9 @@ All notable changes to TyPy are recorded here. The format follows
 - Calling a class whose body declares an attribute that no `__init__`
   assigns is E0309. The program used to compile and crash when the
   attribute was read, where CPython raises `AttributeError` (CLS-01).
+- Calling a module variable that holds a value, such as an `int`, from a
+  function is E0401. The call used to be dropped, where CPython raises
+  `TypeError` (EXP-02).
 
 ## [0.3.0] - 2026-11-13
 

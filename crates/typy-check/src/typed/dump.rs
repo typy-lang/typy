@@ -435,6 +435,7 @@ impl Dump<'_> {
             TypedExprKind::Upcast(_) => "Upcast".to_owned(),
             TypedExprKind::Downcast(_) => "Downcast".to_owned(),
             TypedExprKind::IsInstance(_) => "IsInstance".to_owned(),
+            TypedExprKind::OperatorCall(_) => "OperatorCall".to_owned(),
             TypedExprKind::Unwrap(_) => "Unwrap".to_owned(),
             TypedExprKind::Comprehension { .. } => "Comprehension".to_owned(),
             TypedExprKind::DictOf(_) => "DictOf".to_owned(),

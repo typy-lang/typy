@@ -67,6 +67,33 @@ impl<'ctx> FunctionEmitter<'_, '_, 'ctx> {
                 function,
                 arguments,
             } => self.call_runtime(*function, arguments)?,
+            Operation::SameMethod {
+                class,
+                slot,
+                left,
+                right,
+            } => {
+                let (left, _) = self.method(*class, *slot, *left)?;
+                let (right, _) = self.method(*class, *slot, *right)?;
+                Some(
+                    self.builder
+                        .build_int_compare(
+                            inkwell::IntPredicate::EQ,
+                            self.builder.build_ptr_to_int(
+                                left,
+                                self.shared.context.i64_type(),
+                                "",
+                            )?,
+                            self.builder.build_ptr_to_int(
+                                right,
+                                self.shared.context.i64_type(),
+                                "",
+                            )?,
+                            "",
+                        )?
+                        .into(),
+                )
+            }
             Operation::CallMethod {
                 class,
                 slot,
