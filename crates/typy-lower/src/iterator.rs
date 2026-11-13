@@ -106,7 +106,7 @@ impl FunctionLowerer<'_> {
         };
         let Some(default) = default else {
             let value = if let Some(next) = method {
-                self.call_function(
+                self.call_method(
                     next,
                     vec![(0, Self::borrowed(lowered.value, lowered.ty))],
                     item,

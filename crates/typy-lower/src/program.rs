@@ -8,12 +8,15 @@ use crate::types::tyir_type;
 
 use crate::call_graph::recursive_functions;
 use crate::function::FunctionLowerer;
+use crate::methods::{Calls, MethodTables};
 use crate::module_variable::ModuleGlobals;
 use crate::strings::StringPool;
 
 /// Returns the program in TyIR, verified. A function may raise when its lowered code contains an `invoke`, so lowering repeats until that set stops growing (detailed design section 9).
 pub fn lower(program: &TypedProgram) -> Result<TyirModule, Diagnostics> {
     let recursive = recursive_functions(program);
+    let methods = MethodTables::new(program);
+    let families = methods.families();
     let mut may_raise = vec![false; program.functions.len()];
     loop {
         let mut strings = StringPool::default();
@@ -26,7 +29,10 @@ pub fn lower(program: &TypedProgram) -> Result<TyirModule, Diagnostics> {
                 FunctionLowerer::lower(
                     program,
                     function,
-                    &may_raise,
+                    &Calls {
+                        may_raise: &may_raise,
+                        methods: &methods,
+                    },
                     &mut strings,
                     &mut tuple_types,
                     &module_globals,
@@ -34,10 +40,19 @@ pub fn lower(program: &TypedProgram) -> Result<TyirModule, Diagnostics> {
                 )
             })
             .collect();
-        let found: Vec<bool> = functions
+        let mut found: Vec<bool> = functions
             .iter()
             .map(|function| function.may_raise)
             .collect();
+        // A call through a table may run any method of the entry, so if one may raise, each
+        // is called as one that may (ADR-0021).
+        for family in &families {
+            if family.iter().any(|id| found[id.0 as usize]) {
+                for id in family {
+                    found[id.0 as usize] = true;
+                }
+            }
+        }
         if found != may_raise {
             may_raise = found;
             continue;
@@ -65,6 +80,7 @@ pub fn lower(program: &TypedProgram) -> Result<TyirModule, Diagnostics> {
                     name: class.name.clone(),
                     module: class.module.clone(),
                     fields,
+                    methods: methods.table(class.id),
                     repr: method("__repr__"),
                     str: method("__str__"),
                     base: class.base.map(|base| base.0),

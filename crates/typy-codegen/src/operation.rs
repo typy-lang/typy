@@ -67,6 +67,22 @@ impl<'ctx> FunctionEmitter<'_, '_, 'ctx> {
                 function,
                 arguments,
             } => self.call_runtime(*function, arguments)?,
+            Operation::CallMethod {
+                class,
+                slot,
+                arguments,
+            } => {
+                let (pointer, ty) = self.method(*class, *slot, arguments[0])?;
+                let arguments = self.arguments(arguments)?;
+                match self
+                    .builder
+                    .build_indirect_call(ty, pointer, &arguments, "")?
+                    .try_as_basic_value()
+                {
+                    inkwell::values::ValueKind::Basic(value) => Some(value),
+                    inkwell::values::ValueKind::Instruction(_) => None,
+                }
+            }
             Operation::Call {
                 function,
                 arguments,

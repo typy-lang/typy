@@ -173,6 +173,7 @@ impl FunctionLowerer<'_> {
             TypedExprKind::Call {
                 function,
                 arguments,
+                dispatch,
             } => {
                 let values: Vec<(usize, Lowered)> = arguments
                     .iter()
@@ -184,7 +185,11 @@ impl FunctionLowerer<'_> {
                         )
                     })
                     .collect();
-                self.call_function(*function, values, ty, span)
+                if *dispatch {
+                    self.call_method(*function, values, ty, span)
+                } else {
+                    self.call_function(*function, values, ty, span)
+                }
             }
             TypedExprKind::New {
                 class,
@@ -406,10 +411,37 @@ impl FunctionLowerer<'_> {
         self.produced(result, ty)
     }
 
-    /// Calls a program function: arguments were evaluated in source order; missing ones take their constant defaults (EXP-16).
+    /// Calls a program function directly: arguments were evaluated in source order; missing ones take their constant defaults (EXP-16).
     pub(crate) fn call_function(
         &mut self,
         function: FunctionId,
+        arguments: Vec<(usize, Lowered)>,
+        ty: TyirType,
+        span: Span,
+    ) -> Lowered {
+        self.call(function, None, arguments, ty, span)
+    }
+
+    /// Calls a method on the instance that is its first argument: through the method table
+    /// when a class derived from the method's class defines it again, so the instance's
+    /// class decides which runs, and directly otherwise (ADR-0021).
+    pub(crate) fn call_method(
+        &mut self,
+        function: FunctionId,
+        arguments: Vec<(usize, Lowered)>,
+        ty: TyirType,
+        span: Span,
+    ) -> Lowered {
+        let dispatch = self.methods.dispatch(function);
+        self.call(function, dispatch, arguments, ty, span)
+    }
+
+    /// Calls `function`, or the entry `dispatch` names of the table of the class of the first
+    /// argument, which takes the arguments `function` takes.
+    fn call(
+        &mut self,
+        function: FunctionId,
+        dispatch: Option<(u32, u32)>,
         arguments: Vec<(usize, Lowered)>,
         ty: TyirType,
         span: Span,
@@ -457,32 +489,36 @@ impl FunctionLowerer<'_> {
             };
             ordered.push(value);
         }
-        let callee = typy_tyir::FunctionId(function.0);
+        let function_id = typy_tyir::FunctionId(function.0);
+        let (callee, operation) = match dispatch {
+            Some((class, slot)) => (
+                Callee::Method { class, slot },
+                Operation::CallMethod {
+                    class,
+                    slot,
+                    arguments: ordered.clone(),
+                },
+            ),
+            None => (
+                Callee::Function(function_id),
+                Operation::Call {
+                    function: function_id,
+                    arguments: ordered.clone(),
+                },
+            ),
+        };
         let value = if self
             .may_raise
             .get(function.0 as usize)
             .copied()
             .unwrap_or(false)
         {
-            self.invoke(Callee::Function(callee), ordered, ty, span)
+            self.invoke(callee, ordered, ty, span)
         } else if ty == TyirType::Unit {
-            self.builder.push(
-                Operation::Call {
-                    function: callee,
-                    arguments: ordered,
-                },
-                span,
-            );
+            self.builder.push(operation, span);
             self.constant(Constant::Unit, span)
         } else {
-            self.builder.push_value(
-                Operation::Call {
-                    function: callee,
-                    arguments: ordered,
-                },
-                ty,
-                span,
-            )
+            self.builder.push_value(operation, ty, span)
         };
         let result = self.produced(value, ty);
         for (_, lowered) in arguments.into_iter().rev() {

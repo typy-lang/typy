@@ -248,7 +248,7 @@ impl FunctionLowerer<'_> {
     ) -> Iterator {
         let iterable = Self::borrowed(iterable.value, iterable.ty);
         let ty = self.lowered_type(iterator);
-        let made = self.call_function(iter, vec![(0, iterable)], ty, span);
+        let made = self.call_method(iter, vec![(0, iterable)], ty, span);
         let slot = self.hidden_slot("iterator", ty);
         self.store(slot, made, span);
         Iterator::Protocol {

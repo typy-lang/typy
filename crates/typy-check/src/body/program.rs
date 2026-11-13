@@ -281,6 +281,11 @@ impl Program {
         &self.instances
     }
 
+    /// Returns the signatures of the functions of the modules checked so far, indexed by ID.
+    pub(crate) fn signatures(&self) -> &[FunctionSignature] {
+        &self.signatures
+    }
+
     /// Returns the classes of the modules checked so far, indexed by ID.
     pub(crate) fn classes(&self) -> &[ClassInfo] {
         &self.classes

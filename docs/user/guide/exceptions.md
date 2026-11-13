@@ -149,13 +149,12 @@ handled, so it is refused outside an `except` clause with E0416.
 TyPy does not check, so a program cannot call them (E0417); it can still
 catch them.
 
-## Planned
+## Overriding methods
 
-Redefining a method of a base other than `__init__`, `__str__` and
-`__repr__`, and `super()` beyond `super().__init__(...)`, come with
-inheritance in 0.4 (CLS-04):
+An exception class may define a method of its base again, as any class
+may (CLS-04). The exception's own class decides which method runs:
 
-<!-- typy-expect: rejected E0201 at 7:9 -->
+<!-- typy-expect: accepted -->
 ```python
 class AppError(Exception):
     def code(self) -> int:
@@ -165,7 +164,17 @@ class AppError(Exception):
 class OtherError(AppError):
     def code(self) -> int:
         return 2
+
+
+try:
+    raise OtherError("busy")
+except AppError as error:
+    print(error, error.code())
 ```
+
+## Planned
+
+`super()` beyond `super().__init__(...)` comes later in 0.4 (CLS-14).
 
 The `args` attribute comes in 0.4 (EXC-11), and so does `code` of a
 `SystemExit` (EXC-13). An `OSError` built with two to five arguments,

@@ -137,6 +137,24 @@ impl Checker<'_> {
                     function.symbol.clone(),
                 ))
             }
+            Callee::Method { class, slot } => {
+                let entry = self
+                    .module
+                    .classes
+                    .get(class as usize)
+                    .and_then(|owner| owner.methods.get(slot as usize))
+                    .ok_or_else(|| {
+                        self.error(format!("class#{class} has no method#{slot} in its table"))
+                    })?;
+                let (parameters, result, may_raise, _) =
+                    self.callee_signature(Callee::Function(*entry))?;
+                Ok((
+                    parameters,
+                    result,
+                    may_raise,
+                    format!("class#{class}.method#{slot}"),
+                ))
+            }
         }
     }
 
@@ -213,6 +231,17 @@ impl Checker<'_> {
                 function,
                 arguments,
             } => self.call(Callee::Function(*function), arguments)?,
+            Operation::CallMethod {
+                class,
+                slot,
+                arguments,
+            } => self.call(
+                Callee::Method {
+                    class: *class,
+                    slot: *slot,
+                },
+                arguments,
+            )?,
             Operation::ToBits(value) => {
                 let ty = self.ty(*value)?;
                 if !matches!(

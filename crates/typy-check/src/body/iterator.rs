@@ -131,6 +131,7 @@ impl BodyChecker<'_> {
         Self::typed(
             TypedExprKind::Call {
                 function: method,
+                dispatch: true,
                 arguments: vec![Argument {
                     parameter: 0,
                     value: instance,

@@ -14,9 +14,14 @@ All notable changes to TyPy are recorded here. The format follows
   instance is accepted wherever its base is, as an argument, in a
   variable, in a `list[Base]` and as a `Base | None`, and `type()`,
   `str`, `repr` and `print` use its own class. A subclass may declare an
-  inherited attribute again with the same type. Redefining a base's
-  methods other than `__init__`, `__str__` and `__repr__` follows later
-  in 0.4 (CLS-04, ADR-0021).
+  inherited attribute again with the same type (CLS-04, ADR-0021).
+- Overriding methods: a subclass, including an exception class, may
+  define a method of its base again, and a call runs the method of the
+  instance's own class, also for `for`, `next` and `with`. An override
+  is checked against the base method as type checkers check it, E0404
+  otherwise; one that changes a default, or takes or returns a type
+  held differently, such as `int | None` for `int`, is planned for 0.5
+  (CLS-04, CLS-13, ADR-0021).
 - An exception class may derive from an exception class imported from
   another module, as `from errors import AppError` or `errors.AppError`
   (CLS-03).

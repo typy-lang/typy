@@ -126,6 +126,7 @@ pub(super) fn operands(operation: &Operation) -> Vec<ValueId> {
         | Operation::Compare { left, right, .. } => vec![*left, *right],
         Operation::CallRuntime { arguments, .. }
         | Operation::Call { arguments, .. }
+        | Operation::CallMethod { arguments, .. }
         | Operation::MakeTuple {
             items: arguments, ..
         } => arguments.clone(),

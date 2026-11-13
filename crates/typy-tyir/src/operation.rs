@@ -193,6 +193,16 @@ pub enum Operation {
         /// The arguments, borrowed.
         arguments: Vec<ValueId>,
     },
+    /// Calls the method at `slot` of the table of the class of the first argument, which
+    /// cannot raise; see `Callee::Method`.
+    CallMethod {
+        /// The class whose table gives the entry's parameters and result.
+        class: u32,
+        /// The position in the table.
+        slot: u32,
+        /// The arguments, borrowed; the first is the instance.
+        arguments: Vec<ValueId>,
+    },
     /// A tuple of these values, which it takes over (DAT-08).
     MakeTuple {
         /// The tuple's type.

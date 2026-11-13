@@ -390,6 +390,7 @@ impl BodyChecker<'_> {
                         TypedExprKind::Call {
                             function,
                             arguments: all,
+                            dispatch: false,
                         },
                         Type::NoneType,
                         span,

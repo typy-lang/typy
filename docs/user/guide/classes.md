@@ -9,7 +9,7 @@ class body or assigned in `__init__`, and has one type.
 | --- | --- |
 | Classes with `__init__`, methods and attributes declared in the body or assigned in `__init__` | CLS-01 |
 | Assigning or calling a name the class does not have is refused | CLS-02 |
-| A class derived from one class of the program, with its attributes and methods | CLS-04 |
+| A class derived from one class of the program, with its attributes and methods, overriding them | CLS-04 |
 | `__str__` and `__repr__`, used by `print`, `str`, `repr`, f-strings and containers | CLS-08 |
 | A type object for every type, with `object` as the root | CLS-10 |
 | `type(x)`, class and built-in type names as values, `__name__` | CLS-12 |
@@ -94,13 +94,59 @@ for shape in shapes:
     print(shape.describe(), type(shape).__name__, shape)
 ```
 
+A subclass may define a method of its base again. A call runs the
+method of the instance's own class, whatever the type of the variable
+that holds it, as in CPython:
+
+<!-- typy-expect: accepted -->
+```python
+class Shape:
+    def area(self) -> float:
+        return 0.0
+
+    def describe(self) -> str:
+        return f"area {self.area()}"
+
+
+class Square(Shape):
+    def __init__(self, side: float) -> None:
+        self.side = side
+
+    def area(self) -> float:
+        return self.side * self.side
+
+
+shapes: list[Shape] = [Shape(), Square(3.0)]
+print([shape.describe() for shape in shapes])
+```
+
+An override takes the base method's parameters in the same order and
+with the same names. Each parameter accepts the type the base's takes,
+and the result is one the base's result type accepts, as type checkers
+require; a mismatch is E0404. A parameter keeps the base's default, and
+an override that takes or returns a type held differently from the
+base's, such as `int | None` where the base has `int`, is planned for
+0.5; both are E0201. `__init__` is not compared, since it runs only on
+the class being made.
+
+<!-- typy-expect: rejected E0404 at 7:9 -->
+```python
+class Shape:
+    def area(self) -> float:
+        return 0.0
+
+
+class Label(Shape):
+    def area(self) -> str:
+        return "none"
+```
+
 A subclass may declare an attribute of its base again only with the
 same type. The base of a class is `object`, an exception class or a
 class of the program defined before it; a built-in type such as `int` or
-`list` is E0201, and several bases are planned for after 1.0. A subclass
-defines its own `__init__`, `__str__` and `__repr__`; redefining any
-other method of a base, `super()` beyond an exception class's
-`super().__init__(...)`, and `isinstance` come later in 0.4.
+`list` is E0201, and several bases are planned for after 1.0. `super()`
+beyond an exception class's `super().__init__(...)`, and `isinstance`,
+come later in 0.4.
 
 <!-- typy-expect: rejected E0201 at 1:13 -->
 ```python

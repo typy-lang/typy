@@ -85,20 +85,32 @@ impl<'ctx> FunctionEmitter<'_, '_, 'ctx> {
         let context = self.shared.context;
         let (function, result_type) = match callee {
             Callee::Runtime(function) => (
-                runtime_function(context, self.shared.module, function),
+                Some(runtime_function(context, self.shared.module, function)),
                 function.signature().result,
             ),
             Callee::Function(id) => (
-                self.shared.functions[id.0 as usize],
+                Some(self.shared.functions[id.0 as usize]),
                 self.shared.tyir.function(id).return_type,
             ),
+            Callee::Method { class, slot } => {
+                let entry = self.shared.tyir.classes[class as usize].methods[slot as usize];
+                (None, self.shared.tyir.function(entry).return_type)
+            }
         };
-        let arguments = self.arguments(arguments)?;
-        let returned = match self
-            .builder
-            .build_call(function, &arguments, "")?
-            .try_as_basic_value()
-        {
+        let call = match (function, callee) {
+            (Some(function), _) => {
+                let arguments = self.arguments(arguments)?;
+                self.builder.build_call(function, &arguments, "")?
+            }
+            (None, Callee::Method { class, slot }) => {
+                let (pointer, ty) = self.method(class, slot, arguments[0])?;
+                let arguments = self.arguments(arguments)?;
+                self.builder
+                    .build_indirect_call(ty, pointer, &arguments, "")?
+            }
+            (None, _) => unreachable!("only a method is called through its table"),
+        };
+        let returned = match call.try_as_basic_value() {
             ValueKind::Basic(value) => value,
             ValueKind::Instruction(_) => {
                 return Err(CodegenError(

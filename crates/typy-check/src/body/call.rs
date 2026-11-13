@@ -72,6 +72,7 @@ impl BodyChecker<'_> {
                 TypedExprKind::Call {
                     function,
                     arguments: bound,
+                    dispatch: false,
                 },
                 self.program.signatures[function.0 as usize].returns.clone(),
                 span,

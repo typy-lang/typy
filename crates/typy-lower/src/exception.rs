@@ -475,21 +475,29 @@ impl FunctionLowerer<'_> {
         exhausted: BlockId,
         span: Span,
     ) -> Lowered {
-        let callee = typy_tyir::FunctionId(next.0);
+        let dispatch = self.methods.dispatch(next);
+        let callee = match dispatch {
+            Some((class, slot)) => typy_tyir::Callee::Method { class, slot },
+            None => typy_tyir::Callee::Function(typy_tyir::FunctionId(next.0)),
+        };
         if !self
             .may_raise
             .get(next.0 as usize)
             .copied()
             .unwrap_or(false)
         {
-            let value = self.builder.push_value(
-                Operation::Call {
-                    function: callee,
+            let operation = match dispatch {
+                Some((class, slot)) => Operation::CallMethod {
+                    class,
+                    slot,
                     arguments: vec![iterator],
                 },
-                item,
-                span,
-            );
+                None => Operation::Call {
+                    function: typy_tyir::FunctionId(next.0),
+                    arguments: vec![iterator],
+                },
+            };
+            let value = self.builder.push_value(operation, item, span);
             return self.produced(value, item);
         }
         let normal = self.builder.create_block();
@@ -497,7 +505,7 @@ impl FunctionLowerer<'_> {
         let error = self.builder.create_block();
         let exception = self.builder.add_block_parameter(error, TyirType::EXCEPTION);
         self.builder.terminate(Terminator::Invoke {
-            callee: typy_tyir::Callee::Function(callee),
+            callee,
             arguments: vec![iterator],
             normal,
             error,
@@ -557,7 +565,7 @@ impl FunctionLowerer<'_> {
             WithProtocol::Methods { enter, .. } => {
                 let entered_type =
                     self.lowered_type(&self.program.function(enter).signature.returns);
-                self.call_function(enter, vec![(0, current)], entered_type, span)
+                self.call_method(enter, vec![(0, current)], entered_type, span)
             }
             // A file enters as itself, once it is checked to be open.
             WithProtocol::TextFile => {
@@ -636,7 +644,7 @@ impl FunctionLowerer<'_> {
             arguments.push((index + 1, Self::borrowed(value, ty)));
         }
         let returns = self.lowered_type(&signature.returns);
-        let result = self.call_function(exit, arguments, returns, span);
+        let result = self.call_method(exit, arguments, returns, span);
         if exception.is_none() {
             self.release(result, span);
             let unit = self.constant(Constant::Unit, span);

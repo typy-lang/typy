@@ -8,6 +8,7 @@ mod definition;
 mod definition_order;
 mod module_imports;
 mod module_scope;
+mod overriding;
 mod visit;
 
 use std::collections::{BTreeMap, BTreeSet};
@@ -147,6 +148,7 @@ fn check_module(
             ids: &class_ids,
             instances: &instances,
             earlier: program.classes(),
+            signatures: program.signatures(),
         },
         &annotations,
         floor_defers,

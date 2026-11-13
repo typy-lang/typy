@@ -27,6 +27,7 @@ mod list_method;
 mod loop_source;
 mod mangle;
 mod math;
+mod methods;
 mod module_variable;
 mod optional;
 mod ownership;

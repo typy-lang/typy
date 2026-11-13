@@ -61,6 +61,7 @@ fn callee(module: &TyirModule, callee: Callee) -> String {
             .functions
             .get(id.0 as usize)
             .map_or_else(|| format!("fn{}", id.0), |function| function.symbol.clone()),
+        Callee::Method { class, slot } => format!("class#{class}.method#{slot}"),
     }
 }
 
@@ -195,6 +196,21 @@ fn operation(module: &TyirModule, operation: &Operation) -> String {
         } => format!(
             "call {}({})",
             callee(module, Callee::Function(*function)),
+            names(arguments)
+        ),
+        Operation::CallMethod {
+            class,
+            slot,
+            arguments,
+        } => format!(
+            "call {}({})",
+            callee(
+                module,
+                Callee::Method {
+                    class: *class,
+                    slot: *slot
+                }
+            ),
             names(arguments)
         ),
         Operation::MakeTuple { ty, items } => format!("tuple#{} ({})", ty.0, names(items)),

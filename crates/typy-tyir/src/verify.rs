@@ -2,6 +2,7 @@
 
 mod definitions;
 mod dominance;
+mod tables;
 mod typing;
 
 use std::fmt;
@@ -54,7 +55,7 @@ pub fn verify(module: &TyirModule) -> Result<(), VerifyError> {
         definitions::check(function)?;
         typing::check(module, function)?;
     }
-    Ok(())
+    tables::check(module)
 }
 
 #[cfg(test)]

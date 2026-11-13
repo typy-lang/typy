@@ -958,9 +958,17 @@ holds its base's attributes first, counted in `ClassInfo::inherited`, and the
 type of an inherited attribute is read from the class that declares it; a
 subclass may declare an inherited attribute again only with the type its base
 declares, E0202 otherwise and when the base assigns it without declaring it
-(ADR-0021). A method is looked up in the class,
-then in each base; redefining a method of a base other than `__init__`,
-`__str__` and `__repr__` is E0201 (CLS-13). Calling an exception class without
+(ADR-0021). A method is looked up in the class, then in each base. A method
+that a base defines too is checked against it by `check::overriding::Override`,
+except `__init__`: the same number of parameters with the same names, each of a
+type that accepts the base's and with a default where the base has one, and a
+result the base's result type accepts, E0404 otherwise (CLS-04, CLS-13). A
+default other than the base's, and a parameter or result held differently from
+the base's, such as `int | None` for `int`, are E0201, planned for 0.5: a call
+through the base fills the base's default, and the entry would need an
+adapter. A call of a method on an instance is `TypedExprKind::Call` with
+`dispatch` set, and a call through `super()` has it clear. Calling an
+exception class without
 an `__init__` of the program's takes positional arguments of any type; with one,
 its arguments are bound as for a call and `TypedExprKind::NewException` carries
 an `InitCall` with them and the count of those written by position, which become
@@ -1220,7 +1228,8 @@ inherited method, such as `__init__`, `__iter__` or `__repr__`, upcasts the
 instance the same way. `str`, `repr` and `print` of an instance of a class
 that has a subclass call `object_str` or `object_repr`, which call the
 methods the object's class holds; of any other class, they call its
-methods directly. `NewInstance { class }` makes an instance
+methods directly.
+`NewInstance { class }` makes an instance
 with every attribute zero, `Field { object, index }` borrows an attribute,
 `SetField { object, index, value }` stores one, taking over the value's
 reference without releasing the old value, and `Identical { left, right }`
@@ -1236,6 +1245,29 @@ in the module's `TupleTypes`, which interns each distinct list of item
 types and says whether a type is counted. A tuple is a value
 with its items in place, not an object, as ADR-0001 decides, so `is` cannot
 observe a copy (EXP-08), and it is counted when an item is.
+
+`methods::MethodTables` lays out each class's method table (ADR-0021).
+A class starts from a copy of its base's table, puts its own method in place
+of each one it overrides, and appends each new method that a class derived
+from it defines again; `__init__` has no entry, since it runs only on the
+class being made. `TyirClass::methods` holds the table, and a program
+without overrides has empty tables. `call_method` lowers a call with
+`dispatch` set, and the calls of `__iter__`, `__next__`, `__enter__` and
+`__exit__`: when a class derived from the method's class defines the method
+again, the call is `Operation::CallMethod { class, slot, arguments }`, or an
+invoke of `Callee::Method { class, slot }`, whose parameters and result are
+those of the entry of `class`'s table; otherwise it is a direct `Call`. The
+methods at one position of the tables form a family, and when one of them
+may raise, each is lowered as one that may, so every entry returns the same
+way. The call graph of FUN-02 counts each override of a called method as a
+callee. The verifier checks that a class's table is at least as long as its
+base's and that the entries at one position take the same number of
+arguments, may raise alike, and have equal types or two instance types, which
+are both addresses. Codegen emits a class's type object followed by its
+table in one global, so the runtime reads the type object as before; a call
+loads the class from the instance, at offset 8 in an instance and an
+exception alike, then the entry, and calls it indirectly. The type object of
+a class derived from a class of the program has that class as its base.
 
 A list is `TyirType::LIST`, `Object(TypeId::LIST)`. `TyirType::Bits` is the
 eight bytes that stand for a list item at the runtime's interface, never

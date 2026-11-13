@@ -3,18 +3,25 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use typy_check::{
-    AssignTarget, FunctionId, LoopSource, RaiseCause, TypedExpr, TypedExprKind, TypedProgram,
-    TypedStmt,
+    AssignTarget, ClassId, FunctionId, LoopSource, RaiseCause, TypedExpr, TypedExprKind,
+    TypedProgram, TypedStmt,
 };
 
 /// Returns the functions that can call themselves, directly or through others.
 pub(crate) fn recursive_functions(program: &TypedProgram) -> BTreeSet<FunctionId> {
+    let overrides = overrides(program);
     let calls: BTreeMap<FunctionId, BTreeSet<FunctionId>> = program
         .functions
         .iter()
         .map(|function| {
             let mut callees = BTreeSet::new();
             statements(&function.body, &mut callees);
+            // A call of a method may run any method that overrides it (ADR-0021).
+            let reached: Vec<FunctionId> = callees
+                .iter()
+                .flat_map(|callee| overrides.get(callee).into_iter().flatten().copied())
+                .collect();
+            callees.extend(reached);
             (function.id, callees)
         })
         .collect();
@@ -35,6 +42,35 @@ pub(crate) fn recursive_functions(program: &TypedProgram) -> BTreeSet<FunctionId
             false
         })
         .collect()
+}
+
+/// Returns, for each method, the methods of the same name of the classes derived from its
+/// class.
+fn overrides(program: &TypedProgram) -> BTreeMap<FunctionId, Vec<FunctionId>> {
+    let derives_from = |class: ClassId, base: ClassId| {
+        let mut current = program.class(class).base;
+        while let Some(each) = current {
+            if each == base {
+                return true;
+            }
+            current = program.class(each).base;
+        }
+        false
+    };
+    let mut found: BTreeMap<FunctionId, Vec<FunctionId>> = BTreeMap::new();
+    for class in &program.classes {
+        for (name, method) in &class.methods {
+            let below = program
+                .classes
+                .iter()
+                .filter(|other| derives_from(other.id, class.id))
+                .flat_map(|other| &other.methods)
+                .filter(|(each, _)| each == name)
+                .map(|(_, id)| *id);
+            found.entry(*method).or_default().extend(below);
+        }
+    }
+    found
 }
 
 #[allow(clippy::too_many_lines, reason = "one arm per statement kind")]
@@ -195,6 +231,7 @@ fn expression(expression_value: &TypedExpr, callees: &mut BTreeSet<FunctionId>) 
         TypedExprKind::Call {
             function,
             arguments,
+            ..
         } => {
             callees.insert(*function);
             for argument in arguments {

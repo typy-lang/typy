@@ -1801,30 +1801,11 @@ fn statements_and_expressions_outside_the_subset_give_their_codes() {
             "try:\n    x = 1\nexcept ValueError:\n    pass\nfinally:\n    pass\nprint(x)\n",
             &["E0306"],
         ),
-        // A class derives from an exception class defined before it, and redefines only
-        // `__init__`, `__str__` and `__repr__` (CLS-03, CLS-13, CLS-14, EXC-12).
-        ("class A(Exception, ValueError):\n    pass\n", &["E0201"]),
-        ("class A(B):\n    pass\nclass B:\n    pass\n", &["E0306"]),
-        ("class A(A):\n    pass\n", &["E0306"]),
-        ("class A(len):\n    pass\n", &["E0201"]),
-        (
-            "class B:\n    x: int\nclass A(B):\n    x: str\n",
-            &["E0202"],
-        ),
-        (
-            "class B:\n    def __init__(self) -> None:\n        self.x = 1\nclass A(B):\n    x: int\n",
-            &["E0202"],
-        ),
-        ("class A(int):\n    pass\n", &["E0201"]),
         (
             "class A(B):\n    pass\nclass B(Exception):\n    pass\n",
             &["E0306"],
         ),
         ("class A(UnicodeEncodeError):\n    pass\n", &["E0417"]),
-        (
-            "class A(Exception):\n    def f(self) -> None:\n        pass\nclass B(A):\n    def f(self) -> None:\n        pass\n",
-            &["E0201"],
-        ),
         (
             "class A(Exception):\n    def f(self) -> None:\n        super().__init__()\n",
             &["E0201"],
@@ -1861,6 +1842,38 @@ fn statements_and_expressions_outside_the_subset_give_their_codes() {
         ),
         ("x: set[Thing] = {1}\n", &["E0205"]),
         ("print(sorted([{1: 2}]))\n", &["E0407"]),
+    ];
+    for (source, expected) in cases {
+        assert_eq!(&rejected(source), expected, "\n{source}");
+    }
+}
+
+#[test]
+fn a_base_must_be_a_class_before_it_and_an_override_must_fit() {
+    let cases: &[(&str, &[&str])] = &[
+        // A class derives from one class defined before it, and an override fits the method
+        // it overrides (CLS-03, CLS-04, CLS-14, EXC-12).
+        ("class A(Exception, ValueError):\n    pass\n", &["E0201"]),
+        ("class A(B):\n    pass\nclass B:\n    pass\n", &["E0306"]),
+        ("class A(A):\n    pass\n", &["E0306"]),
+        ("class A(len):\n    pass\n", &["E0201"]),
+        (
+            "class B:\n    x: int\nclass A(B):\n    x: str\n",
+            &["E0202"],
+        ),
+        (
+            "class B:\n    def __init__(self) -> None:\n        self.x = 1\nclass A(B):\n    x: int\n",
+            &["E0202"],
+        ),
+        ("class A(int):\n    pass\n", &["E0201"]),
+        (
+            "class A(Exception):\n    def f(self) -> None:\n        pass\nclass B(A):\n    def f(self) -> int:\n        return 1\n",
+            &["E0404"],
+        ),
+        (
+            "class A:\n    def f(self, x: int = 1) -> None:\n        pass\nclass B(A):\n    def f(self, x: int = 2) -> None:\n        pass\n",
+            &["E0201"],
+        ),
     ];
     for (source, expected) in cases {
         assert_eq!(&rejected(source), expected, "\n{source}");

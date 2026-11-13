@@ -63,6 +63,9 @@ pub struct TyirClass {
     pub repr: Option<FunctionId>,
     /// `__str__`, which `str` of an exception's argument calls, when the class has one.
     pub str: Option<FunctionId>,
+    /// The method table: the methods a subclass may override, its own or a base's, each at
+    /// the position it has in the base's table, then those the class adds (ADR-0021).
+    pub methods: Vec<FunctionId>,
     /// The class's base when it is a class of the module, by its index; its attributes come
     /// first (ADR-0021).
     pub base: Option<u32>,

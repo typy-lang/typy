@@ -153,8 +153,47 @@ fn method_writer<'ctx>(
     Ok(function)
 }
 
+/// Returns the layout of a runtime `TypeObject`, which the runtime reads.
+fn type_object_type(context: &inkwell::context::Context) -> StructType<'_> {
+    let (half, word) = (context.i32_type(), context.i64_type());
+    let pointer = context.ptr_type(AddressSpace::default());
+    let header = context.struct_type(&[half.into(), half.into()], false);
+    context.struct_type(
+        &[
+            header.into(),
+            pointer.into(),
+            word.into(),
+            pointer.into(),
+            pointer.into(),
+            pointer.into(),
+            pointer.into(),
+            pointer.into(),
+            pointer.into(),
+            pointer.into(),
+            word.into(),
+            pointer.into(),
+            pointer.into(),
+        ],
+        false,
+    )
+}
+
+/// Returns the layout of a class's type object followed by its method table, which only the
+/// program reads (ADR-0021).
+fn class_object_type(context: &inkwell::context::Context, methods: u32) -> StructType<'_> {
+    let pointer = context.ptr_type(AddressSpace::default());
+    context.struct_type(
+        &[
+            type_object_type(context).into(),
+            pointer.array_type(methods).into(),
+        ],
+        false,
+    )
+}
+
 /// Returns the address of the type object of class `index`, emitting it on first use: an
-/// immortal object of type `type`, whose base is the runtime's `object`.
+/// immortal object of type `type`, whose base is the class's base or the runtime's `object`,
+/// followed by the class's method table.
 pub(crate) fn type_object<'ctx>(
     shared: &mut Shared<'_, 'ctx>,
     index: u32,
@@ -170,15 +209,17 @@ pub(crate) fn type_object<'ctx>(
     let (name, name_length) = text_global(shared, &class.name, &format!("typy.class{index}.name"));
     let (module, module_length) =
         text_global(shared, &class.module, &format!("typy.class{index}.module"));
-    let base = match class.exception_base {
-        Some(typy_tyir::TypeObjectRef::Class(base)) => type_object(shared, base)?,
-        Some(reference) => {
+    let base = match (class.base, class.exception_base) {
+        (Some(base), _) | (_, Some(typy_tyir::TypeObjectRef::Class(base))) => {
+            type_object(shared, base)?
+        }
+        (None, Some(reference)) => {
             let symbol = reference
                 .runtime_symbol()
                 .ok_or_else(|| CodegenError("a runtime class has a symbol".to_owned()))?;
             runtime_global(shared, &symbol)
         }
-        None => runtime_global(shared, "typy_rt_object"),
+        (None, None) => runtime_global(shared, "typy_rt_object"),
     };
     let hash = runtime_symbol(
         shared,
@@ -195,27 +236,36 @@ pub(crate) fn type_object<'ctx>(
         false,
     );
     let null = pointer.const_null();
-    let object = context.const_struct(
-        &[
-            header.into(),
-            name.into(),
-            word.const_int(name_length, false).into(),
-            base.into(),
-            null.into(),
-            hash.as_global_value().as_pointer_value().into(),
-            null.into(),
-            null.into(),
-            repr.as_global_value().as_pointer_value().into(),
-            module.into(),
-            word.const_int(module_length, false).into(),
-            fields.into(),
-            str.into(),
-        ],
-        false,
-    );
+    let object = type_object_type(context).const_named_struct(&[
+        header.into(),
+        name.into(),
+        word.const_int(name_length, false).into(),
+        base.into(),
+        null.into(),
+        hash.as_global_value().as_pointer_value().into(),
+        null.into(),
+        null.into(),
+        repr.as_global_value().as_pointer_value().into(),
+        module.into(),
+        word.const_int(module_length, false).into(),
+        fields.into(),
+        str.into(),
+    ]);
+    let methods: Vec<PointerValue<'ctx>> = class
+        .methods
+        .iter()
+        .map(|method| {
+            shared.functions[method.0 as usize]
+                .as_global_value()
+                .as_pointer_value()
+        })
+        .collect();
+    let count = u32::try_from(methods.len()).unwrap_or(u32::MAX);
+    let class_object = class_object_type(context, count)
+        .const_named_struct(&[object.into(), pointer.const_array(&methods).into()]);
     let global = Statics::global(
         shared.module,
-        object.as_basic_value_enum(),
+        class_object.as_basic_value_enum(),
         &format!("typy.class{index}"),
     );
     shared.statics.add_type_object(index, global);
@@ -223,6 +273,49 @@ pub(crate) fn type_object<'ctx>(
 }
 
 impl<'ctx> FunctionEmitter<'_, '_, 'ctx> {
+    /// Returns the function at `slot` of the method table of the class of `instance`, an
+    /// instance of class `class` or of one derived from it, with the type of `class`'s entry
+    /// (ADR-0021). An instance and an exception both hold their class after their header.
+    pub(crate) fn method(
+        &mut self,
+        class: u32,
+        slot: u32,
+        instance: ValueId,
+    ) -> Result<(PointerValue<'ctx>, inkwell::types::FunctionType<'ctx>), CodegenError> {
+        let entry = self
+            .shared
+            .tyir
+            .classes
+            .get(class as usize)
+            .and_then(|owner| owner.methods.get(slot as usize))
+            .ok_or_else(|| CodegenError(format!("class#{class} has no method#{slot}")))?;
+        let function_type = self.shared.functions[entry.0 as usize].get_type();
+        let context = self.shared.context;
+        let pointer = context.ptr_type(AddressSpace::default());
+        let object = self.value(instance)?.into_pointer_value();
+        let header = context.struct_type(&[pointer.into(), pointer.into()], false);
+        let class_field = self.builder.build_struct_gep(header, object, 1, "")?;
+        let class_object = self
+            .builder
+            .build_load(pointer, class_field, "")?
+            .into_pointer_value();
+        // The entries before `slot`, then the entry, laid out as the table is.
+        let reach = context.struct_type(
+            &[
+                type_object_type(context).into(),
+                pointer.array_type(slot).into(),
+                pointer.into(),
+            ],
+            false,
+        );
+        let address = self.builder.build_struct_gep(reach, class_object, 2, "")?;
+        let function = self
+            .builder
+            .build_load(pointer, address, "")?
+            .into_pointer_value();
+        Ok((function, function_type))
+    }
+
     /// Returns the layout of an instance of the class of `object`: its header, its class, then
     /// its attributes as a tuple, with the attributes' types and the position of the tuple. An
     /// exception of class `class` holds its fixed part, then its attributes (ADR-0013).

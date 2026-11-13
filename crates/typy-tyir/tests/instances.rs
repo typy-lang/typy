@@ -55,6 +55,7 @@ fn on_point(body: impl FnOnce(ValueId, ValueId) -> Body) -> TyirModule {
             name: "Point".to_owned(),
             module: "__main__".to_owned(),
             fields,
+            methods: Vec::new(),
             repr: None,
             str: None,
             base: None,
@@ -216,6 +217,7 @@ fn on_exception(parameter: TyirType, operation: Operation) -> TyirModule {
             name: "AppError".to_owned(),
             module: "__main__".to_owned(),
             fields,
+            methods: Vec::new(),
             repr: None,
             str: None,
             base: None,
@@ -266,6 +268,7 @@ fn on_circle(make: impl FnOnce(ValueId, ValueId) -> (Operation, TyirType)) -> Ty
         name: name.to_owned(),
         module: "__main__".to_owned(),
         fields,
+        methods: Vec::new(),
         repr: None,
         str: None,
         base,
@@ -336,4 +339,133 @@ fn an_upcast_reaches_a_base_and_nothing_else() {
         )
     });
     assert!(message(&to_optional).contains("is not an instance of a class derived from"));
+}
+
+/// A method of a class `class` of the module that returns `result`, the function `id`.
+fn method(id: u32, class: u32, result: TyirType) -> typy_tyir::TyirFunction {
+    let mut builder = FunctionBuilder::new(FunctionId(id), format!("m{id}"), "m", result);
+    builder.add_parameter(TyirType::Object(TypeId::class(class)));
+    let constant = if result == TyirType::Float {
+        Constant::Float(1.0)
+    } else {
+        Constant::Int("1".to_owned())
+    };
+    let value = builder.push_value(Operation::Constant(constant), result, span());
+    builder.terminate(Terminator::Return(value));
+    builder.finish()
+}
+
+/// A module whose entry calls the method at `slot` of `Shape`'s table on a `Circle`, where
+/// `Shape`'s table holds `Shape.area` and `Circle`'s the tables `circle` gives.
+fn dispatching(slot: u32, circle: Vec<FunctionId>, circle_area: TyirType) -> TyirModule {
+    let mut builder = FunctionBuilder::new(FunctionId(0), "entry", "entry", TyirType::Unit);
+    let instance = builder.push_value(
+        Operation::NewInstance { class: 1 },
+        TyirType::Object(TypeId::class(1)),
+        span(),
+    );
+    let shape = TyirType::Object(TypeId::class(0));
+    let upcast = builder.push_value(
+        Operation::Upcast {
+            value: instance,
+            ty: shape,
+        },
+        shape,
+        span(),
+    );
+    builder.push_value(
+        Operation::CallMethod {
+            class: 0,
+            slot,
+            arguments: vec![upcast],
+        },
+        TyirType::Int,
+        span(),
+    );
+    let unit = builder.push_value(Operation::Constant(Constant::Unit), TyirType::Unit, span());
+    builder.terminate(Terminator::Return(unit));
+    let mut tuple_types = TupleTypes::default();
+    let TyirType::Tuple(fields) = tuple_types.intern(Vec::new()) else {
+        unreachable!("interning gives a tuple type");
+    };
+    let class = |name: &str, base: Option<u32>, methods: Vec<FunctionId>| TyirClass {
+        name: name.to_owned(),
+        module: "__main__".to_owned(),
+        fields,
+        methods,
+        repr: None,
+        str: None,
+        base,
+        exception_base: None,
+    };
+    TyirModule {
+        globals: Vec::new(),
+        modules: Vec::new(),
+        functions: vec![
+            builder.finish(),
+            method(1, 0, TyirType::Int),
+            method(2, 1, circle_area),
+        ],
+        strings: Vec::new(),
+        tuple_types,
+        classes: vec![
+            class("Shape", None, vec![FunctionId(1)]),
+            class("Circle", Some(0), circle),
+        ],
+        entry: FunctionId(0),
+    }
+}
+
+#[test]
+fn a_method_call_goes_through_a_table_that_extends_its_base_s() {
+    let valid = dispatching(0, vec![FunctionId(2)], TyirType::Int);
+    assert_eq!(verify(&valid), Ok(()));
+    assert!(
+        print(&valid).contains("call class#0.method#0(v1)"),
+        "{}",
+        print(&valid)
+    );
+    let cases = [
+        (
+            dispatching(1, vec![FunctionId(2)], TyirType::Int),
+            "class#0 has no method#1 in its table",
+        ),
+        (
+            dispatching(0, Vec::new(), TyirType::Int),
+            "the table has 0 methods, fewer than the 1 of its base",
+        ),
+        (
+            dispatching(0, vec![FunctionId(2)], TyirType::Float),
+            "method#0, m2, is not called as m1, its base's entry, is",
+        ),
+        (
+            dispatching(0, vec![FunctionId(7)], TyirType::Int),
+            "method#0 is fn7, which does not exist",
+        ),
+        (
+            dispatching(0, vec![FunctionId(0)], TyirType::Int),
+            "method#0 takes no instance",
+        ),
+        (
+            {
+                let mut module = dispatching(0, vec![FunctionId(2)], TyirType::Int);
+                module.classes[0].base = Some(1);
+                module
+            },
+            "the base class#1 is not a class before it",
+        ),
+        (
+            {
+                let mut module = dispatching(0, vec![FunctionId(2)], TyirType::Int);
+                let extra = module.functions[2].parameters[0];
+                module.functions[2].parameters.push(extra);
+                module
+            },
+            "method#0, m2, is not called as m1, its base's entry, is",
+        ),
+    ];
+    for (module, expected) in cases {
+        let found = message(&module);
+        assert!(found.contains(expected), "{expected} in {found}");
+    }
 }

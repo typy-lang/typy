@@ -8,9 +8,10 @@ use typy_source::syntax::{Expr, Identifier, Stmt};
 
 use super::annotation::{AnnotationScope, annotation_type};
 use super::definition::{Definition, FunctionParts, Owner, defined_twice, definition};
+use super::overriding::Override;
 use crate::class_type::InstanceClass;
 use crate::exception::{BuiltinException, ExceptionClass};
-use crate::typed::{ClassId, FunctionId};
+use crate::typed::{ClassId, FunctionId, FunctionSignature};
 use crate::types::Type;
 
 /// An attribute of a class: declared in the class body, or assigned in `__init__`, whose
@@ -231,9 +232,6 @@ fn unsupported_base(span: Span) -> Diagnostic {
     .with_rule(RuleId::CLS_04)
 }
 
-/// The methods an exception class may define again over its base's (CLS-13).
-const REDEFINABLE: [&str; 3] = ["__init__", "__str__", "__repr__"];
-
 /// The special methods a class may define: `__init__`, `__str__` and `__repr__`, and from 0.3
 /// `__iter__` and `__next__` (CST-08) and `__enter__` and `__exit__` (CST-05). Any other name that starts and ends with two
 /// underscores changes how Python treats the instances, and waits for the operator methods of
@@ -254,6 +252,8 @@ pub(super) struct KnownClasses<'known> {
     pub(super) ids: &'known BTreeMap<String, ClassId>,
     pub(super) instances: &'known BTreeMap<ClassId, Type>,
     pub(super) earlier: &'known [ClassInfo],
+    /// The signatures of the functions of the modules checked before, indexed by ID.
+    pub(super) signatures: &'known [FunctionSignature],
 }
 
 /// Collects each class's attributes and methods; the methods become definitions whose IDs
@@ -307,7 +307,7 @@ pub(super) fn collect_members<'tree>(
                         continue;
                     };
                     let name = &parts.name.name;
-                    if let Some(refused) = refused_method(&parts, &info, classes) {
+                    if let Some(refused) = refused_method(&parts, &info) {
                         diagnostics.push(refused);
                         continue;
                     }
@@ -327,24 +327,17 @@ pub(super) fn collect_members<'tree>(
                     }
                     info.methods.push((name.clone(), id));
                     let method = definition(&parts, Some(&owner), &scope, diagnostics);
-                    if matches!(name.as_str(), "__str__" | "__repr__") {
-                        check_text_method(&method, parts.name, diagnostics);
-                    }
-                    if name == "__exit__" {
-                        check_exit(&method, parts.name, diagnostics);
-                    }
-                    if matches!(name.as_str(), "__iter__" | "__next__" | "__enter__")
-                        && method.signature.parameters.len() != 1
+                    let signatures = Signatures {
+                        earlier: known.signatures,
+                        local: &methods,
+                        first_function,
+                    };
+                    if let Some(diagnostic) =
+                        check_override(&info, classes, signatures, &method, parts.name)
                     {
-                        diagnostics.push(
-                            Diagnostic::new(
-                                DiagnosticCode::error(404),
-                                parts.name.span,
-                                format!("`{name}` takes only `self`"),
-                            )
-                            .with_rule(RuleId::CST_08),
-                        );
+                        diagnostics.push(diagnostic);
                     }
+                    check_special_method(&method, parts.name, diagnostics);
                     methods.push(method);
                 }
                 _ => {}
@@ -414,29 +407,12 @@ fn new_info(class: &ClassStatement<'_>, instance: &Type, classes: Classes<'_>) -
     }
 }
 
-/// Returns why a method cannot be defined, if it cannot: the class already defines it, it
-/// redefines a method of a base other than those of CLS-13, it is a special method planned
-/// with the operator methods, or it has no `self`.
-fn refused_method(
-    parts: &FunctionParts<'_>,
-    info: &ClassInfo,
-    classes: Classes<'_>,
-) -> Option<Diagnostic> {
+/// Returns why a method cannot be defined, if it cannot: the class already defines it, it is
+/// a special method planned with the operator methods, or it has no `self`.
+fn refused_method(parts: &FunctionParts<'_>, info: &ClassInfo) -> Option<Diagnostic> {
     let name = &parts.name.name;
     if info.method(name).is_some() {
         return Some(defined_twice(parts.name));
-    }
-    if !REDEFINABLE.contains(&name.as_str()) && inherited_method(classes, info.base, name) {
-        return Some(
-            Diagnostic::new(
-                DiagnosticCode::error(201),
-                parts.name.span,
-                format!(
-                    "redefining the method `{name}` of a base is planned for TyPy 0.4 (CLS-04)"
-                ),
-            )
-            .with_rule(RuleId::CLS_13),
-        );
     }
     if name.starts_with("__") && name.ends_with("__") && !SPECIAL_METHODS.contains(&name.as_str()) {
         return Some(planned_method(parts.name));
@@ -455,16 +431,65 @@ fn refused_method(
     None
 }
 
-/// Returns true when `base`, or a class it derives from, defines the method `name`.
-fn inherited_method(classes: Classes<'_>, base: Option<ClassId>, name: &str) -> bool {
+/// The signatures of the functions collected so far: those of the modules checked before,
+/// indexed by ID, and the module's methods, whose IDs follow `first_function`.
+#[derive(Clone, Copy)]
+struct Signatures<'definitions, 'tree> {
+    earlier: &'definitions [FunctionSignature],
+    local: &'definitions [Definition<'tree>],
+    first_function: usize,
+}
+
+impl<'definitions> Signatures<'definitions, '_> {
+    fn get(self, id: FunctionId) -> Option<&'definitions FunctionSignature> {
+        (id.0 as usize)
+            .checked_sub(self.first_function)
+            .map_or_else(
+                || self.earlier.get(id.0 as usize),
+                |local| self.local.get(local).map(|base| &base.signature),
+            )
+    }
+}
+
+/// Returns why a method does not fit the base method it overrides, if it overrides one and
+/// does not fit; a constructor runs on its own class only, so `__init__` is not compared.
+fn check_override(
+    info: &ClassInfo,
+    classes: Classes<'_>,
+    signatures: Signatures<'_, '_>,
+    method: &Definition<'_>,
+    name: &Identifier,
+) -> Option<Diagnostic> {
+    if name.name == "__init__" {
+        return None;
+    }
+    let (base_id, base_class) = inherited_method(classes, info.base, &name.name)?;
+    let base = signatures.get(base_id)?;
+    Override {
+        name: &format!("{}.{}", info.name, name.name),
+        signature: &method.signature,
+        base_name: &format!("{base_class}.{}", name.name),
+        base,
+        span: name.span,
+    }
+    .check()
+}
+
+/// Returns the method `name` of `base` or of the nearest class it derives from that defines
+/// it, with that class's name.
+fn inherited_method<'infos>(
+    classes: Classes<'infos>,
+    base: Option<ClassId>,
+    name: &str,
+) -> Option<(FunctionId, &'infos str)> {
     let mut current = base;
     while let Some(info) = current.and_then(|class| classes.get(class)) {
-        if info.method(name).is_some() {
-            return true;
+        if let Some(method) = info.method(name) {
+            return Some((method, &info.name));
         }
         current = info.base;
     }
-    false
+    None
 }
 
 /// Declares an attribute in the class body; a second declaration is an error.
@@ -517,6 +542,26 @@ fn declare(
         name: name.to_owned(),
         ty,
     });
+}
+
+/// Checks the signature of a special method the runtime or a statement calls: `__str__`,
+/// `__repr__`, `__exit__`, `__iter__`, `__next__` and `__enter__`.
+fn check_special_method(method: &Definition<'_>, name: &Identifier, diagnostics: &mut Diagnostics) {
+    match name.name.as_str() {
+        "__str__" | "__repr__" => check_text_method(method, name, diagnostics),
+        "__exit__" => check_exit(method, name, diagnostics),
+        "__iter__" | "__next__" | "__enter__" if method.signature.parameters.len() != 1 => {
+            diagnostics.push(
+                Diagnostic::new(
+                    DiagnosticCode::error(404),
+                    name.span,
+                    format!("`{}` takes only `self`", name.name),
+                )
+                .with_rule(RuleId::CST_08),
+            );
+        }
+        _ => {}
+    }
 }
 
 /// `__str__` and `__repr__` take only the instance and return a `str`, as CPython requires

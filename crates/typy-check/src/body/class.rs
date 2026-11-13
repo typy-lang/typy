@@ -449,6 +449,7 @@ impl BodyChecker<'_> {
             TypedExprKind::Call {
                 function: method,
                 arguments: bound,
+                dispatch: true,
             },
             returns,
             span,

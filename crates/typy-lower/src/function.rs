@@ -75,6 +75,7 @@ pub(crate) struct FunctionLowerer<'context> {
     pub(crate) builder: FunctionBuilder,
     pub(crate) program: &'context TypedProgram,
     pub(crate) may_raise: &'context [bool],
+    pub(crate) methods: &'context crate::methods::MethodTables,
     pub(crate) strings: &'context mut StringPool,
     pub(crate) tuple_types: &'context mut TupleTypes,
     pub(crate) slots: BTreeMap<SymbolId, SlotId>,
@@ -120,7 +121,7 @@ impl<'context> FunctionLowerer<'context> {
     pub(crate) fn lower(
         program: &'context TypedProgram,
         function: &TypedFunction,
-        may_raise: &'context [bool],
+        calls: &crate::methods::Calls<'context>,
         strings: &'context mut StringPool,
         tuple_types: &'context mut TupleTypes,
         module_globals: &'context crate::module_variable::ModuleGlobals,
@@ -182,7 +183,8 @@ impl<'context> FunctionLowerer<'context> {
         let mut lowerer = FunctionLowerer {
             builder,
             program,
-            may_raise,
+            may_raise: calls.may_raise,
+            methods: calls.methods,
             strings,
             tuple_types,
             slots,
@@ -216,7 +218,14 @@ impl<'context> FunctionLowerer<'context> {
             }
         }
         lowerer.prologue();
-        lowerer.builder.set_may_raise(lowerer.raises);
+        // A method that shares a table entry with one that raises is called as one that may
+        // raise, so it returns as one (ADR-0021).
+        let shared = calls
+            .may_raise
+            .get(function.id.0 as usize)
+            .copied()
+            .unwrap_or(false);
+        lowerer.builder.set_may_raise(lowerer.raises || shared);
         lowerer.builder.finish()
     }
 

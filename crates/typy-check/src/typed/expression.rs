@@ -87,6 +87,10 @@ pub enum TypedExprKind {
     Call {
         function: FunctionId,
         arguments: Vec<Argument>,
+        /// True for a method called on an instance, which runs the method of the instance's
+        /// class when that class defines it again; false for a function and for `super()`
+        /// (ADR-0021).
+        dispatch: bool,
     },
     /// A new instance of a class, made by calling the class: the instance is made, then
     /// `__init__` runs on it with the arguments (CLS-01).
