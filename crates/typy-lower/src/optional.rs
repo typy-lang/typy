@@ -39,6 +39,10 @@ impl FunctionLowerer<'_> {
     /// result takes over the value's reference.
     pub(crate) fn upcast(&mut self, inner: &TypedExpr, ty: TyirType, span: Span) -> Lowered {
         let value = self.expression(inner);
+        // A union whose members are held alike is held as they are.
+        if value.ty == ty {
+            return value;
+        }
         let upcast = self.builder.push_value(
             Operation::Upcast {
                 value: value.value,

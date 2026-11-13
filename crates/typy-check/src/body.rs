@@ -38,6 +38,7 @@ mod statement;
 mod super_call;
 mod sys_call;
 mod type_object;
+mod union;
 mod view_operator;
 
 pub(crate) use builtin_module::ModuleFunction;

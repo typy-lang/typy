@@ -533,3 +533,48 @@ fn same_method_compares_two_instances_of_a_class_with_a_table() {
     assert!(message(&same(4, false)).contains("class#0 has no method#4 in its table"));
     assert!(message(&same(0, true)).contains("v1 of type int is not an instance of class#0"));
 }
+
+#[test]
+fn any_object_becomes_a_union_and_a_union_any_object() {
+    let to_union = on_circle(|circle, _| {
+        (
+            Operation::Upcast {
+                value: circle,
+                ty: TyirType::UNION,
+            },
+            TyirType::UNION,
+        )
+    });
+    assert_eq!(verify(&to_union), Ok(()));
+    assert!(
+        print(&to_union).contains("upcast v0, union"),
+        "{}",
+        print(&to_union)
+    );
+    let number = on_circle(|_, number| {
+        (
+            Operation::Upcast {
+                value: number,
+                ty: TyirType::UNION,
+            },
+            TyirType::UNION,
+        )
+    });
+    assert!(message(&number).contains("is not an instance"));
+    let optional = |id| TyirType::Optional(typy_tyir::OptionalBase::Object(id));
+    let mut builder = FunctionBuilder::new(FunctionId(0), "_TY8__main__1g", "g", TyirType::Unit);
+    let held = builder.add_parameter(optional(TypeId::UNION));
+    builder.push_value(
+        Operation::Downcast {
+            value: held,
+            ty: optional(TypeId::STR),
+        },
+        optional(TypeId::STR),
+        span(),
+    );
+    let unit = builder.push_value(Operation::Constant(Constant::Unit), TyirType::Unit, span());
+    builder.terminate(Terminator::Return(unit));
+    let mut module = on_circle(|circle, _| (Operation::Increment(circle), TyirType::Unit));
+    module.functions = vec![builder.finish()];
+    assert_eq!(verify(&module), Ok(()));
+}

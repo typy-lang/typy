@@ -66,7 +66,8 @@ impl FunctionLowerer<'_> {
                 | Type::Module(_)
                 | Type::AnyModule
                 | Type::TextFile
-                | Type::Traceback,
+                | Type::Traceback
+                | Type::Union(_),
                 _,
             ) => {
                 let object = self.bits(Self::borrowed(lowered.value, lowered.ty), span);
@@ -74,7 +75,10 @@ impl FunctionLowerer<'_> {
                 self.borrowed_result(class)
             }
             (_, Some(of)) => self.type_object(&of, span),
-            (Type::Optional(inner), None) if matches!(inner.as_ref(), Type::Instance(class) if self.program.has_subclass(class.id)) => {
+            (Type::Optional(inner), None)
+                if matches!(inner.as_ref(), Type::Union(_))
+                    || matches!(inner.as_ref(), Type::Instance(class) if self.program.has_subclass(class.id)) =>
+            {
                 self.optional_branch(
                     lowered,
                     TyirType::TYPE,

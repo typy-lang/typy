@@ -49,6 +49,14 @@ All notable changes to TyPy are recorded here. The format follows
   the ordering methods as CPython does, and refuses what CPython
   refuses, such as a mutable default. The hash of a frozen dataclass
   and `default_factory` are planned for 0.5 (CLS-05, LIB-06).
+- Unions of objects, such as `str | list[int]`, `bytes | None` or
+  `Circle | Square`: a value of a member is held as the object itself,
+  and a union can be passed, returned, stored, printed, written with
+  `str` and `repr`, given to `type()` and tested for truth. `isinstance`
+  narrows it in both branches, and a union of classes that share a base
+  has that base's attributes and methods. A union with a member held by
+  value, such as `int | str`, comes later in 0.4 (TYP-14, TYP-07,
+  ADR-0022).
 - `Final` and `Final[T]` from `typing`: a module or function variable, a
   class variable or an attribute that `__init__` declares `Final` is
   assigned only by its declaration, and any other assignment is E0414. A
@@ -82,6 +90,11 @@ All notable changes to TyPy are recorded here. The format follows
   (CLS-03).
 
 ### Changed
+
+- The name of `except (A, B) as name` is the union `A | B`, as type
+  checkers read it, and no longer their common base; its attributes and
+  methods are still the base's, and it can be stored in a variable
+  declared `A | B` (TYP-14).
 
 - A base that is not `object`, an exception class or a class of the
   program, such as `int` or `list`, is E0201 with a message that names

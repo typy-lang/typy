@@ -88,14 +88,15 @@ impl BodyChecker<'_> {
     /// Checks the value an attribute expression reads or assigns; the instance `__init__` is
     /// building is read without the check that it is complete.
     fn instance_object(&mut self, value: &Expr) -> TypedExpr {
-        match self.initialized_instance(value) {
-            Some((initializing, span)) => Self::typed(
+        if let Some((initializing, span)) = self.initialized_instance(value) {
+            return Self::typed(
                 TypedExprKind::Local(initializing.instance),
                 self.program.instance_type(initializing.class),
                 span,
-            ),
-            None => self.expression(value),
+            );
         }
+        let object = self.expression(value);
+        self.through_union_base(object)
     }
 
     /// Returns an instance with its class, after reporting a value that is not an instance.

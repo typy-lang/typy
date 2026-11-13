@@ -230,6 +230,22 @@ pub unsafe extern "C" fn typy_rt_object_str(object: *mut ObjectHeader) -> Raisin
     }
 }
 
+/// Returns whether a heap object is true, as its type tests it; an object whose type has no
+/// test is true, as in CPython (TYP-14).
+///
+/// # Safety
+///
+/// `object` points to a live object with a valid header.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn typy_rt_object_is_true(object: *mut ObjectHeader) -> bool {
+    // SAFETY: the caller's guarantee.
+    match unsafe { type_of(object) }.truth {
+        // SAFETY: the type's function takes an object of the type.
+        Some(truth) => unsafe { truth(object) },
+        None => true,
+    }
+}
+
 /// Returns the type object of a heap object, as `type(value)` gives it for a value whose
 /// type only the object knows, such as an iterator (CLS-12).
 ///

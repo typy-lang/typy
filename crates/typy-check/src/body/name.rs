@@ -74,7 +74,16 @@ impl BodyChecker<'_> {
                 TypedExprKind::Local(symbol)
             };
             let read = Self::typed(kind, ty.clone(), span);
+            let not_none = self
+                .assigned
+                .as_ref()
+                .is_some_and(|facts| facts.contains(&Fact::NotNone(symbol)));
             if let Some(narrowed) = self.narrowed_type(symbol, id) {
+                // A narrowed `T | None` a test showed is not `None` is a `T`.
+                let narrowed = match narrowed {
+                    Type::Optional(inner) if not_none => *inner,
+                    other => other,
+                };
                 return Self::narrowed_read(read, narrowed, span);
             }
             // A test before this point showed the optional variable is not `None` (TYP-13);

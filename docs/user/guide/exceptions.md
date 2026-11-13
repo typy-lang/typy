@@ -27,7 +27,8 @@ An `except` clause catches an exception of the class it names or of any
 class derived from it, so `except LookupError` catches a `KeyError`. The
 clauses are tried in order. The name after `as` holds the exception while
 the clause runs and is deleted when it ends, as in CPython; with several
-classes it has the type of their nearest common base. An exception no
+classes it is a union of them, such as `ValueError | KeyError`, whose
+attributes and methods are those of their nearest common base. An exception no
 clause catches goes on to the code around the `try`. `else` runs when the
 body raised nothing. `finally` runs on every way out of the `try`: after
 the body, a clause or `else`, on `return`, `break` and `continue`, and

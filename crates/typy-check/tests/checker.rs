@@ -81,7 +81,7 @@ fn a_try_statement_types_each_clause_and_its_name() {
         .iter()
         .find(|symbol| symbol.name == "e")
         .expect("the clause's name is a symbol");
-    assert_eq!(e.ty.to_string(), "LookupError");
+    assert_eq!(e.ty.to_string(), "IndexError | KeyError");
 }
 
 #[test]

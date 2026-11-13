@@ -52,6 +52,10 @@ fn optional_variable(expression: &TypedExpr) -> Option<SymbolId> {
             Some(*symbol)
         }
         TypedExprKind::Unwrap(inner) => optional_variable(inner),
+        // A read an `isinstance` test narrowed to a `T | None` (TYP-14).
+        TypedExprKind::Downcast(inner) if matches!(expression.ty, Type::Optional(_)) => {
+            narrowable_variable(inner)
+        }
         _ => None,
     }
 }
@@ -90,16 +94,21 @@ pub(super) fn test_facts(test: &TypedExpr) -> (BTreeSet<Fact>, BTreeSet<Fact>) {
             }
         }
         TypedExprKind::IsInstance(isinstance) => {
-            let (Some(symbol), Some(narrowed)) =
-                (narrowable_variable(&isinstance.value), isinstance.narrowed)
-            else {
+            let Some(symbol) = narrowable_variable(&isinstance.value) else {
                 return (none(), none());
             };
-            let mut holds = BTreeSet::from([Fact::Narrowed(symbol, narrowed)]);
-            if matches!(isinstance.value.ty, Type::Optional(_)) {
-                holds.insert(Fact::NotNone(symbol));
+            let mut holds = none();
+            if let Some(narrowed) = isinstance.narrowed {
+                holds.insert(Fact::Narrowed(symbol, narrowed));
+                if matches!(isinstance.value.ty, Type::Optional(_)) {
+                    holds.insert(Fact::NotNone(symbol));
+                }
             }
-            (holds, none())
+            let fails = isinstance
+                .otherwise
+                .map(|otherwise| BTreeSet::from([Fact::Narrowed(symbol, otherwise)]))
+                .unwrap_or_default();
+            (holds, fails)
         }
         TypedExprKind::Unary {
             operator: UnaryOperator::Not,

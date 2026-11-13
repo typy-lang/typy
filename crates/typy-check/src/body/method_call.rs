@@ -40,7 +40,10 @@ impl BodyChecker<'_> {
         if let Some(call) = self.call_through(receiver, name, arguments, keywords, span) {
             return call;
         }
-        let receiver = self.expression(receiver);
+        let receiver = {
+            let receiver = self.expression(receiver);
+            self.through_union_base(receiver)
+        };
         if receiver.ty.has_error() {
             return Self::invalid_call(span);
         }

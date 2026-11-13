@@ -816,45 +816,65 @@ without a default would give `V | None`, E0201 until TYP-06 brings it.
 source of pairs of the dict's types. A dict passed to a set method or to
 `set()` stays a dict, so the runtime takes CPython's dict steps.
 
-Optional values (TYP-06, TYP-13, ADR-0011) add `Type::Optional(T)`, written
-`T | None` or `None | T`, which `Type::optional` builds so that `T` is never
-`None` or optional itself. Any other `|` annotation is E0201, planned for
-0.4 (TYP-14). `is_assignable_to` accepts `None` and a `T` where `T | None`
+Unions of objects (TYP-14, ADR-0022) add `Type::Union(members)`, which
+`Type::union` builds in normal form in `union_type`: nested unions flatten,
+`None` makes the union optional, a member another member accepts is dropped, the
+members are sorted by their debug text so `A | B` is `B | A`, and one member is
+that member. `check::annotation::union_annotation` accepts a union whose members
+are all objects (`Type::is_object`) and reports any other as E0201 until tagged
+unions come. A member is assignable to its union, and a union to any type each
+member is assignable to, through `Upcast`. Lowering holds a union as its members
+are when all are held alike, as the class every member derives from when they
+are instances that share one (`Type::union_base`), and otherwise as
+`TypeId::UNION`, an object whose header says what it is, which the verifier lets
+any object become and become again. `body::union::through_union_base` gives the
+receiver of an attribute, a method or `raise` the shared class, or the common
+exception class of a union of exceptions, which an `except (A, B) as name`
+binds. `str`, `repr`, `type()` and a truth test of a `TypeId::UNION` value call
+`typy_rt_object_str`, `typy_rt_object_repr`, `typy_rt_object_type` and
+`typy_rt_object_is_true`, which read the object's type slots; `str` has a `str`
+slot that returns the object itself. `IsInstanceTest::otherwise` gives the
+members no tested class takes in every case, which the flow state holds in the
+branch where the test fails, and a narrowed `T | None` that a test showed is not
+`None` reads as `T`. A truth test of a union held as a base whose members test
+themselves otherwise, or of a member class whose truth comes from `__len__`, is
+E0201, planned for 0.5.
+
+Optional values (TYP-06, TYP-13, ADR-0011) add `Type::Optional(T)`, written `T |
+None` or `None | T`, which `Type::optional` builds so that `T` is never `None`
+or optional itself. `is_assignable_to` accepts `None` and a `T` where `T | None`
 is declared, and `matches` compares types item by item for everything a
-container stores, so `list[int]` is not a `list[int | None]`: a stored item
-is never converted. `BodyChecker::converted` makes the conversion explicit
-as `TypedExprKind::Wrap(value)` wherever a value meets a declared type, at
-an assignment, an argument, a `return`, an item of a display and a branch
-of a conditional expression, and converts a tuple display item by item. An
-instance, or an optional one, that meets the type of a class it derives
-from becomes `TypedExprKind::Upcast(value)`, and so does the receiver of
-an inherited method (CLS-04). A
-display, and a conditional expression with a `None` branch, join their
-items' types, so `[1, None]` is `list[int | None]`. An optional value is
+container stores, so `list[int]` is not a `list[int | None]`: a stored item is
+never converted. `BodyChecker::converted` makes the conversion explicit as
+`TypedExprKind::Wrap(value)` wherever a value meets a declared type, at an
+assignment, an argument, a `return`, an item of a display and a branch of a
+conditional expression, and converts a tuple display item by item. An instance,
+or an optional one, that meets the type of a class it derives from becomes
+`TypedExprKind::Upcast(value)`, and so does the receiver of an inherited method
+(CLS-04). A display, and a conditional expression with a `None` branch, join
+their items' types, so `[1, None]` is `list[int | None]`. An optional value is
 compared with `None` by `is`, tested for truth and written as text; `==`,
-ordering, operators and methods on it are E0407, E0401 and E0412, with a
-help that says how to narrow it. `True`, `False` and `None` are each the
-only object of its value, so two `bool` or `bool | None` values also
-compare by `is`: lowering compiles it as `==` of two `bool` values, after
-testing an optional one for `None`, which is never a `bool` (EXP-08). The flow
-state of definite assignment holds `Fact::Assigned(symbol)` and
-`Fact::NotNone(symbol)`, joined by intersection, so a fact holds only where it
-holds on every path.
-`test_facts` gives the facts a test shows when it holds and when it fails:
-`x is not None` and a truth test of `x` show `x` is not `None` when they
-hold, `x is None` when it fails, `not` exchanges them, and `and` and `or`
-combine their operands'. An `if` and a `while` add them to each branch, the
-operands of `and` and `or`, the branches of a conditional expression and
-the clauses of a comprehension after a condition see what the test before
-showed, and an early `return`, `break` or `continue` leaves what the other
-branch showed. Assigning a value that is not `None` to an optional variable
-shows it is not `None`, and assigning `None` or an optional value forgets
-it. A loop forgets the facts of every variable its body assigns before it
-reads its test or binds its target, since the next pass starts from what the
-body left. A name whose fact holds reads as `TypedExprKind::Unwrap(local)`
-of type `T`. `dict.get(key)` without a default gives `V | None`, or `V` when
-`V` is optional, as `get(key, None)`; `setdefault(key)` without a default
-needs an optional `V`, E0404 otherwise.
+ordering, operators and methods on it are E0407, E0401 and E0412, with a help
+that says how to narrow it. `True`, `False` and `None` are each the only object
+of its value, so two `bool` or `bool | None` values also compare by `is`:
+lowering compiles it as `==` of two `bool` values, after testing an optional one
+for `None`, which is never a `bool` (EXP-08). The flow state of definite
+assignment holds `Fact::Assigned(symbol)` and `Fact::NotNone(symbol)`, joined by
+intersection, so a fact holds only where it holds on every path. `test_facts`
+gives the facts a test shows when it holds and when it fails: `x is not None`
+and a truth test of `x` show `x` is not `None` when they hold, `x is None` when
+it fails, `not` exchanges them, and `and` and `or` combine their operands'. An
+`if` and a `while` add them to each branch, the operands of `and` and `or`, the
+branches of a conditional expression and the clauses of a comprehension after a
+condition see what the test before showed, and an early `return`, `break` or
+`continue` leaves what the other branch showed. Assigning a value that is not
+`None` to an optional variable shows it is not `None`, and assigning `None` or
+an optional value forgets it. A loop forgets the facts of every variable its
+body assigns before it reads its test or binds its target, since the next pass
+starts from what the body left. A name whose fact holds reads as
+`TypedExprKind::Unwrap(local)` of type `T`. `dict.get(key)` without a default
+gives `V | None`, or `V` when `V` is optional, as `get(key, None)`;
+`setdefault(key)` without a default needs an optional `V`, E0404 otherwise.
 
 Comprehensions (EXP-12) add `TypedExprKind::Comprehension { element, value,
 generators }`, a `value` only for a dict, and each `Generator { target,

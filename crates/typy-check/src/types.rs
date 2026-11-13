@@ -38,6 +38,9 @@ pub enum Type {
     /// `T | None`: a value of `T`, or `None` (TYP-06, ADR-0011). `T` is never `None` or
     /// optional itself; `optional` builds the type and keeps that rule.
     Optional(Box<Type>),
+    /// `A | B | ...`: a value of one of two or more types other than `None`, in the normal
+    /// form `Type::union` builds (TYP-14, ADR-0022).
+    Union(Vec<Type>),
     /// An instance of a class of the program, or of a class derived from it (CLS-01, CLS-04).
     Instance(Arc<InstanceClass>),
     /// An exception of a class (ADR-0013).
@@ -141,6 +144,7 @@ impl TypeObjectOf {
             | Type::Traceback
             | Type::Module(_)
             | Type::Optional(_)
+            | Type::Union(_)
             | Type::Error => {
                 return None;
             }
@@ -266,6 +270,14 @@ impl Type {
             // instance (CLS-04).
             (Self::Exception(class), Self::Exception(base)) => class.derives_from(base),
             (Self::Instance(class), Self::Instance(base)) => class.derives_from(base),
+            // A union is held where each of its members is, and a member where its union is
+            // (TYP-14).
+            (Self::Union(members), _) => {
+                members.iter().all(|member| member.is_assignable_to(target))
+            }
+            (_, Self::Union(members)) if !matches!(self, Self::Optional(_)) => {
+                members.iter().any(|member| self.is_assignable_to(member))
+            }
             (Self::Optional(_), _) => self.matches(target) || self.is_upcast_to(target),
             (_, Self::Optional(inner)) => self.is_assignable_to(inner),
             (_, Self::Iterable(item)) => self.iterable_item().is_some_and(|own| own.matches(item)),
@@ -280,6 +292,11 @@ impl Type {
         match (self, target) {
             (Self::Instance(class), Self::Instance(base)) => class.derives_from(base),
             (Self::Optional(inner), Self::Optional(base)) => inner.is_upcast_to(base),
+            // A value becomes a union, or a wider one, or the class every member derives
+            // from, as the object it is (TYP-14).
+            (Self::Union(_), _) | (_, Self::Union(_)) => {
+                !self.matches(target) && self.is_assignable_to(target)
+            }
             _ => false,
         }
     }
@@ -563,6 +580,11 @@ impl Type {
                 format!("an {class}")
             }
             Self::Iterator(_) | Self::Iterable(_) => format!("an {self}"),
+            // The article reads with the first member, as in `an A | B`.
+            Self::Union(members) => {
+                let rest: Vec<String> = members[1..].iter().map(ToString::to_string).collect();
+                format!("{} | {}", members[0].with_article(), rest.join(" | "))
+            }
             other => format!("a {other}"),
         }
     }
@@ -602,6 +624,10 @@ impl fmt::Display for Type {
                 write!(formatter, "{}[{key}, {value}]", view.name())
             }
             Self::Optional(inner) => write!(formatter, "{inner} | None"),
+            Self::Union(members) => {
+                let text: Vec<String> = members.iter().map(ToString::to_string).collect();
+                formatter.write_str(&text.join(" | "))
+            }
             Self::Instance(class) => write!(formatter, "{class}"),
             Self::Exception(class) => write!(formatter, "{class}"),
             Self::Iterator(item) => write!(formatter, "Iterator[{item}]"),

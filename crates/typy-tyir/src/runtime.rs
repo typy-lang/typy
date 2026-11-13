@@ -192,6 +192,7 @@ pub enum RuntimeFunction {
     ObjectType,
     ObjectRepr,
     ObjectStr,
+    ObjectIsTrue,
     IsInstance,
     IntLength,
     Traceback,
@@ -326,7 +327,7 @@ const FLOAT_FLOAT: &[TyirType] = &[TyirType::Float, TyirType::Float];
 
 impl RuntimeFunction {
     /// Every runtime function.
-    pub const ALL: [Self; 287] = [
+    pub const ALL: [Self; 288] = [
         Self::IntFloorDivide,
         Self::IntModulo,
         Self::IntPower,
@@ -510,6 +511,7 @@ impl RuntimeFunction {
         Self::ObjectType,
         Self::ObjectRepr,
         Self::ObjectStr,
+        Self::ObjectIsTrue,
         Self::IsInstance,
         Self::IntLength,
         Self::Traceback,
@@ -803,6 +805,7 @@ impl RuntimeFunction {
             Self::IteratorItem => signature(&[ITERATOR], Bits, false),
             Self::ObjectType => signature(&[Bits], TYPE, false),
             Self::ObjectRepr | Self::ObjectStr => signature(&[Bits], STR, true),
+            Self::ObjectIsTrue => signature(&[Bits], Bool, false),
             Self::IsInstance => signature(&[Bits, TYPE], Bool, false),
             Self::IntLength => signature(&[Int], Int, true),
             Self::Traceback => signature(&[], TyirType::TRACEBACK, false),
@@ -1100,6 +1103,7 @@ impl RuntimeFunction {
             Self::ObjectType => "object_type",
             Self::ObjectRepr => "object_repr",
             Self::ObjectStr => "object_str",
+            Self::ObjectIsTrue => "object_is_true",
             Self::IsInstance => "is_instance",
             Self::IntLength => "int_length",
             Self::Traceback => "traceback",

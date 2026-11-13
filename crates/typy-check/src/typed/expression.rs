@@ -373,6 +373,9 @@ pub struct IsInstanceTest {
     /// The position, in the function's table of narrowed types, of the type a true test gives
     /// the variable the value reads, when it narrows one (TYP-07).
     pub narrowed: Option<u32>,
+    /// The position of the type a false test gives that variable: the members of a union no
+    /// tested class takes in every case (TYP-07, TYP-14).
+    pub otherwise: Option<u32>,
 }
 
 impl TypedExpr {

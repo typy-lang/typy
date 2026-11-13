@@ -21,10 +21,12 @@ value.
 | A variable narrows to a derived class after `isinstance` | TYP-07 |
 | A name, class variable or attribute declared `Final` is not assigned again | TYP-08 |
 | `type Name = annotation` at module level names an annotation | SMT-10 |
+| `A \| B` of objects, such as `str \| list[int]`, narrowed by `isinstance` | TYP-14, TYP-07 |
 | `Iterator[T]` and `Iterable[T]` from `typing` or `collections.abc` | TYP-15 |
 | `TracebackType` and `ModuleType` from `types` | CST-10, MOD-10 |
 
-Unions of other types, such as `int | str`, come later in 0.4 (TYP-14).
+A union with a member held by value, such as `int | str`, comes later in
+0.4 (TYP-14).
 
 ## Iterators and iterables
 
@@ -57,6 +59,61 @@ its truth depend on which collection it is, so `len`, `bool`, `not` and a
 condition on it are refused. In 0.3 these names, and `typing`,
 `collections.abc` and `types` themselves, are for annotations only; their
 use as values, and the other names of `typing`, come in 0.4 (LIB-06).
+
+## Unions
+
+`A | B` holds a value of either type. TyPy holds a union of objects, such
+as `str | bytes`, `list[int] | dict[str, int]` or two classes, as the
+object itself, so passing a member where the union is expected costs
+nothing. `A | B` and `B | A` are one type, and a member another member
+takes is dropped: `Circle | Shape` is `Shape` when `Circle` derives from
+`Shape`.
+
+A union can be passed, returned, stored in a container, printed, written
+with `str`, `repr` and f-strings, given to `type()` and tested for truth.
+`isinstance` narrows it, in the branch where the test holds and in the
+branch where it fails. A union of classes that share a base has that
+base's attributes and methods:
+
+<!-- typy-expect: accepted -->
+```python
+class Shape:
+    def __init__(self, name: str) -> None:
+        self.name = name
+
+
+class Circle(Shape):
+    def __init__(self, radius: float) -> None:
+        super().__init__("circle")
+        self.radius = radius
+
+
+class Square(Shape):
+    def __init__(self, side: float) -> None:
+        super().__init__("square")
+        self.side = side
+
+
+def size(value: str | list[int]) -> int:
+    if isinstance(value, str):
+        return len(value)
+    return sum(value)
+
+
+def measure(shape: Circle | Square) -> str:
+    if isinstance(shape, Circle):
+        return shape.name + " " + str(shape.radius)
+    return shape.name + " " + str(shape.side)
+
+
+print(size("abc"), size([1, 2]), measure(Square(2.0)))
+```
+
+Any other operation, such as `==`, `len` or a method, needs every member
+to have it. Until TyPy calls it on each member, which comes later in 0.4,
+narrow the value with `isinstance` first. A truth test whose member
+classes test themselves with `__len__`, or differently from their base,
+is planned for 0.5.
 
 ## Names that keep their value
 

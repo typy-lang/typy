@@ -309,6 +309,13 @@ impl FunctionLowerer<'_> {
             TyirType::Object(typy_tyir::TypeId::TYPE) => {
                 return self.constant(Constant::Bool(true), span);
             }
+            // The object's type tests it, as CPython's truth test does (TYP-14).
+            TyirType::UNION => {
+                let object = self.bits(Self::borrowed(lowered.value, lowered.ty), span);
+                return self
+                    .call_runtime(RuntimeFunction::ObjectIsTrue, vec![object], span)
+                    .value;
+            }
             // A range is true when it holds its own start; its length may pass `sys.maxsize`,
             // where CPython's truth test still answers.
             TyirType::RANGE => {

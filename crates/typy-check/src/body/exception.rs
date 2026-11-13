@@ -6,7 +6,7 @@ use typy_source::syntax::{Constant, ExceptHandler, Expr, Keyword, Stmt, WithItem
 
 use super::BodyChecker;
 use super::flow::{Fact, meet};
-use crate::exception::{BuiltinException, ExceptionClass, common_base};
+use crate::exception::{BuiltinException, ExceptionClass};
 use crate::typed::{
     RaiseCause, SymbolKind, TypedConstant, TypedExpr, TypedExprKind, TypedHandler, TypedStmt,
     WithProtocol,
@@ -156,6 +156,7 @@ impl BodyChecker<'_> {
     /// called with no arguments, as CPython does.
     fn exception_operand(&mut self, operand: &Expr, what: &str) -> TypedExpr {
         let value = self.expression(operand);
+        let value = self.through_union_base(value);
         match &value.ty {
             Type::Exception(_) | Type::Error => value,
             Type::TypeObject(Some(of)) if matches!(**of, TypeObjectOf::Exception(_)) => {
@@ -263,7 +264,8 @@ impl BodyChecker<'_> {
     fn handler(&mut self, handler: &ExceptHandler) -> TypedHandler {
         let classes = self.handler_classes(handler.class.as_ref());
         let bound = handler.name.as_ref().map(|name| {
-            let ty = Type::Exception(common_base(&classes));
+            // The name holds one of the classes, as type checkers read it (TYP-14).
+            let ty = Type::union(classes.iter().cloned().map(Type::Exception).collect());
             let symbol =
                 self.program
                     .add_symbol(&name.name, SymbolKind::Local, ty.clone(), name.span);

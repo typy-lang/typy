@@ -72,6 +72,7 @@ impl BodyChecker<'_> {
             .map(|(class, _)| class.clone())
             .collect();
         let narrowed = self.narrowing(&value, &inner, &classes, always, none_matches);
+        let otherwise = self.union_otherwise(&value, &inner, &classes);
         Self::typed(
             TypedExprKind::IsInstance(Box::new(IsInstanceTest {
                 value,
@@ -79,6 +80,7 @@ impl BodyChecker<'_> {
                 always,
                 checks,
                 narrowed,
+                otherwise,
             })),
             Type::Bool,
             span,
@@ -133,6 +135,15 @@ impl BodyChecker<'_> {
         }
         let narrowed = if always {
             inner.clone()
+        } else if let Type::Union(members) = inner {
+            let kept: Vec<Type> = members
+                .iter()
+                .flat_map(|member| self.member_when_true(member, classes))
+                .collect();
+            if kept.is_empty() {
+                return None;
+            }
+            Type::union(kept)
         } else if let Type::Exception(own) = inner {
             let mut tested = Vec::new();
             for class in classes {
@@ -169,6 +180,12 @@ impl BodyChecker<'_> {
             }
             Type::instance(common?)
         };
+        self.narrowing_position(value, narrowed)
+    }
+
+    /// Returns the position of `narrowed` in the function's table of narrowed types, unless
+    /// it is the value's own type.
+    fn narrowing_position(&mut self, value: &TypedExpr, narrowed: Type) -> Option<u32> {
         if narrowed == value.ty {
             return None;
         }
@@ -182,11 +199,86 @@ impl BodyChecker<'_> {
             });
         u32::try_from(position).ok()
     }
+
+    /// Returns what a member of a union may be when the test holds: the member, when a tested
+    /// class takes all of it or may take part, or the tested classes derived from it, when
+    /// only they can.
+    fn member_when_true(&self, member: &Type, classes: &[TypeObjectOf]) -> Vec<Type> {
+        let mut found = Vec::new();
+        for class in classes {
+            match outcome(member, class) {
+                Outcome::Always => return vec![member.clone()],
+                Outcome::Never => {}
+                Outcome::Checked => match (member, class) {
+                    (Type::Instance(own), TypeObjectOf::Instance(id, _))
+                        if matches!(self.program.instance_type(*id),
+                            Type::Instance(tested) if tested.derives_from(own)) =>
+                    {
+                        found.push(self.program.instance_type(*id));
+                    }
+                    // With single inheritance, an unrelated class takes no instance.
+                    (Type::Instance(_), TypeObjectOf::Instance(..)) => {}
+                    _ => return vec![member.clone()],
+                },
+            }
+        }
+        found
+    }
+
+    /// Returns the position of the type a false test gives a variable that holds a union: the
+    /// members no tested class takes in every case, or `None` when that is every member or no
+    /// member.
+    fn union_otherwise(
+        &mut self,
+        value: &TypedExpr,
+        inner: &Type,
+        classes: &[TypeObjectOf],
+    ) -> Option<u32> {
+        let Type::Union(members) = inner else {
+            return None;
+        };
+        super::flow::narrowable_variable(value)?;
+        let left: Vec<Type> = members
+            .iter()
+            .filter(|member| {
+                !classes
+                    .iter()
+                    .any(|class| matches!(outcome(member, class), Outcome::Always))
+            })
+            .cloned()
+            .collect();
+        if left.is_empty() {
+            return None;
+        }
+        // `None` is among the classes only with `object`, which takes every member, so a
+        // value that may be `None` still may here.
+        let rest = Type::union(left);
+        let rest = if matches!(value.ty, Type::Optional(_)) {
+            Type::optional(rest)
+        } else {
+            rest
+        };
+        self.narrowing_position(value, rest)
+    }
 }
 
 /// Returns what testing a value of type `ty`, which is not optional, against `class` gives.
 fn outcome(ty: &Type, class: &TypeObjectOf) -> Outcome {
     match (ty, class) {
+        // A union is an instance when each member is, and is not when no member is.
+        (Type::Union(members), _) => {
+            let each: Vec<Outcome> = members
+                .iter()
+                .map(|member| outcome(member, class))
+                .collect();
+            if each.iter().all(|one| matches!(one, Outcome::Always)) {
+                Outcome::Always
+            } else if each.iter().all(|one| matches!(one, Outcome::Never)) {
+                Outcome::Never
+            } else {
+                Outcome::Checked
+            }
+        }
         (_, TypeObjectOf::NoneType) => Outcome::Never,
         (Type::Instance(own), TypeObjectOf::Instance(id, _)) => {
             if own.id == *id || own.ancestors.iter().any(|(each, _)| each == id) {

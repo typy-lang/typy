@@ -236,3 +236,35 @@ fn the_traceback_is_one_immortal_object_written_with_its_address() {
         assert_eq!((*traceback).reference_count, IMMORTAL);
     }
 }
+
+#[test]
+fn str_of_a_string_is_the_string_and_repr_quotes_it() {
+    let string = crate::string::from_str("abc");
+    // SAFETY: the string is live until it is released below.
+    unsafe {
+        let same_string = super::typy_rt_object_str(string.cast());
+        assert_eq!(same_string.value, string);
+        assert_eq!(text(same_string.value), "abc");
+        assert_eq!(
+            text(super::typy_rt_object_repr(string.cast()).value),
+            "'abc'"
+        );
+        crate::refcount::typy_rt_decrement(string.cast());
+    }
+}
+
+#[test]
+fn an_object_is_true_as_its_type_tests_it() {
+    let empty = crate::string::from_str("");
+    let full = crate::string::from_str("a");
+    let traceback = super::typy_rt_traceback();
+    // SAFETY: each object is live until it is released below.
+    unsafe {
+        assert!(!super::typy_rt_object_is_true(empty.cast()));
+        assert!(super::typy_rt_object_is_true(full.cast()));
+        // A type without a test of its own leaves every object true.
+        assert!(super::typy_rt_object_is_true(traceback.cast_mut()));
+        crate::refcount::typy_rt_decrement(empty.cast());
+        crate::refcount::typy_rt_decrement(full.cast());
+    }
+}

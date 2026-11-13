@@ -83,35 +83,16 @@ impl Walker {
                     },
                 );
             }
+            // `T | None` is an optional type (TYP-06), and any other union a union, whose
+            // members the checker reads (TYP-14).
             Expr::BinOp {
                 operator: BinaryOperator::BitOr,
                 left,
                 right,
-                span,
+                ..
             } => {
-                let is_none = |side: &Expr| {
-                    matches!(
-                        side,
-                        Expr::Constant {
-                            value: Constant::None,
-                            ..
-                        }
-                    )
-                };
-                // `T | None` and `None | T` are optional types (TYP-06); any other union waits
-                // for `isinstance` narrowing.
-                match (is_none(left), is_none(right)) {
-                    (false, true) => self.annotation(left),
-                    (true, false) => self.annotation(right),
-                    _ => self.report(
-                        *span,
-                        planned(
-                            "union annotations such as `int | str`",
-                            "0.4",
-                            RuleId::TYP_14,
-                        ),
-                    ),
-                }
+                self.annotation(left);
+                self.annotation(right);
             }
             Expr::Constant {
                 value: Constant::Str(_),

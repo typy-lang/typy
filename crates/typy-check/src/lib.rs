@@ -15,6 +15,7 @@ mod subset;
 mod sys;
 mod typed;
 mod types;
+mod union_type;
 mod unprovided;
 
 pub use builtin::Builtin;

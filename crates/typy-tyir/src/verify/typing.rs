@@ -369,6 +369,15 @@ impl Checker<'_> {
     /// Returns true when `from` holds instances of a class of the module that is `to`'s class
     /// or derives from it, both optional or neither.
     fn derives_from(&self, from: TyirType, to: TyirType) -> bool {
+        // Every object is held as a union of objects as it is (TYP-14).
+        if let (TyirType::Object(_), TyirType::UNION)
+        | (
+            TyirType::Optional(crate::types::OptionalBase::Object(_)),
+            TyirType::Optional(crate::types::OptionalBase::Object(TypeId::UNION)),
+        ) = (from, to)
+        {
+            return true;
+        }
         let classes = match (from, to) {
             (TyirType::Object(from), TyirType::Object(to))
             | (

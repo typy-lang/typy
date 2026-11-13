@@ -150,10 +150,6 @@ fn later_features_name_their_release_and_rule() {
             "`nonlocal` statements are planned for TyPy 1.0 (SMT-09)",
         ),
         (
-            "def f(x: int | str) -> None:\n    pass\n",
-            "union annotations such as `int | str` are planned for TyPy 0.4 (TYP-14)",
-        ),
-        (
             "f()()\n",
             "calls of values that are not names are planned for TyPy 1.0 (FUN-05)",
         ),

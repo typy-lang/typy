@@ -194,28 +194,8 @@ impl BodyChecker<'_> {
                 // `False` and `None` are each the only object of its value, so `bool` and
                 // `bool | None` values compare by identity too (EXP-08).
                 let instance = |ty: &Type| match ty {
-                    Type::Optional(inner) => matches!(
-                        inner.as_ref(),
-                        Type::Instance(..)
-                            | Type::Exception(_)
-                            | Type::Iterator(_)
-                            | Type::TypeObject(_)
-                            | Type::Module(_)
-                            | Type::AnyModule
-                            | Type::TextFile
-                            | Type::Traceback
-                    ),
-                    other => matches!(
-                        other,
-                        Type::Instance(..)
-                            | Type::Exception(_)
-                            | Type::Iterator(_)
-                            | Type::Traceback
-                            | Type::Module(_)
-                            | Type::AnyModule
-                            | Type::TextFile
-                            | Type::TypeObject(_)
-                    ),
+                    Type::Optional(inner) => has_identity(inner),
+                    other => has_identity(other),
                 };
                 let singleton =
                     |ty: &Type| *ty == Type::Bool || *ty == Type::Optional(Box::new(Type::Bool));
@@ -353,5 +333,25 @@ fn binary_symbol(operator: BinaryOperator) -> &'static str {
         BinaryOperator::BitXor => "^",
         BinaryOperator::BitAnd => "&",
         BinaryOperator::FloorDiv => "//",
+    }
+}
+
+/// Returns true when CPython defines the identity of every value of the type, as it does for
+/// instances, exceptions, iterators, modules, files, tracebacks and type objects, and for a
+/// union of such types (EXP-08, TYP-14).
+fn has_identity(ty: &Type) -> bool {
+    match ty {
+        Type::Union(members) => members.iter().all(has_identity),
+        other => matches!(
+            other,
+            Type::Instance(..)
+                | Type::Exception(_)
+                | Type::Iterator(_)
+                | Type::Traceback
+                | Type::Module(_)
+                | Type::AnyModule
+                | Type::TextFile
+                | Type::TypeObject(_)
+        ),
     }
 }
