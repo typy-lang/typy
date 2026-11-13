@@ -270,6 +270,11 @@ impl BodyChecker<'_> {
             }
             Expr::Subscript { value, index, .. } => {
                 let value = self.expression(value);
+                // An instance's class may define `__getitem__` (CLS-07).
+                let value = match self.item_call(value, index, span) {
+                    Ok(call) => return call,
+                    Err(value) => value,
+                };
                 if let Expr::Slice {
                     lower, upper, step, ..
                 } = index.as_ref()
@@ -377,6 +382,31 @@ impl BodyChecker<'_> {
     /// Reports a value whose truth cannot be tested: a condition, `not`, `and`, `or` and
     /// `bool()` all test it (EXP-10).
     pub(super) fn check_truth(&mut self, value: &TypedExpr) {
+        // An instance's truth comes from its class, so a subclass that defines `__bool__` or
+        // `__len__` where its base defines neither would need the object's class (CLS-07).
+        if let Type::Instance(class) = &value.ty
+            && self.program.method(class.id, "__bool__").is_none()
+            && self.program.method(class.id, "__len__").is_none()
+            && self.program.classes.iter().any(|other| {
+                (other.method("__bool__").is_some() || other.method("__len__").is_some())
+                    && matches!(self.program.instance_type(other.id), Type::Instance(derived)
+                        if derived.ancestors.iter().any(|(id, _)| *id == class.id))
+            })
+        {
+            self.diagnostics.push(
+                Diagnostic::new(
+                    DiagnosticCode::error(201),
+                    value.span,
+                    format!(
+                        "a truth test of {} whose subclass defines `__bool__` or `__len__` is \
+                         planned for TyPy 0.5 (CLS-07)",
+                        value.ty.with_article()
+                    ),
+                )
+                .with_rule(RuleId::CLS_07)
+                .with_help(format!("define `__bool__` in `{}`", class.name)),
+            );
+        }
         if !value.ty.is_truth_testable() {
             self.diagnostics.push(
                 Diagnostic::new(

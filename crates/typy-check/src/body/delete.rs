@@ -45,7 +45,13 @@ impl BodyChecker<'_> {
                     .push(refused(&format!("the variable `{id}`")));
                 return;
             }
-            Expr::Subscript { .. } => {}
+            Expr::Subscript { value, index, .. } => {
+                // An instance's class may define `__delitem__` (CLS-07).
+                if let Some(call) = self.item_deletion(value, index, target.span()) {
+                    checked.push(call);
+                    return;
+                }
+            }
             // Python's grammar leaves an attribute as the only other target of `del`.
             _ => {
                 self.diagnostics.push(refused("an attribute"));

@@ -177,3 +177,15 @@ fn a_class_with_comparison_methods_fills_its_type_object_slots() {
         assert!(ir.contains(slot), "{slot} in\n{ir}");
     }
 }
+
+#[test]
+fn a_class_with_bool_fills_its_truth_slot() {
+    let (_guard, main) = program(concat!(
+        "class F:\n",
+        "    def __bool__(self) -> bool:\n",
+        "        return False\n",
+        "print(any([F()]))\n",
+    ));
+    let ir = text(emit(&main, EmitStage::LlvmIr));
+    assert!(ir.contains("typy.class0.truth"), "{ir}");
+}

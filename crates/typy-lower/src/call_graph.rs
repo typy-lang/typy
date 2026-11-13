@@ -250,6 +250,7 @@ fn expression(expression_value: &TypedExpr, callees: &mut BTreeSet<FunctionId>) 
             expression(&call.right, callees);
         }
         TypedExprKind::Wrap(operand)
+        | TypedExprKind::CheckedLength(operand)
         | TypedExprKind::Upcast(operand)
         | TypedExprKind::Downcast(operand)
         | TypedExprKind::Unwrap(operand)

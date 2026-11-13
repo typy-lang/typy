@@ -192,6 +192,33 @@ fn hash_slot<'ctx>(
     Ok(function)
 }
 
+/// Returns the `truth` slot of class `index`, which calls `__bool__` (CLS-07).
+fn truth_slot<'ctx>(
+    shared: &Shared<'_, 'ctx>,
+    index: u32,
+    method: typy_tyir::FunctionId,
+) -> Result<FunctionValue<'ctx>, CodegenError> {
+    let context = shared.context;
+    let (byte, pointer) = (context.i8_type(), context.ptr_type(AddressSpace::default()));
+    let function = shared.module.add_function(
+        &format!("typy.class{index}.truth"),
+        byte.fn_type(&[pointer.into()], false),
+        Some(Linkage::Private),
+    );
+    let builder = context.create_builder();
+    builder.position_at_end(context.append_basic_block(function, ""));
+    let instance = slot_parameter(function, 0)?;
+    let truth = builder
+        .build_call(shared.functions[method.0 as usize], &[instance.into()], "")?
+        .try_as_basic_value()
+        .basic()
+        .ok_or_else(|| CodegenError("`__bool__` returns a bool".to_owned()))?
+        .into_int_value();
+    let truth = builder.build_int_z_extend(truth, byte, "")?;
+    builder.build_return(Some(&truth))?;
+    Ok(function)
+}
+
 /// Returns the `equal` slot of class `index`: it calls `__eq__` when the other object is an
 /// instance of the class its parameter takes, and otherwise compares identities, as
 /// `NotImplemented` and CPython's fallback give (ADR-0026).
@@ -416,6 +443,12 @@ pub(crate) fn type_object<'ctx>(
             word.fn_type(&[pointer.into()], false),
         ),
     };
+    let truth = match class.truth {
+        Some(method) => truth_slot(shared, index, method)?
+            .as_global_value()
+            .as_pointer_value(),
+        None => pointer.const_null(),
+    };
     let equal = match class.equal {
         Some((method, takes)) => equal_slot(shared, index, method, takes)?
             .as_global_value()
@@ -438,13 +471,12 @@ pub(crate) fn type_object<'ctx>(
         ],
         false,
     );
-    let null = pointer.const_null();
     let object = type_object_type(context).const_named_struct(&[
         header.into(),
         name.into(),
         word.const_int(name_length, false).into(),
         base.into(),
-        null.into(),
+        truth.into(),
         hash.as_global_value().as_pointer_value().into(),
         equal.into(),
         order.into(),

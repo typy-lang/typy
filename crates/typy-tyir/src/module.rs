@@ -70,6 +70,8 @@ pub struct TyirClass {
     pub order: [Option<FunctionId>; 4],
     /// `__hash__`, which the type object's `hash` slot calls.
     pub hash: Option<FunctionId>,
+    /// `__bool__`, which the type object's `truth` slot calls.
+    pub truth: Option<FunctionId>,
     /// The method table: the methods a subclass may override, its own or a base's, each at
     /// the position it has in the base's table, then those the class adds (ADR-0021).
     pub methods: Vec<FunctionId>,

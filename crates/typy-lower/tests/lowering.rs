@@ -683,3 +683,23 @@ fn a_right_operand_typed_as_a_base_is_compared_through_the_left_class_s_table() 
     ));
     assert!(printed.contains("downcast"), "{printed}");
 }
+
+#[test]
+fn container_methods_and_truth_call_the_class_s_methods() {
+    let printed = text(concat!(
+        "class G:\n",
+        "    def __len__(self) -> int:\n",
+        "        return 2\n",
+        "    def __delitem__(self, key: int) -> None:\n",
+        "        pass\n",
+        "class F:\n",
+        "    def __bool__(self) -> bool:\n",
+        "        return False\n",
+        "g = G()\n",
+        "del g[0]\n",
+        "print(len(g), bool(g), not F(), any([F()]))\n",
+        "if g:\n",
+        "    print('full')\n",
+    ));
+    assert!(printed.contains("rt.int_length"), "{printed}");
+}

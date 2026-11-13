@@ -63,6 +63,17 @@ impl BodyChecker<'_> {
                 {
                     return Some(call);
                 }
+                if let [
+                    Expr::Subscript {
+                        value: object,
+                        index,
+                        ..
+                    },
+                ] = targets.as_slice()
+                    && let Some(call) = self.item_assignment(object, index, value, *span)
+                {
+                    return Some(call);
+                }
                 let expected = match targets.as_slice() {
                     [single] => self.known_type(single),
                     _ => None,

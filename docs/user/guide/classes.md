@@ -14,6 +14,7 @@ class body or assigned in `__init__`, and has one type.
 | `@staticmethod`, `@classmethod`, and `@property` with its setter | CLS-06 |
 | `__eq__`, `__ne__`, `__lt__`, `__le__`, `__gt__`, `__ge__` and `__hash__` | CLS-07 |
 | `__add__`, `__radd__` and the other arithmetic, bitwise and unary methods | CLS-07 |
+| `__len__`, `__getitem__`, `__setitem__`, `__delitem__`, `__contains__` and `__bool__` | CLS-07 |
 | `__str__` and `__repr__`, used by `print`, `str`, `repr`, f-strings and containers | CLS-08 |
 | A type object for every type, with `object` as the root | CLS-10 |
 | `type(x)`, class and built-in type names as values, `__name__` | CLS-12 |
@@ -23,10 +24,9 @@ every attribute holds a value, so no attribute is ever read empty. A
 signature that names its own class, or a class defined below it, quotes
 the name, such as `"Node | None"`.
 
-Instances are equal only to themselves and hashed by identity unless
-their class defines comparison methods, as below; container methods
-such as `__len__` come later in 0.4 (CLS-07), with `@dataclass`
-(CLS-05).
+Instances are equal only to themselves, hashed by identity and true
+unless their class defines the methods below (CLS-07); `@dataclass`
+comes later in 0.4 (CLS-05).
 A class may derive from an exception class, as
 [Exceptions](exceptions.md) describes (CLS-03).
 
@@ -425,6 +425,44 @@ As in CPython, `3 * total` falls back to the right operand's
 its class derives from the left's and defines it again. `x += y` is
 `x = x + y` for a variable or an attribute of one; the in-place methods
 such as `__iadd__` are planned for 0.5.
+
+## Container methods
+
+`__len__` gives `len(x)`, `__getitem__`, `__setitem__` and `__delitem__`
+give `x[k]`, `x[k] = v` and `del x[k]`, `__contains__` gives `v in x`,
+and `__bool__` gives the truth of `if x`, `not x`, `bool(x)`, `any` and
+`all`; without `__bool__`, an instance is true when `__len__` is not
+zero (CLS-07):
+
+<!-- typy-expect: accepted -->
+```python
+class Shelf:
+    def __init__(self) -> None:
+        self.books: dict[str, int] = {}
+
+    def __len__(self) -> int:
+        return len(self.books)
+
+    def __getitem__(self, title: str) -> int:
+        return self.books[title]
+
+    def __setitem__(self, title: str, pages: int) -> None:
+        self.books[title] = pages
+
+    def __contains__(self, title: str) -> bool:
+        return title in self.books
+
+
+shelf = Shelf()
+shelf["Dune"] = 412
+print(len(shelf), shelf["Dune"], "Dune" in shelf, bool(Shelf()))
+```
+
+As in CPython, a negative `__len__` raises `ValueError`. A slice such
+as `x[1:2]`, `any` and `all` of instances whose truth comes from
+`__len__`, and a truth test whose static class has neither method while
+a subclass defines one, are planned for 0.5, and so is `in` without
+`__contains__`, which CPython answers by iterating.
 
 ## Attributes are declared
 

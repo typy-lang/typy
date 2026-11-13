@@ -2,6 +2,7 @@
 
 mod arithmetic;
 mod bitwise;
+mod length;
 pub(crate) mod limbs;
 pub(crate) mod natural;
 mod text;

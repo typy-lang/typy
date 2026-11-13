@@ -269,7 +269,7 @@ fn unsupported_base(span: Span) -> Diagnostic {
 /// `__iter__` and `__next__` (CST-08) and `__enter__` and `__exit__` (CST-05). Any other name that starts and ends with two
 /// underscores changes how Python treats the instances, and waits for the operator methods of
 /// 0.4 (CLS-07).
-const SPECIAL_METHODS: [&str; 44] = [
+const SPECIAL_METHODS: [&str; 50] = [
     "__init__",
     "__str__",
     "__repr__",
@@ -314,6 +314,12 @@ const SPECIAL_METHODS: [&str; 44] = [
     "__pos__",
     "__invert__",
     "__abs__",
+    "__len__",
+    "__getitem__",
+    "__setitem__",
+    "__delitem__",
+    "__contains__",
+    "__bool__",
 ];
 
 /// The classes a module's class bodies may name: each by its name, the type of each one's
@@ -996,6 +1002,9 @@ fn check_special_method(method: &Definition<'_>, name: &Identifier, diagnostics:
         "__eq__" | "__ne__" | "__lt__" | "__le__" | "__gt__" | "__ge__" => {
             check_comparison(method, name, diagnostics);
         }
+        "__len__" | "__bool__" | "__getitem__" | "__setitem__" | "__delitem__" | "__contains__" => {
+            check_container_method(method, name, diagnostics);
+        }
         "__neg__" | "__pos__" | "__invert__" | "__abs__"
             if method.signature.parameters.len() != 1 =>
         {
@@ -1066,6 +1075,49 @@ const BINARY: [&str; 13] = [
     "add", "sub", "mul", "matmul", "truediv", "floordiv", "mod", "pow", "lshift", "rshift", "and",
     "or", "xor",
 ];
+
+/// Checks a container method's signature: `__len__` returns an `int` and `__bool__` and
+/// `__contains__` a `bool`, `__setitem__` and `__delitem__` return `None`, and each takes
+/// `self` and the values its operation passes (CLS-07).
+fn check_container_method(
+    method: &Definition<'_>,
+    name: &Identifier,
+    diagnostics: &mut Diagnostics,
+) {
+    let signature = &method.signature;
+    let (parameters, returns, written) = match name.name.as_str() {
+        "__len__" => (1, Some(Type::Int), "takes only `self` and returns an int"),
+        "__bool__" => (1, Some(Type::Bool), "takes only `self` and returns a bool"),
+        "__contains__" => (
+            2,
+            Some(Type::Bool),
+            "takes `self` and an item, and returns a bool",
+        ),
+        "__getitem__" => (2, None, "takes `self` and a key"),
+        "__setitem__" => (
+            3,
+            Some(Type::NoneType),
+            "takes `self`, a key and a value, and returns `None`",
+        ),
+        _ => (
+            2,
+            Some(Type::NoneType),
+            "takes `self` and a key, and returns `None`",
+        ),
+    };
+    let fits = signature.parameters.len() == parameters
+        && returns.is_none_or(|returns| signature.returns.matches(&returns));
+    if !fits {
+        diagnostics.push(
+            Diagnostic::new(
+                DiagnosticCode::error(404),
+                name.span,
+                format!("`{}` {written}", name.name),
+            )
+            .with_rule(RuleId::CLS_07),
+        );
+    }
+}
 
 /// A comparison method takes `self` and one more value, of a type that accepts every instance
 /// of its class, so a comparison inside a container always calls it with one, and returns a

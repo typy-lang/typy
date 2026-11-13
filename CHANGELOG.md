@@ -44,6 +44,11 @@ All notable changes to TyPy are recorded here. The format follows
   dicts, `in`, `sorted`, `min` and `max` call them through the class's
   type object. A class with `__eq__` and no `__hash__` has no hash
   (CLS-07, ADR-0026).
+- Container methods: `len(x)`, `x[k]`, `x[k] = v`, `del x[k]` and
+  `v in x` call `__len__`, `__getitem__`, `__setitem__`, `__delitem__`
+  and `__contains__`, and truth tests, `any` and `all` call `__bool__`,
+  or test `__len__` against zero. A negative `__len__` raises
+  `ValueError` as in CPython (CLS-07).
 - Arithmetic methods: the binary operators call `__add__`, `__sub__`,
   `__mul__` and the others, with their reflected forms such as
   `__radd__`; `-x`, `+x`, `~x` and `abs(x)` call `__neg__`, `__pos__`,

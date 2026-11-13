@@ -61,6 +61,14 @@ impl BodyChecker<'_> {
             .iter()
             .map(|argument| self.expression(argument))
             .collect();
+        // `len` of an instance calls its class's `__len__` (CLS-07).
+        if builtin == Builtin::Len
+            && keywords.is_empty()
+            && let [value] = values.as_slice()
+            && let Some(call) = self.length_call(value, span)
+        {
+            return call;
+        }
         // `abs` of an instance calls its class's `__abs__` (CLS-07).
         if builtin == Builtin::Abs
             && keywords.is_empty()

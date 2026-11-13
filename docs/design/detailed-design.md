@@ -1043,7 +1043,17 @@ reflected `__radd__`, typed by the method's result, E0201 when the two methods
 return different types; `operator_unary` calls `__neg__`, `__pos__`,
 `__invert__` and, for `abs`, `__abs__`. An augmented assignment whose operator
 calls a method assigns its result to the variable or the variable's
-attribute, E0201 for any other target. A class body's values follow ADR-0024:
+attribute, E0201 for any other target. `body::container_method` calls
+`__len__` for `len`, wrapped in `TypedExprKind::CheckedLength`, which lowers to
+`int_length` and raises CPython's `ValueError` or `OverflowError`;
+`__getitem__` for a subscript; `__setitem__` for `variable[key] = value`, as a
+statement that evaluates the value first; `__delitem__` for `del`; and
+`__contains__` for `in` and `not in`. Lowering tests an instance's truth with
+`__bool__`, or with its checked `__len__` against zero, and `TyirClass::truth`
+puts `__bool__` in the type object's `truth` slot for `any` and `all`; `any`
+and `all` of instances whose truth comes from `__len__`, and a truth test of a
+class with neither method whose subclass defines one, are E0201. A class body's
+values follow ADR-0024:
 `check::class_values` turns `name = value` and `name: ClassVar[T] = value` into
 an assignment to the module variable `Class.name`, and `name: T = value` into
 one that holds the default of the attribute `name`. These module variables are

@@ -2565,7 +2565,7 @@ fn arithmetic_methods_are_checked() {
             &["E0201"],
         ),
         (
-            "class V:\n    def __len__(self) -> int:\n        return 1\n",
+            "class V:\n    def __getattr__(self, name: str) -> int:\n        return 1\n",
             &["E0201"],
         ),
         (
@@ -2574,6 +2574,83 @@ fn arithmetic_methods_are_checked() {
         ),
         (
             "class V:\n    def __add__(self, other: 'V') -> int:\n        return 1\n    def __radd__(self, other: 'V') -> str:\n        return ''\nprint(V() + V())\n",
+            &["E0201"],
+        ),
+    ];
+    for (source, expected) in cases {
+        assert_eq!(&rejected(source), expected, "\n{source}");
+    }
+}
+
+#[test]
+fn container_methods_are_checked() {
+    accepted(concat!(
+        "class G:\n",
+        "    def __init__(self) -> None:\n",
+        "        self.cells: dict[int, str] = {}\n",
+        "    def __len__(self) -> int:\n",
+        "        return len(self.cells)\n",
+        "    def __getitem__(self, key: int) -> str:\n",
+        "        return self.cells[key]\n",
+        "    def __setitem__(self, key: int, value: str) -> None:\n",
+        "        self.cells[key] = value\n",
+        "    def __delitem__(self, key: int) -> None:\n",
+        "        del self.cells[key]\n",
+        "    def __contains__(self, key: int) -> bool:\n",
+        "        return key in self.cells\n",
+        "class H:\n",
+        "    def __init__(self) -> None:\n",
+        "        self.g = G()\n",
+        "g = G()\n",
+        "g[1] = 'a'\n",
+        "h = H()\n",
+        "h.g[2] = 'b'\n",
+        "del g[1]\n",
+        "print(len(g), 1 in g, 2 not in h.g, h.g[2], bool(g), not g)\n",
+    ));
+    let cases: &[(&str, &[&str])] = &[
+        (
+            "class G:\n    def __len__(self) -> str:\n        return ''\n",
+            &["E0404"],
+        ),
+        (
+            "class G:\n    def __bool__(self, n: int) -> bool:\n        return True\n",
+            &["E0404"],
+        ),
+        (
+            "class G:\n    def __contains__(self, key: int) -> int:\n        return 1\n",
+            &["E0404"],
+        ),
+        (
+            "class G:\n    def __getitem__(self) -> int:\n        return 1\n",
+            &["E0404"],
+        ),
+        (
+            "class G:\n    def __delitem__(self, key: int) -> int:\n        return 1\n",
+            &["E0404"],
+        ),
+        (
+            "class G:\n    def __getitem__(self, key: int) -> int:\n        return key\nprint(G()['a'])\n",
+            &["E0404"],
+        ),
+        (
+            "class G:\n    def __getitem__(self, key: int) -> int:\n        return key\nprint(G()[1:2])\n",
+            &["E0201"],
+        ),
+        (
+            "class G:\n    def __setitem__(self, key: int, value: int) -> None:\n        pass\ng = G()\ng[1:2] = 3\n",
+            &["E0201"],
+        ),
+        (
+            "class G:\n    def __delitem__(self, key: int) -> None:\n        pass\ng = G()\ndel g[1:2]\n",
+            &["E0201"],
+        ),
+        (
+            "class G:\n    def __len__(self) -> int:\n        return 1\nprint(any([G()]))\n",
+            &["E0201"],
+        ),
+        (
+            "class G:\n    pass\nclass H(G):\n    def __bool__(self) -> bool:\n        return False\ng: G = H()\nprint(not g)\n",
             &["E0201"],
         ),
     ];

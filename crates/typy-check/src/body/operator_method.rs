@@ -80,6 +80,12 @@ impl BodyChecker<'_> {
         right: TypedExpr,
         span: Span,
     ) -> Comparison {
+        if let CompareOperator::In | CompareOperator::NotIn = operator
+            && let Some(call) =
+                self.contains_call(&left, &right, operator == CompareOperator::NotIn, span)
+        {
+            return Comparison::Called(call);
+        }
         let Some((name, reflected)) = method_names(operator) else {
             return Comparison::Builtin(left, right);
         };

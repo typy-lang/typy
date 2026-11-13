@@ -7,6 +7,7 @@ mod call;
 mod class;
 mod class_value;
 mod comprehension;
+mod container_method;
 mod delete;
 mod dict;
 mod dict_call;

@@ -130,7 +130,8 @@ fn raising_slot_methods(
             .map(|(method, _)| method)
             .into_iter()
             .chain(class.order.iter().flatten().copied())
-            .chain(class.hash);
+            .chain(class.hash)
+            .chain(class.truth);
         for method in methods {
             if !may_raise[method.0 as usize] || reported.contains(&method) {
                 continue;
@@ -203,6 +204,7 @@ fn tyir_class(
         equal,
         order: ["__lt__", "__le__", "__gt__", "__ge__"].map(method),
         hash: method("__hash__"),
+        truth: method("__bool__"),
         base: class.base.map(|base| base.0),
         exception_base,
     }

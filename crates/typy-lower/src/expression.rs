@@ -64,6 +64,13 @@ impl FunctionLowerer<'_> {
             TypedExprKind::Upcast(inner) => self.upcast(inner, ty, span),
             TypedExprKind::Downcast(inner) => self.downcast(inner, ty, span),
             TypedExprKind::IsInstance(test) => self.isinstance(test, span),
+            TypedExprKind::CheckedLength(call) => {
+                let length = self.expression(call);
+                let checked =
+                    self.call_runtime(RuntimeFunction::IntLength, vec![length.value], span);
+                self.release(length, span);
+                checked
+            }
             TypedExprKind::OperatorCall(call) => self.operator_call(call, ty, span),
             TypedExprKind::Unwrap(inner) => self.unwrap(inner, ty, span),
             TypedExprKind::Dict { keys, values } => {
@@ -293,9 +300,13 @@ impl FunctionLowerer<'_> {
                     span,
                 );
             }
-            // An instance of a class without `__bool__` or `__len__` is true (CLS-07), and so
-            // is a type object.
-            TyirType::Object(id) if id.class_index().is_some() || id == typy_tyir::TypeId::TYPE => {
+            // An instance's class decides its truth with `__bool__`, or with `__len__` when it
+            // has no `__bool__`; without either, the instance is true (CLS-07), and so is a type
+            // object.
+            TyirType::Object(id) if id.class_index().is_some() => {
+                return self.instance_truth(lowered, id, span);
+            }
+            TyirType::Object(typy_tyir::TypeId::TYPE) => {
                 return self.constant(Constant::Bool(true), span);
             }
             // A range is true when it holds its own start; its length may pass `sys.maxsize`,
@@ -332,6 +343,35 @@ impl FunctionLowerer<'_> {
             TyirType::Bool,
             span,
         )
+    }
+
+    /// Returns the truth of an instance: its class's `__bool__`, or its `__len__` checked and
+    /// compared with zero, or true (CLS-07); the instance is not released.
+    fn instance_truth(&mut self, lowered: Lowered, id: typy_tyir::TypeId, span: Span) -> ValueId {
+        let class = typy_check::ClassId(id.class_index().unwrap_or(0));
+        let instance = Self::borrowed(lowered.value, lowered.ty);
+        if let Some(method) = self.program.method(class, "__bool__") {
+            return self
+                .call_method(method, vec![(0, instance)], TyirType::Bool, span)
+                .value;
+        }
+        let Some(method) = self.program.method(class, "__len__") else {
+            return self.constant(Constant::Bool(true), span);
+        };
+        let length = self.call_method(method, vec![(0, instance)], TyirType::Int, span);
+        let checked = self.call_runtime(RuntimeFunction::IntLength, vec![length.value], span);
+        self.release(length, span);
+        let truth = self.builder.push_value(
+            Operation::IsTrue {
+                kind: ScalarKind::Int,
+                value: checked.value,
+            },
+            TyirType::Bool,
+            span,
+        );
+        // A large `int` is an object, so the checked length is released once tested.
+        self.release(checked, span);
+        truth
     }
 
     /// `a or b` and `a and b` return one of their operands, evaluating each only while the result is undecided (EXP-09).

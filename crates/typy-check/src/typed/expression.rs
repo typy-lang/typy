@@ -200,6 +200,9 @@ pub enum TypedExprKind {
     Downcast(Box<TypedExpr>),
     /// `isinstance(value, classes)` (CLS-09).
     IsInstance(Box<IsInstanceTest>),
+    /// The `int` a class's `__len__` returned, checked to be a length, which raises
+    /// `ValueError` when it is negative (CLS-07).
+    CheckedLength(Box<TypedExpr>),
     /// A comparison of instances that calls a comparison method (CLS-07, ADR-0026).
     OperatorCall(Box<OperatorCall>),
     /// A dict display: each key and its value, in order (DAT-09).
@@ -425,6 +428,7 @@ impl TypedExpr {
             TypedExprKind::IsInstance(test) => vec![&test.value],
             TypedExprKind::OperatorCall(call) => vec![&call.left, &call.right],
             TypedExprKind::Wrap(inner)
+            | TypedExprKind::CheckedLength(inner)
             | TypedExprKind::Upcast(inner)
             | TypedExprKind::Downcast(inner)
             | TypedExprKind::Unwrap(inner)
