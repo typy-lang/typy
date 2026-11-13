@@ -848,7 +848,11 @@ tagged unions. `TypedExprKind::EachMember` keeps the variable's read and each
 member's class with its checked expression, and lowering tests the object with
 `typy_rt_is_instance` against each class but the last, whose branch runs when
 none holds; the branches pass their result to one block. Equality and order
-refuse a union that is not a variable, which no split reaches.
+refuse a union that is not a variable, which no split reaches. A container of a
+union of objects stores each as an object item, and the runtime compares two
+objects of different types as CPython does: a built-in type is equal only to its
+own objects, and a class's slot, which tests the other object's class, decides
+for its instances.
 
 Optional values (TYP-06, TYP-13, ADR-0011) add `Type::Optional(T)`, written `T |
 None` or `None | T`, which `Type::optional` builds so that `T` is never `None`

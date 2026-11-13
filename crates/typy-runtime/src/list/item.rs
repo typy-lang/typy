@@ -530,16 +530,29 @@ unsafe fn object_hash(object: *mut ObjectHeader) -> i64 {
     }
 }
 
-/// Returns `left == right` for two objects of one type; without a test of its own, a type's
-/// objects are equal only to themselves.
+/// Returns `left == right` for two objects, as CPython compares them; without a test of its
+/// own, a type's objects are equal only to themselves.
 ///
 /// # Safety
 ///
-/// Both point to live objects of one type.
+/// Both point to live objects.
 unsafe fn objects_equal(left: *mut ObjectHeader, right: *mut ObjectHeader) -> bool {
-    // SAFETY: the caller passes live objects of one type, and its function takes them.
+    // SAFETY: the caller passes live objects, and each type's function takes its own.
     unsafe {
-        match type_of(left).equal {
+        let (left_type, right_type) = (type_of(left), type_of(right));
+        if !core::ptr::eq(left_type, right_type) {
+            // Objects of two types, as a union of objects holds them: a built-in type is equal
+            // only to its own objects, and a class's `__eq__`, whose slot tests the other
+            // object's class, decides for its instances, the left one first (TYP-14).
+            let class_equal =
+                |ty: &crate::type_object::TypeObject| ty.equal.filter(|_| !ty.fields.is_null());
+            return match (class_equal(left_type), class_equal(right_type)) {
+                (Some(equal), _) => equal(left, right),
+                (None, Some(equal)) => equal(right, left),
+                (None, None) => core::ptr::eq(left, right),
+            };
+        }
+        match left_type.equal {
             Some(equal) => equal(left, right),
             None => core::ptr::eq(left, right),
         }
