@@ -49,6 +49,10 @@ All notable changes to TyPy are recorded here. The format follows
   the ordering methods as CPython does, and refuses what CPython
   refuses, such as a mutable default. The hash of a frozen dataclass
   and `default_factory` are planned for 0.5 (CLS-05, LIB-06).
+- `Final` and `Final[T]` from `typing`: a module or function variable, a
+  class variable or an attribute that `__init__` declares `Final` is
+  assigned only by its declaration, and any other assignment is E0414. A
+  `Final` without a value is E0408 (TYP-08).
 - Container methods: `len(x)`, `x[k]`, `x[k] = v`, `del x[k]` and
   `v in x` call `__len__`, `__getitem__`, `__setitem__`, `__delitem__`
   and `__contains__`, and truth tests, `any` and `all` call `__bool__`,

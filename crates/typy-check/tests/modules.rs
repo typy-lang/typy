@@ -306,3 +306,12 @@ fn a_dataclass_derives_from_one_of_another_module() {
     ]);
     assert!(dump.contains("Child.__init__"), "{dump}");
 }
+
+#[test]
+fn an_augmented_module_variable_of_another_module_keeps_its_type() {
+    let found = rejected(&[
+        ("app.py", "import limits\nlimits.LIMIT += 1.5\n"),
+        ("limits.py", "LIMIT = 1\n"),
+    ]);
+    assert!(found.contains(&"E0402".to_string()), "{found:?}");
+}

@@ -26,6 +26,9 @@ pub(crate) struct Program {
     /// The module variables some function declares `global`, which a test cannot narrow,
     /// because a call may assign them.
     pub(super) assigned_in_functions: BTreeSet<String>,
+    /// Each variable declared `Final`, with the name its declaration assigns, which alone may
+    /// assign it (TYP-08).
+    pub(super) final_variables: BTreeMap<SymbolId, Span>,
     /// Whether the module variables have only the types a first look at the module body gave
     /// them, while the `__init__` methods are checked.
     pub(super) provisional: bool,
@@ -103,6 +106,7 @@ impl Program {
             module_variables: BTreeSet::new(),
             module_symbols: BTreeMap::new(),
             assigned_in_functions: BTreeSet::new(),
+            final_variables: BTreeMap::new(),
             provisional: false,
             classes: Vec::new(),
             class_modules: Vec::new(),

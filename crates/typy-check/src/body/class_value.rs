@@ -254,6 +254,10 @@ impl BodyChecker<'_> {
         if let Some(refused) = self.inherited_class_variable(class, holder, attribute, span) {
             return Some(refused);
         }
+        let name = self.program.symbols[symbol.0 as usize].name.clone();
+        if self.final_reassigned(symbol, &name, span) {
+            return Some(ClassValueAssignment::Refused);
+        }
         if !ty.is_assignable_to(&current.ty) {
             self.diagnostics.push(
                 Diagnostic::new(

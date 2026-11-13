@@ -806,6 +806,9 @@ impl BodyChecker<'_> {
             }
             return None;
         };
+        if self.final_reassigned(symbol, &attribute.name, span) {
+            return None;
+        }
         if !ty.is_assignable_to(&read.ty) {
             self.diagnostics.push(
                 Diagnostic::new(

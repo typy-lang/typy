@@ -63,13 +63,13 @@ impl Walker {
                 }
             }
             // `Iterator[T]` and `Iterable[T]`, by name or through `typing` or
-            // `collections.abc`, and `ClassVar[T]`; the checker resolves where the name comes
-            // from (TYP-15, CLS-11).
+            // `collections.abc`, `ClassVar[T]` and `Final[T]`; the checker resolves where the
+            // name comes from (TYP-15, CLS-11, TYP-08).
             Expr::Subscript { value, index, .. }
                 if matches!(
                     value.as_ref(),
                     Expr::Name { id, .. } | Expr::Attribute { attribute: typy_source::syntax::Identifier { name: id, .. }, .. }
-                        if matches!(id.as_str(), "Iterator" | "Iterable" | "ClassVar")
+                        if matches!(id.as_str(), "Iterator" | "Iterable" | "ClassVar" | "Final")
                 ) =>
             {
                 self.annotation(index);

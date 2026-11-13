@@ -220,6 +220,8 @@ impl RuleId {
     pub const TYP_05: Self = Self("TYP-05");
     /// The annotations `list[T]`, `dict[K, V]`, `set[T]`, `tuple[...]` and `T \\| None` shall be accepted.
     pub const TYP_06: Self = Self("TYP-06");
+    /// A name annotated `Final` shall not be assigned again.
+    pub const TYP_08: Self = Self("TYP-08");
     /// An `int` value shall be rejected where a `float` is declared, because CPython keeps it an `int`: `x: float = 1` prints `1`.
     pub const TYP_09: Self = Self("TYP-09");
     /// `typing.Any`, `typing.cast` and unannotated `object` values shall be rejected.
@@ -341,6 +343,7 @@ impl RuleId {
         Self::TYP_03,
         Self::TYP_05,
         Self::TYP_06,
+        Self::TYP_08,
         Self::TYP_09,
         Self::TYP_10,
         Self::TYP_12,

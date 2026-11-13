@@ -271,7 +271,9 @@ impl BodyChecker<'_> {
         if initializing && let Some(facts) = &mut self.assigned {
             facts.insert(Fact::Attribute(index));
         }
-        if self.refuse_frozen_field(class, attribute, value, span) {
+        if self.refuse_frozen_field(class, attribute, value, span)
+            || self.refuse_final_attribute(class, index, span)
+        {
             return None;
         }
         // An inherited attribute takes its type from the class that declares it.
@@ -567,5 +569,46 @@ impl BodyChecker<'_> {
             returns,
             span,
         )
+    }
+
+    /// Reports an assignment to an attribute declared `Final` other than its declaration in
+    /// `__init__`; returns true when it reports one (TYP-08).
+    pub(super) fn refuse_final_attribute(
+        &mut self,
+        class: ClassId,
+        index: usize,
+        span: Span,
+    ) -> bool {
+        let owner = self.program.declaring(class, index);
+        let info = &self.program.classes[owner.0 as usize];
+        let Some(&(_, declared)) = info.final_attributes.iter().find(|(at, _)| *at == index) else {
+            return false;
+        };
+        if declared == span {
+            return false;
+        }
+        let message = format!(
+            "`{}.{}` is declared `Final`, so it is not assigned again",
+            info.name, info.attributes[index].name
+        );
+        self.diagnostics.push(
+            Diagnostic::new(DiagnosticCode::error(414), span, message)
+                .with_rule(RuleId::TYP_08)
+                .with_label(declared, "declared here"),
+        );
+        true
+    }
+
+    /// Returns true when the statement at `span` is a `Final` declaration that the class of
+    /// `object` recorded from its `__init__` (TYP-08).
+    pub(super) fn final_attribute_declaration(&self, object: &Expr, span: Span) -> bool {
+        self.peek_type(object)
+            .and_then(|ty| ty.class_id())
+            .is_some_and(|class| {
+                self.program.classes[class.0 as usize]
+                    .final_attributes
+                    .iter()
+                    .any(|(_, declared)| *declared == span)
+            })
     }
 }

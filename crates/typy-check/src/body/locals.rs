@@ -34,10 +34,13 @@ impl BodyChecker<'_> {
                 }
                 Stmt::AugAssign { target, .. } => self.bind_local(target),
                 Stmt::AnnAssign {
-                    target, annotation, ..
+                    target,
+                    annotation,
+                    value,
+                    ..
                 } => {
                     self.bind_local(target);
-                    self.declare(target, annotation);
+                    self.declare(target, annotation, value.is_some());
                 }
                 Stmt::For {
                     target,
@@ -137,12 +140,38 @@ impl BodyChecker<'_> {
         annotation_type(annotation, &scope, self.diagnostics)
     }
 
-    pub(super) fn declare(&mut self, target: &Expr, annotation: &Expr) {
+    pub(super) fn declare(&mut self, target: &Expr, annotation: &Expr, given: bool) {
         let Expr::Name { id, span } = target else {
             return;
         };
-        let ty = self.annotation(annotation);
         let symbol = self.locals[id];
+        // `Final[T]` declares `T`, and a bare `Final` takes the value's type (TYP-08).
+        let annotation = match crate::check::final_type(
+            annotation,
+            &self.program.annotation_names,
+            &self.program.annotation_modules,
+        ) {
+            Some(qualified) => {
+                if !given {
+                    self.diagnostics.push(
+                        Diagnostic::new(
+                            DiagnosticCode::error(408),
+                            annotation.span(),
+                            format!("`{id}` is declared `Final` and is given no value"),
+                        )
+                        .with_rule(RuleId::TYP_08)
+                        .with_help(format!("give it its value, such as `{id}: Final = 0`")),
+                    );
+                }
+                self.program.final_variables.insert(symbol, *span);
+                match qualified {
+                    crate::check::ClassVarAnnotation::Typed(inner) => inner,
+                    crate::check::ClassVarAnnotation::Bare => return,
+                }
+            }
+            None => annotation,
+        };
+        let ty = self.annotation(annotation);
         match self.declared.get(&symbol) {
             Some(existing) if *existing != ty => self.diagnostics.push(
                 Diagnostic::new(
@@ -312,6 +341,13 @@ impl BodyChecker<'_> {
             }
             TypedExprKind::DictItem { dict, key } => self.entry_target(*dict, *key, ty, span),
             TypedExprKind::Attribute { object, index } => {
+                if object
+                    .ty
+                    .class_id()
+                    .is_some_and(|class| self.refuse_final_attribute(class, index, span))
+                {
+                    return None;
+                }
                 if !ty.is_assignable_to(&current.ty) {
                     self.diagnostics.push(
                         Diagnostic::new(
@@ -329,6 +365,10 @@ impl BodyChecker<'_> {
                 Some(AssignTarget::Attribute { object, index })
             }
             TypedExprKind::ModuleAttribute { symbol, .. } => {
+                let name = self.program.symbols[symbol.0 as usize].name.clone();
+                if self.final_reassigned(symbol, &name, span) {
+                    return None;
+                }
                 if !ty.is_assignable_to(&current.ty) {
                     self.diagnostics.push(
                         Diagnostic::new(
@@ -477,6 +517,9 @@ impl BodyChecker<'_> {
             return None;
         };
         let symbol = *self.locals.get(id)?;
+        if self.final_reassigned(symbol, id, *span) {
+            return None;
+        }
         match self.types.get(&symbol).cloned() {
             None => {
                 self.types.insert(symbol, ty);
@@ -525,5 +568,26 @@ impl BodyChecker<'_> {
             facts.retain(|fact| !matches!(fact, Fact::Narrowed(each, _) if *each == symbol));
         }
         Some(symbol)
+    }
+
+    /// Reports an assignment to a variable declared `Final` other than its declaration;
+    /// returns true when it reports one (TYP-08).
+    pub(super) fn final_reassigned(&mut self, symbol: SymbolId, name: &str, span: Span) -> bool {
+        let Some(declared) = self.program.final_variables.get(&symbol).copied() else {
+            return false;
+        };
+        if declared == span {
+            return false;
+        }
+        self.diagnostics.push(
+            Diagnostic::new(
+                DiagnosticCode::error(414),
+                span,
+                format!("`{name}` is declared `Final`, so it is not assigned again"),
+            )
+            .with_rule(RuleId::TYP_08)
+            .with_label(declared, "declared here"),
+        );
+        true
     }
 }

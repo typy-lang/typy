@@ -1061,7 +1061,14 @@ decorator with `Stmt::relocate`, and gives `__init__` the fields' own
 annotations and defaults; the methods take the first dataclass of the chain,
 and test the other object's class, as CPython does. A frozen dataclass's
 `ClassInfo::frozen` makes assigning a field E0414 outside the `__init__` the
-expansion wrote. Class bodies' values follow ADR-0024:
+expansion wrote. `Final` follows TYP-08: `body::locals::declare` records each
+`Final` variable in `Program::final_variables` with the name its declaration
+assigns, and `assign` and `module_attribute_target` refuse any other with
+E0414; a class body's `Final` with a value is a class variable, whose module
+variable `Class.name` is declared the same way; and `note_init` records each
+`self.name: Final` statement of `__init__` in `ClassInfo::final_attributes`
+before any method is checked, so `attribute_target` refuses every other
+assignment whichever method comes first. Class bodies' values follow ADR-0024:
 `check::class_values` turns `name = value` and `name: ClassVar[T] = value` into
 an assignment to the module variable `Class.name`, and `name: T = value` into
 one that holds the default of the attribute `name`. These module variables are

@@ -30,6 +30,7 @@ pub(crate) struct ImportedNames {
     pub(crate) names: BTreeMap<String, AnnotationName>,
     pub(crate) standard: BTreeMap<String, String>,
 }
+pub(crate) use annotation::{ClassVarAnnotation, final_type};
 pub(crate) use class::{ClassInfo, class_value_variable, class_values};
 pub(crate) use definition::Definition;
 

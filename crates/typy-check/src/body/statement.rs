@@ -101,10 +101,36 @@ impl BodyChecker<'_> {
                 span,
                 ..
             } => {
-                let declared = self.annotation(annotation);
-                let value = self.expression_expecting(value, Some(&declared));
+                // `Final[T]` declares `T`, and a bare `Final` takes the value's type (TYP-08).
+                let declared = match crate::check::final_type(
+                    annotation,
+                    &self.program.annotation_names,
+                    &self.program.annotation_modules,
+                ) {
+                    Some(qualified) => {
+                        if !self.final_attribute_declaration(object, *span) {
+                            self.diagnostics.push(
+                                Diagnostic::new(
+                                    DiagnosticCode::error(408),
+                                    annotation.span(),
+                                    "`Final` declares an attribute in the body of `__init__`, \
+                                     as `self.name: Final = value`",
+                                )
+                                .with_rule(RuleId::TYP_08),
+                            );
+                        }
+                        match qualified {
+                            crate::check::ClassVarAnnotation::Typed(inner) => {
+                                Some(self.annotation(inner))
+                            }
+                            crate::check::ClassVarAnnotation::Bare => None,
+                        }
+                    }
+                    None => Some(self.annotation(annotation)),
+                };
+                let value = self.expression_expecting(value, declared.as_ref());
                 let target =
-                    self.attribute_target(object, attribute, &value.ty, Some(declared), *span)?;
+                    self.attribute_target(object, attribute, &value.ty, declared, *span)?;
                 TypedStmt::Assign {
                     targets: vec![target],
                     value,

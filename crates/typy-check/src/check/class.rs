@@ -61,6 +61,9 @@ pub(crate) struct ClassInfo {
     /// Whether the class's `__init__` uses the instance other than through its attributes,
     /// once checked.
     pub(crate) init_uses_instance: bool,
+    /// The attributes `__init__` declares `Final`, each by its position with the statement
+    /// that alone assigns it (TYP-08).
+    pub(crate) final_attributes: Vec<(usize, Span)>,
     pub(crate) span: Span,
 }
 
@@ -394,7 +397,7 @@ pub(super) fn collect_members<'tree>(
                         u32::try_from(first_function + methods.len()).unwrap_or(u32::MAX),
                     );
                     if name == "__init__" && kind == MethodKind::Instance {
-                        note_init(&parts, id, &mut info);
+                        note_init(&parts, id, &mut info, names);
                     }
                     let method = method_definition(
                         &parts,
@@ -499,6 +502,7 @@ fn new_info(class: &ClassStatement<'_>, instance: &Type, classes: Classes<'_>) -
         frozen: false,
         generated_init: false,
         init_uses_instance: false,
+        final_attributes: Vec::new(),
         span: class.span,
     }
 }
@@ -523,7 +527,12 @@ fn class_scope<'known>(
 
 /// Notes a class's `__init__`, and the attributes it assigns that the class body does not
 /// declare.
-fn note_init(parts: &FunctionParts<'_>, id: FunctionId, info: &mut ClassInfo) {
+fn note_init(
+    parts: &FunctionParts<'_>,
+    id: FunctionId,
+    info: &mut ClassInfo,
+    names: &crate::check::ImportedNames,
+) {
     info.init = Some(id);
     for attribute in initialized_attributes(parts) {
         if info.attribute(&attribute).is_none() {
@@ -531,6 +540,30 @@ fn note_init(parts: &FunctionParts<'_>, id: FunctionId, info: &mut ClassInfo) {
                 name: attribute,
                 ty: None,
             });
+        }
+    }
+    let is_instance = |id: &str| {
+        parts
+            .parameters
+            .first()
+            .is_some_and(|instance| instance.name.name == id)
+    };
+    // Only a statement of the body itself declares one, so it runs once per instance.
+    for statement in parts.body {
+        if let Stmt::AnnAssign {
+            target: Expr::Attribute {
+                value, attribute, ..
+            },
+            annotation,
+            value: Some(_),
+            span,
+            ..
+        } = statement
+            && matches!(value.as_ref(), Expr::Name { id, .. } if is_instance(id))
+            && super::annotation::final_type(annotation, &names.names, &names.standard).is_some()
+            && let Some(index) = info.attribute(&attribute.name)
+        {
+            info.final_attributes.push((index, *span));
         }
     }
 }
@@ -902,9 +935,12 @@ fn class_body_name(
             value,
             ..
         } => {
+            // A `Final` the class body gives a value is a class variable, as PEP 591 has it.
             let class_var =
                 super::annotation::class_var_type(annotation, &names.names, &names.standard)
-                    .is_some();
+                    .is_some()
+                    || super::annotation::final_type(annotation, &names.names, &names.standard)
+                        .is_some();
             if class_var && value.is_some() {
                 info.class_variables.push(id.clone());
                 return;

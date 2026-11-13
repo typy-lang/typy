@@ -107,7 +107,7 @@ module does not define is E0425, at compile time.
 with their releases: `math` and `sys` in 0.3, `dataclasses` in 0.4, and
 `ctypes` in 0.5 (LIB-04 to LIB-07, FFI-01). `typing` and
 `collections.abc` give `Iterator` and `Iterable`, `typing` gives
-`ClassVar`, and `types` gives `TracebackType` and `ModuleType`, for
+`ClassVar` and `Final`, and `types` gives `TracebackType` and `ModuleType`, for
 annotations (TYP-15). `dataclasses` gives `dataclass` and `field`, as
 [Classes](classes.md#dataclasses) describes (CLS-05). The library page
 describes [`math`](library.md#the-math-module) and

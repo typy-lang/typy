@@ -37,6 +37,8 @@ pub(crate) enum AnnotationName {
     ModuleType,
     /// `typing.ClassVar`, which declares a class variable in a class body (CLS-11).
     ClassVar,
+    /// `typing.Final`, which declares a name that is not assigned again (TYP-08).
+    Final,
     /// `dataclasses.dataclass` and `dataclasses.field`, which the dataclass expansion reads
     /// (CLS-05).
     Dataclasses,
@@ -54,6 +56,7 @@ pub(crate) fn annotation_name(module: &str, name: &str) -> Option<AnnotationName
         ("types", "TracebackType") => Some(AnnotationName::TracebackType),
         ("types", "ModuleType") => Some(AnnotationName::ModuleType),
         ("typing", "ClassVar") => Some(AnnotationName::ClassVar),
+        ("typing", "Final") => Some(AnnotationName::Final),
         ("dataclasses", "dataclass" | "field") => Some(AnnotationName::Dataclasses),
         _ => None,
     }
@@ -98,8 +101,14 @@ fn standard_annotation(
         {
             class_var_elsewhere(annotation, diagnostics)
         }
+        Expr::Subscript { value, .. }
+            if standard_name(value, scope) == Some(AnnotationName::Final) =>
+        {
+            final_elsewhere(annotation, diagnostics)
+        }
         _ if let Some(name) = standard_name(annotation, scope) => match name {
             AnnotationName::ClassVar => class_var_elsewhere(annotation, diagnostics),
+            AnnotationName::Final => final_elsewhere(annotation, diagnostics),
             AnnotationName::Dataclasses => {
                 diagnostics.push(
                     Diagnostic::new(
@@ -127,6 +136,20 @@ fn standard_annotation(
         },
         _ => return None,
     })
+}
+
+/// Reports `Final` outside the declaration of a variable, a class variable or an attribute
+/// given a value.
+fn final_elsewhere(annotation: &Expr, diagnostics: &mut Diagnostics) -> Type {
+    diagnostics.push(
+        Diagnostic::new(
+            DiagnosticCode::error(408),
+            annotation.span(),
+            "`Final` declares a variable, a class variable or an attribute given a value",
+        )
+        .with_rule(RuleId::TYP_08),
+    );
+    Type::Error
 }
 
 /// Reports `ClassVar` outside the declaration of a class variable in a class body.
@@ -157,22 +180,47 @@ pub(crate) fn class_var_type<'tree>(
     names: &BTreeMap<String, AnnotationName>,
     standard: &BTreeMap<String, String>,
 ) -> Option<ClassVarAnnotation<'tree>> {
-    let is_class_var = |expression: &Expr| match expression {
-        Expr::Name { id, .. } => names.get(id) == Some(&AnnotationName::ClassVar),
+    qualified(annotation, AnnotationName::ClassVar, names, standard)
+}
+
+/// Returns the annotation of a name declared `Final[T]` or `Final`, or `None` for any other
+/// annotation (TYP-08).
+pub(crate) fn final_type<'tree>(
+    annotation: &'tree Expr,
+    names: &BTreeMap<String, AnnotationName>,
+    standard: &BTreeMap<String, String>,
+) -> Option<ClassVarAnnotation<'tree>> {
+    qualified(annotation, AnnotationName::Final, names, standard)
+}
+
+/// Returns the annotation inside a qualifier of `typing`, `ClassVar` or `Final`, written with a
+/// type or bare, or `None` when the annotation is not one.
+fn qualified<'tree>(
+    annotation: &'tree Expr,
+    qualifier: AnnotationName,
+    names: &BTreeMap<String, AnnotationName>,
+    standard: &BTreeMap<String, String>,
+) -> Option<ClassVarAnnotation<'tree>> {
+    let word = match qualifier {
+        AnnotationName::Final => "Final",
+        _ => "ClassVar",
+    };
+    let is_qualifier = |expression: &Expr| match expression {
+        Expr::Name { id, .. } => names.get(id) == Some(&qualifier),
         Expr::Attribute {
             value, attribute, ..
         } => {
             matches!(value.as_ref(), Expr::Name { id, .. }
                 if standard.get(id).map(String::as_str) == Some("typing"))
-                && attribute.name == "ClassVar"
+                && attribute.name == word
         }
         _ => false,
     };
     match annotation {
-        Expr::Subscript { value, index, .. } if is_class_var(value) => {
+        Expr::Subscript { value, index, .. } if is_qualifier(value) => {
             Some(ClassVarAnnotation::Typed(index))
         }
-        other if is_class_var(other) => Some(ClassVarAnnotation::Bare),
+        other if is_qualifier(other) => Some(ClassVarAnnotation::Bare),
         _ => None,
     }
 }

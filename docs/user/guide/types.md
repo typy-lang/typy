@@ -19,6 +19,7 @@ value.
 | A variable read before it is assigned on every path is refused | TYP-12 |
 | `T \| None` narrows to `T` after `is not None`, a failed `is None` test or a truth test | TYP-13 |
 | A variable narrows to a derived class after `isinstance` | TYP-07 |
+| A name, class variable or attribute declared `Final` is not assigned again | TYP-08 |
 | `Iterator[T]` and `Iterable[T]` from `typing` or `collections.abc` | TYP-15 |
 | `TracebackType` and `ModuleType` from `types` | CST-10, MOD-10 |
 
@@ -55,6 +56,49 @@ its truth depend on which collection it is, so `len`, `bool`, `not` and a
 condition on it are refused. In 0.3 these names, and `typing`,
 `collections.abc` and `types` themselves, are for annotations only; their
 use as values, and the other names of `typing`, come in 0.4 (LIB-06).
+
+## Names that keep their value
+
+`Final` from `typing` declares a name that its declaration alone assigns.
+`Final[T]` gives it the type `T`, and a bare `Final` gives it the type of
+its value. A module or a function declares a `Final` variable, a class
+body a `Final` class variable, and `__init__` a `Final` attribute with
+`self.name: Final = value`:
+
+<!-- typy-expect: accepted -->
+```python
+from typing import Final
+
+LIMIT: Final = 10
+
+
+class Box:
+    SIZE: Final[int] = 3
+
+    def __init__(self, width: int) -> None:
+        self.width: Final = width
+
+
+box = Box(LIMIT)
+print(Box.SIZE, box.SIZE, box.width)
+```
+
+Any other assignment is E0414, also through `global`, an augmented
+assignment, a `for` target or `module.NAME = value`. A `Final` without a
+value, `Final` in any other annotation, such as a parameter's, and a
+`Final` attribute declared anywhere but the body of `__init__` are
+E0408. CPython runs such a program without a word, since only a type
+checker reads `Final`; TyPy refuses it when it compiles the program:
+
+<!-- typy-expect: rejected E0414 at 6:5 -->
+```python
+from typing import Final
+
+LIMIT: Final = 10
+
+for step in range(2):
+    LIMIT += step
+```
 
 ## Example
 
