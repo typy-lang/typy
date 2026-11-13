@@ -243,6 +243,12 @@ fn expression(expression_value: &TypedExpr, callees: &mut BTreeSet<FunctionId>) 
             expression(right, callees);
         }
         TypedExprKind::IsInstance(test) => expression(&test.value, callees),
+        TypedExprKind::EachMember(each) => {
+            expression(&each.value, callees);
+            for (_, body) in &each.arms {
+                expression(body, callees);
+            }
+        }
         TypedExprKind::OperatorCall(call) => {
             callees.extend(call.forward);
             callees.extend(call.reflected);

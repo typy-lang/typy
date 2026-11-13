@@ -11,6 +11,7 @@ mod container_method;
 mod delete;
 mod dict;
 mod dict_call;
+mod each_member;
 mod exception;
 mod expression;
 mod flow;
@@ -76,6 +77,9 @@ pub(crate) struct BodyChecker<'program> {
     /// The types `isinstance` tests narrow variables to, which `Fact::Narrowed` names by
     /// position (TYP-07).
     narrowings: Vec<Type>,
+    /// The variables an operation is being checked for each member of, innermost last, each
+    /// with the member it is checked for now (TYP-14).
+    splitting: Vec<(SymbolId, Type)>,
     /// The class and instance of the method being checked, which `super()` reads.
     method: Option<class::Initializing>,
     /// Whether a use of the incomplete instance has been reported, so one cause gives one error.
@@ -108,6 +112,7 @@ impl<'program> BodyChecker<'program> {
             initializing: None,
             method: None,
             narrowings: Vec::new(),
+            splitting: Vec::new(),
             reported_incomplete: false,
             handling: 0,
             finally_loops: Vec::new(),

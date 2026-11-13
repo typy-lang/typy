@@ -307,11 +307,17 @@ impl BodyChecker<'_> {
     }
 }
 
-/// Adds to an error about an optional operand how to use the value it holds (TYP-13).
+/// Adds to an error about an optional operand how to use the value it holds (TYP-13), and
+/// to one about a union how TyPy uses it member by member (TYP-14).
 fn with_narrowing_help(diagnostic: Diagnostic, left: &Type, right: &Type) -> Diagnostic {
     if matches!(left, Type::Optional(_)) || matches!(right, Type::Optional(_)) {
         diagnostic.with_help(
             "an optional value is used after a test shows it is not None, such as `if value is not None:`",
+        )
+    } else if matches!(left, Type::Union(_)) || matches!(right, Type::Union(_)) {
+        diagnostic.with_help(
+            "assign the union to a variable, which TyPy uses member by member, or narrow it \
+             with `isinstance`",
         )
     } else {
         diagnostic

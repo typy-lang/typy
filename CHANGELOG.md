@@ -54,9 +54,11 @@ All notable changes to TyPy are recorded here. The format follows
   and a union can be passed, returned, stored, printed, written with
   `str` and `repr`, given to `type()` and tested for truth. `isinstance`
   narrows it in both branches, and a union of classes that share a base
-  has that base's attributes and methods. A union with a member held by
-  value, such as `int | str`, comes later in 0.4 (TYP-14, TYP-07,
-  ADR-0022).
+  has that base's attributes and methods. Any other operation on a
+  variable that holds a union, such as `value.upper()`, `len(value)` or
+  `value + value`, is checked for each member and runs the one for the
+  object's member. A union with a member held by value, such as
+  `int | str`, comes later in 0.4 (TYP-14, TYP-07, ADR-0022).
 - `Final` and `Final[T]` from `typing`: a module or function variable, a
   class variable or an attribute that `__init__` declares `Final` is
   assigned only by its declaration, and any other assignment is E0414. A

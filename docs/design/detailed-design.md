@@ -838,7 +838,17 @@ members no tested class takes in every case, which the flow state holds in the
 branch where the test fails, and a narrowed `T | None` that a test showed is not
 `None` reads as `T`. A truth test of a union held as a base whose members test
 themselves otherwise, or of a member class whose truth comes from `__len__`, is
-E0201, planned for 0.5.
+E0201, planned for 0.5. `body::each_member` checks an attribute, a method call,
+an operator, an item, a comparison other than `is`, or a builtin call other than
+`print`, `str`, `repr`, `type`, `isinstance` and `bool`, whose operand is a
+variable that holds a union of members with no shared class, once for each
+member with `Fact::Narrowed` set to it, and joins the results with
+`Type::union`; a result held by value for some members only is E0201 until
+tagged unions. `TypedExprKind::EachMember` keeps the variable's read and each
+member's class with its checked expression, and lowering tests the object with
+`typy_rt_is_instance` against each class but the last, whose branch runs when
+none holds; the branches pass their result to one block. Equality and order
+refuse a union that is not a variable, which no split reaches.
 
 Optional values (TYP-06, TYP-13, ADR-0011) add `Type::Optional(T)`, written `T |
 None` or `None | T`, which `Type::optional` builds so that `T` is never `None`

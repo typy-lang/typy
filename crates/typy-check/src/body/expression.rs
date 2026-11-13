@@ -13,6 +13,9 @@ impl BodyChecker<'_> {
     #[allow(clippy::too_many_lines, reason = "one arm per expression kind")]
     pub(super) fn expression(&mut self, expression: &Expr) -> TypedExpr {
         let span = expression.span();
+        if let Some(each) = self.each_member(expression) {
+            return each;
+        }
         match expression {
             Expr::Constant { value, .. } => {
                 let constant = match value {

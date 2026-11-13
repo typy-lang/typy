@@ -59,9 +59,10 @@ fn operations_not_every_member_has_are_refused() {
             "def f(v: str | bytes) -> bytes:\n    return v.encode()\n",
             "E0412",
         ),
+        // Each member is checked, so the error names the member without the attribute.
         (
             "def f(s: Circle | Other) -> str:\n    return s.name\n",
-            "E0412",
+            "E0414",
         ),
         ("x: str | bytes = [1]\n", "E0402"),
     ];
@@ -82,6 +83,7 @@ fn a_truth_test_the_object_types_cannot_answer_is_planned() {
     );
     let planned = [
         "def f(v: Full | Flag) -> bool:\n    return not v\n",
+        "def f(v: Sized | str) -> bool:\n    return bool(v)\n",
         "def f(v: Plain | Flag | None) -> bool:\n    return bool(v)\n",
         "def f(v: Alone | str) -> bool:\n    return bool(v)\n",
         "def f(v: list[Full | str]) -> bool:\n    return any(v)\n",
@@ -95,6 +97,9 @@ fn a_truth_test_the_object_types_cannot_answer_is_planned() {
     }
     let accepted = [
         "def f(v: Flag | str) -> bool:\n    return bool(v)\n",
+        "def f(v: list[Plain | str]) -> bool:\n    return any(v)\n",
+        "class Tested:\n    def __bool__(self) -> bool:\n        return False\nclass Left(Tested):\n    pass\nclass Right(Tested):\n    pass\ndef f(v: Left | Right) -> bool:\n    return bool(v)\n",
+        "class Measured:\n    def __len__(self) -> int:\n        return 0\nclass Left(Measured):\n    pass\nclass Right(Measured):\n    pass\ndef f(v: Left | Right) -> bool:\n    return bool(v)\n",
         "def f(v: Plain | Full) -> bool:\n    return isinstance(v, Base)\n",
     ];
     for body in accepted {
@@ -118,4 +123,59 @@ fn a_display_where_a_union_is_expected_takes_its_member() {
         "f('a')\n",
     );
     assert_eq!(app(source), Vec::<String>::new());
+}
+
+#[test]
+fn an_operation_on_a_union_variable_is_checked_for_each_member() {
+    let accepted = [
+        // Two union operands split one inside the other.
+        "def f(a: str | bytes, b: list[int] | set[int]) -> int:\n    return len(a) + len(b)\n",
+        // A method every member has, whose result is a union of objects.
+        "def f(v: str | bytes) -> None:\n    w = v.upper()\n    print(w)\n",
+        // A union of classes that share a base reads the base's attribute without a split.
+        "def f(s: Circle | Square) -> str:\n    return s.name\n",
+        // A class no member is gives false, and the test narrows nothing.
+        "def f(v: str | bytes) -> bool:\n    return isinstance(v, list)\n",
+        // Code after a `return` is checked too.
+        "def f(v: str | bytes) -> int:\n    return 0\n    return len(v)\n",
+        // A variable already narrowed to a smaller union is split on what is left.
+        "def f(v: str | bytes | list[int]) -> int:\n    if isinstance(v, list):\n        return 0\n    return len(v)\n",
+    ];
+    for body in accepted {
+        assert_eq!(with_shapes(body), Vec::<String>::new(), "{body}");
+    }
+    let refused: &[(&str, &str)] = &[
+        // An iterator has no class to test the object against.
+        (
+            "from collections.abc import Iterator\ndef f(v: Iterator[int] | str) -> int:\n    return len(v)\n",
+            "E0201",
+        ),
+        // A variable a function declares `global` is not narrowed, so it is not split.
+        (
+            "g: str | bytes = 'a'\ndef f() -> None:\n    global g\n    g = b'b'\ndef h() -> int:\n    return len(g)\n",
+            "E0404",
+        ),
+        // A union of exceptions is used through their common class, not split.
+        (
+            "def f(e: ValueError | KeyError) -> None:\n    print(e + e)\n",
+            "E0401",
+        ),
+        // A union computed in place is not split.
+        (
+            "def f(v: str | bytes) -> int:\n    return len(v * 2)\n",
+            "E0404",
+        ),
+        // A union computed in place is not compared.
+        (
+            "def f(v: str | bytes) -> bool:\n    return v * 2 == v * 2\n",
+            "E0407",
+        ),
+        (
+            "def f(v: str | bytes) -> bool:\n    return v * 2 < v * 2\n",
+            "E0407",
+        ),
+    ];
+    for (body, code) in refused {
+        assert_eq!(with_shapes(body), vec![code.to_string()], "{body}");
+    }
 }

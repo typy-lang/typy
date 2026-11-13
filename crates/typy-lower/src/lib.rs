@@ -12,6 +12,7 @@ mod comprehension;
 mod conversion;
 mod dict;
 mod dict_call;
+mod each_member;
 mod exception;
 mod expression;
 mod fstring;

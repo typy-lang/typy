@@ -109,11 +109,31 @@ def measure(shape: Circle | Square) -> str:
 print(size("abc"), size([1, 2]), measure(Square(2.0)))
 ```
 
-Any other operation, such as `==`, `len` or a method, needs every member
-to have it. Until TyPy calls it on each member, which comes later in 0.4,
-narrow the value with `isinstance` first. A truth test whose member
-classes test themselves with `__len__`, or differently from their base,
-is planned for 0.5.
+Any other operation on a variable that holds a union, such as a method,
+an attribute, an operator, an item or `len`, is checked once for each
+member, and the program runs the one for the member the object is. Each
+member must allow it, so an error names the member that does not:
+
+<!-- typy-expect: accepted -->
+```python
+def describe(value: str | bytes) -> str:
+    return str(len(value)) + " " + str(value.upper())
+
+
+def total(values: list[int] | set[int]) -> int:
+    return len(values) + sum(values)
+
+
+print(describe("abc"), describe(b"xy"), total([1, 2]), total({3}))
+```
+
+The results join into one type: `value.upper()` above is a
+`str | bytes`. A result that is held by value for some members and not
+for others, such as `value[0]`, which is a `str` or an `int`, comes with
+tagged unions later in 0.4. A union computed in place, such as `value * 2`,
+is used member by member once it is assigned to a variable. A truth test
+whose member classes test themselves with `__len__`, or differently from
+their base, is planned for 0.5.
 
 ## Names that keep their value
 

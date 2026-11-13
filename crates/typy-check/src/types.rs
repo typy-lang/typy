@@ -382,9 +382,11 @@ impl Type {
                 left.derives_from(right) || right.derives_from(left)
             }
             // Views compare by the rules of `body/view_operator.rs` (DAT-16), an optional value
-            // is compared with `None` by `is`, and iterators by `is`.
+            // is compared with `None` by `is`, and iterators by `is`. A union in a variable is
+            // compared member by member, and one computed in place is not compared (TYP-14).
             (
-                Self::DictView(..)
+                Self::Union(_)
+                | Self::DictView(..)
                 | Self::Optional(_)
                 | Self::Iterator(_)
                 | Self::Iterable(_)
@@ -395,7 +397,8 @@ impl Type {
             )
             | (
                 _,
-                Self::DictView(..)
+                Self::Union(_)
+                | Self::DictView(..)
                 | Self::Optional(_)
                 | Self::Iterator(_)
                 | Self::Iterable(_)
@@ -443,7 +446,8 @@ impl Type {
             // A class orders its instances with `__lt__` and the other operator methods, which
             // are planned for 0.4 (CLS-07).
             (
-                Self::NoneType
+                Self::Union(_)
+                | Self::NoneType
                 | Self::Dict(..)
                 | Self::DictView(..)
                 | Self::Optional(_)
@@ -460,7 +464,8 @@ impl Type {
             )
             | (
                 _,
-                Self::NoneType
+                Self::Union(_)
+                | Self::NoneType
                 | Self::Dict(..)
                 | Self::DictView(..)
                 | Self::Optional(_)

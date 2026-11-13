@@ -27,11 +27,11 @@ pub use method::Method;
 pub use open::OpenAccess;
 pub use sys::SysValue;
 pub use typed::{
-    Argument, AssignTarget, Attribute, ClassId, Conversion, FStringPart, FormattedValue,
-    FunctionId, FunctionSignature, Generator, ImportBinding, InitCall, IsInstanceTest, LoopSource,
-    OperatorCall, PercentConversion, PercentField, PercentNumber, PercentPart, PercentValue,
-    PrintCall, RaiseCause, SignatureParameter, Symbol, SymbolId, SymbolKind, TypedClass,
-    TypedConstant, TypedExpr, TypedExprKind, TypedFunction, TypedHandler, TypedModule,
-    TypedProgram, TypedStmt, WithProtocol, dump,
+    Argument, AssignTarget, Attribute, ClassId, Conversion, EachMember, FStringPart,
+    FormattedValue, FunctionId, FunctionSignature, Generator, ImportBinding, InitCall,
+    IsInstanceTest, LoopSource, OperatorCall, PercentConversion, PercentField, PercentNumber,
+    PercentPart, PercentValue, PrintCall, RaiseCause, SignatureParameter, Symbol, SymbolId,
+    SymbolKind, TypedClass, TypedConstant, TypedExpr, TypedExprKind, TypedFunction, TypedHandler,
+    TypedModule, TypedProgram, TypedStmt, WithProtocol, dump,
 };
 pub use types::{Type, TypeObjectOf, View};

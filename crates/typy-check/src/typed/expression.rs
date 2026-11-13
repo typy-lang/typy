@@ -200,6 +200,8 @@ pub enum TypedExprKind {
     Downcast(Box<TypedExpr>),
     /// `isinstance(value, classes)` (CLS-09).
     IsInstance(Box<IsInstanceTest>),
+    /// An operation on a variable that holds a union, checked for each member (TYP-14).
+    EachMember(Box<EachMember>),
     /// The `int` a class's `__len__` returned, checked to be a length, which raises
     /// `ValueError` when it is negative (CLS-07).
     CheckedLength(Box<TypedExpr>),
@@ -378,6 +380,17 @@ pub struct IsInstanceTest {
     pub otherwise: Option<u32>,
 }
 
+/// An operation on a variable that holds a union of objects, checked once for each member
+/// with the variable narrowed to it (TYP-14, ADR-0022).
+#[derive(Clone, Debug, PartialEq)]
+pub struct EachMember {
+    /// The read of the variable, whose object decides which member it is.
+    pub value: TypedExpr,
+    /// Each member's class with the operation checked for it; the last runs when no class
+    /// before it is the object's.
+    pub arms: Vec<(crate::types::TypeObjectOf, TypedExpr)>,
+}
+
 impl TypedExpr {
     /// Returns the expression's operands in source order, the expressions it evaluates directly.
     #[must_use]
@@ -429,6 +442,9 @@ impl TypedExpr {
                 .collect(),
             TypedExprKind::DictItem { dict, key } => vec![dict, key],
             TypedExprKind::IsInstance(test) => vec![&test.value],
+            TypedExprKind::EachMember(each) => std::iter::once(&each.value)
+                .chain(each.arms.iter().map(|(_, body)| body))
+                .collect(),
             TypedExprKind::OperatorCall(call) => vec![&call.left, &call.right],
             TypedExprKind::Wrap(inner)
             | TypedExprKind::CheckedLength(inner)

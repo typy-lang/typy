@@ -189,6 +189,12 @@ impl BodyChecker<'_> {
         if narrowed == value.ty {
             return None;
         }
+        Some(self.narrowing_index(narrowed))
+    }
+
+    /// Returns the position of `narrowed` in the function's table of narrowed types, adding
+    /// it when it is not there yet.
+    fn narrowing_index(&mut self, narrowed: Type) -> u32 {
         let position = self
             .narrowings
             .iter()
@@ -197,7 +203,8 @@ impl BodyChecker<'_> {
                 self.narrowings.push(narrowed);
                 self.narrowings.len() - 1
             });
-        u32::try_from(position).ok()
+        // A function has far fewer narrowed types than `u32::MAX`.
+        u32::try_from(position).unwrap_or(u32::MAX)
     }
 
     /// Returns what a member of a union may be when the test holds: the member, when a tested

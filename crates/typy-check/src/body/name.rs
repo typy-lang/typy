@@ -181,7 +181,15 @@ impl BodyChecker<'_> {
     /// Returns the narrowest type `isinstance` tests showed the variable holds here, if any;
     /// a variable a function declares `global` may be assigned by a call, so it is not
     /// narrowed (TYP-07).
-    fn narrowed_type(&self, symbol: crate::typed::SymbolId, id: &str) -> Option<Type> {
+    pub(super) fn narrowed_type(&self, symbol: crate::typed::SymbolId, id: &str) -> Option<Type> {
+        if let Some((_, member)) = self
+            .splitting
+            .iter()
+            .rev()
+            .find(|(each, _)| *each == symbol)
+        {
+            return Some(member.clone());
+        }
         if self.program.assigned_in_functions.contains(id) {
             return None;
         }
