@@ -174,8 +174,6 @@ except AppError as error:
 
 ## Planned
 
-`super()` beyond `super().__init__(...)` comes later in 0.4 (CLS-14).
-
 The `args` attribute comes in 0.4 (EXC-11), and so does `code` of a
 `SystemExit` (EXC-13). An `OSError` built with two to five arguments,
 which CPython reads as `errno`, `strerror` and `filename`, is planned for

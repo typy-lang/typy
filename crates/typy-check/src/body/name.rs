@@ -50,6 +50,14 @@ impl BodyChecker<'_> {
                     )),
                 );
             }
+            // The instance used other than through its attributes may reach a method that an
+            // override in a subclass defines, so `super().__init__()` in a subclass must come
+            // after the subclass's own attributes are assigned (ADR-0021).
+            if let Some(initializing) = self.initializing
+                && initializing.instance == symbol
+            {
+                self.program.classes[initializing.class.0 as usize].init_uses_instance = true;
+            }
             if let Some(initializing) = self.initializing
                 && initializing.instance == symbol
                 && !self.reported_incomplete

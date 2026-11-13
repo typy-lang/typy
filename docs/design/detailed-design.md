@@ -972,12 +972,22 @@ exception class without
 an `__init__` of the program's takes positional arguments of any type; with one,
 its arguments are bound as for a call and `TypedExprKind::NewException` carries
 an `InitCall` with them and the count of those written by position, which become
-the exception's arguments. In an exception class's `__init__`,
-`super().__init__(...)` is a `Call` of the nearest base's `__init__` on the
-instance, or `TypedExprKind::SetArguments` when no base of the program's has
-one, and after it the inherited attributes count as assigned; any other
-`super()` is E0201 (CLS-14). `is` compares two exceptions. A class name read as
-a value is `TypeObjectOf::Exception`, and in an annotation it names the
+the exception's arguments. `body::super_call` checks `super().name(...)`, and
+`super(Class, self)` naming the enclosing class and its instance, in any method
+(CLS-14): a `Call` of the nearest base's method on the instance with
+`dispatch` clear, E0414 when no base of the program's has the method or outside
+a method, and E0201, planned for 0.5, for other arguments. In `__init__`,
+`super().__init__(...)` calls the nearest base's `__init__`; with none, an
+exception class gets `TypedExprKind::SetArguments` and any other class nothing,
+as `object.__init__()` does, E0404 with arguments. After it the inherited
+attributes count as assigned. `ClassInfo::init_uses_instance` notes an
+`__init__` that uses the instance other than through its attributes, directly
+or through its base's; `super().__init__(...)` that runs such an `__init__`
+before the class's own attributes are assigned is E0309, since an override may
+read them. Calling a class whose attributes the `__init__` that runs, its own
+or its nearest base's, does not all assign is E0309, so no instance holds an
+attribute without a value (CLS-01). `is` compares two exceptions. A class name
+read as a value is `TypeObjectOf::Exception`, and in an annotation it names the
 exception type. Calling a class takes positional arguments of any type and gives
 `TypedExprKind::NewException { class, arguments }`; a keyword is E0404, and a
 call of `UnicodeDecodeError` or `UnicodeEncodeError` is E0417 (EXC-12). The type

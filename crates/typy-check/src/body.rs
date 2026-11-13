@@ -30,6 +30,7 @@ mod round_call;
 mod set;
 mod slice;
 mod statement;
+mod super_call;
 mod sys_call;
 mod type_object;
 mod view_operator;
@@ -66,6 +67,8 @@ pub(crate) struct BodyChecker<'program> {
     returns: Option<Type>,
     /// The class and instance of the `__init__` being checked.
     initializing: Option<class::Initializing>,
+    /// The class and instance of the method being checked, which `super()` reads.
+    method: Option<class::Initializing>,
     /// Whether a use of the incomplete instance has been reported, so one cause gives one error.
     reported_incomplete: bool,
     /// How many `except` clauses enclose the statement being checked, in this function.
@@ -94,6 +97,7 @@ impl<'program> BodyChecker<'program> {
             reported_unassigned: BTreeSet::new(),
             returns,
             initializing: None,
+            method: None,
             reported_incomplete: false,
             handling: 0,
             finally_loops: Vec::new(),
@@ -129,6 +133,12 @@ impl<'program> BodyChecker<'program> {
                 .get_or_insert_with(BTreeSet::new)
                 .insert(flow::Fact::Assigned(symbol));
             parameters.push(symbol);
+        }
+        if let (Some(class), Some(instance)) = (definition.class, parameters.first()) {
+            checker.method = Some(class::Initializing {
+                class,
+                instance: *instance,
+            });
         }
         if let (Some(class), "__init__", Some(instance)) = (
             definition.class,

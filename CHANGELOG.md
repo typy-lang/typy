@@ -22,6 +22,13 @@ All notable changes to TyPy are recorded here. The format follows
   otherwise; one that changes a default, or takes or returns a type
   held differently, such as `int | None` for `int`, is planned for 0.5
   (CLS-04, CLS-13, ADR-0021).
+- `super()` in any method: `super().name(...)` and `super(Class, self)`
+  call the nearest base's method, and `super().__init__()` in a class
+  whose bases have no `__init__` does nothing, as `object.__init__`
+  does. Outside a method it is E0414 (CLS-14). It comes after a
+  subclass assigns its own attributes when the base's `__init__` uses
+  the instance, which could run an override that reads them, E0309
+  otherwise (CLS-04).
 - An exception class may derive from an exception class imported from
   another module, as `from errors import AppError` or `errors.AppError`
   (CLS-03).
@@ -31,6 +38,12 @@ All notable changes to TyPy are recorded here. The format follows
 - A base that is not `object`, an exception class or a class of the
   program, such as `int` or `list`, is E0201 with a message that names
   what a base may be, in place of "planned for TyPy 0.4" (CLS-04).
+
+### Fixed
+
+- Calling a class whose body declares an attribute that no `__init__`
+  assigns is E0309. The program used to compile and crash when the
+  attribute was read, where CPython raises `AttributeError` (CLS-01).
 
 ## [0.3.0] - 2026-11-13
 

@@ -1808,7 +1808,7 @@ fn statements_and_expressions_outside_the_subset_give_their_codes() {
         ("class A(UnicodeEncodeError):\n    pass\n", &["E0417"]),
         (
             "class A(Exception):\n    def f(self) -> None:\n        super().__init__()\n",
-            &["E0201"],
+            &["E0414"],
         ),
         (
             "class A(Exception):\n    def __init__(self) -> None:\n        super().__init__(x=1)\n",
@@ -1822,8 +1822,8 @@ fn statements_and_expressions_outside_the_subset_give_their_codes() {
         ("class A(Exception):\n    pass\nA().n\n", &["E0414"]),
         ("try:\n    pass\nexcept int:\n    pass\n", &["E0418"]),
         (
-            "class A:\n    def __init__(self) -> None:\n        super().__init__()\n",
-            &["E0201"],
+            "class A:\n    def __init__(self) -> None:\n        super().__init__(1)\n",
+            &["E0404"],
         ),
         // The name `as` binds is deleted after its clause (EXC-01).
         (
@@ -2137,4 +2137,59 @@ fn fstrings_check_every_field() {
     assert_eq!(rejected("print(f'{undefined}')\n"), ["E0205"]);
     assert_eq!(rejected("print(f'{1:{undefined}}')\n"), ["E0205"]);
     assert_eq!(rejected("print(f'{1 + \"a\"}')\n"), ["E0401"]);
+}
+
+#[test]
+fn super_calls_the_nearest_base_s_method_in_any_method() {
+    accepted(
+        "class A:\n    def __init__(self) -> None:\n        self.x = 1\n    def f(self, n: int) -> int:\n        return n\n\
+         class B(A):\n    def __init__(self) -> None:\n        super(B, self).__init__()\n    def f(self, n: int) -> int:\n        return super().f(n) + super(B, self).f(n=n)\n\
+         class C(B):\n    def g(self) -> int:\n        return super().f(1)\n\
+         print(C().g())\n",
+    );
+    accepted(
+        "class A:\n    def __init__(self) -> None:\n        print(self)\n\
+         class B(A):\n    def __init__(self) -> None:\n        super().__init__()\n\
+         class C(A):\n    def __init__(self) -> None:\n        self.y = 2\n        super().__init__()\n\
+         print(B(), C().y)\n",
+    );
+    let cases: &[(&str, &[&str])] = &[
+        (
+            "class A:\n    def f(self) -> int:\n        return super().f()\n",
+            &["E0414"],
+        ),
+        (
+            "class A:\n    pass\nclass B(A):\n    def f(self) -> int:\n        return super(A, self).f()\n",
+            &["E0201"],
+        ),
+        (
+            "class A:\n    pass\nclass B(A):\n    def f(self, other: 'B') -> None:\n        super(B, other).f()\n",
+            &["E0201"],
+        ),
+        (
+            "class A:\n    def __init__(self) -> None:\n        super().__init__(x=1)\n",
+            &["E0404"],
+        ),
+        (
+            "class A:\n    def __init__(self, n: int) -> None:\n        self.n = n\nclass B(A):\n    def __init__(self) -> None:\n        super().__init__('one')\n",
+            &["E0404"],
+        ),
+        (
+            "class A:\n    def f(self, n: int) -> None:\n        pass\nclass B(A):\n    def g(self) -> None:\n        super().f('one')\n",
+            &["E0404"],
+        ),
+        (
+            "class E(Exception):\n    def __init__(self) -> None:\n        super().__init__(code=1)\n",
+            &["E0404"],
+        ),
+        (
+            "class A:\n    def __init__(self) -> None:\n        self.f()\n    def f(self) -> None:\n        pass\n\
+             class B(A):\n    def __init__(self) -> None:\n        super().__init__()\n        self.z = 1\n",
+            &["E0309"],
+        ),
+        ("class A:\n    x: int\nA()\n", &["E0309"]),
+    ];
+    for (source, expected) in cases {
+        assert_eq!(&rejected(source), expected, "\n{source}");
+    }
 }

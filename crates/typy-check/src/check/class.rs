@@ -37,6 +37,9 @@ pub(crate) struct ClassInfo {
     pub(crate) attributes: Vec<AttributeInfo>,
     pub(crate) methods: Vec<(String, FunctionId)>,
     pub(crate) init: Option<FunctionId>,
+    /// Whether the class's `__init__` uses the instance other than through its attributes,
+    /// once checked.
+    pub(crate) init_uses_instance: bool,
     pub(crate) span: Span,
 }
 
@@ -403,6 +406,7 @@ fn new_info(class: &ClassStatement<'_>, instance: &Type, classes: Classes<'_>) -
         attributes,
         methods: Vec::new(),
         init: None,
+        init_uses_instance: false,
         span: class.span,
     }
 }

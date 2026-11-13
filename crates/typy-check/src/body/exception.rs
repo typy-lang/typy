@@ -2,14 +2,14 @@
 //! ADR-0013).
 
 use typy_diagnostics::{Diagnostic, DiagnosticCode, RuleId, Span};
-use typy_source::syntax::{Constant, ExceptHandler, Expr, Identifier, Keyword, Stmt, WithItem};
+use typy_source::syntax::{Constant, ExceptHandler, Expr, Keyword, Stmt, WithItem};
 
 use super::BodyChecker;
 use super::flow::{Fact, meet};
 use crate::exception::{BuiltinException, ExceptionClass, common_base};
 use crate::typed::{
-    Argument, RaiseCause, SymbolKind, TypedConstant, TypedExpr, TypedExprKind, TypedHandler,
-    TypedStmt, WithProtocol,
+    RaiseCause, SymbolKind, TypedConstant, TypedExpr, TypedExprKind, TypedHandler, TypedStmt,
+    WithProtocol,
 };
 use crate::types::{Type, TypeObjectOf};
 
@@ -84,7 +84,7 @@ impl BodyChecker<'_> {
 
     /// Refuses two or more arguments to `OSError` or a class derived from it: CPython reads
     /// them as `errno`, `strerror` and `filename`, which is planned for 0.4 (EXC-14).
-    fn os_error_arguments(
+    pub(super) fn os_error_arguments(
         &mut self,
         builtin: BuiltinException,
         values: &[TypedExpr],
@@ -334,102 +334,6 @@ impl BodyChecker<'_> {
                 None
             })
             .collect()
-    }
-
-    /// Checks `super().name(arguments)`, accepted as `super().__init__(...)` in the `__init__`
-    /// of an exception class (CLS-14). With a base of the program that has `__init__`, it calls
-    /// that `__init__` on the instance; otherwise it sets the exception's arguments, as
-    /// `BaseException.__init__` does. Either way the inherited attributes are assigned after.
-    pub(super) fn super_call(
-        &mut self,
-        name: &Identifier,
-        arguments: &[Expr],
-        keywords: &[Keyword],
-        span: Span,
-    ) -> TypedExpr {
-        let exception_init = self.initializing.and_then(|initializing| {
-            let exception = self
-                .program
-                .exception(initializing.class)
-                .filter(|_| name.name == "__init__")?;
-            Some((initializing, exception.builtin()))
-        });
-        let Some((initializing, builtin)) = exception_init else {
-            for argument in arguments {
-                self.expression(argument);
-            }
-            return self.error(
-                Diagnostic::new(
-                    DiagnosticCode::error(201),
-                    span,
-                    "`super()` is planned for TyPy 0.4, beyond `super().__init__(...)` in the \
-                     `__init__` of an exception class (CLS-14)",
-                )
-                .with_rule(RuleId::CLS_14),
-                span,
-            );
-        };
-        let instance = Self::typed(
-            TypedExprKind::Local(initializing.instance),
-            self.program.instance_type(initializing.class),
-            span,
-        );
-        let info = &self.program.classes[initializing.class.0 as usize];
-        let (base, inherited) = (info.base, info.inherited);
-        let base_init = base.and_then(|base| self.program.method(base, "__init__"));
-        let call = if let (Some(function), Some(base)) = (base_init, base) {
-            let qualified = format!("{}.__init__", self.program.instance_type(base));
-            match self.bind_arguments(function, 1, &qualified, arguments, keywords, span) {
-                Ok(bound) => {
-                    let mut all = vec![Argument {
-                        parameter: 0,
-                        value: instance,
-                    }];
-                    all.extend(bound);
-                    Self::typed(
-                        TypedExprKind::Call {
-                            function,
-                            arguments: all,
-                            dispatch: false,
-                        },
-                        Type::NoneType,
-                        span,
-                    )
-                }
-                Err(error) => return error,
-            }
-        } else {
-            let values: Vec<TypedExpr> = arguments
-                .iter()
-                .map(|value| self.expression(value))
-                .collect();
-            if let Some(keyword) = keywords.first() {
-                return self.error(
-                    Diagnostic::new(
-                        DiagnosticCode::error(404),
-                        keyword.span,
-                        "`BaseException.__init__` takes positional arguments only",
-                    )
-                    .with_rule(RuleId::CLS_14),
-                    span,
-                );
-            }
-            if let Some(error) = self.os_error_arguments(builtin, &values, span) {
-                return error;
-            }
-            Self::typed(
-                TypedExprKind::SetArguments {
-                    exception: Box::new(instance),
-                    arguments: values,
-                },
-                Type::NoneType,
-                span,
-            )
-        };
-        if let Some(facts) = &mut self.assigned {
-            facts.extend((0..inherited).map(Fact::Attribute));
-        }
-        call
     }
 
     /// Checks `assert test, message`, which raises `AssertionError(message)` when the test is

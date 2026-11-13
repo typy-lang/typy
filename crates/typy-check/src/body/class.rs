@@ -329,6 +329,48 @@ impl BodyChecker<'_> {
         })
     }
 
+    /// Returns the error for making an instance of a class whose attributes the `__init__`
+    /// that runs, its own or its nearest base's, does not all assign: one the class body
+    /// declares without an `__init__` of the class, which CPython reports as missing when it
+    /// is read (CLS-01).
+    fn unassigned_on_creation(&self, class: ClassId, span: Span) -> Option<Diagnostic> {
+        let info = &self.program.classes[class.0 as usize];
+        let mut current = Some(class);
+        let mut assigned = 0;
+        while let Some(each) = current {
+            let other = &self.program.classes[each.0 as usize];
+            if other.init.is_some() {
+                assigned = other.attributes.len();
+                break;
+            }
+            current = other.base;
+        }
+        let missing: Vec<String> = info.attributes[assigned.min(info.attributes.len())..]
+            .iter()
+            .map(|attribute| format!("`{}`", attribute.name))
+            .collect();
+        if missing.is_empty() {
+            return None;
+        }
+        Some(
+            Diagnostic::new(
+                DiagnosticCode::error(309),
+                span,
+                format!(
+                    "an instance of `{}` would hold {} without a value, since no `__init__` \
+                     that runs assigns it",
+                    info.name,
+                    missing.join(", ")
+                ),
+            )
+            .with_rule(RuleId::CLS_01)
+            .with_help(format!(
+                "define `__init__` in `{}` and assign it there",
+                info.name
+            )),
+        )
+    }
+
     /// Checks `Class(arguments)`: the arguments of `__init__`, without the instance, or none
     /// for a class without `__init__`. An exception class without `__init__` takes positional
     /// arguments of any type, as its built-in base does.
@@ -340,6 +382,12 @@ impl BodyChecker<'_> {
         span: Span,
     ) -> TypedExpr {
         let name = self.program.classes[class.0 as usize].name.clone();
+        if let Some(diagnostic) = self.unassigned_on_creation(class, span) {
+            for argument in arguments {
+                self.expression(argument);
+            }
+            return self.error(diagnostic, span);
+        }
         let init = self.program.method(class, "__init__");
         let ty = self.program.instance_type(class);
         if let Type::Exception(exception) = &ty {

@@ -21,7 +21,7 @@ impl BodyChecker<'_> {
         span: Span,
     ) -> Option<TypedExpr> {
         if is_super(receiver) {
-            return Some(self.super_call(name, arguments, keywords, span));
+            return Some(self.super_call(receiver, name, arguments, keywords, span));
         }
         let module = self.module_of(receiver)?;
         let call = self.module_call(&module, name, arguments, keywords, span);
@@ -413,13 +413,13 @@ fn counted(count: usize, noun: &str) -> String {
     }
 }
 
-/// Returns true for `super()` with no arguments.
+/// Returns true for `super()`, with no arguments or two given by position.
 fn is_super(receiver: &Expr) -> bool {
     matches!(
         receiver,
         Expr::Call { function, arguments, keywords, .. }
             if matches!(function.as_ref(), Expr::Name { id, .. } if id == "super")
-                && arguments.is_empty()
+                && matches!(arguments.len(), 0 | 2)
                 && keywords.is_empty()
     )
 }

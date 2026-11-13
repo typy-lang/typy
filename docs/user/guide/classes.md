@@ -144,9 +144,50 @@ class Label(Shape):
 A subclass may declare an attribute of its base again only with the
 same type. The base of a class is `object`, an exception class or a
 class of the program defined before it; a built-in type such as `int` or
-`list` is E0201, and several bases are planned for after 1.0. `super()`
-beyond an exception class's `super().__init__(...)`, and `isinstance`,
-come later in 0.4.
+`list` is E0201, and several bases are planned for after 1.0.
+`isinstance` comes later in 0.4.
+
+## Calling the base with `super()`
+
+In a method, `super().name(...)` calls the method of the nearest base
+that defines it, and `super(Class, self)` naming the enclosing class does
+the same (CLS-14). In `__init__`, `super().__init__(...)` runs the base's
+`__init__`, which assigns the inherited attributes:
+
+<!-- typy-expect: accepted -->
+```python
+class Shape:
+    def __init__(self, name: str) -> None:
+        self.name = name
+
+    def describe(self) -> str:
+        return "shape " + self.name
+
+
+class Square(Shape):
+    def __init__(self, side: float) -> None:
+        super().__init__("square")
+        self.side = side
+
+    def describe(self) -> str:
+        return super().describe() + f" with side {self.side}"
+
+
+print(Square(2.0).describe())
+```
+
+When the base's `__init__` uses `self` other than through its
+attributes, as by calling a method, it may run an override that reads
+an attribute of the subclass. Such a call of `super().__init__(...)`
+comes after the subclass assigns its own attributes, E0309 otherwise,
+so no attribute is read before it holds a value. `super()` outside a
+method is E0414, and `super(Base, self)` naming another class is
+planned for 0.5.
+
+An instance never holds an attribute without a value: calling a class
+whose body declares an attribute that no `__init__` that runs assigns,
+such as a subclass without `__init__` that declares one of its own, is
+E0309.
 
 <!-- typy-expect: rejected E0201 at 1:13 -->
 ```python
