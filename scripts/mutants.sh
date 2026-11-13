@@ -6,10 +6,18 @@
 # so it has the tools installed there without a download; the image is removed afterwards.
 # Each package's tests run on their own, so a crate whose tests need the runtime archives
 # built beside the compiler (typy-build, typy-driver, typy-cli) is not a package for it.
+#
+# With `suites` as the second argument, only the mutants an earlier run of the package did not
+# catch are tested again, against the conformance suite and the driver and command-line
+# tests, which run whole programs. The runtime archives the dev container built are copied to
+# `target/lib/` first, and from there into each copy of the tree, where the tests find them
+# beside the compiler they build; so this mode suits a compiler package, not `typy-runtime`.
+# The sanitizer run of the suite is left out, since it repeats the suite for the runtime.
 set -euo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
 
-package="${1:?usage: scripts/mutants.sh PACKAGE}"
+package="${1:?usage: scripts/mutants.sh PACKAGE [suites]}"
+mode="${2:-own}"
 image="typy-lang-mutants:local"
 dev="$(docker compose -f .devcontainer/compose.yaml ps -q dev)"
 if [ -z "${dev}" ]; then
@@ -25,6 +33,16 @@ docker commit --pause=false \
     "${dev}" "${image}" >/dev/null
 trap 'docker rmi "${image}" >/dev/null' EXIT
 mkdir -p .tmp/mutants
+arguments=(--package "${package}" --jobs 2 --no-shuffle --output ".tmp/mutants/${package}")
+if [ "${mode}" = "suites" ]; then
+    rm -rf target/lib
+    mkdir -p target
+    docker cp "${dev}:/var/cache/typy/target/lib" target/lib
+    arguments+=(--iterate --copy-target true
+        --test-package "${package}" --test-package typy-conformance
+        --test-package typy-driver --test-package typy-cli
+        --cargo-test-arg=-E --cargo-test-arg="not binary(sanitized)")
+fi
 docker run --rm --init --network none \
     --memory 6g --memory-swap 6g --cpus 4 --pids-limit 1024 \
     --user "$(id -u):$(id -g)" \
@@ -35,5 +53,4 @@ docker run --rm --init --network none \
     --env CARGO_NET_OFFLINE=true \
     --env CARGO_TERM_COLOR=never \
     "${image}" \
-    env -u CARGO_TARGET_DIR cargo mutants --package "${package}" --jobs 2 --no-shuffle \
-    --output ".tmp/mutants/${package}"
+    env -u CARGO_TARGET_DIR cargo mutants "${arguments[@]}"

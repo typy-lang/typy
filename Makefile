@@ -91,9 +91,10 @@ fuzz: dev ## Fuzz the source, checking and lowering stages for FUZZ_SECONDS seco
 	@$(COMPOSE) exec -T -e FUZZ_SECONDS=$(FUZZ_SECONDS) dev scripts/fuzz.sh
 
 MUTANTS_PACKAGE ?= typy-diagnostics
+MUTANTS_TESTS ?= own
 
-mutants: ## Run cargo-mutants on MUTANTS_PACKAGE in a container limited to 6 GB, without network; the report goes to .tmp/mutants/
-	@scripts/mutants.sh $(MUTANTS_PACKAGE)
+mutants: ## Run cargo-mutants on MUTANTS_PACKAGE in a container limited to 6 GB, without network; MUTANTS_TESTS=suites tests the earlier survivors against the conformance suite; the report goes to .tmp/mutants/
+	@scripts/mutants.sh $(MUTANTS_PACKAGE) $(MUTANTS_TESTS)
 
 bench: runtime ## Time the release-built compiler on generated 10,000-line projects against the budgets of NFR-04, NFR-05 and NFR-14
 	@$(EXEC) cargo build --release -p typy-cli --locked
