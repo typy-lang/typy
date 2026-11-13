@@ -53,7 +53,7 @@ fn indexing_counts_negative_indexes_from_the_end_and_raises_outside() {
         assert!(!result.exception.is_null(), "{index}");
         // SAFETY: the exception is live; its message is a live string.
         unsafe {
-            assert_eq!((*result.exception).kind, crate::ExceptionKind::IndexError);
+            assert_eq!((*result.exception).kind(), crate::ExceptionKind::IndexError);
             assert_eq!(
                 text((*result.exception).message),
                 "string index out of range"
@@ -90,7 +90,12 @@ fn comparison_orders_by_code_point_then_length() {
 fn raised<T>(result: &crate::Raising<T>) -> (crate::ExceptionKind, String) {
     assert!(!result.exception.is_null(), "nothing was raised");
     // SAFETY: the exception is live; its message is a live string.
-    unsafe { ((*result.exception).kind, text((*result.exception).message)) }
+    unsafe {
+        (
+            (*result.exception).kind(),
+            text((*result.exception).message),
+        )
+    }
 }
 
 #[test]

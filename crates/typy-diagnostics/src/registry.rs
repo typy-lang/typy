@@ -37,6 +37,15 @@ const fn active(number: u16, summary: &'static str, rule: RuleId) -> CodeInfo {
     }
 }
 
+const fn warning(number: u16, summary: &'static str, rule: RuleId) -> CodeInfo {
+    CodeInfo {
+        code: DiagnosticCode::warning(number),
+        summary,
+        rule: Some(rule),
+        status: CodeStatus::Active,
+    }
+}
+
 /// Every diagnostic code, sorted by code (detailed design section 4.3).
 pub const CODES: &[CodeInfo] = &[
     active(101, "source file larger than 16 MiB", RuleId::LEX_09),
@@ -59,6 +68,7 @@ pub const CODES: &[CodeInfo] = &[
         rule: None,
         status: CodeStatus::Active,
     },
+    active(107, "`typy.toml` is not valid", RuleId::CLI_07),
     active(
         201,
         "feature planned for a later TyPy release",
@@ -79,7 +89,7 @@ pub const CODES: &[CodeInfo] = &[
     ),
     active(
         301,
-        "`is` used on values other than `None` or class instances",
+        "`is` used on values other than `None`, `bool` values or class instances",
         RuleId::EXP_08,
     ),
     active(
@@ -173,6 +183,67 @@ pub const CODES: &[CodeInfo] = &[
         "attribute or method a class does not have",
         RuleId::CLS_02,
     ),
+    active(
+        415,
+        "`raise` or `from` of a value that is not an exception",
+        RuleId::SMT_06,
+    ),
+    active(
+        416,
+        "bare `raise` outside an `except` clause",
+        RuleId::EXC_07,
+    ),
+    active(
+        417,
+        "call of an exception class TyPy does not let a program build",
+        RuleId::EXC_12,
+    ),
+    active(
+        418,
+        "`except` clause that names something other than exception classes",
+        RuleId::EXC_09,
+    ),
+    active(
+        419,
+        "`return`, `break` or `continue` that leaves a `finally` block",
+        RuleId::EXC_06,
+    ),
+    active(
+        420,
+        "`with` on a value whose class has no `__enter__` and `__exit__`",
+        RuleId::CST_05,
+    ),
+    active(
+        421,
+        "`del` of something other than a list item, a list slice or a dict key",
+        RuleId::SMT_05,
+    ),
+    active(422, "circular import at module level", RuleId::MOD_05),
+    active(
+        423,
+        "`global` of a name the module does not bind",
+        RuleId::SMT_08,
+    ),
+    active(
+        424,
+        "module variable an `__init__` reads before the module's code gives it a type",
+        RuleId::SMT_08,
+    ),
+    active(
+        425,
+        "import of a name its module does not define",
+        RuleId::SMT_07,
+    ),
+    active(
+        426,
+        "import inside a function of a module that the imported module imports",
+        RuleId::MOD_05,
+    ),
+    active(
+        427,
+        "`%` format that does not fit its values",
+        RuleId::LIB_10,
+    ),
     active(701, "C toolchain program not found", RuleId::A_01),
     active(702, "link failed", RuleId::A_01),
     CodeInfo {
@@ -182,6 +253,12 @@ pub const CODES: &[CodeInfo] = &[
         status: CodeStatus::Active,
     },
     active(9001, "internal compiler error", RuleId::NFR_09),
+    warning(101, "invalid escape sequence", RuleId::DIA_08),
+    warning(
+        301,
+        "assertion that is always true, of a tuple with items",
+        RuleId::DIA_08,
+    ),
 ];
 
 /// Returns what the registry knows about `code`, or `None` for an unknown code.
@@ -220,7 +297,7 @@ mod tests {
     #[test]
     fn unknown_code_is_not_found() {
         assert_eq!(lookup(DiagnosticCode::error(9999)), None);
-        assert_eq!(lookup(DiagnosticCode::warning(101)), None);
+        assert_eq!(lookup(DiagnosticCode::warning(9999)), None);
     }
 
     #[test]

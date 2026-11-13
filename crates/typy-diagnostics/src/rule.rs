@@ -9,6 +9,10 @@ pub struct RuleId(&'static str);
 impl RuleId {
     /// The host has a C toolchain that can link for the target.
     pub const A_01: Self = Self("A-01");
+    /// Project settings shall be read from `typy.toml`, and a command line flag shall override the same setting in the file.
+    pub const CLI_07: Self = Self("CLI-07");
+    /// The setting `python-floor` in `typy.toml` shall set the program's Python floor to one of `3.12`, `3.13`, `3.14` or `3.15`, and any other value shall be rejected.
+    pub const CLI_12: Self = Self("CLI-12");
     /// Classes with methods and an `__init__` shall be accepted, with each instance attribute assigned in `__init__` or declared in the class body.
     pub const CLS_01: Self = Self("CLS-01");
     /// Adding an attribute that the class does not declare shall be rejected.
@@ -29,6 +33,10 @@ impl RuleId {
     pub const CLS_11: Self = Self("CLS-11");
     /// `type(x)` shall give the type object of the value `x`, and a class name or the name of a built-in type shall be its type object as a value; a type object shall print as `<class 'name'>`, give its name as `__name__`, and compare with `is`, `is not`, `==` and `!=`.
     pub const CLS_12: Self = Self("CLS-12");
+    /// A class derived from an exception class shall be accepted with new methods and attributes and with its own `__init__`, `__str__` and `__repr__`; redefining another method of a base shall be rejected until CLS-04.
+    pub const CLS_13: Self = Self("CLS-13");
+    /// `super().__init__(...)` shall be accepted in the `__init__` of an exception class and shall set the exception's arguments; any other use of `super()` shall be rejected until 0.4.
+    pub const CLS_14: Self = Self("CLS-14");
     /// `for` shall iterate over `range`, `str`, `bytes`, `list`, `tuple`, `dict`, `set` and any class with `__iter__` and `__next__`.
     pub const CST_03: Self = Self("CST-03");
     /// `try` with `except`, `else` and `finally` clauses shall be accepted, and `finally` shall run on `return`, `break`, `continue` and exceptions.
@@ -41,6 +49,8 @@ impl RuleId {
     pub const CST_08: Self = Self("CST-08");
     /// `iter` and `next`, with and without a default, shall be available for the built-in iterables.
     pub const CST_09: Self = Self("CST-09");
+    /// The parameters of `__exit__` after `self` may be left without annotations, and shall then have the types `type[BaseException] \| None`, `BaseException \| None` and `TracebackType \| None`; the traceback shall be one object of type `traceback`, written as CPython writes one, which holds no frames.
+    pub const CST_10: Self = Self("CST-10");
     /// `bool` shall have the values `True` and `False`.
     pub const DAT_03: Self = Self("DAT-03");
     /// `str` shall be an immutable sequence of Unicode code points. `len()` and indexing shall count code points, and indexing shall return a `str` of length 1.
@@ -67,8 +77,20 @@ impl RuleId {
     pub const DAT_16: Self = Self("DAT-16");
     /// `range` shall be a value as well as a loop source: a sequence of `int` with `len`, indexing, slicing, `in`, `==` and `repr`, as in Python.
     pub const DAT_17: Self = Self("DAT-17");
+    /// Where CPython 3.12 to 3.15 give a `SyntaxWarning` while compiling a program TyPy accepts, TyPy shall give a warning: for an invalid escape sequence and for an assertion that is always true.
+    pub const DIA_08: Self = Self("DIA-08");
     /// Raising and catching exceptions shall follow the Language Reference, including matching on base classes.
     pub const EXC_01: Self = Self("EXC-01");
+    /// A `return`, `break` or `continue` that leaves a `finally` block shall be rejected, as PEP 765 makes CPython 3.14 warn about it (ADR-0013).
+    pub const EXC_06: Self = Self("EXC-06");
+    /// A `raise` without an expression shall re-raise the exception being handled, and shall be rejected outside an `except` clause.
+    pub const EXC_07: Self = Self("EXC-07");
+    /// An `except` clause shall name one exception class or a tuple of them, with or without `as`, or none for a bare `except`; any other expression shall be rejected.
+    pub const EXC_09: Self = Self("EXC-09");
+    /// Calling `UnicodeDecodeError` or `UnicodeEncodeError`, or deriving a class from them, shall be rejected; catching them shall be accepted.
+    pub const EXC_12: Self = Self("EXC-12");
+    /// `OSError` and its subclasses built with two to five arguments shall give the subclass for the `errno`, and the attributes `errno`, `strerror` and `filename`, as CPython does.
+    pub const EXC_14: Self = Self("EXC-14");
     /// `+`, `-`, `*`, `/`, `//`, `%` and `**` shall give Python's results for `int` and `float`, including `/` on two `int` values returning `float` and `%` taking the sign of the divisor.
     pub const EXP_02: Self = Self("EXP-02");
     /// `int ** int` shall be accepted only when the exponent is a non-negative integer literal, because CPython returns `float` for a negative exponent.
@@ -97,6 +119,8 @@ impl RuleId {
     pub const EXP_16: Self = Self("EXP-16");
     /// `*args` and `**kwargs` with annotated element types shall be accepted.
     pub const EXP_17: Self = Self("EXP-17");
+    /// A module-level `ctypes.CDLL` or `ctypes.cdll.LoadLibrary` call with a string literal shall link the named library.
+    pub const FFI_01: Self = Self("FFI-01");
     /// Module-level function definitions shall be accepted.
     pub const FUN_01: Self = Self("FUN-01");
     /// Keyword-only and positional-only parameters shall be accepted.
@@ -119,6 +143,10 @@ impl RuleId {
     pub const LEX_08: Self = Self("LEX-08");
     /// A source file larger than 16 MiB shall be rejected with a diagnostic before it is parsed, so input size cannot exhaust the compiler's memory.
     pub const LEX_09: Self = Self("LEX-09");
+    /// A `\u` or `\U` escape of a surrogate code point, U+D800 to U+DFFF, in a `str` literal shall give that code point, as CPython keeps it.
+    pub const LEX_10: Self = Self("LEX-10");
+    /// Brackets nested more than 200 deep and blocks nested more than 99 deep shall be rejected with CPython's messages, and expressions and statements nested more than 25000 deep shall be rejected, so that no program nests past what the compiler's stack holds.
+    pub const LEX_11: Self = Self("LEX-11");
     /// `print` with `sep` and `end`, `len`, `range`, `abs`, `min`, `max`, `int`, `float`, `str`, `bool`, `repr`, `ord` and `chr` shall be available.
     pub const LIB_01: Self = Self("LIB-01");
     /// `list`, `dict`, `set`, `tuple`, `sorted`, `reversed`, `enumerate`, `zip`, `sum`, `any`, `all` and `round` shall be available.
@@ -127,12 +155,37 @@ impl RuleId {
     pub const LIB_03: Self = Self("LIB-03");
     /// `sys.argv`, `sys.exit`, `sys.stdout`, `sys.stderr`, the `file` argument of `print`, `input` and `open` for text files shall be available.
     pub const LIB_04: Self = Self("LIB-04");
+    /// The `math` module shall be available.
+    pub const LIB_05: Self = Self("LIB-05");
+    /// The `dataclasses` names in CLS-05 and the `typing` names in TYP and GEN shall be available.
+    pub const LIB_06: Self = Self("LIB-06");
+    /// `os.environ`, `os.path`, `time` and `random` shall be available.
+    pub const LIB_07: Self = Self("LIB-07");
     /// Importing a standard library module that TyPy does not provide shall be rejected with the list of modules it provides.
     pub const LIB_08: Self = Self("LIB-08");
     /// `str % values`, printf-style formatting with a value, a tuple of values or a dict of named values, shall be accepted with Python's results.
     pub const LIB_10: Self = Self("LIB-10");
+    /// `format % values` shall be accepted with a format that is not a string literal, and with a `tuple[T, ...]` of values.
+    pub const LIB_11: Self = Self("LIB-11");
+    /// `math.fsum`, `math.prod`, `math.sumprod`, `math.dist`, `math.gamma` and `math.lgamma` shall be available.
+    pub const LIB_12: Self = Self("LIB-12");
+    /// `sys.maxsize`, `sys.byteorder`, `sys.platform`, `sys.version`, `sys.version_info`, `sys.hexversion`, `sys.maxunicode`, `sys.getrecursionlimit`, `sys.setrecursionlimit` and `sys.stdin` shall be available.
+    pub const LIB_13: Self = Self("LIB-13");
+    /// `open` shall accept binary modes, `+` modes, a mode that is not a literal, encodings other than UTF-8 and the arguments `buffering`, `errors`, `newline`, `closefd` and `opener`; a text file shall have `seek`, `tell`, `truncate`, `fileno`, `isatty`, `readable`, `writable` and `seekable`, and the attributes `name`, `mode` and `closed`; closing `sys.stdout` or `sys.stderr` shall close it.
+    pub const LIB_14: Self = Self("LIB-14");
+    /// A program shall be built from several `.py` files, found from the main file's directory and from paths set in `typy.toml`.
+    /// A program shall be built from several `.py` files, found from the main file's directory and from paths set in `typy.toml`.
+    pub const MOD_01: Self = Self("MOD-01");
+    /// Packages with `__init__.py` and relative imports shall be accepted.
+    pub const MOD_02: Self = Self("MOD-02");
+    /// A circular import shall be rejected with the cycle shown.
+    pub const MOD_05: Self = Self("MOD-05");
     /// `lazy import` and `lazy from ... import` are accepted at module level when the Python floor is 3.15 or later.
     pub const MOD_06: Self = Self("MOD-06");
+    /// `sys.set_lazy_imports`, `sys.set_lazy_imports_filter` and `sys.lazy_modules` shall be rejected, because they change import behaviour from outside the importing module.
+    pub const MOD_09: Self = Self("MOD-09");
+    /// A name bound by a lazy import shall be usable from another module, assignable through a lazily imported module, and bindable by more than one lazy import.
+    pub const MOD_11: Self = Self("MOD-11");
     /// The compiler shall not crash on any input; an internal error shall be reported as `E9xxx` with a hint to report it.
     pub const NFR_09: Self = Self("NFR-09");
     /// Unpacking assignment to several targets shall be accepted for tuples and lists.
@@ -177,10 +230,14 @@ impl RuleId {
     pub const TYP_13: Self = Self("TYP-13");
     /// Annotations that join two or more types other than `None` with `|`, such as `int | str`, shall be accepted, with narrowing by `isinstance` (TYP-07).
     pub const TYP_14: Self = Self("TYP-14");
+    /// The annotations `Iterator[T]` and `Iterable[T]`, imported from `collections.abc` or `typing`, shall be accepted for iterators and for the built-in iterables of items of type `T`; their use as values is planned for 0.4 (ADR-0014, ADR-0015).
+    pub const TYP_15: Self = Self("TYP-15");
 
     /// Every rule a diagnostic can name, in ID order.
     pub const ALL: &'static [Self] = &[
         Self::A_01,
+        Self::CLI_07,
+        Self::CLI_12,
         Self::CLS_01,
         Self::CLS_02,
         Self::CLS_04,
@@ -191,12 +248,15 @@ impl RuleId {
         Self::CLS_09,
         Self::CLS_11,
         Self::CLS_12,
+        Self::CLS_13,
+        Self::CLS_14,
         Self::CST_03,
         Self::CST_04,
         Self::CST_05,
         Self::CST_06,
         Self::CST_08,
         Self::CST_09,
+        Self::CST_10,
         Self::DAT_03,
         Self::DAT_05,
         Self::DAT_06,
@@ -210,7 +270,13 @@ impl RuleId {
         Self::DAT_15,
         Self::DAT_16,
         Self::DAT_17,
+        Self::DIA_08,
         Self::EXC_01,
+        Self::EXC_06,
+        Self::EXC_07,
+        Self::EXC_09,
+        Self::EXC_12,
+        Self::EXC_14,
         Self::EXP_02,
         Self::EXP_04,
         Self::EXP_06,
@@ -225,6 +291,7 @@ impl RuleId {
         Self::EXP_15,
         Self::EXP_16,
         Self::EXP_17,
+        Self::FFI_01,
         Self::FUN_01,
         Self::FUN_03,
         Self::FUN_04,
@@ -236,13 +303,27 @@ impl RuleId {
         Self::LEX_07,
         Self::LEX_08,
         Self::LEX_09,
+        Self::LEX_10,
+        Self::LEX_11,
         Self::LIB_01,
         Self::LIB_02,
         Self::LIB_03,
         Self::LIB_04,
+        Self::LIB_05,
+        Self::LIB_06,
+        Self::LIB_07,
         Self::LIB_08,
         Self::LIB_10,
+        Self::LIB_11,
+        Self::LIB_12,
+        Self::LIB_13,
+        Self::LIB_14,
+        Self::MOD_01,
+        Self::MOD_02,
+        Self::MOD_05,
         Self::MOD_06,
+        Self::MOD_09,
+        Self::MOD_11,
         Self::NFR_09,
         Self::SMT_02,
         Self::SMT_04,
@@ -265,6 +346,7 @@ impl RuleId {
         Self::TYP_12,
         Self::TYP_13,
         Self::TYP_14,
+        Self::TYP_15,
     ];
 
     /// Returns the ID as text, such as `TYP-03`.

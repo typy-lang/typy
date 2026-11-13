@@ -4,9 +4,14 @@
 
 mod algebra;
 mod operations;
+#[cfg(test)]
+pub(crate) use operations::typy_rt_set_add_moved;
 mod others;
+mod views;
 
-pub(crate) use operations::{key_error, typy_rt_set_compare, typy_rt_set_repr};
+pub(crate) use operations::{
+    key_error, typy_rt_set_compare, typy_rt_set_item, typy_rt_set_next, typy_rt_set_repr,
+};
 #[cfg(test)]
 pub(crate) use operations::{typy_rt_set_add, typy_rt_set_new};
 #[cfg(test)]
@@ -258,6 +263,17 @@ unsafe fn occupy(set: &mut SetObject, slot: usize, item: u64, hash: i64) {
 ///
 /// `set` points to a live set, and `item` is a live item of its type whose hash is `hash`.
 pub(crate) unsafe fn add(set: *mut SetObject, item: u64, hash: i64) -> bool {
+    // SAFETY: the caller's guarantee.
+    unsafe { add_item(set, item, hash, true) }
+}
+
+/// Adds `item` as `add` does, with a reference of its own only when `retain`; otherwise the set
+/// takes over the caller's reference, which is released when an equal item is there already.
+///
+/// # Safety
+///
+/// As for `add`.
+pub(crate) unsafe fn add_item(set: *mut SetObject, item: u64, hash: i64, retain: bool) -> bool {
     // SAFETY: the caller's guarantee; the probe stays inside the table.
     unsafe {
         let item_type = (*set).item_type();
@@ -277,9 +293,14 @@ pub(crate) unsafe fn add(set: *mut SetObject, item: u64, hash: i64) -> bool {
             })
         };
         if found.is_some() {
+            if !retain {
+                item_type.release(item);
+            }
             return false;
         }
-        item_type.retain(item);
+        if retain {
+            item_type.retain(item);
+        }
         let set = &mut *set;
         set.used += 1;
         if let Some(slot) = free_slot {

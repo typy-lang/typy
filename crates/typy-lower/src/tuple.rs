@@ -11,7 +11,7 @@ use crate::ownership::Lowered;
 
 impl FunctionLowerer<'_> {
     /// Returns the item types of a tuple type.
-    fn item_types(&self, ty: TyirType) -> (TupleTypeId, Vec<TyirType>) {
+    pub(crate) fn item_types(&self, ty: TyirType) -> (TupleTypeId, Vec<TyirType>) {
         let TyirType::Tuple(id) = ty else {
             unreachable!("the checker gives a tuple operation only tuples")
         };
@@ -143,11 +143,25 @@ impl FunctionLowerer<'_> {
     /// target, from left to right, then releases the tuple (SMT-02).
     pub(crate) fn assign_target(&mut self, target: &AssignTarget, value: Lowered, span: Span) {
         match target {
-            AssignTarget::Name(symbol) => {
-                let slot = self.slots[symbol];
-                self.store(slot, value, span);
-            }
+            AssignTarget::Name(symbol) => self.assign_name(*symbol, value, span),
             AssignTarget::Item { list, index } => self.assign_item(list, index, value, span),
+            AssignTarget::Slice {
+                list,
+                lower,
+                upper,
+                step,
+            } => {
+                // The value is evaluated first; the list and the bounds after it (DAT-13).
+                let bounds = [lower.as_deref(), upper.as_deref(), step.as_deref()];
+                self.call_with_slice(
+                    RuntimeFunction::ListAssignSlice,
+                    list,
+                    bounds,
+                    vec![value.value],
+                    span,
+                );
+                self.release(value, span);
+            }
             AssignTarget::Entry { dict, key } => self.assign_entry(dict, key, value, span),
             AssignTarget::Attribute { object, index } => {
                 self.assign_attribute(object, *index, value, span);
@@ -316,7 +330,18 @@ impl FunctionLowerer<'_> {
                     .value
             }
             TyirType::Object(typy_tyir::TypeId::BYTES) => self.bytes_constant(&[], span),
-            TyirType::Object(id) if id.class_index().is_some() => {
+            // An instance, exception, iterator or range slot starts as null, which counting
+            // passes over.
+            TyirType::Object(id)
+                if id.class_index().is_some()
+                    || id == typy_tyir::TypeId::EXCEPTION
+                    || id == typy_tyir::TypeId::ITERATOR
+                    || id == typy_tyir::TypeId::TRACEBACK
+                    || id == typy_tyir::TypeId::RANGE
+                    || id == typy_tyir::TypeId::MODULE
+                    || id == typy_tyir::TypeId::ITERABLE
+                    || id == typy_tyir::TypeId::TEXT_FILE =>
+            {
                 self.constant(Constant::NoInstance(id), span)
             }
             // A type object slot starts as `object`, which is immortal.

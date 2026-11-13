@@ -21,6 +21,34 @@ pub(super) fn visit_statement(statement: &Stmt, visit: &mut dyn FnMut(&Expr)) {
             visit_expression(target, visit);
             visit_expression(value, visit);
         }
+        Stmt::With { items, body, .. } => {
+            for item in items {
+                visit_expression(&item.context, visit);
+                if let Some(target) = &item.target {
+                    visit_expression(target, visit);
+                }
+            }
+            for inner in body {
+                visit_statement(inner, visit);
+            }
+        }
+        Stmt::Delete { targets, .. } => {
+            for target in targets {
+                visit_expression(target, visit);
+            }
+        }
+        Stmt::Assert { test, message, .. } => {
+            for value in std::iter::once(test).chain(message) {
+                visit_expression(value, visit);
+            }
+        }
+        Stmt::Raise {
+            exception, cause, ..
+        } => {
+            for value in exception.iter().chain(cause) {
+                visit_expression(value, visit);
+            }
+        }
         Stmt::For {
             iter, body, orelse, ..
         } => {
@@ -39,6 +67,14 @@ pub(super) fn visit_statement(statement: &Stmt, visit: &mut dyn FnMut(&Expr)) {
             body.iter()
                 .chain(orelse)
                 .for_each(|inner| visit_statement(inner, visit));
+        }
+        Stmt::Try { handlers, .. } => {
+            for class in handlers.iter().filter_map(|handler| handler.class.as_ref()) {
+                visit_expression(class, visit);
+            }
+            for inner in statement.try_blocks().into_iter().flatten() {
+                visit_statement(inner, visit);
+            }
         }
         _ => {}
     }

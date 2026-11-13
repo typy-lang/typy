@@ -3,7 +3,7 @@
 TyPy adds nothing to Python. It accepts only programs that CPython also
 runs, and an accepted program behaves as CPython does.
 
-## What TyPy 0.2 accepts
+## What TyPy accepts
 
 | Item | Rule |
 | --- | --- |

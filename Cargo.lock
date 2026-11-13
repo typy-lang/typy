@@ -68,6 +68,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "330a5ed07fa54e4702c9d6c4174f74427fc0ef6e214bbd677ae50a5099946470"
 
 [[package]]
+name = "ar_archive_writer"
+version = "0.5.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "523e5e187fff36fcb8d1d19ccf0ca4ca43ec3d158316057f66dc6f72716bc5ec"
+dependencies = [
+ "object",
+]
+
+[[package]]
 name = "arrayvec"
 version = "0.7.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -596,6 +605,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "object"
+version = "0.39.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2e5a6c098c7a3b6547378093f5cc30bc54fd361ce711e05293a5cc589562739b"
+dependencies = [
+ "memchr",
+]
+
+[[package]]
 name = "once_cell"
 version = "1.21.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -701,6 +719,16 @@ dependencies = [
  "rusty-fork",
  "tempfile",
  "unarray",
+]
+
+[[package]]
+name = "psm"
+version = "0.1.32"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4dcd034599e63b970727f70d79e02d62390a4a84f7c6b827c27c46d5ac3fa622"
+dependencies = [
+ "ar_archive_writer",
+ "cc",
 ]
 
 [[package]]
@@ -823,6 +851,7 @@ dependencies = [
  "ruff_text_size",
  "ruff_unicode_names2",
  "rustc-hash",
+ "stacker",
  "static_assertions",
  "thin-vec",
  "unicode-ident",
@@ -992,6 +1021,19 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d0d5d4b1981b8bbbb7aed204cae5726d683d5d6ac7e74ec54122ea28f315e7c8"
 
 [[package]]
+name = "stacker"
+version = "0.1.25"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "707f49d46706bacf8a2b00d51dace3f9de527c13eec3778f570c411f89e69967"
+dependencies = [
+ "cc",
+ "cfg-if",
+ "libc",
+ "psm",
+ "windows-sys",
+]
+
+[[package]]
 name = "static_assertions"
 version = "1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1108,7 +1150,7 @@ checksum = "b6f5e870be6c3b371b77fe0ee0bafb859fa4964b4404c27de1d380043c4dda20"
 
 [[package]]
 name = "typy-build"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "camino",
  "tempfile",
@@ -1121,7 +1163,7 @@ dependencies = [
 
 [[package]]
 name = "typy-check"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "camino",
  "typy-diagnostics",
@@ -1130,7 +1172,7 @@ dependencies = [
 
 [[package]]
 name = "typy-cli"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "camino",
  "clap",
@@ -1140,11 +1182,12 @@ dependencies = [
  "typy-codegen",
  "typy-diagnostics",
  "typy-driver",
+ "typy-source",
 ]
 
 [[package]]
 name = "typy-codegen"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "camino",
  "inkwell",
@@ -1157,7 +1200,7 @@ dependencies = [
 
 [[package]]
 name = "typy-conformance"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "camino",
  "tempfile",
@@ -1170,14 +1213,14 @@ dependencies = [
 
 [[package]]
 name = "typy-diagnostics"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "proptest",
 ]
 
 [[package]]
 name = "typy-driver"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "camino",
  "tempfile",
@@ -1192,7 +1235,7 @@ dependencies = [
 
 [[package]]
 name = "typy-lower"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "camino",
  "typy-check",
@@ -1203,11 +1246,11 @@ dependencies = [
 
 [[package]]
 name = "typy-runtime"
-version = "0.2.0"
+version = "0.3.0"
 
 [[package]]
 name = "typy-source"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "camino",
  "proptest",
@@ -1215,12 +1258,13 @@ dependencies = [
  "ruff_python_parser",
  "ruff_text_size",
  "tempfile",
+ "toml_edit",
  "typy-diagnostics",
 ]
 
 [[package]]
 name = "typy-tyir"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "typy-diagnostics",
 ]

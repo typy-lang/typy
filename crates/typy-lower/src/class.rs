@@ -50,11 +50,13 @@ impl FunctionLowerer<'_> {
     /// Reads the attribute at `index` of an instance, borrowed from it; an attribute of an
     /// instance this expression made keeps a reference of its own.
     pub(crate) fn attribute(&mut self, object: &TypedExpr, index: usize, span: Span) -> Lowered {
+        let class = exception_class_index(&object.ty);
         let object = self.expression(object);
-        let ty = self.field_type(object.ty, index);
+        let ty = self.field_type(object.ty, class, index);
         let value = self.builder.push_value(
             Operation::Field {
                 object: object.value,
+                class,
                 index: field_index(index),
             },
             ty,
@@ -83,20 +85,29 @@ impl FunctionLowerer<'_> {
         value: Lowered,
         span: Span,
     ) {
+        let class = exception_class_index(&object.ty);
         let object = self.expression(object);
-        self.store_field(object, index, value, span);
+        self.store_field(object, class, index, value, span);
         self.release(object, span);
     }
 
     /// Stores a value in the attribute at `index` of an instance that is already evaluated.
-    fn store_field(&mut self, object: Lowered, index: usize, value: Lowered, span: Span) {
-        let ty = self.field_type(object.ty, index);
+    fn store_field(
+        &mut self,
+        object: Lowered,
+        class: Option<u32>,
+        index: usize,
+        value: Lowered,
+        span: Span,
+    ) {
+        let ty = self.field_type(object.ty, class, index);
         let stored = self.take_reference(value, span);
         let field = field_index(index);
         let old = self.counted(ty).then(|| {
             self.builder.push_value(
                 Operation::Field {
                     object: object.value,
+                    class,
                     index: field,
                 },
                 ty,
@@ -106,6 +117,7 @@ impl FunctionLowerer<'_> {
         self.builder.push(
             Operation::SetField {
                 object: object.value,
+                class,
                 index: field,
                 value: stored,
             },
@@ -125,11 +137,13 @@ impl FunctionLowerer<'_> {
         combine: impl FnOnce(&mut Self, Lowered) -> Lowered,
         span: Span,
     ) {
+        let class = exception_class_index(&object.ty);
         let object = self.expression(object);
-        let ty = self.field_type(object.ty, index);
+        let ty = self.field_type(object.ty, class, index);
         let value = self.builder.push_value(
             Operation::Field {
                 object: object.value,
+                class,
                 index: field_index(index),
             },
             ty,
@@ -142,7 +156,7 @@ impl FunctionLowerer<'_> {
             Self::borrowed(value, ty)
         };
         let result = combine(self, current);
-        self.store_field(object, index, result, span);
+        self.store_field(object, class, index, result, span);
         self.release(object, span);
     }
 
@@ -206,13 +220,24 @@ impl FunctionLowerer<'_> {
     }
 
     /// Returns the type of the attribute at `index` of an instance of type `ty`.
-    fn field_type(&mut self, ty: TyirType, index: usize) -> TyirType {
-        let TyirType::Object(id) = ty else {
-            unreachable!("only an instance has attributes");
+    fn field_type(&mut self, ty: TyirType, class: Option<u32>, index: usize) -> TyirType {
+        let class = match (class, ty) {
+            (Some(class), _) => class,
+            (None, TyirType::Object(id)) => id.class_index().unwrap_or(0),
+            (None, _) => unreachable!("only an instance has attributes"),
         };
         let program = self.program;
-        let class = program.class(ClassId(id.class_index().unwrap_or(0)));
+        let class = program.class(ClassId(class));
         self.lowered_type(&class.attributes[index].ty)
+    }
+}
+
+/// Returns the class of an exception of a class of the program, whose attributes the field
+/// operations reach past the exception's fixed part.
+fn exception_class_index(ty: &typy_check::Type) -> Option<u32> {
+    match ty {
+        typy_check::Type::Exception(exception) => exception.class_id().map(|class| class.0),
+        _ => None,
     }
 }
 

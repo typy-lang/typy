@@ -62,7 +62,10 @@ impl BodyChecker<'_> {
     /// Returns the type object a class name or a built-in type name gives as a value.
     pub(super) fn type_object_named(&self, name: &str, span: Span) -> Option<TypedExpr> {
         let of = match self.program.class_ids.get(name) {
-            Some(class) => TypeObjectOf::Instance(*class, name.to_owned()),
+            Some(class) => match self.program.exceptions.get(class) {
+                Some(exception) => TypeObjectOf::Exception(exception.clone()),
+                None => TypeObjectOf::Instance(*class, name.to_owned()),
+            },
             None => TypeObjectOf::named(name)?,
         };
         let ty = TypeObjectOf::type_of(Some(of.clone()));

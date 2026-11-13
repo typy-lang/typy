@@ -18,11 +18,36 @@ impl FunctionLowerer<'_> {
         let ty = self.lowered_type(&expression.ty);
         match &expression.kind {
             TypedExprKind::Constant(constant) => self.typed_constant(constant, span),
-            TypedExprKind::Local(symbol) => {
-                let slot = self.slots[symbol];
-                self.load(slot, span)
+            TypedExprKind::Local(symbol) | TypedExprKind::ModuleVariable(symbol) => {
+                self.read_name(*symbol, span)
             }
             TypedExprKind::Tuple(items) => self.tuple_display(items, ty, span),
+            TypedExprKind::MathCall {
+                function,
+                arguments,
+            } => self.math_call(*function, arguments, &expression.ty, span),
+            TypedExprKind::PercentFormat { values, parts } => {
+                self.percent_format(values, parts, span)
+            }
+            TypedExprKind::Lazy { reify, value } => {
+                self.run_lazy_import(*reify, span);
+                self.expression(value)
+            }
+            TypedExprKind::NewException {
+                class,
+                arguments,
+                init,
+            } => self.new_exception(class, arguments, init.as_deref(), span),
+            TypedExprKind::SetArguments {
+                exception,
+                arguments,
+            } => self.set_arguments(exception, arguments, span),
+            TypedExprKind::Iter(source) => self.iter_of(source, span),
+            TypedExprKind::Next {
+                iterator,
+                method,
+                default,
+            } => self.next_of(iterator, *method, default.as_deref(), ty, span),
             TypedExprKind::List(items) => {
                 let item = match &expression.ty {
                     typy_check::Type::List(item) => self.lowered_type(item),
@@ -41,6 +66,12 @@ impl FunctionLowerer<'_> {
                 self.dict_display(keys, values, &expression.ty, span)
             }
             TypedExprKind::DictOf(source) => self.dict_of(source, &expression.ty, span),
+            TypedExprKind::DictWith { source, entries } => {
+                self.dict_with(source.as_deref(), entries, &expression.ty, span)
+            }
+            TypedExprKind::DictFromKeys { source, value } => {
+                self.dict_from_keys(source, value.as_deref(), &expression.ty, span)
+            }
             TypedExprKind::Comprehension {
                 element,
                 value,
@@ -92,8 +123,27 @@ impl FunctionLowerer<'_> {
                 self.tuple_item(tuple, *index, ty, span)
             }
             TypedExprKind::ModuleName => {
-                let value = self.string("__main__", span);
+                let module = self.module.clone();
+                let value = self.string(&module, span);
                 Self::borrowed(value, TyirType::STR)
+            }
+            TypedExprKind::ModuleAttribute { module, symbol } => {
+                self.module_attribute(module, *symbol, span)
+            }
+            TypedExprKind::Submodule(module) => self.submodule(module, span),
+            // An iterable is the same object, so only its type changes.
+            TypedExprKind::AsIterable(inner) => {
+                let lowered = self.expression(inner);
+                let bits = self.bits(lowered, span);
+                let value = self.builder.push_value(
+                    Operation::FromBits {
+                        bits,
+                        ty: TyirType::ITERABLE,
+                    },
+                    TyirType::ITERABLE,
+                    span,
+                );
+                self.transfer(lowered, value, TyirType::ITERABLE)
             }
             TypedExprKind::Binary {
                 left,
@@ -150,9 +200,11 @@ impl FunctionLowerer<'_> {
                 self.release(object, span);
                 name
             }
-            TypedExprKind::Print { values, sep, end } => {
-                self.print(values, sep.as_deref(), end.as_deref(), span)
-            }
+            TypedExprKind::Print(call) => self.print(call, span),
+            TypedExprKind::SysValue(value) => self.sys_value(*value, span),
+            TypedExprKind::Open { path, mode, access } => self.open(path, mode, *access, span),
+            TypedExprKind::SysExit(code) => self.sys_exit(code.as_deref(), span),
+            TypedExprKind::Input(prompt) => self.input(prompt.as_deref(), span),
             TypedExprKind::IterableBuiltin {
                 builtin,
                 iterable,
@@ -236,6 +288,23 @@ impl FunctionLowerer<'_> {
             // is a type object.
             TyirType::Object(id) if id.class_index().is_some() || id == typy_tyir::TypeId::TYPE => {
                 return self.constant(Constant::Bool(true), span);
+            }
+            // A range is true when it holds its own start; its length may pass `sys.maxsize`,
+            // where CPython's truth test still answers.
+            TyirType::RANGE => {
+                let which = self.constant(Constant::Int("0".to_owned()), span);
+                let start = self.call_runtime(
+                    RuntimeFunction::RangeBound,
+                    vec![lowered.value, which],
+                    span,
+                );
+                let inside = self.call_runtime(
+                    RuntimeFunction::RangeContains,
+                    vec![lowered.value, start.value],
+                    span,
+                );
+                self.release(start, span);
+                return inside.value;
             }
             TyirType::Object(_) => ScalarKind::Str,
             TyirType::Bits => unreachable!("list items are converted before they are tested"),

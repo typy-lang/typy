@@ -202,7 +202,7 @@ fn the_text_of_a_list_with_an_int_of_too_many_digits_raises() {
     unsafe {
         let result = typy_rt_list_repr(list);
         assert!(!result.exception.is_null());
-        assert_eq!((*result.exception).kind, crate::ExceptionKind::ValueError);
+        assert_eq!((*result.exception).kind(), crate::ExceptionKind::ValueError);
     }
 }
 

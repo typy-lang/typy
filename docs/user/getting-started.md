@@ -15,14 +15,14 @@ sudo apt install build-essential
 
 ## Install from a release archive
 
-Download `typy-0.2.0-x86_64-unknown-linux-gnu.tar.gz` and its `.sha256`
+Download `typy-0.3.0-x86_64-unknown-linux-gnu.tar.gz` and its `.sha256`
 file from the [release page](https://github.com/typy-lang/typy/releases),
 check the archive and unpack it:
 
 ```sh
-sha256sum --check typy-0.2.0-x86_64-unknown-linux-gnu.tar.gz.sha256
-tar -xzf typy-0.2.0-x86_64-unknown-linux-gnu.tar.gz
-export PATH="$PWD/typy-0.2.0-x86_64-unknown-linux-gnu/bin:$PATH"
+sha256sum --check typy-0.3.0-x86_64-unknown-linux-gnu.tar.gz.sha256
+tar -xzf typy-0.3.0-x86_64-unknown-linux-gnu.tar.gz
+export PATH="$PWD/typy-0.3.0-x86_64-unknown-linux-gnu/bin:$PATH"
 typy --version
 ```
 

@@ -39,13 +39,20 @@ impl Walker {
                 planned("type parameters", "0.4", RuleId::GEN_01),
             );
         }
-        for base in class.bases {
-            if !matches!(base, Expr::Name { id, .. } if id == "object") {
-                self.report(
-                    base.span(),
-                    planned("base classes other than `object`", "0.4", RuleId::CLS_04),
-                );
-            }
+        // One base named by its name is resolved with the other classes: `object`, or an
+        // exception class (CLS-03).
+        match class.bases {
+            [] | [Expr::Name { .. }] => {}
+            [base] => self.report(
+                base.span(),
+                planned("base classes other than `object`", "0.4", RuleId::CLS_04),
+            ),
+            [_, second, ..] => self.report(
+                second.span(),
+                Feature::AfterOne {
+                    what: "classes with several bases",
+                },
+            ),
         }
         if class.keyword_count > 0 {
             self.report(

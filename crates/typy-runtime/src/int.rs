@@ -11,7 +11,7 @@ pub(crate) mod value;
 pub(crate) use arithmetic::typy_rt_int_power;
 pub(crate) use arithmetic::{
     ZERO_DIVISION, typy_rt_int_add, typy_rt_int_compare, typy_rt_int_floor_divide,
-    typy_rt_int_multiply, typy_rt_int_negate, typy_rt_int_subtract,
+    typy_rt_int_modulo, typy_rt_int_multiply, typy_rt_int_negate, typy_rt_int_subtract,
 };
 #[cfg(test)]
 pub(crate) use text::typy_rt_int_from_str;

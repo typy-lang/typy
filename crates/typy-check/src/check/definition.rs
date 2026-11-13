@@ -71,15 +71,19 @@ pub(super) fn defined_twice(name: &Identifier) -> Diagnostic {
 }
 
 /// Collects the module's functions in source order, with their signatures (TYP-01). Each
-/// signature may name the classes whose `class` statements come before its `def`.
+/// signature may name the classes whose `class` statements come before its `def`, and the
+/// classes of the modules checked before it, numbered below `first_class`.
 pub(super) fn collect_functions<'tree>(
     statements: &'tree [Stmt],
+    first_class: usize,
     classes: &BTreeMap<String, ClassId>,
+    exceptions: &BTreeMap<ClassId, crate::exception::ExceptionClass>,
+    names: &crate::check::ImportedNames,
     floor_defers: bool,
     diagnostics: &mut Diagnostics,
 ) -> Vec<Definition<'tree>> {
     let mut functions: Vec<Definition<'tree>> = Vec::new();
-    let mut classes_before = 0;
+    let mut classes_before = u32::try_from(first_class).unwrap_or(u32::MAX);
     for statement in statements {
         if matches!(statement, Stmt::ClassDef { .. }) {
             classes_before += 1;
@@ -96,6 +100,10 @@ pub(super) fn collect_functions<'tree>(
         }
         let scope = AnnotationScope {
             classes,
+            exceptions,
+            modules: &names.modules,
+            names: &names.names,
+            standard: &names.standard,
             bound: if floor_defers {
                 u32::MAX
             } else {
@@ -108,16 +116,17 @@ pub(super) fn collect_functions<'tree>(
 }
 
 /// The class a method belongs to, which types its first parameter.
-pub(super) struct Owner<'class> {
+pub(super) struct Owner {
     pub(super) id: ClassId,
-    pub(super) name: &'class str,
+    /// The type of the class's instances.
+    pub(super) instance: Type,
 }
 
 /// Returns the definition of a function, or of a method of `owner`, whose first parameter is
 /// the instance and needs no annotation.
 pub(super) fn definition<'tree>(
     parts: &FunctionParts<'tree>,
-    owner: Option<&Owner<'_>>,
+    owner: Option<&Owner>,
     scope: &AnnotationScope<'_>,
     diagnostics: &mut Diagnostics,
 ) -> Definition<'tree> {
@@ -127,7 +136,7 @@ pub(super) fn definition<'tree>(
     for (index, parameter) in parts.parameters.iter().enumerate() {
         let ty = match (owner, &parameter.annotation) {
             (Some(owner), annotation) if index == 0 => {
-                let instance = Type::Instance(owner.id, owner.name.to_owned());
+                let instance = owner.instance.clone();
                 if let Some(annotation) = annotation {
                     let annotated = annotation_type(annotation, scope, diagnostics);
                     if !annotated.matches(&instance) {
@@ -147,6 +156,10 @@ pub(super) fn definition<'tree>(
                 instance
             }
             (_, Some(annotation)) => annotation_type(annotation, scope, diagnostics),
+            // The parameters of `__exit__` have the types CPython gives them (CST-10).
+            (Some(_), None) if name == "__exit__" && (1..=3).contains(&index) => {
+                exit_parameter(index)
+            }
             (_, None) => {
                 diagnostics.push(
                     Diagnostic::new(
@@ -204,8 +217,10 @@ pub(super) fn definition<'tree>(
     }
     Definition {
         name: name.clone(),
-        qualified_name: owner
-            .map_or_else(|| name.clone(), |owner| format!("{}.{name}", owner.name)),
+        qualified_name: owner.map_or_else(
+            || name.clone(),
+            |owner| format!("{}.{name}", owner.instance),
+        ),
         class: owner.map(|owner| owner.id),
         signature: FunctionSignature {
             parameters: signature_parameters,
@@ -255,4 +270,18 @@ fn default_value(
         diagnostics.push(diagnostic);
     }
     Some(constant)
+}
+
+/// Returns the type of parameter `index` of `__exit__` after `self`: the class of the
+/// exception, the exception and its traceback, each `None` when the block raised nothing
+/// (CST-10).
+pub(crate) fn exit_parameter(index: usize) -> Type {
+    use crate::exception::{BuiltinException, ExceptionClass};
+    Type::optional(match index {
+        // The class of an exception is known only when the program runs, so
+        // `type[BaseException]` holds any type object, as it does in an annotation.
+        1 => Type::TypeObject(None),
+        2 => Type::Exception(ExceptionClass::Builtin(BuiltinException::BaseException)),
+        _ => Type::Traceback,
+    })
 }

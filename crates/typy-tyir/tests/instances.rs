@@ -46,6 +46,8 @@ fn on_point(body: impl FnOnce(ValueId, ValueId) -> Body) -> TyirModule {
         unreachable!("interning gives a tuple type");
     };
     TyirModule {
+        globals: Vec::new(),
+        modules: Vec::new(),
         functions: vec![builder.finish()],
         strings: Vec::new(),
         tuple_types,
@@ -54,20 +56,34 @@ fn on_point(body: impl FnOnce(ValueId, ValueId) -> Body) -> TyirModule {
             module: "__main__".to_owned(),
             fields,
             repr: None,
+            str: None,
+            exception_base: None,
         }],
         entry: FunctionId(0),
     }
 }
 
 #[test]
+#[allow(
+    clippy::too_many_lines,
+    reason = "one table row per operation and per way it can be wrong"
+)]
 fn instance_operations_check_their_types() {
     let point = TyirType::Object(TypeId::class(0));
     let valid = on_point(|object, number| {
         vec![
             (Operation::NewInstance { class: 0 }, Some(point)),
-            (Operation::Field { object, index: 0 }, Some(TyirType::Int)),
+            (
+                Operation::Field {
+                    object,
+                    class: None,
+                    index: 0,
+                },
+                Some(TyirType::Int),
+            ),
             (
                 Operation::SetField {
+                    class: None,
                     object,
                     index: 0,
                     value: number,
@@ -105,17 +121,23 @@ fn instance_operations_check_their_types() {
         ),
         (
             |_, number| Operation::Field {
+                class: None,
                 object: number,
                 index: 0,
             },
             "is not an instance",
         ),
         (
-            |object, _| Operation::Field { object, index: 1 },
+            |object, _| Operation::Field {
+                object,
+                class: None,
+                index: 1,
+            },
             "Point has no attribute 1",
         ),
         (
             |object, _| Operation::SetField {
+                class: None,
                 object,
                 index: 0,
                 value: object,
@@ -153,4 +175,68 @@ fn instance_operations_check_their_types() {
     assert!(field_of_unknown.class(TypeId::STR).is_none());
     assert!(field_of_unknown.class(TypeId::class(5)).is_none());
     assert_ne!(unknown, point);
+}
+
+/// A module whose class 0 is an exception class with one `int` attribute, and whose function
+/// takes `parameter` and applies `operation` to it.
+fn on_exception(parameter: TyirType, operation: Operation) -> TyirModule {
+    let mut builder = FunctionBuilder::new(FunctionId(0), "_TY8__main__1f", "f", TyirType::Unit);
+    let object = builder.add_parameter(parameter);
+    let (operation, ty) = match operation {
+        Operation::Field { class, index, .. } => (
+            Operation::Field {
+                object,
+                class,
+                index,
+            },
+            Some(TyirType::Int),
+        ),
+        other => (other, None),
+    };
+    match ty {
+        Some(ty) => {
+            builder.push_value(operation, ty, span());
+        }
+        None => builder.push(operation, span()),
+    }
+    let unit = builder.push_value(Operation::Constant(Constant::Unit), TyirType::Unit, span());
+    builder.terminate(Terminator::Return(unit));
+    let mut tuple_types = TupleTypes::default();
+    let TyirType::Tuple(fields) = tuple_types.intern(vec![TyirType::Int]) else {
+        unreachable!("interning gives a tuple type");
+    };
+    TyirModule {
+        globals: Vec::new(),
+        modules: Vec::new(),
+        functions: vec![builder.finish()],
+        strings: Vec::new(),
+        tuple_types,
+        classes: vec![TyirClass {
+            name: "AppError".to_owned(),
+            module: "__main__".to_owned(),
+            fields,
+            repr: None,
+            str: None,
+            exception_base: Some(typy_tyir::TypeObjectRef::Exception("ValueError")),
+        }],
+        entry: FunctionId(0),
+    }
+}
+
+#[test]
+fn an_exception_s_attribute_names_its_class() {
+    let field = Operation::Field {
+        object: ValueId(0),
+        class: Some(0),
+        index: 0,
+    };
+    let valid = on_exception(TyirType::EXCEPTION, field.clone());
+    assert_eq!(verify(&valid), Ok(()));
+    assert!(
+        print(&valid).contains("field v0 of class#0, 0"),
+        "{}",
+        print(&valid)
+    );
+    let error = verify(&on_exception(TyirType::Int, field)).unwrap_err();
+    assert!(error.to_string().contains("is not an instance"), "{error}");
 }

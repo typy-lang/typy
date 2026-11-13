@@ -1,7 +1,7 @@
 //! Lowers f-strings (LEX-07): each replacement field converts its value, formats it by its
 //! type with its specification, and the pieces are joined in order.
 
-use typy_check::{Conversion, FStringPart, FormattedValue, Type, TypeObjectOf};
+use typy_check::{Conversion, FStringPart, FormattedValue, Type};
 use typy_diagnostics::Span;
 use typy_tyir::{Constant, RuntimeFunction, TyirType};
 
@@ -133,17 +133,26 @@ impl FunctionLowerer<'_> {
                     |lowerer| {
                         let none = lowerer.string("None", span);
                         let none = Self::borrowed(none, TyirType::STR);
-                        lowerer.format_other(none, "NoneType", spec, span)
+                        let name = lowerer.string("NoneType", span);
+                        lowerer.format_other(none, name, spec, span)
                     },
                     |lowerer, held| lowerer.format_value(held, inner, spec, span),
                 )
             }
             _ => {
                 let text = self.string_of(value, span);
-                let name =
-                    TypeObjectOf::of(ty).map_or("NoneType".to_owned(), |of| of.name().to_owned());
-                let formatted = self.format_other(text, &name, spec, span);
-                self.release(text, span);
+                // The error names the value's own class, as `type(value).__name__` does, and a
+                // file's type by its full name, as CPython names a type defined in C.
+                let name = if *ty == Type::TextFile {
+                    Self::borrowed(self.string("_io.TextIOWrapper", span), TyirType::STR)
+                } else {
+                    let class = self.runtime_type(value, ty, span);
+                    self.call_runtime(RuntimeFunction::TypeName, vec![class.value], span)
+                };
+                let formatted = self.format_other(text, name.value, spec, span);
+                for owned in [name, text] {
+                    self.release(owned, span);
+                }
                 formatted
             }
         }
@@ -153,14 +162,13 @@ impl FunctionLowerer<'_> {
     fn format_other(
         &mut self,
         text: Lowered,
-        type_name: &str,
+        type_name: typy_tyir::ValueId,
         spec: Lowered,
         span: Span,
     ) -> Lowered {
-        let name = self.string(type_name, span);
         self.call_runtime(
             RuntimeFunction::FormatOther,
-            vec![text.value, spec.value, name],
+            vec![text.value, spec.value, type_name],
             span,
         )
     }

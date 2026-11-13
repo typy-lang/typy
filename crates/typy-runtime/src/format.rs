@@ -4,6 +4,7 @@
 
 mod float;
 mod layout;
+mod percent;
 mod spec;
 #[cfg(test)]
 mod tests;

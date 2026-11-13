@@ -38,6 +38,17 @@ impl BodyChecker<'_> {
                 Stmt::While { body, orelse, .. } | Stmt::If { body, orelse, .. } => {
                     self.collect_locals(&body.iter().chain(orelse).collect::<Vec<_>>());
                 }
+                Stmt::With { items, body, .. } => {
+                    for target in items.iter().filter_map(|item| item.target.as_ref()) {
+                        self.bind_local(target);
+                    }
+                    self.collect_locals(&body.iter().collect::<Vec<_>>());
+                }
+                Stmt::Try { .. } => {
+                    let blocks = statement.try_blocks();
+                    self.collect_locals(&blocks.into_iter().flatten().collect::<Vec<_>>());
+                }
+                Stmt::Import { .. } | Stmt::ImportFrom { .. } => self.bind_imported(statement),
                 _ => {}
             }
         }
@@ -53,12 +64,48 @@ impl BodyChecker<'_> {
         let Expr::Name { id, span } = target else {
             return;
         };
-        if !self.locals.contains_key(id) {
-            let symbol = self
+        if self.locals.contains_key(id) {
+            return;
+        }
+        // A name the module body binds is the module's variable, made before any body.
+        let symbol = match self.program.module_symbols.get(id) {
+            Some(symbol) if !self.in_function() => *symbol,
+            _ => self
                 .program
-                .add_symbol(id, SymbolKind::Local, Type::Error, *span);
-            self.locals.insert(id.clone(), symbol);
-            self.local_order.push(symbol);
+                .add_symbol(id, SymbolKind::Local, Type::Error, *span),
+        };
+        self.locals.insert(id.clone(), symbol);
+        self.local_order.push(symbol);
+    }
+
+    /// Makes each name a function declares `global` the module's variable in it: its reads
+    /// and assignments reach the module variable, with the module's type for it (SMT-08). A
+    /// name the module never binds at module level is E0423.
+    pub(super) fn declare_globals(&mut self, body: &[Stmt]) {
+        for name in crate::check::declared_globals(body) {
+            let Some(symbol) = self.program.module_symbols.get(&name.name).copied() else {
+                self.diagnostics.push(
+                    Diagnostic::new(
+                        DiagnosticCode::error(423),
+                        name.span,
+                        format!(
+                            "`global {}` names a variable the module does not bind",
+                            name.name
+                        ),
+                    )
+                    .with_rule(RuleId::SMT_08)
+                    .with_help(format!(
+                        "assign `{}` at module level, or declare its type there, such as `{}: int`",
+                        name.name, name.name
+                    )),
+                );
+                continue;
+            };
+            let ty = self.program.symbols[symbol.0 as usize].ty.clone();
+            self.global_names.insert(name.name.clone());
+            self.locals.insert(name.name.clone(), symbol);
+            self.declared.insert(symbol, ty.clone());
+            self.types.insert(symbol, ty);
         }
     }
 
@@ -68,6 +115,10 @@ impl BodyChecker<'_> {
     pub(super) fn annotation(&mut self, annotation: &Expr) -> Type {
         let scope = AnnotationScope {
             classes: &self.program.class_ids,
+            exceptions: &self.program.exceptions,
+            modules: &self.program.module_classes,
+            names: &self.program.annotation_names,
+            standard: &self.program.annotation_modules,
             bound: u32::MAX,
         };
         annotation_type(annotation, &scope, self.diagnostics)
@@ -113,6 +164,14 @@ impl BodyChecker<'_> {
         {
             return self.attribute_type(value, attribute);
         }
+        // A slice of a list takes a list of the same type, which an empty `[]` gets.
+        if let Expr::Subscript { value, index, .. } = target
+            && let Expr::Slice { .. } = index.as_ref()
+        {
+            return self
+                .known_type(value)
+                .filter(|ty| matches!(ty, Type::List(_)));
+        }
         let Expr::Name { id, .. } = target else {
             return None;
         };
@@ -142,6 +201,22 @@ impl BodyChecker<'_> {
             span,
         } = target
         {
+            if let Some(module) = self.module_of(object) {
+                if self.lazy_module_function(object).is_some() {
+                    self.diagnostics.push(
+                        Diagnostic::new(
+                            DiagnosticCode::error(201),
+                            *span,
+                            "assigning to an attribute of a module imported lazily is planned \
+                             for TyPy 0.4 (MOD-11)",
+                        )
+                        .with_rule(RuleId::MOD_11)
+                        .with_help("use the name in an expression first, or import it eagerly"),
+                    );
+                    return None;
+                }
+                return self.module_attribute_target(&module, attribute, &ty, value, *span);
+            }
             return self.attribute_target(object, attribute, &ty, None, *span);
         }
         let (Expr::Tuple { elements, span } | Expr::List { elements, span }) = target else {
@@ -190,9 +265,11 @@ impl BodyChecker<'_> {
             let key = self.expression_expecting(index, Some(&key));
             return self.entry_target(list, key, ty, span);
         }
-        if let Expr::Slice { .. } = index {
-            self.slice_assignment(span);
-            return None;
+        if let Expr::Slice {
+            lower, upper, step, ..
+        } = index
+        {
+            return self.slice_target(list, [lower, upper, step], ty, span);
         }
         let index = self.expression(index);
         self.checked_item_target(list, index, ty, span)
@@ -229,6 +306,25 @@ impl BodyChecker<'_> {
                 }
                 Some(AssignTarget::Attribute { object, index })
             }
+            TypedExprKind::ModuleAttribute { symbol, .. } => {
+                if !ty.is_assignable_to(&current.ty) {
+                    self.diagnostics.push(
+                        Diagnostic::new(
+                            DiagnosticCode::error(402),
+                            span,
+                            format!(
+                                "a module variable of type {} is assigned {}",
+                                current.ty,
+                                ty.with_article()
+                            ),
+                        )
+                        .with_rule(RuleId::TYP_03),
+                    );
+                }
+                Some(AssignTarget::Name(symbol))
+            }
+            // The read runs the lazy import, so the assignment goes to the variable it read.
+            TypedExprKind::Lazy { value, .. } => self.augmented_item(*value, ty, span),
             TypedExprKind::TupleItem { tuple, .. } => {
                 self.unassignable_item(&tuple.ty, span);
                 None
@@ -295,10 +391,57 @@ impl BodyChecker<'_> {
             Diagnostic::new(
                 DiagnosticCode::error(201),
                 span,
-                "assigning to a slice is planned for TyPy 0.3 (DAT-13)",
+                "an augmented assignment to a slice is planned for after TyPy 1.0",
             )
             .with_rule(RuleId::DAT_13),
         );
+    }
+
+    /// Checks `list[lower:upper:step] = items`: a slice of a list takes a list of its item
+    /// type, and each bound is an `int` (DAT-13).
+    fn slice_target(
+        &mut self,
+        list: TypedExpr,
+        bounds: [&Option<Box<Expr>>; 3],
+        ty: &Type,
+        span: Span,
+    ) -> Option<AssignTarget> {
+        let [lower, upper, step] = bounds.map(|bound| {
+            bound.as_deref().map(|bound| {
+                let value = self.expression(bound);
+                self.expect(&value, Type::Int, "a slice bound");
+                Box::new(value)
+            })
+        });
+        match &list.ty {
+            Type::List(_) => {}
+            Type::Error => return None,
+            other => {
+                let other = other.clone();
+                self.unassignable_item(&other, span);
+                return None;
+            }
+        }
+        if !ty.is_assignable_to(&list.ty) {
+            self.diagnostics.push(
+                Diagnostic::new(
+                    DiagnosticCode::error(402),
+                    span,
+                    format!(
+                        "a slice of {} is assigned {}, and takes a list of its items",
+                        list.ty,
+                        ty.with_article()
+                    ),
+                )
+                .with_rule(RuleId::DAT_13),
+            );
+        }
+        Some(AssignTarget::Slice {
+            list: Box::new(list),
+            lower,
+            upper,
+            step,
+        })
     }
 
     /// Binds a name target to a value of type `ty`; the first binding fixes the variable's type (TYP-02, TYP-03).

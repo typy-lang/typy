@@ -1,6 +1,6 @@
 # Functions
 
-## What TyPy 0.2 accepts
+## What TyPy accepts
 
 | Item | Rule |
 | --- | --- |

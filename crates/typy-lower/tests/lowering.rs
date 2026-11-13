@@ -260,3 +260,162 @@ fn an_argument_read_from_a_container_is_kept_for_the_call() {
     let call = main.find("first").unwrap_or(0);
     assert!(main[..call].matches("inc ").count() >= 1, "{main}");
 }
+
+#[test]
+fn dict_calls_evaluate_every_argument_before_calling_iter() {
+    let source = "\
+class Pairs:
+    def __iter__(self) -> 'Pairs':
+        return self
+
+    def __next__(self) -> tuple[str, int]:
+        raise StopIteration
+
+
+def note() -> int:
+    return 1
+
+
+made = dict(Pairs(), k=note())
+keys = dict.fromkeys(Pairs(), note())
+";
+    let text = text(source);
+    let calls: Vec<&str> = text
+        .lines()
+        .filter_map(|line| {
+            let callee = line.split("call _TY8__main__").nth(1)?;
+            callee.split('(').next()
+        })
+        .collect();
+    // CPython's `dict` and `dict.fromkeys` call `__iter__` once their arguments are evaluated.
+    assert_eq!(
+        calls,
+        ["4note", "14Pairs.__iter__", "4note", "14Pairs.__iter__"],
+        "{text}"
+    );
+}
+
+#[test]
+fn only_functions_test_that_a_module_variable_is_bound() {
+    let source = "\
+count = 0
+names: list[str] = []
+
+
+def bump() -> int:
+    global count
+    count += 1
+    names.append('x')
+    return count
+
+
+bump()
+print(count, names)
+";
+    let module = lower(source);
+    assert_eq!(
+        module
+            .globals
+            .iter()
+            .map(|global| global.name.as_str())
+            .collect::<Vec<_>>(),
+        [
+            "count",
+            "count bound",
+            "names",
+            "names bound",
+            "__main__ state"
+        ]
+    );
+    let text = text(source);
+    let bump = text
+        .split("fn ")
+        .find(|function| function.contains("# bump"))
+        .unwrap();
+    let main = text
+        .split("fn ")
+        .find(|function| function.contains("# <module>"))
+        .unwrap();
+    // The function tests the flag at each of its three reads; the module's code never does.
+    assert_eq!(bump.matches("rt.name_error(").count(), 3, "{bump}");
+    assert_eq!(main.matches("rt.name_error(").count(), 0, "{main}");
+    assert!(main.contains("store_global g1"), "{main}");
+}
+
+#[test]
+fn imports_initialise_each_module_once_and_test_what_they_read() {
+    use typy_check::TypeChecker;
+    let directory = std::env::temp_dir().join(format!("typy-lower-modules-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&directory);
+    std::fs::create_dir_all(directory.join("pkg")).unwrap();
+    let files = [
+        (
+            "app.py",
+            "import pkg.data\nfrom pkg.data import value\nprint(pkg.data.value, value, pkg.data)\n",
+        ),
+        ("pkg/__init__.py", ""),
+        ("pkg/data.py", "value = 1\n"),
+    ];
+    for (path, text) in files {
+        std::fs::write(directory.join(path), text).unwrap();
+    }
+    let root = Utf8PathBuf::from_path_buf(directory.clone()).unwrap();
+    let project = Project::load(&root.join("app.py"), ProjectSettings::new(root)).unwrap();
+    let program = TypeChecker::check(&project).unwrap();
+    let module = typy_lower::lower(&program).unwrap();
+    let _ = std::fs::remove_dir_all(directory);
+    let names: Vec<&str> = module
+        .modules
+        .iter()
+        .map(|module| module.name.as_str())
+        .collect();
+    assert_eq!(names, ["pkg", "pkg.data", "__main__"]);
+    assert_eq!(module.modules[1].path, "pkg/data.py");
+    let text = print(&module);
+    let main = text
+        .split("fn ")
+        .find(|function| function.contains("__typy_main"))
+        .unwrap();
+    // Each import calls the code of `pkg` and `pkg.data` behind a test of their states, so
+    // they run once; a read through the module object or `from` tests the variable.
+    assert_eq!(
+        main.matches("call _TY").count() + main.matches("invoke _TY").count(),
+        4,
+        "{main}"
+    );
+    assert!(main.contains("rt.module_import_error("), "{main}");
+    assert!(main.contains("rt.module_attribute_error("), "{main}");
+    assert!(main.contains("const module m1"), "{main}");
+}
+
+#[test]
+fn a_try_whose_body_cannot_raise_lowers_and_verifies() {
+    let module = lower(concat!(
+        "def f() -> list[str]:\n",
+        "    out: list[str] = []\n",
+        "    try:\n",
+        "        out.append(\"a\")\n",
+        "    except ValueError:\n",
+        "        print(\"never\")\n",
+        "    return out\n",
+        "\n",
+        "\n",
+        "print(f())\n",
+    ));
+    assert!(function(&module, "f").may_raise);
+}
+
+#[test]
+fn print_to_a_file_inside_an_except_clause_lowers_and_verifies() {
+    lower(concat!(
+        "def f() -> None:\n",
+        "    file = open(\"x.txt\", \"w\")\n",
+        "    try:\n",
+        "        raise ValueError(\"x\")\n",
+        "    except ValueError as error:\n",
+        "        print([error], 1, file=file, sep=\"-\")\n",
+        "\n",
+        "\n",
+        "f()\n",
+    ));
+}

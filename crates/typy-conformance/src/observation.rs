@@ -22,6 +22,17 @@ pub struct Observation {
 }
 
 impl Observation {
+    /// Returns what was shown with each `prefix` removed: CPython names a module's file by
+    /// its absolute path, where TyPy names it from the project root (OI-20).
+    #[must_use]
+    pub fn without_prefix(self, prefix: &str) -> Self {
+        Self {
+            stdout: self.stdout.replace(prefix, ""),
+            last_error_line: self.last_error_line.replace(prefix, ""),
+            ..self
+        }
+    }
+
     /// Runs `command` with no standard input and returns what it showed, or a reason it could not
     /// be observed: it did not start, or it ran past the time limit and was stopped.
     pub fn of(command: &mut Command) -> Result<Self, String> {

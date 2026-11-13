@@ -11,6 +11,9 @@ use typy_tyir::{
 use crate::function::FunctionLowerer;
 use crate::ownership::Lowered;
 
+/// `bool | None`, a byte with 2 for `None` (ADR-0011).
+const BOOL_OR_NONE: TyirType = TyirType::Optional(OptionalBase::Bool);
+
 impl FunctionLowerer<'_> {
     /// `a < b <= c`: each operand is evaluated once, and evaluation stops at the first false link.
     pub(crate) fn comparison_chain(
@@ -23,9 +26,13 @@ impl FunctionLowerer<'_> {
         let join = self.builder.create_block();
         let result = self.builder.add_block_parameter(join, TyirType::Bool);
         let mut left = self.expression(first);
+        let mut left_type = &first.ty;
         for (position, (operator, comparator)) in operators.iter().zip(comparators).enumerate() {
             let right = self.expression(comparator);
-            let outcome = self.compare(*operator, left, right, span);
+            let outcome = self
+                .compare_views(*operator, (left, left_type), (right, &comparator.ty), span)
+                .unwrap_or_else(|| self.compare(*operator, left, right, span));
+            left_type = &comparator.ty;
             self.release(left, span);
             if position + 1 == operators.len() {
                 self.release(right, span);
@@ -65,6 +72,14 @@ impl FunctionLowerer<'_> {
             TyirType::Tuple(_) => self.tuple_contains(item, container, span),
             TyirType::LIST => self.list_contains(item, container, span),
             TyirType::DICT | TyirType::VIEW => self.dict_contains(item, container, span),
+            TyirType::RANGE => {
+                self.call_runtime(
+                    RuntimeFunction::RangeContains,
+                    vec![container.value, item.value],
+                    span,
+                )
+                .value
+            }
             TyirType::SET => {
                 let bits = self.bits(item, span);
                 self.call_runtime(
@@ -136,6 +151,11 @@ impl FunctionLowerer<'_> {
         // the null address. Otherwise an optional value is `None` when its spare
         // value says so; any other value is `None` only when its type is (ADR-0011).
         let holds = match (left.ty, right.ty) {
+            // `True`, `False` and `None` are each the only object of its value, so identity
+            // is equality, and `None` is never a `bool`.
+            (TyirType::Bool | BOOL_OR_NONE, TyirType::Bool | BOOL_OR_NONE) => {
+                self.same_singleton(left, right, span)
+            }
             (
                 TyirType::Object(_) | TyirType::Optional(OptionalBase::Object(_)),
                 TyirType::Object(_) | TyirType::Optional(OptionalBase::Object(_)),
@@ -152,6 +172,64 @@ impl FunctionLowerer<'_> {
         }
         self.builder
             .push_value(Operation::BoolNot(holds), TyirType::Bool, span)
+    }
+
+    /// Returns whether two `bool` or `bool | None` values are the same object: both `None`,
+    /// or both the same `bool` (EXP-08).
+    fn same_singleton(&mut self, left: Lowered, right: Lowered, span: Span) -> ValueId {
+        match (left.ty, right.ty) {
+            (TyirType::Bool, TyirType::Bool) => {
+                self.compare(CompareOperator::Eq, left, right, span)
+            }
+            (TyirType::Bool, _) => self.same_singleton(right, left, span),
+            (_, TyirType::Bool) => {
+                self.optional_branch(
+                    left,
+                    TyirType::Bool,
+                    span,
+                    |lowerer| {
+                        Self::borrowed(
+                            lowerer.constant(Constant::Bool(false), span),
+                            TyirType::Bool,
+                        )
+                    },
+                    |lowerer, value| {
+                        let same = lowerer.same_singleton(value, right, span);
+                        Self::borrowed(same, TyirType::Bool)
+                    },
+                )
+                .value
+            }
+            _ => {
+                self.optional_branch(
+                    left,
+                    TyirType::Bool,
+                    span,
+                    |lowerer| Self::borrowed(lowerer.is_none(right, span), TyirType::Bool),
+                    |lowerer, value| {
+                        let same = lowerer
+                            .optional_branch(
+                                right,
+                                TyirType::Bool,
+                                span,
+                                |lowerer| {
+                                    Self::borrowed(
+                                        lowerer.constant(Constant::Bool(false), span),
+                                        TyirType::Bool,
+                                    )
+                                },
+                                |lowerer, other| {
+                                    let same = lowerer.same_singleton(value, other, span);
+                                    Self::borrowed(same, TyirType::Bool)
+                                },
+                            )
+                            .value;
+                        Self::borrowed(same, TyirType::Bool)
+                    },
+                )
+                .value
+            }
+        }
     }
 
     /// Compares two values whose types the checker accepted; the operands are not released.
@@ -206,6 +284,7 @@ impl FunctionLowerer<'_> {
             (TyirType::DICT | TyirType::SET, _) => {
                 return self.compare_collections(comparison, left, right, span);
             }
+            (TyirType::RANGE, _) => return self.compare_ranges(comparison, left, right, span),
             (TyirType::Bits, _) => {
                 unreachable!("list items are converted before they are compared")
             }
@@ -249,6 +328,29 @@ impl FunctionLowerer<'_> {
             TyirType::Bool,
             span,
         )
+    }
+
+    /// Compares two ranges with `==` or `!=`, by the values they hold (DAT-17).
+    fn compare_ranges(
+        &mut self,
+        comparison: Comparison,
+        left: Lowered,
+        right: Lowered,
+        span: Span,
+    ) -> ValueId {
+        let equal = self
+            .call_runtime(
+                RuntimeFunction::RangeEqual,
+                vec![left.value, right.value],
+                span,
+            )
+            .value;
+        if comparison == Comparison::Equal {
+            equal
+        } else {
+            self.builder
+                .push_value(Operation::BoolNot(equal), TyirType::Bool, span)
+        }
     }
 
     /// Compares two dicts for equality, or two sets, which order as subsets and supersets;

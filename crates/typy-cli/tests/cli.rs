@@ -444,3 +444,181 @@ fn a_c_toolchain_that_cannot_be_started_is_e0702() {
     );
     assert!(!workspace.root.join("app").exists());
 }
+
+#[test]
+fn cli_12_python_floor_in_typy_toml_sets_the_floor_and_the_flag_overrides_it() {
+    let workspace = Workspace::new("lazy import tools\nprint(tools.NAME)\n");
+    std::fs::write(workspace.root.join("tools.py"), "NAME = 'tools'\n").unwrap();
+    let default = workspace.typy(&["check", "app.py"]);
+    assert_eq!(status(&default), 1);
+    assert!(
+        stderr(&default).starts_with("error[E0103]"),
+        "{}",
+        stderr(&default)
+    );
+    std::fs::write(
+        workspace.root.join("typy.toml"),
+        "python-floor = \"3.15\"\n",
+    )
+    .unwrap();
+    let run = workspace.typy(&["run", "app.py"]);
+    assert_eq!((status(&run), stdout(&run).as_str()), (0, "tools\n"));
+    let overridden = workspace.typy(&["check", "app.py", "--python-floor", "3.14"]);
+    assert_eq!(status(&overridden), 1);
+    assert!(stderr(&overridden).starts_with("error[E0103]"));
+}
+
+#[test]
+fn cli_07_a_typy_toml_that_is_not_valid_stops_with_status_2_at_its_line() {
+    let workspace = Workspace::new(HELLO);
+    for (settings, place, text) in [
+        ("python-floor = 3.15\n", "typy.toml:1:16", "is a float"),
+        (
+            "python-floor = \"3.11\"\n",
+            "typy.toml:1:16",
+            "the string \"3.11\"",
+        ),
+        ("\n[x\n", "typy.toml:2:3", "not valid TOML"),
+        ("floor = \"3.15\"\n", "typy.toml:1:1", "no setting `floor`"),
+        (
+            "module-paths = [\"../outside\"]\n",
+            "typy.toml:1:17",
+            "under the project",
+        ),
+        (
+            "module-paths = [\"missing\"]\n",
+            "typy.toml:1:17",
+            "is not a directory",
+        ),
+        ("module-paths = \"lib\"\n", "typy.toml:1:16", "not an array"),
+        ("module-paths = [1]\n", "typy.toml:1:17", "is an integer"),
+    ] {
+        std::fs::write(workspace.root.join("typy.toml"), settings).unwrap();
+        let output = workspace.typy(&["build", "app.py"]);
+        let error = stderr(&output);
+        assert_eq!(status(&output), 2, "{settings}{error}");
+        assert!(error.starts_with("error[E0107]: "), "{error}");
+        assert!(error.contains(place) && error.contains(text), "{error}");
+        assert!(!workspace.root.join("app").exists());
+    }
+}
+
+#[test]
+fn mod_01_modules_are_found_in_the_module_paths_after_the_main_files_directory() {
+    let workspace = Workspace::new("import tools\nimport extra\nprint(tools.NAME, extra.NAME)\n");
+    for (path, name) in [
+        ("lib/tools.py", "lib"),
+        ("vendor/tools.py", "vendor"),
+        ("vendor/extra.py", "vendor"),
+    ] {
+        let path = workspace.root.join(path);
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        std::fs::write(path, format!("NAME = '{name}'\n")).unwrap();
+    }
+    let settings = "module-paths = [\"lib\", \"vendor\"]\n";
+    std::fs::write(workspace.root.join("typy.toml"), settings).unwrap();
+    let run = workspace.typy(&["run", "app.py"]);
+    assert_eq!((status(&run), stdout(&run).as_str()), (0, "lib vendor\n"));
+    std::fs::write(workspace.root.join("tools.py"), "NAME = 'root'\n").unwrap();
+    let run = workspace.typy(&["run", "app.py"]);
+    assert_eq!(stdout(&run), "root vendor\n");
+}
+
+#[test]
+fn dia_05_json_diagnostics_are_one_object_per_line() {
+    let workspace = Workspace::new("x: int = 1\nx = \"a\"\nprint(y)\n");
+    let output = workspace.typy(&["check", "app.py", "--error-format=json"]);
+    assert_eq!(status(&output), 1);
+    let text = stderr(&output);
+    let lines: Vec<&str> = text.lines().collect();
+    assert_eq!(lines.len(), 2, "{text}");
+    assert!(
+        lines[0].starts_with(
+            "{\"code\":\"E0402\",\"severity\":\"error\",\"message\":\"`x` was declared as int"
+        ),
+        "{text}"
+    );
+    assert!(
+        lines[0].contains("\"file\":\"app.py\",\"line\":2,\"column\":5,"),
+        "{text}"
+    );
+    assert!(lines[1].starts_with("{\"code\":\"E0205\""), "{text}");
+    assert!(lines.iter().all(|line| line.ends_with('}')), "{text}");
+    std::fs::write(workspace.root.join("typy.toml"), "floor = 1\n").unwrap();
+    let settings = workspace.typy(&["--error-format", "json", "build", "app.py"]);
+    assert_eq!(status(&settings), 2);
+    assert!(
+        stderr(&settings).starts_with("{\"code\":\"E0107\""),
+        "{}",
+        stderr(&settings)
+    );
+    std::fs::remove_file(workspace.root.join("typy.toml")).unwrap();
+    std::fs::write(workspace.root.join("app.py"), HELLO).unwrap();
+    let clean = workspace.typy(&["run", "app.py", "--error-format=json"]);
+    assert_eq!((status(&clean), stderr(&clean).as_str()), (0, ""));
+}
+
+#[test]
+fn dia_07_warnings_are_shown_and_fail_only_with_deny_warnings() {
+    let workspace = Workspace::new("print('\\d')\nassert (1, 'always')\n");
+    let built = workspace.typy(&["build", "app.py"]);
+    let text = stderr(&built);
+    assert_eq!(status(&built), 0, "{text}");
+    assert!(
+        text.starts_with("warning[W0101]: `\\d` is an invalid escape sequence"),
+        "{text}"
+    );
+    assert!(text.contains("warning[W0301]: "), "{text}");
+    assert!(workspace.root.join("app").exists());
+    let checked = workspace.typy(&["check", "app.py", "--error-format=json"]);
+    assert_eq!(status(&checked), 0);
+    assert_eq!(stderr(&checked).lines().count(), 2, "{}", stderr(&checked));
+    for _ in 0..2 {
+        let run = workspace.typy(&["run", "app.py"]);
+        assert_eq!((status(&run), stdout(&run).as_str()), (0, "\\d\n"));
+        assert!(
+            stderr(&run).starts_with("warning[W0101]"),
+            "{}",
+            stderr(&run)
+        );
+    }
+    std::fs::remove_file(workspace.root.join("app")).unwrap();
+    for command in ["check", "build", "run"] {
+        let denied = workspace.typy(&[command, "app.py", "--deny-warnings"]);
+        assert_eq!(status(&denied), 1, "{command}");
+        assert!(
+            stderr(&denied).starts_with("warning[W0101]"),
+            "{}",
+            stderr(&denied)
+        );
+    }
+    assert!(!workspace.root.join("app").exists());
+}
+
+#[test]
+fn cli_10_explain_prints_a_code_with_a_wrong_and_a_corrected_program() {
+    let workspace = Workspace::new(HELLO);
+    let output = workspace.typy(&["explain", "E0402"]);
+    let text = stdout(&output);
+    assert_eq!(status(&output), 0);
+    assert!(
+        text.starts_with("E0402: assignment changes the type of a variable\n"),
+        "{text}"
+    );
+    assert!(
+        text.contains("This program gives E0402:\n\n    count = 0\n"),
+        "{text}"
+    );
+    assert!(text.contains("This one is correct:\n"), "{text}");
+    assert!(text.ends_with("\nRule: TYP-03\n"), "{text}");
+    for (code, message) in [
+        (
+            "e0402",
+            "error: `e0402` is not a diagnostic code, such as E0402\n",
+        ),
+        ("E0999", "error: no diagnostic has the code E0999\n"),
+    ] {
+        let wrong = workspace.typy(&["explain", code]);
+        assert_eq!((status(&wrong), stderr(&wrong).as_str()), (2, message));
+    }
+}

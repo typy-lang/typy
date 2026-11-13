@@ -38,6 +38,8 @@ pub enum Constant {
     NoInstance(crate::types::TypeId),
     /// The address of a type object (CLS-12).
     TypeObject(crate::types::TypeObjectRef),
+    /// The module object of the module at this index of `TyirModule::modules` (MOD-10).
+    Module(u32),
     /// The address of the descriptor of a tuple type that a list holds, which the runtime
     /// reads to store, count, compare and write its items (ADR-0009).
     TupleDescriptor(TupleTypeId),
@@ -60,6 +62,7 @@ impl Constant {
             Self::NoneOf(base) => TyirType::Optional(*base),
             Self::NoInstance(id) => TyirType::Object(*id),
             Self::TypeObject(_) => TyirType::TYPE,
+            Self::Module(_) => TyirType::MODULE,
             Self::TupleDescriptor(_) => TyirType::Bits,
         }
     }
@@ -80,6 +83,7 @@ impl fmt::Display for Constant {
             Self::NoneOf(base) => write!(formatter, "none {}", TyirType::Optional(*base)),
             Self::NoInstance(id) => write!(formatter, "null {}", TyirType::Object(*id)),
             Self::TypeObject(ty) => write!(formatter, "type {ty}"),
+            Self::Module(index) => write!(formatter, "module m{index}"),
             Self::TupleDescriptor(TupleTypeId(id)) => write!(formatter, "descriptor tuple#{id}"),
         }
     }

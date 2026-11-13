@@ -61,7 +61,12 @@ pub(crate) fn judge_accepted(
                 describe(&failure).join("; ")
             ));
         }
-        let observed = match Observation::of(&mut Command::new(&executable)) {
+        // Each build runs in an empty directory of its own, as each oracle run does.
+        let Ok(working) = tempfile::tempdir() else {
+            return Verdict::Invalid("cannot make a working directory".to_owned());
+        };
+        let observed = match Observation::of(Command::new(&executable).current_dir(working.path()))
+        {
             Ok(observed) => observed,
             Err(reason) => return Verdict::Fail(format!("the {} build {reason}", mode.name())),
         };
@@ -100,7 +105,7 @@ pub(crate) fn judge_sanitized(
         Ok(request) => request.with_emit(EmitStage::Obj),
         Err(error) => return Verdict::Invalid(error.to_string()),
     };
-    let object = match pipeline.run(&request) {
+    let object = match pipeline.run(&request).map(|success| success.outcome) {
         Ok(Outcome::Emitted(Emission::Bytes(bytes))) => bytes,
         Ok(_) => return Verdict::Fail("no object file was emitted".to_owned()),
         Err(failure) => {
@@ -120,6 +125,10 @@ pub(crate) fn judge_sanitized(
         "-o",
         executable.as_str(),
         object_path.as_str(),
+        // As the program's own link: the C maths library before the runtime archive.
+        "-Wl,--push-state,--no-as-needed",
+        "-lm",
+        "-Wl,--pop-state",
         archive.as_str(),
         "-lm",
     ]));
@@ -129,8 +138,13 @@ pub(crate) fn judge_sanitized(
         Err(reason) => return Verdict::Invalid(format!("the sanitized link {reason}")),
     }
     // A sanitizer report ends the program with status 86 and its summary as the last line.
+    let Ok(working) = tempfile::tempdir() else {
+        return Verdict::Invalid("cannot make a working directory".to_owned());
+    };
     let observed = Observation::of(
-        Command::new(&executable).env("ASAN_OPTIONS", "detect_leaks=1:exitcode=86"),
+        Command::new(&executable)
+            .env("ASAN_OPTIONS", "detect_leaks=1:exitcode=86")
+            .current_dir(working.path()),
     );
     match observed {
         Ok(observed) if observed == *expected => Verdict::Pass,

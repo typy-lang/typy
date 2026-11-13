@@ -8,10 +8,16 @@ pub const STR_TYPE_ID: u32 = 1;
 pub const BYTES_TYPE_ID: u32 = 6;
 /// The type ID of exception objects.
 pub const EXCEPTION_TYPE_ID: u32 = 2;
+
+/// The bytes of an exception's fixed part, which a class's attributes follow; the runtime's
+/// `exception::PREFIX`, which its tests pin to this number.
+pub(crate) const EXCEPTION_PREFIX: u32 = 80;
 /// The type ID of large integers.
 pub const BIG_INT_TYPE_ID: u32 = 3;
 /// The type ID of a type object, such as a class's (ADR-0012).
 pub(crate) const TYPE_TYPE_ID: u32 = 10;
+/// The type ID of a module object (MOD-10).
+pub(crate) const MODULE_TYPE_ID: u32 = 15;
 /// The smallest integer held inline: -2^62.
 pub const INLINE_MIN: i128 = -(1 << 62);
 /// The largest integer held inline: 2^62 - 1.
@@ -56,9 +62,7 @@ pub fn encode_int(text: &str) -> IntEncoding {
             limbs.push(u64::try_from(carry).unwrap_or(0));
         }
     }
-    while limbs.len() > 1 && limbs.last() == Some(&0) {
-        limbs.pop();
-    }
+    // A limb is added only for a carry, so the top limb is never zero.
     IntEncoding::Big { negative, limbs }
 }
 

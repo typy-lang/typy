@@ -23,15 +23,14 @@ impl FunctionLowerer<'_> {
     ) {
         match target {
             AssignTarget::Name(symbol) => {
-                let slot = self.slots[symbol];
-                let current = self.load(slot, span);
+                let current = self.read_name(*symbol, span);
                 let right = self.expression(value);
                 if let Some(changed) = self.in_place(operator, current, right, result, span) {
                     self.release(changed, span);
                     return;
                 }
                 let lowered = self.binary(operator, current, right, result, span);
-                self.store(slot, lowered, span);
+                self.assign_name(*symbol, lowered, span);
             }
             AssignTarget::Item { list, index } => {
                 self.augmented_item(list, index, operator, value, result, span);
@@ -66,6 +65,9 @@ impl FunctionLowerer<'_> {
             }
             AssignTarget::Tuple(_) => {
                 unreachable!("Python refuses a tuple as the target of an augmented assignment")
+            }
+            AssignTarget::Slice { .. } => {
+                unreachable!("the checker refuses an augmented assignment to a slice")
             }
         }
     }

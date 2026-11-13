@@ -17,7 +17,7 @@ members = [
 ]
 
 [workspace.package]
-version = "0.2.0"
+version = "0.3.0"
 edition = "2024"
 rust-version = "1.99"
 license = "MIT OR Apache-2.0"
@@ -31,6 +31,8 @@ clap = { version = "4.5", features = ["derive"] }
 proptest = "1"
 sha2 = "0.11"
 tempfile = "3"
+# Only its parser: TyPy reads `typy.toml` and never writes it (CLI-07).
+toml_edit = { version = "0.25", default-features = false, features = ["parse"] }
 typy-diagnostics = { path = "crates/typy-diagnostics" }
 typy-source = { path = "crates/typy-source" }
 typy-tyir = { path = "crates/typy-tyir" }
@@ -44,7 +46,8 @@ inkwell = { version = "=0.11.0", default-features = false, features = ["llvm23-1
 # The parser has no stability promise, so it is pinned to one exact version
 # and upgraded on purpose (C-02, ADR-0005).
 ruff_python_ast = "=0.0.20"
-ruff_python_parser = "=0.0.20"
+# `stacker` grows the parser's stack on the heap, so no input can overflow it (NFR-09).
+ruff_python_parser = { version = "=0.0.20", features = ["stacker"] }
 ruff_text_size = "=0.0.20"
 
 [workspace.lints.rust]

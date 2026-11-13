@@ -20,6 +20,8 @@ fn span() -> Span {
 
 fn module(function: TyirFunction) -> TyirModule {
     TyirModule {
+        globals: Vec::new(),
+        modules: Vec::new(),
         functions: vec![function],
         tuple_types: crate::TupleTypes::default(),
         strings: vec!["hi\n".to_owned()],
@@ -129,6 +131,51 @@ fn a_value_used_before_its_definition_fails() {
     let mut function = division();
     function.blocks[0].instructions.swap(0, 1);
     assert!(message(&module(function)).contains("may not have run"));
+}
+
+#[test]
+fn a_value_used_by_the_instruction_that_defines_it_fails() {
+    for position in [0, 1] {
+        let mut function = division();
+        let instruction = &mut function.blocks[0].instructions[position];
+        let own = instruction.result.expect("the instruction defines a value");
+        instruction.operation = Operation::Compare {
+            kind: ScalarKind::Int,
+            comparison: Comparison::NotEqual,
+            left: own,
+            right: own,
+        };
+        assert!(
+            message(&module(function)).contains("may not have run"),
+            "instruction {position}"
+        );
+    }
+}
+
+#[test]
+fn the_text_without_counting_leaves_out_inc_and_dec_only() {
+    let mut function = division();
+    function.blocks[0]
+        .instructions
+        .push(crate::instruction::Instruction {
+            result: None,
+            operation: Operation::Increment(ValueId(0)),
+            span: span(),
+        });
+    let module = module(function);
+    let counted = print(&module);
+    let plain = crate::print::print_without_counting(&module);
+    assert!(counted.contains("  inc v0"), "{counted}");
+    assert!(!plain.contains("inc v0"), "{plain}");
+    assert_eq!(
+        plain.lines().count() + 1,
+        counted.lines().count(),
+        "{plain}\n{counted}"
+    );
+    assert!(
+        plain.contains("invoke rt.int_floor_divide(v0, v1)"),
+        "{plain}"
+    );
 }
 
 #[test]
@@ -426,6 +473,8 @@ fn every_operation() -> TyirModule {
     builder.terminate(Terminator::Return(unit));
     builder.push_value(Operation::Constant(Constant::Unit), TyirType::Unit, span());
     TyirModule {
+        globals: Vec::new(),
+        modules: Vec::new(),
         functions: vec![builder.finish(), callee.finish()],
         tuple_types: crate::TupleTypes::default(),
         strings: vec!["a".to_owned()],
@@ -774,4 +823,38 @@ fn optional_operations_check_their_types() {
     let tested = on_int(|value| (Operation::IsNone(value), TyirType::Bool));
     assert!(message(&tested).contains("is not optional"));
     assert!(print(&wrapped).contains("wrap v0, optional int"));
+}
+
+#[test]
+fn a_function_of_many_blocks_verifies_in_linear_time() {
+    // 100000 blocks in a chain, each passing on one value; dominance sets per block would
+    // hold five billion entries.
+    let mut builder =
+        FunctionBuilder::new(FunctionId(0), "_TY8__main__4long", "long", TyirType::Int);
+    let mut value = builder.push_value(
+        Operation::Constant(Constant::Int("0".to_owned())),
+        TyirType::Int,
+        span(),
+    );
+    for _ in 0..100_000 {
+        let next = builder.create_block();
+        builder.terminate(Terminator::Jump {
+            target: next,
+            arguments: Vec::new(),
+        });
+        builder.switch_to(next);
+        value = builder.push_value(
+            Operation::IntBinary {
+                operator: IntOperator::Add,
+                left: value,
+                right: value,
+            },
+            TyirType::Int,
+            span(),
+        );
+    }
+    builder.terminate(Terminator::Return(value));
+    let started = std::time::Instant::now();
+    assert_eq!(verify(&module(builder.finish())), Ok(()));
+    assert!(started.elapsed() < std::time::Duration::from_secs(10));
 }

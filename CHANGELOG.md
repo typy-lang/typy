@@ -6,6 +6,208 @@ All notable changes to TyPy are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-11-13
+
+### Added
+
+- `open` for text files in UTF-8, in the modes `r`, `w`, `a` and `x`:
+  `read`, `readline`, `readlines`, `write`, `writelines`, `flush` and
+  `close`, iteration over the lines, and `with`. Reading translates
+  newlines and decodes as CPython does, files still open are written out
+  when the program ends, and errors are CPython's `OSError` subclasses
+  with its text, such as `[Errno 2] No such file or directory:
+  'notes.txt'`. `OSError` and all its subclasses can be caught and
+  raised. Binary and `+` modes, other encodings, `seek` and the file's
+  attributes are planned for 0.4 (LIB-04, LIB-14, EXC-14, ADR-0019).
+- The `sys` module's `argv`, `exit`, `stdout` and `stderr`, `print` with
+  `file` and `flush`, and `input`, which raises `EOFError` at the end of
+  standard input. An uncaught `SystemExit` ends the program with its
+  code as the exit status and no traceback, as in CPython. Other names
+  of `sys` are E0201 when planned for 0.4 (LIB-13) and E0202 otherwise;
+  the switches of lazy imports are E0202 (LIB-04, MOD-09).
+- The `math` module: its constants and its functions of numbers, with
+  CPython's results to the last bit and CPython 3.15's error messages;
+  a name newer than the program's Python floor is E0425. `fsum`, `prod`,
+  `sumprod`, `dist`, `gamma` and `lgamma` are planned for 0.4 (LIB-05,
+  LIB-12, ADR-0018).
+- `format % values`, printf-style formatting of a string literal, with
+  every conversion, flag, width, precision and `*`, and `%(key)s` with a
+  dict, giving CPython's results. A format that does not fit its values
+  is E0427 with CPython's message; a format that is not a literal is
+  planned for 0.4 (LIB-10, LIB-11).
+- `typy explain CODE` prints what a diagnostic means, the rule it
+  enforces, a program that gives it and the corrected program; the
+  troubleshooting page shows the same programs, and the documentation
+  test runs them (CLI-10).
+- Warnings, where CPython warns while compiling: W0101 for an invalid
+  escape sequence such as `"\d"`, with the doubled backslash as its fix,
+  and W0301 for `assert (test, "message")`, which is always true. They
+  never fail a build unless `--deny-warnings` is given (DIA-07, DIA-08,
+  ADR-0017).
+- `--error-format=json` writes each diagnostic as one JSON object per
+  line, with the same keys every time, for editors and CI (DIA-05).
+- `typy.toml` beside the main file sets `python-floor` and `module-paths`,
+  the directories where imports look for modules after the main file's
+  directory; `--python-floor` on `check`, `build` and `run` overrides the
+  file. A setting that is not valid is E0107 at its line, with exit status
+  2 (CLI-07, CLI-12, MOD-01).
+- Lazy imports: `lazy import m` and `lazy from m import name` with the
+  Python floor 3.15, and a module-level `__lazy_modules__` at every floor.
+  The module runs at the first use of a name, an error it raises reaches
+  that use, and the next use runs it again. Using such a name from another
+  module is E0201, planned for 0.4 (MOD-06 to MOD-08, MOD-11).
+- `Iterator[T]` and `Iterable[T]` annotations from `typing` or
+  `collections.abc`, and `TracebackType` and `ModuleType` from `types`. An
+  `Iterable[T]` takes any built-in iterable or iterator of `T` and keeps
+  the object, so a list passed as one can be read twice (TYP-15, CST-10,
+  MOD-10).
+- A truth test, `not` or `bool()` of a value whose truth TyPy cannot know
+  is E0304 everywhere, not only in a condition (EXP-10).
+- `make bench` times the release-built compiler on generated 10,000-line
+  projects, in one file and in 200 modules, against the budgets of NFR-04,
+  NFR-05 and NFR-14, and checks that checking time grows linearly with the
+  number of modules; CI runs it.
+- Programs of several modules: `import m`, `import a.b as c` and
+  `from m import name` for functions, classes, module variables and
+  submodules, packages with `__init__.py`, and relative imports. Each
+  module runs once, at its first import, and runs again at the next import
+  when its code raised. A module object prints as
+  `<module 'm' from 'm.py'>`, with the path from the main file's directory
+  (SMT-07, MOD-01 to MOD-03, MOD-10).
+- E0206 for a module the program does not have, E0422 for a circular
+  import at module level with each import shown, and E0425 for a name a
+  module does not define; standard library modules TyPy provides later
+  are E0201 (MOD-05, LIB-08).
+- `global` in a function, and functions that read the variables of their
+  module. A read before the module binds the variable raises CPython's
+  `NameError`, and CPython's `SyntaxError`s for `global` are E0103 (SMT-08).
+- `NameError` and `ImportError` as built-in exception classes (EXC-01).
+- `raise` with an exception or an exception class, and `raise ... from
+  cause` and `raise ... from None`. An uncaught exception prints its cause
+  or its context first, with CPython's line between them (SMT-06, EXC-04,
+  STD-05).
+- The built-in exception classes as values, annotations and calls, with
+  CPython's bases, so a `KeyError` may be stored where a `LookupError` is
+  declared; `NotImplementedError` and `AttributeError` are new (EXC-01,
+  EXC-02, EXC-10).
+- `str`, `repr`, `print` and f-strings of an exception give CPython's text,
+  computed from its arguments; `repr` of a `UnicodeDecodeError` shows its
+  five arguments (EXC-08).
+- Exception classes of your own: a class derived from a built-in
+  exception class, or from such a class defined before it, with
+  attributes, methods and its own `__init__`, `__str__` and `__repr__`.
+  Calling it keeps the arguments passed by position as the exception's
+  arguments, and `super().__init__(...)` in `__init__` calls the base's.
+  `except` catches it by any of its bases, and `is` compares exceptions
+  (CLS-03, CLS-13, CLS-14, EXP-08).
+- Assigning a list to a slice of a list, `xs[a:b:c] = items`, with
+  CPython's results: a simple slice grows or shrinks the list, and an
+  extended slice takes exactly as many items or raises `ValueError`
+  (DAT-13).
+- `del` of list items, list slices with or without a step, and dict keys,
+  with CPython's errors; E0421 for `del` of a variable, an attribute or
+  part of a tuple, `str` or `bytes` (SMT-05).
+- `is` and `is not` between `bool` and `bool | None` values, such as
+  `done is True` or `flag is False`. `True`, `False` and `None` are each a
+  single object, as in CPython, so the result is that of `==` (EXP-08).
+- `dict.keys()` and `dict.items()` as sets: `|`, `&`, `-` and `^` with a
+  set, another view or a list give a new set in CPython's order, and `==`,
+  `<` and the other comparisons compare their items. `dict.values()`
+  compares by identity, as in CPython (DAT-16).
+- `dict(name=value, ...)`, with or without a source, and
+  `dict.fromkeys(keys)` and `dict.fromkeys(keys, value)`, with CPython's
+  order of evaluation (DAT-16).
+- `reversed` of a dict, of `dict.keys()`, `dict.values()` and
+  `dict.items()`, from the last entry to the first; a dict that changes
+  size raises `RuntimeError`, as in CPython (DAT-16).
+- `range` as a value and an annotation: `len`, indexing, slicing, `in`,
+  `==`, use as a dict key or set item, and CPython's text. `for`,
+  `reversed`, `iter` and `next` read it, and its bounds may be of any size
+  (DAT-17).
+- `with`, with one or more context managers and `as` targets, calling
+  `__exit__` on every way out of the body; a true result of `__exit__`
+  suppresses the exception. The parameters of `__exit__` may be left
+  without annotations, and its traceback is an object that holds no
+  frames (CST-05, CST-10).
+- E0420 for `with` on a value whose class has no `__enter__` and
+  `__exit__` (CST-05).
+- `for` over an instance of a class that defines `__iter__` and
+  `__next__`, which ends when `__next__` raises `StopIteration` (CST-08).
+- `iter()` and `next()`, with or without a default, for lists, tuples,
+  `str`, `bytes`, sets, dicts and views of dicts, and for classes with
+  `__iter__` and `__next__`, with CPython's iterator behaviour: a list
+  iterator sees appended items, and a set or dict that changes size raises
+  `RuntimeError` (CST-09).
+- `assert test` and `assert test, message`, which raise `AssertionError`
+  when the test is false in every build mode, evaluating the message only
+  then; what the test shows holds after it (SMT-04).
+- `finally`, which runs on every way out of a `try`: falling through,
+  `return`, `break`, `continue` and an exception, which keeps going after
+  it. E0419 refuses a `return`, `break` or `continue` that would leave a
+  `finally` block, as CPython 3.14 warns about it (CST-04, EXC-06).
+- `try` with `except` clauses and `else`: `except C`, `except (A, B)`,
+  `except C as name` and a bare `except`. A clause catches its classes and
+  every class derived from them, the name after `as` is deleted when the
+  clause ends, and a bare `raise` inside a clause re-raises the exception.
+  An exception raised while another is handled keeps it as its context,
+  and an uncaught one prints it first (CST-04, EXC-01, EXC-04, EXC-07,
+  EXC-09).
+- E0418 for an `except` clause that names something other than exception
+  classes (EXC-09).
+- E0415 for `raise` of a value that is not an exception, E0416 for a bare
+  `raise` outside an `except` clause, and E0417 for a call of
+  `UnicodeDecodeError` or `UnicodeEncodeError` (EXC-07, EXC-12).
+
+### Changed
+
+- The last use of a variable moves its value into an assignment, a
+  display, `append`, `insert`, `add` or a dict entry, and a new value such
+  as a call's result goes into a collection without being counted, so
+  building a collection in a loop does no reference counting of its items
+  (MEM-09).
+- `--release` and `--release-small` builds leave out debug information; a
+  static musl hello world is about 30 KB (CLI-05, NFR-01).
+
+### Fixed
+
+- A format specification on an exception, such as `f"{error:>5}"`,
+  raises `TypeError` naming the exception's own class, as CPython does;
+  it named `NoneType`.
+- A deeply nested program no longer crashes `typy`; it aborted on 1000
+  nested brackets. Brackets nested past 200 and blocks past 99 are E0103
+  with CPython's messages, and expressions or statements nested past
+  25000 are E0103; everything CPython compiles still compiles (LEX-11,
+  ADR-0020).
+- A function of many blocks, such as a long `elif` chain, compiles in
+  time and memory in proportion to its size; 20000 `elif` clauses ran out
+  of memory.
+- `print(..., file=f)` inside an `except` clause compiles; it failed with
+  E9001.
+- An import inside a function, or a lazy one, no longer makes a circular
+  import with a module that imports the importing module back at module
+  level; it gave a false E0422 (MOD-05, OI-21).
+- A function whose only `try` has a body that cannot raise compiles;
+  it failed with E9001.
+- A `\u` or `\U` escape of a surrogate in a `str` literal is E0201,
+  planned for 0.4 (LEX-10); it gave U+FFFD instead of the surrogate.
+- Programs call the C library's maths functions, as CPython does, and
+  not the copies in the runtime archive, whose `cbrt` differed in the
+  last bit.
+- `typy run` builds again after the runtime archive changes, since the
+  cache key now covers the archive as well as the compiler.
+- `type(m)` of a module, an `Iterable[T]` or a traceback gives its type
+  object; it stopped the compiler with E9001 before.
+
+- `typy run` no longer reuses an executable built from other versions of
+  the program's modules or by another build of the compiler: the cache key
+  covers every file of the program and the compiler executable.
+- A list, set or dict display, a comprehension, or a `list`, `set`,
+  `tuple` or `dict` call is accepted where an optional collection is
+  expected, such as `items: list[int] | None = []` or an argument of type
+  `list[int] | None`; it stopped with E9001 or E0410.
+- A function that returns a value on both branches of an `if` and `else`,
+  with nothing after them, compiles; it stopped with E9001.
+
 ## [0.2.0] - 2026-11-10
 
 ### Added
@@ -300,6 +502,7 @@ compiler needs glibc 2.39 or later and a C toolchain.
   non-ASCII text, checks that every requirement has a row in the test plan,
   and checks that every diagram is rendered from its source.
 
-[Unreleased]: https://github.com/typy-lang/typy/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/typy-lang/typy/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/typy-lang/typy/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/typy-lang/typy/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/typy-lang/typy/releases/tag/v0.1.0

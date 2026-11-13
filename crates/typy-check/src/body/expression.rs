@@ -36,6 +36,28 @@ impl BodyChecker<'_> {
             Expr::Name { id, .. } => self.name(id, span),
             Expr::BinOp {
                 left,
+                operator: typy_source::syntax::BinaryOperator::Mod,
+                right,
+                ..
+            } if matches!(
+                **left,
+                Expr::Constant {
+                    value: typy_source::syntax::Constant::Str(_),
+                    ..
+                }
+            ) =>
+            {
+                let Expr::Constant {
+                    value: typy_source::syntax::Constant::Str(format),
+                    span: format_span,
+                } = &**left
+                else {
+                    unreachable!("the guard matched a string literal");
+                };
+                self.percent_format(format, *format_span, right, span)
+            }
+            Expr::BinOp {
+                left,
                 operator,
                 right,
                 ..
@@ -243,7 +265,7 @@ impl BodyChecker<'_> {
                         span,
                     );
                 }
-                if value.ty == Type::Bytes {
+                if matches!(value.ty, Type::Bytes | Type::Range) {
                     self.expect(&index, Type::Int, "an index");
                     return Self::typed(
                         TypedExprKind::Index {
@@ -312,17 +334,23 @@ impl BodyChecker<'_> {
 
     pub(super) fn truth_test(&mut self, test: &Expr) -> TypedExpr {
         let test = self.expression(test);
-        if !test.ty.is_truth_testable() {
+        self.check_truth(&test);
+        test
+    }
+
+    /// Reports a value whose truth cannot be tested: a condition, `not`, `and`, `or` and
+    /// `bool()` all test it (EXP-10).
+    pub(super) fn check_truth(&mut self, value: &TypedExpr) {
+        if !value.ty.is_truth_testable() {
             self.diagnostics.push(
                 Diagnostic::new(
                     DiagnosticCode::error(304),
-                    test.span,
-                    format!("{} cannot be used as a condition", test.ty.with_article()),
+                    value.span,
+                    format!("{} cannot be used as a condition", value.ty.with_article()),
                 )
                 .with_rule(RuleId::EXP_10),
             );
         }
-        test
     }
 
     /// Checks `tuple[index]`: the position is an integer literal, counted from the end when

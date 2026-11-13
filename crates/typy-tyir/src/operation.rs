@@ -114,6 +114,15 @@ pub enum Operation {
         /// The value.
         value: ValueId,
     },
+    /// The value a global holds, borrowed from the global.
+    LoadGlobal(crate::module::GlobalId),
+    /// Stores a value in a global; the global takes over the reference.
+    StoreGlobal {
+        /// The global.
+        global: crate::module::GlobalId,
+        /// The value.
+        value: ValueId,
+    },
     /// An `int` operation that cannot raise.
     IntBinary {
         /// The operator.
@@ -228,6 +237,9 @@ pub enum Operation {
     Field {
         /// The instance.
         object: ValueId,
+        /// The class of an exception, whose attributes follow its fixed part; `None` for an
+        /// instance, whose type names its class.
+        class: Option<u32>,
         /// The attribute's position.
         index: u32,
     },
@@ -236,6 +248,8 @@ pub enum Operation {
     SetField {
         /// The instance.
         object: ValueId,
+        /// The class of an exception, as for `Field`.
+        class: Option<u32>,
         /// The attribute's position.
         index: u32,
         /// The value.

@@ -8,6 +8,7 @@ use crate::types::tyir_type;
 
 use crate::call_graph::recursive_functions;
 use crate::function::FunctionLowerer;
+use crate::module_variable::ModuleGlobals;
 use crate::strings::StringPool;
 
 /// Returns the program in TyIR, verified. A function may raise when its lowered code contains an `invoke`, so lowering repeats until that set stops growing (detailed design section 9).
@@ -17,6 +18,7 @@ pub fn lower(program: &TypedProgram) -> Result<TyirModule, Diagnostics> {
     loop {
         let mut strings = StringPool::default();
         let mut tuple_types = TupleTypes::default();
+        let module_globals = ModuleGlobals::new(program, &mut tuple_types);
         let functions: Vec<_> = program
             .functions
             .iter()
@@ -27,6 +29,7 @@ pub fn lower(program: &TypedProgram) -> Result<TyirModule, Diagnostics> {
                     &may_raise,
                     &mut strings,
                     &mut tuple_types,
+                    &module_globals,
                     recursive.contains(&function.id),
                 )
             })
@@ -51,21 +54,37 @@ pub fn lower(program: &TypedProgram) -> Result<TyirModule, Diagnostics> {
                 let TyirType::Tuple(fields) = tuple_types.intern(fields) else {
                     unreachable!("interning gives a tuple type");
                 };
-                let repr = class
-                    .methods
-                    .iter()
-                    .find(|(name, _)| name == "__repr__")
-                    .map(|(_, id)| FunctionId(id.0));
+                // A method of the class, or of the nearest base that has it.
+                let method = |wanted: &str| {
+                    let mut current = Some(class);
+                    while let Some(each) = current {
+                        if let Some((_, id)) = each.methods.iter().find(|(name, _)| name == wanted)
+                        {
+                            return Some(FunctionId(id.0));
+                        }
+                        current = each.base.map(|base| program.class(base));
+                    }
+                    None
+                };
+                let exception_base = class
+                    .exception
+                    .as_ref()
+                    .and_then(typy_check::ExceptionClass::base)
+                    .map(|base| crate::exception::exception_class(&base));
                 TyirClass {
                     name: class.name.clone(),
                     module: class.module.clone(),
                     fields,
-                    repr,
+                    repr: method("__repr__"),
+                    str: method("__str__"),
+                    exception_base,
                 }
             })
             .collect();
         let module = TyirModule {
             functions,
+            globals: module_globals.globals,
+            modules: module_objects(program),
             strings: strings.into_strings(),
             tuple_types,
             classes,
@@ -87,4 +106,26 @@ pub fn lower(program: &TypedProgram) -> Result<TyirModule, Diagnostics> {
             }
         };
     }
+}
+
+/// Returns the module object of each module: the program's, then the built-in modules it
+/// imports, which have no file, so their text names none (ADR-0018).
+fn module_objects(program: &TypedProgram) -> Vec<typy_tyir::TyirModuleObject> {
+    program
+        .modules
+        .iter()
+        .map(|module| typy_tyir::TyirModuleObject {
+            name: module.name.clone(),
+            path: module.path.clone(),
+        })
+        .chain(
+            program
+                .builtin_modules
+                .iter()
+                .map(|name| typy_tyir::TyirModuleObject {
+                    name: name.clone(),
+                    path: String::new(),
+                }),
+        )
+        .collect()
 }

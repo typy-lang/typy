@@ -1,11 +1,11 @@
 # Generics
 
 Generic functions and classes, written with PEP 695 type parameter lists,
-and protocols come in 0.4 (GEN-01 to GEN-05). TyPy 0.2 accepts no generic
+and protocols come in 0.4 (GEN-01 to GEN-05). TyPy 0.3 accepts no generic
 definitions of its own; the built-in generic types `list[T]`, `dict[K, V]`,
 `set[T]` and `tuple[...]` are covered in [Types](types.md).
 
-## What TyPy 0.2 accepts
+## What TyPy accepts
 
 Concrete functions over the built-in generic types:
 

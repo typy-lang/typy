@@ -47,6 +47,21 @@ const PROGRAMS: &[&str] = &[
     "class T:\n    def __init__(self, pair: tuple[int, str], flag: bool, ratio: float) -> None:\n        self.pair = pair\n        self.flag = flag\n        self.ratio = ratio\n        self.maybe: bool | None = None\nt = T((1, 'x'), True, 0.5)\nt.maybe = False\nt.ratio /= 2.0\nprint(t.pair, t.flag, t.ratio, t.maybe, {t} == {t})\n",
     "class P:\n    pass\nx: int | None = None\nkinds = [int, P, type(P()), type(x)]\nprint(kinds, type(1) == int, int != str, P.__name__, type(x).__name__, bool(int), {str: 1}[type('a')], type({1: 1}.values()), object, type(int))\n",
     "class P:\n    pass\nx = 1\nf = 2.5\nb = True\ns = 'h\\u00e9'\nm: int | None = None\nn: int | None = 4\nitems = [1]\nprint(f'', f'{x}', f'{x:>5}', f'{f:.2f}', f'{b}', f'{b:d}', f'{s:^7}', f'{m}', f'{m:>4}', f'{n:03}', f'{items}', f'{items:}', f'{P():}', f'{x!s}', f'{s!r:>8}', f'{s!a}', f'{x = }', f'{f=:.1e}', f'{x:{x}}', f'{{}}')\n",
+    "def check(n: int) -> int:\n    if n < 0:\n        raise ValueError('negative', n, [n])\n    return n\ne: LookupError = KeyError('k')\nprint(e, repr(e), f'{e}', type(e), [e], check(1))\nraise RuntimeError('r') from e\n",
+    "def fail() -> str:\n    raise TypeError from None\nraise NotImplementedError\n",
+    "def sign(b: bool) -> int:\n    if b:\n        return 1\n    else:\n        return -1\nprint(sign(True), sign(False))\n",
+    "def first(items: list[int]) -> int:\n    try:\n        return items[0]\n    except KeyError:\n        return -1\n    except LookupError as e:\n        print(repr(e))\n    return 0\ntotal = 0\nfor n in [1, 0, 2]:\n    try:\n        total += 10 // n\n    except ZeroDivisionError as e:\n        print(e)\n        continue\n    except:\n        break\n    else:\n        print(total)\ntry:\n    print(first([]))\nexcept ValueError:\n    raise\n",
+    "def label(n: int) -> str:\n    text = str(n)\n    try:\n        if n > 1:\n            return text * 2\n        print(10 // n)\n    except ZeroDivisionError as e:\n        return str(e)\n    finally:\n        print('done', n)\n    return text\nfor n in range(4):\n    try:\n        if n == 1:\n            continue\n        if n == 3:\n            break\n    finally:\n        print(label(n))\ntry:\n    raise KeyError('k')\nfinally:\n    raise RuntimeError('r')\n",
+    "class AppError(Exception):\n    pass\n\n\nclass ConfigError(AppError):\n    def __init__(self, key: str, line: int) -> None:\n        super().__init__(f\"bad key {key}\")\n        self.key = key\n        self.line = line\n\n    def where(self) -> str:\n        return f\"{self.key} at line {self.line}\"\n\n\nclass MissingKey(ConfigError):\n    pass\n\n\nclass Quiet(ValueError):\n    def __str__(self) -> str:\n        return \"quiet!\"\n\n\ndef load(key: str) -> int:\n    if key == \"port\":\n        raise MissingKey(key, 7)\n    if key == \"host\":\n        raise Quiet(\"host\", 1)\n    if key == \"app\":\n        raise AppError\n    return 1\n\n\nfor key in [\"port\", \"host\", \"app\", \"user\"]:\n    try:\n        print(key, load(key))\n    except ConfigError as error:\n        print(\"config:\", error, repr(error), error.where(), error.key, type(error).__name__)\n    except ValueError as error:\n        print(\"value:\", error, repr(error), type(error).__name__)\n    except AppError as error:\n        print(\"app:\", repr(error), str(error) == \"\")\ne = MissingKey(\"k\", 2)\nprint(e.line)\nraise MissingKey(\"timeout\", 3)\n",
+    "class HttpError(Exception):\n    def __init__(self, status: int, reason: str) -> None:\n        super().__init__(status, reason)\n        self.status = status\n        self.reason = reason\n\n\nclass RetryableError(HttpError):\n    def __init__(self, status: int, reason: str, delay: float) -> None:\n        super().__init__(status, reason)\n        self.delay = delay\n        self.attempts: list[int] = []\n\n\nerrors: list[HttpError] = [HttpError(404, \"missing\"), RetryableError(503, \"busy\", 1.5)]\nfor error in errors:\n    print(error.status, error.reason, repr(error), str(error))\nretry = RetryableError(429, \"slow down\", 0.25)\nretry.attempts.append(1)\nretry.status += 1\nprint(retry.status, retry.delay, retry.attempts, retry)\ntry:\n    raise retry\nexcept HttpError as caught:\n    print(\"caught\", caught.status, type(caught).__name__)\n",
+    "class Coded(Exception):\n    def __init__(self, code: int = 1) -> None:\n        super().__init__()\n        self.code = code\ne = Coded()\nf = Coded(code=2)\nprint(e.code, f.code, repr(e))\ndef g() -> int:\n    try:\n        return 1\n    finally:\n        raise ValueError('in finally')\nprint(g())\n",
+    "def first(items: list[int] | None) -> int:\n    assert items is not None, 'required'\n    assert len(items) > 0\n    return items[0]\nprint(first([3]), first([]) if False else 0)\nassert first([1]) == 2, ('mismatch', 2)\n",
+    "class Countdown:\n    def __init__(self, start: int) -> None:\n        self.current = start\n\n    def __iter__(self) -> \"Countdown\":\n        return self\n\n    def __next__(self) -> int:\n        if self.current <= 0:\n            raise StopIteration\n        self.current -= 1\n        return self.current + 1\n\n\nclass WordIterator:\n    def __init__(self, words: list[str]) -> None:\n        self.words = words\n        self.index = 0\n\n    def __iter__(self) -> \"WordIterator\":\n        return self\n\n    def __next__(self) -> str:\n        if self.index >= len(self.words):\n            raise StopIteration()\n        word = self.words[self.index]\n        self.index += 1\n        return word\n\n\nclass Sentence:\n    def __init__(self, text: str) -> None:\n        self.words = text.split()\n\n    def __iter__(self) -> WordIterator:\n        return WordIterator(self.words)\n\n\nclass Faulty:\n    def __iter__(self) -> \"Faulty\":\n        return self\n\n    def __next__(self) -> int:\n        raise ValueError(\"broken\")\n\n\nfor n in Countdown(3):\n    print(n)\nelse:\n    print(\"lift off\")\nsentence = Sentence(\"the quick brown fox\")\nfor word in sentence:\n    if word == \"brown\":\n        break\n    print(word)\nprint([w.upper() for w in sentence])\nfor i, w in enumerate(Sentence(\"a b\")):\n    print(i, w)\nfor n, w in zip(Countdown(5), Sentence(\"x y z\")):\n    print(n, w)\nfor outer in Countdown(2):\n    for inner in Countdown(outer):\n        print(outer, inner)\ntry:\n    for value in Faulty():\n        print(value)\nexcept ValueError as error:\n    print(\"caught\", error)\nfor value in Faulty():\n    print(value)\n",
+    "items = [1, 2, 3]\nit = iter(items)\nprint(next(it), next(it))\nitems.append(4)\nprint(list(it), next(it, -1))\nchars = iter(\"h\u{e9}llo\")\nprint(next(chars), next(chars), [c for c in chars], type(chars).__name__, type(iter(\"ab\")).__name__)\nscores = {\"a\": 1, \"b\": 2}\nkeys = iter(scores)\nvalues = iter(scores.values())\npairs = iter(scores.items())\nprint(next(keys), next(values), next(pairs), list(pairs))\nprint(next(iter(b\"\\x05\")), next(iter({7})), next(iter((1, 2))), type(iter(scores.items())).__name__)\nempty: list[str] = []\nprint(next(iter(empty), None), next(iter(empty), \"nothing\"))\nfor n in iter([10, 20]):\n    print(n)\nagain = iter([1])\nprint(iter(again) is again)\ngrowing = {1: 1}\ntry:\n    for key in iter(growing):\n        growing[key + 1] = 0\nexcept RuntimeError as error:\n    print(\"error:\", error)\ntry:\n    next(iter(empty))\nexcept StopIteration as error:\n    print(\"stop:\", repr(error))\nnext(iter(\"\"))\n",
+    "class Resource:\n    def __init__(self, name: str, swallow: bool = False) -> None:\n        self.name = name\n        self.swallow = swallow\n\n    def __enter__(self) -> \"Resource\":\n        print(\"enter\", self.name)\n        return self\n\n    def __exit__(self, kind, error, trace) -> bool:\n        if error is None:\n            print(\"exit\", self.name, kind, error, trace is None)\n        else:\n            print(\"exit\", self.name, kind, repr(error), trace is None)\n        return self.swallow\n\n\nclass Pair:\n    def __enter__(self) -> tuple[int, str]:\n        return (1, \"one\")\n\n    def __exit__(self, kind, error, trace) -> None:\n        print(\"pair done\")\n\n\ndef early(n: int) -> int:\n    with Resource(\"early\"):\n        if n > 0:\n            return n * 10\n    return -1\n\n\nwith Resource(\"plain\") as resource:\n    print(\"body\", resource.name)\nprint(early(2), early(0))\nfor i in range(3):\n    with Resource(f\"loop{i}\"):\n        if i == 0:\n            continue\n        if i == 2:\n            break\n        print(\"loop body\", i)\nwith Resource(\"quiet\", True):\n    raise KeyError(\"swallowed\")\nprint(\"after quiet\")\nwith Resource(\"outer\"), Resource(\"inner\", True) as inner:\n    print(\"both\", inner.name)\n    raise ValueError(\"inner swallows\")\nwith Pair() as (number, word):\n    print(number, word)\ntry:\n    with Resource(\"loud\"):\n        raise IndexError(\"passes\")\nexcept IndexError as error:\n    print(\"caught\", error)\n",
+    "class Failing:\n    def __enter__(self) -> None:\n        return None\n\n    def __exit__(self, kind, error, trace) -> None:\n        raise RuntimeError(\"exit failed\")\n\n\nwith Failing():\n    raise ValueError(\"body failed\")\n",
+    "numbers = list(range(10))\ndel numbers[0]\ndel numbers[-1]\nprint(numbers)\ndel numbers[1:3]\nprint(numbers)\ndel numbers[::2]\nprint(numbers)\ndel numbers[10:20], numbers[0]\nprint(numbers)\nwords = [\"a\", \"b\", \"c\", \"d\"]\ndel words[::-1]\nprint(words)\npairs = [(1, \"one\"), (2, \"two\"), (3, \"three\")]\ndel pairs[1]\nprint(pairs)\nscores = {\"ann\": 3, \"bob\": 5}\ndel scores[\"ann\"]\nprint(scores)\nnested = {\"k\": [1, 2, 3]}\ndel nested[\"k\"][1]\nprint(nested)\ntry:\n    del numbers[100]\nexcept IndexError as error:\n    print(\"index:\", error)\ntry:\n    del scores[\"zed\"]\nexcept KeyError as error:\n    print(\"key:\", repr(error))\ntry:\n    del words[::0]\nexcept ValueError as error:\n    print(\"value:\", error)\ndel scores[\"bob\"], scores[\"bob\"]\n",
+    "letters = [\"a\", \"b\", \"c\", \"d\", \"e\"]\nletters[1:3] = [\"X\"]\nprint(letters)\nletters[:0] = [\"start\", \"again\"]\nprint(letters)\nletters[::2] = [\"1\", \"2\", \"3\"]\nprint(letters)\nletters[:] = []\nprint(letters)\nnumbers = [1, 2, 3]\nnumbers[1:] = numbers\nprint(numbers)\ngrid = [[0, 0], [1, 1]]\ngrid[0][:] = [5, 6]\nprint(grid)\npairs = [(1, \"a\"), (2, \"b\")]\npairs[1:] = [(3, \"c\"), (4, \"d\")]\nprint(pairs)\ntry:\n    numbers[::2] = [0]\nexcept ValueError as error:\n    print(error)\nnumbers[::-1] = [9, 8]\n",
 ];
 
 #[test]
@@ -143,4 +158,55 @@ fn reading_an_item_of_a_value_that_is_not_a_tuple_is_an_internal_error() {
     let error = llvm_ir(&module, Target::host(), Optimization::None, &project).unwrap_err();
     let text = format!("{error:?}");
     assert!(text.contains("is not a tuple"), "{text}");
+}
+
+#[test]
+fn counting_attributes_placeholders_and_descriptors_reach_the_ir() {
+    let (project, module) = compile(concat!(
+        "class P:\n",
+        "    def __init__(self, x: int) -> None:\n",
+        "        self.x = x\n",
+        "\n\n",
+        "def run() -> None:\n",
+        "    p = P(3)\n",
+        "    p.x = 7\n",
+        "    s = \"a\" + \"b\"\n",
+        "    t = (s, 1, (s, 2.5))\n",
+        "    u = (s, 1, (s, 2.5))\n",
+        "    q = P(4)\n",
+        "    pairs = [t, u]\n",
+        "    items = {\"k\"}\n",
+        "    table = {\"k\": 1}\n",
+        "    print(p.x, q.x, pairs, items, table)\n",
+        "\n\n",
+        "run()\n",
+    ));
+    let ir = llvm_ir(&module, Target::host(), Optimization::None, &project).unwrap();
+    for expected in [
+        "call void @typy_rt_increment(",
+        "call void @typy_rt_decrement(",
+        "call void @typy_rt_int_increment(",
+        "call void @typy_rt_int_decrement(",
+        // `p.x = 7` stores the tagged word of 7.
+        "store i64 15",
+        "@typy_rt_placeholder_list",
+        "@typy_rt_placeholder_set",
+        "@typy_rt_placeholder_dict",
+        // A `str`, an `int` and a nested tuple, then a `str` and a `float`.
+        "{ i32 3, i32 0, ptr null }, { i32, i32, ptr } { i32 0, i32 8, ptr null }, { i32, i32, ptr } { i32 5, i32 16, ptr @typy.tuple0 }",
+        "{ i32 3, i32 0, ptr null }, { i32, i32, ptr } { i32 1, i32 8, ptr null }",
+    ] {
+        assert!(ir.contains(expected), "{expected:?} missing from\n{ir}");
+    }
+    let defined = |name: &str| {
+        ir.lines()
+            .filter(|line| line.starts_with(&format!("{name} = ")))
+            .count()
+    };
+    // Two uses of one tuple type and two instances of one class share their statics.
+    assert_eq!(defined("@typy.tuple0"), 1, "{ir}");
+    assert_eq!(defined("@typy.tuple1"), 1, "{ir}");
+    assert_eq!(defined("@typy.class0"), 1, "{ir}");
+    assert!(!ir.contains("@typy.tuple0.1"), "{ir}");
+    assert!(!ir.contains("@typy.class0.1 "), "{ir}");
 }

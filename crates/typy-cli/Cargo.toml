@@ -24,6 +24,7 @@ typy-build.workspace = true
 typy-codegen.workspace = true
 typy-diagnostics.workspace = true
 typy-driver.workspace = true
+typy-source.workspace = true
 
 [dev-dependencies]
 tempfile.workspace = true

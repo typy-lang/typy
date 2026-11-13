@@ -23,7 +23,9 @@ fn a_static_musl_hello_world_is_smaller_than_100_kb() {
         .with_target(Target {
             triple: TargetTriple::X86_64LinuxMusl,
         });
-    let outcome = Pipeline::new(target.join("debug/typy")).run(&request);
+    let outcome = Pipeline::new(target.join("debug/typy"))
+        .run(&request)
+        .map(|success| success.outcome);
     let Ok(Outcome::Executable(artifact)) = outcome else {
         panic!("{outcome:?}; run `make runtime`");
     };

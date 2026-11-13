@@ -4,6 +4,7 @@ use typy_diagnostics::{Diagnostic, DiagnosticCode, RuleId, Span};
 use typy_source::syntax::{BinaryOperator, CompareOperator, UnaryOperator};
 
 use super::BodyChecker;
+use super::view_operator::is_set_view;
 use crate::typed::{TypedConstant, TypedExpr, TypedExprKind};
 use crate::types::Type;
 
@@ -36,9 +37,9 @@ impl BodyChecker<'_> {
         }
         let symbol = binary_symbol(operator);
         if matches!(operator, Op::BitOr | Op::BitAnd | Op::Sub | Op::BitXor)
-            && (matches!(l, Type::DictView(..)) || matches!(r, Type::DictView(..)))
+            && (is_set_view(&l) || is_set_view(&r))
         {
-            return self.planned_view_operation(span);
+            return self.view_operation(symbol, &l, &r, span);
         }
         if let (Op::Add, Type::Tuple(first), Type::Tuple(second)) = (operator, &l, &r) {
             return Type::Tuple(first.iter().chain(second).cloned().collect());
@@ -114,10 +115,11 @@ impl BodyChecker<'_> {
                     Diagnostic::new(
                         DiagnosticCode::error(201),
                         span,
-                        "formatting strings with `%` is planned for TyPy 0.3 (LIB-10)",
+                        "formatting with `%` a format that is not a string literal is planned \
+                         for TyPy 0.4 (LIB-11)",
                     )
-                    .with_rule(RuleId::LIB_10)
-                    .with_help("write an f-string, such as `f\"{count} items\"`"),
+                    .with_rule(RuleId::LIB_11)
+                    .with_help("write the format as a literal, or write an f-string"),
                 );
                 Error
             }
@@ -134,7 +136,10 @@ impl BodyChecker<'_> {
         let ty = operand.ty.clone();
         match operator {
             _ if ty == Type::Error => Type::Error,
-            UnaryOperator::Not => Type::Bool,
+            UnaryOperator::Not => {
+                self.check_truth(operand);
+                Type::Bool
+            }
             _ if ty == Type::Bool => self.bool_arithmetic(span),
             UnaryOperator::USub | UnaryOperator::UAdd if ty.is_numeric() => ty,
             UnaryOperator::Invert if ty == Type::Int => Type::Int,
@@ -177,22 +182,54 @@ impl BodyChecker<'_> {
                 | CompareOperator::IsNot
         );
         if compares && (matches!(l, Type::DictView(..)) || matches!(r, Type::DictView(..))) {
-            self.planned_view_operation(span);
+            let equality = matches!(operator, CompareOperator::Eq | CompareOperator::NotEq);
+            if !Self::view_comparison(&l, &r, equality) {
+                self.comparison_error(&l, &r, span);
+            }
             return;
         }
         match operator {
             CompareOperator::Is | CompareOperator::IsNot => {
-                // Two instances, or optional instances, are the same object or not (EXP-08).
+                // Two instances, or optional instances, are the same object or not. `True`,
+                // `False` and `None` are each the only object of its value, so `bool` and
+                // `bool | None` values compare by identity too (EXP-08).
                 let instance = |ty: &Type| match ty {
-                    Type::Optional(inner) => matches!(inner.as_ref(), Type::Instance(..)),
-                    other => matches!(other, Type::Instance(..) | Type::TypeObject(_)),
+                    Type::Optional(inner) => matches!(
+                        inner.as_ref(),
+                        Type::Instance(..)
+                            | Type::Exception(_)
+                            | Type::Iterator(_)
+                            | Type::TypeObject(_)
+                            | Type::Module(_)
+                            | Type::AnyModule
+                            | Type::TextFile
+                            | Type::Traceback
+                    ),
+                    other => matches!(
+                        other,
+                        Type::Instance(..)
+                            | Type::Exception(_)
+                            | Type::Iterator(_)
+                            | Type::Traceback
+                            | Type::Module(_)
+                            | Type::AnyModule
+                            | Type::TextFile
+                            | Type::TypeObject(_)
+                    ),
                 };
-                if l != Type::NoneType && r != Type::NoneType && !(instance(&l) && instance(&r)) {
+                let singleton =
+                    |ty: &Type| *ty == Type::Bool || *ty == Type::Optional(Box::new(Type::Bool));
+                let booleans = singleton(&l) && singleton(&r);
+                if l != Type::NoneType
+                    && r != Type::NoneType
+                    && !booleans
+                    && !(instance(&l) && instance(&r))
+                {
                     self.diagnostics.push(
                         Diagnostic::new(
                             DiagnosticCode::error(301),
                             span,
-                            format!("`is` compares identity, which is defined only against None here; these are {l} and {r}"),
+                            format!("`is` compares identity, which is defined only against None, between bools or between objects here; these are {l} and {r}"),
                         )
                         .with_rule(RuleId::EXP_08)
                         .with_help("use `==` to compare values"),
@@ -223,6 +260,8 @@ impl BodyChecker<'_> {
                 Type::DictView(view, key, value) if l.is_assignable_to(&view.item(key, value)) => {}
                 // A substring test: `in` on a `str` needs a `str` on its left.
                 Type::Str if l == Type::Str => {}
+                // `in` on a range tests an `int` without stepping (DAT-17).
+                Type::Range if l == Type::Int => {}
                 // `in` on `bytes` looks for a byte, an `int`, or for `bytes` within them.
                 Type::Bytes if matches!(l, Type::Int | Type::Bytes) => {}
                 // A tuple compares the value with each item for equality, so each item has to
@@ -262,19 +301,7 @@ impl BodyChecker<'_> {
         Type::Error
     }
 
-    /// Reports a comparison or a set operation of a dict view, planned for 0.3 (DAT-16).
-    fn planned_view_operation(&mut self, span: Span) -> Type {
-        self.diagnostics.push(
-            Diagnostic::new(
-                DiagnosticCode::error(201),
-                span,
-                "comparisons and set operations of dict views are planned for TyPy 0.3 (DAT-16)",
-            )
-            .with_rule(RuleId::DAT_16),
-        );
-        Type::Error
-    }
-
+    /// Reports arithmetic on `bool` values, which TyPy refuses (DAT-03).
     pub(super) fn bool_arithmetic(&mut self, span: Span) -> Type {
         self.diagnostics.push(
             Diagnostic::new(

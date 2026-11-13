@@ -37,7 +37,8 @@ enum Iterator {
         item: TyirType,
     },
     /// A dict or a view of one: the next entry, the number of entries when the loop began, and
-    /// how many entries it has given, which CPython's dict iterator checks at every step.
+    /// how many entries it has given, which CPython's dict iterator checks at every step. For
+    /// `reversed` the next entry counts down from the last (DAT-16).
     Dict {
         source: SlotId,
         position: SlotId,
@@ -46,6 +47,7 @@ enum Iterator {
         shows: typy_check::View,
         through_view: bool,
         ty: TyirType,
+        backwards: bool,
     },
     /// A `range`: the next value, the limit it stops at and the step, and whether the step
     /// rises when it is a constant.
@@ -68,6 +70,15 @@ enum Iterator {
         count: SlotId,
         inner: Box<Iterator>,
         ty: TyirType,
+    },
+    /// An iterator that `iter()` made: its slot, and the type of its items (CST-09).
+    Object { iterator: SlotId, item: TyirType },
+    /// An instance of an iterator class: the slot of what `__iter__` returned, and its
+    /// `__next__` (CST-08).
+    Protocol {
+        iterator: SlotId,
+        next: typy_check::FunctionId,
+        item: TyirType,
     },
     /// `zip`: the iterators, and the slot of `strict` when it is given.
     Zip {
@@ -98,6 +109,7 @@ impl FunctionLowerer<'_> {
         self.loops.push(LoopTargets {
             break_target: exit,
             continue_target: header,
+            cleanups: self.cleanups.len(),
         });
         self.statements(body);
         self.loops.pop();
@@ -184,9 +196,101 @@ impl FunctionLowerer<'_> {
         self.builder.switch_to(exit);
     }
 
+    /// Starts `source`, calls `between`, then calls `visit` with each value, as `each_value`
+    /// does, and returns what `between` gave. This is the order of a call that evaluates its
+    /// arguments before it iterates one, as `dict(source, name=value)` does: the source's
+    /// expressions first, then `between`, and a class's `__iter__` only after it (DAT-16).
+    pub(crate) fn each_value_after<T>(
+        &mut self,
+        source: &LoopSource,
+        span: Span,
+        between: impl FnOnce(&mut Self) -> T,
+        mut visit: impl FnMut(&mut Self, &T, Lowered),
+    ) -> T {
+        let (iterator, given) = if let LoopSource::Protocol {
+            iterable,
+            iter,
+            next,
+            iterator,
+            item,
+        } = source
+        {
+            let kept = self.kept(iterable, "iterable", span);
+            let given = between(self);
+            let iterable = self.load(kept, span);
+            let started = self.protocol_iterator(iterable, (*iter, *next), iterator, item, span);
+            (started, given)
+        } else {
+            let started = self.start_iterator(source, span);
+            (started, between(self))
+        };
+        let header = self.builder.create_block();
+        let exit = self.builder.create_block();
+        self.jump_to(header);
+        self.builder.switch_to(header);
+        let value = self.next_value(&iterator, exit, span);
+        visit(self, &given, value);
+        self.release(value, span);
+        self.jump_to(header);
+        self.builder.switch_to(exit);
+        given
+    }
+
+    /// Calls `__iter__` of a borrowed iterable and keeps what it returns, the iterator that
+    /// `__next__` steps (CST-08).
+    fn protocol_iterator(
+        &mut self,
+        iterable: Lowered,
+        (iter, next): (typy_check::FunctionId, typy_check::FunctionId),
+        iterator: &typy_check::Type,
+        item: &typy_check::Type,
+        span: Span,
+    ) -> Iterator {
+        let iterable = Self::borrowed(iterable.value, iterable.ty);
+        let ty = self.lowered_type(iterator);
+        let made = self.call_function(iter, vec![(0, iterable)], ty, span);
+        let slot = self.hidden_slot("iterator", ty);
+        self.store(slot, made, span);
+        Iterator::Protocol {
+            iterator: slot,
+            next,
+            item: self.lowered_type(item),
+        }
+    }
+
     /// Evaluates the source's expressions in order and keeps them in hidden slots.
     fn start_iterator(&mut self, source: &LoopSource, span: Span) -> Iterator {
         match source {
+            LoopSource::Items(sequence) if let typy_check::Type::Iterable(item) = &sequence.ty => {
+                let lowered = self.expression(sequence);
+                let made = self.iterable_iterator(lowered, item, span);
+                self.release(lowered, span);
+                let slot = self.hidden_slot("iterator", TyirType::ITERATOR);
+                self.store(slot, made, span);
+                Iterator::Object {
+                    iterator: slot,
+                    item: self.lowered_type(item),
+                }
+            }
+            LoopSource::Items(sequence) if let typy_check::Type::Iterator(item) = &sequence.ty => {
+                let iterator = self.kept(sequence, "iterator", span);
+                Iterator::Object {
+                    iterator,
+                    item: self.lowered_type(item),
+                }
+            }
+            LoopSource::Items(sequence) if sequence.ty == typy_check::Type::Range => {
+                self.start_range_value(sequence, false, span)
+            }
+            LoopSource::Items(sequence) if sequence.ty == typy_check::Type::TextFile => {
+                let made = self.iter_of(sequence, span);
+                let slot = self.hidden_slot("iterator", TyirType::ITERATOR);
+                self.store(slot, made, span);
+                Iterator::Object {
+                    iterator: slot,
+                    item: TyirType::STR,
+                }
+            }
             LoopSource::Items(sequence) => self.start_sequence(sequence, false, span),
             LoopSource::Range {
                 start,
@@ -194,7 +298,23 @@ impl FunctionLowerer<'_> {
                 step,
                 reversed,
             } => self.start_range([start, stop, step], *reversed, span),
+            LoopSource::Reversed(sequence) if sequence.ty == typy_check::Type::Range => {
+                self.start_range_value(sequence, true, span)
+            }
             LoopSource::Reversed(sequence) => self.start_sequence(sequence, true, span),
+            LoopSource::Protocol {
+                iterable,
+                iter,
+                next,
+                iterator,
+                item,
+            } => {
+                // CPython calls `__iter__` once, when the loop starts.
+                let lowered = self.expression(iterable);
+                let started = self.protocol_iterator(lowered, (*iter, *next), iterator, item, span);
+                self.release(lowered, span);
+                started
+            }
             LoopSource::Enumerate {
                 source: inner,
                 start,
@@ -234,7 +354,7 @@ impl FunctionLowerer<'_> {
     /// CPython's `reversed` reads the length once when it is called.
     fn start_sequence(&mut self, sequence: &TypedExpr, backwards: bool, span: Span) -> Iterator {
         if let typy_check::Type::Dict(_, _) | typy_check::Type::DictView(..) = &sequence.ty {
-            return self.start_dict(sequence, span);
+            return self.start_dict(sequence, backwards, span);
         }
         if let typy_check::Type::Set(item) = &sequence.ty {
             let item = self.lowered_type(item);
@@ -290,6 +410,35 @@ impl FunctionLowerer<'_> {
             let value = self.load(stride, span);
             self.call_runtime(RuntimeFunction::RangeCheckStep, vec![value.value], span);
         }
+        self.finish_range([counter, limit, stride], constant, reversed, span)
+    }
+
+    /// Reads a range value, keeps its start, stop and step as a range loop does, and steps it
+    /// forwards or, for `reversed`, backwards (DAT-17). Its step is never zero.
+    fn start_range_value(&mut self, range: &TypedExpr, reversed: bool, span: Span) -> Iterator {
+        let lowered = self.expression(range);
+        let slots =
+            ["counter", "limit", "stride"].map(|name| self.hidden_slot(name, TyirType::Int));
+        for (which, slot) in slots.into_iter().enumerate() {
+            let code = self.constant(Constant::Int(which.to_string()), span);
+            let bound =
+                self.call_runtime(RuntimeFunction::RangeBound, vec![lowered.value, code], span);
+            self.store(slot, bound, span);
+        }
+        self.release(lowered, span);
+        self.finish_range(slots, None, reversed, span)
+    }
+
+    /// Turns the start, stop and step in `slots` into the counter, limit and step a range loop
+    /// reads: unchanged forwards, or for `reversed` from the last value back to
+    /// `start - step`, as CPython's `range_reverse` does.
+    fn finish_range(
+        &mut self,
+        [counter, limit, stride]: [SlotId; 3],
+        constant: Option<bool>,
+        reversed: bool,
+        span: Span,
+    ) -> Iterator {
         if reversed {
             let (first, end, increment) = (
                 self.load(counter, span),
@@ -367,8 +516,8 @@ impl FunctionLowerer<'_> {
     }
 
     /// Keeps a dict or a view of one, the first entry to look at, the number of entries and
-    /// none visited.
-    fn start_dict(&mut self, source: &TypedExpr, span: Span) -> Iterator {
+    /// none visited. `reversed` starts at the last entry, as CPython's `dictreviter_new` does.
+    fn start_dict(&mut self, source: &TypedExpr, backwards: bool, span: Span) -> Iterator {
         let (shows, through_view, item) = match &source.ty {
             typy_check::Type::DictView(view, key, value) => (*view, true, view.item(key, value)),
             typy_check::Type::Dict(key, _) => (typy_check::View::Keys, false, key.as_ref().clone()),
@@ -378,13 +527,17 @@ impl FunctionLowerer<'_> {
         let source = self.kept(source, "dict", span);
         let zero = || Constant::Int("0".to_owned());
         let position = self.hidden_slot("position", TyirType::Int);
-        let start = Self::borrowed(self.constant(zero(), span), TyirType::Int);
+        let dict = self.iterated_dict(source, through_view, span);
+        let start = if backwards {
+            self.call_runtime(RuntimeFunction::DictLastEntry, vec![dict], span)
+        } else {
+            Self::borrowed(self.constant(zero(), span), TyirType::Int)
+        };
         self.store(position, start, span);
         let visited = self.hidden_slot("visited", TyirType::Int);
         let none = Self::borrowed(self.constant(zero(), span), TyirType::Int);
         self.store(visited, none, span);
         let length = self.hidden_slot("length", TyirType::Int);
-        let dict = self.iterated_dict(source, through_view, span);
         let count = self.call_runtime(RuntimeFunction::DictLength, vec![dict], span);
         self.store(length, count, span);
         Iterator::Dict {
@@ -395,6 +548,7 @@ impl FunctionLowerer<'_> {
             shows,
             through_view,
             ty,
+            backwards,
         }
     }
 
@@ -419,6 +573,7 @@ impl FunctionLowerer<'_> {
             shows,
             through_view,
             ty,
+            backwards,
         } = iterator
         else {
             unreachable!("a dict iterator")
@@ -426,12 +581,20 @@ impl FunctionLowerer<'_> {
         let dict = self.iterated_dict(*source, *through_view, span);
         let at = self.load(*position, span);
         let count = self.load(*length, span);
-        let seen = self.load(*visited, span);
-        let found = self.call_runtime(
-            RuntimeFunction::DictNext,
-            vec![dict, at.value, count.value, seen.value],
-            span,
-        );
+        let found = if *backwards {
+            self.call_runtime(
+                RuntimeFunction::DictPrevious,
+                vec![dict, at.value, count.value],
+                span,
+            )
+        } else {
+            let seen = self.load(*visited, span);
+            self.call_runtime(
+                RuntimeFunction::DictNext,
+                vec![dict, at.value, count.value, seen.value],
+                span,
+            )
+        };
         let zero = self.constant(Constant::Int("0".to_owned()), span);
         let more = self.int_compare(Comparison::GreaterEqual, found.value, zero, span);
         let fetch = self.builder.create_block();
@@ -466,7 +629,7 @@ impl FunctionLowerer<'_> {
                 self.make_tuple(*ty, vec![key, value], span)
             }
         };
-        let next = self.add_int(found, 1, span);
+        let next = self.add_int(found, if *backwards { -1 } else { 1 }, span);
         self.store(*position, next, span);
         let seen = self.load(*visited, span);
         let seen = self.add_int(seen, 1, span);
@@ -562,6 +725,31 @@ impl FunctionLowerer<'_> {
                 rising,
             } => self.next_in_range([*counter, *limit, *stride], *rising, exhausted, span),
             Iterator::Dict { .. } => self.next_dict_entry(iterator, exhausted, span),
+            Iterator::Protocol {
+                iterator,
+                next,
+                item,
+            } => {
+                let current = self.load(*iterator, span);
+                self.call_next(*next, current.value, *item, exhausted, span)
+            }
+            Iterator::Object { iterator, item } => {
+                let current = self.load(*iterator, span);
+                let keep_going = self.constant(Constant::Int("0".to_owned()), span);
+                let found = self.call_runtime(
+                    RuntimeFunction::IteratorAdvance,
+                    vec![current.value, keep_going],
+                    span,
+                );
+                let fetch = self.builder.create_block();
+                self.builder.terminate(Terminator::Branch {
+                    condition: found.value,
+                    then: fetch,
+                    otherwise: exhausted,
+                });
+                self.builder.switch_to(fetch);
+                self.current_item(current.value, *item, span)
+            }
             Iterator::Set {
                 set,
                 slot,
@@ -743,7 +931,7 @@ impl FunctionLowerer<'_> {
         self.call_runtime(RuntimeFunction::ZipUnequal, vec![index, longer], span);
     }
 
-    fn int_compare(
+    pub(crate) fn int_compare(
         &mut self,
         comparison: Comparison,
         left: ValueId,

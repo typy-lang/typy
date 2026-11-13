@@ -87,6 +87,27 @@ pub unsafe extern "C" fn typy_rt_list_pop(
 /// `list` points to a live list, `index` is an `int` word, and `item` is a live item of its kind.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn typy_rt_list_insert(list: *mut ListObject, index: i64, item: u64) {
+    // SAFETY: the caller's guarantee.
+    unsafe { insert(list, index, item, true) };
+}
+
+/// Inserts `item`, whose reference the list takes over from the caller (MEM-09).
+///
+/// # Safety
+///
+/// As for `typy_rt_list_insert`, and the caller owns a reference to `item`.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn typy_rt_list_insert_moved(list: *mut ListObject, index: i64, item: u64) {
+    // SAFETY: the caller's guarantee.
+    unsafe { insert(list, index, item, false) };
+}
+
+/// Inserts `item` before position `index`, with a reference of its own when `retain`.
+///
+/// # Safety
+///
+/// `list` points to a live list, `item` is a live item of its type and `index` an `int` word.
+unsafe fn insert(list: *mut ListObject, index: i64, item: u64, retain: bool) {
     // SAFETY: the caller passes a live list and item; `reserve_one` makes room.
     unsafe {
         let length = i64::try_from((*list).length).unwrap_or(i64::MAX);
@@ -105,7 +126,9 @@ pub unsafe extern "C" fn typy_rt_list_insert(list: *mut ListObject, index: i64, 
         let position = usize::try_from(position).unwrap_or(0);
         reserve_one(list);
         let item_type = (*list).item_type();
-        item_type.retain(item);
+        if retain {
+            item_type.retain(item);
+        }
         let words = (*list).words();
         core::ptr::copy(
             (*list).slot(position),

@@ -33,7 +33,7 @@ fn codes(failure: &Failure) -> Vec<String> {
 
 fn emit(main: &Utf8Path, stage: EmitStage) -> Emission {
     let request = BuildRequest::new(main).unwrap().with_emit(stage);
-    match pipeline().run(&request) {
+    match pipeline().run(&request).map(|success| success.outcome) {
         Ok(Outcome::Emitted(emission)) => emission,
         other => panic!("{other:?}"),
     }
@@ -51,7 +51,7 @@ const SOURCE: &str = "s = \"a\"\ns = s + \"b\"\nprint(s, 1 + 2)\n";
 #[test]
 fn a_correct_program_checks() {
     let (_guard, main) = program(SOURCE);
-    match pipeline().check(&main) {
+    match pipeline().check(&main).map(|success| success.outcome) {
         Ok(Outcome::Checked(Sources::Project(project))) => {
             assert_eq!(project.path(typy_diagnostics::FileId(0)), "app.py");
         }
@@ -120,7 +120,8 @@ fn a_stage_after_checking_needs_a_correct_program() {
 fn a_build_links_an_executable_that_runs() {
     let (_guard, main) = program(SOURCE);
     let request = BuildRequest::new(&main).unwrap();
-    let Ok(Outcome::Executable(artifact)) = pipeline().run(&request) else {
+    let Ok(Outcome::Executable(artifact)) = pipeline().run(&request).map(|success| success.outcome)
+    else {
         panic!("no executable; run `make runtime`");
     };
     assert_eq!(

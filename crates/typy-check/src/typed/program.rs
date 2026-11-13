@@ -13,8 +13,29 @@ pub struct TypedProgram {
     pub functions: Vec<TypedFunction>,
     /// Every class, indexed by `ClassId`.
     pub classes: Vec<TypedClass>,
+    /// Every module, each after the modules its module-level imports need (ADR-0015).
+    pub modules: Vec<TypedModule>,
+    /// Each function that runs a lazy import for one name, with the variable it binds; one
+    /// for a function or a class binds none (MOD-06).
+    pub lazy_imports: std::collections::BTreeMap<FunctionId, Option<SymbolId>>,
+    /// The built-in modules the program imports, such as `math`, whose module objects follow
+    /// those of `modules` (ADR-0018).
+    pub builtin_modules: Vec<String>,
     /// The module body of `__main__`.
     pub entry: FunctionId,
+    /// The warnings of checking the program, such as W0301 (DIA-08).
+    pub warnings: typy_diagnostics::Diagnostics,
+}
+
+/// A module of the program after checking.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct TypedModule {
+    /// The module's qualified name, `__main__` for the main file.
+    pub name: String,
+    /// The path of its file from the project root, which its text shows (OI-20).
+    pub path: String,
+    /// The function of its module-level code.
+    pub body: FunctionId,
 }
 
 impl TypedProgram {

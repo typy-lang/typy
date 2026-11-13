@@ -3,13 +3,42 @@
 use crate::constant::StringId;
 use crate::function::{FunctionId, TyirFunction};
 use crate::tuple_types::TupleTypes;
-use crate::types::TupleTypeId;
+use crate::types::{TupleTypeId, TyirType};
+
+/// Index of a global in its module.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct GlobalId(pub u32);
+
+/// A variable in static storage for the whole run: a module variable, or the flag that says
+/// whether one is bound (ADR-0015). It holds the zero value of its type until the entry
+/// function stores the first value, and a counted global owns the reference it holds.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct TyirGlobal {
+    /// The Python name, for the text form.
+    pub name: String,
+    /// The type of the values it holds.
+    pub ty: TyirType,
+}
+
+/// A module object: the module's qualified name and the path of its file from the project
+/// root, which its text shows (OI-20).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct TyirModuleObject {
+    /// The qualified name.
+    pub name: String,
+    /// The path from the project root.
+    pub path: String,
+}
 
 /// Every function of the program, the string pool, and the entry function.
 #[derive(Clone, Debug, PartialEq)]
 pub struct TyirModule {
     /// The functions, indexed by `FunctionId`.
     pub functions: Vec<TyirFunction>,
+    /// The globals, indexed by `GlobalId`.
+    pub globals: Vec<TyirGlobal>,
+    /// The module objects, indexed as `Constant::Module` names them.
+    pub modules: Vec<TyirModuleObject>,
     /// The string constants, indexed by `StringId`.
     pub strings: Vec<String>,
     /// The tuple types its values use.
@@ -32,6 +61,11 @@ pub struct TyirClass {
     pub fields: TupleTypeId,
     /// `__repr__`, which writes an instance inside a container, when the class has one.
     pub repr: Option<FunctionId>,
+    /// `__str__`, which `str` of an exception's argument calls, when the class has one.
+    pub str: Option<FunctionId>,
+    /// The base of an exception class, whose instances are exceptions; `None` for a class
+    /// whose base is `object` (ADR-0013).
+    pub exception_base: Option<crate::types::TypeObjectRef>,
 }
 
 impl TyirModule {

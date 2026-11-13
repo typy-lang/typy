@@ -155,8 +155,21 @@ impl Method {
             Self::ListIndex | Self::ListCount | Self::TupleIndex | Self::TupleCount => {
                 (vec![positional("value", item, true)], Type::Int)
             }
-            Self::ListClear | Self::ListReverse | Self::SetClear => (Vec::new(), Type::NoneType),
+            Self::ListClear
+            | Self::ListReverse
+            | Self::SetClear
+            | Self::TextFlush
+            | Self::TextClose => (Vec::new(), Type::NoneType),
+            Self::TextRead | Self::TextReadline => {
+                (vec![positional("size", Type::Int, false)], Type::Str)
+            }
+            Self::TextReadlines => (Vec::new(), Type::List(Box::new(Type::Str))),
+            Self::TextWritelines => (
+                vec![positional_as("lines", ParameterType::Strings, true)],
+                Type::NoneType,
+            ),
             Self::ListCopy | Self::SetCopy => (Vec::new(), receiver.clone()),
+            Self::TextWrite => (vec![positional("text", Type::Str, true)], Type::Int),
             Self::ListSort => (
                 vec![parameter(
                     "reverse",

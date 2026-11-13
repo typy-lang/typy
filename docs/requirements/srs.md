@@ -3,10 +3,10 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy software requirements specification |
-| Version | 1.29 |
+| Version | 1.43 |
 | Status | Approved |
 | Owner | typy-lang contributors |
-| Last updated | 2026-11-10 |
+| Last updated | 2026-11-12 |
 
 ## 1. Introduction
 
@@ -162,6 +162,8 @@ formatter applies; Ruff's formatter is the project's recommendation.
 | LEX-07 | f-strings, with conversions and format specifications, shall be accepted. | M | 0.2 | 2.4.3 |
 | LEX-08 | Imaginary literals shall be rejected. | M | 0.1 | 2.4.7 |
 | LEX-09 | A source file larger than 16 MiB shall be rejected with a diagnostic before it is parsed, so input size cannot exhaust the compiler's memory (NFR-09, NFR-14). | M | 0.1 | |
+| LEX-10 | A `\u` or `\U` escape of a surrogate code point, U+D800 to U+DFFF, in a `str` literal shall give that code point, as CPython keeps it. | S | 0.4 | 2.4.1.1 |
+| LEX-11 | Brackets nested more than 200 deep and blocks nested more than 99 deep shall be rejected with CPython's messages, and expressions and statements nested more than 25000 deep shall be rejected, so that no program nests past what the compiler's stack holds. | M | 0.3 | 2.1.8 |
 
 ### 3.4 Types and annotations (TYP)
 
@@ -181,6 +183,7 @@ formatter applies; Ruff's formatter is the project's recommendation.
 | TYP-12 | A read of a local variable shall be rejected unless the variable is assigned on every path that reaches the read, so `UnboundLocalError` cannot occur. | M | 0.1 | 4.2.2 |
 | TYP-13 | A local variable or parameter of type `T \| None` shall narrow to `T` where an `is None` or `is not None` test, or a truth test that holds, shows it is not `None`, and using it as `T` anywhere else shall be rejected. | M | 0.2 | |
 | TYP-14 | Annotations that join two or more types other than `None` with `\|`, such as `int \| str`, shall be accepted, with narrowing by `isinstance` (TYP-07). | M | 0.4 | 3.3.5 |
+| TYP-15 | The annotations `Iterator[T]` and `Iterable[T]`, imported from `collections.abc` or `typing`, shall be accepted for iterators and for the built-in iterables of items of type `T`; their use as values is planned for 0.4 (ADR-0014, ADR-0015). | S | 0.3 | |
 
 ### 3.5 Built-in types and values (DAT)
 
@@ -215,7 +218,7 @@ formatter applies; Ruff's formatter is the project's recommendation.
 | EXP-05 | Shifts and bitwise operators shall give Python's results for `int`, and a negative shift count shall raise `ValueError`. | M | 0.1 | 6.8 |
 | EXP-06 | Comparisons shall be accepted between values of the same type, and between `int` and `float`. Chained comparisons shall evaluate each operand once. | M | 0.1 | 6.10 |
 | EXP-07 | `in` and `not in` shall be accepted on `str`, `bytes`, `list`, `tuple`, `dict` and `set`. | M | 0.2 | 6.10.2 |
-| EXP-08 | `is` and `is not` shall be accepted only when one operand is `None` or both operands are class instances. | M | 0.1 | 6.10.3 |
+| EXP-08 | `is` and `is not` shall be accepted only when one operand is `None`, both operands are `bool` or `bool \| None`, or both operands are class instances. | M | 0.1 | 6.10.3 |
 | EXP-09 | `and` and `or` shall short-circuit and return one of their operands, and shall be accepted only when both operands have the same type. | M | 0.1 | 6.11 |
 | EXP-10 | A value shall be accepted in a truth test when its type is `bool`, `int`, `float`, `str`, `bytes`, a built-in container, `T \| None`, or a class that defines `__bool__` or `__len__`. Other values shall be rejected. | M | 0.1 | 6.11 |
 | EXP-11 | Conditional expressions `x if c else y` shall be accepted when both branches have the same type. | M | 0.1 | 6.13 |
@@ -255,6 +258,7 @@ formatter applies; Ruff's formatter is the project's recommendation.
 | CST-07 | A `match` on an enumeration-like union of classes shall report a warning when cases are missing. | S | 0.5 | 8.6 |
 | CST-08 | `for` shall iterate over any class with `__iter__` and `__next__`, and end when `__next__` raises `StopIteration` (OI-17). | M | 0.3 | 8.3 |
 | CST-09 | `iter` and `next`, with and without a default, shall be available for the built-in iterables. | S | 0.3 | 8.3 |
+| CST-10 | The parameters of `__exit__` after `self` may be left without annotations, and shall then have the types `type[BaseException] \| None`, `BaseException \| None` and `TracebackType \| None`; the traceback shall be one object of type `traceback`, written as CPython writes one, which holds no frames. | S | 0.3 | |
 
 ### 3.9 Functions (FUN)
 
@@ -284,6 +288,8 @@ formatter applies; Ruff's formatter is the project's recommendation.
 | CLS-10 | Every type, built in or a class, shall have a type object that names it and its base, and the chain of bases of every type shall end at `object`. | M | 0.2 | |
 | CLS-11 | Class variables, given a value in the class body, shall be accepted. | S | 0.4 | |
 | CLS-12 | `type(x)` shall give the type object of the value `x`, and a class name or the name of a built-in type shall be its type object as a value; a type object shall print as `<class 'name'>`, give its name as `__name__`, and compare with `is`, `is not`, `==` and `!=`. | M | 0.2 | |
+| CLS-13 | A class derived from an exception class shall be accepted with new methods and attributes and with its own `__init__`, `__str__` and `__repr__`; redefining another method of a base shall be rejected until CLS-04. | M | 0.3 | 8.8 |
+| CLS-14 | `super().__init__(...)` shall be accepted in the `__init__` of an exception class and shall set the exception's arguments; any other use of `super()` shall be rejected until 0.4. | M | 0.3 | |
 
 ### 3.11 Generics and protocols (GEN)
 
@@ -300,10 +306,19 @@ formatter applies; Ruff's formatter is the project's recommendation.
 | ID | Requirement | Priority | Release | LR |
 | --- | --- | --- | --- | --- |
 | EXC-01 | Raising and catching exceptions shall follow the Language Reference, including matching on base classes. | M | 0.3 | 4.3 |
-| EXC-02 | The built-in exception classes the runtime raises shall exist with their Python names: `ArithmeticError`, `AssertionError`, `IndexError`, `KeyError`, `OverflowError`, `RecursionError`, `RuntimeError`, `StopIteration`, `TypeError`, `UnicodeDecodeError`, `UnicodeEncodeError`, `ValueError`, `ZeroDivisionError` and their bases. | M | 0.3 | 4.3 |
+| EXC-02 | The built-in exception classes the runtime raises shall exist with their Python names: `ArithmeticError`, `AssertionError`, `EOFError`, `IndexError`, `KeyError`, `OverflowError`, `RecursionError`, `RuntimeError`, `StopIteration`, `SystemExit`, `TypeError`, `UnicodeDecodeError`, `UnicodeEncodeError`, `ValueError`, `ZeroDivisionError`, `OSError` with each of its subclasses, and their bases. | M | 0.3 | 4.3 |
 | EXC-03 | An exception that is not raised shall cost no more than a compare and branch at each call that may raise. | M | 0.3 | |
 | EXC-04 | Exception chaining with `from` and the implicit context shall be kept, and shown in the uncaught exception output. | S | 0.3 | 7.8 |
 | EXC-05 | An exception shall not cross a function exported to C (FFI-05); the program shall abort with the exception printed. | M | 0.5 | |
+| EXC-06 | A `return`, `break` or `continue` that leaves a `finally` block shall be rejected, as PEP 765 makes CPython 3.14 warn about it (ADR-0013). | M | 0.3 | 8.4 |
+| EXC-07 | A `raise` without an expression shall re-raise the exception being handled, and shall be rejected outside an `except` clause. | M | 0.3 | 7.8 |
+| EXC-08 | `str()`, `repr()`, `print()` and f-strings of an exception shall give CPython's text, computed from the arguments it was built with. | M | 0.3 | |
+| EXC-09 | An `except` clause shall name one exception class or a tuple of them, with or without `as`, or none for a bare `except`; any other expression shall be rejected. | M | 0.3 | 8.4 |
+| EXC-10 | `NotImplementedError` and `AttributeError` shall exist with their Python names and bases, for programs to raise. | M | 0.3 | |
+| EXC-11 | The `args` attribute of an exception shall give the tuple of its arguments. | S | 0.4 | |
+| EXC-12 | Calling `UnicodeDecodeError` or `UnicodeEncodeError`, or deriving a class from them, shall be rejected; catching them shall be accepted. | S | 0.3 | |
+| EXC-13 | The `code` attribute of `SystemExit` shall give the argument it was built with, or `None` without one. | S | 0.4 | |
+| EXC-14 | `OSError` and its subclasses built with two to five arguments shall give the subclass for the `errno`, and the attributes `errno`, `strerror` and `filename`, as CPython does. | S | 0.4 | |
 
 ### 3.13 Modules and imports (MOD)
 
@@ -317,7 +332,9 @@ formatter applies; Ruff's formatter is the project's recommendation.
 | MOD-06 | `lazy import` and `lazy from ... import` (PEP 810) shall be accepted at module level when the program's Python floor is 3.15 or later, and shall bind the name without initialising the module. | S | 0.3 | |
 | MOD-07 | A module-level `__lazy_modules__` list of string literals shall make the listed imports of that module lazy, as PEP 810 defines for Python 3.15, for every Python floor. | S | 0.3 | |
 | MOD-08 | An exception raised while a lazily imported module initialises shall be raised at the first use of the name, and a later use shall try the initialisation again, as PEP 810 defines. | S | 0.3 | |
-| MOD-09 | `sys.set_lazy_imports`, `sys.set_lazy_imports_filter` and `sys.lazy_modules` shall be rejected, because they change import behaviour from outside the importing module. | S | 0.3 | |
+| MOD-09 | `sys.set_lazy_imports`, `sys.set_lazy_imports_filter`, `sys.get_lazy_imports`, `sys.get_lazy_imports_filter` and `sys.lazy_modules` shall be rejected, because they change or depend on import behaviour set from outside the importing module. | S | 0.3 | |
+| MOD-10 | An imported module shall be an object of type `module` whose attributes are its module-level names: `m.x` shall read and `m.x = v` assign them, the object may be bound to other names and compared with `is`, and its text shall name its path from the project root (OI-20, ADR-0015). | M | 0.3 | 5.3 |
+| MOD-11 | A name a module binds by a lazy import shall be usable from another module, a module variable shall be assignable as `m.x = v` through a lazily imported module `m`, and a name shall be bindable by more than one lazy import of the module. | S | 0.4 | |
 
 ### 3.14 Built-in functions and standard library (LIB)
 
@@ -327,12 +344,16 @@ formatter applies; Ruff's formatter is the project's recommendation.
 | LIB-02 | `list`, `dict`, `set`, `tuple`, `sorted`, `reversed`, `enumerate`, `zip`, `sum`, `any`, `all` and `round` shall be available. | M | 0.2 |
 | LIB-03 | The methods of `str`, `bytes`, `list`, `dict` and `set` listed in the design shall be available with Python's results. | M | 0.2 |
 | LIB-04 | `sys.argv`, `sys.exit`, `sys.stdout`, `sys.stderr`, the `file` argument of `print`, `input` and `open` for text files shall be available. | M | 0.3 |
-| LIB-05 | The `math` module shall be available. | M | 0.3 |
+| LIB-05 | The `math` module shall be available with its constants and its functions of numbers, with CPython's results and errors; a name the module gained after the program's Python floor shall be rejected. | M | 0.3 |
 | LIB-06 | The `dataclasses` names in CLS-05 and the `typing` names in TYP and GEN shall be available. | M | 0.4 |
 | LIB-07 | `os.environ`, `os.path`, `time` and `random` shall be available. | S | 1.0 |
 | LIB-08 | Importing a standard library module that TyPy does not provide shall be rejected with the list of modules it provides. | M | 0.3 |
 | LIB-09 | Each standard library module TyPy provides shall be TyPy's own implementation, with the names and results the Python library documentation defines. | M | 0.1 |
-| LIB-10 | `str % values`, printf-style formatting with a value, a tuple of values or a dict of named values, shall be accepted with Python's results. | S | 0.3 |
+| LIB-10 | `str % values`, printf-style formatting of a string literal with a value, a tuple of values or a dict of named values, shall be accepted with Python's results, and a format that does not fit its values shall be rejected with CPython's message. | S | 0.3 |
+| LIB-11 | `format % values` shall be accepted with a format that is not a string literal, and with a `tuple[T, ...]` of values. | S | 0.4 |
+| LIB-12 | `math.fsum`, `math.prod`, `math.sumprod`, `math.dist`, `math.gamma` and `math.lgamma` shall be available. | S | 0.4 |
+| LIB-13 | `sys.maxsize`, `sys.byteorder`, `sys.platform`, `sys.version`, `sys.version_info`, `sys.hexversion`, `sys.maxunicode`, `sys.getrecursionlimit`, `sys.setrecursionlimit` and `sys.stdin` shall be available. | S | 0.4 |
+| LIB-14 | `open` shall accept binary modes, `+` modes, a mode that is not a literal, encodings other than UTF-8 and the arguments `buffering`, `errors`, `newline`, `closefd` and `opener`; a text file shall have `seek`, `tell`, `truncate`, `fileno`, `isatty`, `readable`, `writable` and `seekable`, and the attributes `name`, `mode` and `closed`; closing `sys.stdout` or `sys.stderr` shall close it. | S | 0.4 |
 
 ### 3.15 Memory management (MEM)
 
@@ -375,6 +396,7 @@ direct calls and links the library when the program is built.
 | DIA-05 | `--error-format=json` shall write the same diagnostics as JSON, one object per line. | S | 0.3 |
 | DIA-06 | A code shall never be reused, and a retired code shall stay reserved. | M | 0.1 |
 | DIA-07 | Warnings shall not fail a build unless `--deny-warnings` is given. | M | 0.3 |
+| DIA-08 | Where CPython 3.12 to 3.15 give a `SyntaxWarning` while compiling a program TyPy accepts, TyPy shall give a warning: for an invalid escape sequence and for an assertion that is always true. | S | 0.3 |
 
 Code ranges follow the pack: `E01xx` lexical, `E02xx` declarations, `E03xx`
 expressions and statements, `E04xx` types, `E05xx` exceptions and control
@@ -457,11 +479,17 @@ TyPy rejects them (STD-04):
 | Multiple inheritance | |
 | `__del__` | |
 | A language server | |
+| `enumerate`, `zip` and `reversed` objects held as values | |
+| `from module import *` | |
 
 ## 7. Open issues
 
-There are no open issues. A new question gets the next unused issue number,
-after the last of the resolved issues below.
+A new question gets the next unused issue number, after the last of the
+resolved issues below.
+
+| ID | Question | Raised |
+| --- | --- | --- |
+| OI-23 | Which ABI lets TyPy modules link dynamically: the layouts of objects, the exception state, the identity of type objects across shared libraries, and one runtime shared by every library (ADR-0016)? It is settled after 1.0, once those layouts are fixed. | 2026-11-11 |
 
 ## 8. Resolved issues
 
@@ -486,6 +514,10 @@ after the last of the resolved issues below.
 | OI-17 | How does a 0.2 program end a `for` over a class with `__iter__` and `__next__`, when `raise` arrives in 0.3? | It does not: CST-03 covers the built-in iterables in 0.2, and CST-08 adds iterator classes in 0.3 together with `raise`, so `StopIteration` works as in CPython. | 2026-11-08 |
 | OI-18 | How do items of type `float` compare inside containers? CPython compares container items by identity before value, so with `x = float("nan")`, `(x,) == (x,)`, `[x] == [x]` and `x in [x]` are `True`, while TyPy holds floats without an object. | By value, as `x == x` does: a NaN item is never equal to another, in a tuple, a list, `in`, `count`, `index`, a `dict` key or a `set`. This gives CPython's result for NaN values made separately, and differs from it only when one NaN object is placed in a container more than once, which the user documentation names as a known difference. | 2026-11-09 |
 | OI-19 | In which order does a set display of constant items iterate, when the oracle versions build it differently? A display of three to thirty items that are all constants compiles to a frozenset of the items, which is merged into a new set, and the merge can place the items in other slots than adding them one by one does. CPython 3.12 and 3.13 also rebuild the frozenset once more from its own order when they merge the code's constants, and CPython 3.14 iterates a `for` loop over such a display in the order of the items added one by one. | The order of the newest oracle, CPython 3.15, as OI-14 decides for messages: such a display, and a loop over it, holds the items added in order to a set, then merged into a new set. A constant item is a literal, `None`, `True`, `False`, a number with a sign, or a tuple of constant items; CPython also folds arithmetic on constants, which TyPy computes when the program runs, so a display such as `{1 + 2, 4, 5}` may iterate in another order than CPython's. A conformance test of such a display is invalid unless every oracle prints it alike (STD-03, DAT-10, ADR-0010). | 2026-11-09 |
+| OI-20 | What does the text of a module object show, when CPython's `<module 'm' from '/abs/path/m.py'>` names the absolute path of the file, which would make the build depend on its directory (NFR-06)? | The path from the project root, `<module 'a.b' from 'a/b.py'>`. It is the one known difference from CPython's text, named in the user documentation (MOD-10, ADR-0015). | 2026-11-11 |
+| OI-21 | Which imports form the cycle MOD-05 rejects, when an import inside a function runs only once the function is called? | The imports at module level. An import inside a function adds no edge and may find a module still initialising, as in CPython, whose names not yet bound raise CPython's `NameError`, `AttributeError` or `ImportError` (ADR-0015). | 2026-11-11 |
+| OI-22 | How is a module checked whose function imports a module that imports it at module level, when each module is checked after the modules it imports? | Such an import is E0426, planned for 0.4: TyPy checks the modules in the order their imports give, an import inside a function counting when it closes no cycle, so the importing function's module comes first and cannot see the other's names yet (ADR-0015). | 2026-11-11 |
+| OI-24 | What is `sys.argv[0]`, when CPython gives the path of the script it runs and a TyPy program has no script? | The path of the executable as the operating system passes it to `main`, which is what a C program receives and what a shell user typed. The other items are the arguments, decoded as CPython decodes them. A conformance test does not print `sys.argv[0]`, because the oracle's differs (LIB-04, STD-03). | 2026-11-12 |
 
 ## Appendix A. Disposition of the specification pack
 

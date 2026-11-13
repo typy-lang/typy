@@ -4,6 +4,9 @@
 use camino::Utf8PathBuf;
 use clap::{Args, Parser, Subcommand};
 use typy_build::{BuildMode, EmitStage};
+use typy_source::{PythonFloor, SettingOverrides};
+
+use crate::output::ErrorFormat;
 
 /// Compiles typed Python programs ahead of time to native executables.
 #[derive(Debug, Parser)]
@@ -11,6 +14,18 @@ use typy_build::{BuildMode, EmitStage};
 pub(crate) struct Arguments {
     #[command(subcommand)]
     pub(crate) command: Command,
+    /// How to write diagnostics: text, or one JSON object per line.
+    #[arg(
+        long,
+        global = true,
+        value_enum,
+        default_value_t,
+        value_name = "FORMAT"
+    )]
+    pub(crate) error_format: ErrorFormat,
+    /// Fail with status 1 when there are warnings, before any code is generated.
+    #[arg(long, global = true)]
+    pub(crate) deny_warnings: bool,
 }
 
 /// The commands of 0.1.
@@ -20,6 +35,8 @@ pub(crate) enum Command {
     Check {
         /// The main file of the program.
         file: Utf8PathBuf,
+        #[command(flatten)]
+        settings: Settings,
     },
     /// Build an executable, or write the output of one compiler stage.
     Build {
@@ -34,6 +51,13 @@ pub(crate) enum Command {
         output: Option<Utf8PathBuf>,
         #[command(flatten)]
         mode: Mode,
+        #[command(flatten)]
+        settings: Settings,
+    },
+    /// Explain a diagnostic code, with a program that causes it and the corrected program.
+    Explain {
+        /// The code, such as E0402.
+        code: String,
     },
     /// Build the program and run it, passing the arguments after `--`.
     Run {
@@ -41,6 +65,8 @@ pub(crate) enum Command {
         file: Utf8PathBuf,
         #[command(flatten)]
         mode: Mode,
+        #[command(flatten)]
+        settings: Settings,
         /// The program's arguments.
         #[arg(last = true)]
         arguments: Vec<String>,
@@ -69,6 +95,34 @@ impl Mode {
     }
 }
 
+/// The flags that override a setting of `typy.toml` (CLI-07).
+#[derive(Clone, Copy, Debug, Args)]
+pub(crate) struct Settings {
+    /// The oldest CPython version the program supports, from 3.12 to 3.15; overrides
+    /// `python-floor` in typy.toml.
+    #[arg(long, value_name = "VERSION", value_parser = parse_floor)]
+    python_floor: Option<PythonFloor>,
+}
+
+impl Settings {
+    /// Returns the settings the flags give.
+    pub(crate) const fn overrides(self) -> SettingOverrides {
+        SettingOverrides {
+            python_floor: self.python_floor,
+        }
+    }
+}
+
+fn parse_floor(text: &str) -> Result<PythonFloor, String> {
+    PythonFloor::parse(text).ok_or_else(|| {
+        let floors: Vec<&str> = PythonFloor::ALL
+            .iter()
+            .map(|floor| floor.as_str())
+            .collect();
+        format!("expected one of {}", floors.join(", "))
+    })
+}
+
 fn parse_stage(text: &str) -> Result<EmitStage, String> {
     EmitStage::parse(text).ok_or_else(|| {
         let names: Vec<&str> = EmitStage::ALL.iter().map(|stage| stage.name()).collect();
@@ -79,6 +133,7 @@ fn parse_stage(text: &str) -> Result<EmitStage, String> {
 #[cfg(test)]
 mod tests {
     use super::{Arguments, Command};
+    use crate::output::ErrorFormat;
     use clap::Parser as _;
     use typy_build::{BuildMode, EmitStage};
 
@@ -94,6 +149,7 @@ mod tests {
             emit,
             output,
             mode,
+            ..
         }) = parse(&[
             "build",
             "app.py",
@@ -131,11 +187,52 @@ mod tests {
             &["build"][..],
             &["build", "app.py", "--emit=exe"],
             &["build", "app.py", "--release", "--release-small"],
+            &["check", "app.py", "--python-floor", "3.11"],
             &["frobnicate"],
         ] {
             let error = parse(line).unwrap_err();
             assert_eq!(error.exit_code(), 2, "{line:?}");
         }
+    }
+
+    #[test]
+    fn every_command_takes_a_python_floor() {
+        for line in [
+            &["check", "app.py", "--python-floor", "3.15"][..],
+            &["build", "app.py", "--python-floor=3.15"],
+            &["run", "app.py", "--python-floor", "3.15", "--", "x"],
+        ] {
+            let settings = match parse(line).unwrap() {
+                Command::Check { settings, .. }
+                | Command::Build { settings, .. }
+                | Command::Run { settings, .. } => settings,
+                Command::Explain { .. } => panic!("explain takes no settings"),
+            };
+            assert_eq!(
+                settings.overrides().python_floor,
+                Some(typy_source::PythonFloor::V3_15)
+            );
+        }
+    }
+
+    #[test]
+    fn the_error_format_is_text_unless_json_is_asked_for() {
+        let format = |line: &[&str]| {
+            Arguments::try_parse_from(std::iter::once("typy").chain(line.iter().copied()))
+                .map(|arguments| arguments.error_format)
+        };
+        assert_eq!(format(&["check", "a.py"]).unwrap(), ErrorFormat::Text);
+        assert_eq!(
+            format(&["check", "a.py", "--error-format=json"]).unwrap(),
+            ErrorFormat::Json
+        );
+        assert_eq!(
+            format(&["--error-format", "json", "run", "a.py"]).unwrap(),
+            ErrorFormat::Json
+        );
+        assert!(format(&["check", "a.py", "--error-format=xml"]).is_err());
+        let deny = Arguments::try_parse_from(["typy", "build", "a.py", "--deny-warnings"]);
+        assert!(deny.unwrap().deny_warnings);
     }
 
     #[test]

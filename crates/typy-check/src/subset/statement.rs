@@ -1,6 +1,6 @@
 //! Checks statements against the feature table.
 
-use typy_diagnostics::RuleId;
+use typy_diagnostics::{Diagnostic, DiagnosticCode, RuleId};
 use typy_source::syntax::{Expr, ParameterKind, Stmt};
 
 use super::feature::{Feature, feature, planned};
@@ -71,7 +71,14 @@ impl Walker {
                     self.annotation(returns);
                 }
                 let outer_loops = std::mem::take(&mut self.loop_depth);
+                let names = parameters
+                    .iter()
+                    .map(|parameter| parameter.name.name.as_str());
+                let outer_scope = self
+                    .scope
+                    .replace(super::global_scope::GlobalScope::of_parameters(names));
                 self.statements(body, Place::Function);
+                self.scope = outer_scope;
                 self.loop_depth = outer_loops;
             }
             Stmt::ClassDef {
@@ -101,6 +108,49 @@ impl Walker {
                     self.expression(value);
                 }
             }
+            Stmt::With { items, body, .. } => {
+                for item in items {
+                    self.expression(&item.context);
+                    if let Some(target) = &item.target {
+                        self.name_target(target);
+                    }
+                }
+                self.block(body, place);
+            }
+            Stmt::Delete { targets, .. } => {
+                for target in targets {
+                    self.expression(target);
+                }
+            }
+            Stmt::Assert { test, message, .. } => {
+                // CPython warns, since a tuple with items is always true (DIA-08).
+                if let Expr::Tuple { elements, span } = test
+                    && !elements.is_empty()
+                {
+                    self.diagnostics.push(
+                        Diagnostic::new(
+                            DiagnosticCode::warning(301),
+                            *span,
+                            "this assertion is always true, since a tuple with items is true",
+                        )
+                        .with_rule(RuleId::DIA_08)
+                        .with_help(
+                            "remove the parentheses to give the test and its message: \
+                             `assert test, message`",
+                        ),
+                    );
+                }
+                for value in std::iter::once(test).chain(message) {
+                    self.expression(value);
+                }
+            }
+            Stmt::Raise {
+                exception, cause, ..
+            } => {
+                for value in exception.iter().chain(cause) {
+                    self.expression(value);
+                }
+            }
             Stmt::Assign { targets, value, .. } => {
                 for target in targets {
                     self.name_target(target);
@@ -117,6 +167,9 @@ impl Walker {
                 value,
                 ..
             } => {
+                if let Expr::Name { id, span } = target {
+                    self.annotated_name(id, *span);
+                }
                 self.name_target(target);
                 self.annotation(annotation);
                 if let Some(value) = value {
@@ -150,6 +203,16 @@ impl Walker {
                 self.block(body, place);
                 self.block(orelse, place);
             }
+            Stmt::Try { handlers, .. } => {
+                for class in handlers.iter().filter_map(|handler| handler.class.as_ref()) {
+                    self.expression(class);
+                }
+                self.try_depth += 1;
+                for block in statement.try_blocks() {
+                    self.block(block, place);
+                }
+                self.try_depth -= 1;
+            }
             Stmt::Import {
                 is_lazy: true,
                 span,
@@ -159,11 +222,16 @@ impl Walker {
                 is_lazy: true,
                 span,
                 ..
-            } => {
-                self.report(*span, planned("lazy imports", "0.3", RuleId::MOD_06));
-            }
-            Stmt::Import { span, .. } | Stmt::ImportFrom { span, .. } => {
-                self.report(*span, planned("imports", "0.3", RuleId::SMT_07));
+            } => self.lazy_import(statement, *span, place),
+            Stmt::ImportFrom { names, span, .. }
+                if names.iter().any(|alias| alias.name.name == "*") =>
+            {
+                self.report(
+                    *span,
+                    Feature::AfterOne {
+                        what: "imports of every name with `from module import *`",
+                    },
+                );
             }
             Stmt::Expr { value, .. } => self.expression(value),
             Stmt::Break { span } if self.loop_depth == 0 => {
@@ -172,14 +240,20 @@ impl Walker {
             Stmt::Continue { span } if self.loop_depth == 0 => {
                 self.syntax_error(*span, "`continue` outside a loop");
             }
-            Stmt::Pass { .. } | Stmt::Break { .. } | Stmt::Continue { .. } => {}
+            Stmt::Global { names, .. } => self.global_statement(names),
+            // The checker resolves each import against the modules of the program.
+            Stmt::Import { .. }
+            | Stmt::ImportFrom { .. }
+            | Stmt::Pass { .. }
+            | Stmt::Break { .. }
+            | Stmt::Continue { .. } => {}
             Stmt::Other { kind, span } => self.report(*span, feature(*kind)),
         }
     }
 
     pub(super) fn name_target(&mut self, target: &Expr) {
         match target {
-            Expr::Name { .. } => {}
+            Expr::Name { id, .. } => self.assigned_name(id),
             // An item of a list; the checker decides what may be indexed (DAT-07).
             Expr::Subscript { value, index, .. } => {
                 self.expression(value);

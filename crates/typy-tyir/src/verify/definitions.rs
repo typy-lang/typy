@@ -3,7 +3,7 @@
 use std::collections::BTreeMap;
 
 use super::VerifyError;
-use super::dominance::dominators;
+use super::dominance::dominance;
 use crate::block::BlockId;
 use crate::function::TyirFunction;
 use crate::operation::Operation;
@@ -54,7 +54,7 @@ pub(super) fn check(function: &TyirFunction) -> Result<(), VerifyError> {
             }
         }
     }
-    let dominators = dominators(function);
+    let dominance = dominance(function);
     for block in &function.blocks {
         let uses = block
             .instructions
@@ -82,7 +82,7 @@ pub(super) fn check(function: &TyirFunction) -> Result<(), VerifyError> {
             let dominates = if definition.block == block.id {
                 definition.position < position
             } else {
-                dominators[block.id.0 as usize].contains(&definition.block)
+                dominance.dominates(definition.block, block.id)
             };
             if !dominates {
                 return Err(error(
@@ -98,8 +98,12 @@ pub(super) fn check(function: &TyirFunction) -> Result<(), VerifyError> {
 /// Returns the values an operation reads.
 pub(super) fn operands(operation: &Operation) -> Vec<ValueId> {
     match operation {
-        Operation::Constant(_) | Operation::Load(_) | Operation::NewInstance { .. } => Vec::new(),
+        Operation::Constant(_)
+        | Operation::Load(_)
+        | Operation::LoadGlobal(_)
+        | Operation::NewInstance { .. } => Vec::new(),
         Operation::Store { value, .. }
+        | Operation::StoreGlobal { value, .. }
         | Operation::IntUnary { operand: value, .. }
         | Operation::FloatNegate(value)
         | Operation::BoolNot(value)

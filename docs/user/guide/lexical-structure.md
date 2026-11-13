@@ -2,7 +2,7 @@
 
 TyPy reads source as the Python Language Reference defines it.
 
-## What TyPy 0.2 accepts
+## What TyPy accepts
 
 | Item | Rule |
 | --- | --- |
@@ -36,3 +36,21 @@ print(f"{big = }", f"{3.14159:{8}.{2}f}|", "con" "cat")
 ```python
 z = 2j
 ```
+
+An escape of a surrogate code point, `\ud800` to `\udfff` or
+`\U0000d800` to `\U0000dfff`, in a `str` literal is E0201: TyPy 0.4
+keeps the code point, as CPython does (LEX-10). A string that holds a
+surrogate can still be made by decoding, as
+`b"\xff".decode("utf-8", "surrogateescape")` gives `'\udcff'`.
+
+<!-- typy-expect: rejected E0201 at 1:12 -->
+```python
+escaped = "\udcff"
+```
+
+Nesting has the limits CPython has, so a program CPython refuses is
+refused with E0103 and the same message: brackets nested more than 200
+deep are "too many nested parentheses", and blocks nested more than 99
+deep are "too many levels of indentation". Expressions and statements
+nested more than 25000 deep, past any program CPython compiles, are E0103
+as well (LEX-11).

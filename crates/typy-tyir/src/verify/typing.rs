@@ -68,6 +68,15 @@ impl Checker<'_> {
             .ok_or_else(|| self.error(format!("v{} has no type", value.0)))
     }
 
+    /// Returns the type of a global, or an error when the module has no such global.
+    fn global(&self, global: crate::module::GlobalId) -> Result<TyirType, VerifyError> {
+        self.module
+            .globals
+            .get(global.0 as usize)
+            .map(|global| global.ty)
+            .ok_or_else(|| self.error(format!("global g{} does not exist", global.0)))
+    }
+
     fn expect(&self, value: ValueId, expected: TyirType, what: &str) -> Result<(), VerifyError> {
         let actual = self.ty(value)?;
         if actual == expected {
@@ -150,6 +159,12 @@ impl Checker<'_> {
                     .get(slot.0 as usize)
                     .ok_or_else(|| self.error(format!("slot s{} does not exist", slot.0)))?;
                 self.expect(*value, slot.ty, "the stored value")?;
+                None
+            }
+            Operation::LoadGlobal(global) => Some(self.global(*global)?),
+            Operation::StoreGlobal { global, value } => {
+                let ty = self.global(*global)?;
+                self.expect(*value, ty, "the stored value")?;
                 None
             }
             Operation::IntBinary { left, right, .. } => {
@@ -239,13 +254,18 @@ impl Checker<'_> {
                 }
                 Some(TyirType::Object(TypeId::class(*class)))
             }
-            Operation::Field { object, index } => Some(self.field(*object, *index)?),
+            Operation::Field {
+                object,
+                class,
+                index,
+            } => Some(self.field(*object, *class, *index)?),
             Operation::SetField {
                 object,
+                class,
                 index,
                 value,
             } => {
-                let ty = self.field(*object, *index)?;
+                let ty = self.field(*object, *class, *index)?;
                 self.expect(*value, ty, "the attribute's value")?;
                 None
             }
@@ -278,15 +298,23 @@ impl Checker<'_> {
     }
 
     /// Returns the type of an attribute of an instance of a class of the module.
-    fn field(&self, object: ValueId, index: u32) -> Result<TyirType, VerifyError> {
+    fn field(
+        &self,
+        object: ValueId,
+        class: Option<u32>,
+        index: u32,
+    ) -> Result<TyirType, VerifyError> {
         let ty = self.ty(object)?;
-        let TyirType::Object(id) = ty else {
-            return Err(self.error(format!("v{} of type {ty} is not an instance", object.0)));
+        let not_instance = || self.error(format!("v{} of type {ty} is not an instance", object.0));
+        let class = match (ty, class) {
+            (TyirType::EXCEPTION, Some(class)) => self
+                .module
+                .classes
+                .get(class as usize)
+                .ok_or_else(not_instance)?,
+            (TyirType::Object(id), None) => self.module.class(id).ok_or_else(not_instance)?,
+            _ => return Err(not_instance()),
         };
-        let class = self
-            .module
-            .class(id)
-            .ok_or_else(|| self.error(format!("v{} of type {ty} is not an instance", object.0)))?;
         self.module
             .tuple_types
             .items(class.fields)

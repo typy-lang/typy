@@ -21,6 +21,7 @@ pub(crate) fn assigned_symbols(body: &[TypedStmt]) -> BTreeSet<SymbolId> {
                 }
             }
             AssignTarget::Item { .. }
+            | AssignTarget::Slice { .. }
             | AssignTarget::Entry { .. }
             | AssignTarget::Attribute { .. } => {}
         }
@@ -34,6 +35,10 @@ pub(crate) fn assigned_symbols(body: &[TypedStmt]) -> BTreeSet<SymbolId> {
                     }
                 }
                 TypedStmt::AugAssign { target: each, .. } => target(each, found),
+                TypedStmt::Import { bindings, .. } => {
+                    found.extend(bindings.iter().map(typy_check::ImportBinding::target));
+                }
+                TypedStmt::LazyImport { targets, .. } => found.extend(targets.iter().copied()),
                 TypedStmt::If { body, orelse, .. } | TypedStmt::While { body, orelse, .. } => {
                     statements(body, found);
                     statements(orelse, found);
@@ -58,8 +63,34 @@ pub(crate) fn assigned_symbols(body: &[TypedStmt]) -> BTreeSet<SymbolId> {
                     statements(body, found);
                     statements(orelse, found);
                 }
+                TypedStmt::With {
+                    target: each, body, ..
+                } => {
+                    if let Some(each) = each {
+                        target(each, found);
+                    }
+                    statements(body, found);
+                }
+                TypedStmt::Try {
+                    body,
+                    handlers,
+                    orelse,
+                    finalbody,
+                    ..
+                } => {
+                    statements(body, found);
+                    for handler in handlers {
+                        found.extend(handler.name);
+                        statements(&handler.body, found);
+                    }
+                    statements(orelse, found);
+                    statements(finalbody, found);
+                }
                 TypedStmt::Expr { .. }
+                | TypedStmt::Delete { .. }
+                | TypedStmt::Assert { .. }
                 | TypedStmt::Return { .. }
+                | TypedStmt::Raise { .. }
                 | TypedStmt::Pass { .. }
                 | TypedStmt::Break { .. }
                 | TypedStmt::Continue { .. } => {}
@@ -80,7 +111,9 @@ pub(crate) fn outlives_call(expression: &TypedExpr) -> bool {
         | TypedExprKind::Constant(_)
         | TypedExprKind::ModuleName
         | TypedExprKind::TypeObject(_) => true,
-        TypedExprKind::Wrap(inner) | TypedExprKind::Unwrap(inner) => outlives_call(inner),
+        TypedExprKind::Wrap(inner)
+        | TypedExprKind::Unwrap(inner)
+        | TypedExprKind::AsIterable(inner) => outlives_call(inner),
         _ => false,
     }
 }

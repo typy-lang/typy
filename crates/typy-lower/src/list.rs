@@ -71,7 +71,13 @@ impl FunctionLowerer<'_> {
         for element in items {
             let value = self.expression(element);
             let bits = self.bits(value, span);
-            self.call_runtime(RuntimeFunction::ListAppend, vec![list.value, bits], span);
+            self.store_call(
+                RuntimeFunction::ListAppend,
+                RuntimeFunction::ListAppendMoved,
+                vec![list.value, bits],
+                value,
+                span,
+            );
             self.release(value, span);
         }
         list
@@ -125,9 +131,11 @@ impl FunctionLowerer<'_> {
         let list = self.expression(list);
         let index = self.expression(index);
         let bits = self.bits(value, span);
-        self.call_runtime(
+        self.store_call(
             RuntimeFunction::ListSet,
+            RuntimeFunction::ListSetMoved,
             vec![list.value, index.value, bits],
+            value,
             span,
         );
         self.release(value, span);

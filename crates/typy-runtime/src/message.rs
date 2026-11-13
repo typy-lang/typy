@@ -65,8 +65,27 @@ impl MessageBuffer {
         unsafe { repr_into(text, |point| self.push(point)) };
     }
 
+    /// Appends the code points of `text`.
+    ///
+    /// # Safety
+    ///
+    /// `text` points to a live `str` object.
+    pub(crate) unsafe fn push_text(&mut self, text: *const StrObject) {
+        // SAFETY: the caller passes a live string, and each index is inside it.
+        unsafe {
+            for index in 0..crate::string::length(text) {
+                self.push(crate::string::code_point(text, index));
+            }
+        }
+    }
+
     /// Returns a new exception of `kind` with the message, owned by the caller.
     pub(crate) fn raise(&self, kind: ExceptionKind) -> *mut ExceptionObject {
+        raise_with_message(kind, self.text())
+    }
+
+    /// Returns the message as a new `str`, owned by the caller.
+    pub(crate) fn text(&self) -> *mut StrObject {
         let used = &self.points[..self.used];
         let text_kind = used
             .iter()
@@ -78,7 +97,7 @@ impl MessageBuffer {
             // SAFETY: the string is new, the index is in bounds, and its kind holds every point.
             unsafe { set_code_point(message, index, *point) };
         }
-        raise_with_message(kind, message)
+        message
     }
 }
 

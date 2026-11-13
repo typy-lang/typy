@@ -4,6 +4,7 @@
 mod dicts;
 mod lists;
 mod steps;
+mod views;
 
 use super::SetObject;
 use super::operations::{
@@ -255,7 +256,7 @@ fn removing_a_missing_item_raises_key_error_with_its_repr() {
     unsafe {
         assert!(with_int(2, |item| typy_rt_set_remove(set, item)).is_null());
         let error = with_int(2, |item| typy_rt_set_remove(set, item));
-        assert_eq!((*error).kind, crate::exception::ExceptionKind::KeyError);
+        assert_eq!((*error).kind(), crate::exception::ExceptionKind::KeyError);
         assert_eq!(message(error), "2");
     }
     release(set);
@@ -268,7 +269,7 @@ fn a_missing_key_whose_repr_fails_still_raises_key_error() {
     unsafe {
         let large = crate::int::typy_rt_int_power(word(10), word(5000)).value;
         let error = typy_rt_set_remove(set, large.cast_unsigned());
-        assert_eq!((*error).kind, crate::exception::ExceptionKind::KeyError);
+        assert_eq!((*error).kind(), crate::exception::ExceptionKind::KeyError);
         assert_eq!(message(error), "<exception str() failed>");
         typy_rt_int_decrement(large);
         typy_rt_set_clear(set);

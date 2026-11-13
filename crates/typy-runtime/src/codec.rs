@@ -5,8 +5,10 @@
 
 use crate::Raising;
 use crate::exception::{ExceptionKind, ExceptionObject};
+use crate::list::ItemKind;
 use crate::message::MessageBuffer;
 use crate::string::{StrBuilder, StrObject, code_point, length};
+use crate::tuple::{Field, TupleType};
 use crate::word::inline_value;
 
 /// A codec, numbered as the compiler passes it.
@@ -149,7 +151,10 @@ fn encode_error(
     }
     message.push_str(": ");
     message.push_str(reason);
-    message.raise(ExceptionKind::UnicodeEncodeError)
+    let exception = message.raise(ExceptionKind::UnicodeEncodeError);
+    // SAFETY: the exception is new, and the caller passes a live string.
+    unsafe { unicode_arguments(exception, codec, text, start, end, reason) };
+    exception
 }
 
 fn decode_error(
@@ -183,7 +188,95 @@ fn decode_error(
     }
     message.push_str(": ");
     message.push_str(reason);
-    message.raise(ExceptionKind::UnicodeDecodeError)
+    let exception = message.raise(ExceptionKind::UnicodeDecodeError);
+    // SAFETY: the exception is new, and the caller passes live bytes.
+    unsafe { unicode_arguments(exception, codec, data, start, end, reason) };
+    exception
+}
+
+/// Returns the `UnicodeDecodeError` of the UTF-8 codec for `data[start..end]`, with a new
+/// `bytes` of `data` as its object, as a text file's decoder raises it (ADR-0019).
+pub(crate) fn utf8_decode_error(
+    data: &[u8],
+    start: usize,
+    end: usize,
+    reason: &str,
+) -> *mut ExceptionObject {
+    let object = crate::bytes::new_bytes(data.len());
+    for (index, byte) in data.iter().enumerate() {
+        // SAFETY: the bytes are new and hold `data.len()` bytes.
+        unsafe { crate::string::set_code_point(object, index, u32::from(*byte)) };
+    }
+    let exception = decode_error(Codec::Utf8, object, start, end, reason);
+    // SAFETY: the exception holds a reference of its own to the bytes.
+    unsafe { crate::refcount::typy_rt_decrement(object.cast()) };
+    exception
+}
+
+/// Returns the `UnicodeEncodeError` of the UTF-8 codec for the surrogates of `text` from
+/// `start` to `end`, as a text file's encoder raises it (ADR-0019).
+///
+/// # Safety
+///
+/// `text` points to a live `str` with surrogates from `start` to `end`.
+pub(crate) unsafe fn utf8_encode_error(
+    text: *const StrObject,
+    start: usize,
+    end: usize,
+) -> *mut ExceptionObject {
+    encode_error(Codec::Utf8, text, start, end, "surrogates not allowed")
+}
+
+/// The layout of the arguments of a Unicode error: the codec's name, the text or the bytes,
+/// the start, the end and the reason.
+static UNICODE_ARGUMENTS: TupleType = TupleType {
+    size: 40,
+    length: 5,
+    fields: UNICODE_FIELDS.as_ptr(),
+};
+
+static UNICODE_FIELDS: [Field; 5] = [
+    Field::plain(ItemKind::Object, 0),
+    Field::plain(ItemKind::Object, 8),
+    Field::plain(ItemKind::Int, 16),
+    Field::plain(ItemKind::Int, 24),
+    Field::plain(ItemKind::Object, 32),
+];
+
+/// Gives a Unicode error CPython's five arguments, which its `repr` shows:
+/// `UnicodeDecodeError('utf-8', b'\xff', 0, 1, 'invalid start byte')`.
+///
+/// # Safety
+///
+/// `exception` is new and has no arguments, and `object` points to a live `str` or `bytes`.
+unsafe fn unicode_arguments(
+    exception: *mut ExceptionObject,
+    codec: Codec,
+    object: *const StrObject,
+    start: usize,
+    end: usize,
+    reason: &str,
+) {
+    let position = |value: usize| {
+        crate::word::inline(i64::try_from(value).unwrap_or(i64::MAX))
+            .unwrap_or(0)
+            .cast_unsigned()
+    };
+    // SAFETY: the caller's guarantee; the exception takes the new references.
+    unsafe {
+        crate::refcount::typy_rt_increment(object.cast_mut().cast());
+        crate::exception::set_arguments(
+            exception,
+            &UNICODE_ARGUMENTS,
+            &[
+                crate::string::from_str(codec.name()).expose_provenance() as u64,
+                object.expose_provenance() as u64,
+                position(start),
+                position(end),
+                crate::string::from_str(reason).expose_provenance() as u64,
+            ],
+        );
+    }
 }
 
 /// Returns the bytes of `point` in UTF-8, which the caller has checked is not a surrogate.
@@ -294,7 +387,7 @@ pub unsafe extern "C" fn typy_rt_str_encode(
 /// its reason, as CPython's decoder finds them: a lead byte outside `C2` to `F4` is an invalid
 /// start byte; a byte after it outside the range the lead allows ends an invalid continuation
 /// before that byte; the data running out first is an unexpected end of data, to the end.
-fn utf8_sequence(
+pub(crate) fn utf8_sequence(
     byte: impl Fn(usize) -> Option<u32>,
     at: usize,
 ) -> Result<(usize, u32), (usize, &'static str)> {

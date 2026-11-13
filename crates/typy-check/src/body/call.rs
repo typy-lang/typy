@@ -6,6 +6,7 @@ use typy_source::syntax::{Expr, Keyword};
 
 use super::BodyChecker;
 use crate::builtin::Builtin;
+use crate::exception::BuiltinException;
 use crate::typed::{Argument, FunctionId, TypedExpr, TypedExprKind};
 use crate::types::Type;
 
@@ -31,13 +32,22 @@ impl BodyChecker<'_> {
             );
         }
         if let Some(function) = self.program.function_ids.get(name).copied() {
-            return self.call_function(function, name, arguments, keywords, span);
+            let call = self.call_function(function, name, arguments, keywords, span);
+            return self.through_lazy(name, call);
+        }
+        if let Some(function) = self.program.module_functions.get(name).copied() {
+            let call = self.module_function_call(function, arguments, keywords, span);
+            return self.through_lazy(name, call);
         }
         if let Some(class) = self.program.class_ids.get(name).copied() {
-            return self.new_instance(class, arguments, keywords, span);
+            let instance = self.new_instance(class, arguments, keywords, span);
+            return self.through_lazy(name, instance);
         }
         if let Some(builtin) = Builtin::named(name) {
             return self.call_builtin(builtin, arguments, keywords, span);
+        }
+        if let Some(class) = BuiltinException::named(name) {
+            return self.new_exception(class, arguments, keywords, span);
         }
         if self.in_function() && self.program.module_variables.contains(name) {
             return self.name(name, name_span);

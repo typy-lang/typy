@@ -82,6 +82,12 @@ impl FunctionBuilder {
         slot
     }
 
+    /// Returns the type the function returns.
+    #[must_use]
+    pub fn return_type(&self) -> TyirType {
+        self.return_type
+    }
+
     /// Returns the type of a slot.
     #[must_use]
     pub fn slot_type(&self, slot: SlotId) -> TyirType {

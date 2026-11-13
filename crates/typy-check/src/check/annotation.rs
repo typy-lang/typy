@@ -6,6 +6,7 @@ use std::collections::BTreeMap;
 use typy_diagnostics::{Diagnostic, DiagnosticCode, Diagnostics, RuleId};
 use typy_source::syntax::{Constant, Expr};
 
+use crate::exception::{BuiltinException, ExceptionClass};
 use crate::typed::ClassId;
 use crate::types::Type;
 
@@ -14,7 +15,108 @@ use crate::types::Type;
 #[derive(Clone, Copy, Debug)]
 pub(crate) struct AnnotationScope<'classes> {
     pub(crate) classes: &'classes BTreeMap<String, ClassId>,
+    /// The classes that derive from an exception class, whose instances are exceptions.
+    pub(crate) exceptions: &'classes BTreeMap<ClassId, ExceptionClass>,
+    /// For each name bound to a module at module level, that module's classes, which an
+    /// annotation such as `shapes.Point` names (MOD-10).
+    pub(crate) modules: &'classes BTreeMap<String, BTreeMap<String, ClassId>>,
+    /// The names imported from `typing`, `collections.abc` and `types` (TYP-15).
+    pub(crate) names: &'classes BTreeMap<String, AnnotationName>,
+    /// For each name bound to one of those modules, the module.
+    pub(crate) standard: &'classes BTreeMap<String, String>,
     pub(crate) bound: u32,
+}
+
+/// A name of `typing`, `collections.abc` or `types` that TyPy 0.3 gives for annotations
+/// (TYP-15, CST-10, ADR-0015).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum AnnotationName {
+    Iterator,
+    Iterable,
+    TracebackType,
+    ModuleType,
+}
+
+/// The modules that give names for annotations only in 0.3.
+pub(crate) const ANNOTATION_MODULES: [&str; 3] = ["typing", "collections.abc", "types"];
+
+/// Returns the annotation name `name` of the module `module`, if TyPy 0.3 gives it.
+pub(crate) fn annotation_name(module: &str, name: &str) -> Option<AnnotationName> {
+    match (module, name) {
+        ("typing" | "collections.abc", "Iterator") => Some(AnnotationName::Iterator),
+        ("typing" | "collections.abc", "Iterable") => Some(AnnotationName::Iterable),
+        ("types", "TracebackType") => Some(AnnotationName::TracebackType),
+        ("types", "ModuleType") => Some(AnnotationName::ModuleType),
+        _ => None,
+    }
+}
+
+/// Returns the annotation name an expression names: an imported name, or a name read
+/// through one of the modules, such as `typing.Iterator` or `collections.abc.Iterable`.
+fn standard_name(expression: &Expr, scope: &AnnotationScope<'_>) -> Option<AnnotationName> {
+    match expression {
+        Expr::Name { id, .. } => scope.names.get(id).copied(),
+        Expr::Attribute {
+            value, attribute, ..
+        } => {
+            let module = standard_module(value, scope)?;
+            annotation_name(&module, &attribute.name)
+        }
+        _ => None,
+    }
+}
+
+/// Returns the type a name of `typing`, `collections.abc` or `types` names, with its items
+/// for `Iterator[T]` and `Iterable[T]`, or `None` for any other annotation (TYP-15).
+fn standard_annotation(
+    annotation: &Expr,
+    scope: &AnnotationScope<'_>,
+    diagnostics: &mut Diagnostics,
+) -> Option<Type> {
+    Some(match annotation {
+        Expr::Subscript { value, index, .. }
+            if let Some(name @ (AnnotationName::Iterator | AnnotationName::Iterable)) =
+                standard_name(value, scope) =>
+        {
+            let item = Box::new(annotation_type(index, scope, diagnostics));
+            if name == AnnotationName::Iterator {
+                Type::Iterator(item)
+            } else {
+                Type::Iterable(item)
+            }
+        }
+        _ if let Some(name) = standard_name(annotation, scope) => match name {
+            AnnotationName::TracebackType => Type::Traceback,
+            AnnotationName::ModuleType => Type::AnyModule,
+            AnnotationName::Iterator | AnnotationName::Iterable => {
+                diagnostics.push(
+                    Diagnostic::new(
+                        DiagnosticCode::error(408),
+                        annotation.span(),
+                        "an `Iterator` or `Iterable` annotation names the type of its items, such as `Iterator[int]`",
+                    )
+                    .with_rule(RuleId::TYP_15),
+                );
+                Type::Error
+            }
+        },
+        _ => return None,
+    })
+}
+
+/// Returns the standard module a name, or a dotted name through one, stands for.
+fn standard_module(expression: &Expr, scope: &AnnotationScope<'_>) -> Option<String> {
+    match expression {
+        Expr::Name { id, .. } => scope.standard.get(id).cloned(),
+        Expr::Attribute {
+            value, attribute, ..
+        } => Some(format!(
+            "{}.{}",
+            standard_module(value, scope)?,
+            attribute.name
+        )),
+        _ => None,
+    }
 }
 
 /// Returns the type an annotation names.
@@ -23,12 +125,47 @@ pub(crate) fn annotation_type(
     scope: &AnnotationScope<'_>,
     diagnostics: &mut Diagnostics,
 ) -> Type {
+    if let Some(ty) = standard_annotation(annotation, scope, diagnostics) {
+        return ty;
+    }
     match annotation {
         Expr::Constant {
             value: Constant::None,
             ..
         } => Type::NoneType,
         Expr::Name { id, span } => named_type(id, *span, scope, diagnostics),
+        Expr::Attribute {
+            value,
+            attribute,
+            span,
+        } if let Expr::Name { id, .. } = value.as_ref()
+            && let Some(classes) = scope.modules.get(id) =>
+        {
+            let only = BTreeMap::from([(
+                attribute.name.clone(),
+                classes
+                    .get(&attribute.name)
+                    .copied()
+                    .unwrap_or(ClassId(u32::MAX)),
+            )]);
+            if classes.contains_key(&attribute.name) {
+                let inner = AnnotationScope {
+                    classes: &only,
+                    bound: u32::MAX,
+                    ..*scope
+                };
+                return named_type(&attribute.name, *span, &inner, diagnostics);
+            }
+            diagnostics.push(
+                Diagnostic::new(
+                    DiagnosticCode::error(425),
+                    attribute.span,
+                    format!("the module `{id}` has no class `{}`", attribute.name),
+                )
+                .with_rule(RuleId::SMT_07),
+            );
+            Type::Error
+        }
         // A string is read when the annotation is, so it may name any class (CLS-01).
         Expr::Quoted { annotation, .. } => {
             let deferred = AnnotationScope {
@@ -111,6 +248,9 @@ fn named_type(
             );
             return Type::Error;
         }
+        if let Some(exception) = scope.exceptions.get(class) {
+            return Type::Exception(exception.clone());
+        }
         return Type::Instance(*class, id.to_owned());
     }
     match id {
@@ -121,6 +261,7 @@ fn named_type(
         "bool" => Type::Bool,
         "str" => Type::Str,
         "bytes" => Type::Bytes,
+        "range" => Type::Range,
         "Any" | "object" => {
             diagnostics.push(
                 Diagnostic::new(
@@ -168,6 +309,9 @@ fn named_type(
         "dict" => {
             diagnostics.push(dict_arity(span));
             Type::Error
+        }
+        _ if let Some(class) = BuiltinException::named(id) => {
+            Type::Exception(ExceptionClass::Builtin(class))
         }
         _ => {
             diagnostics.push(

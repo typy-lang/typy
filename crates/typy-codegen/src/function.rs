@@ -23,6 +23,8 @@ pub(crate) struct Shared<'module, 'ctx> {
     pub(crate) statics: &'module mut Statics<'ctx>,
     pub(crate) tyir: &'module TyirModule,
     pub(crate) functions: &'module [FunctionValue<'ctx>],
+    /// The address of each global, or `None` for one of a type with no value.
+    pub(crate) globals: &'module [Option<PointerValue<'ctx>>],
     pub(crate) raising: &'module [bool],
     pub(crate) lookup: &'module dyn SourceLookup,
 }

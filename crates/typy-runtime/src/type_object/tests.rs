@@ -1,9 +1,8 @@
 //! Tests of the type objects and of the functions each gives.
 
 use super::{
-    BASE_EXCEPTION, BOOL, BYTES, DICT, DICT_ITEMS, DICT_KEYS, DICT_VALUES, FLOAT, INT, LIST,
-    NONE_TYPE, OBJECT, SET, STR, TUPLE, TYPE, TypeObject, type_of, typy_rt_type_name,
-    typy_rt_type_text,
+    BOOL, BYTES, DICT, DICT_ITEMS, DICT_KEYS, DICT_VALUES, FLOAT, INT, LIST, NONE_TYPE, OBJECT,
+    SET, STR, TUPLE, TYPE, TypeObject, type_of, typy_rt_type_name, typy_rt_type_text,
 };
 use crate::header::{IMMORTAL, ObjectHeader, TYPE_TYPE_ID};
 
@@ -25,7 +24,7 @@ const EVERY_TYPE: [&TypeObject; 16] = [
     &DICT_KEYS,
     &DICT_VALUES,
     &DICT_ITEMS,
-    &BASE_EXCEPTION,
+    &crate::exception::classes::BASE_EXCEPTION,
     &FLOAT,
     &BOOL,
     &NONE_TYPE,
@@ -205,5 +204,23 @@ fn types_are_written_as_cpython_writes_them() {
         assert_eq!(text(written.value), "<class 'float'>");
         let hash = TYPE.hash.expect("a type has a hash");
         assert_eq!(hash(header), hash(header));
+    }
+}
+
+#[test]
+fn the_traceback_is_one_immortal_object_written_with_its_address() {
+    let traceback = super::typy_rt_traceback();
+    // SAFETY: the traceback is immortal.
+    unsafe {
+        assert!(same(type_of(traceback), &super::TRACEBACK_TYPE));
+        let text = super::typy_rt_object_repr(traceback.cast_mut());
+        let length = crate::string::length(text.value);
+        let shown: String = (0..length)
+            .map(|index| char::from_u32(crate::string::code_point(text.value, index)).unwrap())
+            .collect();
+        assert!(shown.starts_with("<traceback object at 0x"), "{shown}");
+        crate::refcount::typy_rt_decrement(text.value.cast());
+        crate::refcount::typy_rt_decrement(traceback.cast_mut());
+        assert_eq!((*traceback).reference_count, IMMORTAL);
     }
 }

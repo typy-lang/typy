@@ -111,8 +111,14 @@ pub unsafe extern "C" fn typy_rt_instance_text(object: u64) -> *mut StrObject {
 unsafe fn default_text(instance: *const InstanceObject) -> *mut StrObject {
     // SAFETY: the caller's guarantee.
     let class = unsafe { class_of(instance) };
+    object_text(instance.cast_mut().cast(), class.module(), class.name())
+}
+
+/// Returns `<module.name object at 0x...>`, or `<name object at 0x...>` when `module` is
+/// empty, for the object at `object`.
+pub(crate) fn object_text(object: *mut ObjectHeader, module: &str, name: &str) -> *mut StrObject {
     let mut digits = [0_u8; 16];
-    let mut address = instance.expose_provenance();
+    let mut address = object.expose_provenance();
     let mut start = digits.len();
     loop {
         start -= 1;
@@ -124,15 +130,8 @@ unsafe fn default_text(instance: *const InstanceObject) -> *mut StrObject {
     }
     // SAFETY: the digits are ASCII.
     let hex = unsafe { core::str::from_utf8_unchecked(&digits[start..]) };
-    let parts = [
-        "<",
-        class.module(),
-        ".",
-        class.name(),
-        " object at 0x",
-        hex,
-        ">",
-    ];
+    let dot = if module.is_empty() { "" } else { "." };
+    let parts = ["<", module, dot, name, " object at 0x", hex, ">"];
     crate::string::from_parts(&parts)
 }
 

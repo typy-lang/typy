@@ -27,6 +27,9 @@ fn print_with(module: &TyirModule, counting: bool) -> String {
     for (index, string) in module.strings.iter().enumerate() {
         let _ = writeln!(text, "string s{index} = {string:?}");
     }
+    for (index, global) in module.globals.iter().enumerate() {
+        let _ = writeln!(text, "global g{index}: {} = {:?}", global.ty, global.name);
+    }
     let _ = writeln!(text, "entry fn{}", module.entry.0);
     for function in &module.functions {
         text.push('\n');
@@ -147,6 +150,10 @@ fn operation(module: &TyirModule, operation: &Operation) -> String {
         Operation::Constant(constant) => format!("const {constant}"),
         Operation::Load(slot) => format!("load s{}", slot.0),
         Operation::Store { slot, value } => format!("store s{}, v{}", slot.0, value.0),
+        Operation::LoadGlobal(global) => format!("load_global g{}", global.0),
+        Operation::StoreGlobal { global, value } => {
+            format!("store_global g{}, v{}", global.0, value.0)
+        }
         Operation::IntBinary {
             operator,
             left,
@@ -198,14 +205,29 @@ fn operation(module: &TyirModule, operation: &Operation) -> String {
         Operation::IsNone(value) => format!("is_none v{}", value.0),
         Operation::FromBits { bits, ty } => format!("from_bits v{}, {ty}", bits.0),
         Operation::NewInstance { class } => format!("new class#{class}"),
-        Operation::Field { object, index } => format!("field v{}, {index}", object.0),
+        Operation::Field {
+            object,
+            class,
+            index,
+        } => format!("field v{}{}, {index}", object.0, of_class(*class)),
         Operation::SetField {
             object,
+            class,
             index,
             value,
-        } => format!("set_field v{}, {index}, v{}", object.0, value.0),
+        } => format!(
+            "set_field v{}{}, {index}, v{}",
+            object.0,
+            of_class(*class),
+            value.0
+        ),
         Operation::Identical { left, right } => format!("identical v{}, v{}", left.0, right.0),
         Operation::Increment(value) => format!("inc v{}", value.0),
         Operation::Decrement(value) => format!("dec v{}", value.0),
     }
+}
+
+/// Returns ` of class#n` for the class of an exception's attribute, or nothing.
+fn of_class(class: Option<u32>) -> String {
+    class.map_or_else(String::new, |class| format!(" of class#{class}"))
 }

@@ -20,9 +20,16 @@ pub(crate) struct Selection {
     pub(crate) step: i64,
     /// The number of positions.
     pub(crate) count: usize,
+    /// The stop, adjusted to the sequence as `slice.indices` gives it.
+    pub(crate) stop: i64,
 }
 
 impl Selection {
+    /// Returns where a slice of step 1 starts, which is also where nothing is selected.
+    pub(crate) fn start_position(self) -> usize {
+        usize::try_from(self.start).unwrap_or(0)
+    }
+
     /// Returns the `index`-th position the slice selects.
     pub(crate) fn position(self, index: usize) -> usize {
         let offset = i64::try_from(index).unwrap_or(i64::MAX) * self.step;
@@ -108,6 +115,7 @@ pub(crate) fn select(
         start,
         step: stride,
         count: usize::try_from(count).unwrap_or(0),
+        stop,
     })
 }
 
@@ -176,7 +184,8 @@ mod tests {
             Selection {
                 start: 0,
                 step: 1,
-                count: 5
+                count: 5,
+                stop: 5,
             }
         );
         assert_eq!(
@@ -187,6 +196,6 @@ mod tests {
         );
         let zero = select(word(0), word(0), word(0), word(STEP), 5).unwrap_err();
         // SAFETY: the exception is live.
-        assert_eq!(unsafe { (*zero).kind }, crate::ExceptionKind::ValueError);
+        assert_eq!(unsafe { (*zero).kind() }, crate::ExceptionKind::ValueError);
     }
 }

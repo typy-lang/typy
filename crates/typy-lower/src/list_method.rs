@@ -39,6 +39,8 @@ impl FunctionLowerer<'_> {
             self.dict_method(receiver.value, method, &values, result, span)
         } else if receiver.ty == TyirType::SET {
             self.set_method(receiver.value, method, &values, result, span)
+        } else if receiver.ty == TyirType::TEXT_FILE {
+            self.text_method(receiver.value, method, &given, span)
         } else {
             let arguments: Vec<Lowered> = given.iter().flatten().copied().collect();
             self.list_method(receiver.value, method, &arguments, result, span)
@@ -61,9 +63,18 @@ impl FunctionLowerer<'_> {
     ) -> Lowered {
         match (method, arguments) {
             (Method::ListPop, given) => self.pop(list, given.first().copied(), result, span),
+            (Method::ListAppend, [item]) => {
+                let bits = self.bits(*item, span);
+                self.store_call(
+                    RuntimeFunction::ListAppend,
+                    RuntimeFunction::ListAppendMoved,
+                    vec![list, bits],
+                    *item,
+                    span,
+                )
+            }
             (
-                Method::ListAppend
-                | Method::ListRemove
+                Method::ListRemove
                 | Method::ListIndex
                 | Method::ListCount
                 | Method::TupleIndex
@@ -72,7 +83,6 @@ impl FunctionLowerer<'_> {
             ) => {
                 // A `tuple[T, ...]` is a list object, so its `index` and `count` are the list's.
                 let function = match method {
-                    Method::ListAppend => RuntimeFunction::ListAppend,
                     Method::ListRemove => RuntimeFunction::ListRemove,
                     Method::ListIndex | Method::TupleIndex => RuntimeFunction::ListIndex,
                     _ => RuntimeFunction::ListCount,
@@ -82,9 +92,11 @@ impl FunctionLowerer<'_> {
             }
             (Method::ListInsert, [index, item]) => {
                 let bits = self.bits(*item, span);
-                self.call_runtime(
+                self.store_call(
                     RuntimeFunction::ListInsert,
+                    RuntimeFunction::ListInsertMoved,
                     vec![list, index.value, bits],
+                    *item,
                     span,
                 )
             }

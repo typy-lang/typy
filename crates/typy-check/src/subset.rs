@@ -3,6 +3,7 @@
 mod class;
 mod expression;
 mod feature;
+mod global_scope;
 mod statement;
 
 use typy_diagnostics::{Diagnostic, DiagnosticCode, Diagnostics, RuleId, Span};
@@ -16,6 +17,8 @@ pub(crate) fn check(tree: &SyntaxTree) -> Diagnostics {
     let mut walker = Walker {
         diagnostics: Diagnostics::new(),
         loop_depth: 0,
+        try_depth: 0,
+        scope: None,
     };
     walker.statements(&tree.body, Place::ModuleTop);
     walker.diagnostics
@@ -33,6 +36,11 @@ enum Place {
 struct Walker {
     diagnostics: Diagnostics,
     loop_depth: usize,
+    /// How many `try` statements enclose the statement being walked, where CPython refuses
+    /// a lazy import.
+    try_depth: usize,
+    /// The names of the function being walked, for CPython's rules of `global`.
+    scope: Option<global_scope::GlobalScope>,
 }
 
 impl Walker {

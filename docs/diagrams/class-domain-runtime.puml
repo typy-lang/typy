@@ -14,7 +14,15 @@ package "Runtime context" {
         size
         may_form_cycle
     }
-    class ExceptionObject <<entity>>
+    class TypeObject <<value object>> {
+        name
+        base
+    }
+    class ExceptionObject <<entity>> {
+        arguments
+        suppress_context
+    }
+    class HandledException <<entity>>
     class TracebackEntry <<value object>> {
         function
         line
@@ -42,7 +50,10 @@ HeapObject "1" *-- "1" ObjectHeader
 ObjectHeader --> "1" TypeDescriptor
 ExceptionObject --|> HeapObject
 ExceptionObject "1" *-- "*" TracebackEntry
-ExceptionObject --> "0..1" ExceptionObject : cause
+ExceptionObject --> "0..2" ExceptionObject : cause, context
+ExceptionObject --> "1" TypeObject : class
+TypeObject --> "0..1" TypeObject : base
+HandledException --> "1" ExceptionObject
 Allocator ..> HeapObject : allocates and frees
 CycleCollector ..> HeapObject : collects cyclic garbage
 

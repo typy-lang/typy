@@ -3,6 +3,7 @@
 use typy_diagnostics::Span;
 use typy_source::syntax::BinaryOperator;
 
+use super::FunctionId;
 use super::expression::TypedExpr;
 use super::symbol::SymbolId;
 use crate::types::Type;
@@ -22,6 +23,18 @@ pub enum AssignTarget {
         list: Box<TypedExpr>,
         /// The position, counted from the end when negative.
         index: Box<TypedExpr>,
+    },
+    /// A slice of a list, `list[lower:upper:step] = items`, which the items of a list replace;
+    /// the list and the bounds are evaluated after the value, as CPython does (DAT-13).
+    Slice {
+        /// The list.
+        list: Box<TypedExpr>,
+        /// The start, if given.
+        lower: Option<Box<TypedExpr>>,
+        /// The stop, if given.
+        upper: Option<Box<TypedExpr>>,
+        /// The step, if given.
+        step: Option<Box<TypedExpr>>,
     },
     /// An attribute of an instance, `object.name = value`, by its position in the class's
     /// attributes; the object is evaluated after the value, as CPython does (CLS-01).
@@ -52,6 +65,21 @@ pub struct Generator {
     pub conditions: Vec<super::expression::TypedExpr>,
 }
 
+/// How a `with` statement enters and leaves its context manager (CST-05).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum WithProtocol {
+    /// An instance of a class with `__enter__` and `__exit__`.
+    Methods {
+        /// Its class's `__enter__`.
+        enter: super::function::FunctionId,
+        /// Its class's `__exit__`.
+        exit: super::function::FunctionId,
+    },
+    /// A text file: entering checks it is open and gives the file, and leaving closes it
+    /// (ADR-0019).
+    TextFile,
+}
+
 /// What a `for` loop goes over (CST-03, LIB-02). A sequence is read as CPython's list
 /// iterator reads it: each step checks the length again, so a list that grows or shrinks in
 /// the body changes how many steps there are.
@@ -80,6 +108,20 @@ pub enum LoopSource {
         /// The first count.
         start: TypedExpr,
     },
+    /// An instance of a class with `__iter__`: `__iter__` is called once, then the `__next__`
+    /// of what it returns until that raises `StopIteration` (CST-08).
+    Protocol {
+        /// The instance.
+        iterable: Box<TypedExpr>,
+        /// Its class's `__iter__`.
+        iter: super::function::FunctionId,
+        /// The `__next__` of the class `__iter__` returns.
+        next: super::function::FunctionId,
+        /// What `__iter__` returns.
+        iterator: Type,
+        /// What `__next__` returns.
+        item: Type,
+    },
     /// `zip(first, second, ...)`: a tuple of one value from each source, until one ends. With
     /// `strict` true, sources of different lengths raise `ValueError`.
     Zip {
@@ -96,6 +138,7 @@ impl LoopSource {
     pub fn expressions(&self) -> Vec<&TypedExpr> {
         match self {
             Self::Items(sequence) | Self::Reversed(sequence) => vec![sequence],
+            Self::Protocol { iterable, .. } => vec![iterable],
             Self::Range {
                 start, stop, step, ..
             } => vec![start, stop, step],
@@ -117,9 +160,14 @@ impl LoopSource {
     pub fn item_type(&self) -> Type {
         match self {
             Self::Range { .. } => Type::Int,
+            Self::Protocol { item, .. } => item.clone(),
             Self::Items(sequence) | Self::Reversed(sequence) => match &sequence.ty {
-                Type::Bytes => Type::Int,
-                Type::Set(item) | Type::Dict(item, _) => item.as_ref().clone(),
+                Type::Bytes | Type::Range => Type::Int,
+                Type::TextFile => Type::Str,
+                Type::Set(item)
+                | Type::Dict(item, _)
+                | Type::Iterator(item)
+                | Type::Iterable(item) => item.as_ref().clone(),
                 Type::DictView(view, key, value) => view.item(key, value),
                 other => other
                     .sequence_item()
@@ -128,6 +176,47 @@ impl LoopSource {
             },
             Self::Enumerate { source, .. } => Type::Tuple(vec![Type::Int, source.item_type()]),
             Self::Zip { sources, .. } => Type::Tuple(sources.iter().map(Self::item_type).collect()),
+        }
+    }
+}
+
+/// A name an import binds to a value.
+#[derive(Clone, Debug, PartialEq)]
+pub enum ImportBinding {
+    /// A variable bound to a module object.
+    Module {
+        /// The variable.
+        target: SymbolId,
+        /// The module.
+        module: String,
+    },
+    /// A variable bound to the value a module variable of `module` has, which raises
+    /// `ImportError` while unbound.
+    Value {
+        /// The variable.
+        target: SymbolId,
+        /// The module that holds the value.
+        module: String,
+        /// The module variable whose value it takes.
+        source: SymbolId,
+    },
+    /// A variable bound to a value of a built-in module, such as `math.pi` or `sys.argv`.
+    Expression {
+        /// The variable.
+        target: SymbolId,
+        /// The value.
+        value: TypedExpr,
+    },
+}
+
+impl ImportBinding {
+    /// Returns the variable the binding assigns.
+    #[must_use]
+    pub const fn target(&self) -> SymbolId {
+        match self {
+            Self::Module { target, .. }
+            | Self::Value { target, .. }
+            | Self::Expression { target, .. } => *target,
         }
     }
 }
@@ -162,6 +251,45 @@ pub enum TypedStmt {
         value: Option<TypedExpr>,
         span: Span,
     },
+    /// `with manager as target: body`: `__enter__` gives what the target binds, and `__exit__`
+    /// runs on every way out of the body; when it may return a true value, it may suppress an
+    /// exception (CST-05). Several items nest.
+    With {
+        manager: TypedExpr,
+        protocol: WithProtocol,
+        suppresses: bool,
+        target: Option<AssignTarget>,
+        body: Vec<TypedStmt>,
+        span: Span,
+    },
+    /// `del target, ...`: each target, a list item, a list slice or a dict key, is removed in
+    /// order (SMT-05).
+    Delete {
+        targets: Vec<TypedExpr>,
+        span: Span,
+    },
+    /// `assert test, message`: when the test is false, the exception, an `AssertionError` of
+    /// the message, is raised (SMT-04).
+    Assert {
+        test: TypedExpr,
+        exception: TypedExpr,
+        span: Span,
+    },
+    /// `try` with its `except` clauses, its `else` block and its `finally` block (CST-04).
+    Try {
+        body: Vec<TypedStmt>,
+        handlers: Vec<TypedHandler>,
+        orelse: Vec<TypedStmt>,
+        finalbody: Vec<TypedStmt>,
+        span: Span,
+    },
+    /// `raise exception`, with its cause; a class is called with no arguments first. A bare
+    /// `raise`, with no exception, raises the one being handled again (SMT-06, EXC-07).
+    Raise {
+        exception: Option<TypedExpr>,
+        cause: RaiseCause,
+        span: Span,
+    },
     If {
         test: TypedExpr,
         body: Vec<TypedStmt>,
@@ -192,6 +320,20 @@ pub enum TypedStmt {
         orelse: Vec<TypedStmt>,
         span: Span,
     },
+    /// `import` or `from ... import`: each module, in order, is initialised unless it has
+    /// begun, then each binding takes its value (SMT-07, MOD-03).
+    Import {
+        modules: Vec<String>,
+        bindings: Vec<ImportBinding>,
+        span: Span,
+    },
+    /// A lazy import: its names wait, unbound, until the first use of one runs its function
+    /// in `reifies`, which runs the import for that name (MOD-06).
+    LazyImport {
+        reifies: Vec<FunctionId>,
+        targets: Vec<SymbolId>,
+        span: Span,
+    },
     Pass {
         span: Span,
     },
@@ -201,4 +343,29 @@ pub enum TypedStmt {
     Continue {
         span: Span,
     },
+}
+
+/// What `from` gives a raised exception (EXC-04).
+#[derive(Clone, Debug, PartialEq)]
+pub enum RaiseCause {
+    /// No `from`: the exception keeps the context it is raised in.
+    Absent,
+    /// `from None`: no cause, and the context is left out of the report.
+    None,
+    /// `from cause`: an exception, or a class called with no arguments.
+    Exception(TypedExpr),
+}
+
+/// One `except` clause: the classes it catches, in order, with `BaseException` for a bare
+/// `except`; the name it binds, for its body only; and its body (EXC-01, EXC-09).
+#[derive(Clone, Debug, PartialEq)]
+pub struct TypedHandler {
+    /// The classes the clause catches.
+    pub classes: Vec<crate::exception::ExceptionClass>,
+    /// The variable `as` binds, which holds the exception while the body runs.
+    pub name: Option<SymbolId>,
+    /// The clause's body.
+    pub body: Vec<TypedStmt>,
+    /// The whole clause.
+    pub span: Span,
 }

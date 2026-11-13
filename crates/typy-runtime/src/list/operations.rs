@@ -30,11 +30,34 @@ pub extern "C" fn typy_rt_list_new(kind: i64, capacity: i64, tuple: u64) -> *mut
 /// `list` points to a live list, and `item` is a live item of its kind.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn typy_rt_list_append(list: *mut ListObject, item: u64) {
-    // SAFETY: the caller passes a live list and item; `reserve_one` makes room for it.
+    // SAFETY: the caller's guarantee.
+    unsafe { append(list, item, true) };
+}
+
+/// Appends `item`, whose reference the list takes over from the caller (MEM-09).
+///
+/// # Safety
+///
+/// As for `typy_rt_list_append`, and the caller owns a reference to `item`.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn typy_rt_list_append_moved(list: *mut ListObject, item: u64) {
+    // SAFETY: the caller's guarantee.
+    unsafe { append(list, item, false) };
+}
+
+/// Appends `item`, with a reference of its own when `retain`.
+///
+/// # Safety
+///
+/// `list` points to a live list and `item` is a live item of its type.
+unsafe fn append(list: *mut ListObject, item: u64, retain: bool) {
+    // SAFETY: the caller's guarantee; `reserve_one` makes room for the item.
     unsafe {
         reserve_one(list);
         let item_type = (*list).item_type();
-        item_type.retain(item);
+        if retain {
+            item_type.retain(item);
+        }
         item_type.store((*list).slot((*list).length), item);
         (*list).length += 1;
     }
@@ -54,7 +77,11 @@ pub unsafe extern "C" fn typy_rt_list_length(list: *const ListObject) -> i64 {
 
 /// Returns the position an `int` word names in a list of `length` items, counting a negative
 /// one from the end, or the `IndexError` CPython raises with `message` (DAT-11).
-fn position(index: i64, length: usize, message: &str) -> Result<usize, *mut ExceptionObject> {
+pub(super) fn position(
+    index: i64,
+    length: usize,
+    message: &str,
+) -> Result<usize, *mut ExceptionObject> {
     if !is_inline(index) {
         return Err(raise(
             ExceptionKind::IndexError,
@@ -105,19 +132,58 @@ pub unsafe extern "C" fn typy_rt_list_set(
     index: i64,
     item: u64,
 ) -> *mut ExceptionObject {
-    // SAFETY: the caller passes a live list and item; `position` keeps the index inside it.
+    // SAFETY: the caller's guarantee.
+    unsafe { set_item(list, index, item, true) }
+}
+
+/// Sets item `index` to `item`, whose reference the list takes over from the caller; an
+/// index out of range releases `item` (MEM-09).
+///
+/// # Safety
+///
+/// As for `typy_rt_list_set`, and the caller owns a reference to `item`.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn typy_rt_list_set_moved(
+    list: *mut ListObject,
+    index: i64,
+    item: u64,
+) -> *mut ExceptionObject {
+    // SAFETY: the caller's guarantee.
+    unsafe { set_item(list, index, item, false) }
+}
+
+/// Sets item `index`, counting `item` when `retain`, and otherwise releasing it when the
+/// index is out of range.
+///
+/// # Safety
+///
+/// `list` points to a live list, `item` is a live item of its type and `index` an `int` word.
+unsafe fn set_item(
+    list: *mut ListObject,
+    index: i64,
+    item: u64,
+    retain: bool,
+) -> *mut ExceptionObject {
+    // SAFETY: the caller's guarantee; `position` keeps the index inside the list.
     unsafe {
+        let item_type = (*list).item_type();
         match position(index, (*list).length, "list assignment index out of range") {
             Ok(index) => {
                 // The new item is counted first, so releasing the old one cannot free what the
                 // new one holds.
-                let item_type = (*list).item_type();
-                item_type.retain(item);
+                if retain {
+                    item_type.retain(item);
+                }
                 item_type.release((*list).item(index));
                 item_type.store((*list).slot(index), item);
                 core::ptr::null_mut()
             }
-            Err(exception) => exception,
+            Err(exception) => {
+                if !retain {
+                    item_type.release(item);
+                }
+                exception
+            }
         }
     }
 }

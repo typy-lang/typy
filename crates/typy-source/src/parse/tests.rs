@@ -230,16 +230,7 @@ type X = int
 match v:
     case _:
         pass
-try:
-    pass
-except E:
-    pass
-with f:
-    pass
-del x
-assert x
-raise E
-global g
+nonlocal g
 ";
     let kinds: Vec<NodeKind> = body(source)
         .iter()
@@ -254,12 +245,7 @@ global g
             NodeKind::AsyncFunctionDef,
             NodeKind::TypeAlias,
             NodeKind::Match,
-            NodeKind::Try,
-            NodeKind::With,
-            NodeKind::Delete,
-            NodeKind::Assert,
-            NodeKind::Raise,
-            NodeKind::Global,
+            NodeKind::Nonlocal,
         ]
     );
 }
@@ -401,6 +387,41 @@ Module
       Call @3:7
         Name f @3:7
         Constant Int(\"2\") @3:9
+";
+    assert_eq!(dump(&tree, &file(source)), expected);
+}
+
+#[test]
+fn dump_indents_type_parameters_annotations_keywords_and_quoted_annotations() {
+    let source =
+        "def f[T](x: T) -> T:\n    return x\n\n\ny: int = 1\nprint(1, sep=\"\")\nz: \"int\" = 2\n";
+    let tree = parse(&file(source), PythonFloor::V3_12).unwrap();
+    let expected = "\
+Module
+  FunctionDef f @1:1
+    type_params 1
+    Parameter x Normal @1:10
+      Name T @1:13
+    returns
+      Name T @1:19
+    body
+      Return @2:5
+        Name x @2:12
+  AnnAssign @5:1
+    Name y @5:1
+    Name int @5:4
+    Constant Int(\"1\") @5:10
+  Expr @6:1
+    Call @6:1
+      Name print @6:1
+      Constant Int(\"1\") @6:7
+      keyword sep @6:10
+        Constant Str(\"\") @6:14
+  AnnAssign @7:1
+    Name z @7:1
+    Quoted @7:4
+      Name int @7:5
+    Constant Int(\"2\") @7:12
 ";
     assert_eq!(dump(&tree, &file(source)), expected);
 }
@@ -707,9 +728,225 @@ fn every_node_kind_is_dumped_at_its_depth_with_its_position() {
 }
 
 #[test]
+fn each_form_of_raise_is_dumped_with_its_operands() {
+    let source = "raise\nraise E\nraise E(1) from c\n";
+    let expected = "Module\n  Raise @1:1\n  Raise @2:1\n    Name E @2:7\n  Raise from @3:1\n    Call @3:7\n      Name E @3:7\n      Constant Int(\"1\") @3:9\n    Name c @3:17\n";
+    let parsed = parse(&file(source), PythonFloor::V3_12).unwrap();
+    assert_eq!(dump(&parsed, &file(source)), expected);
+}
+
+#[test]
+fn a_try_statement_keeps_its_clauses_in_order() {
+    let source = "try:\n    pass\nexcept (A, B) as e:\n    raise\nexcept:\n    pass\nelse:\n    pass\nfinally:\n    pass\n";
+    let expected = "Module\n  Try @1:1\n    body\n      Pass @2:5\n    except as e @3:1\n      Tuple @3:8\n        Name A @3:9\n        Name B @3:12\n      body\n        Raise @4:5\n    except @5:1\n      body\n        Pass @6:5\n    orelse\n      Pass @8:5\n    finally\n      Pass @10:5\n";
+    let parsed = parse(&file(source), PythonFloor::V3_12).unwrap();
+    assert_eq!(dump(&parsed, &file(source)), expected);
+}
+
+#[test]
+fn assert_keeps_its_test_and_message() {
+    let source = "assert x\nassert x, 'm'\n";
+    let expected = "Module\n  Assert @1:1\n    Name x @1:8\n  Assert @2:1\n    Name x @2:8\n    Constant Str(\"m\") @2:11\n";
+    let parsed = parse(&file(source), PythonFloor::V3_12).unwrap();
+    assert_eq!(dump(&parsed, &file(source)), expected);
+}
+
+#[test]
+fn a_with_statement_keeps_each_item_and_its_target() {
+    let source = "with a() as (x, y), b:\n    pass\n";
+    let expected = "Module\n  With @1:1\n    Call @1:6\n      Name a @1:6\n    as\n      Tuple @1:13\n        Name x @1:14\n        Name y @1:17\n    Name b @1:21\n    body\n      Pass @2:5\n";
+    let parsed = parse(&file(source), PythonFloor::V3_12).unwrap();
+    assert_eq!(dump(&parsed, &file(source)), expected);
+}
+
+#[test]
+fn del_keeps_each_target() {
+    let source = "del xs[0], d['k']\n";
+    let expected = "Module\n  Delete @1:1\n    Subscript @1:5\n      Name xs @1:5\n      Constant Int(\"0\") @1:8\n    Subscript @1:12\n      Name d @1:12\n      Constant Str(\"k\") @1:14\n";
+    let parsed = parse(&file(source), PythonFloor::V3_12).unwrap();
+    assert_eq!(dump(&parsed, &file(source)), expected);
+}
+
+#[test]
 fn every_statement_kind_is_dumped_at_its_depth_with_its_position() {
     let source = "@cache\ndef f(n: int) -> int:\n    total = 0\n    total += n\n    for i in range(n):\n        continue\n    else:\n        pass\n    while n:\n        break\n    else:\n        pass\n    if n:\n        return n\n    else:\n        return 0\nimport os\nfrom ..pkg import name\nprint(s[0], sep=\"-\", **options)\n";
     let expected = "Module\n  FunctionDef f @1:1\n    decorator\n      Name cache @1:2\n    Parameter n Normal @2:7\n      Name int @2:10\n    returns\n      Name int @2:18\n    body\n      Assign @3:5\n        Name total @3:5\n        Constant Int(\"0\") @3:13\n      AugAssign Add @4:5\n        Name total @4:5\n        Name n @4:14\n      For @5:5\n        Name i @5:9\n        Call @5:14\n          Name range @5:14\n          Name n @5:20\n        body\n          Continue @6:9\n        orelse\n          Pass @8:9\n      While @9:5\n        Name n @9:11\n        body\n          Break @10:9\n        orelse\n          Pass @12:9\n      If @13:5\n        Name n @13:8\n        body\n          Return @14:9\n            Name n @14:16\n        orelse\n          Return @16:9\n            Constant Int(\"0\") @16:16\n  Import os @17:1\n  ImportFrom ..pkg name @18:1\n  Expr @19:1\n    Call @19:1\n      Name print @19:1\n      Subscript @19:7\n        Name s @19:7\n        Constant Int(\"0\") @19:9\n      keyword sep @19:13\n        Constant Str(\"-\") @19:17\n      keyword ** @19:22\n        Name options @19:24\n";
     let parsed = parse(&file(source), PythonFloor::V3_12).unwrap();
     assert_eq!(dump(&parsed, &file(source)), expected);
+}
+
+/// Returns each warning of `source` as its code, its message and its byte range.
+fn warnings(source: &str) -> Vec<(String, String, u32, u32)> {
+    super::parse_with_warnings(&file(source), PythonFloor::V3_12)
+        .expect("the source is valid")
+        .warnings
+        .iter()
+        .map(|warning| {
+            let span = warning.span().expect("a warning has a place");
+            (
+                warning.code().to_string(),
+                warning.message().to_owned(),
+                span.start().0,
+                span.end().0,
+            )
+        })
+        .collect()
+}
+
+#[test]
+fn escapes_cpython_accepts_give_no_warning() {
+    for source in [
+        "x = '\\\\ \\' \\\" \\a \\b \\f \\n \\r \\t \\v \\x41 \\0 \\377 \\N{BULLET} \\u0041 \\U00000041'\n",
+        "x = b'\\\\ \\' \\a \\x41 \\0 \\377'\n",
+        "x = 'joined \\\nline'\n",
+        "x = r'\\d' + rb'\\q' + R'\\w' + f'{1}' + fr'\\d{2}'\n",
+        "x = '''\\n\\t'''\n",
+    ] {
+        assert_eq!(warnings(source), [], "{source}");
+    }
+}
+
+#[test]
+fn an_invalid_escape_is_w0101_at_the_escape_with_its_fix() {
+    let found = warnings("x = '\\d' + b'\\q' + f'{1}\\w' + '\\777' + b'\\N'\n");
+    let expected = [
+        ("W0101", "`\\d` is an invalid escape sequence", 5, 7),
+        ("W0101", "`\\q` is an invalid escape sequence", 13, 15),
+        ("W0101", "`\\w` is an invalid escape sequence", 24, 26),
+        (
+            "W0101",
+            "`\\777` is an invalid octal escape sequence",
+            31,
+            35,
+        ),
+        ("W0101", "`\\N` is an invalid escape sequence", 41, 43),
+    ];
+    let expected: Vec<(String, String, u32, u32)> = expected
+        .iter()
+        .map(|(code, message, start, end)| {
+            ((*code).to_owned(), (*message).to_owned(), *start, *end)
+        })
+        .collect();
+    assert_eq!(found, expected);
+    let field = warnings("x = 1\ny = f'\\{x}' + f'a\\{x}b'\n");
+    let braces: Vec<(u32, u32)> = field.iter().map(|found| (found.2, found.3)).collect();
+    assert_eq!(braces, [(12, 14), (23, 25)]);
+    let parsed = super::parse_with_warnings(&file("x = '\\d'\n"), PythonFloor::V3_12).unwrap();
+    let fix = parsed.warnings[0]
+        .fix()
+        .expect("doubling the backslash keeps the value");
+    assert_eq!(fix.replacement, "\\\\d");
+}
+
+#[test]
+fn a_surrogate_escape_in_a_str_is_refused_and_any_other_is_not() {
+    let refused = [
+        (r#"x = "\ud800""#, r"`\ud800`", 5, 11),
+        (r#"x = "a\uDFFF""#, r"`\uDFFF`", 6, 12),
+        (r#"x = "\U0000dc80""#, r"`\U0000dc80`", 5, 15),
+        (r#"x = f"{1}\udc80""#, r"`\udc80`", 9, 15),
+    ];
+    for (source, escape, start, end) in refused {
+        let errors = parse(&file(source), PythonFloor::V3_12).unwrap_err();
+        assert_eq!(errors.len(), 1, "{source}");
+        let span = errors[0].span().unwrap();
+        assert_eq!((span.start().0, span.end().0), (start, end), "{source}");
+        assert_eq!(errors[0].code().to_string(), "E0201", "{source}");
+        assert!(
+            errors[0].message().contains(escape),
+            "{}",
+            errors[0].message()
+        );
+    }
+    for source in [
+        r#"x = r"\ud800""#,
+        r#"x = "\\ud800""#,
+        r#"x = b"\\ud800""#,
+        r#"x = "\ud7ff\ue000\U0010ffff""#,
+    ] {
+        assert!(parse(&file(source), PythonFloor::V3_12).is_ok(), "{source}");
+    }
+}
+
+/// Runs `work` on a stack as large as the one `typy` gives the compiler, which converting a
+/// tree nested `MAX_DEPTH` levels needs.
+fn on_large_stack<T: Send + 'static>(work: impl FnOnce() -> T + Send + 'static) -> T {
+    std::thread::Builder::new()
+        .stack_size(512 * 1024 * 1024)
+        .spawn(work)
+        .unwrap()
+        .join()
+        .unwrap()
+}
+
+/// Returns the message, the line and the column of the one error parsing `source` gives.
+fn nesting_error(source: String) -> Option<(String, u32, u32)> {
+    on_large_stack(move || {
+        let file = file(&source);
+        let errors = parse(&file, PythonFloor::V3_12).err()?;
+        assert_eq!(errors.len(), 1);
+        let error = &errors[0];
+        assert_eq!(error.code().to_string(), "E0103");
+        assert_eq!(
+            error.rule().map(typy_diagnostics::RuleId::as_str),
+            Some("LEX-11")
+        );
+        let span = error.span().unwrap();
+        let position = file.position(span.start());
+        Some((error.message().to_owned(), position.line, position.column))
+    })
+}
+
+#[test]
+fn brackets_past_200_and_blocks_past_99_are_refused_with_cpythons_message() {
+    let brackets = |depth: usize| format!("x = {}1{}\n", "(".repeat(depth), ")".repeat(depth));
+    assert_eq!(nesting_error(brackets(200)), None);
+    assert_eq!(
+        nesting_error(brackets(201)),
+        Some(("too many nested parentheses".to_owned(), 1, 205))
+    );
+    let mixed = format!("y = [{}]\n", "{(".repeat(100));
+    assert_eq!(
+        nesting_error(mixed).map(|(message, ..)| message),
+        Some("too many nested parentheses".to_owned())
+    );
+    let blocks = |depth: usize| {
+        let mut text = String::new();
+        for level in 0..depth {
+            text.push_str(&"    ".repeat(level));
+            text.push_str("if True:\n");
+        }
+        text.push_str(&"    ".repeat(depth));
+        text.push_str("pass\n");
+        text
+    };
+    assert_eq!(nesting_error(blocks(99)), None);
+    assert_eq!(
+        nesting_error(blocks(100)),
+        Some(("too many levels of indentation".to_owned(), 101, 1))
+    );
+}
+
+#[test]
+fn expressions_and_elif_chains_past_the_deepest_nesting_are_refused() {
+    let past = format!(
+        "the program nests more than {} levels deep, past what CPython compiles",
+        super::MAX_DEPTH
+    );
+    let binary = |count: usize| format!("x = 1{}\n", " + 1".repeat(count));
+    assert_eq!(nesting_error(binary(super::MAX_DEPTH - 2)), None);
+    assert_eq!(
+        nesting_error(binary(super::MAX_DEPTH)).map(|(message, ..)| message),
+        Some(past.clone())
+    );
+    let unary = format!("x = {}1\n", "-".repeat(super::MAX_DEPTH));
+    assert_eq!(
+        nesting_error(unary).map(|(message, ..)| message),
+        Some(past.clone())
+    );
+    let elif = format!(
+        "if x:\n    pass\n{}",
+        "elif x:\n    pass\n".repeat(super::MAX_DEPTH)
+    );
+    assert_eq!(nesting_error(elif).map(|(message, ..)| message), Some(past));
 }

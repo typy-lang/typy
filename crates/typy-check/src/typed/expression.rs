@@ -38,6 +38,26 @@ pub struct Argument {
 pub enum TypedExprKind {
     Constant(TypedConstant),
     Local(SymbolId),
+    /// A module variable, read as it is now; outside the module's own code it may be unbound
+    /// and raise `NameError`, and a call may assign it (SMT-08, ADR-0015).
+    ModuleVariable(SymbolId),
+    /// `module.name`, a module variable of another module read through its module object;
+    /// it raises `AttributeError` while unbound (MOD-10).
+    ModuleAttribute {
+        module: String,
+        symbol: SymbolId,
+    },
+    /// `package.module`, the module object of a submodule, which raises `AttributeError`
+    /// until the submodule is initialised.
+    Submodule(String),
+    /// `value`, a call or a class read through a lazy import, which first runs the import
+    /// when its statement ran and its names were not used yet (MOD-06).
+    Lazy {
+        reify: FunctionId,
+        value: Box<TypedExpr>,
+    },
+    /// A built-in iterable or an iterator held as an `Iterable[T]`: the same object (TYP-15).
+    AsIterable(Box<TypedExpr>),
     /// `__name__`, which is `"__main__"` in the main module (STD-06).
     ModuleName,
     Binary {
@@ -75,6 +95,31 @@ pub enum TypedExprKind {
         init: Option<FunctionId>,
         arguments: Vec<Argument>,
     },
+    /// A new exception of a class, made by calling the class with positional arguments of
+    /// any type, which the exception keeps (ADR-0013).
+    NewException {
+        class: crate::exception::ExceptionClass,
+        arguments: Vec<TypedExpr>,
+        /// The `__init__` of a class of the program, which takes the arguments in place of
+        /// `arguments`.
+        init: Option<Box<InitCall>>,
+    },
+    /// `super().__init__(arguments)` in the `__init__` of an exception class whose bases have
+    /// no `__init__` of the program's: the exception's arguments become these (CLS-14).
+    SetArguments {
+        exception: Box<TypedExpr>,
+        arguments: Vec<TypedExpr>,
+    },
+    /// `iter(source)` of a built-in iterable: a new iterator over it (CST-09).
+    Iter(Box<TypedExpr>),
+    /// `next(iterator)` or `next(iterator, default)`: the next item of an iterator, or of an
+    /// instance whose class's `__next__` is `method`; at the end, the default, or
+    /// `StopIteration` without one (CST-08, CST-09).
+    Next {
+        iterator: Box<TypedExpr>,
+        method: Option<super::function::FunctionId>,
+        default: Option<Box<TypedExpr>>,
+    },
     /// An attribute of an instance, by its position in the class's attributes (CLS-01).
     Attribute {
         object: Box<TypedExpr>,
@@ -88,12 +133,33 @@ pub enum TypedExprKind {
     TypeName(Box<TypedExpr>),
     /// An f-string: its literal text and formatted fields, joined in order (LEX-07).
     FString(Vec<FStringPart>),
-    /// `print(values, sep=sep, end=end)`; `sep` and `end` are present only when written.
-    Print {
-        values: Vec<TypedExpr>,
-        sep: Option<Box<TypedExpr>>,
-        end: Option<Box<TypedExpr>>,
+    /// A value of `sys`: `argv`, `stdout` or `stderr` (LIB-04).
+    SysValue(crate::sys::SysValue),
+    /// `sys.exit(code)`, which raises `SystemExit` with `code` (LIB-04).
+    SysExit(Option<Box<TypedExpr>>),
+    /// `input(prompt)`: a line of standard input (LIB-04).
+    Input(Option<Box<TypedExpr>>),
+    /// `open(path, mode)` in a text mode: `mode` as written, which the file's `repr` shows,
+    /// and how it opens the file (LIB-04, ADR-0019).
+    Open {
+        path: Box<TypedExpr>,
+        mode: String,
+        access: crate::open::OpenAccess,
     },
+    /// A call of a function of `math`, with its arguments in the order the function takes
+    /// them; a keyword not given is `None` (LIB-05).
+    MathCall {
+        function: crate::math::MathFunction,
+        arguments: Vec<TypedExpr>,
+    },
+    /// `format % values` with a literal format: the right operand, evaluated once, and the
+    /// pieces that make the text (LIB-10).
+    PercentFormat {
+        values: Box<TypedExpr>,
+        parts: Vec<super::percent::PercentPart>,
+    },
+    /// A call of `print` (LIB-01, LIB-04).
+    Print(Box<PrintCall>),
     /// `sorted`, `sum`, `any`, `all`, or `min` or `max` of one iterable, with the one optional
     /// value the builtin takes: `reverse`, `start` or `default` (LIB-02).
     IterableBuiltin {
@@ -130,6 +196,18 @@ pub enum TypedExprKind {
     /// `dict(source)`: a copy of a dict, or a dict of the `(key, value)` pairs the source gives,
     /// set in order (DAT-09).
     DictOf(Box<super::statement::LoopSource>),
+    /// `dict(name=value, ...)` or `dict(source, name=value, ...)`: the source's pairs, then
+    /// each name as a `str` key with its value, in order (DAT-16).
+    DictWith {
+        source: Option<Box<super::statement::LoopSource>>,
+        entries: Vec<(String, TypedExpr)>,
+    },
+    /// `dict.fromkeys(source, value)`: each item of the source as a key, mapped to the one
+    /// value, or to `None` when none is given (DAT-16).
+    DictFromKeys {
+        source: Box<super::statement::LoopSource>,
+        value: Option<Box<TypedExpr>>,
+    },
     /// `dict[key]`, which raises `KeyError` for a missing key (DAT-09).
     DictItem {
         dict: Box<TypedExpr>,
@@ -179,6 +257,22 @@ pub enum TypedExprKind {
     },
 }
 
+/// `print(values, sep=sep, end=end, file=file, flush=flush)`; each keyword is present only
+/// when written, and `file` only when it is not `None` (LIB-04).
+#[derive(Clone, Debug, PartialEq)]
+pub struct PrintCall {
+    /// The values printed, in order.
+    pub values: Vec<TypedExpr>,
+    /// What is written between two values.
+    pub sep: Option<TypedExpr>,
+    /// What is written after the last value.
+    pub end: Option<TypedExpr>,
+    /// The text file written to.
+    pub file: Option<TypedExpr>,
+    /// Whether standard output is written out after.
+    pub flush: Option<TypedExpr>,
+}
+
 /// One piece of an f-string or of a format specification after checking.
 #[derive(Clone, Debug, PartialEq)]
 pub enum FStringPart {
@@ -208,4 +302,161 @@ pub struct FormattedValue {
     pub conversion: Option<Conversion>,
     /// The format specification, if the field has one, itself text and fields.
     pub spec: Option<Vec<FStringPart>>,
+}
+
+/// A call of the `__init__` of an exception class on the new exception (CLS-03). The arguments
+/// written by position, which come first, are also the exception's arguments, as CPython's
+/// `BaseException.__new__` keeps them.
+#[derive(Clone, Debug, PartialEq)]
+pub struct InitCall {
+    /// The `__init__`, the class's own or the nearest base's.
+    pub function: super::function::FunctionId,
+    /// Its arguments after the instance, in source order.
+    pub arguments: Vec<Argument>,
+    /// How many of them come first, written by position.
+    pub positional: usize,
+}
+
+impl TypedExpr {
+    /// Returns the expression's operands in source order, the expressions it evaluates directly.
+    #[must_use]
+    #[allow(clippy::too_many_lines, reason = "one arm per expression kind")]
+    pub fn operands(&self) -> Vec<&TypedExpr> {
+        match &self.kind {
+            TypedExprKind::Constant(_)
+            | TypedExprKind::Local(_)
+            | TypedExprKind::ModuleVariable(_)
+            | TypedExprKind::ModuleAttribute { .. }
+            | TypedExprKind::Submodule(_)
+            | TypedExprKind::ModuleName
+            | TypedExprKind::TypeObject(_)
+            | TypedExprKind::SysValue(_) => Vec::new(),
+            TypedExprKind::Binary { left, right, .. }
+            | TypedExprKind::Index {
+                value: left,
+                index: right,
+            } => {
+                vec![left, right]
+            }
+            TypedExprKind::Unary { operand, .. }
+            | TypedExprKind::TupleOf(operand)
+            | TypedExprKind::TupleItem { tuple: operand, .. }
+            | TypedExprKind::TupleSlice { tuple: operand, .. } => {
+                vec![operand]
+            }
+            TypedExprKind::Tuple(items)
+            | TypedExprKind::List(items)
+            | TypedExprKind::Set(items) => items.iter().collect(),
+            TypedExprKind::ListItem { list, index } => vec![list, index],
+            TypedExprKind::ListOf(source)
+            | TypedExprKind::SetOf(source)
+            | TypedExprKind::DictOf(source) => source.expressions(),
+            TypedExprKind::DictWith { source, entries } => source
+                .iter()
+                .flat_map(|source| source.expressions())
+                .chain(entries.iter().map(|(_, value)| value))
+                .collect(),
+            TypedExprKind::DictFromKeys { source, value } => source
+                .expressions()
+                .into_iter()
+                .chain(value.as_deref())
+                .collect(),
+            TypedExprKind::Dict { keys, values } => keys
+                .iter()
+                .zip(values)
+                .flat_map(|(key, value)| [key, value])
+                .collect(),
+            TypedExprKind::DictItem { dict, key } => vec![dict, key],
+            TypedExprKind::Wrap(inner)
+            | TypedExprKind::Unwrap(inner)
+            | TypedExprKind::AsIterable(inner)
+            | TypedExprKind::Lazy { value: inner, .. } => vec![inner],
+            TypedExprKind::PercentFormat { values, .. } => vec![values],
+            TypedExprKind::MathCall { arguments, .. } => arguments.iter().collect(),
+            TypedExprKind::Open { path, .. } => vec![path],
+            TypedExprKind::SysExit(value) | TypedExprKind::Input(value) => {
+                value.iter().map(Box::as_ref).collect()
+            }
+            TypedExprKind::Comprehension {
+                element,
+                value,
+                generators,
+            } => std::iter::once(element.as_ref())
+                .chain(value.as_deref())
+                .chain(generators.iter().flat_map(|generator| {
+                    generator
+                        .source
+                        .expressions()
+                        .into_iter()
+                        .chain(&generator.conditions)
+                }))
+                .collect(),
+            TypedExprKind::IterableBuiltin {
+                iterable, option, ..
+            } => std::iter::once(iterable.as_ref())
+                .chain(option.as_deref())
+                .collect(),
+            TypedExprKind::Slice {
+                value,
+                lower,
+                upper,
+                step,
+            } => std::iter::once(value.as_ref())
+                .chain(lower.as_deref())
+                .chain(upper.as_deref())
+                .chain(step.as_deref())
+                .collect(),
+            TypedExprKind::Method {
+                receiver,
+                arguments,
+                ..
+            } => std::iter::once(receiver.as_ref())
+                .chain(arguments.iter().map(|argument| &argument.value))
+                .collect(),
+            TypedExprKind::BoolOp { values, .. }
+            | TypedExprKind::Builtin {
+                arguments: values, ..
+            } => values.iter().collect(),
+            TypedExprKind::Compare {
+                left, comparators, ..
+            } => std::iter::once(left.as_ref()).chain(comparators).collect(),
+            TypedExprKind::IfExp { test, body, orelse } => vec![test, body, orelse],
+            TypedExprKind::Call { arguments, .. } | TypedExprKind::New { arguments, .. } => {
+                arguments.iter().map(|argument| &argument.value).collect()
+            }
+            TypedExprKind::Attribute { object, .. }
+            | TypedExprKind::TypeOf(object)
+            | TypedExprKind::TypeName(object) => vec![object],
+            TypedExprKind::NewException {
+                arguments, init, ..
+            } => arguments
+                .iter()
+                .chain(
+                    init.iter()
+                        .flat_map(|init| init.arguments.iter().map(|argument| &argument.value)),
+                )
+                .collect(),
+            TypedExprKind::Iter(source) => vec![source],
+            TypedExprKind::Next {
+                iterator, default, ..
+            } => std::iter::once(iterator.as_ref())
+                .chain(default.as_deref())
+                .collect(),
+            TypedExprKind::SetArguments {
+                exception,
+                arguments,
+            } => std::iter::once(exception.as_ref())
+                .chain(arguments)
+                .collect(),
+            TypedExprKind::FString(parts) => crate::typed::dump::fstring_values(parts),
+            TypedExprKind::Print(call) => call
+                .values
+                .iter()
+                .chain(&call.sep)
+                .chain(&call.end)
+                .chain(&call.file)
+                .chain(&call.flush)
+                .collect(),
+        }
+    }
 }

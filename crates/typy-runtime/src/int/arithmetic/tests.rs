@@ -79,7 +79,10 @@ fn division_by_zero_raises_with_cpython_messages() {
     // SAFETY: the words are live `int` words, and the exceptions are live.
     unsafe {
         let q = typy_rt_int_floor_divide(word(1), word(0));
-        assert_eq!((*q.exception).kind, crate::ExceptionKind::ZeroDivisionError);
+        assert_eq!(
+            (*q.exception).kind(),
+            crate::ExceptionKind::ZeroDivisionError
+        );
         let r = typy_rt_int_modulo(word(1), word(0));
         assert!(!r.exception.is_null());
     }
@@ -122,6 +125,6 @@ fn a_negative_exponent_raises_value_error() {
     unsafe {
         let result = typy_rt_int_power(word(2), word(-1));
         assert!(!result.exception.is_null());
-        assert_eq!((*result.exception).kind, crate::ExceptionKind::ValueError);
+        assert_eq!((*result.exception).kind(), crate::ExceptionKind::ValueError);
     }
 }

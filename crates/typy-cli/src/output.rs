@@ -3,77 +3,130 @@
 use std::io::Write as _;
 
 use camino::Utf8Path;
-use typy_diagnostics::{Diagnostic, DiagnosticCode, RuleId, SourceLookup, render_text};
-use typy_driver::{Emission, Failure, Sources};
+use typy_diagnostics::{
+    Diagnostic, DiagnosticCode, RuleId, SourceLookup, render_json, render_text,
+};
+use typy_driver::{Emission, Failure, Sources, Warnings};
 
 use crate::exit_status::ExitStatus;
 
-/// Writes rendered diagnostics to standard error, a blank line between two of them.
-fn write_diagnostics(diagnostics: &[Diagnostic], sources: &dyn SourceLookup) {
-    let text: Vec<String> = diagnostics
-        .iter()
-        .map(|diagnostic| render_text(diagnostic, sources))
-        .collect();
-    let mut error = std::io::stderr().lock();
-    let _ = error.write_all(text.join("\n").as_bytes());
+/// How diagnostics are written to standard error (DIA-05).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, clap::ValueEnum)]
+pub(crate) enum ErrorFormat {
+    /// Text for a person, a blank line between two diagnostics.
+    #[default]
+    Text,
+    /// One JSON object per line, for an editor or CI.
+    Json,
 }
 
-/// Reports a failure and returns its status: `Internal` when any diagnostic is an `E9xxx`
-/// internal error, `ProgramErrors` otherwise.
-pub(crate) fn report(failure: Failure) -> ExitStatus {
-    let internal = failure
-        .diagnostics
-        .iter()
-        .any(|diagnostic| diagnostic.code().to_string().starts_with("E9"));
-    let sorted = failure.diagnostics.into_sorted(&failure.sources);
-    write_diagnostics(&sorted, &failure.sources);
-    if internal {
-        ExitStatus::Internal
-    } else {
+/// Writes diagnostics in the format the command line chose.
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct Reporter {
+    format: ErrorFormat,
+}
+
+impl Reporter {
+    /// Returns a reporter that writes in `format`.
+    pub(crate) const fn new(format: ErrorFormat) -> Self {
+        Self { format }
+    }
+
+    /// Writes rendered diagnostics to standard error.
+    fn write(self, diagnostics: &[Diagnostic], sources: &dyn SourceLookup) {
+        let text = match self.format {
+            ErrorFormat::Text => diagnostics
+                .iter()
+                .map(|diagnostic| render_text(diagnostic, sources))
+                .collect::<Vec<String>>()
+                .join("\n"),
+            ErrorFormat::Json => diagnostics
+                .iter()
+                .map(|diagnostic| render_json(diagnostic, sources))
+                .collect(),
+        };
+        let mut error = std::io::stderr().lock();
+        let _ = error.write_all(text.as_bytes());
+    }
+
+    /// Reports a failure and returns its status: `Internal` when any diagnostic is an
+    /// `E9xxx` internal error, `Usage` when `typy.toml` is not valid (E0107, UC-11),
+    /// `ProgramErrors` otherwise.
+    pub(crate) fn report(self, failure: Failure) -> ExitStatus {
+        let has = |prefix: &str| {
+            failure
+                .diagnostics
+                .iter()
+                .any(|diagnostic| diagnostic.code().to_string().starts_with(prefix))
+        };
+        let status = if has("E9") {
+            ExitStatus::Internal
+        } else if has("E0107") {
+            ExitStatus::Usage
+        } else {
+            ExitStatus::ProgramErrors
+        };
+        let sorted = failure.diagnostics.into_sorted(&failure.sources);
+        self.write(&sorted, &failure.sources);
+        status
+    }
+
+    /// Writes the warnings of a build or check that succeeded (DIA-07).
+    pub(crate) fn warnings(self, warnings: Warnings) {
+        if warnings.diagnostics.iter().next().is_none() {
+            return;
+        }
+        let sorted = warnings.diagnostics.into_sorted(&warnings.sources);
+        self.write(&sorted, &warnings.sources);
+    }
+
+    /// Reports an internal error with no place in the source (NFR-09).
+    pub(crate) fn internal(self, message: &str) {
+        let diagnostic = Diagnostic::without_location(DiagnosticCode::error(9001), message)
+            .with_rule(RuleId::NFR_09)
+            .with_help(
+                "this is a defect in TyPy; please report it with the program that caused it",
+            );
+        self.write(&[diagnostic], &Sources::None);
+    }
+
+    /// Reports a file that could not be written.
+    pub(crate) fn unwritable(self, path: &Utf8Path, error: &std::io::Error) -> ExitStatus {
+        let diagnostic = Diagnostic::without_location(
+            DiagnosticCode::error(106),
+            format!("cannot write {path}: {error}"),
+        )
+        .with_help("check that the directory exists and is writable");
+        self.write(&[diagnostic], &Sources::None);
         ExitStatus::ProgramErrors
     }
-}
 
-/// Reports an internal error with no place in the source (NFR-09).
-pub(crate) fn report_internal(message: &str) {
-    let diagnostic = Diagnostic::without_location(DiagnosticCode::error(9001), message)
-        .with_rule(RuleId::NFR_09)
-        .with_help("this is a defect in TyPy; please report it with the program that caused it");
-    write_diagnostics(&[diagnostic], &Sources::None);
-}
-
-/// Reports a file that could not be written.
-pub(crate) fn report_unwritable(path: &Utf8Path, error: &std::io::Error) -> ExitStatus {
-    let diagnostic = Diagnostic::without_location(
-        DiagnosticCode::error(106),
-        format!("cannot write {path}: {error}"),
-    )
-    .with_help("check that the directory exists and is writable");
-    write_diagnostics(&[diagnostic], &Sources::None);
-    ExitStatus::ProgramErrors
-}
-
-/// Writes the output of `--emit` to `output`, or to standard output when it is absent.
-pub(crate) fn write_emission(emission: &Emission, output: Option<&Utf8Path>) -> ExitStatus {
-    let Some(path) = output else {
-        let mut stdout = std::io::stdout().lock();
-        return match stdout
-            .write_all(emission.as_bytes())
-            .and_then(|()| stdout.flush())
-        {
-            Ok(()) => ExitStatus::Success,
-            Err(error) => report_unwritable(Utf8Path::new("standard output"), &error),
+    /// Writes the output of `--emit` to `output`, or to standard output when it is absent.
+    pub(crate) fn emission(self, emission: &Emission, output: Option<&Utf8Path>) -> ExitStatus {
+        let Some(path) = output else {
+            let mut stdout = std::io::stdout().lock();
+            return match stdout
+                .write_all(emission.as_bytes())
+                .and_then(|()| stdout.flush())
+            {
+                Ok(()) => ExitStatus::Success,
+                Err(error) => self.unwritable(Utf8Path::new("standard output"), &error),
+            };
         };
-    };
-    match std::fs::write(path, emission.as_bytes()) {
-        Ok(()) => ExitStatus::Success,
-        Err(error) => report_unwritable(path, &error),
+        match std::fs::write(path, emission.as_bytes()) {
+            Ok(()) => ExitStatus::Success,
+            Err(error) => self.unwritable(path, &error),
+        }
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::report;
+    use super::{ErrorFormat, Reporter};
+
+    fn report(failure: Failure) -> ExitStatus {
+        Reporter::new(ErrorFormat::Text).report(failure)
+    }
     use crate::exit_status::ExitStatus;
     use typy_diagnostics::{Diagnostic, DiagnosticCode, Diagnostics};
     use typy_driver::Failure;
@@ -91,6 +144,10 @@ mod tests {
         assert_eq!(
             report(failure(DiagnosticCode::error(702))),
             ExitStatus::ProgramErrors
+        );
+        assert_eq!(
+            report(failure(DiagnosticCode::error(107))),
+            ExitStatus::Usage
         );
     }
 }

@@ -23,6 +23,20 @@ impl TypeId {
     pub const DICT_VIEW: Self = Self(9);
     /// A type object (ADR-0012, CLS-12).
     pub const TYPE: Self = Self(10);
+    /// An iterator that `iter()` makes (ADR-0014).
+    pub const ITERATOR: Self = Self(12);
+    /// The traceback `__exit__` receives (CST-10).
+    pub const TRACEBACK: Self = Self(13);
+    /// A `range` held as a value (DAT-17).
+    pub const RANGE: Self = Self(14);
+    /// A module object, immortal (MOD-10, ADR-0015).
+    pub const MODULE: Self = Self(15);
+    /// An object of any built-in iterable type, or an iterator, held as an `Iterable[T]`; its
+    /// header says which (TYP-15).
+    pub const ITERABLE: Self = Self(16);
+    /// A text file, `_io.TextIOWrapper`: `sys.stdout`, `sys.stderr` and the files `open`
+    /// gives (LIB-04).
+    pub const TEXT_FILE: Self = Self(17);
     /// The first ID of the program's classes; class `n` of the module is this plus `n`.
     const FIRST_CLASS: u32 = 1 << 16;
 
@@ -97,6 +111,18 @@ impl TyirType {
     pub const VIEW: Self = Self::Object(TypeId::DICT_VIEW);
     /// A type object.
     pub const TYPE: Self = Self::Object(TypeId::TYPE);
+    /// An iterator.
+    pub const ITERATOR: Self = Self::Object(TypeId::ITERATOR);
+    /// The traceback.
+    pub const TRACEBACK: Self = Self::Object(TypeId::TRACEBACK);
+    /// A range.
+    pub const RANGE: Self = Self::Object(TypeId::RANGE);
+    /// A module object.
+    pub const MODULE: Self = Self::Object(TypeId::MODULE);
+    /// An iterable.
+    pub const ITERABLE: Self = Self::Object(TypeId::ITERABLE);
+    /// A text file (LIB-04).
+    pub const TEXT_FILE: Self = Self::Object(TypeId::TEXT_FILE);
 }
 
 impl fmt::Display for TyirType {
@@ -113,6 +139,12 @@ impl fmt::Display for TyirType {
             Self::Object(TypeId::DICT) => formatter.write_str("dict"),
             Self::Object(TypeId::DICT_VIEW) => formatter.write_str("view"),
             Self::Object(TypeId::TYPE) => formatter.write_str("type"),
+            Self::Object(TypeId::ITERATOR) => formatter.write_str("iterator"),
+            Self::Object(TypeId::TRACEBACK) => formatter.write_str("traceback"),
+            Self::Object(TypeId::RANGE) => formatter.write_str("range"),
+            Self::Object(TypeId::MODULE) => formatter.write_str("module"),
+            Self::Object(TypeId::ITERABLE) => formatter.write_str("iterable"),
+            Self::Object(TypeId::TEXT_FILE) => formatter.write_str("text_file"),
             Self::Bits => formatter.write_str("bits"),
             Self::Object(id) if id.class_index().is_some() => {
                 write!(formatter, "class#{}", id.class_index().unwrap_or(0))
@@ -185,6 +217,20 @@ pub enum TypeObjectRef {
     Runtime(RuntimeType),
     /// The type object of class `n` of the module.
     Class(u32),
+    /// A built-in exception class of the runtime, by its name, such as `ValueError`.
+    Exception(&'static str),
+}
+
+impl TypeObjectRef {
+    /// Returns the runtime's symbol for the type object, or `None` for a class of the module.
+    #[must_use]
+    pub fn runtime_symbol(self) -> Option<String> {
+        match self {
+            Self::Runtime(ty) => Some(ty.symbol().to_owned()),
+            Self::Exception(name) => Some(format!("typy_rt_exception_{name}")),
+            Self::Class(_) => None,
+        }
+    }
 }
 
 /// The runtime's type objects that a program names.
@@ -209,6 +255,7 @@ pub enum RuntimeType {
     DictItems,
     Object,
     Type,
+    Range,
 }
 
 impl RuntimeType {
@@ -231,6 +278,7 @@ impl RuntimeType {
             Self::DictItems => "typy_rt_type_dict_items",
             Self::Object => "typy_rt_object",
             Self::Type => "typy_rt_type_type",
+            Self::Range => "typy_rt_type_range",
         }
     }
 }
@@ -239,7 +287,50 @@ impl fmt::Display for TypeObjectRef {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Runtime(ty) => formatter.write_str(ty.symbol()),
+            Self::Exception(name) => write!(formatter, "typy_rt_exception_{name}"),
             Self::Class(index) => write!(formatter, "class#{index}"),
+        }
+    }
+}
+
+#[cfg(test)]
+mod type_object_tests {
+    use super::{RuntimeType, TypeId, TypeObjectRef};
+
+    #[test]
+    fn a_class_type_counts_from_the_first_class_and_gives_its_index_back() {
+        for index in [0, 1, 7] {
+            assert_eq!(TypeId::class(index).class_index(), Some(index));
+        }
+        assert_eq!(TypeId::class(3).0, (1 << 16) + 3);
+        assert_eq!(TypeId::LIST.class_index(), None);
+    }
+
+    #[test]
+    fn a_type_object_is_named_by_its_runtime_symbol() {
+        let cases = [
+            (
+                TypeObjectRef::Runtime(RuntimeType::Int),
+                Some("typy_rt_type_int"),
+            ),
+            (
+                TypeObjectRef::Runtime(RuntimeType::Object),
+                Some("typy_rt_object"),
+            ),
+            (
+                TypeObjectRef::Runtime(RuntimeType::Range),
+                Some("typy_rt_type_range"),
+            ),
+            (
+                TypeObjectRef::Exception("ValueError"),
+                Some("typy_rt_exception_ValueError"),
+            ),
+            (TypeObjectRef::Class(2), None),
+        ];
+        for (object, symbol) in cases {
+            assert_eq!(object.runtime_symbol().as_deref(), symbol, "{object:?}");
+            let shown = object.to_string();
+            assert_eq!(shown, symbol.map_or("class#2".to_owned(), str::to_owned));
         }
     }
 }

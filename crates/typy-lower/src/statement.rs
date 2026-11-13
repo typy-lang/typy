@@ -16,10 +16,6 @@ impl FunctionLowerer<'_> {
         }
     }
 
-    fn slot(&self, symbol: SymbolId) -> SlotId {
-        self.slots[&symbol]
-    }
-
     #[allow(clippy::too_many_lines, reason = "one arm per statement kind")]
     fn statement(&mut self, statement: &TypedStmt) {
         match statement {
@@ -60,14 +56,16 @@ impl FunctionLowerer<'_> {
                         _ => unreachable!("the checker allows an entry target only on a dict"),
                     },
                     typy_check::AssignTarget::Attribute { object, index } => match &object.ty {
-                        typy_check::Type::Instance(class, _) => {
-                            self.program.class(*class).attributes[*index].ty.clone()
+                        ty if let Some(class) = ty.class_id() => {
+                            self.program.class(class).attributes[*index].ty.clone()
                         }
                         _ => unreachable!(
                             "the checker allows an attribute target only on an instance"
                         ),
                     },
-                    typy_check::AssignTarget::Tuple(_) => typy_check::Type::Error,
+                    typy_check::AssignTarget::Tuple(_) | typy_check::AssignTarget::Slice { .. } => {
+                        typy_check::Type::Error
+                    }
                 };
                 self.augmented_assignment(target, *operator, value, &result, *span);
             }
@@ -76,9 +74,10 @@ impl FunctionLowerer<'_> {
                 self.release(lowered, *span);
             }
             TypedStmt::Return { value, span } => {
-                // A returned variable hands its slot's reference to the caller (MEM-04).
+                // A returned variable hands its slot's reference to the caller (MEM-04), unless
+                // an `except` clause is open, whose cleanup may release the variable's value.
                 let moved = match value.as_ref().map(|value| &value.kind) {
-                    Some(typy_check::TypedExprKind::Local(symbol)) => {
+                    Some(typy_check::TypedExprKind::Local(symbol)) if self.cleanups.is_empty() => {
                         let slot = self.slots[symbol];
                         (!self.borrowed.contains(&slot)).then_some(slot)
                     }
@@ -92,8 +91,62 @@ impl FunctionLowerer<'_> {
                     }
                     (None, _) => self.constant(Constant::Unit, *span),
                 };
+                // A `finally` block runs after the value is computed, and an error in it
+                // releases the value with the other temporaries.
+                let returned = self.builder.return_type();
+                let held = !self.cleanups.is_empty() && self.counted(returned);
+                if held {
+                    self.temporaries.push(value);
+                }
+                self.run_cleanups(0, *span);
+                if held {
+                    self.untrack(value);
+                }
                 self.release_slots_but(moved, *span);
                 self.builder.terminate(Terminator::Return(value));
+            }
+            TypedStmt::Raise {
+                exception,
+                cause,
+                span,
+            } => self.raise_statement(exception.as_ref(), cause, *span),
+            TypedStmt::With {
+                manager,
+                protocol,
+                suppresses,
+                target,
+                body,
+                span,
+            } => self.with_statement(
+                manager,
+                *protocol,
+                *suppresses,
+                target.as_ref(),
+                body,
+                *span,
+            ),
+            TypedStmt::Delete { targets, span } => {
+                for target in targets {
+                    self.delete(target, *span);
+                }
+            }
+            TypedStmt::Assert {
+                test,
+                exception,
+                span,
+            } => {
+                // The message is evaluated only when the test is false, as in CPython.
+                let condition = self.condition(test);
+                let passed = self.builder.create_block();
+                let failed = self.builder.create_block();
+                self.builder.terminate(Terminator::Branch {
+                    condition,
+                    then: passed,
+                    otherwise: failed,
+                });
+                self.builder.switch_to(failed);
+                self.raise_statement(Some(exception), &typy_check::RaiseCause::Absent, *span);
+                self.builder.switch_to(passed);
             }
             TypedStmt::If {
                 test,
@@ -141,17 +194,36 @@ impl FunctionLowerer<'_> {
             } => {
                 self.for_range(*target, [start, stop, step], body, orelse, *span);
             }
+            TypedStmt::Import {
+                modules,
+                bindings,
+                span,
+            } => self.import_statement(modules, bindings, *span),
+            TypedStmt::LazyImport {
+                reifies,
+                targets,
+                span,
+            } => self.lazy_import_statement(reifies, targets, *span),
             TypedStmt::Pass { .. } => {}
             TypedStmt::Break { span } => {
                 if let Some(targets) = self.loops.last().copied() {
+                    self.run_cleanups(targets.cleanups, *span);
                     self.jump_if_open(targets.break_target, *span);
                 }
             }
             TypedStmt::Continue { span } => {
                 if let Some(targets) = self.loops.last().copied() {
+                    self.run_cleanups(targets.cleanups, *span);
                     self.jump_if_open(targets.continue_target, *span);
                 }
             }
+            TypedStmt::Try {
+                body,
+                handlers,
+                orelse,
+                finalbody,
+                span,
+            } => self.try_statement(body, handlers, orelse, finalbody, *span),
         }
     }
 
@@ -195,6 +267,7 @@ impl FunctionLowerer<'_> {
         self.loops.push(LoopTargets {
             break_target: exit,
             continue_target: header,
+            cleanups: self.cleanups.len(),
         });
         self.statements(body);
         self.loops.pop();
@@ -254,11 +327,11 @@ impl FunctionLowerer<'_> {
         });
         self.builder.switch_to(inside);
         let value = self.load(counter, span);
-        let target_slot = self.slot(target);
-        self.store(target_slot, value, span);
+        self.assign_name(target, value, span);
         self.loops.push(LoopTargets {
             break_target: exit,
             continue_target: advance,
+            cleanups: self.cleanups.len(),
         });
         self.statements(body);
         self.loops.pop();

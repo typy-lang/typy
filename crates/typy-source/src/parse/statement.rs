@@ -5,7 +5,7 @@ use ruff_text_size::{Ranged, TextRange};
 
 use super::Converter;
 use super::operator::binary_operator;
-use crate::syntax::{Alias, NodeKind, Parameter, ParameterKind, Stmt};
+use crate::syntax::{Alias, ExceptHandler, NodeKind, Parameter, ParameterKind, Stmt, WithItem};
 
 impl Converter<'_> {
     pub(super) fn statements(&self, statements: &[ast::Stmt]) -> Vec<Stmt> {
@@ -22,11 +22,19 @@ impl Converter<'_> {
         }
     }
 
+    /// Converts a statement, one level deeper; past `MAX_DEPTH` it stands in `pass`, and
+    /// parsing fails.
+    pub(super) fn statement(&self, statement: &ast::Stmt) -> Stmt {
+        let span = self.span(statement.range());
+        self.deeper(statement.range(), || self.statement_kind(statement))
+            .unwrap_or(Stmt::Pass { span })
+    }
+
     #[allow(
         clippy::too_many_lines,
         reason = "one arm per statement kind of Python's grammar"
     )]
-    pub(super) fn statement(&self, statement: &ast::Stmt) -> Stmt {
+    fn statement_kind(&self, statement: &ast::Stmt) -> Stmt {
         let span = self.span(statement.range());
         match statement {
             ast::Stmt::FunctionDef(node) if node.is_async => {
@@ -84,7 +92,14 @@ impl Converter<'_> {
                 value: node.value.as_deref().map(|value| self.expression(value)),
                 span,
             },
-            ast::Stmt::Delete(node) => self.other_statement(NodeKind::Delete, node.range),
+            ast::Stmt::Delete(node) => Stmt::Delete {
+                targets: node
+                    .targets
+                    .iter()
+                    .map(|target| self.expression(target))
+                    .collect(),
+                span,
+            },
             ast::Stmt::TypeAlias(node) => self.other_statement(NodeKind::TypeAlias, node.range),
             ast::Stmt::Assign(node) => Stmt::Assign {
                 targets: node
@@ -133,14 +148,54 @@ impl Converter<'_> {
             ast::Stmt::With(node) if node.is_async => {
                 self.other_statement(NodeKind::AsyncWith, node.range)
             }
-            ast::Stmt::With(node) => self.other_statement(NodeKind::With, node.range),
+            ast::Stmt::With(node) => Stmt::With {
+                items: node
+                    .items
+                    .iter()
+                    .map(|item| WithItem {
+                        context: self.expression(&item.context_expr),
+                        target: item
+                            .optional_vars
+                            .as_deref()
+                            .map(|target| self.expression(target)),
+                    })
+                    .collect(),
+                body: self.statements(&node.body),
+                span,
+            },
             ast::Stmt::Match(node) => self.other_statement(NodeKind::Match, node.range),
-            ast::Stmt::Raise(node) => self.other_statement(NodeKind::Raise, node.range),
+            ast::Stmt::Raise(node) => Stmt::Raise {
+                exception: node.exc.as_deref().map(|value| self.expression(value)),
+                cause: node.cause.as_deref().map(|value| self.expression(value)),
+                span,
+            },
             ast::Stmt::Try(node) if node.is_star => {
                 self.other_statement(NodeKind::TryStar, node.range)
             }
-            ast::Stmt::Try(node) => self.other_statement(NodeKind::Try, node.range),
-            ast::Stmt::Assert(node) => self.other_statement(NodeKind::Assert, node.range),
+            ast::Stmt::Try(node) => Stmt::Try {
+                body: self.statements(&node.body),
+                handlers: node
+                    .handlers
+                    .iter()
+                    .map(|handler| {
+                        let ast::ExceptHandler::ExceptHandler(handler) = handler;
+                        ExceptHandler {
+                            class: handler.type_.as_deref().map(|class| self.expression(class)),
+                            name: handler.name.as_ref().map(|name| self.identifier(name)),
+                            body: self.statements(&handler.body),
+                            span: self.span(handler.range),
+                        }
+                    })
+                    .collect(),
+                orelse: self.statements(&node.orelse),
+                finalbody: self.statements(&node.finalbody),
+                span,
+            },
+            ast::Stmt::Assert(node) => Stmt::Assert {
+                test: self.expression(&node.test),
+                message: node.msg.as_deref().map(|message| self.expression(message)),
+                span,
+            },
             ast::Stmt::Import(node) => Stmt::Import {
                 names: node.names.iter().map(|alias| self.alias(alias)).collect(),
                 is_lazy: node.is_lazy,
@@ -153,7 +208,14 @@ impl Converter<'_> {
                 is_lazy: node.is_lazy,
                 span,
             },
-            ast::Stmt::Global(node) => self.other_statement(NodeKind::Global, node.range),
+            ast::Stmt::Global(node) => Stmt::Global {
+                names: node
+                    .names
+                    .iter()
+                    .map(|name| self.identifier(name))
+                    .collect(),
+                span,
+            },
             ast::Stmt::Nonlocal(node) => self.other_statement(NodeKind::Nonlocal, node.range),
             ast::Stmt::Expr(node) => Stmt::Expr {
                 value: self.expression(&node.value),
@@ -173,7 +235,8 @@ impl Converter<'_> {
         let Some((first, rest)) = clauses.split_first() else {
             return Vec::new();
         };
-        match &first.test {
+        // Each `elif` nests one level deeper, as its `If` node does.
+        self.deeper(first.range, || match &first.test {
             Some(test) => vec![Stmt::If {
                 test: self.expression(test),
                 body: self.statements(&first.body),
@@ -181,7 +244,8 @@ impl Converter<'_> {
                 span: self.span(first.range),
             }],
             None => self.statements(&first.body),
-        }
+        })
+        .unwrap_or_default()
     }
 
     pub(super) fn alias(&self, alias: &ast::Alias) -> Alias {

@@ -5,7 +5,7 @@ use typy_diagnostics::{Diagnostic, DiagnosticCode, RuleId, Span};
 use super::BodyChecker;
 use super::flow::Fact;
 use crate::builtin::Builtin;
-use crate::typed::{TypedExpr, TypedExprKind};
+use crate::typed::{SymbolId, SymbolKind, TypedExpr, TypedExprKind};
 use crate::types::Type;
 use crate::unprovided::{Unprovided, unprovided};
 
@@ -23,7 +23,17 @@ const MODULE_DUNDERS: &[&str] = &[
 impl BodyChecker<'_> {
     /// Resolves a name that is read as a value (LR 4.2.2).
     pub(super) fn name(&mut self, id: &str, span: Span) -> TypedExpr {
+        if self.in_function()
+            && !self.global_names.contains(id)
+            && !self.locals.contains_key(id)
+            && let Some(symbol) = self.program.module_symbols.get(id).copied()
+        {
+            return self.module_variable(id, symbol, span);
+        }
         if let Some(symbol) = self.locals.get(id).copied() {
+            if self.global_names.contains(id) {
+                return self.module_variable(id, symbol, span);
+            }
             if let Some(assigned) = &self.assigned
                 && !assigned.contains(&Fact::Assigned(symbol))
                 && self.reported_unassigned.insert(symbol)
@@ -49,9 +59,17 @@ impl BodyChecker<'_> {
                 self.incomplete_instance(initializing, span, false);
             }
             let ty = self.types.get(&symbol).cloned().unwrap_or(Type::Error);
-            let read = Self::typed(TypedExprKind::Local(symbol), ty.clone(), span);
-            // A test before this point showed the optional variable is not `None` (TYP-13).
+            let kind = if self.program.symbols[symbol.0 as usize].kind == SymbolKind::ModuleVariable
+            {
+                TypedExprKind::ModuleVariable(symbol)
+            } else {
+                TypedExprKind::Local(symbol)
+            };
+            let read = Self::typed(kind, ty.clone(), span);
+            // A test before this point showed the optional variable is not `None` (TYP-13);
+            // a call may assign a variable a function declares `global`, so it is not narrowed.
             if let Type::Optional(inner) = ty
+                && !self.program.assigned_in_functions.contains(id)
                 && self
                     .assigned
                     .as_ref()
@@ -64,21 +82,27 @@ impl BodyChecker<'_> {
         if id == "__name__" {
             return Self::typed(TypedExprKind::ModuleName, Type::Str, span);
         }
-        if self.in_function() && self.program.module_variables.contains(id) {
+        if self.program.annotation_names.contains_key(id)
+            || self.program.annotation_modules.contains_key(id)
+        {
             return self.error(
                 Diagnostic::new(
                     DiagnosticCode::error(201),
                     span,
-                    format!("reading the module variable `{id}` from a function is planned for TyPy 0.3 (SMT-08)"),
+                    format!("using `{id}` as a value is planned for TyPy 0.4 (TYP-15)"),
                 )
-                .with_rule(RuleId::SMT_08),
+                .with_rule(RuleId::TYP_15)
+                .with_help("TyPy 0.3 reads it in annotations only"),
                 span,
             );
         }
         if let Some(type_object) = self.type_object_named(id, span) {
-            return type_object;
+            return self.through_lazy(id, type_object);
         }
-        if self.program.function_ids.contains_key(id) || Builtin::named(id).is_some() {
+        if self.program.function_ids.contains_key(id)
+            || self.program.module_functions.contains_key(id)
+            || Builtin::named(id).is_some()
+        {
             return self.error(
                 Diagnostic::new(
                     DiagnosticCode::error(201),
@@ -90,6 +114,27 @@ impl BodyChecker<'_> {
             );
         }
         self.unknown_name(id, span)
+    }
+
+    /// Reads a module variable from a function: its value as it is now, which may be unbound
+    /// and then raises `NameError`, and is never narrowed, since a call may assign it (SMT-08).
+    fn module_variable(&mut self, id: &str, symbol: SymbolId, span: Span) -> TypedExpr {
+        let ty = self.program.symbols[symbol.0 as usize].ty.clone();
+        if ty == Type::Error && self.program.provisional {
+            return self.error(
+                Diagnostic::new(
+                    DiagnosticCode::error(424),
+                    span,
+                    format!("an `__init__` reads `{id}` before the module's code gives it a type"),
+                )
+                .with_rule(RuleId::SMT_08)
+                .with_help(format!(
+                    "declare its type at module level, such as `{id}: int = ...`"
+                )),
+                span,
+            );
+        }
+        Self::typed(TypedExprKind::ModuleVariable(symbol), ty, span)
     }
 
     pub(super) fn unknown_name(&mut self, id: &str, span: Span) -> TypedExpr {

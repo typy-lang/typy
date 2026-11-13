@@ -7,7 +7,7 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 
 use camino::{Utf8Path, Utf8PathBuf};
 use typy_driver::Pipeline;
-use typy_source::PythonFloor;
+use typy_source::SettingOverrides;
 
 use crate::expectation::Expectation;
 use crate::oracle::run_oracles;
@@ -129,14 +129,14 @@ impl Suite {
     }
 
     fn judge_case(&self, case: &TestCase) -> Verdict {
+        // The test's floor is what `python-floor` in its typy.toml would set (CLI-12).
+        let pipeline = self.pipeline.clone().with_overrides(SettingOverrides {
+            python_floor: Some(case.floor),
+        });
         match case.expectation {
             Expectation::Rejected { code, line, column } => {
-                judge_rejected(&self.pipeline, case, code, line, column)
+                judge_rejected(&pipeline, case, code, line, column)
             }
-            Expectation::Accepted if case.floor != PythonFloor::default() => Verdict::Invalid(
-                "a Python floor other than 3.12 needs `python-floor` in typy.toml (CLI-12, 0.3)"
-                    .to_owned(),
-            ),
             Expectation::Accepted => {
                 let runs = run_oracles(&case.path, case.floor);
                 let mut shown = Vec::new();
@@ -164,21 +164,24 @@ impl Suite {
                         version.as_str()
                     ));
                 }
-                let verdict = judge_accepted(&self.pipeline, case, expected);
+                let verdict = judge_accepted(&pipeline, case, expected);
                 if verdict != Verdict::Pass || !self.sanitizers {
                     return verdict;
                 }
-                judge_sanitized(&self.pipeline, &self.compiler, case, expected)
+                judge_sanitized(&pipeline, &self.compiler, case, expected)
             }
         }
     }
 }
 
-/// Adds every `.py` file under `directory` to `files`.
+/// Adds every `.py` file under `directory` to `files`, and the `main.py` of each test of
+/// several modules, whose other files are its modules.
 fn collect(directory: &Utf8Path, files: &mut Vec<Utf8PathBuf>) -> std::io::Result<()> {
     for entry in directory.read_dir_utf8()? {
         let path = entry?.into_path();
-        if path.is_dir() {
+        if path.is_dir() && crate::test_case::is_case_directory(&path) {
+            files.push(path.join("main.py"));
+        } else if path.is_dir() {
             collect(&path, files)?;
         } else if path.extension() == Some("py") {
             files.push(path);

@@ -59,11 +59,7 @@ fn each_way_a_test_fails_or_cannot_judge_typy_gets_its_verdict() {
     results.sort_by(|left, right| left.0.cmp(&right.0));
     let expected = [
         ("EXP-02_in_a_directory.py", "pass", ""),
-        (
-            "EXP-02_later_floor.py",
-            "invalid",
-            "a Python floor other than 3.12",
-        ),
+        ("EXP-02_later_floor.py", "pass", ""),
         (
             "EXP-02_rejected_by_typy.py",
             "fail",

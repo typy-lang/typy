@@ -45,6 +45,9 @@ impl BodyChecker<'_> {
         });
         let Some((builtin, arguments, keywords)) = call else {
             let sequence = self.sequence(iter);
+            if sequence.ty.class_id().is_some() {
+                return self.protocol_source(sequence, user);
+            }
             let item = self.iterated_item(&sequence, user);
             return (LoopSource::Items(sequence), item);
         };
@@ -57,6 +60,48 @@ impl BodyChecker<'_> {
         };
         let ty = source.item_type();
         (source, ty)
+    }
+
+    /// Checks iterating over an instance: its class's `__iter__` gives an instance of a class
+    /// with `__next__`, whose result is each value (CST-08).
+    fn protocol_source(&mut self, iterable: TypedExpr, user: &str) -> (LoopSource, Type) {
+        let class = iterable.ty.class_id().unwrap_or(crate::typed::ClassId(0));
+        let not_iterable = |reason: String| {
+            Diagnostic::new(
+                DiagnosticCode::error(411),
+                iterable.span,
+                format!("{user} over {} {reason}", iterable.ty.with_article()),
+            )
+            .with_rule(RuleId::CST_08)
+        };
+        let Some(iter) = self.program.method(class, "__iter__") else {
+            self.diagnostics
+                .push(not_iterable("needs `__iter__` in its class".to_owned()));
+            return (LoopSource::Items(iterable), Type::Error);
+        };
+        let iterator = self.program.signatures[iter.0 as usize].returns.clone();
+        let next = iterator
+            .class_id()
+            .and_then(|class| self.program.method(class, "__next__"));
+        let Some(next) = next else {
+            if !iterator.has_error() {
+                self.diagnostics.push(not_iterable(format!(
+                    "needs `__iter__` to return an instance of a class with `__next__`, and it \
+                     returns {}",
+                    iterator.with_article()
+                )));
+            }
+            return (LoopSource::Items(iterable), Type::Error);
+        };
+        let item = self.program.signatures[next.0 as usize].returns.clone();
+        let source = LoopSource::Protocol {
+            iterable: Box::new(iterable),
+            iter,
+            next,
+            iterator,
+            item: item.clone(),
+        };
+        (source, item)
     }
 
     fn enumerate(&mut self, arguments: &[Expr], keywords: &[Keyword], span: Span) -> LoopSource {
@@ -109,10 +154,11 @@ impl BodyChecker<'_> {
             return self.range(range_arguments, range_keywords, true, span);
         }
         let sequence = self.sequence(&arguments[0]);
-        if let Type::Dict(..) | Type::DictView(..) = sequence.ty {
-            return self.reversed_dict(&sequence, span);
-        }
-        if let Type::Set(_) = sequence.ty {
+        // A set has no order, and a file or an iterator gives its items once, front first.
+        if matches!(
+            sequence.ty,
+            Type::Set(_) | Type::TextFile | Type::Iterator(_)
+        ) {
             self.diagnostics.push(
                 Diagnostic::new(
                     DiagnosticCode::error(411),
@@ -132,24 +178,6 @@ impl BodyChecker<'_> {
         }
         self.iterated_item(&sequence, "`reversed`");
         LoopSource::Reversed(sequence)
-    }
-
-    /// Reports `reversed` of a dict or a view, which CPython reads from the last entry; it is
-    /// planned with the other forms of DAT-16.
-    fn reversed_dict(&mut self, sequence: &TypedExpr, span: Span) -> LoopSource {
-        self.diagnostics.push(
-            Diagnostic::new(
-                DiagnosticCode::error(201),
-                sequence.span,
-                "`reversed` of a dict or a dict view is planned for TyPy 0.3 (DAT-16)",
-            )
-            .with_rule(RuleId::DAT_16),
-        );
-        LoopSource::Reversed(Self::typed(
-            TypedExprKind::Constant(TypedConstant::None),
-            Type::Error,
-            span,
-        ))
     }
 
     /// Checks `range(stop)`, `range(start, stop)` or `range(start, stop, step)`, each an `int`,
@@ -216,7 +244,7 @@ impl BodyChecker<'_> {
 
     /// Checks a sequence a loop reads. A fixed tuple whose items have one type is read as a
     /// `tuple[T, ...]` (DAT-14).
-    fn sequence(&mut self, expression: &Expr) -> TypedExpr {
+    pub(super) fn sequence(&mut self, expression: &Expr) -> TypedExpr {
         let value = self.expression(expression);
         let Type::Tuple(items) = &value.ty else {
             return value;

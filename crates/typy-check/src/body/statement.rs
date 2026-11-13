@@ -111,6 +111,25 @@ impl BodyChecker<'_> {
                 span: *span,
             },
             Stmt::Return { value, span } => self.return_statement(value.as_ref(), *span),
+            Stmt::Raise {
+                exception,
+                cause,
+                span,
+            } => self.raise_statement(exception.as_ref(), cause.as_ref(), *span),
+            Stmt::Assert {
+                test,
+                message,
+                span,
+            } => self.assert_statement(test, message.as_ref(), *span),
+            Stmt::With { items, body, span } => self.with_statement(items, body, *span)?,
+            Stmt::Delete { targets, span } => self.delete_statement(targets, *span),
+            Stmt::Try {
+                body,
+                handlers,
+                orelse,
+                finalbody,
+                span,
+            } => self.try_statement(body, handlers, orelse, finalbody, *span),
             Stmt::If {
                 test,
                 body,
@@ -167,6 +186,7 @@ impl BodyChecker<'_> {
             } => self.for_statement(target, iter, body, orelse, *span)?,
             Stmt::Pass { span } => TypedStmt::Pass { span: *span },
             Stmt::Break { span } => {
+                self.check_stays_in_finally("break", *span);
                 let state = self.assigned.take();
                 if let Some(breaks) = self.breaks.last_mut() {
                     breaks.push(state);
@@ -174,14 +194,18 @@ impl BodyChecker<'_> {
                 TypedStmt::Break { span: *span }
             }
             Stmt::Continue { span } => {
+                self.check_stays_in_finally("continue", *span);
                 self.assigned = None;
                 TypedStmt::Continue { span: *span }
             }
+            Stmt::Import { span, .. } | Stmt::ImportFrom { span, .. } => {
+                return self.import_statement(statement, *span);
+            }
+            // `global` changes where names resolve, which `declare_globals` did.
             Stmt::AnnAssign { value: None, .. }
+            | Stmt::Global { .. }
             | Stmt::FunctionDef { .. }
             | Stmt::ClassDef { .. }
-            | Stmt::Import { .. }
-            | Stmt::ImportFrom { .. }
             | Stmt::Other { .. } => return None,
         })
     }
@@ -354,6 +378,7 @@ impl BodyChecker<'_> {
 
     pub(super) fn return_statement(&mut self, value: Option<&Expr>, span: Span) -> TypedStmt {
         self.check_instance_complete(span);
+        self.check_stays_in_finally("return", span);
         let expected = self.returns.clone().unwrap_or(Type::NoneType);
         let value = value.map(|value| self.expression_expecting(value, Some(&expected)));
         let actual = value
@@ -414,6 +439,17 @@ fn assigned_names<'tree>(statements: &'tree [Stmt], names: &mut BTreeSet<&'tree 
             Stmt::While { body, orelse, .. } | Stmt::If { body, orelse, .. } => {
                 assigned_names(body, names);
                 assigned_names(orelse, names);
+            }
+            Stmt::Try { .. } => {
+                for block in statement.try_blocks() {
+                    assigned_names(block, names);
+                }
+            }
+            Stmt::With { items, body, .. } => {
+                for target in items.iter().filter_map(|item| item.target.as_ref()) {
+                    target_names(target, names);
+                }
+                assigned_names(body, names);
             }
             _ => {}
         }

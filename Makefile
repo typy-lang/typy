@@ -10,7 +10,7 @@ MARKDOWN := "**/*.md" "\#.tmp/**" "\#target/**" "\#dist/**"
 
 
 .PHONY: dev image shell runtime fmt fmt-check lint type test coverage docs-lint ascii-check traceability test-int test-e2e test-all \
-	build dist bless coverage-branches miri fuzz runtime-size diagrams diagrams-check unicode-tables unicode-tables-check format-cases format-cases-check check hooks clean
+	build dist bless coverage-branches miri fuzz runtime-size diagrams diagrams-check unicode-tables unicode-tables-check format-cases format-cases-check stdlib-names stdlib-names-check errno-texts errno-texts-check mutants mutants-package bench check hooks clean
 
 dev: ## Start the dev service, building its image the first time
 	@$(COMPOSE) up -d --quiet-pull dev 2>/dev/null
@@ -90,6 +90,19 @@ FUZZ_SECONDS ?= 60
 fuzz: dev ## Fuzz the source, checking and lowering stages for FUZZ_SECONDS seconds, 60 by default (NFR-09)
 	@$(COMPOSE) exec -T -e FUZZ_SECONDS=$(FUZZ_SECONDS) dev scripts/fuzz.sh
 
+MUTANTS_BASE ?= HEAD
+MUTANTS_PACKAGE ?= typy-diagnostics
+
+mutants: ## Mutation-test the Rust lines changed since MUTANTS_BASE, by default the uncommitted work, in a container limited to 6 GB; the report goes to .tmp/mutants/diff/
+	@scripts/mutants.sh diff $(MUTANTS_BASE)
+
+mutants-package: ## Mutation-test every mutant of MUTANTS_PACKAGE; hours for a large crate
+	@scripts/mutants.sh package $(MUTANTS_PACKAGE)
+
+bench: runtime ## Time the release-built compiler on generated 10,000-line projects against the budgets of NFR-04, NFR-05 and NFR-14
+	@$(EXEC) cargo build --release -p typy-cli --locked
+	@$(EXEC) python3 tests/bench/build_time.py
+
 runtime-size: build ## Fail when the runtime a hello world links is over the size budgets of NFR-02
 	@$(EXEC) python3 scripts/check-runtime-size.py
 
@@ -105,7 +118,19 @@ format-cases: dev ## Write the runtime's table of format() results from CPython 
 format-cases-check: dev ## Fail when the committed table of format() results differs from CPython's
 	@$(EXEC) python3.15 scripts/generate-format-cases.py --check
 
-check: fmt-check lint coverage-branches docs-lint ascii-check traceability diagrams-check unicode-tables-check format-cases-check runtime-size ## Run the whole quality gate
+stdlib-names: dev ## Write the loader's table of CPython 3.12 to 3.15's standard library module names (LIB-08)
+	@$(EXEC) python3.15 scripts/generate-stdlib-names.py
+
+stdlib-names-check: dev ## Fail when the committed table of standard library module names differs from CPython's
+	@$(EXEC) python3.15 scripts/generate-stdlib-names.py --check
+
+errno-texts: dev ## Write the runtime's table of glibc's error texts, which OSError shows (ADR-0019)
+	@$(EXEC) python3.15 scripts/generate-errno-texts.py
+
+errno-texts-check: dev ## Fail when the committed table of error texts differs from glibc's
+	@$(EXEC) python3.15 scripts/generate-errno-texts.py --check
+
+check: fmt-check lint coverage-branches docs-lint ascii-check traceability diagrams-check unicode-tables-check format-cases-check stdlib-names-check errno-texts-check runtime-size ## Run the whole quality gate
 
 hooks: ## Use the hooks in .githooks for this clone
 	git config core.hooksPath .githooks

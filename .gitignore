@@ -9,3 +9,4 @@
 
 # Release archives that `make dist` builds.
 /dist/
+__pycache__/

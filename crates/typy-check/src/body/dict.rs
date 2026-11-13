@@ -89,16 +89,8 @@ impl BodyChecker<'_> {
         expected: Option<&Type>,
         span: Span,
     ) -> TypedExpr {
-        if let Some(keyword) = keywords.first() {
-            return self.error(
-                Diagnostic::new(
-                    DiagnosticCode::error(201),
-                    keyword.span,
-                    "keyword arguments of `dict` are planned for TyPy 0.3 (DAT-16)",
-                )
-                .with_rule(RuleId::DAT_16),
-                span,
-            );
+        if !keywords.is_empty() {
+            return self.dict_with_keywords(arguments, keywords, expected, span);
         }
         match arguments {
             [] => self.dict_display(&[], &[], expected, span),
@@ -108,25 +100,14 @@ impl BodyChecker<'_> {
                 };
                 Self::typed(TypedExprKind::DictOf(Box::new(source)), ty, span)
             }
-            _ => self.error(
-                Diagnostic::new(
-                    DiagnosticCode::error(404),
-                    span,
-                    format!(
-                        "`dict` takes at most 1 argument, and {} are given",
-                        arguments.len()
-                    ),
-                )
-                .with_rule(RuleId::LIB_02),
-                span,
-            ),
+            _ => self.dict_arity(arguments.len(), span),
         }
     }
 
     /// Checks a source of `(key, value)` pairs, as `dict(source)` and `dict.update` take: a
     /// dict, or anything a loop reads two-item tuples from, whose key has a hash. Returns the
     /// source and the dict type it makes, or `None` after reporting why it cannot.
-    fn pairs_type(&mut self, source: &Expr, user: &str) -> Option<(LoopSource, Type)> {
+    pub(super) fn pairs_type(&mut self, source: &Expr, user: &str) -> Option<(LoopSource, Type)> {
         let span = source.span();
         let (source, item) = self.loop_source(source, user);
         if item.has_error() {

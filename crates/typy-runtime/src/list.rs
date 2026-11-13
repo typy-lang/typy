@@ -3,9 +3,14 @@
 //! NFR-13, ADR-0001, ADR-0009).
 
 mod aggregate;
+mod delete;
 mod item;
 mod methods;
 mod operations;
+#[cfg(test)]
+pub(crate) use methods::typy_rt_list_insert_moved;
+#[cfg(test)]
+pub(crate) use operations::{typy_rt_list_append_moved, typy_rt_list_set, typy_rt_list_set_moved};
 #[cfg(test)]
 mod optional_tests;
 mod order;

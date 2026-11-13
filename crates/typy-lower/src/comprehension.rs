@@ -35,9 +35,12 @@ impl FunctionLowerer<'_> {
             }
             _ => unreachable!("a comprehension makes a list, a set or a dict"),
         };
-        let add = match ty {
-            Type::List(_) => RuntimeFunction::ListAppend,
-            _ => RuntimeFunction::SetAdd,
+        let (add, add_moved) = match ty {
+            Type::List(_) => (
+                RuntimeFunction::ListAppend,
+                RuntimeFunction::ListAppendMoved,
+            ),
+            _ => (RuntimeFunction::SetAdd, RuntimeFunction::SetAddMoved),
         };
         self.generate(generators, span, &mut |lowerer| {
             let made = lowerer.expression(element);
@@ -48,7 +51,7 @@ impl FunctionLowerer<'_> {
                 lowerer.release(entry, span);
             } else {
                 let bits = lowerer.bits(made, span);
-                lowerer.call_runtime(add, vec![result.value, bits], span);
+                lowerer.store_call(add, add_moved, vec![result.value, bits], made, span);
             }
             lowerer.release(made, span);
         });

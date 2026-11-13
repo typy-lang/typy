@@ -76,7 +76,7 @@ fn every_text_stage_of_every_program_matches_its_golden_file() {
         let name = program.file_stem().unwrap();
         for stage in TEXT_STAGES {
             let request = BuildRequest::new(&program).unwrap().with_emit(stage);
-            let text = match pipeline().run(&request) {
+            let text = match pipeline().run(&request).map(|success| success.outcome) {
                 Ok(Outcome::Emitted(Emission::Text(text))) => text,
                 other => panic!("{program} --emit={}: {other:?}", stage.name()),
             };

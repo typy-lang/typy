@@ -23,33 +23,14 @@ pub(crate) fn unprovided(name: &str) -> Option<Unprovided> {
         Unprovided::Planned { release, rule }
     }
     match name {
-        "iter" | "next" => Some(planned("0.3", RuleId::CST_09)),
-        "input" | "open" => Some(planned("0.3", RuleId::LIB_04)),
         "isinstance" | "issubclass" => Some(planned("0.4", RuleId::CLS_09)),
         "property" | "staticmethod" | "classmethod" | "super" => {
             Some(planned("0.4", RuleId::CLS_01))
         }
         "callable" | "map" | "filter" => Some(planned("1.0", RuleId::FUN_05)),
-        _ if is_exception_class(name) => Some(planned("0.3", RuleId::EXC_01)),
         _ if CPYTHON_3_12_BUILTINS.contains(&name) => Some(Unprovided::Excluded),
         _ => None,
     }
-}
-
-fn is_exception_class(name: &str) -> bool {
-    CPYTHON_3_12_BUILTINS.contains(&name)
-        && (name.ends_with("Error")
-            || name.ends_with("Exception")
-            || name.ends_with("Warning")
-            || name.ends_with("ExceptionGroup")
-            || matches!(
-                name,
-                "GeneratorExit"
-                    | "KeyboardInterrupt"
-                    | "StopIteration"
-                    | "StopAsyncIteration"
-                    | "SystemExit"
-            ))
 }
 
 /// The names in CPython 3.12's `builtins` module, with the site module's additions, that a program can refer to.
@@ -213,10 +194,6 @@ mod tests {
     #[test]
     fn later_builtins_name_their_release_and_rule() {
         let cases = [
-            ("next", "0.3", RuleId::CST_09),
-            ("open", "0.3", RuleId::LIB_04),
-            ("ValueError", "0.3", RuleId::EXC_01),
-            ("KeyboardInterrupt", "0.3", RuleId::EXC_01),
             ("isinstance", "0.4", RuleId::CLS_09),
             ("super", "0.4", RuleId::CLS_01),
             ("map", "1.0", RuleId::FUN_05),

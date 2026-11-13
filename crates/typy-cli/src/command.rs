@@ -2,37 +2,60 @@
 
 mod build;
 mod check;
+mod explain;
 mod run;
 
 use camino::Utf8PathBuf;
 use typy_driver::Pipeline;
 
-use crate::arguments::{Arguments, Command};
+use crate::arguments::Command;
 use crate::exit_status::ExitStatus;
-use crate::output::report_internal;
+use crate::output::Reporter;
 
 /// Runs the command and returns the status `typy` exits with.
-pub(crate) fn run(arguments: Arguments) -> ExitStatus {
+pub(crate) fn run(command: Command, deny_warnings: bool, reporter: Reporter) -> ExitStatus {
     let pipeline = match compiler() {
-        Ok(path) => Pipeline::new(path),
+        Ok(path) => Pipeline::new(path).with_deny_warnings(deny_warnings),
         Err(message) => {
-            report_internal(&message);
+            reporter.internal(&message);
             return ExitStatus::Internal;
         }
     };
-    match arguments.command {
-        Command::Check { file } => check::check(&pipeline, &file),
+    match command {
+        Command::Explain { code } => explain::explain(&code),
+        Command::Check { file, settings } => check::check(
+            &pipeline.with_overrides(settings.overrides()),
+            &file,
+            reporter,
+        ),
         Command::Build {
             file,
             emit,
             output,
             mode,
-        } => build::build(&pipeline, file, emit, output.as_deref(), mode.build_mode()),
+            settings,
+        } => build::build(
+            &pipeline.with_overrides(settings.overrides()),
+            file,
+            emit,
+            output.as_deref(),
+            mode.build_mode(),
+            reporter,
+        ),
         Command::Run {
             file,
             mode,
+            settings,
             arguments,
-        } => run::run(&pipeline, file, mode.build_mode(), &arguments),
+        } => run::run(
+            &pipeline.with_overrides(settings.overrides()),
+            file,
+            mode.build_mode(),
+            settings.overrides(),
+            deny_warnings,
+            &arguments,
+            reporter,
+        ),
     }
 }
 

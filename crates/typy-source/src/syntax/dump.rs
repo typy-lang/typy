@@ -212,6 +212,65 @@ impl Dump<'_> {
                 self.line(depth, "Expr", span);
                 self.expression(depth + 1, value);
             }
+            Stmt::Raise {
+                exception, cause, ..
+            } => {
+                let from = if cause.is_some() { " from" } else { "" };
+                self.line(depth, &format!("Raise{from}"), span);
+                for value in exception.iter().chain(cause) {
+                    self.expression(depth + 1, value);
+                }
+            }
+            Stmt::Try {
+                body,
+                handlers,
+                orelse,
+                finalbody,
+                ..
+            } => {
+                self.line(depth, "Try", span);
+                self.block(depth + 1, "body", body);
+                for handler in handlers {
+                    let name = handler
+                        .name
+                        .as_ref()
+                        .map_or(String::new(), |name| format!(" as {}", name.name));
+                    self.line(depth + 1, &format!("except{name}"), Some(handler.span));
+                    if let Some(class) = &handler.class {
+                        self.expression(depth + 2, class);
+                    }
+                    self.block(depth + 2, "body", &handler.body);
+                }
+                self.block(depth + 1, "orelse", orelse);
+                self.block(depth + 1, "finally", finalbody);
+            }
+            Stmt::With { items, body, .. } => {
+                self.line(depth, "With", span);
+                for item in items {
+                    self.expression(depth + 1, &item.context);
+                    if let Some(target) = &item.target {
+                        self.line(depth + 1, "as", None);
+                        self.expression(depth + 2, target);
+                    }
+                }
+                self.block(depth + 1, "body", body);
+            }
+            Stmt::Delete { targets, .. } => {
+                self.line(depth, "Delete", span);
+                for target in targets {
+                    self.expression(depth + 1, target);
+                }
+            }
+            Stmt::Assert { test, message, .. } => {
+                self.line(depth, "Assert", span);
+                for value in std::iter::once(test).chain(message) {
+                    self.expression(depth + 1, value);
+                }
+            }
+            Stmt::Global { names, .. } => {
+                let names: Vec<&str> = names.iter().map(|name| name.name.as_str()).collect();
+                self.line(depth, &format!("Global {}", names.join(", ")), span);
+            }
             Stmt::Pass { .. } => self.line(depth, "Pass", span),
             Stmt::Break { .. } => self.line(depth, "Break", span),
             Stmt::Continue { .. } => self.line(depth, "Continue", span),

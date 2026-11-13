@@ -1,35 +1,40 @@
 //! The set functions that take another collection: a set, a dict of the set's items as keys,
-//! or a list or `tuple[T, ...]` of the set's items, which is what generated code makes of any
-//! other iterable (DAT-15). Each takes
+//! a view of a dict's keys or items, or a list or `tuple[T, ...]` of the set's items, which is
+//! what generated code makes of any other iterable (DAT-15, DAT-16). Each takes
 //! the steps CPython's `setobject.c` takes for that kind of operand, so the result holds its
 //! items in CPython's order.
 
 use super::algebra::{self, copy, is_disjoint, is_subset, purge};
 use super::{SetObject, add, discard, lookup, new_set, resize};
 use crate::dict::DictObject;
-use crate::header::{DICT_TYPE_ID, SET_TYPE_ID};
+use crate::dict::view::ViewObject;
+use crate::header::{DICT_TYPE_ID, DICT_VIEW_TYPE_ID, SET_TYPE_ID};
 use crate::list::ListObject;
 
 /// The other operand of a set function.
-enum Other<'a> {
+pub(super) enum Other<'a> {
     /// A set, whose table the set algorithms read.
     Set(&'a SetObject),
     /// A dict, whose keys CPython reads in order with the hashes it stored.
     Dict(&'a DictObject),
     /// A list or `tuple[T, ...]` of the set's items, read in order.
     Items(&'a ListObject),
+    /// A view of a dict's keys, read in order as CPython reads any iterable.
+    Keys(&'a ViewObject),
+    /// A view of a dict's items, read in order as `(key, value)` pairs.
+    Pairs(&'a ViewObject),
 }
 
 /// Returns the operand at `address`.
 ///
 /// # Safety
 ///
-/// `address` is the address of a live set, list or `tuple[T, ...]`.
+/// `address` is the address of a live set, dict, view, list or `tuple[T, ...]`.
 #[allow(
     clippy::cast_ptr_alignment,
     reason = "every object comes from malloc, aligned for every type, and starts with its header"
 )]
-unsafe fn other<'a>(address: u64) -> Other<'a> {
+pub(super) unsafe fn other<'a>(address: u64) -> Other<'a> {
     let header = core::ptr::with_exposed_provenance::<crate::header::ObjectHeader>(
         usize::try_from(address).unwrap_or(0),
     );
@@ -38,19 +43,28 @@ unsafe fn other<'a>(address: u64) -> Other<'a> {
         match (*header).type_id {
             SET_TYPE_ID => Other::Set(&*header.cast::<SetObject>()),
             DICT_TYPE_ID => Other::Dict(&*header.cast::<DictObject>()),
+            DICT_VIEW_TYPE_ID => {
+                let view = &*header.cast::<ViewObject>();
+                if view.kind == 0 {
+                    Other::Keys(view)
+                } else {
+                    Other::Pairs(view)
+                }
+            }
             _ => Other::Items(&*header.cast::<ListObject>()),
         }
     }
 }
 
-/// Calls `visit` with each item of an operand that is not a set and its hash, in order: the
-/// items of a list, or the keys of a dict with their stored hashes, until it returns false;
-/// returns whether every call returned true.
+/// Calls `visit` with each item of an operand and its hash, in order, until it returns false:
+/// the items of a list, the keys of a dict or a keys view with their stored hashes, each
+/// `(key, value)` pair of an items view, laid out as the set's tuple items, or the items of a
+/// set in table order. Returns whether every call returned true.
 ///
 /// # Safety
 ///
 /// `other` holds items of the set's type.
-unsafe fn each_item(
+pub(super) unsafe fn each_item(
     set: *const SetObject,
     other: &Other<'_>,
     mut visit: impl FnMut(u64, i64) -> bool,
@@ -68,9 +82,61 @@ unsafe fn each_item(
             Other::Dict(dict) => dict
                 .live_entries()
                 .all(|index| visit(dict.key(index), dict.hash(index))),
-            Other::Set(_) => unreachable!("a set operand is read by the set algorithms"),
+            Other::Keys(view) => {
+                let dict = &*view.dict;
+                dict.live_entries()
+                    .all(|index| visit(dict.key(index), dict.hash(index)))
+            }
+            Other::Pairs(view) => each_pair(set, &*view.dict, true, visit),
+            Other::Set(source) => source
+                .active()
+                .all(|slot| visit(source.item(slot), source.hash(slot))),
         }
     }
+}
+
+/// Calls `visit` with each `(key, value)` pair of `dict` and its hash, or 0 when `hashed` is
+/// false, in order, built in room laid out as the tuple items of `set`, until it returns
+/// false; returns whether every call returned true. A pair borrows its key and value, so
+/// `visit` keeps it only by a reference of its own. A pair whose value has no hash is read
+/// only unhashed, as CPython compares two items views by looking up each key.
+///
+/// # Safety
+///
+/// `set` holds tuples of the dict's key and value types, and `dict` is live.
+pub(super) unsafe fn each_pair(
+    set: *const SetObject,
+    dict: &DictObject,
+    hashed: bool,
+    mut visit: impl FnMut(u64, i64) -> bool,
+) -> bool {
+    // SAFETY: the caller's guarantee; the room is as large as one pair.
+    unsafe {
+        let item_type = (*set).item_type();
+        let pair_type = (*set).tuple;
+        let room = crate::allocator::allocate(usize::try_from((*pair_type).size).unwrap_or(8));
+        let address = room.expose_provenance() as u64;
+        let all = dict.live_entries().all(|index| {
+            crate::tuple::store_field(pair_type, address, 0, dict.key(index));
+            crate::tuple::store_field(pair_type, address, 1, dict.value(index));
+            visit(address, pair_hash(item_type, address, hashed))
+        });
+        crate::allocator::free(room);
+        all
+    }
+}
+
+/// Returns the hash of the pair at `address`, or 0 when it is read `hashed` false.
+///
+/// # Safety
+///
+/// `address` holds a live pair of `item_type`.
+unsafe fn pair_hash(item_type: crate::list::ItemType, address: u64, hashed: bool) -> i64 {
+    if !hashed {
+        return 0;
+    }
+    // SAFETY: the caller's guarantee.
+    unsafe { item_type.hash(address) }
 }
 
 /// Adds each item of `other` to `set`, CPython's `set_update_internal`: nothing when `other`
@@ -99,7 +165,7 @@ pub unsafe extern "C" fn typy_rt_set_extend(set: *mut SetObject, other: u64, ski
                 }
                 add_each(set, &operand);
             }
-            Other::Items(_) => add_each(set, &operand),
+            Other::Items(_) | Other::Keys(_) | Other::Pairs(_) => add_each(set, &operand),
         }
     }
 }
@@ -268,7 +334,7 @@ pub unsafe extern "C" fn typy_rt_set_toggle(set: *mut SetObject, other: u64) {
                     true
                 });
             }
-            Other::Items(_) => {
+            Other::Items(_) | Other::Keys(_) | Other::Pairs(_) => {
                 let source = new_set((*set).item_type());
                 typy_rt_set_extend(source, other, 0);
                 algebra::symmetric_difference_update(set, source);

@@ -1,28 +1,41 @@
 //! Checks one function body, or the module body: names, types and definite assignment.
 
 mod builtin_call;
+mod builtin_module;
 mod call;
 mod class;
 mod comprehension;
+mod delete;
 mod dict;
+mod dict_call;
+mod exception;
 mod expression;
 mod flow;
 mod fstring;
+mod import;
 mod iterable_call;
+mod iterator;
 mod list;
 mod list_call;
 mod locals;
 mod loop_source;
+mod math_call;
 mod method_call;
 mod name;
+mod open_call;
 mod operator;
+mod percent;
 mod program;
 mod round_call;
 mod set;
 mod slice;
 mod statement;
+mod sys_call;
 mod type_object;
+mod view_operator;
 
+pub(crate) use builtin_module::ModuleFunction;
+pub(crate) use import::Imported;
 pub(crate) use program::Program;
 
 use std::collections::{BTreeMap, BTreeSet};
@@ -55,6 +68,12 @@ pub(crate) struct BodyChecker<'program> {
     initializing: Option<class::Initializing>,
     /// Whether a use of the incomplete instance has been reported, so one cause gives one error.
     reported_incomplete: bool,
+    /// How many `except` clauses enclose the statement being checked, in this function.
+    handling: usize,
+    /// For each `finally` block being checked, how many loops were open where it starts.
+    finally_loops: Vec<usize>,
+    /// The module variables the function declares `global`, which it assigns (SMT-08).
+    global_names: BTreeSet<String>,
 }
 
 impl<'program> BodyChecker<'program> {
@@ -76,6 +95,9 @@ impl<'program> BodyChecker<'program> {
             returns,
             initializing: None,
             reported_incomplete: false,
+            handling: 0,
+            finally_loops: Vec::new(),
+            global_names: BTreeSet::new(),
         }
     }
 
@@ -118,9 +140,12 @@ impl<'program> BodyChecker<'program> {
                 instance: *instance,
             });
         }
+        checker.declare_globals(definition.body);
+        let saved = checker.import_names_of(definition.body);
         let statements: Vec<&Stmt> = definition.body.iter().collect();
         checker.collect_locals(&statements);
         let body = checker.statements(&statements);
+        checker.restore_names(saved);
         checker.check_instance_complete(definition.span);
         if checker.assigned.is_some() && returns != Type::NoneType && returns != Type::Error {
             checker.diagnostics.push(
@@ -156,15 +181,21 @@ impl<'program> BodyChecker<'program> {
         statements: &[&Stmt],
         diagnostics: &mut Diagnostics,
     ) -> FunctionId {
-        let entry = FunctionId(id(program.functions.len()));
         let mut checker = BodyChecker::new(program, diagnostics, None);
         checker.collect_locals(statements);
         let body = checker.statements(statements);
         let locals = checker.finish_locals();
+        // A lazy import adds the function that runs it, so the body's ID comes after those.
+        let entry = FunctionId(id(program.functions.len()));
         let span = statements.first().map_or_else(
             || Span::empty(typy_diagnostics::FileId(0), typy_diagnostics::TextOffset(0)),
             |first| first.span(),
         );
+        // The module body takes an ID as a function does, so it has a signature too.
+        program.signatures.push(FunctionSignature {
+            parameters: Vec::new(),
+            returns: Type::NoneType,
+        });
         program.functions.push(Some(TypedFunction {
             id: entry,
             name: "<module>".to_owned(),

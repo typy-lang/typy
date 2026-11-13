@@ -37,6 +37,21 @@ pub unsafe extern "C" fn typy_rt_set_add(set: *mut SetObject, item: u64) {
     }
 }
 
+/// Adds `item`, whose reference the set takes over from the caller, or releases it when an
+/// equal item is there already (MEM-09).
+///
+/// # Safety
+///
+/// As for `typy_rt_set_add`, and the caller owns a reference to `item`.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn typy_rt_set_add_moved(set: *mut SetObject, item: u64) {
+    // SAFETY: the caller's guarantee.
+    unsafe {
+        let hash = (*set).item_type().hash(item);
+        crate::set::add_item(set, item, hash, false);
+    }
+}
+
 /// Returns whether the set holds an item equal to `item` (`in`).
 ///
 /// # Safety

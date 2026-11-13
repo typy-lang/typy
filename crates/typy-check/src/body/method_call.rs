@@ -10,6 +10,24 @@ use crate::typed::{Argument, TypedConstant, TypedExpr, TypedExprKind};
 use crate::types::Type;
 
 impl BodyChecker<'_> {
+    /// Checks a call through `super()` or a module object, which names a method of a base or
+    /// a function of the module rather than a method of a value.
+    fn call_through(
+        &mut self,
+        receiver: &Expr,
+        name: &Identifier,
+        arguments: &[Expr],
+        keywords: &[Keyword],
+        span: Span,
+    ) -> Option<TypedExpr> {
+        if is_super(receiver) {
+            return Some(self.super_call(name, arguments, keywords, span));
+        }
+        let module = self.module_of(receiver)?;
+        let call = self.module_call(&module, name, arguments, keywords, span);
+        Some(self.through_lazy_module(receiver, call))
+    }
+
     /// Checks `receiver.name(arguments)`, a method of a built-in type (LIB-03).
     pub(super) fn method_call(
         &mut self,
@@ -19,27 +37,24 @@ impl BodyChecker<'_> {
         keywords: &[Keyword],
         span: Span,
     ) -> TypedExpr {
+        if let Some(call) = self.call_through(receiver, name, arguments, keywords, span) {
+            return call;
+        }
         let receiver = self.expression(receiver);
         if receiver.ty.has_error() {
             return Self::invalid_call(span);
         }
-        if let Type::Instance(class, _) = receiver.ty {
+        if name.name == "fromkeys"
+            && let Type::TypeObject(Some(of)) = &receiver.ty
+            && **of == crate::types::TypeObjectOf::Dict
+        {
+            return self.call_fromkeys(arguments, keywords, None, span);
+        }
+        if let Some(class) = receiver.ty.class_id() {
             return self.instance_method_call(receiver, class, name, arguments, keywords, span);
         }
         let Some(method) = Method::of(&receiver.ty, &name.name) else {
-            return self.error(
-                Diagnostic::new(
-                    DiagnosticCode::error(412),
-                    name.span,
-                    format!(
-                        "{} has no method `{}` in TyPy",
-                        receiver.ty.with_article(),
-                        name.name
-                    ),
-                )
-                .with_rule(RuleId::LIB_03),
-                span,
-            );
+            return self.unknown_method(&receiver.ty, name, span);
         };
         // `setdefault` without a default stores `None`, which only an optional value type holds.
         if method == Method::DictSetdefault
@@ -238,6 +253,27 @@ impl BodyChecker<'_> {
         );
     }
 
+    /// Reports a method a built-in type does not have; a text file says which of its names
+    /// are planned (LIB-14).
+    fn unknown_method(&mut self, receiver: &Type, name: &Identifier, span: Span) -> TypedExpr {
+        if *receiver == Type::TextFile {
+            return self.missing_file_name(&name.name, name.span, span);
+        }
+        self.error(
+            Diagnostic::new(
+                DiagnosticCode::error(412),
+                name.span,
+                format!(
+                    "{} has no method `{}` in TyPy",
+                    receiver.with_article(),
+                    name.name
+                ),
+            )
+            .with_rule(RuleId::LIB_03),
+            span,
+        )
+    }
+
     /// Checks one argument against what its parameter accepts.
     fn method_argument(
         &mut self,
@@ -289,9 +325,16 @@ impl BodyChecker<'_> {
                         Diagnostic::new(
                             DiagnosticCode::error(404),
                             value.span,
-                            format!(
-                                "`join` joins items of type {text}, and these items are {item}"
-                            ),
+                            if method == Method::TextWritelines {
+                                format!(
+                                    "`writelines` writes items of type {text}, and these items \
+                                     are {item}"
+                                )
+                            } else {
+                                format!(
+                                    "`join` joins items of type {text}, and these items are {item}"
+                                )
+                            },
                         )
                         .with_rule(RuleId::LIB_03),
                     );
@@ -368,4 +411,15 @@ fn counted(count: usize, noun: &str) -> String {
     } else {
         format!("{count} {noun}s")
     }
+}
+
+/// Returns true for `super()` with no arguments.
+fn is_super(receiver: &Expr) -> bool {
+    matches!(
+        receiver,
+        Expr::Call { function, arguments, keywords, .. }
+            if matches!(function.as_ref(), Expr::Name { id, .. } if id == "super")
+                && arguments.is_empty()
+                && keywords.is_empty()
+    )
 }

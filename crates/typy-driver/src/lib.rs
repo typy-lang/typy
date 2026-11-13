@@ -6,9 +6,11 @@ mod failure;
 mod outcome;
 mod pipeline;
 mod sources;
+mod success;
 
 pub use emission::Emission;
 pub use failure::Failure;
 pub use outcome::Outcome;
 pub use pipeline::Pipeline;
 pub use sources::Sources;
+pub use success::{Success, Warnings};

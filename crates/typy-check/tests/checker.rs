@@ -61,6 +61,169 @@ fn check(source: &str) -> Result<TypedProgram, Vec<String>> {
     TypeChecker::check(&project).map_err(|diagnostics| codes(&diagnostics, &project))
 }
 
+#[test]
+fn a_try_statement_types_each_clause_and_its_name() {
+    let source = "def f(n: int) -> int:\n    try:\n        return 10 // n\n    except (KeyError, IndexError) as e:\n        raise\n    except ZeroDivisionError:\n        return 0\n    except:\n        raise ValueError('other') from None\n    else:\n        pass\n";
+    let (_directory, project) = load(source);
+    let program = TypeChecker::check(&project).expect("the program is accepted");
+    let dump = typy_check::dump(&program, &project);
+    for expected in [
+        "Try @2:5",
+        "except KeyError, IndexError as e @4:5",
+        "except ZeroDivisionError @6:5",
+        "except BaseException @8:5",
+        "Raise @5:9",
+    ] {
+        assert!(dump.contains(expected), "{expected} in\n{dump}");
+    }
+    let e = program
+        .symbols
+        .iter()
+        .find(|symbol| symbol.name == "e")
+        .expect("the clause's name is a symbol");
+    assert_eq!(e.ty.to_string(), "LookupError");
+}
+
+#[test]
+fn finally_runs_on_every_path_and_what_it_assigns_holds_after() {
+    let source = "def f(n: int) -> int:\n    try:\n        n += 1\n    finally:\n        done = True\n        for i in range(2):\n            if i:\n                break\n    print(done)\n    return n\n\
+                  def g() -> int:\n    try:\n        return 1\n    finally:\n        raise ValueError\n";
+    let (_directory, project) = load(source);
+    let program = TypeChecker::check(&project).expect("the program is accepted");
+    let dump = typy_check::dump(&program, &project);
+    assert!(dump.contains("    finally\n"), "{dump}");
+}
+
+#[test]
+fn an_exception_class_builds_exceptions_and_keeps_its_base_s_attributes() {
+    let source = "class Base(LookupError):\n    def __init__(self, code: int) -> None:\n        super().__init__(code, 'x')\n        self.code = code\n\
+                  class Child(Base):\n    def __init__(self, code: int, extra: str) -> None:\n        super().__init__(code)\n        self.extra = extra\n    def __str__(self) -> str:\n        return self.extra\n\
+                  class Plain(Child):\n    pass\n\
+                  e: LookupError = Plain(1, extra='e')\n\
+                  c = Child(2, 'c')\n\
+                  c.code += 1\n\
+                  print(c.code, c.extra, type(Base), e is c)\n\
+                  try:\n    raise Plain(3, 'p')\nexcept Base as caught:\n    print(caught.code)\n";
+    let (_directory, project) = load(source);
+    let program = TypeChecker::check(&project);
+    let program = program.expect("the program is accepted");
+    let dump = typy_check::dump(&program, &project);
+    for expected in ["SetArguments", "NewException Plain", "NewException Child"] {
+        assert!(dump.contains(expected), "{expected} in\n{dump}");
+    }
+    let child = &program.classes[1];
+    let names: Vec<&str> = child
+        .attributes
+        .iter()
+        .map(|attribute| attribute.name.as_str())
+        .collect();
+    assert_eq!(names, ["code", "extra"]);
+    assert_eq!(child.base, Some(program.classes[0].id));
+}
+
+#[test]
+fn clauses_and_super_after_a_return_are_still_checked() {
+    accepted(
+        "def f() -> None:\n    return\n    try:\n        pass\n    except ValueError as e:\n        print(e)\n\
+         class A(Exception):\n    def __init__(self) -> None:\n        return\n        super().__init__()\n",
+    );
+}
+
+#[test]
+fn assert_builds_an_assertion_error_and_narrows_after_it() {
+    let source = "def f(x: int | None) -> int:\n    assert x is not None, 'needed'\n    assert x > 0\n    return x + 1\n";
+    let (_directory, project) = load(source);
+    let program = TypeChecker::check(&project).expect("the program is accepted");
+    let dump = typy_check::dump(&program, &project);
+    for expected in [
+        "Assert @2:5",
+        "NewException AssertionError : AssertionError",
+        "Assert @3:5",
+        "Unwrap",
+    ] {
+        assert!(dump.contains(expected), "{expected} in\n{dump}");
+    }
+}
+
+#[test]
+fn iterators_type_their_items_and_next_its_default() {
+    let source = "class C:\n    def __iter__(self) -> 'C':\n        return self\n    def __next__(self) -> int:\n        raise StopIteration\n\
+                  items = iter({'a': 1}.items())\n\
+                  first = next(items)\n\
+                  maybe = next(iter([1]), None)\n\
+                  same = next(iter(iter('ab')))\n\
+                  counted = next(C(), 0)\n\
+                  for n in iter(C()):\n    print(n, first, maybe, same, counted, type(items), items is items)\n";
+    let (_directory, project) = load(source);
+    let program = TypeChecker::check(&project).expect("the program is accepted");
+    let types: Vec<String> = ["items", "first", "maybe", "same", "counted"]
+        .iter()
+        .map(|name| {
+            let symbol = program
+                .symbols
+                .iter()
+                .find(|symbol| symbol.name == *name)
+                .unwrap();
+            symbol.ty.to_string()
+        })
+        .collect();
+    assert_eq!(
+        types,
+        [
+            "Iterator[tuple[str, int]]",
+            "tuple[str, int]",
+            "int | None",
+            "str",
+            "int"
+        ]
+    );
+    let dump = typy_check::dump(&program, &project);
+    for expected in ["Iter : Iterator", "Next __next__", "Next : int | None"] {
+        assert!(dump.contains(expected), "{expected} in\n{dump}");
+    }
+}
+
+#[test]
+fn with_binds_what_enter_returns_and_knows_whether_exit_suppresses() {
+    let source = "class M:\n    def __enter__(self) -> int:\n        return 1\n    def __exit__(self, kind, error, trace) -> bool:\n        print(kind, error, trace)\n        return True\n\
+                  class N:\n    def __enter__(self) -> str:\n        return 'n'\n    def __exit__(self, kind, error, trace) -> None:\n        pass\n\
+                  with M() as number, N() as text:\n    print(number, text)\n";
+    let (_directory, project) = load(source);
+    let program = TypeChecker::check(&project).expect("the program is accepted");
+    let dump = typy_check::dump(&program, &project);
+    for expected in ["With as number: int suppresses", "With as text: str @"] {
+        assert!(dump.contains(expected), "{expected} in\n{dump}");
+    }
+    let trace = program
+        .symbols
+        .iter()
+        .find(|symbol| symbol.name == "trace")
+        .unwrap();
+    assert_eq!(trace.ty.to_string(), "TracebackType | None");
+}
+
+#[test]
+fn raise_ends_the_path_it_is_on() {
+    let source = "def f(n: int) -> int:\n    if n > 0:\n        return n\n    raise ValueError('n', n)\n\
+         def g() -> str:\n    raise KeyError from None\n\
+         e: LookupError = IndexError()\n\
+         t = type(e)\n\
+         raise RuntimeError('r') from e\n";
+    let (_directory, project) = load(source);
+    let program = TypeChecker::check(&project).expect("the program is accepted");
+    let dump = typy_check::dump(&program, &project);
+    for expected in [
+        "Raise @4:5",
+        "NewException ValueError : ValueError",
+        "Raise from None @6:5",
+        "NewException KeyError : KeyError",
+        "Raise from @9:1",
+        "ModuleVariable e : LookupError",
+    ] {
+        assert!(dump.contains(expected), "{expected} in\n{dump}");
+    }
+}
+
 fn accepted(source: &str) -> TypedProgram {
     check(source).unwrap_or_else(|codes| panic!("rejected with {codes:?}:\n{source}"))
 }
@@ -154,10 +317,10 @@ fn keyword_arguments_keep_source_order_and_defaults_fill_the_rest() {
     let TypedStmt::Expr { value, .. } = &entry.body[0] else {
         panic!("not an expression")
     };
-    let TypedExprKind::Print { values, .. } = &value.kind else {
+    let TypedExprKind::Print(call) = &value.kind else {
         panic!("not print")
     };
-    let TypedExprKind::Call { arguments, .. } = &values[0].kind else {
+    let TypedExprKind::Call { arguments, .. } = &call.values[0].kind else {
         panic!("not a call")
     };
     let order: Vec<usize> = arguments
@@ -206,7 +369,7 @@ fn rejected_programs_give_their_codes() {
             &["E0202"],
         ),
         ("def f() -> None:\n    pass\nf = 1\n", &["E0202"]),
-        ("x = 1\ndef f() -> int:\n    return x\n", &["E0201"]),
+        ("x = 1\ndef f() -> str:\n    return x\n", &["E0405"]),
         ("def f() -> int:\n    return 1\ng = f\n", &["E0201"]),
         ("x = 1\nx()\n", &["E0401"]),
         ("print(min(1, 2.0))\n", &["E0404"]),
@@ -214,12 +377,15 @@ fn rejected_programs_give_their_codes() {
         ("print(len(1))\n", &["E0404"]),
         ("print(len(\"a\", \"b\"))\n", &["E0404"]),
         ("print(abs(\"a\"))\n", &["E0401"]),
-        ("print(1, file=None)\n", &["E0201"]),
+        ("print(1, file=1)\n", &["E0404"]),
+        ("print(1, flush=1)\n", &["E0404"]),
         ("print(1, color=1)\n", &["E0404"]),
-        ("x = range(3)\n", &["E0201"]),
+        ("x = enumerate([1])\n", &["E0201"]),
+        ("print(1 is True)\n", &["E0301"]),
+        ("n: int | None = None\nprint(n is True)\n", &["E0301"]),
         ("print(1[0])\n", &["E0401"]),
         ("print(\"a\"[\"b\"])\n", &["E0404"]),
-        ("print(\"%d\" % 1)\n", &["E0201"]),
+        ("template = \"%d\"\nprint(template % 1)\n", &["E0201"]),
         ("print(~\"a\")\n", &["E0401"]),
         (
             "def f(a: int) -> int:\n    return a\nprint(f(1, 2))\n",
@@ -456,7 +622,7 @@ Function fn1 __main__.<module>() -> None @5:1
         If @6:5
           BoolOp And : bool @6:8
             Compare [Gt] : bool @6:8
-              Local i : int @6:8
+              ModuleVariable i : int @6:8
               Constant Int("0") : int @6:12
             Unary Not : bool @6:18
               Constant Bool(false) : bool @6:22
@@ -464,7 +630,7 @@ Function fn1 __main__.<module>() -> None @5:1
             Expr @7:9
               Print sep=true end=false : None @7:9
                 Call twice : int @7:15
-                  Local i : int @7:21
+                  ModuleVariable i : int @7:21
                 Index : str @7:25
                   Constant Str("x") : str @7:25
                   Constant Int("0") : int @7:29
@@ -626,14 +792,44 @@ fn each_builtin_call_name_and_statement_rule_gives_its_code() {
         ("print(max())\n", &["E0404"]),
         ("print(len(missing))\n", &["E0205"]),
         ("print(1 and \"a\")\n", &["E0303"]),
-        // Module variables inside functions need `global`, which arrives in 0.3.
-        ("count = 1\ndef f() -> int:\n    return count\n", &["E0201"]),
-        ("count = 1\ndef f() -> None:\n    count()\n", &["E0201"]),
-        // Functions, builtins and exception classes are not values in 0.1.
+        // A function reads module variables, and assigns them after `global` (SMT-08).
+        (
+            "def f() -> None:\n    global missing\n    missing = 1\n",
+            &["E0423"],
+        ),
+        (
+            "count = 1\ndef f() -> None:\n    count = 2\n    global count\n",
+            &["E0103"],
+        ),
+        (
+            "count = 1\ndef f() -> None:\n    print(count)\n    global count\n",
+            &["E0103"],
+        ),
+        (
+            "count = 1\ndef f(count: int) -> None:\n    global count\n",
+            &["E0103"],
+        ),
+        (
+            "count = 1\ndef f() -> None:\n    global count\n    count: int = 2\n",
+            &["E0103"],
+        ),
+        (
+            "count = 1\ndef f() -> None:\n    count: int = 2\n    global count\n",
+            &["E0103"],
+        ),
+        (
+            "count = 1\ndef f() -> None:\n    global count\n    count = 'a'\n",
+            &["E0402"],
+        ),
+        (
+            "class C:\n    def __init__(self) -> None:\n        self.v = LIMIT\nc = C()\nLIMIT = c.v\n",
+            &["E0424"],
+        ),
+        // Functions and builtins are not values; no requirement provides warnings or
+        // exception groups.
         ("x = len\n", &["E0201"]),
-        ("x = BaseException\n", &["E0201"]),
-        ("x = UserWarning\n", &["E0201"]),
-        ("x = ExceptionGroup\n", &["E0201"]),
+        ("x = UserWarning\n", &["E0202"]),
+        ("x = ExceptionGroup\n", &["E0202"]),
         // A return value of another type (TYP-03, TYP-09).
         ("def f() -> str:\n    return 1\n", &["E0405"]),
         ("def f() -> float:\n    return 1\n", &["E0405"]),
@@ -771,7 +967,6 @@ fn slice_and_list_method_rules_give_their_codes() {
         ("x = 1\ny = x[1:2]\n", &["E0401"]),
         ("y = missing[1:2]\n", &["E0205"]),
         ("x = [[1]]\ny = x[0:1, 0]\n", &["E0401"]),
-        ("x = [1]\nx[0:1] = [2]\n", &["E0201"]),
         ("x = [1]\nx[0:1] += [2]\n", &["E0201"]),
         ("x = (1, 2)\nx[0] += 1\n", &["E0401"]),
         ("x = 'ab'\nx[0] += 'c'\n", &["E0401"]),
@@ -1272,12 +1467,33 @@ fn dict_rules_give_their_codes() {
         ("d = dict([1, 2])\n", &["E0404"]),
         ("d = dict([(1, 2, 3)])\n", &["E0404"]),
         ("d = dict([([1], 2)])\n", &["E0413"]),
-        ("d = dict(a=1)\n", &["E0201"]),
+        ("d = dict(a=1, a=2)\n", &["E0404"]),
+        ("d = dict({1: 2}, a=3)\n", &["E0404"]),
+        ("d = dict(a=1, b='x')\n", &["E0409"]),
+        ("d = dict([1], a=1)\n", &["E0404"]),
+        ("d = dict([], [], a=1)\n", &["E0404"]),
+        ("d = dict.fromkeys([[1]])\n", &["E0413"]),
+        ("d = dict.fromkeys([1], value=2)\n", &["E0404"]),
+        ("d = dict.fromkeys()\n", &["E0404"]),
+        ("d = dict.fromkeys(1)\n", &["E0411"]),
+        ("d = dict.fromkeys([1], missing)\n", &["E0205"]),
+        ("d = dict.fromkeys(missing)\n", &["E0205"]),
+        ("d: dict[int, int] = dict(a=1)\n", &["E0402"]),
+        ("d = dict(a=missing)\n", &["E0205"]),
         ("d = dict([(1, 2)], [(3, 4)])\n", &["E0404"]),
         ("d = dict(missing)\n", &["E0205"]),
-        ("d = {1: 2}.keys() == {1: 2}.keys()\n", &["E0201"]),
-        ("d = {1: 2}.keys() & {1}\n", &["E0201"]),
-        ("for x in reversed({1: 2}):\n    pass\n", &["E0201"]),
+        ("d = {1: 2}.keys() == {1: 2}.values()\n", &["E0407"]),
+        ("d = {1: 2}.keys() & {'a'}\n", &["E0401"]),
+        ("d = {1: 2}.values() - {2}\n", &["E0401"]),
+        ("d = {1: [2]}.items() ^ {1: [2]}.items()\n", &["E0413"]),
+        ("d = {1: 2}.values() <= {1: 2}.values()\n", &["E0407"]),
+        ("d = {1: 2}.keys() == [1]\n", &["E0407"]),
+        ("d = {1: 2}.keys() | 1\n", &["E0401"]),
+        (
+            "t: tuple[str, ...] = ('a',)\nd = {1: 2}.keys() | t\n",
+            &["E0401"],
+        ),
+        ("d = {1: 2}.values() == {1: 'a'}.values()\n", &["E0407"]),
         ("p = {1: 2}\np['a'] = 3\n", &["E0404"]),
         ("p = {1: 2}\np[1] = 'b'\n", &["E0402"]),
         ("p = {1: 2}\nprint(p['a'])\n", &["E0404"]),
@@ -1374,7 +1590,9 @@ fn comprehension_and_range_rules_give_their_codes() {
         ("h = [missing for q in range(2)]\n", &["E0205"]),
         ("i = {missing: 1 for q in range(2)}\n", &["E0205"]),
         ("j = [q for q, r in range(2)]\n", &["E0308"]),
-        ("k = range(3)\n", &["E0201"]),
+        ("k = range(3) < range(4)\n", &["E0407"]),
+        ("q: range = [1]\n", &["E0402"]),
+        ("u = 'a' in range(3)\n", &["E0407"]),
         ("m = list(range('a'))\n", &["E0404"]),
         ("n = list(range(1, 2, 3, 4))\n", &["E0404"]),
         ("o = list(range(x=1))\n", &["E0404"]),
@@ -1399,11 +1617,23 @@ g = [(i, j) for i in range(3) for j in range(i) if i if j]
 h = sum(range(10)) + len(list(reversed(range(1, 9, 2))))
 k = [v for v in enumerate(range(2))]
 m = x + 'a'
+v = {1: 'a'}
+w = (v.keys() & [1], v.items() | {(2, 'b')}, v.keys() <= {1}, v.values() == v.values())
+z = (dict(a=1), dict({'k': 2}, b=3), dict.fromkeys('ab'), dict.fromkeys([1], 2.5))
+y: dict[str, float] = dict(a=1.5)
+u: dict[str, list[int]] = dict([('k', [1])], b=[])
+r: range = range(1, 9, 2)
+n = (len(r), r[-1], 3 in r, r == range(4), [v for v in reversed(r)])
+s = r[1:]
 ";
     let (_directory, project) = load(source);
     let program = TypeChecker::check(&project).expect("the program is accepted");
     let dump = typy_check::dump(&program, &project);
     for node in [
+        "Assign n: tuple[int, int, bool, bool, list[int]]",
+        "Assign s: range",
+        "Assign z: tuple[dict[str, int], dict[str, int], dict[str, None], dict[int, float]]",
+        "Assign w: tuple[set[int], set[tuple[int, str]], bool, bool]",
         "Comprehension : list[int]",
         "Comprehension : list[list[str]]",
         "Comprehension : set[int]",
@@ -1539,10 +1769,80 @@ fn statements_and_expressions_outside_the_subset_give_their_codes() {
         ("continue\n", &["E0103"]),
         ("print([x for x in 1 for y in x])\n", &["E0411"]),
         ("print({u: 1 for x in [1]})\n", &["E0205"]),
-        ("print(ValueError)\n", &["E0201"]),
-        ("print(Exception)\n", &["E0201"]),
-        ("print(UserWarning)\n", &["E0201"]),
-        ("print(ExceptionGroup)\n", &["E0201"]),
+        ("print(UserWarning)\n", &["E0202"]),
+        ("print(ExceptionGroup)\n", &["E0202"]),
+        // `raise` takes an exception or an exception class (SMT-06, EXC-07, EXC-12).
+        ("raise 1\n", &["E0415"]),
+        ("raise int\n", &["E0415"]),
+        ("raise ValueError('v') from 'cause'\n", &["E0415"]),
+        ("raise\n", &["E0416"]),
+        ("e = UnicodeDecodeError()\n", &["E0417"]),
+        ("raise UnicodeEncodeError\n", &["E0417"]),
+        ("e = ValueError(message='v')\n", &["E0404"]),
+        ("e: KeyError = ValueError('v')\n", &["E0402"]),
+        ("raise u\n", &["E0205"]),
+        // An `except` clause names classes; `finally` comes later (CST-04, EXC-09).
+        ("try:\n    pass\nexcept 1:\n    pass\n", &["E0418"]),
+        (
+            "try:\n    pass\nexcept (ValueError, 'x'):\n    pass\n",
+            &["E0418"],
+        ),
+        ("try:\n    pass\nexcept u:\n    pass\n", &["E0205"]),
+        // `return`, `break` or `continue` cannot leave a `finally` block (EXC-06).
+        (
+            "def f() -> None:\n    try:\n        pass\n    finally:\n        return\n",
+            &["E0419"],
+        ),
+        (
+            "while True:\n    try:\n        pass\n    finally:\n        continue\n",
+            &["E0419"],
+        ),
+        (
+            "try:\n    x = 1\nexcept ValueError:\n    pass\nfinally:\n    pass\nprint(x)\n",
+            &["E0306"],
+        ),
+        // A class derives from an exception class defined before it, and redefines only
+        // `__init__`, `__str__` and `__repr__` (CLS-03, CLS-13, CLS-14, EXC-12).
+        ("class A(Exception, ValueError):\n    pass\n", &["E0201"]),
+        ("class B:\n    pass\nclass A(B):\n    pass\n", &["E0201"]),
+        ("class A(int):\n    pass\n", &["E0201"]),
+        (
+            "class A(B):\n    pass\nclass B(Exception):\n    pass\n",
+            &["E0306"],
+        ),
+        ("class A(UnicodeEncodeError):\n    pass\n", &["E0417"]),
+        (
+            "class A(Exception):\n    def f(self) -> None:\n        pass\nclass B(A):\n    def f(self) -> None:\n        pass\n",
+            &["E0201"],
+        ),
+        (
+            "class A(Exception):\n    def f(self) -> None:\n        super().__init__()\n",
+            &["E0201"],
+        ),
+        (
+            "class A(Exception):\n    def __init__(self) -> None:\n        super().__init__(x=1)\n",
+            &["E0404"],
+        ),
+        ("class A(Exception):\n    pass\nA(x=1)\n", &["E0404"]),
+        (
+            "class A(Exception):\n    def __init__(self, n: int) -> None:\n        self.n = n\nA('n')\n",
+            &["E0404"],
+        ),
+        ("class A(Exception):\n    pass\nA().n\n", &["E0414"]),
+        ("try:\n    pass\nexcept int:\n    pass\n", &["E0418"]),
+        (
+            "class A:\n    def __init__(self) -> None:\n        super().__init__()\n",
+            &["E0201"],
+        ),
+        // The name `as` binds is deleted after its clause (EXC-01).
+        (
+            "try:\n    pass\nexcept ValueError as e:\n    pass\nprint(e)\n",
+            &["E0205"],
+        ),
+        (
+            "e = 1\ntry:\n    pass\nexcept ValueError as e:\n    pass\nprint(e)\n",
+            &["E0306"],
+        ),
         ("for i in range(u):\n    print(i)\n", &["E0205"]),
         ("print({1: u for x in [1]})\n", &["E0205"]),
         (
@@ -1551,6 +1851,63 @@ fn statements_and_expressions_outside_the_subset_give_their_codes() {
         ),
         ("x: set[Thing] = {1}\n", &["E0205"]),
         ("print(sorted([{1: 2}]))\n", &["E0407"]),
+    ];
+    for (source, expected) in cases {
+        assert_eq!(&rejected(source), expected, "\n{source}");
+    }
+}
+
+#[test]
+fn iterators_used_wrongly_give_their_codes() {
+    let cases: &[(&str, &[&str])] = &[
+        // A slice of a list takes a list of its items (DAT-13).
+        ("xs = [1]\nws = ['a']\nxs[0:1] = ws\n", &["E0402"]),
+        ("s = 'ab'\ns[0:1] = ['a']\n", &["E0401"]),
+        ("xs = [1]\nxs[0:'a'] = [2]\n", &["E0404"]),
+        ("xs = [1]\nxs[0:1] += [2]\n", &["E0201"]),
+        ("xs = [1]\nu[0:1] = [2]\n", &["E0205"]),
+        // `del` removes list items, slices and dict keys only (SMT-05).
+        ("x = 1\ndel x\n", &["E0421"]),
+        ("t = (1, 2)\ndel t[0]\n", &["E0421"]),
+        ("t = (1, 2)\ndel t[0:1]\n", &["E0421"]),
+        ("s = 'ab'\ndel s[0]\n", &["E0421"]),
+        ("s = 'ab'\ndel s[0:1]\n", &["E0421"]),
+        ("t: tuple[int, ...] = (1, 2)\ndel t[0]\n", &["E0421"]),
+        ("del u[0]\n", &["E0205"]),
+        // `with` needs `__enter__` and `__exit__` of the right shapes (CST-05, CST-10).
+        ("with 1:\n    pass\n", &["E0420"]),
+        ("with u:\n    pass\n", &["E0205"]),
+        (
+            "class M:\n    def __enter__(self) -> None:\n        pass\nwith M():\n    pass\n",
+            &["E0420"],
+        ),
+        (
+            "class M:\n    def __enter__(self, x: int) -> None:\n        pass\n",
+            &["E0404"],
+        ),
+        (
+            "class M:\n    def __exit__(self, a, b, c) -> int:\n        return 1\n",
+            &["E0404"],
+        ),
+        (
+            "class M:\n    def __enter__(self) -> int:\n        return 1\n    def __exit__(self, a, b, c) -> None:\n        pass\nwith M() as (x, y):\n    pass\n",
+            &["E0308"],
+        ),
+        // `iter` and `next` take iterables and iterators; a class iterates with `__iter__`
+        // and `__next__` (CST-08, CST-09).
+        ("print(iter(1))\n", &["E0411"]),
+        ("print(iter())\n", &["E0404"]),
+        ("print(next())\n", &["E0404"]),
+        ("print(iter([1], x=1))\n", &["E0404"]),
+        ("print(next(iter([1]), 'a'))\n", &["E0404"]),
+        ("print(next(5))\n", &["E0404"]),
+        ("class A:\n    pass\nprint(iter(A()))\n", &["E0411"]),
+        (
+            "class A:\n    def __iter__(self, n: int) -> 'A':\n        return self\n",
+            &["E0404"],
+        ),
+        ("print(iter(u))\n", &["E0205"]),
+        ("i = iter([1])\nprint(i == i)\n", &["E0407"]),
     ];
     for (source, expected) in cases {
         assert_eq!(&rejected(source), expected, "\n{source}");

@@ -2,7 +2,10 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use typy_check::{AssignTarget, FunctionId, TypedExpr, TypedExprKind, TypedProgram, TypedStmt};
+use typy_check::{
+    AssignTarget, FunctionId, LoopSource, RaiseCause, TypedExpr, TypedExprKind, TypedProgram,
+    TypedStmt,
+};
 
 /// Returns the functions that can call themselves, directly or through others.
 pub(crate) fn recursive_functions(program: &TypedProgram) -> BTreeSet<FunctionId> {
@@ -34,6 +37,7 @@ pub(crate) fn recursive_functions(program: &TypedProgram) -> BTreeSet<FunctionId
         .collect()
 }
 
+#[allow(clippy::too_many_lines, reason = "one arm per statement kind")]
 fn statements(body: &[TypedStmt], callees: &mut BTreeSet<FunctionId>) {
     for statement in body {
         match statement {
@@ -57,9 +61,7 @@ fn statements(body: &[TypedStmt], callees: &mut BTreeSet<FunctionId>) {
                 orelse,
                 ..
             } => {
-                for value in source.expressions() {
-                    expression(value, callees);
-                }
+                loop_source(source, callees);
                 assign_target(target, callees);
                 statements(body, callees);
                 statements(orelse, callees);
@@ -67,6 +69,59 @@ fn statements(body: &[TypedStmt], callees: &mut BTreeSet<FunctionId>) {
             TypedStmt::Return {
                 value: Some(value), ..
             } => expression(value, callees),
+            TypedStmt::With {
+                manager,
+                protocol,
+                target,
+                body,
+                ..
+            } => {
+                expression(manager, callees);
+                if let typy_check::WithProtocol::Methods { enter, exit } = protocol {
+                    callees.insert(*enter);
+                    callees.insert(*exit);
+                }
+                if let Some(target) = target {
+                    assign_target(target, callees);
+                }
+                statements(body, callees);
+            }
+            TypedStmt::Delete { targets, .. } => {
+                for target in targets {
+                    expression(target, callees);
+                }
+            }
+            TypedStmt::Assert {
+                test, exception, ..
+            } => {
+                expression(test, callees);
+                expression(exception, callees);
+            }
+            TypedStmt::Try {
+                body,
+                handlers,
+                orelse,
+                finalbody,
+                ..
+            } => {
+                statements(body, callees);
+                for handler in handlers {
+                    statements(&handler.body, callees);
+                }
+                statements(orelse, callees);
+                statements(finalbody, callees);
+            }
+            TypedStmt::Raise {
+                exception, cause, ..
+            } => {
+                let cause = match cause {
+                    RaiseCause::Exception(cause) => Some(cause),
+                    RaiseCause::Absent | RaiseCause::None => None,
+                };
+                for value in exception.iter().chain(cause) {
+                    expression(value, callees);
+                }
+            }
             TypedStmt::If {
                 test, body, orelse, ..
             }
@@ -91,7 +146,10 @@ fn statements(body: &[TypedStmt], callees: &mut BTreeSet<FunctionId>) {
                 statements(body, callees);
                 statements(orelse, callees);
             }
+            // A module's code runs once and never recursively, so an import adds no edge.
             TypedStmt::Return { value: None, .. }
+            | TypedStmt::Import { .. }
+            | TypedStmt::LazyImport { .. }
             | TypedStmt::Pass { .. }
             | TypedStmt::Break { .. }
             | TypedStmt::Continue { .. } => {}
@@ -106,6 +164,17 @@ fn assign_target(target: &AssignTarget, callees: &mut BTreeSet<FunctionId>) {
         AssignTarget::Tuple(targets) => {
             for target in targets {
                 assign_target(target, callees);
+            }
+        }
+        AssignTarget::Slice {
+            list,
+            lower,
+            upper,
+            step,
+        } => {
+            expression(list, callees);
+            for bound in [lower, upper, step].into_iter().flatten() {
+                expression(bound, callees);
             }
         }
         AssignTarget::Item { list, index } => {
@@ -163,6 +232,7 @@ fn expression(expression_value: &TypedExpr, callees: &mut BTreeSet<FunctionId>) 
             }
             for generator in generators {
                 assign_target(&generator.target, callees);
+                protocol_calls(&generator.source, callees);
                 for value in generator
                     .source
                     .expressions()
@@ -181,7 +251,19 @@ fn expression(expression_value: &TypedExpr, callees: &mut BTreeSet<FunctionId>) 
         TypedExprKind::ListOf(source)
         | TypedExprKind::SetOf(source)
         | TypedExprKind::DictOf(source) => {
-            for value in source.expressions() {
+            loop_source(source, callees);
+        }
+        TypedExprKind::DictWith { source, entries } => {
+            if let Some(source) = source {
+                loop_source(source, callees);
+            }
+            for (_, value) in entries {
+                expression(value, callees);
+            }
+        }
+        TypedExprKind::DictFromKeys { source, value } => {
+            loop_source(source, callees);
+            if let Some(value) = value {
                 expression(value, callees);
             }
         }
@@ -238,14 +320,55 @@ fn expression(expression_value: &TypedExpr, callees: &mut BTreeSet<FunctionId>) 
                 expression(value, callees);
             }
         }
-        TypedExprKind::Print { values, sep, end } => {
-            for value in values.iter().chain(sep.as_deref()).chain(end.as_deref()) {
+        TypedExprKind::Print(call) => {
+            for value in call
+                .values
+                .iter()
+                .chain(&call.sep)
+                .chain(&call.end)
+                .chain(&call.file)
+                .chain(&call.flush)
+            {
                 expression(value, callees);
             }
         }
         TypedExprKind::Index { value, index } => {
             expression(value, callees);
             expression(index, callees);
+        }
+        TypedExprKind::NewException {
+            arguments, init, ..
+        } => {
+            for argument in arguments {
+                expression(argument, callees);
+            }
+            if let Some(init) = init {
+                callees.insert(init.function);
+                for argument in &init.arguments {
+                    expression(&argument.value, callees);
+                }
+            }
+        }
+        TypedExprKind::Iter(source) => expression(source, callees),
+        TypedExprKind::Next {
+            iterator,
+            method,
+            default,
+        } => {
+            callees.extend(*method);
+            expression(iterator, callees);
+            if let Some(default) = default {
+                expression(default, callees);
+            }
+        }
+        TypedExprKind::SetArguments {
+            exception,
+            arguments,
+        } => {
+            expression(exception, callees);
+            for argument in arguments {
+                expression(argument, callees);
+            }
         }
         TypedExprKind::New {
             init, arguments, ..
@@ -262,7 +385,28 @@ fn expression(expression_value: &TypedExpr, callees: &mut BTreeSet<FunctionId>) 
         TypedExprKind::TypeObject(_)
         | TypedExprKind::Constant(_)
         | TypedExprKind::Local(_)
-        | TypedExprKind::ModuleName => {}
+        | TypedExprKind::ModuleVariable(_)
+        | TypedExprKind::ModuleAttribute { .. }
+        | TypedExprKind::Submodule(_)
+        | TypedExprKind::ModuleName
+        | TypedExprKind::SysValue(_) => {}
+        TypedExprKind::AsIterable(inner) => expression(inner, callees),
+        TypedExprKind::PercentFormat { values, .. } => expression(values, callees),
+        TypedExprKind::Open { path, .. } => expression(path, callees),
+        TypedExprKind::SysExit(value) | TypedExprKind::Input(value) => {
+            if let Some(value) = value {
+                expression(value, callees);
+            }
+        }
+        TypedExprKind::MathCall { arguments, .. } => {
+            for argument in arguments {
+                expression(argument, callees);
+            }
+        }
+        TypedExprKind::Lazy { reify, value } => {
+            callees.insert(*reify);
+            expression(value, callees);
+        }
     }
 }
 
@@ -275,5 +419,31 @@ fn fstring(parts: &[typy_check::FStringPart], callees: &mut BTreeSet<FunctionId>
                 fstring(spec, callees);
             }
         }
+    }
+}
+
+/// Adds the calls a loop source makes: its expressions', and a class's `__iter__` and
+/// `__next__`.
+fn loop_source(source: &LoopSource, callees: &mut BTreeSet<FunctionId>) {
+    for value in source.expressions() {
+        expression(value, callees);
+    }
+    protocol_calls(source, callees);
+}
+
+/// Adds the `__iter__` and `__next__` of every class a loop source iterates over.
+fn protocol_calls(source: &LoopSource, callees: &mut BTreeSet<FunctionId>) {
+    match source {
+        LoopSource::Protocol { iter, next, .. } => {
+            callees.insert(*iter);
+            callees.insert(*next);
+        }
+        LoopSource::Enumerate { source, .. } => protocol_calls(source, callees),
+        LoopSource::Zip { sources, .. } => {
+            for source in sources {
+                protocol_calls(source, callees);
+            }
+        }
+        LoopSource::Items(_) | LoopSource::Reversed(_) | LoopSource::Range { .. } => {}
     }
 }

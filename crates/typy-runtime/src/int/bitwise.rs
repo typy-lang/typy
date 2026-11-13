@@ -284,14 +284,20 @@ mod tests {
         // SAFETY: the words are live `int` words, and the exceptions are live.
         unsafe {
             let negative = typy_rt_int_left_shift(word(1), word(-1));
-            assert_eq!((*negative.exception).kind, crate::ExceptionKind::ValueError);
+            assert_eq!(
+                (*negative.exception).kind(),
+                crate::ExceptionKind::ValueError
+            );
             assert!(
                 !typy_rt_int_right_shift(word(1), word(-1))
                     .exception
                     .is_null()
             );
             let huge = typy_rt_int_left_shift(word(1), word(1 << 70));
-            assert_eq!((*huge.exception).kind, crate::ExceptionKind::OverflowError);
+            assert_eq!(
+                (*huge.exception).kind(),
+                crate::ExceptionKind::OverflowError
+            );
             assert_eq!(
                 value(typy_rt_int_left_shift(word(0), word(1 << 70)).value),
                 0

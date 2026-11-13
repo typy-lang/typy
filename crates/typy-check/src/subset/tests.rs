@@ -69,7 +69,7 @@ class C(object):
 fn later_features_name_their_release_and_rule() {
     let cases = [
         (
-            "class C(B):\n    pass\n",
+            "class C(module.B):\n    pass\n",
             "base classes other than `object` are planned for TyPy 0.4 (CLS-04)",
         ),
         (
@@ -99,31 +99,6 @@ fn later_features_name_their_release_and_rule() {
         (
             "x = (i for i in range(3))\n",
             "generator expressions are planned for TyPy 1.0 (EXP-15)",
-        ),
-        ("import os\n", "imports are planned for TyPy 0.3 (SMT-07)"),
-        (
-            "try:\n    pass\nexcept E:\n    pass\n",
-            "`try` statements are planned for TyPy 0.3 (CST-04)",
-        ),
-        (
-            "raise E\n",
-            "`raise` statements are planned for TyPy 0.3 (SMT-06)",
-        ),
-        (
-            "with f:\n    pass\n",
-            "`with` statements are planned for TyPy 0.3 (CST-05)",
-        ),
-        (
-            "assert True\n",
-            "`assert` statements are planned for TyPy 0.3 (SMT-04)",
-        ),
-        (
-            "del x\n",
-            "`del` statements are planned for TyPy 0.3 (SMT-05)",
-        ),
-        (
-            "global x\n",
-            "`global` statements are planned for TyPy 0.3 (SMT-08)",
         ),
         (
             "type X = int\n",
@@ -212,16 +187,40 @@ fn later_features_name_their_release_and_rule() {
 }
 
 #[test]
-fn lazy_imports_name_their_release_with_floor_3_15() {
-    let found = diagnostics_with_floor(
-        "lazy import json\nlazy from os import path\n",
-        PythonFloor::V3_15,
-    );
-    let messages: Vec<&str> = found.iter().map(|(_, message)| message.as_str()).collect();
-    assert_eq!(
-        messages,
-        ["lazy imports are planned for TyPy 0.3 (MOD-06)"; 2]
-    );
+fn lazy_imports_at_module_level_pass_with_floor_3_15() {
+    let source =
+        "lazy import json\nif True:\n    lazy from os import path\nwith x:\n    lazy import a\n";
+    assert_eq!(diagnostics_with_floor(source, PythonFloor::V3_15), []);
+}
+
+#[test]
+fn lazy_imports_cpython_refuses_give_its_messages() {
+    let cases = [
+        (
+            "def f() -> None:\n    lazy import json\n",
+            "lazy import not allowed inside functions",
+        ),
+        (
+            "try:\n    lazy import json\nexcept ImportError:\n    pass\n",
+            "lazy import not allowed inside try/except blocks",
+        ),
+        (
+            "lazy from os import *\n",
+            "lazy from ... import * is not allowed",
+        ),
+        (
+            "lazy from __future__ import annotations\n",
+            "lazy from __future__ import is not allowed",
+        ),
+    ];
+    for (source, message) in cases {
+        let found = diagnostics_with_floor(source, PythonFloor::V3_15);
+        assert_eq!(
+            found,
+            [("E0103".to_owned(), message.to_owned())],
+            "{source}"
+        );
+    }
 }
 
 #[test]
@@ -237,7 +236,7 @@ fn excluded_features_say_they_cannot_be_compiled() {
         ),
         (
             "def f(x: frozenset[int]) -> None:\n    pass\n",
-            "generic annotations other than `list`, `dict`, `set`, `tuple` and `type`, such as `frozenset[int]`, cannot be compiled by TyPy with CPython's meaning",
+            "generic annotations other than `list`, `dict`, `set`, `tuple`, `type`, `Iterator` and `Iterable`, such as `frozenset[int]`, cannot be compiled by TyPy with CPython's meaning",
         ),
         (
             "x = ...\n",
@@ -296,4 +295,56 @@ fn return_break_and_continue_out_of_place_are_syntax_errors() {
             "{source:?} gave {found:?}"
         );
     }
+}
+
+#[test]
+fn global_after_a_use_an_assignment_or_an_annotation_is_a_syntax_error() {
+    let cases = [
+        (
+            "def f() -> None:\n    print(x)\n    global x\n",
+            Some("name 'x' is used prior to global declaration"),
+        ),
+        (
+            "def f() -> None:\n    x = 1\n    global x\n",
+            Some("name 'x' is assigned to before global declaration"),
+        ),
+        (
+            "def f(x: int) -> None:\n    global x\n",
+            Some("name 'x' is parameter and global"),
+        ),
+        (
+            "def f() -> None:\n    x: int = 1\n    global x\n",
+            Some("annotated name 'x' can't be global"),
+        ),
+        (
+            "def f() -> None:\n    global x\n    x: int = 1\n",
+            Some("annotated name 'x' can't be global"),
+        ),
+        ("def f() -> None:\n    global x\n    x = 1\n", None),
+        ("global x\nx = 1\n", None),
+    ];
+    for (source, expected) in cases {
+        let found: Vec<(String, String)> = diagnostics(source)
+            .into_iter()
+            .filter(|(code, _)| code == "E0103")
+            .collect();
+        match expected {
+            Some(message) => assert!(
+                found.iter().any(|(_, found)| found == message),
+                "{source:?} gave {found:?}"
+            ),
+            None => assert!(found.is_empty(), "{source:?} gave {found:?}"),
+        }
+    }
+}
+
+#[test]
+fn an_assertion_of_a_tuple_with_items_is_w0301() {
+    assert_eq!(
+        diagnostics("x = 1\nassert (x, 'message')\nassert ()\nassert x, 'message'\n"),
+        [(
+            "W0301".to_owned(),
+            "this assertion is always true, since a tuple with items is true".to_owned()
+        )]
+    );
 }
