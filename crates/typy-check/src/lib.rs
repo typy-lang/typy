@@ -4,6 +4,7 @@
 mod body;
 mod builtin;
 mod check;
+mod class_type;
 mod codec;
 mod exception;
 mod math;
@@ -18,6 +19,7 @@ mod unprovided;
 
 pub use builtin::Builtin;
 pub use check::TypeChecker;
+pub use class_type::InstanceClass;
 pub use exception::{BuiltinException, ExceptionClass, ProgramException};
 pub use math::{MathFunction, MathShape};
 pub use method::Method;

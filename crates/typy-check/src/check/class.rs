@@ -8,6 +8,7 @@ use typy_source::syntax::{Expr, Identifier, Stmt};
 
 use super::annotation::{AnnotationScope, annotation_type};
 use super::definition::{Definition, FunctionParts, Owner, defined_twice, definition};
+use crate::class_type::InstanceClass;
 use crate::exception::{BuiltinException, ExceptionClass};
 use crate::typed::{ClassId, FunctionId};
 use crate::types::Type;
@@ -98,69 +99,134 @@ pub(super) fn collect_classes<'tree>(
     classes
 }
 
-/// Resolves each class's base, in source order: `object`, a built-in exception class, or a
-/// class defined before it that is an exception class. Returns the exception classes, each
-/// with its chain of bases (CLS-03); any other base is planned with inheritance (CLS-04).
-pub(super) fn exception_classes(
+/// The classes a base may name: those of the modules checked before, by ID, with the type of
+/// their instances, and the names an annotation may use for them.
+pub(super) struct BaseScope<'names> {
+    pub(super) known: &'names BTreeMap<ClassId, Type>,
+    pub(super) class_ids: &'names BTreeMap<String, ClassId>,
+    pub(super) modules: &'names BTreeMap<String, BTreeMap<String, ClassId>>,
+}
+
+/// Resolves each class's base, in source order, and returns the type of each class's
+/// instances: an exception for a class derived from a built-in exception class or from a
+/// class of the program that is one (CLS-03), otherwise an instance whose chain holds the
+/// classes of the program it derives from (CLS-04, ADR-0021). A base that cannot be resolved
+/// is reported, and the class derives from `object`, so its uses are still checked.
+pub(super) fn class_types(
     classes: &[ClassStatement<'_>],
+    scope: &BaseScope<'_>,
     diagnostics: &mut Diagnostics,
-) -> BTreeMap<ClassId, ExceptionClass> {
-    let mut found: BTreeMap<ClassId, ExceptionClass> = BTreeMap::new();
+) -> BTreeMap<ClassId, Type> {
+    let mut found: BTreeMap<ClassId, Type> = BTreeMap::new();
     for class in classes {
-        let Some(Expr::Name { id, span }) = class.base else {
-            continue;
-        };
         let name = class.name.name.clone();
-        let exception = if id == "object" {
-            continue;
-        } else if let Some(builtin) = BuiltinException::named(id) {
-            if !builtin.can_be_called() {
-                diagnostics.push(
-                    Diagnostic::new(
-                        DiagnosticCode::error(417),
-                        *span,
-                        format!("a class cannot derive from `{id}` in TyPy"),
-                    )
-                    .with_rule(RuleId::EXC_12)
-                    .with_help("derive from `ValueError` instead"),
-                );
-                continue;
-            }
-            ExceptionClass::program(class.id, name, Vec::new(), builtin)
-        } else if let Some(base) = classes.iter().find(|other| other.name.name == *id) {
-            if base.id >= class.id {
-                diagnostics.push(
-                    Diagnostic::new(
-                        DiagnosticCode::error(306),
-                        *span,
-                        format!("`{id}` is defined after the class that derives from it"),
-                    )
-                    .with_rule(RuleId::TYP_12),
-                );
-                continue;
-            }
-            let Some(ExceptionClass::Class(parent)) = found.get(&base.id) else {
-                diagnostics.push(base_planned(*span));
-                continue;
-            };
-            let mut chain = vec![(base.id, id.clone())];
-            chain.extend(parent.ancestors.iter().cloned());
-            ExceptionClass::program(class.id, name, chain, parent.builtin)
-        } else {
-            diagnostics.push(base_planned(*span));
-            continue;
-        };
-        found.insert(class.id, exception);
+        let ty = class
+            .base
+            .and_then(|base| derived_type(class, base, scope, &found, diagnostics))
+            .unwrap_or_else(|| Type::instance(InstanceClass::root(class.id, name)));
+        found.insert(class.id, ty);
     }
     found
 }
 
-/// Returns the error for a base other than `object` or an exception class.
-fn base_planned(span: Span) -> Diagnostic {
+/// Returns the type of the instances of a class with a base other than `object`, or `None`
+/// for `object` and for a base that is reported.
+fn derived_type(
+    class: &ClassStatement<'_>,
+    base: &Expr,
+    scope: &BaseScope<'_>,
+    found: &BTreeMap<ClassId, Type>,
+    diagnostics: &mut Diagnostics,
+) -> Option<Type> {
+    let name = class.name.name.clone();
+    let span = base.span();
+    let (written, base_id) = match base {
+        Expr::Name { id, .. } if id == "object" => return None,
+        Expr::Name { id, .. } => {
+            if let Some(builtin) = BuiltinException::named(id) {
+                if !builtin.can_be_called() {
+                    diagnostics.push(
+                        Diagnostic::new(
+                            DiagnosticCode::error(417),
+                            span,
+                            format!("a class cannot derive from `{id}` in TyPy"),
+                        )
+                        .with_rule(RuleId::EXC_12)
+                        .with_help("derive from `ValueError` instead"),
+                    );
+                    return None;
+                }
+                return Some(Type::Exception(ExceptionClass::program(
+                    class.id,
+                    name,
+                    Vec::new(),
+                    builtin,
+                )));
+            }
+            (id.clone(), scope.class_ids.get(id).copied())
+        }
+        Expr::Attribute {
+            value, attribute, ..
+        } => match value.as_ref() {
+            Expr::Name { id, .. } => (
+                format!("{id}.{}", attribute.name),
+                scope
+                    .modules
+                    .get(id)
+                    .and_then(|classes| classes.get(&attribute.name))
+                    .copied(),
+            ),
+            _ => (String::new(), None),
+        },
+        _ => (String::new(), None),
+    };
+    let Some(base_id) = base_id else {
+        diagnostics.push(unsupported_base(span));
+        return None;
+    };
+    if base_id >= class.id {
+        diagnostics.push(
+            Diagnostic::new(
+                DiagnosticCode::error(306),
+                span,
+                format!("`{written}` is defined after the class that derives from it"),
+            )
+            .with_rule(RuleId::TYP_12),
+        );
+        return None;
+    }
+    match found.get(&base_id).or_else(|| scope.known.get(&base_id))? {
+        Type::Exception(ExceptionClass::Class(parent)) => {
+            let mut chain = vec![(base_id, parent.name.clone())];
+            chain.extend(parent.ancestors.iter().cloned());
+            Some(Type::Exception(ExceptionClass::program(
+                class.id,
+                name,
+                chain,
+                parent.builtin,
+            )))
+        }
+        Type::Instance(parent) => {
+            let mut ancestors = vec![(base_id, parent.name.clone())];
+            ancestors.extend(parent.ancestors.iter().cloned());
+            Some(Type::instance(InstanceClass {
+                id: class.id,
+                name,
+                ancestors,
+            }))
+        }
+        _ => None,
+    }
+}
+
+/// Returns the error for a base other than `object`, an exception class or a class of the
+/// program: a built-in type such as `list`, or an expression that names no class.
+fn unsupported_base(span: Span) -> Diagnostic {
     Diagnostic::new(
         DiagnosticCode::error(201),
         span,
-        "base classes other than `object` and exception classes are planned for TyPy 0.4 (CLS-04)",
+        "a class derives from `object`, an exception class or a class of the program in TyPy \
+         (CLS-04)",
     )
     .with_rule(RuleId::CLS_04)
 }
@@ -182,12 +248,19 @@ const SPECIAL_METHODS: [&str; 7] = [
     "__exit__",
 ];
 
+/// The classes a module's class bodies may name: each by its name, the type of each one's
+/// instances, and the classes of the modules checked before, indexed by ID.
+pub(super) struct KnownClasses<'known> {
+    pub(super) ids: &'known BTreeMap<String, ClassId>,
+    pub(super) instances: &'known BTreeMap<ClassId, Type>,
+    pub(super) earlier: &'known [ClassInfo],
+}
+
 /// Collects each class's attributes and methods; the methods become definitions whose IDs
 /// follow `first_function`.
 pub(super) fn collect_members<'tree>(
     classes: &[ClassStatement<'tree>],
-    class_ids: &BTreeMap<String, ClassId>,
-    exceptions: &BTreeMap<ClassId, ExceptionClass>,
+    known: &KnownClasses<'_>,
     names: &crate::check::ImportedNames,
     floor_defers: bool,
     first_function: usize,
@@ -198,20 +271,26 @@ pub(super) fn collect_members<'tree>(
     for class in classes {
         // The class's own name is bound only after its body runs.
         let scope = AnnotationScope {
-            classes: class_ids,
-            exceptions,
+            classes: known.ids,
+            instances: known.instances,
             modules: &names.modules,
             names: &names.names,
             standard: &names.standard,
             bound: if floor_defers { u32::MAX } else { class.id.0 },
         };
-        let mut info = new_info(class, exceptions.get(&class.id).cloned(), &infos);
+        let instance = known
+            .instances
+            .get(&class.id)
+            .cloned()
+            .unwrap_or_else(|| Type::instance(InstanceClass::root(class.id, &class.name.name)));
+        let classes = Classes {
+            earlier: known.earlier,
+            local: &infos,
+        };
+        let mut info = new_info(class, &instance, classes);
         let owner = Owner {
             id: class.id,
-            instance: info.exception.clone().map_or_else(
-                || Type::Instance(class.id, class.name.name.clone()),
-                Type::Exception,
-            ),
+            instance,
         };
         for statement in class.body {
             match statement {
@@ -228,7 +307,7 @@ pub(super) fn collect_members<'tree>(
                         continue;
                     };
                     let name = &parts.name.name;
-                    if let Some(refused) = refused_method(&parts, &info, &infos) {
+                    if let Some(refused) = refused_method(&parts, &info, classes) {
                         diagnostics.push(refused);
                         continue;
                     }
@@ -288,19 +367,39 @@ pub(super) fn collect_members<'tree>(
     (infos, methods)
 }
 
-/// Returns the class's information before its body is read: an exception class whose base is
-/// a class of the program holds its base's attributes first, so each keeps its place.
-fn new_info(
-    class: &ClassStatement<'_>,
-    exception: Option<ExceptionClass>,
-    infos: &[ClassInfo],
-) -> ClassInfo {
-    let base = match &exception {
-        Some(ExceptionClass::Class(program)) => program.ancestors.first().map(|(base, _)| *base),
-        _ => None,
+/// The classes collected so far: those of the modules checked before, indexed by ID, and the
+/// module's own classes before the one being collected.
+#[derive(Clone, Copy)]
+struct Classes<'infos> {
+    earlier: &'infos [ClassInfo],
+    local: &'infos [ClassInfo],
+}
+
+impl<'infos> Classes<'infos> {
+    /// Returns a class collected before; a base is defined before the class, so it is one.
+    fn get(self, class: ClassId) -> Option<&'infos ClassInfo> {
+        self.earlier
+            .get(class.0 as usize)
+            .or_else(|| self.local.iter().find(|info| info.id == class))
+    }
+}
+
+/// Returns the class's information before its body is read: a class whose base is a class of
+/// the program holds its base's attributes first, so each keeps its place (ADR-0021).
+fn new_info(class: &ClassStatement<'_>, instance: &Type, classes: Classes<'_>) -> ClassInfo {
+    let (base, exception) = match instance {
+        Type::Exception(exception) => (
+            match exception {
+                ExceptionClass::Class(program) => program.ancestors.first().map(|(base, _)| *base),
+                ExceptionClass::Builtin(_) => None,
+            },
+            Some(exception.clone()),
+        ),
+        Type::Instance(own) => (own.ancestors.first().map(|(base, _)| *base), None),
+        _ => (None, None),
     };
     let attributes: Vec<AttributeInfo> = base
-        .and_then(|base| infos.iter().find(|info| info.id == base))
+        .and_then(|base| classes.get(base))
         .map_or_else(Vec::new, |info| info.attributes.clone());
     ClassInfo {
         id: class.id,
@@ -321,13 +420,13 @@ fn new_info(
 fn refused_method(
     parts: &FunctionParts<'_>,
     info: &ClassInfo,
-    infos: &[ClassInfo],
+    classes: Classes<'_>,
 ) -> Option<Diagnostic> {
     let name = &parts.name.name;
     if info.method(name).is_some() {
         return Some(defined_twice(parts.name));
     }
-    if !REDEFINABLE.contains(&name.as_str()) && inherited_method(infos, info.base, name) {
+    if !REDEFINABLE.contains(&name.as_str()) && inherited_method(classes, info.base, name) {
         return Some(
             Diagnostic::new(
                 DiagnosticCode::error(201),
@@ -357,10 +456,9 @@ fn refused_method(
 }
 
 /// Returns true when `base`, or a class it derives from, defines the method `name`.
-fn inherited_method(infos: &[ClassInfo], base: Option<ClassId>, name: &str) -> bool {
+fn inherited_method(classes: Classes<'_>, base: Option<ClassId>, name: &str) -> bool {
     let mut current = base;
-    // A base is defined before the class, so its information is already collected.
-    while let Some(info) = current.and_then(|class| infos.iter().find(|info| info.id == class)) {
+    while let Some(info) = current.and_then(|class| classes.get(class)) {
         if info.method(name).is_some() {
             return true;
         }
@@ -377,6 +475,33 @@ fn declare(
     span: Span,
     diagnostics: &mut Diagnostics,
 ) {
+    if let Some(index) = info.attribute(name).filter(|index| *index < info.inherited) {
+        // A subclass may declare an attribute of its base again with the same type, so code
+        // that knows only the base reads it at the same place with the same type (ADR-0021).
+        let base = info.attributes[index].ty.clone();
+        if base.as_ref() == ty.as_ref() {
+            return;
+        }
+        let message = match base {
+            Some(base) => format!(
+                "`{}.{name}` is declared as {}, but its base declares it as {base}",
+                info.name,
+                ty.map_or_else(|| "something else".to_owned(), |ty| ty.to_string()),
+            ),
+            None => format!(
+                "`{}.{name}` is declared again, but its base assigns it without declaring it",
+                info.name
+            ),
+        };
+        let diagnostic =
+            Diagnostic::new(DiagnosticCode::error(202), span, message).with_rule(RuleId::CLS_04);
+        diagnostics.push(if info.attributes[index].ty.is_none() {
+            diagnostic.with_help(format!("declare `{name}` in the body of the base class"))
+        } else {
+            diagnostic
+        });
+        return;
+    }
     if info.attribute(name).is_some() {
         diagnostics.push(
             Diagnostic::new(

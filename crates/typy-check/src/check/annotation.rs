@@ -15,8 +15,8 @@ use crate::types::Type;
 #[derive(Clone, Copy, Debug)]
 pub(crate) struct AnnotationScope<'classes> {
     pub(crate) classes: &'classes BTreeMap<String, ClassId>,
-    /// The classes that derive from an exception class, whose instances are exceptions.
-    pub(crate) exceptions: &'classes BTreeMap<ClassId, ExceptionClass>,
+    /// The type of each class's instances: an exception for an exception class.
+    pub(crate) instances: &'classes BTreeMap<ClassId, Type>,
     /// For each name bound to a module at module level, that module's classes, which an
     /// annotation such as `shapes.Point` names (MOD-10).
     pub(crate) modules: &'classes BTreeMap<String, BTreeMap<String, ClassId>>,
@@ -248,10 +248,11 @@ fn named_type(
             );
             return Type::Error;
         }
-        if let Some(exception) = scope.exceptions.get(class) {
-            return Type::Exception(exception.clone());
-        }
-        return Type::Instance(*class, id.to_owned());
+        return scope
+            .instances
+            .get(class)
+            .cloned()
+            .unwrap_or_else(|| Type::instance(crate::class_type::InstanceClass::root(*class, id)));
     }
     match id {
         "int" => Type::Int,

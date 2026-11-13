@@ -61,6 +61,7 @@ impl FunctionLowerer<'_> {
                 self.set_display(items, item, span)
             }
             TypedExprKind::Wrap(inner) => self.wrap(inner, ty, span),
+            TypedExprKind::Upcast(inner) => self.upcast(inner, ty, span),
             TypedExprKind::Unwrap(inner) => self.unwrap(inner, ty, span),
             TypedExprKind::Dict { keys, values } => {
                 self.dict_display(keys, values, &expression.ty, span)
@@ -420,7 +421,21 @@ impl FunctionLowerer<'_> {
             let value = if let Some((_, lowered)) =
                 arguments.iter().find(|(position, _)| *position == index)
             {
-                lowered.value
+                // A call the lowering makes itself, such as of an inherited `__init__` or
+                // `__repr__`, may pass an instance of a subclass (ADR-0021).
+                let wanted = self.lowered_type(&parameter.ty);
+                if lowered.ty == wanted {
+                    lowered.value
+                } else {
+                    self.builder.push_value(
+                        Operation::Upcast {
+                            value: lowered.value,
+                            ty: wanted,
+                        },
+                        wanted,
+                        span,
+                    )
+                }
             } else {
                 let default = parameter.default.clone().unwrap_or(TypedConstant::None);
                 let constant = self.typed_constant(&default, span).value;

@@ -34,7 +34,7 @@ pub(crate) use definition::Definition;
 use crate::body::{BodyChecker, Program};
 use crate::subset;
 use crate::typed::{ClassId, FunctionId, TypedProgram};
-use class::{collect_classes, collect_members, exception_classes};
+use class::{BaseScope, KnownClasses, class_types, collect_classes, collect_members};
 use definition::collect_functions;
 use definition_order::check_calls_follow_definitions;
 pub(crate) use module_scope::declared_globals;
@@ -117,21 +117,37 @@ fn check_module(
             .iter()
             .map(|class| (class.name.name.clone(), class.id)),
     );
-    let mut exceptions = program.known_exceptions();
-    exceptions.extend(exception_classes(&classes, diagnostics));
+    let mut instances = class_types(
+        &classes,
+        &BaseScope {
+            known: program.known_instances(),
+            class_ids: &class_ids,
+            modules: &annotations.modules,
+        },
+        diagnostics,
+    );
+    instances.extend(
+        program
+            .known_instances()
+            .iter()
+            .map(|(class, ty)| (*class, ty.clone())),
+    );
     let mut definitions = collect_functions(
         &tree.body,
         first_class,
         &class_ids,
-        &exceptions,
+        &instances,
         &annotations,
         floor_defers,
         diagnostics,
     );
     let (class_infos, methods) = collect_members(
         &classes,
-        &class_ids,
-        &exceptions,
+        &KnownClasses {
+            ids: &class_ids,
+            instances: &instances,
+            earlier: program.classes(),
+        },
         &annotations,
         floor_defers,
         first_function + definitions.len(),
@@ -151,7 +167,7 @@ fn check_module(
         variables.into_keys().collect(),
         class_infos,
         class_ids,
-        exceptions,
+        instances,
     );
     program.import_names(&imports.functions, annotations);
     program.import_module_functions(&imports.module_functions);

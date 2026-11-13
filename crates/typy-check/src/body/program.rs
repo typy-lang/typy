@@ -34,7 +34,7 @@ pub(crate) struct Program {
     pub(super) class_modules: Vec<String>,
     pub(super) class_ids: BTreeMap<String, ClassId>,
     /// The classes that derive from an exception class (CLS-03).
-    pub(super) exceptions: BTreeMap<ClassId, ExceptionClass>,
+    pub(super) instances: BTreeMap<ClassId, Type>,
     /// The modules checked so far, in the order they were checked.
     pub(super) modules: Vec<TypedModule>,
     /// The names each module checked so far defines, by the module's name (ADR-0015).
@@ -107,7 +107,7 @@ impl Program {
             classes: Vec::new(),
             class_modules: Vec::new(),
             class_ids: BTreeMap::new(),
-            exceptions: BTreeMap::new(),
+            instances: BTreeMap::new(),
             modules: Vec::new(),
             scopes: BTreeMap::new(),
             loaded: BTreeSet::new(),
@@ -164,7 +164,7 @@ impl Program {
         module_variables: BTreeSet<String>,
         classes: Vec<ClassInfo>,
         class_ids: BTreeMap<String, ClassId>,
-        exceptions: BTreeMap<ClassId, ExceptionClass>,
+        instances: BTreeMap<ClassId, Type>,
     ) {
         let first = self.functions.len();
         // Methods are reached through their instances, so only module functions have names.
@@ -197,7 +197,7 @@ impl Program {
             .extend(std::iter::repeat_n(self.module.clone(), classes.len()));
         self.classes.extend(classes);
         self.class_ids = class_ids;
-        self.exceptions.extend(exceptions);
+        self.instances.extend(instances);
     }
 
     /// Notes the module about to be checked, whose imports resolve against its package.
@@ -277,8 +277,21 @@ impl Program {
     }
 
     /// Returns the exception classes of the modules checked so far.
-    pub(crate) fn known_exceptions(&self) -> BTreeMap<ClassId, ExceptionClass> {
-        self.exceptions.clone()
+    pub(crate) fn known_instances(&self) -> &BTreeMap<ClassId, Type> {
+        &self.instances
+    }
+
+    /// Returns the classes of the modules checked so far, indexed by ID.
+    pub(crate) fn classes(&self) -> &[ClassInfo] {
+        &self.classes
+    }
+
+    /// Returns the class of an exception class, or `None` for any other class.
+    pub(super) fn exception(&self, class: ClassId) -> Option<&ExceptionClass> {
+        match self.instances.get(&class) {
+            Some(Type::Exception(exception)) => Some(exception),
+            _ => None,
+        }
     }
 
     /// Adds the functions a module imports by name to its table of functions, and the
@@ -315,10 +328,12 @@ impl Program {
 
     /// Returns the type of the instances of a class: an exception for an exception class.
     pub(super) fn instance_type(&self, class: ClassId) -> Type {
-        self.exceptions.get(&class).cloned().map_or_else(
-            || Type::Instance(class, self.classes[class.0 as usize].name.clone()),
-            Type::Exception,
-        )
+        self.instances.get(&class).cloned().unwrap_or_else(|| {
+            Type::instance(crate::class_type::InstanceClass::root(
+                class,
+                &self.classes[class.0 as usize].name,
+            ))
+        })
     }
 
     /// Returns the method `name` of a class, its own or the nearest base's.

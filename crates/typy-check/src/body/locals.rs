@@ -115,7 +115,7 @@ impl BodyChecker<'_> {
     pub(super) fn annotation(&mut self, annotation: &Expr) -> Type {
         let scope = AnnotationScope {
             classes: &self.program.class_ids,
-            exceptions: &self.program.exceptions,
+            instances: &self.program.instances,
             modules: &self.program.module_classes,
             names: &self.program.annotation_names,
             standard: &self.program.annotation_modules,

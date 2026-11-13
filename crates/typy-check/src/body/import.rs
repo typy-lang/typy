@@ -675,7 +675,7 @@ impl BodyChecker<'_> {
 
     /// Returns the type object of a class as a value, an exception class's for one.
     pub(super) fn class_object(&self, class: ClassId, name: &str, span: Span) -> TypedExpr {
-        let of = match self.program.exceptions.get(&class) {
+        let of = match self.program.exception(class) {
             Some(exception) => crate::types::TypeObjectOf::Exception(exception.clone()),
             None => crate::types::TypeObjectOf::Instance(class, name.to_owned()),
         };

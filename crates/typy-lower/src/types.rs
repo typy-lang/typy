@@ -19,7 +19,7 @@ pub(crate) fn tyir_type(ty: &Type, tuples: &mut TupleTypes) -> TyirType {
         Type::Set(_) => TyirType::SET,
         Type::Dict(..) => TyirType::DICT,
         Type::DictView(..) => TyirType::VIEW,
-        Type::Instance(class, _) => TyirType::Object(TypeId::class(class.0)),
+        Type::Instance(class) => TyirType::Object(TypeId::class(class.id.0)),
         Type::TypeObject(_) => TyirType::TYPE,
         Type::Exception(_) => TyirType::EXCEPTION,
         Type::Iterator(_) => TyirType::ITERATOR,

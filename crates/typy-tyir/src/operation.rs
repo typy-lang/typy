@@ -226,6 +226,14 @@ pub enum Operation {
     },
     /// The value an optional holds, which is not `None`.
     Unwrap(ValueId),
+    /// An instance, or an optional one, as a value of type `ty`, an instance of a class it
+    /// derives from: the same object (ADR-0021).
+    Upcast {
+        /// The instance.
+        value: ValueId,
+        /// The type of the base's instances, optional when the value is.
+        ty: crate::types::TyirType,
+    },
     /// Whether an optional value is `None`.
     IsNone(ValueId),
     /// A new instance of class `class`, with one reference and every attribute zero (CLS-01).

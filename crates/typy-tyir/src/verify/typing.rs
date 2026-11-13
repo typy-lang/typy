@@ -243,6 +243,16 @@ impl Checker<'_> {
                 Some(*ty)
             }
             Operation::Unwrap(value) => Some(self.optional_value(*value)?),
+            Operation::Upcast { value, ty } => {
+                let from = self.ty(*value)?;
+                if !self.derives_from(from, *ty) {
+                    return Err(self.error(format!(
+                        "v{} of type {from} is not an instance of a class derived from {ty}",
+                        value.0
+                    )));
+                }
+                Some(*ty)
+            }
             Operation::IsNone(value) => {
                 self.optional_value(*value)?;
                 Some(TyirType::Bool)
@@ -287,6 +297,37 @@ impl Checker<'_> {
                 None
             }
         })
+    }
+
+    /// Returns true when `from` holds instances of a class of the module that is `to`'s class
+    /// or derives from it, both optional or neither.
+    fn derives_from(&self, from: TyirType, to: TyirType) -> bool {
+        let classes = match (from, to) {
+            (TyirType::Object(from), TyirType::Object(to))
+            | (
+                TyirType::Optional(crate::types::OptionalBase::Object(from)),
+                TyirType::Optional(crate::types::OptionalBase::Object(to)),
+            ) => from.class_index().zip(to.class_index()),
+            _ => None,
+        };
+        let Some((mut current, base)) = classes else {
+            return false;
+        };
+        // Each base has a lower index than the classes derived from it, so the walk ends.
+        loop {
+            if current == base {
+                return true;
+            }
+            match self
+                .module
+                .classes
+                .get(current as usize)
+                .and_then(|class| class.base)
+            {
+                Some(next) if next < current => current = next,
+                _ => return false,
+            }
+        }
     }
 
     /// Returns the type an optional value holds, after checking it is optional.

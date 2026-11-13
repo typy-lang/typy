@@ -77,7 +77,7 @@ pub(super) fn collect_functions<'tree>(
     statements: &'tree [Stmt],
     first_class: usize,
     classes: &BTreeMap<String, ClassId>,
-    exceptions: &BTreeMap<ClassId, crate::exception::ExceptionClass>,
+    instances: &BTreeMap<ClassId, Type>,
     names: &crate::check::ImportedNames,
     floor_defers: bool,
     diagnostics: &mut Diagnostics,
@@ -100,7 +100,7 @@ pub(super) fn collect_functions<'tree>(
         }
         let scope = AnnotationScope {
             classes,
-            exceptions,
+            instances,
             modules: &names.modules,
             names: &names.names,
             standard: &names.standard,

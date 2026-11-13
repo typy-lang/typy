@@ -102,6 +102,14 @@ impl BodyChecker<'_> {
         let Some(expected) = expected else {
             return value;
         };
+        if value.ty != *expected && value.ty.is_upcast_to(expected) {
+            let span = value.span;
+            return Self::typed(
+                TypedExprKind::Upcast(Box::new(value)),
+                expected.clone(),
+                span,
+            );
+        }
         match expected {
             // A collection or an iterator becomes an iterable as it is.
             Type::Iterable(item)

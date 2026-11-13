@@ -9,6 +9,7 @@ use crate::runtime::runtime_function;
 
 impl<'ctx> FunctionEmitter<'_, '_, 'ctx> {
     /// Emits one operation and returns its value, if it has one.
+    #[allow(clippy::too_many_lines, reason = "one arm per operation")]
     pub(crate) fn operation(
         &mut self,
         operation: &Operation,
@@ -87,6 +88,9 @@ impl<'ctx> FunctionEmitter<'_, '_, 'ctx> {
             Operation::TupleItem { tuple, index } => self.tuple_item(*tuple, *index)?,
             Operation::Wrap { value, ty } => Some(self.wrap(*value, *ty)?),
             Operation::Unwrap(value) => Some(self.unwrap(*value)?),
+            // An instance of a class keeps its address as an instance of its base, whose
+            // attributes come first (ADR-0021).
+            Operation::Upcast { value, .. } => Some(self.value(*value)?),
             Operation::IsNone(value) => Some(self.is_none(*value)?),
             Operation::NewInstance { class } => Some(self.new_instance(*class)?),
             Operation::Field {

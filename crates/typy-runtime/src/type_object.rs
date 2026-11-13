@@ -213,6 +213,23 @@ pub unsafe extern "C" fn typy_rt_object_repr(object: *mut ObjectHeader) -> Raisi
     }
 }
 
+/// Returns `str(object)` through the object's type: its `__str__`, or else its `__repr__`, for
+/// an instance whose class may be a subclass of the one the program names (CLS-08, ADR-0021).
+///
+/// # Safety
+///
+/// `object` points to a live object whose type writes it.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn typy_rt_object_str(object: *mut ObjectHeader) -> Raising<*mut StrObject> {
+    // SAFETY: the caller's guarantee.
+    match unsafe { type_of(object) }.str {
+        // SAFETY: the type's function takes an object of the type.
+        Some(str) => unsafe { str(object) },
+        // SAFETY: the caller's guarantee.
+        None => unsafe { typy_rt_object_repr(object) },
+    }
+}
+
 /// Returns the type object of a heap object, as `type(value)` gives it for a value whose
 /// type only the object knows, such as an iterator (CLS-12).
 ///

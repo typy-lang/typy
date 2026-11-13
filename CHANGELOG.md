@@ -6,6 +6,27 @@ All notable changes to TyPy are recorded here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- Single inheritance between classes of the program: a class may derive
+  from a class defined before it, named by its name or as
+  `module.Class`, and holds its base's attributes and methods. An
+  instance is accepted wherever its base is, as an argument, in a
+  variable, in a `list[Base]` and as a `Base | None`, and `type()`,
+  `str`, `repr` and `print` use its own class. A subclass may declare an
+  inherited attribute again with the same type. Redefining a base's
+  methods other than `__init__`, `__str__` and `__repr__` follows later
+  in 0.4 (CLS-04, ADR-0021).
+- An exception class may derive from an exception class imported from
+  another module, as `from errors import AppError` or `errors.AppError`
+  (CLS-03).
+
+### Changed
+
+- A base that is not `object`, an exception class or a class of the
+  program, such as `int` or `list`, is E0201 with a message that names
+  what a base may be, in place of "planned for TyPy 0.4" (CLS-04).
+
 ## [0.3.0] - 2026-11-13
 
 ### Added

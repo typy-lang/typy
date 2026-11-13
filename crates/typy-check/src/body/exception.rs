@@ -347,10 +347,14 @@ impl BodyChecker<'_> {
         keywords: &[Keyword],
         span: Span,
     ) -> TypedExpr {
-        let exception_init = self.initializing.filter(|initializing| {
-            name.name == "__init__" && self.program.exceptions.contains_key(&initializing.class)
+        let exception_init = self.initializing.and_then(|initializing| {
+            let exception = self
+                .program
+                .exception(initializing.class)
+                .filter(|_| name.name == "__init__")?;
+            Some((initializing, exception.builtin()))
         });
-        let Some(initializing) = exception_init else {
+        let Some((initializing, builtin)) = exception_init else {
             for argument in arguments {
                 self.expression(argument);
             }
@@ -409,7 +413,6 @@ impl BodyChecker<'_> {
                     span,
                 );
             }
-            let builtin = self.program.exceptions[&initializing.class].builtin();
             if let Some(error) = self.os_error_arguments(builtin, &values, span) {
                 return error;
             }

@@ -69,10 +69,6 @@ class C(object):
 fn later_features_name_their_release_and_rule() {
     let cases = [
         (
-            "class C(module.B):\n    pass\n",
-            "base classes other than `object` are planned for TyPy 0.4 (CLS-04)",
-        ),
-        (
             "@d\nclass C:\n    pass\n",
             "class decorators are planned for TyPy 0.4 (CLS-05)",
         ),

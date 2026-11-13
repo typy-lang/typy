@@ -92,31 +92,27 @@ python-floor = "3.15"
 ## E0201: feature planned for a later TyPy release
 
 The program uses valid Python that a later TyPy release accepts, such as
-`try`, `import` or inheritance. The message names the release and the rule.
-Write the code without the feature, for example an f-string instead of `%`
-formatting, or wait for that release.
+`int | str` annotations or class decorators. The message names the release
+and the rule. Write the code without the feature, for example with one type
+in the annotation, or wait for that release.
 
 This program gives E0201:
 
-<!-- typy-expect: rejected E0201 at 5:14 -->
+<!-- typy-expect: rejected E0201 at 1:17 -->
 ```python
-class Shape:
-    pass
-
-
-class Square(Shape):
-    pass
+def show(value: int | str) -> None:
+    print(value)
 ```
 
 This one is correct:
 
 <!-- typy-expect: accepted -->
 ```python
-class Square:
-    pass
+def show(value: str) -> None:
+    print(value)
 
 
-print(Square.__name__)
+show("ready")
 ```
 
 ## E0202: feature TyPy cannot compile with CPython's meaning

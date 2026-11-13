@@ -431,9 +431,14 @@ impl BodyChecker<'_> {
             );
         };
         let qualified = format!("{}.{}", info.name, name.name);
+        // An inherited method takes the instance as an instance of the class that defines it.
+        let owner = self.program.signatures[method.0 as usize]
+            .parameters
+            .first()
+            .map(|parameter| parameter.ty.clone());
         let mut bound = vec![Argument {
             parameter: 0,
-            value: receiver,
+            value: Self::converted(receiver, owner.as_ref()),
         }];
         match self.bind_arguments(method, 1, &qualified, arguments, keywords, span) {
             Ok(arguments) => bound.extend(arguments),

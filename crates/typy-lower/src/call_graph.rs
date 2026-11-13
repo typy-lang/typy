@@ -206,6 +206,7 @@ fn expression(expression_value: &TypedExpr, callees: &mut BTreeSet<FunctionId>) 
             expression(right, callees);
         }
         TypedExprKind::Wrap(operand)
+        | TypedExprKind::Upcast(operand)
         | TypedExprKind::Unwrap(operand)
         | TypedExprKind::Unary { operand, .. }
         | TypedExprKind::TupleOf(operand)

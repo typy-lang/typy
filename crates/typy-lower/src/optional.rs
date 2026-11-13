@@ -35,6 +35,21 @@ impl FunctionLowerer<'_> {
         self.transfer(value, wrapped, ty)
     }
 
+    /// Returns an instance, or an optional one, as an instance of a base, of type `ty`; the
+    /// result takes over the value's reference.
+    pub(crate) fn upcast(&mut self, inner: &TypedExpr, ty: TyirType, span: Span) -> Lowered {
+        let value = self.expression(inner);
+        let upcast = self.builder.push_value(
+            Operation::Upcast {
+                value: value.value,
+                ty,
+            },
+            ty,
+            span,
+        );
+        self.transfer(value, upcast, ty)
+    }
+
     /// Returns the value an optional holds, which a test showed is not `None`; it takes over
     /// the optional's reference.
     pub(crate) fn unwrap(&mut self, inner: &TypedExpr, ty: TyirType, span: Span) -> Lowered {

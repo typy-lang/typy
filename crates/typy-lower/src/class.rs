@@ -197,13 +197,17 @@ impl FunctionLowerer<'_> {
             unreachable!("an instance is an object");
         };
         let class = self.program.class(ClassId(id.class_index().unwrap_or(0)));
-        let method = |name: &str| {
-            class
-                .methods
-                .iter()
-                .find(|(each, _)| each == name)
-                .map(|(_, id)| *id)
-        };
+        if self.program.has_subclass(class.id) {
+            // The instance may be of a subclass that writes itself, so its class does.
+            let object = self.bits(Self::borrowed(lowered.value, lowered.ty), span);
+            let function = if repr {
+                RuntimeFunction::ObjectRepr
+            } else {
+                RuntimeFunction::ObjectStr
+            };
+            return self.call_runtime(function, vec![object], span);
+        }
+        let method = |name: &str| self.program.method(class.id, name);
         let method = if repr {
             method("__repr__")
         } else {

@@ -1,7 +1,9 @@
 //! The static types: the scalars of 0.1, and from 0.2 the types built from other types.
 
 use std::fmt;
+use std::sync::Arc;
 
+use crate::class_type::InstanceClass;
 use crate::exception::{BuiltinException, ExceptionClass};
 
 /// The static type of a value (TYP-11). Types built from others, such as a tuple, hold their
@@ -36,8 +38,8 @@ pub enum Type {
     /// `T | None`: a value of `T`, or `None` (TYP-06, ADR-0011). `T` is never `None` or
     /// optional itself; `optional` builds the type and keeps that rule.
     Optional(Box<Type>),
-    /// An instance of a class of the program, with the class's name for messages (CLS-01).
-    Instance(crate::typed::ClassId, String),
+    /// An instance of a class of the program, or of a class derived from it (CLS-01, CLS-04).
+    Instance(Arc<InstanceClass>),
     /// An exception of a class (ADR-0013).
     Exception(ExceptionClass),
     /// An iterator that `iter()` makes, of the type of its items (ADR-0014).
@@ -126,7 +128,7 @@ impl TypeObjectOf {
             Type::Set(_) => Self::Set,
             Type::Dict(..) => Self::Dict,
             Type::DictView(view, ..) => Self::View(*view),
-            Type::Instance(class, name) => Self::Instance(*class, name.clone()),
+            Type::Instance(class) => Self::Instance(class.id, class.name.clone()),
             Type::TypeObject(_) => Self::Type,
             Type::Range => Self::Range,
             // An exception's class may derive from its static class, so it is read from the
@@ -233,6 +235,12 @@ impl View {
 }
 
 impl Type {
+    /// Returns the type of the instances of a class, shared so a type stays small.
+    #[must_use]
+    pub fn instance(class: InstanceClass) -> Self {
+        Self::Instance(Arc::new(class))
+    }
+
     /// Returns `T | None`: `None` for `None`, and `T | None` itself for an optional `T`, as
     /// Python's typing joins them.
     #[must_use]
@@ -254,12 +262,25 @@ impl Type {
             | (Self::NoneType, Self::Optional(_))
             | (Self::Module(_), Self::AnyModule)
             | (Self::TypeObject(_), Self::TypeObject(None)) => true,
-            // An exception of a class is one of each of its bases (EXC-01).
+            // An exception of a class is one of each of its bases (EXC-01), and so is an
+            // instance (CLS-04).
             (Self::Exception(class), Self::Exception(base)) => class.derives_from(base),
-            (Self::Optional(_), _) => self.matches(target),
+            (Self::Instance(class), Self::Instance(base)) => class.derives_from(base),
+            (Self::Optional(_), _) => self.matches(target) || self.is_upcast_to(target),
             (_, Self::Optional(inner)) => self.is_assignable_to(inner),
             (_, Self::Iterable(item)) => self.iterable_item().is_some_and(|own| own.matches(item)),
             _ => self.matches(target),
+        }
+    }
+
+    /// Returns true when a value of this type is an instance, or an optional one, of a class
+    /// that derives from the class of `target`, which is of the same kind (CLS-04).
+    #[must_use]
+    pub fn is_upcast_to(&self, target: &Self) -> bool {
+        match (self, target) {
+            (Self::Instance(class), Self::Instance(base)) => class.derives_from(base),
+            (Self::Optional(inner), Self::Optional(base)) => inner.is_upcast_to(base),
+            _ => false,
         }
     }
 
@@ -298,7 +319,7 @@ impl Type {
     #[must_use]
     pub fn class_id(&self) -> Option<crate::typed::ClassId> {
         match self {
-            Self::Instance(class, _) => Some(*class),
+            Self::Instance(class) => Some(class.id),
             Self::Exception(exception) => exception.class_id(),
             _ => None,
         }
@@ -338,6 +359,11 @@ impl Type {
             | (Self::TupleOf(left), Self::TupleOf(right))
             | (Self::Set(left), Self::Set(right)) => left == right,
             (Self::Dict(..), Self::Dict(..)) => self == other,
+            // An instance is equal only to itself, so a class compares with its bases and its
+            // subclasses, whose instances it may be (CLS-04).
+            (Self::Instance(left), Self::Instance(right)) => {
+                left.derives_from(right) || right.derives_from(left)
+            }
             // Views compare by the rules of `body/view_operator.rs` (DAT-16), an optional value
             // is compared with `None` by `is`, and iterators by `is`.
             (
@@ -512,7 +538,7 @@ impl Type {
             Self::Set(_) => "set".to_owned(),
             Self::Dict(..) => "dict".to_owned(),
             Self::Optional(_) | Self::NoneType => "NoneType".to_owned(),
-            Self::Instance(_, name) => name.clone(),
+            Self::Instance(class) => class.name.clone(),
             other => other.to_string(),
         }
     }
@@ -523,8 +549,8 @@ impl Type {
         match self {
             Self::Int => "an int".to_owned(),
             Self::NoneType => "None".to_owned(),
-            Self::Instance(_, name) if name.starts_with(['A', 'E', 'I', 'O', 'U']) => {
-                format!("an {name}")
+            Self::Instance(class) if class.name.starts_with(['A', 'E', 'I', 'O', 'U']) => {
+                format!("an {class}")
             }
             Self::Exception(class) if class.name().starts_with(['A', 'E', 'I', 'O', 'U']) => {
                 format!("an {class}")
@@ -569,7 +595,7 @@ impl fmt::Display for Type {
                 write!(formatter, "{}[{key}, {value}]", view.name())
             }
             Self::Optional(inner) => write!(formatter, "{inner} | None"),
-            Self::Instance(_, name) => formatter.write_str(name),
+            Self::Instance(class) => write!(formatter, "{class}"),
             Self::Exception(class) => write!(formatter, "{class}"),
             Self::Iterator(item) => write!(formatter, "Iterator[{item}]"),
             Self::Iterable(item) => write!(formatter, "Iterable[{item}]"),
@@ -615,9 +641,10 @@ mod tests {
 
     #[test]
     fn instances_compare_by_identity_and_have_no_order() {
+        use crate::class_type::InstanceClass;
         use crate::typed::ClassId;
-        let point = Type::Instance(ClassId(0), "Point".to_owned());
-        let item = Type::Instance(ClassId(1), "Item".to_owned());
+        let point = Type::instance(InstanceClass::root(ClassId(0), "Point"));
+        let item = Type::instance(InstanceClass::root(ClassId(1), "Item"));
         assert!(point.can_test_equality(&point));
         assert!(!point.can_test_equality(&item));
         assert!(!point.can_order(&point));

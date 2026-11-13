@@ -57,6 +57,7 @@ fn on_point(body: impl FnOnce(ValueId, ValueId) -> Body) -> TyirModule {
             fields,
             repr: None,
             str: None,
+            base: None,
             exception_base: None,
         }],
         entry: FunctionId(0),
@@ -217,6 +218,7 @@ fn on_exception(parameter: TyirType, operation: Operation) -> TyirModule {
             fields,
             repr: None,
             str: None,
+            base: None,
             exception_base: Some(typy_tyir::TypeObjectRef::Exception("ValueError")),
         }],
         entry: FunctionId(0),
@@ -239,4 +241,99 @@ fn an_exception_s_attribute_names_its_class() {
     );
     let error = verify(&on_exception(TyirType::Int, field)).unwrap_err();
     assert!(error.to_string().contains("is not an instance"), "{error}");
+}
+
+/// A module of three classes, `Shape`, `Circle` derived from it and `Other`, and a function
+/// of a `Circle` and an `int`, with one operation `make` gives on them.
+fn on_circle(make: impl FnOnce(ValueId, ValueId) -> (Operation, TyirType)) -> TyirModule {
+    let circle = TyirType::Object(TypeId::class(1));
+    let mut builder = FunctionBuilder::new(FunctionId(0), "_TY8__main__1f", "f", TyirType::Unit);
+    let parameter = builder.add_parameter(circle);
+    let number = builder.push_value(
+        Operation::Constant(Constant::Int("1".to_owned())),
+        TyirType::Int,
+        span(),
+    );
+    let (operation, ty) = make(parameter, number);
+    builder.push_value(operation, ty, span());
+    let unit = builder.push_value(Operation::Constant(Constant::Unit), TyirType::Unit, span());
+    builder.terminate(Terminator::Return(unit));
+    let mut tuple_types = TupleTypes::default();
+    let TyirType::Tuple(fields) = tuple_types.intern(Vec::new()) else {
+        unreachable!("interning gives a tuple type");
+    };
+    let class = |name: &str, base: Option<u32>| TyirClass {
+        name: name.to_owned(),
+        module: "__main__".to_owned(),
+        fields,
+        repr: None,
+        str: None,
+        base,
+        exception_base: None,
+    };
+    TyirModule {
+        globals: Vec::new(),
+        modules: Vec::new(),
+        functions: vec![builder.finish()],
+        strings: Vec::new(),
+        tuple_types,
+        classes: vec![
+            class("Shape", None),
+            class("Circle", Some(0)),
+            class("Other", None),
+        ],
+        entry: FunctionId(0),
+    }
+}
+
+#[test]
+fn an_upcast_reaches_a_base_and_nothing_else() {
+    let shape = TyirType::Object(TypeId::class(0));
+    let valid = on_circle(|circle, _| {
+        (
+            Operation::Upcast {
+                value: circle,
+                ty: shape,
+            },
+            shape,
+        )
+    });
+    assert_eq!(verify(&valid), Ok(()));
+    assert!(
+        print(&valid).contains("upcast v0, class#0"),
+        "{}",
+        print(&valid)
+    );
+    let other = TyirType::Object(TypeId::class(2));
+    let unrelated = on_circle(|circle, _| {
+        (
+            Operation::Upcast {
+                value: circle,
+                ty: other,
+            },
+            other,
+        )
+    });
+    assert!(message(&unrelated).contains("is not an instance of a class derived from"));
+    let number = on_circle(|_, number| {
+        (
+            Operation::Upcast {
+                value: number,
+                ty: shape,
+            },
+            shape,
+        )
+    });
+    assert!(message(&number).contains("v1 of type int is not an instance"));
+    let optional = TyirType::Optional(typy_tyir::OptionalBase::Object(TypeId::class(0)));
+    let to_optional = on_circle(|circle, _| {
+        (
+            Operation::Upcast {
+                value: circle,
+                ty: optional,
+            },
+            optional,
+        )
+    });
+    assert!(message(&to_optional).contains("is not an instance of a class derived from"));
 }

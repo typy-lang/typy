@@ -39,7 +39,7 @@ messages, including classes of the program's own; imports of the
 program's modules, packages and PEP 810 lazy imports; and the `math` and
 `sys` modules, `input` and text files through `open`. Programs print what
 CPython prints, including the traceback of an uncaught exception.
-Inheritance beyond exceptions, generics and `ctypes` come in later
+Overriding methods of a base, generics and `ctypes` come in later
 releases; the [language guide](docs/user/guide/index.md) lists what each
 release accepts.
 

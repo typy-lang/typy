@@ -3,10 +3,10 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy detailed design |
-| Version | 1.74 |
+| Version | 1.75 |
 | Status | Approved |
 | Owner | typy-lang contributors |
-| Last updated | 2026-11-12 |
+| Last updated | 2026-11-13 |
 
 ## 1. Purpose and scope
 
@@ -825,7 +825,10 @@ container stores, so `list[int]` is not a `list[int | None]`: a stored item
 is never converted. `BodyChecker::converted` makes the conversion explicit
 as `TypedExprKind::Wrap(value)` wherever a value meets a declared type, at
 an assignment, an argument, a `return`, an item of a display and a branch
-of a conditional expression, and converts a tuple display item by item. A
+of a conditional expression, and converts a tuple display item by item. An
+instance, or an optional one, that meets the type of a class it derives
+from becomes `TypedExprKind::Upcast(value)`, and so does the receiver of
+an inherited method (CLS-04). A
 display, and a conditional expression with a `None` branch, join their
 items' types, so `[1, None]` is `list[int | None]`. An optional value is
 compared with `None` by `is`, tested for truth and written as text; `==`,
@@ -880,7 +883,7 @@ evaluate annotations only when they are read. `collect_members` gives each
 class its `ClassInfo`: the attributes the class body declares with an
 annotation, then those `__init__` assigns on its first parameter, in source
 order, and its methods. A method is a `Definition` whose first parameter is
-the instance, `Type::Instance(class, name)`, without an annotation, and
+the instance, `Type::Instance(InstanceClass)`, without an annotation, and
 whose qualified name is `Class.method`. `__init__` may leave out its return
 annotation and returns `None`, E0405 otherwise; `__str__` and `__repr__`
 take only `self` and return a `str`, E0404 otherwise; any other name with
@@ -917,9 +920,11 @@ A field formats a value of any type.
 
 Type objects (CLS-12) are `Type::TypeObject(Some(TypeObjectOf))`, written
 `type[int]`, or `Type::TypeObject(None)`, written `type`, when the type is
-known only when the program runs. `type(x)` is `TypedExprKind::TypeOf(x)`;
-without inheritance the checker knows the type object of every value but an
-optional one, whose type object is `NoneType` or its base's. A class name,
+known only when the program runs. `type(x)` is `TypedExprKind::TypeOf(x)`.
+The type object of an instance of a class that no class of the program
+derives from is the class's, and that of an optional one `NoneType` or
+its base's; an instance of a class with a subclass, and an exception, give
+the class the object holds when the program runs. A class name,
 or one of `int`, `float`, `bool`, `str`, `bytes`, `list`, `tuple`, `set`,
 `dict`, `object` and `type` read as a value, is `TypedExprKind::TypeObject`,
 and `__name__` of a type object is `TypedExprKind::TypeName`; any other
@@ -937,13 +942,23 @@ program, its ancestors that are classes of the program, nearest first, and the
 built-in class its chain reaches. `derives_from` compares the IDs of the
 program's classes and walks the built-in chain, so an exception is assignable
 where its class or any base is declared without the class table. A class's base
-is resolved in source order: `object`, a built-in exception class, or a class
-defined before it that is an exception class (CLS-03). A base defined after the
-class is E0306, `UnicodeDecodeError` and `UnicodeEncodeError` are E0417, any
-other base is E0201 (CLS-04), and several bases are E0201, planned for after
-1.0. An exception class whose base is the program's holds its base's attributes
-first, counted in `ClassInfo::inherited`, and the type of an inherited attribute
-is read from the class that declares it. A method is looked up in the class,
+is resolved in source order by `class_types`, which gives every class the type
+of its instances: `object`, a built-in exception class, or a class of the
+program defined before it, named by its name or as `module.Class` (CLS-03,
+CLS-04). A class derived from an exception class is an exception type; any
+other is `Type::Instance(InstanceClass)`, which holds the class, its name and
+its ancestors that are classes of the program, nearest first, so
+`is_assignable_to` accepts an instance where its class or any base is declared
+without the class table, as for exceptions, and two instances of related
+classes compare with `==` and `is`. A base defined after the class, or the
+class itself, is E0306, `UnicodeDecodeError` and `UnicodeEncodeError` are
+E0417, any other base, such as `int` or `list`, is E0201 (CLS-04), and several
+bases are E0201, planned for after 1.0. A class whose base is the program's
+holds its base's attributes first, counted in `ClassInfo::inherited`, and the
+type of an inherited attribute is read from the class that declares it; a
+subclass may declare an inherited attribute again only with the type its base
+declares, E0202 otherwise and when the base assigns it without declaring it
+(ADR-0021). A method is looked up in the class,
 then in each base; redefining a method of a base other than `__init__`,
 `__str__` and `__repr__` is E0201 (CLS-13). Calling an exception class without
 an `__init__` of the program's takes positional arguments of any type; with one,
@@ -1196,7 +1211,16 @@ and `IsNone(value)` make, read and test one, and `Constant::NoneOf(base)`
 is its `None`. An instance of class `n` of the module is
 `Object(TypeId::class(n))`, and `TyirModule::classes` holds each
 `TyirClass`: its name, its module, the tuple type that lays out its
-attributes and its `__repr__`. `NewInstance { class }` makes an instance
+attributes, its `__repr__` and `__str__`, its own or a base's, and its base
+when that is a class of the module. `Upcast { value, ty }` is an instance,
+or an optional one, as an instance of a class it derives from, which the
+verifier checks by the bases; it generates no code, since a subclass's
+attributes follow its base's (ADR-0021). A call the lowering makes of an
+inherited method, such as `__init__`, `__iter__` or `__repr__`, upcasts the
+instance the same way. `str`, `repr` and `print` of an instance of a class
+that has a subclass call `object_str` or `object_repr`, which call the
+methods the object's class holds; of any other class, they call its
+methods directly. `NewInstance { class }` makes an instance
 with every attribute zero, `Field { object, index }` borrows an attribute,
 `SetField { object, index, value }` stores one, taking over the value's
 reference without releasing the old value, and `Identical { left, right }`

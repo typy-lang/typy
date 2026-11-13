@@ -51,6 +51,26 @@ impl TypedProgram {
         &self.classes[id.0 as usize]
     }
 
+    /// Returns the method `name` of a class, its own or the nearest base's.
+    #[must_use]
+    pub fn method(&self, id: ClassId, name: &str) -> Option<FunctionId> {
+        let mut current = Some(id);
+        while let Some(class) = current.map(|id| self.class(id)) {
+            if let Some((_, method)) = class.methods.iter().find(|(each, _)| each == name) {
+                return Some(*method);
+            }
+            current = class.base;
+        }
+        None
+    }
+
+    /// Returns true when a class of the program derives from `id`, so a value whose static
+    /// class is `id` may hold an instance of another class (CLS-04).
+    #[must_use]
+    pub fn has_subclass(&self, id: ClassId) -> bool {
+        self.classes.iter().any(|class| class.base == Some(id))
+    }
+
     /// Returns a function by its ID.
     #[must_use]
     pub fn function(&self, id: FunctionId) -> &TypedFunction {

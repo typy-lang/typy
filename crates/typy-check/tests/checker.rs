@@ -1804,7 +1804,17 @@ fn statements_and_expressions_outside_the_subset_give_their_codes() {
         // A class derives from an exception class defined before it, and redefines only
         // `__init__`, `__str__` and `__repr__` (CLS-03, CLS-13, CLS-14, EXC-12).
         ("class A(Exception, ValueError):\n    pass\n", &["E0201"]),
-        ("class B:\n    pass\nclass A(B):\n    pass\n", &["E0201"]),
+        ("class A(B):\n    pass\nclass B:\n    pass\n", &["E0306"]),
+        ("class A(A):\n    pass\n", &["E0306"]),
+        ("class A(len):\n    pass\n", &["E0201"]),
+        (
+            "class B:\n    x: int\nclass A(B):\n    x: str\n",
+            &["E0202"],
+        ),
+        (
+            "class B:\n    def __init__(self) -> None:\n        self.x = 1\nclass A(B):\n    x: int\n",
+            &["E0202"],
+        ),
         ("class A(int):\n    pass\n", &["E0201"]),
         (
             "class A(B):\n    pass\nclass B(Exception):\n    pass\n",

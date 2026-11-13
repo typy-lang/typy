@@ -432,6 +432,7 @@ impl Dump<'_> {
             TypedExprKind::Set(_) => "Set".to_owned(),
             TypedExprKind::Dict { .. } => "Dict".to_owned(),
             TypedExprKind::Wrap(_) => "Wrap".to_owned(),
+            TypedExprKind::Upcast(_) => "Upcast".to_owned(),
             TypedExprKind::Unwrap(_) => "Unwrap".to_owned(),
             TypedExprKind::Comprehension { .. } => "Comprehension".to_owned(),
             TypedExprKind::DictOf(_) => "DictOf".to_owned(),

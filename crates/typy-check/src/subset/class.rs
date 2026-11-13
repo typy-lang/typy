@@ -39,14 +39,10 @@ impl Walker {
                 planned("type parameters", "0.4", RuleId::GEN_01),
             );
         }
-        // One base named by its name is resolved with the other classes: `object`, or an
-        // exception class (CLS-03).
+        // One base is resolved with the other classes, which reports one that is not
+        // `object`, an exception class or a class of the program (CLS-03, CLS-04).
         match class.bases {
-            [] | [Expr::Name { .. }] => {}
-            [base] => self.report(
-                base.span(),
-                planned("base classes other than `object`", "0.4", RuleId::CLS_04),
-            ),
+            [] | [_] => {}
             [_, second, ..] => self.report(
                 second.span(),
                 Feature::AfterOne {

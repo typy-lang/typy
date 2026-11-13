@@ -202,6 +202,7 @@ fn operation(module: &TyirModule, operation: &Operation) -> String {
         Operation::ToBits(value) => format!("to_bits v{}", value.0),
         Operation::Wrap { value, ty } => format!("wrap v{}, {ty}", value.0),
         Operation::Unwrap(value) => format!("unwrap v{}", value.0),
+        Operation::Upcast { value, ty } => format!("upcast v{}, {ty}", value.0),
         Operation::IsNone(value) => format!("is_none v{}", value.0),
         Operation::FromBits { bits, ty } => format!("from_bits v{}, {ty}", bits.0),
         Operation::NewInstance { class } => format!("new class#{class}"),

@@ -220,6 +220,14 @@ fn the_traceback_is_one_immortal_object_written_with_its_address() {
             .collect();
         assert!(shown.starts_with("<traceback object at 0x"), "{shown}");
         crate::refcount::typy_rt_decrement(text.value.cast());
+        // A type without `__str__` writes `str` of an object as its `__repr__`.
+        let text = super::typy_rt_object_str(traceback.cast_mut());
+        let length = crate::string::length(text.value);
+        let written: String = (0..length)
+            .map(|index| char::from_u32(crate::string::code_point(text.value, index)).unwrap())
+            .collect();
+        assert!(written.starts_with("<traceback object at 0x"), "{written}");
+        crate::refcount::typy_rt_decrement(text.value.cast());
         crate::refcount::typy_rt_decrement(traceback.cast_mut());
         assert_eq!((*traceback).reference_count, IMMORTAL);
     }

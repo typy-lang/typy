@@ -186,6 +186,9 @@ pub enum TypedExprKind {
     },
     /// A value of `T`, or `None`, held as a `T | None` (TYP-06, ADR-0011).
     Wrap(Box<TypedExpr>),
+    /// An instance, or an optional one, held as an instance of a class it derives from: the
+    /// same object, whose type is the expression's (CLS-04).
+    Upcast(Box<TypedExpr>),
     /// The value of a `T | None` that a test showed is not `None` (TYP-13).
     Unwrap(Box<TypedExpr>),
     /// A dict display: each key and its value, in order (DAT-09).
@@ -368,6 +371,7 @@ impl TypedExpr {
                 .collect(),
             TypedExprKind::DictItem { dict, key } => vec![dict, key],
             TypedExprKind::Wrap(inner)
+            | TypedExprKind::Upcast(inner)
             | TypedExprKind::Unwrap(inner)
             | TypedExprKind::AsIterable(inner)
             | TypedExprKind::Lazy { value: inner, .. } => vec![inner],
