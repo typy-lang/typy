@@ -26,3 +26,6 @@ supersedes it.
 | [ADR-0018](0018-provide-math-and-sys-as-checker-tables-over-runtime-functions.md) | Provide math and sys as checker tables over runtime functions | Accepted | 2026-11-12 |
 | [ADR-0019](0019-open-text-files-over-buffered-descriptors-with-cpythons-errors.md) | Open text files over buffered descriptors with CPython's errors | Accepted | 2026-11-12 |
 | [ADR-0020](0020-bound-nesting-as-cpython-does-and-compile-on-a-large-stack.md) | Bound nesting as CPython does and compile on a large stack | Accepted | 2026-11-13 |
+| [ADR-0021](0021-extend-the-base-layout-and-call-overrides-through-a-method-table.md) | Extend the base layout and call overrides through a method table | Accepted | 2026-11-13 |
+| [ADR-0022](0022-hold-a-union-of-objects-as-a-pointer-and-others-as-a-tag-and-value.md) | Hold a union of objects as a pointer and others as a tag and value | Accepted | 2026-11-13 |
+| [ADR-0023](0023-compile-generics-and-protocol-parameters-to-one-copy-per-concrete-type.md) | Compile generics and protocol parameters to one copy per concrete type | Accepted | 2026-11-13 |
