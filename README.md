@@ -30,25 +30,29 @@ These are the goals of TyPy 1.0, as the
 
 ## Status
 
-TyPy 0.2.0 checks, builds and runs programs made of module-level functions,
+TyPy 0.3.0 checks, builds and runs programs made of modules, functions,
 classes and statements over `int`, `float`, `str`, `bytes`, `bool`, `None`,
 lists, tuples, dicts, sets and optional values, with comprehensions,
-f-strings and the format specification language, slices, unpacking, `if`,
-`while` and `for`. Programs print what CPython prints, including the last
-line of an uncaught exception. Exceptions, imports, inheritance and `ctypes`
-come in later releases; the [language guide](docs/user/guide/index.md)
-lists what each release accepts.
+f-strings, `%` formatting, slices and unpacking; `if`, `while`, `for`,
+`try`, `with`, `raise` and `assert`; exceptions with CPython's classes and
+messages, including classes of the program's own; imports of the
+program's modules, packages and PEP 810 lazy imports; and the `math` and
+`sys` modules, `input` and text files through `open`. Programs print what
+CPython prints, including the traceback of an uncaught exception.
+Inheritance beyond exceptions, generics and `ctypes` come in later
+releases; the [language guide](docs/user/guide/index.md) lists what each
+release accepts.
 
 ## Quick start
 
 TyPy runs on x86_64 Linux with glibc 2.39 or later, such as Ubuntu 24.04
 or Debian 13, and needs a C toolchain (`cc`). Download the archive from the
-[0.2.0 release](https://github.com/typy-lang/typy/releases/tag/v0.2.0),
+[0.3.0 release](https://github.com/typy-lang/typy/releases/tag/v0.3.0),
 unpack it, and run a program:
 
 ```sh
-tar -xzf typy-0.2.0-x86_64-unknown-linux-gnu.tar.gz
-export PATH="$PWD/typy-0.2.0-x86_64-unknown-linux-gnu/bin:$PATH"
+tar -xzf typy-0.3.0-x86_64-unknown-linux-gnu.tar.gz
+export PATH="$PWD/typy-0.3.0-x86_64-unknown-linux-gnu/bin:$PATH"
 printf 'print("hello", 1 + 2)\n' > hello.py
 typy run hello.py
 ```

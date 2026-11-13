@@ -43,7 +43,15 @@ impl FunctionLowerer<'_> {
     /// object, which for an optional value depends on whether it is `None`.
     pub(crate) fn type_of(&mut self, value: &TypedExpr, span: Span) -> Lowered {
         let lowered = self.expression(value);
-        let result = match (&value.ty, TypeObjectOf::of(&value.ty)) {
+        let result = self.runtime_type(lowered, &value.ty, span);
+        self.release(lowered, span);
+        result
+    }
+
+    /// Returns the type object of `lowered`, a value of the checked type `ty`, borrowed: the
+    /// class an exception or another object holds, or the type its checked type gives.
+    pub(crate) fn runtime_type(&mut self, lowered: Lowered, ty: &Type, span: Span) -> Lowered {
+        match (ty, TypeObjectOf::of(ty)) {
             (Type::Exception(_), _) => self.exception_type(&lowered, span),
             // These objects carry their type in their header.
             (
@@ -69,8 +77,6 @@ impl FunctionLowerer<'_> {
                 Self::borrowed(chosen, TyirType::TYPE)
             }
             (_, None) => unreachable!("a checked program has no error types"),
-        };
-        self.release(lowered, span);
-        result
+        }
     }
 }

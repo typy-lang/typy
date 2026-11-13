@@ -1150,7 +1150,7 @@ checksum = "b6f5e870be6c3b371b77fe0ee0bafb859fa4964b4404c27de1d380043c4dda20"
 
 [[package]]
 name = "typy-build"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "camino",
  "tempfile",
@@ -1163,7 +1163,7 @@ dependencies = [
 
 [[package]]
 name = "typy-check"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "camino",
  "typy-diagnostics",
@@ -1172,7 +1172,7 @@ dependencies = [
 
 [[package]]
 name = "typy-cli"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "camino",
  "clap",
@@ -1187,7 +1187,7 @@ dependencies = [
 
 [[package]]
 name = "typy-codegen"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "camino",
  "inkwell",
@@ -1200,7 +1200,7 @@ dependencies = [
 
 [[package]]
 name = "typy-conformance"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "camino",
  "tempfile",
@@ -1213,14 +1213,14 @@ dependencies = [
 
 [[package]]
 name = "typy-diagnostics"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "proptest",
 ]
 
 [[package]]
 name = "typy-driver"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "camino",
  "tempfile",
@@ -1235,7 +1235,7 @@ dependencies = [
 
 [[package]]
 name = "typy-lower"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "camino",
  "typy-check",
@@ -1246,11 +1246,11 @@ dependencies = [
 
 [[package]]
 name = "typy-runtime"
-version = "0.2.0"
+version = "0.3.0"
 
 [[package]]
 name = "typy-source"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "camino",
  "proptest",
@@ -1264,7 +1264,7 @@ dependencies = [
 
 [[package]]
 name = "typy-tyir"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "typy-diagnostics",
 ]

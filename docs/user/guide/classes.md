@@ -3,7 +3,7 @@
 Classes are standard Python classes. Every attribute is declared in the
 class body or assigned in `__init__`, and has one type.
 
-## What TyPy 0.2 accepts
+## What TyPy accepts
 
 | Item | Rule |
 | --- | --- |

@@ -3,7 +3,7 @@
 Operators give Python's results, and operands are evaluated in Python's
 order.
 
-## What TyPy 0.2 accepts
+## What TyPy accepts
 
 | Item | Rule |
 | --- | --- |

@@ -4,7 +4,7 @@ Every value in a TyPy program has one type, fixed when the program is
 compiled. Functions are annotated; variables take the type of their first
 value.
 
-## What TyPy 0.2 accepts
+## What TyPy accepts
 
 | Item | Rule |
 | --- | --- |

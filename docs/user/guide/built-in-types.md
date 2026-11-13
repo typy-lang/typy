@@ -3,7 +3,7 @@
 TyPy's built-in types behave as CPython's do, with the same results and
 the same exceptions.
 
-## What TyPy 0.2 accepts
+## What TyPy accepts
 
 | Item | Rule |
 | --- | --- |

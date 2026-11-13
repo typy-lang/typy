@@ -3,7 +3,7 @@
 TyPy frees memory by reference counting: an object is freed when its last
 reference goes, with no garbage collector and no pauses.
 
-## What TyPy 0.2 accepts
+## What TyPy accepts
 
 | Item | Rule |
 | --- | --- |

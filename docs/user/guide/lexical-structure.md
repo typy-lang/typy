@@ -2,7 +2,7 @@
 
 TyPy reads source as the Python Language Reference defines it.
 
-## What TyPy 0.2 accepts
+## What TyPy accepts
 
 | Item | Rule |
 | --- | --- |

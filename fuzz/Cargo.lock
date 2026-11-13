@@ -785,7 +785,7 @@ dependencies = [
 
 [[package]]
 name = "typy-check"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "typy-diagnostics",
  "typy-source",
@@ -793,7 +793,7 @@ dependencies = [
 
 [[package]]
 name = "typy-diagnostics"
-version = "0.2.0"
+version = "0.3.0"
 
 [[package]]
 name = "typy-fuzz"
@@ -809,7 +809,7 @@ dependencies = [
 
 [[package]]
 name = "typy-lower"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "typy-check",
  "typy-diagnostics",
@@ -819,7 +819,7 @@ dependencies = [
 
 [[package]]
 name = "typy-source"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "camino",
  "ruff_python_ast",
@@ -831,7 +831,7 @@ dependencies = [
 
 [[package]]
 name = "typy-tyir"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "typy-diagnostics",
 ]

@@ -6,6 +6,8 @@ All notable changes to TyPy are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-11-13
+
 ### Added
 
 - `open` for text files in UTF-8, in the modes `r`, `w`, `a` and `x`:
@@ -168,6 +170,9 @@ All notable changes to TyPy are recorded here. The format follows
 
 ### Fixed
 
+- A format specification on an exception, such as `f"{error:>5}"`,
+  raises `TypeError` naming the exception's own class, as CPython does;
+  it named `NoneType`.
 - A deeply nested program no longer crashes `typy`; it aborted on 1000
   nested brackets. Brackets nested past 200 and blocks past 99 are E0103
   with CPython's messages, and expressions or statements nested past
@@ -497,6 +502,7 @@ compiler needs glibc 2.39 or later and a C toolchain.
   non-ASCII text, checks that every requirement has a row in the test plan,
   and checks that every diagram is rendered from its source.
 
-[Unreleased]: https://github.com/typy-lang/typy/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/typy-lang/typy/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/typy-lang/typy/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/typy-lang/typy/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/typy-lang/typy/releases/tag/v0.1.0
