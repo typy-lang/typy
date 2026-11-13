@@ -38,7 +38,14 @@ impl FunctionLowerer<'_> {
                 span,
             )
         };
+        // A reflected method no class overrides is one function for every class, so when the
+        // left object's class has the same one, CPython never calls it first.
+        let swaps = call.reflected != call.left_reflected
+            || call
+                .left_reflected
+                .is_some_and(|method| self.methods.dispatch(method).is_some());
         let result = match (call.forward, call.reflected) {
+            (Some(forward), Some(_)) if !swaps => forward_call(self, forward),
             (Some(forward), Some(reflected)) => {
                 let swap = self.reflected_first(call, left, right, span);
                 let join = self.builder.create_block();

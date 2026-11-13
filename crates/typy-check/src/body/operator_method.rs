@@ -117,16 +117,14 @@ impl BodyChecker<'_> {
         right: &TypedExpr,
         span: Span,
     ) -> Option<TypedExpr> {
-        let mut forward = self.operator_method(&left.ty, name, &right.ty);
+        let forward = self.operator_method(&left.ty, name, &right.ty);
         let mut left_reflected = None;
         let mut backward = self.operator_method(&right.ty, reflected, &left.ty);
         forward.or(backward)?;
         if let (Type::Instance(left_class), Type::Instance(right_class)) = (&left.ty, &right.ty) {
+            // Which runs is the runtime's to decide, from the objects' classes, which may
+            // derive from the static ones.
             left_reflected = self.program.method(left_class.id, reflected);
-            let subclass = right_class.id != left_class.id && right_class.derives_from(left_class);
-            if subclass && backward.is_some() && backward != left_reflected {
-                forward = None;
-            }
             if backward.is_none() && self.defined_below(right_class.id, reflected) {
                 self.diagnostics.push(
                     Diagnostic::new(
