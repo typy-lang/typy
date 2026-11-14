@@ -133,7 +133,7 @@ fn is_dict(value: u64) -> bool {
     let object: *const crate::header::ObjectHeader =
         core::ptr::with_exposed_provenance(usize::try_from(value).unwrap_or(0));
     // SAFETY: the value is a live object.
-    !object.is_null() && unsafe { (*object).type_id } == crate::header::DICT_TYPE_ID
+    unsafe { (*object).type_id == crate::header::DICT_TYPE_ID }
 }
 
 /// Returns the text of the format with each conversion made.
@@ -720,6 +720,7 @@ mod tests {
             ("%s%%", &[50], true, "50%"),
             ("%c%c", &[72, 105], false, "Hi"),
             ("%.3f %e", &[2, 3], false, "2.000 3.000000e+00"),
+            ("%ld|%hi|%Lu", &[5, 6, 7], false, "5|6|7"),
             ("plain", &[], false, "plain"),
         ];
         for (format, values, one, expected) in cases {
@@ -921,12 +922,13 @@ mod tests {
         // SAFETY: the dict is live and takes its own references.
         unsafe {
             crate::dict::typy_rt_dict_set(dict, text_word("a"), word(7).cast_unsigned());
+            crate::dict::typy_rt_dict_set(dict, text_word("\u{3b1}"), word(8).cast_unsigned());
         }
         let mapping = [(ItemKind::Object, dict.expose_provenance() as u64)];
         for (format, expected) in [
             ("%(a)d-%(a)05.1f", Ok("7-007.0")),
             ("no keys", Ok("no keys")),
-            ("%s", Ok("{'a': 7}")),
+            ("%s", Ok("{'a': 7, '\u{3b1}': 8}")),
             ("%(b)s", Err("'b'")),
             (
                 "%(a)s %d",
@@ -937,6 +939,11 @@ mod tests {
                 Err("* cannot be used with a parenthesised mapping key at position 0"),
             ),
             ("%(a)c", Ok("\u{7}")),
+            ("%(\u{3b1})s", Ok("8")),
+            (
+                "%(a).*d",
+                Err("* cannot be used with a parenthesised mapping key at position 0"),
+            ),
         ] {
             let found = format_items(format, &mapping, 1);
             match expected {
@@ -968,5 +975,78 @@ mod tests {
             typy_rt_decrement(dict.cast());
             typy_rt_decrement(list.cast());
         }
+    }
+
+    #[test]
+    fn each_conversion_takes_the_kinds_of_value_cpython_takes() {
+        let three = (ItemKind::Int, inline(3).unwrap().cast_unsigned());
+        let truth = (ItemKind::Bool, 1);
+        for (kinds, numbers, needs) in [
+            ("diu", ["3", "1", "2"], "a real number"),
+            ("xXo", ["3", "1", ""], "an integer"),
+            (
+                "eE",
+                ["3.000000e+00", "1.000000e+00", "2.500000e+00"],
+                "a real number",
+            ),
+            ("fF", ["3.000000", "1.000000", "2.500000"], "a real number"),
+            ("gG", ["3", "1", "2.5"], "a real number"),
+        ] {
+            for kind in kinds.chars() {
+                let format = format!("%{kind}");
+                for (item, expected) in [three, truth, float(2.5)].into_iter().zip(numbers) {
+                    let found = format_items(&format, &[item], 0);
+                    if expected.is_empty() {
+                        let message =
+                            format!("format argument 1: %{kind} requires {needs}, not float");
+                        assert_eq!(found, Err(message));
+                    } else if kind.is_ascii_uppercase() {
+                        assert_eq!(found, Ok(expected.to_uppercase()), "{format}");
+                    } else {
+                        assert_eq!(found.as_deref(), Ok(expected), "{format}");
+                    }
+                }
+                let text = (ItemKind::Object, text_word("s"));
+                assert_eq!(
+                    format_items(&format, &[text], 0),
+                    Err(format!(
+                        "format argument 1: %{kind} requires {needs}, not str"
+                    ))
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn an_int_too_large_for_a_float_fails_a_float_conversion() {
+        let big = crate::int::value::Integer {
+            negative: false,
+            magnitude: crate::int::natural::shift_left(&[1], 1100),
+        }
+        .into_word();
+        assert_eq!(
+            format_items("%f", &[(ItemKind::Int, big.cast_unsigned())], 0),
+            Err("int too large to convert to float".to_owned())
+        );
+    }
+
+    #[test]
+    fn a_key_missing_from_a_dict_of_other_keys_raises_key_error() {
+        let word = |value: i64| inline(value).unwrap();
+        let dict = crate::dict::typy_rt_dict_new(
+            word(ItemKind::Int as i64),
+            0,
+            word(ItemKind::Int as i64),
+            0,
+            word(0),
+        );
+        // SAFETY: the dict is live.
+        unsafe {
+            crate::dict::typy_rt_dict_set(dict, word(1).cast_unsigned(), word(2).cast_unsigned());
+        }
+        let mapping = [(ItemKind::Object, dict.expose_provenance() as u64)];
+        assert_eq!(format_items("%(a)s", &mapping, 1), Err("'a'".to_owned()));
+        // SAFETY: the test holds the only reference.
+        unsafe { typy_rt_decrement(dict.cast()) };
     }
 }

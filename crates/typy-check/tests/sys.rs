@@ -87,6 +87,11 @@ fn names_of_sys_typy_does_not_have_give_their_codes() {
             "using `sys.version_info` as a value is planned for TyPy 0.5 (LIB-16); compare it with a tuple of `int`s, or read an item or a field",
         ),
         (
+            "import sys\nprint(sys.version_info == 3)\n",
+            "E0201",
+            "using `sys.version_info` as a value is planned for TyPy 0.5 (LIB-16); compare it with a tuple of `int`s, or read an item or a field",
+        ),
+        (
             "import sys\nsys.setrecursionlimit('a')\n",
             "E0404",
             "'str' object cannot be interpreted as an integer",

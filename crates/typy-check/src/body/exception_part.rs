@@ -20,7 +20,7 @@ impl BodyChecker<'_> {
         let span = expression.span();
         match expression {
             Expr::Attribute { value, .. } => {
-                let part = self.part_access(expression)?;
+                let (part, _) = self.part_access(expression)?;
                 self.expression(value);
                 Some(
                     self.error(
@@ -105,9 +105,13 @@ impl BodyChecker<'_> {
         self.part_operation(expression, PartOperation::Truth, expression.span())
     }
 
-    /// Returns the part an expression reads: `name.args` of an exception, or `name.code` of a
-    /// `SystemExit`, where `name` is a variable.
-    fn part_access(&self, expression: &Expr) -> Option<ExceptionPart> {
+    /// Returns the part an expression reads, with the exception it reads it from:
+    /// `name.args` of an exception, or `name.code` of a `SystemExit`, where `name` is a
+    /// variable.
+    fn part_access<'expression>(
+        &self,
+        expression: &'expression Expr,
+    ) -> Option<(ExceptionPart, &'expression Expr)> {
         let Expr::Attribute {
             value, attribute, ..
         } = expression
@@ -129,8 +133,8 @@ impl BodyChecker<'_> {
             return None;
         };
         match attribute.name.as_str() {
-            "args" => Some(ExceptionPart::Arguments),
-            "code" if is_system_exit(class) => Some(ExceptionPart::Code),
+            "args" => Some((ExceptionPart::Arguments, value.as_ref())),
+            "code" if is_system_exit(class) => Some((ExceptionPart::Code, value.as_ref())),
             _ => None,
         }
     }
@@ -143,10 +147,7 @@ impl BodyChecker<'_> {
         operation: PartOperation,
         span: Span,
     ) -> Option<TypedExpr> {
-        let part = self.part_access(accessed)?;
-        let Expr::Attribute { value, .. } = accessed else {
-            return None;
-        };
+        let (part, value) = self.part_access(accessed)?;
         if part == ExceptionPart::Code && operation == PartOperation::Length {
             self.diagnostics.push(
                 Diagnostic::new(

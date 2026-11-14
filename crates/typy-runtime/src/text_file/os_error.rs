@@ -262,6 +262,7 @@ mod tests {
     use crate::refcount::typy_rt_decrement;
     use crate::string::{StrObject, code_point, from_str, length};
     use crate::tuple::{Field, TupleType};
+    use crate::type_object::TypeObject;
     use crate::word::{inline, inline_value};
 
     fn text(string: *const StrObject) -> String {
@@ -323,6 +324,163 @@ mod tests {
             assert_eq!(typy_rt_os_error_errno(raised), 0);
             assert!(typy_rt_os_error_text(raised, inline(1).unwrap()).is_null());
             typy_rt_decrement(raised.cast());
+        }
+    }
+
+    /// Returns a layout of these kinds, eight bytes apart.
+    fn layout(kinds: &[ItemKind]) -> &'static TupleType {
+        let fields: Vec<Field> = kinds
+            .iter()
+            .zip(0..)
+            .map(|(kind, index)| Field::plain(*kind, index * 8))
+            .collect();
+        let fields = fields.leak();
+        Box::leak(Box::new(TupleType {
+            size: 8 * fields.len() as u64,
+            length: fields.len() as u64,
+            fields: fields.as_ptr(),
+        }))
+    }
+
+    /// Returns the class name and the message of an `OSError` of `class` built with these
+    /// items, with the text of its `errno` and its `filename2` when it has one.
+    fn built(
+        class: &TypeObject,
+        kinds: &[ItemKind],
+        items: &[u64],
+    ) -> (&'static str, String, String, Option<String>) {
+        // SAFETY: the items are live values of the layout, which the exception copies.
+        unsafe {
+            let error = typy_rt_os_error_new(class, layout(kinds), items.as_ptr().cast());
+            let errno = typy_rt_os_error_errno(error);
+            let errno_text = crate::int::typy_rt_int_to_str(errno).value;
+            let errno_value = text(errno_text);
+            typy_rt_decrement(errno_text.cast());
+            crate::refcount::typy_rt_int_decrement(errno);
+            let second = typy_rt_os_error_text(error, inline(4).unwrap());
+            let second_text = (!second.is_null()).then(|| text(second));
+            if !second.is_null() {
+                typy_rt_decrement(second.cast());
+            }
+            let found = (
+                (*error).class().name(),
+                text((*error).message),
+                errno_value,
+                second_text,
+            );
+            typy_rt_decrement(error.cast());
+            found
+        }
+    }
+
+    #[test]
+    fn os_error_picks_its_subclass_only_for_a_small_errno() {
+        let gone = from_str("gone");
+        let (name, other) = (from_str("a"), from_str("b"));
+        let word = |object: *mut StrObject| object.expose_provenance() as u64;
+        let small = |value: i64| inline(value).unwrap().cast_unsigned();
+        let big = crate::int::value::Integer {
+            negative: false,
+            magnitude: crate::int::natural::shift_left(&[1], 70),
+        }
+        .into_word();
+        let (int, text_kind) = (ItemKind::Int, ItemKind::Object);
+        let optional = ItemKind::OptionalObject;
+        let five = [int, text_kind, optional, ItemKind::NoneValue, optional];
+        assert_eq!(
+            built(
+                &OS_ERROR,
+                &[int, text_kind],
+                &[big.cast_unsigned(), word(gone)]
+            ),
+            (
+                "OSError",
+                "[Errno 1180591620717411303424] gone".to_owned(),
+                "1180591620717411303424".to_owned(),
+                None
+            )
+        );
+        assert_eq!(
+            built(
+                &FILE_NOT_FOUND_ERROR,
+                &[int, text_kind],
+                &[small(13), word(gone)]
+            ),
+            (
+                "FileNotFoundError",
+                "[Errno 13] gone".to_owned(),
+                "13".to_owned(),
+                None
+            )
+        );
+        assert_eq!(
+            built(
+                &OS_ERROR,
+                &five,
+                &[small(2), word(gone), word(name), 0, word(other)]
+            ),
+            (
+                "FileNotFoundError",
+                "[Errno 2] gone: 'a' -> 'b'".to_owned(),
+                "2".to_owned(),
+                Some("b".to_owned())
+            )
+        );
+        assert_eq!(
+            built(
+                &OS_ERROR,
+                &[int, text_kind, optional],
+                &[small(2), word(gone), 0]
+            ),
+            (
+                "FileNotFoundError",
+                "[Errno 2] gone".to_owned(),
+                "2".to_owned(),
+                None
+            )
+        );
+        // SAFETY: the test holds the only references.
+        unsafe {
+            crate::refcount::typy_rt_int_decrement(big);
+            for object in [gone, name, other] {
+                typy_rt_decrement(object.cast());
+            }
+        }
+    }
+
+    #[test]
+    fn errno_is_none_unless_the_first_of_two_arguments_is_an_int() {
+        let text_word = from_str("x").expose_provenance() as u64;
+        // The kinds and items of the arguments, and whether `strerror` is given.
+        let cases: [(&[ItemKind], &[u64], bool); 3] = [
+            (&[ItemKind::Object], &[text_word], false),
+            (
+                &[ItemKind::OptionalInt, ItemKind::Object],
+                &[0, text_word],
+                true,
+            ),
+            (
+                &[ItemKind::Object, ItemKind::Object],
+                &[text_word, text_word],
+                true,
+            ),
+        ];
+        for (kinds, items, strerror) in cases {
+            // SAFETY: the items are live values of the layout, which the exception copies.
+            unsafe {
+                let error = crate::exception::typy_rt_exception_new(
+                    &raw const OS_ERROR,
+                    layout(kinds),
+                    items.as_ptr().cast(),
+                );
+                assert_eq!(typy_rt_os_error_errno(error), 0);
+                let text = typy_rt_os_error_text(error, inline(1).unwrap());
+                assert_eq!(!text.is_null(), strerror, "{kinds:?}");
+                if !text.is_null() {
+                    typy_rt_decrement(text.cast());
+                }
+                typy_rt_decrement(error.cast());
+            }
         }
     }
 }

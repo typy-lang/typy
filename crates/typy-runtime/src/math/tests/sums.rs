@@ -55,7 +55,7 @@ fn release(list: *mut ListObject) {
     unsafe { crate::refcount::typy_rt_decrement(list.cast()) };
 }
 
-const GAMMA: [(u64, u64); 12] = [
+const GAMMA: [(u64, u64); 13] = [
     (0x3fe0_0000_0000_0000, 0x3ffc_5bf8_91b4_ef6a),
     (0x4014_0000_0000_0000, 0x4038_0000_0000_0000),
     (0x4037_0000_0000_0000, 0x444e_7752_6159_f06c),
@@ -68,6 +68,7 @@ const GAMMA: [(u64, u64); 12] = [
     (0x400a_0000_0000_0000, 0x4004_64e0_d629_3ffb),
     (0xbfe0_0000_0000_0000, 0xc00c_5bf8_91b4_ef6b),
     (0x401e_0000_0000_0000, 0x409d_3d04_68bd_32bc),
+    (0xc062_d000_0000_0000, 0x8942_0cf9_b3f0_8b2f),
 ];
 
 const LGAMMA: [(u64, u64); 8] = [
@@ -143,10 +144,11 @@ fn gamma_and_lgamma_refuse_poles_and_overflow() {
     let overflow = Err(("OverflowError", "math range error"));
     check(typy_rt_math_gamma(200.0), &overflow, "gamma(200)");
     check(typy_rt_math_gamma(171.7), &overflow, "gamma(171.7)");
+    check(typy_rt_math_gamma(250.5), &overflow, "gamma(250.5)");
     check(typy_rt_math_lgamma(1e308), &overflow, "lgamma(1e308)");
 }
 
-const FSUM: [(&[u64], u64); 7] = [
+const FSUM: [(&[u64], u64); 10] = [
     (&[0x3fb9_9999_9999_999a; 10], 0x3ff0_0000_0000_0000),
     (
         &[
@@ -164,6 +166,30 @@ const FSUM: [(&[u64], u64); 7] = [
             0x4341_c379_37e0_8000,
         ],
         0x4341_c379_37e0_8001,
+    ),
+    (
+        &[
+            0x4341_c379_37e0_8000,
+            0xbff0_0000_0000_0000,
+            0x3c9c_d2b2_97d8_89bc,
+        ],
+        0x4341_c379_37e0_8000,
+    ),
+    (
+        &[
+            0x3ff0_0000_0000_0000,
+            0xbc9c_d2b2_97d8_89bc,
+            0x4000_0000_0000_0000,
+        ],
+        0x4008_0000_0000_0000,
+    ),
+    (
+        &[
+            0xbff0_0000_0000_0000,
+            0x3c9c_d2b2_97d8_89bc,
+            0x4000_0000_0000_0000,
+        ],
+        0x3ff0_0000_0000_0000,
     ),
     (
         &[
@@ -346,7 +372,7 @@ fn sumprod_of_ints_is_exact_and_needs_equal_lengths() {
     }
 }
 
-const SUMPROD: [(&[u64], &[u64], u64); 5] = [
+const SUMPROD: [(&[u64], &[u64], u64); 6] = [
     (
         &[0x3fb9_9999_9999_999a, 0x3fc9_9999_9999_999a],
         &[0x4008_0000_0000_0000, 0x4010_0000_0000_0000],
@@ -372,6 +398,11 @@ const SUMPROD: [(&[u64], &[u64], u64); 5] = [
         0xfff8_0000_0000_0000,
     ),
     (&[0x8000_0000_0000_0000], &[0x3ff0_0000_0000_0000], 0),
+    (
+        &[0x3ff0_0000_0000_0000, 0x7fe1_ccf3_85eb_c8a0],
+        &[0x3ff0_0000_0000_0000, 0x4024_0000_0000_0000],
+        0x7ff0_0000_0000_0000,
+    ),
 ];
 
 #[test]
@@ -394,6 +425,12 @@ fn sumprod_of_floats_keeps_the_rounding_errors_of_its_products() {
         unsafe { typy_rt_math_sumprod_float(p, q) },
         &Err(("OverflowError", "int too large to convert to float")),
         "sumprod of a huge int",
+    );
+    // SAFETY: both lists are live.
+    check(
+        unsafe { typy_rt_math_sumprod_float(q, p) },
+        &Err(("OverflowError", "int too large to convert to float")),
+        "sumprod of a huge int first",
     );
     let short = floats(&[]);
     // SAFETY: both lists are live.

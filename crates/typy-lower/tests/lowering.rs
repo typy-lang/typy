@@ -719,3 +719,18 @@ fn rarely_written_programs_lower_and_verify() {
         lower(source);
     }
 }
+
+#[test]
+fn a_bool_recursion_limit_is_set_as_an_int() {
+    let module = lower("import sys\nflag = True\nsys.setrecursionlimit(flag)\n");
+    assert!(typy_tyir::verify(&module).is_ok());
+    let text = print(&module);
+    // The `bool` picks the `int` 1 or 0, which the runtime takes.
+    for line in [
+        "const int 1",
+        "const int 0",
+        "invoke rt.sys_setrecursionlimit(",
+    ] {
+        assert!(text.contains(line), "{line:?} missing from\n{text}");
+    }
+}

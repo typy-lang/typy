@@ -315,3 +315,15 @@ fn an_augmented_module_variable_of_another_module_keeps_its_type() {
     ]);
     assert!(found.contains(&"E0402".to_string()), "{found:?}");
 }
+
+#[test]
+fn version_info_of_another_module_is_its_own_variable() {
+    let dump = accepted(&[
+        (
+            "app.py",
+            "import util\nprint(util.version_info == (1, 2))\n",
+        ),
+        ("util.py", "version_info = (1, 2)\n"),
+    ]);
+    assert!(dump.contains("version_info"), "{dump}");
+}

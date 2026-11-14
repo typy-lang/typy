@@ -82,7 +82,7 @@ pub extern "C" fn typy_rt_sys_stdin() -> *const TextFile {
 
 #[cfg(test)]
 mod tests {
-    use super::{Reader, line_from};
+    use super::{Reader, line_from, read_from};
 
     /// Returns the code points of each line `input()` gives from `chunks`, read one chunk at
     /// a time.
@@ -149,5 +149,29 @@ mod tests {
         let lines = lines_of(&[&long, &long[..100], b"\n"]);
         assert_eq!(lines.len(), 1);
         assert_eq!(lines[0].len(), super::super::reader::CHUNK + 100);
+    }
+
+    #[test]
+    fn read_gives_the_rest_or_up_to_a_limit() {
+        for (limit, expected) in [(None, "one\ntwo"), (Some(5), "one\nt")] {
+            let mut reader = Reader::escaping();
+            let mut chunks = [&b"one\r\n"[..], b"two"].into_iter();
+            let mut source = |buffer: &mut [u8]| {
+                let Some(chunk) = chunks.next() else {
+                    return Ok(0);
+                };
+                buffer[..chunk.len()].copy_from_slice(chunk);
+                Ok(chunk.len())
+            };
+            let text = read_from(&mut reader, limit, false, &mut source).unwrap();
+            // SAFETY: the text is live, and released once it is read.
+            unsafe {
+                let found: String = (0..super::length(text))
+                    .filter_map(|index| char::from_u32(super::code_point(text, index)))
+                    .collect();
+                crate::refcount::typy_rt_decrement(text.cast());
+                assert_eq!(found, expected, "{limit:?}");
+            }
+        }
     }
 }

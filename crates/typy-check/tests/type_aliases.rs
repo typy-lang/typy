@@ -82,6 +82,12 @@ fn aliases_typy_does_not_compile_are_refused() {
         ("type Tree = list[Tree]\n", "E0201"),
         ("type A = B\ntype B = dict[str, A]\nx: A = {}\n", "E0201"),
         ("type Pair[T] = tuple[T, T]\nx: Pair = (1, 2)\n", "E0408"),
+        ("type Pair[K, V] = dict[K, V]\nx: Pair = {}\n", "E0408"),
+        // A type parameter hides the alias of its name, and is not subscripted.
+        (
+            "type Box[T] = list[T]\ndef f[Box](x: Box[int]) -> None:\n    pass\n",
+            "E0205",
+        ),
         (
             "type Pair[T] = tuple[T, T]\nx: Pair[int, int] = (1, 2)\n",
             "E0408",

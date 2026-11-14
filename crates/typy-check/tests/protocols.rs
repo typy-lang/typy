@@ -129,6 +129,8 @@ fn a_protocol_is_refused_where_typy_does_not_hold_one() {
             "E0201",
         ),
         ("class P(Protocol):\n    size: int = 0\n", "E0201"),
+        ("class P(Protocol):\n    size = 0\n", "E0201"),
+        ("x: dict[Shape, Shape] = {}\n", "E0201"),
         (
             "class P(Protocol):\n    def merge(self, other: Shape) -> None: ...\n",
             "E0201",
@@ -152,4 +154,27 @@ fn a_protocol_is_refused_where_typy_does_not_hold_one() {
             "{program}\n{found:?}"
         );
     }
+}
+
+#[test]
+fn a_parameter_with_a_default_in_the_protocol_needs_one_in_the_class() {
+    let program = concat!(
+        "from typing import Protocol\n",
+        "class Sized(Protocol):\n",
+        "    def size(self, scale: int = 1) -> int: ...\n",
+        "class Kept:\n",
+        "    def size(self, scale: int = 2) -> int:\n",
+        "        return scale\n",
+        "class Lacking:\n",
+        "    def size(self, scale: int) -> int:\n",
+        "        return scale\n",
+        "def measure[S: Sized](item: S) -> int:\n",
+        "    return item.size()\n",
+        "def through(item: Sized) -> int:\n",
+        "    return measure(item)\n",
+        "print(measure(Kept()), through(Kept()))\n",
+    );
+    assert_eq!(app(program), Vec::<String>::new());
+    let refused = format!("{program}print(measure(Lacking()))\n");
+    assert_eq!(app(&refused), ["E0404"]);
 }

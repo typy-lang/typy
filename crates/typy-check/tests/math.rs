@@ -166,6 +166,12 @@ fn other_uses_of_math_give_their_codes() {
     for (source, code) in [
         ("import math\nprint(math.fsum(['a']))\n", "E0404"),
         ("import math\nprint(math.fsum([1.0], [2.0]))\n", "E0404"),
+        ("import math\nprint(math.dist([1.0]))\n", "E0404"),
+        ("import math\nprint(math.fsum(missing))\n", "E0205"),
+        (
+            "import math\nx: list[int | str] = [1]\nprint(math.fsum(x))\n",
+            "E0404",
+        ),
         ("import math\nprint(math.fsum([1.0], start=2))\n", "E0404"),
         ("import math\nprint(math.prod([1.0], begin=2))\n", "E0404"),
         (

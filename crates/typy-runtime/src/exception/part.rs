@@ -321,6 +321,7 @@ mod tests {
         );
         assert_eq!(text(bare, code(), false), "None");
         assert_eq!(text(one, code(), true), "3");
+        assert_eq!(text(one, code(), false), "3");
         assert_eq!(text(several, code(), false), "(3, 0)");
         // SAFETY: the exceptions are live.
         unsafe {
@@ -336,6 +337,63 @@ mod tests {
         assert!(!equals(one, code(), ItemKind::Int, zero));
         for exception in [bare, one, falsy, several] {
             release(exception);
+        }
+    }
+
+    /// Returns whether a part equals the tuple of these items of these kinds.
+    fn equals_tuple(
+        object: *mut ExceptionObject,
+        part: i64,
+        kinds: &[ItemKind],
+        words: &[u64],
+    ) -> bool {
+        let inner = layout(kinds);
+        let outer = Box::leak(Box::new(TupleType {
+            size: inner.size.max(8),
+            length: 1,
+            fields: Box::leak(Box::new([Field {
+                kind: ItemKind::Tuple as u32,
+                offset: 0,
+                tuple: inner,
+            }]))
+            .as_ptr(),
+        }));
+        let words = if words.is_empty() { &[0][..] } else { words };
+        // SAFETY: the exception and the tuple are live.
+        unsafe {
+            typy_rt_exception_part_equal(
+                object,
+                part,
+                outer,
+                words.as_ptr().expose_provenance() as u64,
+            )
+        }
+    }
+
+    #[test]
+    fn args_equals_only_a_tuple_of_the_same_arguments() {
+        let three = inline(3).unwrap().cast_unsigned();
+        let none = built(&VALUE_ERROR, &[], &[]);
+        let raised = raise(ExceptionKind::ValueError, "bad");
+        let texts = [
+            crate::string::from_str("bad"),
+            crate::string::from_str("other"),
+        ];
+        let text = ItemKind::Object;
+        let [bad, other] = texts.map(|each| each.expose_provenance() as u64);
+        assert!(equals_tuple(none, args(), &[], &[]));
+        assert!(!equals_tuple(none, args(), &[ItemKind::Int], &[three]));
+        assert!(!equals(none, args(), ItemKind::Int, three));
+        assert!(equals_tuple(raised, args(), &[text], &[bad]));
+        assert!(!equals_tuple(raised, args(), &[text], &[other]));
+        assert!(!equals_tuple(raised, args(), &[text, text], &[bad, bad]));
+        assert!(!equals(raised, args(), text, bad));
+        for exception in [none, raised] {
+            release(exception);
+        }
+        for each in texts {
+            // SAFETY: the test holds the only reference.
+            unsafe { typy_rt_decrement(each.cast()) };
         }
     }
 }
