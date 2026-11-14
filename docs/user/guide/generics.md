@@ -11,6 +11,7 @@ those types costs (GEN-01 to GEN-03, ADR-0023, ADR-0028).
 | Item | Rule |
 | --- | --- |
 | `def name[T, U](...)`: a generic function at module level | GEN-01 |
+| `def name[T](self, ...)`: a method with type parameters, also a static method | GEN-01 |
 | `class Name[T]:`, a generic class, and `Name[int]` in annotations and calls | GEN-01 |
 | `[T: Bound]`, a bound, and `[T: (A, B)]`, constraints | GEN-02 |
 | One compiled copy for each set of type arguments, with no type at run time | GEN-03 |
@@ -139,11 +140,41 @@ CPython. A generic dataclass gets its methods for each copy.
 `isinstance(x, Node[int])` is refused, as CPython raises `TypeError` for
 it.
 
+## Generic methods
+
+A method of a class that is not generic may take type parameters of its
+own. A call gives them their types from the arguments after `self`, as
+for a function, and runs the copy for those types:
+
+<!-- typy-expect: accepted -->
+```python
+class Store:
+    def __init__(self, name: str) -> None:
+        self.name = name
+
+    def pair[T](self, value: T) -> tuple[str, T]:
+        return (self.name, value)
+
+    @staticmethod
+    def wrap[T](value: T) -> list[T]:
+        return [value]
+
+
+store = Store("main")
+print(store.pair(1), store.pair("a"), Store.wrap(2.5))
+```
+
+A copy is called directly, not looked up through the instance's class,
+so a method with type parameters may not override a method of a base or
+be overridden, E0201 (GEN-09).
+
 ## Refused and planned
 
 `TypeVar` and `Generic` from `typing` are E0202: a type parameter list
-replaces them (GEN-01). Type parameters of methods, generic type aliases
-and protocols come later in 0.4. A generic class with a base, a class
+replaces them (GEN-01). Generic type aliases and protocols come later in
+0.4. Type parameters of a method of a generic class, of a special
+method, a property or a class method, and of a method that overrides or
+is overridden are planned for 0.5 (GEN-09). A generic class with a base, a class
 derived from a generic class, and class variables and defaults of a
 generic class are planned for 0.5 (GEN-08), as is using a generic
 function or class of another module (GEN-07); `*Ts`, `**P` and defaults

@@ -78,6 +78,12 @@ All notable changes to TyPy are recorded here. The format follows
   `isinstance(Box(1), Box)` hold. A generic class with a base, a class
   derived from one, and its class variables and defaults are planned for
   0.5 (GEN-01, GEN-03, GEN-08, ADR-0028).
+- Methods with type parameters, `def pair[T](self, value: T)`, also
+  static methods, in a class that is not generic. A call takes the types
+  from the arguments after `self` and runs the copy for them. Type
+  parameters of a method of a generic class, of a special method, a
+  property or a class method, and of a method that overrides or is
+  overridden are planned for 0.5 (GEN-01, GEN-09).
 - `Final` and `Final[T]` from `typing`: a module or function variable, a
   class variable or an attribute that `__init__` declares `Final` is
   assigned only by its declaration, and any other assignment is E0414. A

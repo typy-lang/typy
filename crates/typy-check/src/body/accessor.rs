@@ -20,6 +20,39 @@ impl BodyChecker<'_> {
         .is_some_and(|info| info.static_methods.iter().any(|method| method == name))
     }
 
+    /// Returns true when `class` or a base defines `name` as a method with type parameters of
+    /// its own, whose calls go to its copies (GEN-01).
+    pub(super) fn is_generic_method(&self, class: ClassId, name: &str) -> bool {
+        std::iter::successors(Some(class), |each| {
+            self.program.classes[each.0 as usize].base
+        })
+        .map(|each| &self.program.classes[each.0 as usize])
+        .find(|info| info.method(name).is_some())
+        .is_some_and(|info| info.generic_methods.iter().any(|method| method == name))
+    }
+
+    /// Returns the function a call of the method `function`, named `name` in `class`, runs,
+    /// with its signature: the copy for a method with type parameters of its own, solved from
+    /// the arguments after the first `skip`; the method itself for any other, including one
+    /// that is generic only through its class.
+    pub(super) fn method_target(
+        &mut self,
+        (class, name): (ClassId, &str),
+        function: FunctionId,
+        skip: usize,
+        qualified: &str,
+        (arguments, keywords): (&[Expr], &[Keyword]),
+        span: Span,
+    ) -> Result<(FunctionId, crate::typed::FunctionSignature), TypedExpr> {
+        if self.is_generic_method(class, name) {
+            return self.call_target(function, skip, qualified, arguments, keywords, span);
+        }
+        Ok((
+            function,
+            self.program.signatures[function.0 as usize].clone(),
+        ))
+    }
+
     /// Returns the getter of the property `name` of `class` or a base, when it has one.
     pub(super) fn property_getter(&self, class: ClassId, name: &str) -> Option<FunctionId> {
         let mut current = Some(class);
@@ -71,32 +104,43 @@ impl BodyChecker<'_> {
                 span,
             );
         };
-        self.static_call(function, &class_name, name, arguments, keywords, span)
+        self.static_call(function, class, name, arguments, keywords, span)
     }
 
-    /// Calls a static method with its arguments, without an instance.
+    /// Calls a static method of `class` with its arguments, without an instance.
     pub(super) fn static_call(
         &mut self,
         function: FunctionId,
-        class_name: &str,
+        class: ClassId,
         name: &Identifier,
         arguments: &[Expr],
         keywords: &[Keyword],
         span: Span,
     ) -> TypedExpr {
+        let class_name = &self.program.classes[class.0 as usize].name;
         let qualified = format!("{class_name}.{}", name.name);
-        let bound = match self.bind_arguments(function, 0, &qualified, arguments, keywords, span) {
+        let (target, signature) = match self.method_target(
+            (class, &name.name),
+            function,
+            0,
+            &qualified,
+            (arguments, keywords),
+            span,
+        ) {
+            Ok(found) => found,
+            Err(error) => return error,
+        };
+        let bound = match self.bind_to(&signature, 0, &qualified, arguments, keywords, span) {
             Ok(bound) => bound,
             Err(error) => return error,
         };
-        let returns = self.program.signatures[function.0 as usize].returns.clone();
         Self::typed(
             TypedExprKind::Call {
-                function,
+                function: target,
                 arguments: bound,
                 dispatch: false,
             },
-            returns,
+            signature.returns,
             span,
         )
     }

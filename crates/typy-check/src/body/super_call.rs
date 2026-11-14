@@ -120,7 +120,18 @@ impl BodyChecker<'_> {
         };
         let qualified = format!("{}.{}", self.program.instance_type(base), name.name);
         let instance = self.enclosing_instance(method, span);
-        let bound = match self.bind_arguments(function, 1, &qualified, arguments, keywords, span) {
+        let (target, signature) = match self.method_target(
+            (base, &name.name),
+            function,
+            1,
+            &qualified,
+            (arguments, keywords),
+            span,
+        ) {
+            Ok(found) => found,
+            Err(error) => return error,
+        };
+        let bound = match self.bind_to(&signature, 1, &qualified, arguments, keywords, span) {
             Ok(bound) => bound,
             Err(error) => return error,
         };
@@ -129,14 +140,13 @@ impl BodyChecker<'_> {
             value: instance,
         }];
         all.extend(bound);
-        let returns = self.program.signatures[function.0 as usize].returns.clone();
         Self::typed(
             TypedExprKind::Call {
-                function,
+                function: target,
                 arguments: all,
                 dispatch: false,
             },
-            returns,
+            signature.returns,
             span,
         )
     }

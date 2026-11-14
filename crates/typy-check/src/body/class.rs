@@ -527,8 +527,7 @@ impl BodyChecker<'_> {
                     span,
                 );
             }
-            let class_name = self.program.classes[class.0 as usize].name.clone();
-            return self.static_call(method, &class_name, name, arguments, keywords, span);
+            return self.static_call(method, class, name, arguments, keywords, span);
         }
         let info = &self.program.classes[class.0 as usize];
         let Some(method) = found else {
@@ -560,18 +559,29 @@ impl BodyChecker<'_> {
             parameter: 0,
             value: Self::converted(receiver, owner.as_ref()),
         }];
-        match self.bind_arguments(method, 1, &qualified, arguments, keywords, span) {
+        let (target, signature) = match self.method_target(
+            (class, &name.name),
+            method,
+            1,
+            &qualified,
+            (arguments, keywords),
+            span,
+        ) {
+            Ok(found) => found,
+            Err(error) => return error,
+        };
+        match self.bind_to(&signature, 1, &qualified, arguments, keywords, span) {
             Ok(arguments) => bound.extend(arguments),
             Err(error) => return error,
         }
-        let returns = self.program.signatures[method.0 as usize].returns.clone();
         Self::typed(
             TypedExprKind::Call {
-                function: method,
+                function: target,
                 arguments: bound,
-                dispatch: true,
+                // A copy of a generic method is in no method table, and no class overrides it.
+                dispatch: target == method,
             },
-            returns,
+            signature.returns,
             span,
         )
     }

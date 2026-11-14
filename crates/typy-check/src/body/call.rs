@@ -99,8 +99,8 @@ impl BodyChecker<'_> {
         keywords: &[Keyword],
         span: Span,
     ) -> TypedExpr {
-        if let Some(generic) = self.program.generic(function).cloned() {
-            return self.generic_call(function, &generic, name, arguments, keywords, span);
+        if self.program.generic(function).is_some() {
+            return self.generic_call(function, name, arguments, keywords, span);
         }
         match self.bind_arguments(function, 0, name, arguments, keywords, span) {
             Ok(bound) => Self::typed(

@@ -147,6 +147,8 @@ impl RuleId {
     pub const GEN_07: Self = Self("GEN-07");
     /// A generic class shall be accepted with a base other than `object`, as the base of another class, and with class variables and defaults.
     pub const GEN_08: Self = Self("GEN-08");
+    /// Type parameters shall be accepted on a method of a generic class, a special method, a property, a class method, and a method that overrides or is overridden.
+    pub const GEN_09: Self = Self("GEN-09");
     /// Source files shall be UTF-8 with the `.py` extension.
     pub const LEX_01: Self = Self("LEX-01");
     /// Bytes literals shall be accepted.
@@ -325,6 +327,7 @@ impl RuleId {
         Self::GEN_06,
         Self::GEN_07,
         Self::GEN_08,
+        Self::GEN_09,
         Self::LEX_01,
         Self::LEX_06,
         Self::LEX_07,

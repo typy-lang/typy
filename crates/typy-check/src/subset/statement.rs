@@ -40,12 +40,6 @@ impl Walker {
                         planned("decorators", "1.0", RuleId::FUN_06),
                     );
                 }
-                if place == Place::Class && !type_parameters.is_empty() {
-                    self.report(
-                        *span,
-                        planned("type parameters of methods", "0.4", RuleId::GEN_01),
-                    );
-                }
                 self.type_parameters(type_parameters);
                 for parameter in parameters {
                     match parameter.kind {

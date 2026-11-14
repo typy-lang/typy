@@ -7,7 +7,10 @@ use typy_diagnostics::{Diagnostic, DiagnosticCode, Diagnostics, RuleId, Span};
 use typy_source::syntax::{Expr, Identifier, Stmt};
 
 use super::annotation::{AnnotationScope, annotation_type};
-use super::definition::{Definition, FunctionParts, MethodKind, Owner, defined_twice, definition};
+use super::definition::{
+    Definition, FunctionParts, MethodKind, Owner, defined_twice, definition,
+    resolve_type_parameters,
+};
 use super::generic_class::finish_generic_class;
 use super::overriding::Override;
 use crate::class_type::{InstanceClass, Operators};
@@ -48,6 +51,9 @@ pub(crate) struct ClassInfo {
     pub(crate) remote_class_methods: Vec<String>,
     /// The static methods the class defines (CLS-06).
     pub(crate) static_methods: Vec<String>,
+    /// The methods with type parameters the class defines, each called through its copies
+    /// rather than the class's method table (GEN-01).
+    pub(crate) generic_methods: Vec<String>,
     /// The properties the class defines, each a getter among the methods, and its setter, when
     /// it has one, as the method `name.setter` (CLS-06).
     pub(crate) properties: Vec<String>,
@@ -513,6 +519,7 @@ fn new_info(class: &ClassStatement<'_>, instance: &Type, classes: Classes<'_>) -
         class_methods: Vec::new(),
         remote_class_methods: Vec::new(),
         static_methods: Vec::new(),
+        generic_methods: Vec::new(),
         properties: Vec::new(),
         defaults: Vec::new(),
         frozen: false,
@@ -711,7 +718,24 @@ fn method_definition<'tree>(
         instance: owner.instance.clone(),
         takes_instance: *kind != MethodKind::Static,
     };
-    let mut method = definition(parts, Some(&method_owner), scope, diagnostics);
+    // A method's annotations name its own type parameters and its class's.
+    let type_parameters =
+        resolve_type_parameters(parts.type_parameters, parts.span, scope, diagnostics);
+    let mut in_scope = scope.parameters.clone();
+    in_scope.extend(
+        type_parameters
+            .iter()
+            .map(|parameter| (parameter.name.clone(), Type::parameter(parameter.clone()))),
+    );
+    let method_scope = AnnotationScope {
+        parameters: &in_scope,
+        ..*scope
+    };
+    let mut method = definition(parts, Some(&method_owner), &method_scope, diagnostics);
+    if !type_parameters.is_empty() {
+        info.generic_methods.push(registered.clone());
+    }
+    method.type_parameters = type_parameters;
     if registered != *name {
         method.qualified_name = format!("{}.{registered}", info.name);
         method.name = registered;
@@ -741,6 +765,13 @@ fn refused_method(
     let special = name.starts_with("__") && name.ends_with("__");
     if special && !SPECIAL_METHODS.contains(&name.as_str()) {
         return Some(planned_method(parts.name));
+    }
+    let generic = !parts.type_parameters.is_empty();
+    if generic && (special || !matches!(kind, MethodKind::Instance | MethodKind::Static)) {
+        return Some(planned_generic_method(
+            parts.name,
+            "type parameters of a special method, a property or a class method are",
+        ));
     }
     if special && *kind != MethodKind::Instance {
         return refuse(
@@ -880,6 +911,14 @@ fn check_override(
         return None;
     }
     let (base_id, base_class) = inherited_method(classes, info.base, &name.name)?;
+    // A copy of a generic method is called directly, so neither side of an override may be
+    // generic.
+    if !method.type_parameters.is_empty() || generic_method_in_bases(classes, info.base, name) {
+        return Some(planned_generic_method(
+            name,
+            "a method with type parameters that overrides or is overridden is",
+        ));
+    }
     let base = signatures.get(base_id)?;
     Override {
         name: &format!("{}.{}", info.name, name.name),
@@ -889,6 +928,26 @@ fn check_override(
         span: name.span,
     }
     .check()
+}
+
+/// Returns true when the nearest class from `base` up that defines the method `name` gives
+/// it type parameters (GEN-01).
+fn generic_method_in_bases(classes: Classes<'_>, base: Option<ClassId>, name: &Identifier) -> bool {
+    std::iter::successors(base.and_then(|class| classes.get(class)), |info| {
+        info.base.and_then(|class| classes.get(class))
+    })
+    .find(|info| info.method(&name.name).is_some())
+    .is_some_and(|info| info.generic_methods.contains(&name.name))
+}
+
+/// Reports a method with type parameters that TyPy 0.5 accepts (GEN-09).
+fn planned_generic_method(name: &Identifier, what: &str) -> Diagnostic {
+    Diagnostic::new(
+        DiagnosticCode::error(201),
+        name.span,
+        format!("{what} planned for TyPy 0.5 (GEN-09)"),
+    )
+    .with_rule(RuleId::GEN_09)
 }
 
 /// Returns the method `name` of `base` or of the nearest class it derives from that defines

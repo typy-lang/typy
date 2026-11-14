@@ -82,10 +82,23 @@ fn calls_that_give_no_fitting_type_are_refused() {
             "def f[T](x: T | str) -> int:\n    return 0\nprint(f('s'))\n",
             "E0404",
         ),
-        // Type parameters of methods and of aliases come with generic classes.
+        // A generic method is called through its copies, so it neither overrides nor is
+        // overridden (GEN-09).
         (
-            "class C:\n    def m[T](self, x: T) -> T:\n        return x\n",
+            "class B:\n    def m(self, x: int) -> int:\n        return x\nclass C(B):\n    def m[T](self, x: T) -> T:\n        return x\n",
             "E0201",
+        ),
+        (
+            "class B:\n    def m[T](self, x: T) -> T:\n        return x\nclass C(B):\n    def m(self, x: int) -> int:\n        return x\n",
+            "E0201",
+        ),
+        (
+            "class C:\n    @classmethod\n    def m[T](cls, x: T) -> T:\n        return x\n",
+            "E0201",
+        ),
+        (
+            "class C:\n    def m[T](self, x: T) -> T:\n        return x\nprint(C().m())\n",
+            "E0404",
         ),
         ("type Pair[T] = tuple[T, T]\n", "E0201"),
     ];

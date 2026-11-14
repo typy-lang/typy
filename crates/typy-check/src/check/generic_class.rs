@@ -181,6 +181,20 @@ pub(super) fn finish_generic_class(
         return;
     };
     for method in methods {
+        if !method.type_parameters.is_empty() {
+            diagnostics.push(
+                Diagnostic::new(
+                    DiagnosticCode::error(201),
+                    method.span,
+                    format!(
+                        "type parameters of `{}`, a method of a generic class, are planned for \
+                         TyPy 0.5 (GEN-09)",
+                        method.qualified_name
+                    ),
+                )
+                .with_rule(RuleId::GEN_09),
+            );
+        }
         method.type_parameters.clone_from(&generic.parameters);
     }
     if !info.class_variables.is_empty() || !info.defaults.is_empty() {
