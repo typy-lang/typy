@@ -450,7 +450,11 @@ fn expression(expression_value: &TypedExpr, callees: &mut BTreeSet<FunctionId>) 
         | TypedExprKind::SysValue(_) => {}
         TypedExprKind::AsIterable(inner) => expression(inner, callees),
         TypedExprKind::PercentFormat { values, .. } => expression(values, callees),
-        TypedExprKind::Open { path, .. } => expression(path, callees),
+        TypedExprKind::Open { .. } => {
+            for part in expression_value.operands() {
+                expression(part, callees);
+            }
+        }
         TypedExprKind::OsErrorField { exception, .. }
         | TypedExprKind::FileAttribute {
             file: exception, ..

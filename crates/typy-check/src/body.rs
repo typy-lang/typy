@@ -34,6 +34,7 @@ mod math_iterable;
 mod method_call;
 mod name;
 mod open_call;
+mod open_options;
 mod operator;
 mod operator_method;
 mod os_error;

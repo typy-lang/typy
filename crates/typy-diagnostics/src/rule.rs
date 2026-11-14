@@ -201,7 +201,8 @@ impl RuleId {
     pub const LIB_16: Self = Self("LIB-16");
     /// The other names of `typing` and `collections.abc` that describe types, such as `Optional`, `Union`, `List`, `Dict`, `Callable`, `NamedTuple` and `Sequence`, shall be available.
     pub const LIB_17: Self = Self("LIB-17");
-    /// A program shall be built from several `.py` files, found from the main file's directory and from paths set in `typy.toml`.
+    /// The `opener` argument of `open` shall be accepted.
+    pub const LIB_18: Self = Self("LIB-18");
     /// A program shall be built from several `.py` files, found from the main file's directory and from paths set in `typy.toml`.
     pub const MOD_01: Self = Self("MOD-01");
     /// Packages with `__init__.py` and relative imports shall be accepted.
@@ -372,6 +373,7 @@ impl RuleId {
         Self::LIB_15,
         Self::LIB_16,
         Self::LIB_17,
+        Self::LIB_18,
         Self::MOD_01,
         Self::MOD_02,
         Self::MOD_05,

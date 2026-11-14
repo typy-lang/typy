@@ -93,7 +93,7 @@ fn modes_open_refuses_are_e0404_with_cpythons_message() {
 }
 
 #[test]
-fn what_0_4_brings_to_open_is_e0201() {
+fn what_is_planned_for_open_is_e0201() {
     for (source, message) in [
         (
             "f = open(\"a\", \"rb\")\n",
@@ -108,26 +108,68 @@ fn what_0_4_brings_to_open_is_e0201() {
             "a mode of `open` that is not a string literal is planned for TyPy 0.4 (LIB-14)",
         ),
         (
-            "f = open(\"a\", buffering=1)\n",
-            "the `buffering` argument of `open` is planned for TyPy 0.4 (LIB-14)",
+            "f = open(\"a\", closefd=False)\n",
+            "the `closefd` argument of `open` is planned for TyPy 0.4 (LIB-14)",
         ),
         (
-            "f = open(\"a\", \"r\", -1, None, \"ignore\")\n",
-            "the `errors` argument of `open` is planned for TyPy 0.4 (LIB-14)",
-        ),
-        (
-            "f = open(\"a\", newline=\"\")\n",
-            "the `newline` argument of `open` is planned for TyPy 0.4 (LIB-14)",
-        ),
-        (
-            "f = open(\"a\", encoding=\"latin-1\")\n",
-            "TyPy 0.3 opens files in UTF-8 only, written as `\"utf-8\"` or `None`; other \
-             encodings are planned for TyPy 0.4 (LIB-14)",
+            "f = open(\"a\", \"r\", -1, None, None, None, True, len)\n",
+            "the `opener` argument of `open` is planned for TyPy 1.0 (LIB-18)",
         ),
     ] {
         assert_eq!(
             one_error(source),
             ("E0201".to_owned(), message.to_owned()),
+            "{source}"
+        );
+    }
+}
+
+#[test]
+fn open_takes_buffering_an_encoding_errors_and_newline() {
+    let source = "\
+n: str | None = None
+size = 1
+a = open(\"a\", \"w\", size, \"Latin-1\", \"xmlcharrefreplace\", \"\\r\\n\", True, None)
+b = open(\"a\", encoding=\"ascii\", errors=\"surrogateescape\", newline=n)
+c = open(\"a\", buffering=-1, encoding=None, errors=None, newline=None)
+d = open(\"a\", encoding=\" UTF8 \", newline=\"\")
+";
+    assert_eq!(diagnostics_at(PythonFloor::V3_12, source), []);
+}
+
+#[test]
+fn an_argument_open_cannot_take_is_e0404() {
+    for (source, message) in [
+        (
+            "f = open(\"a\", newline=\"x\")\n",
+            "`open` raises `ValueError: illegal newline value: x` for this newline",
+        ),
+        (
+            "f = open(\"a\", encoding=\"utf-16\")\n",
+            "TyPy provides the codecs `utf-8`, `ascii` and `latin-1`, and \"utf-16\" is none of \
+             them",
+        ),
+        (
+            "e = \"ascii\"\nf = open(\"a\", encoding=e)\n",
+            "`encoding` of `open` is a string literal, so TyPy can check it when compiling",
+        ),
+        (
+            "f = open(\"a\", errors=\"namereplace\")\n",
+            "TyPy provides the error handlers `strict`, `ignore`, `replace`, `backslashreplace`, \
+             `xmlcharrefreplace` and `surrogateescape`, and \"namereplace\" is none of them",
+        ),
+        (
+            "f = open(\"a\", buffering=\"1\")\n",
+            "`buffering` of `open` must be an int, and this is a str",
+        ),
+        (
+            "f = open(\"a\", newline=1)\n",
+            "`newline` of `open` must be a str | None, and this is an int",
+        ),
+    ] {
+        assert_eq!(
+            one_error(source),
+            ("E0404".to_owned(), message.to_owned()),
             "{source}"
         );
     }

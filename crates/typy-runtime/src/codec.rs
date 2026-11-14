@@ -12,16 +12,22 @@ use crate::tuple::{Field, TupleType};
 use crate::word::inline_value;
 
 /// A codec, numbered as the compiler passes it.
-#[derive(Clone, Copy, PartialEq, Eq)]
-enum Codec {
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub(crate) enum Codec {
     Utf8 = 0,
     Ascii = 1,
     Latin1 = 2,
 }
 
 impl Codec {
+    /// Returns the codec an `int` word numbers.
     fn of(word: i64) -> Self {
-        match inline_value(word) {
+        Self::from_number(inline_value(word))
+    }
+
+    /// Returns the codec a number names.
+    pub(crate) const fn from_number(number: i64) -> Self {
+        match number {
             1 => Self::Ascii,
             2 => Self::Latin1,
             _ => Self::Utf8,
@@ -47,8 +53,8 @@ impl Codec {
 }
 
 /// An error handler, numbered as the compiler passes it.
-#[derive(Clone, Copy, PartialEq, Eq)]
-enum Handler {
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub(crate) enum Handler {
     Strict = 0,
     Ignore = 1,
     Replace = 2,
@@ -58,8 +64,14 @@ enum Handler {
 }
 
 impl Handler {
+    /// Returns the handler an `int` word numbers.
     fn of(word: i64) -> Self {
-        match inline_value(word) {
+        Self::from_number(inline_value(word))
+    }
+
+    /// Returns the handler a number names.
+    pub(crate) const fn from_number(number: i64) -> Self {
+        match number {
             1 => Self::Ignore,
             2 => Self::Replace,
             3 => Self::BackslashReplace,
@@ -194,20 +206,29 @@ fn decode_error(
     exception
 }
 
-/// Returns the `UnicodeDecodeError` of the UTF-8 codec for `data[start..end]`, with a new
-/// `bytes` of `data` as its object, as a text file's decoder raises it (ADR-0019).
-pub(crate) fn utf8_decode_error(
+/// Returns the error a text file's decoder raises for `data[start..end]`: the codec's
+/// `UnicodeDecodeError` with a new `bytes` of `data` as its object, or, for
+/// `xmlcharrefreplace`, which cannot decode, CPython's `TypeError` (LIB-14).
+pub(crate) fn chunk_decode_error(
+    codec: Codec,
+    handler: Handler,
     data: &[u8],
     start: usize,
     end: usize,
     reason: &str,
 ) -> *mut ExceptionObject {
+    if handler == Handler::XmlCharRefReplace {
+        return crate::exception::raise(
+            ExceptionKind::TypeError,
+            "don't know how to handle UnicodeDecodeError in error callback",
+        );
+    }
     let object = crate::bytes::new_bytes(data.len());
     for (index, byte) in data.iter().enumerate() {
         // SAFETY: the bytes are new and hold `data.len()` bytes.
         unsafe { crate::string::set_code_point(object, index, u32::from(*byte)) };
     }
-    let exception = decode_error(Codec::Utf8, object, start, end, reason);
+    let exception = decode_error(codec, object, start, end, reason);
     // SAFETY: the exception holds a reference of its own to the bytes.
     unsafe { crate::refcount::typy_rt_decrement(object.cast()) };
     exception
@@ -314,7 +335,23 @@ pub unsafe extern "C" fn typy_rt_str_encode(
     codec: i64,
     handler: i64,
 ) -> Raising<*mut StrObject> {
-    let (codec, handler) = (Codec::of(codec), Handler::of(handler));
+    // SAFETY: the caller's guarantee.
+    match unsafe { encode(text, Codec::of(codec), Handler::of(handler)) } {
+        Ok(bytes) => Raising::ok(bytes),
+        Err(error) => Raising::error(core::ptr::null_mut(), error),
+    }
+}
+
+/// Returns `text.encode(codec, errors)` as a new `bytes`, or its `UnicodeEncodeError`.
+///
+/// # Safety
+///
+/// `text` points to a live string.
+pub(crate) unsafe fn encode(
+    text: *const StrObject,
+    codec: Codec,
+    handler: Handler,
+) -> Result<*mut StrObject, *mut ExceptionObject> {
     // SAFETY: the caller passes a live string; every index stays inside it.
     unsafe {
         let whole = length(text);
@@ -371,15 +408,12 @@ pub unsafe extern "C" fn typy_rt_str_encode(
                     }
                     Handler::SurrogateEscape | Handler::Strict => {
                         out.discard();
-                        return Raising::error(
-                            core::ptr::null_mut(),
-                            encode_error(codec, text, start, at, reason),
-                        );
+                        return Err(encode_error(codec, text, start, at, reason));
                     }
                 }
             }
         }
-        Raising::ok(out.finish())
+        Ok(out.finish())
     }
 }
 

@@ -1,8 +1,8 @@
 //! Tests of text files: the standard files, CPython's chunked reading and newline
 //! translation, buffered writing, `OSError` for an error number, and files on disk.
 
-use super::reader::{CHUNK, Reader};
-use super::writer::{CAPACITY, Writer};
+use super::reader::{CHUNK, Decoding, Reader};
+use super::writer::{CAPACITY, Encoding, Writer};
 use super::{
     TEXT_FILE, TextFile, typy_rt_sys_stderr, typy_rt_sys_stdout, typy_rt_text_close,
     typy_rt_text_enter, typy_rt_text_flush, typy_rt_text_read, typy_rt_text_readline,
@@ -47,7 +47,7 @@ fn error_repr(error: *mut ExceptionObject) -> String {
     }
 }
 
-fn repr_of(file: *const TextFile) -> String {
+pub(super) fn repr_of(file: *const TextFile) -> String {
     let repr = TEXT_FILE.repr.unwrap();
     // SAFETY: the file is a live text file.
     take(unsafe { repr(file.cast_mut().cast()).value })
@@ -123,7 +123,7 @@ fn reading_a_standard_file_is_not_supported() {
 
 /// Reads `chunks` one at a time through `read`, with an error number after the last chunk
 /// when `failing` is set.
-fn source_of<'chunks>(
+pub(super) fn source_of<'chunks>(
     chunks: &'chunks [&'chunks [u8]],
     failing: Option<i32>,
 ) -> impl FnMut(&mut [u8]) -> Result<usize, i32> + 'chunks {
@@ -140,7 +140,7 @@ fn source_of<'chunks>(
 
 /// Returns each line `readline` gives until the end, or the error that stops it.
 fn lines_of(chunks: &[&[u8]]) -> Result<Vec<String>, (String, String)> {
-    let mut reader = Box::new(Reader::new());
+    let mut reader = Box::new(Reader::with(Decoding::DEFAULT));
     let mut source = source_of(chunks, None);
     let mut lines = Vec::new();
     loop {
@@ -195,7 +195,7 @@ fn an_invalid_byte_stops_the_line_of_its_chunk_with_its_position_in_the_chunk() 
         lines_of(&[b"ab\xe2\x82"]),
         decode("'utf-8' codec can't decode bytes in position 0-1: unexpected end of data")
     );
-    let mut reader = Box::new(Reader::new());
+    let mut reader = Box::new(Reader::with(Decoding::DEFAULT));
     let mut source = source_of(&[b"ok\n", b"\xff\n", b"after\n"], None);
     assert_eq!(
         take(reader.read_text(None, true, &mut source).unwrap()),
@@ -210,7 +210,7 @@ fn an_invalid_byte_stops_the_line_of_its_chunk_with_its_position_in_the_chunk() 
 
 #[test]
 fn a_limit_counts_characters_after_translation() {
-    let mut reader = Box::new(Reader::new());
+    let mut reader = Box::new(Reader::with(Decoding::DEFAULT));
     let mut source = source_of(&[b"a\r\nbc\xc3\xa9d"], None);
     let mut read = |limit: Option<usize>, line: bool| {
         take(reader.read_text(limit, line, &mut source).unwrap())
@@ -224,7 +224,7 @@ fn a_limit_counts_characters_after_translation() {
 
 #[test]
 fn read_decodes_the_rest_at_once_with_positions_from_the_first_byte_not_decoded() {
-    let mut reader = Box::new(Reader::new());
+    let mut reader = Box::new(Reader::with(Decoding::DEFAULT));
     let mut source = source_of(&[b"x\r", b"\ny\r", b"\nz"], None);
     assert_eq!(
         take(reader.read_text(Some(1), false, &mut source).unwrap()),
@@ -233,7 +233,7 @@ fn read_decodes_the_rest_at_once_with_positions_from_the_first_byte_not_decoded(
     assert_eq!(take(reader.read_rest(&mut source).unwrap()), "\ny\nz");
     assert_eq!(take(reader.read_rest(&mut source).unwrap()), "");
 
-    let mut reader = Box::new(Reader::new());
+    let mut reader = Box::new(Reader::with(Decoding::DEFAULT));
     let long = [b'x'; CHUNK];
     let chunks: [&[u8]; 3] = [&long, &long, b"\xff"];
     let mut source = source_of(&chunks, None);
@@ -246,14 +246,14 @@ fn read_decodes_the_rest_at_once_with_positions_from_the_first_byte_not_decoded(
 
 #[test]
 fn read_turns_a_lone_carriage_return_into_a_newline() {
-    let mut reader = Box::new(Reader::new());
+    let mut reader = Box::new(Reader::with(Decoding::DEFAULT));
     let mut source = source_of(&[b"a\rb\r"], None);
     assert_eq!(take(reader.read_rest(&mut source).unwrap()), "a\nb\n");
 }
 
 #[test]
 fn an_error_of_reading_is_an_os_error() {
-    let mut reader = Box::new(Reader::new());
+    let mut reader = Box::new(Reader::with(Decoding::DEFAULT));
     let mut source = source_of(&[], Some(5));
     let error = reader.read_text(None, true, &mut source).unwrap_err();
     assert_eq!(
@@ -269,7 +269,7 @@ fn an_error_of_reading_is_an_os_error() {
 
 #[test]
 fn a_write_waits_in_the_buffer_until_it_fills_or_is_flushed() {
-    let mut writer = Box::new(Writer::new());
+    let mut writer = Box::new(Writer::with(Encoding::DEFAULT));
     let mut written: Vec<Vec<u8>> = Vec::new();
     let mut sink = |bytes: &[u8]| {
         written.push(bytes.to_vec());
@@ -293,7 +293,7 @@ fn a_write_waits_in_the_buffer_until_it_fills_or_is_flushed() {
 
 #[test]
 fn a_surrogate_is_refused_before_anything_is_written() {
-    let mut writer = Box::new(Writer::new());
+    let mut writer = Box::new(Writer::with(Encoding::DEFAULT));
     let mut sink = |_: &[u8]| Ok(());
     let text = crate::string::new_string(4, crate::string::StrKind::Ucs2);
     for (index, point) in [0x61, 0xd800, 0xdc00, 0x62].into_iter().enumerate() {
@@ -388,6 +388,25 @@ fn an_error_number_gives_cpythons_class_text_and_arguments() {
     unsafe { typy_rt_decrement(path.cast()) };
 }
 
+/// The arguments of `open` after the mode, as the compiler passes them.
+pub(super) struct OpenOptions {
+    pub(super) buffering: i128,
+    pub(super) encoding: Option<&'static str>,
+    pub(super) codec: i64,
+    pub(super) handler: i64,
+    pub(super) newline: Option<&'static str>,
+}
+
+impl OpenOptions {
+    pub(super) const DEFAULT: Self = Self {
+        buffering: -1,
+        encoding: None,
+        codec: 0,
+        handler: 0,
+        newline: None,
+    };
+}
+
 /// A directory of its own for a test of files on disk, removed at the end.
 pub(super) struct Scratch(pub(super) std::path::PathBuf);
 
@@ -410,15 +429,42 @@ impl Scratch {
         mode: &str,
         access: i64,
     ) -> Result<*mut TextFile, (String, String)> {
+        self.open_with(name, mode, access, &OpenOptions::DEFAULT)
+    }
+
+    /// Opens `name` with the arguments of `options`.
+    pub(super) fn open_with(
+        &self,
+        name: &str,
+        mode: &str,
+        access: i64,
+        options: &OpenOptions,
+    ) -> Result<*mut TextFile, (String, String)> {
         let path = self.path(name);
         let mode = from_str(mode);
+        let encoding = options.encoding.map_or(core::ptr::null_mut(), from_str);
+        let newline = options.newline.map_or(core::ptr::null_mut(), from_str);
+        let buffering = crate::int::value::Integer::from_i128(options.buffering).into_word();
         // SAFETY: the strings are live; the file keeps references of its own.
-        let opened =
-            unsafe { super::disk::typy_rt_open(path, mode, crate::word::inline(access).unwrap()) };
-        // SAFETY: the strings are owned here.
+        let opened = unsafe {
+            super::disk::typy_rt_open(
+                path,
+                mode,
+                crate::word::inline(access | options.codec << 2 | options.handler << 4).unwrap(),
+                buffering,
+                encoding,
+                newline,
+            )
+        };
+        // SAFETY: the strings and the word are owned here.
         unsafe {
             typy_rt_decrement(path.cast());
             typy_rt_decrement(mode.cast());
+            typy_rt_decrement(encoding.cast());
+            typy_rt_decrement(newline.cast());
+            if !crate::word::is_inline(buffering) {
+                typy_rt_decrement(crate::int::object_of(buffering).cast());
+            }
         }
         if opened.exception.is_null() {
             Ok(opened.value)
@@ -636,7 +682,15 @@ fn a_path_is_encoded_as_cpython_encodes_it() {
     let mode = from_str("w");
     // SAFETY: the strings are live; each is released once.
     unsafe {
-        let opened = super::disk::typy_rt_open(path, mode, crate::word::inline(1).unwrap());
+        let word = |value: i64| crate::word::inline(value).unwrap();
+        let opened = super::disk::typy_rt_open(
+            path,
+            mode,
+            word(1),
+            word(-1),
+            core::ptr::null(),
+            core::ptr::null(),
+        );
         assert_eq!(
             error_text(opened.exception).1,
             "'utf-8' codec can't encode character '\\ud800' in position 2: surrogates not allowed"

@@ -28,7 +28,7 @@ fn os_error(errno: i32) -> *mut ExceptionObject {
 /// # Safety
 ///
 /// `word` is an `int` word whose large integer is live.
-unsafe fn value_of(word: i64) -> Option<i128> {
+pub(super) unsafe fn value_of(word: i64) -> Option<i128> {
     if crate::word::is_inline(word) {
         return Some(i128::from(crate::word::inline_value(word)));
     }

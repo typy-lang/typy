@@ -176,6 +176,7 @@ pub enum TypedExprKind {
         path: Box<TypedExpr>,
         mode: String,
         access: crate::open::OpenAccess,
+        options: Box<OpenOptions>,
     },
     /// A call of a function of `math`, with its arguments in the order the function takes
     /// them; a keyword not given is `None` (LIB-05).
@@ -485,7 +486,15 @@ impl TypedExpr {
             | TypedExprKind::Lazy { value: inner, .. } => vec![inner],
             TypedExprKind::PercentFormat { values, .. } => vec![values],
             TypedExprKind::MathCall { arguments, .. } => arguments.iter().collect(),
-            TypedExprKind::Open { path, .. } => vec![path],
+            TypedExprKind::Open { path, options, .. } => [
+                Some(path),
+                options.buffering.as_ref(),
+                options.newline.as_ref(),
+            ]
+            .into_iter()
+            .flatten()
+            .map(Box::as_ref)
+            .collect(),
             TypedExprKind::SysExit(value)
             | TypedExprKind::Input(value)
             | TypedExprKind::RecursionLimit(value) => value.iter().map(Box::as_ref).collect(),
@@ -645,4 +654,19 @@ impl FileAttribute {
             _ => None,
         }
     }
+}
+
+/// The arguments of `open` after its mode, as the runtime takes them (LIB-14).
+#[derive(Clone, Debug, PartialEq, Default)]
+pub struct OpenOptions {
+    /// `buffering`, when given and not -1.
+    pub buffering: Option<Box<TypedExpr>>,
+    /// `encoding` as written, which the file's `repr` shows; `None` for `None` or not given.
+    pub encoding: Option<String>,
+    /// The codec `encoding` names, numbered as the runtime takes it.
+    pub codec: i64,
+    /// The error handler `errors` names, numbered as the runtime takes it.
+    pub handler: i64,
+    /// `newline`, when given and not `None`.
+    pub newline: Option<Box<TypedExpr>>,
 }

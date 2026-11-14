@@ -679,6 +679,9 @@ impl RuntimeFunction {
     pub const fn signature(self) -> RuntimeSignature {
         use TyirType::{Bits, Bool, Float, Int, Unit};
         const STR: TyirType = TyirType::STR;
+        const OPTIONAL_STR: TyirType = TyirType::Optional(crate::types::OptionalBase::Object(
+            crate::types::TypeId::STR,
+        ));
         const LIST: TyirType = TyirType::LIST;
         const BYTES: TyirType = TyirType::BYTES;
         const SET: TyirType = TyirType::SET;
@@ -907,7 +910,11 @@ impl RuntimeFunction {
             Self::TextFlush | Self::TextClose | Self::TextEnter => {
                 signature(&[TyirType::TEXT_FILE], Unit, true)
             }
-            Self::Open => signature(&[STR, STR, Int], TyirType::TEXT_FILE, true),
+            Self::Open => signature(
+                &[STR, STR, Int, Int, STR, OPTIONAL_STR],
+                TyirType::TEXT_FILE,
+                true,
+            ),
             Self::TextRead | Self::TextReadline => {
                 signature(&[TyirType::TEXT_FILE, Int], STR, true)
             }

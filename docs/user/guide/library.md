@@ -297,13 +297,43 @@ until the program ends. Another file object that reads the file before
 then sees only what was written out, and CPython's buffer sizes differ
 between versions, so flush or close a file before reading it again.
 
-A mode CPython refuses for every file, such as `"rw"`, is E0404 with
-CPython's message. TyPy 0.4 adds what 0.3 refuses with E0201 (LIB-14):
+### Encodings, errors and newlines
 
-- binary modes such as `"rb"`, modes with `+`, and a mode that is not a
-  literal;
-- encodings other than UTF-8, and the arguments `buffering`, `errors`,
-  `newline`, `closefd` and `opener` other than their defaults.
+`open` takes `buffering`, `encoding`, `errors` and `newline` as CPython's
+does (LIB-14):
+
+- `encoding` names `utf-8`, `ascii` or `latin-1`, in any spelling CPython
+  finds for them, such as `"UTF8"` or `"Latin1"`; the file's `repr` shows
+  it as written. `errors` names `strict`, `ignore`, `replace`,
+  `backslashreplace`, `xmlcharrefreplace` or `surrogateescape`. Both are
+  string literals or `None`, so TyPy checks them when it compiles; another
+  codec or handler is E0404. Reading with `xmlcharrefreplace` raises
+  CPython's `TypeError` at the first byte the codec cannot decode.
+- `newline` is `None`, `""`, `"\n"`, `"\r"` or `"\r\n"`, or a variable
+  of type `str | None`, which is checked when the file is opened. With
+  `None`, reading ends a line at `\n`, `\r\n` or `\r` and gives each as
+  `\n`; with `""` it ends lines there and gives them as they are; with
+  another value a line ends only at that value. Writing turns each `\n`
+  into `"\r"` or `"\r\n"` when `newline` is one of them.
+- `buffering=1` writes the file out after each write of a `\n` or a
+  `\r`; another positive size keeps TyPy's own buffer, and `0` raises
+  `ValueError: can't have unbuffered text I/O` after opening the file, as
+  CPython does.
+
+<!-- typy-expect: accepted -->
+```python
+with open("notes.txt", "w", encoding="latin-1", newline="\r\n") as notes:
+    notes.write("caf\u00e9\n")
+
+with open("notes.txt", encoding="ascii", errors="replace") as notes:
+    print(repr(notes.read()))
+```
+
+A mode CPython refuses for every file, such as `"rw"`, is E0404 with
+CPython's message, and so is a `newline` literal it refuses. TyPy 0.4
+adds what is refused now with E0201 (LIB-14): binary modes such as
+`"rb"`, modes with `+`, a mode that is not a literal, and `closefd`.
+`opener` takes a function as a value and is planned for 1.0 (LIB-18).
 
 `close()` of `sys.stdout` or `sys.stderr` writes it out and leaves it
 open in 0.3; closing them comes with the rest of LIB-14.

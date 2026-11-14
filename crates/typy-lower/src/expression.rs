@@ -221,7 +221,12 @@ impl FunctionLowerer<'_> {
             }
             TypedExprKind::Print(call) => self.print(call, span),
             TypedExprKind::SysValue(value) => self.sys_value(*value, span),
-            TypedExprKind::Open { path, mode, access } => self.open(path, mode, *access, span),
+            TypedExprKind::Open {
+                path,
+                mode,
+                access,
+                options,
+            } => self.open(path, mode, *access, options, span),
             TypedExprKind::SysExit(code) => self.sys_exit(code.as_deref(), span),
             TypedExprKind::RecursionLimit(limit) => self.recursion_limit(limit.as_deref(), span),
             TypedExprKind::PercentDynamic { format, values } => {

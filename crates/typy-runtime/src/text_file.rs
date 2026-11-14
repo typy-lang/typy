@@ -4,12 +4,15 @@
 
 mod disk;
 mod errno_text;
+mod newline;
 mod os_error;
 mod position;
 mod reader;
 mod state;
 mod stdin;
 pub(crate) use stdin::input_line;
+#[cfg(test)]
+mod decoding_tests;
 #[cfg(test)]
 mod position_tests;
 #[cfg(test)]
@@ -48,6 +51,8 @@ pub struct TextFile {
     path: *mut StrObject,
     /// The mode as the program wrote it, which the file owns; null for a standard file.
     mode: *mut StrObject,
+    /// The encoding as the program wrote it, which the file owns; null for `utf-8`.
+    encoding: *mut StrObject,
     /// What a readable file has read and not given out; null otherwise and once closed.
     reader: *mut reader::Reader,
     /// What a writable file has not written out; null otherwise and once closed.
@@ -69,6 +74,7 @@ const fn standard(descriptor: i32, name: &'static str, flags: u32) -> TextFile {
         name,
         path: core::ptr::null_mut(),
         mode: core::ptr::null_mut(),
+        encoding: core::ptr::null_mut(),
         reader: core::ptr::null_mut(),
         writer: core::ptr::null_mut(),
         previous: core::ptr::null_mut(),

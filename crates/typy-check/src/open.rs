@@ -1,5 +1,5 @@
-//! The modes and encodings of `open` (LIB-04, LIB-14, ADR-0019): a text mode as CPython's
-//! `_io.open` reads it, with its messages for a mode it refuses, and the names of UTF-8.
+//! The modes of `open` (LIB-04, LIB-14, ADR-0019): a text mode as CPython's `_io.open` reads
+//! it, with its messages for a mode it refuses.
 
 /// How a text file is opened, numbered as the runtime takes it.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -71,31 +71,9 @@ pub(crate) fn open_access(mode: &str) -> Result<OpenAccess, ModeRefusal> {
     })
 }
 
-/// Returns whether CPython's codec lookup finds UTF-8 for `name`: lowercased, each run of
-/// characters other than letters, digits and `.` read as one `_`, without one at either end.
-pub(crate) fn is_utf8(name: &str) -> bool {
-    let mut normalized = String::new();
-    let mut gap = false;
-    for character in name.chars().flat_map(char::to_lowercase) {
-        if character.is_alphanumeric() || character == '.' {
-            if gap && !normalized.is_empty() {
-                normalized.push('_');
-            }
-            gap = false;
-            normalized.push(character);
-        } else {
-            gap = true;
-        }
-    }
-    matches!(
-        normalized.as_str(),
-        "utf_8" | "utf8" | "u8" | "utf" | "cp65001" | "csutf8" | "utf8_ucs2" | "utf8_ucs4"
-    )
-}
-
 #[cfg(test)]
 mod tests {
-    use super::{ModeRefusal, OpenAccess, is_utf8, open_access};
+    use super::{ModeRefusal, OpenAccess, open_access};
 
     #[test]
     fn text_modes_give_their_access() {
@@ -155,29 +133,6 @@ mod tests {
             ("a+t", "a mode with `+`"),
         ] {
             assert_eq!(open_access(mode), Err(ModeRefusal::Planned(what)), "{mode}");
-        }
-    }
-
-    #[test]
-    fn the_names_of_utf_8_are_found_as_cpython_finds_them() {
-        for name in [
-            "utf-8",
-            "UTF-8",
-            "utf8",
-            "U8",
-            "utf",
-            "Utf_8",
-            "utf-8 ",
-            "  utf8",
-            "UTF8-UCS2",
-            "cp65001",
-            "utf--8",
-            "csutf8",
-        ] {
-            assert!(is_utf8(name), "{name}");
-        }
-        for name in ["utf.8", "utf_8_sig", "latin-1", "ascii", "", "nope"] {
-            assert!(!is_utf8(name), "{name}");
         }
     }
 }

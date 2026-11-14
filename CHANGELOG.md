@@ -88,6 +88,10 @@ All notable changes to TyPy are recorded here. The format follows
   class methods or class variables is planned for 0.5 (GEN-04, GEN-05,
   GEN-10, ADR-0023).
 - `...` alone as a statement does nothing, as `pass` does.
+- `open` takes `buffering`, `encoding` (`utf-8`, `ascii` or `latin-1`),
+  `errors` (`strict`, `ignore`, `replace`, `backslashreplace`,
+  `xmlcharrefreplace` or `surrogateescape`) and `newline`, with CPython's
+  results and errors; `buffering=1` writes out each line (LIB-14).
 - Text files have `name`, `mode` and `closed`, and the methods `fileno`,
   `isatty`, `readable`, `writable`, `seekable`, `seek`, `tell` and
   `truncate`, with CPython's results and errors; a file opened with `"a"`
@@ -167,6 +171,11 @@ All notable changes to TyPy are recorded here. The format follows
 
 ### Changed
 
+- `open(..., encoding="csutf8")` is E0404, as for `str.encode`: CPython
+  3.12 does not know the name, so its result depends on the version.
+  Write `"utf-8"` instead.
+- The `opener` argument of `open` is planned for 1.0 (LIB-18), since it
+  takes a function as a value.
 - Importing a module inside a function of a module that it imports at
   module level is planned for 0.5 (MOD-13).
 - Names of `typing` that TyPy does not give are planned for 0.5 rather

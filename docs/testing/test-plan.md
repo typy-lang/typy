@@ -423,6 +423,7 @@ that the specification does not define.
 | LIB-15 | 0.5 | IT | `tests/conformance/lib/LIB-15_*.py` |
 | LIB-16 | 0.5 | IT | `tests/conformance/lib/LIB-16_*.py` |
 | LIB-17 | 0.5 | IT | `tests/conformance/lib/LIB-17_*.py` |
+| LIB-18 | 1.0 | IT | `tests/conformance/lib/LIB-18_*.py` |
 | LIB-13 | 0.4 | IT | `tests/conformance/lib/LIB-13_*.py` |
 | LIB-14 | 0.4 | IT | `tests/conformance/lib/LIB-14_*.py` |
 | MEM-01 | 0.1 | UT, IT | `typy-runtime` unit tests; `tests/conformance/mem/MEM-01_*.py` under sanitizers |

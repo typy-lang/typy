@@ -1,11 +1,11 @@
-//! Checks calls of `open` (LIB-04, LIB-14, ADR-0019): a `str` path, a mode written as a
-//! literal, which decides that the file is a text file, and UTF-8 as its encoding.
+//! Checks calls of `open` (LIB-04, LIB-14, ADR-0019): a `str` path and a mode written as a
+//! literal, which decides that the file is a text file; `open_options` checks the rest.
 
 use typy_diagnostics::{Diagnostic, DiagnosticCode, RuleId, Span};
 use typy_source::syntax::{Constant, Expr, Identifier, Keyword};
 
 use super::BodyChecker;
-use crate::open::{ModeRefusal, OpenAccess, is_utf8, open_access};
+use crate::open::{ModeRefusal, OpenAccess, open_access};
 use crate::typed::{FileAttribute, TypedExpr, TypedExprKind};
 use crate::types::Type;
 
@@ -21,34 +21,8 @@ const PARAMETERS: [&str; 8] = [
     "opener",
 ];
 
-/// Returns whether `value` is the default of parameter `index` of `open`, which an argument
-/// may spell out: `buffering=-1`, `errors=None` or `"strict"`, `newline=None`, `closefd=True`
-/// and `opener=None`.
-fn is_default(index: usize, value: &Expr) -> bool {
-    let negative_one = super::expression::literal_position(value) == Some(-1);
-    let none = matches!(
-        value,
-        Expr::Constant {
-            value: Constant::None,
-            ..
-        }
-    );
-    match PARAMETERS[index] {
-        "buffering" => negative_one,
-        "errors" => none || literal(value) == Some("strict"),
-        "closefd" => matches!(
-            value,
-            Expr::Constant {
-                value: Constant::Bool(true),
-                ..
-            }
-        ),
-        _ => none,
-    }
-}
-
 /// Returns the text of a string literal.
-fn literal(expression: &Expr) -> Option<&str> {
+pub(super) fn literal(expression: &Expr) -> Option<&str> {
     match expression {
         Expr::Constant {
             value: Constant::Str(text),
@@ -117,28 +91,10 @@ impl BodyChecker<'_> {
         };
         let path = self.expression(file);
         self.expect(&path, Type::Str, "the file of `open`");
-        if let Some((index, value)) = given
-            .iter()
-            .enumerate()
-            .skip(2)
-            .filter_map(|(index, value)| value.map(|value| (index, value)))
-            .find(|(index, value)| *index != 3 && !is_default(*index, value))
-        {
-            return self.open_refused(
-                201,
-                value.span(),
-                format!(
-                    "the `{}` argument of `open` is planned for TyPy 0.4 (LIB-14)",
-                    PARAMETERS[index]
-                ),
-                RuleId::LIB_14,
-            );
-        }
-        if let Some(encoding) = given[3]
-            && let Some(refused) = self.open_encoding(encoding)
-        {
-            return refused;
-        }
+        let options = match self.open_options(&given) {
+            Ok(options) => options,
+            Err(refused) => return refused,
+        };
         let (mode, access) = match given[1] {
             None => ("r".to_owned(), OpenAccess::Read),
             Some(mode) => match self.open_mode(mode) {
@@ -154,6 +110,7 @@ impl BodyChecker<'_> {
                 path: Box::new(path),
                 mode,
                 access,
+                options: Box::new(options),
             },
             Type::TextFile,
             span,
@@ -192,27 +149,6 @@ impl BodyChecker<'_> {
         }
     }
 
-    /// Returns the error of an encoding that is neither `None` nor a name of UTF-8.
-    fn open_encoding(&mut self, encoding: &Expr) -> Option<TypedExpr> {
-        match encoding {
-            Expr::Constant {
-                value: Constant::None,
-                ..
-            } => None,
-            _ if literal(encoding).is_some_and(is_utf8) => None,
-            _ => Some(
-                self.open_refused(
-                    201,
-                    encoding.span(),
-                    "TyPy 0.3 opens files in UTF-8 only, written as `\"utf-8\"` or `None`; other \
-                 encodings are planned for TyPy 0.4 (LIB-14)"
-                        .to_owned(),
-                    RuleId::LIB_14,
-                ),
-            ),
-        }
-    }
-
     /// Returns `name`, `mode` or `closed` of a text file, or reports another name (LIB-14).
     pub(super) fn file_attribute(
         &mut self,
@@ -248,7 +184,13 @@ impl BodyChecker<'_> {
     }
 
     /// Reports an error of `open` and returns the expression of a call that failed.
-    fn open_refused(&mut self, code: u16, at: Span, message: String, rule: RuleId) -> TypedExpr {
+    pub(super) fn open_refused(
+        &mut self,
+        code: u16,
+        at: Span,
+        message: String,
+        rule: RuleId,
+    ) -> TypedExpr {
         self.diagnostics
             .push(Diagnostic::new(DiagnosticCode::error(code), at, message).with_rule(rule));
         Self::invalid_call(at)

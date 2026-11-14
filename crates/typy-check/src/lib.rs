@@ -32,7 +32,7 @@ pub use sys::SysValue;
 pub use typed::{
     Argument, AssignTarget, Attribute, ClassId, Conversion, EachMember, ExceptionPart, FStringPart,
     FileAttribute, FormattedValue, FunctionId, FunctionSignature, Generator, ImportBinding,
-    InitCall, IsInstanceTest, LoopSource, OperatorCall, OsErrorField, PartOperation,
+    InitCall, IsInstanceTest, LoopSource, OpenOptions, OperatorCall, OsErrorField, PartOperation,
     PercentConversion, PercentField, PercentNumber, PercentPart, PercentValue, PrintCall,
     RaiseCause, SignatureParameter, Symbol, SymbolId, SymbolKind, TypedClass, TypedConstant,
     TypedExpr, TypedExprKind, TypedFunction, TypedHandler, TypedModule, TypedProgram, TypedStmt,

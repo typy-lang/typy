@@ -178,18 +178,59 @@ impl FunctionLowerer<'_> {
         value
     }
 
-    /// Lowers `open(path, mode)`: a new text file, or the `OSError` of opening it.
+    /// Lowers `open(path, mode, buffering, encoding, errors, newline)`: a new text file, or the
+    /// error of opening it. Its arguments are evaluated in the order `open` takes them.
     pub(crate) fn open(
         &mut self,
         path: &TypedExpr,
         mode: &str,
         access: typy_check::OpenAccess,
+        options: &typy_check::OpenOptions,
         span: Span,
     ) -> Lowered {
         let path = self.expression(path);
+        let buffering = options
+            .buffering
+            .as_deref()
+            .map(|value| self.expression(value));
+        let optional_str = TyirType::Optional(typy_tyir::OptionalBase::Object(TypeId::STR));
+        let newline = options.newline.as_deref().map(|value| {
+            if value.ty == typy_check::Type::Str {
+                self.wrap(value, optional_str, span)
+            } else {
+                self.expression(value)
+            }
+        });
         let mode = self.string(mode, span);
-        let access = self.constant(Constant::Int((access as i64).to_string()), span);
-        let file = self.call_runtime(RuntimeFunction::Open, vec![path.value, mode, access], span);
+        // The runtime reads the access, the codec and the handler from one word, so a call
+        // keeps to six arguments.
+        let how = access as i64 | options.codec << 2 | options.handler << 4;
+        let how = self.constant(Constant::Int(how.to_string()), span);
+        let buffering_value = buffering.map_or_else(
+            || self.constant(Constant::Int("-1".to_owned()), span),
+            |value| value.value,
+        );
+        let encoding = match &options.encoding {
+            Some(name) => self.string(name, span),
+            None => self.constant(Constant::NoInstance(TypeId::STR), span),
+        };
+        let newline_value =
+            newline.map_or_else(|| self.none_of(optional_str, span), |value| value.value);
+        let file = self.call_runtime(
+            RuntimeFunction::Open,
+            vec![
+                path.value,
+                mode,
+                how,
+                buffering_value,
+                encoding,
+                newline_value,
+            ],
+            span,
+        );
+        for value in [newline, buffering].into_iter().flatten() {
+            self.release(value, span);
+        }
         self.release(path, span);
         file
     }

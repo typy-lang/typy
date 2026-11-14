@@ -2,11 +2,13 @@
 //! through the file's buffers, closing, and the list of open files the program closes at its
 //! end.
 
-use super::reader::Reader;
-use super::writer::Writer;
+use super::newline::Newline;
+use super::reader::{Decoding, Reader};
+use super::writer::{Encoding, Writer};
 use super::{CLOSED, FUNCTIONS, FileFunctions, READABLE, TextFile, WRITABLE};
 use crate::Raising;
 use crate::cell::ProgramCell;
+use crate::codec::{Codec, Handler};
 use crate::exception::ExceptionObject;
 use crate::header::{ObjectHeader, TEXT_FILE_TYPE_ID};
 use crate::refcount::{typy_rt_decrement, typy_rt_increment};
@@ -31,8 +33,8 @@ enum Access {
 }
 
 impl Access {
-    fn of(word: i64) -> Self {
-        match crate::word::inline_value(word) {
+    const fn of(number: i64) -> Self {
+        match number {
             1 => Self::Write,
             2 => Self::Append,
             3 => Self::Create,
@@ -105,19 +107,73 @@ unsafe fn path_bytes(
     Ok(bytes)
 }
 
-/// Returns `open(path, mode)` for a text mode the checker has read: `access` is the number of
-/// its `Access`, and `mode` the mode as written, which the file's `repr` shows.
+/// How a file opened in a text mode decodes, encodes and buffers.
+struct Options {
+    decoding: Decoding,
+    line_buffering: bool,
+}
+
+/// Returns the options of `open` that need the file open to be checked, as CPython checks
+/// them after opening it: `buffering=0` and an illegal `newline`.
 ///
 /// # Safety
 ///
-/// `path` and `mode` point to live strings, and `access` is an `int` word.
+/// `newline` is null or points to a live `str`.
+unsafe fn options(
+    buffering: i32,
+    codec: i64,
+    handler: i64,
+    newline: *const StrObject,
+) -> Result<Options, *mut ExceptionObject> {
+    if buffering == 0 {
+        return Err(crate::exception::raise(
+            crate::exception::ExceptionKind::ValueError,
+            "can't have unbuffered text I/O",
+        ));
+    }
+    // SAFETY: the caller's guarantee.
+    let newline = unsafe { Newline::of(newline)? };
+    Ok(Options {
+        decoding: Decoding {
+            codec: Codec::from_number(codec),
+            handler: Handler::from_number(handler),
+            newline,
+        },
+        line_buffering: buffering == 1,
+    })
+}
+
+/// Returns `open(path, mode, buffering, encoding, errors, newline)` for a text mode the
+/// checker has read. `how` holds the number of its `Access` in its two low bits, the codec
+/// `encoding` names in the next two, and the error handler `errors` names above them, so the
+/// call keeps to six arguments; `mode` and `encoding` are as written, which the file's `repr`
+/// shows, `encoding` null for `None`; `newline` is null for `None`.
+///
+/// # Safety
+///
+/// `path` and `mode` point to live strings, `encoding` and `newline` are null or point to
+/// live strings, and `how` and `buffering` are `int` words whose large integers are live.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn typy_rt_open(
     path: *const StrObject,
     mode: *const StrObject,
-    access: i64,
+    how: i64,
+    buffering: i64,
+    encoding: *const StrObject,
+    newline: *const StrObject,
 ) -> Raising<*mut TextFile> {
-    let access = Access::of(access);
+    let how = crate::word::inline_value(how);
+    let access = Access::of(how & 3);
+    let (codec, handler) = ((how >> 2) & 3, how >> 4);
+    // SAFETY: the caller's guarantee.
+    let buffering = unsafe { super::position::value_of(buffering) };
+    let Some(buffering) = buffering.and_then(|value| i32::try_from(value).ok()) else {
+        let error = crate::exception::raise(
+            crate::exception::ExceptionKind::OverflowError,
+            "Python int too large to convert to C int",
+        );
+        return Raising::error(core::ptr::null_mut(), error);
+    };
     // SAFETY: the caller's guarantee.
     let bytes = match unsafe { path_bytes(path) } {
         Ok(bytes) => bytes,
@@ -139,6 +195,14 @@ pub unsafe extern "C" fn typy_rt_open(
         let error = unsafe { super::os_error::os_error(crate::libc::EISDIR, path) };
         return Raising::error(core::ptr::null_mut(), error);
     }
+    // SAFETY: the caller's guarantee.
+    let options = match unsafe { options(buffering, codec, handler, newline) } {
+        Ok(options) => options,
+        Err(error) => {
+            let _ = crate::libc::close(descriptor);
+            return Raising::error(core::ptr::null_mut(), error);
+        }
+    };
     if access == Access::Append {
         // CPython's `FileIO` moves to the end at once, so `tell` gives the size.
         let _ = crate::libc::seek(descriptor, 0, crate::libc::SEEK_END);
@@ -148,11 +212,19 @@ pub unsafe extern "C" fn typy_rt_open(
     unsafe {
         typy_rt_increment(path.cast_mut().cast());
         typy_rt_increment(mode.cast_mut().cast());
+        typy_rt_increment(encoding.cast_mut().cast());
     }
     let (flags, reader, writer) = if access == Access::Read {
-        (READABLE, boxed(Reader::new()), core::ptr::null_mut())
+        let reader = boxed(Reader::with(options.decoding));
+        (READABLE, reader, core::ptr::null_mut())
     } else {
-        (WRITABLE, core::ptr::null_mut(), boxed(Writer::new()))
+        let writer = boxed(Writer::with(Encoding {
+            codec: options.decoding.codec,
+            handler: options.decoding.handler,
+            newline: options.decoding.newline,
+            line_buffering: options.line_buffering,
+        }));
+        (WRITABLE, core::ptr::null_mut(), writer)
     };
     let next = OPEN.with(|open| *open);
     let file = boxed(TextFile {
@@ -162,6 +234,7 @@ pub unsafe extern "C" fn typy_rt_open(
         name: "",
         path: path.cast_mut(),
         mode: mode.cast_mut(),
+        encoding: encoding.cast_mut(),
         reader,
         writer,
         previous: core::ptr::null_mut(),
@@ -209,7 +282,13 @@ pub(crate) unsafe fn repr(file: &TextFile) -> *mut StrObject {
             crate::string::typy_rt_str_repr(file.path),
             crate::string::from_str(" mode="),
             crate::string::typy_rt_str_repr(file.mode),
-            crate::string::from_str(" encoding='utf-8'>"),
+            crate::string::from_str(" encoding="),
+            if file.encoding.is_null() {
+                crate::string::from_str("'utf-8'")
+            } else {
+                crate::string::typy_rt_str_repr(file.encoding)
+            },
+            crate::string::from_str(">"),
         ];
         let mut text = crate::string::from_str("");
         for part in parts {
@@ -346,6 +425,7 @@ unsafe fn destroy(file: *mut TextFile) {
         typy_rt_decrement(error.cast());
         typy_rt_decrement((*file).path.cast());
         typy_rt_decrement((*file).mode.cast());
+        typy_rt_decrement((*file).encoding.cast());
     }
     crate::allocator::free(file.cast());
 }
