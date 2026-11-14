@@ -197,6 +197,10 @@ All notable changes to TyPy are recorded here. The format follows
 
 ### Fixed
 
+- A `for` loop whose variable is a `T | None`, such as one bound earlier by
+  a loop over `None` and `"a"`, over items of type `T` no longer stops the
+  compiler with an internal error; the variable is not `None` in the
+  loop's body (CST-03, TYP-13).
 - A call that names one keyword twice, such as `print(1, sep="", sep="")`,
   is E0103 with CPython's `SyntaxError` message, `keyword argument
   repeated: sep`; it used to compile, or report the wrong error (STD-01).

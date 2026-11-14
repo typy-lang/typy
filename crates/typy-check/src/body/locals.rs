@@ -567,9 +567,12 @@ impl BodyChecker<'_> {
             Some(_) => {}
         }
         // A value that is not `None` shows the optional variable is not `None` until it is
-        // assigned again (TYP-13).
+        // assigned again (TYP-13); a `for` loop's item of the base type shows it too.
         let not_none = matches!(self.types.get(&symbol), Some(Type::Optional(_)))
-            && matches!(&value.kind, TypedExprKind::Wrap(inner) if inner.ty != Type::NoneType);
+            && match &value.kind {
+                TypedExprKind::Wrap(inner) => inner.ty != Type::NoneType,
+                _ => !matches!(value.ty, Type::NoneType | Type::Optional(_) | Type::Error),
+            };
         if let Some(facts) = &mut self.assigned {
             facts.insert(Fact::Assigned(symbol));
             if not_none {

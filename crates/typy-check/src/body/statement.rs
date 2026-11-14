@@ -471,6 +471,10 @@ impl BodyChecker<'_> {
         self.assigned = entry;
         let mut inside = self.assigned.clone().unwrap_or_default();
         inside.insert(Fact::Assigned(target));
+        // The counter is an `int`, so a `T | None` variable is not `None` in the body (TYP-13).
+        if matches!(self.types.get(&target), Some(Type::Optional(_))) {
+            inside.insert(Fact::NotNone(target));
+        }
         let before_loop = self.assigned.replace(inside);
         self.breaks.push(Vec::new());
         let body = self.block(body);

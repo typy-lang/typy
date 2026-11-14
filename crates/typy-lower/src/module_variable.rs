@@ -209,9 +209,12 @@ impl FunctionLowerer<'_> {
     pub(crate) fn assign_name(&mut self, symbol: SymbolId, lowered: Lowered, span: Span) {
         let Some(global) = self.module_globals.of.get(&symbol).copied() else {
             let slot = self.slots[&symbol];
+            let lowered = self.held_as(lowered, self.builder.slot_type(slot), span);
             self.store(slot, lowered, span);
             return;
         };
+        let ty = self.module_globals.globals[global.value.0 as usize].ty;
+        let lowered = self.held_as(lowered, ty, span);
         let value = self.take_reference(lowered, span);
         let old = self.counted(lowered.ty).then(|| {
             self.builder
