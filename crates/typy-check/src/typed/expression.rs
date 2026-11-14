@@ -144,6 +144,13 @@ pub enum TypedExprKind {
     /// `sys.getrecursionlimit()`, without a value, or `sys.setrecursionlimit(limit)`
     /// (LIB-13).
     RecursionLimit(Option<Box<TypedExpr>>),
+    /// An operation on `args` of an exception or `code` of a `SystemExit`, read from the
+    /// exception (EXC-11, EXC-13, ADR-0030).
+    ExceptionPart {
+        exception: Box<TypedExpr>,
+        part: ExceptionPart,
+        operation: PartOperation,
+    },
     /// `input(prompt)`: a line of standard input (LIB-04).
     Input(Option<Box<TypedExpr>>),
     /// `open(path, mode)` in a text mode: `mode` as written, which the file's `repr` shows,
@@ -465,6 +472,14 @@ impl TypedExpr {
             TypedExprKind::SysExit(value)
             | TypedExprKind::Input(value)
             | TypedExprKind::RecursionLimit(value) => value.iter().map(Box::as_ref).collect(),
+            TypedExprKind::ExceptionPart {
+                exception,
+                operation,
+                ..
+            } => match operation {
+                PartOperation::Equal(other) => vec![exception, other],
+                _ => vec![exception],
+            },
             TypedExprKind::Comprehension {
                 element,
                 value,
@@ -547,4 +562,29 @@ impl TypedExpr {
                 .collect(),
         }
     }
+}
+
+/// A part of an exception that may hold any value (EXC-11, EXC-13, ADR-0030).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ExceptionPart {
+    /// `exception.args`, the tuple of its arguments.
+    Arguments,
+    /// `system_exit.code`: `None`, its one argument, or the tuple of its arguments.
+    Code,
+}
+
+/// What a program does with a part of an exception.
+#[derive(Clone, Debug, PartialEq)]
+pub enum PartOperation {
+    /// `str` of it, or `repr` when `repr`.
+    Text {
+        /// Whether it is `repr`.
+        repr: bool,
+    },
+    /// `len` of `args`.
+    Length,
+    /// Its truth.
+    Truth,
+    /// Whether it equals the value.
+    Equal(Box<TypedExpr>),
 }

@@ -392,6 +392,7 @@ that the specification does not define.
 | EXC-12 | 0.3 | IT | `tests/conformance/exc/EXC-12_*.py` |
 | EXC-13 | 0.4 | IT | `tests/conformance/exc/EXC-13_*.py` |
 | EXC-14 | 0.4 | IT | `tests/conformance/exc/EXC-14_*.py` |
+| EXC-15 | 0.5 | IT | `tests/conformance/exc/EXC-15_*.py` |
 | MOD-01 | 0.3 | IT, E2E | `tests/conformance/mod/MOD-01_*`; module paths in `crates/typy-cli/tests/cli.rs`, tests named for MOD-01 |
 | MOD-02 | 0.3 | IT | `tests/conformance/mod/MOD-02_*.py` |
 | MOD-03 | 0.3 | IT | `tests/conformance/mod/MOD-03_*.py` |

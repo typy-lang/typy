@@ -173,10 +173,36 @@ except AppError as error:
     print(error, error.code())
 ```
 
+## The arguments and the exit code
+
+`error.args` is the tuple of the arguments an exception was built with
+(EXC-11), and `stop.code` of a `SystemExit` is `None`, its one argument,
+or the tuple of several (EXC-13). Either may hold any value, so TyPy
+reads them where a program writes, compares or tests them: `print`,
+`str`, `repr`, `bool`, an f-string field, `==` and `!=` with any value, a
+condition, `not`, and `len` of `args` (ADR-0030):
+
+<!-- typy-expect: accepted -->
+```python
+import sys
+
+try:
+    raise ValueError("bad value", 3)
+except ValueError as error:
+    print(error.args, len(error.args), error.args == ("bad value", 3))
+try:
+    sys.exit(2)
+except SystemExit as stop:
+    if stop.code == 2:
+        print(f"exit code {stop.code!r}")
+```
+
+Any other use, such as `error.args[0]` or `saved = error.args`, is
+planned for 0.5 (E0201, EXC-15).
+
 ## Planned
 
-The `args` attribute comes in 0.4 (EXC-11), and so does `code` of a
-`SystemExit` (EXC-13). An `OSError` built with two to five arguments,
+An `OSError` built with two to five arguments,
 which CPython reads as `errno`, `strerror` and `filename`, is planned for
 0.4 too (EXC-14), so `OSError(2, "missing")` is E0201 in 0.3; give it one
 argument, the message. Exception groups and `except*` are planned for

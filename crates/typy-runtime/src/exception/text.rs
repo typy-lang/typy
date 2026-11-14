@@ -139,14 +139,14 @@ pub(crate) fn exit_code(exception: &ExceptionObject) -> ExitCode {
 }
 
 /// The arguments of an exception: their layout and their address.
-struct Arguments {
-    layout: *const crate::tuple::TupleType,
-    address: u64,
+pub(super) struct Arguments {
+    pub(super) layout: *const crate::tuple::TupleType,
+    pub(super) address: u64,
 }
 
 impl Arguments {
     /// Returns the arguments of an exception the program built with at least one argument.
-    fn of(exception: &ExceptionObject) -> Option<Self> {
+    pub(super) fn of(exception: &ExceptionObject) -> Option<Self> {
         if exception.arguments.is_null() {
             return None;
         }
@@ -157,7 +157,7 @@ impl Arguments {
     }
 
     /// Returns the number of arguments.
-    fn count(&self) -> u64 {
+    pub(super) fn count(&self) -> u64 {
         // SAFETY: the descriptor lives as long as the program.
         unsafe { (*self.layout).length }
     }

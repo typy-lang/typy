@@ -29,6 +29,25 @@ impl BodyChecker<'_> {
                     if let Some(debug) = &field.debug {
                         checked.push(FStringPart::Literal(debug.clone()));
                     }
+                    // `args` and `code` are written as text here, `repr` for `!r` and a
+                    // debug field without a format, so no conversion follows.
+                    let repr = field.conversion == Some('r')
+                        || (field.conversion.is_none()
+                            && field.debug.is_some()
+                            && field.spec.is_none());
+                    let written = match field.conversion {
+                        None | Some('s' | 'r') => self.written_part(&field.value, repr),
+                        _ => None,
+                    };
+                    if let Some(value) = written {
+                        let spec = field.spec.as_ref().map(|spec| self.fstring_parts(spec));
+                        checked.push(FStringPart::Field(Box::new(FormattedValue {
+                            value,
+                            conversion: None,
+                            spec,
+                        })));
+                        continue;
+                    }
                     let value = self.expression(&field.value);
                     let conversion = match field.conversion {
                         Some('s') => Some(Conversion::Str),

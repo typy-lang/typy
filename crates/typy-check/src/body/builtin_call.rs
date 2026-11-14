@@ -336,7 +336,10 @@ impl BodyChecker<'_> {
     ) -> TypedExpr {
         let values: Vec<TypedExpr> = arguments
             .iter()
-            .map(|argument| self.expression(argument))
+            .map(|argument| {
+                self.written_part(argument, false)
+                    .unwrap_or_else(|| self.expression(argument))
+            })
             .collect();
         let mut sep = None;
         let mut end = None;

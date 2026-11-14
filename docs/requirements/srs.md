@@ -326,6 +326,7 @@ formatter applies; Ruff's formatter is the project's recommendation.
 | EXC-12 | Calling `UnicodeDecodeError` or `UnicodeEncodeError`, or deriving a class from them, shall be rejected; catching them shall be accepted. | S | 0.3 | |
 | EXC-13 | The `code` attribute of `SystemExit` shall give the argument it was built with, or `None` without one. | S | 0.4 | |
 | EXC-14 | `OSError` and its subclasses built with two to five arguments shall give the subclass for the `errno`, and the attributes `errno`, `strerror` and `filename`, as CPython does. | S | 0.4 | |
+| EXC-15 | `args` of an exception and `code` of a `SystemExit` shall be values of their own: stored, passed, indexed and iterated. | S | 0.5 | |
 
 ### 3.13 Modules and imports (MOD)
 

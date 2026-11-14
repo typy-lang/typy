@@ -167,6 +167,23 @@ impl ItemType {
         }
     }
 
+    /// Returns the value an item holds with the value's type: the item itself for a type that
+    /// is not optional or a union, and `None` for `None` of an optional item.
+    ///
+    /// # Safety
+    ///
+    /// `item` is a live item of this type.
+    pub(crate) unsafe fn held_value(self, item: u64) -> Option<(Self, u64)> {
+        // SAFETY: the caller's guarantee.
+        match unsafe { self.held(item) } {
+            Held::Plain => Some((self, item)),
+            Held::None => None,
+            // A union's member may itself be optional.
+            // SAFETY: the value is a live item of its type.
+            Held::Value(ty, value) => unsafe { ty.held_value(value) },
+        }
+    }
+
     /// Returns the type of tuple items laid out by `tuple`.
     pub(crate) const fn tuple(tuple: *const TupleType) -> Self {
         Self {
@@ -245,8 +262,13 @@ impl ItemType {
                 ItemKind::Object | ItemKind::OptionalObject => {
                     crate::refcount::typy_rt_increment(pointer(item));
                 }
-                ItemKind::Tuple | ItemKind::OptionalTuple | ItemKind::Union => {
-                    crate::tuple::retain(self.tuple, item);
+                ItemKind::Tuple => crate::tuple::retain(self.tuple, item),
+                // Only the value held is live: an optional tuple's pair holds nothing for
+                // `None`, and a union only the slot its tag names.
+                ItemKind::OptionalTuple | ItemKind::Union => {
+                    if let Held::Value(ty, value) = self.held(item) {
+                        ty.retain(value);
+                    }
                 }
                 ItemKind::Float
                 | ItemKind::Bool
@@ -272,8 +294,11 @@ impl ItemType {
                 ItemKind::Object | ItemKind::OptionalObject => {
                     crate::refcount::typy_rt_decrement(pointer(item));
                 }
-                ItemKind::Tuple | ItemKind::OptionalTuple | ItemKind::Union => {
-                    crate::tuple::release(self.tuple, item);
+                ItemKind::Tuple => crate::tuple::release(self.tuple, item),
+                ItemKind::OptionalTuple | ItemKind::Union => {
+                    if let Held::Value(ty, value) = self.held(item) {
+                        ty.release(value);
+                    }
                 }
                 ItemKind::Float
                 | ItemKind::Bool
@@ -557,10 +582,31 @@ unsafe fn object_hash(object: *mut ObjectHeader) -> i64 {
 /// # Safety
 ///
 /// Each is a live value of its type.
-unsafe fn values_equal(left_type: ItemType, left: u64, right_type: ItemType, right: u64) -> bool {
+pub(crate) unsafe fn values_equal(
+    left_type: ItemType,
+    left: u64,
+    right_type: ItemType,
+    right: u64,
+) -> bool {
     if left_type == right_type {
         // SAFETY: the caller's guarantee.
         return unsafe { left_type.equal(left, right) };
+    }
+    // An optional or a union of one type is compared with a value of another as the value it
+    // holds, and `None` as `None`.
+    if left_type.base().is_some()
+        || right_type.base().is_some()
+        || left_type.kind == ItemKind::Union
+        || right_type.kind == ItemKind::Union
+    {
+        // SAFETY: the caller's guarantee.
+        let held = unsafe { (left_type.held_value(left), right_type.held_value(right)) };
+        return match held {
+            (None, None) => true,
+            (None, Some((ty, _))) | (Some((ty, _)), None) => ty.kind == ItemKind::NoneValue,
+            // SAFETY: each is the live value an item holds.
+            (Some((a, l)), Some((b, r))) => unsafe { values_equal(a, l, b, r) },
+        };
     }
     match (left_type.kind, right_type.kind) {
         (ItemKind::Object, ItemKind::Object) => {

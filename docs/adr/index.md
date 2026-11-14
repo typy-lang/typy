@@ -35,3 +35,4 @@ supersedes it.
 | [ADR-0027](0027-hold-a-union-as-its-object-or-as-a-tuple-of-a-tag-and-a-slot-per-member.md) | Hold a union as its object, or as a tuple of a tag and a slot per member | Accepted | 2026-11-13 |
 | [ADR-0028](0028-make-each-copy-of-a-generic-class-answer-as-the-generic-class.md) | Make each copy of a generic class answer as the generic class | Accepted | 2026-11-14 |
 | [ADR-0029](0029-report-cpython-3-15-as-the-python-version-of-a-built-program.md) | Report CPython 3.15 as the Python version of a built program | Accepted | 2026-11-14 |
+| [ADR-0030](0030-read-exception-args-and-exit-codes-where-a-program-uses-them.md) | Read exception args and exit codes where a program uses them | Accepted | 2026-11-14 |

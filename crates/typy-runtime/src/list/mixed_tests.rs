@@ -113,3 +113,25 @@ fn an_int_equals_only_a_whole_finite_float_of_its_value() {
         }
     }
 }
+
+#[test]
+fn an_optional_compares_with_another_type_as_the_value_it_holds() {
+    let optional = ItemType::from(ItemKind::OptionalInt);
+    let none = ItemType::from(ItemKind::NoneValue);
+    let int = ItemType::from(ItemKind::Int);
+    let float = ItemType::from(ItemKind::Float);
+    // SAFETY: each item is a live value of its type; an `int | None` holds 0 for `None`.
+    unsafe {
+        assert!(super::values_equal(optional, 0, none, 0));
+        assert!(super::values_equal(none, 0, optional, 0));
+        assert!(!super::values_equal(optional, word(3), none, 0));
+        assert!(super::values_equal(optional, word(3), int, word(3)));
+        assert!(super::values_equal(
+            float,
+            3.0_f64.to_bits(),
+            optional,
+            word(3)
+        ));
+        assert!(!super::values_equal(optional, 0, int, word(0)));
+    }
+}

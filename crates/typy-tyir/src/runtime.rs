@@ -176,6 +176,10 @@ pub enum RuntimeFunction {
     TypeText,
     TypeName,
     ExceptionNew,
+    ExceptionPartText,
+    ExceptionArgsLength,
+    ExceptionPartTruth,
+    ExceptionPartEqual,
     ExceptionSetCause,
     ExceptionThrow,
     ExceptionHandled,
@@ -338,7 +342,7 @@ const FLOAT_FLOAT: &[TyirType] = &[TyirType::Float, TyirType::Float];
 
 impl RuntimeFunction {
     /// Every runtime function.
-    pub const ALL: [Self; 299] = [
+    pub const ALL: [Self; 303] = [
         Self::IntFloorDivide,
         Self::IntModulo,
         Self::IntPower,
@@ -506,6 +510,10 @@ impl RuntimeFunction {
         Self::TypeText,
         Self::TypeName,
         Self::ExceptionNew,
+        Self::ExceptionPartText,
+        Self::ExceptionArgsLength,
+        Self::ExceptionPartTruth,
+        Self::ExceptionPartEqual,
         Self::ExceptionSetCause,
         Self::ExceptionThrow,
         Self::ExceptionHandled,
@@ -810,6 +818,10 @@ impl RuntimeFunction {
             Self::InstanceText => signature(&[Bits], STR, false),
             Self::TypeText | Self::TypeName => signature(&[TYPE], STR, false),
             Self::ExceptionNew => signature(&[TYPE, Bits, Bits], EXCEPTION, false),
+            Self::ExceptionPartText => signature(&[EXCEPTION, Int, Int], STR, true),
+            Self::ExceptionArgsLength => signature(&[EXCEPTION], Int, false),
+            Self::ExceptionPartTruth => signature(&[EXCEPTION, Int], Bool, false),
+            Self::ExceptionPartEqual => signature(&[EXCEPTION, Int, Bits, Bits], Bool, false),
             Self::ExceptionSetCause => signature(&[EXCEPTION, Bits], Unit, false),
             Self::ExceptionThrow => signature(&[EXCEPTION], Unit, true),
             Self::ExceptionHandled => signature(&[], EXCEPTION, false),
@@ -1118,6 +1130,10 @@ impl RuntimeFunction {
             Self::TypeText => "type_text",
             Self::TypeName => "type_name",
             Self::ExceptionNew => "exception_new",
+            Self::ExceptionPartText => "exception_part_text",
+            Self::ExceptionArgsLength => "exception_args_length",
+            Self::ExceptionPartTruth => "exception_part_truth",
+            Self::ExceptionPartEqual => "exception_part_equal",
             Self::ExceptionSetCause => "exception_set_cause",
             Self::ExceptionThrow => "exception_throw",
             Self::ExceptionHandled => "exception_handled",

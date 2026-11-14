@@ -358,6 +358,7 @@ impl Dump<'_> {
         }
     }
 
+    #[allow(clippy::too_many_lines, reason = "one arm per expression kind")]
     fn expression(&mut self, depth: usize, expression: &TypedExpr) {
         let ty = &expression.ty;
         let label = match &expression.kind {
@@ -378,6 +379,7 @@ impl Dump<'_> {
             TypedExprKind::SysValue(value) => format!("SysValue {value:?}"),
             TypedExprKind::SysExit(_) => "SysExit".to_owned(),
             TypedExprKind::RecursionLimit(_) => "RecursionLimit".to_owned(),
+            TypedExprKind::ExceptionPart { part, .. } => format!("ExceptionPart({part:?})"),
             TypedExprKind::Input(_) => "Input".to_owned(),
             TypedExprKind::Open { mode, access, .. } => format!("Open {mode:?} {access:?}"),
             TypedExprKind::PercentFormat { parts, .. } => {

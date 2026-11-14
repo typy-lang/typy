@@ -17,6 +17,7 @@ mod generic_call;
 mod generic_copy;
 pub use each_member::member_class;
 mod exception;
+mod exception_part;
 mod expression;
 mod flow;
 mod fstring;

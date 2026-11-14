@@ -91,6 +91,8 @@ impl RuleId {
     pub const EXC_12: Self = Self("EXC-12");
     /// `OSError` and its subclasses built with two to five arguments shall give the subclass for the `errno`, and the attributes `errno`, `strerror` and `filename`, as CPython does.
     pub const EXC_14: Self = Self("EXC-14");
+    /// `args` of an exception and `code` of a `SystemExit` shall be values of their own: stored, passed, indexed and iterated.
+    pub const EXC_15: Self = Self("EXC-15");
     /// `+`, `-`, `*`, `/`, `//`, `%` and `**` shall give Python's results for `int` and `float`, including `/` on two `int` values returning `float` and `%` taking the sign of the divisor.
     pub const EXP_02: Self = Self("EXP-02");
     /// `int ** int` shall be accepted only when the exponent is a non-negative integer literal, because CPython returns `float` for a negative exponent.
@@ -305,6 +307,7 @@ impl RuleId {
         Self::EXC_09,
         Self::EXC_12,
         Self::EXC_14,
+        Self::EXC_15,
         Self::EXP_02,
         Self::EXP_04,
         Self::EXP_06,

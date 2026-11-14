@@ -4,6 +4,7 @@
 pub(crate) mod classes;
 mod handled;
 mod kind;
+mod part;
 mod report;
 mod text;
 mod traceback;

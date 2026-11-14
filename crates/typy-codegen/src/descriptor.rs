@@ -61,8 +61,11 @@ pub(crate) fn tuple_descriptor<'ctx>(
     let field_type = context.struct_type(&[half.into(), half.into(), pointer.into()], false);
     let mut fields = Vec::with_capacity(items.len());
     for (index, item) in items.iter().enumerate() {
+        // An optional tuple is read through its pair of a flag and the tuple.
         let nested = match item {
-            TyirType::Tuple(inner) => tuple_descriptor(shared, *inner)?,
+            TyirType::Tuple(inner) | TyirType::Optional(typy_tyir::OptionalBase::Tuple(inner)) => {
+                tuple_descriptor(shared, *inner)?
+            }
             _ => pointer.const_null(),
         };
         let offset = tuple_field(&items, index)

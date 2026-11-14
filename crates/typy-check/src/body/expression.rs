@@ -19,6 +19,9 @@ impl BodyChecker<'_> {
         if let Some(folded) = self.version_info_use(expression) {
             return folded;
         }
+        if let Some(part) = self.exception_part_use(expression) {
+            return part;
+        }
         match expression {
             Expr::Constant { value, .. } => {
                 let constant = match value {
@@ -386,6 +389,9 @@ impl BodyChecker<'_> {
     }
 
     pub(super) fn truth_test(&mut self, test: &Expr) -> TypedExpr {
+        if let Some(truth) = self.tested_part(test) {
+            return truth;
+        }
         let test = self.expression(test);
         self.check_truth(&test);
         test

@@ -15,8 +15,8 @@ pub use class::{Attribute, ClassId, TypedClass};
 pub use constant::TypedConstant;
 pub use dump::dump;
 pub use expression::{
-    Argument, Conversion, EachMember, FStringPart, FormattedValue, InitCall, IsInstanceTest,
-    OperatorCall, PrintCall, TypedExpr, TypedExprKind,
+    Argument, Conversion, EachMember, ExceptionPart, FStringPart, FormattedValue, InitCall,
+    IsInstanceTest, OperatorCall, PartOperation, PrintCall, TypedExpr, TypedExprKind,
 };
 pub use function::{FunctionId, TypedFunction};
 pub use percent::{PercentConversion, PercentField, PercentNumber, PercentPart, PercentValue};

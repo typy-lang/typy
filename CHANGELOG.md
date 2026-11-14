@@ -88,6 +88,10 @@ All notable changes to TyPy are recorded here. The format follows
   class methods or class variables is planned for 0.5 (GEN-04, GEN-05,
   GEN-10, ADR-0023).
 - `...` alone as a statement does nothing, as `pass` does.
+- `args` of an exception and `code` of a `SystemExit`, where a program
+  prints, formats, compares with `==` or `!=`, or tests them, and
+  `len(error.args)`. Other uses, such as `error.args[0]`, are planned for
+  0.5 (EXC-11, EXC-13, EXC-15, ADR-0030).
 - `sys.stdin`, a text file that `input()` reads too, and `sys.maxsize`,
   `sys.maxunicode`, `sys.byteorder`, `sys.platform`,
   `sys.getrecursionlimit` and `sys.setrecursionlimit`. The recursion
