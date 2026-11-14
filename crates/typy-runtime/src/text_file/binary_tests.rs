@@ -253,3 +253,141 @@ fn a_file_io_reads_and_writes_the_descriptor_at_once() {
     assert_eq!(truncate(file, Some(1)), Ok(1));
     release(file);
 }
+
+/// Returns the lines a `for` loop gives from `file`, or the class and text of its error.
+fn loop_lines(file: *mut TextFile) -> Result<Vec<Vec<u8>>, (String, String)> {
+    let mut lines = Vec::new();
+    loop {
+        // SAFETY: the file is live.
+        match unsafe { super::loop_line(file) } {
+            Ok(Some(line)) => lines.push(bytes_of(crate::Raising::ok(line))?),
+            Ok(None) => return Ok(lines),
+            Err(error) => return Err(error_text(error)),
+        }
+    }
+}
+
+#[test]
+#[cfg_attr(miri, ignore = "Miri does not open files without disabling isolation")]
+fn a_for_loop_over_a_binary_file_gives_its_lines_as_bytes() {
+    let scratch = Scratch::new("binary-loop");
+    std::fs::write(scratch.0.join("l.bin"), b"ab\ncd").unwrap();
+    for form in [BINARY, BINARY | RAW] {
+        let file = scratch.open("l.bin", "rb", form).unwrap();
+        assert_eq!(
+            loop_lines(file),
+            Ok(vec![b"ab\n".to_vec(), b"cd".to_vec()]),
+            "{form}"
+        );
+        release(file);
+    }
+    let refused = [
+        (BINARY, "ioUnsupportedOperation", "read"),
+        (
+            BINARY | RAW,
+            "ioUnsupportedOperation",
+            "File not open for reading",
+        ),
+    ];
+    for (form, class, text) in refused {
+        let file = scratch.open("l.bin", "wb", 1 | form).unwrap();
+        assert_eq!(
+            loop_lines(file),
+            Err((class.to_owned(), text.to_owned())),
+            "{form}"
+        );
+        release(file);
+    }
+}
+
+#[test]
+#[cfg_attr(miri, ignore = "Miri does not open files without disabling isolation")]
+fn a_seek_past_a_c_int_or_an_offset_raises_as_cpythons_class_does() {
+    let scratch = Scratch::new("binary-seek-large");
+    std::fs::write(scratch.0.join("s.bin"), b"ab").unwrap();
+    let large = |value: i128| crate::int::value::Integer::from_i128(value).into_word();
+    let c_int = ("OverflowError", "Python int too large to convert to C int");
+    let cases = [
+        (BINARY, 0, 1 << 40, c_int),
+        (
+            BINARY,
+            1 << 70,
+            0,
+            (
+                "ValueError",
+                "cannot fit 'int' into an offset-sized integer",
+            ),
+        ),
+        (BINARY | RAW, 0, 1 << 40, c_int),
+        (
+            BINARY | RAW,
+            1 << 70,
+            0,
+            ("OverflowError", "Python int too large to convert to C long"),
+        ),
+    ];
+    for (form, offset, whence, (class, text)) in cases {
+        let file = scratch.open("s.bin", "rb", form).unwrap();
+        let (offset, whence) = (large(offset), large(whence));
+        // SAFETY: the file and the words are live; each is released once.
+        unsafe {
+            let moved = number(typy_rt_text_seek(file, offset, whence));
+            assert_eq!(moved, error(class, text), "{form}");
+            for value in [offset, whence] {
+                if !crate::word::is_inline(value) {
+                    typy_rt_decrement(crate::int::object_of(value).cast());
+                }
+            }
+        }
+        release(file);
+    }
+}
+
+#[test]
+#[cfg_attr(miri, ignore = "Miri does not open files without disabling isolation")]
+fn a_write_the_device_refuses_fails_the_next_operation_that_writes_it_out() {
+    let scratch = Scratch::new("binary-full");
+    let full = (
+        "OSError".to_owned(),
+        "[Errno 28] No space left on device".to_owned(),
+    );
+    // Joining an absolute path gives that path.
+    let file = scratch.open("/dev/full", "rb+", PLUS | BINARY).unwrap();
+    assert_eq!(write(file, b"x"), Ok(1));
+    assert_eq!(read(file, 1), Err(full.clone()));
+    assert_eq!(write(file, b"x"), Ok(1));
+    assert_eq!(seek(file, 0, 0), Err(full.clone()));
+    assert_eq!(write(file, b"x"), Ok(1));
+    assert_eq!(truncate(file, None), Err(full.clone()));
+    assert_eq!(write(file, b"x"), Ok(1));
+    // SAFETY: the file is live.
+    unsafe { assert_eq!(error_text(typy_rt_text_close(file)), full) };
+    release(file);
+}
+
+#[test]
+fn standard_output_given_as_null_is_not_binary() {
+    // SAFETY: a null file stands for standard output.
+    assert!(!unsafe { super::binary::is_binary(core::ptr::null()) });
+}
+
+#[test]
+#[cfg_attr(miri, ignore = "Miri does not open files without disabling isolation")]
+fn a_closed_file_io_refuses_to_say_whether_it_writes() {
+    let scratch = Scratch::new("binary-raw-state");
+    std::fs::write(scratch.0.join("s.bin"), b"").unwrap();
+    let file = scratch.open("s.bin", "rb", BINARY | RAW).unwrap();
+    // SAFETY: the file is live.
+    unsafe {
+        assert!(typy_rt_text_close(file).is_null());
+        let writable = super::state::typy_rt_text_state(file, size(2));
+        assert_eq!(
+            error_text(writable.exception),
+            (
+                "ValueError".to_owned(),
+                "I/O operation on closed file".to_owned()
+            )
+        );
+    }
+    release(file);
+}

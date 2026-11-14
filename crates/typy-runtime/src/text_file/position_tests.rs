@@ -410,3 +410,91 @@ fn a_plus_file_writes_where_its_reader_stopped_and_reads_after_writing_out() {
     let written = std::fs::read(scratch.0.join("p.txt")).unwrap();
     assert_eq!(written, b"YYcdef\nX");
 }
+
+/// Returns a file over the write end of a new pipe, opened with `closefd=False`, and the pipe.
+fn pipe_file() -> (*mut TextFile, std::io::PipeReader, std::io::PipeWriter) {
+    let (reading, writing) = std::io::pipe().unwrap();
+    let descriptor = std::os::fd::AsRawFd::as_raw_fd(&writing);
+    let mode = from_str("w");
+    // SAFETY: the mode is live and released once; the file keeps a reference of its own.
+    unsafe {
+        let opened = super::disk::typy_rt_open_descriptor(
+            size(i64::from(descriptor)),
+            mode,
+            size(1 | 1 << 11),
+            size(-1),
+            core::ptr::null(),
+            core::ptr::null(),
+        );
+        typy_rt_decrement(mode.cast());
+        assert!(opened.exception.is_null());
+        (opened.value, reading, writing)
+    }
+}
+
+#[test]
+#[cfg_attr(miri, ignore = "Miri does not open files without disabling isolation")]
+fn a_pipe_cannot_tell_or_seek() {
+    let (file, _reading, _writing) = pipe_file();
+    let refused = Err(error(
+        "ioUnsupportedOperation",
+        "underlying stream is not seekable",
+    ));
+    assert_eq!(tell(file), refused);
+    assert_eq!(seek(file, 0, 0), refused);
+    // SAFETY: the file is live and released once.
+    unsafe { typy_rt_decrement(file.cast()) };
+}
+
+#[test]
+#[cfg_attr(miri, ignore = "Miri does not open files without disabling isolation")]
+fn a_negative_position_too_long_to_show_raises_the_digit_limit() {
+    let scratch = Scratch::new("seek-digits");
+    let file = scratch.open("d.txt", "w", 1).unwrap();
+    // 300 limbs hold more than 4300 decimal digits.
+    let cookie = crate::int::value::Integer {
+        negative: true,
+        magnitude: crate::int::limbs::Limbs::from_slice(&[1; 300]),
+    }
+    .into_word();
+    // SAFETY: the file and the word are live; each is released once.
+    unsafe {
+        let moved = typy_rt_text_seek(file, cookie, size(0));
+        assert_eq!(
+            error_text(moved.exception),
+            error(
+                "ValueError",
+                "Exceeds the limit (4300 digits) for integer string conversion; use \
+                 sys.set_int_max_str_digits() to increase the limit"
+            )
+        );
+        typy_rt_decrement(crate::int::object_of(cookie).cast());
+        typy_rt_decrement(file.cast());
+    }
+}
+
+#[test]
+#[cfg_attr(miri, ignore = "Miri does not open files without disabling isolation")]
+fn a_write_the_device_refuses_fails_the_next_operation_that_writes_it_out() {
+    let scratch = Scratch::new("full-text");
+    let full = error("OSError", "[Errno 28] No space left on device");
+    // Joining an absolute path gives that path.
+    let file = scratch.open("/dev/full", "w+", 1 | 4).unwrap();
+    write(file, "x");
+    assert_eq!(tell(file), Err(full.clone()));
+    write(file, "x");
+    assert_eq!(seek(file, 0, 0), Err(full.clone()));
+    write(file, "x");
+    assert_eq!(truncate(file, None), Err(full.clone()));
+    write(file, "x");
+    // SAFETY: the file is live and released once.
+    unsafe {
+        assert_eq!(
+            error_text(typy_rt_text_read(file, size(-1)).exception),
+            full
+        );
+        write(file, "x");
+        assert_eq!(error_text(typy_rt_text_close(file)), full);
+        typy_rt_decrement(file.cast());
+    }
+}

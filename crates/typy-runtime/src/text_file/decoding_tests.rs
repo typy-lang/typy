@@ -208,6 +208,14 @@ fn a_size_that_cuts_an_escape_leaves_the_rest_for_the_next_read() {
     let calls = [(Some(3), false), (Some(2), false), (None, false)];
     let found = reads(escaping, &[b"a\xffb"], &calls);
     assert_eq!(found, Ok(texts(&["a\\x", "ff", "b"])));
+    let calls = [
+        (Some(2), false),
+        (Some(1), false),
+        (Some(1), false),
+        (None, false),
+    ];
+    let found = reads(escaping, &[b"a\xffb"], &calls);
+    assert_eq!(found, Ok(texts(&["a\\", "x", "f", "fb"])));
     let mut reader = Box::new(Reader::with(escaping));
     let mut source = source_of(&[b"\xff"], None);
     assert_eq!(
@@ -559,4 +567,99 @@ fn a_directory_descriptor_and_closefd_with_a_path_are_refused() {
         typy_rt_decrement(mode.cast());
     }
     assert!(!scratch.0.join("p.txt").exists());
+}
+
+#[test]
+#[cfg_attr(miri, ignore = "Miri does not open files without disabling isolation")]
+fn a_mode_value_of_x_creates_a_file_that_is_new() {
+    let scratch = Scratch::new("mode-value-x");
+    let shown = opened_with_mode(&scratch, "x").unwrap();
+    assert!(shown.ends_with("mode='x' encoding='utf-8'>"), "{shown}");
+    let path = scratch.0.join("m.txt").display().to_string();
+    assert_eq!(
+        opened_with_mode(&scratch, "x"),
+        Err((
+            "FileExistsError".to_owned(),
+            format!("[Errno 17] File exists: '{path}'")
+        ))
+    );
+}
+
+/// Returns `open(fd, mode, buffering, closefd=False)` with the access and form bits of `how`,
+/// or the class and text of its error.
+fn opened_keeping(
+    descriptor: i32,
+    mode: &str,
+    how: i64,
+    buffering: i64,
+) -> Result<*mut super::TextFile, (String, String)> {
+    let mode = from_str(mode);
+    // SAFETY: the mode is live and released once; the file keeps a reference of its own.
+    unsafe {
+        let opened = super::disk::typy_rt_open_descriptor(
+            size(i64::from(descriptor)),
+            mode,
+            size(how | 1 << 11),
+            size(buffering),
+            core::ptr::null(),
+            core::ptr::null(),
+        );
+        typy_rt_decrement(mode.cast());
+        if opened.exception.is_null() {
+            Ok(opened.value)
+        } else {
+            Err(error_text(opened.exception))
+        }
+    }
+}
+
+#[test]
+#[cfg_attr(miri, ignore = "Miri does not open files without disabling isolation")]
+fn closefd_false_keeps_the_descriptor_when_unbuffered_text_is_refused() {
+    let (mut reading, writing) = std::io::pipe().unwrap();
+    let descriptor = std::os::fd::AsRawFd::as_raw_fd(&writing);
+    assert_eq!(
+        opened_keeping(descriptor, "w", 1, 0).map(|_| ()),
+        Err((
+            "ValueError".to_owned(),
+            "can't have unbuffered text I/O".to_owned()
+        ))
+    );
+    assert_eq!(crate::libc::write_retrying(descriptor, b"still"), Ok(()));
+    let mut found = [0; 5];
+    std::io::Read::read_exact(&mut reading, &mut found).unwrap();
+    assert_eq!(&found, b"still");
+}
+
+#[test]
+#[cfg_attr(miri, ignore = "Miri does not open files without disabling isolation")]
+fn a_file_io_with_closefd_false_shows_it() {
+    let (reading, _writing) = std::io::pipe().unwrap();
+    let descriptor = std::os::fd::AsRawFd::as_raw_fd(&reading);
+    let file = opened_keeping(descriptor, "rb", 1 << 8 | 1 << 9, -1).unwrap();
+    assert_eq!(
+        super::tests::repr_of(file),
+        format!("<_io.FileIO name={descriptor} mode='rb' closefd=False>")
+    );
+    // SAFETY: the file is live and released once.
+    unsafe {
+        assert!(typy_rt_text_close(file).is_null());
+        typy_rt_decrement(file.cast());
+    }
+    assert!(crate::libc::directory_status(descriptor).is_ok());
+}
+
+#[test]
+fn a_binary_line_stops_at_an_error_of_reading() {
+    let latin = decoding(Codec::Latin1, Handler::Strict, Newline::Lf);
+    let mut reader = Box::new(Reader::with(latin));
+    let mut source = source_of(&[b"ab"], Some(5));
+    let error = reader.read_bytes(None, true, &mut source).unwrap_err();
+    assert_eq!(
+        error_text(error),
+        (
+            "OSError".to_owned(),
+            "[Errno 5] Input/output error".to_owned()
+        )
+    );
 }

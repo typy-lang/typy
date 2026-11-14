@@ -63,6 +63,10 @@ fn the_standard_files_show_as_cpython_shows_them() {
         repr_of(typy_rt_sys_stderr()),
         "<_io.TextIOWrapper name='<stderr>' mode='w' encoding='utf-8'>"
     );
+    assert_eq!(
+        repr_of(&raw const super::stdin::STDIN),
+        "<_io.TextIOWrapper name='<stdin>' mode='r' encoding='utf-8'>"
+    );
     assert_eq!(TEXT_FILE.name(), "TextIOWrapper");
 }
 
@@ -759,5 +763,59 @@ fn files_close_in_any_order_and_the_rest_close_at_the_end() {
         for object in [first.cast(), middle.cast(), last.cast(), text.cast()] {
             typy_rt_decrement(object);
         }
+    }
+}
+
+#[test]
+fn standard_input_refuses_writing() {
+    let stdin = (&raw const super::stdin::STDIN).cast_mut();
+    let text = from_str("x");
+    // SAFETY: standard input and the text are live; the text is released once.
+    unsafe {
+        assert_eq!(
+            error_text(typy_rt_text_write(stdin, text).exception),
+            (
+                "ioUnsupportedOperation".to_owned(),
+                "not writable".to_owned()
+            )
+        );
+        typy_rt_decrement(text.cast());
+    }
+}
+
+#[test]
+#[cfg_attr(miri, ignore = "Miri does not read standard input")]
+fn standard_input_at_its_end_reads_nothing_and_ends_a_loop() {
+    // The test runner gives each test an empty standard input.
+    let stdin = (&raw const super::stdin::STDIN).cast_mut();
+    // SAFETY: standard input is live; each result is released once.
+    unsafe {
+        assert_eq!(take(typy_rt_text_readline(stdin, size(-1)).value), "");
+        assert_eq!(take(typy_rt_text_read(stdin, size(-1)).value), "");
+        assert!(super::loop_line(stdin).unwrap().is_none());
+        let lines = typy_rt_text_readlines(stdin).value;
+        assert_eq!((*lines).length, 0);
+        typy_rt_decrement(lines.cast());
+    }
+}
+
+#[test]
+#[cfg_attr(miri, ignore = "Miri does not open files without disabling isolation")]
+fn a_closed_file_refuses_a_write_given_to_it_directly() {
+    let scratch = Scratch::new("closed-write");
+    let file = scratch.open("c.txt", "w", 1).unwrap();
+    let text = from_str("x");
+    // SAFETY: the file and the text are live; each is released once.
+    unsafe {
+        assert!(typy_rt_text_close(file).is_null());
+        assert_eq!(
+            error_text(super::disk::write(&mut *file, text)),
+            (
+                "ValueError".to_owned(),
+                "I/O operation on closed file.".to_owned()
+            )
+        );
+        typy_rt_decrement(text.cast());
+        typy_rt_decrement(file.cast());
     }
 }

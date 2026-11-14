@@ -233,3 +233,72 @@ fn the_recursion_limit_keeps_a_c_int_of_at_least_one() {
         );
     }
 }
+
+#[test]
+#[cfg_attr(miri, ignore = "Miri does not read standard input")]
+fn input_at_the_end_of_standard_input_raises_eof_error() {
+    // The test runner gives each test an empty standard input.
+    let prompt = from_str("name? ");
+    for given in [core::ptr::null(), prompt.cast_const()] {
+        // SAFETY: the prompt is null or live.
+        let read = unsafe { super::typy_rt_input(given) };
+        assert!(read.value.is_null());
+        // SAFETY: the exception is live and owned here.
+        unsafe {
+            let error = read.exception;
+            assert_eq!((*error).class().name(), "EOFError");
+            let text: String = points((*error).message)
+                .into_iter()
+                .filter_map(char::from_u32)
+                .collect();
+            assert_eq!(text, "EOF when reading a line");
+            typy_rt_decrement(error.cast());
+        }
+    }
+    // SAFETY: the prompt is owned here.
+    unsafe { typy_rt_decrement(prompt.cast()) };
+}
+
+unsafe extern "C" fn failing_str(
+    _: *mut crate::header::ObjectHeader,
+) -> crate::Raising<*mut StrObject> {
+    crate::Raising::error(
+        core::ptr::null_mut(),
+        raise(ExceptionKind::RuntimeError, "no text"),
+    )
+}
+
+/// A subclass of `SystemExit` whose `str` raises.
+static SILENT_EXIT: TypeObject = TypeObject {
+    str: Some(failing_str),
+    ..TypeObject::new("SilentExit", &raw const SYSTEM_EXIT)
+};
+
+#[test]
+fn system_exit_whose_value_has_no_text_ends_with_one() {
+    let exception = with_argument(
+        &SILENT_EXIT,
+        ItemKind::Object,
+        from_str("bye").expose_provenance() as u64,
+    );
+    // SAFETY: the exception is live and owned here.
+    unsafe {
+        assert_eq!(exit_status(exception), (1, false));
+        typy_rt_decrement(exception.cast());
+    }
+}
+
+#[test]
+fn system_exit_with_another_value_ends_with_one_once_standard_error_is_closed() {
+    crate::io::close_standard(crate::libc::STDERR);
+    let exception = with_argument(
+        &SYSTEM_EXIT,
+        ItemKind::Object,
+        from_str("bye").expose_provenance() as u64,
+    );
+    // SAFETY: the exception is live and owned here.
+    unsafe {
+        assert_eq!(exit_status(exception), (1, false));
+        typy_rt_decrement(exception.cast());
+    }
+}

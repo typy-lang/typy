@@ -97,6 +97,10 @@ fn calls_that_give_no_fitting_type_are_refused() {
             "E0201",
         ),
         (
+            "class C:\n    def __eq__[T](self, other: T) -> bool:\n        return True\n",
+            "E0201",
+        ),
+        (
             "class C:\n    def m[T](self, x: T) -> T:\n        return x\nprint(C().m())\n",
             "E0404",
         ),

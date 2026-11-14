@@ -947,6 +947,8 @@ fn list_rules_give_their_codes() {
         ("x = [1]\nx.append(item=2)\n", &["E0404"]),
         ("x = [1]\nx.append()\n", &["E0404"]),
         ("x = 'a'.format()\n", &["E0412"]),
+        ("x = [1]\ny = x.copy(1)\n", &["E0404"]),
+        ("x = 'ab'.fromkeys(['a'])\n", &["E0412"]),
         ("print(1 in 2)\n", &["E0407"]),
         ("def f(x: list) -> None:\n    pass\n", &["E0408"]),
     ];
@@ -1255,6 +1257,7 @@ fn str_method_arguments_bind_by_position_and_name() {
         ("x = 'a'.split(',', 1, 2)\n", &["E0404"]),
         ("x = 'a'.split(sep=',', sep=',')\n", &["E0103"]),
         ("x = 'a'.split(separator=',')\n", &["E0404"]),
+        ("x = 'a'.split(',', sep=',')\n", &["E0404"]),
         ("x = 'a'.find(sub='a')\n", &["E0404"]),
         ("x = 'a'.find()\n", &["E0404"]),
         ("x = 'a'.find('a', 1.5)\n", &["E0404"]),
@@ -1262,6 +1265,8 @@ fn str_method_arguments_bind_by_position_and_name() {
         ("x = 'a'.startswith(('a', 1))\n", &["E0404"]),
         ("x = ','.join([1, 2])\n", &["E0404"]),
         ("x = ','.join(5)\n", &["E0411"]),
+        // An item whose type is already an error gives no second report.
+        ("x = ','.join([missing])\n", &["E0205"]),
         ("x = 'a'.strip(**{})\n", &["E0201"]),
         ("x = 'a'.format()\n", &["E0412"]),
         ("x = 'a'.center(5, fillchar='*')\n", &["E0404"]),

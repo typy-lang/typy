@@ -133,7 +133,7 @@ mod tests {
         assert_eq!(parsed("\n"), Ok(Newline::Lf));
         assert_eq!(parsed("\r"), Ok(Newline::Cr));
         assert_eq!(parsed("\r\n"), Ok(Newline::CrLf));
-        for bad in ["x", "\n\r", "\n\n", "\r\n\r", "abcd"] {
+        for bad in ["x", "\n\r", "\n\n", "\rx", "\r\n\r", "abcd"] {
             assert_eq!(parsed(bad), Err(format!("illegal newline value: {bad}")));
         }
     }

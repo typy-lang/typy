@@ -178,3 +178,23 @@ fn class_bodies_and_methods_out_of_reach_give_their_codes() {
         ),
     ]);
 }
+
+#[test]
+fn class_statements_typy_cannot_compile_are_refused() {
+    refused(&[
+        // An assignment to several names in the class body.
+        ("class A:\n    a, b = 1, 2\nprint(A.a)\n", "E0202"),
+        // An `__init__` without the instance, which CPython defines and cannot call.
+        (
+            "class A:\n    def __init__() -> None:\n        pass\nprint(1)\n",
+            "E0404",
+        ),
+        // `Final` on an attribute of another object than the instance.
+        (
+            "from typing import Final\n\
+             class B:\n    def __init__(self) -> None:\n        self.v: int = 0\n\
+             class A:\n    def __init__(self, b: B) -> None:\n        b.v: Final[int] = 1\n",
+            "E0408",
+        ),
+    ]);
+}
