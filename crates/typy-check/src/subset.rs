@@ -31,6 +31,18 @@ pub(crate) fn check(tree: &SyntaxTree) -> Diagnostics {
                 _ => None,
             })
             .collect(),
+        generic_aliases: tree
+            .body
+            .iter()
+            .filter_map(|statement| match statement {
+                typy_source::syntax::Stmt::TypeAlias {
+                    name,
+                    type_parameters,
+                    ..
+                } if !type_parameters.is_empty() => Some(name.name.clone()),
+                _ => None,
+            })
+            .collect(),
     };
     walker.statements(&tree.body, Place::ModuleTop);
     walker.diagnostics
@@ -55,6 +67,9 @@ struct Walker {
     scope: Option<global_scope::GlobalScope>,
     /// The module's generic classes, whose names an annotation may subscript (GEN-01).
     generic_classes: std::collections::BTreeSet<String>,
+    /// The module's generic type aliases, which an annotation of an alias's value may
+    /// subscript before the checker expands it (SMT-10).
+    generic_aliases: std::collections::BTreeSet<String>,
 }
 
 impl Walker {

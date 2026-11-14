@@ -259,10 +259,17 @@ impl Walker {
                         ),
                     );
                 }
-                if !type_parameters.is_empty() {
+                self.type_parameters(type_parameters);
+                // An alias is expanded before types are known, so nothing could check a
+                // bound.
+                for parameter in type_parameters.iter().filter(|each| each.bound.is_some()) {
                     self.report(
-                        *span,
-                        planned("type parameters of aliases", "0.4", RuleId::GEN_01),
+                        parameter.span,
+                        planned(
+                            "bounds and constraints of a type alias's parameters",
+                            "0.5",
+                            RuleId::SMT_12,
+                        ),
                     );
                 }
                 self.annotation(value);

@@ -213,10 +213,31 @@ An alias that names itself, such as `type Tree = list[Tree]`, is E0201;
 a recursive type is planned for after 1.0. An alias defined twice, E0414,
 and one whose name the module also gives a class, a function or a
 variable, E0202, are refused, since an annotation would read one meaning
-of the name. Type parameters, `type Pair[T] = tuple[T, T]`, come with
-generics later in 0.4 (GEN-01). An alias of another module, an alias read
-as a value, which CPython gives as a `TypeAliasType`, and `type` inside a
-function, a class or a block are planned for 0.5 (SMT-12).
+of the name.
+
+An alias may take type parameters. `Pair[int]` stands for the value with
+`int` in place of `T`, and a type parameter of a generic function or
+class may be the argument:
+
+<!-- typy-expect: accepted -->
+```python
+type Pair[T] = tuple[T, T]
+type Table[K, V] = dict[K, list[V]]
+
+
+def swap[T](pair: Pair[T]) -> Pair[T]:
+    return (pair[1], pair[0])
+
+
+counts: Table[str, int] = {"a": [1, 2]}
+print(swap((1, 2)), swap(("x", "y")), counts)
+```
+
+A generic alias named without one type argument for each parameter, such
+as `Pair` or `Pair[int, int]`, is E0408. An alias of another module, an
+alias read as a value, which CPython gives as a `TypeAliasType`, `type`
+inside a function, a class or a block, and a bound or constraints on an
+alias's type parameter are planned for 0.5 (SMT-12).
 
 ## Example
 

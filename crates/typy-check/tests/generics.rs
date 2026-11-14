@@ -100,7 +100,6 @@ fn calls_that_give_no_fitting_type_are_refused() {
             "class C:\n    def m[T](self, x: T) -> T:\n        return x\nprint(C().m())\n",
             "E0404",
         ),
-        ("type Pair[T] = tuple[T, T]\n", "E0201"),
     ];
     for (source, code) in cases {
         let found = app(source);

@@ -171,11 +171,13 @@ be overridden, E0201 (GEN-09).
 ## Refused and planned
 
 `TypeVar` and `Generic` from `typing` are E0202: a type parameter list
-replaces them (GEN-01). Generic type aliases and protocols come later in
-0.4. Type parameters of a method of a generic class, of a special
-method, a property or a class method, and of a method that overrides or
-is overridden are planned for 0.5 (GEN-09). A generic class with a base, a class
-derived from a generic class, and class variables and defaults of a
-generic class are planned for 0.5 (GEN-08), as is using a generic
-function or class of another module (GEN-07); `*Ts`, `**P` and defaults
-of type parameters are planned for 1.0 (GEN-06).
+replaces them (GEN-01). Protocols come later in 0.4. A generic type
+alias, `type Pair[T] = tuple[T, T]`, is described with the other [type
+aliases](types.md#type-aliases). Type parameters of a method of a
+generic class, of a special method, a property or a class method, and of
+a method that overrides or is overridden are planned for 0.5 (GEN-09). A
+generic class with a base, a class derived from a generic class, and
+class variables and defaults of a generic class are planned for 0.5
+(GEN-08), as is using a generic function or class of another module
+(GEN-07); `*Ts`, `**P` and defaults of type parameters are planned for
+1.0 (GEN-06).

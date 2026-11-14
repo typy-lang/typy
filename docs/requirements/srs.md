@@ -245,7 +245,7 @@ formatter applies; Ruff's formatter is the project's recommendation.
 | SMT-09 | `nonlocal` shall be accepted in nested functions. | M | 1.0 | 7.13 |
 | SMT-10 | The `type` statement shall define a type alias, with or without type parameters. | M | 0.4 | 7.14 |
 | SMT-11 | `yield` shall be accepted in generator functions. | M | 1.0 | 7.7 |
-| SMT-12 | A type alias shall be usable from another module, readable as a value as CPython's `TypeAliasType`, and definable inside a function, a class or a block. | S | 0.5 | 7.14 |
+| SMT-12 | A type alias shall be usable from another module, readable as a value as CPython's `TypeAliasType`, definable inside a function, a class or a block, and given type parameters with a bound or constraints. | S | 0.5 | 7.14 |
 
 ### 3.8 Compound statements (CST)
 
