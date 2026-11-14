@@ -185,6 +185,8 @@ All notable changes to TyPy are recorded here. The format follows
 
 ### Changed
 
+- Allocation on the stack is planned for 0.5 (MEM-03), with the benchmarks
+  that measure what it gains.
 - A class decorator other than `@dataclass` is planned for 1.0 with the
   other user-defined decorators (FUN-06), not for 0.4.
 - `open(..., encoding="csutf8")` is E0404, as for `str.encode`: CPython

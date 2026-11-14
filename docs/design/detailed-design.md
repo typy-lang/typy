@@ -1581,7 +1581,7 @@ is a pointer to a `BigInt` (ADR-0001, DAT-01). `Str` values are
 `ValueInfo` holds a value's `ty: TyirType` and its
 `representation: ValueRepresentation`: `Inline`, `Stack` or `Heap`. In 0.1
 `Int`, `Float`, `Bool` and `Unit` are `Inline` and objects are `Heap`;
-`Stack` is chosen by escape analysis from 0.4 (MEM-03).
+`Stack` is chosen by escape analysis from 0.5 (MEM-03).
 
 A function's locals are `Slot`s, stack variables read with `load` and
 written with `store`, as LLVM's `alloca` is. LLVM's `mem2reg` pass turns

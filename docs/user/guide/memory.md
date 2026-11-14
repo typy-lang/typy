@@ -31,7 +31,7 @@ def table(count: int) -> list[list[str]]:
 print(table(3))
 ```
 
-Allocation on the stack comes in 0.4 (MEM-03), and the collection of reference
+Allocation on the stack comes in 0.5 (MEM-03), and the collection of reference
 cycles in 1.0 (MEM-06). Until then, objects that refer to each other in a
 cycle stay allocated until the program ends.
 

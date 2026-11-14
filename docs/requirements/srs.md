@@ -378,7 +378,7 @@ formatter applies; Ruff's formatter is the project's recommendation.
 | --- | --- | --- | --- |
 | MEM-01 | An object shall be freed when its last reference goes, with no tracing garbage collector and no pause. | M | 0.1 |
 | MEM-02 | `float`, `bool` and inline `int` values shall be held without a heap allocation in variables, fields and containers, so a `list[float]` stores 8 bytes per item. | M | 0.2 |
-| MEM-03 | An object the compiler proves does not outlive its function shall be allocated without a heap call. | S | 0.4 |
+| MEM-03 | An object the compiler proves does not outlive its function shall be allocated without a heap call. | S | 0.5 |
 | MEM-04 | Passing a variable or a constant as an argument shall cost no reference count operation, and returning a variable shall move its value to the caller. | M | 0.2 |
 | MEM-05 | Freed memory of one object shall be reused for a new object of the same size in the same function when the compiler can prove it safe. | C | 1.0 |
 | MEM-06 | Reference cycles shall be collected, without a background thread, and only objects whose class can be part of a cycle shall pay for cycle tracking (ADR-0001). | S | 1.0 |
@@ -462,8 +462,8 @@ cache, unless a row says otherwise.
 | 0.1 | Functions, `int`, `float`, `bool`, `str`, `None`, `if`, `while`, `for` over `range`, operators | `build`, `run`, `check`, `--emit`; runtime; diagnostics; Linux x86_64 |
 | 0.2 | `list`, `tuple`, `dict`, `set`, `bytes`, classes without inheritance, f-strings, comprehensions, slicing | Unboxed values, reference count elision; user documentation |
 | 0.3 | `try`, `raise`, user exceptions, `with`, `assert`, `del`, `global`, modules and packages, lazy imports | `sys`, `math`, `open`; `typy.toml` with `python-floor`; JSON diagnostics; the first warnings and `--deny-warnings` |
-| 0.4 | Dataclasses, inheritance, protocols, PEP 695 generics, narrowing, `Final`, `type` aliases | Stack allocation |
-| 0.5 | `match`, `:=`, C interoperability through `ctypes` | Libraries and exports; Linux and macOS AArch64; cross-compilation |
+| 0.4 | Dataclasses, inheritance, protocols, PEP 695 generics, narrowing, `Final`, `type` aliases | Binary files and the rest of `open` |
+| 0.5 | `match`, `:=`, C interoperability through `ctypes` | Stack allocation; libraries and exports; Linux and macOS AArch64; cross-compilation |
 | 1.0 | Closures, `lambda`, `nonlocal`, generators, `*args`, keyword-only parameters | Cycle collection, `weakref`; Windows; performance budgets |
 
 ## 6. Out of scope
