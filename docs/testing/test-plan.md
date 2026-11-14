@@ -406,6 +406,8 @@ that the specification does not define.
 | MOD-09 | 0.3 | IT | `crates/typy-check/tests/sys.rs` for each switch, as an attribute and in `from sys import`; `tests/conformance/mod/MOD-09_*.py` |
 | MOD-10 | 0.3 | IT | `tests/conformance/mod/MOD-10_*.py` |
 | MOD-11 | 0.4 | IT | `tests/conformance/mod/MOD-11_*` |
+| MOD-12 | 0.5 | IT | `tests/conformance/mod/MOD-12_*` |
+| MOD-13 | 0.5 | IT | `tests/conformance/mod/MOD-13_*` |
 | LIB-01 | 0.1 | IT | `tests/conformance/lib/LIB-01_*.py` |
 | LIB-02 | 0.2 | IT | `tests/conformance/lib/LIB-02_*.py` |
 | LIB-03 | 0.2 | IT | `tests/conformance/lib/LIB-03_*.py` |

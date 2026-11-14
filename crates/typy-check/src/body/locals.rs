@@ -259,20 +259,15 @@ impl BodyChecker<'_> {
         } = target
         {
             if let Some(module) = self.module_of(object) {
-                if self.lazy_module_function(object).is_some() {
-                    self.diagnostics.push(
-                        Diagnostic::new(
-                            DiagnosticCode::error(201),
-                            *span,
-                            "assigning to an attribute of a module imported lazily is planned \
-                             for TyPy 0.4 (MOD-11)",
-                        )
-                        .with_rule(RuleId::MOD_11)
-                        .with_help("use the name in an expression first, or import it eagerly"),
-                    );
-                    return None;
-                }
-                return self.module_attribute_target(&module, attribute, &ty, value, *span);
+                let target = self.module_attribute_target(&module, attribute, &ty, value, *span)?;
+                // A module bound lazily is imported before the assignment (MOD-11).
+                return Some(match self.lazy_module_function(object) {
+                    Some(reify) => AssignTarget::Lazy {
+                        reify,
+                        target: Box::new(target),
+                    },
+                    None => target,
+                });
             }
             if let Some(class) = self.class_named_by(object)
                 && let Some(assignment) =

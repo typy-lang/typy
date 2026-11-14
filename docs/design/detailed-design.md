@@ -1383,12 +1383,18 @@ and E0206 otherwise (LIB-08). For each module it runs:
    function. `Program::lazy_names` maps each module and name to it; its
    IDs are the same in the first look and the final check of a module
    body, since only module bodies add functions while they are checked. A
-   function's own import of the name hides it. Using such a name from
-   another module, assigning through such a module and binding a name by
-   two lazy imports are E0201 (MOD-11). The subset walker reports
-   CPython's `SyntaxError`s for `lazy` inside a function or a `try`, and
-   with `*` or `__future__`, as E0103; a class body holds only methods,
-   so one there is E0202.
+   function's own import of the name hides it. Another module's use of
+   such a name, as `m.name` or `m.f()`, is `Lazy` with that module's
+   function, and its `from m import name` lists the function in the
+   import's `pending`, run after the modules and before the names are
+   bound. `m.x = v` through a module bound lazily is `AssignTarget::Lazy`.
+   A variable bound by several lazy imports keeps its first function in
+   `lazy_names`; lowering reads every function that binds the variable,
+   and each `LazyImport` arms its own and disarms the others, so at most
+   one waits. A function or a class bound by two is E0201 (MOD-11,
+   MOD-12). The subset walker reports CPython's `SyntaxError`s for `lazy`
+   inside a function or a `try`, and with `*` or `__future__`, as E0103;
+   a class body holds only methods, so one there is E0202.
    `format % values` with a string literal on the left is checked by
    `body/percent.rs` (LIB-10). `percent_format::parse` reads the format
    with CPython's grammar and `ValueError` messages; each conversion then

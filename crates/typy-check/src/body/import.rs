@@ -52,6 +52,9 @@ pub(crate) enum Named {
 pub(crate) struct Resolved {
     pub(crate) modules: Vec<String>,
     pub(crate) names: Vec<(String, Imported, Span)>,
+    /// The lazy imports of other modules whose names this import reads, which run first, as
+    /// reading the module's attribute runs them in CPython (MOD-11).
+    pub(crate) pending: Vec<FunctionId>,
 }
 
 impl Resolved {
@@ -146,6 +149,9 @@ impl Program {
                 self.check_provided(&base, *span)?;
                 resolved.initialise(&base);
                 for alias in names {
+                    if let Some(reify) = self.lazy_elsewhere(base.as_str(), &alias.name.name) {
+                        resolved.pending.push(reify);
+                    }
                     let imported = self.imported_name(&base, alias, *span)?;
                     if let Imported::Module(child) = &imported {
                         resolved.initialise(child);
@@ -250,7 +256,6 @@ impl Program {
         if base.as_str() == self.module && self.loaded.contains(child.as_str()) {
             return Ok(Imported::Module(child));
         }
-        self.check_not_lazy(base.as_str(), name, alias.name.span)?;
         match self.named(base.as_str(), name) {
             None => return Err(Box::new(checked_later(span, base))),
             Some(Named::Function(function)) => return Ok(Imported::Function(function)),
@@ -283,35 +288,15 @@ impl Program {
         ))
     }
 
-    /// Fails for a name another module binds by a lazy import: reaching it from outside
-    /// would run that import first, which is planned for 0.4 (MOD-11).
-    pub(super) fn check_not_lazy(
-        &self,
-        module: &str,
-        name: &str,
-        span: Span,
-    ) -> Result<(), Box<Diagnostic>> {
-        if module == self.module
-            || !self
-                .lazy_names
-                .contains_key(&(module.to_owned(), name.to_owned()))
-        {
-            return Ok(());
+    /// Returns the function of the lazy import by which another module binds `name`, if it
+    /// does: reaching the name from outside runs that import first (MOD-11).
+    pub(super) fn lazy_elsewhere(&self, module: &str, name: &str) -> Option<FunctionId> {
+        if module == self.module {
+            return None;
         }
-        Err(Box::new(
-            Diagnostic::new(
-                DiagnosticCode::error(201),
-                span,
-                format!(
-                    "using `{module}.{name}`, which `{module}` imports lazily, from another module \
-                     is planned for TyPy 0.4 (MOD-11)"
-                ),
-            )
-            .with_rule(RuleId::MOD_11)
-            .with_help(format!(
-                "import it eagerly in `{module}`, or import it from its own module"
-            )),
-        ))
+        self.lazy_names
+            .get(&(module.to_owned(), name.to_owned()))
+            .copied()
     }
 
     /// Fails for a standard library module, which TyPy provides from a later release or not
@@ -424,10 +409,11 @@ fn checked_later(span: Span, module: &ModuleName) -> Diagnostic {
         DiagnosticCode::error(426),
         span,
         format!(
-            "`{module}` imports this module at module level, so importing it inside this function is planned for TyPy 0.4"
+            "`{module}` imports this module at module level, so importing it inside this \
+             function is planned for TyPy 0.5 (MOD-13)"
         ),
     )
-    .with_rule(RuleId::MOD_05)
+    .with_rule(RuleId::MOD_13)
     .with_help("import it at module level in the other direction, or move the shared code to a third module")
 }
 
@@ -497,6 +483,7 @@ impl BodyChecker<'_> {
         }
         let import = TypedStmt::Import {
             modules: resolved.modules,
+            pending: resolved.pending,
             bindings,
             span,
         };
@@ -517,7 +504,10 @@ impl BodyChecker<'_> {
         span: Span,
     ) -> Option<TypedStmt> {
         let TypedStmt::Import {
-            modules, bindings, ..
+            modules,
+            pending,
+            bindings,
+            ..
         } = import
         else {
             return None;
@@ -535,11 +525,23 @@ impl BodyChecker<'_> {
         names.extend(callables.into_iter().map(|name| (name, None)));
         let first = self.program.next_function().0;
         let module = self.program.module.clone();
-        let twice = names.iter().zip(first..).find(|((name, _), id)| {
+        // A variable may be bound by several lazy imports, the last one run giving its value;
+        // a function or a class would need the call to choose its target when it runs.
+        let twice = names.iter().zip(first..).find(|((name, binding), id)| {
             self.program
                 .lazy_names
                 .get(&(module.clone(), name.clone()))
-                .is_some_and(|known| known.0 != *id)
+                .is_some_and(|known| {
+                    known.0 != *id
+                        && (binding.is_none()
+                            || self
+                                .program
+                                .lazy_imports
+                                .get(known)
+                                .copied()
+                                .flatten()
+                                .is_none())
+                })
         });
         if let Some(((name, _), _)) = twice {
             self.diagnostics.push(
@@ -547,10 +549,11 @@ impl BodyChecker<'_> {
                     DiagnosticCode::error(201),
                     span,
                     format!(
-                        "binding `{name}` by a second lazy import is planned for TyPy 0.4 (MOD-11)"
+                        "binding the function or class `{name}` by a second lazy import is \
+                         planned for TyPy 0.5 (MOD-12)"
                     ),
                 )
-                .with_rule(RuleId::MOD_11),
+                .with_rule(RuleId::MOD_12),
             );
             return None;
         }
@@ -561,6 +564,7 @@ impl BodyChecker<'_> {
             targets.extend(target);
             let import = TypedStmt::Import {
                 modules: modules.clone(),
+                pending: pending.clone(),
                 bindings: binding.into_iter().collect(),
                 span,
             };
@@ -647,9 +651,15 @@ impl BodyChecker<'_> {
             };
             return self.builtin_attribute(module, &name, span);
         }
-        if let Err(diagnostic) = self.program.check_not_lazy(module, name, span) {
-            return self.error(*diagnostic, span);
+        if let Some(reify) = self.program.lazy_elsewhere(module, name) {
+            let read = self.module_attribute_now(module, name, span);
+            return Self::lazy_value(Some(reify), read);
         }
+        self.module_attribute_now(module, name, span)
+    }
+
+    /// Reads `module.name` without running a lazy import of it.
+    fn module_attribute_now(&mut self, module: &str, name: &str, span: Span) -> TypedExpr {
         let Some(found) = self.program.named(module, name) else {
             let module = ModuleName::new(module).unwrap_or_else(|_| ModuleName::main());
             return self.error(checked_later(span, &module), span);
@@ -808,9 +818,22 @@ impl BodyChecker<'_> {
                 Err(diagnostic) => self.error(*diagnostic, span),
             };
         }
-        if let Err(diagnostic) = self.program.check_not_lazy(module, &name.name, name.span) {
-            return self.error(*diagnostic, span);
+        if let Some(reify) = self.program.lazy_elsewhere(module, &name.name) {
+            let call = self.module_call_now(module, name, arguments, keywords, span);
+            return Self::lazy_value(Some(reify), call);
         }
+        self.module_call_now(module, name, arguments, keywords, span)
+    }
+
+    /// Checks `module.name(arguments)` without running a lazy import of `name`.
+    fn module_call_now(
+        &mut self,
+        module: &str,
+        name: &typy_source::syntax::Identifier,
+        arguments: &[Expr],
+        keywords: &[typy_source::syntax::Keyword],
+        span: Span,
+    ) -> TypedExpr {
         match self.program.named(module, &name.name) {
             None => {
                 let module = ModuleName::new(module).unwrap_or_else(|_| ModuleName::main());

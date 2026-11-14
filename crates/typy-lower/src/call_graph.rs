@@ -182,9 +182,10 @@ fn statements(body: &[TypedStmt], callees: &mut BTreeSet<FunctionId>) {
                 statements(body, callees);
                 statements(orelse, callees);
             }
+            // Another module's lazy import a name needs is a call.
+            TypedStmt::Import { pending, .. } => callees.extend(pending.iter().copied()),
             // A module's code runs once and never recursively, so an import adds no edge.
             TypedStmt::Return { value: None, .. }
-            | TypedStmt::Import { .. }
             | TypedStmt::LazyImport { .. }
             | TypedStmt::Pass { .. }
             | TypedStmt::Break { .. }
@@ -197,6 +198,10 @@ fn statements(body: &[TypedStmt], callees: &mut BTreeSet<FunctionId>) {
 fn assign_target(target: &AssignTarget, callees: &mut BTreeSet<FunctionId>) {
     match target {
         AssignTarget::Name(_) => {}
+        AssignTarget::Lazy { reify, target } => {
+            callees.insert(*reify);
+            assign_target(target, callees);
+        }
         AssignTarget::Tuple(targets) => {
             for target in targets {
                 assign_target(target, callees);

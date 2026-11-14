@@ -86,10 +86,15 @@ prints differently there.
 A lazy import is allowed at module level, also inside `if`, `for`,
 `while` and `with`. As in CPython, it is E0103 inside a function, a
 `try` statement, or with `*` or `__future__`; inside a class it is E0202,
-since a class body holds only its methods. TyPy 0.4 adds what 0.3 refuses
-with E0201 (MOD-11): using a name another module imports lazily, such as
-`from app import heavy`, assigning `m.x = v` through a lazily imported
-`m`, and binding one name by two lazy imports.
+since a class body holds only its methods.
+
+Another module may use a name a module imports lazily, as
+`from app import heavy` or `app.heavy` does: reading it runs the import
+first, as in CPython. Assigning `m.x = v` through a lazily imported `m`
+runs `m`'s import before the assignment. A variable may be bound by more
+than one lazy import, and its first use runs the one that ran last
+(MOD-11). A function or a class bound by two lazy imports is planned for
+0.5 (MOD-12).
 
 The switches of `sys` that change lazy imports from outside the module,
 `sys.set_lazy_imports`, `sys.set_lazy_imports_filter`, their `get_`

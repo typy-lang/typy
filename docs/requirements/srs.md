@@ -345,6 +345,8 @@ formatter applies; Ruff's formatter is the project's recommendation.
 | MOD-09 | `sys.set_lazy_imports`, `sys.set_lazy_imports_filter`, `sys.get_lazy_imports`, `sys.get_lazy_imports_filter` and `sys.lazy_modules` shall be rejected, because they change or depend on import behaviour set from outside the importing module. | S | 0.3 | |
 | MOD-10 | An imported module shall be an object of type `module` whose attributes are its module-level names: `m.x` shall read and `m.x = v` assign them, the object may be bound to other names and compared with `is`, and its text shall name its path from the project root (OI-20, ADR-0015). | M | 0.3 | 5.3 |
 | MOD-11 | A name a module binds by a lazy import shall be usable from another module, a module variable shall be assignable as `m.x = v` through a lazily imported module `m`, and a name shall be bindable by more than one lazy import of the module. | S | 0.4 | |
+| MOD-12 | A function or a class shall be bindable by more than one lazy import of a module, a call running the one bound last. | C | 0.5 | |
+| MOD-13 | A module shall be importable inside a function of a module that it imports at module level. | S | 0.5 | |
 
 ### 3.14 Built-in functions and standard library (LIB)
 

@@ -44,6 +44,14 @@ pub enum AssignTarget {
         /// The attribute's position.
         index: usize,
     },
+    /// A target reached through a module bound by a lazy import, `module.name = value`: the
+    /// import runs first, as loading the module's name runs it in CPython (MOD-11).
+    Lazy {
+        /// The function of the lazy import.
+        reify: super::function::FunctionId,
+        /// The target itself.
+        target: Box<AssignTarget>,
+    },
     /// An entry of a dict, `dict[key] = value`; the dict and the key are evaluated after the
     /// value, as CPython does (DAT-09).
     Entry {
@@ -324,6 +332,9 @@ pub enum TypedStmt {
     /// begun, then each binding takes its value (SMT-07, MOD-03).
     Import {
         modules: Vec<String>,
+        /// The functions of other modules' lazy imports of the names it reads, which run after
+        /// the modules and before the names are bound (MOD-11).
+        pending: Vec<FunctionId>,
         bindings: Vec<ImportBinding>,
         span: Span,
     },

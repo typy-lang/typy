@@ -18,12 +18,16 @@ impl FunctionLowerer<'_> {
     /// Lowers an import statement: initialises each module in order, then binds each name.
     pub(crate) fn import_statement(
         &mut self,
-        modules: &[String],
+        (modules, pending): (&[String], &[typy_check::FunctionId]),
         bindings: &[ImportBinding],
         span: Span,
     ) {
         for module in modules {
             self.initialise_module(module, span);
+        }
+        // Reading a name another module binds lazily runs its import first (MOD-11).
+        for reify in pending {
+            self.run_lazy_import(*reify, span);
         }
         for binding in bindings {
             match binding {

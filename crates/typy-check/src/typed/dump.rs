@@ -117,6 +117,7 @@ impl Dump<'_> {
             AssignTarget::Slice { list, .. } => format!("slice of {}", list.ty),
             AssignTarget::Entry { dict, .. } => format!("entry of {}", dict.ty),
             AssignTarget::Attribute { object, index } => self.attribute(&object.ty, *index),
+            AssignTarget::Lazy { target, .. } => format!("lazy {}", self.target(target)),
         }
     }
 
@@ -281,6 +282,7 @@ impl Dump<'_> {
             }
             TypedStmt::Import {
                 modules,
+                pending,
                 bindings,
                 span,
             } => {
@@ -307,9 +309,17 @@ impl Dump<'_> {
                         }
                     })
                     .collect();
+                let runs = pending.iter().fold(String::new(), |mut runs, reify| {
+                    let _ = write!(runs, " runs lazy {}", reify.0);
+                    runs
+                });
                 self.line(
                     depth,
-                    &format!("Import {} binds {}", modules.join(" "), names.join(", ")),
+                    &format!(
+                        "Import {}{runs} binds {}",
+                        modules.join(" "),
+                        names.join(", ")
+                    ),
                     *span,
                 );
             }

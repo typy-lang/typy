@@ -348,6 +348,7 @@ fn source_reads(source: &LoopSource, reads: &mut Vec<SymbolId>) {
 fn target_reads(target: &AssignTarget, reads: &mut Vec<SymbolId>) {
     match target {
         AssignTarget::Name(_) => {}
+        AssignTarget::Lazy { target, .. } => target_reads(target, reads),
         AssignTarget::Tuple(targets) => {
             for each in targets {
                 target_reads(each, reads);

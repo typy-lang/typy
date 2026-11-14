@@ -144,6 +144,11 @@ impl FunctionLowerer<'_> {
     pub(crate) fn assign_target(&mut self, target: &AssignTarget, value: Lowered, span: Span) {
         match target {
             AssignTarget::Name(symbol) => self.assign_name(*symbol, value, span),
+            // A module bound lazily is imported before the assignment (MOD-11).
+            AssignTarget::Lazy { reify, target } => {
+                self.run_lazy_import(*reify, span);
+                self.assign_target(target, value, span);
+            }
             AssignTarget::Item { list, index } => self.assign_item(list, index, value, span),
             AssignTarget::Slice {
                 list,

@@ -88,6 +88,11 @@ All notable changes to TyPy are recorded here. The format follows
   class methods or class variables is planned for 0.5 (GEN-04, GEN-05,
   GEN-10, ADR-0023).
 - `...` alone as a statement does nothing, as `pass` does.
+- Names a module binds by a lazy import can be used from another module,
+  `m.x = v` assigns through a lazily imported `m`, and a variable may be
+  bound by more than one lazy import; each runs the pending import first,
+  as CPython does (MOD-11). A function or a class bound by two lazy
+  imports is planned for 0.5 (MOD-12).
 - `format % values` with a format that is not a literal, also through
   `%=`, and with a `tuple[T, ...]` of values: the runtime reads the format
   and raises what CPython raises (LIB-11).
@@ -158,6 +163,8 @@ All notable changes to TyPy are recorded here. The format follows
 
 ### Changed
 
+- Importing a module inside a function of a module that it imports at
+  module level is planned for 0.5 (MOD-13).
 - Names of `typing` that TyPy does not give are planned for 0.5 rather
   than 0.4: `Optional`, `Union`, `List`, `Dict` and the other older names
   (LIB-17), and `Iterator` and `Iterable` as values (TYP-17).

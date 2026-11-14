@@ -296,7 +296,11 @@ impl Program {
             generic: false,
         }));
         self.lazy_imports.insert(id, target);
-        self.lazy_names.insert((self.module.clone(), name), id);
+        // A name a later lazy import binds again keeps its first function, which lowering
+        // reads together with the others that bind the same variable (MOD-11).
+        self.lazy_names
+            .entry((self.module.clone(), name))
+            .or_insert(id);
         id
     }
 
