@@ -88,12 +88,6 @@ impl Program {
                 format!("module `math` has no name `{name}`"),
                 RuleId::LIB_05,
             )),
-            Some(MathName::Planned) => Err(error(
-                201,
-                span,
-                format!("`math.{name}` is planned for TyPy 0.4 (LIB-12)"),
-                RuleId::LIB_12,
-            )),
             Some(MathName::Function(function)) if function.since() > self.floor => Err(Box::new(
                 Diagnostic::new(
                     DiagnosticCode::error(425),

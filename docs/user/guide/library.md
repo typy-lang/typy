@@ -89,9 +89,29 @@ print(math.frexp(8.0), math.degrees(math.pi), math.log10(10**400))
 A function the module gained after the program's Python floor is E0425
 at that floor: `math.fma` needs `python-floor = "3.13"`, and `fmax`,
 `fmin`, `signbit`, `isnormal` and `issubnormal` need `"3.15"`.
-`fsum`, `prod`, `sumprod`, `dist`, `gamma` and `lgamma` are planned for
-0.4 (LIB-12). A function of `math` is not a value yet: `f = math.sqrt`
-is planned for 1.0 (FUN-05).
+A function of `math` is not a value yet: `f = math.sqrt` is planned for
+1.0 (FUN-05).
+
+`fsum`, `dist`, `prod` and `sumprod` take iterables of `int`, `bool` or
+`float` items, and `gamma` and `lgamma` a real number, each with
+CPython's result (LIB-12). As in CPython, `prod` of `float`s with the
+default start and `sumprod` with a `float` give the `int` start, or 0,
+when there are no items, so their type is `int | float`; give `prod` a
+`float` start for a `float`:
+
+<!-- typy-expect: accepted -->
+```python
+import math
+
+prices = [2.5, 4.0]
+counts = [3, 2]
+print(math.fsum([0.1] * 10), math.dist((0, 0), (3, 4)))
+print(math.prod(range(1, 6)), math.prod(prices, start=1.0))
+print(math.sumprod(prices, counts), math.gamma(0.5), math.lgamma(10.0))
+```
+
+Items of a union, such as a `list[int | float]`, a `bool` start and
+`prod` of items that are not numbers are planned for 0.5 (LIB-15).
 
 ## The sys module
 

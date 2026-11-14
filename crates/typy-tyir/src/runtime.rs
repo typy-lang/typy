@@ -296,6 +296,14 @@ pub enum RuntimeFunction {
     MathPerm,
     MathGcd,
     MathLcm,
+    MathGamma,
+    MathLgamma,
+    MathFsum,
+    MathDist,
+    MathProdInt,
+    MathProdFloat,
+    MathSumprodInt,
+    MathSumprodFloat,
     Ascii,
 }
 
@@ -327,7 +335,7 @@ const FLOAT_FLOAT: &[TyirType] = &[TyirType::Float, TyirType::Float];
 
 impl RuntimeFunction {
     /// Every runtime function.
-    pub const ALL: [Self; 288] = [
+    pub const ALL: [Self; 296] = [
         Self::IntFloorDivide,
         Self::IntModulo,
         Self::IntPower,
@@ -615,6 +623,14 @@ impl RuntimeFunction {
         Self::MathPerm,
         Self::MathGcd,
         Self::MathLcm,
+        Self::MathGamma,
+        Self::MathLgamma,
+        Self::MathFsum,
+        Self::MathDist,
+        Self::MathProdInt,
+        Self::MathProdFloat,
+        Self::MathSumprodInt,
+        Self::MathSumprodFloat,
         Self::Ascii,
     ];
 
@@ -704,7 +720,7 @@ impl RuntimeFunction {
             Self::ListRepeat => signature(&[LIST, Int], LIST, true),
             Self::ListCompare => signature(&[LIST, LIST, Int], Bool, false),
             Self::ListSort => signature(&[LIST, Int], Unit, false),
-            Self::ListSumInt => signature(&[LIST, Int], Int, false),
+            Self::ListSumInt | Self::MathProdInt => signature(&[LIST, Int], Int, false),
             Self::ListSumFloat => signature(&[LIST, Float], Float, false),
             Self::ListAny | Self::ListAll => signature(&[LIST], Bool, false),
             Self::ZipUnequal => signature(INT_INT, Unit, true),
@@ -864,7 +880,9 @@ impl RuntimeFunction {
             | Self::MathTanh
             | Self::MathLogFloat
             | Self::MathLog2Float
-            | Self::MathLog10Float => signature(&[Float], Float, true),
+            | Self::MathLog10Float
+            | Self::MathGamma
+            | Self::MathLgamma => signature(&[Float], Float, true),
             Self::MathFrexpExponent => signature(&[Float], Int, false),
             Self::MathIsfinite
             | Self::MathIsinf
@@ -883,6 +901,10 @@ impl RuntimeFunction {
             Self::MathNextafter => signature(&[Float, Float, Int], Float, true),
             Self::MathIsclose => signature(&[Float, Float, Float, Float], Bool, true),
             Self::MathHypot => signature(&[LIST], Float, false),
+            Self::MathFsum => signature(&[LIST], Float, true),
+            Self::MathDist | Self::MathSumprodFloat => signature(&[LIST, LIST], Float, true),
+            Self::MathProdFloat => signature(&[LIST, Float], Float, true),
+            Self::MathSumprodInt => signature(&[LIST, LIST], Int, true),
             Self::MathLogInt | Self::MathLog2Int | Self::MathLog10Int => {
                 signature(&[Int], Float, true)
             }
@@ -1206,6 +1228,14 @@ impl RuntimeFunction {
             Self::MathComb => "math_comb",
             Self::MathPerm => "math_perm",
             Self::MathGcd => "math_gcd",
+            Self::MathGamma => "math_gamma",
+            Self::MathLgamma => "math_lgamma",
+            Self::MathFsum => "math_fsum",
+            Self::MathDist => "math_dist",
+            Self::MathProdInt => "math_prod_int",
+            Self::MathProdFloat => "math_prod_float",
+            Self::MathSumprodInt => "math_sumprod_int",
+            Self::MathSumprodFloat => "math_sumprod_float",
             Self::MathLcm => "math_lcm",
             Self::Ascii => "ascii",
         }

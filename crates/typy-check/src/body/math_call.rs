@@ -30,8 +30,14 @@ impl BodyChecker<'_> {
         keywords: &[Keyword],
         span: Span,
     ) -> TypedExpr {
-        let name = format!("math.{}", function.name());
         let shape = function.shape();
+        if matches!(
+            shape,
+            MathShape::Fsum | MathShape::Dist | MathShape::Prod | MathShape::Sumprod
+        ) {
+            return self.iterable_math_call(function, arguments, keywords, span);
+        }
+        let name = format!("math.{}", function.name());
         let (positional, keyword) = match math_arguments(&name, shape, arguments, keywords, span) {
             Ok(arguments) => arguments,
             Err(diagnostic) => return self.error(*diagnostic, span),
@@ -139,6 +145,10 @@ fn math_arguments<'call>(
         MathShape::Comb => (2, Some(2), Wanted::Integer, &[]),
         MathShape::Perm => (1, Some(2), Wanted::Integer, &[]),
         MathShape::Fold => (0, None, Wanted::Integer, &[]),
+        // `math_call` checks the functions of iterables apart.
+        MathShape::Fsum | MathShape::Dist | MathShape::Prod | MathShape::Sumprod => {
+            (1, Some(2), Wanted::Real, &[])
+        }
     };
     let mut keyword: Vec<(Option<&Expr>, Wanted)> =
         names.iter().map(|(_, wanted)| (None, *wanted)).collect();

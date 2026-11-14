@@ -2235,6 +2235,7 @@ fn the_logarithm_of_a_base_divides_by_its_logarithm() {
 }
 
 mod more;
+mod sums;
 
 fn check_flag(found: Raising<bool>, expected: &Result<bool, (&str, &str)>, case: &str) {
     match expected {

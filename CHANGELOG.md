@@ -88,6 +88,13 @@ All notable changes to TyPy are recorded here. The format follows
   class methods or class variables is planned for 0.5 (GEN-04, GEN-05,
   GEN-10, ADR-0023).
 - `...` alone as a statement does nothing, as `pass` does.
+- `math.fsum`, `math.dist`, `math.prod`, `math.sumprod`, `math.gamma`
+  and `math.lgamma`, with CPython's results to the last bit. The first
+  four take iterables of `int`, `bool` or `float` items; `prod` of
+  `float`s with the default start and `sumprod` with a `float` are
+  `int | float`, since CPython gives the `int` start or 0 for no items.
+  Items of a union and a `bool` start are planned for 0.5 (LIB-12,
+  LIB-15).
 - Methods with type parameters, `def pair[T](self, value: T)`, also
   static methods, in a class that is not generic. A call takes the types
   from the arguments after `self` and runs the copy for them. Type

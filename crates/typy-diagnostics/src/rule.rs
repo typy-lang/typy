@@ -191,6 +191,8 @@ impl RuleId {
     pub const LIB_13: Self = Self("LIB-13");
     /// `open` shall accept binary modes, `+` modes, a mode that is not a literal, encodings other than UTF-8 and the arguments `buffering`, `errors`, `newline`, `closefd` and `opener`; a text file shall have `seek`, `tell`, `truncate`, `fileno`, `isatty`, `readable`, `writable` and `seekable`, and the attributes `name`, `mode` and `closed`; closing `sys.stdout` or `sys.stderr` shall close it.
     pub const LIB_14: Self = Self("LIB-14");
+    /// `math.fsum`, `math.dist`, `math.prod` and `math.sumprod` shall take items of a union of number types, and `math.prod` a `bool` start and items other than numbers.
+    pub const LIB_15: Self = Self("LIB-15");
     /// A program shall be built from several `.py` files, found from the main file's directory and from paths set in `typy.toml`.
     /// A program shall be built from several `.py` files, found from the main file's directory and from paths set in `typy.toml`.
     pub const MOD_01: Self = Self("MOD-01");
@@ -351,6 +353,7 @@ impl RuleId {
         Self::LIB_12,
         Self::LIB_13,
         Self::LIB_14,
+        Self::LIB_15,
         Self::MOD_01,
         Self::MOD_02,
         Self::MOD_05,

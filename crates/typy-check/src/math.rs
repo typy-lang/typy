@@ -19,6 +19,7 @@ pub enum MathFunction {
     Cos,
     Cosh,
     Degrees,
+    Dist,
     Erf,
     Erfc,
     Exp,
@@ -32,6 +33,8 @@ pub enum MathFunction {
     Fmin,
     Fmod,
     Frexp,
+    Fsum,
+    Gamma,
     Gcd,
     Hypot,
     Isclose,
@@ -43,6 +46,7 @@ pub enum MathFunction {
     Issubnormal,
     Lcm,
     Ldexp,
+    Lgamma,
     Log,
     Log10,
     Log1p,
@@ -51,12 +55,14 @@ pub enum MathFunction {
     Nextafter,
     Perm,
     Pow,
+    Prod,
     Radians,
     Remainder,
     Signbit,
     Sin,
     Sinh,
     Sqrt,
+    Sumprod,
     Tan,
     Tanh,
     Trunc,
@@ -96,16 +102,26 @@ pub enum MathShape {
     Perm,
     /// Any number of `int`s to an `int`: `gcd` and `lcm`.
     Fold,
+    /// `fsum(values)`, an iterable of real numbers, to a `float`.
+    Fsum,
+    /// `dist(p, q)`, two iterables of real numbers, to a `float`.
+    Dist,
+    /// `prod(values, *, start)`: an `int` for `int` items and start, a `float` for a
+    /// `float` start, and otherwise `int | float`, the start for no items.
+    Prod,
+    /// `sumprod(p, q)`: an `int` for `int` items, and otherwise `int | float`, 0 for no
+    /// items.
+    Sumprod,
 }
 
 /// The functions and their names, in name order.
-const FUNCTIONS: [(&str, MathFunction); 56] = {
+const FUNCTIONS: [(&str, MathFunction); 62] = {
     use MathFunction::{
         Acos, Acosh, Asin, Asinh, Atan, Atan2, Atanh, Cbrt, Ceil, Comb, Copysign, Cos, Cosh,
-        Degrees, Erf, Erfc, Exp, Exp2, Expm1, Fabs, Factorial, Floor, Fma, Fmax, Fmin, Fmod, Frexp,
-        Gcd, Hypot, Isclose, Isfinite, Isinf, Isnan, Isnormal, Isqrt, Issubnormal, Lcm, Ldexp, Log,
-        Log1p, Log2, Log10, Modf, Nextafter, Perm, Pow, Radians, Remainder, Signbit, Sin, Sinh,
-        Sqrt, Tan, Tanh, Trunc, Ulp,
+        Degrees, Dist, Erf, Erfc, Exp, Exp2, Expm1, Fabs, Factorial, Floor, Fma, Fmax, Fmin, Fmod,
+        Frexp, Fsum, Gamma, Gcd, Hypot, Isclose, Isfinite, Isinf, Isnan, Isnormal, Isqrt,
+        Issubnormal, Lcm, Ldexp, Lgamma, Log, Log1p, Log2, Log10, Modf, Nextafter, Perm, Pow, Prod,
+        Radians, Remainder, Signbit, Sin, Sinh, Sqrt, Sumprod, Tan, Tanh, Trunc, Ulp,
     };
     [
         ("acos", Acos),
@@ -122,6 +138,7 @@ const FUNCTIONS: [(&str, MathFunction); 56] = {
         ("cos", Cos),
         ("cosh", Cosh),
         ("degrees", Degrees),
+        ("dist", Dist),
         ("erf", Erf),
         ("erfc", Erfc),
         ("exp", Exp),
@@ -135,6 +152,8 @@ const FUNCTIONS: [(&str, MathFunction); 56] = {
         ("fmin", Fmin),
         ("fmod", Fmod),
         ("frexp", Frexp),
+        ("fsum", Fsum),
+        ("gamma", Gamma),
         ("gcd", Gcd),
         ("hypot", Hypot),
         ("isclose", Isclose),
@@ -146,6 +165,7 @@ const FUNCTIONS: [(&str, MathFunction); 56] = {
         ("issubnormal", Issubnormal),
         ("lcm", Lcm),
         ("ldexp", Ldexp),
+        ("lgamma", Lgamma),
         ("log", Log),
         ("log10", Log10),
         ("log1p", Log1p),
@@ -154,12 +174,14 @@ const FUNCTIONS: [(&str, MathFunction); 56] = {
         ("nextafter", Nextafter),
         ("perm", Perm),
         ("pow", Pow),
+        ("prod", Prod),
         ("radians", Radians),
         ("remainder", Remainder),
         ("signbit", Signbit),
         ("sin", Sin),
         ("sinh", Sinh),
         ("sqrt", Sqrt),
+        ("sumprod", Sumprod),
         ("tan", Tan),
         ("tanh", Tanh),
         ("trunc", Trunc),
@@ -176,9 +198,6 @@ const CONSTANTS: [(&str, f64); 5] = [
     ("tau", core::f64::consts::TAU),
 ];
 
-/// The names of `math` planned for a later release (LIB-12).
-const PLANNED: [&str; 6] = ["dist", "fsum", "gamma", "lgamma", "prod", "sumprod"];
-
 /// What a name of `math` is.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub(crate) enum MathName {
@@ -186,17 +205,12 @@ pub(crate) enum MathName {
     Constant(f64),
     /// A function.
     Function(MathFunction),
-    /// A function planned for TyPy 0.4 (LIB-12).
-    Planned,
 }
 
 /// Returns what `name` is in `math`, if it is a name of the module.
 pub(crate) fn math_name(name: &str) -> Option<MathName> {
     if let Some((_, value)) = CONSTANTS.iter().find(|(known, _)| *known == name) {
         return Some(MathName::Constant(*value));
-    }
-    if PLANNED.contains(&name) {
-        return Some(MathName::Planned);
     }
     FUNCTIONS
         .binary_search_by(|(known, _)| known.cmp(&name))
@@ -239,6 +253,10 @@ impl MathFunction {
             F::Comb => MathShape::Comb,
             F::Perm => MathShape::Perm,
             F::Gcd | F::Lcm => MathShape::Fold,
+            F::Fsum => MathShape::Fsum,
+            F::Dist => MathShape::Dist,
+            F::Prod => MathShape::Prod,
+            F::Sumprod => MathShape::Sumprod,
             _ => MathShape::Real(1),
         }
     }
@@ -275,7 +293,10 @@ mod tests {
                 other => panic!("{name} is a constant, not {other:?}"),
             }
         }
-        assert_eq!(math_name("fsum"), Some(MathName::Planned));
+        assert_eq!(
+            math_name("fsum"),
+            Some(MathName::Function(MathFunction::Fsum))
+        );
         assert_eq!(math_name("square"), None);
     }
 

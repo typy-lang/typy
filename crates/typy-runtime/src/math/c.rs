@@ -32,6 +32,7 @@ unsafe extern "C" {
     pub(super) fn log2(x: f64) -> f64;
     pub(super) fn modf(x: f64, integral: *mut f64) -> f64;
     pub(super) fn nextafter(x: f64, y: f64) -> f64;
+    pub(super) fn round(x: f64) -> f64;
     pub(super) fn sin(x: f64) -> f64;
     pub(super) fn sinh(x: f64) -> f64;
     pub(super) fn sqrt(x: f64) -> f64;

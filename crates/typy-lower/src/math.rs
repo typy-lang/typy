@@ -99,6 +99,9 @@ impl FunctionLowerer<'_> {
             }
             MathShape::Perm => self.permutations(&values, span),
             MathShape::Fold => self.fold(function, &values, span),
+            MathShape::Fsum | MathShape::Dist | MathShape::Prod | MathShape::Sumprod => {
+                self.iterable_math_call(function, &values, result, span)
+            }
         };
         for value in values {
             self.release(value, span);
@@ -322,11 +325,13 @@ fn real_function(function: MathFunction) -> RuntimeFunction {
         F::Fmax => R::MathFmax,
         F::Fmin => R::MathFmin,
         F::Fmod => R::MathFmod,
+        F::Gamma => R::MathGamma,
         F::Isfinite => R::MathIsfinite,
         F::Isinf => R::MathIsinf,
         F::Isnan => R::MathIsnan,
         F::Isnormal => R::MathIsnormal,
         F::Issubnormal => R::MathIssubnormal,
+        F::Lgamma => R::MathLgamma,
         F::Log1p => R::MathLog1p,
         F::Pow => R::MathPow,
         F::Radians => R::MathRadians,

@@ -415,6 +415,7 @@ that the specification does not define.
 | LIB-10 | 0.3 | UT, IT | `crates/typy-runtime/src/format/percent/tests.rs`, a table of CPython 3.12's results; `crates/typy-check/tests/percent.rs` for each refusal message; `tests/conformance/lib/LIB-10_*.py` |
 | LIB-11 | 0.4 | IT | `tests/conformance/lib/LIB-11_*.py` |
 | LIB-12 | 0.4 | IT | `tests/conformance/lib/LIB-12_*.py` |
+| LIB-15 | 0.5 | IT | `tests/conformance/lib/LIB-15_*.py` |
 | LIB-13 | 0.4 | IT | `tests/conformance/lib/LIB-13_*.py` |
 | LIB-14 | 0.4 | IT | `tests/conformance/lib/LIB-14_*.py` |
 | MEM-01 | 0.1 | UT, IT | `typy-runtime` unit tests; `tests/conformance/mem/MEM-01_*.py` under sanitizers |
