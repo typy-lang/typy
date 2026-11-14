@@ -61,6 +61,81 @@ impl Access {
     }
 }
 
+/// Returns the access of a text mode the program gave as a value and whether it has `+`,
+/// with CPython's `ValueError` for a mode it refuses: each character one of `rwxabt+` and
+/// given once, not both `t` and `b`, and exactly one of `r`, `w`, `a` and `x`. A binary mode
+/// raises `TypeError`, since such a mode gives a text file in TyPy (ADR-0031).
+///
+/// # Safety
+///
+/// `mode` points to a live `str`.
+unsafe fn mode_value(mode: *const StrObject) -> Result<(Access, bool), *mut ExceptionObject> {
+    use crate::exception::ExceptionKind::{TypeError, ValueError};
+    // SAFETY: the caller's guarantee.
+    let count = unsafe { length(mode) };
+    // SAFETY: the caller's guarantee; every index is below the length.
+    let point = |index: usize| unsafe { code_point(mode, index) };
+    let has = |character: u8| (0..count).any(|index| point(index) == u32::from(character));
+    let valid = (0..count).all(|index| {
+        let each = point(index);
+        b"rwxabt+".iter().any(|allowed| u32::from(*allowed) == each)
+            && !(index + 1..count).any(|later| point(later) == each)
+    });
+    let refuse = |kind, text: &str, shown: bool| {
+        let mut message = crate::message::MessageBuffer::new();
+        message.push_str(text);
+        if shown {
+            // SAFETY: the caller's guarantee.
+            unsafe { message.push_text(mode) };
+            message.push_str("'");
+        }
+        message.raise(kind)
+    };
+    if !valid {
+        return Err(refuse(ValueError, "invalid mode: '", true));
+    }
+    if has(b't') && has(b'b') {
+        return Err(refuse(
+            ValueError,
+            "can't have text and binary mode at once",
+            false,
+        ));
+    }
+    let accesses = b"rwax".iter().filter(|access| has(**access)).count();
+    if accesses == 0 {
+        return Err(refuse(
+            ValueError,
+            "Must have exactly one of create/read/write/append mode and at most one plus",
+            false,
+        ));
+    }
+    if accesses > 1 {
+        return Err(refuse(
+            ValueError,
+            "must have exactly one of create/read/write/append mode",
+            false,
+        ));
+    }
+    if has(b'b') {
+        return Err(refuse(
+            TypeError,
+            "TyPy opens a text file for a mode that is not a literal, and this mode is \
+             binary: '",
+            true,
+        ));
+    }
+    let access = if has(b'w') {
+        Access::Write
+    } else if has(b'a') {
+        Access::Append
+    } else if has(b'x') {
+        Access::Create
+    } else {
+        Access::Read
+    };
+    Ok((access, has(b'+')))
+}
+
 /// Returns the path as the bytes the C library takes, ended by a zero byte: UTF-8, with
 /// U+DC80 to U+DCFF as the bytes they stand for, as CPython's `os.fsencode` gives them.
 ///
@@ -170,7 +245,16 @@ pub unsafe extern "C" fn typy_rt_open(
     newline: *const StrObject,
 ) -> Raising<*mut TextFile> {
     let how = crate::word::inline_value(how);
-    let (access, plus) = (Access::of(how & 3), how & 4 != 0);
+    // A mode that is not a literal is read here, as CPython reads it (ADR-0031).
+    let (access, plus) = if how & (1 << 10) == 0 {
+        (Access::of(how & 3), how & 4 != 0)
+    } else {
+        // SAFETY: the caller passes a live mode.
+        match unsafe { mode_value(mode) } {
+            Ok(found) => found,
+            Err(error) => return Raising::error(core::ptr::null_mut(), error),
+        }
+    };
     let (codec, handler) = ((how >> 3) & 3, (how >> 5) & 7);
     let (binary, raw) = (how & (1 << 8) != 0, how & (1 << 9) != 0);
     // SAFETY: the caller's guarantee.
@@ -222,11 +306,40 @@ pub unsafe extern "C" fn typy_rt_open(
         typy_rt_increment(mode.cast_mut().cast());
         typy_rt_increment(encoding.cast_mut().cast());
     }
-    // A mode with `+` both reads and writes, as CPython's `BufferedRandom` does.
+    let (flags, reader, writer) = buffers(access, plus, (binary, raw), &options);
+    let next = OPEN.with(|open| *open);
+    let file = boxed(TextFile {
+        header: ObjectHeader::new(TEXT_FILE_TYPE_ID),
+        descriptor,
+        flags,
+        name: "",
+        path: path.cast_mut(),
+        mode: mode.cast_mut(),
+        encoding: encoding.cast_mut(),
+        reader,
+        writer,
+        previous: core::ptr::null_mut(),
+        next,
+    });
+    if !next.is_null() {
+        // SAFETY: the open files are live.
+        unsafe { (*next).previous = file };
+    }
+    OPEN.with(|open| *open = file);
+    Raising::ok(file)
+}
+
+/// Returns the flags of a new file and the buffers it reads and writes through: a mode with
+/// `+` both reads and writes, as CPython's `BufferedRandom` does; a binary file reads its
+/// bytes through a reader of `latin-1`, which checks none; a `FileIO` has no buffers.
+fn buffers(
+    access: Access,
+    plus: bool,
+    (binary, raw): (bool, bool),
+    options: &Options,
+) -> (u32, *mut Reader, *mut Writer) {
     let readable = access == Access::Read || plus;
     let writable = access != Access::Read || plus;
-    // A binary file reads its bytes through a reader of `latin-1`, which checks none; a
-    // `FileIO` has no buffers.
     let decoding = if binary {
         Decoding {
             codec: Codec::Latin1,
@@ -255,26 +368,7 @@ pub unsafe extern "C" fn typy_rt_open(
         | if writable { WRITABLE } else { 0 }
         | if binary { super::BINARY } else { 0 }
         | if raw { super::RAW } else { 0 };
-    let next = OPEN.with(|open| *open);
-    let file = boxed(TextFile {
-        header: ObjectHeader::new(TEXT_FILE_TYPE_ID),
-        descriptor,
-        flags,
-        name: "",
-        path: path.cast_mut(),
-        mode: mode.cast_mut(),
-        encoding: encoding.cast_mut(),
-        reader,
-        writer,
-        previous: core::ptr::null_mut(),
-        next,
-    });
-    if !next.is_null() {
-        // SAFETY: the open files are live.
-        unsafe { (*next).previous = file };
-    }
-    OPEN.with(|open| *open = file);
-    Raising::ok(file)
+    (flags, reader, writer)
 }
 
 /// Returns `value` in memory of its own, which `free` releases.

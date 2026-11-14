@@ -374,3 +374,76 @@ fn a_file_with_options_shows_its_encoding_and_reads_back_what_it_wrote() {
         typy_rt_decrement(file.cast());
     }
 }
+
+/// Returns the class and text of the error of opening `name` with a mode value, or the mode
+/// the file shows.
+fn opened_with_mode(scratch: &Scratch, mode: &str) -> Result<String, (String, String)> {
+    let path = scratch.path("m.txt");
+    let value = from_str(mode);
+    let word = |value: i64| crate::word::inline(value).unwrap();
+    // SAFETY: the strings are live; the file keeps references of its own; each is released
+    // once.
+    unsafe {
+        let opened = super::disk::typy_rt_open(
+            path,
+            value,
+            word(1 << 10),
+            word(-1),
+            core::ptr::null(),
+            core::ptr::null(),
+        );
+        typy_rt_decrement(path.cast());
+        typy_rt_decrement(value.cast());
+        if !opened.exception.is_null() {
+            return Err(error_text(opened.exception));
+        }
+        let shown = super::tests::repr_of(opened.value);
+        typy_rt_decrement(opened.value.cast());
+        Ok(shown)
+    }
+}
+
+#[test]
+#[cfg_attr(miri, ignore = "Miri does not open files without disabling isolation")]
+fn a_mode_value_is_read_as_cpython_reads_a_mode() {
+    let scratch = Scratch::new("mode-value");
+    for mode in ["w", "a+", "r", "rt", "+r"] {
+        let shown = opened_with_mode(&scratch, mode).unwrap();
+        assert!(
+            shown.ends_with(&format!("mode='{mode}' encoding='utf-8'>")),
+            "{shown}"
+        );
+    }
+    let refused = [
+        ("z", "ValueError", "invalid mode: 'z'"),
+        ("rr", "ValueError", "invalid mode: 'rr'"),
+        (
+            "bt",
+            "ValueError",
+            "can't have text and binary mode at once",
+        ),
+        (
+            "rw",
+            "ValueError",
+            "must have exactly one of create/read/write/append mode",
+        ),
+        (
+            "+",
+            "ValueError",
+            "Must have exactly one of create/read/write/append mode and at most one plus",
+        ),
+        (
+            "rb",
+            "TypeError",
+            "TyPy opens a text file for a mode that is not a literal, and this mode is binary: \
+             'rb'",
+        ),
+    ];
+    for (mode, class, text) in refused {
+        assert_eq!(
+            opened_with_mode(&scratch, mode),
+            Err((class.to_owned(), text.to_owned())),
+            "{mode}"
+        );
+    }
+}

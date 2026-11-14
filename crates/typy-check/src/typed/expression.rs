@@ -488,6 +488,7 @@ impl TypedExpr {
             TypedExprKind::MathCall { arguments, .. } => arguments.iter().collect(),
             TypedExprKind::Open { path, options, .. } => [
                 Some(path),
+                options.mode.as_ref(),
                 options.buffering.as_ref(),
                 options.newline.as_ref(),
             ]
@@ -669,4 +670,6 @@ pub struct OpenOptions {
     pub handler: i64,
     /// `newline`, when given and not `None`.
     pub newline: Option<Box<TypedExpr>>,
+    /// The mode, when it is not a literal: a text mode the runtime reads (ADR-0031).
+    pub mode: Option<Box<TypedExpr>>,
 }

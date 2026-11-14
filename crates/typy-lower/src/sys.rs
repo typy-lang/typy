@@ -205,6 +205,7 @@ impl FunctionLowerer<'_> {
         span: Span,
     ) -> Lowered {
         let path = self.expression(path);
+        let mode_value = options.mode.as_deref().map(|value| self.expression(value));
         let buffering = options
             .buffering
             .as_deref()
@@ -217,7 +218,7 @@ impl FunctionLowerer<'_> {
                 self.expression(value)
             }
         });
-        let mode = self.string(mode, span);
+        let mode = mode_value.map_or_else(|| self.string(mode, span), |value| value.value);
         // The runtime reads the access, with `+` in its third bit, the codec, the handler and
         // whether the file is binary or a `FileIO` from one word, so a call keeps to six
         // arguments.
@@ -227,8 +228,12 @@ impl FunctionLowerer<'_> {
             }
             _ => (0, 0),
         };
-        let how =
-            access as i64 | options.codec << 3 | options.handler << 5 | binary << 8 | raw << 9;
+        let how = access as i64
+            | options.codec << 3
+            | options.handler << 5
+            | binary << 8
+            | raw << 9
+            | i64::from(mode_value.is_some()) << 10;
         let how = self.constant(Constant::Int(how.to_string()), span);
         let buffering_value = buffering.map_or_else(
             || self.constant(Constant::Int("-1".to_owned()), span),
@@ -252,7 +257,7 @@ impl FunctionLowerer<'_> {
             ],
             span,
         );
-        for value in [newline, buffering].into_iter().flatten() {
+        for value in [newline, buffering, mode_value].into_iter().flatten() {
             self.release(value, span);
         }
         self.release(path, span);

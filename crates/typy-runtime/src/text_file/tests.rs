@@ -419,7 +419,7 @@ impl Scratch {
         Self(directory)
     }
 
-    fn path(&self, name: &str) -> *mut StrObject {
+    pub(super) fn path(&self, name: &str) -> *mut StrObject {
         from_str(self.0.join(name).to_str().unwrap())
     }
 

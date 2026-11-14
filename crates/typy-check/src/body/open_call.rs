@@ -92,17 +92,20 @@ impl BodyChecker<'_> {
         let path = self.expression(file);
         self.expect(&path, Type::Str, "the file of `open`");
         // CPython reads the mode first, then refuses what a binary mode does not take.
+        let text_read = OpenMode {
+            access: OpenAccess::Read,
+            binary: false,
+        };
+        let mut mode_value = None;
         let (written, mode) = match given[1] {
-            None => (
-                "r".to_owned(),
-                OpenMode {
-                    access: OpenAccess::Read,
-                    binary: false,
-                },
-            ),
+            None => ("r".to_owned(), text_read),
             Some(mode) => match self.open_mode(mode) {
                 Ok(found) => found,
-                Err(refused) => return refused,
+                Err(Ok(value)) => {
+                    mode_value = Some(Box::new(value));
+                    (String::new(), text_read)
+                }
+                Err(Err(refused)) => return refused,
             },
         };
         let ty = if mode.binary {
@@ -117,6 +120,7 @@ impl BodyChecker<'_> {
             Ok(options) => options,
             Err(refused) => return refused,
         };
+        options.mode = mode_value;
         let shown = if mode.binary {
             // The buffer's size changes nothing a program sees, so a binary file has none.
             options.buffering = None;
@@ -207,29 +211,28 @@ impl BodyChecker<'_> {
     }
 
     /// Returns the mode of `open` as written and what it gives, or the error of a mode it
-    /// refuses.
-    fn open_mode(&mut self, mode: &Expr) -> Result<(String, OpenMode), TypedExpr> {
+    /// refuses. A mode that is not a literal is a `str` the runtime reads as a text mode
+    /// (ADR-0031); it is returned as `Err(Ok(value))`.
+    fn open_mode(
+        &mut self,
+        mode: &Expr,
+    ) -> Result<(String, OpenMode), Result<TypedExpr, TypedExpr>> {
         let Some(text) = literal(mode) else {
             let value = self.expression(mode);
+            self.expect(&value, Type::Str, "the mode of `open`");
             if value.ty.has_error() {
-                return Err(Self::invalid_call(mode.span()));
+                return Err(Err(Self::invalid_call(mode.span())));
             }
-            return Err(self.open_refused(
-                201,
-                mode.span(),
-                "a mode of `open` that is not a string literal is planned for TyPy 0.4 (LIB-14)"
-                    .to_owned(),
-                RuleId::LIB_14,
-            ));
+            return Err(Ok(value));
         };
         match open_access(text) {
             Ok(found) => Ok((text.to_owned(), found)),
-            Err(ModeRefusal(message)) => Err(self.open_refused(
+            Err(ModeRefusal(message)) => Err(Err(self.open_refused(
                 404,
                 mode.span(),
                 format!("`open` raises `ValueError: {message}` for this mode"),
                 RuleId::LIB_04,
-            )),
+            ))),
         }
     }
 

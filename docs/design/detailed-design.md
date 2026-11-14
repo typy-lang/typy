@@ -525,7 +525,10 @@ shows, such as `rb+`. `binary_file` refuses `encoding`, `errors` and
 `newline` with CPython's `ValueError` text, `buffering=1`, and a
 `buffering` that is not a literal (E0201, LIB-19). The methods of a text
 file serve a binary one, typed by `Type::file_line`: `bytes` in place of
-`str`.
+`str`. A mode that is not a literal is a `str` in `OpenOptions::mode`, and
+the file is a `TextFile`; `typy_rt_open` reads it as `open_access` does,
+with the same `ValueError` texts, and raises `TypeError` for one with `b`
+(ADR-0031).
 `body/open_options.rs` checks the arguments after the mode into an
 `OpenOptions`: `buffering`, an `int` kept unless it is the
 literal -1; `encoding` and `errors`, string literals resolved by

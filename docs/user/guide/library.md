@@ -337,9 +337,14 @@ with open("notes.txt", encoding="ascii", errors="replace") as notes:
 
 A mode CPython refuses for every file, such as `"rw"`, is E0404 with
 CPython's message, and so is a `newline` literal it refuses. TyPy 0.4
-adds what is refused now with E0201 (LIB-14): a mode that is not a
-literal, and `closefd`. `opener` takes a function as a value and is
-planned for 1.0 (LIB-18).
+adds `closefd`, refused now with E0201 (LIB-14). `opener` takes a
+function as a value and is planned for 1.0 (LIB-18).
+
+A mode held in a variable, such as `open(path, mode)`, opens a text file
+(ADR-0031). It is checked when the file is opened, with CPython's
+`ValueError` for a mode CPython refuses. A binary mode held in a variable
+raises `TypeError`, where CPython opens a binary file: write a binary
+mode as a literal, such as `open(path, "rb")`.
 
 ### Binary files
 

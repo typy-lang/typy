@@ -88,6 +88,7 @@ impl BodyChecker<'_> {
             codec,
             handler,
             newline,
+            mode: None,
         })
     }
 

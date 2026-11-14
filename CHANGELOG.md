@@ -88,6 +88,9 @@ All notable changes to TyPy are recorded here. The format follows
   class methods or class variables is planned for 0.5 (GEN-04, GEN-05,
   GEN-10, ADR-0023).
 - `...` alone as a statement does nothing, as `pass` does.
+- `open` takes a mode held in a variable, which opens a text file and is
+  checked with CPython's errors when the program runs; a binary mode in a
+  variable raises `TypeError` (LIB-14, ADR-0031).
 - `open` takes binary modes, which give a `BufferedReader`,
   `BufferedWriter` or `BufferedRandom`, or a `FileIO` with `buffering=0`,
   reading and writing `bytes` with CPython's results and errors (LIB-14,

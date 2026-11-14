@@ -101,10 +101,6 @@ fn what_is_planned_for_open_is_e0201() {
              program runs, which is planned for TyPy 1.0 (LIB-19)",
         ),
         (
-            "m = \"r\"\nf = open(\"a\", m)\n",
-            "a mode of `open` that is not a string literal is planned for TyPy 0.4 (LIB-14)",
-        ),
-        (
             "f = open(\"a\", closefd=False)\n",
             "the `closefd` argument of `open` is planned for TyPy 0.4 (LIB-14)",
         ),
@@ -132,6 +128,9 @@ c = open(\"a\", buffering=-1, encoding=None, errors=None, newline=None)
 d = open(\"a\", encoding=\" UTF8 \", newline=\"\")
 e = open(\"a\", \"r+\")
 g = open(\"a\", \"+wt\")
+m = \"w\"
+h = open(\"a\", m, encoding=\"ascii\")
+text: str = open(\"a\", m + \"t\").read()
 ";
     assert_eq!(diagnostics_at(PythonFloor::V3_12, source), []);
 }
@@ -237,6 +236,10 @@ fn an_argument_open_cannot_take_is_e0404() {
         (
             "f = open(\"a\", buffering=\"1\")\n",
             "`buffering` of `open` must be an int, and this is a str",
+        ),
+        (
+            "f = open(\"a\", 1)\n",
+            "the mode of `open` must be a str, and this is an int",
         ),
         (
             "f = open(\"a\", newline=1)\n",

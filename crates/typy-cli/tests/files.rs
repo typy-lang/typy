@@ -108,3 +108,21 @@ fn a_program_that_closes_no_file_prints_without_checking_standard_output() {
         assert_eq!(tyir.contains("write_stdout_checked"), checked, "{source}");
     }
 }
+
+#[test]
+fn a_binary_mode_held_in_a_variable_is_refused_when_the_program_runs() {
+    let program = Program::build(concat!(
+        "mode = \"rb\"\n",
+        "try:\n",
+        "    open(\"app.py\", mode)\n",
+        "except TypeError as error:\n",
+        "    print(error)\n",
+    ));
+    let output = program.run(&[], b"");
+    assert_eq!(output.status.code(), Some(0));
+    assert_eq!(
+        String::from_utf8_lossy(&output.stdout),
+        "TyPy opens a text file for a mode that is not a literal, and this mode is binary: \
+         'rb'\n"
+    );
+}
