@@ -143,8 +143,8 @@ impl FunctionLowerer<'_> {
                 let text = self.string_of(value, span);
                 // The error names the value's own class, as `type(value).__name__` does, and a
                 // file's type by its full name, as CPython names a type defined in C.
-                let name = if ty.is_file() {
-                    let name = format!("_io.{ty}");
+                let name = if let Some(class) = ty.file_class_name() {
+                    let name = format!("_io.{class}");
                     Self::borrowed(self.string(&name, span), TyirType::STR)
                 } else {
                     let class = self.runtime_type(value, ty, span);

@@ -362,7 +362,10 @@ impl BodyChecker<'_> {
                 // `file=None` is standard output, as no `file` is.
                 "file" if value.ty == Type::NoneType => {}
                 "file" => {
-                    self.expect(&value, Type::TextFile, "`file`");
+                    // A text file opened for a file descriptor writes as any other.
+                    if value.ty != Type::DescriptorFile(None) {
+                        self.expect(&value, Type::TextFile, "`file`");
+                    }
                     file = Some(value);
                 }
                 "flush" => {

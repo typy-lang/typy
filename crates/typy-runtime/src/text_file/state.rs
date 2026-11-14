@@ -59,6 +59,19 @@ pub unsafe extern "C" fn typy_rt_text_name(file: *const TextFile) -> *mut StrObj
     }
 }
 
+/// Returns `file.name` of a file opened for a file descriptor: that descriptor, as an `int`
+/// word.
+///
+/// # Safety
+///
+/// `file` points to a live text file.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn typy_rt_text_descriptor_name(file: *const TextFile) -> i64 {
+    // SAFETY: the caller's guarantee.
+    let descriptor = unsafe { (*file).descriptor };
+    crate::word::small(usize::try_from(descriptor).unwrap_or(0))
+}
+
 /// Returns `file.mode`: the mode as written to `open`, or `r` or `w` for a standard file.
 ///
 /// # Safety

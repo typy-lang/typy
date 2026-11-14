@@ -224,12 +224,65 @@ unsafe fn options(
     })
 }
 
-/// Returns `open(path, mode, buffering, encoding, errors, newline)` for a text mode the
-/// checker has read. `how` holds the number of its `Access` in its two low bits, whether the
-/// mode has `+` in the next, the codec `encoding` names in the two after, the error handler
-/// `errors` names in the three after, then whether the file is binary and whether it is a
-/// `FileIO`, so the call keeps to six arguments; `mode` and `encoding` are as written, which the file's `repr`
-/// shows, `encoding` null for `None`; `newline` is null for `None`.
+/// What `open` reads from its arguments before it opens anything: the access and whether
+/// the mode has `+`, the codec and the error handler, whether the file is binary or a
+/// `FileIO`, whether `closefd` is false, and `buffering` as a C `int`.
+struct Opening {
+    access: Access,
+    plus: bool,
+    codec: i64,
+    handler: i64,
+    /// Whether the file is binary, and whether it is a `FileIO`.
+    form: (bool, bool),
+    keep_open: bool,
+    buffering: i32,
+}
+
+/// Returns what `how`, `mode` and `buffering` say. `how` holds the number of the `Access` in
+/// its two low bits, whether the mode has `+` in the next, the codec `encoding` names in the
+/// two after, the error handler `errors` names in the three after, then whether the file is
+/// binary, whether it is a `FileIO`, whether the mode is a value to read, and whether
+/// `closefd` is false, so a call keeps to six arguments.
+///
+/// # Safety
+///
+/// `mode` points to a live `str`, and `how` and `buffering` are `int` words whose large
+/// integers are live.
+unsafe fn opening(
+    mode: *const StrObject,
+    how: i64,
+    buffering: i64,
+) -> Result<Opening, *mut ExceptionObject> {
+    let how = crate::word::inline_value(how);
+    // A mode that is not a literal is read here, as CPython reads it (ADR-0031).
+    let (access, plus) = if how & (1 << 10) == 0 {
+        (Access::of(how & 3), how & 4 != 0)
+    } else {
+        // SAFETY: the caller's guarantee.
+        unsafe { mode_value(mode)? }
+    };
+    // SAFETY: the caller's guarantee.
+    let buffering = unsafe { super::position::value_of(buffering) };
+    let Some(buffering) = buffering.and_then(|value| i32::try_from(value).ok()) else {
+        return Err(crate::exception::raise(
+            crate::exception::ExceptionKind::OverflowError,
+            "Python int too large to convert to C int",
+        ));
+    };
+    Ok(Opening {
+        access,
+        plus,
+        codec: (how >> 3) & 3,
+        handler: (how >> 5) & 7,
+        form: (how & (1 << 8) != 0, how & (1 << 9) != 0),
+        keep_open: how & (1 << 11) != 0,
+        buffering,
+    })
+}
+
+/// Returns `open(path, mode, buffering, encoding, errors, newline, closefd)` for a mode the
+/// checker has read, as `opening` reads `how`; `mode` and `encoding` are as written, which
+/// the file's `repr` shows, `encoding` null for `None`; `newline` is null for `None`.
 ///
 /// # Safety
 ///
@@ -244,34 +297,24 @@ pub unsafe extern "C" fn typy_rt_open(
     encoding: *const StrObject,
     newline: *const StrObject,
 ) -> Raising<*mut TextFile> {
-    let how = crate::word::inline_value(how);
-    // A mode that is not a literal is read here, as CPython reads it (ADR-0031).
-    let (access, plus) = if how & (1 << 10) == 0 {
-        (Access::of(how & 3), how & 4 != 0)
-    } else {
-        // SAFETY: the caller passes a live mode.
-        match unsafe { mode_value(mode) } {
-            Ok(found) => found,
-            Err(error) => return Raising::error(core::ptr::null_mut(), error),
-        }
-    };
-    let (codec, handler) = ((how >> 3) & 3, (how >> 5) & 7);
-    let (binary, raw) = (how & (1 << 8) != 0, how & (1 << 9) != 0);
     // SAFETY: the caller's guarantee.
-    let buffering = unsafe { super::position::value_of(buffering) };
-    let Some(buffering) = buffering.and_then(|value| i32::try_from(value).ok()) else {
+    let opening = match unsafe { opening(mode, how, buffering) } {
+        Ok(opening) => opening,
+        Err(error) => return Raising::error(core::ptr::null_mut(), error),
+    };
+    if opening.keep_open {
         let error = crate::exception::raise(
-            crate::exception::ExceptionKind::OverflowError,
-            "Python int too large to convert to C int",
+            crate::exception::ExceptionKind::ValueError,
+            "Cannot use closefd=False with file name",
         );
         return Raising::error(core::ptr::null_mut(), error);
-    };
+    }
     // SAFETY: the caller's guarantee.
     let bytes = match unsafe { path_bytes(path) } {
         Ok(bytes) => bytes,
         Err(error) => return Raising::error(core::ptr::null_mut(), error),
     };
-    let opened = crate::libc::open(bytes.bytes(), access.flags(plus));
+    let opened = crate::libc::open(bytes.bytes(), opening.access.flags(opening.plus));
     bytes.discard();
     let descriptor = match opened {
         Ok(descriptor) => descriptor,
@@ -281,21 +324,105 @@ pub unsafe extern "C" fn typy_rt_open(
             return Raising::error(core::ptr::null_mut(), error);
         }
     };
-    if access == Access::Read && !plus && crate::libc::is_directory(descriptor) {
+    if opening.access == Access::Read && !opening.plus && crate::libc::is_directory(descriptor) {
         let _ = crate::libc::close(descriptor);
         // SAFETY: the caller passes a live path.
         let error = unsafe { super::os_error::os_error(crate::libc::EISDIR, path) };
         return Raising::error(core::ptr::null_mut(), error);
     }
     // SAFETY: the caller's guarantee.
-    let options = match unsafe { options(buffering, codec, handler, newline) } {
-        Ok(options) => options,
-        Err(error) => {
-            let _ = crate::libc::close(descriptor);
-            return Raising::error(core::ptr::null_mut(), error);
-        }
+    unsafe { made(descriptor, path, mode, (encoding, newline), &opening) }
+}
+
+/// Returns `open(fd, ...)`: a file over a descriptor the program has, whose `name` is the
+/// descriptor, with CPython's checks: one past a C `int` is `TypeError`, as CPython then
+/// reads it as a path, a negative one `ValueError`, one that is not open `OSError` and a
+/// directory `IsADirectoryError`.
+///
+/// # Safety
+///
+/// As for `typy_rt_open`, with `fd` an `int` word whose large integer is live.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn typy_rt_open_descriptor(
+    fd: i64,
+    mode: *const StrObject,
+    how: i64,
+    buffering: i64,
+    encoding: *const StrObject,
+    newline: *const StrObject,
+) -> Raising<*mut TextFile> {
+    // SAFETY: the caller's guarantee.
+    let opening = match unsafe { opening(mode, how, buffering) } {
+        Ok(opening) => opening,
+        Err(error) => return Raising::error(core::ptr::null_mut(), error),
     };
-    if access == Access::Append {
+    // SAFETY: the caller's guarantee.
+    let value = unsafe { super::position::value_of(fd) };
+    let failure = |error| Raising::error(core::ptr::null_mut(), error);
+    let Some(descriptor) = value.and_then(|value| i32::try_from(value).ok()) else {
+        return failure(crate::exception::raise(
+            crate::exception::ExceptionKind::TypeError,
+            "expected str, bytes or os.PathLike object, not int",
+        ));
+    };
+    if descriptor < 0 {
+        return failure(crate::exception::raise(
+            crate::exception::ExceptionKind::ValueError,
+            "negative file descriptor",
+        ));
+    }
+    match crate::libc::directory_status(descriptor) {
+        Err(errno) => {
+            // SAFETY: an error of a descriptor names no file.
+            return failure(unsafe { super::os_error::os_error(errno, core::ptr::null()) });
+        }
+        Ok(true) => {
+            return failure(super::os_error::os_error_of_descriptor(
+                crate::libc::EISDIR,
+                descriptor,
+            ));
+        }
+        Ok(false) => {}
+    }
+    // SAFETY: the caller's guarantee.
+    unsafe {
+        made(
+            descriptor,
+            core::ptr::null(),
+            mode,
+            (encoding, newline),
+            &opening,
+        )
+    }
+}
+
+/// Returns the file over `descriptor` once it is open, after the checks CPython makes then:
+/// `buffering=0` and an illegal `newline` close the descriptor, unless `closefd` is false,
+/// and raise. A null `path` names the file by its descriptor.
+///
+/// # Safety
+///
+/// `path` is null or points to a live `str`, `mode` points to one, and `encoding` and
+/// `newline` are null or point to one.
+unsafe fn made(
+    descriptor: i32,
+    path: *const StrObject,
+    mode: *const StrObject,
+    (encoding, newline): (*const StrObject, *const StrObject),
+    opening: &Opening,
+) -> Raising<*mut TextFile> {
+    // SAFETY: the caller's guarantee.
+    let options =
+        match unsafe { options(opening.buffering, opening.codec, opening.handler, newline) } {
+            Ok(options) => options,
+            Err(error) => {
+                if !opening.keep_open {
+                    let _ = crate::libc::close(descriptor);
+                }
+                return Raising::error(core::ptr::null_mut(), error);
+            }
+        };
+    if opening.access == Access::Append {
         // CPython's `FileIO` moves to the end at once, so `tell` gives the size.
         let _ = crate::libc::seek(descriptor, 0, crate::libc::SEEK_END);
     }
@@ -306,7 +433,14 @@ pub unsafe extern "C" fn typy_rt_open(
         typy_rt_increment(mode.cast_mut().cast());
         typy_rt_increment(encoding.cast_mut().cast());
     }
-    let (flags, reader, writer) = buffers(access, plus, (binary, raw), &options);
+    let (flags, reader, writer) = buffers(opening.access, opening.plus, opening.form, &options);
+    let flags = flags
+        | if path.is_null() { super::DESCRIPTOR } else { 0 }
+        | if opening.keep_open {
+            super::KEEP_OPEN
+        } else {
+            0
+        };
     let next = OPEN.with(|open| *open);
     let file = boxed(TextFile {
         header: ObjectHeader::new(TEXT_FILE_TYPE_ID),
@@ -435,7 +569,11 @@ pub(crate) unsafe fn repr(file: &TextFile) -> *mut StrObject {
             (true, true) => [
                 crate::string::from_str(" mode="),
                 crate::string::typy_rt_str_repr(file.mode),
-                crate::string::from_str(" closefd=True>"),
+                crate::string::from_str(if flags & super::KEEP_OPEN == 0 {
+                    " closefd=True>"
+                } else {
+                    " closefd=False>"
+                }),
                 crate::string::from_str(""),
             ],
             (true, false) => [
@@ -445,9 +583,16 @@ pub(crate) unsafe fn repr(file: &TextFile) -> *mut StrObject {
                 crate::string::from_str(""),
             ],
         };
+        let name = if flags & super::DESCRIPTOR == 0 {
+            crate::string::typy_rt_str_repr(file.path)
+        } else {
+            let mut number = crate::message::MessageBuffer::new();
+            number.push_number(i64::from(file.descriptor));
+            number.text()
+        };
         let parts = [
             crate::string::from_str(class),
-            crate::string::typy_rt_str_repr(file.path),
+            name,
             tail[0],
             tail[1],
             tail[2],
@@ -551,7 +696,12 @@ pub(crate) fn close(file: &mut TextFile) -> *mut ExceptionObject {
         return core::ptr::null_mut();
     }
     let flushed = flush(file);
-    let closed = crate::libc::close(file.descriptor);
+    // A file opened with `closefd=False` leaves its descriptor open.
+    let closed = if file.flags & super::KEEP_OPEN == 0 {
+        crate::libc::close(file.descriptor)
+    } else {
+        Ok(())
+    };
     file.flags |= CLOSED;
     crate::allocator::free(file.reader.cast());
     crate::allocator::free(file.writer.cast());

@@ -108,6 +108,12 @@ pub(crate) fn is_terminal(descriptor: i32) -> bool {
 
 /// Returns whether a descriptor is a directory, from the `st_mode` of `fstat`.
 pub(crate) fn is_directory(descriptor: i32) -> bool {
+    directory_status(descriptor).unwrap_or(false)
+}
+
+/// Returns whether an open descriptor is a directory, or the error number of `fstat`, which
+/// is `EBADF` for a descriptor that is not open.
+pub(crate) fn directory_status(descriptor: i32) -> Result<bool, i32> {
     const S_IFMT: u32 = 0o170_000;
     const S_IFDIR: u32 = 0o040_000;
     // `struct stat` is 144 bytes on x86-64 and 128 on AArch64; `st_mode` is the low half of
@@ -119,14 +125,14 @@ pub(crate) fn is_directory(descriptor: i32) -> bool {
     let mut status = [0_u64; 18];
     // SAFETY: `status` is writable and larger than `struct stat`.
     if unsafe { fstat_descriptor(descriptor, &raw mut status) } != 0 {
-        return false;
+        return Err(errno());
     }
     #[allow(
         clippy::cast_possible_truncation,
         reason = "st_mode is the low 32 bits of the word"
     )]
     let mode = status[MODE_WORD] as u32;
-    mode & S_IFMT == S_IFDIR
+    Ok(mode & S_IFMT == S_IFDIR)
 }
 
 /// Reads into `buffer`, making an interrupted call again; returns how many bytes it read, 0 at

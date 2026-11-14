@@ -491,6 +491,7 @@ impl TypedExpr {
                 options.mode.as_ref(),
                 options.buffering.as_ref(),
                 options.newline.as_ref(),
+                options.closefd.as_ref(),
             ]
             .into_iter()
             .flatten()
@@ -641,6 +642,8 @@ pub enum FileAttribute {
     Mode,
     /// `closed`: whether the file is closed.
     Closed,
+    /// `name` of a file opened for a file descriptor: that descriptor, an `int`.
+    Descriptor,
 }
 
 impl FileAttribute {
@@ -672,4 +675,6 @@ pub struct OpenOptions {
     pub newline: Option<Box<TypedExpr>>,
     /// The mode, when it is not a literal: a text mode the runtime reads (ADR-0031).
     pub mode: Option<Box<TypedExpr>>,
+    /// `closefd`, when given and not the literal `True`.
+    pub closefd: Option<Box<TypedExpr>>,
 }

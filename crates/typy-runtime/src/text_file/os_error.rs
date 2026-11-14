@@ -74,6 +74,30 @@ pub(crate) fn text_of(errno: i32) -> *mut StrObject {
     text.text()
 }
 
+/// Returns a new exception of the class for `errno` about a file descriptor, written as
+/// `[Errno 21] Is a directory: 3`, and holding the arguments `(errno, strerror)`.
+pub(crate) fn os_error_of_descriptor(errno: i32, descriptor: i32) -> *mut ExceptionObject {
+    let strerror = text_of(errno);
+    let mut message = MessageBuffer::new();
+    message.push_str("[Errno ");
+    message.push_number(i64::from(errno));
+    message.push_str("] ");
+    // SAFETY: the text is a live string.
+    unsafe { message.push_text(strerror) };
+    message.push_str(": ");
+    message.push_number(i64::from(descriptor));
+    let exception = crate::exception::raise_class(class_of(errno), message.text());
+    let number = crate::word::inline(i64::from(errno))
+        .unwrap_or(1)
+        .cast_unsigned();
+    // SAFETY: the exception is new and takes the reference to the text.
+    unsafe {
+        let text = strerror.expose_provenance() as u64;
+        crate::exception::set_arguments(exception, &ERROR_ARGUMENTS, &[number, text]);
+    }
+    exception
+}
+
 /// Returns a new exception of the class for `errno`, written as
 /// `[Errno 2] No such file or directory: 'name'` with the `repr` of `filename`, or without
 /// it when `filename` is null, and holding the arguments `(errno, strerror)`.

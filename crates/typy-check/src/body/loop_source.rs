@@ -157,7 +157,11 @@ impl BodyChecker<'_> {
         // A set has no order, and a file or an iterator gives its items once, front first.
         if matches!(
             sequence.ty,
-            Type::Set(_) | Type::TextFile | Type::BinaryFile(_) | Type::Iterator(_)
+            Type::Set(_)
+                | Type::TextFile
+                | Type::BinaryFile(_)
+                | Type::DescriptorFile(_)
+                | Type::Iterator(_)
         ) {
             self.diagnostics.push(
                 Diagnostic::new(

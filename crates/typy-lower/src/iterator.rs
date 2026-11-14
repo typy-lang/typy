@@ -19,7 +19,7 @@ fn iterator_kind(ty: &Type) -> i64 {
         Type::DictView(View::Values, ..) => 6,
         Type::DictView(View::Items, ..) => 7,
         Type::Range => 9,
-        Type::TextFile | Type::BinaryFile(_) => 11,
+        Type::TextFile | Type::BinaryFile(_) | Type::DescriptorFile(_) => 11,
         _ => 5,
     }
 }

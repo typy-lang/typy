@@ -81,6 +81,7 @@ impl Type {
                 | Self::Traceback
                 | Self::TextFile
                 | Self::BinaryFile(_)
+                | Self::DescriptorFile(_)
                 | Self::Range
                 | Self::Module(_)
                 | Self::TypeObject(_)

@@ -42,7 +42,7 @@ fn refused_forms_give_their_codes() {
             "class A:\n    def __iter__(self) -> 'A':\n        return self\nfor x in A():\n    pass\n",
             "E0411",
         ),
-        ("print(open('x', closefd=False))\n", "E0201"),
+        ("print(open('x', opener=len))\n", "E0201"),
         ("v: dict[int, int | str] = {}\na = v[1] = 2\n", "E0201"),
         (
             "class B:\n    def __init__(self, n: int) -> None:\n        self.n: int = n\n        self.n: str = 'a'\n",

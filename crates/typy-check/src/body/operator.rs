@@ -345,6 +345,7 @@ fn has_identity(ty: &Type) -> bool {
                 | Type::AnyModule
                 | Type::TextFile
                 | Type::BinaryFile(_)
+                | Type::DescriptorFile(_)
                 | Type::TypeObject(_)
         ),
     }

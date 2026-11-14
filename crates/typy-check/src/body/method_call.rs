@@ -95,7 +95,7 @@ impl BodyChecker<'_> {
         let Some(bound) = self.bind(method, &signature, arguments, keywords, span) else {
             return Self::invalid_call(span);
         };
-        let text = if matches!(receiver.ty, Type::Bytes | Type::BinaryFile(_)) {
+        let text = if receiver.ty == Type::Bytes || receiver.ty.binary_kind().is_some() {
             Type::Bytes
         } else {
             Type::Str

@@ -447,3 +447,116 @@ fn a_mode_value_is_read_as_cpython_reads_a_mode() {
         );
     }
 }
+
+/// Returns the `repr` of the file `open` gives for the `int` word `fd` with `how`, or the
+/// class and text of its error; the file is closed and released.
+fn opened_for_descriptor(fd: i64, how: i64) -> Result<String, (String, String)> {
+    let mode = from_str("r");
+    let word = |value: i64| crate::word::inline(value).unwrap();
+    // SAFETY: the mode is live and released once; the file is released once.
+    unsafe {
+        let opened = super::disk::typy_rt_open_descriptor(
+            fd,
+            mode,
+            word(how),
+            word(-1),
+            core::ptr::null(),
+            core::ptr::null(),
+        );
+        typy_rt_decrement(mode.cast());
+        if !opened.exception.is_null() {
+            return Err(error_text(opened.exception));
+        }
+        let shown = super::tests::repr_of(opened.value);
+        assert_eq!(
+            super::state::typy_rt_text_descriptor_name(opened.value),
+            word(i64::from((*opened.value).descriptor))
+        );
+        assert!(typy_rt_text_close(opened.value).is_null());
+        typy_rt_decrement(opened.value.cast());
+        Ok(shown)
+    }
+}
+
+#[test]
+#[cfg_attr(miri, ignore = "Miri does not open files without disabling isolation")]
+fn a_descriptor_opens_a_file_named_by_its_number() {
+    let scratch = Scratch::new("descriptor");
+    std::fs::write(scratch.0.join("d.txt"), "x").unwrap();
+    let base = scratch.open("d.txt", "r", 0).unwrap();
+    // SAFETY: the file is live.
+    let number = unsafe { (*base).descriptor };
+    let word = crate::word::inline(i64::from(number)).unwrap();
+    let keep_open = 1 << 11;
+    let shown = opened_for_descriptor(word, keep_open).unwrap();
+    assert_eq!(
+        shown,
+        format!("<_io.TextIOWrapper name={number} mode='r' encoding='utf-8'>")
+    );
+    // `closefd=False` left the descriptor open; closing this one closes it.
+    assert!(crate::libc::directory_status(number).is_ok());
+    opened_for_descriptor(word, 0).unwrap();
+    assert_eq!(crate::libc::directory_status(number), Err(9));
+    // SAFETY: the file is live; closing its closed descriptor fails, as in CPython.
+    unsafe {
+        let error = typy_rt_text_close(base);
+        assert_eq!(error_text(error).1, "[Errno 9] Bad file descriptor");
+        typy_rt_decrement(base.cast());
+    }
+    let refused = [
+        (-1, "ValueError", "negative file descriptor"),
+        (999, "OSError", "[Errno 9] Bad file descriptor"),
+    ];
+    for (fd, class, text) in refused {
+        let word = crate::word::inline(fd).unwrap();
+        assert_eq!(
+            opened_for_descriptor(word, 0),
+            Err((class.to_owned(), text.to_owned()))
+        );
+    }
+    let large = crate::int::value::Integer::from_i128(1 << 40).into_word();
+    assert_eq!(
+        opened_for_descriptor(large, 0),
+        Err((
+            "TypeError".to_owned(),
+            "expected str, bytes or os.PathLike object, not int".to_owned()
+        ))
+    );
+}
+
+#[test]
+#[cfg_attr(miri, ignore = "Miri does not open files without disabling isolation")]
+fn a_directory_descriptor_and_closefd_with_a_path_are_refused() {
+    let scratch = Scratch::new("descriptor-directory");
+    let directory = std::fs::File::open(&scratch.0).unwrap();
+    let number = std::os::fd::AsRawFd::as_raw_fd(&directory);
+    let word = crate::word::inline(i64::from(number)).unwrap();
+    assert_eq!(
+        opened_for_descriptor(word, 1 << 11),
+        Err((
+            "IsADirectoryError".to_owned(),
+            format!("[Errno 21] Is a directory: {number}")
+        ))
+    );
+    let path = scratch.path("p.txt");
+    let mode = from_str("w");
+    let small = |value: i64| crate::word::inline(value).unwrap();
+    // SAFETY: the strings are live and released once.
+    unsafe {
+        let opened = super::disk::typy_rt_open(
+            path,
+            mode,
+            small(1 | 1 << 11),
+            small(-1),
+            core::ptr::null(),
+            core::ptr::null(),
+        );
+        assert_eq!(
+            error_text(opened.exception).1,
+            "Cannot use closefd=False with file name"
+        );
+        typy_rt_decrement(path.cast());
+        typy_rt_decrement(mode.cast());
+    }
+    assert!(!scratch.0.join("p.txt").exists());
+}

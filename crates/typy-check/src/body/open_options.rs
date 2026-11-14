@@ -1,5 +1,5 @@
-//! Checks the arguments of `open` after its mode (LIB-14): `buffering`, `encoding`, `errors`
-//! and `newline`, which a text file takes, and `closefd` and `opener`, which are planned.
+//! Checks the arguments of `open` after its mode (LIB-14): `buffering`, `encoding`, `errors`,
+//! `newline` and `closefd`, and `opener`, which is planned for 1.0.
 
 use typy_diagnostics::RuleId;
 use typy_source::syntax::{Constant, Expr};
@@ -30,22 +30,6 @@ impl BodyChecker<'_> {
         &mut self,
         given: &[Option<&Expr>; 8],
     ) -> Result<OpenOptions, TypedExpr> {
-        if let Some(closefd) = given[6]
-            && !matches!(
-                closefd,
-                Expr::Constant {
-                    value: Constant::Bool(true),
-                    ..
-                }
-            )
-        {
-            return Err(self.open_refused(
-                201,
-                closefd.span(),
-                "the `closefd` argument of `open` is planned for TyPy 0.4 (LIB-14)".to_owned(),
-                RuleId::LIB_14,
-            ));
-        }
         if let Some(opener) = given[7]
             && !is_none(opener)
         {
@@ -76,6 +60,22 @@ impl BodyChecker<'_> {
             )?,
             None => 0,
         };
+        // `closefd=True` is the default; another value is checked when the file is opened.
+        let closefd = given[6]
+            .filter(|value| {
+                !matches!(
+                    value,
+                    Expr::Constant {
+                        value: Constant::Bool(true),
+                        ..
+                    }
+                )
+            })
+            .map(|value| {
+                let checked = self.expression(value);
+                self.expect(&checked, Type::Bool, "`closefd` of `open`");
+                Box::new(checked)
+            });
         let newline = match given[5].filter(|value| !is_none(value)) {
             Some(value) => Some(Box::new(self.open_newline(value)?)),
             None => None,
@@ -89,6 +89,7 @@ impl BodyChecker<'_> {
             handler,
             newline,
             mode: None,
+            closefd,
         })
     }
 

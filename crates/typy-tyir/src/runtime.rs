@@ -251,6 +251,8 @@ pub enum RuntimeFunction {
     BinaryReadline,
     BinaryReadlines,
     BinaryWrite,
+    OpenDescriptor,
+    TextDescriptorName,
     ListAppendMoved,
     ListSetMoved,
     ListInsertMoved,
@@ -358,7 +360,7 @@ const FLOAT_FLOAT: &[TyirType] = &[TyirType::Float, TyirType::Float];
 
 impl RuntimeFunction {
     /// Every runtime function.
-    pub const ALL: [Self; 319] = [
+    pub const ALL: [Self; 321] = [
         Self::IntFloorDivide,
         Self::IntModulo,
         Self::IntPower,
@@ -601,6 +603,8 @@ impl RuntimeFunction {
         Self::BinaryReadline,
         Self::BinaryReadlines,
         Self::BinaryWrite,
+        Self::OpenDescriptor,
+        Self::TextDescriptorName,
         Self::ListAppendMoved,
         Self::ListSetMoved,
         Self::ListInsertMoved,
@@ -939,6 +943,12 @@ impl RuntimeFunction {
                 signature(&[TyirType::TEXT_FILE, Int], BYTES, true)
             }
             Self::BinaryWrite => signature(&[TyirType::TEXT_FILE, BYTES], Int, true),
+            Self::OpenDescriptor => signature(
+                &[Int, STR, Int, Int, STR, OPTIONAL_STR],
+                TyirType::TEXT_FILE,
+                true,
+            ),
+            Self::TextDescriptorName => signature(&[TyirType::TEXT_FILE], Int, false),
             Self::TextSeek | Self::TextTruncate => {
                 signature(&[TyirType::TEXT_FILE, Int, Int], Int, true)
             }
@@ -1269,6 +1279,8 @@ impl RuntimeFunction {
             Self::BinaryReadline => "binary_readline",
             Self::BinaryReadlines => "binary_readlines",
             Self::BinaryWrite => "binary_write",
+            Self::OpenDescriptor => "open_descriptor",
+            Self::TextDescriptorName => "text_descriptor_name",
             Self::ListAppendMoved => "list_append_moved",
             Self::ListSetMoved => "list_set_moved",
             Self::ListInsertMoved => "list_insert_moved",

@@ -336,9 +336,22 @@ with open("notes.txt", encoding="ascii", errors="replace") as notes:
 ```
 
 A mode CPython refuses for every file, such as `"rw"`, is E0404 with
-CPython's message, and so is a `newline` literal it refuses. TyPy 0.4
-adds `closefd`, refused now with E0201 (LIB-14). `opener` takes a
-function as a value and is planned for 1.0 (LIB-18).
+CPython's message, and so is a `newline` literal it refuses. `opener`
+takes a function as a value and is planned for 1.0 (LIB-18).
+
+`open(fd)` with an `int` opens a file over a descriptor the program
+already has, such as `sys.stdout.fileno()`. Its `name` is that `int`, so
+the file has a type of its own, such as `TextIOWrapper of a file
+descriptor`, and a variable holds files of one sort only (LIB-14).
+`closefd=False` leaves the descriptor open when the file closes, and with
+a path it is E0404, as CPython raises `ValueError` for it. CPython 3.13
+and later warn when a `bool` is used as a descriptor, so `open(True)` is
+E0404.
+
+A file that cannot be closed when its last reference goes, or when the
+program ends, such as one whose descriptor another file has closed, is
+dropped without a message, where CPython reports the error as an
+ignored exception.
 
 A mode held in a variable, such as `open(path, mode)`, opens a text file
 (ADR-0031). It is checked when the file is opened, with CPython's
@@ -386,7 +399,7 @@ with a message writes only a line ending, and an uncaught exception
 writes `lost sys.stderr`; CPython writes a dump of the exception object,
 with its address, before that line.
 
-<!-- typy-expect: rejected E0201 at 1:30 -->
+<!-- typy-expect: rejected E0201 at 1:29 -->
 ```python
-data = open("x.txt", closefd=False)
+data = open("x.txt", opener=len)
 ```

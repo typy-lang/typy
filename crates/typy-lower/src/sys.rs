@@ -3,7 +3,7 @@
 
 use typy_check::{BuiltinException, ExceptionClass, SysValue, TypedExpr};
 use typy_diagnostics::Span;
-use typy_tyir::{Constant, RuntimeFunction, Terminator, TyirType, TypeId};
+use typy_tyir::{Constant, RuntimeFunction, Terminator, TyirType, TypeId, ValueId};
 
 use crate::function::FunctionLowerer;
 use crate::ownership::Lowered;
@@ -169,6 +169,39 @@ impl FunctionLowerer<'_> {
         self.call_runtime(function, arguments, span)
     }
 
+    /// Returns the word `typy_rt_open` reads: `how` as the checker found it, with the bit of
+    /// `closefd=False` set when `closefd` is false, a literal or a value tested here.
+    fn open_how(&mut self, how: i64, closefd: Option<&TypedExpr>, span: Span) -> ValueId {
+        let keep_open = how | 1 << 11;
+        let Some(closefd) = closefd else {
+            return self.constant(Constant::Int(how.to_string()), span);
+        };
+        if let typy_check::TypedExprKind::Constant(typy_check::TypedConstant::Bool(value)) =
+            &closefd.kind
+        {
+            let chosen = if *value { how } else { keep_open };
+            return self.constant(Constant::Int(chosen.to_string()), span);
+        }
+        let value = self.expression(closefd);
+        let slot = self.hidden_slot("how", TyirType::Int);
+        let closing = self.constant(Constant::Int(how.to_string()), span);
+        self.store(slot, Self::borrowed(closing, TyirType::Int), span);
+        let keeping = self.builder.create_block();
+        let after = self.builder.create_block();
+        self.builder.terminate(Terminator::Branch {
+            condition: value.value,
+            then: after,
+            otherwise: keeping,
+        });
+        self.builder.switch_to(keeping);
+        let kept = self.constant(Constant::Int(keep_open.to_string()), span);
+        self.store(slot, Self::borrowed(kept, TyirType::Int), span);
+        self.jump_to(after);
+        self.builder.switch_to(after);
+        self.release(value, span);
+        self.load(slot, span).value
+    }
+
     /// Returns `name`, `mode` or `closed` of a text file (LIB-14).
     pub(crate) fn file_attribute(
         &mut self,
@@ -183,6 +216,9 @@ impl FunctionLowerer<'_> {
             }
             typy_check::FileAttribute::Mode => {
                 self.call_runtime(RuntimeFunction::TextMode, vec![file.value], span)
+            }
+            typy_check::FileAttribute::Descriptor => {
+                self.call_runtime(RuntimeFunction::TextDescriptorName, vec![file.value], span)
             }
             typy_check::FileAttribute::Closed => {
                 let question = self.constant(Constant::Int("4".to_owned()), span);
@@ -222,19 +258,16 @@ impl FunctionLowerer<'_> {
         // The runtime reads the access, with `+` in its third bit, the codec, the handler and
         // whether the file is binary or a `FileIO` from one word, so a call keeps to six
         // arguments.
-        let (binary, raw) = match file {
-            typy_check::Type::BinaryFile(kind) => {
-                (1, i64::from(*kind == typy_check::BinaryKind::Raw))
-            }
-            _ => (0, 0),
-        };
+        let (binary, raw) = file.binary_kind().map_or((0, 0), |kind| {
+            (1, i64::from(kind == typy_check::BinaryKind::Raw))
+        });
         let how = access as i64
             | options.codec << 3
             | options.handler << 5
             | binary << 8
             | raw << 9
             | i64::from(mode_value.is_some()) << 10;
-        let how = self.constant(Constant::Int(how.to_string()), span);
+        let how = self.open_how(how, options.closefd.as_deref(), span);
         let buffering_value = buffering.map_or_else(
             || self.constant(Constant::Int("-1".to_owned()), span),
             |value| value.value,
@@ -245,8 +278,13 @@ impl FunctionLowerer<'_> {
         };
         let newline_value =
             newline.map_or_else(|| self.none_of(optional_str, span), |value| value.value);
+        let function = if path.ty == TyirType::Int {
+            RuntimeFunction::OpenDescriptor
+        } else {
+            RuntimeFunction::Open
+        };
         let file = self.call_runtime(
-            RuntimeFunction::Open,
+            function,
             vec![
                 path.value,
                 mode,

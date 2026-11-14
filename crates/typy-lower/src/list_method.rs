@@ -19,7 +19,7 @@ impl FunctionLowerer<'_> {
         result: TyirType,
         span: Span,
     ) -> Lowered {
-        let binary = matches!(receiver.ty, typy_check::Type::BinaryFile(_));
+        let binary = receiver.ty.binary_kind().is_some();
         let receiver = self.expression(receiver);
         // Every value in source order, and each parameter's value, which is the last given for
         // a parameter that takes many.

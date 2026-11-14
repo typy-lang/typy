@@ -64,6 +64,9 @@ pub enum Type {
     /// A binary file `open` gives, of the class CPython makes for its mode and buffering
     /// (LIB-14).
     BinaryFile(BinaryKind),
+    /// A file `open` gives for a file descriptor, whose `name` is that `int`: a text file, or
+    /// a binary one of this class (LIB-14).
+    DescriptorFile(Option<BinaryKind>),
     /// `range` held as a value: a sequence of `int` (DAT-17).
     Range,
     /// The module object of the module of this qualified name, whose attributes are known
@@ -155,6 +158,7 @@ impl TypeObjectOf {
             | Type::AnyModule
             | Type::TextFile
             | Type::BinaryFile(_)
+            | Type::DescriptorFile(_)
             | Type::Traceback
             | Type::Module(_)
             | Type::Optional(_)
@@ -635,8 +639,8 @@ impl Type {
     #[must_use]
     pub const fn file_line(&self) -> Option<Type> {
         match self {
-            Self::TextFile => Some(Self::Str),
-            Self::BinaryFile(_) => Some(Self::Bytes),
+            Self::TextFile | Self::DescriptorFile(None) => Some(Self::Str),
+            Self::BinaryFile(_) | Self::DescriptorFile(Some(_)) => Some(Self::Bytes),
             _ => None,
         }
     }
@@ -644,7 +648,29 @@ impl Type {
     /// Returns whether this is a file, text or binary.
     #[must_use]
     pub const fn is_file(&self) -> bool {
-        matches!(self, Self::TextFile | Self::BinaryFile(_))
+        matches!(
+            self,
+            Self::TextFile | Self::BinaryFile(_) | Self::DescriptorFile(_)
+        )
+    }
+
+    /// Returns the class of a binary file, or `None` for a text file and any other type.
+    #[must_use]
+    pub const fn binary_kind(&self) -> Option<BinaryKind> {
+        match self {
+            Self::BinaryFile(kind) | Self::DescriptorFile(Some(kind)) => Some(*kind),
+            _ => None,
+        }
+    }
+
+    /// Returns the name of CPython's class of a file, or `None` for any other type.
+    #[must_use]
+    pub const fn file_class_name(&self) -> Option<&'static str> {
+        match self {
+            Self::TextFile | Self::DescriptorFile(None) => Some("TextIOWrapper"),
+            Self::BinaryFile(kind) | Self::DescriptorFile(Some(kind)) => Some(kind.class_name()),
+            _ => None,
+        }
     }
 
     /// Returns the spelling with its article, for messages: `an int`, `a str`, `None`.
@@ -721,6 +747,11 @@ impl fmt::Display for Type {
             Self::AnyModule => formatter.write_str("ModuleType"),
             Self::TextFile => formatter.write_str("TextIOWrapper"),
             Self::BinaryFile(kind) => formatter.write_str(kind.class_name()),
+            Self::DescriptorFile(kind) => write!(
+                formatter,
+                "{} of a file descriptor",
+                kind.map_or("TextIOWrapper", BinaryKind::class_name)
+            ),
             Self::Traceback => formatter.write_str("TracebackType"),
             Self::Range => formatter.write_str("range"),
             Self::Module(name) => write!(formatter, "module `{name}`"),

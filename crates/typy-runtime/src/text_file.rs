@@ -43,6 +43,10 @@ const STANDARD: u32 = 8;
 const BINARY: u32 = 16;
 /// The binary file is a `FileIO`, which has no buffers.
 const RAW: u32 = 32;
+/// The file was opened for a file descriptor, which is its `name`.
+const DESCRIPTOR: u32 = 64;
+/// The file was opened with `closefd=False`, so closing it leaves its descriptor open.
+const KEEP_OPEN: u32 = 128;
 
 /// A text file: its descriptor and state, its name and mode, and the buffers of a file
 /// `open` made.
@@ -155,7 +159,7 @@ pub(crate) fn close_all() {
 unsafe extern "C" fn text_file_repr(object: *mut ObjectHeader) -> Raising<*mut StrObject> {
     // SAFETY: the type of the object says it is a text file.
     let file = unsafe { &*object.cast::<TextFile>() };
-    if file.path.is_null() {
+    if file.flags & STANDARD != 0 {
         let mut text = MessageBuffer::new();
         text.push_str("<_io.TextIOWrapper name='");
         text.push_str(file.name);

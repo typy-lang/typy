@@ -284,8 +284,8 @@ impl BodyChecker<'_> {
                 item.as_ref().clone()
             }
             Type::DictView(view, key, value) => view.item(key, value),
-            Type::Str | Type::TextFile => Type::Str,
-            Type::BinaryFile(_) => Type::Bytes,
+            Type::Str => Type::Str,
+            file if file.is_file() => file.file_line().unwrap_or(Type::Error),
             Type::Bytes | Type::Range => Type::Int,
             Type::Iterator(item) | Type::Iterable(item) => item.as_ref().clone(),
             Type::Error => Type::Error,

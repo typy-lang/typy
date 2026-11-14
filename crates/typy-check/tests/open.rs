@@ -101,10 +101,6 @@ fn what_is_planned_for_open_is_e0201() {
              program runs, which is planned for TyPy 1.0 (LIB-19)",
         ),
         (
-            "f = open(\"a\", closefd=False)\n",
-            "the `closefd` argument of `open` is planned for TyPy 0.4 (LIB-14)",
-        ),
-        (
             "f = open(\"a\", \"r\", -1, None, None, None, True, len)\n",
             "the `opener` argument of `open` is planned for TyPy 1.0 (LIB-18)",
         ),
@@ -172,6 +168,58 @@ with open(\"a\", \"rb\") as inside:
             "import sys\nf = open(\"a\", \"wb\")\nprint(1, file=f)\n",
             "E0404",
             "`file` must be a TextIOWrapper, and this is a BufferedWriter",
+        ),
+    ] {
+        assert_eq!(
+            one_error(source),
+            (code.to_owned(), message.to_owned()),
+            "{source}"
+        );
+    }
+}
+
+#[test]
+fn a_descriptor_opens_a_file_whose_name_is_an_int() {
+    let source = "\
+import sys
+
+keep = False
+text = open(sys.stdout.fileno(), \"w\", closefd=keep)
+number: int = text.name
+print(\"x\", file=text)
+data = open(0, \"rb\", closefd=False)
+raw = open(0, \"rb\", buffering=0, closefd=False)
+line: bytes = data.readline() + raw.read(1)
+with open(1, \"w\", closefd=True) as out:
+    count: int = out.write(\"y\") + out.name
+";
+    assert_eq!(diagnostics_at(PythonFloor::V3_12, source), []);
+    for (source, code, message) in [
+        (
+            "f = open(True)\n",
+            "E0404",
+            "CPython 3.13 and later warn that a bool is used as a file descriptor; pass an int",
+        ),
+        (
+            "f = open(\"a\", closefd=False)\n",
+            "E0404",
+            "`open` raises `ValueError: Cannot use closefd=False with file name` for a path",
+        ),
+        (
+            "f = open(\"a\", closefd=1)\n",
+            "E0404",
+            "`closefd` of `open` must be a bool, and this is an int",
+        ),
+        (
+            "f = open(\"a\")\nf = open(3)\n",
+            "E0402",
+            "`f` was declared as TextIOWrapper and is assigned a TextIOWrapper of a file \
+             descriptor",
+        ),
+        (
+            "f = open(3)\nname: str = f.name\n",
+            "E0402",
+            "`name` was declared as str and is assigned an int",
         ),
     ] {
         assert_eq!(
@@ -327,8 +375,8 @@ fn calls_open_cannot_take_are_e0404() {
             "`open` takes at most 8 arguments, and 9 are given",
         ),
         (
-            "f = open(3)\n",
-            "the file of `open` must be a str, and this is an int",
+            "f = open(3.5)\n",
+            "the file of `open` must be a str, and this is a float",
         ),
         (
             "f = open(\"a\")\nf.writelines([1])\n",
