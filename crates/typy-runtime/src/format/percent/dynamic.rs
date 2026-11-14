@@ -278,6 +278,10 @@ fn parse(
         *at += 1;
     }
     let width = number(points, at);
+    if matches!(width, Number::Given(digits) if digits > usize::try_from(i64::MAX).unwrap_or(usize::MAX))
+    {
+        return Err(plain_value_error("width too big"));
+    }
     let precision = if is(*at, b'.') {
         *at += 1;
         match number(points, at) {
@@ -287,6 +291,10 @@ fn parse(
     } else {
         Number::Absent
     };
+    if matches!(precision, Number::Given(digits) if digits > usize::try_from(i32::MAX).unwrap_or(usize::MAX))
+    {
+        return Err(plain_value_error("precision too big"));
+    }
     if points
         .get(*at)
         .is_some_and(|point| b"hlL".iter().any(|modifier| u32::from(*modifier) == *point))
@@ -331,6 +339,13 @@ fn number(points: &[u32], at: &mut usize) -> Number {
     } else {
         Number::Given(value)
     }
+}
+
+/// Returns `ValueError` with `message`.
+fn plain_value_error(message: &str) -> *mut ExceptionObject {
+    let mut text = MessageBuffer::new();
+    text.push_str(message);
+    text.raise(ExceptionKind::ValueError)
 }
 
 /// Returns `ValueError` with `message` and a position.
@@ -381,7 +396,7 @@ fn unnamed_text(
 ) -> Result<*mut StrObject, *mut ExceptionObject> {
     let mut printf = conversion.printf;
     if conversion.width == Number::Star {
-        let width = star(values)?;
+        let width = star(values, i128::from(i64::MAX), "ssize_t")?;
         if width < 0 {
             printf.left = true;
         }
@@ -391,7 +406,7 @@ fn unnamed_text(
     }
     match conversion.precision {
         Number::Star => {
-            let precision = star(values)?;
+            let precision = star(values, i128::from(i32::MAX), "int")?;
             printf.precision = Some(usize::try_from(precision.max(0)).unwrap_or(usize::MAX));
         }
         Number::Given(precision) => printf.precision = Some(precision),
@@ -407,14 +422,24 @@ fn unnamed_text(
     convert(printf, conversion.kind, ty, value, &label)
 }
 
-/// Returns the `int` a `*` takes from the next value.
-fn star(values: &mut Values) -> Result<i64, *mut ExceptionObject> {
+/// Returns the `int` a `*` takes from the next value, which CPython reads as a C type of
+/// largest value `largest`, named `c_type` in its `OverflowError`.
+fn star(values: &mut Values, largest: i128, c_type: &str) -> Result<i64, *mut ExceptionObject> {
     let (position, ty, value) = values.next()?;
     let number = match ty.kind() {
-        ItemKind::Int if crate::word::is_inline(value.cast_signed()) => {
-            inline_value(value.cast_signed())
+        ItemKind::Int => {
+            // SAFETY: the value is a live `int` word.
+            let whole = unsafe { crate::int::value::Integer::from_word(value.cast_signed()) }
+                .to_i128()
+                .filter(|number| (-largest - 1..=largest).contains(number));
+            let Some(whole) = whole else {
+                let mut message = MessageBuffer::new();
+                message.push_str("Python int too large to convert to C ");
+                message.push_str(c_type);
+                return Err(message.raise(ExceptionKind::OverflowError));
+            };
+            i64::try_from(whole).unwrap_or(i64::MAX)
         }
-        ItemKind::Int => i64::MAX,
         ItemKind::Bool => i64::from(value != 0),
         _ => {
             let mut message = MessageBuffer::new();
@@ -1048,5 +1073,44 @@ mod tests {
         assert_eq!(format_items("%(a)s", &mapping, 1), Err("'a'".to_owned()));
         // SAFETY: the test holds the only reference.
         unsafe { typy_rt_decrement(dict.cast()) };
+    }
+
+    #[test]
+    fn a_width_or_a_precision_past_a_c_integer_is_refused_as_cpython_refuses_it() {
+        let big = |value: i128| {
+            (
+                ItemKind::Int,
+                crate::int::value::Integer::from_i128(value)
+                    .into_word()
+                    .cast_unsigned(),
+            )
+        };
+        let one = (ItemKind::Int, inline(1).unwrap().cast_unsigned());
+        let cases = [
+            (
+                "%*d",
+                vec![big(1 << 70), one],
+                "Python int too large to convert to C ssize_t",
+            ),
+            (
+                "%*d",
+                vec![big(-(1 << 70)), one],
+                "Python int too large to convert to C ssize_t",
+            ),
+            (
+                "%.*d",
+                vec![big(1 << 31), one],
+                "Python int too large to convert to C int",
+            ),
+            ("%99999999999999999999d", vec![one], "width too big"),
+            ("%.3000000000d", vec![one], "precision too big"),
+        ];
+        for (format, items, expected) in cases {
+            assert_eq!(
+                format_items(format, &items, 0),
+                Err(expected.to_owned()),
+                "{format}"
+            );
+        }
     }
 }

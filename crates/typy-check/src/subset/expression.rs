@@ -187,6 +187,22 @@ impl Walker {
                 for argument in arguments {
                     self.expression(argument);
                 }
+                // CPython refuses a call that names one keyword twice when it compiles it.
+                for (index, keyword) in keywords.iter().enumerate() {
+                    if let Some(name) = &keyword.name
+                        && keywords[..index].iter().any(|before| {
+                            before
+                                .name
+                                .as_ref()
+                                .is_some_and(|earlier| earlier.name == name.name)
+                        })
+                    {
+                        self.syntax_error(
+                            keyword.span,
+                            &format!("keyword argument repeated: {}", name.name),
+                        );
+                    }
+                }
                 for keyword in keywords {
                     if keyword.name.is_none() {
                         self.report(

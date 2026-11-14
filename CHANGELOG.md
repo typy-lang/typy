@@ -177,6 +177,12 @@ All notable changes to TyPy are recorded here. The format follows
 
 ### Fixed
 
+- A call that names one keyword twice, such as `print(1, sep="", sep="")`,
+  is E0103 with CPython's `SyntaxError` message, `keyword argument
+  repeated: sep`; it used to compile, or report the wrong error (STD-01).
+- A `%` format whose width is past a C `ssize_t` or whose precision is
+  past a C `int`, such as `"%99999999999999999999d"`, is refused with
+  CPython's `width too big` or `precision too big` (LIB-10).
 - `input()` reads standard input as CPython does: a line that ends with
   `\r\n` or `\r` loses it, where it used to keep the `\r` (LIB-04).
 - A truth test of a list, a set, a dict or `bytes` in a recursive

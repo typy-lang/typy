@@ -354,3 +354,28 @@ fn a_generic_class_is_named_with_its_type_arguments_in_annotations_and_calls() {
     let other = diagnostics("x: frozenset[int] = 1\nprint(frozenset[int]())\n");
     assert_eq!(other.len(), 2, "{other:?}");
 }
+
+#[test]
+fn a_keyword_repeated_in_a_call_is_a_syntax_error() {
+    for (source, expected) in [
+        (
+            "print(1, sep=\"\", sep=\"\")\n",
+            "keyword argument repeated: sep",
+        ),
+        (
+            "import math\nprint(math.prod([1], start=1, start=2))\n",
+            "keyword argument repeated: start",
+        ),
+        (
+            "def f(a: int) -> None:\n    pass\nf(a=1, a=2)\n",
+            "keyword argument repeated: a",
+        ),
+    ] {
+        let found = diagnostics(source);
+        assert_eq!(
+            found,
+            [("E0103".to_owned(), expected.to_owned())],
+            "{source:?}"
+        );
+    }
+}
