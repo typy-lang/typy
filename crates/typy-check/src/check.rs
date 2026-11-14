@@ -44,6 +44,7 @@ pub(crate) use definition::Definition;
 use crate::body::{BodyChecker, Program};
 use crate::subset;
 use crate::typed::{ClassId, FunctionId, TypedProgram};
+use crate::types::Type;
 use class::{BaseScope, KnownClasses, class_types, collect_classes, collect_members};
 use definition::{FunctionScope, collect_functions};
 use definition_order::check_calls_follow_definitions;
@@ -236,8 +237,16 @@ fn check_module(
         .partition(|(_, definition)| definition.class.is_some() && definition.name == "__init__");
     let function_id =
         |index: usize| FunctionId(u32::try_from(first_function + index).unwrap_or(u32::MAX));
+    // The `__init__` of a generic class is checked once, with its type parameters opaque,
+    // since the types it gives the attributes hold for every copy.
     for (index, definition) in initializers {
+        program.type_arguments = definition
+            .type_parameters
+            .iter()
+            .map(|parameter| (parameter.name.clone(), Type::parameter(parameter.clone())))
+            .collect();
         BodyChecker::check_function(program, function_id(index), definition, diagnostics);
+        program.type_arguments.clear();
     }
     program.end_first_look();
     let body = BodyChecker::check_module(program, &module_body, diagnostics);
