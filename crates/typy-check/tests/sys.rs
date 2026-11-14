@@ -84,7 +84,7 @@ fn names_of_sys_typy_does_not_have_give_their_codes() {
         (
             "import sys\nprint(sys.version_info)\n",
             "E0201",
-            "`sys.version_info` is planned for TyPy 0.4 (LIB-13)",
+            "using `sys.version_info` as a value is planned for TyPy 0.5 (LIB-16); compare it with a tuple of `int`s, or read an item or a field",
         ),
         (
             "import sys\nsys.setrecursionlimit('a')\n",
@@ -232,7 +232,7 @@ fn assigning_a_name_of_a_built_in_module_is_refused() {
         (
             "import sys\nsys.version_info = 1\n",
             "E0201",
-            "`sys.version_info` is planned for TyPy 0.4 (LIB-13)",
+            "using `sys.version_info` as a value is planned for TyPy 0.5 (LIB-16); compare it with a tuple of `int`s, or read an item or a field",
         ),
     ] {
         let found = diagnostics(source);

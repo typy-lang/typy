@@ -127,6 +127,7 @@ LIB-13):
 | `sys.maxsize`, `sys.maxunicode` | `2**63 - 1` and `1114111` |
 | `sys.byteorder`, `sys.platform` | `"little"` and `"linux"`, those of the platforms TyPy builds for |
 | `sys.getrecursionlimit()`, `sys.setrecursionlimit(n)` | Read and set the recursion limit, 1000 at first |
+| `sys.version`, `sys.hexversion`, `sys.version_info` | CPython 3.15.0, whose behaviour TyPy follows: `'3.15.0 (TyPy 0.4.0)'`, `0x030F00F0` and `(3, 15, 0, 'final', 0)` |
 
 An argument that is not valid UTF-8 keeps each stray byte as a
 surrogate, as CPython decodes it, so `b"a\xffb"` becomes `'a\udcffb'`.
@@ -173,8 +174,23 @@ stops where the stack runs out, with `RecursionError` (FUN-02), so the
 number is kept only for `getrecursionlimit`, and a limit below the
 current depth, which CPython refuses with `RecursionError`, is kept.
 
-`sys.version`, `sys.version_info` and `sys.hexversion` are planned
-(E0201, LIB-13). The rest
+A program built by TyPy runs without an interpreter, so it reports the
+version of CPython whose results and messages it has, 3.15, whatever its
+floor (ADR-0029). `sys.version_info` is compared, indexed and read by
+field where the program uses it, through `sys`:
+
+<!-- typy-expect: accepted -->
+```python
+import sys
+
+if sys.version_info >= (3, 12):
+    print("major version", sys.version_info.major, sys.version_info[0])
+print(sys.version.startswith("3."), sys.hexversion >= 0x030C0000)
+```
+
+`sys.version_info` as a value of its own, printed, stored or imported
+with `from sys import version_info`, is planned for 0.5 (E0201, LIB-16).
+The rest
 of CPython's `sys`, such as `sys.modules` or `sys.getrefcount`, depends
 on the interpreter and is E0202. The switches of lazy imports,
 `sys.set_lazy_imports` and its companions, are E0202 as well (MOD-09):

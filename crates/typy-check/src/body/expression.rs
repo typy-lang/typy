@@ -16,6 +16,9 @@ impl BodyChecker<'_> {
         if let Some(each) = self.each_member(expression) {
             return each;
         }
+        if let Some(folded) = self.version_info_use(expression) {
+            return folded;
+        }
         match expression {
             Expr::Constant { value, .. } => {
                 let constant = match value {

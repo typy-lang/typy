@@ -362,6 +362,7 @@ formatter applies; Ruff's formatter is the project's recommendation.
 | LIB-13 | `sys.maxsize`, `sys.byteorder`, `sys.platform`, `sys.version`, `sys.version_info`, `sys.hexversion`, `sys.maxunicode`, `sys.getrecursionlimit`, `sys.setrecursionlimit` and `sys.stdin` shall be available. | S | 0.4 |
 | LIB-14 | `open` shall accept binary modes, `+` modes, a mode that is not a literal, encodings other than UTF-8 and the arguments `buffering`, `errors`, `newline`, `closefd` and `opener`; a text file shall have `seek`, `tell`, `truncate`, `fileno`, `isatty`, `readable`, `writable` and `seekable`, and the attributes `name`, `mode` and `closed`; closing `sys.stdout` or `sys.stderr` shall close it. | S | 0.4 |
 | LIB-15 | `math.fsum`, `math.dist`, `math.prod` and `math.sumprod` shall take items of a union of number types, and `math.prod` a `bool` start and items other than numbers. | C | 0.5 |
+| LIB-16 | `sys.version_info` shall be a value as CPython's: printed, stored, passed and imported with `from sys import version_info`. | C | 0.5 |
 
 ### 3.15 Memory management (MEM)
 

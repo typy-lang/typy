@@ -496,7 +496,9 @@ public name of CPython 3.12 to 3.15's `sys` into a `SysName`: a
 `SysValue` (`argv`, `stdout`, `stderr`, `stdin`), `exit`, a switch of lazy imports
 (E0202, MOD-09), a `SysConstant` folded into the program, `getrecursionlimit`
 and `setrecursionlimit`, which `TypedExprKind::RecursionLimit` reads and sets
-in the runtime, a name planned (E0201, LIB-13), or a name TyPy
+in the runtime, `version_info`, which `body/version_info.rs` folds into
+constants where it is compared with a tuple of `int`s, indexed or read by
+field, and refuses elsewhere (E0201, LIB-16, ADR-0029), or a name TyPy
 does not provide (E0202). `body/builtin_module.rs` holds what the two
 modules share: `BUILTIN_MODULES`, the `ModuleFunction` and
 `BuiltinValue` a name gives, and `Program::builtin_lookup`, whose

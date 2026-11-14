@@ -46,6 +46,7 @@ mod super_call;
 mod sys_call;
 mod type_object;
 mod union;
+mod version_info;
 mod view_operator;
 
 pub(crate) use builtin_module::ModuleFunction;

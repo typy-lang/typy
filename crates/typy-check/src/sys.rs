@@ -1,5 +1,4 @@
-//! The names of the `sys` module (LIB-04, LIB-13, MOD-09, ADR-0018): the ones TyPy provides,
-//! the ones planned, the switches of lazy imports it refuses, and the rest of the
+//! The names of the `sys` module (LIB-04, LIB-13, MOD-09, ADR-0018): the ones TyPy provides, the switches of lazy imports it refuses, and the rest of the
 //! names CPython 3.12 to 3.15 define, which TyPy does not provide.
 
 /// A value of `sys`.
@@ -40,8 +39,9 @@ pub(crate) enum SysName {
     /// A switch of lazy imports, which changes how imports behave from outside the module
     /// that imports (MOD-09).
     LazySwitch,
-    /// A name planned (LIB-13).
-    Planned,
+    /// `sys.version_info`, which TyPy folds where a program compares or reads it, and plans
+    /// as a value (LIB-13, LIB-16).
+    VersionInfo,
     /// A name of CPython's `sys` that TyPy does not provide.
     Unprovided,
 }
@@ -54,9 +54,6 @@ const LAZY_SWITCHES: [&str; 5] = [
     "set_lazy_imports",
     "set_lazy_imports_filter",
 ];
-
-/// The names planned (LIB-13).
-const PLANNED: [&str; 3] = ["hexversion", "version", "version_info"];
 
 /// The other public names of CPython 3.12 to 3.15's `sys`, in name order.
 const OTHERS: [&str; 66] = [
@@ -142,10 +139,17 @@ pub(crate) fn sys_name(name: &str) -> Option<SysName> {
         "maxunicode" => SysName::Constant(SysConstant::Int("1114111")),
         "byteorder" => SysName::Constant(SysConstant::Str("little")),
         "platform" => SysName::Constant(SysConstant::Str("linux")),
+        // The version of CPython whose behaviour TyPy follows (ADR-0029).
+        "version" => SysName::Constant(SysConstant::Str(concat!(
+            "3.15.0 (TyPy ",
+            env!("CARGO_PKG_VERSION"),
+            ")"
+        ))),
+        "hexversion" => SysName::Constant(SysConstant::Int("51314928")),
+        "version_info" => SysName::VersionInfo,
         "getrecursionlimit" => SysName::GetRecursionLimit,
         "setrecursionlimit" => SysName::SetRecursionLimit,
         _ if LAZY_SWITCHES.contains(&name) => SysName::LazySwitch,
-        _ if PLANNED.contains(&name) => SysName::Planned,
         _ if OTHERS.binary_search(&name).is_ok() => SysName::Unprovided,
         _ => return None,
     })
@@ -172,7 +176,7 @@ mod tests {
             sys_name("setrecursionlimit"),
             Some(SysName::SetRecursionLimit)
         );
-        assert_eq!(sys_name("version_info"), Some(SysName::Planned));
+        assert_eq!(sys_name("version_info"), Some(SysName::VersionInfo));
         assert_eq!(sys_name("settrace"), Some(SysName::Unprovided));
         assert_eq!(sys_name("argvs"), None);
     }

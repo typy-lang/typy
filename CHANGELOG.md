@@ -93,6 +93,10 @@ All notable changes to TyPy are recorded here. The format follows
   `sys.getrecursionlimit` and `sys.setrecursionlimit`. The recursion
   limit is kept for `getrecursionlimit`; recursion still stops at the
   stack's limit (LIB-13, FUN-02).
+- `sys.version`, `sys.hexversion` and `sys.version_info` report CPython
+  3.15.0, whose behaviour TyPy follows. `sys.version_info` is compared
+  with a tuple of `int`s, indexed and read by field; as a value of its
+  own it is planned for 0.5 (LIB-13, LIB-16, ADR-0029).
 - `math.fsum`, `math.dist`, `math.prod`, `math.sumprod`, `math.gamma`
   and `math.lgamma`, with CPython's results to the last bit. The first
   four take iterables of `int`, `bool` or `float` items; `prod` of

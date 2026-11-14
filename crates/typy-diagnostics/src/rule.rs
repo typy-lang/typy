@@ -193,6 +193,8 @@ impl RuleId {
     pub const LIB_14: Self = Self("LIB-14");
     /// `math.fsum`, `math.dist`, `math.prod` and `math.sumprod` shall take items of a union of number types, and `math.prod` a `bool` start and items other than numbers.
     pub const LIB_15: Self = Self("LIB-15");
+    /// `sys.version_info` shall be a value as CPython's: printed, stored, passed and imported with `from sys import version_info`.
+    pub const LIB_16: Self = Self("LIB-16");
     /// A program shall be built from several `.py` files, found from the main file's directory and from paths set in `typy.toml`.
     /// A program shall be built from several `.py` files, found from the main file's directory and from paths set in `typy.toml`.
     pub const MOD_01: Self = Self("MOD-01");
@@ -354,6 +356,7 @@ impl RuleId {
         Self::LIB_13,
         Self::LIB_14,
         Self::LIB_15,
+        Self::LIB_16,
         Self::MOD_01,
         Self::MOD_02,
         Self::MOD_05,
