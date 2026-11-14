@@ -155,6 +155,11 @@ All notable changes to TyPy are recorded here. The format follows
 
 ### Changed
 
+- Names of `typing` that TyPy does not give are planned for 0.5 rather
+  than 0.4: `Optional`, `Union`, `List`, `Dict` and the other older names
+  (LIB-17), and `Iterator` and `Iterable` as values (TYP-17).
+  `typing.Any` and `typing.cast` are refused with E0202, since every
+  value has one type (TYP-10).
 - A surrogate escape in a `str` literal, such as `"\udcff"`, is planned
   for 0.5 rather than 0.4: string constants would have to carry code
   points instead of UTF-8 text through the whole compiler (LEX-10).

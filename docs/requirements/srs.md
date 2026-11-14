@@ -183,8 +183,9 @@ formatter applies; Ruff's formatter is the project's recommendation.
 | TYP-12 | A read of a local variable shall be rejected unless the variable is assigned on every path that reaches the read, so `UnboundLocalError` cannot occur. | M | 0.1 | 4.2.2 |
 | TYP-13 | A local variable or parameter of type `T \| None` shall narrow to `T` where an `is None` or `is not None` test, or a truth test that holds, shows it is not `None`, and using it as `T` anywhere else shall be rejected. | M | 0.2 | |
 | TYP-14 | Annotations that join two or more types other than `None` with `\|`, such as `int \| str`, shall be accepted, with narrowing by `isinstance` (TYP-07). | M | 0.4 | 3.3.5 |
-| TYP-15 | The annotations `Iterator[T]` and `Iterable[T]`, imported from `collections.abc` or `typing`, shall be accepted for iterators and for the built-in iterables of items of type `T`; their use as values is planned for 0.4 (ADR-0014, ADR-0015). | S | 0.3 | |
+| TYP-15 | The annotations `Iterator[T]` and `Iterable[T]`, imported from `collections.abc` or `typing`, shall be accepted for iterators and for the built-in iterables of items of type `T` (ADR-0014, ADR-0015). | S | 0.3 | |
 | TYP-16 | One value assigned to several targets, as in `a = b[0] = value`, shall be converted to each target's type, such as the union an item holds. | S | 0.5 | 7.2 |
+| TYP-17 | The names of `typing` and `collections.abc` given for annotations, such as `Iterator` and `Iterable`, shall also be values, as in `isinstance(x, Iterable)`. | S | 0.5 | |
 
 ### 3.5 Built-in types and values (DAT)
 
@@ -365,6 +366,7 @@ formatter applies; Ruff's formatter is the project's recommendation.
 | LIB-14 | `open` shall accept binary modes, `+` modes, a mode that is not a literal, encodings other than UTF-8 and the arguments `buffering`, `errors`, `newline`, `closefd` and `opener`; a text file shall have `seek`, `tell`, `truncate`, `fileno`, `isatty`, `readable`, `writable` and `seekable`, and the attributes `name`, `mode` and `closed`; closing `sys.stdout` or `sys.stderr` shall close it. | S | 0.4 |
 | LIB-15 | `math.fsum`, `math.dist`, `math.prod` and `math.sumprod` shall take items of a union of number types, and `math.prod` a `bool` start and items other than numbers. | C | 0.5 |
 | LIB-16 | `sys.version_info` shall be a value as CPython's: printed, stored, passed and imported with `from sys import version_info`. | C | 0.5 |
+| LIB-17 | The other names of `typing` and `collections.abc` that describe types, such as `Optional`, `Union`, `List`, `Dict`, `Callable`, `NamedTuple` and `Sequence`, shall be available. | S | 0.5 |
 
 ### 3.15 Memory management (MEM)
 

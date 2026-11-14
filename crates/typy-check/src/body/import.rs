@@ -358,8 +358,9 @@ fn not_a_package(module: &ModuleName, span: Span) -> Diagnostic {
     .with_rule(RuleId::LIB_08)
 }
 
-/// Returns the error for a name of `typing`, `collections.abc` or `types` that TyPy 0.3 does
-/// not give: the rest of `typing` and `collections.abc` come in 0.4 (LIB-06).
+/// Returns the error for a name of `typing`, `collections.abc` or `types` that TyPy does not
+/// give: `Any` and `cast` are refused (TYP-10), and the rest of `typing` and
+/// `collections.abc` is planned (LIB-17).
 fn not_given(module: &ModuleName, alias: &Alias) -> Diagnostic {
     let name = &alias.name.name;
     if module.as_str() == "types" {
@@ -383,13 +384,32 @@ fn not_given(module: &ModuleName, alias: &Alias) -> Diagnostic {
         .with_rule(RuleId::GEN_01)
         .with_help("write `def first[T](items: list[T]) -> T:` or `class Box[T]:`");
     }
+    // A value of any type, or one forced to a type, would carry its type when the program
+    // runs, which TyPy's values do not (TYP-10, TYP-11).
+    if module.as_str() == "typing" && matches!(name.as_str(), "Any" | "cast") {
+        return Diagnostic::new(
+            DiagnosticCode::error(202),
+            alias.name.span,
+            format!("`typing.{name}` is refused: every value in TyPy has one type (TYP-10)"),
+        )
+        .with_rule(RuleId::TYP_10)
+        .with_help("annotate the value with its type, or a union of its types");
+    }
+    let help = match name.as_str() {
+        "Optional" => "write `T | None`",
+        "Union" => "write `A | B`",
+        "List" | "Dict" | "Set" | "Tuple" | "Type" | "FrozenSet" => {
+            "write the built-in type, such as `list[int]` or `dict[str, int]`"
+        }
+        _ => "TyPy gives `Iterator`, `Iterable`, `Final`, `ClassVar` and `Protocol`",
+    };
     Diagnostic::new(
         DiagnosticCode::error(201),
         alias.name.span,
-        format!("`{module}.{name}` is planned for TyPy 0.4 (LIB-06)"),
+        format!("`{module}.{name}` is planned for TyPy 0.5 (LIB-17)"),
     )
-    .with_rule(RuleId::LIB_06)
-    .with_help("TyPy 0.3 gives `Iterator` and `Iterable` for annotations")
+    .with_rule(RuleId::LIB_17)
+    .with_help(help)
 }
 
 /// Returns the error for a relative import that names no module, with CPython's message.

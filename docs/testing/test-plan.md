@@ -291,6 +291,7 @@ that the specification does not define.
 | TYP-14 | 0.4 | IT | `tests/conformance/typ/TYP-14_*.py` |
 | TYP-15 | 0.3 | IT | `tests/conformance/typ/TYP-15_*.py` |
 | TYP-16 | 0.5 | IT | `tests/conformance/typ/TYP-16_*.py` |
+| TYP-17 | 0.5 | IT | `tests/conformance/typ/TYP-17_*.py` |
 | DAT-01 | 0.1 | IT | `tests/conformance/dat/DAT-01_*.py` |
 | DAT-02 | 0.1 | IT | `tests/conformance/dat/DAT-02_*.py` |
 | DAT-03 | 0.1 | IT | `tests/conformance/dat/DAT-03_*.py` |
@@ -419,6 +420,7 @@ that the specification does not define.
 | LIB-12 | 0.4 | IT | `tests/conformance/lib/LIB-12_*.py` |
 | LIB-15 | 0.5 | IT | `tests/conformance/lib/LIB-15_*.py` |
 | LIB-16 | 0.5 | IT | `tests/conformance/lib/LIB-16_*.py` |
+| LIB-17 | 0.5 | IT | `tests/conformance/lib/LIB-17_*.py` |
 | LIB-13 | 0.4 | IT | `tests/conformance/lib/LIB-13_*.py` |
 | LIB-14 | 0.4 | IT | `tests/conformance/lib/LIB-14_*.py` |
 | MEM-01 | 0.1 | UT, IT | `typy-runtime` unit tests; `tests/conformance/mem/MEM-01_*.py` under sanitizers |

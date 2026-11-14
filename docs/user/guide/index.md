@@ -16,7 +16,7 @@ add. The rule IDs are the ones diagnostics name, such as `TYP-03`.
 | [Compound statements](compound-statements.md) | `if`, `while` and `for` | CST |
 | [Functions](functions.md) | Function definitions and recursion | FUN |
 | [Classes](classes.md) | Classes, attributes, methods and type objects | CLS |
-| [Generics](generics.md) | Type parameters and protocols, planned for 0.4 | GEN |
+| [Generics](generics.md) | Type parameters and protocols | GEN |
 | [Exceptions](exceptions.md) | Raising and catching, planned for 0.3 | EXC |
 | [Modules](modules.md) | Imports, planned for 0.3 | MOD |
 | [Built-in functions and library](library.md) | Builtins and methods of the built-in types | LIB |

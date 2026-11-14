@@ -199,6 +199,8 @@ impl RuleId {
     pub const LIB_15: Self = Self("LIB-15");
     /// `sys.version_info` shall be a value as CPython's: printed, stored, passed and imported with `from sys import version_info`.
     pub const LIB_16: Self = Self("LIB-16");
+    /// The other names of `typing` and `collections.abc` that describe types, such as `Optional`, `Union`, `List`, `Dict`, `Callable`, `NamedTuple` and `Sequence`, shall be available.
+    pub const LIB_17: Self = Self("LIB-17");
     /// A program shall be built from several `.py` files, found from the main file's directory and from paths set in `typy.toml`.
     /// A program shall be built from several `.py` files, found from the main file's directory and from paths set in `typy.toml`.
     pub const MOD_01: Self = Self("MOD-01");
@@ -264,6 +266,8 @@ impl RuleId {
     pub const TYP_15: Self = Self("TYP-15");
     /// One value assigned to several targets, as in `a = b[0] = value`, shall be converted to each target's type, such as the union an item holds.
     pub const TYP_16: Self = Self("TYP-16");
+    /// The names of `typing` and `collections.abc` given for annotations, such as `Iterator` and `Iterable`, shall also be values, as in `isinstance(x, Iterable)`.
+    pub const TYP_17: Self = Self("TYP-17");
 
     /// Every rule a diagnostic can name, in ID order.
     pub const ALL: &'static [Self] = &[
@@ -363,6 +367,7 @@ impl RuleId {
         Self::LIB_14,
         Self::LIB_15,
         Self::LIB_16,
+        Self::LIB_17,
         Self::MOD_01,
         Self::MOD_02,
         Self::MOD_05,
@@ -395,6 +400,7 @@ impl RuleId {
         Self::TYP_14,
         Self::TYP_15,
         Self::TYP_16,
+        Self::TYP_17,
     ];
 
     /// Returns the ID as text, such as `TYP-03`.

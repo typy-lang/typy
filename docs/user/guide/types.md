@@ -53,9 +53,13 @@ print(total([1, 2]), total(range(3)), total({4: "x"}), list(countdown(3)))
 An iterable may be read by `for`, `iter`, a comprehension and the
 builtins that read an iterable, such as `sum` and `sorted`. Its length and
 its truth depend on which collection it is, so `len`, `bool`, `not` and a
-condition on it are refused. In 0.3 these names, and `typing`,
+condition on it are refused. These names, and `typing`,
 `collections.abc` and `types` themselves, are for annotations only; their
-use as values, and the other names of `typing`, come in 0.4 (LIB-06).
+use as values, as in `isinstance(x, Iterable)`, is planned for 0.5
+(TYP-17). The older names of `typing` that describe types, such as
+`Optional[int]` and `List[int]`, are planned for 0.5 too (LIB-17); write
+`int | None` and `list[int]`. `typing.Any` and `typing.cast` are refused,
+since every value in TyPy has one type (TYP-10).
 
 ## Unions
 

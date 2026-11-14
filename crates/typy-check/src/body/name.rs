@@ -254,10 +254,10 @@ impl BodyChecker<'_> {
                     Diagnostic::new(
                         DiagnosticCode::error(201),
                         span,
-                        format!("using `{id}` as a value is planned for TyPy 0.4 (TYP-15)"),
+                        format!("using `{id}` as a value is planned for TyPy 0.5 (TYP-17)"),
                     )
-                    .with_rule(RuleId::TYP_15)
-                    .with_help("TyPy 0.3 reads it in annotations only"),
+                    .with_rule(RuleId::TYP_17)
+                    .with_help("TyPy reads it in annotations"),
                     span,
                 ),
             );
