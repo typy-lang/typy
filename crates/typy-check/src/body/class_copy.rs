@@ -72,6 +72,7 @@ impl ClassCopies {
             ancestors: Vec::new(),
             operators: generic.instance.operators,
             generic: Some((root, arguments.clone())),
+            protocol: false,
         });
         self.copies.push(ClassCopy {
             root,
@@ -191,11 +192,13 @@ impl Program {
         })
     }
 
-    /// Returns true when the class is a generic class, or a copy whose type arguments hold a
-    /// type parameter: it has no instances and is never laid out (ADR-0028).
+    /// Returns true when the class is a protocol, a generic class, or a copy whose type
+    /// arguments hold a type parameter: it has no instances and is never laid out (GEN-04,
+    /// ADR-0028).
     pub(crate) fn is_opaque_class(&self, class: ClassId) -> bool {
         let copies = self.class_copies.borrow();
-        copies.roots.contains_key(&class)
+        self.is_protocol(class)
+            || copies.roots.contains_key(&class)
             || copies
                 .copy(class)
                 .is_some_and(|copy| copy.arguments.iter().any(Type::has_parameter))

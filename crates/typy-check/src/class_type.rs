@@ -21,6 +21,9 @@ pub struct InstanceClass {
     /// For a copy of a generic class, the generic class and the copy's type arguments
     /// (GEN-03, ADR-0028).
     pub generic: Option<(ClassId, Vec<crate::types::Type>)>,
+    /// Whether the class is a protocol, which any class with its members satisfies (GEN-04,
+    /// ADR-0023).
+    pub protocol: bool,
 }
 
 /// The comparison and hash methods a class defines or inherits, which decide whether its
@@ -95,6 +98,7 @@ impl InstanceClass {
             ancestors: Vec::new(),
             operators: Operators::default(),
             generic: None,
+            protocol: false,
         }
     }
 
@@ -115,6 +119,7 @@ impl InstanceClass {
             ancestors: rest.to_vec(),
             operators: Operators::default(),
             generic: None,
+            protocol: false,
         })
     }
 
@@ -151,6 +156,7 @@ mod tests {
             ancestors: vec![(ClassId(0), "Shape".to_owned())],
             operators: super::Operators::default(),
             generic: None,
+            protocol: false,
         };
         let disc = InstanceClass {
             id: ClassId(2),
@@ -161,6 +167,7 @@ mod tests {
             ],
             operators: super::Operators::default(),
             generic: None,
+            protocol: false,
         };
         (shape, circle, disc)
     }
@@ -190,6 +197,7 @@ mod tests {
             ancestors: vec![(ClassId(0), "Shape".to_owned())],
             operators: super::Operators::default(),
             generic: None,
+            protocol: false,
         };
         assert_eq!(disc.common_base(&circle), Some(circle.clone()));
         assert_eq!(disc.common_base(&square), Some(shape));

@@ -78,6 +78,16 @@ All notable changes to TyPy are recorded here. The format follows
   `isinstance(Box(1), Box)` hold. A generic class with a base, a class
   derived from one, and its class variables and defaults are planned for
   0.5 (GEN-01, GEN-03, GEN-08, ADR-0028).
+- Protocols: `class Shape(Protocol):` from `typing` lists methods and
+  attributes, and any class that has them satisfies it. A parameter
+  typed with a protocol, also inside `list[Shape]`, compiles to one copy
+  for each class it is called with, and `[S: Shape]` bounds a type
+  parameter by one. A class that falls short is E0404, naming the
+  member; calling a protocol and `isinstance` with one are E0401. A
+  protocol as any other type, as a base, or with properties, static and
+  class methods or class variables is planned for 0.5 (GEN-04, GEN-05,
+  GEN-10, ADR-0023).
+- `...` alone as a statement does nothing, as `pass` does.
 - Methods with type parameters, `def pair[T](self, value: T)`, also
   static methods, in a class that is not generic. A call takes the types
   from the arguments after `self` and runs the copy for them. Type

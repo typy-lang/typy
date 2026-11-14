@@ -39,7 +39,7 @@ impl Type {
     }
 
     /// Calls `each` on the type and on every type inside it.
-    fn visit(&self, each: &mut impl FnMut(&Self)) {
+    pub(crate) fn visit(&self, each: &mut impl FnMut(&Self)) {
         each(self);
         match self {
             Self::List(item)

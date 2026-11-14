@@ -196,6 +196,16 @@ impl BodyChecker<'_> {
                     span: *span,
                 }
             }
+            // `...` alone does nothing, as `pass` does (GEN-04).
+            Stmt::Pass { span }
+            | Stmt::Expr {
+                value:
+                    Expr::Constant {
+                        value: typy_source::syntax::Constant::Ellipsis,
+                        ..
+                    },
+                span,
+            } => TypedStmt::Pass { span: *span },
             Stmt::Expr { value, span } => TypedStmt::Expr {
                 value: self.expression(value),
                 span: *span,
@@ -274,7 +284,6 @@ impl BodyChecker<'_> {
                 orelse,
                 span,
             } => self.for_statement(target, iter, body, orelse, *span)?,
-            Stmt::Pass { span } => TypedStmt::Pass { span: *span },
             Stmt::Break { span } => {
                 self.check_stays_in_finally("break", *span);
                 let state = self.assigned.take();

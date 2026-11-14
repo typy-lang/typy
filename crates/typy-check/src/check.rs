@@ -14,6 +14,7 @@ mod generic_tests;
 mod module_imports;
 mod module_scope;
 mod overriding;
+mod protocol;
 mod type_alias;
 mod visit;
 
@@ -40,6 +41,7 @@ pub(crate) struct ImportedNames {
 pub(crate) use annotation::{ClassVarAnnotation, final_type, other_module_alias};
 pub(crate) use class::{ClassInfo, class_value_variable, class_values};
 pub(crate) use definition::Definition;
+pub(crate) use protocol::outside_signature;
 
 use crate::body::{BodyChecker, Program};
 use crate::subset;
@@ -330,6 +332,8 @@ fn module_instances(
             known: program.known_instances(),
             class_ids,
             modules: &annotations.modules,
+            names: &annotations.names,
+            standard: &annotations.standard,
         },
         diagnostics,
     );

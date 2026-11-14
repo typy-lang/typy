@@ -12,6 +12,7 @@ those types costs (GEN-01 to GEN-03, ADR-0023, ADR-0028).
 | --- | --- |
 | `def name[T, U](...)`: a generic function at module level | GEN-01 |
 | `def name[T](self, ...)`: a method with type parameters, also a static method | GEN-01 |
+| `class Name(Protocol):`, satisfied by any class with its members | GEN-04 |
 | `class Name[T]:`, a generic class, and `Name[int]` in annotations and calls | GEN-01 |
 | `[T: Bound]`, a bound, and `[T: (A, B)]`, constraints | GEN-02 |
 | One compiled copy for each set of type arguments, with no type at run time | GEN-03 |
@@ -168,16 +169,80 @@ A copy is called directly, not looked up through the instance's class,
 so a method with type parameters may not override a method of a base or
 be overridden, E0201 (GEN-09).
 
+## Protocols
+
+A protocol lists the methods and attributes a class needs, and any class
+that has them satisfies it, without naming it. A parameter whose type is
+a protocol stands for each such class: TyPy compiles the function once
+for each class it is called with, as if it had a type parameter bounded
+by the protocol:
+
+<!-- typy-expect: accepted -->
+```python
+from typing import Protocol
+
+
+class Shape(Protocol):
+    sides: int
+
+    def area(self) -> float: ...
+
+
+class Square:
+    def __init__(self, side: float) -> None:
+        self.side = side
+        self.sides = 4
+
+    def area(self) -> float:
+        return self.side * self.side
+
+
+class Triangle:
+    def __init__(self) -> None:
+        self.sides = 3
+
+    def area(self) -> float:
+        return 0.5
+
+
+def describe(shape: Shape) -> str:
+    return f"{shape.sides} sides, area {shape.area()}"
+
+
+def total(shapes: list[Shape]) -> float:
+    return sum([shape.area() for shape in shapes], 0.0)
+
+
+mixed: list[Square | Triangle] = [Square(2.0), Triangle()]
+print(describe(Square(1.0)), describe(Triangle()), total(mixed))
+```
+
+A class satisfies a protocol when it has each method, taking the same
+parameters by name with types that accept the protocol's, a default
+where the protocol's method has one, and then only parameters with
+defaults, and returning a type the protocol's accepts; and each
+attribute with the same type. A call with a class that falls short is
+E0404, and the message names the member. A protocol's methods are never
+run, so their bodies are usually `...`.
+
+A protocol has no instances: calling it is E0401, and so is
+`isinstance` with a protocol, which raises `TypeError` in CPython
+(GEN-05).
+
 ## Refused and planned
 
 `TypeVar` and `Generic` from `typing` are E0202: a type parameter list
-replaces them (GEN-01). Protocols come later in 0.4. A generic type
-alias, `type Pair[T] = tuple[T, T]`, is described with the other [type
-aliases](types.md#type-aliases). Type parameters of a method of a
-generic class, of a special method, a property or a class method, and of
-a method that overrides or is overridden are planned for 0.5 (GEN-09). A
-generic class with a base, a class derived from a generic class, and
-class variables and defaults of a generic class are planned for 0.5
-(GEN-08), as is using a generic function or class of another module
-(GEN-07); `*Ts`, `**P` and defaults of type parameters are planned for
-1.0 (GEN-06).
+replaces them (GEN-01). A generic type alias, `type Pair[T] = tuple[T,
+T]`, is described with the other [type aliases](types.md#type-aliases).
+Type parameters of a method of a generic class, of a special method, a
+property or a class method, and of a method that overrides or is
+overridden are planned for 0.5 (GEN-09). A protocol as the type of a
+variable, an attribute, a result or a container item outside a
+parameter, a class that names a protocol as its base, and properties,
+static methods, class methods and class variables of a protocol are
+planned for 0.5 (GEN-10). A generic class with a base, which includes a
+generic protocol, a class derived from a generic class, and class
+variables and defaults of a generic class are planned for 0.5 (GEN-08),
+as is using a generic function or class of another module (GEN-07);
+`*Ts`, `**P` and defaults of type parameters are planned for 1.0
+(GEN-06).

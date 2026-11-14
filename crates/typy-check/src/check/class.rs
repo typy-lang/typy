@@ -6,7 +6,7 @@ use std::collections::BTreeMap;
 use typy_diagnostics::{Diagnostic, DiagnosticCode, Diagnostics, RuleId, Span};
 use typy_source::syntax::{Expr, Identifier, Stmt};
 
-use super::annotation::{AnnotationScope, annotation_type};
+use super::annotation::{AnnotationName, AnnotationScope, annotation_type, is_protocol};
 use super::definition::{
     Definition, FunctionParts, MethodKind, Owner, defined_twice, definition,
     resolve_type_parameters,
@@ -144,6 +144,9 @@ pub(super) struct BaseScope<'names> {
     pub(super) known: &'names BTreeMap<ClassId, Type>,
     pub(super) class_ids: &'names BTreeMap<String, ClassId>,
     pub(super) modules: &'names BTreeMap<String, BTreeMap<String, ClassId>>,
+    /// The names of `typing` and the modules imported, which name `Protocol` (GEN-04).
+    pub(super) names: &'names BTreeMap<String, AnnotationName>,
+    pub(super) standard: &'names BTreeMap<String, String>,
 }
 
 /// Resolves each class's base, in source order, and returns the type of each class's
@@ -159,12 +162,17 @@ pub(super) fn class_types(
     let mut found: BTreeMap<ClassId, Type> = BTreeMap::new();
     for class in classes {
         let name = class.name.name.clone();
+        let protocol = class
+            .base
+            .is_some_and(|base| is_protocol(base, scope.names, scope.standard));
         let ty = class
             .base
+            .filter(|_| !protocol)
             .and_then(|base| derived_type(class, base, scope, &found, diagnostics))
             .unwrap_or_else(|| {
                 Type::instance(InstanceClass {
                     operators: Operators::of(method_names(class.body), Operators::default()),
+                    protocol,
                     ..InstanceClass::root(class.id, name)
                 })
             });
@@ -250,6 +258,23 @@ fn derived_type(
                 parent.builtin,
             )))
         }
+        // A class satisfies a protocol by its members; naming the protocol as its base
+        // would also inherit the protocol's methods (GEN-10).
+        Type::Instance(parent) if parent.protocol => {
+            diagnostics.push(
+                Diagnostic::new(
+                    DiagnosticCode::error(201),
+                    span,
+                    format!(
+                        "a class derived from the protocol `{written}` is planned for TyPy 0.5 \
+                         (GEN-10)"
+                    ),
+                )
+                .with_rule(RuleId::GEN_10)
+                .with_help("leave the protocol out: a class with its members satisfies it"),
+            );
+            None
+        }
         Type::Instance(parent) => {
             let mut ancestors = vec![(base_id, parent.name.clone())];
             ancestors.extend(parent.ancestors.iter().cloned());
@@ -259,6 +284,7 @@ fn derived_type(
                 ancestors,
                 operators: Operators::of(method_names(class.body), parent.operators),
                 generic: None,
+                protocol: false,
             }))
         }
         _ => None,
@@ -393,7 +419,9 @@ pub(super) fn collect_members<'tree>(
                     let kind = parts.method_kind();
                     let registered = registered_name(&kind, name);
                     if let Some(refused) =
-                        refused_method(&parts, &kind, &registered, &info, classes)
+                        refused_method(&parts, &kind, &registered, &info, classes).or_else(|| {
+                            super::protocol::refused_member(&owner.instance, &kind, &parts)
+                        })
                     {
                         diagnostics.push(refused);
                         continue;
@@ -456,6 +484,7 @@ pub(super) fn collect_members<'tree>(
             diagnostics,
         );
         report_name_conflicts(&info, class.name.span, diagnostics);
+        super::protocol::check_values(&owner.instance, &info, class.name.span, diagnostics);
         let own_methods = &mut methods[first_method..];
         finish_generic_class(&info, own_methods, known.copies, class.span, diagnostics);
         infos.push(info);
@@ -732,10 +761,23 @@ fn method_definition<'tree>(
         ..*scope
     };
     let mut method = definition(parts, Some(&method_owner), &method_scope, diagnostics);
-    if !type_parameters.is_empty() {
+    method.type_parameters = type_parameters;
+    let written = method.type_parameters.len();
+    super::protocol::protocol_parameters(&mut method, diagnostics);
+    // A parameter that names a protocol makes the method generic, which only an instance or
+    // a static method may be yet (GEN-09).
+    let special = name.starts_with("__") && name.ends_with("__");
+    if method.type_parameters.len() > written
+        && (special || !matches!(kind, MethodKind::Instance | MethodKind::Static))
+    {
+        diagnostics.push(planned_generic_method(
+            parts.name,
+            "a protocol parameter of a special method, a property or a class method is",
+        ));
+    }
+    if !method.type_parameters.is_empty() {
         info.generic_methods.push(registered.clone());
     }
-    method.type_parameters = type_parameters;
     if registered != *name {
         method.qualified_name = format!("{}.{registered}", info.name);
         method.name = registered;
@@ -1026,6 +1068,7 @@ fn class_body_name(
                 return;
             }
             let ty = annotation_type(annotation, scope, diagnostics);
+            let ty = super::protocol::outside_signature(ty, annotation.span(), diagnostics);
             declare(info, id, Some(ty), *span, diagnostics);
             if value.is_some() {
                 default_value(info, id, *span, diagnostics);

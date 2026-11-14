@@ -53,6 +53,8 @@ pub(crate) enum AnnotationName {
     /// `dataclasses.dataclass` and `dataclasses.field`, which the dataclass expansion reads
     /// (CLS-05).
     Dataclasses,
+    /// `typing.Protocol`, the base of a protocol class (GEN-04).
+    Protocol,
 }
 
 /// The modules that give names for annotations only in 0.3.
@@ -68,8 +70,29 @@ pub(crate) fn annotation_name(module: &str, name: &str) -> Option<AnnotationName
         ("types", "ModuleType") => Some(AnnotationName::ModuleType),
         ("typing", "ClassVar") => Some(AnnotationName::ClassVar),
         ("typing", "Final") => Some(AnnotationName::Final),
+        ("typing", "Protocol") => Some(AnnotationName::Protocol),
         ("dataclasses", "dataclass" | "field") => Some(AnnotationName::Dataclasses),
         _ => None,
+    }
+}
+
+/// Returns true when an expression names `typing.Protocol`, as the base of a protocol class
+/// does (GEN-04).
+pub(crate) fn is_protocol(
+    expression: &Expr,
+    names: &BTreeMap<String, AnnotationName>,
+    standard: &BTreeMap<String, String>,
+) -> bool {
+    match expression {
+        Expr::Name { id, .. } => names.get(id) == Some(&AnnotationName::Protocol),
+        Expr::Attribute {
+            value, attribute, ..
+        } => {
+            attribute.name == "Protocol"
+                && matches!(value.as_ref(), Expr::Name { id, .. }
+                    if standard.get(id).is_some_and(|module| module == "typing"))
+        }
+        _ => false,
     }
 }
 
@@ -128,6 +151,17 @@ fn standard_annotation(
                         "`dataclass` and `field` are not types",
                     )
                     .with_rule(RuleId::CLS_05),
+                );
+                Type::Error
+            }
+            AnnotationName::Protocol => {
+                diagnostics.push(
+                    Diagnostic::new(
+                        DiagnosticCode::error(408),
+                        annotation.span(),
+                        "`Protocol` is not a type; a protocol class derives from it",
+                    )
+                    .with_rule(RuleId::GEN_04),
                 );
                 Type::Error
             }

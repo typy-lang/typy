@@ -306,6 +306,7 @@ formatter applies; Ruff's formatter is the project's recommendation.
 | GEN-07 | A generic function or class of another module shall be usable, made from its source as ADR-0016's interfaces carry it. | S | 0.5 | |
 | GEN-08 | A generic class shall be accepted with a base other than `object`, as the base of another class, and with class variables and defaults. | S | 0.5 | 8.10 |
 | GEN-09 | Type parameters shall be accepted on a method of a generic class, a special method, a property, a class method, and a method that overrides or is overridden. | S | 0.5 | 8.10 |
+| GEN-10 | A protocol shall be usable as the type of a variable, an attribute, a result and a container item outside a parameter, as the base of a class, and with properties, static methods, class methods and class variables. | S | 0.5 | 8.10 |
 
 ### 3.12 Exceptions (EXC)
 

@@ -109,6 +109,25 @@ impl BodyChecker<'_> {
             .into_iter()
             .map(|each| {
                 let typed = self.expression(each);
+                // CPython raises `TypeError` for a protocol not marked `@runtime_checkable`,
+                // and TyPy keeps no members to test at run time.
+                if let TypedExprKind::TypeObject(of) = &typed.kind
+                    && let TypeObjectOf::Instance(class, name) = of.as_ref()
+                    && self.program.is_protocol(*class)
+                {
+                    return Err(Some(Box::new(
+                        Diagnostic::new(
+                            DiagnosticCode::error(401),
+                            each.span(),
+                            format!(
+                                "`isinstance` with the protocol `{name}` raises `TypeError` in \
+                                 CPython"
+                            ),
+                        )
+                        .with_rule(RuleId::GEN_05)
+                        .with_help("test for a class that satisfies the protocol"),
+                    )));
+                }
                 match typed.kind {
                     TypedExprKind::TypeObject(of) => Ok(*of),
                     _ if typed.ty == Type::Error => Err(None),

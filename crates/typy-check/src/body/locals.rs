@@ -143,7 +143,7 @@ impl BodyChecker<'_> {
         let ty = annotation_type(annotation, &scope, self.diagnostics);
         // An annotation may name a copy of a generic class, which the program then holds.
         self.program.make_class_copies();
-        ty
+        crate::check::outside_signature(ty, annotation.span(), self.diagnostics)
     }
 
     pub(super) fn declare(&mut self, target: &Expr, annotation: &Expr, given: bool) {

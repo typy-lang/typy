@@ -852,6 +852,38 @@ empty and their methods are stubs. A copy's `TyirClass::public` names the
 generic class, which codegen writes as the type object's base and as its
 `public` field, which `typy_rt_object_type` returns.
 
+A method with type parameters of its own (GEN-01) is a generic function owned
+by its class: `check::class::method_definition` resolves its parameters in a
+scope that adds them to the class's, and notes its name in
+`ClassInfo::generic_methods`. `BodyChecker::method_target` sends a call of such
+a method, through an instance, its class or `super()`, to
+`BodyChecker::call_target`, which solves the parameters from the arguments
+after the first `skip` and returns the copy and its signature; the call does not
+dispatch, so a generic method neither overrides nor is overridden, and a method
+of a generic class, a special method, a property and a class method take no
+type parameters, each E0201 until GEN-09. A generic type alias (SMT-10) is
+expanded by `check::type_alias` before any annotation is read: `Pair[int]`
+becomes the alias's value with `int` in place of `T`, and a type parameter of an
+enclosing function or class hides an alias of its name.
+
+A protocol (GEN-04, ADR-0023) is a class whose base names `typing.Protocol`;
+`check::class::class_types` marks its `InstanceClass::protocol`. It has no
+instances: `Program::is_opaque_class` holds for it, its methods are stubs whose
+bodies, often `...`, are not checked, and calling it is E0401.
+`check::protocol::protocol_parameters` gives each parameter whose annotation
+names a protocol a type parameter of its own, bounded by the protocol and named
+`Shape of shape`, a name no source can write, so `def total(shape: Shape)` is
+`def total[S: Shape](shape: S)` and compiles to a copy per class. When a type
+argument's bound is a protocol, `BodyChecker::unsatisfied` checks it by its
+members: each method, not static, taking the protocol method's parameters by
+name with types that accept the protocol's and a default where it has one, then
+only parameters with defaults, and returning a type the protocol's accepts; and
+each attribute with the same type. A union satisfies a protocol when each member
+does. `isinstance` with a protocol is E0401 (GEN-05). A protocol as any other
+type, through `check::outside_signature`, as a class's base, and a protocol's
+properties, static and class methods and class variables are E0201 until
+GEN-10.
+
 Unions (TYP-14, ADR-0027) add `Type::Union(members)`, which `Type::union` builds
 in normal form in `union_type`: nested unions flatten, `None` makes the union
 optional, a member another member accepts is dropped, the members are sorted by

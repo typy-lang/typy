@@ -377,6 +377,7 @@ that the specification does not define.
 | GEN-07 | 0.5 | IT | `tests/conformance/gen/GEN-07_*.py` |
 | GEN-08 | 0.5 | IT | `tests/conformance/gen/GEN-08_*.py` |
 | GEN-09 | 0.5 | IT | `tests/conformance/gen/GEN-09_*.py` |
+| GEN-10 | 0.5 | IT | `tests/conformance/gen/GEN-10_*.py` |
 | EXC-01 | 0.3 | IT | `tests/conformance/exc/EXC-01_*.py` |
 | EXC-02 | 0.3 | IT | `tests/conformance/exc/EXC-02_*.py` |
 | EXC-03 | 0.3 | Golden | `tests/golden/llvm-ir/`, where each call that may raise is followed by one compare of the exception against null and a branch |

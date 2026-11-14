@@ -395,6 +395,11 @@ impl Program {
         })
     }
 
+    /// Returns true when the class is a protocol, which has no instances (GEN-04).
+    pub(crate) fn is_protocol(&self, class: ClassId) -> bool {
+        matches!(self.instances.get(&class), Some(Type::Instance(instance)) if instance.protocol)
+    }
+
     /// Returns the method `name` of a class, its own or the nearest base's.
     pub(super) fn method(&self, class: ClassId, name: &str) -> Option<FunctionId> {
         let mut current = Some(class);

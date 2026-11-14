@@ -234,6 +234,16 @@ impl Walker {
                     },
                 );
             }
+            // `...` alone does nothing, as `pass` does, and is the usual body of a protocol's
+            // method (GEN-04).
+            Stmt::Expr {
+                value:
+                    Expr::Constant {
+                        value: typy_source::syntax::Constant::Ellipsis,
+                        ..
+                    },
+                ..
+            } => {}
             Stmt::Expr { value, .. } => self.expression(value),
             Stmt::Break { span } if self.loop_depth == 0 => {
                 self.syntax_error(*span, "`break` outside a loop");

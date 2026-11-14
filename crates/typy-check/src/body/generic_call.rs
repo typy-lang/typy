@@ -187,6 +187,30 @@ impl BodyChecker<'_> {
             );
             return None;
         }
+        // A protocol is satisfied by any class with its members (GEN-04).
+        if let Some(protocol) = parameter
+            .bound
+            .as_ref()
+            .and_then(|bound| self.bound_protocol(bound))
+        {
+            if let Some(reason) = self.unsatisfied(&solution, protocol) {
+                let protocol = self.program.classes[protocol.0 as usize].name.clone();
+                self.diagnostics.push(
+                    Diagnostic::new(
+                        DiagnosticCode::error(404),
+                        span,
+                        format!(
+                            "this call of `{name}` gives {}, which does not satisfy the protocol \
+                             `{protocol}`: {reason}",
+                            solution.with_article()
+                        ),
+                    )
+                    .with_rule(RuleId::GEN_04),
+                );
+                return None;
+            }
+            return Some(solution);
+        }
         if let Some(bound) = &parameter.bound
             && !solution.is_assignable_to(bound)
         {

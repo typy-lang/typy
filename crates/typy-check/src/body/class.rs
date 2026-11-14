@@ -416,6 +416,25 @@ impl BodyChecker<'_> {
         keywords: &[Keyword],
         span: Span,
     ) -> TypedExpr {
+        if self.program.is_protocol(class) {
+            for argument in arguments {
+                self.expression(argument);
+            }
+            let name = &self.program.classes[class.0 as usize].name;
+            return self.error(
+                Diagnostic::new(
+                    DiagnosticCode::error(401),
+                    span,
+                    format!(
+                        "`{name}` is a protocol, which has no instances; CPython raises \
+                         `TypeError`"
+                    ),
+                )
+                .with_rule(RuleId::GEN_04)
+                .with_help("make an instance of a class that satisfies it"),
+                span,
+            );
+        }
         let class = match self.class_to_call(class, arguments, keywords, span) {
             Ok(class) => class,
             Err(error) => return error,

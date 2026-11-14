@@ -36,6 +36,7 @@ mod operator;
 mod operator_method;
 mod percent;
 mod program;
+mod protocol;
 mod round_call;
 mod set;
 mod slice;
@@ -179,14 +180,24 @@ impl<'program> BodyChecker<'program> {
                 facts.extend(defaults.into_iter().map(flow::Fact::Attribute));
             }
         }
-        checker.declare_globals(definition.body);
-        let saved = checker.import_names_of(definition.body);
-        let statements: Vec<&Stmt> = definition.body.iter().collect();
+        // A protocol's method only says what a class that satisfies the protocol has, so its
+        // body, often `...`, is never run or checked (GEN-04).
+        let protocol = definition
+            .class
+            .is_some_and(|class| checker.program.is_protocol(class));
+        let checked_body: &[Stmt] = if protocol { &[] } else { definition.body };
+        checker.declare_globals(checked_body);
+        let saved = checker.import_names_of(checked_body);
+        let statements: Vec<&Stmt> = checked_body.iter().collect();
         checker.collect_locals(&statements);
         let body = checker.statements(&statements);
         checker.restore_names(saved);
         checker.check_instance_complete(definition.span);
-        if checker.assigned.is_some() && returns != Type::NoneType && returns != Type::Error {
+        if checker.assigned.is_some()
+            && !protocol
+            && returns != Type::NoneType
+            && returns != Type::Error
+        {
             checker.diagnostics.push(
                 Diagnostic::new(
                     DiagnosticCode::error(405),
@@ -202,8 +213,10 @@ impl<'program> BodyChecker<'program> {
         }
         let locals = checker.finish_locals();
         // A generic function is checked, never run: its copies run in its place, so it keeps
-        // no body (ADR-0023).
-        let generic = program.generic(function).is_some() || program.is_opaque_copy(function);
+        // no body (ADR-0023). A protocol's method only says what a class that satisfies the
+        // protocol has (GEN-04).
+        let generic =
+            program.generic(function).is_some() || program.is_opaque_copy(function) || protocol;
         program.functions[function.0 as usize] = Some(TypedFunction {
             id: function,
             name: definition.name.clone(),

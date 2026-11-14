@@ -180,6 +180,7 @@ pub(super) fn collect_functions<'tree>(
         scope.parameters = &in_scope;
         let mut made = definition(&parts, None, &scope, diagnostics);
         made.type_parameters = type_parameters;
+        super::protocol::protocol_parameters(&mut made, diagnostics);
         functions.push(made);
     }
     functions
