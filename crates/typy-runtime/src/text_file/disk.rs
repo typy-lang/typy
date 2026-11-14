@@ -42,15 +42,21 @@ impl Access {
         }
     }
 
-    /// Returns the flags `open` takes for the access.
-    const fn flags(self) -> i32 {
-        use crate::libc::{O_APPEND, O_CLOEXEC, O_CREAT, O_EXCL, O_TRUNC, O_WRONLY};
+    /// Returns the flags `open` takes for the access, reading and writing with `plus`.
+    const fn flags(self, plus: bool) -> i32 {
+        use crate::libc::{O_APPEND, O_CLOEXEC, O_CREAT, O_EXCL, O_RDWR, O_TRUNC, O_WRONLY};
+        let direction = match (self, plus) {
+            (_, true) => O_RDWR,
+            (Self::Read, false) => 0,
+            (_, false) => O_WRONLY,
+        };
         O_CLOEXEC
+            | direction
             | match self {
                 Self::Read => 0,
-                Self::Write => O_WRONLY | O_CREAT | O_TRUNC,
-                Self::Append => O_WRONLY | O_CREAT | O_APPEND,
-                Self::Create => O_WRONLY | O_CREAT | O_EXCL,
+                Self::Write => O_CREAT | O_TRUNC,
+                Self::Append => O_CREAT | O_APPEND,
+                Self::Create => O_CREAT | O_EXCL,
             }
     }
 }
@@ -144,9 +150,9 @@ unsafe fn options(
 }
 
 /// Returns `open(path, mode, buffering, encoding, errors, newline)` for a text mode the
-/// checker has read. `how` holds the number of its `Access` in its two low bits, the codec
-/// `encoding` names in the next two, and the error handler `errors` names above them, so the
-/// call keeps to six arguments; `mode` and `encoding` are as written, which the file's `repr`
+/// checker has read. `how` holds the number of its `Access` in its two low bits, whether the
+/// mode has `+` in the next, the codec `encoding` names in the two after, and the error
+/// handler `errors` names above them, so the call keeps to six arguments; `mode` and `encoding` are as written, which the file's `repr`
 /// shows, `encoding` null for `None`; `newline` is null for `None`.
 ///
 /// # Safety
@@ -163,8 +169,8 @@ pub unsafe extern "C" fn typy_rt_open(
     newline: *const StrObject,
 ) -> Raising<*mut TextFile> {
     let how = crate::word::inline_value(how);
-    let access = Access::of(how & 3);
-    let (codec, handler) = ((how >> 2) & 3, how >> 4);
+    let (access, plus) = (Access::of(how & 3), how & 4 != 0);
+    let (codec, handler) = ((how >> 3) & 3, how >> 5);
     // SAFETY: the caller's guarantee.
     let buffering = unsafe { super::position::value_of(buffering) };
     let Some(buffering) = buffering.and_then(|value| i32::try_from(value).ok()) else {
@@ -179,7 +185,7 @@ pub unsafe extern "C" fn typy_rt_open(
         Ok(bytes) => bytes,
         Err(error) => return Raising::error(core::ptr::null_mut(), error),
     };
-    let opened = crate::libc::open(bytes.bytes(), access.flags());
+    let opened = crate::libc::open(bytes.bytes(), access.flags(plus));
     bytes.discard();
     let descriptor = match opened {
         Ok(descriptor) => descriptor,
@@ -189,7 +195,7 @@ pub unsafe extern "C" fn typy_rt_open(
             return Raising::error(core::ptr::null_mut(), error);
         }
     };
-    if access == Access::Read && crate::libc::is_directory(descriptor) {
+    if access == Access::Read && !plus && crate::libc::is_directory(descriptor) {
         let _ = crate::libc::close(descriptor);
         // SAFETY: the caller passes a live path.
         let error = unsafe { super::os_error::os_error(crate::libc::EISDIR, path) };
@@ -214,18 +220,25 @@ pub unsafe extern "C" fn typy_rt_open(
         typy_rt_increment(mode.cast_mut().cast());
         typy_rt_increment(encoding.cast_mut().cast());
     }
-    let (flags, reader, writer) = if access == Access::Read {
-        let reader = boxed(Reader::with(options.decoding));
-        (READABLE, reader, core::ptr::null_mut())
+    // A mode with `+` both reads and writes, as CPython's `BufferedRandom` does.
+    let readable = access == Access::Read || plus;
+    let writable = access != Access::Read || plus;
+    let reader = if readable {
+        boxed(Reader::with(options.decoding))
     } else {
-        let writer = boxed(Writer::with(Encoding {
+        core::ptr::null_mut()
+    };
+    let writer = if writable {
+        boxed(Writer::with(Encoding {
             codec: options.decoding.codec,
             handler: options.decoding.handler,
             newline: options.decoding.newline,
             line_buffering: options.line_buffering,
-        }));
-        (WRITABLE, core::ptr::null_mut(), writer)
+        }))
+    } else {
+        core::ptr::null_mut()
     };
+    let flags = if readable { READABLE } else { 0 } | if writable { WRITABLE } else { 0 };
     let next = OPEN.with(|open| *open);
     let file = boxed(TextFile {
         header: ObjectHeader::new(TEXT_FILE_TYPE_ID),
@@ -322,6 +335,12 @@ pub(crate) unsafe fn write(file: &mut TextFile, text: *const StrObject) -> *mut 
             crate::string::from_str("not writable"),
         );
     }
+    // A write after a read starts where the reader stopped reading the descriptor and drops
+    // what it holds, as CPython's text layer does over `BufferedRandom`.
+    if !file.reader.is_null() {
+        // SAFETY: an open readable file's reader is live.
+        unsafe { (*file.reader).reset() };
+    }
     let mut out = sink(file.descriptor);
     // SAFETY: a writable file that is open has its writer; the caller's guarantee.
     match unsafe { (*file.writer).write(text, &mut out) } {
@@ -358,6 +377,11 @@ pub(crate) fn read(
     }
     if file.flags & READABLE == 0 {
         return Err(super::not_readable());
+    }
+    // A read after a write writes out what the file holds first.
+    let flushed = flush(file);
+    if !flushed.is_null() {
+        return Err(flushed);
     }
     let descriptor = file.descriptor;
     let mut source = |buffer: &mut [u8]| crate::libc::read_retrying(descriptor, buffer);

@@ -450,7 +450,7 @@ impl Scratch {
             super::disk::typy_rt_open(
                 path,
                 mode,
-                crate::word::inline(access | options.codec << 2 | options.handler << 4).unwrap(),
+                crate::word::inline(access | options.codec << 3 | options.handler << 5).unwrap(),
                 buffering,
                 encoding,
                 newline,

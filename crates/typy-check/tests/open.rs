@@ -100,10 +100,6 @@ fn what_is_planned_for_open_is_e0201() {
             "a binary mode of `open` is planned for TyPy 0.4 (LIB-14)",
         ),
         (
-            "f = open(\"a\", \"r+\")\n",
-            "a mode with `+` of `open` is planned for TyPy 0.4 (LIB-14)",
-        ),
-        (
             "m = \"r\"\nf = open(\"a\", m)\n",
             "a mode of `open` that is not a string literal is planned for TyPy 0.4 (LIB-14)",
         ),
@@ -133,6 +129,8 @@ a = open(\"a\", \"w\", size, \"Latin-1\", \"xmlcharrefreplace\", \"\\r\\n\", Tru
 b = open(\"a\", encoding=\"ascii\", errors=\"surrogateescape\", newline=n)
 c = open(\"a\", buffering=-1, encoding=None, errors=None, newline=None)
 d = open(\"a\", encoding=\" UTF8 \", newline=\"\")
+e = open(\"a\", \"r+\")
+g = open(\"a\", \"+wt\")
 ";
     assert_eq!(diagnostics_at(PythonFloor::V3_12, source), []);
 }

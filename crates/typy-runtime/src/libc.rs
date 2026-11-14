@@ -29,6 +29,7 @@ pub(crate) const EINTR: i32 = 4;
 pub(crate) const EISDIR: i32 = 21;
 /// The flags of `open`, as Linux numbers them on `x86_64` and `AArch64`.
 pub(crate) const O_WRONLY: i32 = 0o1;
+pub(crate) const O_RDWR: i32 = 0o2;
 pub(crate) const O_CREAT: i32 = 0o100;
 pub(crate) const O_EXCL: i32 = 0o200;
 pub(crate) const O_TRUNC: i32 = 0o1000;

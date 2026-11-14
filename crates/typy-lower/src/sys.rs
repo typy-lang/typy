@@ -202,9 +202,9 @@ impl FunctionLowerer<'_> {
             }
         });
         let mode = self.string(mode, span);
-        // The runtime reads the access, the codec and the handler from one word, so a call
-        // keeps to six arguments.
-        let how = access as i64 | options.codec << 2 | options.handler << 4;
+        // The runtime reads the access, with `+` in its third bit, the codec and the handler
+        // from one word, so a call keeps to six arguments.
+        let how = access as i64 | options.codec << 3 | options.handler << 5;
         let how = self.constant(Constant::Int(how.to_string()), span);
         let buffering_value = buffering.map_or_else(
             || self.constant(Constant::Int("-1".to_owned()), span),

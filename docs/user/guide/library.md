@@ -216,8 +216,8 @@ make an import lazy in its own module, as
 `open(file, mode)` opens a text file in UTF-8, as CPython 3.15 does by
 default (LIB-04, ADR-0019). `mode` is a string literal: `"r"` reads an
 existing file, `"w"` empties or creates one, `"a"` writes at the end and
-`"x"` creates a new file; each may add `"t"`. A file reads and writes as
-CPython's does:
+`"x"` creates a new file; each may add `"t"`, and `"+"` to both read and
+write the file (LIB-14). A file reads and writes as CPython's does:
 
 - `read(size)` gives `size` characters, or the rest of the file without
   `size`; `readline()` gives the next line with its `\n`, and an empty
@@ -292,6 +292,12 @@ moves to such a position by bytes, and refuses one from 2^63 up with
 `OSError: [Errno 22] Invalid argument`, which CPython raises from 2^63
 to 2^64.
 
+A file opened with `"+"` writes out what it holds before it reads. A
+write after a read starts where the reading stopped taking bytes from the
+file, which is the end of the 8192 bytes CPython's text layer decodes at
+a time, not the position `tell()` gives: call `seek(file.tell())` before
+writing to write there.
+
 Writes wait in a buffer until it fills, until `flush()` or `close()`, or
 until the program ends. Another file object that reads the file before
 then sees only what was written out, and CPython's buffer sizes differ
@@ -332,7 +338,7 @@ with open("notes.txt", encoding="ascii", errors="replace") as notes:
 A mode CPython refuses for every file, such as `"rw"`, is E0404 with
 CPython's message, and so is a `newline` literal it refuses. TyPy 0.4
 adds what is refused now with E0201 (LIB-14): binary modes such as
-`"rb"`, modes with `+`, a mode that is not a literal, and `closefd`.
+`"rb"`, a mode that is not a literal, and `closefd`.
 `opener` takes a function as a value and is planned for 1.0 (LIB-18).
 
 `close()` of `sys.stdin`, `sys.stdout` or `sys.stderr` closes it as

@@ -386,3 +386,27 @@ fn printing_to_standard_output_while_it_is_open_writes() {
         typy_rt_decrement(text.cast());
     }
 }
+
+#[test]
+#[cfg_attr(miri, ignore = "Miri does not open files without disabling isolation")]
+fn a_plus_file_writes_where_its_reader_stopped_and_reads_after_writing_out() {
+    let scratch = Scratch::new("plus");
+    std::fs::write(scratch.0.join("p.txt"), "abcdef\n").unwrap();
+    // `r+` is the access `r` with the bit of `+`.
+    let file = scratch.open("p.txt", "r+", 4).unwrap();
+    assert_eq!(state(file, READABLE), Ok(true));
+    assert_eq!(state(file, WRITABLE), Ok(true));
+    // SAFETY: the file is live and released once.
+    unsafe {
+        assert_eq!(take(typy_rt_text_read(file, size(2)).value), "ab");
+        assert_eq!(tell(file), Ok(2));
+        write(file, "X");
+        assert_eq!(tell(file), Ok(8));
+        assert_eq!(seek(file, 0, 0), Ok(0));
+        write(file, "YY");
+        assert_eq!(take(typy_rt_text_read(file, size(-1)).value), "cdef\nX");
+        typy_rt_decrement(file.cast());
+    }
+    let written = std::fs::read(scratch.0.join("p.txt")).unwrap();
+    assert_eq!(written, b"YYcdef\nX");
+}

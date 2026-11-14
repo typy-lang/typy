@@ -12,6 +12,14 @@ pub enum OpenAccess {
     Append = 2,
     /// `x`: a new file, written.
     Create = 3,
+    /// `r+`: an existing file, read and written.
+    ReadPlus = 4,
+    /// `w+`: a file emptied or created, read and written.
+    WritePlus = 5,
+    /// `a+`: a file created if missing, read, and written at its end.
+    AppendPlus = 6,
+    /// `x+`: a new file, read and written.
+    CreatePlus = 7,
 }
 
 /// Why a mode is refused.
@@ -19,7 +27,7 @@ pub enum OpenAccess {
 pub(crate) enum ModeRefusal {
     /// CPython raises `ValueError` with this message for the mode, whatever the file.
     Fails(String),
-    /// A binary mode or a `+` mode, planned for 0.4 (LIB-14).
+    /// A binary mode, planned for 0.4 (LIB-14).
     Planned(&'static str),
 }
 
@@ -60,14 +68,15 @@ pub(crate) fn open_access(mode: &str) -> Result<OpenAccess, ModeRefusal> {
     if has('b') {
         return Err(ModeRefusal::Planned("a binary mode"));
     }
-    if has('+') {
-        return Err(ModeRefusal::Planned("a mode with `+`"));
-    }
-    Ok(match access {
-        'r' => OpenAccess::Read,
-        'w' => OpenAccess::Write,
-        'a' => OpenAccess::Append,
-        _ => OpenAccess::Create,
+    Ok(match (access, has('+')) {
+        ('r', false) => OpenAccess::Read,
+        ('w', false) => OpenAccess::Write,
+        ('a', false) => OpenAccess::Append,
+        (_, false) => OpenAccess::Create,
+        ('r', true) => OpenAccess::ReadPlus,
+        ('w', true) => OpenAccess::WritePlus,
+        ('a', true) => OpenAccess::AppendPlus,
+        (_, true) => OpenAccess::CreatePlus,
     })
 }
 
@@ -125,14 +134,26 @@ mod tests {
     }
 
     #[test]
-    fn binary_and_plus_modes_are_planned() {
-        for (mode, what) in [
-            ("rb", "a binary mode"),
-            ("wb+", "a binary mode"),
-            ("r+", "a mode with `+`"),
-            ("a+t", "a mode with `+`"),
+    fn plus_modes_read_and_write() {
+        for (mode, access) in [
+            ("r+", OpenAccess::ReadPlus),
+            ("+r", OpenAccess::ReadPlus),
+            ("w+t", OpenAccess::WritePlus),
+            ("a+", OpenAccess::AppendPlus),
+            ("x+", OpenAccess::CreatePlus),
         ] {
-            assert_eq!(open_access(mode), Err(ModeRefusal::Planned(what)), "{mode}");
+            assert_eq!(open_access(mode), Ok(access), "{mode}");
+        }
+    }
+
+    #[test]
+    fn binary_modes_are_planned() {
+        for mode in ["rb", "wb+", "ab"] {
+            assert_eq!(
+                open_access(mode),
+                Err(ModeRefusal::Planned("a binary mode")),
+                "{mode}"
+            );
         }
     }
 }
