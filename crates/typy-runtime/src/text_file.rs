@@ -5,9 +5,13 @@
 mod disk;
 mod errno_text;
 mod os_error;
+mod position;
 mod reader;
+mod state;
 mod stdin;
 pub(crate) use stdin::input_line;
+#[cfg(test)]
+mod position_tests;
 #[cfg(test)]
 mod tests;
 mod writer;
@@ -395,6 +399,49 @@ pub unsafe extern "C" fn typy_rt_text_readlines(file: *mut TextFile) -> Raising<
                 return Raising::error(core::ptr::null_mut(), error);
             }
         }
+    }
+}
+
+/// Runs `action` with the reader of `file`: standard input's, or the one of a readable file
+/// `open` made that is still open, and `None` for the others.
+///
+/// # Safety
+///
+/// `file` points to a live text file.
+unsafe fn with_reader<R>(
+    file: *mut TextFile,
+    action: impl FnOnce(Option<&mut reader::Reader>) -> R,
+) -> R {
+    // SAFETY: the caller's guarantee; an open readable file's reader is live.
+    unsafe {
+        if is_stdin(file) {
+            return stdin::with_reader(|reader| action(Some(reader)));
+        }
+        if is_standard(file) || (*file).reader.is_null() {
+            return action(None);
+        }
+        action(Some(&mut *(*file).reader))
+    }
+}
+
+/// Returns the next line of `file` for a `for` loop, or `None` at its end; a line turns
+/// `tell` off until the end or a `seek`, as CPython's `next` does.
+///
+/// # Safety
+///
+/// `file` points to a live text file.
+pub(crate) unsafe fn loop_line(
+    file: *mut TextFile,
+) -> Result<Option<*mut StrObject>, *mut ExceptionObject> {
+    // SAFETY: the caller's guarantee.
+    unsafe {
+        let line = next_line(file)?;
+        with_reader(file, |reader| {
+            if let Some(reader) = reader {
+                reader.set_iterating(line.is_some());
+            }
+        });
+        Ok(line)
     }
 }
 

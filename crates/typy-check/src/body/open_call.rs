@@ -2,11 +2,11 @@
 //! literal, which decides that the file is a text file, and UTF-8 as its encoding.
 
 use typy_diagnostics::{Diagnostic, DiagnosticCode, RuleId, Span};
-use typy_source::syntax::{Constant, Expr, Keyword};
+use typy_source::syntax::{Constant, Expr, Identifier, Keyword};
 
 use super::BodyChecker;
 use crate::open::{ModeRefusal, OpenAccess, is_utf8, open_access};
-use crate::typed::{TypedExpr, TypedExprKind};
+use crate::typed::{FileAttribute, TypedExpr, TypedExprKind};
 use crate::types::Type;
 
 /// The parameters of `open`, in CPython's order.
@@ -213,18 +213,38 @@ impl BodyChecker<'_> {
         }
     }
 
-    /// Reports a method or attribute a text file does not have in 0.3: E0201 when it is
-    /// planned for 0.4, E0412 otherwise.
-    pub(super) fn missing_file_name(&mut self, name: &str, at: Span, span: Span) -> TypedExpr {
-        let (message, planned) = crate::open::missing_file_name(name);
-        let (code, rule) = if planned {
-            (201, RuleId::LIB_14)
-        } else {
-            (412, RuleId::LIB_04)
+    /// Returns `name`, `mode` or `closed` of a text file, or reports another name (LIB-14).
+    pub(super) fn file_attribute(
+        &mut self,
+        file: TypedExpr,
+        attribute: &Identifier,
+        span: Span,
+    ) -> TypedExpr {
+        let Some((kind, ty)) = FileAttribute::named(&attribute.name) else {
+            return self.missing_file_name(attribute, span);
         };
-        self.diagnostics
-            .push(Diagnostic::new(DiagnosticCode::error(code), at, message).with_rule(rule));
-        Self::invalid_call(span)
+        Self::typed(
+            TypedExprKind::FileAttribute {
+                file: Box::new(file),
+                attribute: kind,
+            },
+            ty,
+            span,
+        )
+    }
+
+    /// Reports a method or attribute a text file does not have, as CPython's
+    /// `AttributeError` names it.
+    pub(super) fn missing_file_name(&mut self, name: &Identifier, span: Span) -> TypedExpr {
+        self.error(
+            Diagnostic::new(
+                DiagnosticCode::error(412),
+                name.span,
+                format!("a TextIOWrapper has no attribute `{}` in TyPy", name.name),
+            )
+            .with_rule(RuleId::LIB_04),
+            span,
+        )
     }
 
     /// Reports an error of `open` and returns the expression of a call that failed.

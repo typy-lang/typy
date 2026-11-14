@@ -30,6 +30,9 @@ pub(crate) struct Reader {
     at_end: bool,
     /// Whether a byte that is not part of a character is escaped rather than an error.
     escape: bool,
+    /// Whether a `for` loop has taken a line since the last `seek` and not reached the end,
+    /// which turns `tell` off, as in CPython.
+    iterating: bool,
 }
 
 /// Returns the length of the valid UTF-8 at the start of `data`, leaving out a character cut
@@ -69,6 +72,7 @@ impl Reader {
             end: 0,
             at_end: false,
             escape: false,
+            iterating: false,
         }
     }
 
@@ -79,6 +83,30 @@ impl Reader {
             escape: true,
             ..Self::new()
         }
+    }
+
+    /// Returns the number of bytes read from the source and not given out yet.
+    pub(crate) const fn unread(&self) -> usize {
+        self.end - self.start
+    }
+
+    /// Drops what was read and not given out, as a `seek` does.
+    pub(crate) const fn reset(&mut self) {
+        self.start = 0;
+        self.valid = 0;
+        self.end = 0;
+        self.at_end = false;
+        self.iterating = false;
+    }
+
+    /// Returns whether a `for` loop has turned `tell` off.
+    pub(crate) const fn iterating(&self) -> bool {
+        self.iterating
+    }
+
+    /// Records that a `for` loop took a line, or reached the end when `line` is false.
+    pub(crate) const fn set_iterating(&mut self, line: bool) {
+        self.iterating = line;
     }
 
     /// Reads the next chunk after the bytes not given out yet and checks it; at the end of the

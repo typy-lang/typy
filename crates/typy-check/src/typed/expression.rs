@@ -163,6 +163,11 @@ pub enum TypedExprKind {
         exception: Box<TypedExpr>,
         field: OsErrorField,
     },
+    /// `name`, `mode` or `closed` of a text file (LIB-14).
+    FileAttribute {
+        file: Box<TypedExpr>,
+        attribute: FileAttribute,
+    },
     /// `input(prompt)`: a line of standard input (LIB-04).
     Input(Option<Box<TypedExpr>>),
     /// `open(path, mode)` in a text mode: `mode` as written, which the file's `repr` shows,
@@ -485,6 +490,7 @@ impl TypedExpr {
             | TypedExprKind::Input(value)
             | TypedExprKind::RecursionLimit(value) => value.iter().map(Box::as_ref).collect(),
             TypedExprKind::OsErrorField { exception, .. } => vec![exception],
+            TypedExprKind::FileAttribute { file, .. } => vec![file],
             TypedExprKind::PercentDynamic { format, values } => vec![format, values],
             TypedExprKind::ExceptionPart {
                 exception,
@@ -614,4 +620,29 @@ pub enum OsErrorField {
     Filename,
     /// `filename2`, the fifth.
     Filename2,
+}
+
+/// An attribute of a text file (LIB-14).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum FileAttribute {
+    /// `name`: the path it was opened with, or `<stdin>`, `<stdout>` or `<stderr>`.
+    Name,
+    /// `mode`: the mode as written to `open`, or `r` or `w` for a standard file.
+    Mode,
+    /// `closed`: whether the file is closed.
+    Closed,
+}
+
+impl FileAttribute {
+    /// Returns the attribute `name` names, with its type.
+    #[must_use]
+    pub fn named(name: &str) -> Option<(Self, crate::types::Type)> {
+        use crate::types::Type;
+        match name {
+            "name" => Some((Self::Name, Type::Str)),
+            "mode" => Some((Self::Mode, Type::Str)),
+            "closed" => Some((Self::Closed, Type::Bool)),
+            _ => None,
+        }
+    }
 }

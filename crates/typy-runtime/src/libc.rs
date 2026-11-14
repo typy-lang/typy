@@ -18,6 +18,9 @@ unsafe extern "C" {
     #[link_name = "fstat"]
     fn fstat_descriptor(descriptor: i32, status: *mut [u64; 18]) -> i32;
     fn __errno_location() -> *mut i32;
+    fn lseek(descriptor: i32, offset: i64, whence: i32) -> i64;
+    fn ftruncate(descriptor: i32, length: i64) -> i32;
+    fn isatty(descriptor: i32) -> i32;
 }
 
 /// `EINTR`: a signal interrupted the call, which is then made again, as CPython does.
@@ -67,6 +70,39 @@ pub(crate) fn close(descriptor: i32) -> Result<(), i32> {
         EINTR => Ok(()),
         error => Err(error),
     }
+}
+
+/// `EINVAL`: an argument is out of range.
+pub(crate) const EINVAL: i32 = 22;
+/// The `whence` of `lseek`.
+pub(crate) const SEEK_SET: i32 = 0;
+pub(crate) const SEEK_CUR: i32 = 1;
+pub(crate) const SEEK_END: i32 = 2;
+
+/// Moves the descriptor's position by `offset` from `whence`; returns the new position or the
+/// error number.
+pub(crate) fn seek(descriptor: i32, offset: i64, whence: i32) -> Result<i64, i32> {
+    // SAFETY: moving a descriptor's position has no memory effects.
+    let position = unsafe { lseek(descriptor, offset, whence) };
+    if position < 0 {
+        return Err(errno());
+    }
+    Ok(position)
+}
+
+/// Cuts or extends the descriptor's file to `length` bytes; returns the error number.
+pub(crate) fn truncate(descriptor: i32, length: i64) -> Result<(), i32> {
+    // SAFETY: resizing a descriptor's file has no memory effects.
+    if unsafe { ftruncate(descriptor, length) } == 0 {
+        return Ok(());
+    }
+    Err(errno())
+}
+
+/// Returns whether the descriptor is a terminal.
+pub(crate) fn is_terminal(descriptor: i32) -> bool {
+    // SAFETY: asking about a descriptor has no memory effects.
+    unsafe { isatty(descriptor) == 1 }
 }
 
 /// Returns whether a descriptor is a directory, from the `st_mode` of `fstat`.

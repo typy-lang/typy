@@ -30,6 +30,11 @@ pub(crate) fn input_line() -> Result<Option<*mut StrObject>, *mut ExceptionObjec
     READER.with(|reader| line_from(reader, &mut standard_input))
 }
 
+/// Runs `action` with what standard input has read and not given out.
+pub(super) fn with_reader<R>(action: impl FnOnce(&mut Reader) -> R) -> R {
+    READER.with(action)
+}
+
 /// Reads from file descriptor 0.
 fn standard_input(buffer: &mut [u8]) -> Result<usize, i32> {
     crate::libc::read_retrying(crate::libc::STDIN, buffer)

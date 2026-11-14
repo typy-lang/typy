@@ -88,6 +88,10 @@ All notable changes to TyPy are recorded here. The format follows
   class methods or class variables is planned for 0.5 (GEN-04, GEN-05,
   GEN-10, ADR-0023).
 - `...` alone as a statement does nothing, as `pass` does.
+- Text files have `name`, `mode` and `closed`, and the methods `fileno`,
+  `isatty`, `readable`, `writable`, `seekable`, `seek`, `tell` and
+  `truncate`, with CPython's results and errors; a file opened with `"a"`
+  starts at its end (LIB-14).
 - Names a module binds by a lazy import can be used from another module,
   `m.x = v` assigns through a lazily imported `m`, and a variable may be
   bound by more than one lazy import; each runs the pending import first,

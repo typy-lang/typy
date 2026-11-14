@@ -255,6 +255,43 @@ text: `FileNotFoundError: [Errno 2] No such file or directory:
 operation on closed file.`, and `io.UnsupportedOperation: not readable`
 for reading a file opened for writing.
 
+A file tells about itself as CPython's does (LIB-14): `name` is the path
+it was opened with, or `<stdin>`, `<stdout>` and `<stderr>`; `mode` is the
+mode as written; `closed`, `fileno()`, `isatty()`, `readable()`,
+`writable()` and `seekable()` answer as their names say. Once a file is
+closed, `name`, `mode` and `closed` still answer, and the methods raise
+`ValueError: I/O operation on closed file`, except that `readable()` of a
+file opened for writing, and `writable()` of one opened for reading,
+answer `False`.
+
+`tell()` gives the file's position, which `seek(position)` returns to,
+and `truncate(size)` cuts or extends the file to `size` bytes, or to its
+position without `size`, without moving it. A position counts bytes of
+UTF-8, as CPython's does for a file read or written in UTF-8. `seek(0,
+1)` stays where it is, `seek(0, 2)` moves to the end, and a move by
+another amount from either is `io.UnsupportedOperation`. A file opened
+with `"a"` starts at its end. Once a `for` loop has taken a line from a
+file, `tell()` raises `OSError: telling position disabled by next() call`
+until the loop reaches the end or `seek` moves the file, as in CPython.
+
+<!-- typy-expect: accepted -->
+```python
+with open("notes.txt", "w") as notes:
+    notes.write("caf\u00e9\n")
+    print(notes.name, notes.mode, notes.tell())
+
+with open("notes.txt") as notes:
+    print(repr(notes.read(3)), notes.tell())
+    notes.seek(0)
+    print(repr(notes.readline()), notes.closed)
+```
+
+CPython leaves a `seek` to a position `tell` did not give undefined, and
+reads the bits of one from 2^64 up as the state of its decoder. TyPy
+moves to such a position by bytes, and refuses one from 2^63 up with
+`OSError: [Errno 22] Invalid argument`, which CPython raises from 2^63
+to 2^64.
+
 Writes wait in a buffer until it fills, until `flush()` or `close()`, or
 until the program ends. Another file object that reads the file before
 then sees only what was written out, and CPython's buffer sizes differ
@@ -266,9 +303,7 @@ CPython's message. TyPy 0.4 adds what 0.3 refuses with E0201 (LIB-14):
 - binary modes such as `"rb"`, modes with `+`, and a mode that is not a
   literal;
 - encodings other than UTF-8, and the arguments `buffering`, `errors`,
-  `newline`, `closefd` and `opener` other than their defaults;
-- `seek`, `tell`, `truncate`, `fileno`, `isatty`, `readable`, `writable`
-  and `seekable`, and the attributes `name`, `mode` and `closed`.
+  `newline`, `closefd` and `opener` other than their defaults.
 
 `close()` of `sys.stdout` or `sys.stderr` writes it out and leaves it
 open in 0.3; closing them comes with the rest of LIB-14.

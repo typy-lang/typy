@@ -6,7 +6,7 @@ use typy_source::syntax::{Constant, Expr, Identifier, Keyword};
 
 use super::BodyChecker;
 use crate::method::{Method, MethodSignature, Parameter, ParameterKind, ParameterType};
-use crate::typed::{Argument, TypedConstant, TypedExpr, TypedExprKind};
+use crate::typed::{Argument, FileAttribute, TypedConstant, TypedExpr, TypedExprKind};
 use crate::types::Type;
 
 impl BodyChecker<'_> {
@@ -261,11 +261,26 @@ impl BodyChecker<'_> {
         );
     }
 
-    /// Reports a method a built-in type does not have; a text file says which of its names
-    /// are planned (LIB-14).
+    /// Reports a method a built-in type does not have; a text file's attribute is not a
+    /// method (LIB-14).
     fn unknown_method(&mut self, receiver: &Type, name: &Identifier, span: Span) -> TypedExpr {
         if *receiver == Type::TextFile {
-            return self.missing_file_name(&name.name, name.span, span);
+            let Some((_, ty)) = FileAttribute::named(&name.name) else {
+                return self.missing_file_name(name, span);
+            };
+            return self.error(
+                Diagnostic::new(
+                    DiagnosticCode::error(401),
+                    name.span,
+                    format!(
+                        "`{}` of a text file is {} and cannot be called",
+                        name.name,
+                        ty.with_article()
+                    ),
+                )
+                .with_rule(RuleId::EXP_02),
+                span,
+            );
         }
         self.error(
             Diagnostic::new(
@@ -297,7 +312,7 @@ impl BodyChecker<'_> {
                 self.expect(&value, ty.clone(), &what);
                 value
             }
-            ParameterType::StrOrNone => {
+            ParameterType::StrOrNone | ParameterType::IntOrNone => {
                 let value = self.expression(argument);
                 if !matches!(
                     argument,
@@ -306,7 +321,12 @@ impl BodyChecker<'_> {
                         ..
                     }
                 ) {
-                    self.expect(&value, text.clone(), &what);
+                    let wanted = if parameter.ty == ParameterType::IntOrNone {
+                        Type::Int
+                    } else {
+                        text.clone()
+                    };
+                    self.expect(&value, wanted, &what);
                 }
                 value
             }

@@ -24,6 +24,8 @@ pub enum ParameterType {
     Exact(Type),
     /// A `str`, or `None` for the method's default, as `sep` of `str.split`.
     StrOrNone,
+    /// An `int`, or `None` for the method's default, as `pos` of `file.truncate`.
+    IntOrNone,
     /// A `str`, or a tuple of them, as `prefix` of `str.startswith`.
     Affixes,
     /// Any iterable of `str`, as the argument of `str.join`.
@@ -164,6 +166,21 @@ impl Method {
                 (vec![positional("size", Type::Int, false)], Type::Str)
             }
             Self::TextReadlines => (Vec::new(), Type::List(Box::new(Type::Str))),
+            Self::TextFileno | Self::TextTell => (Vec::new(), Type::Int),
+            Self::TextIsatty | Self::TextReadable | Self::TextWritable | Self::TextSeekable => {
+                (Vec::new(), Type::Bool)
+            }
+            Self::TextSeek => (
+                vec![
+                    positional("cookie", Type::Int, true),
+                    positional("whence", Type::Int, false),
+                ],
+                Type::Int,
+            ),
+            Self::TextTruncate => (
+                vec![positional_as("pos", ParameterType::IntOrNone, false)],
+                Type::Int,
+            ),
             Self::TextWritelines => (
                 vec![positional_as("lines", ParameterType::Strings, true)],
                 Type::NoneType,

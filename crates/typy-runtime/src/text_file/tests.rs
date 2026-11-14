@@ -13,7 +13,7 @@ use crate::refcount::typy_rt_decrement;
 use crate::string::{StrObject, code_point, from_str, length};
 
 /// Returns the text of a `str` and releases it.
-fn take(text: *mut StrObject) -> String {
+pub(super) fn take(text: *mut StrObject) -> String {
     // SAFETY: the string is live and owned here.
     unsafe {
         let found = (0..length(text))
@@ -25,7 +25,7 @@ fn take(text: *mut StrObject) -> String {
 }
 
 /// Returns the class name and `str` of an exception, and releases it.
-fn error_text(error: *mut ExceptionObject) -> (String, String) {
+pub(super) fn error_text(error: *mut ExceptionObject) -> (String, String) {
     assert!(!error.is_null());
     // SAFETY: the exception is live and owned here.
     unsafe {
@@ -389,10 +389,10 @@ fn an_error_number_gives_cpythons_class_text_and_arguments() {
 }
 
 /// A directory of its own for a test of files on disk, removed at the end.
-struct Scratch(std::path::PathBuf);
+pub(super) struct Scratch(pub(super) std::path::PathBuf);
 
 impl Scratch {
-    fn new(name: &str) -> Self {
+    pub(super) fn new(name: &str) -> Self {
         let directory =
             std::env::temp_dir().join(format!("typy-text-file-{name}-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&directory);
@@ -404,7 +404,12 @@ impl Scratch {
         from_str(self.0.join(name).to_str().unwrap())
     }
 
-    fn open(&self, name: &str, mode: &str, access: i64) -> Result<*mut TextFile, (String, String)> {
+    pub(super) fn open(
+        &self,
+        name: &str,
+        mode: &str,
+        access: i64,
+    ) -> Result<*mut TextFile, (String, String)> {
         let path = self.path(name);
         let mode = from_str(mode);
         // SAFETY: the strings are live; the file keeps references of its own.
@@ -429,7 +434,7 @@ impl Drop for Scratch {
     }
 }
 
-fn size(value: i64) -> i64 {
+pub(super) fn size(value: i64) -> i64 {
     crate::word::inline(value).unwrap()
 }
 

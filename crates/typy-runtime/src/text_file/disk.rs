@@ -139,6 +139,10 @@ pub unsafe extern "C" fn typy_rt_open(
         let error = unsafe { super::os_error::os_error(crate::libc::EISDIR, path) };
         return Raising::error(core::ptr::null_mut(), error);
     }
+    if access == Access::Append {
+        // CPython's `FileIO` moves to the end at once, so `tell` gives the size.
+        let _ = crate::libc::seek(descriptor, 0, crate::libc::SEEK_END);
+    }
     FUNCTIONS.with(|functions| *functions = Some(&DISK_FUNCTIONS));
     // SAFETY: the caller passes live strings, which the file keeps a reference to.
     unsafe {

@@ -239,6 +239,13 @@ pub enum RuntimeFunction {
     TextReadline,
     TextReadlines,
     TextWritelines,
+    TextName,
+    TextMode,
+    TextFileno,
+    TextState,
+    TextSeek,
+    TextTell,
+    TextTruncate,
     ListAppendMoved,
     ListSetMoved,
     ListInsertMoved,
@@ -346,7 +353,7 @@ const FLOAT_FLOAT: &[TyirType] = &[TyirType::Float, TyirType::Float];
 
 impl RuntimeFunction {
     /// Every runtime function.
-    pub const ALL: [Self; 307] = [
+    pub const ALL: [Self; 314] = [
         Self::IntFloorDivide,
         Self::IntModulo,
         Self::IntPower,
@@ -577,6 +584,13 @@ impl RuntimeFunction {
         Self::TextReadline,
         Self::TextReadlines,
         Self::TextWritelines,
+        Self::TextName,
+        Self::TextMode,
+        Self::TextFileno,
+        Self::TextState,
+        Self::TextSeek,
+        Self::TextTell,
+        Self::TextTruncate,
         Self::ListAppendMoved,
         Self::ListSetMoved,
         Self::ListInsertMoved,
@@ -899,6 +913,12 @@ impl RuntimeFunction {
             }
             Self::TextReadlines => signature(&[TyirType::TEXT_FILE], LIST, true),
             Self::TextWritelines => signature(&[TyirType::TEXT_FILE, LIST], Unit, true),
+            Self::TextName | Self::TextMode => signature(&[TyirType::TEXT_FILE], STR, false),
+            Self::TextFileno | Self::TextTell => signature(&[TyirType::TEXT_FILE], Int, true),
+            Self::TextState => signature(&[TyirType::TEXT_FILE, Int], Bool, true),
+            Self::TextSeek | Self::TextTruncate => {
+                signature(&[TyirType::TEXT_FILE, Int, Int], Int, true)
+            }
             Self::Input => signature(&[STR], STR, true),
             Self::MathAcos
             | Self::MathAcosh
@@ -1214,6 +1234,13 @@ impl RuntimeFunction {
             Self::TextReadline => "text_readline",
             Self::TextReadlines => "text_readlines",
             Self::TextWritelines => "text_writelines",
+            Self::TextName => "text_name",
+            Self::TextMode => "text_mode",
+            Self::TextFileno => "text_fileno",
+            Self::TextState => "text_state",
+            Self::TextSeek => "text_seek",
+            Self::TextTell => "text_tell",
+            Self::TextTruncate => "text_truncate",
             Self::ListAppendMoved => "list_append_moved",
             Self::ListSetMoved => "list_set_moved",
             Self::ListInsertMoved => "list_insert_moved",

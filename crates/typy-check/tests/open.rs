@@ -124,22 +124,66 @@ fn what_0_4_brings_to_open_is_e0201() {
             "TyPy 0.3 opens files in UTF-8 only, written as `\"utf-8\"` or `None`; other \
              encodings are planned for TyPy 0.4 (LIB-14)",
         ),
-        (
-            "f = open(\"a\")\nf.seek(0)\n",
-            "`seek` of a text file is planned for TyPy 0.4 (LIB-14)",
-        ),
-        (
-            "f = open(\"a\")\nprint(f.name)\n",
-            "`name` of a text file is planned for TyPy 0.4 (LIB-14)",
-        ),
-        (
-            "import sys\nprint(sys.stdout.closed)\n",
-            "`closed` of a text file is planned for TyPy 0.4 (LIB-14)",
-        ),
     ] {
         assert_eq!(
             one_error(source),
             ("E0201".to_owned(), message.to_owned()),
+            "{source}"
+        );
+    }
+}
+
+#[test]
+fn a_text_file_gives_its_methods_and_attributes_with_their_types() {
+    let source = "\
+import sys
+
+f = open(\"a\")
+n: int = f.fileno() + f.tell() + f.seek(0) + f.seek(0, 2) + f.truncate() + f.truncate(None)
+m: int = f.truncate(3)
+b: bool = f.isatty() or f.readable() or f.writable() or f.seekable() or f.closed
+s: str = f.name + f.mode + sys.stdin.name
+";
+    assert_eq!(diagnostics_at(PythonFloor::V3_12, source), []);
+}
+
+#[test]
+fn a_wrong_use_of_a_text_file_name_is_reported() {
+    for (source, code, message) in [
+        (
+            "f = open(\"a\")\nf.name()\n",
+            "E0401",
+            "`name` of a text file is a str and cannot be called",
+        ),
+        (
+            "f = open(\"a\")\nf.closed()\n",
+            "E0401",
+            "`closed` of a text file is a bool and cannot be called",
+        ),
+        (
+            "f = open(\"a\")\nprint(f.encoding)\n",
+            "E0412",
+            "a TextIOWrapper has no attribute `encoding` in TyPy",
+        ),
+        (
+            "f = open(\"a\")\nf.detach()\n",
+            "E0412",
+            "a TextIOWrapper has no attribute `detach` in TyPy",
+        ),
+        (
+            "f = open(\"a\")\nf.seek(\"0\")\n",
+            "E0404",
+            "`cookie` of `seek` must be an int, and this is a str",
+        ),
+        (
+            "f = open(\"a\")\nf.truncate(1.5)\n",
+            "E0404",
+            "`pos` of `truncate` must be an int, and this is a float",
+        ),
+    ] {
+        assert_eq!(
+            one_error(source),
+            (code.to_owned(), message.to_owned()),
             "{source}"
         );
     }

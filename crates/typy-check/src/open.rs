@@ -93,28 +93,6 @@ pub(crate) fn is_utf8(name: &str) -> bool {
     )
 }
 
-/// The methods and attributes of a text file planned for 0.4 (LIB-14).
-const PLANNED_NAMES: [&str; 11] = [
-    "closed", "fileno", "isatty", "mode", "name", "readable", "seek", "seekable", "tell",
-    "truncate", "writable",
-];
-
-/// Returns the error message for a name of a text file that TyPy 0.3 does not have: planned
-/// for 0.4, or not provided.
-pub(crate) fn missing_file_name(name: &str) -> (String, bool) {
-    if PLANNED_NAMES.contains(&name) {
-        (
-            format!("`{name}` of a text file is planned for TyPy 0.4 (LIB-14)"),
-            true,
-        )
-    } else {
-        (
-            format!("a TextIOWrapper has no attribute `{name}` in TyPy"),
-            false,
-        )
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::{ModeRefusal, OpenAccess, is_utf8, open_access};

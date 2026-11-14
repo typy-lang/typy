@@ -230,6 +230,9 @@ impl FunctionLowerer<'_> {
             TypedExprKind::OsErrorField { exception, field } => {
                 self.os_error_field(exception, *field, span)
             }
+            TypedExprKind::FileAttribute { file, attribute } => {
+                self.file_attribute(file, *attribute, span)
+            }
             TypedExprKind::ExceptionPart {
                 exception,
                 part,

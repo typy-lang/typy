@@ -109,9 +109,73 @@ impl FunctionLowerer<'_> {
             }
             Method::TextReadlines => (RuntimeFunction::TextReadlines, vec![file]),
             Method::TextClose => (RuntimeFunction::TextClose, vec![file]),
+            Method::TextFileno => (RuntimeFunction::TextFileno, vec![file]),
+            Method::TextTell => (RuntimeFunction::TextTell, vec![file]),
+            Method::TextIsatty
+            | Method::TextReadable
+            | Method::TextWritable
+            | Method::TextSeekable => {
+                let question = match method {
+                    Method::TextIsatty => "0",
+                    Method::TextReadable => "1",
+                    Method::TextWritable => "2",
+                    _ => "3",
+                };
+                let question = self.constant(Constant::Int(question.to_owned()), span);
+                (RuntimeFunction::TextState, vec![file, question])
+            }
+            Method::TextSeek => {
+                let whence = given.get(1).copied().flatten().map_or_else(
+                    || self.constant(Constant::Int("0".to_owned()), span),
+                    |whence| whence.value,
+                );
+                (
+                    RuntimeFunction::TextSeek,
+                    vec![file, argument.unwrap_or(file), whence],
+                )
+            }
+            Method::TextTruncate => {
+                // `None` given or left out cuts at the file's position.
+                let size = given
+                    .first()
+                    .copied()
+                    .flatten()
+                    .filter(|size| size.ty == TyirType::Int);
+                let flag = if size.is_some() { "1" } else { "0" };
+                let flag = self.constant(Constant::Int(flag.to_owned()), span);
+                let size = size.map_or_else(
+                    || self.constant(Constant::Int("0".to_owned()), span),
+                    |size| size.value,
+                );
+                (RuntimeFunction::TextTruncate, vec![file, size, flag])
+            }
             _ => (RuntimeFunction::TextFlush, vec![file]),
         };
         self.call_runtime(function, arguments, span)
+    }
+
+    /// Returns `name`, `mode` or `closed` of a text file (LIB-14).
+    pub(crate) fn file_attribute(
+        &mut self,
+        file: &TypedExpr,
+        attribute: typy_check::FileAttribute,
+        span: Span,
+    ) -> Lowered {
+        let file = self.expression(file);
+        let value = match attribute {
+            typy_check::FileAttribute::Name => {
+                self.call_runtime(RuntimeFunction::TextName, vec![file.value], span)
+            }
+            typy_check::FileAttribute::Mode => {
+                self.call_runtime(RuntimeFunction::TextMode, vec![file.value], span)
+            }
+            typy_check::FileAttribute::Closed => {
+                let question = self.constant(Constant::Int("4".to_owned()), span);
+                self.call_runtime(RuntimeFunction::TextState, vec![file.value, question], span)
+            }
+        };
+        self.release(file, span);
+        value
     }
 
     /// Lowers `open(path, mode)`: a new text file, or the `OSError` of opening it.
