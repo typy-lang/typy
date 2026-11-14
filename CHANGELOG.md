@@ -107,6 +107,10 @@ All notable changes to TyPy are recorded here. The format follows
 
 ### Fixed
 
+- A truth test of a list, a set, a dict or `bytes` in a recursive
+  function, such as `if not items:` before `return f(items[1:])`, stopped
+  the compiler with an internal error (EXP-10).
+
 - Calling a class whose body declares an attribute that no `__init__`
   assigns is E0309. The program used to compile and crash when the
   attribute was read, where CPython raises `AttributeError` (CLS-01).

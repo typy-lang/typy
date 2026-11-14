@@ -154,14 +154,18 @@ impl FunctionLowerer<'_> {
     /// Returns whether a list has items, for a truth test (EXP-10).
     pub(crate) fn list_truth(&mut self, list: Lowered, span: Span) -> ValueId {
         let length = self.list_length(list, span);
-        self.builder.push_value(
+        let truth = self.builder.push_value(
             Operation::IsTrue {
                 kind: ScalarKind::Int,
                 value: length.value,
             },
             TyirType::Bool,
             span,
-        )
+        );
+        // The length is a new `int`; once tested it is released, so no path that leaves the
+        // function later releases it again.
+        self.release(length, span);
+        truth
     }
 
     /// Returns `item in list`; the operands are not released.

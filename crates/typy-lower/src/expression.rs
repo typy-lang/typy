@@ -293,15 +293,18 @@ impl FunctionLowerer<'_> {
                     TyirType::VIEW => RuntimeFunction::DictViewLength,
                     _ => RuntimeFunction::BytesLength,
                 };
-                let length = self.call_runtime(function, vec![lowered.value], span).value;
-                return self.builder.push_value(
+                let length = self.call_runtime(function, vec![lowered.value], span);
+                let truth = self.builder.push_value(
                     Operation::IsTrue {
                         kind: ScalarKind::Int,
-                        value: length,
+                        value: length.value,
                     },
                     TyirType::Bool,
                     span,
                 );
+                // The length is a new `int`, released once tested, as `list_truth` does.
+                self.release(length, span);
+                return truth;
             }
             // An instance's class decides its truth with `__bool__`, or with `__len__` when it
             // has no `__bool__`; without either, the instance is true (CLS-07), and so is a type
