@@ -6,6 +6,8 @@ All notable changes to TyPy are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-11-14
+
 ### Added
 
 - Single inheritance between classes of the program: a class may derive
@@ -746,7 +748,8 @@ compiler needs glibc 2.39 or later and a C toolchain.
   non-ASCII text, checks that every requirement has a row in the test plan,
   and checks that every diagram is rendered from its source.
 
-[Unreleased]: https://github.com/typy-lang/typy/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/typy-lang/typy/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/typy-lang/typy/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/typy-lang/typy/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/typy-lang/typy/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/typy-lang/typy/releases/tag/v0.1.0

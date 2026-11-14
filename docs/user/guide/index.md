@@ -1,6 +1,6 @@
 # Language guide
 
-Each page covers one area of the TyPy specification: what TyPy 0.3 accepts,
+Each page covers one area of the TyPy specification: what TyPy 0.4 accepts,
 with the rule ID of each item, what it refuses, and what later releases
 add. The rule IDs are the ones diagnostics name, such as `TYP-03`.
 
@@ -17,8 +17,8 @@ add. The rule IDs are the ones diagnostics name, such as `TYP-03`.
 | [Functions](functions.md) | Function definitions and recursion | FUN |
 | [Classes](classes.md) | Classes, attributes, methods and type objects | CLS |
 | [Generics](generics.md) | Type parameters and protocols | GEN |
-| [Exceptions](exceptions.md) | Raising and catching, planned for 0.3 | EXC |
-| [Modules](modules.md) | Imports, planned for 0.3 | MOD |
+| [Exceptions](exceptions.md) | Raising, catching and `with` | EXC |
+| [Modules](modules.md) | Imports, packages and lazy imports | MOD |
 | [Built-in functions and library](library.md) | Builtins and methods of the built-in types | LIB |
 | [Memory](memory.md) | Reference counting and value layout | MEM |
 | [C interoperability](c-interop.md) | `ctypes`, planned for 0.5 | FFI |
