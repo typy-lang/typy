@@ -273,7 +273,7 @@ that the specification does not define.
 | LEX-07 | 0.2 | IT | `tests/conformance/lex/LEX-07_*.py` |
 | LEX-08 | 0.1 | IT | `tests/conformance/lex/LEX-08_*.py` |
 | LEX-09 | 0.1 | IT | `tests/conformance/lex/LEX-09_*.py` |
-| LEX-10 | 0.4 | IT | `tests/conformance/lex/LEX-10_*.py` |
+| LEX-10 | 0.5 | IT | `tests/conformance/lex/LEX-10_*.py` |
 | LEX-11 | 0.3 | UT, IT, E2E | `crates/typy-source/src/parse/tests.rs` for each limit just inside and just past it; `crates/typy-tyir/src/verify/tests.rs` for a function of 100000 blocks; `crates/typy-cli/tests/nesting.rs` for a program as deep as CPython compiles and each refusal; `tests/conformance/lex/LEX-11_*.py` |
 | TYP-01 | 0.1 | IT | `tests/conformance/typ/TYP-01_*.py` |
 | TYP-02 | 0.1 | IT | `tests/conformance/typ/TYP-02_*.py` |

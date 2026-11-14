@@ -38,7 +38,7 @@ z = 2j
 ```
 
 An escape of a surrogate code point, `\ud800` to `\udfff` or
-`\U0000d800` to `\U0000dfff`, in a `str` literal is E0201: TyPy 0.4
+`\U0000d800` to `\U0000dfff`, in a `str` literal is E0201: TyPy 0.5
 keeps the code point, as CPython does (LEX-10). A string that holds a
 surrogate can still be made by decoding, as
 `b"\xff".decode("utf-8", "surrogateescape")` gives `'\udcff'`.

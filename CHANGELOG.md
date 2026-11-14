@@ -155,6 +155,9 @@ All notable changes to TyPy are recorded here. The format follows
 
 ### Changed
 
+- A surrogate escape in a `str` literal, such as `"\udcff"`, is planned
+  for 0.5 rather than 0.4: string constants would have to carry code
+  points instead of UTF-8 text through the whole compiler (LEX-10).
 - The name of `except (A, B) as name` is the union `A | B`, as type
   checkers read it, and no longer their common base; its attributes and
   methods are still the base's, and it can be stored in a variable
