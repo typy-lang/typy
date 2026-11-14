@@ -71,6 +71,13 @@ All notable changes to TyPy are recorded here. The format follows
   end is E0428. Calling a generic function of another module is planned
   for 0.5 (GEN-07), and `*Ts`, `**P` and defaults for 1.0 (GEN-01 to
   GEN-03, GEN-06, ADR-0023).
+- Generic classes, `class Box[T]:`, made by `Box(1)`, whose types come
+  from `__init__`'s arguments, or by `Box[str]("a")`, and named
+  `Box[int]` in annotations. Each copy holds its attributes in place, and
+  answers as the generic class: `type(Box(1)) is Box` and
+  `isinstance(Box(1), Box)` hold. A generic class with a base, a class
+  derived from one, and its class variables and defaults are planned for
+  0.5 (GEN-01, GEN-03, GEN-08, ADR-0028).
 - `Final` and `Final[T]` from `typing`: a module or function variable, a
   class variable or an attribute that `__init__` declares `Final` is
   assigned only by its declaration, and any other assignment is E0414. A

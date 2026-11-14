@@ -57,6 +57,12 @@ impl Type {
                     item.visit(each);
                 }
             }
+            // A copy of a generic class holds its type arguments (ADR-0028).
+            Self::Instance(class) => {
+                for item in class.generic.iter().flat_map(|(_, items)| items) {
+                    item.visit(each);
+                }
+            }
             _ => {}
         }
     }
@@ -64,7 +70,19 @@ impl Type {
     /// Returns the type with each parameter of `owner` replaced by its argument.
     #[must_use]
     pub fn substituted(&self, owner: Span, arguments: &[Type]) -> Self {
-        let inner = |item: &Self| Box::new(item.substituted(owner, arguments));
+        self.substituted_with(owner, arguments, &mut |_| None)
+    }
+
+    /// Returns the type with each parameter of `owner` replaced by its argument, and each
+    /// instance of a class replaced by what `classes` gives for it, if anything: a copy of a
+    /// generic class becomes the copy for the replaced arguments (ADR-0028).
+    pub(crate) fn substituted_with(
+        &self,
+        owner: Span,
+        arguments: &[Type],
+        classes: &mut dyn FnMut(&crate::class_type::InstanceClass) -> Option<Type>,
+    ) -> Self {
+        let mut inner = |item: &Self| Box::new(item.substituted_with(owner, arguments, classes));
         match self {
             // A parameter of another definition stays as it is.
             Self::Parameter(parameter) => arguments
@@ -72,26 +90,23 @@ impl Type {
                 .filter(|_| parameter.owner == owner)
                 .cloned()
                 .unwrap_or_else(|| self.clone()),
+            Self::Instance(class) => classes(class).unwrap_or_else(|| self.clone()),
             Self::List(item) => Self::List(inner(item)),
             Self::TupleOf(item) => Self::TupleOf(inner(item)),
             Self::Set(item) => Self::Set(inner(item)),
             Self::Iterator(item) => Self::Iterator(inner(item)),
             Self::Iterable(item) => Self::Iterable(inner(item)),
-            Self::Optional(item) => Self::optional(item.substituted(owner, arguments)),
-            Self::Dict(key, value) => Self::Dict(inner(key), inner(value)),
-            Self::DictView(view, key, value) => Self::DictView(*view, inner(key), inner(value)),
-            Self::Tuple(items) => Self::Tuple(
-                items
-                    .iter()
-                    .map(|item| item.substituted(owner, arguments))
-                    .collect(),
-            ),
-            Self::Union(items) => Self::union(
-                items
-                    .iter()
-                    .map(|item| item.substituted(owner, arguments))
-                    .collect(),
-            ),
+            Self::Optional(item) => Self::optional(*inner(item)),
+            Self::Dict(key, value) => {
+                let key = inner(key);
+                Self::Dict(key, inner(value))
+            }
+            Self::DictView(view, key, value) => {
+                let key = inner(key);
+                Self::DictView(*view, key, inner(value))
+            }
+            Self::Tuple(items) => Self::Tuple(items.iter().map(|item| *inner(item)).collect()),
+            Self::Union(items) => Self::union(items.iter().map(|item| *inner(item)).collect()),
             other => other.clone(),
         }
     }
@@ -118,6 +133,16 @@ pub(crate) fn infer(parameter: &Type, argument: &Type, owner: Span, solved: &mut
         | (Type::Set(item), Type::Set(given))
         | (Type::Iterator(item), Type::Iterator(given))
         | (Type::Optional(item), Type::Optional(given)) => infer(item, given, owner, solved),
+        // Two copies of one generic class solve by their type arguments (ADR-0028).
+        (Type::Instance(wanted), Type::Instance(given))
+            if let (Some((root, items)), Some((given_root, given_items))) =
+                (&wanted.generic, &given.generic)
+                && root == given_root =>
+        {
+            for (item, given) in items.iter().zip(given_items) {
+                infer(item, given, owner, solved);
+            }
+        }
         (Type::Dict(key, value), Type::Dict(given_key, given_value)) => {
             infer(key, given_key, owner, solved);
             infer(value, given_value, owner, solved);
@@ -238,6 +263,73 @@ mod tests {
             &mut solved,
         );
         assert_eq!(solved, vec![Some(Type::union(vec![Type::Bool, Type::Str]))]);
+    }
+
+    #[test]
+    fn every_shape_of_parameter_solves_from_its_argument() {
+        let first = parameter(0, None);
+        let pair = Type::Tuple(vec![first.clone(), Type::Str]);
+        let mut solved = vec![None];
+        infer(&pair, &Type::Tuple(vec![Type::Int]), owner(), &mut solved);
+        assert_eq!(solved, vec![None]);
+        infer(
+            &pair,
+            &Type::Tuple(vec![Type::Int, Type::Str]),
+            owner(),
+            &mut solved,
+        );
+        assert_eq!(solved, vec![Some(Type::Int)]);
+        let mut solved = vec![None];
+        let items = Type::Iterable(Box::new(first.clone()));
+        infer(&items, &Type::Int, owner(), &mut solved);
+        assert_eq!(solved, vec![None]);
+        infer(
+            &items,
+            &Type::List(Box::new(Type::Bytes)),
+            owner(),
+            &mut solved,
+        );
+        assert_eq!(solved, vec![Some(Type::Bytes)]);
+        let mut solved = vec![None, None];
+        let either = Type::union(vec![first.clone(), Type::Str]);
+        infer(&either, &Type::Str, owner(), &mut solved);
+        assert_eq!(solved, vec![None, None]);
+        infer(&either, &Type::Int, owner(), &mut solved);
+        assert_eq!(solved[0], Some(Type::Int));
+        let two = Type::union(vec![first.clone(), parameter(1, None)]);
+        let mut solved = vec![None, None];
+        infer(&two, &Type::Int, owner(), &mut solved);
+        assert_eq!(solved, vec![None, None]);
+        let of_tuple = Type::TupleOf(Box::new(first.clone()));
+        let mut solved = vec![None];
+        infer(
+            &of_tuple,
+            &Type::Tuple(vec![Type::Int, Type::Int]),
+            owner(),
+            &mut solved,
+        );
+        assert_eq!(solved, vec![Some(Type::Int)]);
+        let copy = |root: u32, argument: Type| {
+            let mut class = crate::class_type::InstanceClass::root(crate::typed::ClassId(9), "Box");
+            class.generic = Some((crate::typed::ClassId(root), vec![argument]));
+            Type::instance(class)
+        };
+        let mut solved = vec![None];
+        infer(
+            &copy(1, first.clone()),
+            &copy(2, Type::Int),
+            owner(),
+            &mut solved,
+        );
+        assert_eq!(solved, vec![None]);
+        infer(
+            &copy(1, first.clone()),
+            &copy(1, Type::Int),
+            owner(),
+            &mut solved,
+        );
+        assert_eq!(solved, vec![Some(Type::Int)]);
+        assert!(copy(1, first).has_parameter());
     }
 
     #[test]

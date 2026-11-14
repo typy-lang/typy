@@ -166,6 +166,7 @@ mod tests {
             name: "Circle".to_owned(),
             ancestors: vec![(ClassId(0), "Shape".to_owned())],
             operators: crate::class_type::Operators::default(),
+            generic: None,
         });
         let base = signature(vec![parameter("other", circle.clone())], shape.clone());
         let own = signature(

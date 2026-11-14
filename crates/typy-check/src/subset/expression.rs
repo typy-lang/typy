@@ -74,6 +74,17 @@ impl Walker {
             {
                 self.annotation(index);
             }
+            // A generic class of the module, given its type arguments (GEN-01).
+            Expr::Subscript { value, index, .. } if matches!(value.as_ref(), Expr::Name { id, .. } if self.generic_classes.contains(id)) => {
+                match index.as_ref() {
+                    Expr::Tuple { elements, .. } => {
+                        for element in elements {
+                            self.annotation(element);
+                        }
+                    }
+                    single => self.annotation(single),
+                }
+            }
             // Only the generic types of TYP-06, CLS-12 and TYP-15 are provided.
             Expr::Subscript { span, .. } => {
                 self.report(
@@ -163,6 +174,11 @@ impl Walker {
                     Expr::Name { .. } => {}
                     // A method call: the checker decides whether the value has the method.
                     Expr::Attribute { value, .. } => self.expression(value),
+                    // A generic class given its type arguments, such as `Box[int](1)`.
+                    Expr::Subscript { value, index, .. } if matches!(value.as_ref(), Expr::Name { id, .. } if self.generic_classes.contains(id)) =>
+                    {
+                        self.annotation(index);
+                    }
                     other => self.report(
                         other.span(),
                         planned("calls of values that are not names", "1.0", RuleId::FUN_05),

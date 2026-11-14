@@ -36,7 +36,7 @@ impl BodyChecker<'_> {
                 span,
             );
         }
-        let solved = self.solve(function, &generic.parameters, arguments, keywords);
+        let solved = self.solve(function, 0, &generic.parameters, arguments, keywords);
         let mut types = Vec::new();
         for (parameter, solution) in generic.parameters.iter().zip(solved) {
             match self.type_argument(parameter, solution, name, span) {
@@ -55,6 +55,7 @@ impl BodyChecker<'_> {
             }
         };
         let signature = self.program.instantiated(function, &types);
+        self.program.make_class_copies();
         match self.bind_to(&signature, 0, name, arguments, keywords, span) {
             Ok(bound) => Self::typed(
                 TypedExprKind::Call {
@@ -75,6 +76,7 @@ impl BodyChecker<'_> {
     fn solve(
         &mut self,
         function: FunctionId,
+        skip: usize,
         parameters: &[TypeParameter],
         arguments: &[Expr],
         keywords: &[Keyword],
@@ -92,7 +94,11 @@ impl BodyChecker<'_> {
                 .position(|parameter| parameter.name == name.name)?;
             Some((position, &keyword.value))
         });
-        let given: Vec<(usize, &Expr)> = arguments.iter().enumerate().chain(named).collect();
+        let positional = arguments
+            .iter()
+            .enumerate()
+            .map(|(index, argument)| (index + skip, argument));
+        let given: Vec<(usize, &Expr)> = positional.chain(named).collect();
         for (position, argument) in given {
             let (Some(parameter), Some(owner)) = (signature.parameters.get(position), owner) else {
                 continue;
@@ -204,5 +210,60 @@ impl BodyChecker<'_> {
             .with_help("a generic function cannot call itself with a larger type each time"),
             span,
         )
+    }
+
+    /// Returns the copy of the generic class `class` a call makes, its type arguments solved
+    /// from the arguments of `__init__` as a generic function's are; `class` itself for any
+    /// other class (GEN-01, ADR-0028).
+    pub(super) fn class_to_call(
+        &mut self,
+        class: crate::typed::ClassId,
+        arguments: &[Expr],
+        keywords: &[Keyword],
+        span: Span,
+    ) -> Result<crate::typed::ClassId, TypedExpr> {
+        let Some(generic) = self
+            .program
+            .class_copies
+            .borrow()
+            .roots
+            .get(&class)
+            .cloned()
+        else {
+            return Ok(class);
+        };
+        let name = generic.instance.name.clone();
+        let solved = match self.program.method(class, "__init__") {
+            Some(init) => self.solve(init, 1, &generic.parameters, arguments, keywords),
+            None => vec![None; generic.parameters.len()],
+        };
+        let mut types = Vec::new();
+        for (parameter, solution) in generic.parameters.iter().zip(solved) {
+            match self.type_argument(parameter, solution, &name, span) {
+                Some(ty) => types.push(ty),
+                None => return Err(Self::invalid_call(span)),
+            }
+        }
+        let instance = self.program.class_copies.borrow_mut().applied(class, types);
+        self.program.make_class_copies();
+        Ok(instance.class_id().unwrap_or(class))
+    }
+
+    /// Checks `Class[arguments](...)`: a call of the copy of a generic class for the type
+    /// arguments it is given (GEN-01, ADR-0028).
+    pub(super) fn applied_class_call(
+        &mut self,
+        function: &Expr,
+        arguments: &[Expr],
+        keywords: &[Keyword],
+        span: Span,
+    ) -> TypedExpr {
+        if let Type::Instance(class) = self.annotation(function) {
+            return self.new_instance(class.id, arguments, keywords, span);
+        }
+        for argument in arguments {
+            self.expression(argument);
+        }
+        Self::invalid_call(span)
     }
 }

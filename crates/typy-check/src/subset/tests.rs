@@ -73,8 +73,20 @@ fn later_features_name_their_release_and_rule() {
             "class decorators are planned for TyPy 0.4 (CLS-05)",
         ),
         (
-            "class C[T]:\n    pass\n",
-            "generic classes are planned for TyPy 0.4 (GEN-01)",
+            "class B:\n    pass\nclass C[T](B):\n    pass\n",
+            "generic classes with a base or a decorator are planned for TyPy 0.5 (GEN-08)",
+        ),
+        (
+            "class C[T]:\n    pass\nclass D(C[int]):\n    pass\n",
+            "classes derived from a generic class are planned for TyPy 0.5 (GEN-08)",
+        ),
+        (
+            "class C[T]:\n    pass\nclass D(C):\n    pass\n",
+            "classes derived from a generic class are planned for TyPy 0.5 (GEN-08)",
+        ),
+        (
+            "@decorated\nclass C[T]:\n    pass\n",
+            "generic classes with a base or a decorator are planned for TyPy 0.5 (GEN-08)",
         ),
         (
             "x = {**y}\n",
@@ -332,4 +344,13 @@ fn an_assertion_of_a_tuple_with_items_is_w0301() {
             "this assertion is always true, since a tuple with items is true".to_owned()
         )]
     );
+}
+
+#[test]
+fn a_generic_class_is_named_with_its_type_arguments_in_annotations_and_calls() {
+    let source =
+        "class Box[T]:\n    pass\nx: Box[int] = Box[int]()\ny: Box[tuple[int, str]] = Box()\n";
+    assert_eq!(diagnostics(source), Vec::new());
+    let other = diagnostics("x: frozenset[int] = 1\nprint(frozenset[int]())\n");
+    assert_eq!(other.len(), 2, "{other:?}");
 }

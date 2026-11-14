@@ -354,6 +354,10 @@ impl BodyChecker<'_> {
                 Expr::Attribute {
                     value, attribute, ..
                 } => self.method_call(value, attribute, arguments, keywords, span),
+                // The subset check lets only a generic class given its arguments through.
+                Expr::Subscript { .. } => {
+                    self.applied_class_call(function, arguments, keywords, span)
+                }
                 _ => Self::typed(
                     TypedExprKind::Constant(TypedConstant::None),
                     Type::Error,

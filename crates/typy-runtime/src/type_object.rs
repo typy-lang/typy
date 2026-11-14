@@ -65,6 +65,9 @@ pub struct TypeObject {
     pub fields: *const TupleType,
     /// Writes an object as `str` does; absent for a type whose `str` is its `repr`.
     pub str: Option<Repr>,
+    /// The class `type()` gives for an object of this type: for a copy of a generic class, the
+    /// generic class; null for every other type, which is its own (ADR-0028).
+    pub public: *const TypeObject,
 }
 
 // SAFETY: a type object is immortal and never written after it is built, so threads may share it.
@@ -90,6 +93,7 @@ impl TypeObject {
             module_length: 0,
             fields: core::ptr::null(),
             str: None,
+            public: core::ptr::null(),
         }
     }
 
@@ -255,7 +259,13 @@ pub unsafe extern "C" fn typy_rt_object_is_true(object: *mut ObjectHeader) -> bo
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn typy_rt_object_type(object: *const ObjectHeader) -> *const TypeObject {
     // SAFETY: the caller's guarantee.
-    unsafe { type_of(object) }
+    let own = unsafe { type_of(object) };
+    // A copy of a generic class answers as the generic class (ADR-0028).
+    if own.public.is_null() {
+        own
+    } else {
+        own.public
+    }
 }
 
 /// Returns whether the heap object at `object` is an instance of `class`: its type is

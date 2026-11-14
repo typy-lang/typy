@@ -207,5 +207,6 @@ fn tyir_class(
         truth: method("__bool__"),
         base: class.base.map(|base| base.0),
         exception_base,
+        public: class.generic.map(|generic| generic.0),
     }
 }

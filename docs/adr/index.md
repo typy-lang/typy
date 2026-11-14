@@ -33,3 +33,4 @@ supersedes it.
 | [ADR-0025](0025-compile-a-class-method-once-for-each-class-that-has-it.md) | Compile a class method once for each class that has it | Accepted | 2026-11-13 |
 | [ADR-0026](0026-call-operator-methods-directly-and-from-the-type-object-slots.md) | Call operator methods directly and from the type object slots | Accepted | 2026-11-13 |
 | [ADR-0027](0027-hold-a-union-as-its-object-or-as-a-tuple-of-a-tag-and-a-slot-per-member.md) | Hold a union as its object, or as a tuple of a tag and a slot per member | Accepted | 2026-11-13 |
+| [ADR-0028](0028-make-each-copy-of-a-generic-class-answer-as-the-generic-class.md) | Make each copy of a generic class answer as the generic class | Accepted | 2026-11-14 |

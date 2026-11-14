@@ -1,16 +1,17 @@
 # Generics
 
-A generic function takes a type parameter list, as PEP 695 writes it:
-`def first[T](items: list[T]) -> T`. TyPy compiles one copy of the
-function for each set of types the program calls it with, so a generic
-call costs what a call written for those types costs (GEN-01 to GEN-03,
-ADR-0023).
+A generic function or class takes a type parameter list, as PEP 695
+writes it: `def first[T](items: list[T]) -> T` or `class Box[T]:`. TyPy
+compiles one copy of the function, or of the class, for each set of types
+the program uses it with, so a generic call costs what a call written for
+those types costs (GEN-01 to GEN-03, ADR-0023, ADR-0028).
 
 ## What TyPy accepts
 
 | Item | Rule |
 | --- | --- |
 | `def name[T, U](...)`: a generic function at module level | GEN-01 |
+| `class Name[T]:`, a generic class, and `Name[int]` in annotations and calls | GEN-01 |
 | `[T: Bound]`, a bound, and `[T: (A, B)]`, constraints | GEN-02 |
 | One compiled copy for each set of type arguments, with no type at run time | GEN-03 |
 
@@ -98,10 +99,52 @@ A function that calls itself with a larger type each time, as
 `f(x)` calling `f([x])`, would need copies without end; past 64 copies
 inside one another it is E0428.
 
+## Generic classes
+
+A generic class's type parameters type its attributes and methods. A call
+takes the types from the arguments of `__init__`, as a generic function's
+call does, or from the class's type arguments, `Box[str]("a")`. An
+annotation names the class with its type arguments, `Box[int]`; the bare
+name is E0408 outside the class's own body:
+
+<!-- typy-expect: accepted -->
+```python
+class Node[T]:
+    def __init__(self, value: T, next: "Node[T] | None") -> None:
+        self.value = value
+        self.next = next
+
+    def values(self) -> list[T]:
+        found: list[T] = [self.value]
+        rest = self.next
+        if rest is not None:
+            found.extend(rest.values())
+        return found
+
+
+def first[T](node: Node[T]) -> T:
+    return node.value
+
+
+chain = Node(1, Node(2, None))
+words = Node[str]("a", None)
+print(chain.values(), first(words))
+print(type(chain) is Node, isinstance(words, Node))
+```
+
+Each copy, such as `Node[int]`, is a class of its own, which holds an
+`int` in place, and it answers as the generic class: `type(chain)` is
+`Node`, `isinstance(words, Node)` holds and `__name__` is `"Node"`, as in
+CPython. A generic dataclass gets its methods for each copy.
+`isinstance(x, Node[int])` is refused, as CPython raises `TypeError` for
+it.
+
 ## Refused and planned
 
 `TypeVar` and `Generic` from `typing` are E0202: a type parameter list
-replaces them (GEN-01). Type parameters of methods, generic classes,
-generic type aliases and protocols come later in 0.4. Calling a generic
-function of another module is planned for 0.5 (GEN-07), and `*Ts`,
-`**P` and defaults of type parameters for 1.0 (GEN-06).
+replaces them (GEN-01). Type parameters of methods, generic type aliases
+and protocols come later in 0.4. A generic class with a base, a class
+derived from a generic class, and class variables and defaults of a
+generic class are planned for 0.5 (GEN-08), as is using a generic
+function or class of another module (GEN-07); `*Ts`, `**P` and defaults
+of type parameters are planned for 1.0 (GEN-06).

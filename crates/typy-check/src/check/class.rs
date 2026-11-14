@@ -8,6 +8,7 @@ use typy_source::syntax::{Expr, Identifier, Stmt};
 
 use super::annotation::{AnnotationScope, annotation_type};
 use super::definition::{Definition, FunctionParts, MethodKind, Owner, defined_twice, definition};
+use super::generic_class::finish_generic_class;
 use super::overriding::Override;
 use crate::class_type::{InstanceClass, Operators};
 use crate::exception::{BuiltinException, ExceptionClass};
@@ -90,6 +91,8 @@ pub(super) struct ClassStatement<'tree> {
     pub(super) name: &'tree Identifier,
     pub(super) base: Option<&'tree Expr>,
     pub(super) body: &'tree [Stmt],
+    /// The type parameters of a generic class (GEN-01).
+    pub(super) type_parameters: &'tree [typy_source::syntax::TypeParameter],
     pub(super) span: Span,
 }
 
@@ -106,6 +109,7 @@ pub(super) fn collect_classes<'tree>(
             name,
             bases,
             body,
+            type_parameters,
             span,
             ..
         } = statement
@@ -121,6 +125,7 @@ pub(super) fn collect_classes<'tree>(
             name,
             base: bases.first(),
             body,
+            type_parameters,
             span: *span,
         });
     }
@@ -247,6 +252,7 @@ fn derived_type(
                 name,
                 ancestors,
                 operators: Operators::of(method_names(class.body), parent.operators),
+                generic: None,
             }))
         }
         _ => None,
@@ -338,6 +344,8 @@ pub(super) struct KnownClasses<'known> {
     pub(super) earlier: &'known [ClassInfo],
     /// The signatures of the functions of the modules checked before, indexed by ID.
     pub(super) signatures: &'known [FunctionSignature],
+    /// The generic classes and their copies (ADR-0028).
+    pub(super) copies: &'known std::cell::RefCell<crate::body::ClassCopies>,
 }
 
 /// Collects each class's attributes and methods; the methods become definitions whose IDs
@@ -355,12 +363,10 @@ pub(super) fn collect_members<'tree>(
     let mut copies = ClassMethodCopies::default();
     for class in classes {
         let mut own_class_methods: Vec<&'tree Stmt> = Vec::new();
-        let scope = class_scope(known, names, floor_defers, class.id);
-        let instance = known
-            .instances
-            .get(&class.id)
-            .cloned()
-            .unwrap_or_else(|| Type::instance(InstanceClass::root(class.id, &class.name.name)));
+        let in_scope = super::generic_class::parameters_in_scope(known.copies, class.id);
+        let scope = class_scope(known, names, floor_defers, class.id, &in_scope);
+        let first_method = methods.len();
+        let instance = class_instance(known, class);
         let classes = Classes {
             earlier: known.earlier,
             local: &infos,
@@ -433,21 +439,33 @@ pub(super) fn collect_members<'tree>(
                 _ => {}
             }
         }
+        let mut collected = Collected {
+            methods: &mut methods,
+            first_function,
+        };
         copies.make(
             &own_class_methods,
             &mut info,
             classes,
             &scope,
-            &mut Collected {
-                methods: &mut methods,
-                first_function,
-            },
+            &mut collected,
             diagnostics,
         );
         report_name_conflicts(&info, class.name.span, diagnostics);
+        let own_methods = &mut methods[first_method..];
+        finish_generic_class(&info, own_methods, known.copies, class.span, diagnostics);
         infos.push(info);
     }
     (infos, methods)
+}
+
+/// Returns the type of a class's instances, as the class types gave it.
+fn class_instance(known: &KnownClasses<'_>, class: &ClassStatement<'_>) -> Type {
+    known
+        .instances
+        .get(&class.id)
+        .cloned()
+        .unwrap_or_else(|| Type::instance(InstanceClass::root(class.id, &class.name.name)))
 }
 
 /// The classes collected so far: those of the modules checked before, indexed by ID, and the
@@ -514,13 +532,15 @@ fn class_scope<'known>(
     names: &'known crate::check::ImportedNames,
     floor_defers: bool,
     class: ClassId,
+    parameters: &'known BTreeMap<String, Type>,
 ) -> AnnotationScope<'known> {
     AnnotationScope {
         classes: known.ids,
         instances: known.instances,
         modules: &names.modules,
         module_aliases: &names.module_aliases,
-        parameters: &super::annotation::NO_PARAMETERS,
+        parameters,
+        copies: known.copies,
         names: &names.names,
         standard: &names.standard,
         bound: if floor_defers { u32::MAX } else { class.0 },

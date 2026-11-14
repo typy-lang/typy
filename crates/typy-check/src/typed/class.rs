@@ -45,4 +45,10 @@ pub struct TypedClass {
     pub defaults: Vec<(usize, super::symbol::SymbolId)>,
     /// The whole definition.
     pub span: Span,
+    /// For a copy of a generic class, the generic class, which `type()` and `isinstance`
+    /// answer as (ADR-0028).
+    pub generic: Option<ClassId>,
+    /// Whether the class has no instances: a generic class, or a copy whose type arguments
+    /// hold a type parameter, which is checked and never laid out (ADR-0028).
+    pub opaque: bool,
 }

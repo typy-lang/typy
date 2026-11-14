@@ -29,6 +29,9 @@ pub(crate) struct AnnotationScope<'classes> {
     /// The type each type parameter in scope stands for: its opaque type while a generic
     /// body is checked, and its argument while a copy is (GEN-01).
     pub(crate) parameters: &'classes BTreeMap<String, Type>,
+    /// The generic classes and their copies, which an annotation such as `Box[int]` asks
+    /// for (ADR-0028).
+    pub(crate) copies: &'classes std::cell::RefCell<crate::body::ClassCopies>,
     pub(crate) bound: u32,
 }
 
@@ -340,6 +343,14 @@ pub(crate) fn annotation_type(
             };
             annotation_type(annotation, &deferred, diagnostics)
         }
+        // A generic class given its type arguments (GEN-01, ADR-0028).
+        Expr::Subscript { value, index, .. }
+            if let Expr::Name { id, .. } = value.as_ref()
+                && let Some(class) = scope.classes.get(id)
+                && scope.copies.borrow().roots.contains_key(class) =>
+        {
+            super::generic_class::applied_annotation(*class, id, index, scope, diagnostics)
+        }
         Expr::Subscript { value, index, .. } if matches!(value.as_ref(), Expr::Name { id, .. } if id == "tuple") => {
             tuple_annotation(index, scope, diagnostics)
         }
@@ -399,6 +410,9 @@ fn named_type(
         return parameter.clone();
     }
     if let Some(class) = scope.classes.get(id) {
+        if scope.copies.borrow().roots.contains_key(class) {
+            return super::generic_class::bare_annotation(*class, id, span, scope, diagnostics);
+        }
         if class.0 >= scope.bound {
             diagnostics.push(
                 Diagnostic::new(

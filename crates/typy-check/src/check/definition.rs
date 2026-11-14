@@ -115,18 +115,32 @@ pub(super) fn defined_twice(name: &Identifier) -> Diagnostic {
     .with_rule(RuleId::STD_04)
 }
 
+/// What a module's function signatures may name: its classes, with the type of their
+/// instances, the names its imports give, and the generic classes and their copies.
+#[derive(Clone, Copy)]
+pub(super) struct FunctionScope<'known> {
+    pub(super) classes: &'known BTreeMap<String, ClassId>,
+    pub(super) instances: &'known BTreeMap<ClassId, Type>,
+    pub(super) names: &'known crate::check::ImportedNames,
+    pub(super) copies: &'known std::cell::RefCell<crate::body::ClassCopies>,
+}
+
 /// Collects the module's functions in source order, with their signatures (TYP-01). Each
 /// signature may name the classes whose `class` statements come before its `def`, and the
 /// classes of the modules checked before it, numbered below `first_class`.
 pub(super) fn collect_functions<'tree>(
     statements: &'tree [Stmt],
     first_class: usize,
-    classes: &BTreeMap<String, ClassId>,
-    instances: &BTreeMap<ClassId, Type>,
-    names: &crate::check::ImportedNames,
+    known: &FunctionScope<'_>,
     floor_defers: bool,
     diagnostics: &mut Diagnostics,
 ) -> Vec<Definition<'tree>> {
+    let FunctionScope {
+        classes,
+        instances,
+        names,
+        copies,
+    } = *known;
     let mut functions: Vec<Definition<'tree>> = Vec::new();
     let mut classes_before = u32::try_from(first_class).unwrap_or(u32::MAX);
     for statement in statements {
@@ -151,6 +165,7 @@ pub(super) fn collect_functions<'tree>(
             names: &names.names,
             standard: &names.standard,
             parameters: &super::annotation::NO_PARAMETERS,
+            copies,
             bound: if floor_defers {
                 u32::MAX
             } else {
@@ -177,8 +192,18 @@ fn type_parameters(
     scope: &AnnotationScope<'_>,
     diagnostics: &mut Diagnostics,
 ) -> Vec<crate::generic::TypeParameter> {
-    parts
-        .type_parameters
+    resolve_type_parameters(parts.type_parameters, parts.span, scope, diagnostics)
+}
+
+/// Returns the type parameters a list declares for the definition at `owner`, each with its
+/// bound or its constraints (GEN-01, GEN-02).
+pub(super) fn resolve_type_parameters(
+    parameters: &[typy_source::syntax::TypeParameter],
+    owner: Span,
+    scope: &AnnotationScope<'_>,
+    diagnostics: &mut Diagnostics,
+) -> Vec<crate::generic::TypeParameter> {
+    parameters
         .iter()
         .enumerate()
         .map(|(index, parameter)| {
@@ -194,7 +219,7 @@ fn type_parameters(
                 None => (None, Vec::new()),
             };
             crate::generic::TypeParameter {
-                owner: parts.span,
+                owner,
                 index,
                 name: parameter.name.name.clone(),
                 bound,

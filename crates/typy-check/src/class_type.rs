@@ -18,6 +18,9 @@ pub struct InstanceClass {
     pub ancestors: Vec<(ClassId, String)>,
     /// The operator methods the class defines or inherits (CLS-07, ADR-0026).
     pub operators: Operators,
+    /// For a copy of a generic class, the generic class and the copy's type arguments
+    /// (GEN-03, ADR-0028).
+    pub generic: Option<(ClassId, Vec<crate::types::Type>)>,
 }
 
 /// The comparison and hash methods a class defines or inherits, which decide whether its
@@ -91,6 +94,7 @@ impl InstanceClass {
             name: name.into(),
             ancestors: Vec::new(),
             operators: Operators::default(),
+            generic: None,
         }
     }
 
@@ -110,6 +114,7 @@ impl InstanceClass {
             name: name.clone(),
             ancestors: rest.to_vec(),
             operators: Operators::default(),
+            generic: None,
         })
     }
 
@@ -145,6 +150,7 @@ mod tests {
             name: "Circle".to_owned(),
             ancestors: vec![(ClassId(0), "Shape".to_owned())],
             operators: super::Operators::default(),
+            generic: None,
         };
         let disc = InstanceClass {
             id: ClassId(2),
@@ -154,6 +160,7 @@ mod tests {
                 (ClassId(0), "Shape".to_owned()),
             ],
             operators: super::Operators::default(),
+            generic: None,
         };
         (shape, circle, disc)
     }
@@ -182,6 +189,7 @@ mod tests {
             name: "Square".to_owned(),
             ancestors: vec![(ClassId(0), "Shape".to_owned())],
             operators: super::Operators::default(),
+            generic: None,
         };
         assert_eq!(disc.common_base(&circle), Some(circle.clone()));
         assert_eq!(disc.common_base(&square), Some(shape));

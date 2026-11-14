@@ -134,7 +134,14 @@ impl TypeObjectOf {
             Type::Set(_) => Self::Set,
             Type::Dict(..) => Self::Dict,
             Type::DictView(view, ..) => Self::View(*view),
-            Type::Instance(class) => Self::Instance(class.id, class.name.clone()),
+            // A copy of a generic class answers as the generic class (ADR-0028).
+            Type::Instance(class) => match &class.generic {
+                Some((root, _)) => Self::Instance(
+                    *root,
+                    class.name.split('[').next().unwrap_or_default().to_owned(),
+                ),
+                None => Self::Instance(class.id, class.name.clone()),
+            },
             Type::TypeObject(_) => Self::Type,
             Type::Range => Self::Range,
             // An exception's class may derive from its static class, so it is read from the

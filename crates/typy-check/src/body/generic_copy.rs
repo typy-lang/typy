@@ -3,6 +3,8 @@
 
 use std::collections::BTreeMap;
 
+use typy_diagnostics::{FileId, Span, TextOffset};
+
 use super::Program;
 use crate::generic::TypeParameter;
 use crate::typed::{FunctionId, FunctionSignature, SignatureParameter};
@@ -27,6 +29,8 @@ pub(crate) struct GenericCopy {
     pub(crate) copy: FunctionId,
     /// How many copies it is made inside: 1 for one a call outside any copy needs.
     pub(crate) depth: usize,
+    /// For a copy of a method of a generic class, the class copy it belongs to (ADR-0028).
+    pub(crate) class: Option<crate::typed::ClassId>,
 }
 
 /// What asking for a copy gives.
@@ -72,17 +76,32 @@ impl Program {
     /// Returns the copy of `generic` for `arguments`, making it when it is new; a new copy is
     /// checked when the module's other bodies are.
     pub(crate) fn request_copy(&mut self, generic: FunctionId, arguments: Vec<Type>) -> Requested {
+        let known = self
+            .generics
+            .copies
+            .iter()
+            .any(|copy| copy.generic == generic && copy.arguments == arguments);
+        if !known && self.generics.depth >= MOST_NESTED_COPIES {
+            return Requested::TooDeep;
+        }
+        Requested::Copy(self.made_copy(generic, arguments, None))
+    }
+
+    /// Returns the copy of `generic` for `arguments`, making it when it is new; a copy of a
+    /// method of a generic class names the class copy it belongs to.
+    pub(crate) fn made_copy(
+        &mut self,
+        generic: FunctionId,
+        arguments: Vec<Type>,
+        class: Option<crate::typed::ClassId>,
+    ) -> FunctionId {
         if let Some(known) = self
             .generics
             .copies
             .iter()
             .find(|copy| copy.generic == generic && copy.arguments == arguments)
         {
-            return Requested::Copy(known.copy);
-        }
-        let depth = self.generics.depth + 1;
-        if depth > MOST_NESTED_COPIES {
-            return Requested::TooDeep;
+            return known.copy;
         }
         let copy = self.next_function();
         let signature = self.instantiated(generic, &arguments);
@@ -93,9 +112,10 @@ impl Program {
             generic,
             arguments,
             copy,
-            depth,
+            depth: self.generics.depth + 1,
+            class,
         });
-        Requested::Copy(copy)
+        copy
     }
 
     /// Returns the signature of `generic` with each type parameter replaced by its argument.
@@ -105,25 +125,25 @@ impl Program {
         arguments: &[Type],
     ) -> FunctionSignature {
         let signature = &self.signatures[generic.0 as usize];
-        let Some(owner) = self
+        // A generic function has a type parameter; a span no parameter has replaces nothing.
+        let owner = self
             .generics
             .functions
             .get(&generic)
             .and_then(|known| known.parameters.first())
-            .map(|parameter| parameter.owner)
-        else {
-            return signature.clone();
-        };
+            .map_or(Span::empty(FileId(0), TextOffset(0)), |parameter| {
+                parameter.owner
+            });
         FunctionSignature {
             parameters: signature
                 .parameters
                 .iter()
                 .map(|parameter| SignatureParameter {
-                    ty: parameter.ty.substituted(owner, arguments),
+                    ty: self.substitute(&parameter.ty, owner, arguments),
                     ..parameter.clone()
                 })
                 .collect(),
-            returns: signature.returns.substituted(owner, arguments),
+            returns: self.substitute(&signature.returns, owner, arguments),
         }
     }
 

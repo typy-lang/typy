@@ -416,6 +416,10 @@ impl BodyChecker<'_> {
         keywords: &[Keyword],
         span: Span,
     ) -> TypedExpr {
+        let class = match self.class_to_call(class, arguments, keywords, span) {
+            Ok(class) => class,
+            Err(error) => return error,
+        };
         let name = self.program.classes[class.0 as usize].name.clone();
         if let Some(diagnostic) = self.unassigned_on_creation(class, span) {
             for argument in arguments {

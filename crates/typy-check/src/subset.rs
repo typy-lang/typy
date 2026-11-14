@@ -19,6 +19,18 @@ pub(crate) fn check(tree: &SyntaxTree) -> Diagnostics {
         loop_depth: 0,
         try_depth: 0,
         scope: None,
+        generic_classes: tree
+            .body
+            .iter()
+            .filter_map(|statement| match statement {
+                typy_source::syntax::Stmt::ClassDef {
+                    name,
+                    type_parameters,
+                    ..
+                } if !type_parameters.is_empty() => Some(name.name.clone()),
+                _ => None,
+            })
+            .collect(),
     };
     walker.statements(&tree.body, Place::ModuleTop);
     walker.diagnostics
@@ -41,6 +53,8 @@ struct Walker {
     try_depth: usize,
     /// The names of the function being walked, for CPython's rules of `global`.
     scope: Option<global_scope::GlobalScope>,
+    /// The module's generic classes, whose names an annotation may subscript (GEN-01).
+    generic_classes: std::collections::BTreeSet<String>,
 }
 
 impl Walker {

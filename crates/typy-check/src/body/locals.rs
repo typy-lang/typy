@@ -135,11 +135,15 @@ impl BodyChecker<'_> {
             modules: &self.program.module_classes,
             module_aliases: &self.program.module_aliases,
             parameters: &self.program.type_arguments,
+            copies: &self.program.class_copies,
             names: &self.program.annotation_names,
             standard: &self.program.annotation_modules,
             bound: u32::MAX,
         };
-        annotation_type(annotation, &scope, self.diagnostics)
+        let ty = annotation_type(annotation, &scope, self.diagnostics);
+        // An annotation may name a copy of a generic class, which the program then holds.
+        self.program.make_class_copies();
+        ty
     }
 
     pub(super) fn declare(&mut self, target: &Expr, annotation: &Expr, given: bool) {

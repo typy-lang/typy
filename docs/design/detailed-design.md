@@ -833,7 +833,24 @@ joining two solutions into a union, checks bounds and constraints, and asks
 with `Program::type_arguments` naming the arguments. A copy made inside 64
 others is E0428, and a call of another module's generic is E0201 until GEN-07.
 The module body's first look gives back the copies it made, with the function
-IDs they took.
+IDs they took. Generic classes (ADR-0028) are noted before any signature is
+read, by `check::generic_class::note_generic_classes`, in `body::ClassCopies`
+behind a `RefCell` the annotation scope shares, so `Box[int]` in a signature
+asks for a copy, which takes a class ID after the module's classes.
+`ClassCopies::applied` gives the generic class's own instances for its own
+parameters and otherwise the copy's, an `InstanceClass` whose `generic` names
+the class and the type arguments. The generic class's methods are generic over
+its parameters; `Program::make_class_copies` adds each copy's `ClassInfo`, with
+its attribute types substituted, which `Program::attribute_ty` also reads from
+the generic class while the copy's are unknown, and a copy of each method,
+checked as function copies are. `Program::substitute` maps a copy to the copy
+for the substituted arguments, so a recursive class such as `Node[T]` refers to
+its own copies. A call of a generic class solves its type arguments from
+`__init__` in `BodyChecker::class_to_call`. A copy whose arguments hold a
+parameter, and the generic class itself, are opaque: lowering lays them out
+empty and their methods are stubs. A copy's `TyirClass::public` names the
+generic class, which codegen writes as the type object's base and as its
+`public` field, which `typy_rt_object_type` returns.
 
 Unions (TYP-14, ADR-0027) add `Type::Union(members)`, which `Type::union` builds
 in normal form in `union_type`: nested unions flatten, `None` makes the union

@@ -268,3 +268,32 @@ fn an_object_is_true_as_its_type_tests_it() {
         crate::refcount::typy_rt_decrement(full.cast());
     }
 }
+
+#[test]
+fn type_of_a_copy_of_a_generic_class_is_the_generic_class() {
+    let generic = Box::leak(Box::new(TypeObject::new("Box", &raw const OBJECT)));
+    let copy = Box::leak(Box::new(TypeObject {
+        public: &raw const *generic,
+        ..TypeObject::new("Box", &raw const *generic)
+    }));
+    let instance = crate::instance::InstanceObject {
+        header: ObjectHeader {
+            reference_count: IMMORTAL,
+            type_id: crate::header::INSTANCE_TYPE_ID,
+        },
+        class: &raw const *copy,
+    };
+    let object = (&raw const instance).cast::<ObjectHeader>();
+    // SAFETY: the instance and both classes live until the end of the test.
+    unsafe {
+        assert!(same(&*super::typy_rt_object_type(object), generic));
+        assert!(same(type_of(object), copy));
+        assert!(super::typy_rt_is_instance(object, &raw const *generic));
+    }
+    let plain = crate::string::from_str("a");
+    // SAFETY: the string is live until it is released.
+    unsafe {
+        assert!(same(&*super::typy_rt_object_type(plain.cast()), &STR));
+        crate::refcount::typy_rt_decrement(plain.cast());
+    }
+}

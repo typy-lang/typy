@@ -62,6 +62,9 @@ pub(crate) struct Program {
     pub(crate) type_arguments: BTreeMap<String, Type>,
     /// The generic functions of the program and the copies made of them (GEN-03).
     pub(crate) generics: super::generic_copy::Generics,
+    /// The generic classes of the program and the copies made of them, which annotations,
+    /// read where only a shared reference is at hand, may add to (ADR-0028).
+    pub(crate) class_copies: std::cell::RefCell<super::class_copy::ClassCopies>,
     /// The names of `typing`, `collections.abc` and `types` the module imports, and the
     /// names bound to those modules, which annotations read (TYP-15).
     pub(super) annotation_names: BTreeMap<String, crate::check::AnnotationName>,
@@ -96,6 +99,7 @@ pub(crate) struct Snapshot {
     first_class: usize,
     /// The generic copies made before the first look, whose IDs the look's copies follow.
     generics: super::generic_copy::Generics,
+    class_copies: super::class_copy::ClassCopies,
 }
 
 /// The names one module defines, which other modules import.
@@ -136,6 +140,7 @@ impl Program {
             type_aliases: BTreeSet::new(),
             type_arguments: BTreeMap::new(),
             generics: super::generic_copy::Generics::default(),
+            class_copies: std::cell::RefCell::default(),
             annotation_names: BTreeMap::new(),
             annotation_modules: BTreeMap::new(),
             module_functions: BTreeMap::new(),
@@ -446,7 +451,10 @@ impl Program {
     /// Returns the type of the attribute at `index` of `class`, once it is known.
     pub(super) fn attribute_ty(&self, class: ClassId, index: usize) -> Option<Type> {
         let owner = self.declaring(class, index);
-        self.classes[owner.0 as usize].attributes[index].ty.clone()
+        let known = self.classes[owner.0 as usize].attributes[index].ty.clone();
+        // A copy of a generic class has the generic class's attribute types, with its type
+        // arguments, before its own `__init__` is checked (ADR-0028).
+        known.or_else(|| self.copied_attribute_ty(owner, index))
     }
 
     /// Makes the symbol of each module variable, before any body is checked, and notes those
@@ -483,6 +491,7 @@ impl Program {
             classes: self.classes[first_class..].to_vec(),
             first_class,
             generics: self.generics.clone(),
+            class_copies: self.class_copies.borrow().clone(),
         }
     }
 
@@ -504,6 +513,7 @@ impl Program {
         self.classes.extend(snapshot.classes);
         // The copies the look made took IDs it gives back; the module body makes them again.
         self.generics = snapshot.generics;
+        self.class_copies.replace(snapshot.class_copies);
         let symbols: Vec<SymbolId> = self.module_symbols.values().copied().collect();
         for (symbol, ty) in symbols.into_iter().zip(found) {
             self.symbols[symbol.0 as usize].ty = ty;
@@ -545,27 +555,50 @@ impl Program {
             .classes
             .iter()
             .enumerate()
-            .map(|(index, class)| TypedClass {
-                id: ClassId(id(index)),
-                name: class.name.clone(),
-                module: self.class_modules[index].clone(),
-                base: class.base,
-                exception: class.exception.clone(),
-                attributes: class
-                    .attributes
-                    .iter()
-                    .enumerate()
-                    .map(|(position, attribute)| Attribute {
-                        name: attribute.name.clone(),
-                        ty: self
-                            .attribute_ty(class.id, position)
-                            .unwrap_or(crate::types::Type::Error),
-                    })
-                    .collect(),
-                methods: class.methods.clone(),
-                init: self.method(class.id, "__init__"),
-                defaults: self.default_variables(class.id),
-                span: class.span,
+            .map(|(index, class)| {
+                let opaque = self.is_opaque_class(class.id);
+                let generic = self
+                    .class_copies
+                    .borrow()
+                    .copy(class.id)
+                    .map(|copy| copy.root);
+                TypedClass {
+                    id: ClassId(id(index)),
+                    name: class.name.clone(),
+                    module: self.class_modules[index].clone(),
+                    base: class.base,
+                    exception: class.exception.clone(),
+                    // An opaque class has no instances, so it holds nothing to lay out.
+                    attributes: if opaque {
+                        Vec::new()
+                    } else {
+                        class
+                            .attributes
+                            .iter()
+                            .enumerate()
+                            .map(|(position, attribute)| Attribute {
+                                name: attribute.name.clone(),
+                                ty: self
+                                    .attribute_ty(class.id, position)
+                                    .unwrap_or(crate::types::Type::Error),
+                            })
+                            .collect()
+                    },
+                    methods: if opaque {
+                        Vec::new()
+                    } else {
+                        class.methods.clone()
+                    },
+                    init: if opaque {
+                        None
+                    } else {
+                        self.method(class.id, "__init__")
+                    },
+                    defaults: self.default_variables(class.id),
+                    span: class.span,
+                    generic,
+                    opaque,
+                }
             })
             .collect();
         TypedProgram {

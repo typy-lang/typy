@@ -110,3 +110,44 @@ fn a_generic_of_another_module_is_planned() {
     ]);
     assert_eq!(found, vec!["E0201".to_string()]);
 }
+
+#[test]
+fn generic_classes_check_their_type_arguments() {
+    let classes = concat!(
+        "class Shape:\n    pass\n",
+        "class Box[T]:\n    def __init__(self, value: T) -> None:\n        self.value = value\n",
+        "class Held[S: Shape]:\n    def __init__(self, shape: S) -> None:\n        self.shape = shape\n",
+        "class Either[N: (int, str)]:\n    def __init__(self, value: N) -> None:\n        self.value = value\n",
+    );
+    let accepted = [
+        "def keep[S: Shape](held: Held[S]) -> S:\n    return held.shape\nprint(keep(Held(Shape())))\n",
+        "x: Either[int] = Either(1)\nprint(x.value)\n",
+        "def f[U](b: Box[U]) -> Box[U]:\n    return b\nprint(f(Box(1)).value, Box[str]('a').value)\n",
+    ];
+    for body in accepted {
+        assert_eq!(
+            app(&format!("{classes}{body}")),
+            Vec::<String>::new(),
+            "{body}"
+        );
+    }
+    let refused: &[(&str, &str)] = &[
+        ("x: Box[int, str] = Box(1)\n", "E0408"),
+        ("x: Box[missing] = Box(1)\n", "E0205"),
+        ("x: Held[int] = Held(Shape())\n", "E0408"),
+        ("x: Either[float] = Either(1)\n", "E0408"),
+        ("x: Box = Box(1)\n", "E0408"),
+        ("class Box2[T]:\n    count = 0\n", "E0201"),
+        ("class Sub(Box[int]):\n    pass\n", "E0201"),
+        ("class Sub(Box):\n    pass\n", "E0201"),
+        ("@decorated\nclass Box3[T]:\n    pass\n", "E0201"),
+    ];
+    for (body, code) in refused {
+        let found = app(&format!("{classes}{body}"));
+        assert_eq!(
+            found.first().map(String::as_str),
+            Some(*code),
+            "{body}\n{found:?}"
+        );
+    }
+}

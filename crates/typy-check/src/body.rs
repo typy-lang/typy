@@ -5,6 +5,7 @@ mod builtin_call;
 mod builtin_module;
 mod call;
 mod class;
+mod class_copy;
 mod class_value;
 mod comprehension;
 mod container_method;
@@ -46,6 +47,7 @@ mod union;
 mod view_operator;
 
 pub(crate) use builtin_module::ModuleFunction;
+pub(crate) use class_copy::{ClassCopies, GenericClass};
 pub(crate) use import::Imported;
 pub(crate) use program::Program;
 
@@ -201,7 +203,7 @@ impl<'program> BodyChecker<'program> {
         let locals = checker.finish_locals();
         // A generic function is checked, never run: its copies run in its place, so it keeps
         // no body (ADR-0023).
-        let generic = program.generic(function).is_some();
+        let generic = program.generic(function).is_some() || program.is_opaque_copy(function);
         program.functions[function.0 as usize] = Some(TypedFunction {
             id: function,
             name: definition.name.clone(),

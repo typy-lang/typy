@@ -81,6 +81,9 @@ pub struct TyirClass {
     /// The base of an exception class, whose instances are exceptions; `None` for a class
     /// whose base is `object` (ADR-0013).
     pub exception_base: Option<crate::types::TypeObjectRef>,
+    /// For a copy of a generic class, the generic class by its index, which its type object
+    /// names as its base and as the class `type()` gives (ADR-0028).
+    pub public: Option<u32>,
 }
 
 impl TyirModule {

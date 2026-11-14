@@ -8,6 +8,9 @@ pub(crate) use annotation::{unhashable, unhashable_key};
 mod definition;
 mod definition_order;
 mod generic_body;
+mod generic_class;
+#[cfg(test)]
+mod generic_tests;
 mod module_imports;
 mod module_scope;
 mod overriding;
@@ -42,7 +45,7 @@ use crate::body::{BodyChecker, Program};
 use crate::subset;
 use crate::typed::{ClassId, FunctionId, TypedProgram};
 use class::{BaseScope, KnownClasses, class_types, collect_classes, collect_members};
-use definition::collect_functions;
+use definition::{FunctionScope, collect_functions};
 use definition_order::check_calls_follow_definitions;
 pub(crate) use module_scope::declared_globals;
 use module_scope::{check_module_names, module_variables};
@@ -156,27 +159,18 @@ fn check_module(
             .iter()
             .map(|class| (class.name.name.clone(), class.id)),
     );
-    let mut instances = class_types(
-        &classes,
-        &BaseScope {
-            known: program.known_instances(),
-            class_ids: &class_ids,
-            modules: &annotations.modules,
-        },
-        diagnostics,
-    );
-    instances.extend(
-        program
-            .known_instances()
-            .iter()
-            .map(|(class, ty)| (*class, ty.clone())),
-    );
+    let instances = module_instances(program, &classes, &class_ids, &annotations, diagnostics);
+    let known_scope = (&class_ids, &instances, &annotations);
+    note_module_generics(program, &classes, first_class, known_scope, diagnostics);
     let mut definitions = collect_functions(
         &tree.body,
         first_class,
-        &class_ids,
-        &instances,
-        &annotations,
+        &FunctionScope {
+            classes: &class_ids,
+            instances: &instances,
+            names: &annotations,
+            copies: &program.class_copies,
+        },
         floor_defers,
         diagnostics,
     );
@@ -187,6 +181,7 @@ fn check_module(
             instances: &instances,
             earlier: program.classes(),
             signatures: program.signatures(),
+            copies: &program.class_copies,
         },
         &annotations,
         floor_defers,
@@ -218,6 +213,7 @@ fn check_module(
         class_ids,
         instances,
     );
+    program.make_class_copies();
     program.import_names(&imports.functions, annotations);
     program.import_module_functions(&imports.module_functions);
     program.declare_module_variables(&module_variable_spans, &definitions);
@@ -310,6 +306,68 @@ fn check_body(
     }
 }
 
+/// Returns the type of the instances of each class: the module's, then those of the modules
+/// checked before it.
+fn module_instances(
+    program: &Program,
+    classes: &[class::ClassStatement<'_>],
+    class_ids: &BTreeMap<String, ClassId>,
+    annotations: &ImportedNames,
+    diagnostics: &mut Diagnostics,
+) -> BTreeMap<ClassId, crate::types::Type> {
+    let mut instances = class_types(
+        classes,
+        &BaseScope {
+            known: program.known_instances(),
+            class_ids,
+            modules: &annotations.modules,
+        },
+        diagnostics,
+    );
+    instances.extend(
+        program
+            .known_instances()
+            .iter()
+            .map(|(class, ty)| (*class, ty.clone())),
+    );
+    instances
+}
+
+/// Notes the module's generic classes, whose copies an annotation of the module may ask for;
+/// a copy's class ID follows the module's classes (ADR-0028).
+fn note_module_generics(
+    program: &Program,
+    classes: &[class::ClassStatement<'_>],
+    first_class: usize,
+    (class_ids, instances, annotations): (
+        &BTreeMap<String, ClassId>,
+        &BTreeMap<ClassId, crate::types::Type>,
+        &ImportedNames,
+    ),
+    diagnostics: &mut Diagnostics,
+) {
+    {
+        let mut copies = program.class_copies.borrow_mut();
+        copies.next = copies.next.max(first_class + classes.len());
+    }
+    generic_class::note_generic_classes(
+        classes,
+        &annotation::AnnotationScope {
+            classes: class_ids,
+            instances,
+            modules: &annotations.modules,
+            module_aliases: &annotations.module_aliases,
+            names: &annotations.names,
+            standard: &annotations.standard,
+            parameters: &annotation::NO_PARAMETERS,
+            copies: &program.class_copies,
+            bound: u32::MAX,
+        },
+        &program.class_copies,
+        diagnostics,
+    );
+}
+
 /// Checks each copy of a generic function of the module that a call needs, as an ordinary
 /// function whose type parameters stand for its arguments; a copy may need further copies
 /// (GEN-03, ADR-0023).
@@ -323,8 +381,19 @@ fn check_copies(
         // A copy is made only for a generic of the module being checked (GEN-07).
         let generic = &definitions[copy.generic.0 as usize - first_function];
         let given: Vec<String> = copy.arguments.iter().map(ToString::to_string).collect();
+        // A copy of a method belongs to its copy of the class, whose name it takes.
+        let qualified_name = match copy.class {
+            Some(class) => format!(
+                "{}[{}].{}",
+                program.class_name(class),
+                given.join(", "),
+                generic.name
+            ),
+            None => format!("{}[{}]", generic.qualified_name, given.join(", ")),
+        };
         let made = Definition {
-            qualified_name: format!("{}[{}]", generic.qualified_name, given.join(", ")),
+            qualified_name,
+            class: copy.class.or(generic.class),
             copy_of: Some(copy.generic),
             signature: program.instantiated(copy.generic, &copy.arguments),
             type_parameters: Vec::new(),

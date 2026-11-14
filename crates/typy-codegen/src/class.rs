@@ -353,6 +353,33 @@ fn slot_parameter(
         .into_pointer_value())
 }
 
+/// Returns the base a class's type object names and its public type: for a copy of a generic
+/// class, the generic class both times, so `isinstance` holds and `type()` gives it
+/// (ADR-0028); otherwise the class's base, or the runtime's `object`, and null.
+fn bases<'ctx>(
+    shared: &mut Shared<'_, 'ctx>,
+    class: &typy_tyir::TyirClass,
+) -> Result<(PointerValue<'ctx>, PointerValue<'ctx>), CodegenError> {
+    let pointer = shared.context.ptr_type(AddressSpace::default());
+    let public = match class.public {
+        Some(generic) => type_object(shared, generic)?,
+        None => pointer.const_null(),
+    };
+    let base = match (class.public.or(class.base), class.exception_base) {
+        (Some(base), _) | (_, Some(typy_tyir::TypeObjectRef::Class(base))) => {
+            type_object(shared, base)?
+        }
+        (None, Some(reference)) => {
+            let symbol = reference
+                .runtime_symbol()
+                .ok_or_else(|| CodegenError("a runtime class has a symbol".to_owned()))?;
+            runtime_global(shared, &symbol)
+        }
+        (None, None) => runtime_global(shared, "typy_rt_object"),
+    };
+    Ok((base, public))
+}
+
 /// Returns the layout of a runtime `TypeObject`, which the runtime reads.
 fn type_object_type(context: &inkwell::context::Context) -> StructType<'_> {
     let (half, word) = (context.i32_type(), context.i64_type());
@@ -371,6 +398,7 @@ fn type_object_type(context: &inkwell::context::Context) -> StructType<'_> {
             pointer.into(),
             pointer.into(),
             word.into(),
+            pointer.into(),
             pointer.into(),
             pointer.into(),
         ],
@@ -423,18 +451,7 @@ pub(crate) fn type_object<'ctx>(
     let (name, name_length) = text_global(shared, &class.name, &format!("typy.class{index}.name"));
     let (module, module_length) =
         text_global(shared, &class.module, &format!("typy.class{index}.module"));
-    let base = match (class.base, class.exception_base) {
-        (Some(base), _) | (_, Some(typy_tyir::TypeObjectRef::Class(base))) => {
-            type_object(shared, base)?
-        }
-        (None, Some(reference)) => {
-            let symbol = reference
-                .runtime_symbol()
-                .ok_or_else(|| CodegenError("a runtime class has a symbol".to_owned()))?;
-            runtime_global(shared, &symbol)
-        }
-        (None, None) => runtime_global(shared, "typy_rt_object"),
-    };
+    let (base, public) = bases(shared, class)?;
     let hash = match class.hash {
         Some(method) => hash_slot(shared, index, method)?,
         None => runtime_symbol(
@@ -485,6 +502,7 @@ pub(crate) fn type_object<'ctx>(
         word.const_int(module_length, false).into(),
         fields.into(),
         str.into(),
+        public.into(),
     ]);
     let methods: Vec<PointerValue<'ctx>> = class
         .methods

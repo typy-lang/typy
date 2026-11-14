@@ -310,7 +310,8 @@ fn outcome(ty: &Type, class: &TypeObjectOf) -> Outcome {
         }
         (_, TypeObjectOf::NoneType) => Outcome::Never,
         (Type::Instance(own), TypeObjectOf::Instance(id, _)) => {
-            if own.id == *id || own.ancestors.iter().any(|(each, _)| each == id) {
+            let copy_of = own.generic.as_ref().is_some_and(|(root, _)| root == id);
+            if own.id == *id || copy_of || own.ancestors.iter().any(|(each, _)| each == id) {
                 Outcome::Always
             } else {
                 // The instance's class may derive from the tested class; when the two are not

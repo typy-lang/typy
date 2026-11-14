@@ -145,6 +145,8 @@ impl RuleId {
     pub const GEN_06: Self = Self("GEN-06");
     /// A generic function or class of another module shall be usable, made from its source as ADR-0016's interfaces carry it.
     pub const GEN_07: Self = Self("GEN-07");
+    /// A generic class shall be accepted with a base other than `object`, as the base of another class, and with class variables and defaults.
+    pub const GEN_08: Self = Self("GEN-08");
     /// Source files shall be UTF-8 with the `.py` extension.
     pub const LEX_01: Self = Self("LEX-01");
     /// Bytes literals shall be accepted.
@@ -322,6 +324,7 @@ impl RuleId {
         Self::GEN_05,
         Self::GEN_06,
         Self::GEN_07,
+        Self::GEN_08,
         Self::LEX_01,
         Self::LEX_06,
         Self::LEX_07,
