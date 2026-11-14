@@ -6,6 +6,8 @@ mod disk;
 mod errno_text;
 mod os_error;
 mod reader;
+mod stdin;
+pub(crate) use stdin::input_line;
 #[cfg(test)]
 mod tests;
 mod writer;
@@ -25,7 +27,7 @@ const READABLE: u32 = 1;
 const WRITABLE: u32 = 2;
 /// The file is closed.
 const CLOSED: u32 = 4;
-/// The file is standard output or standard error, a static object that is never closed.
+/// The file is standard input, output or error, a static object that is never closed.
 const STANDARD: u32 = 8;
 
 /// A text file: its descriptor and state, its name and mode, and the buffers of a file
@@ -51,15 +53,15 @@ pub struct TextFile {
     next: *mut TextFile,
 }
 
-/// Returns a standard file writing to `descriptor`.
-const fn standard(descriptor: i32, name: &'static str) -> TextFile {
+/// Returns a standard file of `descriptor`, with its flags.
+const fn standard(descriptor: i32, name: &'static str, flags: u32) -> TextFile {
     TextFile {
         header: ObjectHeader {
             reference_count: IMMORTAL,
             type_id: TEXT_FILE_TYPE_ID,
         },
         descriptor,
-        flags: WRITABLE | STANDARD,
+        flags,
         name,
         path: core::ptr::null_mut(),
         mode: core::ptr::null_mut(),
@@ -71,10 +73,10 @@ const fn standard(descriptor: i32, name: &'static str) -> TextFile {
 }
 
 /// `sys.stdout`.
-static STDOUT: TextFile = standard(crate::libc::STDOUT, "<stdout>");
+static STDOUT: TextFile = standard(crate::libc::STDOUT, "<stdout>", WRITABLE | STANDARD);
 
 /// `sys.stderr`.
-static STDERR: TextFile = standard(crate::libc::STDERR, "<stderr>");
+static STDERR: TextFile = standard(crate::libc::STDERR, "<stderr>", WRITABLE | STANDARD);
 
 // SAFETY: the runtime runs one thread (A-03), and a standard file is never written.
 unsafe impl Sync for TextFile {}
@@ -140,7 +142,11 @@ unsafe extern "C" fn text_file_repr(object: *mut ObjectHeader) -> Raising<*mut S
         let mut text = MessageBuffer::new();
         text.push_str("<_io.TextIOWrapper name='");
         text.push_str(file.name);
-        text.push_str("' mode='w' encoding='utf-8'>");
+        text.push_str(if file.flags & READABLE != 0 {
+            "' mode='r' encoding='utf-8'>"
+        } else {
+            "' mode='w' encoding='utf-8'>"
+        });
         return Raising::ok(text.text());
     }
     // SAFETY: a file `open` made owns its path and mode, both live strings.
@@ -169,6 +175,41 @@ unsafe fn is_standard(file: *const TextFile) -> bool {
     file.is_null() || unsafe { (*file).flags } & STANDARD != 0
 }
 
+/// Returns whether `file` is standard input.
+///
+/// # Safety
+///
+/// `file` is null or points to a live text file.
+unsafe fn is_stdin(file: *const TextFile) -> bool {
+    // SAFETY: the caller's guarantee.
+    !file.is_null() && unsafe { (*file).flags } & (STANDARD | READABLE) == STANDARD | READABLE
+}
+
+/// Reads from a standard file: standard input as `stdin::read` does, and the others not.
+///
+/// # Safety
+///
+/// `file` points to a live standard text file.
+unsafe fn read_standard(
+    file: *const TextFile,
+    limit: Option<usize>,
+    line: bool,
+) -> Result<*mut StrObject, *mut ExceptionObject> {
+    // SAFETY: the caller's guarantee.
+    if unsafe { is_stdin(file) } {
+        return stdin::read(limit, line);
+    }
+    Err(not_readable())
+}
+
+/// Returns `io.UnsupportedOperation: not writable`, what writing to standard input raises.
+fn not_writable() -> *mut ExceptionObject {
+    crate::exception::raise_class(
+        &crate::exception::classes::UNSUPPORTED_OPERATION,
+        crate::string::from_str("not writable"),
+    )
+}
+
 /// Returns `io.UnsupportedOperation: not readable`, what reading a standard file raises.
 fn not_readable() -> *mut ExceptionObject {
     crate::exception::raise_class(
@@ -190,6 +231,9 @@ pub unsafe extern "C" fn typy_rt_text_write(
 ) -> Raising<i64> {
     // SAFETY: the caller's guarantee.
     unsafe {
+        if is_stdin(file) {
+            return Raising::error(0, not_writable());
+        }
         if !is_standard(file) {
             let error = disk::write(&mut *file, text);
             if !error.is_null() {
@@ -300,7 +344,7 @@ pub unsafe extern "C" fn typy_rt_text_read(
     // SAFETY: the caller's guarantee.
     unsafe {
         if is_standard(file) {
-            return Raising::error(core::ptr::null_mut(), not_readable());
+            return read_standard(file, limit(size), false).into();
         }
         disk::read(&mut *file, limit(size), false).into()
     }
@@ -320,7 +364,7 @@ pub unsafe extern "C" fn typy_rt_text_readline(
     // SAFETY: the caller's guarantee.
     unsafe {
         if is_standard(file) {
-            return Raising::error(core::ptr::null_mut(), not_readable());
+            return read_standard(file, limit(size), true).into();
         }
         disk::read(&mut *file, limit(size), true).into()
     }
@@ -364,10 +408,11 @@ pub(crate) unsafe fn next_line(
 ) -> Result<Option<*mut StrObject>, *mut ExceptionObject> {
     // SAFETY: the caller's guarantee.
     unsafe {
-        if is_standard(file) {
-            return Err(not_readable());
-        }
-        let line = disk::read(&mut *file, None, true)?;
+        let line = if is_standard(file) {
+            read_standard(file, None, true)?
+        } else {
+            disk::read(&mut *file, None, true)?
+        };
         if length(line) == 0 {
             crate::refcount::typy_rt_decrement(line.cast());
             return Ok(None);

@@ -115,13 +115,18 @@ Items of a union, such as a `list[int | float]`, a `bool` start and
 
 ## The sys module
 
-`import sys` gives four names of CPython's `sys` module (LIB-04):
+`import sys` gives these names of CPython's `sys` module (LIB-04,
+LIB-13):
 
 | Name | What it is |
 | --- | --- |
 | `sys.argv` | A `list[str]`: the path of the executable, then each argument |
 | `sys.exit(code)` | Raises `SystemExit(code)`; `code` may be left out |
 | `sys.stdout`, `sys.stderr` | Text files with `write(text)`, which returns the number of characters, and `flush()` |
+| `sys.stdin` | A text file with `read`, `readline`, `readlines` and iteration, which `input()` reads too |
+| `sys.maxsize`, `sys.maxunicode` | `2**63 - 1` and `1114111` |
+| `sys.byteorder`, `sys.platform` | `"little"` and `"linux"`, those of the platforms TyPy builds for |
+| `sys.getrecursionlimit()`, `sys.setrecursionlimit(n)` | Read and set the recursion limit, 1000 at first |
 
 An argument that is not valid UTF-8 keeps each stray byte as a
 surrogate, as CPython decodes it, so `b"a\xffb"` becomes `'a\udcffb'`.
@@ -156,8 +161,20 @@ if name == "nobody":
     sys.exit("no name given")
 ```
 
-`sys.version_info`, `sys.platform`, `sys.maxsize`, `sys.stdin` and the
-other constants listed in LIB-13 are planned for 0.4 (E0201). The rest
+`sys.stdin` reads standard input as CPython 3.15 does: `\r\n` and `\r`
+become `\n`, and a byte that is not part of a UTF-8 character becomes a
+surrogate, as for an argument. `input()` and `sys.stdin` share what has
+been read, so they can be mixed. Writing to `sys.stdin` raises
+`io.UnsupportedOperation: not writable`.
+
+`setrecursionlimit` checks its argument as CPython does: below 1 is
+`ValueError`, and past a C `int` is `OverflowError`. Recursion itself
+stops where the stack runs out, with `RecursionError` (FUN-02), so the
+number is kept only for `getrecursionlimit`, and a limit below the
+current depth, which CPython refuses with `RecursionError`, is kept.
+
+`sys.version`, `sys.version_info` and `sys.hexversion` are planned
+(E0201, LIB-13). The rest
 of CPython's `sys`, such as `sys.modules` or `sys.getrefcount`, depends
 on the interpreter and is E0202. The switches of lazy imports,
 `sys.set_lazy_imports` and its companions, are E0202 as well (MOD-09):

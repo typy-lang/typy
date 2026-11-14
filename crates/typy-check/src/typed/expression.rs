@@ -141,6 +141,9 @@ pub enum TypedExprKind {
     SysValue(crate::sys::SysValue),
     /// `sys.exit(code)`, which raises `SystemExit` with `code` (LIB-04).
     SysExit(Option<Box<TypedExpr>>),
+    /// `sys.getrecursionlimit()`, without a value, or `sys.setrecursionlimit(limit)`
+    /// (LIB-13).
+    RecursionLimit(Option<Box<TypedExpr>>),
     /// `input(prompt)`: a line of standard input (LIB-04).
     Input(Option<Box<TypedExpr>>),
     /// `open(path, mode)` in a text mode: `mode` as written, which the file's `repr` shows,
@@ -459,9 +462,9 @@ impl TypedExpr {
             TypedExprKind::PercentFormat { values, .. } => vec![values],
             TypedExprKind::MathCall { arguments, .. } => arguments.iter().collect(),
             TypedExprKind::Open { path, .. } => vec![path],
-            TypedExprKind::SysExit(value) | TypedExprKind::Input(value) => {
-                value.iter().map(Box::as_ref).collect()
-            }
+            TypedExprKind::SysExit(value)
+            | TypedExprKind::Input(value)
+            | TypedExprKind::RecursionLimit(value) => value.iter().map(Box::as_ref).collect(),
             TypedExprKind::Comprehension {
                 element,
                 value,

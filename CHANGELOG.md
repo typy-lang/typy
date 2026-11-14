@@ -88,6 +88,11 @@ All notable changes to TyPy are recorded here. The format follows
   class methods or class variables is planned for 0.5 (GEN-04, GEN-05,
   GEN-10, ADR-0023).
 - `...` alone as a statement does nothing, as `pass` does.
+- `sys.stdin`, a text file that `input()` reads too, and `sys.maxsize`,
+  `sys.maxunicode`, `sys.byteorder`, `sys.platform`,
+  `sys.getrecursionlimit` and `sys.setrecursionlimit`. The recursion
+  limit is kept for `getrecursionlimit`; recursion still stops at the
+  stack's limit (LIB-13, FUN-02).
 - `math.fsum`, `math.dist`, `math.prod`, `math.sumprod`, `math.gamma`
   and `math.lgamma`, with CPython's results to the last bit. The first
   four take iterables of `int`, `bool` or `float` items; `prod` of
@@ -148,6 +153,8 @@ All notable changes to TyPy are recorded here. The format follows
 
 ### Fixed
 
+- `input()` reads standard input as CPython does: a line that ends with
+  `\r\n` or `\r` loses it, where it used to keep the `\r` (LIB-04).
 - A truth test of a list, a set, a dict or `bytes` in a recursive
   function, such as `if not items:` before `return f(items[1:])`, stopped
   the compiler with an internal error (EXP-10).

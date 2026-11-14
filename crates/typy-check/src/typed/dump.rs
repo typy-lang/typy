@@ -377,6 +377,7 @@ impl Dump<'_> {
             TypedExprKind::MathCall { function, .. } => format!("MathCall {}", function.name()),
             TypedExprKind::SysValue(value) => format!("SysValue {value:?}"),
             TypedExprKind::SysExit(_) => "SysExit".to_owned(),
+            TypedExprKind::RecursionLimit(_) => "RecursionLimit".to_owned(),
             TypedExprKind::Input(_) => "Input".to_owned(),
             TypedExprKind::Open { mode, access, .. } => format!("Open {mode:?} {access:?}"),
             TypedExprKind::PercentFormat { parts, .. } => {

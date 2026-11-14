@@ -446,7 +446,9 @@ fn expression(expression_value: &TypedExpr, callees: &mut BTreeSet<FunctionId>) 
         TypedExprKind::AsIterable(inner) => expression(inner, callees),
         TypedExprKind::PercentFormat { values, .. } => expression(values, callees),
         TypedExprKind::Open { path, .. } => expression(path, callees),
-        TypedExprKind::SysExit(value) | TypedExprKind::Input(value) => {
+        TypedExprKind::SysExit(value)
+        | TypedExprKind::Input(value)
+        | TypedExprKind::RecursionLimit(value) => {
             if let Some(value) = value {
                 expression(value, callees);
             }

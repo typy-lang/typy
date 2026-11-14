@@ -9,16 +9,37 @@ use crate::function::FunctionLowerer;
 use crate::ownership::Lowered;
 
 impl FunctionLowerer<'_> {
-    /// Returns `sys.argv`, `sys.stdout` or `sys.stderr`, which the runtime keeps for the whole
+    /// Returns `sys.argv`, `sys.stdout`, `sys.stderr` or `sys.stdin`, which the runtime keeps for the whole
     /// run, so the value is borrowed.
     pub(crate) fn sys_value(&mut self, value: SysValue, span: Span) -> Lowered {
         let (function, ty) = match value {
             SysValue::Argv => (RuntimeFunction::SysArgv, TyirType::LIST),
             SysValue::Stdout => (RuntimeFunction::SysStdout, TyirType::TEXT_FILE),
             SysValue::Stderr => (RuntimeFunction::SysStderr, TyirType::TEXT_FILE),
+            SysValue::Stdin => (RuntimeFunction::SysStdin, TyirType::TEXT_FILE),
         };
         let found = self.call_runtime(function, Vec::new(), span);
         self.borrowed_result(Lowered { ty, ..found })
+    }
+
+    /// Returns `sys.getrecursionlimit()`, or sets the limit for `sys.setrecursionlimit(limit)`,
+    /// whose `bool` becomes an `int` first (LIB-13).
+    pub(crate) fn recursion_limit(&mut self, limit: Option<&TypedExpr>, span: Span) -> Lowered {
+        let Some(limit) = limit else {
+            return self.call_runtime(RuntimeFunction::SysGetRecursionLimit, Vec::new(), span);
+        };
+        let value = self.expression(limit);
+        let integer = self.int_of(value, span);
+        let result = self.call_runtime(
+            RuntimeFunction::SysSetRecursionLimit,
+            vec![integer.value],
+            span,
+        );
+        if integer.value != value.value {
+            self.release(integer, span);
+        }
+        self.release(value, span);
+        result
     }
 
     /// Lowers `sys.exit(code)`: raises `SystemExit` with the code, or with no argument.

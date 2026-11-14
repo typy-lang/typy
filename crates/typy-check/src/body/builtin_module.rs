@@ -8,7 +8,7 @@ use typy_source::syntax::Alias;
 use super::Program;
 use super::import::Imported;
 use crate::math::{MathFunction, MathName, math_name};
-use crate::sys::{SysName, SysValue, sys_name};
+use crate::sys::{SysConstant, SysName, SysValue, sys_name};
 use crate::typed::{TypedConstant, TypedExpr, TypedExprKind};
 use crate::types::Type;
 
@@ -27,6 +27,10 @@ pub(crate) enum ModuleFunction {
     Math(MathFunction),
     /// `sys.exit`.
     Exit,
+    /// `sys.getrecursionlimit`.
+    GetRecursionLimit,
+    /// `sys.setrecursionlimit`.
+    SetRecursionLimit,
 }
 
 /// A value of a built-in module.
@@ -36,6 +40,8 @@ pub(crate) enum BuiltinValue {
     Float(f64),
     /// A value of `sys`.
     Sys(SysValue),
+    /// A constant of `sys`.
+    SysConstant(SysConstant),
 }
 
 impl BuiltinValue {
@@ -50,8 +56,16 @@ impl BuiltinValue {
                 TypedExprKind::SysValue(value),
                 match value {
                     SysValue::Argv => Type::List(Box::new(Type::Str)),
-                    SysValue::Stdout | SysValue::Stderr => Type::TextFile,
+                    SysValue::Stdout | SysValue::Stderr | SysValue::Stdin => Type::TextFile,
                 },
+            ),
+            Self::SysConstant(SysConstant::Int(digits)) => (
+                TypedExprKind::Constant(TypedConstant::Int(digits.to_owned())),
+                Type::Int,
+            ),
+            Self::SysConstant(SysConstant::Str(text)) => (
+                TypedExprKind::Constant(TypedConstant::Str(text.to_owned())),
+                Type::Str,
             ),
         };
         TypedExpr { kind, ty, span }
@@ -116,6 +130,15 @@ impl Program {
         match sys_name(name) {
             Some(SysName::Value(value)) => Ok(BuiltinName::Value(BuiltinValue::Sys(value))),
             Some(SysName::Exit) => Ok(BuiltinName::Function(ModuleFunction::Exit)),
+            Some(SysName::Constant(constant)) => {
+                Ok(BuiltinName::Value(BuiltinValue::SysConstant(constant)))
+            }
+            Some(SysName::GetRecursionLimit) => {
+                Ok(BuiltinName::Function(ModuleFunction::GetRecursionLimit))
+            }
+            Some(SysName::SetRecursionLimit) => {
+                Ok(BuiltinName::Function(ModuleFunction::SetRecursionLimit))
+            }
             Some(SysName::LazySwitch) => Err(Box::new(
                 Diagnostic::new(
                     DiagnosticCode::error(202),

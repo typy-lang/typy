@@ -1,6 +1,8 @@
 //! Reading a text file as CPython's `TextIOWrapper` reads it (ADR-0019): 8192 bytes at a time,
 //! each chunk checked as UTF-8 when it is read, with the bytes of a character cut off at its
-//! end carried into the next, and `\r\n` and `\r` read as `\n`.
+//! end carried into the next, and `\r\n` and `\r` read as `\n`. Standard input escapes a
+//! byte that is not part of a character as U+DC80 to U+DCFF, as CPython's `surrogateescape`
+//! does in UTF-8 mode, the default from 3.15.
 
 use crate::byte_buffer::ByteBuffer;
 use crate::codec::{utf8_decode_error, utf8_sequence};
@@ -26,18 +28,23 @@ pub(crate) struct Reader {
     end: usize,
     /// Whether the source has given its last byte.
     at_end: bool,
+    /// Whether a byte that is not part of a character is escaped rather than an error.
+    escape: bool,
 }
 
 /// Returns the length of the valid UTF-8 at the start of `data`, leaving out a character cut
 /// off at its end unless `last`, or the start, end and reason of the first error, as CPython's
 /// incremental decoder finds them.
-fn check(data: &[u8], last: bool) -> Result<usize, (usize, usize, &'static str)> {
+///
+/// When `escape`, a byte that is not part of a character is valid, as it is decoded escaped.
+fn check(data: &[u8], last: bool, escape: bool) -> Result<usize, (usize, usize, &'static str)> {
     let byte = |index: usize| data.get(index).map(|byte| u32::from(*byte));
     let mut at = 0;
     while at < data.len() {
         match utf8_sequence(byte, at) {
             Ok((count, _)) => at += count,
             Err((usize::MAX, _)) if !last => return Ok(at),
+            Err(_) if escape => at += 1,
             Err((usize::MAX, reason)) => return Err((at, data.len(), reason)),
             Err((end, reason)) => return Err((at, end, reason)),
         }
@@ -45,10 +52,11 @@ fn check(data: &[u8], last: bool) -> Result<usize, (usize, usize, &'static str)>
     Ok(at)
 }
 
-/// Returns the code point at `at` of bytes checked as UTF-8, and its length.
+/// Returns the code point at `at` of bytes checked as UTF-8, and its length; a byte that is
+/// not part of a character is escaped as U+DC80 to U+DCFF.
 fn decode_at(bytes: &[u8], at: usize) -> (usize, u32) {
     let byte = |index: usize| bytes.get(index).map(|byte| u32::from(*byte));
-    utf8_sequence(byte, at).unwrap_or((1, 0xfffd))
+    utf8_sequence(byte, at).unwrap_or((1, 0xdc00 + u32::from(bytes[at])))
 }
 
 impl Reader {
@@ -60,6 +68,16 @@ impl Reader {
             valid: 0,
             end: 0,
             at_end: false,
+            escape: false,
+        }
+    }
+
+    /// Returns a reader that has read nothing and escapes a byte that is not part of a
+    /// character, as standard input does.
+    pub(crate) const fn escaping() -> Self {
+        Self {
+            escape: true,
+            ..Self::new()
         }
     }
 
@@ -76,7 +94,7 @@ impl Reader {
             .map_err(|errno| unsafe { super::os_error::os_error(errno, core::ptr::null()) })?;
         self.end += count;
         self.at_end = count == 0;
-        match check(&self.bytes[tail..self.end], self.at_end) {
+        match check(&self.bytes[tail..self.end], self.at_end, self.escape) {
             Ok(length) => {
                 self.valid = tail + length;
                 Ok(())
@@ -160,7 +178,7 @@ impl Reader {
         self.valid = 0;
         self.end = 0;
         let bytes = all.bytes();
-        if let Err((start, end, reason)) = check(&bytes[decoded..], true) {
+        if let Err((start, end, reason)) = check(&bytes[decoded..], true, self.escape) {
             let error = utf8_decode_error(&bytes[decoded..], start, end, reason);
             all.discard();
             return Err(error);

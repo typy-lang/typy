@@ -218,6 +218,9 @@ pub enum RuntimeFunction {
     PercentCharStr,
     SysArgv,
     SysStdout,
+    SysStdin,
+    SysGetRecursionLimit,
+    SysSetRecursionLimit,
     SysStderr,
     TextWrite,
     TextFlush,
@@ -335,7 +338,7 @@ const FLOAT_FLOAT: &[TyirType] = &[TyirType::Float, TyirType::Float];
 
 impl RuntimeFunction {
     /// Every runtime function.
-    pub const ALL: [Self; 296] = [
+    pub const ALL: [Self; 299] = [
         Self::IntFloorDivide,
         Self::IntModulo,
         Self::IntPower,
@@ -545,6 +548,9 @@ impl RuntimeFunction {
         Self::PercentCharStr,
         Self::SysArgv,
         Self::SysStdout,
+        Self::SysStdin,
+        Self::SysGetRecursionLimit,
+        Self::SysSetRecursionLimit,
         Self::SysStderr,
         Self::TextWrite,
         Self::TextFlush,
@@ -691,7 +697,7 @@ impl RuntimeFunction {
             Self::Ord => signature(&[STR], Int, true),
             Self::WriteStdout => signature(&[STR], Unit, false),
             Self::CheckStack => signature(&[], Unit, true),
-            Self::RangeCheckStep => signature(&[Int], Unit, true),
+            Self::RangeCheckStep | Self::SysSetRecursionLimit => signature(&[Int], Unit, true),
             Self::NameError => signature(&[STR], Unit, true),
             Self::ModuleAttributeError | Self::ModuleImportError => {
                 signature(&[TyirType::MODULE, STR, Int], Unit, true)
@@ -846,7 +852,10 @@ impl RuntimeFunction {
             Self::FormatOther | Self::PercentCharStr => signature(&[STR, STR, STR], STR, true),
             Self::PercentInt => signature(&[Int, STR, Int], STR, true),
             Self::SysArgv => signature(&[], LIST, false),
-            Self::SysStdout | Self::SysStderr => signature(&[], TyirType::TEXT_FILE, false),
+            Self::SysStdout | Self::SysStderr | Self::SysStdin => {
+                signature(&[], TyirType::TEXT_FILE, false)
+            }
+            Self::SysGetRecursionLimit => signature(&[], Int, false),
             Self::TextWrite => signature(&[TyirType::TEXT_FILE, STR], Int, true),
             Self::TextFlush | Self::TextClose | Self::TextEnter => {
                 signature(&[TyirType::TEXT_FILE], Unit, true)
@@ -1151,6 +1160,9 @@ impl RuntimeFunction {
             Self::PercentCharStr => "percent_char_str",
             Self::SysArgv => "sys_argv",
             Self::SysStdout => "sys_stdout",
+            Self::SysStdin => "sys_stdin",
+            Self::SysGetRecursionLimit => "sys_getrecursionlimit",
+            Self::SysSetRecursionLimit => "sys_setrecursionlimit",
             Self::SysStderr => "sys_stderr",
             Self::TextWrite => "text_write",
             Self::TextFlush => "text_flush",

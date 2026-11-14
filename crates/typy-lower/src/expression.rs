@@ -223,6 +223,7 @@ impl FunctionLowerer<'_> {
             TypedExprKind::SysValue(value) => self.sys_value(*value, span),
             TypedExprKind::Open { path, mode, access } => self.open(path, mode, *access, span),
             TypedExprKind::SysExit(code) => self.sys_exit(code.as_deref(), span),
+            TypedExprKind::RecursionLimit(limit) => self.recursion_limit(limit.as_deref(), span),
             TypedExprKind::Input(prompt) => self.input(prompt.as_deref(), span),
             TypedExprKind::IterableBuiltin {
                 builtin,

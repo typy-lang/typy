@@ -1,4 +1,4 @@
-//! End-to-end tests of `sys` and `input` (LIB-04): a built program runs as a subprocess with
+//! End-to-end tests of `sys` and `input` (LIB-04, LIB-13): a built program runs as a subprocess with
 //! real arguments, piped standard input and its exit status, which the conformance suite's
 //! oracle runs cannot vary.
 
@@ -45,7 +45,49 @@ fn input_reads_each_line_without_its_newline_until_the_end() {
     let output = program.run(&[], "one\n\ntwo\r\ncaf\u{e9}\nlast".as_bytes());
     assert_eq!(
         text(&output.stdout),
-        "> 'one'\n> ''\n> 'two\\r'\n> 'caf\u{e9}'\n> 'last'\n> 5\n"
+        "> 'one'\n> ''\n> 'two'\n> 'caf\u{e9}'\n> 'last'\n> 5\n"
+    );
+}
+
+#[test]
+fn sys_stdin_and_input_read_one_stream_in_turn() {
+    let program = Program::build(concat!(
+        "import sys\n",
+        "print(repr(sys.stdin))\n",
+        "first = input()\n",
+        "second = sys.stdin.readline()\n",
+        "for line in sys.stdin:\n",
+        "    print('loop', repr(line))\n",
+        "    break\n",
+        "third = input()\n",
+        "print([first, second, third], repr(sys.stdin.read()), repr(sys.stdin.read()))\n",
+    ));
+    let output = program.run(&[], b"one\r\ntwo\nthree\nfour\nfive\rsix");
+    assert_eq!(
+        text(&output.stdout),
+        concat!(
+            "<_io.TextIOWrapper name='<stdin>' mode='r' encoding='utf-8'>\n",
+            "loop 'three\\n'\n",
+            "['one', 'two\\n', 'four'] 'five\\nsix' ''\n",
+        )
+    );
+}
+
+#[test]
+fn writing_to_sys_stdin_raises_and_bytes_outside_utf8_are_escaped() {
+    let program = Program::build(concat!(
+        "import sys\n",
+        "try:\n",
+        "    sys.stdin.write('x')\n",
+        "except Exception as error:\n",
+        "    print(type(error).__name__, error)\n",
+        "line = input()\n",
+        "print(len(line), ord(line[1]))\n",
+    ));
+    let output = program.run(&[], b"a\xffb\n");
+    assert_eq!(
+        text(&output.stdout),
+        "UnsupportedOperation not writable\n3 56575\n"
     );
 }
 
