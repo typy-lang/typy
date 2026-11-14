@@ -41,22 +41,23 @@ pub unsafe extern "C" fn typy_rt_str_repeat(
     text: *const StrObject,
     count: i64,
 ) -> Raising<*mut StrObject> {
-    if !is_inline(count) {
-        // A large positive count is too big to repeat; a large negative one repeats nothing.
-        // SAFETY: a large integer word points to a live large integer.
-        if unsafe { crate::int::is_negative(count) } {
-            return Raising::ok(new_string(0, StrKind::Latin1));
-        }
+    // SAFETY: the caller passes an `int` word.
+    let Some(times) = (unsafe { crate::int::repeat_count(count) }) else {
         let error = raise(
             ExceptionKind::OverflowError,
             "cannot fit 'int' into an index-sized integer",
         );
         return Raising::error(core::ptr::null_mut(), error);
-    }
-    let times = usize::try_from(inline_value(count).max(0)).unwrap_or(usize::MAX);
+    };
     // SAFETY: the caller passes a live string.
     let source_length = unsafe { length(text) };
-    let Some(total) = source_length.checked_mul(times) else {
+    // Nothing repeated stays empty, however many times.
+    let times = if source_length == 0 { 0 } else { times };
+    // CPython refuses a length past the largest index-sized integer.
+    let total = source_length
+        .checked_mul(times)
+        .filter(|total| i64::try_from(*total).is_ok());
+    let Some(total) = total else {
         let error = raise(ExceptionKind::OverflowError, "repeated string is too long");
         return Raising::error(core::ptr::null_mut(), error);
     };

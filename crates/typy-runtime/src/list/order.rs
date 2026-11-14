@@ -4,7 +4,7 @@
 use super::{ListObject, new_list, push_retained};
 use crate::Raising;
 use crate::exception::{ExceptionKind, raise};
-use crate::word::{inline_value, is_inline};
+use crate::word::inline_value;
 
 /// Returns `left + right`, a new list of the items of both.
 ///
@@ -41,27 +41,20 @@ pub unsafe extern "C" fn typy_rt_list_repeat(
     list: *const ListObject,
     count: i64,
 ) -> Raising<*mut ListObject> {
-    // SAFETY: the caller passes a live list; every index stays below its length.
+    // SAFETY: the caller passes a live list and an `int` word; every index stays below its
+    // length.
     unsafe {
-        if !is_inline(count) && !crate::int::is_negative(count) {
-            let error = raise(
-                ExceptionKind::OverflowError,
-                "cannot fit 'int' into an index-sized integer",
-            );
-            return Raising::error(core::ptr::null_mut(), error);
-        }
-        let times = if is_inline(count) {
-            usize::try_from(inline_value(count).max(0)).unwrap_or(0)
-        } else {
-            0
-        };
-        let Some(total) = (*list).length.checked_mul(times) else {
+        let Some(times) = crate::int::repeat_count(count) else {
             let error = raise(
                 ExceptionKind::OverflowError,
                 "cannot fit 'int' into an index-sized integer",
             );
             return Raising::error(core::ptr::null_mut(), error);
         };
+        // Nothing repeated stays empty, however many times.
+        let times = if (*list).length == 0 { 0 } else { times };
+        // A length past the address space runs out of memory when it is allocated.
+        let total = (*list).length.saturating_mul(times);
         let result = super::same_type(new_list((*list).item_type(), total), list);
         for _ in 0..times {
             for index in 0..(*list).length {

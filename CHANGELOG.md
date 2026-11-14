@@ -127,6 +127,13 @@ All notable changes to TyPy are recorded here. The format follows
   function, such as `if not items:` before `return f(items[1:])`, stopped
   the compiler with an internal error (EXP-10).
 
+- Repeating a list, a `str` or `bytes` by a count from 2**62 up to the
+  largest index-sized integer raised `OverflowError`. An empty sequence
+  now stays empty however many times it is repeated, and a longer one is
+  refused as CPython refuses it. A list whose repeated length passes the
+  address space now runs out of memory, which prints `MemoryError` and
+  ends the program, where it used to raise `OverflowError` (DAT-05,
+  DAT-06, DAT-07).
 - Calling a class whose body declares an attribute that no `__init__`
   assigns is E0309. The program used to compile and crash when the
   attribute was read, where CPython raises `AttributeError` (CLS-01).

@@ -51,6 +51,24 @@ pub(crate) unsafe fn is_negative(word: i64) -> bool {
     unsafe { (*object_of(word)).sign_and_length < 0 }
 }
 
+/// Returns how many times `sequence * count` repeats: none for a count below one, or `None`
+/// for one past an index-sized integer, which CPython refuses with `OverflowError`.
+///
+/// # Safety
+///
+/// `count` is a live `int` word.
+pub(crate) unsafe fn repeat_count(count: i64) -> Option<usize> {
+    // SAFETY: the caller passes a live `int` word.
+    let value = unsafe { value::Integer::from_word(count) };
+    if value.negative {
+        return Some(0);
+    }
+    value
+        .to_i128()
+        .and_then(|count| i64::try_from(count).ok())
+        .and_then(|count| usize::try_from(count).ok())
+}
+
 /// Returns the `int` word of a large integer: its address, whose lowest bit is clear. The
 /// address is exposed, so `object_of` may turn the word back into a pointer.
 #[allow(
@@ -78,5 +96,29 @@ mod tests {
     #[test]
     fn the_fixed_part_takes_sixteen_bytes() {
         assert_eq!(core::mem::size_of::<BigIntObject>(), 16);
+    }
+
+    #[test]
+    fn a_repeat_count_is_none_below_one_and_refused_past_an_index_sized_integer() {
+        use super::repeat_count;
+        use super::value::Integer;
+        let cases = [
+            (-(1_i128 << 70), Some(0)),
+            (-1, Some(0)),
+            (0, Some(0)),
+            (3, Some(3)),
+            (1 << 62, Some(1 << 62)),
+            (
+                i128::from(i64::MAX),
+                Some(usize::try_from(i64::MAX).unwrap()),
+            ),
+            (i128::from(i64::MAX) + 1, None),
+            (1 << 70, None),
+        ];
+        for (count, wanted) in cases {
+            let word = Integer::from_i128(count).into_word();
+            // SAFETY: the word is a live `int` word.
+            assert_eq!(unsafe { repeat_count(word) }, wanted, "{count}");
+        }
     }
 }

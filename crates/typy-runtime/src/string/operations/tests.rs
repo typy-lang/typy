@@ -119,6 +119,24 @@ fn repetition_by_a_large_int_repeats_nothing_or_overflows() {
 }
 
 #[test]
+fn repetition_by_an_index_sized_count_past_the_inline_range_is_bounded_as_cpython_does() {
+    let large = Integer::from_i128(1 << 62).into_word();
+    // SAFETY: the sources are live, and the word points to a live large integer.
+    unsafe {
+        let empty = typy_rt_str_repeat(from_str(""), large);
+        assert!(empty.exception.is_null());
+        assert_eq!(text(empty.value), "");
+        assert_eq!(
+            raised(&typy_rt_str_repeat(from_str("ab"), large)),
+            (
+                crate::ExceptionKind::OverflowError,
+                "repeated string is too long".to_owned()
+            )
+        );
+    }
+}
+
+#[test]
 fn repetition_whose_length_overflows_raises_before_allocating() {
     let source = from_str("abcde");
     // SAFETY: the source is live.
