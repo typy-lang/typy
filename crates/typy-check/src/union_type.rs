@@ -147,6 +147,16 @@ mod tests {
     }
 
     #[test]
+    fn an_optional_value_is_held_only_where_none_is() {
+        let either = Type::union(vec![Type::Int, Type::Str]);
+        let maybe = Type::optional(Type::Int);
+        assert!(!maybe.is_assignable_to(&either));
+        assert!(!maybe.is_upcast_to(&either));
+        assert!(maybe.is_assignable_to(&Type::optional(either.clone())));
+        assert!(Type::Int.is_assignable_to(&either));
+    }
+
+    #[test]
     fn instances_of_one_base_share_it() {
         let circle = class(1, "Circle", &[(0, "Shape")]);
         let square = class(2, "Square", &[(0, "Shape")]);

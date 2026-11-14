@@ -309,6 +309,9 @@ impl Type {
             (Self::Instance(class), Self::Instance(base)) => class.derives_from(base),
             (Self::Optional(inner), Self::Optional(base)) => inner.is_upcast_to(base),
             (Self::Parameter(_), _) => *self != *target && self.is_assignable_to(target),
+            // A union with `None` is an optional of the other members, so a union target
+            // never holds `None`.
+            (Self::Optional(_), Self::Union(_)) => false,
             // A value becomes a union, or a wider one, or the class every member derives
             // from, as the object it is (TYP-14).
             // An optional target is converted as an optional is: its base, then wrapped.
@@ -610,6 +613,10 @@ impl Type {
             Self::Union(members) => {
                 let rest: Vec<String> = members[1..].iter().map(ToString::to_string).collect();
                 format!("{} | {}", members[0].with_article(), rest.join(" | "))
+            }
+            // The article reads with the first member, as in `an int | None`.
+            Self::Optional(inner) => {
+                format!("{} | None", inner.with_article())
             }
             other => format!("a {other}"),
         }
