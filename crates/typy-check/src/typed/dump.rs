@@ -381,6 +381,7 @@ impl Dump<'_> {
             TypedExprKind::RecursionLimit(_) => "RecursionLimit".to_owned(),
             TypedExprKind::ExceptionPart { part, .. } => format!("ExceptionPart({part:?})"),
             TypedExprKind::OsErrorField { field, .. } => format!("OsErrorField({field:?})"),
+            TypedExprKind::PercentDynamic { .. } => "PercentDynamic".to_owned(),
             TypedExprKind::Input(_) => "Input".to_owned(),
             TypedExprKind::Open { mode, access, .. } => format!("Open {mode:?} {access:?}"),
             TypedExprKind::PercentFormat { parts, .. } => {

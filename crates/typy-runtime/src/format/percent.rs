@@ -146,9 +146,19 @@ pub unsafe extern "C" fn typy_rt_percent_int(
     spec: *const StrObject,
     conversion: i64,
 ) -> Raising<*mut StrObject> {
-    // SAFETY: the caller's guarantee.
-    let (printf, integer) = unsafe { (read(spec), whole(value)) };
     let kind = u8::try_from(inline_value(conversion)).unwrap_or(b'd');
+    // SAFETY: the caller's guarantee.
+    unsafe { int_text(read(spec), value, kind) }
+}
+
+/// Returns `%d`, `%x`, `%X` or `%o`, as `kind` says, of an `int` word laid out by `printf`.
+///
+/// # Safety
+///
+/// `value` is an `int` word whose large integer is live.
+unsafe fn int_text(printf: Printf, value: i64, kind: u8) -> Raising<*mut StrObject> {
+    // SAFETY: the caller's guarantee.
+    let integer = unsafe { whole(value) };
     let (base, prefix) = match kind {
         b'x' => (16, "0x"),
         b'X' => (16, "0X"),
@@ -196,9 +206,13 @@ pub unsafe extern "C" fn typy_rt_percent_float(
     spec: *const StrObject,
     conversion: i64,
 ) -> Raising<*mut StrObject> {
-    // SAFETY: the caller's guarantee.
-    let printf = unsafe { read(spec) };
     let kind = u8::try_from(inline_value(conversion)).unwrap_or(b'f');
+    // SAFETY: the caller's guarantee.
+    float_text(unsafe { read(spec) }, value, kind)
+}
+
+/// Returns `%e`, `%f` or `%g`, as `kind` says, of a `float` laid out by `printf`.
+fn float_text(printf: Printf, value: f64, kind: u8) -> Raising<*mut StrObject> {
     let layout = Spec {
         precision: Some(printf.precision.unwrap_or(6)),
         ..printf.number_spec(kind)
@@ -218,7 +232,17 @@ pub unsafe extern "C" fn typy_rt_percent_str(
     spec: *const StrObject,
 ) -> Raising<*mut StrObject> {
     // SAFETY: the caller's guarantee.
-    let (printf, text) = unsafe { (read(spec), points(text)) };
+    unsafe { str_text(read(spec), text) }
+}
+
+/// Returns text already converted laid out by `printf`.
+///
+/// # Safety
+///
+/// `text` points to a live string.
+unsafe fn str_text(printf: Printf, text: *const StrObject) -> Raising<*mut StrObject> {
+    // SAFETY: the caller's guarantee.
+    let text = unsafe { points(text) };
     let result = string(text.points(), &printf.text_spec());
     text.discard();
     finish(result)
@@ -238,7 +262,21 @@ pub unsafe extern "C" fn typy_rt_percent_char(
     label: *const StrObject,
 ) -> Raising<*mut StrObject> {
     // SAFETY: the caller's guarantee.
-    let (printf, integer) = unsafe { (read(spec), whole(value)) };
+    unsafe { char_text(read(spec), value, label) }
+}
+
+/// Returns `%c` of an `int` word laid out by `printf`; `label` names the value in an error.
+///
+/// # Safety
+///
+/// As for `typy_rt_percent_char`.
+unsafe fn char_text(
+    printf: Printf,
+    value: i64,
+    label: *const StrObject,
+) -> Raising<*mut StrObject> {
+    // SAFETY: the caller's guarantee.
+    let integer = unsafe { whole(value) };
     let magnitude = integer.magnitude.as_slice();
     let point = match magnitude {
         [] => Some(0),
@@ -268,6 +306,20 @@ pub unsafe extern "C" fn typy_rt_percent_char_str(
     label: *const StrObject,
 ) -> Raising<*mut StrObject> {
     // SAFETY: the caller's guarantee.
+    unsafe { char_str_text(read(spec), text, label) }
+}
+
+/// Returns `%c` of a `str` laid out by `printf`; `label` names the value in an error.
+///
+/// # Safety
+///
+/// As for `typy_rt_percent_char_str`.
+unsafe fn char_str_text(
+    printf: Printf,
+    text: *const StrObject,
+    label: *const StrObject,
+) -> Raising<*mut StrObject> {
+    // SAFETY: the caller's guarantee.
     let count = unsafe { length(text) };
     if count != 1 {
         let mut message = MessageBuffer::new();
@@ -279,11 +331,12 @@ pub unsafe extern "C" fn typy_rt_percent_char_str(
         return finish(Err(message.raise(ExceptionKind::TypeError)));
     }
     // SAFETY: the caller's guarantee; a precision does nothing to one character.
-    let (printf, text) = unsafe { (read(spec), points(text)) };
+    let text = unsafe { points(text) };
     let result = layout::text(text.points(), &printf.text_spec());
     text.discard();
     Raising::ok(result)
 }
 
+mod dynamic;
 #[cfg(test)]
 mod tests;

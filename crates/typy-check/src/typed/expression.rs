@@ -144,6 +144,12 @@ pub enum TypedExprKind {
     /// `sys.getrecursionlimit()`, without a value, or `sys.setrecursionlimit(limit)`
     /// (LIB-13).
     RecursionLimit(Option<Box<TypedExpr>>),
+    /// `format % values` with a format the runtime reads, which is known only when the
+    /// program runs or takes the items of a `tuple[T, ...]` (LIB-11).
+    PercentDynamic {
+        format: Box<TypedExpr>,
+        values: Box<TypedExpr>,
+    },
     /// An operation on `args` of an exception or `code` of a `SystemExit`, read from the
     /// exception (EXC-11, EXC-13, ADR-0030).
     ExceptionPart {
@@ -479,6 +485,7 @@ impl TypedExpr {
             | TypedExprKind::Input(value)
             | TypedExprKind::RecursionLimit(value) => value.iter().map(Box::as_ref).collect(),
             TypedExprKind::OsErrorField { exception, .. } => vec![exception],
+            TypedExprKind::PercentDynamic { format, values } => vec![format, values],
             TypedExprKind::ExceptionPart {
                 exception,
                 operation,

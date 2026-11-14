@@ -69,6 +69,9 @@ impl BodyChecker<'_> {
                     super::operator_method::Comparison::Builtin(left, right) => (left, right),
                 };
                 let (left, right) = Self::tuple_operands(*operator, left, right);
+                if let Some(formatted) = Self::percent_dynamic(*operator, &left, &right, span) {
+                    return formatted;
+                }
                 let ty = self.binary_type(*operator, &left, &right, span);
                 Self::typed(
                     TypedExprKind::Binary {

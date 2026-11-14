@@ -162,15 +162,18 @@ fn values_that_already_failed_give_no_second_error() {
 }
 
 #[test]
-fn formats_planned_for_0_4_give_e0201() {
+fn a_format_known_when_the_program_runs_is_read_by_the_runtime() {
     for source in [
         "template = '%s'\nprint(template % 1)\n",
         "values: tuple[int, ...] = (1, 2)\nprint('%d %d' % values)\n",
+        "template = '%s-%s'\ntemplate %= (1, 2)\nprint(template)\n",
+        "def f(t: str, d: dict[str, int]) -> str:\n    return t % d\n",
     ] {
-        let found = diagnostics(source);
-        assert_eq!(found.len(), 1, "{source}: {found:?}");
-        assert_eq!(found[0].0, "E0201", "{source}");
-        assert!(found[0].1.ends_with("(LIB-11)"), "{source}: {}", found[0].1);
+        assert_eq!(
+            diagnostics(source),
+            Vec::<(String, String)>::new(),
+            "{source}"
+        );
     }
 }
 

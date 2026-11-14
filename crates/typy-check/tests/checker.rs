@@ -385,7 +385,6 @@ fn rejected_programs_give_their_codes() {
         ("n: int | None = None\nprint(n is True)\n", &["E0301"]),
         ("print(1[0])\n", &["E0401"]),
         ("print(\"a\"[\"b\"])\n", &["E0404"]),
-        ("template = \"%d\"\nprint(template % 1)\n", &["E0201"]),
         ("print(~\"a\")\n", &["E0401"]),
         (
             "def f(a: int) -> int:\n    return a\nprint(f(1, 2))\n",
@@ -685,7 +684,7 @@ fn each_operator_gives_python_s_result_type_or_its_diagnostic() {
         ("s * f", Err(&["E0401"])),
         ("s - s", Err(&["E0401"])),
         ("s + i", Err(&["E0401"])),
-        ("s % i", Err(&["E0201"])),
+        ("s % i", Ok("str")),
         // Arithmetic: int with int stays int, anything with float is float (EXP-02).
         ("i + i", Ok("int")),
         ("i + f", Ok("float")),

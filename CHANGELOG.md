@@ -88,6 +88,9 @@ All notable changes to TyPy are recorded here. The format follows
   class methods or class variables is planned for 0.5 (GEN-04, GEN-05,
   GEN-10, ADR-0023).
 - `...` alone as a statement does nothing, as `pass` does.
+- `format % values` with a format that is not a literal, also through
+  `%=`, and with a `tuple[T, ...]` of values: the runtime reads the format
+  and raises what CPython raises (LIB-11).
 - `OSError` and its subclasses built with two to five arguments, read as
   `errno`, `strerror`, `filename`, `winerror` and `filename2`, with the
   attributes `errno`, `strerror`, `filename` and `filename2`. `OSError`

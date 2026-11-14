@@ -110,19 +110,6 @@ impl BodyChecker<'_> {
             {
                 Int
             }
-            Op::Mod if l == Str => {
-                self.diagnostics.push(
-                    Diagnostic::new(
-                        DiagnosticCode::error(201),
-                        span,
-                        "formatting with `%` a format that is not a string literal is planned \
-                         for TyPy 0.4 (LIB-11)",
-                    )
-                    .with_rule(RuleId::LIB_11)
-                    .with_help("write the format as a literal, or write an f-string"),
-                );
-                Error
-            }
             _ => self.operator_error(symbol, &l, &r, span),
         }
     }

@@ -183,6 +183,7 @@ pub enum RuntimeFunction {
     OsErrorNew,
     OsErrorErrno,
     OsErrorText,
+    PercentDynamic,
     ExceptionSetCause,
     ExceptionThrow,
     ExceptionHandled,
@@ -345,7 +346,7 @@ const FLOAT_FLOAT: &[TyirType] = &[TyirType::Float, TyirType::Float];
 
 impl RuntimeFunction {
     /// Every runtime function.
-    pub const ALL: [Self; 306] = [
+    pub const ALL: [Self; 307] = [
         Self::IntFloorDivide,
         Self::IntModulo,
         Self::IntPower,
@@ -520,6 +521,7 @@ impl RuntimeFunction {
         Self::OsErrorNew,
         Self::OsErrorErrno,
         Self::OsErrorText,
+        Self::PercentDynamic,
         Self::ExceptionSetCause,
         Self::ExceptionThrow,
         Self::ExceptionHandled,
@@ -826,6 +828,7 @@ impl RuntimeFunction {
             Self::ExceptionNew | Self::OsErrorNew => {
                 signature(&[TYPE, Bits, Bits], EXCEPTION, false)
             }
+            Self::PercentDynamic => signature(&[STR, Bits, Bits, Int], STR, true),
             Self::OsErrorErrno => signature(
                 &[EXCEPTION],
                 TyirType::Optional(crate::OptionalBase::Int),
@@ -1155,6 +1158,7 @@ impl RuntimeFunction {
             Self::OsErrorNew => "os_error_new",
             Self::OsErrorErrno => "os_error_errno",
             Self::OsErrorText => "os_error_text",
+            Self::PercentDynamic => "percent_dynamic",
             Self::ExceptionSetCause => "exception_set_cause",
             Self::ExceptionThrow => "exception_throw",
             Self::ExceptionHandled => "exception_handled",

@@ -55,16 +55,30 @@ print("%(user)s plays for %(team)s" % {"user": "Ada", "team": "blue"})
 print("%*d" % (6, count))
 ```
 
-TyPy reads the format when it checks the program, so a format that does
+TyPy reads a literal format when it checks the program, so one that does
 not fit its values is E0427, with the message CPython's `TypeError` or
 `ValueError` would give, in CPython 3.15's words, such as
-`not enough arguments for format string (got 1)`.
-A format that is not a literal, and a `tuple[T, ...]` of values, are
-planned for 0.4 (LIB-11); write an f-string for those:
+`not enough arguments for format string (got 1)`:
 
 <!-- typy-expect: rejected E0427 at 1:25 -->
 ```python
 print("%d of %d done" % (3,))
+```
+
+A format that is not a literal, such as one read from a variable, and a
+`tuple[T, ...]` of values, are read when the program runs (LIB-11): the
+runtime gives the same text, and raises the `TypeError`, `ValueError` or
+`KeyError` CPython would raise:
+
+<!-- typy-expect: accepted -->
+```python
+template = "%s scored %d"
+results: tuple[int, ...] = (3, 4)
+print(template % ("Ada", 7), "%d-%d" % results)
+try:
+    print(template % "only one")
+except TypeError:
+    print("not enough values")
 ```
 
 ## The math module

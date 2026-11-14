@@ -447,6 +447,10 @@ fn expression(expression_value: &TypedExpr, callees: &mut BTreeSet<FunctionId>) 
         TypedExprKind::PercentFormat { values, .. } => expression(values, callees),
         TypedExprKind::Open { path, .. } => expression(path, callees),
         TypedExprKind::OsErrorField { exception, .. } => expression(exception, callees),
+        TypedExprKind::PercentDynamic { format, values } => {
+            expression(format, callees);
+            expression(values, callees);
+        }
         TypedExprKind::ExceptionPart {
             exception,
             operation,

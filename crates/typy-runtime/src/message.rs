@@ -55,6 +55,32 @@ impl MessageBuffer {
         }
     }
 
+    /// Appends a number in upper-case hexadecimal, with at least `width` digits.
+    pub(crate) fn push_hex(&mut self, value: u32, width: usize) {
+        let digits = b"0123456789ABCDEF";
+        let mut written = [0_u8; 8];
+        let mut start = written.len();
+        let mut rest = value;
+        loop {
+            start -= 1;
+            written[start] = digits[usize::try_from(rest % 16).unwrap_or(0)];
+            rest /= 16;
+            if rest == 0 && written.len() - start >= width.min(8) {
+                break;
+            }
+        }
+        for digit in &written[start..] {
+            self.push(u32::from(*digit));
+        }
+    }
+
+    /// Appends what another message holds.
+    pub(crate) fn push_buffer(&mut self, other: &Self) {
+        for point in &other.points[..other.used] {
+            self.push(*point);
+        }
+    }
+
     /// Appends `repr(text)`.
     ///
     /// # Safety
