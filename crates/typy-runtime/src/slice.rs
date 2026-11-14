@@ -152,7 +152,7 @@ mod tests {
 
     #[test]
     fn slices_select_the_positions_cpython_selects() {
-        let cases: [(Bounds, &[usize]); 10] = [
+        let cases: [(Bounds, &[usize]); 11] = [
             ((None, None, None), &[0, 1, 2, 3, 4]),
             ((Some(1), Some(3), None), &[1, 2]),
             ((Some(-2), None, None), &[3, 4]),
@@ -163,6 +163,7 @@ mod tests {
             ((Some(-9), Some(2), None), &[0, 1]),
             ((Some(3), Some(1), None), &[]),
             ((Some(9), Some(-9), Some(-1)), &[4, 3, 2, 1, 0]),
+            ((Some(1), Some(3), Some(-1)), &[]),
         ];
         for ((start, stop, stride), expected) in cases {
             assert_eq!(

@@ -159,11 +159,8 @@ impl BodyChecker<'_> {
         let value = self.through_union_base(value);
         match &value.ty {
             Type::Exception(_) | Type::Error => value,
-            Type::TypeObject(Some(of)) if matches!(**of, TypeObjectOf::Exception(_)) => {
-                let TypeObjectOf::Exception(class) = (**of).clone() else {
-                    unreachable!("matched above");
-                };
-                self.called_class(&class, value.span)
+            Type::TypeObject(Some(of)) if let TypeObjectOf::Exception(class) = &**of => {
+                self.called_class(class, value.span)
             }
             other => {
                 let message = format!(

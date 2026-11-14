@@ -511,3 +511,17 @@ fn a_sparse_source_is_merged_entry_by_entry() {
     }
     [source, target].into_iter().for_each(release);
 }
+
+#[test]
+fn a_small_full_source_is_cloned_into_an_empty_dict() {
+    let source = int_dict();
+    set(source, 1, 2);
+    let empty = int_dict();
+    // SAFETY: the dicts are live.
+    unsafe {
+        typy_rt_dict_update(empty, source.expose_provenance() as u64);
+        assert_eq!((*empty).log2, (*source).log2);
+        assert!(typy_rt_dict_equal(empty, source));
+    }
+    [source, empty].into_iter().for_each(release);
+}

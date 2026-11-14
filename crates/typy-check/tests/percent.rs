@@ -173,3 +173,35 @@ fn formats_planned_for_0_4_give_e0201() {
         assert!(found[0].1.ends_with("(LIB-11)"), "{source}: {}", found[0].1);
     }
 }
+
+#[test]
+fn integer_conversions_and_quoted_keys_give_cpythons_message() {
+    for (source, message) in [
+        (
+            "print('%(it\\'s \"q\")d' % {'it\\'s \"q\"': 'a'})\n",
+            "format argument 'it\\'s \"q\"': %d requires a real number, not str",
+        ),
+        (
+            "print('%i' % 'a')\n",
+            "format argument: %i requires a real number, not str",
+        ),
+        (
+            "print('%u' % 'a')\n",
+            "format argument: %u requires a real number, not str",
+        ),
+        (
+            "print('%X' % 1.5)\n",
+            "format argument: %X requires an integer, not float",
+        ),
+        (
+            "print('%o' % 1.5)\n",
+            "format argument: %o requires an integer, not float",
+        ),
+    ] {
+        assert_eq!(
+            diagnostics(source),
+            [("E0427".to_owned(), message.to_owned())],
+            "{source}"
+        );
+    }
+}

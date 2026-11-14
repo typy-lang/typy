@@ -242,21 +242,19 @@ impl Stmt {
     /// `except` clause, its `else` block and its `finally` block; none for another statement.
     #[must_use]
     pub fn try_blocks(&self) -> Vec<&[Self]> {
-        let Self::Try {
-            body,
-            handlers,
-            orelse,
-            finalbody,
-            ..
-        } = self
-        else {
-            return Vec::new();
-        };
-        let mut blocks = vec![body.as_slice()];
-        blocks.extend(handlers.iter().map(|handler| handler.body.as_slice()));
-        blocks.push(orelse);
-        blocks.push(finalbody);
-        blocks
+        match self {
+            Self::Try {
+                body,
+                handlers,
+                orelse,
+                finalbody,
+                ..
+            } => std::iter::once(body.as_slice())
+                .chain(handlers.iter().map(|handler| handler.body.as_slice()))
+                .chain([orelse.as_slice(), finalbody.as_slice()])
+                .collect(),
+            _ => Vec::new(),
+        }
     }
 
     /// Returns the span of the whole statement.

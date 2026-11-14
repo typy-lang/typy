@@ -206,11 +206,9 @@ mod tests {
         assert_eq!(message(&defaulted, &defaulted), None);
         let mut other = defaulted.clone();
         other.parameters[1].default = Some(TypedConstant::Int("2".to_owned()));
-        assert!(
-            message(&other, &defaulted).is_some_and(
-                |text| text.starts_with("E0201") && text.contains("default for `scale`")
-            )
-        );
+        let text = message(&other, &defaulted).unwrap_or_default();
+        assert!(text.starts_with("E0201"), "{text}");
+        assert!(text.contains("default for `scale`"), "{text}");
     }
 
     #[test]
@@ -230,10 +228,9 @@ mod tests {
             vec![parameter("scale", Type::optional(Type::Int))],
             Type::Int,
         );
-        assert!(
-            message(&optional, &base)
-                .is_some_and(|text| text.starts_with("E0201") && text.contains("TyPy 0.5"))
-        );
+        let text = message(&optional, &base).unwrap_or_default();
+        assert!(text.starts_with("E0201"), "{text}");
+        assert!(text.contains("TyPy 0.5"), "{text}");
         let base_optional = signature(Vec::new(), Type::optional(Type::Int));
         let plain = signature(Vec::new(), Type::Int);
         assert!(message(&plain, &base_optional).is_some_and(|text| text.starts_with("E0201")));

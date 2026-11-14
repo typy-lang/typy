@@ -596,6 +596,19 @@ fn dia_07_warnings_are_shown_and_fail_only_with_deny_warnings() {
 }
 
 #[test]
+fn cli_10_explain_of_a_code_without_a_rule_names_no_rule() {
+    let workspace = Workspace::new(HELLO);
+    let output = workspace.typy(&["explain", "E0105"]);
+    let text = stdout(&output);
+    assert_eq!(status(&output), 0);
+    assert!(
+        text.starts_with("E0105: source file cannot be read\n"),
+        "{text}"
+    );
+    assert!(!text.contains("Rule:"), "{text}");
+}
+
+#[test]
 fn cli_10_explain_prints_a_code_with_a_wrong_and_a_corrected_program() {
     let workspace = Workspace::new(HELLO);
     let output = workspace.typy(&["explain", "E0402"]);

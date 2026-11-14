@@ -311,11 +311,9 @@ mod tests {
         for info in CODES {
             let first_word = info.summary.split(' ').next().unwrap();
             let first = first_word.chars().next().unwrap();
-            assert!(
-                !first.is_uppercase() || PROPER_NAMES.contains(&first_word),
-                "{}",
-                info.code
-            );
+            if first.is_uppercase() {
+                assert!(PROPER_NAMES.contains(&first_word), "{}", info.code);
+            }
             assert!(!info.summary.ends_with('.'), "{}", info.code);
         }
     }

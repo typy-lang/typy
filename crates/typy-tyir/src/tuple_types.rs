@@ -14,6 +14,11 @@ pub struct TupleTypes {
 impl TupleTypes {
     /// Returns the tuple type with these items, adding it when it is new.
     pub fn intern(&mut self, items: Vec<TyirType>) -> TyirType {
+        TyirType::Tuple(self.intern_id(items))
+    }
+
+    /// Returns the number of the tuple type with these items, adding it when it is new.
+    pub fn intern_id(&mut self, items: Vec<TyirType>) -> TupleTypeId {
         self.interned(items, false)
     }
 
@@ -23,10 +28,10 @@ impl TupleTypes {
         let items = std::iter::once(TyirType::Int)
             .chain(members.iter().copied())
             .collect();
-        self.interned(items, true)
+        TyirType::Tuple(self.interned(items, true))
     }
 
-    fn interned(&mut self, items: Vec<TyirType>, union: bool) -> TyirType {
+    fn interned(&mut self, items: Vec<TyirType>, union: bool) -> TupleTypeId {
         let index = self
             .items
             .iter()
@@ -37,7 +42,7 @@ impl TupleTypes {
                 self.unions.push(union);
                 self.items.len() - 1
             });
-        TyirType::Tuple(TupleTypeId(u32::try_from(index).unwrap_or(u32::MAX)))
+        TupleTypeId(u32::try_from(index).unwrap_or(u32::MAX))
     }
 
     /// Returns true when a tuple type is a union of its slots after the tag (ADR-0027).
@@ -101,6 +106,14 @@ mod tests {
     use super::TupleTypes;
     use crate::types::{TupleTypeId, TyirType};
 
+    /// Returns the number of a tuple type that interning gave.
+    fn tuple_id(ty: TyirType) -> TupleTypeId {
+        match ty {
+            TyirType::Tuple(id) => id,
+            other => panic!("interning gave {other:?}"),
+        }
+    }
+
     #[test]
     fn a_union_is_a_tuple_of_its_own() {
         let mut types = TupleTypes::default();
@@ -108,9 +121,7 @@ mod tests {
         let union = types.intern_union(&[TyirType::Int, TyirType::STR]);
         assert_ne!(tuple, union);
         assert_eq!(types.intern_union(&[TyirType::Int, TyirType::STR]), union);
-        let (TyirType::Tuple(tuple), TyirType::Tuple(union)) = (tuple, union) else {
-            unreachable!("interning gives tuple types");
-        };
+        let (tuple, union) = (tuple_id(tuple), tuple_id(union));
         assert!(types.is_union(union));
         assert!(!types.is_union(tuple));
         assert!(!types.is_union(TupleTypeId(9)));

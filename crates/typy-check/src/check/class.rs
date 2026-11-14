@@ -378,14 +378,11 @@ pub(super) fn collect_members<'tree>(
             takes_instance: true,
         };
         for statement in class.body {
-            match statement {
-                Stmt::AnnAssign { .. } | Stmt::Assign { .. } => {
+            match (statement, FunctionParts::of(statement)) {
+                (Stmt::AnnAssign { .. } | Stmt::Assign { .. }, _) => {
                     class_body_name(statement, &mut info, &scope, names, diagnostics);
                 }
-                Stmt::FunctionDef { .. } => {
-                    let Some(parts) = FunctionParts::of(statement) else {
-                        continue;
-                    };
+                (_, Some(parts)) => {
                     let name = &parts.name.name;
                     let kind = parts.method_kind();
                     let registered = registered_name(&kind, name);
@@ -402,7 +399,8 @@ pub(super) fn collect_members<'tree>(
                     let id = FunctionId(
                         u32::try_from(first_function + methods.len()).unwrap_or(u32::MAX),
                     );
-                    if name == "__init__" && kind == MethodKind::Instance {
+                    // A special method takes no decorator, so `__init__` is an instance method.
+                    if name == "__init__" {
                         note_init(&parts, id, &mut info, names);
                     }
                     let method = method_definition(
@@ -653,10 +651,10 @@ impl<'tree> ClassMethodCopies<'tree> {
             takes_instance: true,
         };
         let mut made = Vec::new();
-        for (statement, origin) in visible {
-            let Some(parts) = FunctionParts::of(statement) else {
-                continue;
-            };
+        // Each statement is a `def`, since only methods are copied.
+        for (statement, parts, origin) in visible.into_iter().filter_map(|(statement, origin)| {
+            Some((statement, FunctionParts::of(statement)?, origin))
+        }) {
             let id = FunctionId(
                 u32::try_from(collected.first_function + collected.methods.len())
                     .unwrap_or(u32::MAX),
@@ -764,7 +762,8 @@ fn refused_method(
                 "redefining the method `{name}` of a base as a static method is planned for TyPy 0.5 (CLS-06)"
             ),
         ),
-        _ if static_in_bases && *kind != MethodKind::Static => refuse(
+        // A static method of a base is also its method, so the arm above takes a static one.
+        _ if static_in_bases => refuse(
             201,
             format!(
                 "redefining the static method `{name}` of a base is planned for TyPy 0.5 (CLS-06)"
@@ -1269,11 +1268,9 @@ fn planned_method(name: &Identifier) -> Diagnostic {
         .strip_prefix("__")
         .and_then(|rest| rest.strip_suffix("__"))
         .unwrap_or_default();
-    // The container methods come with CLS-07 in 0.4, the in-place operators after them, and
-    // the other special methods, such as `__call__`, after 1.0.
-    let release = if CONTAINER_METHODS.contains(&bare) {
-        "TyPy 0.4"
-    } else if bare
+    // The in-place operators come after the container methods of 0.4, and the other special
+    // methods, such as `__call__`, after 1.0.
+    let release = if bare
         .strip_prefix('i')
         .is_some_and(|rest| BINARY.contains(&rest))
     {
@@ -1291,9 +1288,6 @@ fn planned_method(name: &Identifier) -> Diagnostic {
     )
     .with_rule(RuleId::CLS_07)
 }
-
-/// The container methods of CLS-07, without their underscores.
-const CONTAINER_METHODS: [&str; 6] = ["len", "getitem", "setitem", "delitem", "contains", "bool"];
 
 /// Returns the attributes `__init__` assigns on its first parameter, in source order, at any
 /// depth of its blocks; an augmented assignment reads the attribute first, so it assigns none.

@@ -186,6 +186,17 @@ fn a_value_used_on_a_path_its_definition_is_not_on_fails() {
 }
 
 #[test]
+fn a_value_defined_only_where_no_path_reaches_fails() {
+    let mut function = division();
+    function.blocks[0].terminator = Terminator::Jump {
+        target: crate::block::BlockId(2),
+        arguments: Vec::new(),
+    };
+    function.blocks[2].terminator = Terminator::Return(ValueId(4));
+    assert!(message(&module(function)).contains("may not have run"));
+}
+
+#[test]
 fn a_function_without_an_entry_block_fails() {
     let mut function = division();
     function.blocks.clear();

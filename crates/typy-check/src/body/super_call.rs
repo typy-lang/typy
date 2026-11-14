@@ -60,8 +60,9 @@ impl BodyChecker<'_> {
     /// Returns why the arguments of `super(...)` are refused, if they are: with arguments, it
     /// takes the enclosing class and the method's instance, by their names.
     fn super_arguments_refused(&self, receiver: &Expr, method: Initializing) -> Option<Diagnostic> {
-        let Expr::Call { arguments, .. } = receiver else {
-            return None;
+        let arguments = match receiver {
+            Expr::Call { arguments, .. } => arguments.as_slice(),
+            _ => &[],
         };
         let names_class = |expression: &Expr| {
             matches!(expression, Expr::Name { id, .. }
@@ -71,7 +72,7 @@ impl BodyChecker<'_> {
             matches!(expression, Expr::Name { id, .. }
                 if self.locals.get(id) == Some(&method.instance))
         };
-        match arguments.as_slice() {
+        match arguments {
             [] => None,
             [class, instance] if names_class(class) && names_instance(instance) => None,
             _ => Some(
@@ -251,16 +252,12 @@ impl BodyChecker<'_> {
         base: crate::typed::ClassId,
         span: Span,
     ) -> Option<TypedExpr> {
-        let mut current = Some(base);
-        let mut shares = false;
-        while let Some(class) = current {
-            let info = &self.program.classes[class.0 as usize];
-            if info.init.is_some() {
-                shares = info.init_uses_instance;
-                break;
-            }
-            current = info.base;
-        }
+        let shares = std::iter::successors(Some(base), |class| {
+            self.program.classes[class.0 as usize].base
+        })
+        .map(|class| &self.program.classes[class.0 as usize])
+        .find(|info| info.init.is_some())
+        .is_some_and(|info| info.init_uses_instance);
         if !shares {
             return None;
         }

@@ -12,15 +12,12 @@ use crate::types::Type;
 impl BodyChecker<'_> {
     /// Returns true when `class` or a base defines `name` as a static method.
     pub(super) fn is_static_method(&self, class: ClassId, name: &str) -> bool {
-        let mut current = Some(class);
-        while let Some(each) = current {
-            let info = &self.program.classes[each.0 as usize];
-            if info.method(name).is_some() {
-                return info.static_methods.iter().any(|method| method == name);
-            }
-            current = info.base;
-        }
-        false
+        std::iter::successors(Some(class), |each| {
+            self.program.classes[each.0 as usize].base
+        })
+        .map(|each| &self.program.classes[each.0 as usize])
+        .find(|info| info.method(name).is_some())
+        .is_some_and(|info| info.static_methods.iter().any(|method| method == name))
     }
 
     /// Returns the getter of the property `name` of `class` or a base, when it has one.

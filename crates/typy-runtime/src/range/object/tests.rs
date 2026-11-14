@@ -131,7 +131,7 @@ fn membership_and_equality_follow_cpython() {
         );
     }
     let falling = range(9, 0, -4);
-    for (value, inside) in [(9, true), (1, true), (5, true), (0, false)] {
+    for (value, inside) in [(9, true), (1, true), (5, true), (0, false), (10, false)] {
         assert_eq!(
             // SAFETY: the range is live.
             unsafe { typy_rt_range_contains(falling, word(value)) },

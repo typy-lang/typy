@@ -214,6 +214,32 @@ mod tests {
     }
 
     #[test]
+    fn a_module_without_a_file_reads_as_built_in() {
+        let (name, path) = (from_str("math"), from_str(""));
+        let module = super::ModuleObject {
+            header: crate::header::ObjectHeader {
+                reference_count: crate::header::IMMORTAL,
+                type_id: crate::header::MODULE_TYPE_ID,
+            },
+            name,
+            path,
+        };
+        // SAFETY: the module and the strings are live for the whole test.
+        unsafe {
+            let object = core::ptr::from_ref(&module).cast_mut();
+            let text = super::module_repr(object.cast()).value;
+            let repr: String = (0..crate::string::length(text))
+                .map(|index| char::from_u32(crate::string::code_point(text, index)).unwrap())
+                .collect();
+            crate::refcount::typy_rt_decrement(text.cast());
+            assert_eq!(repr, "<module 'math' (built-in)>");
+            for text in [name, path] {
+                crate::refcount::typy_rt_decrement(text.cast());
+            }
+        }
+    }
+
+    #[test]
     fn an_unbound_module_variable_raises_name_error_with_cpythons_message() {
         let name = from_str("count");
         // SAFETY: the name is live, and the exception is owned here.

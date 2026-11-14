@@ -1223,11 +1223,14 @@ mod tests {
             .map(|function| function.name())
             .collect();
         // The C names of `math`, such as `log10`, hold digits after a letter.
+        assert!(
+            names
+                .iter()
+                .all(|name| name.starts_with(|c: char| c.is_ascii_lowercase()))
+        );
         assert!(names.iter().all(|name| {
-            name.starts_with(|c: char| c.is_ascii_lowercase())
-                && name
-                    .chars()
-                    .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '_')
+            name.chars()
+                .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '_')
         }));
         names.sort_unstable();
         names.dedup();

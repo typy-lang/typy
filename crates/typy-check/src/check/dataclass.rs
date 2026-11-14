@@ -302,10 +302,21 @@ impl Names {
         self.names(called, &self.dataclass, "dataclass")
     }
 
-    /// Returns true for `field(...)`.
-    fn is_field(&self, expression: &Expr) -> bool {
-        matches!(expression, Expr::Call { function, .. }
-            if self.names(function, &self.field, "field"))
+    /// Returns the arguments of `field(...)`, or `None` for any other expression.
+    fn field_call<'call>(&self, expression: &'call Expr) -> Option<FieldCall<'call>> {
+        match expression {
+            Expr::Call {
+                function,
+                arguments,
+                keywords,
+                span,
+            } if self.names(function, &self.field, "field") => Some(FieldCall {
+                arguments,
+                keywords,
+                span: *span,
+            }),
+            _ => None,
+        }
     }
 }
 
@@ -388,8 +399,8 @@ fn own_fields(body: &mut [Stmt], names: &Names, diagnostics: &mut Diagnostics) -
         if is_class_var(annotation) {
             continue;
         }
-        if let Some(call) = value.as_ref().filter(|value| names.is_field(value)) {
-            *value = field_default(call, diagnostics);
+        if let Some(call) = value.as_ref().and_then(|value| names.field_call(value)) {
+            *value = field_default(&call, diagnostics);
         }
         if let Some(default) = value.as_ref()
             && let Some(kind) = mutable(default)
@@ -415,23 +426,21 @@ fn own_fields(body: &mut [Stmt], names: &Names, diagnostics: &mut Diagnostics) -
     fields
 }
 
+/// The arguments of a call of `field`.
+struct FieldCall<'call> {
+    arguments: &'call [Expr],
+    keywords: &'call [Keyword],
+    span: Span,
+}
+
 /// Returns the default `field(default=v)` gives, `v`, or none for `field()`.
-fn field_default(call: &Expr, diagnostics: &mut Diagnostics) -> Option<Expr> {
-    let Expr::Call {
-        arguments,
-        keywords,
-        span,
-        ..
-    } = call
-    else {
-        return None;
-    };
-    if !arguments.is_empty() {
-        diagnostics.push(planned(*span, "`field` with positional arguments"));
+fn field_default(call: &FieldCall<'_>, diagnostics: &mut Diagnostics) -> Option<Expr> {
+    if !call.arguments.is_empty() {
+        diagnostics.push(planned(call.span, "`field` with positional arguments"));
         return None;
     }
     let mut default = None;
-    for keyword in keywords {
+    for keyword in call.keywords {
         match keyword.name.as_ref().map(|name| name.name.as_str()) {
             Some("default") => default = Some(keyword.value.clone()),
             Some(option) => {
@@ -595,15 +604,17 @@ fn parsed(source: &str, fields: &[Field], at: Span) -> Vec<Stmt> {
         .unwrap_or_default();
     for method in &mut methods {
         method.relocate(at);
-        if let Stmt::FunctionDef {
-            name, parameters, ..
-        } = method
-            && name.name == "__init__"
-        {
-            for (parameter, field) in parameters.iter_mut().skip(1).zip(fields) {
-                parameter.annotation = Some(field.annotation.clone());
-                parameter.default.clone_from(&field.default);
+        // Each statement written is a `def`.
+        match method {
+            Stmt::FunctionDef {
+                name, parameters, ..
+            } if name.name == "__init__" => {
+                for (parameter, field) in parameters.iter_mut().skip(1).zip(fields) {
+                    parameter.annotation = Some(field.annotation.clone());
+                    parameter.default.clone_from(&field.default);
+                }
             }
+            _ => {}
         }
     }
     methods

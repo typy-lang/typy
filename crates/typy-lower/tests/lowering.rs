@@ -703,3 +703,19 @@ fn container_methods_and_truth_call_the_class_s_methods() {
     ));
     assert!(printed.contains("rt.int_length"), "{printed}");
 }
+
+#[test]
+fn rarely_written_programs_lower_and_verify() {
+    for source in [
+        "d = {1: 2}\nd.update()\nprint(d)\n",
+        "def f(x: int | None = 3) -> int | None:\n    return x\nprint(f(), f(None))\n",
+        "f = open('out.txt', 'w')\ntry:\n    print(f'{f:>3}')\nexcept TypeError as e:\n    print(e)\nf.close()\n",
+        "e: list[int] = []\nprint(max([1, 2], default=0), max(e, default=0), min(e, default=5))\n",
+        "try:\n    for i in range(0, 3, 0):\n        print(i)\nexcept ValueError as e:\n    print(e)\n",
+        "import math\nprint(math.perm(5, None), math.perm(5))\n",
+        "def f() -> None:\n    x = None\n    print(x)\nf()\n",
+        "xs = [1, 2]\nxs[0] += 1\nprint(xs)\n",
+    ] {
+        lower(source);
+    }
+}

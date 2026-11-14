@@ -42,21 +42,11 @@ impl BodyChecker<'_> {
                 operator: typy_source::syntax::BinaryOperator::Mod,
                 right,
                 ..
-            } if matches!(
-                **left,
-                Expr::Constant {
-                    value: typy_source::syntax::Constant::Str(_),
-                    ..
-                }
-            ) =>
+            } if let Expr::Constant {
+                value: typy_source::syntax::Constant::Str(format),
+                span: format_span,
+            } = &**left =>
             {
-                let Expr::Constant {
-                    value: typy_source::syntax::Constant::Str(format),
-                    span: format_span,
-                } = &**left
-                else {
-                    unreachable!("the guard matched a string literal");
-                };
                 self.percent_format(format, *format_span, right, span)
             }
             Expr::BinOp {

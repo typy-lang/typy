@@ -117,6 +117,15 @@ impl<'context> FunctionLowerer<'context> {
         tyir_type(ty, self.tuple_types)
     }
 
+    /// Returns the number of the tuple type of a tuple of `items`, adding it when it is new.
+    pub(crate) fn tuple_type_id(&mut self, items: &[typy_check::Type]) -> typy_tyir::TupleTypeId {
+        let items = items
+            .iter()
+            .map(|item| tyir_type(item, self.tuple_types))
+            .collect();
+        self.tuple_types.intern_id(items)
+    }
+
     /// Lowers `function`. `may_raise` says, for each function of the program, whether calls to it are invokes.
     pub(crate) fn lower(
         program: &'context TypedProgram,

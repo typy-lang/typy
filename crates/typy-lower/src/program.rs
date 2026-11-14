@@ -2,7 +2,7 @@
 
 use typy_check::TypedProgram;
 use typy_diagnostics::{Diagnostic, DiagnosticCode, Diagnostics, RuleId};
-use typy_tyir::{FunctionId, TupleTypes, TyirClass, TyirModule, TyirType, verify};
+use typy_tyir::{FunctionId, TupleTypes, TyirClass, TyirModule, verify};
 
 use crate::types::tyir_type;
 
@@ -169,9 +169,7 @@ fn tyir_class(
         .iter()
         .map(|attribute| tyir_type(&attribute.ty, tuple_types))
         .collect();
-    let TyirType::Tuple(fields) = tuple_types.intern(fields) else {
-        unreachable!("interning gives a tuple type");
-    };
+    let fields = tuple_types.intern_id(fields);
     let method = |wanted: &str| program.method(class.id, wanted).map(|id| FunctionId(id.0));
     let exception_base = class
         .exception

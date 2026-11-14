@@ -245,6 +245,13 @@ fn read_decodes_the_rest_at_once_with_positions_from_the_first_byte_not_decoded(
 }
 
 #[test]
+fn read_turns_a_lone_carriage_return_into_a_newline() {
+    let mut reader = Box::new(Reader::new());
+    let mut source = source_of(&[b"a\rb\r"], None);
+    assert_eq!(take(reader.read_rest(&mut source).unwrap()), "a\nb\n");
+}
+
+#[test]
 fn an_error_of_reading_is_an_os_error() {
     let mut reader = Box::new(Reader::new());
     let mut source = source_of(&[], Some(5));

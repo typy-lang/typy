@@ -388,8 +388,8 @@ impl BodyChecker<'_> {
         orelse: &[Stmt],
         span: Span,
     ) -> Option<TypedStmt> {
-        if self.is_range_call(iter) {
-            return self.for_range(target, iter, body, orelse, span);
+        if let Some(arguments) = self.range_arguments(iter) {
+            return self.for_range(target, (arguments, iter.span()), body, orelse, span);
         }
         let (source, item) = self.loop_source(iter, "`for`");
         // What each step binds has no expression of its own; diagnostics about it point at the
@@ -424,22 +424,15 @@ impl BodyChecker<'_> {
         })
     }
 
+    /// Checks `for target in range(...)`, given the arguments of the call and its span.
     pub(super) fn for_range(
         &mut self,
         target: &Expr,
-        iter: &Expr,
+        (arguments, call_span): (&[Expr], Span),
         body: &[Stmt],
         orelse: &[Stmt],
         span: Span,
     ) -> Option<TypedStmt> {
-        let Expr::Call {
-            arguments,
-            span: call_span,
-            ..
-        } = iter
-        else {
-            return None;
-        };
         let values: Vec<TypedExpr> = arguments
             .iter()
             .map(|argument| self.expression(argument))
@@ -450,7 +443,7 @@ impl BodyChecker<'_> {
         let constant = |digits: &str| TypedExpr {
             kind: TypedExprKind::Constant(TypedConstant::Int(digits.to_owned())),
             ty: Type::Int,
-            span: *call_span,
+            span: call_span,
         };
         let mut given = values.into_iter();
         let (first, limit, stride) = match (given.next(), given.next(), given.next()) {
@@ -488,15 +481,18 @@ impl BodyChecker<'_> {
         })
     }
 
-    /// Returns true for a call of the builtin `range` with one to three positional arguments,
-    /// the form `for` lowers as a counting loop. A program function or variable named `range`
-    /// hides the builtin, as it does in a call.
-    fn is_range_call(&self, iter: &Expr) -> bool {
-        matches!(
-            self.called_builtin(iter),
+    /// Returns the arguments of a call of the builtin `range` with one to three positional
+    /// arguments, the form `for` lowers as a counting loop. A program function or variable
+    /// named `range` hides the builtin, as it does in a call.
+    fn range_arguments<'call>(&self, iter: &'call Expr) -> Option<&'call [Expr]> {
+        match self.called_builtin(iter) {
             Some((Builtin::Range, arguments, keywords))
-                if keywords.is_empty() && (1..=3).contains(&arguments.len())
-        )
+                if keywords.is_empty() && (1..=3).contains(&arguments.len()) =>
+            {
+                Some(arguments)
+            }
+            _ => None,
+        }
     }
 
     pub(super) fn return_statement(&mut self, value: Option<&Expr>, span: Span) -> TypedStmt {

@@ -268,10 +268,12 @@ mod tests {
             assert_eq!(math_name(name), Some(MathName::Function(function)));
         }
         for (name, value) in CONSTANTS {
-            let Some(MathName::Constant(found)) = math_name(name) else {
-                panic!("{name} is a constant");
-            };
-            assert_eq!(found.to_bits(), value.to_bits(), "{name}");
+            match math_name(name) {
+                Some(MathName::Constant(found)) => {
+                    assert_eq!(found.to_bits(), value.to_bits(), "{name}");
+                }
+                other => panic!("{name} is a constant, not {other:?}"),
+            }
         }
         assert_eq!(math_name("fsum"), Some(MathName::Planned));
         assert_eq!(math_name("square"), None);

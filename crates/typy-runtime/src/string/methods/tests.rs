@@ -43,6 +43,9 @@ type Search = (&'static str, &'static str, i64, i64, i64, Option<i64>);
 
 const SEARCHES: &[Search] = &[
     ("hello world", "", 0, 0, 0, Some(0)),
+    ("hello world", "o", 0, -3, 3, Some(4)),
+    ("hello world", "o", 0, -3, 7, Some(7)),
+    ("hello world", "o", 0, -30, 3, Some(-1)),
     ("hello world", "", 1, 0, 9, Some(1)),
     ("hello world", "", -3, 0, 17, Some(4)),
     ("hello world", "", 2, 5, 7, Some(5)),
@@ -539,6 +542,11 @@ const SPLITS: &[Split] = &[
     ("hello world", "", -1, 0, &["hello", "world"]),
     ("hello world", "", 0, 2, &["hello world"]),
     ("hello world", "", 2, 0, &["hello", "world"]),
+    ("  a b  c ", "", -1, 2, &["a", "b", "c"]),
+    ("  a b  c ", "", 1, 2, &["  a b", "c"]),
+    ("   ", "", -1, 2, &[]),
+    ("  a b", "", 2, 2, &["a", "b"]),
+    ("a b ", "", 5, 2, &["a", "b"]),
     ("hello world", ",", -1, 3, &["hello world"]),
     ("hello world", ",", 1, 1, &["hello world"]),
     ("hello world", ",", 2, 3, &["hello world"]),

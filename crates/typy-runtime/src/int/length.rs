@@ -15,7 +15,7 @@ use crate::exception::{ExceptionKind, raise};
 pub unsafe extern "C" fn typy_rt_int_length(word: i64) -> Raising<i64> {
     // SAFETY: the caller passes a live `int` word.
     let value = unsafe { Integer::from_word(word) };
-    if value.negative && !value.is_zero() {
+    if value.negative {
         return Raising::error(
             1,
             raise(ExceptionKind::ValueError, "__len__() should return >= 0"),

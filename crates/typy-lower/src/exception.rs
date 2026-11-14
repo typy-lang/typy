@@ -39,11 +39,9 @@ impl FunctionLowerer<'_> {
             return self.new_exception_with_init(class, init, span);
         }
         let class = self.constant(Constant::TypeObject(exception_class(class)), span);
-        let types = arguments.iter().map(|value| value.ty.clone()).collect();
-        let layout = self.lowered_type(&Type::Tuple(types));
-        let TyirType::Tuple(id) = layout else {
-            unreachable!("a tuple type lowers to a tuple");
-        };
+        let types: Vec<Type> = arguments.iter().map(|value| value.ty.clone()).collect();
+        let id = self.tuple_type_id(&types);
+        let layout = TyirType::Tuple(id);
         let descriptor = self.constant(Constant::TupleDescriptor(id), span);
         if arguments.is_empty() {
             let unit = self.constant(Constant::Unit, span);
@@ -87,14 +85,12 @@ impl FunctionLowerer<'_> {
             })
             .collect();
         let positional = &init.arguments[..init.positional];
-        let types = positional
+        let types: Vec<Type> = positional
             .iter()
             .map(|argument| argument.value.ty.clone())
             .collect();
-        let layout = self.lowered_type(&Type::Tuple(types));
-        let TyirType::Tuple(id) = layout else {
-            unreachable!("a tuple type lowers to a tuple");
-        };
+        let id = self.tuple_type_id(&types);
+        let layout = TyirType::Tuple(id);
         let items: Vec<ValueId> = values[..init.positional]
             .iter()
             .map(|(_, lowered)| {
@@ -137,11 +133,9 @@ impl FunctionLowerer<'_> {
         span: Span,
     ) -> Lowered {
         let exception = self.expression(exception);
-        let types = arguments.iter().map(|value| value.ty.clone()).collect();
-        let layout = self.lowered_type(&Type::Tuple(types));
-        let TyirType::Tuple(id) = layout else {
-            unreachable!("a tuple type lowers to a tuple");
-        };
+        let types: Vec<Type> = arguments.iter().map(|value| value.ty.clone()).collect();
+        let id = self.tuple_type_id(&types);
+        let layout = TyirType::Tuple(id);
         let descriptor = self.constant(Constant::TupleDescriptor(id), span);
         let tuple = self.tuple_display(arguments, layout, span);
         let address = if arguments.is_empty() {

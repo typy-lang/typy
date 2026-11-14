@@ -20,7 +20,7 @@ fn logarithm(function: unsafe extern "C" fn(f64) -> f64, x: f64) -> f64 {
     if x.is_nan() || (x.is_infinite() && x > 0.0) {
         return x;
     }
-    if x > 0.0 && x.is_finite() {
+    if x > 0.0 {
         return call(function, x);
     }
     if x == 0.0 {

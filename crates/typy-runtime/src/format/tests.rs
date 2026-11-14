@@ -136,3 +136,32 @@ fn ascii_escapes_every_code_point_outside_ascii() {
     // SAFETY: the string is no longer used.
     unsafe { crate::refcount::typy_rt_decrement(text.cast()) };
 }
+
+#[test]
+fn a_zero_fill_after_an_alignment_and_a_negative_zero_follow_cpython() {
+    let cases = [
+        (Value::Int("5"), "<05", "ok", "50000"),
+        (Value::Int("5"), "^05", "ok", "00500"),
+        (
+            Value::Int("1180591620717411303424"),
+            "c",
+            "OverflowError",
+            "Python int too large to convert to C long",
+        ),
+        (
+            Value::Int("-5"),
+            "c",
+            "OverflowError",
+            "%c arg not in range(0x110000)",
+        ),
+        (Value::Float((-0.0001_f64).to_bits()), "z.1f", "ok", "0.0"),
+        (Value::Float((-0.0_f64).to_bits()), "z.0f", "ok", "0"),
+    ];
+    for (value, spec, kind, expected) in cases {
+        assert_eq!(
+            format(value, spec),
+            (kind.to_owned(), expected.to_owned()),
+            "{value:?} {spec:?}"
+        );
+    }
+}

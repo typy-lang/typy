@@ -45,9 +45,8 @@ pub fn lazy_modules(statements: &[Stmt]) -> BTreeSet<String> {
 pub fn is_lazy(statement: &Stmt, listed: &BTreeSet<String>) -> bool {
     match statement {
         Stmt::Import { is_lazy, names, .. } => {
-            *is_lazy
-                || (!names.is_empty()
-                    && names.iter().all(|alias| listed.contains(&alias.name.name)))
+            // The parser gives an `import` at least one name.
+            *is_lazy || names.iter().all(|alias| listed.contains(&alias.name.name))
         }
         Stmt::ImportFrom {
             is_lazy,
