@@ -31,6 +31,21 @@ fn write_stdout_bytes(bytes: &[u8]) {
     });
 }
 
+/// Which of standard input, output and error the program closed, one bit per descriptor, as
+/// `sys.stdin.close()` and its companions set it (LIB-14). CPython opens the three with
+/// `closefd=False`, so the descriptors stay open.
+static STANDARD_CLOSED: ProgramCell<u8> = ProgramCell::new(0);
+
+/// Returns whether the program closed the standard file of `descriptor`, 0 to 2.
+pub(crate) fn standard_closed(descriptor: i32) -> bool {
+    STANDARD_CLOSED.with(|closed| *closed & (1 << (descriptor & 3)) != 0)
+}
+
+/// Records that the program closed the standard file of `descriptor`, 0 to 2.
+pub(crate) fn close_standard(descriptor: i32) {
+    STANDARD_CLOSED.with(|closed| *closed |= 1 << (descriptor & 3));
+}
+
 /// Writes everything buffered for standard output.
 pub(crate) fn flush_stdout() {
     STDOUT_BUFFER.with(|buffer| {

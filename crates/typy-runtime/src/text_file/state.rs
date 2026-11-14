@@ -86,7 +86,7 @@ pub unsafe extern "C" fn typy_rt_text_mode(file: *const TextFile) -> *mut StrObj
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn typy_rt_text_fileno(file: *const TextFile) -> Raising<i64> {
     // SAFETY: the caller's guarantee.
-    let (flags, descriptor) = unsafe { ((*file).flags, (*file).descriptor) };
+    let (flags, descriptor) = unsafe { (super::flags_of(file), (*file).descriptor) };
     if flags & CLOSED != 0 {
         return Raising::error(0, closed_raw_error());
     }
@@ -104,7 +104,7 @@ pub unsafe extern "C" fn typy_rt_text_fileno(file: *const TextFile) -> Raising<i
 pub unsafe extern "C" fn typy_rt_text_state(file: *const TextFile, question: i64) -> Raising<bool> {
     let question = Question::of(question);
     // SAFETY: the caller's guarantee.
-    let (flags, descriptor) = unsafe { ((*file).flags, (*file).descriptor) };
+    let (flags, descriptor) = unsafe { (super::flags_of(file), (*file).descriptor) };
     let closed = flags & CLOSED != 0;
     let direction = match question {
         Question::Readable => Some(flags & READABLE != 0),

@@ -16,6 +16,12 @@ const REPEATED_CUTOFF: u64 = 3;
 /// `exception` points to a live exception.
 pub(crate) unsafe fn report_uncaught(exception: *const ExceptionObject) {
     flush_stdout();
+    // With `sys.stderr` closed, CPython writes a dump of the object, with its address, and
+    // this line to the descriptor; TyPy writes the line.
+    if crate::io::standard_closed(crate::libc::STDERR) {
+        write_stderr(b"lost sys.stderr\n");
+        return;
+    }
     // SAFETY: the caller's guarantee.
     unsafe { report_into(exception, &mut |bytes| write_stderr(bytes)) };
 }

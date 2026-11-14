@@ -316,3 +316,73 @@ fn an_appended_file_starts_at_its_end() {
     // SAFETY: the file is live and released once.
     unsafe { typy_rt_decrement(file.cast()) };
 }
+
+#[test]
+fn closing_standard_output_keeps_its_descriptor_and_refuses_what_follows() {
+    let stdout = typy_rt_sys_stdout().cast_mut();
+    let text = from_str("x");
+    let closed = (
+        "ValueError".to_owned(),
+        "I/O operation on closed file.".to_owned(),
+    );
+    // SAFETY: standard output and the text are live; the text is released once.
+    unsafe {
+        assert!(typy_rt_text_close(stdout).is_null());
+        assert!(typy_rt_text_close(stdout).is_null());
+        assert_eq!(state(stdout, CLOSED), Ok(true));
+        assert_eq!(state(stdout, READABLE), Ok(false));
+        assert_eq!(
+            state(stdout, WRITABLE),
+            Err("I/O operation on closed file".to_owned())
+        );
+        assert_eq!(
+            error_text(typy_rt_text_write(stdout, text).exception),
+            closed
+        );
+        assert_eq!(error_text(super::typy_rt_text_flush(stdout)), closed);
+        assert_eq!(
+            error_text(super::typy_rt_write_stdout_checked(text)),
+            closed
+        );
+        assert_eq!(
+            error_text(crate::sys::typy_rt_input(core::ptr::null()).exception),
+            closed
+        );
+        typy_rt_decrement(text.cast());
+    }
+    // The descriptor stays open, as CPython opens standard output with `closefd=False`.
+    assert_ne!(crate::libc::seek(1, 0, crate::libc::SEEK_CUR), Err(9));
+}
+
+#[test]
+fn closing_standard_input_refuses_reading_it() {
+    let stdin = (&raw const STDIN).cast_mut();
+    let closed = (
+        "ValueError".to_owned(),
+        "I/O operation on closed file.".to_owned(),
+    );
+    // SAFETY: standard input is live.
+    unsafe {
+        assert!(typy_rt_text_close(stdin).is_null());
+        assert_eq!(
+            error_text(typy_rt_text_readline(stdin, size(-1)).exception),
+            closed
+        );
+        assert_eq!(
+            error_text(typy_rt_text_read(stdin, size(-1)).exception),
+            closed
+        );
+        assert_eq!(error_text(super::stdin::input_line().unwrap_err()), closed);
+        assert_eq!(error_text(super::typy_rt_text_enter(stdin)), closed);
+    }
+}
+
+#[test]
+fn printing_to_standard_output_while_it_is_open_writes() {
+    let text = from_str("");
+    // SAFETY: the text is live and released once.
+    unsafe {
+        assert!(super::typy_rt_write_stdout_checked(text).is_null());
+        typy_rt_decrement(text.cast());
+    }
+}

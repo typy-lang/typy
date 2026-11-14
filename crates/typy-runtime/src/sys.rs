@@ -128,6 +128,10 @@ pub unsafe extern "C" fn typy_rt_sys_setrecursionlimit(limit: i64) -> *mut Excep
 /// `prompt` is null or points to a live string.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn typy_rt_input(prompt: *const StrObject) -> Raising<*mut StrObject> {
+    // CPython writes the prompt to `sys.stdout` and flushes it, which raises once it is closed.
+    if crate::io::standard_closed(crate::libc::STDOUT) {
+        return Raising::error(core::ptr::null_mut(), crate::text_file::closed_error());
+    }
     if !prompt.is_null() {
         // SAFETY: the caller's guarantee.
         unsafe { crate::io::typy_rt_write_stdout(prompt) };
@@ -183,7 +187,10 @@ pub(crate) unsafe fn exit_status(exception: *mut ExceptionObject) -> (i32, bool)
                 unsafe {
                     let text = str(exception.cast());
                     if text.exception.is_null() {
-                        crate::string::write_utf8(text.value, crate::io::write_stderr);
+                        // CPython writes only the line ending when `sys.stderr` is closed.
+                        if !crate::io::standard_closed(crate::libc::STDERR) {
+                            crate::string::write_utf8(text.value, crate::io::write_stderr);
+                        }
                         crate::io::write_stderr(b"\n");
                         crate::refcount::typy_rt_decrement(text.value.cast());
                     } else {

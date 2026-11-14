@@ -335,8 +335,14 @@ adds what is refused now with E0201 (LIB-14): binary modes such as
 `"rb"`, modes with `+`, a mode that is not a literal, and `closefd`.
 `opener` takes a function as a value and is planned for 1.0 (LIB-18).
 
-`close()` of `sys.stdout` or `sys.stderr` writes it out and leaves it
-open in 0.3; closing them comes with the rest of LIB-14.
+`close()` of `sys.stdin`, `sys.stdout` or `sys.stderr` closes it as
+CPython does: what it holds is written out, and then writing to it,
+reading it, `input()` and `print()` to it raise `ValueError: I/O
+operation on closed file.` The descriptor stays open, as CPython opens
+the three with `closefd=False`. When `sys.stderr` is closed, `sys.exit`
+with a message writes only a line ending, and an uncaught exception
+writes `lost sys.stderr`; CPython writes a dump of the exception object,
+with its address, before that line.
 
 <!-- typy-expect: rejected E0201 at 1:22 -->
 ```python

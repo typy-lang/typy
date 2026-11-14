@@ -37,6 +37,7 @@ pub enum RuntimeFunction {
     Chr,
     Ord,
     WriteStdout,
+    WriteStdoutChecked,
     CheckStack,
     RangeCheckStep,
     NameError,
@@ -353,7 +354,7 @@ const FLOAT_FLOAT: &[TyirType] = &[TyirType::Float, TyirType::Float];
 
 impl RuntimeFunction {
     /// Every runtime function.
-    pub const ALL: [Self; 314] = [
+    pub const ALL: [Self; 315] = [
         Self::IntFloorDivide,
         Self::IntModulo,
         Self::IntPower,
@@ -382,6 +383,7 @@ impl RuntimeFunction {
         Self::Chr,
         Self::Ord,
         Self::WriteStdout,
+        Self::WriteStdoutChecked,
         Self::CheckStack,
         Self::RangeCheckStep,
         Self::NameError,
@@ -731,7 +733,7 @@ impl RuntimeFunction {
             Self::WriteStdout => signature(&[STR], Unit, false),
             Self::CheckStack => signature(&[], Unit, true),
             Self::RangeCheckStep | Self::SysSetRecursionLimit => signature(&[Int], Unit, true),
-            Self::NameError => signature(&[STR], Unit, true),
+            Self::NameError | Self::WriteStdoutChecked => signature(&[STR], Unit, true),
             Self::ModuleAttributeError | Self::ModuleImportError => {
                 signature(&[TyirType::MODULE, STR, Int], Unit, true)
             }
@@ -1039,6 +1041,7 @@ impl RuntimeFunction {
             Self::Chr => "chr",
             Self::Ord => "ord",
             Self::WriteStdout => "write_stdout",
+            Self::WriteStdoutChecked => "write_stdout_checked",
             Self::CheckStack => "check_stack",
             Self::RangeCheckStep => "range_check_step",
             Self::NameError => "name_error",

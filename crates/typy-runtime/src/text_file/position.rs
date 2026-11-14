@@ -48,7 +48,7 @@ fn word_of(position: i64) -> i64 {
 /// `file` points to a live text file.
 unsafe fn seekable(file: *mut TextFile) -> Result<i32, *mut ExceptionObject> {
     // SAFETY: the caller's guarantee.
-    let (flags, descriptor) = unsafe { ((*file).flags, (*file).descriptor) };
+    let (flags, descriptor) = unsafe { (super::flags_of(file), (*file).descriptor) };
     if flags & CLOSED != 0 {
         return Err(super::disk::closed_error());
     }
@@ -257,7 +257,7 @@ pub unsafe extern "C" fn typy_rt_text_truncate(
 /// As for `typy_rt_text_truncate`.
 unsafe fn truncate(file: *mut TextFile, size: Option<i64>) -> Result<i64, *mut ExceptionObject> {
     // SAFETY: the caller's guarantee.
-    let (flags, descriptor) = unsafe { ((*file).flags, (*file).descriptor) };
+    let (flags, descriptor) = unsafe { (super::flags_of(file), (*file).descriptor) };
     if flags & CLOSED != 0 {
         return Err(super::disk::closed_error());
     }

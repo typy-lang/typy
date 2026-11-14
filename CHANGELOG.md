@@ -88,6 +88,9 @@ All notable changes to TyPy are recorded here. The format follows
   class methods or class variables is planned for 0.5 (GEN-04, GEN-05,
   GEN-10, ADR-0023).
 - `...` alone as a statement does nothing, as `pass` does.
+- `close()` of `sys.stdin`, `sys.stdout` or `sys.stderr` closes it, as in
+  CPython: reading it, writing to it, `input()` and `print()` then raise
+  `ValueError: I/O operation on closed file.` (LIB-14).
 - `open` takes `buffering`, `encoding` (`utf-8`, `ascii` or `latin-1`),
   `errors` (`strict`, `ignore`, `replace`, `backslashreplace`,
   `xmlcharrefreplace` or `surrogateescape`) and `newline`, with CPython's

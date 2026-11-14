@@ -64,6 +64,11 @@ impl BodyChecker<'_> {
         let Some(method) = Method::of(&receiver.ty, &name.name) else {
             return self.unknown_method(&receiver.ty, name, span);
         };
+        // A program that may close a text file may close `sys.stdout`, so its `print` checks
+        // that standard output is open (LIB-14).
+        if method == Method::TextClose {
+            self.program.closes_text_files = true;
+        }
         // `setdefault` without a default stores `None`, which only an optional value type holds.
         if method == Method::DictSetdefault
             && arguments.len() == 1

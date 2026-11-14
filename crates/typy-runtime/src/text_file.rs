@@ -175,6 +175,43 @@ pub extern "C" fn typy_rt_sys_stderr() -> *const TextFile {
     &raw const STDERR
 }
 
+/// Returns the flags of `file` with `CLOSED` set for a standard file the program closed.
+///
+/// # Safety
+///
+/// `file` points to a live text file.
+pub(crate) unsafe fn flags_of(file: *const TextFile) -> u32 {
+    // SAFETY: the caller's guarantee.
+    let (flags, descriptor) = unsafe { ((*file).flags, (*file).descriptor) };
+    if flags & STANDARD != 0 && crate::io::standard_closed(descriptor) {
+        return flags | CLOSED;
+    }
+    flags
+}
+
+/// Returns `ValueError: I/O operation on closed file.`
+pub(crate) fn closed_error() -> *mut ExceptionObject {
+    disk::closed_error()
+}
+
+/// Writes `text` to standard output for `print` in a program that may close it, or returns
+/// the error once it is closed (LIB-14).
+///
+/// # Safety
+///
+/// `text` points to a live `str`.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn typy_rt_write_stdout_checked(
+    text: *const StrObject,
+) -> *mut ExceptionObject {
+    if crate::io::standard_closed(crate::libc::STDOUT) {
+        return disk::closed_error();
+    }
+    // SAFETY: the caller's guarantee.
+    unsafe { crate::io::typy_rt_write_stdout(text) };
+    core::ptr::null_mut()
+}
+
 /// Returns whether `file` is null, which stands for standard output, or a standard file.
 ///
 /// # Safety
@@ -205,6 +242,10 @@ unsafe fn read_standard(
     limit: Option<usize>,
     line: bool,
 ) -> Result<*mut StrObject, *mut ExceptionObject> {
+    // SAFETY: the caller's guarantee.
+    if unsafe { flags_of(file) } & CLOSED != 0 {
+        return Err(disk::closed_error());
+    }
     // SAFETY: the caller's guarantee.
     if unsafe { is_stdin(file) } {
         return stdin::read(limit, line);
@@ -241,6 +282,9 @@ pub unsafe extern "C" fn typy_rt_text_write(
 ) -> Raising<i64> {
     // SAFETY: the caller's guarantee.
     unsafe {
+        if !file.is_null() && flags_of(file) & CLOSED != 0 {
+            return Raising::error(0, disk::closed_error());
+        }
         if is_stdin(file) {
             return Raising::error(0, not_writable());
         }
@@ -272,7 +316,7 @@ pub unsafe extern "C" fn typy_rt_text_writelines(
 ) -> *mut ExceptionObject {
     // SAFETY: the caller's guarantee.
     unsafe {
-        if !is_standard(file) && (*file).flags & CLOSED != 0 {
+        if flags_of(file) & CLOSED != 0 {
             return disk::closed_error();
         }
         // The length is read at each step, as CPython's iterator reads it.
@@ -301,6 +345,9 @@ pub unsafe extern "C" fn typy_rt_text_flush(file: *mut TextFile) -> *mut Excepti
         if !is_standard(file) {
             return disk::flush(&mut *file);
         }
+        if !file.is_null() && flags_of(file) & CLOSED != 0 {
+            return disk::closed_error();
+        }
         if file.is_null() || (*file).descriptor == crate::libc::STDOUT {
             crate::io::flush_stdout();
         }
@@ -308,8 +355,9 @@ pub unsafe extern "C" fn typy_rt_text_flush(file: *mut TextFile) -> *mut Excepti
     core::ptr::null_mut()
 }
 
-/// Closes `file`: a file `open` made writes out its buffer and closes its descriptor, once; a
-/// standard file is written out and stays open.
+/// Closes `file` once: a file `open` made writes out its buffer and closes its descriptor; a
+/// standard file is written out and marked closed, and its descriptor stays open, as
+/// CPython opens it with `closefd=False` (LIB-14).
 ///
 /// # Safety
 ///
@@ -318,10 +366,15 @@ pub unsafe extern "C" fn typy_rt_text_flush(file: *mut TextFile) -> *mut Excepti
 pub unsafe extern "C" fn typy_rt_text_close(file: *mut TextFile) -> *mut ExceptionObject {
     // SAFETY: the caller's guarantee.
     unsafe {
-        if is_standard(file) {
-            return typy_rt_text_flush(file);
+        if !is_standard(file) {
+            return disk::close(&mut *file);
         }
-        disk::close(&mut *file)
+        if flags_of(file) & CLOSED != 0 {
+            return core::ptr::null_mut();
+        }
+        let flushed = typy_rt_text_flush(file);
+        crate::io::close_standard((*file).descriptor);
+        flushed
     }
 }
 
@@ -334,7 +387,7 @@ pub unsafe extern "C" fn typy_rt_text_close(file: *mut TextFile) -> *mut Excepti
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn typy_rt_text_enter(file: *mut TextFile) -> *mut ExceptionObject {
     // SAFETY: the caller's guarantee.
-    if unsafe { (*file).flags } & CLOSED != 0 {
+    if unsafe { flags_of(file) } & CLOSED != 0 {
         return disk::closed_error();
     }
     core::ptr::null_mut()

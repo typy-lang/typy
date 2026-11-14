@@ -74,6 +74,8 @@ pub(crate) struct Program {
     pub(super) module_functions: BTreeMap<String, super::builtin_module::ModuleFunction>,
     /// The built-in modules the program imports, whose module objects it holds.
     pub(super) builtin_modules: BTreeSet<String>,
+    /// Whether the program closes a text file, by `close()` or a `with` block (LIB-14).
+    pub(super) closes_text_files: bool,
     /// The minor version of the program's Python floor, such as 12 for 3.12.
     pub(super) floor: u8,
     /// The modules the module's `__lazy_modules__` lists, whose imports are lazy (MOD-07).
@@ -145,6 +147,7 @@ impl Program {
             annotation_modules: BTreeMap::new(),
             module_functions: BTreeMap::new(),
             builtin_modules: BTreeSet::new(),
+            closes_text_files: false,
             floor: 12,
             lazy_modules: BTreeSet::new(),
             lazy_imports: BTreeMap::new(),
@@ -617,6 +620,7 @@ impl Program {
             modules: self.modules,
             lazy_imports: self.lazy_imports,
             builtin_modules: self.builtin_modules.into_iter().collect(),
+            closes_text_files: self.closes_text_files,
             entry,
             warnings: typy_diagnostics::Diagnostics::new(),
         }

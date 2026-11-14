@@ -344,6 +344,8 @@ impl BodyChecker<'_> {
         let (first, rest) = items.split_first()?;
         let manager = self.expression(&first.context);
         if manager.ty == Type::TextFile {
+            // Leaving the block closes the file, which may be `sys.stdout` (LIB-14).
+            self.program.closes_text_files = true;
             return self.with_body(
                 manager,
                 WithProtocol::TextFile,

@@ -21,6 +21,9 @@ pub struct TypedProgram {
     /// The built-in modules the program imports, such as `math`, whose module objects follow
     /// those of `modules` (ADR-0018).
     pub builtin_modules: Vec<String>,
+    /// Whether the program closes a text file, by `close()` or a `with` block, which may be
+    /// `sys.stdout`; `print` then checks that standard output is open (LIB-14).
+    pub closes_text_files: bool,
     /// The module body of `__main__`.
     pub entry: FunctionId,
     /// The warnings of checking the program, such as W0301 (DIA-08).

@@ -27,6 +27,9 @@ pub(super) fn read(
 /// Returns the next line of standard input without its `\n`, or `None` at its end, as
 /// `input()` reads it.
 pub(crate) fn input_line() -> Result<Option<*mut StrObject>, *mut ExceptionObject> {
+    if crate::io::standard_closed(crate::libc::STDIN) {
+        return Err(super::disk::closed_error());
+    }
     READER.with(|reader| line_from(reader, &mut standard_input))
 }
 
