@@ -99,6 +99,9 @@ impl BodyChecker<'_> {
         keywords: &[Keyword],
         span: Span,
     ) -> TypedExpr {
+        if let Some(generic) = self.program.generic(function).cloned() {
+            return self.generic_call(function, &generic, name, arguments, keywords, span);
+        }
         match self.bind_arguments(function, 0, name, arguments, keywords, span) {
             Ok(bound) => Self::typed(
                 TypedExprKind::Call {
@@ -126,6 +129,19 @@ impl BodyChecker<'_> {
         span: Span,
     ) -> Result<Vec<Argument>, TypedExpr> {
         let signature = self.program.signatures[function.0 as usize].clone();
+        self.bind_to(&signature, skip, name, arguments, keywords, span)
+    }
+
+    /// Binds the arguments of a call to the parameters of `signature` after the first `skip`.
+    pub(super) fn bind_to(
+        &mut self,
+        signature: &crate::typed::FunctionSignature,
+        skip: usize,
+        name: &str,
+        arguments: &[Expr],
+        keywords: &[Keyword],
+        span: Span,
+    ) -> Result<Vec<Argument>, TypedExpr> {
         let parameters = &signature.parameters[skip.min(signature.parameters.len())..];
         let mut bound: Vec<Argument> = Vec::new();
         let mut filled = vec![false; parameters.len()];

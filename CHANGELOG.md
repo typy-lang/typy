@@ -62,6 +62,15 @@ All notable changes to TyPy are recorded here. The format follows
   object's member. Lists, sets and dicts of a union compare and hash
   each item as its member, so `1` and `1.0` are one key (TYP-14, TYP-07,
   ADR-0027).
+- Generic functions written with PEP 695 type parameter lists, such as
+  `def first[T](items: list[T]) -> T`, with bounds, `[S: Shape]`, and
+  constraints, `[N: (int, float)]`. A call takes the types from its
+  arguments, and TyPy compiles one copy of the function for each set of
+  types, so a generic call costs what a written-out call does. `TypeVar`
+  and `Generic` are E0202; a function that would need copies without
+  end is E0428. Calling a generic function of another module is planned
+  for 0.5 (GEN-07), and `*Ts`, `**P` and defaults for 1.0 (GEN-01 to
+  GEN-03, GEN-06, ADR-0023).
 - `Final` and `Final[T]` from `typing`: a module or function variable, a
   class variable or an attribute that `__init__` declares `Final` is
   assigned only by its declaration, and any other assignment is E0414. A

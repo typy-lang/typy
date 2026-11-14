@@ -1211,6 +1211,41 @@ This one is correct:
 print("%d of %d done" % (3, 4))
 ```
 
+## E0428: copies of a generic function without end
+
+A generic function calls itself with a larger type each time, as `f(x)`
+calling `f([x])`. TyPy compiles one copy of a generic function for each
+set of types it is called with (GEN-03, ADR-0023), and each copy here
+needs a copy for a larger type, so the copies would never end; past 64
+copies inside one another the program is refused. Call the function with
+the same type, or write the recursion over a type that does not grow.
+
+This program gives E0428:
+
+<!-- typy-expect: rejected E0428 at 4:12 -->
+```python
+def depth[T](value: T, levels: int) -> int:
+    if levels == 0:
+        return 0
+    return depth([value], levels - 1) + 1
+
+
+print(depth(1, 3))
+```
+
+This one is correct:
+
+<!-- typy-expect: accepted -->
+```python
+def depth[T](value: list[T], levels: int) -> int:
+    if levels == 0:
+        return 0
+    return depth(value, levels - 1) + 1
+
+
+print(depth([1], 3))
+```
+
 ## E0701: C toolchain program not found
 
 TyPy links programs with the system C toolchain, which is not installed

@@ -7,6 +7,7 @@ mod dataclass;
 pub(crate) use annotation::{unhashable, unhashable_key};
 mod definition;
 mod definition_order;
+mod generic_body;
 mod module_imports;
 mod module_scope;
 mod overriding;
@@ -244,10 +245,24 @@ fn check_module(
     }
     program.end_first_look();
     let body = BodyChecker::check_module(program, &module_body, diagnostics);
-    for (index, definition) in others {
-        check_body(program, function_id(index), definition, diagnostics);
-    }
+    check_bodies(program, &others, &definitions, first_function, diagnostics);
     program.end_module(body);
+}
+
+/// Checks the bodies of the module's functions after the module body, then the copies of
+/// its generic functions that the calls need (GEN-03).
+fn check_bodies(
+    program: &mut Program,
+    others: &[(usize, &Definition<'_>)],
+    definitions: &[Definition<'_>],
+    first_function: usize,
+    diagnostics: &mut Diagnostics,
+) {
+    for (index, definition) in others {
+        let id = FunctionId(u32::try_from(first_function + index).unwrap_or(u32::MAX));
+        check_body(program, id, definition, diagnostics);
+    }
+    check_copies(program, definitions, first_function, diagnostics);
 }
 
 /// Adds the module variables that hold the values the module's class bodies give, each named
@@ -278,6 +293,10 @@ fn check_body(
     definition: &Definition<'_>,
     diagnostics: &mut Diagnostics,
 ) {
+    if !definition.type_parameters.is_empty() {
+        generic_body::check(program, id, definition, diagnostics);
+        return;
+    }
     if definition.copy_of.is_none() {
         BodyChecker::check_function(program, id, definition, diagnostics);
         return;
@@ -289,6 +308,38 @@ fn check_body(
             diagnostics.push(diagnostic.clone());
         }
     }
+}
+
+/// Checks each copy of a generic function of the module that a call needs, as an ordinary
+/// function whose type parameters stand for its arguments; a copy may need further copies
+/// (GEN-03, ADR-0023).
+fn check_copies(
+    program: &mut Program,
+    definitions: &[Definition<'_>],
+    first_function: usize,
+    diagnostics: &mut Diagnostics,
+) {
+    while let Some(copy) = program.next_pending_copy() {
+        // A copy is made only for a generic of the module being checked (GEN-07).
+        let generic = &definitions[copy.generic.0 as usize - first_function];
+        let given: Vec<String> = copy.arguments.iter().map(ToString::to_string).collect();
+        let made = Definition {
+            qualified_name: format!("{}[{}]", generic.qualified_name, given.join(", ")),
+            copy_of: Some(copy.generic),
+            signature: program.instantiated(copy.generic, &copy.arguments),
+            type_parameters: Vec::new(),
+            ..generic.clone()
+        };
+        program.type_arguments = generic
+            .type_parameters
+            .iter()
+            .zip(&copy.arguments)
+            .map(|(parameter, argument)| (parameter.name.clone(), argument.clone()))
+            .collect();
+        check_body(program, copy.copy, &made, diagnostics);
+        program.type_arguments.clear();
+    }
+    program.end_copies();
 }
 
 /// Notes in each frozen dataclass's information what its expansion wrote (CLS-05).

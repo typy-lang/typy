@@ -26,8 +26,14 @@ pub(crate) struct AnnotationScope<'classes> {
     pub(crate) names: &'classes BTreeMap<String, AnnotationName>,
     /// For each name bound to one of those modules, the module.
     pub(crate) standard: &'classes BTreeMap<String, String>,
+    /// The type each type parameter in scope stands for: its opaque type while a generic
+    /// body is checked, and its argument while a copy is (GEN-01).
+    pub(crate) parameters: &'classes BTreeMap<String, Type>,
     pub(crate) bound: u32,
 }
+
+/// The type parameters of a scope that has none.
+pub(crate) static NO_PARAMETERS: BTreeMap<String, Type> = BTreeMap::new();
 
 /// A name of `typing`, `collections.abc` or `types` that TyPy 0.3 gives for annotations
 /// (TYP-15, CST-10, ADR-0015).
@@ -389,6 +395,9 @@ fn named_type(
     scope: &AnnotationScope<'_>,
     diagnostics: &mut Diagnostics,
 ) -> Type {
+    if let Some(parameter) = scope.parameters.get(id) {
+        return parameter.clone();
+    }
     if let Some(class) = scope.classes.get(id) {
         if class.0 >= scope.bound {
             diagnostics.push(

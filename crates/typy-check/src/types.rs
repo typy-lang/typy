@@ -41,6 +41,9 @@ pub enum Type {
     /// `A | B | ...`: a value of one of two or more types other than `None`, in the normal
     /// form `Type::union` builds (TYP-14, ADR-0027).
     Union(Vec<Type>),
+    /// A type parameter of a generic function, as its body is checked: an opaque type that
+    /// offers what its bound offers, and which no copy of the body holds (GEN-01, ADR-0023).
+    Parameter(Arc<crate::generic::TypeParameter>),
     /// An instance of a class of the program, or of a class derived from it (CLS-01, CLS-04).
     Instance(Arc<InstanceClass>),
     /// An exception of a class (ADR-0013).
@@ -145,6 +148,7 @@ impl TypeObjectOf {
             | Type::Module(_)
             | Type::Optional(_)
             | Type::Union(_)
+            | Type::Parameter(_)
             | Type::Error => {
                 return None;
             }
@@ -270,6 +274,11 @@ impl Type {
             // instance (CLS-04).
             (Self::Exception(class), Self::Exception(base)) => class.derives_from(base),
             (Self::Instance(class), Self::Instance(base)) => class.derives_from(base),
+            // A bounded type parameter is held where its bound is (GEN-02).
+            (Self::Parameter(parameter), _) if *self != *target => parameter
+                .bound
+                .as_ref()
+                .is_some_and(|bound| bound.is_assignable_to(target)),
             // A union is held where each of its members is, and a member where its union is
             // (TYP-14).
             (Self::Union(members), _) => {
@@ -292,6 +301,7 @@ impl Type {
         match (self, target) {
             (Self::Instance(class), Self::Instance(base)) => class.derives_from(base),
             (Self::Optional(inner), Self::Optional(base)) => inner.is_upcast_to(base),
+            (Self::Parameter(_), _) => *self != *target && self.is_assignable_to(target),
             // A value becomes a union, or a wider one, or the class every member derives
             // from, as the object it is (TYP-14).
             // An optional target is converted as an optional is: its base, then wrapped.
@@ -447,7 +457,8 @@ impl Type {
             // A class orders its instances with `__lt__` and the other operator methods, which
             // are planned for 0.4 (CLS-07).
             (
-                Self::Union(_)
+                Self::Parameter(_)
+                | Self::Union(_)
                 | Self::NoneType
                 | Self::Dict(..)
                 | Self::DictView(..)
@@ -465,7 +476,8 @@ impl Type {
             )
             | (
                 _,
-                Self::Union(_)
+                Self::Parameter(_)
+                | Self::Union(_)
                 | Self::NoneType
                 | Self::Dict(..)
                 | Self::DictView(..)
@@ -586,6 +598,7 @@ impl Type {
                 format!("an {class}")
             }
             Self::Iterator(_) | Self::Iterable(_) => format!("an {self}"),
+            Self::Parameter(parameter) => format!("a value of type {}", parameter.name),
             // The article reads with the first member, as in `an A | B`.
             Self::Union(members) => {
                 let rest: Vec<String> = members[1..].iter().map(ToString::to_string).collect();
@@ -634,6 +647,7 @@ impl fmt::Display for Type {
                 let text: Vec<String> = members.iter().map(ToString::to_string).collect();
                 formatter.write_str(&text.join(" | "))
             }
+            Self::Parameter(parameter) => formatter.write_str(&parameter.name),
             Self::Instance(class) => write!(formatter, "{class}"),
             Self::Exception(class) => write!(formatter, "{class}"),
             Self::Iterator(item) => write!(formatter, "Iterator[{item}]"),

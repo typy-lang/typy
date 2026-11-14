@@ -302,6 +302,8 @@ formatter applies; Ruff's formatter is the project's recommendation.
 | GEN-03 | Generics shall compile to one copy per concrete type, with no run-time type information. | M | 0.4 | |
 | GEN-04 | Classes derived from `typing.Protocol` shall be satisfied by any class with matching methods, checked when the program is compiled. | M | 0.4 | |
 | GEN-05 | `isinstance` with a protocol shall be rejected. | M | 0.4 | |
+| GEN-06 | `*Ts` and `**P` type parameters, and defaults of type parameters, shall be accepted. | C | 1.0 | 8.10 |
+| GEN-07 | A generic function or class of another module shall be usable, made from its source as ADR-0016's interfaces carry it. | S | 0.5 | |
 
 ### 3.12 Exceptions (EXC)
 

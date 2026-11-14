@@ -101,7 +101,13 @@ impl BodyChecker<'_> {
         };
         let ty = match other {
             Expr::Constant { value, .. } => constant_type(value)?,
-            Expr::Name { .. } => self.peek_type(other)?,
+            // A variable split on before has the member it is checked for now.
+            Expr::Name { id, .. } => match self.locals.get(id) {
+                Some(symbol) => self
+                    .narrowed_type(*symbol, id)
+                    .or_else(|| self.peek_type(other))?,
+                None => self.peek_type(other)?,
+            },
             _ => return None,
         };
         members

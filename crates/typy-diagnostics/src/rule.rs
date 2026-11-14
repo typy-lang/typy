@@ -133,6 +133,18 @@ impl RuleId {
     pub const FUN_06: Self = Self("FUN-06");
     /// Generic functions and classes shall be written with PEP 695 type parameter lists; `TypeVar` and `Generic` shall be rejected.
     pub const GEN_01: Self = Self("GEN-01");
+    /// Type parameters with a bound or with constraints shall be accepted and checked.
+    pub const GEN_02: Self = Self("GEN-02");
+    /// Generics shall compile to one copy per concrete type, with no run-time type information.
+    pub const GEN_03: Self = Self("GEN-03");
+    /// Classes derived from `typing.Protocol` shall be satisfied by any class with matching methods, checked when the program is compiled.
+    pub const GEN_04: Self = Self("GEN-04");
+    /// `isinstance` with a protocol shall be rejected.
+    pub const GEN_05: Self = Self("GEN-05");
+    /// `*Ts` and `**P` type parameters, and defaults of type parameters, shall be accepted.
+    pub const GEN_06: Self = Self("GEN-06");
+    /// A generic function or class of another module shall be usable, made from its source as ADR-0016's interfaces carry it.
+    pub const GEN_07: Self = Self("GEN-07");
     /// Source files shall be UTF-8 with the `.py` extension.
     pub const LEX_01: Self = Self("LEX-01");
     /// Bytes literals shall be accepted.
@@ -304,6 +316,12 @@ impl RuleId {
         Self::FUN_05,
         Self::FUN_06,
         Self::GEN_01,
+        Self::GEN_02,
+        Self::GEN_03,
+        Self::GEN_04,
+        Self::GEN_05,
+        Self::GEN_06,
+        Self::GEN_07,
         Self::LEX_01,
         Self::LEX_06,
         Self::LEX_07,

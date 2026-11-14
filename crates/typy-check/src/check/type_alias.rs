@@ -29,7 +29,7 @@ fn resolved(body: &[Stmt], diagnostics: &mut Diagnostics) -> BTreeMap<String, Ex
     for statement in body {
         let Stmt::TypeAlias {
             name,
-            type_parameter_count,
+            type_parameters,
             value,
             ..
         } = statement
@@ -37,7 +37,7 @@ fn resolved(body: &[Stmt], diagnostics: &mut Diagnostics) -> BTreeMap<String, Ex
             continue;
         };
         // The subset check reports type parameters.
-        if *type_parameter_count > 0 {
+        if !type_parameters.is_empty() {
             continue;
         }
         if let Some((_, first)) = declared.get(&name.name) {

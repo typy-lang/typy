@@ -74,7 +74,7 @@ fn later_features_name_their_release_and_rule() {
         ),
         (
             "class C[T]:\n    pass\n",
-            "type parameters are planned for TyPy 0.4 (GEN-01)",
+            "generic classes are planned for TyPy 0.4 (GEN-01)",
         ),
         (
             "x = {**y}\n",
@@ -94,8 +94,8 @@ fn later_features_name_their_release_and_rule() {
              (SMT-12)",
         ),
         (
-            "def f[T](x: T) -> T:\n    return x\n",
-            "type parameters are planned for TyPy 0.4 (GEN-01)",
+            "def f[*Ts](x: int) -> int:\n    return x\n",
+            "`*Ts` and `**P` type parameters are planned for TyPy 1.0 (GEN-06)",
         ),
         (
             "match x:\n    case _:\n        pass\n",

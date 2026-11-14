@@ -13,7 +13,7 @@ pub(super) struct ClassParts<'tree> {
     pub(super) keyword_count: usize,
     pub(super) body: &'tree [Stmt],
     pub(super) decorators: &'tree [Expr],
-    pub(super) type_parameter_count: usize,
+    pub(super) type_parameters: &'tree [typy_source::syntax::TypeParameter],
     pub(super) span: Span,
 }
 
@@ -33,10 +33,10 @@ impl Walker {
                 planned("class decorators", "0.4", RuleId::CLS_05),
             );
         }
-        if class.type_parameter_count > 0 {
+        if !class.type_parameters.is_empty() {
             self.report(
                 class.span,
-                planned("type parameters", "0.4", RuleId::GEN_01),
+                planned("generic classes", "0.4", RuleId::GEN_01),
             );
         }
         // One base is resolved with the other classes, which reports one that is not

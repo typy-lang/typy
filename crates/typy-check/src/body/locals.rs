@@ -134,6 +134,7 @@ impl BodyChecker<'_> {
             instances: &self.program.instances,
             modules: &self.program.module_classes,
             module_aliases: &self.program.module_aliases,
+            parameters: &self.program.type_arguments,
             names: &self.program.annotation_names,
             standard: &self.program.annotation_modules,
             bound: u32::MAX,

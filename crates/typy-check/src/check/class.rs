@@ -520,6 +520,7 @@ fn class_scope<'known>(
         instances: known.instances,
         modules: &names.modules,
         module_aliases: &names.module_aliases,
+        parameters: &super::annotation::NO_PARAMETERS,
         names: &names.names,
         standard: &names.standard,
         bound: if floor_defers { u32::MAX } else { class.0 },

@@ -5,7 +5,7 @@ use std::fmt::Write as _;
 use typy_diagnostics::Span;
 
 use super::expression::{Comprehension, Expr, FStringPart};
-use super::statement::Stmt;
+use super::statement::{Stmt, TypeParameter, TypeParameterKind};
 use super::tree::SyntaxTree;
 use crate::source_file::SourceFile;
 
@@ -62,7 +62,7 @@ impl Dump<'_> {
                 returns,
                 body,
                 decorators,
-                type_parameter_count,
+                type_parameters,
                 ..
             } => {
                 self.line(depth, &format!("FunctionDef {}", name.name), span);
@@ -70,13 +70,7 @@ impl Dump<'_> {
                     self.line(depth + 1, "decorator", None);
                     self.expression(depth + 2, decorator);
                 }
-                if *type_parameter_count > 0 {
-                    self.line(
-                        depth + 1,
-                        &format!("type_params {type_parameter_count}"),
-                        None,
-                    );
-                }
+                self.type_parameters(depth + 1, type_parameters);
                 for parameter in parameters {
                     let label = format!("Parameter {} {:?}", parameter.name.name, parameter.kind);
                     self.line(depth + 1, &label, Some(parameter.span));
@@ -100,7 +94,7 @@ impl Dump<'_> {
                 keyword_count,
                 body,
                 decorators,
-                type_parameter_count,
+                type_parameters,
                 ..
             } => {
                 self.line(depth, &format!("ClassDef {}", name.name), span);
@@ -108,10 +102,7 @@ impl Dump<'_> {
                     self.line(depth + 1, "decorator", None);
                     self.expression(depth + 2, decorator);
                 }
-                if *type_parameter_count > 0 {
-                    let label = format!("type_params {type_parameter_count}");
-                    self.line(depth + 1, &label, None);
-                }
+                self.type_parameters(depth + 1, type_parameters);
                 for base in bases {
                     self.line(depth + 1, "base", None);
                     self.expression(depth + 2, base);
@@ -273,21 +264,37 @@ impl Dump<'_> {
             }
             Stmt::TypeAlias {
                 name,
-                type_parameter_count,
+                type_parameters,
                 value,
                 ..
             } => {
-                self.line(
-                    depth,
-                    &format!("TypeAlias {} [{type_parameter_count}]", name.name),
-                    span,
-                );
+                self.line(depth, &format!("TypeAlias {}", name.name), span);
+                self.type_parameters(depth + 1, type_parameters);
                 self.expression(depth + 1, value);
             }
             Stmt::Pass { .. } => self.line(depth, "Pass", span),
             Stmt::Break { .. } => self.line(depth, "Break", span),
             Stmt::Continue { .. } => self.line(depth, "Continue", span),
             Stmt::Other { kind, .. } => self.line(depth, &kind.to_string(), span),
+        }
+    }
+
+    /// Writes each type parameter: its kind and name, then its bound and its default.
+    fn type_parameters(&mut self, depth: usize, parameters: &[TypeParameter]) {
+        for parameter in parameters {
+            let prefix = match parameter.kind {
+                TypeParameterKind::Type => "",
+                TypeParameterKind::TypeTuple => "*",
+                TypeParameterKind::Parameters => "**",
+            };
+            let label = format!("TypeParam {prefix}{}", parameter.name.name);
+            self.line(depth, &label, Some(parameter.span));
+            for (what, part) in [("bound", &parameter.bound), ("default", &parameter.default)] {
+                if let Some(part) = part {
+                    self.line(depth + 1, what, None);
+                    self.expression(depth + 2, part);
+                }
+            }
         }
     }
 

@@ -12,6 +12,8 @@ mod delete;
 mod dict;
 mod dict_call;
 mod each_member;
+mod generic_call;
+mod generic_copy;
 pub use each_member::member_class;
 mod exception;
 mod expression;
@@ -197,6 +199,9 @@ impl<'program> BodyChecker<'program> {
             );
         }
         let locals = checker.finish_locals();
+        // A generic function is checked, never run: its copies run in its place, so it keeps
+        // no body (ADR-0023).
+        let generic = program.generic(function).is_some();
         program.functions[function.0 as usize] = Some(TypedFunction {
             id: function,
             name: definition.name.clone(),
@@ -204,9 +209,10 @@ impl<'program> BodyChecker<'program> {
             module: program.module.clone(),
             signature: definition.signature.clone(),
             parameters,
-            locals,
-            body,
+            locals: if generic { Vec::new() } else { locals },
+            body: if generic { Vec::new() } else { body },
             span: definition.span,
+            generic,
         });
     }
 
@@ -244,6 +250,7 @@ impl<'program> BodyChecker<'program> {
             locals,
             body,
             span,
+            generic: false,
         }));
         entry
     }

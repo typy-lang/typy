@@ -38,7 +38,7 @@ fn function_definition_keeps_parameters_annotations_and_defaults() {
             returns,
             body,
             decorators,
-            type_parameter_count,
+            type_parameters,
             ..
         },
     ] = statements.as_slice()
@@ -72,7 +72,7 @@ fn function_definition_keeps_parameters_annotations_and_defaults() {
     ));
     assert!(matches!(body.as_slice(), [Stmt::Pass { .. }]));
     assert_eq!(decorators.len(), 0);
-    assert_eq!(*type_parameter_count, 0);
+    assert_eq!(type_parameters.len(), 0);
 }
 
 #[test]
@@ -82,7 +82,7 @@ fn decorators_and_type_parameters_are_recorded() {
     let [
         Stmt::FunctionDef {
             decorators,
-            type_parameter_count,
+            type_parameters,
             ..
         },
     ] = statements.as_slice()
@@ -90,7 +90,11 @@ fn decorators_and_type_parameters_are_recorded() {
         panic!("not one function definition");
     };
     assert_eq!(decorators.len(), 1);
-    assert_eq!(*type_parameter_count, 2);
+    let names: Vec<&str> = type_parameters
+        .iter()
+        .map(|parameter| parameter.name.name.as_str())
+        .collect();
+    assert_eq!(names, ["T", "U"]);
 }
 
 #[test]
@@ -397,7 +401,7 @@ fn dump_indents_type_parameters_annotations_keywords_and_quoted_annotations() {
     let expected = "\
 Module
   FunctionDef f @1:1
-    type_params 1
+    TypeParam T @1:7
     Parameter x Normal @1:10
       Name T @1:13
     returns
@@ -505,7 +509,7 @@ fn classes_keep_their_bases_keywords_decorators_and_body() {
         keyword_count,
         body,
         decorators,
-        type_parameter_count,
+        type_parameters,
         ..
     } = &parsed.body[0]
     else {
@@ -513,12 +517,12 @@ fn classes_keep_their_bases_keywords_decorators_and_body() {
     };
     assert_eq!(name.name, "C");
     assert_eq!((bases.len(), *keyword_count, body.len()), (1, 1, 2));
-    assert_eq!((decorators.len(), *type_parameter_count), (1, 1));
+    assert_eq!((decorators.len(), type_parameters.len()), (1, 1));
     let dumped = dump(&parsed, &file(source));
     for line in [
         "ClassDef C @1:1",
         "  decorator",
-        "  type_params 1",
+        "  TypeParam T @2:9",
         "  base",
         "    Name B",
         "  keywords 1",
@@ -585,7 +589,7 @@ x
     for line in [
         "FunctionDef f @1:1",
         "  decorator",
-        "    type_params 1",
+        "    TypeParam T @2:7",
         "Parameter a Normal",
         "Parameter rest VarPositional",
         "Parameter more VarKeyword",
@@ -720,7 +724,7 @@ fn lists_and_attributes_are_converted() {
 #[test]
 fn every_node_kind_is_dumped_at_its_depth_with_its_position() {
     let source = "@trace\nclass Box(Base, metaclass=M):\n    size: int\n\n    def put[T](self, item: int, /, *rest: int, flag: bool = True, **more: int) -> None:\n        self.items = [x * 2 for x in rest if x if not x]\n        pairs = {k: v for k, v in more.items()}\n        unique = {y async for y in rest}\n        text = f\"{item!r:>{size}.2f} {flag=}\"\n        part = rest[1:2:3]\n        same = {1, 2}\n        table = {\"a\": 1, **more}\n        print(a < b <= c, -item, item if flag else 0, x or y, lambda: 1)\n";
-    let expected = "Module\n  ClassDef Box @1:1\n    decorator\n      Name trace @1:2\n    base\n      Name Base @2:11\n    keywords 1\n    body\n      AnnAssign @3:5\n        Name size @3:5\n        Name int @3:11\n      FunctionDef put @5:5\n        type_params 1\n        Parameter self PositionalOnly @5:16\n        Parameter item PositionalOnly @5:22\n          Name int @5:28\n        Parameter rest VarPositional @5:36\n          Name int @5:43\n        Parameter flag KeywordOnly @5:48\n          Name bool @5:54\n          default\n            Constant Bool(true) @5:61\n        Parameter more VarKeyword @5:67\n          Name int @5:75\n        returns\n          Constant None @5:83\n        body\n          Assign @6:9\n            Attribute items @6:9\n              Name self @6:9\n            ListComp @6:22\n              BinOp Mult @6:23\n                Name x @6:23\n                Constant Int(\"2\") @6:27\n              Comprehension @6:29\n                Name x @6:33\n                Name rest @6:38\n                Name x @6:46\n                UnaryOp Not @6:51\n                  Name x @6:55\n          Assign @7:9\n            Name pairs @7:9\n            DictComp @7:17\n              Name k @7:18\n              Name v @7:21\n              Comprehension @7:23\n                Tuple @7:27\n                  Name k @7:27\n                  Name v @7:30\n                Call @7:35\n                  Attribute items @7:35\n                    Name more @7:35\n          Assign @8:9\n            Name unique @8:9\n            SetComp @8:18\n              Name y @8:19\n              AsyncComprehension @8:21\n                Name y @8:31\n                Name rest @8:36\n          Assign @9:9\n            Name text @9:9\n            FString @9:16\n              Field !r @9:18\n                Name item @9:19\n                spec\n                  Literal \">\"\n                  Field @9:27\n                    Name size @9:28\n                  Literal \".2f\"\n              Literal \" \"\n              Field debug \"flag=\" @9:38\n                Name flag @9:39\n          Assign @10:9\n            Name part @10:9\n            Subscript @10:16\n              Name rest @10:16\n              Slice @10:21\n                Constant Int(\"1\") @10:21\n                Constant Int(\"2\") @10:23\n                Constant Int(\"3\") @10:25\n          Assign @11:9\n            Name same @11:9\n            Set @11:16\n              Constant Int(\"1\") @11:17\n              Constant Int(\"2\") @11:20\n          Assign @12:9\n            Name table @12:9\n            Dict @12:17\n              Constant Str(\"a\") @12:18\n              Constant Int(\"1\") @12:23\n              Unpack @12:28\n              Name more @12:28\n          Expr @13:9\n            Call @13:9\n              Name print @13:9\n              Compare [Lt, LtE] @13:15\n                Name a @13:15\n                Name b @13:19\n                Name c @13:24\n              UnaryOp USub @13:27\n                Name item @13:28\n              IfExp @13:34\n                Name flag @13:42\n                Name item @13:34\n                Constant Int(\"0\") @13:52\n              BoolOp Or @13:55\n                Name x @13:55\n                Name y @13:60\n              Lambda @13:63\n";
+    let expected = "Module\n  ClassDef Box @1:1\n    decorator\n      Name trace @1:2\n    base\n      Name Base @2:11\n    keywords 1\n    body\n      AnnAssign @3:5\n        Name size @3:5\n        Name int @3:11\n      FunctionDef put @5:5\n        TypeParam T @5:13\n        Parameter self PositionalOnly @5:16\n        Parameter item PositionalOnly @5:22\n          Name int @5:28\n        Parameter rest VarPositional @5:36\n          Name int @5:43\n        Parameter flag KeywordOnly @5:48\n          Name bool @5:54\n          default\n            Constant Bool(true) @5:61\n        Parameter more VarKeyword @5:67\n          Name int @5:75\n        returns\n          Constant None @5:83\n        body\n          Assign @6:9\n            Attribute items @6:9\n              Name self @6:9\n            ListComp @6:22\n              BinOp Mult @6:23\n                Name x @6:23\n                Constant Int(\"2\") @6:27\n              Comprehension @6:29\n                Name x @6:33\n                Name rest @6:38\n                Name x @6:46\n                UnaryOp Not @6:51\n                  Name x @6:55\n          Assign @7:9\n            Name pairs @7:9\n            DictComp @7:17\n              Name k @7:18\n              Name v @7:21\n              Comprehension @7:23\n                Tuple @7:27\n                  Name k @7:27\n                  Name v @7:30\n                Call @7:35\n                  Attribute items @7:35\n                    Name more @7:35\n          Assign @8:9\n            Name unique @8:9\n            SetComp @8:18\n              Name y @8:19\n              AsyncComprehension @8:21\n                Name y @8:31\n                Name rest @8:36\n          Assign @9:9\n            Name text @9:9\n            FString @9:16\n              Field !r @9:18\n                Name item @9:19\n                spec\n                  Literal \">\"\n                  Field @9:27\n                    Name size @9:28\n                  Literal \".2f\"\n              Literal \" \"\n              Field debug \"flag=\" @9:38\n                Name flag @9:39\n          Assign @10:9\n            Name part @10:9\n            Subscript @10:16\n              Name rest @10:16\n              Slice @10:21\n                Constant Int(\"1\") @10:21\n                Constant Int(\"2\") @10:23\n                Constant Int(\"3\") @10:25\n          Assign @11:9\n            Name same @11:9\n            Set @11:16\n              Constant Int(\"1\") @11:17\n              Constant Int(\"2\") @11:20\n          Assign @12:9\n            Name table @12:9\n            Dict @12:17\n              Constant Str(\"a\") @12:18\n              Constant Int(\"1\") @12:23\n              Unpack @12:28\n              Name more @12:28\n          Expr @13:9\n            Call @13:9\n              Name print @13:9\n              Compare [Lt, LtE] @13:15\n                Name a @13:15\n                Name b @13:19\n                Name c @13:24\n              UnaryOp USub @13:27\n                Name item @13:28\n              IfExp @13:34\n                Name flag @13:42\n                Name item @13:34\n                Constant Int(\"0\") @13:52\n              BoolOp Or @13:55\n                Name x @13:55\n                Name y @13:60\n              Lambda @13:63\n";
     let parsed = parse(&file(source), PythonFloor::V3_12).unwrap();
     assert_eq!(dump(&parsed, &file(source)), expected);
 }
@@ -951,14 +955,19 @@ fn expressions_and_elif_chains_past_the_deepest_nesting_are_refused() {
 
 #[test]
 fn a_type_statement_keeps_its_name_parameters_and_value() {
-    let source = "type Pair[T] = tuple[T, T]\ntype Name = 'str'\n";
+    let source = "type Pair[T: int, *Ts, **P = [int]] = tuple[T, T]\ntype Name = 'str'\n";
     let dumped = dump(
         &parse(&file(source), PythonFloor::V3_12).unwrap(),
         &file(source),
     );
     for line in [
-        "TypeAlias Pair [1] @1:1",
-        "TypeAlias Name [0] @2:1",
+        "TypeAlias Pair @1:1",
+        "TypeParam T @1:11",
+        "bound",
+        "TypeParam *Ts",
+        "TypeParam **P",
+        "default",
+        "TypeAlias Name @2:1",
         "Quoted",
     ] {
         assert!(dumped.contains(line), "{line} in\n{dumped}");

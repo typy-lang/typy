@@ -25,6 +25,8 @@ pub(crate) struct Definition<'tree> {
     /// whose diagnostics this copy does not repeat (ADR-0025).
     pub(crate) copy_of: Option<FunctionId>,
     pub(crate) signature: FunctionSignature,
+    /// The type parameters of a generic function, whose copies run in its place (GEN-01).
+    pub(crate) type_parameters: Vec<crate::generic::TypeParameter>,
     pub(crate) parameters: Vec<(String, Span)>,
     pub(crate) body: &'tree [Stmt],
     pub(crate) span: Span,
@@ -36,6 +38,8 @@ pub(super) struct FunctionParts<'tree> {
     /// The decorators, of which a method may have one of CLS-06.
     pub(super) decorators: &'tree [Expr],
     pub(super) parameters: &'tree [Parameter],
+    /// The type parameters of a generic function (GEN-01).
+    pub(super) type_parameters: &'tree [typy_source::syntax::TypeParameter],
     pub(super) returns: Option<&'tree Expr>,
     pub(super) body: &'tree [Stmt],
     pub(super) span: Span,
@@ -79,6 +83,7 @@ impl<'tree> FunctionParts<'tree> {
             returns,
             body,
             decorators,
+            type_parameters,
             span,
             ..
         } = statement
@@ -89,6 +94,7 @@ impl<'tree> FunctionParts<'tree> {
             name,
             decorators,
             parameters,
+            type_parameters,
             returns: returns.as_ref(),
             body,
             span: *span,
@@ -137,22 +143,65 @@ pub(super) fn collect_functions<'tree>(
             diagnostics.push(defined_twice(parts.name));
             continue;
         }
-        let scope = AnnotationScope {
+        let mut scope = AnnotationScope {
             classes,
             instances,
             modules: &names.modules,
             module_aliases: &names.module_aliases,
             names: &names.names,
             standard: &names.standard,
+            parameters: &super::annotation::NO_PARAMETERS,
             bound: if floor_defers {
                 u32::MAX
             } else {
                 classes_before
             },
         };
-        functions.push(definition(&parts, None, &scope, diagnostics));
+        let type_parameters = type_parameters(&parts, &scope, diagnostics);
+        let in_scope: BTreeMap<String, Type> = type_parameters
+            .iter()
+            .map(|parameter| (parameter.name.clone(), Type::parameter(parameter.clone())))
+            .collect();
+        scope.parameters = &in_scope;
+        let mut made = definition(&parts, None, &scope, diagnostics);
+        made.type_parameters = type_parameters;
+        functions.push(made);
     }
     functions
+}
+
+/// Returns the type parameters of a generic function, each with its bound or its
+/// constraints (GEN-01, GEN-02).
+fn type_parameters(
+    parts: &FunctionParts<'_>,
+    scope: &AnnotationScope<'_>,
+    diagnostics: &mut Diagnostics,
+) -> Vec<crate::generic::TypeParameter> {
+    parts
+        .type_parameters
+        .iter()
+        .enumerate()
+        .map(|(index, parameter)| {
+            let (bound, constraints) = match &parameter.bound {
+                Some(Expr::Tuple { elements, .. }) => (
+                    None,
+                    elements
+                        .iter()
+                        .map(|each| annotation_type(each, scope, diagnostics))
+                        .collect(),
+                ),
+                Some(bound) => (Some(annotation_type(bound, scope, diagnostics)), Vec::new()),
+                None => (None, Vec::new()),
+            };
+            crate::generic::TypeParameter {
+                owner: parts.span,
+                index,
+                name: parameter.name.name.clone(),
+                bound,
+                constraints,
+            }
+        })
+        .collect()
 }
 
 /// The class a method belongs to, which types its first parameter.
@@ -284,6 +333,7 @@ pub(super) fn definition<'tree>(
                 Some(Type::TypeObject(_))
             ),
         copy_of: None,
+        type_parameters: Vec::new(),
         signature: FunctionSignature {
             parameters: signature_parameters,
             returns,

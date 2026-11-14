@@ -127,6 +127,9 @@ impl<'context> FunctionLowerer<'context> {
         module_globals: &'context crate::module_variable::ModuleGlobals,
         recursive: bool,
     ) -> TyirFunction {
+        if function.generic {
+            return generic_stub(function);
+        }
         let entry = function.id == program.entry;
         let symbol_name = if entry {
             ENTRY_SYMBOL.to_owned()
@@ -292,4 +295,22 @@ impl<'context> FunctionLowerer<'context> {
             arguments: Vec::new(),
         });
     }
+}
+
+/// Returns the stand-in for a generic function, whose copies are called in its place: it
+/// takes nothing and returns nothing, and no call reaches it (ADR-0023).
+fn generic_stub(function: &TypedFunction) -> TyirFunction {
+    let mut builder = FunctionBuilder::new(
+        FunctionId(function.id.0),
+        symbol(&function.module, &function.qualified_name),
+        function.name.clone(),
+        TyirType::Unit,
+    );
+    let unit = builder.push_value(
+        typy_tyir::Operation::Constant(typy_tyir::Constant::Unit),
+        TyirType::Unit,
+        function.span,
+    );
+    builder.terminate(typy_tyir::Terminator::Return(unit));
+    builder.finish()
 }

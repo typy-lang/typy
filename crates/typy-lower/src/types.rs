@@ -29,6 +29,7 @@ pub(crate) fn tyir_type(ty: &Type, tuples: &mut TupleTypes) -> TyirType {
         Type::TextFile => TyirType::TEXT_FILE,
         Type::Iterable(_) => TyirType::ITERABLE,
         Type::Union(members) => union_type(ty, members, tuples),
+        Type::Parameter(_) => unreachable!("a copy of a generic body holds no type parameter"),
         Type::Tuple(items) => {
             let items = items.iter().map(|item| tyir_type(item, tuples)).collect();
             tuples.intern(items)

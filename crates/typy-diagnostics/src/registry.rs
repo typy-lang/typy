@@ -244,6 +244,11 @@ pub const CODES: &[CodeInfo] = &[
         "`%` format that does not fit its values",
         RuleId::LIB_10,
     ),
+    active(
+        428,
+        "copies of a generic function without end",
+        RuleId::GEN_03,
+    ),
     active(701, "C toolchain program not found", RuleId::A_01),
     active(702, "link failed", RuleId::A_01),
     CodeInfo {

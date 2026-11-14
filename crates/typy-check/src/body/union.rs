@@ -9,11 +9,22 @@ use crate::types::Type;
 
 impl BodyChecker<'_> {
     /// Returns a value of a union of instances that share a base class as an instance of that
-    /// class, and of a union of exceptions as an exception of their nearest common class,
-    /// whose attributes and methods every member has; any other value as it is.
+    /// class, of a union of exceptions as an exception of their nearest common class, and of
+    /// a bounded type parameter as its bound, whose attributes and methods every value has;
+    /// any other value as it is.
     pub(super) fn through_union_base(&self, value: TypedExpr) -> TypedExpr {
         let ty = if let Some(base) = value.ty.union_base() {
             self.program.instance_type(base.id)
+        } else if let Type::Parameter(parameter) = &value.ty
+            && let Some(bound) = &parameter.bound
+        {
+            // A bounded type parameter offers what its bound offers (GEN-02).
+            self.through_union_base(Self::typed(
+                TypedExprKind::Upcast(Box::new(value.clone())),
+                bound.clone(),
+                value.span,
+            ))
+            .ty
         } else if let Some(classes) = exception_members(&value.ty) {
             Type::Exception(crate::exception::common_base(&classes))
         } else {

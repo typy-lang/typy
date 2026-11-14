@@ -816,6 +816,25 @@ without a default would give `V | None`, E0201 until TYP-06 brings it.
 source of pairs of the dict's types. A dict passed to a set method or to
 `set()` stays a dict, so the runtime takes CPython's dict steps.
 
+Generic functions (GEN-01 to GEN-03, ADR-0023) keep their syntax as
+`TypeParameter`s on `Stmt::FunctionDef`. `check::definition::collect_functions`
+resolves each into a `generic::TypeParameter`, with its bound or its
+constraints, owned by the definition's span, and checks the signature with each
+name in `AnnotationScope::parameters` as `Type::Parameter`, an opaque type
+assignable only to itself and, through `through_union_base`, offering its
+bound's attributes and methods. `check::generic_body` checks the body with each
+unconstrained parameter opaque and once for each combination of the constraints
+of the others, then keeps the function as a generic with no body, which lowering
+compiles to an empty stub. `body::generic_call` types the arguments once with
+what that look reports dropped, solves the parameters with `generic::infer`,
+joining two solutions into a union, checks bounds and constraints, and asks
+`Program::request_copy` for the copy of the arguments, which
+`check::check_copies` checks at the end of the module as an ordinary function
+with `Program::type_arguments` naming the arguments. A copy made inside 64
+others is E0428, and a call of another module's generic is E0201 until GEN-07.
+The module body's first look gives back the copies it made, with the function
+IDs they took.
+
 Unions (TYP-14, ADR-0027) add `Type::Union(members)`, which `Type::union` builds
 in normal form in `union_type`: nested unions flatten, `None` makes the union
 optional, a member another member accepts is dropped, the members are sorted by

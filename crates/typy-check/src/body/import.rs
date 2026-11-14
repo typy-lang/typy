@@ -370,6 +370,19 @@ fn not_given(module: &ModuleName, alias: &Alias) -> Diagnostic {
         )
         .with_rule(RuleId::TYP_15);
     }
+    // A generic is written with a type parameter list, which needs no `TypeVar` (GEN-01).
+    if module.as_str() == "typing" && matches!(name.as_str(), "TypeVar" | "Generic") {
+        return Diagnostic::new(
+            DiagnosticCode::error(202),
+            alias.name.span,
+            format!(
+                "`typing.{name}` is refused: TyPy writes generic functions and classes with \
+                 type parameter lists (GEN-01)"
+            ),
+        )
+        .with_rule(RuleId::GEN_01)
+        .with_help("write `def first[T](items: list[T]) -> T:` or `class Box[T]:`");
+    }
     Diagnostic::new(
         DiagnosticCode::error(201),
         alias.name.span,

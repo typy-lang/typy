@@ -57,6 +57,11 @@ pub(crate) struct Program {
     /// The type aliases of the module being checked, which only its annotations read
     /// (SMT-10).
     pub(super) type_aliases: BTreeSet<String>,
+    /// The type each type parameter stands for while a generic body or a copy of it is
+    /// checked (GEN-01).
+    pub(crate) type_arguments: BTreeMap<String, Type>,
+    /// The generic functions of the program and the copies made of them (GEN-03).
+    pub(crate) generics: super::generic_copy::Generics,
     /// The names of `typing`, `collections.abc` and `types` the module imports, and the
     /// names bound to those modules, which annotations read (TYP-15).
     pub(super) annotation_names: BTreeMap<String, crate::check::AnnotationName>,
@@ -89,6 +94,8 @@ pub(crate) struct Snapshot {
     signatures: usize,
     classes: Vec<ClassInfo>,
     first_class: usize,
+    /// The generic copies made before the first look, whose IDs the look's copies follow.
+    generics: super::generic_copy::Generics,
 }
 
 /// The names one module defines, which other modules import.
@@ -127,6 +134,8 @@ impl Program {
             module_classes: BTreeMap::new(),
             module_aliases: BTreeMap::new(),
             type_aliases: BTreeSet::new(),
+            type_arguments: BTreeMap::new(),
+            generics: super::generic_copy::Generics::default(),
             annotation_names: BTreeMap::new(),
             annotation_modules: BTreeMap::new(),
             module_functions: BTreeMap::new(),
@@ -179,6 +188,7 @@ impl Program {
         instances: BTreeMap<ClassId, Type>,
     ) {
         let first = self.functions.len();
+        self.note_generics(first, definitions);
         // Methods are reached through their instances, so only module functions have names.
         self.function_ids = definitions
             .iter()
@@ -278,6 +288,7 @@ impl Program {
             locals: Vec::new(),
             body: vec![import],
             span,
+            generic: false,
         }));
         self.lazy_imports.insert(id, target);
         self.lazy_names.insert((self.module.clone(), name), id);
@@ -471,6 +482,7 @@ impl Program {
             signatures: self.signatures.len(),
             classes: self.classes[first_class..].to_vec(),
             first_class,
+            generics: self.generics.clone(),
         }
     }
 
@@ -490,6 +502,8 @@ impl Program {
         self.signatures.truncate(snapshot.signatures);
         self.classes.truncate(snapshot.first_class);
         self.classes.extend(snapshot.classes);
+        // The copies the look made took IDs it gives back; the module body makes them again.
+        self.generics = snapshot.generics;
         let symbols: Vec<SymbolId> = self.module_symbols.values().copied().collect();
         for (symbol, ty) in symbols.into_iter().zip(found) {
             self.symbols[symbol.0 as usize].ty = ty;
