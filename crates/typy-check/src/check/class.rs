@@ -704,6 +704,15 @@ impl<'tree> ClassMethodCopies<'tree> {
                 &mut *diagnostics
             };
             let mut method = definition(&parts, Some(&owner), scope, sink);
+            // A parameter that names a protocol would make the copy generic (GEN-09).
+            let written = method.type_parameters.len();
+            super::protocol::protocol_parameters(&mut method, sink);
+            if method.type_parameters.len() > written {
+                sink.push(planned_generic_method(
+                    parts.name,
+                    "a protocol parameter of a special method, a property or a class method is",
+                ));
+            }
             method.qualified_name = format!("{}.{}", info.name, parts.name.name);
             method.copy_of = origin;
             info.class_methods.push((parts.name.name.clone(), id));

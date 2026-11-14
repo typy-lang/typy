@@ -217,6 +217,9 @@ All notable changes to TyPy are recorded here. The format follows
 
 ### Fixed
 
+- A class method with a parameter that names a protocol is E0201, planned
+  for 0.5 (GEN-09); it was accepted and every call with a matching class
+  was refused.
 - A `for` loop whose variable is a `T | None`, such as one bound earlier by
   a loop over `None` and `"a"`, over items of type `T` no longer stops the
   compiler with an internal error; the variable is not `None` in the
