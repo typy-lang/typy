@@ -367,7 +367,7 @@ impl Method {
                 .find(|method| method.name() == name)
                 .copied();
         }
-        if *receiver == Type::TextFile {
+        if receiver.is_file() {
             return match name {
                 "write" => Some(Self::TextWrite),
                 "flush" => Some(Self::TextFlush),

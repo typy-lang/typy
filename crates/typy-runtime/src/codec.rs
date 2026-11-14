@@ -223,11 +223,7 @@ pub(crate) fn chunk_decode_error(
             "don't know how to handle UnicodeDecodeError in error callback",
         );
     }
-    let object = crate::bytes::new_bytes(data.len());
-    for (index, byte) in data.iter().enumerate() {
-        // SAFETY: the bytes are new and hold `data.len()` bytes.
-        unsafe { crate::string::set_code_point(object, index, u32::from(*byte)) };
-    }
+    let object = crate::bytes::from_slice(data);
     let exception = decode_error(codec, object, start, end, reason);
     // SAFETY: the exception holds a reference of its own to the bytes.
     unsafe { crate::refcount::typy_rt_decrement(object.cast()) };

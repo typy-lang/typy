@@ -105,7 +105,14 @@ unsafe fn tell(file: *mut TextFile) -> Result<i64, *mut ExceptionObject> {
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn typy_rt_text_tell(file: *mut TextFile) -> Raising<i64> {
     // SAFETY: the caller's guarantee.
-    match unsafe { tell(file) } {
+    let told = unsafe {
+        if super::binary::is_binary(file) {
+            super::binary::tell(file)
+        } else {
+            tell(file)
+        }
+    };
+    match told {
         Ok(at) => Raising::ok(word_of(at)),
         Err(error) => Raising::error(0, error),
     }
@@ -177,7 +184,14 @@ pub unsafe extern "C" fn typy_rt_text_seek(
     whence: i64,
 ) -> Raising<i64> {
     // SAFETY: the caller's guarantee.
-    match unsafe { seek(file, cookie, whence) } {
+    let moved = unsafe {
+        if super::binary::is_binary(file) {
+            super::binary::seek(file, cookie, whence)
+        } else {
+            seek(file, cookie, whence)
+        }
+    };
+    match moved {
         Ok(at) => Raising::ok(word_of(at)),
         Err(error) => Raising::error(0, error),
     }
@@ -244,7 +258,14 @@ pub unsafe extern "C" fn typy_rt_text_truncate(
 ) -> Raising<i64> {
     let given = crate::word::inline_value(given) != 0;
     // SAFETY: the caller's guarantee.
-    match unsafe { truncate(file, given.then_some(size)) } {
+    let cut = unsafe {
+        if super::binary::is_binary(file) {
+            super::binary::truncate(file, given.then_some(size))
+        } else {
+            truncate(file, given.then_some(size))
+        }
+    };
+    match cut {
         Ok(at) => Raising::ok(word_of(at)),
         Err(error) => Raising::error(0, error),
     }

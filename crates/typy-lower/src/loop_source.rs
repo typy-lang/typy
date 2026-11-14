@@ -282,13 +282,15 @@ impl FunctionLowerer<'_> {
             LoopSource::Items(sequence) if sequence.ty == typy_check::Type::Range => {
                 self.start_range_value(sequence, false, span)
             }
-            LoopSource::Items(sequence) if sequence.ty == typy_check::Type::TextFile => {
+            LoopSource::Items(sequence) if sequence.ty.is_file() => {
                 let made = self.iter_of(sequence, span);
                 let slot = self.hidden_slot("iterator", TyirType::ITERATOR);
                 self.store(slot, made, span);
+                // A text file gives `str` lines and a binary one `bytes`.
+                let line = sequence.ty.file_line().unwrap_or(typy_check::Type::Str);
                 Iterator::Object {
                     iterator: slot,
-                    item: TyirType::STR,
+                    item: self.lowered_type(&line),
                 }
             }
             LoopSource::Items(sequence) => self.start_sequence(sequence, false, span),

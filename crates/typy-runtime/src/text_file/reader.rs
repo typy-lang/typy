@@ -240,6 +240,44 @@ impl Reader {
         }
     }
 
+    /// Returns up to `limit` bytes as a `bytes`, all of the rest when `limit` is `None`,
+    /// ending after the first `\n` when `line`, as a binary file reads them; the reader's
+    /// codec is `latin-1`, so every byte it read is checked.
+    pub(crate) fn read_bytes(
+        &mut self,
+        limit: Option<usize>,
+        line: bool,
+        source: Source<'_>,
+    ) -> Result<*mut StrObject, *mut ExceptionObject> {
+        let mut out = ByteBuffer::new();
+        loop {
+            let available = &self.bytes[self.start..self.valid];
+            let wanted = limit.map_or(available.len(), |limit| {
+                (limit - out.bytes().len()).min(available.len())
+            });
+            let taken = if line {
+                available[..wanted]
+                    .iter()
+                    .position(|byte| *byte == b'\n')
+                    .map_or(wanted, |at| at + 1)
+            } else {
+                wanted
+            };
+            out.extend(&available[..taken]);
+            self.start += taken;
+            let ended = line && out.bytes().last() == Some(&b'\n');
+            if ended || limit == Some(out.bytes().len()) || self.at_end {
+                let made = crate::bytes::from_slice(out.bytes());
+                out.discard();
+                return Ok(made);
+            }
+            if let Err(error) = self.refill(source) {
+                out.discard();
+                return Err(error);
+            }
+        }
+    }
+
     /// Returns whether the byte after `self.start` is still to be read, so a `\r` there waits.
     const fn waits(&self) -> bool {
         self.start + 1 == self.end && !self.at_end

@@ -172,6 +172,7 @@ impl LoopSource {
             Self::Items(sequence) | Self::Reversed(sequence) => match &sequence.ty {
                 Type::Bytes | Type::Range => Type::Int,
                 Type::TextFile => Type::Str,
+                Type::BinaryFile(_) => Type::Bytes,
                 Type::Set(item)
                 | Type::Dict(item, _)
                 | Type::Iterator(item)

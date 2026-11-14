@@ -337,9 +337,40 @@ with open("notes.txt", encoding="ascii", errors="replace") as notes:
 
 A mode CPython refuses for every file, such as `"rw"`, is E0404 with
 CPython's message, and so is a `newline` literal it refuses. TyPy 0.4
-adds what is refused now with E0201 (LIB-14): binary modes such as
-`"rb"`, a mode that is not a literal, and `closefd`.
-`opener` takes a function as a value and is planned for 1.0 (LIB-18).
+adds what is refused now with E0201 (LIB-14): a mode that is not a
+literal, and `closefd`. `opener` takes a function as a value and is
+planned for 1.0 (LIB-18).
+
+### Binary files
+
+A mode with `"b"` opens a binary file, of the class CPython makes for it
+(LIB-14, ADR-0031): `BufferedReader` for `"rb"`, `BufferedWriter` for
+`"wb"`, `"ab"` and `"xb"`, `BufferedRandom` for a mode with `"+"`, and
+`FileIO` for any of them with `buffering=0`. A binary file reads and
+writes `bytes`: `read`, `readline` and `readlines` give `bytes`, a `for`
+loop gives its lines as `bytes`, and `write` takes `bytes` and returns
+their number. `seek` moves by any amount from the start, the position
+(`whence=1`), the end (`whence=2`), or Linux's next data or hole (`3` and
+`4`). Each class raises CPython's errors with its own words, such as
+`ValueError: read of closed file` for a `BufferedReader` and `ValueError:
+I/O operation on closed file` for a `FileIO`. The `mode` of a binary
+file is shown as CPython 3.15 shows it, such as `"wb+"` for `"w+b"`,
+where 3.12 to 3.14 show `"rb+"`.
+
+<!-- typy-expect: accepted -->
+```python
+with open("data.bin", "wb") as out:
+    out.write(b"\x00\x01line\n")
+
+with open("data.bin", "rb") as data:
+    print(data.read(2), data.readline(), data.tell())
+```
+
+A binary mode takes no `encoding`, `errors` or `newline`, as CPython
+raises `ValueError` for them, so each is E0404. `buffering=1` is E0404
+too, since CPython warns with the program's own file and line. A
+`buffering` that is not a literal decides the class only when the
+program runs, and is planned for 1.0 with `typing.BinaryIO` (LIB-19).
 
 `close()` of `sys.stdin`, `sys.stdout` or `sys.stderr` closes it as
 CPython does: what it holds is written out, and then writing to it,
@@ -350,7 +381,7 @@ with a message writes only a line ending, and an uncaught exception
 writes `lost sys.stderr`; CPython writes a dump of the exception object,
 with its address, before that line.
 
-<!-- typy-expect: rejected E0201 at 1:22 -->
+<!-- typy-expect: rejected E0201 at 1:30 -->
 ```python
-data = open("x.bin", "rb")
+data = open("x.txt", closefd=False)
 ```

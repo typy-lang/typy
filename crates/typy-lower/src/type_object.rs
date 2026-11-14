@@ -73,6 +73,7 @@ impl FunctionLowerer<'_> {
                 | Type::Module(_)
                 | Type::AnyModule
                 | Type::TextFile
+                | Type::BinaryFile(_)
                 | Type::Traceback
                 | Type::Union(_),
                 _,

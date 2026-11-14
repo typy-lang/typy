@@ -167,7 +167,7 @@ impl BodyChecker<'_> {
         if let Type::TypeObject(_) = object.ty {
             return self.type_object_attribute(object, attribute, span);
         }
-        if object.ty == Type::TextFile {
+        if object.ty.is_file() {
             return self.file_attribute(object, attribute, span);
         }
         if let Some(field) = self.os_error_field(&object, attribute, span) {

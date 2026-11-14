@@ -343,13 +343,16 @@ impl BodyChecker<'_> {
     ) -> Option<TypedStmt> {
         let (first, rest) = items.split_first()?;
         let manager = self.expression(&first.context);
-        if manager.ty == Type::TextFile {
+        if manager.ty.is_file() {
             // Leaving the block closes the file, which may be `sys.stdout` (LIB-14).
-            self.program.closes_text_files = true;
+            if manager.ty == Type::TextFile {
+                self.program.closes_text_files = true;
+            }
+            let file = manager.ty.clone();
             return self.with_body(
                 manager,
                 WithProtocol::TextFile,
-                Type::TextFile,
+                file,
                 false,
                 first,
                 rest,

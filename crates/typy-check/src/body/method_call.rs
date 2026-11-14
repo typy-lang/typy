@@ -66,7 +66,7 @@ impl BodyChecker<'_> {
         };
         // A program that may close a text file may close `sys.stdout`, so its `print` checks
         // that standard output is open (LIB-14).
-        if method == Method::TextClose {
+        if method == Method::TextClose && receiver.ty == Type::TextFile {
             self.program.closes_text_files = true;
         }
         // `setdefault` without a default stores `None`, which only an optional value type holds.
@@ -95,7 +95,7 @@ impl BodyChecker<'_> {
         let Some(bound) = self.bind(method, &signature, arguments, keywords, span) else {
             return Self::invalid_call(span);
         };
-        let text = if receiver.ty == Type::Bytes {
+        let text = if matches!(receiver.ty, Type::Bytes | Type::BinaryFile(_)) {
             Type::Bytes
         } else {
             Type::Str
@@ -269,9 +269,9 @@ impl BodyChecker<'_> {
     /// Reports a method a built-in type does not have; a text file's attribute is not a
     /// method (LIB-14).
     fn unknown_method(&mut self, receiver: &Type, name: &Identifier, span: Span) -> TypedExpr {
-        if *receiver == Type::TextFile {
+        if receiver.is_file() {
             let Some((_, ty)) = FileAttribute::named(&name.name) else {
-                return self.missing_file_name(name, span);
+                return self.missing_file_name(receiver, name, span);
             };
             return self.error(
                 Diagnostic::new(

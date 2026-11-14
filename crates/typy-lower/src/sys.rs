@@ -78,10 +78,12 @@ impl FunctionLowerer<'_> {
         line
     }
 
-    /// Calls a method of a text file; a `size` not given is -1, as in CPython.
+    /// Calls a method of a text file, or of a binary one when `binary`; a `size` not given, or
+    /// `None`, is -1, as in CPython.
     pub(crate) fn text_method(
         &mut self,
         file: typy_tyir::ValueId,
+        binary: bool,
         method: typy_check::Method,
         given: &[Option<Lowered>],
         span: Span,
@@ -90,7 +92,11 @@ impl FunctionLowerer<'_> {
         let argument = given.first().copied().flatten().map(|value| value.value);
         let (function, arguments) = match method {
             Method::TextWrite => (
-                RuntimeFunction::TextWrite,
+                if binary {
+                    RuntimeFunction::BinaryWrite
+                } else {
+                    RuntimeFunction::TextWrite
+                },
                 vec![file, argument.unwrap_or(file)],
             ),
             Method::TextWritelines => (
@@ -98,15 +104,24 @@ impl FunctionLowerer<'_> {
                 vec![file, argument.unwrap_or(file)],
             ),
             Method::TextRead | Method::TextReadline => {
-                let size =
-                    argument.unwrap_or_else(|| self.constant(Constant::Int("-1".to_owned()), span));
-                let function = if method == Method::TextRead {
-                    RuntimeFunction::TextRead
-                } else {
-                    RuntimeFunction::TextReadline
+                let size = given
+                    .first()
+                    .copied()
+                    .flatten()
+                    .filter(|size| size.ty == TyirType::Int)
+                    .map_or_else(
+                        || self.constant(Constant::Int("-1".to_owned()), span),
+                        |size| size.value,
+                    );
+                let function = match (method == Method::TextRead, binary) {
+                    (true, false) => RuntimeFunction::TextRead,
+                    (false, false) => RuntimeFunction::TextReadline,
+                    (true, true) => RuntimeFunction::BinaryRead,
+                    (false, true) => RuntimeFunction::BinaryReadline,
                 };
                 (function, vec![file, size])
             }
+            Method::TextReadlines if binary => (RuntimeFunction::BinaryReadlines, vec![file]),
             Method::TextReadlines => (RuntimeFunction::TextReadlines, vec![file]),
             Method::TextClose => (RuntimeFunction::TextClose, vec![file]),
             Method::TextFileno => (RuntimeFunction::TextFileno, vec![file]),
@@ -186,6 +201,7 @@ impl FunctionLowerer<'_> {
         mode: &str,
         access: typy_check::OpenAccess,
         options: &typy_check::OpenOptions,
+        file: &typy_check::Type,
         span: Span,
     ) -> Lowered {
         let path = self.expression(path);
@@ -202,9 +218,17 @@ impl FunctionLowerer<'_> {
             }
         });
         let mode = self.string(mode, span);
-        // The runtime reads the access, with `+` in its third bit, the codec and the handler
-        // from one word, so a call keeps to six arguments.
-        let how = access as i64 | options.codec << 3 | options.handler << 5;
+        // The runtime reads the access, with `+` in its third bit, the codec, the handler and
+        // whether the file is binary or a `FileIO` from one word, so a call keeps to six
+        // arguments.
+        let (binary, raw) = match file {
+            typy_check::Type::BinaryFile(kind) => {
+                (1, i64::from(*kind == typy_check::BinaryKind::Raw))
+            }
+            _ => (0, 0),
+        };
+        let how =
+            access as i64 | options.codec << 3 | options.handler << 5 | binary << 8 | raw << 9;
         let how = self.constant(Constant::Int(how.to_string()), span);
         let buffering_value = buffering.map_or_else(
             || self.constant(Constant::Int("-1".to_owned()), span),

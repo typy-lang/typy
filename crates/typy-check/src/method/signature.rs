@@ -111,6 +111,7 @@ impl Method {
             Type::Set(item) => item.as_ref().clone(),
             _ => receiver.sequence_item().cloned().unwrap_or(Type::Error),
         };
+        let line = || receiver.file_line().unwrap_or(Type::Str);
         let other = || {
             vec![positional_as(
                 "other",
@@ -162,10 +163,12 @@ impl Method {
             | Self::SetClear
             | Self::TextFlush
             | Self::TextClose => (Vec::new(), Type::NoneType),
-            Self::TextRead | Self::TextReadline => {
-                (vec![positional("size", Type::Int, false)], Type::Str)
-            }
-            Self::TextReadlines => (Vec::new(), Type::List(Box::new(Type::Str))),
+            // A text file reads and writes `str`, a binary file `bytes` (LIB-14).
+            Self::TextRead | Self::TextReadline => (
+                vec![positional_as("size", ParameterType::IntOrNone, false)],
+                line(),
+            ),
+            Self::TextReadlines => (Vec::new(), Type::List(Box::new(line()))),
             Self::TextFileno | Self::TextTell => (Vec::new(), Type::Int),
             Self::TextIsatty | Self::TextReadable | Self::TextWritable | Self::TextSeekable => {
                 (Vec::new(), Type::Bool)
@@ -186,7 +189,7 @@ impl Method {
                 Type::NoneType,
             ),
             Self::ListCopy | Self::SetCopy => (Vec::new(), receiver.clone()),
-            Self::TextWrite => (vec![positional("text", Type::Str, true)], Type::Int),
+            Self::TextWrite => (vec![positional("text", line(), true)], Type::Int),
             Self::ListSort => (
                 vec![parameter(
                     "reverse",

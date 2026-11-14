@@ -88,7 +88,7 @@ impl Writer {
     /// # Safety
     ///
     /// `bytes` points to a live `bytes`.
-    unsafe fn add(
+    pub(crate) unsafe fn add(
         &mut self,
         bytes: *const StrObject,
         sink: Sink<'_>,
@@ -109,6 +109,11 @@ impl Writer {
             }
         }
         Ok(())
+    }
+
+    /// Returns the number of bytes given and not written out yet.
+    pub(crate) const fn pending(&self) -> usize {
+        self.used
     }
 
     /// Writes out what the buffer holds.

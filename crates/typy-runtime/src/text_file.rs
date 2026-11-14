@@ -2,6 +2,7 @@
 //! written as UTF-8, standard output through its buffer, and the files `open` makes, which
 //! `disk` reads and writes.
 
+mod binary;
 mod disk;
 mod errno_text;
 mod newline;
@@ -11,6 +12,8 @@ mod reader;
 mod state;
 mod stdin;
 pub(crate) use stdin::input_line;
+#[cfg(test)]
+mod binary_tests;
 #[cfg(test)]
 mod decoding_tests;
 #[cfg(test)]
@@ -36,6 +39,10 @@ const WRITABLE: u32 = 2;
 const CLOSED: u32 = 4;
 /// The file is standard input, output or error, a static object that is never closed.
 const STANDARD: u32 = 8;
+/// The file is binary: a `BufferedReader`, `BufferedWriter` or `BufferedRandom` (LIB-14).
+const BINARY: u32 = 16;
+/// The binary file is a `FileIO`, which has no buffers.
+const RAW: u32 = 32;
 
 /// A text file: its descriptor and state, its name and mode, and the buffers of a file
 /// `open` made.
@@ -321,9 +328,14 @@ pub unsafe extern "C" fn typy_rt_text_writelines(
         }
         // The length is read at each step, as CPython's iterator reads it.
         let mut index = 0;
+        let binary = binary::is_binary(file);
         while index < (*lines).length {
             let line = (*lines).item(index) as *const StrObject;
-            let written = typy_rt_text_write(file, line);
+            let written = if binary {
+                binary::typy_rt_binary_write(file, line)
+            } else {
+                typy_rt_text_write(file, line)
+            };
             if !written.exception.is_null() {
                 return written.exception;
             }
@@ -343,6 +355,14 @@ pub unsafe extern "C" fn typy_rt_text_flush(file: *mut TextFile) -> *mut Excepti
     // SAFETY: the caller's guarantee.
     unsafe {
         if !is_standard(file) {
+            // A closed `BufferedWriter` or `BufferedRandom` names the operation.
+            let flags = (*file).flags;
+            if flags & (BINARY | RAW | WRITABLE | CLOSED) == BINARY | WRITABLE | CLOSED {
+                return crate::exception::raise(
+                    crate::exception::ExceptionKind::ValueError,
+                    "flush of closed file",
+                );
+            }
             return disk::flush(&mut *file);
         }
         if !file.is_null() && flags_of(file) & CLOSED != 0 {
@@ -514,6 +534,9 @@ pub(crate) unsafe fn next_line(
 ) -> Result<Option<*mut StrObject>, *mut ExceptionObject> {
     // SAFETY: the caller's guarantee.
     unsafe {
+        if binary::is_binary(file) {
+            return binary::next_line(file);
+        }
         let line = if is_standard(file) {
             read_standard(file, None, true)?
         } else {

@@ -61,6 +61,9 @@ pub enum Type {
     /// A text file, `_io.TextIOWrapper`: `sys.stdout`, `sys.stderr` and the files `open`
     /// gives (LIB-04).
     TextFile,
+    /// A binary file `open` gives, of the class CPython makes for its mode and buffering
+    /// (LIB-14).
+    BinaryFile(BinaryKind),
     /// `range` held as a value: a sequence of `int` (DAT-17).
     Range,
     /// The module object of the module of this qualified name, whose attributes are known
@@ -151,6 +154,7 @@ impl TypeObjectOf {
             | Type::Iterable(_)
             | Type::AnyModule
             | Type::TextFile
+            | Type::BinaryFile(_)
             | Type::Traceback
             | Type::Module(_)
             | Type::Optional(_)
@@ -202,6 +206,32 @@ impl TypeObjectOf {
             Self::Range => "range",
             Self::Instance(_, name) => name,
             Self::Exception(class) => class.name(),
+        }
+    }
+}
+
+/// The class of a binary file, which its mode and buffering decide (LIB-14).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum BinaryKind {
+    /// `_io.BufferedReader`: a mode that only reads.
+    Reader,
+    /// `_io.BufferedWriter`: a mode that only writes.
+    Writer,
+    /// `_io.BufferedRandom`: a mode with `+`.
+    Random,
+    /// `_io.FileIO`: any binary mode with `buffering=0`.
+    Raw,
+}
+
+impl BinaryKind {
+    /// Returns the name of CPython's class.
+    #[must_use]
+    pub const fn class_name(self) -> &'static str {
+        match self {
+            Self::Reader => "BufferedReader",
+            Self::Writer => "BufferedWriter",
+            Self::Random => "BufferedRandom",
+            Self::Raw => "FileIO",
         }
     }
 }
@@ -558,8 +588,13 @@ impl Type {
 
     /// Returns the type of the items a loop over a value of this type reads, when it is one
     /// that `Iterable[T]` takes: a built-in iterable or an iterator (TYP-15).
+    ///
+    /// See also `file_line`, the line a file gives.
     #[must_use]
     pub fn iterable_item(&self) -> Option<Type> {
+        if let Some(line) = self.file_line() {
+            return Some(line);
+        }
         match self {
             Self::List(item)
             | Self::TupleOf(item)
@@ -568,7 +603,7 @@ impl Type {
             | Self::Iterator(item)
             | Self::Iterable(item) => Some(item.as_ref().clone()),
             Self::DictView(view, key, value) => Some(view.item(key, value)),
-            Self::Str | Self::TextFile => Some(Self::Str),
+            Self::Str => Some(Self::Str),
             Self::Bytes | Self::Range => Some(Self::Int),
             // A fixed tuple whose items have one type is held as a `tuple[T, ...]` first.
             Self::Tuple(items) => {
@@ -593,6 +628,23 @@ impl Type {
             Self::Instance(class) => class.name.clone(),
             other => other.to_string(),
         }
+    }
+
+    /// Returns the type of a line of a file: `str` for a text file, `bytes` for a binary one,
+    /// and `None` for any other type.
+    #[must_use]
+    pub const fn file_line(&self) -> Option<Type> {
+        match self {
+            Self::TextFile => Some(Self::Str),
+            Self::BinaryFile(_) => Some(Self::Bytes),
+            _ => None,
+        }
+    }
+
+    /// Returns whether this is a file, text or binary.
+    #[must_use]
+    pub const fn is_file(&self) -> bool {
+        matches!(self, Self::TextFile | Self::BinaryFile(_))
     }
 
     /// Returns the spelling with its article, for messages: `an int`, `a str`, `None`.
@@ -668,6 +720,7 @@ impl fmt::Display for Type {
             Self::Iterable(item) => write!(formatter, "Iterable[{item}]"),
             Self::AnyModule => formatter.write_str("ModuleType"),
             Self::TextFile => formatter.write_str("TextIOWrapper"),
+            Self::BinaryFile(kind) => formatter.write_str(kind.class_name()),
             Self::Traceback => formatter.write_str("TracebackType"),
             Self::Range => formatter.write_str("range"),
             Self::Module(name) => write!(formatter, "module `{name}`"),

@@ -226,7 +226,7 @@ impl FunctionLowerer<'_> {
                 mode,
                 access,
                 options,
-            } => self.open(path, mode, *access, options, span),
+            } => self.open(path, mode, *access, options, &expression.ty, span),
             TypedExprKind::SysExit(code) => self.sys_exit(code.as_deref(), span),
             TypedExprKind::RecursionLimit(limit) => self.recursion_limit(limit.as_deref(), span),
             TypedExprKind::PercentDynamic { format, values } => {

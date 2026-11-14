@@ -247,6 +247,10 @@ pub enum RuntimeFunction {
     TextSeek,
     TextTell,
     TextTruncate,
+    BinaryRead,
+    BinaryReadline,
+    BinaryReadlines,
+    BinaryWrite,
     ListAppendMoved,
     ListSetMoved,
     ListInsertMoved,
@@ -354,7 +358,7 @@ const FLOAT_FLOAT: &[TyirType] = &[TyirType::Float, TyirType::Float];
 
 impl RuntimeFunction {
     /// Every runtime function.
-    pub const ALL: [Self; 315] = [
+    pub const ALL: [Self; 319] = [
         Self::IntFloorDivide,
         Self::IntModulo,
         Self::IntPower,
@@ -593,6 +597,10 @@ impl RuntimeFunction {
         Self::TextSeek,
         Self::TextTell,
         Self::TextTruncate,
+        Self::BinaryRead,
+        Self::BinaryReadline,
+        Self::BinaryReadlines,
+        Self::BinaryWrite,
         Self::ListAppendMoved,
         Self::ListSetMoved,
         Self::ListInsertMoved,
@@ -920,11 +928,17 @@ impl RuntimeFunction {
             Self::TextRead | Self::TextReadline => {
                 signature(&[TyirType::TEXT_FILE, Int], STR, true)
             }
-            Self::TextReadlines => signature(&[TyirType::TEXT_FILE], LIST, true),
+            Self::TextReadlines | Self::BinaryReadlines => {
+                signature(&[TyirType::TEXT_FILE], LIST, true)
+            }
             Self::TextWritelines => signature(&[TyirType::TEXT_FILE, LIST], Unit, true),
             Self::TextName | Self::TextMode => signature(&[TyirType::TEXT_FILE], STR, false),
             Self::TextFileno | Self::TextTell => signature(&[TyirType::TEXT_FILE], Int, true),
             Self::TextState => signature(&[TyirType::TEXT_FILE, Int], Bool, true),
+            Self::BinaryRead | Self::BinaryReadline => {
+                signature(&[TyirType::TEXT_FILE, Int], BYTES, true)
+            }
+            Self::BinaryWrite => signature(&[TyirType::TEXT_FILE, BYTES], Int, true),
             Self::TextSeek | Self::TextTruncate => {
                 signature(&[TyirType::TEXT_FILE, Int, Int], Int, true)
             }
@@ -1251,6 +1265,10 @@ impl RuntimeFunction {
             Self::TextSeek => "text_seek",
             Self::TextTell => "text_tell",
             Self::TextTruncate => "text_truncate",
+            Self::BinaryRead => "binary_read",
+            Self::BinaryReadline => "binary_readline",
+            Self::BinaryReadlines => "binary_readlines",
+            Self::BinaryWrite => "binary_write",
             Self::ListAppendMoved => "list_append_moved",
             Self::ListSetMoved => "list_set_moved",
             Self::ListInsertMoved => "list_insert_moved",

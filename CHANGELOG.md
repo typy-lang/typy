@@ -88,6 +88,10 @@ All notable changes to TyPy are recorded here. The format follows
   class methods or class variables is planned for 0.5 (GEN-04, GEN-05,
   GEN-10, ADR-0023).
 - `...` alone as a statement does nothing, as `pass` does.
+- `open` takes binary modes, which give a `BufferedReader`,
+  `BufferedWriter` or `BufferedRandom`, or a `FileIO` with `buffering=0`,
+  reading and writing `bytes` with CPython's results and errors (LIB-14,
+  ADR-0031).
 - `open` takes the modes `"r+"`, `"w+"`, `"a+"` and `"x+"`, which read and
   write one text file as CPython's do (LIB-14).
 - `close()` of `sys.stdin`, `sys.stdout` or `sys.stderr` closes it, as in
@@ -179,6 +183,8 @@ All notable changes to TyPy are recorded here. The format follows
 - `open(..., encoding="csutf8")` is E0404, as for `str.encode`: CPython
   3.12 does not know the name, so its result depends on the version.
   Write `"utf-8"` instead.
+- A binary mode with a `buffering` that is not a literal is planned for 1.0
+  (LIB-19), since the value decides the class of the file.
 - The `opener` argument of `open` is planned for 1.0 (LIB-18), since it
   takes a function as a value.
 - Importing a module inside a function of a module that it imports at

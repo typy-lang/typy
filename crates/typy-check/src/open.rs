@@ -22,19 +22,39 @@ pub enum OpenAccess {
     CreatePlus = 7,
 }
 
-/// Why a mode is refused.
+/// Why a mode is refused: CPython raises `ValueError` with this message for the mode,
+/// whatever the file.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub(crate) enum ModeRefusal {
-    /// CPython raises `ValueError` with this message for the mode, whatever the file.
-    Fails(String),
-    /// A binary mode, planned for 0.4 (LIB-14).
-    Planned(&'static str),
+pub(crate) struct ModeRefusal(pub(crate) String);
+
+/// What a mode of `open` gives: how the file is opened, and whether it is binary.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct OpenMode {
+    pub(crate) access: OpenAccess,
+    pub(crate) binary: bool,
+}
+
+impl OpenMode {
+    /// Returns the mode a binary file shows, as CPython 3.15's `FileIO` writes it: the
+    /// access letter, `b`, and `+` for a mode that reads and writes.
+    pub(crate) const fn binary_mode(self) -> &'static str {
+        match self.access {
+            OpenAccess::Read => "rb",
+            OpenAccess::Write => "wb",
+            OpenAccess::Append => "ab",
+            OpenAccess::Create => "xb",
+            OpenAccess::ReadPlus => "rb+",
+            OpenAccess::WritePlus => "wb+",
+            OpenAccess::AppendPlus => "ab+",
+            OpenAccess::CreatePlus => "xb+",
+        }
+    }
 }
 
 /// Returns how `mode` opens a file, as CPython's `_io.open` checks it: each character one of
 /// `rwxabt+` and given once, not both `t` and `b`, and exactly one of `r`, `w`, `a` and `x`.
-pub(crate) fn open_access(mode: &str) -> Result<OpenAccess, ModeRefusal> {
-    let invalid = || ModeRefusal::Fails(format!("invalid mode: '{mode}'"));
+pub(crate) fn open_access(mode: &str) -> Result<OpenMode, ModeRefusal> {
+    let invalid = || ModeRefusal(format!("invalid mode: '{mode}'"));
     for (index, character) in mode.char_indices() {
         if !"rwxabt+".contains(character)
             || mode[index + character.len_utf8()..].contains(character)
@@ -44,7 +64,7 @@ pub(crate) fn open_access(mode: &str) -> Result<OpenAccess, ModeRefusal> {
     }
     let has = |character: char| mode.contains(character);
     if has('t') && has('b') {
-        return Err(ModeRefusal::Fails(
+        return Err(ModeRefusal(
             "can't have text and binary mode at once".to_owned(),
         ));
     }
@@ -54,21 +74,18 @@ pub(crate) fn open_access(mode: &str) -> Result<OpenAccess, ModeRefusal> {
     let access = match accesses.collect::<Vec<_>>()[..] {
         [one] => one,
         [] => {
-            return Err(ModeRefusal::Fails(
+            return Err(ModeRefusal(
                 "Must have exactly one of create/read/write/append mode and at most one plus"
                     .to_owned(),
             ));
         }
         _ => {
-            return Err(ModeRefusal::Fails(
+            return Err(ModeRefusal(
                 "must have exactly one of create/read/write/append mode".to_owned(),
             ));
         }
     };
-    if has('b') {
-        return Err(ModeRefusal::Planned("a binary mode"));
-    }
-    Ok(match (access, has('+')) {
+    let access = match (access, has('+')) {
         ('r', false) => OpenAccess::Read,
         ('w', false) => OpenAccess::Write,
         ('a', false) => OpenAccess::Append,
@@ -77,6 +94,10 @@ pub(crate) fn open_access(mode: &str) -> Result<OpenAccess, ModeRefusal> {
         ('w', true) => OpenAccess::WritePlus,
         ('a', true) => OpenAccess::AppendPlus,
         (_, true) => OpenAccess::CreatePlus,
+    };
+    Ok(OpenMode {
+        access,
+        binary: has('b'),
     })
 }
 
@@ -96,7 +117,11 @@ mod tests {
             ("x", OpenAccess::Create),
             ("xt", OpenAccess::Create),
         ] {
-            assert_eq!(open_access(mode), Ok(access), "{mode}");
+            assert_eq!(
+                open_access(mode).map(|found| found.access),
+                Ok(access),
+                "{mode}"
+            );
         }
     }
 
@@ -127,7 +152,7 @@ mod tests {
         ] {
             assert_eq!(
                 open_access(mode),
-                Err(ModeRefusal::Fails(message.to_owned())),
+                Err(ModeRefusal(message.to_owned())),
                 "{mode}"
             );
         }
@@ -142,18 +167,28 @@ mod tests {
             ("a+", OpenAccess::AppendPlus),
             ("x+", OpenAccess::CreatePlus),
         ] {
-            assert_eq!(open_access(mode), Ok(access), "{mode}");
+            assert_eq!(
+                open_access(mode).map(|found| found.access),
+                Ok(access),
+                "{mode}"
+            );
         }
     }
 
     #[test]
-    fn binary_modes_are_planned() {
-        for mode in ["rb", "wb+", "ab"] {
-            assert_eq!(
-                open_access(mode),
-                Err(ModeRefusal::Planned("a binary mode")),
-                "{mode}"
-            );
+    fn binary_modes_show_as_cpython_3_15_shows_them() {
+        for (mode, shown) in [
+            ("rb", "rb"),
+            ("br", "rb"),
+            ("wb+", "wb+"),
+            ("+ab", "ab+"),
+            ("xb", "xb"),
+            ("r+b", "rb+"),
+        ] {
+            let found = open_access(mode).unwrap();
+            assert!(found.binary, "{mode}");
+            assert_eq!(found.binary_mode(), shown, "{mode}");
         }
+        assert!(!open_access("rt").unwrap().binary);
     }
 }

@@ -114,7 +114,8 @@ pub unsafe extern "C" fn typy_rt_text_state(file: *const TextFile, question: i64
     if question == Question::Closed {
         return Raising::ok(closed);
     }
-    if closed && direction != Some(false) {
+    // A `FileIO` refuses every question once closed.
+    if closed && (direction != Some(false) || flags & super::RAW != 0) {
         return Raising::error(false, closed_raw_error());
     }
     Raising::ok(match question {

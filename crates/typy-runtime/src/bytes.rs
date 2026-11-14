@@ -20,6 +20,16 @@ pub(crate) fn new_bytes(count: usize) -> *mut StrObject {
     object
 }
 
+/// Returns a new `bytes` of `data`.
+pub(crate) fn from_slice(data: &[u8]) -> *mut StrObject {
+    let object = new_bytes(data.len());
+    for (index, byte) in data.iter().enumerate() {
+        // SAFETY: the bytes are new and hold `data.len()` bytes.
+        unsafe { crate::string::set_code_point(object, index, u32::from(*byte)) };
+    }
+    object
+}
+
 /// Gives a new string the `bytes` type, for the results of the string functions on `bytes`.
 ///
 /// # Safety

@@ -151,8 +151,9 @@ unsafe fn options(
 
 /// Returns `open(path, mode, buffering, encoding, errors, newline)` for a text mode the
 /// checker has read. `how` holds the number of its `Access` in its two low bits, whether the
-/// mode has `+` in the next, the codec `encoding` names in the two after, and the error
-/// handler `errors` names above them, so the call keeps to six arguments; `mode` and `encoding` are as written, which the file's `repr`
+/// mode has `+` in the next, the codec `encoding` names in the two after, the error handler
+/// `errors` names in the three after, then whether the file is binary and whether it is a
+/// `FileIO`, so the call keeps to six arguments; `mode` and `encoding` are as written, which the file's `repr`
 /// shows, `encoding` null for `None`; `newline` is null for `None`.
 ///
 /// # Safety
@@ -170,7 +171,8 @@ pub unsafe extern "C" fn typy_rt_open(
 ) -> Raising<*mut TextFile> {
     let how = crate::word::inline_value(how);
     let (access, plus) = (Access::of(how & 3), how & 4 != 0);
-    let (codec, handler) = ((how >> 3) & 3, how >> 5);
+    let (codec, handler) = ((how >> 3) & 3, (how >> 5) & 7);
+    let (binary, raw) = (how & (1 << 8) != 0, how & (1 << 9) != 0);
     // SAFETY: the caller's guarantee.
     let buffering = unsafe { super::position::value_of(buffering) };
     let Some(buffering) = buffering.and_then(|value| i32::try_from(value).ok()) else {
@@ -223,12 +225,23 @@ pub unsafe extern "C" fn typy_rt_open(
     // A mode with `+` both reads and writes, as CPython's `BufferedRandom` does.
     let readable = access == Access::Read || plus;
     let writable = access != Access::Read || plus;
-    let reader = if readable {
-        boxed(Reader::with(options.decoding))
+    // A binary file reads its bytes through a reader of `latin-1`, which checks none; a
+    // `FileIO` has no buffers.
+    let decoding = if binary {
+        Decoding {
+            codec: Codec::Latin1,
+            handler: Handler::Strict,
+            newline: Newline::Lf,
+        }
+    } else {
+        options.decoding
+    };
+    let reader = if readable && !raw {
+        boxed(Reader::with(decoding))
     } else {
         core::ptr::null_mut()
     };
-    let writer = if writable {
+    let writer = if writable && !raw {
         boxed(Writer::with(Encoding {
             codec: options.decoding.codec,
             handler: options.decoding.handler,
@@ -238,7 +251,10 @@ pub unsafe extern "C" fn typy_rt_open(
     } else {
         core::ptr::null_mut()
     };
-    let flags = if readable { READABLE } else { 0 } | if writable { WRITABLE } else { 0 };
+    let flags = if readable { READABLE } else { 0 }
+        | if writable { WRITABLE } else { 0 }
+        | if binary { super::BINARY } else { 0 }
+        | if raw { super::RAW } else { 0 };
     let next = OPEN.with(|open| *open);
     let file = boxed(TextFile {
         header: ObjectHeader::new(TEXT_FILE_TYPE_ID),
@@ -288,20 +304,60 @@ pub(crate) fn closed_error() -> *mut ExceptionObject {
 ///
 /// The file's path and mode are live strings.
 pub(crate) unsafe fn repr(file: &TextFile) -> *mut StrObject {
+    use super::{BINARY, RAW};
+    let flags = file.flags;
+    if flags & RAW != 0 && flags & CLOSED != 0 {
+        return crate::string::from_str("<_io.FileIO [closed]>");
+    }
+    let class = match (
+        flags & BINARY != 0,
+        flags & RAW != 0,
+        flags & (READABLE | WRITABLE),
+    ) {
+        (false, _, _) => "<_io.TextIOWrapper name=",
+        (true, true, _) => "<_io.FileIO name=",
+        (true, false, READABLE) => "<_io.BufferedReader name=",
+        (true, false, WRITABLE) => "<_io.BufferedWriter name=",
+        (true, false, _) => "<_io.BufferedRandom name=",
+    };
     // SAFETY: the caller's guarantee; each part is a live string released once.
     unsafe {
+        let tail: [*mut StrObject; 4] = match (flags & BINARY != 0, flags & RAW != 0) {
+            (false, _) => [
+                crate::string::from_str(" mode="),
+                crate::string::typy_rt_str_repr(file.mode),
+                crate::string::from_str(" encoding="),
+                if file.encoding.is_null() {
+                    crate::string::from_str("'utf-8'>")
+                } else {
+                    let shown = crate::string::typy_rt_str_repr(file.encoding);
+                    let closing = crate::string::from_str(">");
+                    let joined = crate::string::typy_rt_str_concat(shown, closing);
+                    typy_rt_decrement(shown.cast());
+                    typy_rt_decrement(closing.cast());
+                    joined
+                },
+            ],
+            (true, true) => [
+                crate::string::from_str(" mode="),
+                crate::string::typy_rt_str_repr(file.mode),
+                crate::string::from_str(" closefd=True>"),
+                crate::string::from_str(""),
+            ],
+            (true, false) => [
+                crate::string::from_str(">"),
+                crate::string::from_str(""),
+                crate::string::from_str(""),
+                crate::string::from_str(""),
+            ],
+        };
         let parts = [
-            crate::string::from_str("<_io.TextIOWrapper name="),
+            crate::string::from_str(class),
             crate::string::typy_rt_str_repr(file.path),
-            crate::string::from_str(" mode="),
-            crate::string::typy_rt_str_repr(file.mode),
-            crate::string::from_str(" encoding="),
-            if file.encoding.is_null() {
-                crate::string::from_str("'utf-8'")
-            } else {
-                crate::string::typy_rt_str_repr(file.encoding)
-            },
-            crate::string::from_str(">"),
+            tail[0],
+            tail[1],
+            tail[2],
+            tail[3],
         ];
         let mut text = crate::string::from_str("");
         for part in parts {

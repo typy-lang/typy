@@ -80,6 +80,7 @@ impl Type {
                 | Self::AnyModule
                 | Self::Traceback
                 | Self::TextFile
+                | Self::BinaryFile(_)
                 | Self::Range
                 | Self::Module(_)
                 | Self::TypeObject(_)

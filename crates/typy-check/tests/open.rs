@@ -96,8 +96,9 @@ fn modes_open_refuses_are_e0404_with_cpythons_message() {
 fn what_is_planned_for_open_is_e0201() {
     for (source, message) in [
         (
-            "f = open(\"a\", \"rb\")\n",
-            "a binary mode of `open` is planned for TyPy 0.4 (LIB-14)",
+            "n = 0\nf = open(\"a\", \"rb\", n)\n",
+            "a `buffering` that is not a literal decides the class of a binary file when the \
+             program runs, which is planned for TyPy 1.0 (LIB-19)",
         ),
         (
             "m = \"r\"\nf = open(\"a\", m)\n",
@@ -133,6 +134,83 @@ e = open(\"a\", \"r+\")
 g = open(\"a\", \"+wt\")
 ";
     assert_eq!(diagnostics_at(PythonFloor::V3_12, source), []);
+}
+
+#[test]
+fn a_binary_mode_gives_the_class_cpython_makes() {
+    let source = "\
+r = open(\"a\", \"rb\")
+w = open(\"a\", \"ab\", -1, None, None, None)
+p = open(\"a\", \"r+b\", 4096)
+raw = open(\"a\", \"wb\", buffering=0)
+data: bytes = r.read() + r.read(None) + r.readline(2) + p.read(1) + raw.read()
+lines: list[bytes] = r.readlines()
+for line in r:
+    data = data + line
+count: int = w.write(b\"x\") + p.write(data) + raw.write(b\"\") + p.seek(-1, 2) + w.tell()
+w.writelines([b\"a\", b\"b\"])
+with open(\"a\", \"rb\") as inside:
+    data = inside.read()
+";
+    assert_eq!(diagnostics_at(PythonFloor::V3_12, source), []);
+    for (source, code, message) in [
+        (
+            "f = open(\"a\", \"wb\")\nf.write(\"text\")\n",
+            "E0404",
+            "`text` of `write` must be a bytes, and this is a str",
+        ),
+        (
+            "f = open(\"a\", \"rb\")\ns: str = f.read()\n",
+            "E0402",
+            "`s` was declared as str and is assigned a bytes",
+        ),
+        (
+            "f = open(\"a\", \"rb\")\nf.peek()\n",
+            "E0412",
+            "a BufferedReader has no attribute `peek` in TyPy",
+        ),
+        (
+            "import sys\nf = open(\"a\", \"wb\")\nprint(1, file=f)\n",
+            "E0404",
+            "`file` must be a TextIOWrapper, and this is a BufferedWriter",
+        ),
+    ] {
+        assert_eq!(
+            one_error(source),
+            (code.to_owned(), message.to_owned()),
+            "{source}"
+        );
+    }
+}
+
+#[test]
+fn what_a_binary_mode_does_not_take_is_e0404() {
+    for (source, message) in [
+        (
+            "f = open(\"a\", \"rb\", encoding=\"utf-8\")\n",
+            "`open` raises `ValueError: binary mode doesn't take an encoding argument` for this \
+             mode",
+        ),
+        (
+            "f = open(\"a\", \"wb\", errors=\"strict\")\n",
+            "`open` raises `ValueError: binary mode doesn't take an errors argument` for this mode",
+        ),
+        (
+            "f = open(\"a\", \"ab\", newline=\"\")\n",
+            "`open` raises `ValueError: binary mode doesn't take a newline argument` for this mode",
+        ),
+        (
+            "f = open(\"a\", \"rb\", 1)\n",
+            "CPython warns that `buffering=1` does not buffer lines in a binary mode, naming the \
+             program's file and line; leave it out",
+        ),
+    ] {
+        assert_eq!(
+            one_error(source),
+            ("E0404".to_owned(), message.to_owned()),
+            "{source}"
+        );
+    }
 }
 
 #[test]

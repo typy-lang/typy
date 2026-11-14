@@ -54,12 +54,12 @@ impl BodyChecker<'_> {
         };
         self.no_keywords(Builtin::Next, keywords);
         let mut iterator = self.expression(iterator);
-        // A text file is its own iterator, as in CPython: each step reads its next line.
-        if iterator.ty == Type::TextFile {
+        // A file is its own iterator, as in CPython: each step reads its next line.
+        if let Some(line) = iterator.ty.file_line() {
             let span = iterator.span;
             iterator = Self::typed(
                 TypedExprKind::Iter(Box::new(iterator)),
-                Type::Iterator(Box::new(Type::Str)),
+                Type::Iterator(Box::new(line)),
                 span,
             );
         }

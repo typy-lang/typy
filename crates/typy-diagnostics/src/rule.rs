@@ -203,6 +203,8 @@ impl RuleId {
     pub const LIB_17: Self = Self("LIB-17");
     /// The `opener` argument of `open` shall be accepted.
     pub const LIB_18: Self = Self("LIB-18");
+    /// `open` with a binary mode shall accept a `buffering` that is not a literal, as `typing.BinaryIO`.
+    pub const LIB_19: Self = Self("LIB-19");
     /// A program shall be built from several `.py` files, found from the main file's directory and from paths set in `typy.toml`.
     pub const MOD_01: Self = Self("MOD-01");
     /// Packages with `__init__.py` and relative imports shall be accepted.
@@ -374,6 +376,7 @@ impl RuleId {
         Self::LIB_16,
         Self::LIB_17,
         Self::LIB_18,
+        Self::LIB_19,
         Self::MOD_01,
         Self::MOD_02,
         Self::MOD_05,

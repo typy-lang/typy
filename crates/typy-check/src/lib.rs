@@ -38,4 +38,4 @@ pub use typed::{
     TypedExpr, TypedExprKind, TypedFunction, TypedHandler, TypedModule, TypedProgram, TypedStmt,
     WithProtocol, dump,
 };
-pub use types::{Type, TypeObjectOf, View};
+pub use types::{BinaryKind, Type, TypeObjectOf, View};

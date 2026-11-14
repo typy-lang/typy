@@ -229,6 +229,7 @@ pub fn member_class(member: &Type) -> Option<TypeObjectOf> {
         | Type::Module(_)
         | Type::AnyModule
         | Type::TextFile
+        | Type::BinaryFile(_)
         | Type::Traceback => None,
         other => TypeObjectOf::of(other),
     }
