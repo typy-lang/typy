@@ -200,10 +200,30 @@ except SystemExit as stop:
 Any other use, such as `error.args[0]` or `saved = error.args`, is
 planned for 0.5 (E0201, EXC-15).
 
+## OS errors
+
+`OSError` and its subclasses built with two to five arguments read them
+as CPython does (EXC-14): `errno`, `strerror`, `filename`, `winerror` and
+`filename2`. `OSError` itself becomes the subclass for `errno`, so
+`OSError(2, "gone")` is a `FileNotFoundError`. The attributes `errno`,
+`strerror`, `filename` and `filename2` are `None` when not given, as for
+an `OSError` of one argument, and `open` gives them too:
+
+<!-- typy-expect: accepted -->
+```python
+try:
+    raise OSError(2, "No such file or directory", "data.txt")
+except FileNotFoundError as error:
+    print(error, repr(error))
+    print(error.errno, error.strerror, error.filename)
+```
+
+To keep their types known, `errno` is an `int`, `strerror` a `str`, the
+file names a `str` or `None` and `winerror` an `int` or `None`; other
+arguments, more than five, two or more through `super().__init__`, and
+two or more to a subclass with an `__init__` of its own are planned for
+0.5 (E0201, EXC-16).
+
 ## Planned
 
-An `OSError` built with two to five arguments,
-which CPython reads as `errno`, `strerror` and `filename`, is planned for
-0.4 too (EXC-14), so `OSError(2, "missing")` is E0201 in 0.3; give it one
-argument, the message. Exception groups and `except*` are planned for
-after 1.0.
+Exception groups and `except*` are planned for after 1.0.

@@ -1,5 +1,5 @@
 //! Tests of checking `open`, text files and `OSError` through the public API (LIB-04,
-//! LIB-14, EXC-14, ADR-0019): what TyPy accepts, and the code and message of each refusal.
+//! LIB-14, EXC-14, EXC-16, ADR-0019): what TyPy accepts, and the code and message of each refusal.
 
 use typy_check::TypeChecker;
 use typy_source::{Project, ProjectSettings, PythonFloor};
@@ -187,20 +187,36 @@ fn calls_open_cannot_take_are_e0404() {
 }
 
 #[test]
-fn an_os_error_of_two_or_more_arguments_is_planned() {
-    let message = "an `OSError` of two or more arguments, which CPython reads as `errno`, \
-                   `strerror` and `filename`, is planned for TyPy 0.4 (EXC-14)";
+fn an_os_error_of_two_to_five_arguments_of_known_types_is_accepted() {
     for source in [
         "raise OSError(2, \"No such file\")\n",
-        "raise FileNotFoundError(2, \"No such file\", \"a.txt\")\n",
-        "class Missing(OSError):\n    pass\n\n\nraise Missing(1, 2)\n",
-        "class Missing(OSError):\n    def __init__(self, path: str) -> None:\n        super().__init__(2, path)\n\n\nraise Missing(\"a\")\n",
+        "raise FileNotFoundError(2, \"No such file\", \"a.txt\", None, \"b.txt\")\n",
+        "class Missing(OSError):\n    pass\n\n\nraise Missing(2, \"gone\", None, 3)\n",
+        "error = OSError(2, \"x\")\nprint(error.errno, error.strerror, error.filename, error.filename2)\n",
     ] {
         assert_eq!(
-            one_error(source),
-            ("E0201".to_owned(), message.to_owned()),
+            diagnostics(source),
+            Vec::<(String, String)>::new(),
             "{source}"
         );
+    }
+}
+
+#[test]
+fn an_os_error_of_other_arguments_is_planned() {
+    for source in [
+        "raise OSError(2, 3)\n",
+        "raise OSError(\"2\", \"x\")\n",
+        "raise OSError(2, \"x\", 3)\n",
+        "raise OSError(2, \"x\", None, \"w\")\n",
+        "raise OSError(1, \"a\", \"b\", None, \"c\", 6)\n",
+        "class Missing(OSError):\n    pass\n\n\nraise Missing(1, 2)\n",
+        "class Missing(OSError):\n    def __init__(self, path: str) -> None:\n        super().__init__(2, path)\n\n\nraise Missing(\"a\")\n",
+        "class Missing(OSError):\n    def __init__(self, code: int, path: str) -> None:\n        self.path = path\n\n\nraise Missing(2, \"a\")\n",
+    ] {
+        let (code, message) = one_error(source);
+        assert_eq!(code, "E0201", "{source}");
+        assert!(message.ends_with("(EXC-16)"), "{source}: {message}");
     }
 }
 

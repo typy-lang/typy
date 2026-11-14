@@ -88,6 +88,11 @@ All notable changes to TyPy are recorded here. The format follows
   class methods or class variables is planned for 0.5 (GEN-04, GEN-05,
   GEN-10, ADR-0023).
 - `...` alone as a statement does nothing, as `pass` does.
+- `OSError` and its subclasses built with two to five arguments, read as
+  `errno`, `strerror`, `filename`, `winerror` and `filename2`, with the
+  attributes `errno`, `strerror`, `filename` and `filename2`. `OSError`
+  itself becomes the subclass for `errno`, as in CPython. Other argument
+  types are planned for 0.5 (EXC-14, EXC-16).
 - `args` of an exception and `code` of a `SystemExit`, where a program
   prints, formats, compares with `==` or `!=`, or tests them, and
   `len(error.args)`. Other uses, such as `error.args[0]`, are planned for

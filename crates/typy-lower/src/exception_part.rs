@@ -1,8 +1,9 @@
 //! Lowers the operations on `args` of an exception and `code` of a `SystemExit` (EXC-11,
 //! EXC-13, ADR-0030): each calls the runtime with the exception, and `==` passes the other
-//! value as a tuple of one, whose layout tells the runtime its type.
+//! value as a tuple of one, whose layout tells the runtime its type. Also lowers the
+//! attributes of an `OSError` (EXC-14).
 
-use typy_check::{ExceptionPart, PartOperation, TypedExpr};
+use typy_check::{ExceptionPart, OsErrorField, PartOperation, TypedExpr};
 use typy_diagnostics::Span;
 use typy_tyir::{Constant, RuntimeFunction, TyirType};
 
@@ -59,6 +60,36 @@ impl FunctionLowerer<'_> {
                 );
                 self.release(tuple, span);
                 equal
+            }
+        };
+        self.release(exception, span);
+        result
+    }
+
+    /// Returns `errno`, `strerror`, `filename` or `filename2` of the `OSError` `exception`.
+    pub(crate) fn os_error_field(
+        &mut self,
+        exception: &TypedExpr,
+        field: OsErrorField,
+        span: Span,
+    ) -> Lowered {
+        let exception = self.expression(exception);
+        let result = match field {
+            OsErrorField::Errno => {
+                self.call_runtime(RuntimeFunction::OsErrorErrno, vec![exception.value], span)
+            }
+            OsErrorField::Strerror | OsErrorField::Filename | OsErrorField::Filename2 => {
+                let index = match field {
+                    OsErrorField::Strerror => "1",
+                    OsErrorField::Filename => "2",
+                    _ => "4",
+                };
+                let index = self.constant(Constant::Int(index.to_owned()), span);
+                self.call_runtime(
+                    RuntimeFunction::OsErrorText,
+                    vec![exception.value, index],
+                    span,
+                )
             }
         };
         self.release(exception, span);

@@ -36,6 +36,7 @@ mod name;
 mod open_call;
 mod operator;
 mod operator_method;
+mod os_error;
 mod percent;
 mod program;
 mod protocol;

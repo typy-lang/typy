@@ -180,6 +180,9 @@ pub enum RuntimeFunction {
     ExceptionArgsLength,
     ExceptionPartTruth,
     ExceptionPartEqual,
+    OsErrorNew,
+    OsErrorErrno,
+    OsErrorText,
     ExceptionSetCause,
     ExceptionThrow,
     ExceptionHandled,
@@ -342,7 +345,7 @@ const FLOAT_FLOAT: &[TyirType] = &[TyirType::Float, TyirType::Float];
 
 impl RuntimeFunction {
     /// Every runtime function.
-    pub const ALL: [Self; 303] = [
+    pub const ALL: [Self; 306] = [
         Self::IntFloorDivide,
         Self::IntModulo,
         Self::IntPower,
@@ -514,6 +517,9 @@ impl RuntimeFunction {
         Self::ExceptionArgsLength,
         Self::ExceptionPartTruth,
         Self::ExceptionPartEqual,
+        Self::OsErrorNew,
+        Self::OsErrorErrno,
+        Self::OsErrorText,
         Self::ExceptionSetCause,
         Self::ExceptionThrow,
         Self::ExceptionHandled,
@@ -817,7 +823,19 @@ impl RuntimeFunction {
             Self::RangeLast => signature(&[Int, Int, Int], Int, false),
             Self::InstanceText => signature(&[Bits], STR, false),
             Self::TypeText | Self::TypeName => signature(&[TYPE], STR, false),
-            Self::ExceptionNew => signature(&[TYPE, Bits, Bits], EXCEPTION, false),
+            Self::ExceptionNew | Self::OsErrorNew => {
+                signature(&[TYPE, Bits, Bits], EXCEPTION, false)
+            }
+            Self::OsErrorErrno => signature(
+                &[EXCEPTION],
+                TyirType::Optional(crate::OptionalBase::Int),
+                false,
+            ),
+            Self::OsErrorText => signature(
+                &[EXCEPTION, Int],
+                TyirType::Optional(crate::OptionalBase::Object(crate::TypeId::STR)),
+                false,
+            ),
             Self::ExceptionPartText => signature(&[EXCEPTION, Int, Int], STR, true),
             Self::ExceptionArgsLength => signature(&[EXCEPTION], Int, false),
             Self::ExceptionPartTruth => signature(&[EXCEPTION, Int], Bool, false),
@@ -1134,6 +1152,9 @@ impl RuntimeFunction {
             Self::ExceptionArgsLength => "exception_args_length",
             Self::ExceptionPartTruth => "exception_part_truth",
             Self::ExceptionPartEqual => "exception_part_equal",
+            Self::OsErrorNew => "os_error_new",
+            Self::OsErrorErrno => "os_error_errno",
+            Self::OsErrorText => "os_error_text",
             Self::ExceptionSetCause => "exception_set_cause",
             Self::ExceptionThrow => "exception_throw",
             Self::ExceptionHandled => "exception_handled",

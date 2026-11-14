@@ -25,19 +25,21 @@ enum Part {
     Nothing,
     /// One value of this type: the runtime's text, or the one argument of a `SystemExit`.
     One(ItemType, u64),
-    /// A tuple of this layout at this address; for `args`, also of none.
-    Tuple(*const TupleType, u64),
+    /// The tuple of these arguments.
+    Tuple(Arguments),
     /// `args` of no arguments, `()`.
     Empty,
 }
 
-/// Returns what `part`, 0 for `args` or 1 for `code`, of `exception` holds.
+/// Returns what `part`, 0 for `args` or 1 for `code`, of `exception` holds: its arguments
+/// first, then the text the runtime gave it, which stands for its one argument.
 fn part_of(exception: &ExceptionObject, part: i64) -> Part {
-    if !exception.message.is_null() {
+    let arguments = Arguments::of(exception);
+    if arguments.is_none() && !exception.message.is_null() {
         let text = ItemType::from(ItemKind::Object);
         return Part::One(text, exception.message.expose_provenance() as u64);
     }
-    match (Arguments::of(exception), part) {
+    match (arguments, part) {
         (None, ARGUMENTS) => Part::Empty,
         (None, _) => Part::Nothing,
         // `code` is the one argument itself.
@@ -45,8 +47,8 @@ fn part_of(exception: &ExceptionObject, part: i64) -> Part {
             // SAFETY: the arguments are live and laid out as their descriptor says; an
             // optional or a union is read as the value it holds.
             let held = unsafe {
-                field_type(arguments.layout, 0).held_value(field(
-                    arguments.layout,
+                field_type(arguments.layout(), 0).held_value(field(
+                    arguments.layout(),
                     arguments.address,
                     0,
                 ))
@@ -56,7 +58,7 @@ fn part_of(exception: &ExceptionObject, part: i64) -> Part {
                 None => Part::Nothing,
             }
         }
-        (Some(arguments), _) => Part::Tuple(arguments.layout, arguments.address),
+        (Some(arguments), _) => Part::Tuple(arguments),
     }
 }
 
@@ -109,7 +111,7 @@ pub unsafe extern "C" fn typy_rt_exception_part_text(
             }
             Part::One(ty, value) if repr == 1 => ty.repr(value),
             Part::One(ty, value) => ty.str(value),
-            Part::Tuple(layout, address) => crate::tuple::repr(layout, address),
+            Part::Tuple(arguments) => crate::tuple::repr(arguments.layout(), arguments.address),
         }
     }
 }
@@ -125,8 +127,7 @@ pub unsafe extern "C" fn typy_rt_exception_args_length(object: *const ExceptionO
     let count = match part_of(unsafe { exception(object) }, ARGUMENTS) {
         Part::Nothing | Part::Empty => 0,
         Part::One(..) => 1,
-        // SAFETY: the descriptor lives as long as the program.
-        Part::Tuple(layout, _) => unsafe { (*layout).length },
+        Part::Tuple(arguments) => arguments.count(),
     };
     crate::word::inline(i64::try_from(count).unwrap_or(i64::MAX)).unwrap_or(1)
 }
@@ -150,7 +151,7 @@ pub unsafe extern "C" fn typy_rt_exception_part_truth(
             Part::Nothing | Part::Empty => false,
             Part::One(_, _) if part == ARGUMENTS => true,
             Part::One(ty, value) => ty.is_true(value),
-            Part::Tuple(layout, _) => (*layout).length > 0,
+            Part::Tuple(arguments) => arguments.count() > 0,
         }
     }
 }
@@ -195,9 +196,12 @@ pub unsafe extern "C" fn typy_rt_exception_part_equal(
                     )
             }
             Part::One(ty, value) => crate::list::values_equal(ty, value, wanted_type, wanted),
-            Part::Tuple(layout, address) => {
-                crate::list::values_equal(ItemType::tuple(layout), address, wanted_type, wanted)
-            }
+            Part::Tuple(arguments) => crate::list::values_equal(
+                ItemType::tuple(arguments.layout()),
+                arguments.address,
+                wanted_type,
+                wanted,
+            ),
         }
     }
 }

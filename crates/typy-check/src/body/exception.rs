@@ -68,7 +68,7 @@ impl BodyChecker<'_> {
                 span,
             );
         }
-        if let Some(error) = self.os_error_arguments(class.builtin(), &values, span) {
+        if let Some(error) = self.os_error_arguments(class.builtin(), &values, false, span) {
             return error;
         }
         Self::typed(
@@ -79,32 +79,6 @@ impl BodyChecker<'_> {
             },
             Type::Exception(class),
             span,
-        )
-    }
-
-    /// Refuses two or more arguments to `OSError` or a class derived from it: CPython reads
-    /// them as `errno`, `strerror` and `filename`, which is planned for 0.4 (EXC-14).
-    pub(super) fn os_error_arguments(
-        &mut self,
-        builtin: BuiltinException,
-        values: &[TypedExpr],
-        span: Span,
-    ) -> Option<TypedExpr> {
-        if !builtin.is_os_error() || values.len() < 2 {
-            return None;
-        }
-        Some(
-            self.error(
-                Diagnostic::new(
-                    DiagnosticCode::error(201),
-                    values[1].span,
-                    "an `OSError` of two or more arguments, which CPython reads as `errno`, \
-                     `strerror` and `filename`, is planned for TyPy 0.4 (EXC-14)",
-                )
-                .with_rule(RuleId::EXC_14)
-                .with_help("give one argument, the message"),
-                span,
-            ),
         )
     }
 

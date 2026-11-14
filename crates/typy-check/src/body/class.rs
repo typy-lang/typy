@@ -170,6 +170,9 @@ impl BodyChecker<'_> {
         if object.ty == Type::TextFile {
             return self.missing_file_name(&attribute.name, attribute.span, span);
         }
+        if let Some(field) = self.os_error_field(&object, attribute, span) {
+            return field;
+        }
         let Some((object, class)) = self.as_instance(object) else {
             return Self::invalid_call(span);
         };
@@ -416,24 +419,8 @@ impl BodyChecker<'_> {
         keywords: &[Keyword],
         span: Span,
     ) -> TypedExpr {
-        if self.program.is_protocol(class) {
-            for argument in arguments {
-                self.expression(argument);
-            }
-            let name = &self.program.classes[class.0 as usize].name;
-            return self.error(
-                Diagnostic::new(
-                    DiagnosticCode::error(401),
-                    span,
-                    format!(
-                        "`{name}` is a protocol, which has no instances; CPython raises \
-                         `TypeError`"
-                    ),
-                )
-                .with_rule(RuleId::GEN_04)
-                .with_help("make an instance of a class that satisfies it"),
-                span,
-            );
+        if let Some(refused) = self.protocol_called(class, arguments, span) {
+            return refused;
         }
         let class = match self.class_to_call(class, arguments, keywords, span) {
             Ok(class) => class,
@@ -451,6 +438,12 @@ impl BodyChecker<'_> {
         if let Type::Exception(exception) = &ty {
             let exception = exception.clone();
             return match init {
+                Some(_)
+                    if let Some(refused) =
+                        self.os_error_with_init(&exception, &name, arguments, span) =>
+                {
+                    refused
+                }
                 Some(function) => {
                     match self.bind_arguments(function, 1, &name, arguments, keywords, span) {
                         Ok(bound) => Self::typed(

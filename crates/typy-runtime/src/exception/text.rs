@@ -2,11 +2,12 @@
 //! the program built it with, as `BaseException` writes them (EXC-08, ADR-0013).
 
 use super::ExceptionObject;
-use super::classes::{KEY_ERROR, derives_from};
+use super::classes::{KEY_ERROR, OS_ERROR, derives_from};
 use crate::Raising;
 use crate::header::ObjectHeader;
 use crate::refcount::typy_rt_increment;
 use crate::string::{StrObject, from_str};
+use crate::tuple::TupleType;
 
 /// Returns `str(exception)`: the runtime's text; or from the arguments, nothing for none, the
 /// `str` of the only one, its `repr` for a `KeyError`, and the `repr` of the tuple of several.
@@ -37,7 +38,7 @@ pub unsafe extern "C" fn typy_rt_exception_str(
         match arguments.count() {
             1 if derives_from(exception.class(), &KEY_ERROR) => arguments.item_repr(0),
             1 => arguments.item_str(0),
-            _ => crate::tuple::repr(arguments.layout, arguments.address),
+            _ => crate::tuple::repr(arguments.layout(), arguments.address),
         }
     }
 }
@@ -68,7 +69,7 @@ pub unsafe extern "C" fn typy_rt_exception_repr(
             Some(arguments) if arguments.count() == 1 => ("(", arguments.item_repr(0), ")"),
             Some(arguments) => (
                 "",
-                crate::tuple::repr(arguments.layout, arguments.address),
+                crate::tuple::repr(arguments.layout(), arguments.address),
                 "",
             ),
             None if message.is_null() => ("(", Raising::ok(from_str("")), ")"),
@@ -111,7 +112,7 @@ pub(crate) enum ExitCode {
 
 /// Returns the argument of a `SystemExit`.
 pub(crate) fn exit_code(exception: &ExceptionObject) -> ExitCode {
-    let Some(arguments) = Arguments::of(exception) else {
+    let Some(arguments) = Arguments::all(exception) else {
         return ExitCode::None;
     };
     if arguments.count() != 1 {
@@ -120,8 +121,8 @@ pub(crate) fn exit_code(exception: &ExceptionObject) -> ExitCode {
     // SAFETY: the exception's arguments are live, laid out as their type says, with one.
     let (kind, value) = unsafe {
         (
-            crate::tuple::field_type(arguments.layout, 0).kind(),
-            crate::tuple::field(arguments.layout, arguments.address, 0),
+            crate::tuple::field_type(arguments.layout(), 0).kind(),
+            crate::tuple::field(arguments.layout(), arguments.address, 0),
         )
     };
     #[allow(
@@ -138,28 +139,79 @@ pub(crate) fn exit_code(exception: &ExceptionObject) -> ExitCode {
     }
 }
 
-/// The arguments of an exception: their layout and their address.
+/// The arguments of an exception that `args`, `str` and `repr` show: their layout and their
+/// address. An `OSError` built with three to five arguments shows the first two, `errno` and
+/// `strerror`, and keeps the file names for its attributes, as CPython does (EXC-14).
 pub(super) struct Arguments {
-    pub(super) layout: *const crate::tuple::TupleType,
+    /// The layout of the arguments shown: the exception's own, or the first two of its fields.
+    shown: TupleType,
     pub(super) address: u64,
 }
 
 impl Arguments {
+    /// Returns every argument of an exception the program built with at least one argument,
+    /// without the reading of an `OSError`'s file names, so a program that only needs the
+    /// code of a `SystemExit` links nothing of `OSError`.
+    fn all(exception: &ExceptionObject) -> Option<Self> {
+        if exception.arguments.is_null() {
+            return None;
+        }
+        // SAFETY: the descriptor lives as long as the program.
+        let own = unsafe { &*exception.arguments_type };
+        Some(Self {
+            shown: TupleType {
+                size: own.size,
+                length: own.length,
+                fields: own.fields,
+            },
+            address: exception.arguments.expose_provenance() as u64,
+        })
+    }
+
     /// Returns the arguments of an exception the program built with at least one argument.
     pub(super) fn of(exception: &ExceptionObject) -> Option<Self> {
         if exception.arguments.is_null() {
             return None;
         }
+        // SAFETY: the descriptor lives as long as the program.
+        let own = unsafe { &*exception.arguments_type };
+        let address = exception.arguments.expose_provenance() as u64;
+        // CPython keeps the file names out of `args` when `filename` is not `None`.
+        let named = || {
+            // SAFETY: the arguments are live and laid out as their descriptor says, with a
+            // third.
+            unsafe {
+                crate::tuple::field_type(own, 2)
+                    .held_value(crate::tuple::field(own, address, 2))
+                    .is_some_and(|(ty, _)| ty.kind() != crate::list::ItemKind::NoneValue)
+            }
+        };
+        let length = if (3..=5).contains(&own.length)
+            && derives_from(exception.class(), &OS_ERROR)
+            && named()
+        {
+            2
+        } else {
+            own.length
+        };
         Some(Self {
-            layout: exception.arguments_type,
-            address: exception.arguments.expose_provenance() as u64,
+            shown: TupleType {
+                size: own.size,
+                length,
+                fields: own.fields,
+            },
+            address,
         })
+    }
+
+    /// Returns the layout of the arguments shown, which lives as long as these arguments.
+    pub(super) fn layout(&self) -> *const TupleType {
+        &raw const self.shown
     }
 
     /// Returns the number of arguments.
     pub(super) fn count(&self) -> u64 {
-        // SAFETY: the descriptor lives as long as the program.
-        unsafe { (*self.layout).length }
+        self.shown.length
     }
 
     /// Returns `str` of argument `index`.
@@ -170,8 +222,8 @@ impl Arguments {
     unsafe fn item_str(&self, index: usize) -> Raising<*mut StrObject> {
         // SAFETY: the caller's guarantee.
         unsafe {
-            crate::tuple::field_type(self.layout, index).str(crate::tuple::field(
-                self.layout,
+            crate::tuple::field_type(self.layout(), index).str(crate::tuple::field(
+                self.layout(),
                 self.address,
                 index,
             ))
@@ -186,8 +238,8 @@ impl Arguments {
     unsafe fn item_repr(&self, index: usize) -> Raising<*mut StrObject> {
         // SAFETY: the caller's guarantee.
         unsafe {
-            crate::tuple::field_type(self.layout, index).repr(crate::tuple::field(
-                self.layout,
+            crate::tuple::field_type(self.layout(), index).repr(crate::tuple::field(
+                self.layout(),
                 self.address,
                 index,
             ))

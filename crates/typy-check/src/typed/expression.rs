@@ -151,6 +151,12 @@ pub enum TypedExprKind {
         part: ExceptionPart,
         operation: PartOperation,
     },
+    /// `errno`, `strerror`, `filename` or `filename2` of an `OSError`, `None` when it was not
+    /// given (EXC-14).
+    OsErrorField {
+        exception: Box<TypedExpr>,
+        field: OsErrorField,
+    },
     /// `input(prompt)`: a line of standard input (LIB-04).
     Input(Option<Box<TypedExpr>>),
     /// `open(path, mode)` in a text mode: `mode` as written, which the file's `repr` shows,
@@ -472,6 +478,7 @@ impl TypedExpr {
             TypedExprKind::SysExit(value)
             | TypedExprKind::Input(value)
             | TypedExprKind::RecursionLimit(value) => value.iter().map(Box::as_ref).collect(),
+            TypedExprKind::OsErrorField { exception, .. } => vec![exception],
             TypedExprKind::ExceptionPart {
                 exception,
                 operation,
@@ -587,4 +594,17 @@ pub enum PartOperation {
     Truth,
     /// Whether it equals the value.
     Equal(Box<TypedExpr>),
+}
+
+/// An attribute of an `OSError` that its arguments give (EXC-14).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum OsErrorField {
+    /// `errno`, the first argument.
+    Errno,
+    /// `strerror`, the second.
+    Strerror,
+    /// `filename`, the third.
+    Filename,
+    /// `filename2`, the fifth.
+    Filename2,
 }

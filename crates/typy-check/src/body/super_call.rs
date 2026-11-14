@@ -215,7 +215,7 @@ impl BodyChecker<'_> {
                     span,
                 );
             }
-            if let Some(error) = self.os_error_arguments(exception.builtin(), &values, span) {
+            if let Some(error) = self.os_error_arguments(exception.builtin(), &values, true, span) {
                 return error;
             }
             Self::typed(

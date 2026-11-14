@@ -380,6 +380,7 @@ impl Dump<'_> {
             TypedExprKind::SysExit(_) => "SysExit".to_owned(),
             TypedExprKind::RecursionLimit(_) => "RecursionLimit".to_owned(),
             TypedExprKind::ExceptionPart { part, .. } => format!("ExceptionPart({part:?})"),
+            TypedExprKind::OsErrorField { field, .. } => format!("OsErrorField({field:?})"),
             TypedExprKind::Input(_) => "Input".to_owned(),
             TypedExprKind::Open { mode, access, .. } => format!("Open {mode:?} {access:?}"),
             TypedExprKind::PercentFormat { parts, .. } => {

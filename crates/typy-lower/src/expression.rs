@@ -224,6 +224,9 @@ impl FunctionLowerer<'_> {
             TypedExprKind::Open { path, mode, access } => self.open(path, mode, *access, span),
             TypedExprKind::SysExit(code) => self.sys_exit(code.as_deref(), span),
             TypedExprKind::RecursionLimit(limit) => self.recursion_limit(limit.as_deref(), span),
+            TypedExprKind::OsErrorField { exception, field } => {
+                self.os_error_field(exception, *field, span)
+            }
             TypedExprKind::ExceptionPart {
                 exception,
                 part,

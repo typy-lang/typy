@@ -3,11 +3,37 @@
 //! same type, checked when a type argument is given for a parameter the protocol bounds
 //! (GEN-04, ADR-0023).
 
+use typy_diagnostics::{Diagnostic, DiagnosticCode, RuleId};
+
 use super::BodyChecker;
-use crate::typed::{ClassId, FunctionSignature};
+use crate::typed::{ClassId, FunctionSignature, TypedExpr};
 use crate::types::Type;
 
 impl BodyChecker<'_> {
+    /// Refuses a call of a protocol, which has no instances; CPython raises `TypeError`.
+    pub(super) fn protocol_called(
+        &mut self,
+        class: ClassId,
+        arguments: &[typy_source::syntax::Expr],
+        span: typy_diagnostics::Span,
+    ) -> Option<TypedExpr> {
+        if !self.program.is_protocol(class) {
+            return None;
+        }
+        for argument in arguments {
+            self.expression(argument);
+        }
+        let name = &self.program.classes[class.0 as usize].name;
+        let diagnostic = Diagnostic::new(
+            DiagnosticCode::error(401),
+            span,
+            format!("`{name}` is a protocol, which has no instances; CPython raises `TypeError`"),
+        )
+        .with_rule(RuleId::GEN_04)
+        .with_help("make an instance of a class that satisfies it");
+        Some(self.error(diagnostic, span))
+    }
+
     /// Returns the protocol a bound names, if it names one.
     pub(super) fn bound_protocol(&self, bound: &Type) -> Option<ClassId> {
         bound

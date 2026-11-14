@@ -38,6 +38,7 @@ impl FunctionLowerer<'_> {
         if let Some(init) = init {
             return self.new_exception_with_init(class, init, span);
         }
+        let built_in = class.builtin();
         let class = self.constant(Constant::TypeObject(exception_class(class)), span);
         let types: Vec<Type> = arguments.iter().map(|value| value.ty.clone()).collect();
         let id = self.tuple_type_id(&types);
@@ -54,11 +55,13 @@ impl FunctionLowerer<'_> {
         }
         let tuple = self.tuple_display(arguments, layout, span);
         let address = self.bits(Self::borrowed(tuple.value, tuple.ty), span);
-        let exception = self.call_runtime(
-            RuntimeFunction::ExceptionNew,
-            vec![class, descriptor, address],
-            span,
-        );
+        // An `OSError` of two or more arguments reads them as `errno` and the rest (EXC-14).
+        let constructor = if built_in.is_os_error() && arguments.len() >= 2 {
+            RuntimeFunction::OsErrorNew
+        } else {
+            RuntimeFunction::ExceptionNew
+        };
+        let exception = self.call_runtime(constructor, vec![class, descriptor, address], span);
         self.release(tuple, span);
         exception
     }
