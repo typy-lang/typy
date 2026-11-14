@@ -185,6 +185,8 @@ All notable changes to TyPy are recorded here. The format follows
 
 ### Changed
 
+- A class decorator other than `@dataclass` is planned for 1.0 with the
+  other user-defined decorators (FUN-06), not for 0.4.
 - `open(..., encoding="csutf8")` is E0404, as for `str.encode`: CPython
   3.12 does not know the name, so its result depends on the version.
   Write `"utf-8"` instead.

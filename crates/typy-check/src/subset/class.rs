@@ -27,10 +27,12 @@ impl Walker {
                 },
             );
         }
+        // `@dataclass` is taken off the class before this walk (CLS-05); any other class
+        // decorator is a user-defined decorator (FUN-06).
         if let Some(decorator) = class.decorators.first() {
             self.report(
                 decorator.span(),
-                planned("class decorators", "0.4", RuleId::CLS_05),
+                planned("class decorators", "1.0", RuleId::FUN_06),
             );
         }
         // A generic class, or one of its copies, as a base is planned (GEN-08).

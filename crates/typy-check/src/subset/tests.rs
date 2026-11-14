@@ -70,7 +70,7 @@ fn later_features_name_their_release_and_rule() {
     let cases = [
         (
             "@d\nclass C:\n    pass\n",
-            "class decorators are planned for TyPy 0.4 (CLS-05)",
+            "class decorators are planned for TyPy 1.0 (FUN-06)",
         ),
         (
             "class B:\n    pass\nclass C[T](B):\n    pass\n",
