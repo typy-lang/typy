@@ -47,7 +47,29 @@ pub(crate) fn check(tree: &SyntaxTree) -> Diagnostics {
                 _ => None,
             })
             .collect(),
+        imported: std::collections::BTreeSet::new(),
+        imported_modules: std::collections::BTreeSet::new(),
     };
+    for statement in &tree.body {
+        match statement {
+            typy_source::syntax::Stmt::ImportFrom { names, .. } => {
+                walker.imported.extend(
+                    names
+                        .iter()
+                        .map(|alias| alias.as_name.as_ref().unwrap_or(&alias.name).name.clone()),
+                );
+            }
+            typy_source::syntax::Stmt::Import { names, .. } => {
+                walker
+                    .imported_modules
+                    .extend(names.iter().map(|alias| match &alias.as_name {
+                        Some(bound) => bound.name.clone(),
+                        None => alias.name.name.split('.').next().unwrap_or("").to_owned(),
+                    }));
+            }
+            _ => {}
+        }
+    }
     walker.statements(&tree.body, Place::ModuleTop);
     walker.diagnostics
 }
@@ -74,6 +96,11 @@ struct Walker {
     /// The module's generic type aliases, which an annotation of an alias's value may
     /// subscript before the checker expands it (SMT-10).
     generic_aliases: std::collections::BTreeSet<String>,
+    /// The names the module's top-level `from` imports bind, which may be generic aliases of
+    /// another module that the checker reads (SMT-12).
+    imported: std::collections::BTreeSet<String>,
+    /// The names the module's top-level `import` statements bind to modules.
+    imported_modules: std::collections::BTreeSet<String>,
     /// The names each enclosing comprehension binds, innermost last, which an assignment
     /// expression may not rebind (EXP-13).
     comprehension_names: Vec<Vec<String>>,

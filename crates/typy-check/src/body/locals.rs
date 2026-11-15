@@ -160,6 +160,7 @@ impl BodyChecker<'_> {
             instances: &self.program.instances,
             modules: &self.program.module_classes,
             module_aliases: &self.program.module_aliases,
+            imported_aliases: &self.program.imported_aliases,
             parameters: &self.program.type_arguments,
             copies: &self.program.class_copies,
             names: &self.program.annotation_names,

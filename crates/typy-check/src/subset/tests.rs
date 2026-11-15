@@ -101,11 +101,6 @@ fn later_features_name_their_release_and_rule() {
             "generator expressions are planned for TyPy 1.0 (EXP-15)",
         ),
         (
-            "def f() -> None:\n    type X = int\n",
-            "`type` statements inside functions, classes and blocks are planned for TyPy 0.5 \
-             (SMT-12)",
-        ),
-        (
             "def f[*Ts](x: int) -> int:\n    return x\n",
             "`*Ts` and `**P` type parameters are planned for TyPy 1.0 (GEN-06)",
         ),

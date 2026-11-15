@@ -274,10 +274,16 @@ print(swap((1, 2)), swap(("x", "y")), counts)
 ```
 
 A generic alias named without one type argument for each parameter, such
-as `Pair` or `Pair[int, int]`, is E0408. An alias of another module, an
-alias read as a value, which CPython gives as a `TypeAliasType`, `type`
-inside a function, a class or a block, and a bound or constraints on an
-alias's type parameter are planned for 0.5 (SMT-12).
+as `Pair` or `Pair[int, int]`, is E0408. An alias of another module is
+read as its own module wrote it, imported by name, as in
+`from shapes import Pair`, or read through its module, as `shapes.Pair[int]`.
+A `type` statement inside a function, a class or a block makes its alias
+for the statements after it there. A bound or constraints on an alias's
+type parameter, as in `type Ordered[T: float] = tuple[T, T]`, are taken as
+CPython takes them, which checks no argument against them; each use is
+checked as the type the alias stands for (SMT-12). An alias read as a
+value, which CPython gives as a `TypeAliasType`, is planned for 0.5
+(SMT-12).
 
 ## Example
 

@@ -53,7 +53,12 @@ pub(crate) struct Program {
     /// module, which annotations such as `shapes.Point` name.
     pub(super) module_classes: BTreeMap<String, BTreeMap<String, ClassId>>,
     /// For each name bound to a module of the program, that module's type aliases (SMT-10).
-    pub(super) module_aliases: BTreeMap<String, BTreeSet<String>>,
+    pub(super) module_aliases: BTreeMap<String, crate::check::AliasTable>,
+    /// The type aliases of other modules the module, or the function being checked, imports
+    /// by name (SMT-12).
+    pub(super) imported_aliases: crate::check::AliasTable,
+    /// The module's own type aliases as other modules read them, kept when the module ends.
+    pub(super) exported_aliases: crate::check::AliasTable,
     /// The type aliases of the module being checked, which only its annotations read
     /// (SMT-10).
     pub(super) type_aliases: BTreeSet<String>,
@@ -114,6 +119,8 @@ pub(crate) struct ModuleScope {
     pub(super) class_ids: BTreeMap<String, ClassId>,
     pub(super) module_symbols: BTreeMap<String, SymbolId>,
     pub(super) type_aliases: BTreeSet<String>,
+    /// The module's type aliases as other modules read them (SMT-12).
+    pub(super) alias_values: crate::check::AliasTable,
 }
 
 impl Program {
@@ -142,6 +149,8 @@ impl Program {
             path: String::new(),
             module_classes: BTreeMap::new(),
             module_aliases: BTreeMap::new(),
+            imported_aliases: BTreeMap::new(),
+            exported_aliases: BTreeMap::new(),
             type_aliases: BTreeSet::new(),
             type_arguments: BTreeMap::new(),
             generics: super::generic_copy::Generics::default(),
@@ -228,6 +237,7 @@ impl Program {
             .collect();
         self.module_classes = BTreeMap::new();
         self.module_aliases = BTreeMap::new();
+        self.imported_aliases = BTreeMap::new();
         self.class_modules
             .extend(std::iter::repeat_n(self.module.clone(), classes.len()));
         self.classes.extend(classes);
@@ -330,14 +340,38 @@ impl Program {
     pub(crate) fn module_aliases_of(
         &self,
         modules: &BTreeMap<String, String>,
-    ) -> BTreeMap<String, BTreeSet<String>> {
+    ) -> BTreeMap<String, crate::check::AliasTable> {
         modules
             .iter()
             .filter_map(|(name, module)| {
                 let scope = self.scopes.get(module)?;
-                Some((name.clone(), scope.type_aliases.clone()))
+                Some((name.clone(), scope.alias_values.clone()))
             })
             .collect()
+    }
+
+    /// Keeps the module's type aliases, with what its annotations see, for the modules that
+    /// import them (SMT-12).
+    pub(crate) fn export_aliases(
+        &mut self,
+        aliases: &BTreeMap<String, crate::check::type_alias::Alias>,
+        classes: &BTreeMap<String, ClassId>,
+        names: &crate::check::ImportedNames,
+    ) {
+        self.exported_aliases = aliases
+            .iter()
+            .map(|(name, alias)| {
+                (
+                    name.clone(),
+                    std::rc::Rc::new(crate::check::ExportedAlias {
+                        parameters: alias.parameters.clone(),
+                        value: alias.value.clone(),
+                        classes: classes.clone(),
+                        names: names.clone(),
+                    }),
+                )
+            })
+            .collect();
     }
 
     /// Returns the exception classes of the modules checked so far.
@@ -374,6 +408,7 @@ impl Program {
             .extend(functions.iter().map(|(name, id)| (name.clone(), *id)));
         self.module_classes = annotations.modules;
         self.module_aliases = annotations.module_aliases;
+        self.imported_aliases = annotations.aliases;
         self.annotation_names = annotations.names;
         self.annotation_modules = annotations.standard;
     }
@@ -393,6 +428,7 @@ impl Program {
                 class_ids: self.class_ids.clone(),
                 module_symbols: self.module_symbols.clone(),
                 type_aliases: std::mem::take(&mut self.type_aliases),
+                alias_values: std::mem::take(&mut self.exported_aliases),
             },
         );
     }

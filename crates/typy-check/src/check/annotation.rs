@@ -20,8 +20,10 @@ pub(crate) struct AnnotationScope<'classes> {
     /// For each name bound to a module at module level, that module's classes, which an
     /// annotation such as `shapes.Point` names (MOD-10).
     pub(crate) modules: &'classes BTreeMap<String, BTreeMap<String, ClassId>>,
-    /// For each of those names, that module's type aliases (SMT-10).
-    pub(crate) module_aliases: &'classes BTreeMap<String, std::collections::BTreeSet<String>>,
+    /// For each of those names, that module's type aliases (SMT-10, SMT-12).
+    pub(crate) module_aliases: &'classes BTreeMap<String, AliasTable>,
+    /// The type aliases of other modules imported by name (SMT-12).
+    pub(crate) imported_aliases: &'classes AliasTable,
     /// The names imported from `typing`, `collections.abc` and `types` (TYP-15).
     pub(crate) names: &'classes BTreeMap<String, AnnotationName>,
     /// For each name bound to one of those modules, the module.
@@ -34,6 +36,20 @@ pub(crate) struct AnnotationScope<'classes> {
     pub(crate) copies: &'classes std::cell::RefCell<crate::body::ClassCopies>,
     pub(crate) bound: u32,
 }
+
+/// A type alias of a module as another module reads it: its type parameters, its value with
+/// its module's own aliases expanded, and what its module's annotations see, so the value is
+/// read where it was written (SMT-12).
+#[derive(Debug, PartialEq)]
+pub(crate) struct ExportedAlias {
+    pub(crate) parameters: Vec<String>,
+    pub(crate) value: Expr,
+    pub(crate) classes: BTreeMap<String, ClassId>,
+    pub(crate) names: crate::check::ImportedNames,
+}
+
+/// Type aliases by the name a module reads them under.
+pub(crate) type AliasTable = BTreeMap<String, std::rc::Rc<ExportedAlias>>;
 
 /// The type parameters of a scope that has none.
 pub(crate) static NO_PARAMETERS: BTreeMap<String, Type> = BTreeMap::new();
@@ -394,14 +410,6 @@ fn module_class_type(
         };
         return named_type(&attribute.name, span, &inner, diagnostics);
     }
-    if scope
-        .module_aliases
-        .get(id)
-        .is_some_and(|aliases| aliases.contains(&attribute.name))
-    {
-        diagnostics.push(other_module_alias(id, &attribute.name, span));
-        return Type::Error;
-    }
     diagnostics.push(
         Diagnostic::new(
             DiagnosticCode::error(425),
@@ -413,20 +421,89 @@ fn module_class_type(
     Type::Error
 }
 
-/// Reports a type alias of another module, whose expansion in this module is planned
-/// (SMT-12).
-pub(crate) fn other_module_alias(
-    module: &str,
-    name: &str,
-    span: typy_diagnostics::Span,
-) -> Diagnostic {
-    Diagnostic::new(
-        DiagnosticCode::error(201),
-        span,
-        format!("using the type alias `{module}.{name}` of another module is planned for TyPy 0.5 (SMT-12)"),
-    )
-    .with_rule(RuleId::SMT_12)
-    .with_help(format!("define the alias in this module, or annotate with what `{name}` stands for"))
+/// Returns the alias of another module an annotation names, by an imported name or through
+/// its module, alone or given its type arguments.
+fn imported_alias<'scope>(
+    expression: &Expr,
+    scope: &AnnotationScope<'scope>,
+) -> Option<(String, &'scope ExportedAlias)> {
+    match expression {
+        Expr::Name { id, .. } => scope
+            .imported_aliases
+            .get(id)
+            .map(|alias| (id.clone(), alias.as_ref())),
+        Expr::Attribute {
+            value, attribute, ..
+        } => {
+            let Expr::Name { id, .. } = value.as_ref() else {
+                return None;
+            };
+            let alias = scope.module_aliases.get(id)?.get(&attribute.name)?;
+            Some((format!("{id}.{}", attribute.name), alias.as_ref()))
+        }
+        _ => None,
+    }
+}
+
+/// Returns the type an alias of another module stands for, its value read in its own module
+/// with each type argument, read here, in place of its parameter (SMT-12).
+fn imported_alias_type(
+    annotation: &Expr,
+    scope: &AnnotationScope<'_>,
+    diagnostics: &mut Diagnostics,
+) -> Option<Type> {
+    let (named, arguments) = match annotation {
+        Expr::Subscript { value, index, .. } => {
+            let found = imported_alias(value, scope)?;
+            let arguments = match index.as_ref() {
+                Expr::Tuple { elements, .. } => elements.iter().collect(),
+                one => vec![one],
+            };
+            (found, arguments)
+        }
+        other => (imported_alias(other, scope)?, Vec::new()),
+    };
+    let (name, alias) = named;
+    if arguments.len() != alias.parameters.len() {
+        let count = alias.parameters.len();
+        diagnostics.push(
+            Diagnostic::new(
+                DiagnosticCode::error(408),
+                annotation.span(),
+                format!(
+                    "the type alias `{name}` takes {count} type {}, such as `{name}[{}]`",
+                    if count == 1 { "argument" } else { "arguments" },
+                    vec!["int"; count].join(", ")
+                ),
+            )
+            .with_rule(RuleId::SMT_10),
+        );
+        return Some(Type::Error);
+    }
+    let parameters: BTreeMap<String, Type> = alias
+        .parameters
+        .iter()
+        .cloned()
+        .zip(
+            arguments
+                .into_iter()
+                .map(|argument| annotation_type(argument, scope, diagnostics)),
+        )
+        .collect();
+    let written = &alias.names;
+    let own = AnnotationScope {
+        classes: &alias.classes,
+        instances: scope.instances,
+        modules: &written.modules,
+        module_aliases: &written.module_aliases,
+        imported_aliases: &written.aliases,
+        names: &written.names,
+        standard: &written.standard,
+        parameters: &parameters,
+        copies: scope.copies,
+        bound: u32::MAX,
+    };
+    Some(annotation_type(&alias.value, &own, diagnostics))
 }
 
 /// Returns the standard module a name, or a dotted name through one, stands for.
@@ -451,6 +528,9 @@ pub(crate) fn annotation_type(
     diagnostics: &mut Diagnostics,
 ) -> Type {
     if let Some(ty) = standard_annotation(annotation, scope, diagnostics) {
+        return ty;
+    }
+    if let Some(ty) = imported_alias_type(annotation, scope, diagnostics) {
         return ty;
     }
     match annotation {

@@ -27,6 +27,8 @@ pub(super) struct ModuleImports {
     pub(super) standard: BTreeMap<String, String>,
     /// The functions of built-in modules imported by name.
     pub(super) module_functions: BTreeMap<String, crate::body::ModuleFunction>,
+    /// The type aliases of other modules imported by name (SMT-12).
+    pub(super) aliases: crate::check::AliasTable,
 }
 
 /// Returns what the imports at module level bind, in any block outside a `def` or a `class`.
@@ -67,6 +69,9 @@ fn collect(program: &Program, statements: &[Stmt], found: &mut ModuleImports) {
                         }
                         Imported::ModuleFunction(function) => {
                             found.module_functions.insert(name, function);
+                        }
+                        Imported::TypeAlias(alias) => {
+                            found.aliases.insert(name, alias);
                         }
                     }
                 }

@@ -146,8 +146,12 @@ impl Walker {
                     }
                 }
             }
-            // A generic class or type alias of the module, given its type arguments (GEN-01).
-            Expr::Subscript { value, index, .. } if matches!(value.as_ref(), Expr::Name { id, .. } if self.generic_classes.contains(id) || self.generic_aliases.contains(id)) => {
+            // A generic class or type alias of the module, given its type arguments (GEN-01),
+            // or a name of another module, which the checker reads (SMT-12).
+            Expr::Subscript { value, index, .. }
+                if matches!(value.as_ref(), Expr::Name { id, .. } if self.generic_classes.contains(id) || self.generic_aliases.contains(id) || self.imported.contains(id))
+                    || matches!(value.as_ref(), Expr::Attribute { value: module, .. } if matches!(module.as_ref(), Expr::Name { id, .. } if self.imported_modules.contains(id))) =>
+            {
                 match index.as_ref() {
                     Expr::Tuple { elements, .. } => {
                         for element in elements {

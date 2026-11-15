@@ -15,7 +15,7 @@ mod module_imports;
 mod module_scope;
 mod overriding;
 mod protocol;
-mod type_alias;
+pub(crate) mod type_alias;
 mod visit;
 pub(crate) use visit::visit_statement;
 
@@ -31,15 +31,17 @@ pub(crate) use annotation::{
 
 /// The names a module's imports give its annotations: each module's classes by the name
 /// bound to it, and the names of `typing`, `collections.abc` and `types` (TYP-15).
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug, Default, PartialEq)]
 pub(crate) struct ImportedNames {
     pub(crate) modules: BTreeMap<String, BTreeMap<String, ClassId>>,
     /// For each name bound to a module of the program, that module's type aliases (SMT-10).
-    pub(crate) module_aliases: BTreeMap<String, BTreeSet<String>>,
+    pub(crate) module_aliases: BTreeMap<String, AliasTable>,
+    /// The type aliases of other modules imported by name (SMT-12).
+    pub(crate) aliases: AliasTable,
     pub(crate) names: BTreeMap<String, AnnotationName>,
     pub(crate) standard: BTreeMap<String, String>,
 }
-pub(crate) use annotation::{ClassVarAnnotation, final_type, other_module_alias};
+pub(crate) use annotation::{AliasTable, ClassVarAnnotation, ExportedAlias, final_type};
 pub(crate) use class::{ClassInfo, class_value_variable, class_values};
 pub(crate) use definition::Definition;
 pub(crate) use protocol::outside_signature;
@@ -60,6 +62,7 @@ impl ImportedNames {
         Self {
             modules: program.module_classes_of(&imports.modules),
             module_aliases: program.module_aliases_of(&imports.modules),
+            aliases: imports.aliases.clone(),
             names: imports.annotations.clone(),
             standard: imports.standard.clone(),
         }
@@ -78,14 +81,15 @@ impl TypeChecker {
         // A dataclass gets its methods, and each annotation the types its aliases stand for,
         // before anything reads the module (CLS-05, SMT-10).
         let mut dataclasses = dataclass::Dataclasses::default();
-        let modules: Vec<Module> = project
+        let expanded: Vec<(Module, BTreeMap<String, type_alias::Alias>)> = project
             .modules_in_order()
             .map(|module| {
                 let mut module = dataclasses.expand(module, &mut diagnostics);
-                type_alias::expand(&mut module.syntax.body, &mut diagnostics);
-                module
+                let aliases = type_alias::expand(&mut module.syntax.body, &mut diagnostics);
+                (module, aliases)
             })
             .collect();
+        let (modules, aliases): (Vec<Module>, Vec<_>) = expanded.into_iter().unzip();
         for module in &modules {
             diagnostics.extend(subset::check(&module.syntax));
         }
@@ -115,7 +119,7 @@ impl TypeChecker {
             assigned,
         );
         // Each module is checked after the modules its module-level imports need.
-        for module in &modules {
+        for (module, aliases) in modules.iter().zip(&aliases) {
             let path = project.path(module.file).to_owned();
             let frozen = dataclasses
                 .info
@@ -124,7 +128,7 @@ impl TypeChecker {
                 .unwrap_or_default();
             check_module(
                 &mut program,
-                module,
+                (module, aliases),
                 &path,
                 floor_defers,
                 &frozen,
@@ -144,7 +148,7 @@ impl TypeChecker {
 /// the modules before it.
 fn check_module(
     program: &mut Program,
-    module: &Module,
+    (module, aliases): (&Module, &BTreeMap<String, type_alias::Alias>),
     path: &str,
     floor_defers: bool,
     dataclasses: &BTreeMap<String, dataclass::DataclassInfo>,
@@ -163,6 +167,7 @@ fn check_module(
             .iter()
             .map(|class| (class.name.name.clone(), class.id)),
     );
+    program.export_aliases(aliases, &class_ids, &annotations);
     let instances = module_instances(program, &classes, &class_ids, &annotations, diagnostics);
     let known_scope = (&class_ids, &instances, &annotations);
     note_module_generics(program, &classes, first_class, known_scope, diagnostics);
@@ -371,6 +376,7 @@ fn note_module_generics(
             instances,
             modules: &annotations.modules,
             module_aliases: &annotations.module_aliases,
+            imported_aliases: &annotations.aliases,
             names: &annotations.names,
             standard: &annotations.standard,
             parameters: &annotation::NO_PARAMETERS,

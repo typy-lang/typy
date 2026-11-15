@@ -33,6 +33,8 @@ pub(crate) enum Imported {
     ModuleFunction(super::builtin_module::ModuleFunction),
     /// A value of a built-in module, which the name takes.
     ModuleValue(super::builtin_module::BuiltinValue),
+    /// A type alias of another module, which annotations read (SMT-12).
+    TypeAlias(std::rc::Rc<crate::check::ExportedAlias>),
 }
 
 /// What a name is in a module's tables.
@@ -41,7 +43,8 @@ pub(crate) enum Named {
     Function(FunctionId),
     Class(ClassId),
     Variable(SymbolId),
-    /// A type alias, which only the annotations of its own module read (SMT-10).
+    /// A type alias, which annotations read, its own module's and those importing it
+    /// (SMT-10, SMT-12).
     TypeAlias,
     Nothing,
 }
@@ -167,6 +170,20 @@ impl Program {
         Ok(resolved)
     }
 
+    /// Returns the type alias `name` of a module, as an importing module reads it.
+    fn alias_value(
+        &self,
+        module: &str,
+        name: &str,
+    ) -> Option<std::rc::Rc<crate::check::ExportedAlias>> {
+        let aliases = if module == self.module {
+            &self.exported_aliases
+        } else {
+            &self.scopes.get(module)?.alias_values
+        };
+        aliases.get(name).cloned()
+    }
+
     /// Returns what `name` is in a module checked before, or in the module being checked,
     /// which its own functions may import by name; `None` when the module is not checked
     /// yet. The tables are read in place, so a lookup costs the same in any module.
@@ -267,11 +284,9 @@ impl Program {
                 });
             }
             Some(Named::TypeAlias) => {
-                return Err(Box::new(crate::check::other_module_alias(
-                    base.as_str(),
-                    name,
-                    alias.name.span,
-                )));
+                if let Some(found) = self.alias_value(base.as_str(), name) {
+                    return Ok(Imported::TypeAlias(found));
+                }
             }
             Some(Named::Nothing) => {}
         }
@@ -448,7 +463,9 @@ impl BodyChecker<'_> {
                     continue;
                 }
                 Imported::ModuleValue(value) => value.expression(name_span).ty,
-                Imported::Annotation(_) | Imported::Standard(_) => continue,
+                Imported::Annotation(_) | Imported::Standard(_) | Imported::TypeAlias(_) => {
+                    continue;
+                }
                 Imported::Variable { source, .. } => {
                     self.program.symbols[source.0 as usize].ty.clone()
                 }
@@ -488,6 +505,7 @@ impl BodyChecker<'_> {
                 | Imported::Class(_)
                 | Imported::Annotation(_)
                 | Imported::Standard(_)
+                | Imported::TypeAlias(_)
                 | Imported::ModuleFunction(_) => None,
             };
             bindings.extend(self.assign(&target, ty, &value).and_then(binding));
@@ -961,6 +979,10 @@ impl BodyChecker<'_> {
                         name.clone(),
                         self.program.module_functions.insert(name, function),
                     )),
+                    Imported::TypeAlias(alias) => saved.aliases.push((
+                        name.clone(),
+                        self.program.imported_aliases.insert(name, alias),
+                    )),
                     Imported::Variable { .. } | Imported::Module(_) | Imported::ModuleValue(_) => {}
                 }
             }
@@ -970,6 +992,12 @@ impl BodyChecker<'_> {
 
     /// Puts back the names `import_names_of` replaced, newest first.
     pub(super) fn restore_names(&mut self, saved: SavedNames) {
+        for (name, previous) in saved.aliases.into_iter().rev() {
+            match previous {
+                Some(alias) => self.program.imported_aliases.insert(name, alias),
+                None => self.program.imported_aliases.remove(&name),
+            };
+        }
         for (name, previous) in saved.math.into_iter().rev() {
             match previous {
                 Some(function) => self.program.module_functions.insert(name, function),
@@ -1016,6 +1044,7 @@ pub(super) struct SavedNames {
     standard: Vec<(String, Option<String>)>,
     lazy: Vec<(String, FunctionId)>,
     math: Vec<(String, Option<ModuleFunction>)>,
+    aliases: Vec<(String, Option<std::rc::Rc<crate::check::ExportedAlias>>)>,
 }
 
 /// Collects the import statements of a block, at any depth outside nested definitions.

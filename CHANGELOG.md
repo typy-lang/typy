@@ -31,6 +31,9 @@ All notable changes to TyPy are recorded here. The format follows
   `List`, `Dict`, `Set`, `Tuple`, `Type`, `Optional[...]` and
   `Union[...]` of `typing`, as the class of `isinstance` and of a class
   pattern, with CPython's answers (TYP-17).
+- Type aliases of another module, by name or through the module, `type`
+  statements inside functions, classes and blocks, and bounds and
+  constraints on an alias's type parameters (SMT-12).
 - One value assigned to several targets, as in `a = items[0] = value`, or
   unpacked into targets, is held by each target as its own type, a union
   or an optional among them (TYP-16).

@@ -162,6 +162,7 @@ pub(super) fn collect_functions<'tree>(
             instances,
             modules: &names.modules,
             module_aliases: &names.module_aliases,
+            imported_aliases: &names.aliases,
             names: &names.names,
             standard: &names.standard,
             parameters: &super::annotation::NO_PARAMETERS,

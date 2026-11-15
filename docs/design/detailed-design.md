@@ -1317,10 +1317,25 @@ after the dataclass expansion and before the subset check: it expands each
 alias's value through the aliases it names, reports an alias that reaches
 itself and one defined twice, and replaces each alias name in an annotation,
 except before a subscript, with its value as an `Expr::Quoted`, which is read
-late, so an alias may name a class defined below it (SMT-10).
-`Program::type_aliases` keeps the module's alias names, and `ModuleScope`
-those of each module checked, so a read of an alias as a value, and an alias
-of another module, are E0201 (SMT-12). `Final` follows TYP-08:
+late, so an alias may name a class defined below it (SMT-10). A `type`
+statement inside a function, a class or a block adds its alias to the
+scope of that block, which `Expansion::scopes` keeps innermost last, so the
+alias stands for its value in the statements after it and the blocks inside
+them (SMT-12). A bound or constraints on an alias's parameter are read as
+CPython reads them, which checks no argument against them; the expanded
+alias is checked as the type it stands for. `expand` returns the module's
+aliases, and `Program::export_aliases` keeps each as an `ExportedAlias`:
+its parameters, its value, and the module's class names and
+`ImportedNames`, which `ModuleScope::alias_values` holds when the module
+ends. An import of an alias binds `Imported::TypeAlias`, which
+`ImportedNames::aliases` and `Program::imported_aliases` keep, and a module
+bound by name carries its aliases in `module_aliases`; `annotation_type`
+reads `Pair[int]`, `shapes.Pair[int]` or a plain alias of another module by
+reading the alias's value in a scope made from its own module's names, with
+each type argument, read where it is written, bound to its parameter. The
+subset walker lets a subscript of a name the module imports, or of a name
+read through an imported module, reach the checker. A read of an alias as a
+value is E0201 (SMT-12). `Final` follows TYP-08:
 `body::locals::declare` records each `Final` variable in
 `Program::final_variables` with the name its declaration assigns, and `assign`
 and `module_attribute_target` refuse any other with E0414; a class body's

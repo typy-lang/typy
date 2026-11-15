@@ -14,25 +14,27 @@ use typy_source::syntax::{Expr, Stmt};
 
 /// A type alias: its type parameters, by name, and its value.
 #[derive(Clone, Debug)]
-struct Alias {
-    parameters: Vec<String>,
-    value: Expr,
+pub(crate) struct Alias {
+    pub(crate) parameters: Vec<String>,
+    pub(crate) value: Expr,
 }
 
-/// What expanding an annotation needs: the aliases, the type parameters in scope, which hide
-/// aliases of their names, and where to report a misused alias.
-struct Expansion<'aliases, 'diagnostics> {
-    aliases: &'aliases BTreeMap<String, Alias>,
+/// What expanding an annotation needs: the aliases of each scope, outermost first, the type
+/// parameters in scope, which hide aliases of their names, and where to report a misused
+/// alias.
+struct Expansion<'diagnostics> {
+    scopes: Vec<BTreeMap<String, Alias>>,
     hidden: Vec<String>,
     diagnostics: &'diagnostics mut Diagnostics,
 }
 
-/// Replaces each name of a module-level type alias in the module's annotations with the
-/// alias's value, and reports an alias defined twice or naming itself.
-pub(super) fn expand(body: &mut [Stmt], diagnostics: &mut Diagnostics) {
+/// Replaces each name of a type alias in the module's annotations with the alias's value,
+/// reports an alias defined twice or naming itself, and returns the module-level aliases,
+/// which other modules import (SMT-12).
+pub(super) fn expand(body: &mut [Stmt], diagnostics: &mut Diagnostics) -> BTreeMap<String, Alias> {
     let aliases = resolved(body, diagnostics);
     let mut expansion = Expansion {
-        aliases: &aliases,
+        scopes: vec![aliases],
         hidden: Vec::new(),
         diagnostics,
     };
@@ -42,6 +44,7 @@ pub(super) fn expand(body: &mut [Stmt], diagnostics: &mut Diagnostics) {
         }
         expansion.statement(statement);
     }
+    expansion.scopes.swap_remove(0)
 }
 
 /// Returns each module-level alias with its value, the aliases it names already expanded.
@@ -147,7 +150,7 @@ fn resolve(
     }
     let mut expanded = (*value).clone();
     Expansion {
-        aliases: &known,
+        scopes: vec![known],
         hidden: Vec::new(),
         diagnostics,
     }
@@ -189,17 +192,27 @@ fn alias_names(
     }
 }
 
-impl Expansion<'_, '_> {
+impl Expansion<'_> {
+    /// Returns the alias `id` names where no type parameter hides it, the innermost first.
+    fn lookup(&self, id: &str) -> Option<&Alias> {
+        if self.hidden.iter().any(|hidden| hidden == id) {
+            return None;
+        }
+        self.scopes.iter().rev().find_map(|scope| scope.get(id))
+    }
+
     /// Replaces each alias an annotation names with its value, read late as a string
     /// annotation is; a generic alias takes its type arguments in place of its parameters.
     fn annotation(&mut self, expression: &mut Expr) {
         match expression {
             Expr::Name { id, span } => {
-                let Some(alias) = self.aliases.get(id).filter(|_| !self.hidden.contains(id)) else {
+                let Some(alias) = self.lookup(id) else {
                     return;
                 };
                 if !alias.parameters.is_empty() {
-                    self.unapplied(id, alias, *span);
+                    let alias = alias.clone();
+                    let id = id.clone();
+                    self.unapplied(&id, &alias, *span);
                     return;
                 }
                 *expression = Expr::Quoted {
@@ -210,11 +223,10 @@ impl Expansion<'_, '_> {
             Expr::Subscript { value, index, span } => {
                 self.annotation(index);
                 let generic = match value.as_ref() {
-                    Expr::Name { id, .. } if !self.hidden.contains(id) => self
-                        .aliases
-                        .get(id)
+                    Expr::Name { id, .. } => self
+                        .lookup(id)
                         .filter(|alias| !alias.parameters.is_empty())
-                        .map(|alias| (id.clone(), alias)),
+                        .map(|alias| (id.clone(), alias.clone())),
                     _ => None,
                 };
                 let Some((name, alias)) = generic else {
@@ -225,7 +237,7 @@ impl Expansion<'_, '_> {
                     one => vec![one.clone()],
                 };
                 if arguments.len() != alias.parameters.len() {
-                    self.unapplied(&name, alias, *span);
+                    self.unapplied(&name, &alias, *span);
                     return;
                 }
                 let mut applied = alias.value.clone();
@@ -347,9 +359,77 @@ impl Expansion<'_, '_> {
         outer
     }
 
+    /// Expands a block: an alias it defines applies to the statements after it and the
+    /// blocks inside them, as the name it binds does (SMT-12).
     fn block(&mut self, body: &mut [Stmt]) {
+        self.scopes.push(BTreeMap::new());
         for statement in body {
-            self.statement(statement);
+            if let Stmt::TypeAlias {
+                name,
+                type_parameters,
+                value,
+                ..
+            } = statement
+            {
+                self.local_alias(name, type_parameters, value);
+            } else {
+                self.statement(statement);
+            }
+        }
+        self.scopes.pop();
+    }
+
+    /// Adds an alias a block defines to the block's scope, its value expanded in the scopes
+    /// around it.
+    fn local_alias(
+        &mut self,
+        name: &typy_source::syntax::Identifier,
+        type_parameters: &[typy_source::syntax::TypeParameter],
+        value: &Expr,
+    ) {
+        let parameters: Vec<String> = type_parameters
+            .iter()
+            .map(|parameter| parameter.name.name.clone())
+            .collect();
+        let mut names = Vec::new();
+        let mut own = BTreeMap::new();
+        own.insert(
+            name.name.clone(),
+            Declared {
+                parameters: parameters.clone(),
+                value,
+                span: name.span,
+            },
+        );
+        alias_names(value, &own, &mut names);
+        if !names.is_empty() && !parameters.contains(&name.name) {
+            self.diagnostics.push(
+                Diagnostic::new(
+                    DiagnosticCode::error(201),
+                    name.span,
+                    format!(
+                        "the type alias `{}` names itself, and a recursive type is planned \
+                         for after TyPy 1.0 (SMT-10)",
+                        name.name
+                    ),
+                )
+                .with_rule(RuleId::SMT_10),
+            );
+            return;
+        }
+        let mut expanded = value.clone();
+        let outer = self.hidden.len();
+        self.hidden.extend(parameters.iter().cloned());
+        self.annotation(&mut expanded);
+        self.hidden.truncate(outer);
+        if let Some(scope) = self.scopes.last_mut() {
+            scope.insert(
+                name.name.clone(),
+                Alias {
+                    parameters,
+                    value: expanded,
+                },
+            );
         }
     }
 }

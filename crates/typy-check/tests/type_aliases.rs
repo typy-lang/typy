@@ -92,14 +92,10 @@ fn aliases_typy_does_not_compile_are_refused() {
             "type Pair[T] = tuple[T, T]\nx: Pair[int, int] = (1, 2)\n",
             "E0408",
         ),
-        ("type Some[T: int] = list[T]\n", "E0201"),
         (
             "type Pair[T] = tuple[T, int]\nx: Pair[str] = ('a', 'b')\n",
             "E0402",
         ),
-        ("def f() -> None:\n    type Inner = int\n", "E0201"),
-        ("class C:\n    type Inner = int\n", "E0201"),
-        ("if True:\n    type Inner = int\n", "E0201"),
         ("type Score = int\nprint(Score)\n", "E0201"),
         ("type Score = int\nScore = 3\n", "E0202"),
         ("type Score = int\nclass Score:\n    pass\n", "E0202"),
@@ -115,16 +111,35 @@ fn aliases_typy_does_not_compile_are_refused() {
 }
 
 #[test]
-fn an_alias_of_another_module_is_planned() {
-    let library = ("lib.py", "type Score = int\n");
-    let cases: &[&str] = &[
+fn an_alias_of_another_module_is_read_where_it_was_written() {
+    let library = (
+        "lib.py",
+        "class Point:\n    pass\ntype Score = int\ntype Many[T] = list[T]\ntype Path = list[Point]\n",
+    );
+    let accepted: &[&str] = &[
         "import lib\nx: lib.Score = 1\n",
-        "import lib\nprint(lib.Score)\n",
-        "import lib\nlib.Score()\n",
-        "from lib import Score\n",
+        "from lib import Score\nx: Score = 1\n",
+        "from lib import Many as Several\nx: Several[str] = ['a']\n",
+        "import lib\nx: lib.Many[int] = [1]\n",
+        // The alias names a class its module defines, which this module never imports.
+        "from lib import Path\nx: Path = []\n",
+        "def f() -> int:\n    from lib import Score\n    x: Score = 1\n    return x\n",
     ];
-    for source in cases {
+    for source in accepted {
+        assert_eq!(
+            codes(&[("app.py", source), library]),
+            Vec::<String>::new(),
+            "{source}"
+        );
+    }
+    let refused: &[(&str, &str)] = &[
+        ("import lib\nx: lib.Many = [1]\n", "E0408"),
+        ("from lib import Score\nx: Score = 'a'\n", "E0402"),
+        ("import lib\nprint(lib.Score)\n", "E0201"),
+        ("import lib\nlib.Score()\n", "E0201"),
+    ];
+    for (source, code) in refused {
         let found = codes(&[("app.py", source), library]);
-        assert_eq!(found.first().map(String::as_str), Some("E0201"), "{source}");
+        assert_eq!(found.first().map(String::as_str), Some(*code), "{source}");
     }
 }

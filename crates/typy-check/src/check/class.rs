@@ -578,6 +578,7 @@ fn class_scope<'known>(
         instances: known.instances,
         modules: &names.modules,
         module_aliases: &names.module_aliases,
+        imported_aliases: &names.aliases,
         parameters,
         copies: known.copies,
         names: &names.names,
