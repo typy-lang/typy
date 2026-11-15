@@ -110,7 +110,7 @@ pub unsafe extern "C" fn typy_rt_dict_get(dict: *const DictObject, key: u64) -> 
         let key_type = (*dict).key_type();
         match find(dict, key, key_type.hash(key)) {
             Some(position) => Raising::ok((*dict).value(position)),
-            None => Raising::error(0, crate::set::key_error(key_type, key)),
+            None => Raising::error(0, crate::exception::key_error(key_type, key)),
         }
     }
 }
@@ -172,7 +172,7 @@ pub unsafe extern "C" fn typy_rt_dict_pop(dict: *mut DictObject, key: u64) -> Ra
                 key_type.release((*dict).key(position));
                 Raising::ok((*dict).value(position))
             }
-            None => Raising::error(0, crate::set::key_error(key_type, key)),
+            None => Raising::error(0, crate::exception::key_error(key_type, key)),
         }
     }
 }
@@ -208,7 +208,7 @@ pub unsafe extern "C" fn typy_rt_dict_popitem(dict: *mut DictObject) -> Raising<
         Some(position) => Raising::ok(word(position)),
         None => Raising::error(
             0,
-            raise(ExceptionKind::KeyError, "'popitem(): dictionary is empty'"),
+            crate::exception::key_error_text("popitem(): dictionary is empty"),
         ),
     }
 }

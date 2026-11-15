@@ -4,7 +4,7 @@
 use super::algebra::{copy, is_subset};
 use super::{SetObject, add, discard, lookup, new_set, take};
 use crate::Raising;
-use crate::exception::{ExceptionKind, ExceptionObject, raise, raise_with_message};
+use crate::exception::{ExceptionKind, ExceptionObject, raise};
 use crate::list::{ItemType, join_reprs};
 use crate::string::StrObject;
 use crate::word::{inline, inline_value};
@@ -76,25 +76,6 @@ pub unsafe extern "C" fn typy_rt_set_discard(set: *mut SetObject, item: u64) {
     }
 }
 
-/// Returns a `KeyError` whose message is the `repr` of `item`, as CPython prints a missing key.
-/// When the `repr` raises, as for an `int` of more than 4300 digits, the message is the one
-/// CPython prints for an exception it cannot convert to text.
-///
-/// # Safety
-///
-/// `item` is a live item of `item_type`.
-pub(crate) unsafe fn key_error(item_type: ItemType, item: u64) -> *mut ExceptionObject {
-    // SAFETY: the caller passes a live item; the exception of a failed `repr` is owned here.
-    unsafe {
-        let text = item_type.repr(item);
-        if text.exception.is_null() {
-            return raise_with_message(ExceptionKind::KeyError, text.value);
-        }
-        crate::refcount::typy_rt_decrement(text.exception.cast());
-        raise(ExceptionKind::KeyError, "<exception str() failed>")
-    }
-}
-
 /// Removes an item equal to `item`, and returns the `KeyError` CPython raises when there is
 /// none, or null (`set.remove`).
 ///
@@ -112,7 +93,7 @@ pub unsafe extern "C" fn typy_rt_set_remove(
         if discard(set, item, item_type.hash(item)) {
             core::ptr::null_mut()
         } else {
-            key_error(item_type, item)
+            crate::exception::key_error(item_type, item)
         }
     }
 }
@@ -129,7 +110,7 @@ pub unsafe extern "C" fn typy_rt_set_pop(set: *mut SetObject) -> Raising<u64> {
     // SAFETY: the caller passes a live set; the search stays inside its table.
     unsafe {
         if (*set).used == 0 {
-            return Raising::error(0, raise(ExceptionKind::KeyError, "'pop from an empty set'"));
+            return Raising::error(0, crate::exception::key_error_text("pop from an empty set"));
         }
         let mask = (*set).mask;
         let mut slot = (*set).finger & mask;

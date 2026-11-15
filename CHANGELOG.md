@@ -67,6 +67,10 @@ All notable changes to TyPy are recorded here. The format follows
 - A function that returns before a later loop over `dict.items()`,
   `keys()` or `values()`, or a later comprehension over one, no longer
   leaks a view object of 24 bytes (CST-03).
+- `args` of a `KeyError` the runtime raises holds the missing key itself,
+  as CPython's does: `(1,)` for `d[1]` and `(('a', 1),)` for a tuple key,
+  where TyPy held the text of its `repr`, `('1',)`. The empty-set and
+  empty-dict errors hold their message without quotes (EXC-11).
 
 ## [0.4.0] - 2026-11-15
 
