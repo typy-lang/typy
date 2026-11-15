@@ -227,6 +227,7 @@ pub fn member_class(member: &Type) -> Option<TypeObjectOf> {
         Type::Iterator(_)
         | Type::Iterable(_)
         | Type::Module(_)
+        | Type::TypeAlias
         | Type::AnyModule
         | Type::TextFile
         | Type::BinaryFile(_)

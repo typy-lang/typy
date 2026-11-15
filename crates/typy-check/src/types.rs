@@ -69,6 +69,8 @@ pub enum Type {
     DescriptorFile(Option<BinaryKind>),
     /// `range` held as a value: a sequence of `int` (DAT-17).
     Range,
+    /// A `typing.TypeAliasType`, the value a `type` statement binds (SMT-12).
+    TypeAlias,
     /// The module object of the module of this qualified name, whose attributes are known
     /// when the program is checked (MOD-10, ADR-0015).
     Module(String),
@@ -180,6 +182,7 @@ impl TypeObjectOf {
             | Type::DescriptorFile(_)
             | Type::Traceback
             | Type::Module(_)
+            | Type::TypeAlias
             | Type::Optional(_)
             | Type::Union(_)
             | Type::Parameter(_)
@@ -473,6 +476,7 @@ impl Type {
                 | Self::Iterator(_)
                 | Self::Iterable(_)
                 | Self::Module(_)
+                | Self::TypeAlias
                 | Self::AnyModule
                 | Self::Traceback,
                 _,
@@ -485,6 +489,7 @@ impl Type {
                 | Self::Iterator(_)
                 | Self::Iterable(_)
                 | Self::Module(_)
+                | Self::TypeAlias
                 | Self::AnyModule
                 | Self::Traceback,
             ) => false,
@@ -539,6 +544,7 @@ impl Type {
                 | Self::Iterator(_)
                 | Self::Iterable(_)
                 | Self::Module(_)
+                | Self::TypeAlias
                 | Self::AnyModule
                 | Self::Traceback
                 | Self::Range
@@ -558,6 +564,7 @@ impl Type {
                 | Self::Iterator(_)
                 | Self::Iterable(_)
                 | Self::Module(_)
+                | Self::TypeAlias
                 | Self::AnyModule
                 | Self::Traceback
                 | Self::Range
@@ -772,6 +779,7 @@ impl fmt::Display for Type {
             Self::Iterator(item) => write!(formatter, "Iterator[{item}]"),
             Self::Iterable(item) => write!(formatter, "Iterable[{item}]"),
             Self::AnyModule => formatter.write_str("ModuleType"),
+            Self::TypeAlias => formatter.write_str("TypeAliasType"),
             Self::TextFile => formatter.write_str("TextIOWrapper"),
             Self::BinaryFile(kind) => formatter.write_str(kind.class_name()),
             Self::DescriptorFile(kind) => write!(

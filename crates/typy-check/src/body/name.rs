@@ -232,19 +232,8 @@ impl BodyChecker<'_> {
     /// Reports a name that only annotations read: a type alias of the module, or a name of
     /// `typing`, `collections.abc` or `types`.
     fn annotation_only(&mut self, id: &str, span: Span) -> Option<TypedExpr> {
-        if self.program.type_aliases.contains(id) {
-            return Some(self.error(
-                Diagnostic::new(
-                    DiagnosticCode::error(201),
-                    span,
-                    format!(
-                        "using the type alias `{id}` as a value is planned for TyPy 0.5 (SMT-12)"
-                    ),
-                )
-                .with_rule(RuleId::SMT_12)
-                .with_help("TyPy reads a type alias in annotations"),
-                span,
-            ));
+        if let Some(alias) = self.type_alias_value(id, span) {
+            return Some(alias);
         }
         if self.program.annotation_names.contains_key(id)
             || self.program.annotation_modules.contains_key(id)

@@ -84,6 +84,7 @@ impl Type {
                 | Self::DescriptorFile(_)
                 | Self::Range
                 | Self::Module(_)
+                | Self::TypeAlias
                 | Self::TypeObject(_)
                 | Self::Union(_)
         )

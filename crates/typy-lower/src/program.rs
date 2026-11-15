@@ -71,6 +71,14 @@ pub fn lower(program: &TypedProgram) -> Result<TyirModule, Diagnostics> {
             functions,
             globals: module_globals.globals,
             modules: module_objects(program),
+            type_aliases: program
+                .type_aliases
+                .iter()
+                .map(|alias| typy_tyir::TyirTypeAlias {
+                    name: alias.name.clone(),
+                    module: alias.module.clone(),
+                })
+                .collect(),
             strings,
             str_points,
             tuple_types,

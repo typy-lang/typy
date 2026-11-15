@@ -281,9 +281,25 @@ A `type` statement inside a function, a class or a block makes its alias
 for the statements after it there. A bound or constraints on an alias's
 type parameter, as in `type Ordered[T: float] = tuple[T, T]`, are taken as
 CPython takes them, which checks no argument against them; each use is
-checked as the type the alias stands for (SMT-12). An alias read as a
-value, which CPython gives as a `TypeAliasType`, is planned for 0.5
-(SMT-12).
+checked as the type the alias stands for (SMT-12).
+
+Read as a value, an alias of the module's top level, or one imported, is
+a `typing.TypeAliasType`, as in CPython: it is written as its name, has
+`__name__` and `__module__`, and is the same object wherever it is read.
+
+<!-- typy-expect: accepted -->
+```python
+type Score = int
+kinds = [Score]
+print(Score, Score.__name__, Score.__module__, type(Score), kinds[0] is Score)
+```
+
+As in CPython, calling an alias, or giving it to `isinstance`, is E0401.
+An alias a function or a class defines read as a value, whose text
+CPython 3.14 changed, an alias given its type arguments as a value, and
+an alias's `__value__` and `__type_params__` are planned for 1.0
+(TYP-18). Two aliases compare with `is`; `==` between them is E0407, as
+for module objects.
 
 ## Example
 

@@ -59,6 +59,8 @@ pub(crate) struct Program {
     pub(super) imported_aliases: crate::check::AliasTable,
     /// The module's own type aliases as other modules read them, kept when the module ends.
     pub(super) exported_aliases: crate::check::AliasTable,
+    /// The type aliases read as values, by module and name (SMT-12).
+    type_alias_objects: Vec<crate::typed::TypedTypeAlias>,
     /// The type aliases of the module being checked, which only its annotations read
     /// (SMT-10).
     pub(super) type_aliases: BTreeSet<String>,
@@ -151,6 +153,7 @@ impl Program {
             module_aliases: BTreeMap::new(),
             imported_aliases: BTreeMap::new(),
             exported_aliases: BTreeMap::new(),
+            type_alias_objects: Vec::new(),
             type_aliases: BTreeSet::new(),
             type_arguments: BTreeMap::new(),
             generics: super::generic_copy::Generics::default(),
@@ -350,6 +353,23 @@ impl Program {
             .collect()
     }
 
+    /// Returns the index of the object of the type alias `name` of `module`, adding it on
+    /// first use (SMT-12).
+    pub(super) fn type_alias_object(&mut self, module: &str, name: &str) -> u32 {
+        let found = self
+            .type_alias_objects
+            .iter()
+            .position(|alias| alias.module == module && alias.name == name)
+            .unwrap_or_else(|| {
+                self.type_alias_objects.push(crate::typed::TypedTypeAlias {
+                    name: name.to_owned(),
+                    module: module.to_owned(),
+                });
+                self.type_alias_objects.len() - 1
+            });
+        id(found)
+    }
+
     /// Keeps the module's type aliases, with what its annotations see, for the modules that
     /// import them (SMT-12).
     pub(crate) fn export_aliases(
@@ -364,6 +384,8 @@ impl Program {
                 (
                     name.clone(),
                     std::rc::Rc::new(crate::check::ExportedAlias {
+                        module: self.module.clone(),
+                        name: name.clone(),
                         parameters: alias.parameters.clone(),
                         value: alias.value.clone(),
                         classes: classes.clone(),
@@ -661,6 +683,7 @@ impl Program {
             modules: self.modules,
             lazy_imports: self.lazy_imports,
             builtin_modules: self.builtin_modules.into_iter().collect(),
+            type_aliases: self.type_alias_objects,
             closes_text_files: self.closes_text_files,
             makes_surrogates: self.makes_surrogates
                 || self.signatures.iter().any(|signature| {

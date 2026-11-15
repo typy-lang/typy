@@ -53,6 +53,7 @@ mod slice;
 mod statement;
 mod super_call;
 mod sys_call;
+mod type_alias_value;
 mod type_object;
 mod typing_class;
 mod union;
@@ -110,6 +111,9 @@ pub(crate) struct BodyChecker<'program> {
     finally_loops: Vec<usize>,
     /// The module variables the function declares `global`, which it assigns (SMT-08).
     global_names: BTreeSet<String>,
+    /// The type aliases the body's `type` statements define, which annotations read
+    /// (SMT-12).
+    local_aliases: BTreeSet<String>,
 }
 
 impl<'program> BodyChecker<'program> {
@@ -138,6 +142,7 @@ impl<'program> BodyChecker<'program> {
             handling: 0,
             finally_loops: Vec::new(),
             global_names: BTreeSet::new(),
+            local_aliases: BTreeSet::new(),
         }
     }
 

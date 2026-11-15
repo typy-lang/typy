@@ -42,6 +42,9 @@ pub(crate) struct AnnotationScope<'classes> {
 /// read where it was written (SMT-12).
 #[derive(Debug, PartialEq)]
 pub(crate) struct ExportedAlias {
+    /// The module that defines the alias, and the alias's own name there.
+    pub(crate) module: String,
+    pub(crate) name: String,
     pub(crate) parameters: Vec<String>,
     pub(crate) value: Expr,
     pub(crate) classes: BTreeMap<String, ClassId>,

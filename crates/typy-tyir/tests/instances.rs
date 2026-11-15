@@ -48,6 +48,7 @@ fn on_point(body: impl FnOnce(ValueId, ValueId) -> Body) -> TyirModule {
     TyirModule {
         globals: Vec::new(),
         modules: Vec::new(),
+        type_aliases: Vec::new(),
         functions: vec![builder.finish()],
         strings: Vec::new(),
         str_points: Vec::new(),
@@ -216,6 +217,7 @@ fn on_exception(parameter: TyirType, operation: Operation) -> TyirModule {
     TyirModule {
         globals: Vec::new(),
         modules: Vec::new(),
+        type_aliases: Vec::new(),
         functions: vec![builder.finish()],
         strings: Vec::new(),
         str_points: Vec::new(),
@@ -294,6 +296,7 @@ fn on_circle(make: impl FnOnce(ValueId, ValueId) -> (Operation, TyirType)) -> Ty
     TyirModule {
         globals: Vec::new(),
         modules: Vec::new(),
+        type_aliases: Vec::new(),
         functions: vec![builder.finish()],
         strings: Vec::new(),
         str_points: Vec::new(),
@@ -434,6 +437,7 @@ fn dispatching(slot: u32, circle: Vec<FunctionId>, circle_area: TyirType) -> Tyi
     TyirModule {
         globals: Vec::new(),
         modules: Vec::new(),
+        type_aliases: Vec::new(),
         functions: vec![
             builder.finish(),
             method(1, 0, TyirType::Int),

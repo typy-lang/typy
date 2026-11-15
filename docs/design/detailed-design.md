@@ -1334,8 +1334,21 @@ reads `Pair[int]`, `shapes.Pair[int]` or a plain alias of another module by
 reading the alias's value in a scope made from its own module's names, with
 each type argument, read where it is written, bound to its parameter. The
 subset walker lets a subscript of a name the module imports, or of a name
-read through an imported module, reach the checker. A read of an alias as a
-value is E0201 (SMT-12). `Final` follows TYP-08:
+read through an imported module, reach the checker. An alias read as a value
+is `TypedExprKind::TypeAliasObject`, an index into `TypedProgram::type_aliases`
+that `Program::type_alias_object` fills with the alias's name and module the
+first time it is read; its type is `Type::TypeAlias`, held as
+`TyirType::TYPE_ALIAS`, type ID 19. Lowering gives `Constant::TypeAlias`, and
+codegen emits one immortal static object per alias, a header then the name
+and the module's name as `str` objects, as it emits module objects, so `is`
+compares two reads. The runtime's `typing.TypeAliasType` writes an alias as
+its name and hashes it by identity, and `typy_rt_type_alias_name` and
+`typy_rt_type_alias_module` give `__name__` and `__module__`
+(`TypedExprKind::TypeAliasPart`). Calling an alias and `isinstance` with
+one are E0401, as CPython raises `TypeError`; an alias a function or a
+class defines, an alias given its type arguments, and `__value__` and
+`__type_params__` read as values are E0201, planned for 1.0 (TYP-18)
+(SMT-12). `Final` follows TYP-08:
 `body::locals::declare` records each `Final` variable in
 `Program::final_variables` with the name its declaration assigns, and `assign`
 and `module_attribute_target` refuse any other with E0414; a class body's

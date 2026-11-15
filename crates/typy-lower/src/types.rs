@@ -26,6 +26,7 @@ pub(crate) fn tyir_type(ty: &Type, tuples: &mut TupleTypes) -> TyirType {
         Type::Traceback => TyirType::TRACEBACK,
         Type::Range => TyirType::RANGE,
         Type::Module(_) | Type::AnyModule => TyirType::MODULE,
+        Type::TypeAlias => TyirType::TYPE_ALIAS,
         // A binary file is the same runtime object as a text file, with flags of its own.
         Type::TextFile | Type::BinaryFile(_) | Type::DescriptorFile(_) => TyirType::TEXT_FILE,
         Type::Iterable(_) => TyirType::ITERABLE,

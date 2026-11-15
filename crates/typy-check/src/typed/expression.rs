@@ -50,6 +50,15 @@ pub enum TypedExprKind {
     /// `package.module`, the module object of a submodule, which raises `AttributeError`
     /// until the submodule is initialised.
     Submodule(String),
+    /// The type alias object at this index of `TypedProgram::type_aliases` (SMT-12).
+    TypeAliasObject(u32),
+    /// `alias.__name__`, or `alias.__module__` when `module` is set, of a type alias (SMT-12).
+    TypeAliasPart {
+        /// The type alias.
+        alias: Box<TypedExpr>,
+        /// Whether the part is `__module__`.
+        module: bool,
+    },
     /// `value`, a call or a class read through a lazy import, which first runs the import
     /// when its statement ran and its names were not used yet (MOD-06).
     Lazy {
@@ -440,6 +449,7 @@ impl TypedExpr {
             | TypedExprKind::Submodule(_)
             | TypedExprKind::ModuleName
             | TypedExprKind::TypeObject(_)
+            | TypedExprKind::TypeAliasObject(_)
             | TypedExprKind::SysValue(_) => Vec::new(),
             TypedExprKind::Binary { left, right, .. }
             | TypedExprKind::Index {
@@ -566,7 +576,8 @@ impl TypedExpr {
             }
             TypedExprKind::Attribute { object, .. }
             | TypedExprKind::TypeOf(object)
-            | TypedExprKind::TypeName(object) => vec![object],
+            | TypedExprKind::TypeName(object)
+            | TypedExprKind::TypeAliasPart { alias: object, .. } => vec![object],
             TypedExprKind::NewException {
                 arguments, init, ..
             } => arguments

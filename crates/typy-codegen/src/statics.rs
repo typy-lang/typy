@@ -22,6 +22,7 @@ pub(crate) struct Statics<'ctx> {
     descriptors: BTreeMap<u32, PointerValue<'ctx>>,
     type_objects: BTreeMap<u32, PointerValue<'ctx>>,
     modules: BTreeMap<u32, PointerValue<'ctx>>,
+    type_aliases: BTreeMap<u32, PointerValue<'ctx>>,
 }
 
 impl<'ctx> Statics<'ctx> {
@@ -36,6 +37,7 @@ impl<'ctx> Statics<'ctx> {
             descriptors: BTreeMap::new(),
             type_objects: BTreeMap::new(),
             modules: BTreeMap::new(),
+            type_aliases: BTreeMap::new(),
         }
     }
 
@@ -180,8 +182,48 @@ impl<'ctx> Statics<'ctx> {
         if let Some(pointer) = self.modules.get(&index) {
             return *pointer;
         }
-        let name = self.string(module, name);
-        let path = self.string(module, path);
+        let pointer = self.two_strings(
+            module,
+            crate::layout::MODULE_TYPE_ID,
+            [name, path],
+            &format!("typy.module.{index}"),
+        );
+        self.modules.insert(index, pointer);
+        pointer
+    }
+
+    /// Returns the type alias object at `index`: an immortal header, then the alias's name and
+    /// its module's name as `str` objects (SMT-12). Each alias has one, so `is` compares them.
+    pub(crate) fn type_alias_object(
+        &mut self,
+        module: &Module<'ctx>,
+        index: u32,
+        name: &str,
+        module_name: &str,
+    ) -> PointerValue<'ctx> {
+        if let Some(pointer) = self.type_aliases.get(&index) {
+            return *pointer;
+        }
+        let pointer = self.two_strings(
+            module,
+            crate::layout::TYPE_ALIAS_TYPE_ID,
+            [name, module_name],
+            &format!("typy.type_alias.{index}"),
+        );
+        self.type_aliases.insert(index, pointer);
+        pointer
+    }
+
+    /// Returns a new immortal static object of type `type_id` that holds two `str` objects.
+    fn two_strings(
+        &mut self,
+        module: &Module<'ctx>,
+        type_id: u32,
+        [first, second]: [&str; 2],
+        symbol: &str,
+    ) -> PointerValue<'ctx> {
+        let first = self.string(module, first);
+        let second = self.string(module, second);
         let context = self.context;
         let value = context.const_struct(
             &[
@@ -191,20 +233,18 @@ impl<'ctx> Statics<'ctx> {
                     .into(),
                 context
                     .i32_type()
-                    .const_int(u64::from(crate::layout::MODULE_TYPE_ID), false)
+                    .const_int(u64::from(type_id), false)
                     .into(),
-                name.into(),
-                path.into(),
+                first.into(),
+                second.into(),
             ],
             false,
         );
-        let global = module.add_global(value.get_type(), None, &format!("typy.module.{index}"));
+        let global = module.add_global(value.get_type(), None, symbol);
         global.set_initializer(&value);
         global.set_constant(true);
         global.set_linkage(Linkage::Private);
-        let pointer = global.as_pointer_value();
-        self.modules.insert(index, pointer);
-        pointer
+        global.as_pointer_value()
     }
 
     /// Returns a null-terminated byte string, for the names in traceback entries.

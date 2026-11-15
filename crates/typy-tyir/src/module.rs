@@ -30,6 +30,15 @@ pub struct TyirModuleObject {
     pub path: String,
 }
 
+/// A type alias object: the alias's name and the name of its module (SMT-12).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct TyirTypeAlias {
+    /// The alias's name.
+    pub name: String,
+    /// The qualified name of the module that defines it.
+    pub module: String,
+}
+
 /// Every function of the program, the string pool, and the entry function.
 #[derive(Clone, Debug, PartialEq)]
 pub struct TyirModule {
@@ -39,6 +48,8 @@ pub struct TyirModule {
     pub globals: Vec<TyirGlobal>,
     /// The module objects, indexed as `Constant::Module` names them.
     pub modules: Vec<TyirModuleObject>,
+    /// The type alias objects, indexed as `Constant::TypeAlias` names them (SMT-12).
+    pub type_aliases: Vec<TyirTypeAlias>,
     /// The string constants, indexed by `StringId`.
     pub strings: Vec<String>,
     /// The code points of the string constants that hold a surrogate, indexed as

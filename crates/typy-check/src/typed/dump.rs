@@ -434,6 +434,13 @@ impl Dump<'_> {
                 )
             }
             TypedExprKind::Submodule(module) => format!("Submodule {module}"),
+            TypedExprKind::TypeAliasObject(index) => format!("TypeAliasObject {index}"),
+            TypedExprKind::TypeAliasPart { module, .. } => if *module {
+                "TypeAliasModule"
+            } else {
+                "TypeAliasName"
+            }
+            .to_owned(),
             TypedExprKind::AsIterable(_) => "AsIterable".to_owned(),
             TypedExprKind::MathCall { function, .. } => format!("MathCall {}", function.name()),
             TypedExprKind::SysValue(value) => format!("SysValue {value:?}"),

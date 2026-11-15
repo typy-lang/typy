@@ -40,6 +40,8 @@ impl TypeId {
     /// An object of any type, held as a union of objects; its header says which (TYP-14,
     /// ADR-0027).
     pub const UNION: Self = Self(18);
+    /// A type alias object, `typing.TypeAliasType`, immortal (SMT-12).
+    pub const TYPE_ALIAS: Self = Self(19);
     /// The first ID of the program's classes; class `n` of the module is this plus `n`.
     const FIRST_CLASS: u32 = 1 << 16;
 
@@ -128,6 +130,8 @@ impl TyirType {
     pub const TEXT_FILE: Self = Self::Object(TypeId::TEXT_FILE);
     /// A union of objects (TYP-14).
     pub const UNION: Self = Self::Object(TypeId::UNION);
+    /// A type alias object (SMT-12).
+    pub const TYPE_ALIAS: Self = Self::Object(TypeId::TYPE_ALIAS);
 }
 
 impl fmt::Display for TyirType {
@@ -151,6 +155,7 @@ impl fmt::Display for TyirType {
             Self::Object(TypeId::ITERABLE) => formatter.write_str("iterable"),
             Self::Object(TypeId::TEXT_FILE) => formatter.write_str("text_file"),
             Self::Object(TypeId::UNION) => formatter.write_str("union"),
+            Self::Object(TypeId::TYPE_ALIAS) => formatter.write_str("type_alias"),
             Self::Bits => formatter.write_str("bits"),
             Self::Object(id) if id.class_index().is_some() => {
                 write!(formatter, "class#{}", id.class_index().unwrap_or(0))

@@ -291,7 +291,7 @@ impl RuleId {
     pub const TYP_16: Self = Self("TYP-16");
     /// The names `Iterable` and `Iterator` of `typing` and `collections.abc`, and `List`, `Dict`, `Set`, `Tuple`, `Type`, `Optional[...]` and `Union[...]` of `typing`, shall be accepted as the classes of `isinstance` and of a class pattern, with CPython's answers.
     pub const TYP_17: Self = Self("TYP-17");
-    /// The names of `typing` and `collections.abc` shall be values of their own: stored, passed, compared and written as CPython writes them.
+    /// The names of `typing` and `collections.abc` shall be values of their own: stored, passed, compared and written as CPython writes them; so shall a type alias that a function or a class defines, an alias given its type arguments, and an alias's `__value__` and `__type_params__`.
     pub const TYP_18: Self = Self("TYP-18");
 
     /// Every rule a diagnostic can name, in ID order.

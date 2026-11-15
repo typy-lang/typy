@@ -453,7 +453,8 @@ fn expression(expression_value: &TypedExpr, callees: &mut BTreeSet<FunctionId>) 
         }
         TypedExprKind::Attribute { object, .. }
         | TypedExprKind::TypeOf(object)
-        | TypedExprKind::TypeName(object) => expression(object, callees),
+        | TypedExprKind::TypeName(object)
+        | TypedExprKind::TypeAliasPart { alias: object, .. } => expression(object, callees),
         TypedExprKind::FString(parts) => fstring(parts, callees),
         TypedExprKind::TypeObject(_)
         | TypedExprKind::Constant(_)
@@ -462,6 +463,7 @@ fn expression(expression_value: &TypedExpr, callees: &mut BTreeSet<FunctionId>) 
         | TypedExprKind::ModuleAttribute { .. }
         | TypedExprKind::Submodule(_)
         | TypedExprKind::ModuleName
+        | TypedExprKind::TypeAliasObject(_)
         | TypedExprKind::SysValue(_) => {}
         TypedExprKind::AsIterable(inner) | TypedExprKind::Named { value: inner, .. } => {
             expression(inner, callees);

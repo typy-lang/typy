@@ -74,6 +74,7 @@ impl FunctionLowerer<'_> {
                 Type::Iterator(_)
                 | Type::Iterable(_)
                 | Type::Module(_)
+                | Type::TypeAlias
                 | Type::AnyModule
                 | Type::TextFile
                 | Type::BinaryFile(_)

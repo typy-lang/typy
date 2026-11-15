@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy software requirements specification |
-| Version | 1.47 |
+| Version | 1.48 |
 | Status | Approved |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-15 |
@@ -186,7 +186,7 @@ formatter applies; Ruff's formatter is the project's recommendation.
 | TYP-15 | The annotations `Iterator[T]` and `Iterable[T]`, imported from `collections.abc` or `typing`, shall be accepted for iterators and for the built-in iterables of items of type `T` (ADR-0014, ADR-0015). | S | 0.3 | |
 | TYP-16 | One value assigned to several targets, as in `a = b[0] = value`, shall be converted to each target's type, such as the union an item holds. | S | 0.5 | 7.2 |
 | TYP-17 | The names `Iterable` and `Iterator` of `typing` and `collections.abc`, and `List`, `Dict`, `Set`, `Tuple`, `Type`, `Optional[...]` and `Union[...]` of `typing`, shall be accepted as the classes of `isinstance` and of a class pattern, with CPython's answers. | S | 0.5 | |
-| TYP-18 | The names of `typing` and `collections.abc` shall be values of their own: stored, passed, compared and written as CPython writes them. | C | 1.0 | |
+| TYP-18 | The names of `typing` and `collections.abc` shall be values of their own: stored, passed, compared and written as CPython writes them; so shall a type alias that a function or a class defines, an alias given its type arguments, and an alias's `__value__` and `__type_params__`. | C | 1.0 | |
 
 ### 3.5 Built-in types and values (DAT)
 

@@ -176,6 +176,8 @@ pub enum RuntimeFunction {
     InstanceText,
     TypeText,
     TypeName,
+    TypeAliasName,
+    TypeAliasModule,
     ExceptionNew,
     ExceptionPartText,
     ExceptionArgsLength,
@@ -360,7 +362,7 @@ const FLOAT_FLOAT: &[TyirType] = &[TyirType::Float, TyirType::Float];
 
 impl RuntimeFunction {
     /// Every runtime function.
-    pub const ALL: [Self; 321] = [
+    pub const ALL: [Self; 323] = [
         Self::IntFloorDivide,
         Self::IntModulo,
         Self::IntPower,
@@ -528,6 +530,8 @@ impl RuntimeFunction {
         Self::InstanceText,
         Self::TypeText,
         Self::TypeName,
+        Self::TypeAliasName,
+        Self::TypeAliasModule,
         Self::ExceptionNew,
         Self::ExceptionPartText,
         Self::ExceptionArgsLength,
@@ -856,6 +860,9 @@ impl RuntimeFunction {
             Self::RangeLast => signature(&[Int, Int, Int], Int, false),
             Self::InstanceText => signature(&[Bits], STR, false),
             Self::TypeText | Self::TypeName => signature(&[TYPE], STR, false),
+            Self::TypeAliasName | Self::TypeAliasModule => {
+                signature(&[TyirType::TYPE_ALIAS], STR, false)
+            }
             Self::ExceptionNew | Self::OsErrorNew => {
                 signature(&[TYPE, Bits, Bits], EXCEPTION, false)
             }
@@ -1204,6 +1211,8 @@ impl RuntimeFunction {
             Self::InstanceText => "instance_text",
             Self::TypeText => "type_text",
             Self::TypeName => "type_name",
+            Self::TypeAliasName => "type_alias_name",
+            Self::TypeAliasModule => "type_alias_module",
             Self::ExceptionNew => "exception_new",
             Self::ExceptionPartText => "exception_part_text",
             Self::ExceptionArgsLength => "exception_args_length",

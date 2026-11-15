@@ -36,6 +36,6 @@ pub use typed::{
     PercentConversion, PercentField, PercentNumber, PercentPart, PercentValue, PrintCall,
     RaiseCause, SignatureParameter, Symbol, SymbolId, SymbolKind, TypedCase, TypedClass,
     TypedConstant, TypedExpr, TypedExprKind, TypedFunction, TypedHandler, TypedModule,
-    TypedPattern, TypedProgram, TypedStmt, WithProtocol, dump,
+    TypedPattern, TypedProgram, TypedStmt, TypedTypeAlias, WithProtocol, dump,
 };
 pub use types::{BinaryKind, Type, TypeObjectOf, View};

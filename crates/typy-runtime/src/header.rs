@@ -34,6 +34,8 @@ pub const RANGE_TYPE_ID: u32 = 14;
 pub const MODULE_TYPE_ID: u32 = 15;
 /// The type ID of a text file, `_io.TextIOWrapper` (LIB-04).
 pub const TEXT_FILE_TYPE_ID: u32 = 17;
+/// The type ID of a type alias object, `typing.TypeAliasType`, which is immortal (SMT-12).
+pub const TYPE_ALIAS_TYPE_ID: u32 = 19;
 
 /// The first 8 bytes of every heap object.
 #[repr(C)]

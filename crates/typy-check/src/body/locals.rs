@@ -28,6 +28,11 @@ impl BodyChecker<'_> {
                 self.bind_local(target);
             }
             match statement {
+                // An alias a function's `type` statement defines is read in annotations only
+                // (SMT-12).
+                Stmt::TypeAlias { name, .. } if self.in_function() => {
+                    self.local_aliases.insert(name.name.clone());
+                }
                 // A class body's values are module variables, assigned where the class
                 // statement runs (ADR-0024).
                 Stmt::ClassDef { name, body, .. } => {

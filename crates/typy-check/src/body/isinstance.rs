@@ -184,43 +184,50 @@ impl BodyChecker<'_> {
     /// Returns the class an expression names as a value: a class of the program, or a
     /// built-in type or exception class.
     fn named_class(&mut self, each: &Expr) -> Result<TypeObjectOf, Option<Box<Diagnostic>>> {
+        let typed = self.expression(each);
+        if typed.ty == Type::TypeAlias {
+            return Err(Some(Box::new(
+                Diagnostic::new(
+                    DiagnosticCode::error(401),
+                    each.span(),
+                    "isinstance() arg 2 must be a type, a tuple of types, or a union: CPython \
+                     raises `TypeError`",
+                )
+                .with_rule(RuleId::SMT_12),
+            )));
+        }
+        // CPython raises `TypeError` for a protocol not marked `@runtime_checkable`,
+        // and TyPy keeps no members to test at run time.
+        if let TypedExprKind::TypeObject(of) = &typed.kind
+            && let TypeObjectOf::Instance(class, name) = of.as_ref()
+            && self.program.is_protocol(*class)
         {
-            {
-                let typed = self.expression(each);
-                // CPython raises `TypeError` for a protocol not marked `@runtime_checkable`,
-                // and TyPy keeps no members to test at run time.
-                if let TypedExprKind::TypeObject(of) = &typed.kind
-                    && let TypeObjectOf::Instance(class, name) = of.as_ref()
-                    && self.program.is_protocol(*class)
-                {
-                    return Err(Some(Box::new(
-                        Diagnostic::new(
-                            DiagnosticCode::error(401),
-                            each.span(),
-                            format!(
-                                "`isinstance` with the protocol `{name}` raises `TypeError` in \
-                                 CPython"
-                            ),
-                        )
-                        .with_rule(RuleId::GEN_05)
-                        .with_help("test for a class that satisfies the protocol"),
-                    )));
-                }
-                match typed.kind {
-                    TypedExprKind::TypeObject(of) => Ok(*of),
-                    _ if typed.ty == Type::Error => Err(None),
-                    _ => Err(Some(Box::new(
-                        Diagnostic::new(
-                            DiagnosticCode::error(201),
-                            each.span(),
-                            "`isinstance` with a class held in a variable or computed is \
-                             planned for TyPy 1.0 (CLS-18)",
-                        )
-                        .with_rule(RuleId::CLS_18)
-                        .with_help("name the class, or a tuple of classes, in the call"),
-                    ))),
-                }
-            }
+            return Err(Some(Box::new(
+                Diagnostic::new(
+                    DiagnosticCode::error(401),
+                    each.span(),
+                    format!(
+                        "`isinstance` with the protocol `{name}` raises `TypeError` in \
+                         CPython"
+                    ),
+                )
+                .with_rule(RuleId::GEN_05)
+                .with_help("test for a class that satisfies the protocol"),
+            )));
+        }
+        match typed.kind {
+            TypedExprKind::TypeObject(of) => Ok(*of),
+            _ if typed.ty == Type::Error => Err(None),
+            _ => Err(Some(Box::new(
+                Diagnostic::new(
+                    DiagnosticCode::error(201),
+                    each.span(),
+                    "`isinstance` with a class held in a variable or computed is \
+                     planned for TyPy 1.0 (CLS-18)",
+                )
+                .with_rule(RuleId::CLS_18)
+                .with_help("name the class, or a tuple of classes, in the call"),
+            ))),
         }
     }
 

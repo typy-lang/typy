@@ -22,6 +22,7 @@ fn module(function: TyirFunction) -> TyirModule {
     TyirModule {
         globals: Vec::new(),
         modules: Vec::new(),
+        type_aliases: Vec::new(),
         functions: vec![function],
         tuple_types: crate::TupleTypes::default(),
         strings: vec!["hi\n".to_owned()],
@@ -487,6 +488,7 @@ fn every_operation() -> TyirModule {
     TyirModule {
         globals: Vec::new(),
         modules: Vec::new(),
+        type_aliases: Vec::new(),
         functions: vec![builder.finish(), callee.finish()],
         tuple_types: crate::TupleTypes::default(),
         strings: vec!["a".to_owned()],

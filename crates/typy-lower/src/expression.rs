@@ -213,6 +213,22 @@ impl FunctionLowerer<'_> {
             TypedExprKind::TypeOf(value) => self.type_of(value, span),
             TypedExprKind::FString(parts) => self.fstring(parts, span),
             TypedExprKind::TypeObject(of) => self.type_object(of, span),
+            // A type alias object is immortal, so it is borrowed (SMT-12).
+            TypedExprKind::TypeAliasObject(index) => {
+                let value = self.constant(Constant::TypeAlias(*index), span);
+                Self::borrowed(value, TyirType::TYPE_ALIAS)
+            }
+            TypedExprKind::TypeAliasPart { alias, module } => {
+                let alias = self.expression(alias);
+                let function = if *module {
+                    RuntimeFunction::TypeAliasModule
+                } else {
+                    RuntimeFunction::TypeAliasName
+                };
+                let part = self.call_runtime(function, vec![alias.value], span);
+                self.release(alias, span);
+                part
+            }
             TypedExprKind::TypeName(object) => {
                 let object = self.expression(object);
                 let name = self.call_runtime(RuntimeFunction::TypeName, vec![object.value], span);

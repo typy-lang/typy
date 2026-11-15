@@ -96,7 +96,15 @@ fn aliases_typy_does_not_compile_are_refused() {
             "type Pair[T] = tuple[T, int]\nx: Pair[str] = ('a', 'b')\n",
             "E0402",
         ),
-        ("type Score = int\nprint(Score)\n", "E0201"),
+        ("type Score = int\nScore()\n", "E0401"),
+        ("type Score = int\nprint(isinstance(1, Score))\n", "E0401"),
+        ("type Score = int\nprint(Score.__value__)\n", "E0201"),
+        ("type Score = int\nprint(Score.size)\n", "E0412"),
+        ("type Pair[T] = tuple[T, T]\nprint(Pair[int])\n", "E0201"),
+        (
+            "def f() -> None:\n    type Local = int\n    print(Local)\n",
+            "E0201",
+        ),
         ("type Score = int\nScore = 3\n", "E0202"),
         ("type Score = int\nclass Score:\n    pass\n", "E0202"),
         (
@@ -124,6 +132,7 @@ fn an_alias_of_another_module_is_read_where_it_was_written() {
         // The alias names a class its module defines, which this module never imports.
         "from lib import Path\nx: Path = []\n",
         "def f() -> int:\n    from lib import Score\n    x: Score = 1\n    return x\n",
+        "import lib\nfrom lib import Score\nprint(lib.Score, Score.__module__, lib.Score is Score)\n",
     ];
     for source in accepted {
         assert_eq!(
@@ -135,8 +144,7 @@ fn an_alias_of_another_module_is_read_where_it_was_written() {
     let refused: &[(&str, &str)] = &[
         ("import lib\nx: lib.Many = [1]\n", "E0408"),
         ("from lib import Score\nx: Score = 'a'\n", "E0402"),
-        ("import lib\nprint(lib.Score)\n", "E0201"),
-        ("import lib\nlib.Score()\n", "E0201"),
+        ("import lib\nlib.Score()\n", "E0401"),
     ];
     for (source, code) in refused {
         let found = codes(&[("app.py", source), library]);

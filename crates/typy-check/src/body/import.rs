@@ -714,6 +714,9 @@ impl BodyChecker<'_> {
         if let Named::Class(class) = found {
             return self.class_object(class, name, span);
         }
+        if let Named::TypeAlias = found {
+            return self.type_alias_object(module, name, span);
+        }
         let child = format!("{module}.{name}");
         if self.program.loaded.contains(&child) {
             return Self::typed(
@@ -727,15 +730,6 @@ impl BodyChecker<'_> {
                 201,
                 RuleId::FUN_05,
                 format!("using `{module}.{name}` as a value is planned for TyPy 1.0 (FUN-05)"),
-            )
-        } else if let Named::TypeAlias = found {
-            (
-                201,
-                RuleId::SMT_12,
-                format!(
-                    "using the type alias `{module}.{name}` as a value is planned for TyPy 0.5 \
-                     (SMT-12)"
-                ),
             )
         } else {
             (

@@ -43,6 +43,8 @@ pub enum Constant {
     TypeObject(crate::types::TypeObjectRef),
     /// The module object of the module at this index of `TyirModule::modules` (MOD-10).
     Module(u32),
+    /// The type alias object at this index of `TyirModule::type_aliases` (SMT-12).
+    TypeAlias(u32),
     /// The address of the descriptor of a tuple type that a list holds, which the runtime
     /// reads to store, count, compare and write its items (ADR-0009).
     TupleDescriptor(TupleTypeId),
@@ -66,6 +68,7 @@ impl Constant {
             Self::NoInstance(id) => TyirType::Object(*id),
             Self::TypeObject(_) => TyirType::TYPE,
             Self::Module(_) => TyirType::MODULE,
+            Self::TypeAlias(_) => TyirType::TYPE_ALIAS,
             Self::TupleDescriptor(_) => TyirType::Bits,
         }
     }
@@ -88,6 +91,7 @@ impl fmt::Display for Constant {
             Self::NoInstance(id) => write!(formatter, "null {}", TyirType::Object(*id)),
             Self::TypeObject(ty) => write!(formatter, "type {ty}"),
             Self::Module(index) => write!(formatter, "module m{index}"),
+            Self::TypeAlias(index) => write!(formatter, "type_alias a{index}"),
             Self::TupleDescriptor(TupleTypeId(id)) => write!(formatter, "descriptor tuple#{id}"),
         }
     }

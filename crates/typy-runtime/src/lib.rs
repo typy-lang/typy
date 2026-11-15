@@ -43,6 +43,7 @@ mod string;
 mod sys;
 mod text_file;
 mod tuple;
+mod type_alias;
 mod type_object;
 mod version;
 mod word;

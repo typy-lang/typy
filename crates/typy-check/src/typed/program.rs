@@ -4,6 +4,15 @@ use super::class::{ClassId, TypedClass};
 use super::function::{FunctionId, TypedFunction};
 use super::symbol::{Symbol, SymbolId};
 
+/// A type alias held as a value: its name and the name of its module (SMT-12).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct TypedTypeAlias {
+    /// The alias's name.
+    pub name: String,
+    /// The qualified name of its module.
+    pub module: String,
+}
+
 /// The whole program after checking.
 #[derive(Clone, Debug, PartialEq)]
 pub struct TypedProgram {
@@ -21,6 +30,9 @@ pub struct TypedProgram {
     /// The built-in modules the program imports, such as `math`, whose module objects follow
     /// those of `modules` (ADR-0018).
     pub builtin_modules: Vec<String>,
+    /// The type aliases the program reads as values, indexed as
+    /// `TypedExprKind::TypeAliasObject` names them (SMT-12).
+    pub type_aliases: Vec<TypedTypeAlias>,
     /// Whether the program closes a text file, by `close()` or a `with` block, which may be
     /// `sys.stdout`; `print` then checks that standard output is open (LIB-14).
     pub closes_text_files: bool,

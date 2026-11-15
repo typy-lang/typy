@@ -56,6 +56,24 @@ impl BodyChecker<'_> {
         if let Some(class) = BuiltinException::named(name) {
             return self.new_exception(class, arguments, keywords, span);
         }
+        // A type alias is a `typing.TypeAliasType`, which CPython does not call (SMT-12).
+        if let Some(alias) = self.type_alias_value(name, name_span) {
+            for argument in arguments {
+                self.expression(argument);
+            }
+            if alias.ty == Type::Error {
+                return TypedExpr { span, ..alias };
+            }
+            return self.error(
+                Diagnostic::new(
+                    DiagnosticCode::error(401),
+                    name_span,
+                    "'typing.TypeAliasType' object is not callable: CPython raises `TypeError`",
+                )
+                .with_rule(RuleId::SMT_12),
+                span,
+            );
+        }
         // A module variable a function reads holds a value, which TyPy calls only when it is
         // a class's type object; CPython raises `TypeError` for an `int` or a `str`.
         if self.in_function() && self.program.module_variables.contains(name) {
