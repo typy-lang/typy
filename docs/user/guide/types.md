@@ -53,13 +53,48 @@ print(total([1, 2]), total(range(3)), total({4: "x"}), list(countdown(3)))
 An iterable may be read by `for`, `iter`, a comprehension and the
 builtins that read an iterable, such as `sum` and `sorted`. Its length and
 its truth depend on which collection it is, so `len`, `bool`, `not` and a
-condition on it are refused. These names, and `typing`,
-`collections.abc` and `types` themselves, are for annotations only; their
-use as values, as in `isinstance(x, Iterable)`, is planned for 0.5
-(TYP-17). The older names of `typing` that describe types, such as
-`Optional[int]` and `List[int]`, are planned for 0.5 too (LIB-17); write
-`int | None` and `list[int]`. `typing.Any` and `typing.cast` are refused,
-since every value in TyPy has one type (TYP-10).
+condition on it are refused.
+
+The older names of `typing` spell the types above: `Optional[int]` is
+`int | None`, `Union[int, str]` is `int | str`, and `List`, `Dict`, `Set`,
+`Tuple` and `Type` are `list`, `dict`, `set`, `tuple` and `type` (LIB-17).
+`Iterable` and `Iterator`, of either module, and `List`, `Dict`, `Set`,
+`Tuple`, `Type`, `Optional[...]` and `Union[...]` of `typing` may also be
+the class of `isinstance` and of a class pattern, answered as CPython
+answers them: a list is `Iterable` and not an `Iterator`, its iterator is
+both, and a class is `Iterable` when it, or a base, defines `__iter__`
+(TYP-17).
+
+<!-- typy-expect: accepted -->
+```python
+from typing import Optional, Union, List
+from collections.abc import Iterable, Iterator
+
+
+class Bag:
+    def __iter__(self) -> Iterator[int]:
+        return iter([1, 2])
+
+
+def describe(value: Optional[Union[int, List[int], Bag]]) -> str:
+    if isinstance(value, Optional[int]):
+        return "a number or nothing"
+    if isinstance(value, Iterable):
+        return "something to loop over"
+    return "other"
+
+
+print(describe(None), describe(3), describe([1]), describe(Bag()))
+```
+
+As in CPython, a bare `Optional` and a subscripted name such as
+`List[int]` in `isinstance` are E0401, and a bare `Union` is E0202, since
+CPython 3.12 and 3.13 raise `TypeError` where 3.14 and 3.15 answer
+`False`. The names held in a variable, passed or printed are planned for
+1.0 (TYP-18), and so are `Sequence`, `Mapping` and the other abstract
+collections (LIB-20), `NamedTuple` (CLS-27) and `Callable`, with function
+values (FUN-05). `typing.Any` and `typing.cast` are refused, since every
+value in TyPy has one type (TYP-10).
 
 ## Unions
 

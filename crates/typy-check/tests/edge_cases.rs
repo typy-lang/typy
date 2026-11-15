@@ -76,7 +76,6 @@ fn refused_forms_give_their_codes() {
         ("print(round())\n", "E0404"),
         ("s: set[Missing] = {1}\n", "E0205"),
         ("print(type(1, a=2))\n", "E0404"),
-        ("import typing\nx: typing.Optional[int] = None\n", "E0202"),
         ("class A:\n    pass\nx: A[int] = A()\n", "E0202"),
         ("x: Missing[int] = 1\n", "E0202"),
         ("def f(x: int = 1 + 1) -> int:\n    return x\n", "E0201"),

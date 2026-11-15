@@ -25,6 +25,12 @@ All notable changes to TyPy are recorded here. The format follows
   returns from each case needs no `return` after it (CST-07, ADR-0033).
 - `@dataclass` writes `__match_args__`, the names of the fields, and
   takes `match_args=False` to leave it out (CLS-05, CST-06).
+- The names `Optional`, `Union`, `List`, `Dict`, `Set`, `Tuple` and `Type`
+  of `typing` in annotations, as the types they spell (LIB-17).
+- `Iterable` and `Iterator` of `typing` and `collections.abc`, and
+  `List`, `Dict`, `Set`, `Tuple`, `Type`, `Optional[...]` and
+  `Union[...]` of `typing`, as the class of `isinstance` and of a class
+  pattern, with CPython's answers (TYP-17).
 - One value assigned to several targets, as in `a = items[0] = value`, or
   unpacked into targets, is held by each target as its own type, a union
   or an optional among them (TYP-16).

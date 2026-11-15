@@ -1400,7 +1400,7 @@ gives `TracebackType` and `ModuleType`, as `AnnotationName`s that
 `resolve_import` binds for annotations only (TYP-15): a name imported from
 them, or a name bound to one of the modules, such as `typing.Iterable`,
 enters `AnnotationScope::names` or `standard`, and its use as a value is
-E0201, planned for 0.4. `Iterator[T]` is `Type::Iterator(T)`,
+E0201, planned for 1.0 (TYP-18). `Iterator[T]` is `Type::Iterator(T)`,
 `TracebackType` is `Type::Traceback` and `ModuleType` is `Type::AnyModule`,
 a module whose attributes are unknown, E0412. `Iterable[T]` is
 `Type::Iterable(T)`: any built-in iterable or iterator whose items have
@@ -1415,6 +1415,29 @@ object of any of those types under the type ID 16, and a loop or `iter()`
 over it calls `typy_rt_iterable_iterator`, which makes the iterator its
 header calls for, reading a view through its dict, or gives an iterator
 itself.
+
+`typing` also gives `Optional`, `Union`, and `List`, `Dict`, `Set`,
+`Tuple` and `Type` as `AnnotationName::Builtin` (LIB-17). In an annotation
+`Optional[T]` is `Type::union` of `T` and `None`, `Union[A, B]` the union
+of its members, and `List[int]` is read as `list[int]` by rewriting the
+name; the subset walker lets these subscripts through by name, as it does
+`Iterator[T]`. As the class of `isinstance` or of a class pattern,
+`body/typing_class.rs` reads these names before the class is checked as a
+value (TYP-17): `List` and the others give the built-in class,
+`Optional[T]` and `Union[A, B]` the classes of their members, and
+`Iterable` and `Iterator` give `TypeObjectOf::Abstract`, which lists the
+classes of the program that have `__iter__`, and `__next__` for
+`Iterator`, each with its bases. `abstract_outcome` answers each member of
+the value's type: the built-in collections are `Iterable`, their iterators
+and files are both, and a class of the program is one when it or a base is
+listed, may be one when a listed class derives from it, and is not
+otherwise. `isinstance_test` replaces the abstract class in the checks it
+leaves for the program's run with the listed classes, so lowering never
+meets it. A bare `Optional`, `ClassVar` or `Final`, and a subscripted
+generic, are E0401, as CPython raises `TypeError`; a bare `Union` is
+E0202, since the oracle versions differ; and an `Iterable[T]` value tested
+against `Iterator` is E0201, planned for 1.0 (LIB-20), since a built-in
+iterator it may hold has no class of the program.
 
 A class may define `__enter__`, taking only the instance, and `__exit__`,
 taking the instance and three parameters that may be left without

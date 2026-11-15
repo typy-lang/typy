@@ -29,6 +29,9 @@ fn reference(of: &TypeObjectOf) -> TypeObjectRef {
         TypeObjectOf::Range => RuntimeType::Range,
         TypeObjectOf::Instance(class, _) => return TypeObjectRef::Class(class.0),
         TypeObjectOf::Exception(class) => return crate::exception::exception_class(class),
+        TypeObjectOf::Abstract { .. } => {
+            unreachable!("the checker tests `Iterable` and `Iterator` through concrete classes")
+        }
     })
 }
 

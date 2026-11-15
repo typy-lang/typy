@@ -344,8 +344,8 @@ fn not_a_package(module: &ModuleName, span: Span) -> Diagnostic {
 }
 
 /// Returns the error for a name of `typing`, `collections.abc` or `types` that TyPy does not
-/// give: `Any` and `cast` are refused (TYP-10), and the rest of `typing` and
-/// `collections.abc` is planned (LIB-17).
+/// give: `Any` and `cast` are refused (TYP-10), `Callable`, `NamedTuple` and the abstract
+/// collections are planned for 1.0, and any other name is not given (LIB-17).
 fn not_given(module: &ModuleName, alias: &Alias) -> Diagnostic {
     let name = &alias.name.name;
     if module.as_str() == "types" {
@@ -380,21 +380,32 @@ fn not_given(module: &ModuleName, alias: &Alias) -> Diagnostic {
         .with_rule(RuleId::TYP_10)
         .with_help("annotate the value with its type, or a union of its types");
     }
-    let help = match name.as_str() {
-        "Optional" => "write `T | None`",
-        "Union" => "write `A | B`",
-        "List" | "Dict" | "Set" | "Tuple" | "Type" | "FrozenSet" => {
-            "write the built-in type, such as `list[int]` or `dict[str, int]`"
-        }
-        _ => "TyPy gives `Iterator`, `Iterable`, `Final`, `ClassVar` and `Protocol`",
+    // The names a later release gives, with the requirement that plans each.
+    let planned = match name.as_str() {
+        "Callable" => Some(RuleId::FUN_05),
+        "NamedTuple" => Some(RuleId::CLS_27),
+        "Sequence" | "MutableSequence" | "Mapping" | "MutableMapping" | "Collection"
+        | "Container" | "Sized" | "Set" | "MutableSet" | "Reversible" | "KeysView"
+        | "ValuesView" | "ItemsView" => Some(RuleId::LIB_20),
+        _ => None,
     };
+    if let Some(rule) = planned {
+        return Diagnostic::new(
+            DiagnosticCode::error(201),
+            alias.name.span,
+            format!("`{module}.{name}` is planned for TyPy 1.0 ({rule})"),
+        )
+        .with_rule(rule);
+    }
     Diagnostic::new(
-        DiagnosticCode::error(201),
+        DiagnosticCode::error(425),
         alias.name.span,
-        format!("`{module}.{name}` is planned for TyPy 0.5 (LIB-17)"),
+        format!(
+            "TyPy's `{module}` gives `Iterator`, `Iterable`, `Optional`, `Union`, `List`, \
+             `Dict`, `Set`, `Tuple`, `Type`, `Final`, `ClassVar` and `Protocol`, not `{name}`"
+        ),
     )
     .with_rule(RuleId::LIB_17)
-    .with_help(help)
 }
 
 /// Returns the error for a relative import that names no module, with CPython's message.

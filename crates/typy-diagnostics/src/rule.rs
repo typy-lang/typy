@@ -47,6 +47,8 @@ impl RuleId {
     pub const CLS_25: Self = Self("CLS-25");
     /// `super(Class, instance)` shall be accepted with any class of the instance's chain of bases.
     pub const CLS_26: Self = Self("CLS-26");
+    /// A class derived from `typing.NamedTuple` shall be accepted, its fields read by name and by position.
+    pub const CLS_27: Self = Self("CLS-27");
     /// `for` shall iterate over `range`, `str`, `bytes`, `list`, `tuple`, `dict`, `set` and any class with `__iter__` and `__next__`.
     pub const CST_03: Self = Self("CST-03");
     /// `try` with `except`, `else` and `finally` clauses shall be accepted, and `finally` shall run on `return`, `break`, `continue` and exceptions.
@@ -211,12 +213,14 @@ impl RuleId {
     pub const LIB_15: Self = Self("LIB-15");
     /// `sys.version_info` shall be a value as CPython's: printed, stored, passed and imported with `from sys import version_info`.
     pub const LIB_16: Self = Self("LIB-16");
-    /// The other names of `typing` and `collections.abc` that describe types, such as `Optional`, `Union`, `List`, `Dict`, `Callable`, `NamedTuple` and `Sequence`, shall be available.
+    /// The names `Optional`, `Union`, `List`, `Dict`, `Set`, `Tuple` and `Type` of `typing` shall be accepted in annotations as the types they spell; `Callable` follows function values (FUN-05).
     pub const LIB_17: Self = Self("LIB-17");
     /// The `opener` argument of `open` shall be accepted.
     pub const LIB_18: Self = Self("LIB-18");
     /// `open` with a binary mode shall accept a `buffering` that is not a literal, as `typing.BinaryIO`.
     pub const LIB_19: Self = Self("LIB-19");
+    /// The abstract collections of `collections.abc` and `typing`, such as `Sequence`, `Mapping`, `MutableSequence` and `Collection`, shall be accepted as types, and a value of type `Iterable[T]` shall be testable against `Iterator`.
+    pub const LIB_20: Self = Self("LIB-20");
     /// A program shall be built from several `.py` files, found from the main file's directory and from paths set in `typy.toml`.
     pub const MOD_01: Self = Self("MOD-01");
     /// Packages with `__init__.py` and relative imports shall be accepted.
@@ -285,8 +289,10 @@ impl RuleId {
     pub const TYP_15: Self = Self("TYP-15");
     /// One value assigned to several targets, as in `a = b[0] = value`, shall be converted to each target's type, such as the union an item holds.
     pub const TYP_16: Self = Self("TYP-16");
-    /// The names of `typing` and `collections.abc` given for annotations, such as `Iterator` and `Iterable`, shall also be values, as in `isinstance(x, Iterable)`.
+    /// The names `Iterable` and `Iterator` of `typing` and `collections.abc`, and `List`, `Dict`, `Set`, `Tuple`, `Type`, `Optional[...]` and `Union[...]` of `typing`, shall be accepted as the classes of `isinstance` and of a class pattern, with CPython's answers.
     pub const TYP_17: Self = Self("TYP-17");
+    /// The names of `typing` and `collections.abc` shall be values of their own: stored, passed, compared and written as CPython writes them.
+    pub const TYP_18: Self = Self("TYP-18");
 
     /// Every rule a diagnostic can name, in ID order.
     pub const ALL: &'static [Self] = &[
@@ -310,6 +316,7 @@ impl RuleId {
         Self::CLS_24,
         Self::CLS_25,
         Self::CLS_26,
+        Self::CLS_27,
         Self::CST_03,
         Self::CST_04,
         Self::CST_05,
@@ -395,6 +402,7 @@ impl RuleId {
         Self::LIB_17,
         Self::LIB_18,
         Self::LIB_19,
+        Self::LIB_20,
         Self::MOD_01,
         Self::MOD_02,
         Self::MOD_05,
@@ -430,6 +438,7 @@ impl RuleId {
         Self::TYP_15,
         Self::TYP_16,
         Self::TYP_17,
+        Self::TYP_18,
     ];
 
     /// Returns the ID as text, such as `TYP-03`.

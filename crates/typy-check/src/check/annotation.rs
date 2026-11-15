@@ -55,6 +55,13 @@ pub(crate) enum AnnotationName {
     Dataclasses,
     /// `typing.Protocol`, the base of a protocol class (GEN-04).
     Protocol,
+    /// `typing.Optional`, `Optional[T]` being `T | None` (LIB-17).
+    Optional,
+    /// `typing.Union`, `Union[A, B]` being `A | B` (LIB-17).
+    Union,
+    /// `typing.List`, `Dict`, `Set`, `Tuple` and `Type`, the built-in type of the same name
+    /// in lower case (LIB-17).
+    Builtin(&'static str),
 }
 
 /// The modules that give names for annotations only in 0.3.
@@ -71,6 +78,13 @@ pub(crate) fn annotation_name(module: &str, name: &str) -> Option<AnnotationName
         ("typing", "ClassVar") => Some(AnnotationName::ClassVar),
         ("typing", "Final") => Some(AnnotationName::Final),
         ("typing", "Protocol") => Some(AnnotationName::Protocol),
+        ("typing", "Optional") => Some(AnnotationName::Optional),
+        ("typing", "Union") => Some(AnnotationName::Union),
+        ("typing", "List") => Some(AnnotationName::Builtin("list")),
+        ("typing", "Dict") => Some(AnnotationName::Builtin("dict")),
+        ("typing", "Set") => Some(AnnotationName::Builtin("set")),
+        ("typing", "Tuple") => Some(AnnotationName::Builtin("tuple")),
+        ("typing", "Type") => Some(AnnotationName::Builtin("type")),
         ("dataclasses", "dataclass" | "field") => Some(AnnotationName::Dataclasses),
         _ => None,
     }
@@ -130,6 +144,26 @@ fn standard_annotation(
                 Type::Iterable(item)
             }
         }
+        // `List[int]` is `list[int]`, read as the built-in type is (LIB-17).
+        Expr::Subscript { value, index, span }
+            if let Some(AnnotationName::Builtin(builtin)) = standard_name(value, scope) =>
+        {
+            let spelled = Expr::Subscript {
+                value: Box::new(Expr::Name {
+                    id: builtin.to_owned(),
+                    span: value.span(),
+                }),
+                index: index.clone(),
+                span: *span,
+            };
+            annotation_type(&spelled, scope, diagnostics)
+        }
+        Expr::Subscript { value, index, .. }
+            if let Some(name @ (AnnotationName::Optional | AnnotationName::Union)) =
+                standard_name(value, scope) =>
+        {
+            union_annotation(name, index, scope, diagnostics)
+        }
         Expr::Subscript { value, .. }
             if standard_name(value, scope) == Some(AnnotationName::ClassVar) =>
         {
@@ -140,47 +174,112 @@ fn standard_annotation(
         {
             final_elsewhere(annotation, diagnostics)
         }
-        _ if let Some(name) = standard_name(annotation, scope) => match name {
-            AnnotationName::ClassVar => class_var_elsewhere(annotation, diagnostics),
-            AnnotationName::Final => final_elsewhere(annotation, diagnostics),
-            AnnotationName::Dataclasses => {
-                diagnostics.push(
-                    Diagnostic::new(
-                        DiagnosticCode::error(408),
-                        annotation.span(),
-                        "`dataclass` and `field` are not types",
-                    )
-                    .with_rule(RuleId::CLS_05),
-                );
-                Type::Error
-            }
-            AnnotationName::Protocol => {
-                diagnostics.push(
-                    Diagnostic::new(
-                        DiagnosticCode::error(408),
-                        annotation.span(),
-                        "`Protocol` is not a type; a protocol class derives from it",
-                    )
-                    .with_rule(RuleId::GEN_04),
-                );
-                Type::Error
-            }
-            AnnotationName::TracebackType => Type::Traceback,
-            AnnotationName::ModuleType => Type::AnyModule,
-            AnnotationName::Iterator | AnnotationName::Iterable => {
-                diagnostics.push(
-                    Diagnostic::new(
-                        DiagnosticCode::error(408),
-                        annotation.span(),
-                        "an `Iterator` or `Iterable` annotation names the type of its items, such as `Iterator[int]`",
-                    )
-                    .with_rule(RuleId::TYP_15),
-                );
-                Type::Error
-            }
-        },
+        _ if let Some(name) = standard_name(annotation, scope) => {
+            bare_standard(name, annotation, scope, diagnostics)
+        }
         _ => return None,
     })
+}
+
+/// Returns the type a bare name of `typing`, `collections.abc` or `types` names, or the error
+/// for one that names no type without its arguments.
+fn bare_standard(
+    name: AnnotationName,
+    annotation: &Expr,
+    scope: &AnnotationScope<'_>,
+    diagnostics: &mut Diagnostics,
+) -> Type {
+    match name {
+        AnnotationName::ClassVar => class_var_elsewhere(annotation, diagnostics),
+        AnnotationName::Final => final_elsewhere(annotation, diagnostics),
+        AnnotationName::Dataclasses => {
+            diagnostics.push(
+                Diagnostic::new(
+                    DiagnosticCode::error(408),
+                    annotation.span(),
+                    "`dataclass` and `field` are not types",
+                )
+                .with_rule(RuleId::CLS_05),
+            );
+            Type::Error
+        }
+        AnnotationName::Protocol => {
+            diagnostics.push(
+                Diagnostic::new(
+                    DiagnosticCode::error(408),
+                    annotation.span(),
+                    "`Protocol` is not a type; a protocol class derives from it",
+                )
+                .with_rule(RuleId::GEN_04),
+            );
+            Type::Error
+        }
+        AnnotationName::Builtin(builtin) => {
+            let spelled = Expr::Name {
+                id: builtin.to_owned(),
+                span: annotation.span(),
+            };
+            annotation_type(&spelled, scope, diagnostics)
+        }
+        AnnotationName::Optional | AnnotationName::Union => {
+            let written = if name == AnnotationName::Optional {
+                "an `Optional` annotation names its type, such as `Optional[int]`"
+            } else {
+                "a `Union` annotation names its types, such as `Union[int, str]`"
+            };
+            diagnostics.push(
+                Diagnostic::new(DiagnosticCode::error(408), annotation.span(), written)
+                    .with_rule(RuleId::LIB_17),
+            );
+            Type::Error
+        }
+        AnnotationName::TracebackType => Type::Traceback,
+        AnnotationName::ModuleType => Type::AnyModule,
+        AnnotationName::Iterator | AnnotationName::Iterable => {
+            diagnostics.push(
+                Diagnostic::new(
+                    DiagnosticCode::error(408),
+                    annotation.span(),
+                    "an `Iterator` or `Iterable` annotation names the type of its items, such as `Iterator[int]`",
+                )
+                .with_rule(RuleId::TYP_15),
+            );
+            Type::Error
+        }
+    }
+}
+
+/// Returns the type `Optional[T]`, which is `T | None`, or `Union[A, B, ...]`, which is
+/// `A | B | ...`, names (LIB-17).
+fn union_annotation(
+    name: AnnotationName,
+    index: &Expr,
+    scope: &AnnotationScope<'_>,
+    diagnostics: &mut Diagnostics,
+) -> Type {
+    let members: Vec<&Expr> = match index {
+        Expr::Tuple { elements, .. } => elements.iter().collect(),
+        other => vec![other],
+    };
+    if name == AnnotationName::Optional && members.len() != 1 {
+        diagnostics.push(
+            Diagnostic::new(
+                DiagnosticCode::error(408),
+                index.span(),
+                "`Optional` takes one type, as CPython requires",
+            )
+            .with_rule(RuleId::LIB_17),
+        );
+        return Type::Error;
+    }
+    let mut types: Vec<Type> = members
+        .into_iter()
+        .map(|member| annotation_type(member, scope, diagnostics))
+        .collect();
+    if name == AnnotationName::Optional {
+        types.push(Type::NoneType);
+    }
+    Type::union(types)
 }
 
 /// Reports `Final` outside the declaration of a variable, a class variable or an attribute

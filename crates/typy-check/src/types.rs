@@ -115,6 +115,25 @@ pub enum TypeObjectOf {
     Instance(crate::typed::ClassId, String),
     /// An exception class.
     Exception(ExceptionClass),
+    /// `collections.abc.Iterable` or `Iterator`, as the class of an `isinstance` test, with
+    /// the classes of the program that define the methods it asks for (TYP-17).
+    Abstract {
+        /// Which abstract class.
+        kind: AbstractClass,
+        /// The classes that define the methods themselves, each with its bases; their
+        /// subclasses inherit the methods.
+        implementers: Vec<(crate::typed::ClassId, Vec<crate::typed::ClassId>)>,
+    },
+}
+
+/// An abstract class of `collections.abc` that `isinstance` tests by the methods a class
+/// defines, as CPython's `__subclasshook__` does (TYP-17).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum AbstractClass {
+    /// `Iterable`: a class with `__iter__`.
+    Iterable,
+    /// `Iterator`: a class with `__iter__` and `__next__`.
+    Iterator,
 }
 
 impl TypeObjectOf {
@@ -210,6 +229,14 @@ impl TypeObjectOf {
             Self::Range => "range",
             Self::Instance(_, name) => name,
             Self::Exception(class) => class.name(),
+            Self::Abstract {
+                kind: AbstractClass::Iterable,
+                ..
+            } => "Iterable",
+            Self::Abstract {
+                kind: AbstractClass::Iterator,
+                ..
+            } => "Iterator",
         }
     }
 }

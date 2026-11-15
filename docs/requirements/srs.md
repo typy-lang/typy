@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy software requirements specification |
-| Version | 1.46 |
+| Version | 1.47 |
 | Status | Approved |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-15 |
@@ -185,7 +185,8 @@ formatter applies; Ruff's formatter is the project's recommendation.
 | TYP-14 | Annotations that join two or more types other than `None` with `\|`, such as `int \| str`, shall be accepted, with narrowing by `isinstance` (TYP-07). | M | 0.4 | 3.3.5 |
 | TYP-15 | The annotations `Iterator[T]` and `Iterable[T]`, imported from `collections.abc` or `typing`, shall be accepted for iterators and for the built-in iterables of items of type `T` (ADR-0014, ADR-0015). | S | 0.3 | |
 | TYP-16 | One value assigned to several targets, as in `a = b[0] = value`, shall be converted to each target's type, such as the union an item holds. | S | 0.5 | 7.2 |
-| TYP-17 | The names of `typing` and `collections.abc` given for annotations, such as `Iterator` and `Iterable`, shall also be values, as in `isinstance(x, Iterable)`. | S | 0.5 | |
+| TYP-17 | The names `Iterable` and `Iterator` of `typing` and `collections.abc`, and `List`, `Dict`, `Set`, `Tuple`, `Type`, `Optional[...]` and `Union[...]` of `typing`, shall be accepted as the classes of `isinstance` and of a class pattern, with CPython's answers. | S | 0.5 | |
+| TYP-18 | The names of `typing` and `collections.abc` shall be values of their own: stored, passed, compared and written as CPython writes them. | C | 1.0 | |
 
 ### 3.5 Built-in types and values (DAT)
 
@@ -304,6 +305,7 @@ formatter applies; Ruff's formatter is the project's recommendation.
 | CLS-24 | The truth of an instance shall come from the `__bool__` or `__len__` of its own class, also where its static type is a base or a union that tests truth otherwise, and in `any` and `all`. | S | 0.5 | |
 | CLS-25 | A class method shall be callable through an instance and through a subclass defined in another module, a class variable shall be assignable through a subclass, and a static method shall be callable through any expression that gives its class or an instance. | S | 0.5 | |
 | CLS-26 | `super(Class, instance)` shall be accepted with any class of the instance's chain of bases. | S | 0.5 | |
+| CLS-27 | A class derived from `typing.NamedTuple` shall be accepted, its fields read by name and by position. | S | 1.0 | |
 | CLS-14 | `super().__init__(...)` shall be accepted in the `__init__` of an exception class and shall set the exception's arguments; any other use of `super()` shall be rejected until 0.4. | M | 0.3 | |
 
 ### 3.11 Generics and protocols (GEN)
@@ -380,9 +382,10 @@ formatter applies; Ruff's formatter is the project's recommendation.
 | LIB-14 | `open` shall accept binary modes, `+` modes, a mode that is not a literal, a file descriptor as the file, the encodings `ascii` and `latin-1`, and the arguments `buffering`, `errors`, `newline` and `closefd`; a text file shall have `seek`, `tell`, `truncate`, `fileno`, `isatty`, `readable`, `writable` and `seekable`, and the attributes `name`, `mode` and `closed`; closing `sys.stdout` or `sys.stderr` shall close it. | S | 0.4 |
 | LIB-15 | `math.fsum`, `math.dist`, `math.prod` and `math.sumprod` shall take items of a union of number types, and `math.prod` a `bool` start and items other than numbers. | C | 0.5 |
 | LIB-16 | `sys.version_info` shall be a value as CPython's: printed, stored, passed and imported with `from sys import version_info`. | C | 0.5 |
-| LIB-17 | The other names of `typing` and `collections.abc` that describe types, such as `Optional`, `Union`, `List`, `Dict`, `Callable`, `NamedTuple` and `Sequence`, shall be available. | S | 0.5 |
+| LIB-17 | The names `Optional`, `Union`, `List`, `Dict`, `Set`, `Tuple` and `Type` of `typing` shall be accepted in annotations as the types they spell; `Callable` follows function values (FUN-05). | S | 0.5 |
 | LIB-18 | `open` shall accept a callable `opener`, which opens the file and returns its descriptor. | C | 1.0 |
 | LIB-19 | `open` with a binary mode shall accept a `buffering` that is not a literal, giving a `typing.BinaryIO`. | C | 1.0 |
+| LIB-20 | The abstract collections of `collections.abc` and `typing`, such as `Sequence`, `Mapping`, `MutableSequence` and `Collection`, shall be accepted as types, and a value of type `Iterable[T]` shall be testable against `Iterator`. | S | 1.0 |
 
 ### 3.15 Memory management (MEM)
 
@@ -478,7 +481,7 @@ cache, unless a row says otherwise.
 | 0.4 | Dataclasses, inheritance, protocols, PEP 695 generics, narrowing, `Final`, `type` aliases | Binary files and the rest of `open` |
 | 0.5 | `match`, `:=`, dataclass `default_factory`, hashing and options, the rest of the class protocols (CLS-20 to CLS-26), C interoperability through `ctypes` | Stack allocation; libraries and exports described by their annotations (ADR-0032) |
 | 0.6 | | Linux and macOS AArch64; cross-compilation |
-| 1.0 | Closures, `lambda`, `nonlocal`, generators, `*args`, keyword-only parameters, `isinstance` with a class held in a variable, `issubclass` | Cycle collection, `weakref`; Windows; performance budgets |
+| 1.0 | Closures, `lambda`, `nonlocal`, generators, `*args`, keyword-only parameters, `isinstance` with a class held in a variable, `issubclass`, `typing` names as values, `NamedTuple`, `Sequence` and the other abstract collections | Cycle collection, `weakref`; Windows; performance budgets |
 
 ## 6. Out of scope
 

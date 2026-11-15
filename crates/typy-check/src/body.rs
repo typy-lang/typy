@@ -54,6 +54,7 @@ mod statement;
 mod super_call;
 mod sys_call;
 mod type_object;
+mod typing_class;
 mod union;
 mod version_info;
 mod view_operator;

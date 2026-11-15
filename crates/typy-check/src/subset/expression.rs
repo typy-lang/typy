@@ -121,6 +121,31 @@ impl Walker {
             {
                 self.annotation(index);
             }
+            // `Optional`, `Union`, `List`, `Dict`, `Set`, `Tuple` and `Type` of `typing`, by
+            // name or through the module, which the checker resolves (LIB-17).
+            Expr::Subscript { value, index, .. }
+                if matches!(
+                    value.as_ref(),
+                    Expr::Name { id, .. } | Expr::Attribute { attribute: typy_source::syntax::Identifier { name: id, .. }, .. }
+                        if matches!(id.as_str(), "Optional" | "Union" | "List" | "Dict" | "Set" | "Tuple" | "Type")
+                ) =>
+            {
+                let items = match index.as_ref() {
+                    Expr::Tuple { elements, .. } => elements.iter().collect(),
+                    single => vec![single],
+                };
+                for item in items {
+                    if !matches!(
+                        item,
+                        Expr::Constant {
+                            value: Constant::Ellipsis,
+                            ..
+                        }
+                    ) {
+                        self.annotation(item);
+                    }
+                }
+            }
             // A generic class or type alias of the module, given its type arguments (GEN-01).
             Expr::Subscript { value, index, .. } if matches!(value.as_ref(), Expr::Name { id, .. } if self.generic_classes.contains(id) || self.generic_aliases.contains(id)) => {
                 match index.as_ref() {
@@ -137,7 +162,7 @@ impl Walker {
                 self.report(
                     *span,
                     Feature::Excluded {
-                        what: "generic annotations other than `list`, `dict`, `set`, `tuple`, `type`, `Iterator` and `Iterable`, such as `frozenset[int]`,",
+                        what: "generic annotations other than `list`, `dict`, `set`, `tuple`, `type`, `Iterator`, `Iterable` and their `typing` names, such as `frozenset[int]`,",
                     },
                 );
             }

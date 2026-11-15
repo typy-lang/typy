@@ -225,7 +225,7 @@ fn excluded_features_say_they_cannot_be_compiled() {
         ),
         (
             "def f(x: frozenset[int]) -> None:\n    pass\n",
-            "generic annotations other than `list`, `dict`, `set`, `tuple`, `type`, `Iterator` and `Iterable`, such as `frozenset[int]`, cannot be compiled by TyPy with CPython's meaning",
+            "generic annotations other than `list`, `dict`, `set`, `tuple`, `type`, `Iterator`, `Iterable` and their `typing` names, such as `frozenset[int]`, cannot be compiled by TyPy with CPython's meaning",
         ),
         (
             "x = ...\n",

@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy test plan |
-| Version | 0.47 |
+| Version | 0.48 |
 | Status | Draft |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-15 |
@@ -292,6 +292,7 @@ that the specification does not define.
 | TYP-15 | 0.3 | IT | `tests/conformance/typ/TYP-15_*.py` |
 | TYP-16 | 0.5 | IT | `tests/conformance/typ/TYP-16_*.py` |
 | TYP-17 | 0.5 | IT | `tests/conformance/typ/TYP-17_*.py` |
+| TYP-18 | 1.0 | IT | `tests/conformance/typ/TYP-18_*.py` |
 | DAT-01 | 0.1 | IT | `tests/conformance/dat/DAT-01_*.py` |
 | DAT-02 | 0.1 | IT | `tests/conformance/dat/DAT-02_*.py` |
 | DAT-03 | 0.1 | IT | `tests/conformance/dat/DAT-03_*.py` |
@@ -379,6 +380,7 @@ that the specification does not define.
 | CLS-24 | 0.5 | IT | `tests/conformance/cls/CLS-24_*.py` |
 | CLS-25 | 0.5 | IT | `tests/conformance/cls/CLS-25_*.py` |
 | CLS-26 | 0.5 | IT | `tests/conformance/cls/CLS-26_*.py` |
+| CLS-27 | 1.0 | IT | `tests/conformance/cls/CLS-27_*.py` |
 | CLS-18 | 1.0 | IT | `tests/conformance/cls/CLS-18_*.py` |
 | CLS-19 | 1.0 | IT | `tests/conformance/cls/CLS-19_*.py` |
 | GEN-01 | 0.4 | IT | `tests/conformance/gen/GEN-01_*.py` |
@@ -437,6 +439,7 @@ that the specification does not define.
 | LIB-17 | 0.5 | IT | `tests/conformance/lib/LIB-17_*.py` |
 | LIB-18 | 1.0 | IT | `tests/conformance/lib/LIB-18_*.py` |
 | LIB-19 | 1.0 | IT | `tests/conformance/lib/LIB-19_*.py` |
+| LIB-20 | 1.0 | IT | `tests/conformance/lib/LIB-20_*.py` |
 | LIB-13 | 0.4 | IT | `tests/conformance/lib/LIB-13_*.py` |
 | LIB-14 | 0.4 | IT | `tests/conformance/lib/LIB-14_*.py` |
 | MEM-01 | 0.1 | UT, IT | `typy-runtime` unit tests; `tests/conformance/mem/MEM-01_*.py` under sanitizers |

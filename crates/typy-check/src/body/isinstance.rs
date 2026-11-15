@@ -66,6 +66,38 @@ impl BodyChecker<'_> {
         classes: &[TypeObjectOf],
         span: Span,
     ) -> TypedExpr {
+        // An `Iterable[T]` value holds a collection or an iterator of the runtime, which no
+        // class of the program stands for (LIB-20).
+        let iterator = classes.iter().any(|class| {
+            matches!(
+                class,
+                TypeObjectOf::Abstract {
+                    kind: crate::types::AbstractClass::Iterator,
+                    ..
+                }
+            )
+        });
+        let held = match &value.ty {
+            Type::Optional(inner) => inner.as_ref(),
+            other => other,
+        };
+        if iterator
+            && held
+                .members()
+                .iter()
+                .any(|member| matches!(member, Type::Iterable(_)))
+        {
+            return self.error(
+                Diagnostic::new(
+                    DiagnosticCode::error(201),
+                    span,
+                    "testing whether an `Iterable` value is an `Iterator` is planned for TyPy \
+                     1.0 (LIB-20)",
+                )
+                .with_rule(RuleId::LIB_20),
+                span,
+            );
+        }
         let inner = match &value.ty {
             Type::Optional(inner) => inner.as_ref().clone(),
             other => other.clone(),
@@ -80,14 +112,21 @@ impl BodyChecker<'_> {
             .iter()
             .zip(&outcomes)
             .filter(|(_, outcome)| matches!(outcome, Outcome::Checked))
-            .map(|(class, _)| class.clone())
+            .flat_map(|(class, _)| self.concrete_classes(class))
             .collect();
         let narrowed = self.narrowing(&value, &inner, classes, always, none_matches);
         let otherwise = self.union_otherwise(&value, &inner, classes);
         let members = match &inner {
             Type::Union(members) => members
                 .iter()
-                .map(|member| member_outcome(member, classes))
+                .map(|member| {
+                    let (always, checks) = member_outcome(member, classes);
+                    let checks = checks
+                        .iter()
+                        .flat_map(|class| self.concrete_classes(class))
+                        .collect();
+                    (always, checks)
+                })
                 .collect(),
             _ => Vec::new(),
         };
@@ -106,6 +145,21 @@ impl BodyChecker<'_> {
         )
     }
 
+    /// Returns the classes a test against `class` asks about when the program runs: the class
+    /// itself, or for `Iterable` and `Iterator` the classes that define their methods (TYP-17).
+    fn concrete_classes(&self, class: &TypeObjectOf) -> Vec<TypeObjectOf> {
+        match class {
+            TypeObjectOf::Abstract { implementers, .. } => implementers
+                .iter()
+                .map(|(id, _)| {
+                    let name = self.program.classes[id.0 as usize].name.clone();
+                    TypeObjectOf::Instance(*id, name)
+                })
+                .collect(),
+            other => vec![other.clone()],
+        }
+    }
+
     /// Returns the classes the second argument names: a class or a tuple of them, each named
     /// as a value.
     pub(super) fn isinstance_classes(
@@ -116,9 +170,22 @@ impl BodyChecker<'_> {
             Expr::Tuple { elements, .. } => elements.iter().collect(),
             other => vec![other],
         };
-        named
-            .into_iter()
-            .map(|each| {
+        let mut found = Vec::new();
+        for each in named {
+            if let Some(classes) = self.typing_classes(each)? {
+                found.extend(classes);
+                continue;
+            }
+            found.push(self.named_class(each)?);
+        }
+        Ok(found)
+    }
+
+    /// Returns the class an expression names as a value: a class of the program, or a
+    /// built-in type or exception class.
+    fn named_class(&mut self, each: &Expr) -> Result<TypeObjectOf, Option<Box<Diagnostic>>> {
+        {
+            {
                 let typed = self.expression(each);
                 // CPython raises `TypeError` for a protocol not marked `@runtime_checkable`,
                 // and TyPy keeps no members to test at run time.
@@ -153,8 +220,8 @@ impl BodyChecker<'_> {
                         .with_help("name the class, or a tuple of classes, in the call"),
                     ))),
                 }
-            })
-            .collect()
+            }
+        }
     }
 
     /// Returns the position, in the function's table of narrowed types, of the type a true
@@ -327,8 +394,61 @@ pub(super) fn always_instance(ty: &Type, class: &TypeObjectOf) -> bool {
     matches!(outcome(ty, class), Outcome::Always)
 }
 
+/// Returns what testing a value of type `ty`, which is not optional and not a union, against
+/// `Iterable` or `Iterator` gives, as CPython's `__subclasshook__` answers (TYP-17): the
+/// built-in collections are iterable, their iterators and files are iterators too, and a class
+/// of the program is one when it or a base defines the methods, or may be one when only a
+/// subclass does.
+fn abstract_outcome(
+    ty: &Type,
+    kind: crate::types::AbstractClass,
+    implementers: &[(crate::typed::ClassId, Vec<crate::typed::ClassId>)],
+) -> Outcome {
+    use crate::types::AbstractClass;
+    let always = |yes: bool| if yes { Outcome::Always } else { Outcome::Never };
+    match ty {
+        Type::List(_)
+        | Type::Tuple(_)
+        | Type::TupleOf(_)
+        | Type::Str
+        | Type::Bytes
+        | Type::Set(_)
+        | Type::Dict(..)
+        | Type::DictView(..)
+        | Type::Range => always(kind == AbstractClass::Iterable),
+        Type::Iterator(_) | Type::TextFile | Type::BinaryFile(_) | Type::DescriptorFile(_) => {
+            Outcome::Always
+        }
+        // An iterable may hold a collection or an iterator, which its object knows.
+        Type::Iterable(_) if kind == AbstractClass::Iterable => Outcome::Always,
+        Type::Iterable(_) => Outcome::Checked,
+        Type::Instance(own) => {
+            let inherits = |(class, _): &(crate::typed::ClassId, Vec<crate::typed::ClassId>)| {
+                own.id == *class || own.ancestors.iter().any(|(each, _)| each == class)
+            };
+            let below = |(_, bases): &(crate::typed::ClassId, Vec<crate::typed::ClassId>)| {
+                bases.contains(&own.id)
+            };
+            if implementers.iter().any(inherits) {
+                Outcome::Always
+            } else if implementers.iter().any(below) {
+                // A subclass defines the methods, so the instance's class decides.
+                Outcome::Checked
+            } else {
+                Outcome::Never
+            }
+        }
+        _ => Outcome::Never,
+    }
+}
+
 /// Returns what testing a value of type `ty`, which is not optional, against `class` gives.
 fn outcome(ty: &Type, class: &TypeObjectOf) -> Outcome {
+    if let TypeObjectOf::Abstract { kind, implementers } = class
+        && !matches!(ty, Type::Union(_))
+    {
+        return abstract_outcome(ty, *kind, implementers);
+    }
     match (ty, class) {
         // A union is an instance when each member is, and is not when no member is.
         (Type::Union(members), _) => {
