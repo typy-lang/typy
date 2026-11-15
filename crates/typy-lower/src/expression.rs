@@ -132,6 +132,7 @@ impl FunctionLowerer<'_> {
                 let tuple = self.expression(tuple);
                 self.tuple_slice(tuple, positions, ty, span)
             }
+            TypedExprKind::Raise(exception) => self.raise_in_place(exception, ty, span),
             TypedExprKind::TupleItem { tuple, index } => {
                 let tuple = self.expression(tuple);
                 self.tuple_item(tuple, *index, ty, span)

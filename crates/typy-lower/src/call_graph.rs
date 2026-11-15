@@ -282,6 +282,7 @@ fn expression(expression_value: &TypedExpr, callees: &mut BTreeSet<FunctionId>) 
         | TypedExprKind::Unwrap(operand)
         | TypedExprKind::Unary { operand, .. }
         | TypedExprKind::TupleOf(operand)
+        | TypedExprKind::Raise(operand)
         | TypedExprKind::TupleItem { tuple: operand, .. }
         | TypedExprKind::TupleSlice { tuple: operand, .. } => {
             expression(operand, callees);

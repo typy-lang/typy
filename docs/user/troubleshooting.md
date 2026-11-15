@@ -393,7 +393,9 @@ print(last)
 ## E0307: tuple indexed other than by an integer literal inside it
 
 Each item of a fixed tuple has its own type, so its position must be a
-literal inside the tuple (DAT-08). Use a literal index, unpack the tuple,
+literal inside the tuple (DAT-08). A variable that holds a union of fixed
+tuples takes a literal inside at least one member, and raises `IndexError`
+when the tuple it holds is shorter. Use a literal index, unpack the tuple,
 or use `tuple[T, ...]` when every item has one type.
 
 This program gives E0307:

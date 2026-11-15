@@ -982,7 +982,11 @@ one block. A loop, a comprehension or a builtin that reads an iterable over a
 variable that holds a union of fixed tuples goes over
 `body::union_loop::union_tuple_items`: an `EachMember` whose arm for each
 member is a list display of that member's items, each converted to the union
-of every member's item types, so the loop reads one list (ADR-0034). Equality
+of every member's item types, so the loop reads one list (ADR-0034). A
+literal index outside some of the tuple members gives those members'
+arms `TypedExprKind::Raise` of `IndexError("tuple index out of range")`,
+which lowering throws in place of a value; an index outside every member is
+E0307. Equality
 and order refuse a union that is not a variable, which no split reaches. A
 container of a union of objects stores each as an object item, and the runtime
 compares two objects of different types as CPython does: a built-in type is

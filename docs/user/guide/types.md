@@ -112,7 +112,10 @@ with `str`, `repr` and f-strings, given to `type()` and tested for truth.
 A variable that holds a union of fixed tuples, such as
 `tuple[str] | tuple[str, int]`, is gone over item by item by a loop, a
 comprehension, `list`, `sorted`, `sum` and the other builtins that read an
-iterable, each item of the union of the members' item types.
+iterable, each item of the union of the members' item types. Indexed with
+a literal, such as `value[1]`, it raises `IndexError` when the tuple it
+holds is too short, as CPython does; a position outside every member is
+E0307.
 `isinstance` narrows it, in the branch where the test holds and in the
 branch where it fails. A union of classes that share a base has that
 base's attributes and methods:

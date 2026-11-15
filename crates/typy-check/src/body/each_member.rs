@@ -1,11 +1,13 @@
 //! Operations on a variable that holds a union of objects, checked once for each member with
 //! the variable narrowed to it; the member the object is runs (TYP-14, ADR-0027).
 
-use typy_diagnostics::{Diagnostic, DiagnosticCode, RuleId};
+use typy_diagnostics::{Diagnostic, DiagnosticCode, RuleId, Span};
 use typy_source::syntax::{CompareOperator, Constant, Expr, UnaryOperator};
 
 use super::BodyChecker;
+use super::expression::literal_position;
 use crate::builtin::Builtin;
+use crate::exception::{BuiltinException, ExceptionClass};
 use crate::typed::{EachMember, SymbolId, TypedConstant, TypedExpr, TypedExprKind};
 use crate::types::{Type, TypeObjectOf};
 
@@ -35,10 +37,34 @@ impl BodyChecker<'_> {
             );
         };
         let unequal = self.unequal_answer(expression, operand, &members);
+        let short = short_members(expression, &members);
+        if let Expr::Subscript { index, .. } = expression
+            && short.iter().all(|short| *short)
+        {
+            return Some(
+                self.error(
+                    Diagnostic::new(
+                        DiagnosticCode::error(307),
+                        index.span(),
+                        format!(
+                            "position {} is outside each member of {}",
+                            literal_position(index).unwrap_or_default(),
+                            Type::Union(members)
+                        ),
+                    )
+                    .with_rule(RuleId::DAT_08),
+                    span,
+                ),
+            );
+        }
         let value = self.expression(operand);
         let before = self.assigned.clone();
         let mut arms = Vec::new();
-        for (member, test) in members.into_iter().zip(tests) {
+        for ((member, test), short) in members.into_iter().zip(tests).zip(short) {
+            if short {
+                arms.push((test, Self::index_error(span)));
+                continue;
+            }
             if let Some((other, answer)) = &unequal
                 && !member.can_test_equality(other)
             {
@@ -57,7 +83,14 @@ impl BodyChecker<'_> {
         let ty = Self::each_member_type(&arms);
         let arms = arms
             .into_iter()
-            .map(|(test, body)| (test, Self::converted(body, Some(&ty))))
+            .map(|(test, mut body)| {
+                if matches!(body.kind, TypedExprKind::Raise(_)) {
+                    body.ty = ty.clone();
+                    (test, body)
+                } else {
+                    (test, Self::converted(body, Some(&ty)))
+                }
+            })
             .collect();
         Some(Self::typed(
             TypedExprKind::EachMember(Box::new(EachMember { value, arms })),
@@ -116,9 +149,40 @@ impl BodyChecker<'_> {
             .then_some((ty, answer))
     }
 
-    /// Returns the type of the result: the members' results joined into one type.
+    /// Returns `IndexError: tuple index out of range`, raised by the item of a tuple member
+    /// too short for the position, as CPython raises it only for that member.
+    fn index_error(span: Span) -> TypedExpr {
+        let class = ExceptionClass::Builtin(BuiltinException::IndexError);
+        let message = TypedConstant::Str("tuple index out of range".to_owned());
+        let exception = Self::typed(
+            TypedExprKind::NewException {
+                class: class.clone(),
+                arguments: vec![Self::typed(
+                    TypedExprKind::Constant(message),
+                    Type::Str,
+                    span,
+                )],
+                init: None,
+            },
+            Type::Exception(class),
+            span,
+        );
+        // The type is the result's, which `each_member` gives once the other arms are known.
+        Self::typed(
+            TypedExprKind::Raise(Box::new(exception)),
+            Type::NoneType,
+            span,
+        )
+    }
+
+    /// Returns the type of the result: the members' results joined into one type. An arm
+    /// that raises gives no result.
     fn each_member_type(arms: &[(TypeObjectOf, TypedExpr)]) -> Type {
-        let results: Vec<Type> = arms.iter().map(|(_, body)| body.ty.clone()).collect();
+        let results: Vec<Type> = arms
+            .iter()
+            .filter(|(_, body)| !matches!(body.kind, TypedExprKind::Raise(_)))
+            .map(|(_, body)| body.ty.clone())
+            .collect();
         if results.iter().any(Type::has_error) {
             return Type::Error;
         }
@@ -218,6 +282,25 @@ impl BodyChecker<'_> {
         }
         Some((symbol, members.clone()))
     }
+}
+
+/// Returns, for each member, whether `expression` is `variable[position]` with a literal
+/// position outside the member, a tuple too short for it.
+fn short_members(expression: &Expr, members: &[Type]) -> Vec<bool> {
+    let position = match expression {
+        Expr::Subscript { index, .. } => literal_position(index),
+        _ => None,
+    };
+    members
+        .iter()
+        .map(|member| match (member, position) {
+            (Type::Tuple(items), Some(position)) => {
+                let length = i128::try_from(items.len()).unwrap_or(i128::MAX);
+                !(-length..length).contains(&position)
+            }
+            _ => false,
+        })
+        .collect()
 }
 
 /// Returns true for a builtin that takes any object, as a union is.

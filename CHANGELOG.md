@@ -34,6 +34,10 @@ All notable changes to TyPy are recorded here. The format follows
 - A loop, a comprehension, `list`, `sorted`, `sum` and the other builtins
   that read an iterable go over a variable that holds a union of fixed
   tuples, such as `tuple[str] | tuple[str, int]` (TYP-14, ADR-0034).
+- A literal index into a variable that holds a union of fixed tuples
+  raises `IndexError` when the tuple it holds is too short, as CPython
+  does, in place of E0307; a position outside every member is still E0307
+  (DAT-08).
 - `sys.version_info` as a value of its own: stored, put in containers,
   imported with `from sys import version_info` and printed as CPython
   writes it, and read as the tuple of its items by indexing, slicing,

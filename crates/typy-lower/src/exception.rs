@@ -200,6 +200,23 @@ impl FunctionLowerer<'_> {
         self.builder.terminate(Terminator::Unreachable);
     }
 
+    /// Raises the exception `exception` makes where a value of `ty` stands. No path goes on
+    /// from the throw, so the value given after it is a zero value no code reads.
+    pub(crate) fn raise_in_place(
+        &mut self,
+        exception: &TypedExpr,
+        ty: TyirType,
+        span: Span,
+    ) -> Lowered {
+        let exception = self.expression(exception);
+        self.call_runtime(RuntimeFunction::ExceptionThrow, vec![exception.value], span);
+        self.untrack(exception.value);
+        self.builder.terminate(Terminator::Unreachable);
+        let after = self.builder.create_block();
+        self.builder.switch_to(after);
+        Self::borrowed(self.zero_value(ty, span), ty)
+    }
+
     /// Returns `str(exception)`, or `repr(exception)` when `repr` is set, through the
     /// exception's class. The exception is not released.
     pub(crate) fn exception_text(&mut self, lowered: Lowered, repr: bool, span: Span) -> Lowered {

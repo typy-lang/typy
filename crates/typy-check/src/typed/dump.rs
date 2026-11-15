@@ -531,6 +531,7 @@ impl Dump<'_> {
             TypedExprKind::Slice { .. } => "Slice".to_owned(),
             TypedExprKind::Method { method, .. } => format!("Method {}", method.name()),
             TypedExprKind::TupleItem { index, .. } => format!("TupleItem {index}"),
+            TypedExprKind::Raise(_) => "Raise".to_owned(),
             TypedExprKind::TupleSlice { positions, .. } => format!("TupleSlice {positions:?}"),
         };
         self.line(depth, &format!("{label} : {ty}"), expression.span);

@@ -325,6 +325,10 @@ pub enum TypedExprKind {
         tuple: Box<TypedExpr>,
         index: usize,
     },
+    /// Raises the exception its operand makes, in place of a value of the expression's type,
+    /// which no path receives: the item of a union's tuple member that is too short for the
+    /// position (DAT-08, ADR-0034).
+    Raise(Box<TypedExpr>),
 }
 
 /// `print(values, sep=sep, end=end, file=file, flush=flush)`; each keyword is present only
@@ -469,6 +473,7 @@ impl TypedExpr {
             }
             TypedExprKind::Unary { operand, .. }
             | TypedExprKind::TupleOf(operand)
+            | TypedExprKind::Raise(operand)
             | TypedExprKind::TupleItem { tuple: operand, .. }
             | TypedExprKind::TupleSlice { tuple: operand, .. } => {
                 vec![operand]
