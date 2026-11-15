@@ -450,6 +450,9 @@ impl Dump<'_> {
             TypedExprKind::Set(_) => "Set".to_owned(),
             TypedExprKind::Dict { .. } => "Dict".to_owned(),
             TypedExprKind::Wrap(_) => "Wrap".to_owned(),
+            TypedExprKind::Named { target, .. } => {
+                format!("Named {}", self.program.symbol(*target).name)
+            }
             TypedExprKind::Upcast(_) => "Upcast".to_owned(),
             TypedExprKind::Downcast(_) => "Downcast".to_owned(),
             TypedExprKind::IsInstance(_) => "IsInstance".to_owned(),

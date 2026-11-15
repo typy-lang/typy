@@ -154,7 +154,8 @@ impl<'context> FunctionLowerer<'context> {
         );
         let mut slots = BTreeMap::new();
         let mut parameters = Vec::new();
-        let assigned = crate::borrow::assigned_symbols(&function.body);
+        let mut assigned = crate::borrow::assigned_symbols(&function.body);
+        assigned.extend(function.named_targets.iter().copied());
         let mut borrowed = BTreeSet::new();
         for symbol_id in &function.parameters {
             let symbol = program.symbol(*symbol_id);

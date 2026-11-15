@@ -257,7 +257,6 @@ fn expressions_beyond_the_release_keep_their_kind() {
     let cases = [
         ("(x for x in y)\n", NodeKind::GeneratorExp),
         ("lambda: 1\n", NodeKind::Lambda),
-        ("(y := 1)\n", NodeKind::NamedExpr),
     ];
     for (source, expected) in cases {
         assert!(
@@ -265,6 +264,15 @@ fn expressions_beyond_the_release_keep_their_kind() {
             "{source}"
         );
     }
+}
+
+#[test]
+fn an_assignment_expression_keeps_its_name_and_value() {
+    let Expr::Named { target, value, .. } = only_expression("(y := x + 1)\n") else {
+        panic!("an assignment expression");
+    };
+    assert_eq!(target.name, "y");
+    assert!(matches!(value.as_ref(), Expr::BinOp { .. }));
 }
 
 #[test]

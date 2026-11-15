@@ -19,10 +19,30 @@ order.
 | Truth tests of numbers, strings, containers, optional values and instances | EXP-10 |
 | `x if c else y` with branches of one type | EXP-11 |
 | List, set and dict comprehensions, each with its own scope | EXP-12 |
+| Assignment expressions `name := value`, as CPython scopes them | EXP-13 |
 | Positional, keyword and default arguments | EXP-16 |
 
-Assignment expressions `:=` come in 0.5 (EXP-13), and `lambda`, generator
-expressions and `*args` in 1.0 (EXP-14, EXP-15, EXP-17).
+An assignment expression `name := value` assigns the variable and gives
+the value, as an assignment does (EXP-13). Inside a comprehension it
+assigns the variable of the function or module around it. A test of
+`(name := value) is not None` narrows `name`, as a test of the variable
+does. CPython's syntax errors are E0103: rebinding a name the
+comprehension binds, `:=` in a comprehension's source, and `__debug__`
+as the name.
+
+<!-- typy-expect: accepted -->
+```python
+def lookup(table: dict[str, int], key: str) -> int:
+    if (found := table.get(key)) is not None:
+        return found + 1
+    return -1
+
+
+print(lookup({"a": 1}, "a"), lookup({"a": 1}, "b"))
+```
+
+`lambda`, generator expressions and `*args` come in 1.0 (EXP-14, EXP-15,
+EXP-17).
 
 ## Example
 

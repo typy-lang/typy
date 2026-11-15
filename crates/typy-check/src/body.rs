@@ -33,6 +33,7 @@ mod math_call;
 mod math_iterable;
 mod method_call;
 mod name;
+mod named;
 mod open_call;
 mod open_options;
 mod operator;
@@ -77,6 +78,8 @@ pub(crate) struct BodyChecker<'program> {
     diagnostics: &'program mut Diagnostics,
     locals: BTreeMap<String, SymbolId>,
     local_order: Vec<SymbolId>,
+    /// The variables an assignment expression in the body assigns (EXP-13).
+    named_targets: Vec<SymbolId>,
     declared: BTreeMap<SymbolId, Type>,
     types: BTreeMap<SymbolId, Type>,
     assigned: Assigned,
@@ -114,6 +117,7 @@ impl<'program> BodyChecker<'program> {
             diagnostics,
             locals: BTreeMap::new(),
             local_order: Vec::new(),
+            named_targets: Vec::new(),
             declared: BTreeMap::new(),
             types: BTreeMap::new(),
             assigned: Some(BTreeSet::new()),
@@ -216,6 +220,7 @@ impl<'program> BodyChecker<'program> {
                 .with_rule(RuleId::TYP_01),
             );
         }
+        let named_targets = std::mem::take(&mut checker.named_targets);
         let locals = checker.finish_locals();
         // A generic function is checked, never run: its copies run in its place, so it keeps
         // no body (ADR-0023). A protocol's method only says what a class that satisfies the
@@ -233,6 +238,7 @@ impl<'program> BodyChecker<'program> {
             body: if generic { Vec::new() } else { body },
             span: definition.span,
             generic,
+            named_targets,
         });
     }
 
@@ -245,6 +251,7 @@ impl<'program> BodyChecker<'program> {
         let mut checker = BodyChecker::new(program, diagnostics, None);
         checker.collect_locals(statements);
         let body = checker.statements(statements);
+        let named_targets = std::mem::take(&mut checker.named_targets);
         let locals = checker.finish_locals();
         // A lazy import adds the function that runs it, so the body's ID comes after those.
         let entry = FunctionId(id(program.functions.len()));
@@ -271,6 +278,7 @@ impl<'program> BodyChecker<'program> {
             body,
             span,
             generic: false,
+            named_targets,
         }));
         entry
     }

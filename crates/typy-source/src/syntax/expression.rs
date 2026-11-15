@@ -86,6 +86,12 @@ pub enum Expr {
         orelse: Box<Expr>,
         span: Span,
     },
+    /// `target := value`, an assignment expression (EXP-13).
+    Named {
+        target: Identifier,
+        value: Box<Expr>,
+        span: Span,
+    },
     Compare {
         left: Box<Expr>,
         operators: Vec<CompareOperator>,
@@ -188,6 +194,7 @@ impl Expr {
             | Self::BinOp { span, .. }
             | Self::UnaryOp { span, .. }
             | Self::IfExp { span, .. }
+            | Self::Named { span, .. }
             | Self::Compare { span, .. }
             | Self::Call { span, .. }
             | Self::Constant { span, .. }

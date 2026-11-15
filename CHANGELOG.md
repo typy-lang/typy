@@ -6,6 +6,12 @@ All notable changes to TyPy are recorded here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- Assignment expressions, `name := value`, with CPython's scoping in
+  comprehensions and its syntax errors; a test of `(name := value) is not
+  None` narrows `name` (EXP-13).
+
 ## [0.4.0] - 2026-11-15
 
 ### Added

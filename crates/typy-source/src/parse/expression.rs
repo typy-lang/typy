@@ -7,8 +7,8 @@ use super::Converter;
 use super::operator::{binary_operator, compare_operator};
 use crate::int_literal::decimal_digits;
 use crate::syntax::{
-    BoolOperator, Comprehension, Constant, Expr, FStringPart, Keyword, NodeKind, ReplacementField,
-    UnaryOperator,
+    BoolOperator, Comprehension, Constant, Expr, FStringPart, Identifier, Keyword, NodeKind,
+    ReplacementField, UnaryOperator,
 };
 
 impl Converter<'_> {
@@ -192,7 +192,18 @@ impl Converter<'_> {
                 id: node.id.as_str().to_owned(),
                 span,
             },
-            ast::Expr::Named(node) => self.other(NodeKind::NamedExpr, node.range),
+            // Any target but a name is a parse error, so the tree never holds one.
+            ast::Expr::Named(node) => match node.target.as_ref() {
+                ast::Expr::Name(name) => Expr::Named {
+                    target: Identifier {
+                        name: name.id.as_str().to_owned(),
+                        span: self.span(name.range),
+                    },
+                    value: self.boxed(&node.value),
+                    span,
+                },
+                _ => self.other(NodeKind::NamedExpr, node.range),
+            },
             ast::Expr::Lambda(node) => self.other(NodeKind::Lambda, node.range),
             ast::Expr::Dict(node) => Expr::Dict {
                 keys: node

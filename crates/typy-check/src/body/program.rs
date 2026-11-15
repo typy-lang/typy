@@ -297,6 +297,7 @@ impl Program {
             body: vec![import],
             span,
             generic: false,
+            named_targets: Vec::new(),
         }));
         self.lazy_imports.insert(id, target);
         // A name a later lazy import binds again keeps its first function, which lowering

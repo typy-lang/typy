@@ -1022,6 +1022,23 @@ E0413, and a dict comprehension `dict[K, V]`; an expected type gives the
 element, as it gives a display's items, so `[[] for _ in xs]` takes an
 annotation. An `async for` clause is E0201, as `async` is.
 
+An assignment expression (EXP-13) is `Expr::Named { target, value }` in
+the syntax tree and `TypedExprKind::Named { target, value }` after
+checking. `collect_locals` and `module_variables` bind its name through
+`visit_statement`, which reaches every expression of a statement, so a
+`:=` inside a comprehension assigns the variable of the function or module
+around it, as CPython scopes it. `body/named.rs` checks the value against
+the variable's declared type as an assignment does, and the expression
+gives the value itself: a value wrapped into a `T | None` is unwrapped, and
+`assign_name` wraps it again as it stores it. `narrowable_variable` sees
+through it, so `(m := f()) is not None` narrows `m`. Each function lists
+its targets in `TypedFunction::named_targets`, which lowering adds to the
+assigned symbols, since no statement shows them, so a parameter assigned
+by `:=` is not borrowed. The subset walker keeps the names enclosing
+comprehensions bind and whether a comprehension's source is being walked,
+and reports CPython's `SyntaxError`s as E0103: rebinding a comprehension
+variable, `:=` in a source, and `__debug__` as the target.
+
 Classes (CLS-01, CLS-02, CLS-08, ADR-0012) are collected before any
 signature: `collect_classes` gives each `class` statement at the top of the
 module a `ClassId` in source order, and an annotation names a class through

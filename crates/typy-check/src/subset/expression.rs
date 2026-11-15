@@ -19,19 +19,66 @@ impl Walker {
         }
     }
 
-    /// Checks each clause of a comprehension: its target, its source and its conditions; an
-    /// `async for` clause is refused as `async` is.
-    fn generators(&mut self, generators: &[Comprehension]) {
+    /// Checks a comprehension: each clause's target, source and conditions, and what it
+    /// makes; an `async for` clause is refused as `async` is. The names its targets bind are
+    /// in scope for what it makes and for its conditions, and a source is walked as one,
+    /// where CPython refuses an assignment expression (EXP-13).
+    fn comprehension(&mut self, made: &[&Expr], generators: &[Comprehension]) {
+        let mut names = Vec::new();
+        for generator in generators {
+            collect_names(&generator.target, &mut names);
+        }
         for generator in generators {
             if generator.is_async {
                 self.report(generator.span, feature(NodeKind::AsyncFor));
             }
             self.name_target(&generator.target);
+            self.comprehension_sources += 1;
             self.expression(&generator.iter);
+            self.comprehension_sources -= 1;
+        }
+        self.comprehension_names.push(names);
+        for generator in generators {
             for condition in &generator.ifs {
                 self.expression(condition);
             }
         }
+        for expression in made {
+            self.expression(expression);
+        }
+        self.comprehension_names.pop();
+    }
+
+    /// Checks `target := value` with CPython's rules: the target may not be `__debug__` nor
+    /// a name an enclosing comprehension binds, and the expression may not be in a
+    /// comprehension's source (EXP-13).
+    fn named(
+        &mut self,
+        target: &typy_source::syntax::Identifier,
+        value: &Expr,
+        span: typy_diagnostics::Span,
+    ) {
+        if target.name == "__debug__" {
+            self.syntax_error(target.span, "cannot assign to __debug__");
+        } else if self
+            .comprehension_names
+            .iter()
+            .any(|names| names.contains(&target.name))
+        {
+            let message = format!(
+                "assignment expression cannot rebind comprehension iteration variable '{}'",
+                target.name
+            );
+            self.syntax_error(span, &message);
+        } else if self.comprehension_sources > 0 {
+            self.syntax_error(
+                span,
+                "assignment expression cannot be used in a comprehension iterable expression",
+            );
+        } else {
+            self.assigned_name(&target.name);
+        }
+        self.expression(value);
     }
 
     /// Annotations name `int`, `float`, `bool`, `str`, `None`, `tuple[...]`, `list[...]`,
@@ -263,20 +310,18 @@ impl Walker {
                 element,
                 generators,
                 ..
-            } => {
-                self.expression(element);
-                self.generators(generators);
-            }
+            } => self.comprehension(&[element], generators),
             Expr::DictComp {
                 key,
                 value,
                 generators,
                 ..
-            } => {
-                self.expression(key);
-                self.expression(value);
-                self.generators(generators);
-            }
+            } => self.comprehension(&[key, value], generators),
+            Expr::Named {
+                target,
+                value,
+                span,
+            } => self.named(target, value, *span),
             Expr::Dict { keys, values, .. } => {
                 for (key, value) in keys.iter().zip(values) {
                     match key {
@@ -294,5 +339,18 @@ impl Walker {
             Expr::FString { parts, .. } => self.fstring(parts),
             Expr::Other { kind, span } => self.report(*span, feature(*kind)),
         }
+    }
+}
+
+/// Adds the names a comprehension target binds.
+fn collect_names(target: &Expr, names: &mut Vec<String>) {
+    match target {
+        Expr::Name { id, .. } => names.push(id.clone()),
+        Expr::Tuple { elements, .. } | Expr::List { elements, .. } => {
+            for element in elements {
+                collect_names(element, names);
+            }
+        }
+        _ => {}
     }
 }

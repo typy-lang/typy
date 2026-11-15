@@ -201,6 +201,7 @@ impl BodyChecker<'_> {
                     span,
                 )
             }
+            Expr::Named { target, value, .. } => self.named(target, value, span),
             Expr::IfExp {
                 test, body, orelse, ..
             } => {

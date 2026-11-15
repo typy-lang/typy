@@ -19,6 +19,8 @@ pub(crate) fn check(tree: &SyntaxTree) -> Diagnostics {
         loop_depth: 0,
         try_depth: 0,
         scope: None,
+        comprehension_names: Vec::new(),
+        comprehension_sources: 0,
         generic_classes: tree
             .body
             .iter()
@@ -70,6 +72,12 @@ struct Walker {
     /// The module's generic type aliases, which an annotation of an alias's value may
     /// subscript before the checker expands it (SMT-10).
     generic_aliases: std::collections::BTreeSet<String>,
+    /// The names each enclosing comprehension binds, innermost last, which an assignment
+    /// expression may not rebind (EXP-13).
+    comprehension_names: Vec<Vec<String>>,
+    /// How many comprehension sources enclose the expression being walked, where CPython
+    /// refuses an assignment expression.
+    comprehension_sources: usize,
 }
 
 impl Walker {

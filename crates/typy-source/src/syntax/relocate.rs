@@ -261,6 +261,15 @@ impl Expr {
                 body.relocate(span);
                 orelse.relocate(span);
             }
+            Self::Named {
+                target,
+                value,
+                span: at,
+            } => {
+                *at = span;
+                target.span = span;
+                value.relocate(span);
+            }
             Self::Compare {
                 left,
                 comparators,

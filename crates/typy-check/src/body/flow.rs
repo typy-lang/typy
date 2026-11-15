@@ -33,12 +33,14 @@ pub(super) fn meet(left: Assigned, right: Assigned) -> Assigned {
     }
 }
 
-/// Returns the optional variable an expression reads, if it reads one.
 /// Returns the variable an expression reads, also through what an earlier test showed of it:
-/// the value it holds when it is not `None`, or an instance of a derived class (TYP-07).
+/// the value it holds when it is not `None`, or an instance of a derived class (TYP-07). An
+/// assignment expression is its variable, which holds its value (EXP-13).
 pub(super) fn narrowable_variable(expression: &TypedExpr) -> Option<SymbolId> {
     match &expression.kind {
-        TypedExprKind::Local(symbol) | TypedExprKind::ModuleVariable(symbol) => Some(*symbol),
+        TypedExprKind::Local(symbol)
+        | TypedExprKind::ModuleVariable(symbol)
+        | TypedExprKind::Named { target: symbol, .. } => Some(*symbol),
         TypedExprKind::Unwrap(inner) | TypedExprKind::Downcast(inner) => narrowable_variable(inner),
         _ => None,
     }
@@ -46,7 +48,9 @@ pub(super) fn narrowable_variable(expression: &TypedExpr) -> Option<SymbolId> {
 
 fn optional_variable(expression: &TypedExpr) -> Option<SymbolId> {
     match &expression.kind {
-        TypedExprKind::Local(symbol) | TypedExprKind::ModuleVariable(symbol)
+        TypedExprKind::Local(symbol)
+        | TypedExprKind::ModuleVariable(symbol)
+        | TypedExprKind::Named { target: symbol, .. }
             if matches!(expression.ty, Type::Optional(_)) =>
         {
             Some(*symbol)

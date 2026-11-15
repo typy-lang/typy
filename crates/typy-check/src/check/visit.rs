@@ -2,7 +2,7 @@
 
 use typy_source::syntax::{Comprehension, Expr, Stmt};
 
-pub(super) fn visit_statement(statement: &Stmt, visit: &mut dyn FnMut(&Expr)) {
+pub(crate) fn visit_statement(statement: &Stmt, visit: &mut dyn FnMut(&Expr)) {
     match statement {
         Stmt::Return {
             value: Some(value), ..
@@ -131,6 +131,7 @@ pub(super) fn visit_expression(expression: &Expr, visit: &mut dyn FnMut(&Expr)) 
         Expr::UnaryOp { operand, .. } | Expr::Attribute { value: operand, .. } => {
             visit_expression(operand, visit);
         }
+        Expr::Named { value, .. } => visit_expression(value, visit),
         Expr::IfExp {
             test, body, orelse, ..
         } => {

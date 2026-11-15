@@ -218,6 +218,11 @@ pub enum TypedExprKind {
     },
     /// A value of `T`, or `None`, held as a `T | None` (TYP-06, ADR-0011).
     Wrap(Box<TypedExpr>),
+    /// `target := value`: the value, stored in the variable and given (EXP-13).
+    Named {
+        target: SymbolId,
+        value: Box<TypedExpr>,
+    },
     /// An instance, or an optional one, held as an instance of a class it derives from: the
     /// same object, whose type is the expression's (CLS-04).
     Upcast(Box<TypedExpr>),
@@ -483,7 +488,8 @@ impl TypedExpr {
             | TypedExprKind::Downcast(inner)
             | TypedExprKind::Unwrap(inner)
             | TypedExprKind::AsIterable(inner)
-            | TypedExprKind::Lazy { value: inner, .. } => vec![inner],
+            | TypedExprKind::Lazy { value: inner, .. }
+            | TypedExprKind::Named { value: inner, .. } => vec![inner],
             TypedExprKind::PercentFormat { values, .. } => vec![values],
             TypedExprKind::MathCall { arguments, .. } => arguments.iter().collect(),
             TypedExprKind::Open { path, options, .. } => [

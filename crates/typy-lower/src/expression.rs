@@ -232,6 +232,12 @@ impl FunctionLowerer<'_> {
             TypedExprKind::PercentDynamic { format, values } => {
                 self.percent_dynamic(format, values, span)
             }
+            TypedExprKind::Named { target, value } => {
+                // The variable takes a reference of its own; the expression gives the value.
+                let lowered = self.expression(value);
+                self.assign_name(*target, Self::borrowed(lowered.value, lowered.ty), span);
+                lowered
+            }
             TypedExprKind::OsErrorField { exception, field } => {
                 self.os_error_field(exception, *field, span)
             }

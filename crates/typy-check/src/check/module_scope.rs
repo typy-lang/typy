@@ -25,6 +25,13 @@ pub(super) fn module_variables(statements: &[Stmt], names: &mut BTreeMap<String,
         }
     }
     for statement in statements {
+        // An assignment expression binds its name in the module, also inside a comprehension
+        // (EXP-13).
+        super::visit::visit_statement(statement, &mut |expression| {
+            if let Expr::Named { target, .. } = expression {
+                names.entry(target.name.clone()).or_insert(target.span);
+            }
+        });
         match statement {
             Stmt::Assign { targets, .. } => targets.iter().for_each(|target| bind(names, target)),
             Stmt::AugAssign { target, .. } | Stmt::AnnAssign { target, .. } => bind(names, target),

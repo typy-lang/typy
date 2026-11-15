@@ -13,6 +13,20 @@ impl BodyChecker<'_> {
     /// Every name assigned anywhere in the body is a local of the body (LR 4.2.2).
     pub(super) fn collect_locals(&mut self, statements: &[&Stmt]) {
         for statement in statements {
+            // An assignment expression binds its name in the body, also inside a
+            // comprehension (EXP-13).
+            let mut named = Vec::new();
+            crate::check::visit_statement(statement, &mut |expression| {
+                if let Expr::Named { target, .. } = expression {
+                    named.push(Expr::Name {
+                        id: target.name.clone(),
+                        span: target.span,
+                    });
+                }
+            });
+            for target in &named {
+                self.bind_local(target);
+            }
             match statement {
                 // A class body's values are module variables, assigned where the class
                 // statement runs (ADR-0024).

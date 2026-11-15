@@ -114,10 +114,6 @@ fn later_features_name_their_release_and_rule() {
             "`match` statements are planned for TyPy 0.5 (CST-06)",
         ),
         (
-            "print(y := 1)\n",
-            "assignment expressions are planned for TyPy 0.5 (EXP-13)",
-        ),
-        (
             "f = lambda: 1\n",
             "`lambda` expressions are planned for TyPy 1.0 (EXP-14)",
         ),

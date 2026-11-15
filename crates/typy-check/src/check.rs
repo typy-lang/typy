@@ -17,6 +17,7 @@ mod overriding;
 mod protocol;
 mod type_alias;
 mod visit;
+pub(crate) use visit::visit_statement;
 
 use std::collections::{BTreeMap, BTreeSet};
 

@@ -10,10 +10,11 @@ use typy_conformance::{Report, Suite};
 /// breaks the repository's ASCII rule, and a file over 16 MiB is too large to commit, so unit
 /// tests in `typy-source` cover LEX-01 and LEX-09. Memory management asks nothing of a
 /// program, so MEM-01, MEM-02, MEM-04 and MEM-09 have no rule a program can break; nor have
-/// the order modules initialise in (MOD-03) and the report of an exception nothing caught
-/// (STD-05), which describe what an accepted program does.
-const NO_REJECTED_FILE: [&str; 8] = [
-    "LEX-01", "LEX-09", "MEM-01", "MEM-02", "MEM-04", "MEM-09", "MOD-03", "STD-05",
+/// the order expressions evaluate in (EXP-01), the order modules initialise in (MOD-03) and
+/// the report of an exception nothing caught (STD-05), which describe what an accepted
+/// program does.
+const NO_REJECTED_FILE: [&str; 9] = [
+    "LEX-01", "LEX-09", "EXP-01", "MEM-01", "MEM-02", "MEM-04", "MEM-09", "MOD-03", "STD-05",
 ];
 
 fn workspace() -> Utf8PathBuf {

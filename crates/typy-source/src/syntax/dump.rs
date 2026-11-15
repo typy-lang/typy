@@ -441,6 +441,10 @@ impl Dump<'_> {
                     self.expression(depth + 1, bound);
                 }
             }
+            Expr::Named { target, value, .. } => {
+                self.line(depth, &format!("Named {}", target.name), span);
+                self.expression(depth + 1, value);
+            }
             Expr::IfExp {
                 test, body, orelse, ..
             } => {

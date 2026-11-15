@@ -30,7 +30,10 @@ pub(super) const fn planned(what: &'static str, release: &'static str, rule: Rul
 pub(super) fn feature(kind: NodeKind) -> Feature {
     match kind {
         NodeKind::Match => planned("`match` statements", "0.5", RuleId::CST_06),
-        NodeKind::NamedExpr => planned("assignment expressions", "0.5", RuleId::EXP_13),
+        // The parser refuses `:=` to anything but a name, so only that error reaches here.
+        NodeKind::NamedExpr => Feature::Excluded {
+            what: "assignment expressions to anything but a name",
+        },
         NodeKind::Nonlocal => planned("`nonlocal` statements", "1.0", RuleId::SMT_09),
         NodeKind::Lambda => planned("`lambda` expressions", "1.0", RuleId::EXP_14),
         NodeKind::GeneratorExp => planned("generator expressions", "1.0", RuleId::EXP_15),

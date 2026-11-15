@@ -448,7 +448,9 @@ fn expression(expression_value: &TypedExpr, callees: &mut BTreeSet<FunctionId>) 
         | TypedExprKind::Submodule(_)
         | TypedExprKind::ModuleName
         | TypedExprKind::SysValue(_) => {}
-        TypedExprKind::AsIterable(inner) => expression(inner, callees),
+        TypedExprKind::AsIterable(inner) | TypedExprKind::Named { value: inner, .. } => {
+            expression(inner, callees);
+        }
         TypedExprKind::PercentFormat { values, .. } => expression(values, callees),
         TypedExprKind::Open { .. } => {
             for part in expression_value.operands() {
