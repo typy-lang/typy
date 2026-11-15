@@ -13,8 +13,8 @@ publish.workspace = true
 workspace = true
 
 [dependencies]
+camino.workspace = true
 typy-diagnostics.workspace = true
 typy-source.workspace = true
 
 [dev-dependencies]
-camino.workspace = true

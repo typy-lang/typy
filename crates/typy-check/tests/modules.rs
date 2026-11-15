@@ -140,7 +140,7 @@ fn imports_that_cannot_resolve_give_their_codes() {
         ("import shapes\nshapes.NAME()\n", &["E0401"]),
         ("import shapes\nshapes.missing()\n", &["E0425"]),
         ("import shapes\nshapes.NAME += 1\n", &["E0401"]),
-        ("import dataclasses\n", &["E0201"]),
+        ("import ctypes\n", &["E0201"]),
         ("import json\n", &["E0206"]),
         ("from collections.abc import Sized\n", &["E0201"]),
         ("from types import FrameType\n", &["E0425"]),
@@ -249,4 +249,81 @@ show(shapes, None)
     for node in ["AsIterable", "Iter : Iterator[int]"] {
         assert!(dump.contains(node), "{node} missing from\n{dump}");
     }
+}
+
+#[test]
+fn class_values_of_another_module_are_read_and_assigned_there() {
+    let settings = "class Limits:\n    retries = 3\n    timeout: float = 1.5\n";
+    let dump = accepted(&[
+        ("settings.py", settings),
+        (
+            "app.py",
+            "import settings\nfrom settings import Limits\n\
+             class Strict(Limits):\n    retries = 1\n\
+             def bump() -> None:\n    Limits.retries = Limits.retries + 1\n\
+             Limits.retries += 2\nbump()\n\
+             print(Limits.retries, settings.Limits.retries, Limits().retries, Limits.timeout, Strict().timeout)\n",
+        ),
+    ]);
+    assert!(dump.contains("Limits.retries"), "{dump}");
+    assert_eq!(
+        rejected(&[
+            ("settings.py", settings),
+            (
+                "app.py",
+                "from settings import Limits\nLimits.timeout = 2.0\n"
+            ),
+        ]),
+        ["E0414"]
+    );
+}
+
+#[test]
+fn a_class_method_inherited_from_another_module_is_planned() {
+    let shapes =
+        "class Shape:\n    @classmethod\n    def make(cls) -> 'Shape':\n        return cls()\n";
+    assert_eq!(
+        rejected(&[
+            ("shapes.py", shapes),
+            (
+                "app.py",
+                "from shapes import Shape\nclass Square(Shape):\n    pass\nprint(Shape.make(), Square.make())\n",
+            ),
+        ]),
+        ["E0201"]
+    );
+}
+
+#[test]
+fn a_dataclass_derives_from_one_of_another_module() {
+    let base = "from dataclasses import dataclass\n@dataclass\nclass Base:\n    x: int\n";
+    let dump = accepted(&[
+        ("base.py", base),
+        (
+            "app.py",
+            "from dataclasses import dataclass\nfrom base import Base\n@dataclass\nclass Child(Base):\n    y: int = 2\nprint(Child(1), Child(1) == Child(1, 2))\n",
+        ),
+    ]);
+    assert!(dump.contains("Child.__init__"), "{dump}");
+}
+
+#[test]
+fn an_augmented_module_variable_of_another_module_keeps_its_type() {
+    let found = rejected(&[
+        ("app.py", "import limits\nlimits.LIMIT += 1.5\n"),
+        ("limits.py", "LIMIT = 1\n"),
+    ]);
+    assert!(found.contains(&"E0402".to_string()), "{found:?}");
+}
+
+#[test]
+fn version_info_of_another_module_is_its_own_variable() {
+    let dump = accepted(&[
+        (
+            "app.py",
+            "import util\nprint(util.version_info == (1, 2))\n",
+        ),
+        ("util.py", "version_info = (1, 2)\n"),
+    ]);
+    assert!(dump.contains("version_info"), "{dump}");
 }

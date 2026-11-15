@@ -61,6 +61,7 @@ fn callee(module: &TyirModule, callee: Callee) -> String {
             .functions
             .get(id.0 as usize)
             .map_or_else(|| format!("fn{}", id.0), |function| function.symbol.clone()),
+        Callee::Method { class, slot } => format!("class#{class}.method#{slot}"),
     }
 }
 
@@ -145,6 +146,7 @@ fn print_block(
     let _ = writeln!(text, "  {terminator}");
 }
 
+#[allow(clippy::too_many_lines, reason = "one arm per operation")]
 fn operation(module: &TyirModule, operation: &Operation) -> String {
     match operation {
         Operation::Constant(constant) => format!("const {constant}"),
@@ -197,11 +199,37 @@ fn operation(module: &TyirModule, operation: &Operation) -> String {
             callee(module, Callee::Function(*function)),
             names(arguments)
         ),
+        Operation::SameMethod {
+            class,
+            slot,
+            left,
+            right,
+        } => format!(
+            "same_method class#{class}.method#{slot}, v{}, v{}",
+            left.0, right.0
+        ),
+        Operation::CallMethod {
+            class,
+            slot,
+            arguments,
+        } => format!(
+            "call {}({})",
+            callee(
+                module,
+                Callee::Method {
+                    class: *class,
+                    slot: *slot
+                }
+            ),
+            names(arguments)
+        ),
         Operation::MakeTuple { ty, items } => format!("tuple#{} ({})", ty.0, names(items)),
         Operation::TupleItem { tuple, index } => format!("item v{}, {index}", tuple.0),
         Operation::ToBits(value) => format!("to_bits v{}", value.0),
         Operation::Wrap { value, ty } => format!("wrap v{}, {ty}", value.0),
         Operation::Unwrap(value) => format!("unwrap v{}", value.0),
+        Operation::Upcast { value, ty } => format!("upcast v{}, {ty}", value.0),
+        Operation::Downcast { value, ty } => format!("downcast v{}, {ty}", value.0),
         Operation::IsNone(value) => format!("is_none v{}", value.0),
         Operation::FromBits { bits, ty } => format!("from_bits v{}, {ty}", bits.0),
         Operation::NewInstance { class } => format!("new class#{class}"),

@@ -44,6 +44,14 @@ pub enum AssignTarget {
         /// The attribute's position.
         index: usize,
     },
+    /// A target reached through a module bound by a lazy import, `module.name = value`: the
+    /// import runs first, as loading the module's name runs it in CPython (MOD-11).
+    Lazy {
+        /// The function of the lazy import.
+        reify: super::function::FunctionId,
+        /// The target itself.
+        target: Box<AssignTarget>,
+    },
     /// An entry of a dict, `dict[key] = value`; the dict and the key are evaluated after the
     /// value, as CPython does (DAT-09).
     Entry {
@@ -163,7 +171,7 @@ impl LoopSource {
             Self::Protocol { item, .. } => item.clone(),
             Self::Items(sequence) | Self::Reversed(sequence) => match &sequence.ty {
                 Type::Bytes | Type::Range => Type::Int,
-                Type::TextFile => Type::Str,
+                file if file.is_file() => file.file_line().unwrap_or(Type::Error),
                 Type::Set(item)
                 | Type::Dict(item, _)
                 | Type::Iterator(item)
@@ -324,6 +332,9 @@ pub enum TypedStmt {
     /// begun, then each binding takes its value (SMT-07, MOD-03).
     Import {
         modules: Vec<String>,
+        /// The functions of other modules' lazy imports of the names it reads, which run after
+        /// the modules and before the names are bound (MOD-11).
+        pending: Vec<FunctionId>,
         bindings: Vec<ImportBinding>,
         span: Span,
     },

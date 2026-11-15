@@ -65,6 +65,9 @@ pub struct TypeObject {
     pub fields: *const TupleType,
     /// Writes an object as `str` does; absent for a type whose `str` is its `repr`.
     pub str: Option<Repr>,
+    /// The class `type()` gives for an object of this type: for a copy of a generic class, the
+    /// generic class; null for every other type, which is its own (ADR-0028).
+    pub public: *const TypeObject,
 }
 
 // SAFETY: a type object is immortal and never written after it is built, so threads may share it.
@@ -90,6 +93,7 @@ impl TypeObject {
             module_length: 0,
             fields: core::ptr::null(),
             str: None,
+            public: core::ptr::null(),
         }
     }
 
@@ -213,6 +217,39 @@ pub unsafe extern "C" fn typy_rt_object_repr(object: *mut ObjectHeader) -> Raisi
     }
 }
 
+/// Returns `str(object)` through the object's type: its `__str__`, or else its `__repr__`, for
+/// an instance whose class may be a subclass of the one the program names (CLS-08, ADR-0021).
+///
+/// # Safety
+///
+/// `object` points to a live object whose type writes it.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn typy_rt_object_str(object: *mut ObjectHeader) -> Raising<*mut StrObject> {
+    // SAFETY: the caller's guarantee.
+    match unsafe { type_of(object) }.str {
+        // SAFETY: the type's function takes an object of the type.
+        Some(str) => unsafe { str(object) },
+        // SAFETY: the caller's guarantee.
+        None => unsafe { typy_rt_object_repr(object) },
+    }
+}
+
+/// Returns whether a heap object is true, as its type tests it; an object whose type has no
+/// test is true, as in CPython (TYP-14).
+///
+/// # Safety
+///
+/// `object` points to a live object with a valid header.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn typy_rt_object_is_true(object: *mut ObjectHeader) -> bool {
+    // SAFETY: the caller's guarantee.
+    match unsafe { type_of(object) }.truth {
+        // SAFETY: the type's function takes an object of the type.
+        Some(truth) => unsafe { truth(object) },
+        None => true,
+    }
+}
+
 /// Returns the type object of a heap object, as `type(value)` gives it for a value whose
 /// type only the object knows, such as an iterator (CLS-12).
 ///
@@ -222,7 +259,28 @@ pub unsafe extern "C" fn typy_rt_object_repr(object: *mut ObjectHeader) -> Raisi
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn typy_rt_object_type(object: *const ObjectHeader) -> *const TypeObject {
     // SAFETY: the caller's guarantee.
-    unsafe { type_of(object) }
+    let own = unsafe { type_of(object) };
+    // A copy of a generic class answers as the generic class (ADR-0028).
+    if own.public.is_null() {
+        own
+    } else {
+        own.public
+    }
+}
+
+/// Returns whether the heap object at `object` is an instance of `class`: its type is
+/// `class` or derives from it, as `isinstance` tests (CLS-09).
+///
+/// # Safety
+///
+/// `object` points to a live object with a valid header, and `class` to a live type object.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn typy_rt_is_instance(
+    object: *const ObjectHeader,
+    class: *const TypeObject,
+) -> bool {
+    // SAFETY: the caller's guarantee.
+    unsafe { crate::exception::classes::derives_from(type_of(object), &*class) }
 }
 
 /// Returns the type of a heap object.

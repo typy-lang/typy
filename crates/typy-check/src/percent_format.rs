@@ -99,6 +99,11 @@ fn conversion(characters: &[char], position: usize, at: &mut usize) -> Result<Co
         *at += 1;
     }
     let width = number(characters, at);
+    // CPython keeps a width in a C `ssize_t` and a precision in a C `int`.
+    if matches!(width, Number::Given(digits) if u64::try_from(digits).map_or(true, |digits| digits > i64::MAX.unsigned_abs()))
+    {
+        return Err("width too big".to_owned());
+    }
     let precision = if characters.get(*at) == Some(&'.') {
         *at += 1;
         match number(characters, at) {
@@ -108,6 +113,9 @@ fn conversion(characters: &[char], position: usize, at: &mut usize) -> Result<Co
     } else {
         Number::Absent
     };
+    if matches!(precision, Number::Given(digits) if digits > i32::MAX.unsigned_abs() as usize) {
+        return Err("precision too big".to_owned());
+    }
     if characters
         .get(*at)
         .is_some_and(|modifier| "hlL".contains(*modifier))
@@ -216,6 +224,8 @@ mod tests {
             ("%*", "stray % at position 0"),
             ("ab %(k", "stray % or incomplete format key at position 3"),
             ("%5y", "unsupported format %y at position 0"),
+            ("%99999999999999999999d", "width too big"),
+            ("%.3000000000d", "precision too big"),
             (
                 "%(a)5!",
                 "stray % at position 0 or unexpected format character '!' at position 5",

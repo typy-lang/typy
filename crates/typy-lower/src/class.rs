@@ -34,6 +34,26 @@ impl FunctionLowerer<'_> {
             .builder
             .push_value(Operation::NewInstance { class: class.0 }, ty, span);
         let instance = self.produced(value, ty);
+        // Each attribute with a default holds it before `__init__` runs (ADR-0024).
+        let program = self.program;
+        for (index, symbol) in &program.class(class).defaults {
+            let read = TypedExpr {
+                kind: typy_check::TypedExprKind::ModuleVariable(*symbol),
+                ty: program.symbols[symbol.0 as usize].ty.clone(),
+                span,
+            };
+            let default = self.expression(&read);
+            let stored = self.take_reference(default, span);
+            self.builder.push(
+                Operation::SetField {
+                    object: instance.value,
+                    class: None,
+                    index: field_index(*index),
+                    value: stored,
+                },
+                span,
+            );
+        }
         if let Some(init) = init {
             let mut values = values;
             values.insert(0, (0, Self::borrowed(instance.value, ty)));
@@ -197,13 +217,17 @@ impl FunctionLowerer<'_> {
             unreachable!("an instance is an object");
         };
         let class = self.program.class(ClassId(id.class_index().unwrap_or(0)));
-        let method = |name: &str| {
-            class
-                .methods
-                .iter()
-                .find(|(each, _)| each == name)
-                .map(|(_, id)| *id)
-        };
+        if self.program.has_subclass(class.id) {
+            // The instance may be of a subclass that writes itself, so its class does.
+            let object = self.bits(Self::borrowed(lowered.value, lowered.ty), span);
+            let function = if repr {
+                RuntimeFunction::ObjectRepr
+            } else {
+                RuntimeFunction::ObjectStr
+            };
+            return self.call_runtime(function, vec![object], span);
+        }
+        let method = |name: &str| self.program.method(class.id, name);
         let method = if repr {
             method("__repr__")
         } else {

@@ -6,11 +6,17 @@ use std::collections::BTreeMap;
 use typy_diagnostics::{Diagnostic, DiagnosticCode, Diagnostics, RuleId, Span};
 use typy_source::syntax::{Expr, Identifier, Stmt};
 
-use super::annotation::{AnnotationScope, annotation_type};
-use super::definition::{Definition, FunctionParts, Owner, defined_twice, definition};
+use super::annotation::{AnnotationName, AnnotationScope, annotation_type, is_protocol};
+use super::definition::{
+    Definition, FunctionParts, MethodKind, Owner, defined_twice, definition,
+    resolve_type_parameters,
+};
+use super::generic_class::finish_generic_class;
+use super::overriding::Override;
+use crate::class_type::{InstanceClass, Operators};
 use crate::exception::{BuiltinException, ExceptionClass};
-use crate::typed::{ClassId, FunctionId};
-use crate::types::Type;
+use crate::typed::{ClassId, FunctionId, FunctionSignature};
+use crate::types::{Type, TypeObjectOf};
 
 /// An attribute of a class: declared in the class body, or assigned in `__init__`, whose
 /// check gives it its type.
@@ -35,6 +41,36 @@ pub(crate) struct ClassInfo {
     pub(crate) attributes: Vec<AttributeInfo>,
     pub(crate) methods: Vec<(String, FunctionId)>,
     pub(crate) init: Option<FunctionId>,
+    /// The class variables the class body gives a value, each held as the module variable
+    /// `Class.name` (CLS-11, ADR-0024).
+    pub(crate) class_variables: Vec<String>,
+    /// The copies of the class methods the class has, each by its name (ADR-0025).
+    pub(crate) class_methods: Vec<(String, FunctionId)>,
+    /// The class methods the class inherits from a base of another module, whose copies are
+    /// planned (ADR-0025).
+    pub(crate) remote_class_methods: Vec<String>,
+    /// The static methods the class defines (CLS-06).
+    pub(crate) static_methods: Vec<String>,
+    /// The methods with type parameters the class defines, each called through its copies
+    /// rather than the class's method table (GEN-01).
+    pub(crate) generic_methods: Vec<String>,
+    /// The properties the class defines, each a getter among the methods, and its setter, when
+    /// it has one, as the method `name.setter` (CLS-06).
+    pub(crate) properties: Vec<String>,
+    /// The positions of the class's own attributes the class body gives a default, each held
+    /// as the module variable `Class.name`.
+    pub(crate) defaults: Vec<usize>,
+    /// Whether the class is a frozen dataclass, whose fields only the `__init__` `@dataclass`
+    /// writes assigns (CLS-05).
+    pub(crate) frozen: bool,
+    /// Whether `@dataclass` wrote the class's `__init__`.
+    pub(crate) generated_init: bool,
+    /// Whether the class's `__init__` uses the instance other than through its attributes,
+    /// once checked.
+    pub(crate) init_uses_instance: bool,
+    /// The attributes `__init__` declares `Final`, each by its position with the statement
+    /// that alone assigns it (TYP-08).
+    pub(crate) final_attributes: Vec<(usize, Span)>,
     pub(crate) span: Span,
 }
 
@@ -61,6 +97,8 @@ pub(super) struct ClassStatement<'tree> {
     pub(super) name: &'tree Identifier,
     pub(super) base: Option<&'tree Expr>,
     pub(super) body: &'tree [Stmt],
+    /// The type parameters of a generic class (GEN-01).
+    pub(super) type_parameters: &'tree [typy_source::syntax::TypeParameter],
     pub(super) span: Span,
 }
 
@@ -77,6 +115,7 @@ pub(super) fn collect_classes<'tree>(
             name,
             bases,
             body,
+            type_parameters,
             span,
             ..
         } = statement
@@ -92,87 +131,191 @@ pub(super) fn collect_classes<'tree>(
             name,
             base: bases.first(),
             body,
+            type_parameters,
             span: *span,
         });
     }
     classes
 }
 
-/// Resolves each class's base, in source order: `object`, a built-in exception class, or a
-/// class defined before it that is an exception class. Returns the exception classes, each
-/// with its chain of bases (CLS-03); any other base is planned with inheritance (CLS-04).
-pub(super) fn exception_classes(
+/// The classes a base may name: those of the modules checked before, by ID, with the type of
+/// their instances, and the names an annotation may use for them.
+pub(super) struct BaseScope<'names> {
+    pub(super) known: &'names BTreeMap<ClassId, Type>,
+    pub(super) class_ids: &'names BTreeMap<String, ClassId>,
+    pub(super) modules: &'names BTreeMap<String, BTreeMap<String, ClassId>>,
+    /// The names of `typing` and the modules imported, which name `Protocol` (GEN-04).
+    pub(super) names: &'names BTreeMap<String, AnnotationName>,
+    pub(super) standard: &'names BTreeMap<String, String>,
+}
+
+/// Resolves each class's base, in source order, and returns the type of each class's
+/// instances: an exception for a class derived from a built-in exception class or from a
+/// class of the program that is one (CLS-03), otherwise an instance whose chain holds the
+/// classes of the program it derives from (CLS-04, ADR-0021). A base that cannot be resolved
+/// is reported, and the class derives from `object`, so its uses are still checked.
+pub(super) fn class_types(
     classes: &[ClassStatement<'_>],
+    scope: &BaseScope<'_>,
     diagnostics: &mut Diagnostics,
-) -> BTreeMap<ClassId, ExceptionClass> {
-    let mut found: BTreeMap<ClassId, ExceptionClass> = BTreeMap::new();
+) -> BTreeMap<ClassId, Type> {
+    let mut found: BTreeMap<ClassId, Type> = BTreeMap::new();
     for class in classes {
-        let Some(Expr::Name { id, span }) = class.base else {
-            continue;
-        };
         let name = class.name.name.clone();
-        let exception = if id == "object" {
-            continue;
-        } else if let Some(builtin) = BuiltinException::named(id) {
-            if !builtin.can_be_called() {
-                diagnostics.push(
-                    Diagnostic::new(
-                        DiagnosticCode::error(417),
-                        *span,
-                        format!("a class cannot derive from `{id}` in TyPy"),
-                    )
-                    .with_rule(RuleId::EXC_12)
-                    .with_help("derive from `ValueError` instead"),
-                );
-                continue;
-            }
-            ExceptionClass::program(class.id, name, Vec::new(), builtin)
-        } else if let Some(base) = classes.iter().find(|other| other.name.name == *id) {
-            if base.id >= class.id {
-                diagnostics.push(
-                    Diagnostic::new(
-                        DiagnosticCode::error(306),
-                        *span,
-                        format!("`{id}` is defined after the class that derives from it"),
-                    )
-                    .with_rule(RuleId::TYP_12),
-                );
-                continue;
-            }
-            let Some(ExceptionClass::Class(parent)) = found.get(&base.id) else {
-                diagnostics.push(base_planned(*span));
-                continue;
-            };
-            let mut chain = vec![(base.id, id.clone())];
-            chain.extend(parent.ancestors.iter().cloned());
-            ExceptionClass::program(class.id, name, chain, parent.builtin)
-        } else {
-            diagnostics.push(base_planned(*span));
-            continue;
-        };
-        found.insert(class.id, exception);
+        let protocol = class
+            .base
+            .is_some_and(|base| is_protocol(base, scope.names, scope.standard));
+        let ty = class
+            .base
+            .filter(|_| !protocol)
+            .and_then(|base| derived_type(class, base, scope, &found, diagnostics))
+            .unwrap_or_else(|| {
+                Type::instance(InstanceClass {
+                    operators: Operators::of(method_names(class.body), Operators::default()),
+                    protocol,
+                    ..InstanceClass::root(class.id, name)
+                })
+            });
+        found.insert(class.id, ty);
     }
     found
 }
 
-/// Returns the error for a base other than `object` or an exception class.
-fn base_planned(span: Span) -> Diagnostic {
+/// Returns the type of the instances of a class with a base other than `object`, or `None`
+/// for `object` and for a base that is reported.
+fn derived_type(
+    class: &ClassStatement<'_>,
+    base: &Expr,
+    scope: &BaseScope<'_>,
+    found: &BTreeMap<ClassId, Type>,
+    diagnostics: &mut Diagnostics,
+) -> Option<Type> {
+    let name = class.name.name.clone();
+    let span = base.span();
+    let (written, base_id) = match base {
+        Expr::Name { id, .. } if id == "object" => return None,
+        Expr::Name { id, .. } => {
+            if let Some(builtin) = BuiltinException::named(id) {
+                if !builtin.can_be_called() {
+                    diagnostics.push(
+                        Diagnostic::new(
+                            DiagnosticCode::error(417),
+                            span,
+                            format!("a class cannot derive from `{id}` in TyPy"),
+                        )
+                        .with_rule(RuleId::EXC_12)
+                        .with_help("derive from `ValueError` instead"),
+                    );
+                    return None;
+                }
+                return Some(Type::Exception(ExceptionClass::program(
+                    class.id,
+                    name,
+                    Vec::new(),
+                    builtin,
+                )));
+            }
+            (id.clone(), scope.class_ids.get(id).copied())
+        }
+        Expr::Attribute {
+            value, attribute, ..
+        } => match value.as_ref() {
+            Expr::Name { id, .. } => (
+                format!("{id}.{}", attribute.name),
+                scope
+                    .modules
+                    .get(id)
+                    .and_then(|classes| classes.get(&attribute.name))
+                    .copied(),
+            ),
+            _ => (String::new(), None),
+        },
+        _ => (String::new(), None),
+    };
+    let Some(base_id) = base_id else {
+        diagnostics.push(unsupported_base(span));
+        return None;
+    };
+    if base_id >= class.id {
+        diagnostics.push(
+            Diagnostic::new(
+                DiagnosticCode::error(306),
+                span,
+                format!("`{written}` is defined after the class that derives from it"),
+            )
+            .with_rule(RuleId::TYP_12),
+        );
+        return None;
+    }
+    match found.get(&base_id).or_else(|| scope.known.get(&base_id))? {
+        Type::Exception(ExceptionClass::Class(parent)) => {
+            let mut chain = vec![(base_id, parent.name.clone())];
+            chain.extend(parent.ancestors.iter().cloned());
+            Some(Type::Exception(ExceptionClass::program(
+                class.id,
+                name,
+                chain,
+                parent.builtin,
+            )))
+        }
+        // A class satisfies a protocol by its members; naming the protocol as its base
+        // would also inherit the protocol's methods (GEN-10).
+        Type::Instance(parent) if parent.protocol => {
+            diagnostics.push(
+                Diagnostic::new(
+                    DiagnosticCode::error(201),
+                    span,
+                    format!(
+                        "a class derived from the protocol `{written}` is planned for TyPy 0.5 \
+                         (GEN-10)"
+                    ),
+                )
+                .with_rule(RuleId::GEN_10)
+                .with_help("leave the protocol out: a class with its members satisfies it"),
+            );
+            None
+        }
+        Type::Instance(parent) => {
+            let mut ancestors = vec![(base_id, parent.name.clone())];
+            ancestors.extend(parent.ancestors.iter().cloned());
+            Some(Type::instance(InstanceClass {
+                id: class.id,
+                name,
+                ancestors,
+                operators: Operators::of(method_names(class.body), parent.operators),
+                generic: None,
+                protocol: false,
+            }))
+        }
+        _ => None,
+    }
+}
+
+/// Returns the names of the methods a class body defines.
+fn method_names(body: &[Stmt]) -> impl Iterator<Item = &str> {
+    body.iter().filter_map(|statement| match statement {
+        Stmt::FunctionDef { name, .. } => Some(name.name.as_str()),
+        _ => None,
+    })
+}
+
+/// Returns the error for a base other than `object`, an exception class or a class of the
+/// program: a built-in type such as `list`, or an expression that names no class.
+fn unsupported_base(span: Span) -> Diagnostic {
     Diagnostic::new(
         DiagnosticCode::error(201),
         span,
-        "base classes other than `object` and exception classes are planned for TyPy 0.4 (CLS-04)",
+        "a class derives from `object`, an exception class or a class of the program in TyPy \
+         (CLS-04)",
     )
     .with_rule(RuleId::CLS_04)
 }
-
-/// The methods an exception class may define again over its base's (CLS-13).
-const REDEFINABLE: [&str; 3] = ["__init__", "__str__", "__repr__"];
 
 /// The special methods a class may define: `__init__`, `__str__` and `__repr__`, and from 0.3
 /// `__iter__` and `__next__` (CST-08) and `__enter__` and `__exit__` (CST-05). Any other name that starts and ends with two
 /// underscores changes how Python treats the instances, and waits for the operator methods of
 /// 0.4 (CLS-07).
-const SPECIAL_METHODS: [&str; 7] = [
+const SPECIAL_METHODS: [&str; 50] = [
     "__init__",
     "__str__",
     "__repr__",
@@ -180,14 +323,68 @@ const SPECIAL_METHODS: [&str; 7] = [
     "__next__",
     "__enter__",
     "__exit__",
+    "__eq__",
+    "__ne__",
+    "__lt__",
+    "__le__",
+    "__gt__",
+    "__ge__",
+    "__hash__",
+    "__add__",
+    "__radd__",
+    "__sub__",
+    "__rsub__",
+    "__mul__",
+    "__rmul__",
+    "__matmul__",
+    "__rmatmul__",
+    "__truediv__",
+    "__rtruediv__",
+    "__floordiv__",
+    "__rfloordiv__",
+    "__mod__",
+    "__rmod__",
+    "__pow__",
+    "__rpow__",
+    "__lshift__",
+    "__rlshift__",
+    "__rshift__",
+    "__rrshift__",
+    "__and__",
+    "__rand__",
+    "__or__",
+    "__ror__",
+    "__xor__",
+    "__rxor__",
+    "__neg__",
+    "__pos__",
+    "__invert__",
+    "__abs__",
+    "__len__",
+    "__getitem__",
+    "__setitem__",
+    "__delitem__",
+    "__contains__",
+    "__bool__",
 ];
+
+/// The classes a module's class bodies may name: each by its name, the type of each one's
+/// instances, and the classes of the modules checked before, indexed by ID.
+pub(super) struct KnownClasses<'known> {
+    pub(super) ids: &'known BTreeMap<String, ClassId>,
+    pub(super) instances: &'known BTreeMap<ClassId, Type>,
+    pub(super) earlier: &'known [ClassInfo],
+    /// The signatures of the functions of the modules checked before, indexed by ID.
+    pub(super) signatures: &'known [FunctionSignature],
+    /// The generic classes and their copies (ADR-0028).
+    pub(super) copies: &'known std::cell::RefCell<crate::body::ClassCopies>,
+}
 
 /// Collects each class's attributes and methods; the methods become definitions whose IDs
 /// follow `first_function`.
 pub(super) fn collect_members<'tree>(
     classes: &[ClassStatement<'tree>],
-    class_ids: &BTreeMap<String, ClassId>,
-    exceptions: &BTreeMap<ClassId, ExceptionClass>,
+    known: &KnownClasses<'_>,
     names: &crate::check::ImportedNames,
     floor_defers: bool,
     first_function: usize,
@@ -195,112 +392,148 @@ pub(super) fn collect_members<'tree>(
 ) -> (Vec<ClassInfo>, Vec<Definition<'tree>>) {
     let mut infos = Vec::new();
     let mut methods: Vec<Definition<'tree>> = Vec::new();
+    let mut copies = ClassMethodCopies::default();
     for class in classes {
-        // The class's own name is bound only after its body runs.
-        let scope = AnnotationScope {
-            classes: class_ids,
-            exceptions,
-            modules: &names.modules,
-            names: &names.names,
-            standard: &names.standard,
-            bound: if floor_defers { u32::MAX } else { class.id.0 },
+        let mut own_class_methods: Vec<&'tree Stmt> = Vec::new();
+        let in_scope = super::generic_class::parameters_in_scope(known.copies, class.id);
+        let scope = class_scope(known, names, floor_defers, class.id, &in_scope);
+        let first_method = methods.len();
+        let instance = class_instance(known, class);
+        let classes = Classes {
+            earlier: known.earlier,
+            local: &infos,
         };
-        let mut info = new_info(class, exceptions.get(&class.id).cloned(), &infos);
+        let mut info = new_info(class, &instance, classes);
         let owner = Owner {
             id: class.id,
-            instance: info.exception.clone().map_or_else(
-                || Type::Instance(class.id, class.name.name.clone()),
-                Type::Exception,
-            ),
+            instance,
+            takes_instance: true,
         };
         for statement in class.body {
-            match statement {
-                Stmt::AnnAssign {
-                    target: Expr::Name { id, span },
-                    annotation,
-                    ..
-                } => {
-                    let ty = annotation_type(annotation, &scope, diagnostics);
-                    declare(&mut info, id, Some(ty), *span, diagnostics);
+            match (statement, FunctionParts::of(statement)) {
+                (Stmt::AnnAssign { .. } | Stmt::Assign { .. }, _) => {
+                    class_body_name(statement, &mut info, &scope, names, diagnostics);
                 }
-                Stmt::FunctionDef { .. } => {
-                    let Some(parts) = FunctionParts::of(statement) else {
-                        continue;
-                    };
+                (_, Some(parts)) => {
                     let name = &parts.name.name;
-                    if let Some(refused) = refused_method(&parts, &info, &infos) {
+                    let kind = parts.method_kind();
+                    let registered = registered_name(&kind, name);
+                    if let Some(refused) =
+                        refused_method(&parts, &kind, &registered, &info, classes).or_else(|| {
+                            super::protocol::refused_member(&owner.instance, &kind, &parts)
+                        })
+                    {
                         diagnostics.push(refused);
+                        continue;
+                    }
+                    if kind == MethodKind::Class {
+                        own_class_methods.push(statement);
                         continue;
                     }
                     let id = FunctionId(
                         u32::try_from(first_function + methods.len()).unwrap_or(u32::MAX),
                     );
+                    // A special method takes no decorator, so `__init__` is an instance method.
                     if name == "__init__" {
-                        info.init = Some(id);
-                        for attribute in initialized_attributes(&parts) {
-                            if info.attribute(&attribute).is_none() {
-                                info.attributes.push(AttributeInfo {
-                                    name: attribute,
-                                    ty: None,
-                                });
-                            }
-                        }
+                        note_init(&parts, id, &mut info, names);
                     }
-                    info.methods.push((name.clone(), id));
-                    let method = definition(&parts, Some(&owner), &scope, diagnostics);
-                    if matches!(name.as_str(), "__str__" | "__repr__") {
-                        check_text_method(&method, parts.name, diagnostics);
-                    }
-                    if name == "__exit__" {
-                        check_exit(&method, parts.name, diagnostics);
-                    }
-                    if matches!(name.as_str(), "__iter__" | "__next__" | "__enter__")
-                        && method.signature.parameters.len() != 1
+                    let method = method_definition(
+                        &parts,
+                        &kind,
+                        id,
+                        &mut info,
+                        &owner,
+                        &scope,
+                        diagnostics,
+                    );
+                    check_accessor(
+                        &kind,
+                        &method,
+                        &info,
+                        &methods,
+                        first_function,
+                        parts.name,
+                        diagnostics,
+                    );
+                    let signatures = Signatures {
+                        earlier: known.signatures,
+                        local: &methods,
+                        first_function,
+                    };
+                    if let Some(diagnostic) =
+                        check_override(&info, classes, signatures, &method, parts.name)
                     {
-                        diagnostics.push(
-                            Diagnostic::new(
-                                DiagnosticCode::error(404),
-                                parts.name.span,
-                                format!("`{name}` takes only `self`"),
-                            )
-                            .with_rule(RuleId::CST_08),
-                        );
+                        diagnostics.push(diagnostic);
                     }
+                    check_special_method(&method, parts.name, diagnostics);
                     methods.push(method);
                 }
                 _ => {}
             }
         }
-        for (name, _) in &info.methods {
-            if info.attribute(name).is_some() {
-                diagnostics.push(
-                    Diagnostic::new(
-                        DiagnosticCode::error(202),
-                        class.name.span,
-                        format!("`{}.{name}` is both an attribute and a method", info.name),
-                    )
-                    .with_rule(RuleId::STD_04),
-                );
-            }
-        }
+        let mut collected = Collected {
+            methods: &mut methods,
+            first_function,
+        };
+        copies.make(
+            &own_class_methods,
+            &mut info,
+            classes,
+            &scope,
+            &mut collected,
+            diagnostics,
+        );
+        report_name_conflicts(&info, class.name.span, diagnostics);
+        super::protocol::check_values(&owner.instance, &info, class.name.span, diagnostics);
+        let own_methods = &mut methods[first_method..];
+        finish_generic_class(&info, own_methods, known.copies, class.span, diagnostics);
         infos.push(info);
     }
     (infos, methods)
 }
 
-/// Returns the class's information before its body is read: an exception class whose base is
-/// a class of the program holds its base's attributes first, so each keeps its place.
-fn new_info(
-    class: &ClassStatement<'_>,
-    exception: Option<ExceptionClass>,
-    infos: &[ClassInfo],
-) -> ClassInfo {
-    let base = match &exception {
-        Some(ExceptionClass::Class(program)) => program.ancestors.first().map(|(base, _)| *base),
-        _ => None,
+/// Returns the type of a class's instances, as the class types gave it.
+fn class_instance(known: &KnownClasses<'_>, class: &ClassStatement<'_>) -> Type {
+    known
+        .instances
+        .get(&class.id)
+        .cloned()
+        .unwrap_or_else(|| Type::instance(InstanceClass::root(class.id, &class.name.name)))
+}
+
+/// The classes collected so far: those of the modules checked before, indexed by ID, and the
+/// module's own classes before the one being collected.
+#[derive(Clone, Copy)]
+struct Classes<'infos> {
+    earlier: &'infos [ClassInfo],
+    local: &'infos [ClassInfo],
+}
+
+impl<'infos> Classes<'infos> {
+    /// Returns a class collected before; a base is defined before the class, so it is one.
+    fn get(self, class: ClassId) -> Option<&'infos ClassInfo> {
+        self.earlier
+            .get(class.0 as usize)
+            .or_else(|| self.local.iter().find(|info| info.id == class))
+    }
+}
+
+/// Returns the class's information before its body is read: a class whose base is a class of
+/// the program holds its base's attributes first, so each keeps its place (ADR-0021).
+fn new_info(class: &ClassStatement<'_>, instance: &Type, classes: Classes<'_>) -> ClassInfo {
+    let (base, exception) = match instance {
+        Type::Exception(exception) => (
+            match exception {
+                ExceptionClass::Class(program) => program.ancestors.first().map(|(base, _)| *base),
+                ExceptionClass::Builtin(_) => None,
+            },
+            Some(exception.clone()),
+        ),
+        Type::Instance(own) => (own.ancestors.first().map(|(base, _)| *base), None),
+        _ => (None, None),
     };
     let attributes: Vec<AttributeInfo> = base
-        .and_then(|base| infos.iter().find(|info| info.id == base))
+        .and_then(|base| classes.get(base))
         .map_or_else(Vec::new, |info| info.attributes.clone());
     ClassInfo {
         id: class.id,
@@ -311,62 +544,576 @@ fn new_info(
         attributes,
         methods: Vec::new(),
         init: None,
+        class_variables: Vec::new(),
+        class_methods: Vec::new(),
+        remote_class_methods: Vec::new(),
+        static_methods: Vec::new(),
+        generic_methods: Vec::new(),
+        properties: Vec::new(),
+        defaults: Vec::new(),
+        frozen: false,
+        generated_init: false,
+        init_uses_instance: false,
+        final_attributes: Vec::new(),
         span: class.span,
     }
 }
 
-/// Returns why a method cannot be defined, if it cannot: the class already defines it, it
-/// redefines a method of a base other than those of CLS-13, it is a special method planned
-/// with the operator methods, or it has no `self`.
-fn refused_method(
-    parts: &FunctionParts<'_>,
-    info: &ClassInfo,
-    infos: &[ClassInfo],
-) -> Option<Diagnostic> {
-    let name = &parts.name.name;
-    if info.method(name).is_some() {
-        return Some(defined_twice(parts.name));
+/// Returns the classes an annotation in a class body may name; the class's own name is bound
+/// only after its body runs.
+fn class_scope<'known>(
+    known: &KnownClasses<'known>,
+    names: &'known crate::check::ImportedNames,
+    floor_defers: bool,
+    class: ClassId,
+    parameters: &'known BTreeMap<String, Type>,
+) -> AnnotationScope<'known> {
+    AnnotationScope {
+        classes: known.ids,
+        instances: known.instances,
+        modules: &names.modules,
+        module_aliases: &names.module_aliases,
+        parameters,
+        copies: known.copies,
+        names: &names.names,
+        standard: &names.standard,
+        bound: if floor_defers { u32::MAX } else { class.0 },
     }
-    if !REDEFINABLE.contains(&name.as_str()) && inherited_method(infos, info.base, name) {
-        return Some(
-            Diagnostic::new(
-                DiagnosticCode::error(201),
-                parts.name.span,
-                format!(
-                    "redefining the method `{name}` of a base is planned for TyPy 0.4 (CLS-04)"
-                ),
-            )
-            .with_rule(RuleId::CLS_13),
-        );
-    }
-    if name.starts_with("__") && name.ends_with("__") && !SPECIAL_METHODS.contains(&name.as_str()) {
-        return Some(planned_method(parts.name));
-    }
-    if parts.parameters.is_empty() {
-        return Some(
-            Diagnostic::new(
-                DiagnosticCode::error(201),
-                parts.name.span,
-                "a method without `self` is a static method, which is planned for TyPy 0.4 \
-                 (CLS-06)",
-            )
-            .with_rule(RuleId::CLS_06),
-        );
-    }
-    None
 }
 
-/// Returns true when `base`, or a class it derives from, defines the method `name`.
-fn inherited_method(infos: &[ClassInfo], base: Option<ClassId>, name: &str) -> bool {
+/// Notes a class's `__init__`, and the attributes it assigns that the class body does not
+/// declare.
+fn note_init(
+    parts: &FunctionParts<'_>,
+    id: FunctionId,
+    info: &mut ClassInfo,
+    names: &crate::check::ImportedNames,
+) {
+    info.init = Some(id);
+    for attribute in initialized_attributes(parts) {
+        if info.attribute(&attribute).is_none() {
+            info.attributes.push(AttributeInfo {
+                name: attribute,
+                ty: None,
+            });
+        }
+    }
+    let is_instance = |id: &str| {
+        parts
+            .parameters
+            .first()
+            .is_some_and(|instance| instance.name.name == id)
+    };
+    // Only a statement of the body itself declares one, so it runs once per instance.
+    for statement in parts.body {
+        if let Stmt::AnnAssign {
+            target: Expr::Attribute {
+                value, attribute, ..
+            },
+            annotation,
+            value: Some(_),
+            span,
+            ..
+        } = statement
+            && matches!(value.as_ref(), Expr::Name { id, .. } if is_instance(id))
+            && super::annotation::final_type(annotation, &names.names, &names.standard).is_some()
+            && let Some(index) = info.attribute(&attribute.name)
+        {
+            info.final_attributes.push((index, *span));
+        }
+    }
+}
+
+/// The methods collected so far, whose IDs follow `first_function`.
+struct Collected<'methods, 'tree> {
+    methods: &'methods mut Vec<Definition<'tree>>,
+    first_function: usize,
+}
+
+/// The class methods each class of the module has, its own and those it inherits from a
+/// class of the module, each with the copy of the class that defines it (ADR-0025).
+#[derive(Default)]
+struct ClassMethodCopies<'tree> {
+    by_class: BTreeMap<ClassId, Vec<(&'tree Stmt, FunctionId)>>,
+}
+
+impl<'tree> ClassMethodCopies<'tree> {
+    /// Makes a copy, for the class `info` describes, of each class method it has: its own, and
+    /// each one a base of the module defines that it does not define again. A class method a
+    /// base of another module defines is noted, since its copy is planned (ADR-0025).
+    fn make(
+        &mut self,
+        own: &[&'tree Stmt],
+        info: &mut ClassInfo,
+        classes: Classes<'_>,
+        scope: &AnnotationScope<'_>,
+        collected: &mut Collected<'_, 'tree>,
+        diagnostics: &mut Diagnostics,
+    ) {
+        let name_of = |statement: &Stmt| match statement {
+            Stmt::FunctionDef { name, .. } => name.name.clone(),
+            _ => String::new(),
+        };
+        let own_names: Vec<String> = own.iter().map(|statement| name_of(statement)).collect();
+        let mut visible: Vec<(&'tree Stmt, Option<FunctionId>)> =
+            own.iter().map(|statement| (*statement, None)).collect();
+        if let Some(base) = info.base {
+            if let Some(inherited) = self.by_class.get(&base) {
+                visible.extend(
+                    inherited
+                        .iter()
+                        .filter(|(statement, _)| !own_names.contains(&name_of(statement)))
+                        .map(|(statement, origin)| (*statement, Some(*origin))),
+                );
+            } else if let Some(base_info) = classes.get(base) {
+                let remote = base_info
+                    .class_methods
+                    .iter()
+                    .map(|(name, _)| name)
+                    .chain(&base_info.remote_class_methods)
+                    .filter(|name| !own_names.contains(name))
+                    .cloned()
+                    .collect::<Vec<_>>();
+                info.remote_class_methods.extend(remote);
+            }
+        }
+        let class_object = match &info.exception {
+            Some(exception) => TypeObjectOf::Exception(exception.clone()),
+            None => TypeObjectOf::Instance(info.id, info.name.clone()),
+        };
+        let owner = Owner {
+            id: info.id,
+            instance: TypeObjectOf::type_of(Some(class_object)),
+            takes_instance: true,
+        };
+        let mut made = Vec::new();
+        // Each statement is a `def`, since only methods are copied.
+        for (statement, parts, origin) in visible.into_iter().filter_map(|(statement, origin)| {
+            Some((statement, FunctionParts::of(statement)?, origin))
+        }) {
+            let id = FunctionId(
+                u32::try_from(collected.first_function + collected.methods.len())
+                    .unwrap_or(u32::MAX),
+            );
+            // An inherited copy repeats the signature of the copy it is made from, whose
+            // errors are reported there.
+            let mut repeated = Diagnostics::new();
+            let sink = if origin.is_some() {
+                &mut repeated
+            } else {
+                &mut *diagnostics
+            };
+            let mut method = definition(&parts, Some(&owner), scope, sink);
+            // A parameter that names a protocol would make the copy generic (GEN-09).
+            let written = method.type_parameters.len();
+            super::protocol::protocol_parameters(&mut method, sink);
+            if method.type_parameters.len() > written {
+                sink.push(planned_generic_method(
+                    parts.name,
+                    "a protocol parameter of a special method, a property or a class method is",
+                ));
+            }
+            method.qualified_name = format!("{}.{}", info.name, parts.name.name);
+            method.copy_of = origin;
+            info.class_methods.push((parts.name.name.clone(), id));
+            made.push((statement, origin.unwrap_or(id)));
+            collected.methods.push(method);
+        }
+        self.by_class.insert(info.id, made);
+    }
+}
+
+/// Returns the name a method is held under: its own, or `name.setter` for the setter of the
+/// property `name`, beside its getter, under a name no Python name can be (CLS-06).
+fn registered_name(kind: &MethodKind, name: &str) -> String {
+    match kind {
+        MethodKind::Setter(property) => format!("{property}.setter"),
+        _ => name.to_owned(),
+    }
+}
+
+/// Records a method in its class, under the name it is held under, and returns its
+/// definition; a static method's first parameter is not the instance.
+fn method_definition<'tree>(
+    parts: &FunctionParts<'tree>,
+    kind: &MethodKind,
+    id: FunctionId,
+    info: &mut ClassInfo,
+    owner: &Owner,
+    scope: &AnnotationScope<'_>,
+    diagnostics: &mut Diagnostics,
+) -> Definition<'tree> {
+    let name = &parts.name.name;
+    let registered = registered_name(kind, name);
+    info.methods.push((registered.clone(), id));
+    match kind {
+        MethodKind::Static => info.static_methods.push(name.clone()),
+        MethodKind::Getter => info.properties.push(name.clone()),
+        _ => {}
+    }
+    let method_owner = Owner {
+        id: owner.id,
+        instance: owner.instance.clone(),
+        takes_instance: *kind != MethodKind::Static,
+    };
+    // A method's annotations name its own type parameters and its class's.
+    let type_parameters =
+        resolve_type_parameters(parts.type_parameters, parts.span, scope, diagnostics);
+    let mut in_scope = scope.parameters.clone();
+    in_scope.extend(
+        type_parameters
+            .iter()
+            .map(|parameter| (parameter.name.clone(), Type::parameter(parameter.clone()))),
+    );
+    let method_scope = AnnotationScope {
+        parameters: &in_scope,
+        ..*scope
+    };
+    let mut method = definition(parts, Some(&method_owner), &method_scope, diagnostics);
+    method.type_parameters = type_parameters;
+    let written = method.type_parameters.len();
+    super::protocol::protocol_parameters(&mut method, diagnostics);
+    // A parameter that names a protocol makes the method generic, which only an instance or
+    // a static method may be yet (GEN-09).
+    let special = name.starts_with("__") && name.ends_with("__");
+    if method.type_parameters.len() > written
+        && (special || !matches!(kind, MethodKind::Instance | MethodKind::Static))
+    {
+        diagnostics.push(planned_generic_method(
+            parts.name,
+            "a protocol parameter of a special method, a property or a class method is",
+        ));
+    }
+    if !method.type_parameters.is_empty() {
+        info.generic_methods.push(registered.clone());
+    }
+    if registered != *name {
+        method.qualified_name = format!("{}.{registered}", info.name);
+        method.name = registered;
+    }
+    method
+}
+
+/// Returns why a method cannot be defined, if it cannot: the class already defines it, it is
+/// a special method planned with the operator methods, or it has no `self`.
+fn refused_method(
+    parts: &FunctionParts<'_>,
+    kind: &MethodKind,
+    registered: &str,
+    info: &ClassInfo,
+    classes: Classes<'_>,
+) -> Option<Diagnostic> {
+    let name = &parts.name.name;
+    let refuse = |code: u16, message: String| {
+        Some(
+            Diagnostic::new(DiagnosticCode::error(code), parts.name.span, message)
+                .with_rule(RuleId::CLS_06),
+        )
+    };
+    if info.method(registered).is_some() {
+        return Some(defined_twice(parts.name));
+    }
+    let special = name.starts_with("__") && name.ends_with("__");
+    if special && !SPECIAL_METHODS.contains(&name.as_str()) {
+        return Some(planned_method(parts.name));
+    }
+    let generic = !parts.type_parameters.is_empty();
+    if generic && (special || !matches!(kind, MethodKind::Instance | MethodKind::Static)) {
+        return Some(planned_generic_method(
+            parts.name,
+            "type parameters of a special method, a property or a class method are",
+        ));
+    }
+    if special && *kind != MethodKind::Instance {
+        return refuse(
+            404,
+            format!("the special method `{name}` takes no decorator"),
+        );
+    }
+    let static_in_bases = static_method_in_bases(classes, info.base, name);
+    match kind {
+        MethodKind::Class if parts.parameters.is_empty() => refuse(
+            404,
+            format!("the class method `{name}` takes the class, `cls`, first"),
+        ),
+        // A static method has no entry in the method tables, so a subclass's own would not run
+        // through an instance of it.
+        MethodKind::Static if inherited_method(classes, info.base, name).is_some() => refuse(
+            201,
+            format!(
+                "redefining the method `{name}` of a base as a static method is planned for TyPy 0.5 (CLS-06)"
+            ),
+        ),
+        // A static method of a base is also its method, so the arm above takes a static one.
+        _ if static_in_bases => refuse(
+            201,
+            format!(
+                "redefining the static method `{name}` of a base is planned for TyPy 0.5 (CLS-06)"
+            ),
+        ),
+        MethodKind::Static => None,
+        MethodKind::Setter(property) if property != name => refuse(
+            404,
+            format!("the setter of the property `{property}` is a method named `{property}`"),
+        ),
+        MethodKind::Setter(property) if !info.properties.contains(property) => refuse(
+            404,
+            format!(
+                "`@{property}.setter` follows the `@property` that defines `{property}` in the same class"
+            ),
+        ),
+        _ if parts.parameters.is_empty() => Some(
+            Diagnostic::new(
+                DiagnosticCode::error(404),
+                parts.name.span,
+                format!("the method `{name}` takes the instance, `self`, first"),
+            )
+            .with_rule(RuleId::CLS_06)
+            .with_help("add `self`, or decorate the function with `@staticmethod`"),
+        ),
+        _ => None,
+    }
+}
+
+/// Returns true when `base`, or a class it derives from, defines `name` as a static method.
+fn static_method_in_bases(classes: Classes<'_>, base: Option<ClassId>, name: &str) -> bool {
     let mut current = base;
-    // A base is defined before the class, so its information is already collected.
-    while let Some(info) = current.and_then(|class| infos.iter().find(|info| info.id == class)) {
-        if info.method(name).is_some() {
+    while let Some(info) = current.and_then(|class| classes.get(class)) {
+        if info.static_methods.iter().any(|each| each == name) {
             return true;
         }
         current = info.base;
     }
     false
+}
+
+/// Checks the signature of a property's getter, which takes only the instance, and of its
+/// setter, which takes the instance and a value of the getter's type and returns `None`.
+fn check_accessor(
+    kind: &MethodKind,
+    method: &Definition<'_>,
+    info: &ClassInfo,
+    methods: &[Definition<'_>],
+    first_function: usize,
+    name: &Identifier,
+    diagnostics: &mut Diagnostics,
+) {
+    let signature = &method.signature;
+    let problem = match kind {
+        MethodKind::Getter if signature.parameters.len() != 1 => {
+            Some(format!("the property `{}` takes only `self`", name.name))
+        }
+        MethodKind::Setter(property) => {
+            let getter = info
+                .method(property)
+                .and_then(|id| (id.0 as usize).checked_sub(first_function))
+                .and_then(|local| methods.get(local))
+                .map(|getter| getter.signature.returns.clone());
+            let fits = signature.parameters.len() == 2
+                && signature.returns.matches(&Type::NoneType)
+                && getter.is_none_or(|ty| signature.parameters[1].ty.matches(&ty));
+            (!fits).then(|| {
+                format!(
+                    "the setter of `{property}` takes `self` and a value of the property's type, \
+                     and returns `None`"
+                )
+            })
+        }
+        _ => None,
+    };
+    if let Some(message) = problem {
+        diagnostics.push(
+            Diagnostic::new(DiagnosticCode::error(404), name.span, message)
+                .with_rule(RuleId::CLS_06),
+        );
+    }
+}
+
+/// The signatures of the functions collected so far: those of the modules checked before,
+/// indexed by ID, and the module's methods, whose IDs follow `first_function`.
+#[derive(Clone, Copy)]
+struct Signatures<'definitions, 'tree> {
+    earlier: &'definitions [FunctionSignature],
+    local: &'definitions [Definition<'tree>],
+    first_function: usize,
+}
+
+impl<'definitions> Signatures<'definitions, '_> {
+    fn get(self, id: FunctionId) -> Option<&'definitions FunctionSignature> {
+        (id.0 as usize)
+            .checked_sub(self.first_function)
+            .map_or_else(
+                || self.earlier.get(id.0 as usize),
+                |local| self.local.get(local).map(|base| &base.signature),
+            )
+    }
+}
+
+/// Returns why a method does not fit the base method it overrides, if it overrides one and
+/// does not fit; a constructor runs on its own class only, so `__init__` is not compared.
+fn check_override(
+    info: &ClassInfo,
+    classes: Classes<'_>,
+    signatures: Signatures<'_, '_>,
+    method: &Definition<'_>,
+    name: &Identifier,
+) -> Option<Diagnostic> {
+    if name.name == "__init__" {
+        return None;
+    }
+    let (base_id, base_class) = inherited_method(classes, info.base, &name.name)?;
+    // A copy of a generic method is called directly, so neither side of an override may be
+    // generic.
+    if !method.type_parameters.is_empty() || generic_method_in_bases(classes, info.base, name) {
+        return Some(planned_generic_method(
+            name,
+            "a method with type parameters that overrides or is overridden is",
+        ));
+    }
+    let base = signatures.get(base_id)?;
+    Override {
+        name: &format!("{}.{}", info.name, name.name),
+        signature: &method.signature,
+        base_name: &format!("{base_class}.{}", name.name),
+        base,
+        span: name.span,
+    }
+    .check()
+}
+
+/// Returns true when the nearest class from `base` up that defines the method `name` gives
+/// it type parameters (GEN-01).
+fn generic_method_in_bases(classes: Classes<'_>, base: Option<ClassId>, name: &Identifier) -> bool {
+    std::iter::successors(base.and_then(|class| classes.get(class)), |info| {
+        info.base.and_then(|class| classes.get(class))
+    })
+    .find(|info| info.method(&name.name).is_some())
+    .is_some_and(|info| info.generic_methods.contains(&name.name))
+}
+
+/// Reports a method with type parameters that TyPy 0.5 accepts (GEN-09).
+fn planned_generic_method(name: &Identifier, what: &str) -> Diagnostic {
+    Diagnostic::new(
+        DiagnosticCode::error(201),
+        name.span,
+        format!("{what} planned for TyPy 0.5 (GEN-09)"),
+    )
+    .with_rule(RuleId::GEN_09)
+}
+
+/// Returns the method `name` of `base` or of the nearest class it derives from that defines
+/// it, with that class's name.
+fn inherited_method<'infos>(
+    classes: Classes<'infos>,
+    base: Option<ClassId>,
+    name: &str,
+) -> Option<(FunctionId, &'infos str)> {
+    let mut current = base;
+    while let Some(info) = current.and_then(|class| classes.get(class)) {
+        if let Some(method) = info.method(name) {
+            return Some((method, &info.name));
+        }
+        current = info.base;
+    }
+    None
+}
+
+/// Reports a name a class gives two meanings: a class variable that is also an attribute or a
+/// method, or an attribute that is also a method.
+fn report_name_conflicts(info: &ClassInfo, span: Span, diagnostics: &mut Diagnostics) {
+    for name in &info.class_variables {
+        if info.attribute(name).is_some() || info.method(name).is_some() {
+            diagnostics.push(
+                Diagnostic::new(
+                    DiagnosticCode::error(202),
+                    span,
+                    format!(
+                        "`{}.{name}` is a class variable and also an attribute or a method",
+                        info.name
+                    ),
+                )
+                .with_rule(RuleId::STD_04),
+            );
+        }
+    }
+    for (name, _) in &info.methods {
+        if info.attribute(name).is_some() {
+            diagnostics.push(
+                Diagnostic::new(
+                    DiagnosticCode::error(202),
+                    span,
+                    format!("`{}.{name}` is both an attribute and a method", info.name),
+                )
+                .with_rule(RuleId::STD_04),
+            );
+        }
+    }
+}
+
+/// Declares what an annotation or an assignment in a class body names: an attribute, with
+/// or without a default, or a class variable (CLS-01, CLS-11, ADR-0024).
+fn class_body_name(
+    statement: &Stmt,
+    info: &mut ClassInfo,
+    scope: &AnnotationScope<'_>,
+    names: &crate::check::ImportedNames,
+    diagnostics: &mut Diagnostics,
+) {
+    match statement {
+        Stmt::AnnAssign {
+            target: Expr::Name { id, span },
+            annotation,
+            value,
+            ..
+        } => {
+            // A `Final` the class body gives a value is a class variable, as PEP 591 has it.
+            let class_var =
+                super::annotation::class_var_type(annotation, &names.names, &names.standard)
+                    .is_some()
+                    || super::annotation::final_type(annotation, &names.names, &names.standard)
+                        .is_some();
+            if class_var && value.is_some() {
+                info.class_variables.push(id.clone());
+                return;
+            }
+            let ty = annotation_type(annotation, scope, diagnostics);
+            let ty = super::protocol::outside_signature(ty, annotation.span(), diagnostics);
+            declare(info, id, Some(ty), *span, diagnostics);
+            if value.is_some() {
+                default_value(info, id, *span, diagnostics);
+            }
+        }
+        Stmt::Assign { targets, .. } => {
+            if let [Expr::Name { id, .. }] = targets.as_slice() {
+                info.class_variables.push(id.clone());
+            }
+        }
+        _ => {}
+    }
+}
+
+/// Notes that the class body gives the attribute `name` a default. An exception is made by
+/// the runtime's exception path, which copies no defaults, so an exception class's are
+/// planned (ADR-0024).
+fn default_value(info: &mut ClassInfo, name: &str, span: Span, diagnostics: &mut Diagnostics) {
+    if info.exception.is_some() {
+        diagnostics.push(
+            Diagnostic::new(
+                DiagnosticCode::error(201),
+                span,
+                "a default for an attribute of an exception class is planned for TyPy 0.5 \
+                 (CLS-11)",
+            )
+            .with_rule(RuleId::CLS_11)
+            .with_help("assign the attribute in `__init__`"),
+        );
+        return;
+    }
+    // A subclass may give an inherited attribute a default of its own, which its instances
+    // hold in place of the base's.
+    if let Some(index) = info.attribute(name) {
+        info.defaults.push(index);
+    }
 }
 
 /// Declares an attribute in the class body; a second declaration is an error.
@@ -377,6 +1124,33 @@ fn declare(
     span: Span,
     diagnostics: &mut Diagnostics,
 ) {
+    if let Some(index) = info.attribute(name).filter(|index| *index < info.inherited) {
+        // A subclass may declare an attribute of its base again with the same type, so code
+        // that knows only the base reads it at the same place with the same type (ADR-0021).
+        let base = info.attributes[index].ty.clone();
+        if base.as_ref() == ty.as_ref() {
+            return;
+        }
+        let message = match base {
+            Some(base) => format!(
+                "`{}.{name}` is declared as {}, but its base declares it as {base}",
+                info.name,
+                ty.map_or_else(|| "something else".to_owned(), |ty| ty.to_string()),
+            ),
+            None => format!(
+                "`{}.{name}` is declared again, but its base assigns it without declaring it",
+                info.name
+            ),
+        };
+        let diagnostic =
+            Diagnostic::new(DiagnosticCode::error(202), span, message).with_rule(RuleId::CLS_04);
+        diagnostics.push(if info.attributes[index].ty.is_none() {
+            diagnostic.with_help(format!("declare `{name}` in the body of the base class"))
+        } else {
+            diagnostic
+        });
+        return;
+    }
     if info.attribute(name).is_some() {
         diagnostics.push(
             Diagnostic::new(
@@ -392,6 +1166,167 @@ fn declare(
         name: name.to_owned(),
         ty,
     });
+}
+
+/// Checks the signature of a special method the runtime or a statement calls: `__str__`,
+/// `__repr__`, `__exit__`, `__iter__`, `__next__` and `__enter__`.
+fn check_special_method(method: &Definition<'_>, name: &Identifier, diagnostics: &mut Diagnostics) {
+    match name.name.as_str() {
+        "__str__" | "__repr__" => check_text_method(method, name, diagnostics),
+        "__exit__" => check_exit(method, name, diagnostics),
+        "__eq__" | "__ne__" | "__lt__" | "__le__" | "__gt__" | "__ge__" => {
+            check_comparison(method, name, diagnostics);
+        }
+        "__len__" | "__bool__" | "__getitem__" | "__setitem__" | "__delitem__" | "__contains__" => {
+            check_container_method(method, name, diagnostics);
+        }
+        "__neg__" | "__pos__" | "__invert__" | "__abs__"
+            if method.signature.parameters.len() != 1 =>
+        {
+            diagnostics.push(
+                Diagnostic::new(
+                    DiagnosticCode::error(404),
+                    name.span,
+                    format!("`{}` takes only `self`", name.name),
+                )
+                .with_rule(RuleId::CLS_07),
+            );
+        }
+        arithmetic if is_binary_method(arithmetic) && method.signature.parameters.len() != 2 => {
+            diagnostics.push(
+                Diagnostic::new(
+                    DiagnosticCode::error(404),
+                    name.span,
+                    format!("`{}` takes `self` and the other operand", name.name),
+                )
+                .with_rule(RuleId::CLS_07),
+            );
+        }
+        "__hash__"
+            if method.signature.parameters.len() != 1
+                || !method.signature.returns.matches(&Type::Int) =>
+        {
+            diagnostics.push(
+                Diagnostic::new(
+                    DiagnosticCode::error(404),
+                    name.span,
+                    "`__hash__` takes only `self` and returns an int",
+                )
+                .with_rule(RuleId::CLS_07),
+            );
+        }
+        "__iter__" | "__next__" | "__enter__" if method.signature.parameters.len() != 1 => {
+            diagnostics.push(
+                Diagnostic::new(
+                    DiagnosticCode::error(404),
+                    name.span,
+                    format!("`{}` takes only `self`", name.name),
+                )
+                .with_rule(RuleId::CST_08),
+            );
+        }
+        _ => {}
+    }
+}
+
+/// Returns true for the methods of the binary arithmetic and bitwise operators and their
+/// reflected forms, such as `__add__` and `__radd__` (CLS-07).
+fn is_binary_method(name: &str) -> bool {
+    let Some(bare) = name
+        .strip_prefix("__")
+        .and_then(|rest| rest.strip_suffix("__"))
+    else {
+        return false;
+    };
+    let bare = bare
+        .strip_prefix('r')
+        .filter(|rest| BINARY.contains(rest))
+        .unwrap_or(bare);
+    BINARY.contains(&bare)
+}
+
+/// The binary operators' method names without their underscores.
+const BINARY: [&str; 13] = [
+    "add", "sub", "mul", "matmul", "truediv", "floordiv", "mod", "pow", "lshift", "rshift", "and",
+    "or", "xor",
+];
+
+/// Checks a container method's signature: `__len__` returns an `int` and `__bool__` and
+/// `__contains__` a `bool`, `__setitem__` and `__delitem__` return `None`, and each takes
+/// `self` and the values its operation passes (CLS-07).
+fn check_container_method(
+    method: &Definition<'_>,
+    name: &Identifier,
+    diagnostics: &mut Diagnostics,
+) {
+    let signature = &method.signature;
+    let (parameters, returns, written) = match name.name.as_str() {
+        "__len__" => (1, Some(Type::Int), "takes only `self` and returns an int"),
+        "__bool__" => (1, Some(Type::Bool), "takes only `self` and returns a bool"),
+        "__contains__" => (
+            2,
+            Some(Type::Bool),
+            "takes `self` and an item, and returns a bool",
+        ),
+        "__getitem__" => (2, None, "takes `self` and a key"),
+        "__setitem__" => (
+            3,
+            Some(Type::NoneType),
+            "takes `self`, a key and a value, and returns `None`",
+        ),
+        _ => (
+            2,
+            Some(Type::NoneType),
+            "takes `self` and a key, and returns `None`",
+        ),
+    };
+    let fits = signature.parameters.len() == parameters
+        && returns.is_none_or(|returns| signature.returns.matches(&returns));
+    if !fits {
+        diagnostics.push(
+            Diagnostic::new(
+                DiagnosticCode::error(404),
+                name.span,
+                format!("`{}` {written}", name.name),
+            )
+            .with_rule(RuleId::CLS_07),
+        );
+    }
+}
+
+/// A comparison method takes `self` and one more value, of a type that accepts every instance
+/// of its class, so a comparison inside a container always calls it with one, and returns a
+/// `bool` (CLS-07, ADR-0026).
+fn check_comparison(method: &Definition<'_>, name: &Identifier, diagnostics: &mut Diagnostics) {
+    let signature = &method.signature;
+    let fits = signature.parameters.len() == 2
+        && signature.parameters[0]
+            .ty
+            .is_assignable_to(&signature.parameters[1].ty)
+        && signature.returns.matches(&Type::Bool);
+    if !fits {
+        let class = signature
+            .parameters
+            .first()
+            .map(|parameter| parameter.ty.clone());
+        diagnostics.push(
+            Diagnostic::new(
+                DiagnosticCode::error(404),
+                name.span,
+                format!(
+                    "`{}` takes `self` and a value its class's instances are, and returns a bool",
+                    name.name
+                ),
+            )
+            .with_rule(RuleId::CLS_07)
+            .with_help(class.map_or_else(String::new, |class| {
+                format!(
+                    "write `def {}(self, other: \"{class}\") -> bool:`",
+                    name.name
+                )
+            })),
+        );
+    }
 }
 
 /// `__str__` and `__repr__` take only the instance and return a `str`, as CPython requires
@@ -439,11 +1374,26 @@ fn check_exit(method: &Definition<'_>, name: &Identifier, diagnostics: &mut Diag
 
 /// Reports a special method a class may not define yet.
 fn planned_method(name: &Identifier) -> Diagnostic {
+    let bare = name
+        .name
+        .strip_prefix("__")
+        .and_then(|rest| rest.strip_suffix("__"))
+        .unwrap_or_default();
+    // The in-place operators come after the container methods of 0.4, and the other special
+    // methods, such as `__call__`, after 1.0.
+    let release = if bare
+        .strip_prefix('i')
+        .is_some_and(|rest| BINARY.contains(&rest))
+    {
+        "TyPy 0.5"
+    } else {
+        "a release after TyPy 1.0"
+    };
     Diagnostic::new(
         DiagnosticCode::error(201),
         name.span,
         format!(
-            "the special method `{}` is planned for TyPy 0.4 (CLS-07)",
+            "the special method `{}` is planned for {release} (CLS-07)",
             name.name
         ),
     )
@@ -513,4 +1463,89 @@ fn initialized_attributes(parts: &FunctionParts<'_>) -> Vec<String> {
         statements(parts.body, &instance.name.name, &mut found);
     }
     found
+}
+
+/// A value a class body gives a name: a class variable, or the default of an instance
+/// attribute, with the assignment that gives it, to the module variable `Class.name` that
+/// holds it, which runs where the `class` statement runs (CLS-11, ADR-0024).
+pub(crate) struct ClassValue {
+    pub(crate) name: String,
+    pub(crate) assignment: Stmt,
+}
+
+/// Returns the name of the module variable that holds a class's value `name`.
+pub(crate) fn class_value_variable(class: &str, name: &str) -> String {
+    format!("{class}.{name}")
+}
+
+/// Returns the values a class body gives, in source order: `name = value`, and
+/// `name: ClassVar[T] = value`, for a class variable, and `name: T = value` for the default
+/// of an instance attribute.
+pub(crate) fn class_values(
+    class: &str,
+    body: &[Stmt],
+    names: &BTreeMap<String, super::annotation::AnnotationName>,
+    standard: &BTreeMap<String, String>,
+) -> Vec<ClassValue> {
+    let renamed = |id: &str, span: Span| Expr::Name {
+        id: class_value_variable(class, id),
+        span,
+    };
+    body.iter()
+        .filter_map(|statement| match statement {
+            Stmt::AnnAssign {
+                target: Expr::Name { id, span },
+                annotation,
+                value: Some(value),
+                simple,
+                span: whole,
+            } => {
+                let target = renamed(id, *span);
+                let assignment =
+                    match super::annotation::class_var_type(annotation, names, standard) {
+                        Some(super::annotation::ClassVarAnnotation::Typed(inner)) => {
+                            Stmt::AnnAssign {
+                                target,
+                                annotation: inner.clone(),
+                                value: Some(value.clone()),
+                                simple: *simple,
+                                span: *whole,
+                            }
+                        }
+                        Some(super::annotation::ClassVarAnnotation::Bare) => Stmt::Assign {
+                            targets: vec![target],
+                            value: value.clone(),
+                            span: *whole,
+                        },
+                        None => Stmt::AnnAssign {
+                            target,
+                            annotation: annotation.clone(),
+                            value: Some(value.clone()),
+                            simple: *simple,
+                            span: *whole,
+                        },
+                    };
+                Some(ClassValue {
+                    name: id.clone(),
+                    assignment,
+                })
+            }
+            Stmt::Assign {
+                targets,
+                value,
+                span,
+            } => match targets.as_slice() {
+                [Expr::Name { id, span: at }] => Some(ClassValue {
+                    name: id.clone(),
+                    assignment: Stmt::Assign {
+                        targets: vec![renamed(id, *at)],
+                        value: value.clone(),
+                        span: *span,
+                    },
+                }),
+                _ => None,
+            },
+            _ => None,
+        })
+        .collect()
 }

@@ -37,6 +37,32 @@ pub struct Parameter {
     pub span: Span,
 }
 
+/// One type parameter of a `def`, a `class` or a `type` statement (GEN-01).
+#[derive(Clone, Debug, PartialEq)]
+pub struct TypeParameter {
+    /// The parameter's name.
+    pub name: Identifier,
+    /// What it stands for.
+    pub kind: TypeParameterKind,
+    /// Its bound, or a tuple of its constraints, written after a colon.
+    pub bound: Option<Expr>,
+    /// Its default, written after `=` (Python 3.13).
+    pub default: Option<Expr>,
+    /// The whole parameter.
+    pub span: Span,
+}
+
+/// What a type parameter stands for.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum TypeParameterKind {
+    /// `T`: one type.
+    Type,
+    /// `*Ts`: any number of types.
+    TypeTuple,
+    /// `**P`: the parameters of a callable.
+    Parameters,
+}
+
 /// One name in an `import` statement.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Alias {
@@ -81,7 +107,7 @@ pub enum Stmt {
         returns: Option<Expr>,
         body: Vec<Stmt>,
         decorators: Vec<Expr>,
-        type_parameter_count: usize,
+        type_parameters: Vec<TypeParameter>,
         span: Span,
     },
     /// `class name(bases): body`; `keyword_count` counts keyword arguments such as
@@ -92,7 +118,7 @@ pub enum Stmt {
         keyword_count: usize,
         body: Vec<Stmt>,
         decorators: Vec<Expr>,
-        type_parameter_count: usize,
+        type_parameters: Vec<TypeParameter>,
         span: Span,
     },
     Return {
@@ -177,6 +203,14 @@ pub enum Stmt {
         message: Option<Expr>,
         span: Span,
     },
+    /// `type name = value` or `type name[T, ...] = value`, a type alias whose value is an
+    /// annotation (SMT-10).
+    TypeAlias {
+        name: Identifier,
+        type_parameters: Vec<TypeParameter>,
+        value: Expr,
+        span: Span,
+    },
     /// `global name, ...`: the names are the module's variables in this function (SMT-08).
     Global {
         names: Vec<Identifier>,
@@ -208,21 +242,19 @@ impl Stmt {
     /// `except` clause, its `else` block and its `finally` block; none for another statement.
     #[must_use]
     pub fn try_blocks(&self) -> Vec<&[Self]> {
-        let Self::Try {
-            body,
-            handlers,
-            orelse,
-            finalbody,
-            ..
-        } = self
-        else {
-            return Vec::new();
-        };
-        let mut blocks = vec![body.as_slice()];
-        blocks.extend(handlers.iter().map(|handler| handler.body.as_slice()));
-        blocks.push(orelse);
-        blocks.push(finalbody);
-        blocks
+        match self {
+            Self::Try {
+                body,
+                handlers,
+                orelse,
+                finalbody,
+                ..
+            } => std::iter::once(body.as_slice())
+                .chain(handlers.iter().map(|handler| handler.body.as_slice()))
+                .chain([orelse.as_slice(), finalbody.as_slice()])
+                .collect(),
+            _ => Vec::new(),
+        }
     }
 
     /// Returns the span of the whole statement.
@@ -247,6 +279,7 @@ impl Stmt {
             | Self::Delete { span, .. }
             | Self::Try { span, .. }
             | Self::Global { span, .. }
+            | Self::TypeAlias { span, .. }
             | Self::Pass { span }
             | Self::Break { span }
             | Self::Continue { span }

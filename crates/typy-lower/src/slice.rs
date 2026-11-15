@@ -92,6 +92,12 @@ impl FunctionLowerer<'_> {
     /// Lowers one target of `del`: a list item, a list slice or a dict key, which is removed
     /// and released (SMT-05).
     pub(crate) fn delete(&mut self, target: &TypedExpr, span: Span) {
+        // `del instance[key]` calls the class's `__delitem__` (CLS-07).
+        if let typy_check::TypedExprKind::Call { .. } = target.kind {
+            let done = self.expression(target);
+            self.release(done, span);
+            return;
+        }
         match &target.kind {
             TypedExprKind::ListItem { list, index } => {
                 let list = self.expression(list);

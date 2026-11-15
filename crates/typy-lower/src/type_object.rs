@@ -53,6 +53,19 @@ impl FunctionLowerer<'_> {
     pub(crate) fn runtime_type(&mut self, lowered: Lowered, ty: &Type, span: Span) -> Lowered {
         match (ty, TypeObjectOf::of(ty)) {
             (Type::Exception(_), _) => self.exception_type(&lowered, span),
+            // A tagged union's member says its type (TYP-14).
+            (Type::Union(members), _) if self.is_tagged(lowered.ty) => {
+                let members = members.clone();
+                self.tag_switch(lowered, TyirType::TYPE, span, |this, position, slot| {
+                    this.runtime_type(slot, &members[position], span)
+                })
+            }
+            // An instance may be of a subclass, whose class it holds (CLS-04).
+            (Type::Instance(class), _) if self.program.has_subclass(class.id) => {
+                let object = self.bits(Self::borrowed(lowered.value, lowered.ty), span);
+                let class = self.call_runtime(RuntimeFunction::ObjectType, vec![object], span);
+                self.borrowed_result(class)
+            }
             // These objects carry their type in their header.
             (
                 Type::Iterator(_)
@@ -60,7 +73,10 @@ impl FunctionLowerer<'_> {
                 | Type::Module(_)
                 | Type::AnyModule
                 | Type::TextFile
-                | Type::Traceback,
+                | Type::BinaryFile(_)
+                | Type::DescriptorFile(_)
+                | Type::Traceback
+                | Type::Union(_),
                 _,
             ) => {
                 let object = self.bits(Self::borrowed(lowered.value, lowered.ty), span);
@@ -68,6 +84,23 @@ impl FunctionLowerer<'_> {
                 self.borrowed_result(class)
             }
             (_, Some(of)) => self.type_object(&of, span),
+            (Type::Optional(inner), None)
+                if matches!(inner.as_ref(), Type::Union(_))
+                    || matches!(inner.as_ref(), Type::Instance(class) if self.program.has_subclass(class.id)) =>
+            {
+                self.optional_branch(
+                    lowered,
+                    TyirType::TYPE,
+                    span,
+                    |this| this.type_object(&TypeObjectOf::NoneType, span),
+                    |this, held| {
+                        let object = this.bits(held, span);
+                        let class =
+                            this.call_runtime(RuntimeFunction::ObjectType, vec![object], span);
+                        this.borrowed_result(class)
+                    },
+                )
+            }
             (Type::Optional(inner), None) => {
                 let none = self.is_none(lowered, span);
                 let absent = self.type_object(&TypeObjectOf::NoneType, span).value;

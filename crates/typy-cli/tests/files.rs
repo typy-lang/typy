@@ -75,3 +75,54 @@ fn a_large_write_reaches_the_file_in_order() {
     }
     assert_eq!(contents(&program, "large.txt"), expected);
 }
+
+#[test]
+fn an_uncaught_exception_after_stderr_is_closed_reports_that_stderr_is_lost() {
+    let program = Program::build(concat!(
+        "import sys\n",
+        "print(\"start\")\n",
+        "sys.stderr.close()\n",
+        "raise KeyError(1)\n",
+    ));
+    let output = program.run(&[], b"");
+    assert_eq!(output.status.code(), Some(1));
+    assert_eq!(String::from_utf8_lossy(&output.stdout), "start\n");
+    // CPython writes a dump of the object, with its address, before this line.
+    assert_eq!(String::from_utf8_lossy(&output.stderr), "lost sys.stderr\n");
+}
+
+#[test]
+fn a_program_that_closes_no_file_prints_without_checking_standard_output() {
+    for (source, checked) in [
+        ("print(\"plain\")\n", false),
+        ("import sys\nprint(\"checked\")\nsys.stdout.close()\n", true),
+        (
+            "with open(\"w.txt\", \"w\") as out:\n    print(\"checked\")\n",
+            true,
+        ),
+    ] {
+        let program = Program::build(source);
+        let output = program.run(&[], b"");
+        assert_eq!(output.status.code(), Some(0), "{source}");
+        let tyir = program.emit("tyir");
+        assert_eq!(tyir.contains("write_stdout_checked"), checked, "{source}");
+    }
+}
+
+#[test]
+fn a_binary_mode_held_in_a_variable_is_refused_when_the_program_runs() {
+    let program = Program::build(concat!(
+        "mode = \"rb\"\n",
+        "try:\n",
+        "    open(\"app.py\", mode)\n",
+        "except TypeError as error:\n",
+        "    print(error)\n",
+    ));
+    let output = program.run(&[], b"");
+    assert_eq!(output.status.code(), Some(0));
+    assert_eq!(
+        String::from_utf8_lossy(&output.stdout),
+        "TyPy opens a text file for a mode that is not a literal, and this mode is binary: \
+         'rb'\n"
+    );
+}

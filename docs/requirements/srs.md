@@ -162,7 +162,7 @@ formatter applies; Ruff's formatter is the project's recommendation.
 | LEX-07 | f-strings, with conversions and format specifications, shall be accepted. | M | 0.2 | 2.4.3 |
 | LEX-08 | Imaginary literals shall be rejected. | M | 0.1 | 2.4.7 |
 | LEX-09 | A source file larger than 16 MiB shall be rejected with a diagnostic before it is parsed, so input size cannot exhaust the compiler's memory (NFR-09, NFR-14). | M | 0.1 | |
-| LEX-10 | A `\u` or `\U` escape of a surrogate code point, U+D800 to U+DFFF, in a `str` literal shall give that code point, as CPython keeps it. | S | 0.4 | 2.4.1.1 |
+| LEX-10 | A `\u` or `\U` escape of a surrogate code point, U+D800 to U+DFFF, in a `str` literal shall give that code point, as CPython keeps it. | S | 0.5 | 2.4.1.1 |
 | LEX-11 | Brackets nested more than 200 deep and blocks nested more than 99 deep shall be rejected with CPython's messages, and expressions and statements nested more than 25000 deep shall be rejected, so that no program nests past what the compiler's stack holds. | M | 0.3 | 2.1.8 |
 
 ### 3.4 Types and annotations (TYP)
@@ -183,7 +183,9 @@ formatter applies; Ruff's formatter is the project's recommendation.
 | TYP-12 | A read of a local variable shall be rejected unless the variable is assigned on every path that reaches the read, so `UnboundLocalError` cannot occur. | M | 0.1 | 4.2.2 |
 | TYP-13 | A local variable or parameter of type `T \| None` shall narrow to `T` where an `is None` or `is not None` test, or a truth test that holds, shows it is not `None`, and using it as `T` anywhere else shall be rejected. | M | 0.2 | |
 | TYP-14 | Annotations that join two or more types other than `None` with `\|`, such as `int \| str`, shall be accepted, with narrowing by `isinstance` (TYP-07). | M | 0.4 | 3.3.5 |
-| TYP-15 | The annotations `Iterator[T]` and `Iterable[T]`, imported from `collections.abc` or `typing`, shall be accepted for iterators and for the built-in iterables of items of type `T`; their use as values is planned for 0.4 (ADR-0014, ADR-0015). | S | 0.3 | |
+| TYP-15 | The annotations `Iterator[T]` and `Iterable[T]`, imported from `collections.abc` or `typing`, shall be accepted for iterators and for the built-in iterables of items of type `T` (ADR-0014, ADR-0015). | S | 0.3 | |
+| TYP-16 | One value assigned to several targets, as in `a = b[0] = value`, shall be converted to each target's type, such as the union an item holds. | S | 0.5 | 7.2 |
+| TYP-17 | The names of `typing` and `collections.abc` given for annotations, such as `Iterator` and `Iterable`, shall also be values, as in `isinstance(x, Iterable)`. | S | 0.5 | |
 
 ### 3.5 Built-in types and values (DAT)
 
@@ -244,6 +246,7 @@ formatter applies; Ruff's formatter is the project's recommendation.
 | SMT-09 | `nonlocal` shall be accepted in nested functions. | M | 1.0 | 7.13 |
 | SMT-10 | The `type` statement shall define a type alias, with or without type parameters. | M | 0.4 | 7.14 |
 | SMT-11 | `yield` shall be accepted in generator functions. | M | 1.0 | 7.7 |
+| SMT-12 | A type alias shall be usable from another module, readable as a value as CPython's `TypeAliasType`, definable inside a function, a class or a block, and given type parameters with a bound or constraints. | S | 0.5 | 7.14 |
 
 ### 3.8 Compound statements (CST)
 
@@ -300,6 +303,11 @@ formatter applies; Ruff's formatter is the project's recommendation.
 | GEN-03 | Generics shall compile to one copy per concrete type, with no run-time type information. | M | 0.4 | |
 | GEN-04 | Classes derived from `typing.Protocol` shall be satisfied by any class with matching methods, checked when the program is compiled. | M | 0.4 | |
 | GEN-05 | `isinstance` with a protocol shall be rejected. | M | 0.4 | |
+| GEN-06 | `*Ts` and `**P` type parameters, and defaults of type parameters, shall be accepted. | C | 1.0 | 8.10 |
+| GEN-07 | A generic function or class of another module shall be usable, made from its source as ADR-0016's interfaces carry it. | S | 0.5 | |
+| GEN-08 | A generic class shall be accepted with a base other than `object`, as the base of another class, and with class variables and defaults. | S | 0.5 | 8.10 |
+| GEN-09 | Type parameters shall be accepted on a method of a generic class, a special method, a property, a class method, and a method that overrides or is overridden. | S | 0.5 | 8.10 |
+| GEN-10 | A protocol shall be usable as the type of a variable, an attribute, a result and a container item outside a parameter, as the base of a class, and with properties, static methods, class methods and class variables. | S | 0.5 | 8.10 |
 
 ### 3.12 Exceptions (EXC)
 
@@ -319,6 +327,8 @@ formatter applies; Ruff's formatter is the project's recommendation.
 | EXC-12 | Calling `UnicodeDecodeError` or `UnicodeEncodeError`, or deriving a class from them, shall be rejected; catching them shall be accepted. | S | 0.3 | |
 | EXC-13 | The `code` attribute of `SystemExit` shall give the argument it was built with, or `None` without one. | S | 0.4 | |
 | EXC-14 | `OSError` and its subclasses built with two to five arguments shall give the subclass for the `errno`, and the attributes `errno`, `strerror` and `filename`, as CPython does. | S | 0.4 | |
+| EXC-15 | `args` of an exception and `code` of a `SystemExit` shall be values of their own: stored, passed, indexed and iterated. | S | 0.5 | |
+| EXC-16 | An `OSError` shall take arguments of any type, more than five of them, and two or more through `super().__init__`, as CPython does. | C | 0.5 | |
 
 ### 3.13 Modules and imports (MOD)
 
@@ -335,6 +345,8 @@ formatter applies; Ruff's formatter is the project's recommendation.
 | MOD-09 | `sys.set_lazy_imports`, `sys.set_lazy_imports_filter`, `sys.get_lazy_imports`, `sys.get_lazy_imports_filter` and `sys.lazy_modules` shall be rejected, because they change or depend on import behaviour set from outside the importing module. | S | 0.3 | |
 | MOD-10 | An imported module shall be an object of type `module` whose attributes are its module-level names: `m.x` shall read and `m.x = v` assign them, the object may be bound to other names and compared with `is`, and its text shall name its path from the project root (OI-20, ADR-0015). | M | 0.3 | 5.3 |
 | MOD-11 | A name a module binds by a lazy import shall be usable from another module, a module variable shall be assignable as `m.x = v` through a lazily imported module `m`, and a name shall be bindable by more than one lazy import of the module. | S | 0.4 | |
+| MOD-12 | A function or a class shall be bindable by more than one lazy import of a module, a call running the one bound last. | C | 0.5 | |
+| MOD-13 | A module shall be importable inside a function of a module that it imports at module level. | S | 0.5 | |
 
 ### 3.14 Built-in functions and standard library (LIB)
 
@@ -353,7 +365,12 @@ formatter applies; Ruff's formatter is the project's recommendation.
 | LIB-11 | `format % values` shall be accepted with a format that is not a string literal, and with a `tuple[T, ...]` of values. | S | 0.4 |
 | LIB-12 | `math.fsum`, `math.prod`, `math.sumprod`, `math.dist`, `math.gamma` and `math.lgamma` shall be available. | S | 0.4 |
 | LIB-13 | `sys.maxsize`, `sys.byteorder`, `sys.platform`, `sys.version`, `sys.version_info`, `sys.hexversion`, `sys.maxunicode`, `sys.getrecursionlimit`, `sys.setrecursionlimit` and `sys.stdin` shall be available. | S | 0.4 |
-| LIB-14 | `open` shall accept binary modes, `+` modes, a mode that is not a literal, encodings other than UTF-8 and the arguments `buffering`, `errors`, `newline`, `closefd` and `opener`; a text file shall have `seek`, `tell`, `truncate`, `fileno`, `isatty`, `readable`, `writable` and `seekable`, and the attributes `name`, `mode` and `closed`; closing `sys.stdout` or `sys.stderr` shall close it. | S | 0.4 |
+| LIB-14 | `open` shall accept binary modes, `+` modes, a mode that is not a literal, a file descriptor as the file, the encodings `ascii` and `latin-1`, and the arguments `buffering`, `errors`, `newline` and `closefd`; a text file shall have `seek`, `tell`, `truncate`, `fileno`, `isatty`, `readable`, `writable` and `seekable`, and the attributes `name`, `mode` and `closed`; closing `sys.stdout` or `sys.stderr` shall close it. | S | 0.4 |
+| LIB-15 | `math.fsum`, `math.dist`, `math.prod` and `math.sumprod` shall take items of a union of number types, and `math.prod` a `bool` start and items other than numbers. | C | 0.5 |
+| LIB-16 | `sys.version_info` shall be a value as CPython's: printed, stored, passed and imported with `from sys import version_info`. | C | 0.5 |
+| LIB-17 | The other names of `typing` and `collections.abc` that describe types, such as `Optional`, `Union`, `List`, `Dict`, `Callable`, `NamedTuple` and `Sequence`, shall be available. | S | 0.5 |
+| LIB-18 | `open` shall accept a callable `opener`, which opens the file and returns its descriptor. | C | 1.0 |
+| LIB-19 | `open` with a binary mode shall accept a `buffering` that is not a literal, giving a `typing.BinaryIO`. | C | 1.0 |
 
 ### 3.15 Memory management (MEM)
 
@@ -361,7 +378,7 @@ formatter applies; Ruff's formatter is the project's recommendation.
 | --- | --- | --- | --- |
 | MEM-01 | An object shall be freed when its last reference goes, with no tracing garbage collector and no pause. | M | 0.1 |
 | MEM-02 | `float`, `bool` and inline `int` values shall be held without a heap allocation in variables, fields and containers, so a `list[float]` stores 8 bytes per item. | M | 0.2 |
-| MEM-03 | An object the compiler proves does not outlive its function shall be allocated without a heap call. | S | 0.4 |
+| MEM-03 | An object the compiler proves does not outlive its function shall be allocated without a heap call. | S | 0.5 |
 | MEM-04 | Passing a variable or a constant as an argument shall cost no reference count operation, and returning a variable shall move its value to the caller. | M | 0.2 |
 | MEM-05 | Freed memory of one object shall be reused for a new object of the same size in the same function when the compiler can prove it safe. | C | 1.0 |
 | MEM-06 | Reference cycles shall be collected, without a background thread, and only objects whose class can be part of a cycle shall pay for cycle tracking (ADR-0001). | S | 1.0 |
@@ -445,8 +462,8 @@ cache, unless a row says otherwise.
 | 0.1 | Functions, `int`, `float`, `bool`, `str`, `None`, `if`, `while`, `for` over `range`, operators | `build`, `run`, `check`, `--emit`; runtime; diagnostics; Linux x86_64 |
 | 0.2 | `list`, `tuple`, `dict`, `set`, `bytes`, classes without inheritance, f-strings, comprehensions, slicing | Unboxed values, reference count elision; user documentation |
 | 0.3 | `try`, `raise`, user exceptions, `with`, `assert`, `del`, `global`, modules and packages, lazy imports | `sys`, `math`, `open`; `typy.toml` with `python-floor`; JSON diagnostics; the first warnings and `--deny-warnings` |
-| 0.4 | Dataclasses, inheritance, protocols, PEP 695 generics, narrowing, `Final`, `type` aliases | Stack allocation |
-| 0.5 | `match`, `:=`, C interoperability through `ctypes` | Libraries and exports; Linux and macOS AArch64; cross-compilation |
+| 0.4 | Dataclasses, inheritance, protocols, PEP 695 generics, narrowing, `Final`, `type` aliases | Binary files and the rest of `open` |
+| 0.5 | `match`, `:=`, C interoperability through `ctypes` | Stack allocation; libraries and exports; Linux and macOS AArch64; cross-compilation |
 | 1.0 | Closures, `lambda`, `nonlocal`, generators, `*args`, keyword-only parameters | Cycle collection, `weakref`; Windows; performance budgets |
 
 ## 6. Out of scope

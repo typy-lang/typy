@@ -110,19 +110,6 @@ impl BodyChecker<'_> {
             {
                 Int
             }
-            Op::Mod if l == Str => {
-                self.diagnostics.push(
-                    Diagnostic::new(
-                        DiagnosticCode::error(201),
-                        span,
-                        "formatting with `%` a format that is not a string literal is planned \
-                         for TyPy 0.4 (LIB-11)",
-                    )
-                    .with_rule(RuleId::LIB_11)
-                    .with_help("write the format as a literal, or write an f-string"),
-                );
-                Error
-            }
             _ => self.operator_error(symbol, &l, &r, span),
         }
     }
@@ -194,28 +181,8 @@ impl BodyChecker<'_> {
                 // `False` and `None` are each the only object of its value, so `bool` and
                 // `bool | None` values compare by identity too (EXP-08).
                 let instance = |ty: &Type| match ty {
-                    Type::Optional(inner) => matches!(
-                        inner.as_ref(),
-                        Type::Instance(..)
-                            | Type::Exception(_)
-                            | Type::Iterator(_)
-                            | Type::TypeObject(_)
-                            | Type::Module(_)
-                            | Type::AnyModule
-                            | Type::TextFile
-                            | Type::Traceback
-                    ),
-                    other => matches!(
-                        other,
-                        Type::Instance(..)
-                            | Type::Exception(_)
-                            | Type::Iterator(_)
-                            | Type::Traceback
-                            | Type::Module(_)
-                            | Type::AnyModule
-                            | Type::TextFile
-                            | Type::TypeObject(_)
-                    ),
+                    Type::Optional(inner) => has_identity(inner),
+                    other => has_identity(other),
                 };
                 let singleton =
                     |ty: &Type| *ty == Type::Bool || *ty == Type::Optional(Box::new(Type::Bool));
@@ -327,11 +294,17 @@ impl BodyChecker<'_> {
     }
 }
 
-/// Adds to an error about an optional operand how to use the value it holds (TYP-13).
+/// Adds to an error about an optional operand how to use the value it holds (TYP-13), and
+/// to one about a union how TyPy uses it member by member (TYP-14).
 fn with_narrowing_help(diagnostic: Diagnostic, left: &Type, right: &Type) -> Diagnostic {
     if matches!(left, Type::Optional(_)) || matches!(right, Type::Optional(_)) {
         diagnostic.with_help(
             "an optional value is used after a test shows it is not None, such as `if value is not None:`",
+        )
+    } else if matches!(left, Type::Union(_)) || matches!(right, Type::Union(_)) {
+        diagnostic.with_help(
+            "assign the union to a variable, which TyPy uses member by member, or narrow it \
+             with `isinstance`",
         )
     } else {
         diagnostic
@@ -353,5 +326,27 @@ fn binary_symbol(operator: BinaryOperator) -> &'static str {
         BinaryOperator::BitXor => "^",
         BinaryOperator::BitAnd => "&",
         BinaryOperator::FloorDiv => "//",
+    }
+}
+
+/// Returns true when CPython defines the identity of every value of the type, as it does for
+/// instances, exceptions, iterators, modules, files, tracebacks and type objects, and for a
+/// union of such types (EXP-08, TYP-14).
+fn has_identity(ty: &Type) -> bool {
+    match ty {
+        Type::Union(members) => members.iter().all(has_identity),
+        other => matches!(
+            other,
+            Type::Instance(..)
+                | Type::Exception(_)
+                | Type::Iterator(_)
+                | Type::Traceback
+                | Type::Module(_)
+                | Type::AnyModule
+                | Type::TextFile
+                | Type::BinaryFile(_)
+                | Type::DescriptorFile(_)
+                | Type::TypeObject(_)
+        ),
     }
 }

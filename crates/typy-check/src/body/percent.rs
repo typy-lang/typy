@@ -1,7 +1,8 @@
-//! Checks `format % values` with a literal format (LIB-10): the format is read when the
-//! program is checked, and each conversion must fit the type of its value, since CPython
-//! would raise `TypeError` or `ValueError` for any program that does not fit. Messages are
-//! CPython 3.15's, the newest wording (OI-14).
+//! Checks `format % values` (LIB-10, LIB-11). A literal format is read when the program is
+//! checked, and each conversion must fit the type of its value, since CPython would raise
+//! `TypeError` or `ValueError` for any program that does not fit. A format known only when
+//! the program runs, or values in a `tuple[T, ...]`, are read by the runtime, which raises
+//! what CPython raises. Messages are CPython 3.15's, the newest wording (OI-14).
 
 use typy_diagnostics::{Diagnostic, DiagnosticCode, RuleId, Span};
 use typy_source::syntax::Expr;
@@ -71,6 +72,15 @@ impl BodyChecker<'_> {
                 ..values
             };
         }
+        // How many values a `tuple[T, ...]` holds is known only when the program runs.
+        if let Type::TupleOf(_) = values.ty {
+            let format = Self::typed(
+                TypedExprKind::Constant(crate::typed::TypedConstant::Str(format.to_owned())),
+                Type::Str,
+                format_span,
+            );
+            return Self::dynamic(format, values, span);
+        }
         match percent_parts(&pieces, &values.ty, values.span) {
             Ok(parts) => Self::typed(
                 TypedExprKind::PercentFormat {
@@ -85,6 +95,36 @@ impl BodyChecker<'_> {
     }
 }
 
+impl BodyChecker<'_> {
+    /// Returns `format % values` read when the program runs, when `format` is a `str` that is
+    /// not a literal (LIB-11).
+    pub(super) fn percent_dynamic(
+        operator: typy_source::syntax::BinaryOperator,
+        format: &TypedExpr,
+        values: &TypedExpr,
+        span: Span,
+    ) -> Option<TypedExpr> {
+        if operator != typy_source::syntax::BinaryOperator::Mod
+            || format.ty != Type::Str
+            || values.ty.has_error()
+        {
+            return None;
+        }
+        Some(Self::dynamic(format.clone(), values.clone(), span))
+    }
+
+    fn dynamic(format: TypedExpr, values: TypedExpr, span: Span) -> TypedExpr {
+        Self::typed(
+            TypedExprKind::PercentDynamic {
+                format: Box::new(format),
+                values: Box::new(values),
+            },
+            Type::Str,
+            span,
+        )
+    }
+}
+
 /// Returns the pieces of the text, each conversion with the value it takes; `span` is the
 /// right operand's, where a mismatch is reported.
 fn percent_parts(
@@ -93,7 +133,7 @@ fn percent_parts(
     span: Span,
 ) -> Result<Vec<PercentPart>, Box<Diagnostic>> {
     let mut arguments = Arguments {
-        values: percent_arguments(values, span)?,
+        values: percent_arguments(values),
         next: 0,
     };
     let mapping = matches!(values, Type::Dict(..));
@@ -139,30 +179,15 @@ fn percent_parts(
 
 /// Returns the values a format takes in order: the items of a tuple, or the right operand
 /// itself.
-fn percent_arguments(
-    values: &Type,
-    span: Span,
-) -> Result<Vec<(PercentValue, Type)>, Box<Diagnostic>> {
-    Ok(match values {
+fn percent_arguments(values: &Type) -> Vec<(PercentValue, Type)> {
+    match values {
         Type::Tuple(items) => items
             .iter()
             .enumerate()
             .map(|(index, item)| (PercentValue::Item(index), item.clone()))
             .collect(),
-        Type::TupleOf(_) => {
-            return Err(Box::new(
-                Diagnostic::new(
-                    DiagnosticCode::error(201),
-                    span,
-                    "formatting with `%` a tuple whose length is known only when the program \
-                     runs is planned for TyPy 0.4 (LIB-11)",
-                )
-                .with_rule(RuleId::LIB_11)
-                .with_help("give the values as a tuple display, such as `(a, b)`"),
-            ));
-        }
         other => vec![(PercentValue::Whole, other.clone())],
-    })
+    }
 }
 
 /// Returns a conversion with a key, `%(key)s`, whose value comes from a dict.

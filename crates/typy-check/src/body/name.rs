@@ -50,6 +50,14 @@ impl BodyChecker<'_> {
                     )),
                 );
             }
+            // The instance used other than through its attributes may reach a method that an
+            // override in a subclass defines, so `super().__init__()` in a subclass must come
+            // after the subclass's own attributes are assigned (ADR-0021).
+            if let Some(initializing) = self.initializing
+                && initializing.instance == symbol
+            {
+                self.program.classes[initializing.class.0 as usize].init_uses_instance = true;
+            }
             if let Some(initializing) = self.initializing
                 && initializing.instance == symbol
                 && !self.reported_incomplete
@@ -66,6 +74,18 @@ impl BodyChecker<'_> {
                 TypedExprKind::Local(symbol)
             };
             let read = Self::typed(kind, ty.clone(), span);
+            let not_none = self
+                .assigned
+                .as_ref()
+                .is_some_and(|facts| facts.contains(&Fact::NotNone(symbol)));
+            if let Some(narrowed) = self.narrowed_type(symbol, id) {
+                // A narrowed `T | None` a test showed is not `None` is a `T`.
+                let narrowed = match narrowed {
+                    Type::Optional(inner) if not_none => *inner,
+                    other => other,
+                };
+                return Self::narrowed_read(read, narrowed, span);
+            }
             // A test before this point showed the optional variable is not `None` (TYP-13);
             // a call may assign a variable a function declares `global`, so it is not narrowed.
             if let Type::Optional(inner) = ty
@@ -82,19 +102,8 @@ impl BodyChecker<'_> {
         if id == "__name__" {
             return Self::typed(TypedExprKind::ModuleName, Type::Str, span);
         }
-        if self.program.annotation_names.contains_key(id)
-            || self.program.annotation_modules.contains_key(id)
-        {
-            return self.error(
-                Diagnostic::new(
-                    DiagnosticCode::error(201),
-                    span,
-                    format!("using `{id}` as a value is planned for TyPy 0.4 (TYP-15)"),
-                )
-                .with_rule(RuleId::TYP_15)
-                .with_help("TyPy 0.3 reads it in annotations only"),
-                span,
-            );
+        if let Some(refused) = self.annotation_only(id, span) {
+            return refused;
         }
         if let Some(type_object) = self.type_object_named(id, span) {
             return self.through_lazy(id, type_object);
@@ -165,5 +174,94 @@ impl BodyChecker<'_> {
             .with_rule(RuleId::STD_04),
         };
         self.error(diagnostic, span)
+    }
+}
+
+impl BodyChecker<'_> {
+    /// Returns the narrowest type `isinstance` tests showed the variable holds here, if any;
+    /// a variable a function declares `global` may be assigned by a call, so it is not
+    /// narrowed (TYP-07).
+    pub(super) fn narrowed_type(&self, symbol: crate::typed::SymbolId, id: &str) -> Option<Type> {
+        if let Some((_, member)) = self
+            .splitting
+            .iter()
+            .rev()
+            .find(|(each, _)| *each == symbol)
+        {
+            return Some(member.clone());
+        }
+        if self.program.assigned_in_functions.contains(id) {
+            return None;
+        }
+        let facts = self.assigned.as_ref()?;
+        let mut narrowest: Option<&Type> = None;
+        for fact in facts {
+            let Fact::Narrowed(each, position) = fact else {
+                continue;
+            };
+            let Some(ty) = self
+                .narrowings
+                .get(*position as usize)
+                .filter(|_| *each == symbol)
+            else {
+                continue;
+            };
+            if narrowest.is_none_or(|current| ty.is_assignable_to(current)) {
+                narrowest = Some(ty);
+            }
+        }
+        narrowest.cloned()
+    }
+
+    /// Returns the read of a variable as the type a test narrowed it to: the value an
+    /// optional holds, then the instance as one of a derived class.
+    fn narrowed_read(read: TypedExpr, narrowed: Type, span: Span) -> TypedExpr {
+        let read = match &read.ty {
+            Type::Optional(inner) if !matches!(narrowed, Type::Optional(_)) => {
+                let inner = inner.as_ref().clone();
+                Self::typed(TypedExprKind::Unwrap(Box::new(read)), inner, span)
+            }
+            _ => read,
+        };
+        if read.ty == narrowed {
+            return read;
+        }
+        Self::typed(TypedExprKind::Downcast(Box::new(read)), narrowed, span)
+    }
+
+    /// Reports a name that only annotations read: a type alias of the module, or a name of
+    /// `typing`, `collections.abc` or `types`.
+    fn annotation_only(&mut self, id: &str, span: Span) -> Option<TypedExpr> {
+        if self.program.type_aliases.contains(id) {
+            return Some(self.error(
+                Diagnostic::new(
+                    DiagnosticCode::error(201),
+                    span,
+                    format!(
+                        "using the type alias `{id}` as a value is planned for TyPy 0.5 (SMT-12)"
+                    ),
+                )
+                .with_rule(RuleId::SMT_12)
+                .with_help("TyPy reads a type alias in annotations"),
+                span,
+            ));
+        }
+        if self.program.annotation_names.contains_key(id)
+            || self.program.annotation_modules.contains_key(id)
+        {
+            return Some(
+                self.error(
+                    Diagnostic::new(
+                        DiagnosticCode::error(201),
+                        span,
+                        format!("using `{id}` as a value is planned for TyPy 0.5 (TYP-17)"),
+                    )
+                    .with_rule(RuleId::TYP_17)
+                    .with_help("TyPy reads it in annotations"),
+                    span,
+                ),
+            );
+        }
+        None
     }
 }

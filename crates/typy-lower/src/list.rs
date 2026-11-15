@@ -14,8 +14,10 @@ use crate::ownership::Lowered;
 
 /// Returns the runtime's code for the kind of item a list of `item` holds, the numbering of the
 /// runtime's `ItemKind`.
-fn item_kind(item: TyirType) -> i64 {
+fn item_kind(item: TyirType, tuples: &typy_tyir::TupleTypes) -> i64 {
     match item {
+        // A union is a tuple of its tag and its slots, read by the tag (ADR-0027).
+        TyirType::Tuple(id) if tuples.is_union(id) => 11,
         TyirType::Int => 0,
         TyirType::Float => 1,
         TyirType::Bool => 2,
@@ -42,7 +44,8 @@ impl FunctionLowerer<'_> {
     /// Returns the operands that tell the runtime how a new list or set stores items of type
     /// `item`: the code of its kind, and the descriptor of a tuple, or 0.
     pub(crate) fn item_layout(&mut self, item: TyirType, span: Span) -> (ValueId, ValueId) {
-        let kind = self.constant(Constant::Int(item_kind(item).to_string()), span);
+        let kind = item_kind(item, self.tuple_types);
+        let kind = self.constant(Constant::Int(kind.to_string()), span);
         let descriptor =
             if let TyirType::Tuple(id) | TyirType::Optional(OptionalBase::Tuple(id)) = item {
                 self.constant(Constant::TupleDescriptor(id), span)
@@ -151,14 +154,18 @@ impl FunctionLowerer<'_> {
     /// Returns whether a list has items, for a truth test (EXP-10).
     pub(crate) fn list_truth(&mut self, list: Lowered, span: Span) -> ValueId {
         let length = self.list_length(list, span);
-        self.builder.push_value(
+        let truth = self.builder.push_value(
             Operation::IsTrue {
                 kind: ScalarKind::Int,
                 value: length.value,
             },
             TyirType::Bool,
             span,
-        )
+        );
+        // The length is a new `int`; once tested it is released, so no path that leaves the
+        // function later releases it again.
+        self.release(length, span);
+        truth
     }
 
     /// Returns `item in list`; the operands are not released.

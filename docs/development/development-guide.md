@@ -200,7 +200,9 @@ the actions and one for the Cargo dependencies of the workspace and of
 `fuzz/`. The repository's settings protect
 `main`: pull requests only, the quality gate job required, linear history,
 squash merges and no force pushes; and the `release` environment requires a
-maintainer's approval.
+maintainer's approval. A merged branch is deleted, except a release branch:
+the ruleset "release branches" forbids deleting any `release-*` branch, so
+each release's branch stays on origin and an issue can be traced to it.
 
 ## 9. Releases
 

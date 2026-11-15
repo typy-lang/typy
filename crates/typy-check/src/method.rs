@@ -194,6 +194,22 @@ pub enum Method {
     TextWritelines,
     /// `file.close()`: writes out what the file holds and closes it.
     TextClose,
+    /// `file.fileno()`: the file's descriptor (LIB-14).
+    TextFileno,
+    /// `file.isatty()`: whether the file is a terminal.
+    TextIsatty,
+    /// `file.readable()`: whether the file can be read.
+    TextReadable,
+    /// `file.writable()`: whether the file can be written.
+    TextWritable,
+    /// `file.seekable()`: whether the file's position can move.
+    TextSeekable,
+    /// `file.seek(cookie, whence=0)`: moves to a position `tell` gave, or to the end.
+    TextSeek,
+    /// `file.tell()`: the file's position.
+    TextTell,
+    /// `file.truncate(pos=None)`: cuts or extends the file to `pos` bytes or its position.
+    TextTruncate,
 }
 
 /// The methods of `str` that `bytes` has too, with ASCII meaning.
@@ -351,7 +367,7 @@ impl Method {
                 .find(|method| method.name() == name)
                 .copied();
         }
-        if *receiver == Type::TextFile {
+        if receiver.is_file() {
             return match name {
                 "write" => Some(Self::TextWrite),
                 "flush" => Some(Self::TextFlush),
@@ -360,6 +376,14 @@ impl Method {
                 "readlines" => Some(Self::TextReadlines),
                 "writelines" => Some(Self::TextWritelines),
                 "close" => Some(Self::TextClose),
+                "fileno" => Some(Self::TextFileno),
+                "isatty" => Some(Self::TextIsatty),
+                "readable" => Some(Self::TextReadable),
+                "writable" => Some(Self::TextWritable),
+                "seekable" => Some(Self::TextSeekable),
+                "seek" => Some(Self::TextSeek),
+                "tell" => Some(Self::TextTell),
+                "truncate" => Some(Self::TextTruncate),
                 _ => None,
             };
         }
@@ -473,6 +497,14 @@ impl Method {
             Self::TextReadlines => "readlines",
             Self::TextWritelines => "writelines",
             Self::TextClose => "close",
+            Self::TextFileno => "fileno",
+            Self::TextIsatty => "isatty",
+            Self::TextReadable => "readable",
+            Self::TextWritable => "writable",
+            Self::TextSeekable => "seekable",
+            Self::TextSeek => "seek",
+            Self::TextTell => "tell",
+            Self::TextTruncate => "truncate",
         }
     }
 }

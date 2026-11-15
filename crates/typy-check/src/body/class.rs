@@ -88,14 +88,15 @@ impl BodyChecker<'_> {
     /// Checks the value an attribute expression reads or assigns; the instance `__init__` is
     /// building is read without the check that it is complete.
     fn instance_object(&mut self, value: &Expr) -> TypedExpr {
-        match self.initialized_instance(value) {
-            Some((initializing, span)) => Self::typed(
+        if let Some((initializing, span)) = self.initialized_instance(value) {
+            return Self::typed(
                 TypedExprKind::Local(initializing.instance),
                 self.program.instance_type(initializing.class),
                 span,
-            ),
-            None => self.expression(value),
+            );
         }
+        let object = self.expression(value);
+        self.through_union_base(object)
     }
 
     /// Returns an instance with its class, after reporting a value that is not an instance.
@@ -157,15 +158,36 @@ impl BodyChecker<'_> {
             return self.through_lazy_module(value, read);
         }
         let object = self.instance_object(value);
+        if let Type::TypeObject(Some(of)) = &object.ty
+            && let Some(class) = Self::program_class(of)
+            && let Some(read) = self.class_value_read(class, attribute, span)
+        {
+            return read;
+        }
         if let Type::TypeObject(_) = object.ty {
             return self.type_object_attribute(object, attribute, span);
         }
-        if object.ty == Type::TextFile {
-            return self.missing_file_name(&attribute.name, attribute.span, span);
+        if object.ty.is_file() {
+            return self.file_attribute(object, attribute, span);
+        }
+        if let Some(field) = self.os_error_field(&object, attribute, span) {
+            return field;
         }
         let Some((object, class)) = self.as_instance(object) else {
             return Self::invalid_call(span);
         };
+        if let Some(getter) = self.property_getter(class, &attribute.name) {
+            return self.property_read(object, getter, span);
+        }
+        // A class variable is read through an instance; reading it does not evaluate the
+        // instance again, which is a variable or an attribute, so it has no effect.
+        if self.program.classes[class.0 as usize]
+            .attribute(&attribute.name)
+            .is_none()
+            && let Some(read) = self.class_value_read(class, attribute, span)
+        {
+            return read;
+        }
         let Some(index) = self.attribute_index(class, attribute) else {
             return Self::invalid_call(span);
         };
@@ -240,12 +262,23 @@ impl BodyChecker<'_> {
         span: Span,
     ) -> Option<AssignTarget> {
         let (object, class) = self.instance(value)?;
+        if self.class_variable_through_instance(class, attribute, span) {
+            return None;
+        }
+        if self.refuse_property_target(class, attribute, span) {
+            return None;
+        }
         let index = self.attribute_index(class, attribute)?;
         let initializing = self.initialized_instance(value).is_some();
         // The attribute counts as assigned even when the value is wrong, so one cause gives
         // one error.
         if initializing && let Some(facts) = &mut self.assigned {
             facts.insert(Fact::Attribute(index));
+        }
+        if self.refuse_frozen_field(class, attribute, value, span)
+            || self.refuse_final_attribute(class, index, span)
+        {
+            return None;
         }
         // An inherited attribute takes its type from the class that declares it.
         let owner = self.program.declaring(class, index);
@@ -329,6 +362,53 @@ impl BodyChecker<'_> {
         })
     }
 
+    /// Returns the error for making an instance of a class whose attributes the `__init__`
+    /// that runs, its own or its nearest base's, does not all assign: one the class body
+    /// declares without an `__init__` of the class, which CPython reports as missing when it
+    /// is read (CLS-01).
+    fn unassigned_on_creation(&self, class: ClassId, span: Span) -> Option<Diagnostic> {
+        let info = &self.program.classes[class.0 as usize];
+        let mut current = Some(class);
+        let mut assigned = 0;
+        while let Some(each) = current {
+            let other = &self.program.classes[each.0 as usize];
+            if other.init.is_some() {
+                assigned = other.attributes.len();
+                break;
+            }
+            current = other.base;
+        }
+        let defaults = self.defaults(class);
+        let missing: Vec<String> = info
+            .attributes
+            .iter()
+            .enumerate()
+            .skip(assigned)
+            .filter(|(index, _)| !defaults.contains(index))
+            .map(|(_, attribute)| format!("`{}`", attribute.name))
+            .collect();
+        if missing.is_empty() {
+            return None;
+        }
+        Some(
+            Diagnostic::new(
+                DiagnosticCode::error(309),
+                span,
+                format!(
+                    "an instance of `{}` would hold {} without a value, since no `__init__` \
+                     that runs assigns it",
+                    info.name,
+                    missing.join(", ")
+                ),
+            )
+            .with_rule(RuleId::CLS_01)
+            .with_help(format!(
+                "define `__init__` in `{}` and assign it there",
+                info.name
+            )),
+        )
+    }
+
     /// Checks `Class(arguments)`: the arguments of `__init__`, without the instance, or none
     /// for a class without `__init__`. An exception class without `__init__` takes positional
     /// arguments of any type, as its built-in base does.
@@ -339,12 +419,31 @@ impl BodyChecker<'_> {
         keywords: &[Keyword],
         span: Span,
     ) -> TypedExpr {
+        if let Some(refused) = self.protocol_called(class, arguments, span) {
+            return refused;
+        }
+        let class = match self.class_to_call(class, arguments, keywords, span) {
+            Ok(class) => class,
+            Err(error) => return error,
+        };
         let name = self.program.classes[class.0 as usize].name.clone();
+        if let Some(diagnostic) = self.unassigned_on_creation(class, span) {
+            for argument in arguments {
+                self.expression(argument);
+            }
+            return self.error(diagnostic, span);
+        }
         let init = self.program.method(class, "__init__");
         let ty = self.program.instance_type(class);
         if let Type::Exception(exception) = &ty {
             let exception = exception.clone();
             return match init {
+                Some(_)
+                    if let Some(refused) =
+                        self.os_error_with_init(&exception, &name, arguments, span) =>
+                {
+                    refused
+                }
                 Some(function) => {
                     match self.bind_arguments(function, 1, &name, arguments, keywords, span) {
                         Ok(bound) => Self::typed(
@@ -410,6 +509,38 @@ impl BodyChecker<'_> {
         span: Span,
     ) -> TypedExpr {
         let found = self.program.method(class, &name.name);
+        if found.is_none() && self.refuse_class_method_through_instance(class, name) {
+            for argument in arguments {
+                self.expression(argument);
+            }
+            return Self::invalid_call(span);
+        }
+        if found.is_some() && self.property_getter(class, &name.name).is_some() {
+            return self.uncallable_property(class, name, arguments, span);
+        }
+        if let Some(method) = found.filter(|_| self.is_static_method(class, &name.name)) {
+            // The instance only names the class, so reading it has no effect to keep.
+            if !matches!(
+                receiver.kind,
+                TypedExprKind::Local(_) | TypedExprKind::ModuleVariable(_)
+            ) {
+                for argument in arguments {
+                    self.expression(argument);
+                }
+                return self.error(
+                    Diagnostic::new(
+                        DiagnosticCode::error(201),
+                        name.span,
+                        "calling a static method through an expression other than a variable \
+                         is planned for TyPy 0.5 (CLS-06)",
+                    )
+                    .with_rule(RuleId::CLS_06)
+                    .with_help("call it through its class"),
+                    span,
+                );
+            }
+            return self.static_call(method, class, name, arguments, keywords, span);
+        }
         let info = &self.program.classes[class.0 as usize];
         let Some(method) = found else {
             let message = if info.attribute(&name.name).is_some() {
@@ -431,22 +562,80 @@ impl BodyChecker<'_> {
             );
         };
         let qualified = format!("{}.{}", info.name, name.name);
+        // An inherited method takes the instance as an instance of the class that defines it.
+        let owner = self.program.signatures[method.0 as usize]
+            .parameters
+            .first()
+            .map(|parameter| parameter.ty.clone());
         let mut bound = vec![Argument {
             parameter: 0,
-            value: receiver,
+            value: Self::converted(receiver, owner.as_ref()),
         }];
-        match self.bind_arguments(method, 1, &qualified, arguments, keywords, span) {
+        let (target, signature) = match self.method_target(
+            (class, &name.name),
+            method,
+            1,
+            &qualified,
+            (arguments, keywords),
+            span,
+        ) {
+            Ok(found) => found,
+            Err(error) => return error,
+        };
+        match self.bind_to(&signature, 1, &qualified, arguments, keywords, span) {
             Ok(arguments) => bound.extend(arguments),
             Err(error) => return error,
         }
-        let returns = self.program.signatures[method.0 as usize].returns.clone();
         Self::typed(
             TypedExprKind::Call {
-                function: method,
+                function: target,
                 arguments: bound,
+                // A copy of a generic method is in no method table, and no class overrides it.
+                dispatch: target == method,
             },
-            returns,
+            signature.returns,
             span,
         )
+    }
+
+    /// Reports an assignment to an attribute declared `Final` other than its declaration in
+    /// `__init__`; returns true when it reports one (TYP-08).
+    pub(super) fn refuse_final_attribute(
+        &mut self,
+        class: ClassId,
+        index: usize,
+        span: Span,
+    ) -> bool {
+        let owner = self.program.declaring(class, index);
+        let info = &self.program.classes[owner.0 as usize];
+        let Some(&(_, declared)) = info.final_attributes.iter().find(|(at, _)| *at == index) else {
+            return false;
+        };
+        if declared == span {
+            return false;
+        }
+        let message = format!(
+            "`{}.{}` is declared `Final`, so it is not assigned again",
+            info.name, info.attributes[index].name
+        );
+        self.diagnostics.push(
+            Diagnostic::new(DiagnosticCode::error(414), span, message)
+                .with_rule(RuleId::TYP_08)
+                .with_label(declared, "declared here"),
+        );
+        true
+    }
+
+    /// Returns true when the statement at `span` is a `Final` declaration that the class of
+    /// `object` recorded from its `__init__` (TYP-08).
+    pub(super) fn final_attribute_declaration(&self, object: &Expr, span: Span) -> bool {
+        self.peek_type(object)
+            .and_then(|ty| ty.class_id())
+            .is_some_and(|class| {
+                self.program.classes[class.0 as usize]
+                    .final_attributes
+                    .iter()
+                    .any(|(_, declared)| *declared == span)
+            })
     }
 }

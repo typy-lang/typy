@@ -1,0 +1,62 @@
+//! Checks the `int` a class's `__len__` returns, as CPython's `len()` and truth tests check it
+//! (CLS-07).
+
+use super::value::Integer;
+use crate::Raising;
+use crate::exception::{ExceptionKind, raise};
+
+/// Returns the `int` word `__len__` returned when it is a length: a negative one raises
+/// `ValueError`, and one past `sys.maxsize` `OverflowError`, with CPython's messages.
+///
+/// # Safety
+///
+/// `word` is a live `int` word.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn typy_rt_int_length(word: i64) -> Raising<i64> {
+    // SAFETY: the caller passes a live `int` word.
+    let value = unsafe { Integer::from_word(word) };
+    if value.negative {
+        return Raising::error(
+            1,
+            raise(ExceptionKind::ValueError, "__len__() should return >= 0"),
+        );
+    }
+    if value
+        .to_i128()
+        .is_none_or(|length| length > i128::from(i64::MAX))
+    {
+        return Raising::error(
+            1,
+            raise(
+                ExceptionKind::OverflowError,
+                "cannot fit 'int' into an index-sized integer",
+            ),
+        );
+    }
+    Raising::ok(word)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::typy_rt_int_length;
+    use crate::word::inline;
+
+    #[test]
+    fn a_length_is_kept_and_a_negative_one_raises() {
+        let word = |value| inline(value).unwrap();
+        // SAFETY: inline words are live `int` words.
+        unsafe {
+            let kept = typy_rt_int_length(word(3));
+            assert!(kept.exception.is_null());
+            assert_eq!(kept.value, word(3));
+            let raised = typy_rt_int_length(word(-1));
+            assert!(!raised.exception.is_null());
+            crate::refcount::typy_rt_decrement(raised.exception.cast());
+            // A length past `sys.maxsize` raises `OverflowError`.
+            let large = super::Integer::from_i128(1 << 100).into_word();
+            let raised = typy_rt_int_length(large);
+            assert!(!raised.exception.is_null());
+            crate::refcount::typy_rt_decrement(raised.exception.cast());
+        }
+    }
+}

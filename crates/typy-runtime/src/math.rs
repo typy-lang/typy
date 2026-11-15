@@ -2,10 +2,12 @@
 //! the functions CPython computes itself, with CPython 3.15's results and messages (OI-14).
 
 mod c;
+mod gamma;
 mod integer;
 mod log;
 mod real;
 mod special;
+mod sums;
 #[cfg(test)]
 mod tests;
 

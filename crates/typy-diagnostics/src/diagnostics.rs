@@ -54,6 +54,12 @@ impl Diagnostics {
         self.items.len()
     }
 
+    /// Drops every diagnostic added after the first `length`, as a check that is repeated
+    /// with more knowledge drops what its first try found.
+    pub fn truncate(&mut self, length: usize) {
+        self.items.truncate(length);
+    }
+
     /// Returns true when there are none.
     #[must_use]
     pub fn is_empty(&self) -> bool {

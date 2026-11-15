@@ -20,6 +20,8 @@ fn floats_round_to_the_even_integer() {
         (-1.5, -2),
         (0.499_999_999_999_999_94, 0),
         (4_503_599_627_370_497.0, 4_503_599_627_370_497),
+        (2.75, 3),
+        (-2.25, -2),
     ];
     for (value, expected) in cases {
         let rounded = typy_rt_float_round(value);

@@ -1692,6 +1692,11 @@ const LOGS: &[(&str, u64, Outcome)] = &[
 /// `(function, n, outcome)` for the logarithms of an `int`.
 const INT_LOGS: &[(&str, &str, Outcome)] = &[
     ("log", "1", Ok(0x0000_0000_0000_0000)),
+    (
+        "log",
+        "13582985290493858492773514283592667786034938469317445497485196697278130927542418487205392083207560592298578262953847383475038725543234929971155548342800628721885763499406390331782864144164680730766837160526223176512798435772129956553355286032203080380775759732320198985094884004069116123084147875437183658467465148948790552744165375",
+        Ok(0x4087_d3b1_f7e6_cc3c),
+    ),
     ("log", "2", Ok(0x3fe6_2e42_fefa_39ef)),
     ("log", "8", Ok(0x4000_a2b2_3f3b_ab73)),
     ("log", "10", Ok(0x4002_6bb1_bbb5_5516)),
@@ -1865,6 +1870,21 @@ const INT_ONES: &[(&str, &str, Result<&str, (&str, &str)>)] = &[
 /// `(function, n, k, outcome)` for `comb`, `perm`, `gcd` and `lcm`.
 const INT_TWOS: &[(&str, &str, &str, Result<&str, (&str, &str)>)] = &[
     ("comb", "5", "2", Ok("10")),
+    (
+        "comb",
+        "18446744073709551616",
+        "9223372036854775808",
+        Err((
+            "OverflowError",
+            "min(n - k, k) must not exceed 9223372036854775807",
+        )),
+    ),
+    (
+        "perm",
+        "18446744073709551616",
+        "9223372036854775808",
+        Err(("OverflowError", "k must not exceed 9223372036854775807")),
+    ),
     ("comb", "10", "3", Ok("120")),
     ("comb", "50", "25", Ok("126410606437752")),
     ("comb", "5", "6", Ok("0")),
@@ -2215,6 +2235,7 @@ fn the_logarithm_of_a_base_divides_by_its_logarithm() {
 }
 
 mod more;
+mod sums;
 
 fn check_flag(found: Raising<bool>, expected: &Result<bool, (&str, &str)>, case: &str) {
     match expected {
@@ -2258,11 +2279,12 @@ fn hypot_gives_cpythons_correctly_rounded_norm() {
             &format!("hypot{coordinates:x?}"),
         );
     }
-    let list = crate::list::new_list(crate::list::ItemKind::Float, 2);
+    let list = crate::list::new_list(crate::list::ItemKind::Float, 3);
     // SAFETY: the list is live and takes the bits of each float.
     unsafe {
         crate::list::push_retained(list, 3.0_f64.to_bits());
         crate::list::push_retained(list, (-4.0_f64).to_bits());
+        crate::list::push_retained(list, 0.0_f64.to_bits());
         assert_eq!(typy_rt_math_hypot(list), 5.0);
         crate::refcount::typy_rt_decrement(list.cast());
     }
@@ -2372,4 +2394,13 @@ fn every_pair_of_special_values_gives_cpythons_result() {
         let (x, y) = (f64::from_bits(*x), f64::from_bits(*y));
         check(two(name, x, y), expected, &format!("{name}({x}, {y})"));
     }
+}
+
+#[test]
+fn a_domain_error_without_a_message_is_the_plain_one() {
+    check(
+        super::domain_error_of(2.0, None),
+        &Err(("ValueError", "math domain error")),
+        "domain_error_of(2.0, None)",
+    );
 }

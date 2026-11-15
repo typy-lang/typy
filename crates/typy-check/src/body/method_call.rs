@@ -6,7 +6,7 @@ use typy_source::syntax::{Constant, Expr, Identifier, Keyword};
 
 use super::BodyChecker;
 use crate::method::{Method, MethodSignature, Parameter, ParameterKind, ParameterType};
-use crate::typed::{Argument, TypedConstant, TypedExpr, TypedExprKind};
+use crate::typed::{Argument, FileAttribute, TypedConstant, TypedExpr, TypedExprKind};
 use crate::types::Type;
 
 impl BodyChecker<'_> {
@@ -21,7 +21,7 @@ impl BodyChecker<'_> {
         span: Span,
     ) -> Option<TypedExpr> {
         if is_super(receiver) {
-            return Some(self.super_call(name, arguments, keywords, span));
+            return Some(self.super_call(receiver, name, arguments, keywords, span));
         }
         let module = self.module_of(receiver)?;
         let call = self.module_call(&module, name, arguments, keywords, span);
@@ -40,7 +40,10 @@ impl BodyChecker<'_> {
         if let Some(call) = self.call_through(receiver, name, arguments, keywords, span) {
             return call;
         }
-        let receiver = self.expression(receiver);
+        let receiver = {
+            let receiver = self.expression(receiver);
+            self.through_union_base(receiver)
+        };
         if receiver.ty.has_error() {
             return Self::invalid_call(span);
         }
@@ -50,12 +53,22 @@ impl BodyChecker<'_> {
         {
             return self.call_fromkeys(arguments, keywords, None, span);
         }
+        if let Type::TypeObject(Some(of)) = &receiver.ty
+            && let Some(class) = Self::program_class(of)
+        {
+            return self.class_method_call(class, name, arguments, keywords, span);
+        }
         if let Some(class) = receiver.ty.class_id() {
             return self.instance_method_call(receiver, class, name, arguments, keywords, span);
         }
         let Some(method) = Method::of(&receiver.ty, &name.name) else {
             return self.unknown_method(&receiver.ty, name, span);
         };
+        // A program that may close a text file may close `sys.stdout`, so its `print` checks
+        // that standard output is open (LIB-14).
+        if method == Method::TextClose && receiver.ty == Type::TextFile {
+            self.program.closes_text_files = true;
+        }
         // `setdefault` without a default stores `None`, which only an optional value type holds.
         if method == Method::DictSetdefault
             && arguments.len() == 1
@@ -82,7 +95,7 @@ impl BodyChecker<'_> {
         let Some(bound) = self.bind(method, &signature, arguments, keywords, span) else {
             return Self::invalid_call(span);
         };
-        let text = if receiver.ty == Type::Bytes {
+        let text = if receiver.ty == Type::Bytes || receiver.ty.binary_kind().is_some() {
             Type::Bytes
         } else {
             Type::Str
@@ -253,11 +266,26 @@ impl BodyChecker<'_> {
         );
     }
 
-    /// Reports a method a built-in type does not have; a text file says which of its names
-    /// are planned (LIB-14).
+    /// Reports a method a built-in type does not have; a text file's attribute is not a
+    /// method (LIB-14).
     fn unknown_method(&mut self, receiver: &Type, name: &Identifier, span: Span) -> TypedExpr {
-        if *receiver == Type::TextFile {
-            return self.missing_file_name(&name.name, name.span, span);
+        if receiver.is_file() {
+            let Some((_, ty)) = FileAttribute::named(&name.name) else {
+                return self.missing_file_name(receiver, name, span);
+            };
+            return self.error(
+                Diagnostic::new(
+                    DiagnosticCode::error(401),
+                    name.span,
+                    format!(
+                        "`{}` of a text file is {} and cannot be called",
+                        name.name,
+                        ty.with_article()
+                    ),
+                )
+                .with_rule(RuleId::EXP_02),
+                span,
+            );
         }
         self.error(
             Diagnostic::new(
@@ -289,7 +317,7 @@ impl BodyChecker<'_> {
                 self.expect(&value, ty.clone(), &what);
                 value
             }
-            ParameterType::StrOrNone => {
+            ParameterType::StrOrNone | ParameterType::IntOrNone => {
                 let value = self.expression(argument);
                 if !matches!(
                     argument,
@@ -298,7 +326,12 @@ impl BodyChecker<'_> {
                         ..
                     }
                 ) {
-                    self.expect(&value, text.clone(), &what);
+                    let wanted = if parameter.ty == ParameterType::IntOrNone {
+                        Type::Int
+                    } else {
+                        text.clone()
+                    };
+                    self.expect(&value, wanted, &what);
                 }
                 value
             }
@@ -413,13 +446,13 @@ fn counted(count: usize, noun: &str) -> String {
     }
 }
 
-/// Returns true for `super()` with no arguments.
+/// Returns true for `super()`, with no arguments or two given by position.
 fn is_super(receiver: &Expr) -> bool {
     matches!(
         receiver,
         Expr::Call { function, arguments, keywords, .. }
             if matches!(function.as_ref(), Expr::Name { id, .. } if id == "super")
-                && arguments.is_empty()
+                && matches!(arguments.len(), 0 | 2)
                 && keywords.is_empty()
     )
 }

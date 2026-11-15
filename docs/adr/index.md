@@ -26,3 +26,14 @@ supersedes it.
 | [ADR-0018](0018-provide-math-and-sys-as-checker-tables-over-runtime-functions.md) | Provide math and sys as checker tables over runtime functions | Accepted | 2026-11-12 |
 | [ADR-0019](0019-open-text-files-over-buffered-descriptors-with-cpythons-errors.md) | Open text files over buffered descriptors with CPython's errors | Accepted | 2026-11-12 |
 | [ADR-0020](0020-bound-nesting-as-cpython-does-and-compile-on-a-large-stack.md) | Bound nesting as CPython does and compile on a large stack | Accepted | 2026-11-13 |
+| [ADR-0021](0021-extend-the-base-layout-and-call-overrides-through-a-method-table.md) | Extend the base layout and call overrides through a method table | Accepted | 2026-11-13 |
+| [ADR-0022](0022-hold-a-union-of-objects-as-a-pointer-and-others-as-a-tag-and-value.md) | Hold a union of objects as a pointer and others as a tag and value | Superseded by ADR-0027 | 2026-11-13 |
+| [ADR-0023](0023-compile-generics-and-protocol-parameters-to-one-copy-per-concrete-type.md) | Compile generics and protocol parameters to one copy per concrete type | Accepted | 2026-11-13 |
+| [ADR-0024](0024-keep-class-variables-in-globals-and-defaults-in-each-instance.md) | Keep class variables in globals and defaults in each instance | Accepted | 2026-11-13 |
+| [ADR-0025](0025-compile-a-class-method-once-for-each-class-that-has-it.md) | Compile a class method once for each class that has it | Accepted | 2026-11-13 |
+| [ADR-0026](0026-call-operator-methods-directly-and-from-the-type-object-slots.md) | Call operator methods directly and from the type object slots | Accepted | 2026-11-13 |
+| [ADR-0027](0027-hold-a-union-as-its-object-or-as-a-tuple-of-a-tag-and-a-slot-per-member.md) | Hold a union as its object, or as a tuple of a tag and a slot per member | Accepted | 2026-11-13 |
+| [ADR-0028](0028-make-each-copy-of-a-generic-class-answer-as-the-generic-class.md) | Make each copy of a generic class answer as the generic class | Accepted | 2026-11-14 |
+| [ADR-0029](0029-report-cpython-3-15-as-the-python-version-of-a-built-program.md) | Report CPython 3.15 as the Python version of a built program | Accepted | 2026-11-14 |
+| [ADR-0030](0030-read-exception-args-and-exit-codes-where-a-program-uses-them.md) | Read exception args and exit codes where a program uses them | Accepted | 2026-11-14 |
+| [ADR-0031](0031-type-a-file-by-its-literal-mode-and-a-mode-value-as-text.md) | Type a file by its literal mode, and a mode value as text | Accepted | 2026-11-14 |

@@ -13,9 +13,29 @@ use crate::types::Type;
 
 impl BodyChecker<'_> {
     pub(super) fn statements(&mut self, statements: &[&Stmt]) -> Vec<TypedStmt> {
-        statements
+        let mut typed = Vec::new();
+        for statement in statements {
+            if let Stmt::ClassDef { name, body, .. } = statement {
+                typed.extend(self.class_body_values(&name.name, body));
+            } else {
+                typed.extend(self.statement(statement));
+            }
+        }
+        typed
+    }
+
+    /// Checks the values a class body gives, as assignments to the module variables that hold
+    /// them, where the `class` statement runs (CLS-11, ADR-0024).
+    fn class_body_values(&mut self, class: &str, body: &[Stmt]) -> Vec<TypedStmt> {
+        let values = crate::check::class_values(
+            class,
+            body,
+            &self.program.annotation_names,
+            &self.program.annotation_modules,
+        );
+        values
             .iter()
-            .filter_map(|statement| self.statement(statement))
+            .filter_map(|value| self.statement(&value.assignment))
             .collect()
     }
 
@@ -32,6 +52,28 @@ impl BodyChecker<'_> {
                 value,
                 span,
             } => {
+                if let [
+                    Expr::Attribute {
+                        value: object,
+                        attribute,
+                        ..
+                    },
+                ] = targets.as_slice()
+                    && let Some(call) = self.property_assignment(object, attribute, value, *span)
+                {
+                    return Some(call);
+                }
+                if let [
+                    Expr::Subscript {
+                        value: object,
+                        index,
+                        ..
+                    },
+                ] = targets.as_slice()
+                    && let Some(call) = self.item_assignment(object, index, value, *span)
+                {
+                    return Some(call);
+                }
                 let expected = match targets.as_slice() {
                     [single] => self.known_type(single),
                     _ => None,
@@ -59,10 +101,36 @@ impl BodyChecker<'_> {
                 span,
                 ..
             } => {
-                let declared = self.annotation(annotation);
-                let value = self.expression_expecting(value, Some(&declared));
+                // `Final[T]` declares `T`, and a bare `Final` takes the value's type (TYP-08).
+                let declared = match crate::check::final_type(
+                    annotation,
+                    &self.program.annotation_names,
+                    &self.program.annotation_modules,
+                ) {
+                    Some(qualified) => {
+                        if !self.final_attribute_declaration(object, *span) {
+                            self.diagnostics.push(
+                                Diagnostic::new(
+                                    DiagnosticCode::error(408),
+                                    annotation.span(),
+                                    "`Final` declares an attribute in the body of `__init__`, \
+                                     as `self.name: Final = value`",
+                                )
+                                .with_rule(RuleId::TYP_08),
+                            );
+                        }
+                        match qualified {
+                            crate::check::ClassVarAnnotation::Typed(inner) => {
+                                Some(self.annotation(inner))
+                            }
+                            crate::check::ClassVarAnnotation::Bare => None,
+                        }
+                    }
+                    None => Some(self.annotation(annotation)),
+                };
+                let value = self.expression_expecting(value, declared.as_ref());
                 let target =
-                    self.attribute_target(object, attribute, &value.ty, Some(declared), *span)?;
+                    self.attribute_target(object, attribute, &value.ty, declared, *span)?;
                 TypedStmt::Assign {
                     targets: vec![target],
                     value,
@@ -92,9 +160,34 @@ impl BodyChecker<'_> {
             } => {
                 let current = self.expression(target);
                 let value = self.expression(value);
+                // Without `__iadd__`, which is planned, `x += y` on an instance is `x = x + y`
+                // (CLS-07).
+                let (current, value) = match self.operator_binary(*operator, current, value, *span)
+                {
+                    super::operator_method::Comparison::Called(call) => {
+                        return self.rebound(target, call, *span);
+                    }
+                    super::operator_method::Comparison::Builtin(current, value) => (current, value),
+                };
                 let (current, value) = Self::tuple_operands(*operator, current, value);
+                if let Some(formatted) = Self::percent_dynamic(*operator, &current, &value, *span) {
+                    return self.rebound(target, formatted, *span);
+                }
                 let result = self.binary_type(*operator, &current, &value, *span);
-                let target = if let Expr::Subscript { .. } | Expr::Attribute { .. } = target {
+                let class_value = match target {
+                    Expr::Attribute {
+                        value: object,
+                        attribute,
+                        ..
+                    } => self.augmented_class_value(object, attribute, &current, &result, *span),
+                    _ => None,
+                };
+                let target = if let Some(assignment) = class_value {
+                    match assignment {
+                        super::class_value::ClassValueAssignment::Assigned(target) => target,
+                        super::class_value::ClassValueAssignment::Refused => return None,
+                    }
+                } else if let Expr::Subscript { .. } | Expr::Attribute { .. } = target {
                     self.augmented_item(current, &result, *span)?
                 } else {
                     AssignTarget::Name(self.assign(target, result, &value)?)
@@ -106,6 +199,16 @@ impl BodyChecker<'_> {
                     span: *span,
                 }
             }
+            // `...` alone does nothing, as `pass` does (GEN-04).
+            Stmt::Pass { span }
+            | Stmt::Expr {
+                value:
+                    Expr::Constant {
+                        value: typy_source::syntax::Constant::Ellipsis,
+                        ..
+                    },
+                span,
+            } => TypedStmt::Pass { span: *span },
             Stmt::Expr { value, span } => TypedStmt::Expr {
                 value: self.expression(value),
                 span: *span,
@@ -184,7 +287,6 @@ impl BodyChecker<'_> {
                 orelse,
                 span,
             } => self.for_statement(target, iter, body, orelse, *span)?,
-            Stmt::Pass { span } => TypedStmt::Pass { span: *span },
             Stmt::Break { span } => {
                 self.check_stays_in_finally("break", *span);
                 let state = self.assigned.take();
@@ -202,11 +304,43 @@ impl BodyChecker<'_> {
                 return self.import_statement(statement, *span);
             }
             // `global` changes where names resolve, which `declare_globals` did.
+            // The aliases are expanded in the annotations, and a program reads none as a value.
             Stmt::AnnAssign { value: None, .. }
             | Stmt::Global { .. }
+            | Stmt::TypeAlias { .. }
             | Stmt::FunctionDef { .. }
             | Stmt::ClassDef { .. }
             | Stmt::Other { .. } => return None,
+        })
+    }
+
+    /// Returns `target = value` for an augmented assignment whose operator called a method:
+    /// a variable, or an attribute of one, which reading again has no effect.
+    fn rebound(&mut self, target: &Expr, value: TypedExpr, span: Span) -> Option<TypedStmt> {
+        let simple = match target {
+            Expr::Name { .. } => true,
+            Expr::Attribute { value: object, .. } => matches!(object.as_ref(), Expr::Name { .. }),
+            _ => false,
+        };
+        if !simple {
+            self.diagnostics.push(
+                Diagnostic::new(
+                    DiagnosticCode::error(201),
+                    span,
+                    "an augmented assignment to an item that calls an operator method is planned \
+                     for TyPy 0.5 (CLS-07)",
+                )
+                .with_rule(RuleId::CLS_07)
+                .with_help("write `item = item + value`"),
+            );
+            return None;
+        }
+        let ty = value.ty.clone();
+        let target = self.assign_target(target, ty, &value)?;
+        Some(TypedStmt::Assign {
+            targets: vec![target],
+            value,
+            span,
         })
     }
 
@@ -226,6 +360,7 @@ impl BodyChecker<'_> {
             for name in names {
                 if let Some(symbol) = self.locals.get(name) {
                     known.remove(&Fact::NotNone(*symbol));
+                    known.retain(|fact| !matches!(fact, Fact::Narrowed(each, _) if each == symbol));
                 }
             }
         }
@@ -265,8 +400,8 @@ impl BodyChecker<'_> {
         orelse: &[Stmt],
         span: Span,
     ) -> Option<TypedStmt> {
-        if self.is_range_call(iter) {
-            return self.for_range(target, iter, body, orelse, span);
+        if let Some(arguments) = self.range_arguments(iter) {
+            return self.for_range(target, (arguments, iter.span()), body, orelse, span);
         }
         let (source, item) = self.loop_source(iter, "`for`");
         // What each step binds has no expression of its own; diagnostics about it point at the
@@ -301,22 +436,15 @@ impl BodyChecker<'_> {
         })
     }
 
+    /// Checks `for target in range(...)`, given the arguments of the call and its span.
     pub(super) fn for_range(
         &mut self,
         target: &Expr,
-        iter: &Expr,
+        (arguments, call_span): (&[Expr], Span),
         body: &[Stmt],
         orelse: &[Stmt],
         span: Span,
     ) -> Option<TypedStmt> {
-        let Expr::Call {
-            arguments,
-            span: call_span,
-            ..
-        } = iter
-        else {
-            return None;
-        };
         let values: Vec<TypedExpr> = arguments
             .iter()
             .map(|argument| self.expression(argument))
@@ -327,7 +455,7 @@ impl BodyChecker<'_> {
         let constant = |digits: &str| TypedExpr {
             kind: TypedExprKind::Constant(TypedConstant::Int(digits.to_owned())),
             ty: Type::Int,
-            span: *call_span,
+            span: call_span,
         };
         let mut given = values.into_iter();
         let (first, limit, stride) = match (given.next(), given.next(), given.next()) {
@@ -343,6 +471,10 @@ impl BodyChecker<'_> {
         self.assigned = entry;
         let mut inside = self.assigned.clone().unwrap_or_default();
         inside.insert(Fact::Assigned(target));
+        // The counter is an `int`, so a `T | None` variable is not `None` in the body (TYP-13).
+        if matches!(self.types.get(&target), Some(Type::Optional(_))) {
+            inside.insert(Fact::NotNone(target));
+        }
         let before_loop = self.assigned.replace(inside);
         self.breaks.push(Vec::new());
         let body = self.block(body);
@@ -365,15 +497,18 @@ impl BodyChecker<'_> {
         })
     }
 
-    /// Returns true for a call of the builtin `range` with one to three positional arguments,
-    /// the form `for` lowers as a counting loop. A program function or variable named `range`
-    /// hides the builtin, as it does in a call.
-    fn is_range_call(&self, iter: &Expr) -> bool {
-        matches!(
-            self.called_builtin(iter),
+    /// Returns the arguments of a call of the builtin `range` with one to three positional
+    /// arguments, the form `for` lowers as a counting loop. A program function or variable
+    /// named `range` hides the builtin, as it does in a call.
+    fn range_arguments<'call>(&self, iter: &'call Expr) -> Option<&'call [Expr]> {
+        match self.called_builtin(iter) {
             Some((Builtin::Range, arguments, keywords))
-                if keywords.is_empty() && (1..=3).contains(&arguments.len())
-        )
+                if keywords.is_empty() && (1..=3).contains(&arguments.len()) =>
+            {
+                Some(arguments)
+            }
+            _ => None,
+        }
     }
 
     pub(super) fn return_statement(&mut self, value: Option<&Expr>, span: Span) -> TypedStmt {

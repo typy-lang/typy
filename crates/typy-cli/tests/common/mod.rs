@@ -50,6 +50,28 @@ impl Program {
         child.wait_with_output().unwrap()
     }
 
+    /// Returns the text of the program's `stage`, such as `tyir`, as `typy build --emit`
+    /// writes it.
+    #[allow(
+        dead_code,
+        reason = "only some of the test files that share this module read it"
+    )]
+    pub(crate) fn emit(&self, stage: &str) -> String {
+        let output = self.root().join(format!("app.{stage}"));
+        let built = Command::new(env!("CARGO_BIN_EXE_typy"))
+            .args(["build", "app.py", "--emit", stage, "-o", output.as_str()])
+            .current_dir(self.root())
+            .env("TYPY_HOME", self.root().join("home"))
+            .output()
+            .unwrap();
+        assert!(
+            built.status.success(),
+            "{}",
+            String::from_utf8_lossy(&built.stderr)
+        );
+        std::fs::read_to_string(output).unwrap()
+    }
+
     /// Returns the directory the program is built and run in.
     pub(crate) fn root(&self) -> &Utf8Path {
         Utf8Path::from_path(self.directory.path()).expect("the directory is UTF-8")

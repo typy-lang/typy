@@ -69,24 +69,24 @@ class C(object):
 fn later_features_name_their_release_and_rule() {
     let cases = [
         (
-            "class C(module.B):\n    pass\n",
-            "base classes other than `object` are planned for TyPy 0.4 (CLS-04)",
-        ),
-        (
             "@d\nclass C:\n    pass\n",
-            "class decorators are planned for TyPy 0.4 (CLS-05)",
+            "class decorators are planned for TyPy 1.0 (FUN-06)",
         ),
         (
-            "class C[T]:\n    pass\n",
-            "type parameters are planned for TyPy 0.4 (GEN-01)",
+            "class B:\n    pass\nclass C[T](B):\n    pass\n",
+            "generic classes with a base or a decorator are planned for TyPy 0.5 (GEN-08)",
         ),
         (
-            "class C:\n    x = 1\n",
-            "class variables are planned for TyPy 0.4 (CLS-11)",
+            "class C[T]:\n    pass\nclass D(C[int]):\n    pass\n",
+            "classes derived from a generic class are planned for TyPy 0.5 (GEN-08)",
         ),
         (
-            "class C:\n    x: int = 1\n",
-            "class variables are planned for TyPy 0.4 (CLS-11)",
+            "class C[T]:\n    pass\nclass D(C):\n    pass\n",
+            "classes derived from a generic class are planned for TyPy 0.5 (GEN-08)",
+        ),
+        (
+            "@decorated\nclass C[T]:\n    pass\n",
+            "generic classes with a base or a decorator are planned for TyPy 0.5 (GEN-08)",
         ),
         (
             "x = {**y}\n",
@@ -101,12 +101,13 @@ fn later_features_name_their_release_and_rule() {
             "generator expressions are planned for TyPy 1.0 (EXP-15)",
         ),
         (
-            "type X = int\n",
-            "`type` statements are planned for TyPy 0.4 (SMT-10)",
+            "def f() -> None:\n    type X = int\n",
+            "`type` statements inside functions, classes and blocks are planned for TyPy 0.5 \
+             (SMT-12)",
         ),
         (
-            "def f[T](x: T) -> T:\n    return x\n",
-            "type parameters are planned for TyPy 0.4 (GEN-01)",
+            "def f[*Ts](x: int) -> int:\n    return x\n",
+            "`*Ts` and `**P` type parameters are planned for TyPy 1.0 (GEN-06)",
         ),
         (
             "match x:\n    case _:\n        pass\n",
@@ -159,10 +160,6 @@ fn later_features_name_their_release_and_rule() {
         (
             "def f() -> None:\n    nonlocal x\n",
             "`nonlocal` statements are planned for TyPy 1.0 (SMT-09)",
-        ),
-        (
-            "def f(x: int | str) -> None:\n    pass\n",
-            "union annotations such as `int | str` are planned for TyPy 0.4 (TYP-14)",
         ),
         (
             "f()()\n",
@@ -347,4 +344,38 @@ fn an_assertion_of_a_tuple_with_items_is_w0301() {
             "this assertion is always true, since a tuple with items is true".to_owned()
         )]
     );
+}
+
+#[test]
+fn a_generic_class_is_named_with_its_type_arguments_in_annotations_and_calls() {
+    let source =
+        "class Box[T]:\n    pass\nx: Box[int] = Box[int]()\ny: Box[tuple[int, str]] = Box()\n";
+    assert_eq!(diagnostics(source), Vec::new());
+    let other = diagnostics("x: frozenset[int] = 1\nprint(frozenset[int]())\n");
+    assert_eq!(other.len(), 2, "{other:?}");
+}
+
+#[test]
+fn a_keyword_repeated_in_a_call_is_a_syntax_error() {
+    for (source, expected) in [
+        (
+            "print(1, sep=\"\", sep=\"\")\n",
+            "keyword argument repeated: sep",
+        ),
+        (
+            "import math\nprint(math.prod([1], start=1, start=2))\n",
+            "keyword argument repeated: start",
+        ),
+        (
+            "def f(a: int) -> None:\n    pass\nf(a=1, a=2)\n",
+            "keyword argument repeated: a",
+        ),
+    ] {
+        let found = diagnostics(source);
+        assert_eq!(
+            found,
+            [("E0103".to_owned(), expected.to_owned())],
+            "{source:?}"
+        );
+    }
 }

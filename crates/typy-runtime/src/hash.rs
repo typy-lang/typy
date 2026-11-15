@@ -62,6 +62,18 @@ fn frexp(value: f64) -> (f64, i32) {
     (mantissa, biased - 1022)
 }
 
+/// Returns the hash of the `int` a class's `__hash__` returns, as CPython's `hash()` reduces
+/// it, for the `hash` slot of the class's type object (CLS-07, ADR-0026).
+///
+/// # Safety
+///
+/// `word` is a live `int` word.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn typy_rt_int_hash(word: i64) -> i64 {
+    // SAFETY: the caller's guarantee.
+    unsafe { int(word) }
+}
+
 /// Returns the hash of a `float`, as CPython's `_Py_HashDouble` computes it: equal to the hash
 /// of an `int` of the same value. A NaN hashes to 0; CPython hashes it by its identity, which a
 /// TyPy float does not have (OI-18).

@@ -1,7 +1,10 @@
 //! Tests of `sys`: decoding the arguments, the list `sys.argv`, and the exit status an
 //! uncaught exception gives.
 
-use super::{INPUT_BLOCK, Input, decode, exit_status, keep_arguments, read_line, typy_rt_sys_argv};
+use super::{
+    decode, exit_status, keep_arguments, typy_rt_sys_argv, typy_rt_sys_getrecursionlimit,
+    typy_rt_sys_setrecursionlimit,
+};
 use crate::exception::classes::{EXCEPTION, SYSTEM_EXIT};
 use crate::exception::{ExceptionKind, ExceptionObject, raise, typy_rt_exception_new};
 use crate::int::limbs::Limbs;
@@ -158,75 +161,6 @@ fn any_other_exception_is_reported_and_ends_with_one() {
     }
 }
 
-/// Returns each line `read_line` gives from `chunks`, read one chunk at a time, until
-/// `EOFError`, with the text of the `EOFError`.
-fn lines_of(chunks: &[&[u8]]) -> (Vec<Vec<u32>>, Vec<u32>) {
-    let mut input = Input {
-        bytes: [0; INPUT_BLOCK],
-        start: 0,
-        end: 0,
-    };
-    let mut next = chunks.iter();
-    let mut lines = Vec::new();
-    loop {
-        let line = read_line(&mut input, |buffer| {
-            let Some(chunk) = next.next() else {
-                return 0;
-            };
-            buffer[..chunk.len()].copy_from_slice(chunk);
-            chunk.len()
-        });
-        if !line.exception.is_null() {
-            // SAFETY: the exception is live and owned here.
-            unsafe {
-                let str = (*line.exception).class().str.unwrap();
-                let text = str(line.exception.cast());
-                let found = points(text.value);
-                typy_rt_decrement(text.value.cast());
-                typy_rt_decrement(line.exception.cast());
-                return (lines, found);
-            }
-        }
-        lines.push(points(line.value));
-        // SAFETY: the line is owned here.
-        unsafe { typy_rt_decrement(line.value.cast()) };
-    }
-}
-
-fn text_points(text: &str) -> Vec<u32> {
-    text.chars().map(u32::from).collect()
-}
-
-#[test]
-fn input_gives_each_line_without_its_newline_then_eof_error() {
-    let end = text_points("EOF when reading a line");
-    let cases: [(&[&[u8]], &[&str]); 6] = [
-        (&[], &[]),
-        (&[b"one\n"], &["one"]),
-        (&[b"one\n\ntwo\r\n"], &["one", "", "two\r"]),
-        (&[b"last"], &["last"]),
-        (
-            &[b"sp", b"lit\nacross", b" chunks\n"],
-            &["split", "across chunks"],
-        ),
-        (&[b"caf\xc3", b"\xa9\n"], &["caf\u{e9}"]),
-    ];
-    for (chunks, expected) in cases {
-        let (lines, error) = lines_of(chunks);
-        let expected: Vec<Vec<u32>> = expected.iter().map(|line| text_points(line)).collect();
-        assert_eq!(lines, expected, "{chunks:?}");
-        assert_eq!(error, end, "{chunks:?}");
-    }
-}
-
-#[test]
-fn input_grows_its_line_past_the_first_allocation() {
-    let long = [b'x'; INPUT_BLOCK];
-    let (lines, _) = lines_of(&[&long, &long[..100], b"\n"]);
-    assert_eq!(lines.len(), 1);
-    assert_eq!(lines[0].len(), INPUT_BLOCK + 100);
-}
-
 static TWO_INT_FIELDS: [Field; 2] = [
     Field::plain(ItemKind::Int, 0),
     Field::plain(ItemKind::Int, 8),
@@ -247,6 +181,127 @@ fn system_exit_with_several_arguments_ends_with_one_after_writing_them() {
             &raw const TWO_INTS,
             words.as_ptr().cast(),
         );
+        assert_eq!(exit_status(exception), (1, false));
+        typy_rt_decrement(exception.cast());
+    }
+}
+
+/// A class of a program's own named `SystemExit`, which is not the built-in one.
+static OWN_SYSTEM_EXIT: TypeObject = TypeObject {
+    module: "app".as_ptr(),
+    module_length: 3,
+    ..TypeObject::new("SystemExit", &raw const EXCEPTION)
+};
+
+#[test]
+fn a_class_of_a_program_named_system_exit_is_reported() {
+    let exception = with_argument(&OWN_SYSTEM_EXIT, ItemKind::Int, inline(0));
+    // SAFETY: the exception is live and owned here.
+    unsafe {
+        assert_eq!(exit_status(exception), (1, true));
+        typy_rt_decrement(exception.cast());
+    }
+}
+
+#[test]
+fn the_recursion_limit_keeps_a_c_int_of_at_least_one() {
+    let overflow = Some("Python int too large to convert to C int");
+    let too_small = Some("recursion limit must be greater or equal than 1");
+    let cases = [
+        (inline(50), None, 50),
+        (inline(0), too_small, 50),
+        (inline(-5), too_small, 50),
+        (inline(2_147_483_648), overflow, 50),
+        (inline(2_147_483_647), None, 2_147_483_647),
+        (large(&[0, 1]), overflow, 2_147_483_647),
+    ];
+    for (word, message, limit) in cases {
+        // SAFETY: the word is an inline `int` or a live large one.
+        let error = unsafe { typy_rt_sys_setrecursionlimit(word.cast_signed()) };
+        let found = (!error.is_null()).then(|| {
+            // SAFETY: the exception and its message are live; the exception is owned here.
+            unsafe {
+                let text = points((*error).message);
+                typy_rt_decrement(error.cast());
+                String::from_iter(text.into_iter().filter_map(char::from_u32))
+            }
+        });
+        assert_eq!(found.as_deref(), message, "{word}");
+        assert_eq!(
+            typy_rt_sys_getrecursionlimit(),
+            crate::word::inline(limit).unwrap()
+        );
+    }
+}
+
+#[test]
+#[cfg_attr(miri, ignore = "Miri does not read standard input")]
+fn input_at_the_end_of_standard_input_raises_eof_error() {
+    // The test runner gives each test an empty standard input.
+    let prompt = from_str("name? ");
+    for given in [core::ptr::null(), prompt.cast_const()] {
+        // SAFETY: the prompt is null or live.
+        let read = unsafe { super::typy_rt_input(given) };
+        assert!(read.value.is_null());
+        // SAFETY: the exception is live and owned here.
+        unsafe {
+            let error = read.exception;
+            assert_eq!((*error).class().name(), "EOFError");
+            let text: String = points((*error).message)
+                .into_iter()
+                .filter_map(char::from_u32)
+                .collect();
+            assert_eq!(text, "EOF when reading a line");
+            typy_rt_decrement(error.cast());
+        }
+    }
+    // SAFETY: the prompt is owned here.
+    unsafe { typy_rt_decrement(prompt.cast()) };
+}
+
+unsafe extern "C" fn failing_str(
+    _: *mut crate::header::ObjectHeader,
+) -> crate::Raising<*mut StrObject> {
+    crate::Raising::error(
+        core::ptr::null_mut(),
+        raise(ExceptionKind::RuntimeError, "no text"),
+    )
+}
+
+/// A subclass of `SystemExit` whose `str` raises.
+static SILENT_EXIT: TypeObject = TypeObject {
+    str: Some(failing_str),
+    ..TypeObject::new("SilentExit", &raw const SYSTEM_EXIT)
+};
+
+#[test]
+fn system_exit_whose_value_has_no_text_ends_with_one() {
+    let exception = with_argument(
+        &SILENT_EXIT,
+        ItemKind::Object,
+        from_str("bye").expose_provenance() as u64,
+    );
+    // SAFETY: the exception is live and owned here.
+    unsafe {
+        assert_eq!(exit_status(exception), (1, false));
+        typy_rt_decrement(exception.cast());
+    }
+}
+
+#[test]
+#[cfg_attr(
+    miri,
+    ignore = "closing a standard file closes it for every test, and Miri runs them in one process"
+)]
+fn system_exit_with_another_value_ends_with_one_once_standard_error_is_closed() {
+    crate::io::close_standard(crate::libc::STDERR);
+    let exception = with_argument(
+        &SYSTEM_EXIT,
+        ItemKind::Object,
+        from_str("bye").expose_provenance() as u64,
+    );
+    // SAFETY: the exception is live and owned here.
+    unsafe {
         assert_eq!(exit_status(exception), (1, false));
         typy_rt_decrement(exception.cast());
     }

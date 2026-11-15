@@ -2,14 +2,14 @@
 //! ADR-0013).
 
 use typy_diagnostics::{Diagnostic, DiagnosticCode, RuleId, Span};
-use typy_source::syntax::{Constant, ExceptHandler, Expr, Identifier, Keyword, Stmt, WithItem};
+use typy_source::syntax::{Constant, ExceptHandler, Expr, Keyword, Stmt, WithItem};
 
 use super::BodyChecker;
 use super::flow::{Fact, meet};
-use crate::exception::{BuiltinException, ExceptionClass, common_base};
+use crate::exception::{BuiltinException, ExceptionClass};
 use crate::typed::{
-    Argument, RaiseCause, SymbolKind, TypedConstant, TypedExpr, TypedExprKind, TypedHandler,
-    TypedStmt, WithProtocol,
+    RaiseCause, SymbolKind, TypedConstant, TypedExpr, TypedExprKind, TypedHandler, TypedStmt,
+    WithProtocol,
 };
 use crate::types::{Type, TypeObjectOf};
 
@@ -68,7 +68,7 @@ impl BodyChecker<'_> {
                 span,
             );
         }
-        if let Some(error) = self.os_error_arguments(class.builtin(), &values, span) {
+        if let Some(error) = self.os_error_arguments(class.builtin(), &values, false, span) {
             return error;
         }
         Self::typed(
@@ -79,32 +79,6 @@ impl BodyChecker<'_> {
             },
             Type::Exception(class),
             span,
-        )
-    }
-
-    /// Refuses two or more arguments to `OSError` or a class derived from it: CPython reads
-    /// them as `errno`, `strerror` and `filename`, which is planned for 0.4 (EXC-14).
-    fn os_error_arguments(
-        &mut self,
-        builtin: BuiltinException,
-        values: &[TypedExpr],
-        span: Span,
-    ) -> Option<TypedExpr> {
-        if !builtin.is_os_error() || values.len() < 2 {
-            return None;
-        }
-        Some(
-            self.error(
-                Diagnostic::new(
-                    DiagnosticCode::error(201),
-                    values[1].span,
-                    "an `OSError` of two or more arguments, which CPython reads as `errno`, \
-                     `strerror` and `filename`, is planned for TyPy 0.4 (EXC-14)",
-                )
-                .with_rule(RuleId::EXC_14)
-                .with_help("give one argument, the message"),
-                span,
-            ),
         )
     }
 
@@ -156,13 +130,11 @@ impl BodyChecker<'_> {
     /// called with no arguments, as CPython does.
     fn exception_operand(&mut self, operand: &Expr, what: &str) -> TypedExpr {
         let value = self.expression(operand);
+        let value = self.through_union_base(value);
         match &value.ty {
             Type::Exception(_) | Type::Error => value,
-            Type::TypeObject(Some(of)) if matches!(**of, TypeObjectOf::Exception(_)) => {
-                let TypeObjectOf::Exception(class) = (**of).clone() else {
-                    unreachable!("matched above");
-                };
-                self.called_class(&class, value.span)
+            Type::TypeObject(Some(of)) if let TypeObjectOf::Exception(class) = &**of => {
+                self.called_class(class, value.span)
             }
             other => {
                 let message = format!(
@@ -263,7 +235,8 @@ impl BodyChecker<'_> {
     fn handler(&mut self, handler: &ExceptHandler) -> TypedHandler {
         let classes = self.handler_classes(handler.class.as_ref());
         let bound = handler.name.as_ref().map(|name| {
-            let ty = Type::Exception(common_base(&classes));
+            // The name holds one of the classes, as type checkers read it (TYP-14).
+            let ty = Type::union(classes.iter().cloned().map(Type::Exception).collect());
             let symbol =
                 self.program
                     .add_symbol(&name.name, SymbolKind::Local, ty.clone(), name.span);
@@ -336,98 +309,6 @@ impl BodyChecker<'_> {
             .collect()
     }
 
-    /// Checks `super().name(arguments)`, accepted as `super().__init__(...)` in the `__init__`
-    /// of an exception class (CLS-14). With a base of the program that has `__init__`, it calls
-    /// that `__init__` on the instance; otherwise it sets the exception's arguments, as
-    /// `BaseException.__init__` does. Either way the inherited attributes are assigned after.
-    pub(super) fn super_call(
-        &mut self,
-        name: &Identifier,
-        arguments: &[Expr],
-        keywords: &[Keyword],
-        span: Span,
-    ) -> TypedExpr {
-        let exception_init = self.initializing.filter(|initializing| {
-            name.name == "__init__" && self.program.exceptions.contains_key(&initializing.class)
-        });
-        let Some(initializing) = exception_init else {
-            for argument in arguments {
-                self.expression(argument);
-            }
-            return self.error(
-                Diagnostic::new(
-                    DiagnosticCode::error(201),
-                    span,
-                    "`super()` is planned for TyPy 0.4, beyond `super().__init__(...)` in the \
-                     `__init__` of an exception class (CLS-14)",
-                )
-                .with_rule(RuleId::CLS_14),
-                span,
-            );
-        };
-        let instance = Self::typed(
-            TypedExprKind::Local(initializing.instance),
-            self.program.instance_type(initializing.class),
-            span,
-        );
-        let info = &self.program.classes[initializing.class.0 as usize];
-        let (base, inherited) = (info.base, info.inherited);
-        let base_init = base.and_then(|base| self.program.method(base, "__init__"));
-        let call = if let (Some(function), Some(base)) = (base_init, base) {
-            let qualified = format!("{}.__init__", self.program.instance_type(base));
-            match self.bind_arguments(function, 1, &qualified, arguments, keywords, span) {
-                Ok(bound) => {
-                    let mut all = vec![Argument {
-                        parameter: 0,
-                        value: instance,
-                    }];
-                    all.extend(bound);
-                    Self::typed(
-                        TypedExprKind::Call {
-                            function,
-                            arguments: all,
-                        },
-                        Type::NoneType,
-                        span,
-                    )
-                }
-                Err(error) => return error,
-            }
-        } else {
-            let values: Vec<TypedExpr> = arguments
-                .iter()
-                .map(|value| self.expression(value))
-                .collect();
-            if let Some(keyword) = keywords.first() {
-                return self.error(
-                    Diagnostic::new(
-                        DiagnosticCode::error(404),
-                        keyword.span,
-                        "`BaseException.__init__` takes positional arguments only",
-                    )
-                    .with_rule(RuleId::CLS_14),
-                    span,
-                );
-            }
-            let builtin = self.program.exceptions[&initializing.class].builtin();
-            if let Some(error) = self.os_error_arguments(builtin, &values, span) {
-                return error;
-            }
-            Self::typed(
-                TypedExprKind::SetArguments {
-                    exception: Box::new(instance),
-                    arguments: values,
-                },
-                Type::NoneType,
-                span,
-            )
-        };
-        if let Some(facts) = &mut self.assigned {
-            facts.extend((0..inherited).map(Fact::Attribute));
-        }
-        call
-    }
-
     /// Checks `assert test, message`, which raises `AssertionError(message)` when the test is
     /// false, in every build mode (SMT-04). What the test shows holds after it, as it does for
     /// an `if` whose other branch raises.
@@ -462,11 +343,16 @@ impl BodyChecker<'_> {
     ) -> Option<TypedStmt> {
         let (first, rest) = items.split_first()?;
         let manager = self.expression(&first.context);
-        if manager.ty == Type::TextFile {
+        if manager.ty.is_file() {
+            // Leaving the block closes the file, which may be `sys.stdout` (LIB-14).
+            if manager.ty == Type::TextFile {
+                self.program.closes_text_files = true;
+            }
+            let file = manager.ty.clone();
             return self.with_body(
                 manager,
                 WithProtocol::TextFile,
-                Type::TextFile,
+                file,
                 false,
                 first,
                 rest,

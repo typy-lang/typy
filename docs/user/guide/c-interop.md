@@ -1,7 +1,7 @@
 # C interoperability
 
 Calling C libraries through the standard `ctypes` module, and exporting
-functions to C, come in 0.5 (FFI-01 to FFI-05). TyPy 0.3 programs run on
+functions to C, come in 0.5 (FFI-01 to FFI-05). TyPy 0.4 programs run on
 their own, and a built executable needs no Python installation.
 
 ## What TyPy accepts
@@ -16,7 +16,7 @@ print("a native executable says hello")
 
 ## Planned
 
-`ctypes` is refused until 0.5, as every import is until 0.3:
+`ctypes` is refused until 0.5:
 
 <!-- typy-expect: rejected E0201 at 1:1 -->
 ```python

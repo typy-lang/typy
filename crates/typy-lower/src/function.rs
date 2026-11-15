@@ -75,6 +75,7 @@ pub(crate) struct FunctionLowerer<'context> {
     pub(crate) builder: FunctionBuilder,
     pub(crate) program: &'context TypedProgram,
     pub(crate) may_raise: &'context [bool],
+    pub(crate) methods: &'context crate::methods::MethodTables,
     pub(crate) strings: &'context mut StringPool,
     pub(crate) tuple_types: &'context mut TupleTypes,
     pub(crate) slots: BTreeMap<SymbolId, SlotId>,
@@ -116,16 +117,28 @@ impl<'context> FunctionLowerer<'context> {
         tyir_type(ty, self.tuple_types)
     }
 
+    /// Returns the number of the tuple type of a tuple of `items`, adding it when it is new.
+    pub(crate) fn tuple_type_id(&mut self, items: &[typy_check::Type]) -> typy_tyir::TupleTypeId {
+        let items = items
+            .iter()
+            .map(|item| tyir_type(item, self.tuple_types))
+            .collect();
+        self.tuple_types.intern_id(items)
+    }
+
     /// Lowers `function`. `may_raise` says, for each function of the program, whether calls to it are invokes.
     pub(crate) fn lower(
         program: &'context TypedProgram,
         function: &TypedFunction,
-        may_raise: &'context [bool],
+        calls: &crate::methods::Calls<'context>,
         strings: &'context mut StringPool,
         tuple_types: &'context mut TupleTypes,
         module_globals: &'context crate::module_variable::ModuleGlobals,
         recursive: bool,
     ) -> TyirFunction {
+        if function.generic {
+            return generic_stub(function);
+        }
         let entry = function.id == program.entry;
         let symbol_name = if entry {
             ENTRY_SYMBOL.to_owned()
@@ -182,7 +195,8 @@ impl<'context> FunctionLowerer<'context> {
         let mut lowerer = FunctionLowerer {
             builder,
             program,
-            may_raise,
+            may_raise: calls.may_raise,
+            methods: calls.methods,
             strings,
             tuple_types,
             slots,
@@ -216,7 +230,14 @@ impl<'context> FunctionLowerer<'context> {
             }
         }
         lowerer.prologue();
-        lowerer.builder.set_may_raise(lowerer.raises);
+        // A method that shares a table entry with one that raises is called as one that may
+        // raise, so it returns as one (ADR-0021).
+        let shared = calls
+            .may_raise
+            .get(function.id.0 as usize)
+            .copied()
+            .unwrap_or(false);
+        lowerer.builder.set_may_raise(lowerer.raises || shared);
         lowerer.builder.finish()
     }
 
@@ -283,4 +304,22 @@ impl<'context> FunctionLowerer<'context> {
             arguments: Vec::new(),
         });
     }
+}
+
+/// Returns the stand-in for a generic function, whose copies are called in its place: it
+/// takes nothing and returns nothing, and no call reaches it (ADR-0023).
+fn generic_stub(function: &TypedFunction) -> TyirFunction {
+    let mut builder = FunctionBuilder::new(
+        FunctionId(function.id.0),
+        symbol(&function.module, &function.qualified_name),
+        function.name.clone(),
+        TyirType::Unit,
+    );
+    let unit = builder.push_value(
+        typy_tyir::Operation::Constant(typy_tyir::Constant::Unit),
+        TyirType::Unit,
+        function.span,
+    );
+    builder.terminate(typy_tyir::Terminator::Return(unit));
+    builder.finish()
 }

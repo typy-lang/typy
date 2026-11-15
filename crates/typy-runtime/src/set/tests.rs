@@ -611,3 +611,10 @@ fn a_large_set_grows_to_twice_its_items() {
     }
     release(set);
 }
+
+#[test]
+fn a_full_set_grows_to_four_times_its_items_or_twice_past_fifty_thousand() {
+    assert_eq!(super::grown_size(10), 40);
+    assert_eq!(super::grown_size(50_000), 200_000);
+    assert_eq!(super::grown_size(50_001), 100_002);
+}

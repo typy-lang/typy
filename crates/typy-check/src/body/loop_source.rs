@@ -157,7 +157,11 @@ impl BodyChecker<'_> {
         // A set has no order, and a file or an iterator gives its items once, front first.
         if matches!(
             sequence.ty,
-            Type::Set(_) | Type::TextFile | Type::Iterator(_)
+            Type::Set(_)
+                | Type::TextFile
+                | Type::BinaryFile(_)
+                | Type::DescriptorFile(_)
+                | Type::Iterator(_)
         ) {
             self.diagnostics.push(
                 Diagnostic::new(
@@ -301,10 +305,11 @@ impl BodyChecker<'_> {
             Diagnostic::new(
                 DiagnosticCode::error(404),
                 span,
+                // `enumerate` and `range` both take one argument, so a refused call has none
+                // or several.
                 format!(
-                    "`{}` takes {expected} arguments, and {given} {} given",
-                    builtin.name(),
-                    if given == 1 { "is" } else { "are" }
+                    "`{}` takes {expected} arguments, and {given} are given",
+                    builtin.name()
                 ),
             )
             .with_rule(RuleId::LIB_02),

@@ -30,7 +30,7 @@ fn run() -> Report {
 
 /// The releases whose requirements the suite must cover: every one up to the version being
 /// built.
-const RELEASES: [&str; 3] = ["0.1", "0.2", "0.3"];
+const RELEASES: [&str; 4] = ["0.1", "0.2", "0.3", "0.4"];
 
 /// Returns the requirements the test plan's matrix gives to the conformance suite for the
 /// releases up to this one.

@@ -37,6 +37,9 @@ impl TypeId {
     /// A text file, `_io.TextIOWrapper`: `sys.stdout`, `sys.stderr` and the files `open`
     /// gives (LIB-04).
     pub const TEXT_FILE: Self = Self(17);
+    /// An object of any type, held as a union of objects; its header says which (TYP-14,
+    /// ADR-0027).
+    pub const UNION: Self = Self(18);
     /// The first ID of the program's classes; class `n` of the module is this plus `n`.
     const FIRST_CLASS: u32 = 1 << 16;
 
@@ -123,6 +126,8 @@ impl TyirType {
     pub const ITERABLE: Self = Self::Object(TypeId::ITERABLE);
     /// A text file (LIB-04).
     pub const TEXT_FILE: Self = Self::Object(TypeId::TEXT_FILE);
+    /// A union of objects (TYP-14).
+    pub const UNION: Self = Self::Object(TypeId::UNION);
 }
 
 impl fmt::Display for TyirType {
@@ -145,6 +150,7 @@ impl fmt::Display for TyirType {
             Self::Object(TypeId::MODULE) => formatter.write_str("module"),
             Self::Object(TypeId::ITERABLE) => formatter.write_str("iterable"),
             Self::Object(TypeId::TEXT_FILE) => formatter.write_str("text_file"),
+            Self::Object(TypeId::UNION) => formatter.write_str("union"),
             Self::Bits => formatter.write_str("bits"),
             Self::Object(id) if id.class_index().is_some() => {
                 write!(formatter, "class#{}", id.class_index().unwrap_or(0))

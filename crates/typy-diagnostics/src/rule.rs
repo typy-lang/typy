@@ -91,6 +91,10 @@ impl RuleId {
     pub const EXC_12: Self = Self("EXC-12");
     /// `OSError` and its subclasses built with two to five arguments shall give the subclass for the `errno`, and the attributes `errno`, `strerror` and `filename`, as CPython does.
     pub const EXC_14: Self = Self("EXC-14");
+    /// `args` of an exception and `code` of a `SystemExit` shall be values of their own: stored, passed, indexed and iterated.
+    pub const EXC_15: Self = Self("EXC-15");
+    /// An `OSError` shall take arguments of any type, more than five of them, and two or more through `super().__init__`, as CPython does.
+    pub const EXC_16: Self = Self("EXC-16");
     /// `+`, `-`, `*`, `/`, `//`, `%` and `**` shall give Python's results for `int` and `float`, including `/` on two `int` values returning `float` and `%` taking the sign of the divisor.
     pub const EXP_02: Self = Self("EXP-02");
     /// `int ** int` shall be accepted only when the exponent is a non-negative integer literal, because CPython returns `float` for a negative exponent.
@@ -133,6 +137,24 @@ impl RuleId {
     pub const FUN_06: Self = Self("FUN-06");
     /// Generic functions and classes shall be written with PEP 695 type parameter lists; `TypeVar` and `Generic` shall be rejected.
     pub const GEN_01: Self = Self("GEN-01");
+    /// Type parameters with a bound or with constraints shall be accepted and checked.
+    pub const GEN_02: Self = Self("GEN-02");
+    /// Generics shall compile to one copy per concrete type, with no run-time type information.
+    pub const GEN_03: Self = Self("GEN-03");
+    /// Classes derived from `typing.Protocol` shall be satisfied by any class with matching methods, checked when the program is compiled.
+    pub const GEN_04: Self = Self("GEN-04");
+    /// `isinstance` with a protocol shall be rejected.
+    pub const GEN_05: Self = Self("GEN-05");
+    /// `*Ts` and `**P` type parameters, and defaults of type parameters, shall be accepted.
+    pub const GEN_06: Self = Self("GEN-06");
+    /// A generic function or class of another module shall be usable, made from its source as ADR-0016's interfaces carry it.
+    pub const GEN_07: Self = Self("GEN-07");
+    /// A generic class shall be accepted with a base other than `object`, as the base of another class, and with class variables and defaults.
+    pub const GEN_08: Self = Self("GEN-08");
+    /// Type parameters shall be accepted on a method of a generic class, a special method, a property, a class method, and a method that overrides or is overridden.
+    pub const GEN_09: Self = Self("GEN-09");
+    /// A protocol shall be usable as the type of a variable, an attribute, a result and a container item outside a parameter, as the base of a class, and with properties, static methods, class methods and class variables.
+    pub const GEN_10: Self = Self("GEN-10");
     /// Source files shall be UTF-8 with the `.py` extension.
     pub const LEX_01: Self = Self("LEX-01");
     /// Bytes literals shall be accepted.
@@ -173,7 +195,16 @@ impl RuleId {
     pub const LIB_13: Self = Self("LIB-13");
     /// `open` shall accept binary modes, `+` modes, a mode that is not a literal, encodings other than UTF-8 and the arguments `buffering`, `errors`, `newline`, `closefd` and `opener`; a text file shall have `seek`, `tell`, `truncate`, `fileno`, `isatty`, `readable`, `writable` and `seekable`, and the attributes `name`, `mode` and `closed`; closing `sys.stdout` or `sys.stderr` shall close it.
     pub const LIB_14: Self = Self("LIB-14");
-    /// A program shall be built from several `.py` files, found from the main file's directory and from paths set in `typy.toml`.
+    /// `math.fsum`, `math.dist`, `math.prod` and `math.sumprod` shall take items of a union of number types, and `math.prod` a `bool` start and items other than numbers.
+    pub const LIB_15: Self = Self("LIB-15");
+    /// `sys.version_info` shall be a value as CPython's: printed, stored, passed and imported with `from sys import version_info`.
+    pub const LIB_16: Self = Self("LIB-16");
+    /// The other names of `typing` and `collections.abc` that describe types, such as `Optional`, `Union`, `List`, `Dict`, `Callable`, `NamedTuple` and `Sequence`, shall be available.
+    pub const LIB_17: Self = Self("LIB-17");
+    /// The `opener` argument of `open` shall be accepted.
+    pub const LIB_18: Self = Self("LIB-18");
+    /// `open` with a binary mode shall accept a `buffering` that is not a literal, as `typing.BinaryIO`.
+    pub const LIB_19: Self = Self("LIB-19");
     /// A program shall be built from several `.py` files, found from the main file's directory and from paths set in `typy.toml`.
     pub const MOD_01: Self = Self("MOD-01");
     /// Packages with `__init__.py` and relative imports shall be accepted.
@@ -186,6 +217,10 @@ impl RuleId {
     pub const MOD_09: Self = Self("MOD-09");
     /// A name bound by a lazy import shall be usable from another module, assignable through a lazily imported module, and bindable by more than one lazy import.
     pub const MOD_11: Self = Self("MOD-11");
+    /// A function or a class shall be bindable by more than one lazy import of a module, a call running the one bound last.
+    pub const MOD_12: Self = Self("MOD-12");
+    /// A module shall be importable inside a function of a module that it imports at module level.
+    pub const MOD_13: Self = Self("MOD-13");
     /// The compiler shall not crash on any input; an internal error shall be reported as `E9xxx` with a hint to report it.
     pub const NFR_09: Self = Self("NFR-09");
     /// Unpacking assignment to several targets shall be accepted for tuples and lists.
@@ -206,6 +241,8 @@ impl RuleId {
     pub const SMT_10: Self = Self("SMT-10");
     /// `yield` shall be accepted in generator functions.
     pub const SMT_11: Self = Self("SMT-11");
+    /// A type alias shall be usable from another module, readable as a value as CPython's `TypeAliasType`, definable inside a function, a class or a block, and given type parameters with a bound or constraints.
+    pub const SMT_12: Self = Self("SMT-12");
     /// TyPy shall accept only source that every oracle version, from the program's Python floor up, parses without a syntax error.
     pub const STD_01: Self = Self("STD-01");
     /// STD-02 shall cover only behaviour the Language Reference or the library documentation defines.
@@ -220,6 +257,8 @@ impl RuleId {
     pub const TYP_05: Self = Self("TYP-05");
     /// The annotations `list[T]`, `dict[K, V]`, `set[T]`, `tuple[...]` and `T \\| None` shall be accepted.
     pub const TYP_06: Self = Self("TYP-06");
+    /// A name annotated `Final` shall not be assigned again.
+    pub const TYP_08: Self = Self("TYP-08");
     /// An `int` value shall be rejected where a `float` is declared, because CPython keeps it an `int`: `x: float = 1` prints `1`.
     pub const TYP_09: Self = Self("TYP-09");
     /// `typing.Any`, `typing.cast` and unannotated `object` values shall be rejected.
@@ -232,6 +271,10 @@ impl RuleId {
     pub const TYP_14: Self = Self("TYP-14");
     /// The annotations `Iterator[T]` and `Iterable[T]`, imported from `collections.abc` or `typing`, shall be accepted for iterators and for the built-in iterables of items of type `T`; their use as values is planned for 0.4 (ADR-0014, ADR-0015).
     pub const TYP_15: Self = Self("TYP-15");
+    /// One value assigned to several targets, as in `a = b[0] = value`, shall be converted to each target's type, such as the union an item holds.
+    pub const TYP_16: Self = Self("TYP-16");
+    /// The names of `typing` and `collections.abc` given for annotations, such as `Iterator` and `Iterable`, shall also be values, as in `isinstance(x, Iterable)`.
+    pub const TYP_17: Self = Self("TYP-17");
 
     /// Every rule a diagnostic can name, in ID order.
     pub const ALL: &'static [Self] = &[
@@ -277,6 +320,8 @@ impl RuleId {
         Self::EXC_09,
         Self::EXC_12,
         Self::EXC_14,
+        Self::EXC_15,
+        Self::EXC_16,
         Self::EXP_02,
         Self::EXP_04,
         Self::EXP_06,
@@ -298,6 +343,15 @@ impl RuleId {
         Self::FUN_05,
         Self::FUN_06,
         Self::GEN_01,
+        Self::GEN_02,
+        Self::GEN_03,
+        Self::GEN_04,
+        Self::GEN_05,
+        Self::GEN_06,
+        Self::GEN_07,
+        Self::GEN_08,
+        Self::GEN_09,
+        Self::GEN_10,
         Self::LEX_01,
         Self::LEX_06,
         Self::LEX_07,
@@ -318,12 +372,19 @@ impl RuleId {
         Self::LIB_12,
         Self::LIB_13,
         Self::LIB_14,
+        Self::LIB_15,
+        Self::LIB_16,
+        Self::LIB_17,
+        Self::LIB_18,
+        Self::LIB_19,
         Self::MOD_01,
         Self::MOD_02,
         Self::MOD_05,
         Self::MOD_06,
         Self::MOD_09,
         Self::MOD_11,
+        Self::MOD_12,
+        Self::MOD_13,
         Self::NFR_09,
         Self::SMT_02,
         Self::SMT_04,
@@ -334,6 +395,7 @@ impl RuleId {
         Self::SMT_09,
         Self::SMT_10,
         Self::SMT_11,
+        Self::SMT_12,
         Self::STD_01,
         Self::STD_03,
         Self::STD_04,
@@ -341,12 +403,15 @@ impl RuleId {
         Self::TYP_03,
         Self::TYP_05,
         Self::TYP_06,
+        Self::TYP_08,
         Self::TYP_09,
         Self::TYP_10,
         Self::TYP_12,
         Self::TYP_13,
         Self::TYP_14,
         Self::TYP_15,
+        Self::TYP_16,
+        Self::TYP_17,
     ];
 
     /// Returns the ID as text, such as `TYP-03`.

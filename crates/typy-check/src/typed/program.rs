@@ -21,6 +21,9 @@ pub struct TypedProgram {
     /// The built-in modules the program imports, such as `math`, whose module objects follow
     /// those of `modules` (ADR-0018).
     pub builtin_modules: Vec<String>,
+    /// Whether the program closes a text file, by `close()` or a `with` block, which may be
+    /// `sys.stdout`; `print` then checks that standard output is open (LIB-14).
+    pub closes_text_files: bool,
     /// The module body of `__main__`.
     pub entry: FunctionId,
     /// The warnings of checking the program, such as W0301 (DIA-08).
@@ -49,6 +52,26 @@ impl TypedProgram {
     #[must_use]
     pub fn class(&self, id: ClassId) -> &TypedClass {
         &self.classes[id.0 as usize]
+    }
+
+    /// Returns the method `name` of a class, its own or the nearest base's.
+    #[must_use]
+    pub fn method(&self, id: ClassId, name: &str) -> Option<FunctionId> {
+        let mut current = Some(id);
+        while let Some(class) = current.map(|id| self.class(id)) {
+            if let Some((_, method)) = class.methods.iter().find(|(each, _)| each == name) {
+                return Some(*method);
+            }
+            current = class.base;
+        }
+        None
+    }
+
+    /// Returns true when a class of the program derives from `id`, so a value whose static
+    /// class is `id` may hold an instance of another class (CLS-04).
+    #[must_use]
+    pub fn has_subclass(&self, id: ClassId) -> bool {
+        self.classes.iter().any(|class| class.base == Some(id))
     }
 
     /// Returns a function by its ID.

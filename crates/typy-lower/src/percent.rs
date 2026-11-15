@@ -175,4 +175,45 @@ impl FunctionLowerer<'_> {
             Some(start) => self.concatenated(start, rest, span),
         }
     }
+
+    /// Returns `format % values` read by the runtime: a tuple's items are the values, given
+    /// with its layout, and any other value is given as a tuple of one, which the runtime
+    /// reads as one value or, for a `tuple[T, ...]`, as the items of the list that holds it
+    /// (LIB-11).
+    pub(crate) fn percent_dynamic(
+        &mut self,
+        format: &typy_check::TypedExpr,
+        values: &typy_check::TypedExpr,
+        span: Span,
+    ) -> Lowered {
+        let format = self.expression(format);
+        let (layout, tuple, form) = match &values.ty {
+            typy_check::Type::Tuple(items) => {
+                let id = self.tuple_type_id(items);
+                (id, self.expression(values), "0")
+            }
+            other => {
+                let id = self.tuple_type_id(std::slice::from_ref(other));
+                let form = if matches!(other, typy_check::Type::TupleOf(_)) {
+                    "2"
+                } else {
+                    "1"
+                };
+                let tuple =
+                    self.tuple_display(std::slice::from_ref(values), TyirType::Tuple(id), span);
+                (id, tuple, form)
+            }
+        };
+        let descriptor = self.constant(Constant::TupleDescriptor(layout), span);
+        let address = self.bits(Self::borrowed(tuple.value, tuple.ty), span);
+        let form = self.constant(Constant::Int(form.to_owned()), span);
+        let text = self.call_runtime(
+            RuntimeFunction::PercentDynamic,
+            vec![format.value, descriptor, address, form],
+            span,
+        );
+        self.release(tuple, span);
+        self.release(format, span);
+        text
+    }
 }

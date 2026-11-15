@@ -14,6 +14,19 @@ impl BodyChecker<'_> {
     pub(super) fn collect_locals(&mut self, statements: &[&Stmt]) {
         for statement in statements {
             match statement {
+                // A class body's values are module variables, assigned where the class
+                // statement runs (ADR-0024).
+                Stmt::ClassDef { name, body, .. } => {
+                    let values = crate::check::class_values(
+                        &name.name,
+                        body,
+                        &self.program.annotation_names,
+                        &self.program.annotation_modules,
+                    );
+                    let assignments: Vec<&Stmt> =
+                        values.iter().map(|value| &value.assignment).collect();
+                    self.collect_locals(&assignments);
+                }
                 Stmt::Assign { targets, .. } => {
                     for target in targets {
                         self.bind_local(target);
@@ -21,10 +34,13 @@ impl BodyChecker<'_> {
                 }
                 Stmt::AugAssign { target, .. } => self.bind_local(target),
                 Stmt::AnnAssign {
-                    target, annotation, ..
+                    target,
+                    annotation,
+                    value,
+                    ..
                 } => {
                     self.bind_local(target);
-                    self.declare(target, annotation);
+                    self.declare(target, annotation, value.is_some());
                 }
                 Stmt::For {
                     target,
@@ -115,21 +131,53 @@ impl BodyChecker<'_> {
     pub(super) fn annotation(&mut self, annotation: &Expr) -> Type {
         let scope = AnnotationScope {
             classes: &self.program.class_ids,
-            exceptions: &self.program.exceptions,
+            instances: &self.program.instances,
             modules: &self.program.module_classes,
+            module_aliases: &self.program.module_aliases,
+            parameters: &self.program.type_arguments,
+            copies: &self.program.class_copies,
             names: &self.program.annotation_names,
             standard: &self.program.annotation_modules,
             bound: u32::MAX,
         };
-        annotation_type(annotation, &scope, self.diagnostics)
+        let ty = annotation_type(annotation, &scope, self.diagnostics);
+        // An annotation may name a copy of a generic class, which the program then holds.
+        self.program.make_class_copies();
+        crate::check::outside_signature(ty, annotation.span(), self.diagnostics)
     }
 
-    pub(super) fn declare(&mut self, target: &Expr, annotation: &Expr) {
+    pub(super) fn declare(&mut self, target: &Expr, annotation: &Expr, given: bool) {
         let Expr::Name { id, span } = target else {
             return;
         };
-        let ty = self.annotation(annotation);
         let symbol = self.locals[id];
+        // `Final[T]` declares `T`, and a bare `Final` takes the value's type (TYP-08).
+        let annotation = match crate::check::final_type(
+            annotation,
+            &self.program.annotation_names,
+            &self.program.annotation_modules,
+        ) {
+            Some(qualified) => {
+                if !given {
+                    self.diagnostics.push(
+                        Diagnostic::new(
+                            DiagnosticCode::error(408),
+                            annotation.span(),
+                            format!("`{id}` is declared `Final` and is given no value"),
+                        )
+                        .with_rule(RuleId::TYP_08)
+                        .with_help(format!("give it its value, such as `{id}: Final = 0`")),
+                    );
+                }
+                self.program.final_variables.insert(symbol, *span);
+                match qualified {
+                    crate::check::ClassVarAnnotation::Typed(inner) => inner,
+                    crate::check::ClassVarAnnotation::Bare => return,
+                }
+            }
+            None => annotation,
+        };
+        let ty = self.annotation(annotation);
         match self.declared.get(&symbol) {
             Some(existing) if *existing != ty => self.diagnostics.push(
                 Diagnostic::new(
@@ -172,6 +220,15 @@ impl BodyChecker<'_> {
                 .known_type(value)
                 .filter(|ty| matches!(ty, Type::List(_)));
         }
+        // An item of a list, or an entry of a dict, takes a value of its own type, which a
+        // member of a union becomes (TYP-14).
+        if let Expr::Subscript { value, .. } = target {
+            return match self.known_type(value)? {
+                Type::List(item) => Some(*item),
+                Type::Dict(_, value) => Some(*value),
+                _ => None,
+            };
+        }
         let Expr::Name { id, .. } = target else {
             return None;
         };
@@ -202,20 +259,24 @@ impl BodyChecker<'_> {
         } = target
         {
             if let Some(module) = self.module_of(object) {
-                if self.lazy_module_function(object).is_some() {
-                    self.diagnostics.push(
-                        Diagnostic::new(
-                            DiagnosticCode::error(201),
-                            *span,
-                            "assigning to an attribute of a module imported lazily is planned \
-                             for TyPy 0.4 (MOD-11)",
-                        )
-                        .with_rule(RuleId::MOD_11)
-                        .with_help("use the name in an expression first, or import it eagerly"),
-                    );
-                    return None;
-                }
-                return self.module_attribute_target(&module, attribute, &ty, value, *span);
+                let target = self.module_attribute_target(&module, attribute, &ty, value, *span)?;
+                // A module bound lazily is imported before the assignment (MOD-11).
+                return Some(match self.lazy_module_function(object) {
+                    Some(reify) => AssignTarget::Lazy {
+                        reify,
+                        target: Box::new(target),
+                    },
+                    None => target,
+                });
+            }
+            if let Some(class) = self.class_named_by(object)
+                && let Some(assignment) =
+                    self.class_value_target(class, attribute, &ty, value, *span)
+            {
+                return match assignment {
+                    super::class_value::ClassValueAssignment::Assigned(target) => Some(target),
+                    super::class_value::ClassValueAssignment::Refused => None,
+                };
             }
             return self.attribute_target(object, attribute, &ty, None, *span);
         }
@@ -290,6 +351,13 @@ impl BodyChecker<'_> {
             }
             TypedExprKind::DictItem { dict, key } => self.entry_target(*dict, *key, ty, span),
             TypedExprKind::Attribute { object, index } => {
+                if object
+                    .ty
+                    .class_id()
+                    .is_some_and(|class| self.refuse_final_attribute(class, index, span))
+                {
+                    return None;
+                }
                 if !ty.is_assignable_to(&current.ty) {
                     self.diagnostics.push(
                         Diagnostic::new(
@@ -307,6 +375,10 @@ impl BodyChecker<'_> {
                 Some(AssignTarget::Attribute { object, index })
             }
             TypedExprKind::ModuleAttribute { symbol, .. } => {
+                let name = self.program.symbols[symbol.0 as usize].name.clone();
+                if self.final_reassigned(symbol, &name, span) {
+                    return None;
+                }
                 if !ty.is_assignable_to(&current.ty) {
                     self.diagnostics.push(
                         Diagnostic::new(
@@ -354,6 +426,9 @@ impl BodyChecker<'_> {
             }
         };
         self.expect(&index, Type::Int, "an index");
+        if self.union_item_needs_its_type(ty, &item, span) {
+            return None;
+        }
         if !ty.is_assignable_to(&item) {
             self.diagnostics.push(
                 Diagnostic::new(
@@ -455,6 +530,9 @@ impl BodyChecker<'_> {
             return None;
         };
         let symbol = *self.locals.get(id)?;
+        if self.final_reassigned(symbol, id, *span) {
+            return None;
+        }
         match self.types.get(&symbol).cloned() {
             None => {
                 self.types.insert(symbol, ty);
@@ -489,9 +567,12 @@ impl BodyChecker<'_> {
             Some(_) => {}
         }
         // A value that is not `None` shows the optional variable is not `None` until it is
-        // assigned again (TYP-13).
+        // assigned again (TYP-13); a `for` loop's item of the base type shows it too.
         let not_none = matches!(self.types.get(&symbol), Some(Type::Optional(_)))
-            && matches!(&value.kind, TypedExprKind::Wrap(inner) if inner.ty != Type::NoneType);
+            && match &value.kind {
+                TypedExprKind::Wrap(inner) => inner.ty != Type::NoneType,
+                _ => !matches!(value.ty, Type::NoneType | Type::Optional(_) | Type::Error),
+            };
         if let Some(facts) = &mut self.assigned {
             facts.insert(Fact::Assigned(symbol));
             if not_none {
@@ -499,7 +580,57 @@ impl BodyChecker<'_> {
             } else {
                 facts.remove(&Fact::NotNone(symbol));
             }
+            // An assignment replaces what an `isinstance` test showed (TYP-07).
+            facts.retain(|fact| !matches!(fact, Fact::Narrowed(each, _) if *each == symbol));
         }
         Some(symbol)
+    }
+
+    /// Reports an assignment to a variable declared `Final` other than its declaration;
+    /// returns true when it reports one (TYP-08).
+    pub(super) fn final_reassigned(&mut self, symbol: SymbolId, name: &str, span: Span) -> bool {
+        let Some(declared) = self.program.final_variables.get(&symbol).copied() else {
+            return false;
+        };
+        if declared == span {
+            return false;
+        }
+        self.diagnostics.push(
+            Diagnostic::new(
+                DiagnosticCode::error(414),
+                span,
+                format!("`{name}` is declared `Final`, so it is not assigned again"),
+            )
+            .with_rule(RuleId::TYP_08)
+            .with_label(declared, "declared here"),
+        );
+        true
+    }
+
+    /// Reports a value assigned to an item or an entry that holds a union, when the value is
+    /// not yet of the union's type: only `a = b[0] = value`, whose one value serves several
+    /// targets, gives one, and a union item needs a value of its own type (TYP-14).
+    pub(super) fn union_item_needs_its_type(&mut self, ty: &Type, item: &Type, span: Span) -> bool {
+        let union = match item {
+            Type::Optional(inner) => inner.as_ref(),
+            other => other,
+        };
+        if !matches!(union, Type::Union(_)) || ty.matches(item) || !ty.is_assignable_to(item) {
+            return false;
+        }
+        self.diagnostics.push(
+            Diagnostic::new(
+                DiagnosticCode::error(201),
+                span,
+                format!(
+                    "one value assigned to several targets, one of which holds {}, is planned \
+                     for TyPy 0.5 (TYP-16)",
+                    item.with_article()
+                ),
+            )
+            .with_rule(RuleId::TYP_16)
+            .with_help("assign each target in a statement of its own"),
+        );
+        true
     }
 }

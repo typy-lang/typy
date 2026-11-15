@@ -1,13 +1,13 @@
-//! Checks calls of `open` (LIB-04, LIB-14, ADR-0019): a `str` path, a mode written as a
-//! literal, which decides that the file is a text file, and UTF-8 as its encoding.
+//! Checks calls of `open` (LIB-04, LIB-14, ADR-0019): a `str` path and a mode written as a
+//! literal, which decides that the file is a text file; `open_options` checks the rest.
 
 use typy_diagnostics::{Diagnostic, DiagnosticCode, RuleId, Span};
-use typy_source::syntax::{Constant, Expr, Keyword};
+use typy_source::syntax::{Constant, Expr, Identifier, Keyword};
 
 use super::BodyChecker;
-use crate::open::{ModeRefusal, OpenAccess, is_utf8, open_access};
-use crate::typed::{TypedExpr, TypedExprKind};
-use crate::types::Type;
+use crate::open::{ModeRefusal, OpenAccess, OpenMode, open_access};
+use crate::typed::{FileAttribute, TypedConstant, TypedExpr, TypedExprKind};
+use crate::types::{BinaryKind, Type};
 
 /// The parameters of `open`, in CPython's order.
 const PARAMETERS: [&str; 8] = [
@@ -21,34 +21,8 @@ const PARAMETERS: [&str; 8] = [
     "opener",
 ];
 
-/// Returns whether `value` is the default of parameter `index` of `open`, which an argument
-/// may spell out: `buffering=-1`, `errors=None` or `"strict"`, `newline=None`, `closefd=True`
-/// and `opener=None`.
-fn is_default(index: usize, value: &Expr) -> bool {
-    let negative_one = super::expression::literal_position(value) == Some(-1);
-    let none = matches!(
-        value,
-        Expr::Constant {
-            value: Constant::None,
-            ..
-        }
-    );
-    match PARAMETERS[index] {
-        "buffering" => negative_one,
-        "errors" => none || literal(value) == Some("strict"),
-        "closefd" => matches!(
-            value,
-            Expr::Constant {
-                value: Constant::Bool(true),
-                ..
-            }
-        ),
-        _ => none,
-    }
-}
-
 /// Returns the text of a string literal.
-fn literal(expression: &Expr) -> Option<&str> {
+pub(super) fn literal(expression: &Expr) -> Option<&str> {
     match expression {
         Expr::Constant {
             value: Constant::Str(text),
@@ -66,10 +40,184 @@ impl BodyChecker<'_> {
         keywords: &[Keyword],
         span: Span,
     ) -> TypedExpr {
+        let given = match self.open_arguments(arguments, keywords) {
+            Ok(given) => given,
+            Err(refused) => return refused,
+        };
+        let Some(file) = given[0] else {
+            return self.open_refused(
+                404,
+                span,
+                "`open` needs the file to open".to_owned(),
+                RuleId::LIB_04,
+            );
+        };
+        let path = self.expression(file);
+        // An `int` is a file descriptor; CPython 3.13 and later warn for a `bool`, so it is
+        // refused (LIB-14).
+        let descriptor = path.ty == Type::Int;
+        if path.ty == Type::Bool {
+            return self.open_refused(
+                404,
+                path.span,
+                "CPython 3.13 and later warn that a bool is used as a file descriptor; pass an int"
+                    .to_owned(),
+                RuleId::LIB_14,
+            );
+        }
+        if !descriptor {
+            self.expect(&path, Type::Str, "the file of `open`");
+        }
+        // CPython reads the mode first, then refuses what a binary mode does not take.
+        let text_read = OpenMode {
+            access: OpenAccess::Read,
+            binary: false,
+        };
+        let mut mode_value = None;
+        let (written, mode) = match given[1] {
+            None => ("r".to_owned(), text_read),
+            Some(mode) => match self.open_mode(mode) {
+                Ok(found) => found,
+                Err(Ok(value)) => {
+                    mode_value = Some(Box::new(value));
+                    (String::new(), text_read)
+                }
+                Err(Err(refused)) => return refused,
+            },
+        };
+        let binary = if mode.binary {
+            match self.binary_file(&given, mode) {
+                Ok(kind) => Some(kind),
+                Err(refused) => return refused,
+            }
+        } else {
+            None
+        };
+        let ty = match (descriptor, binary) {
+            (true, kind) => Type::DescriptorFile(kind),
+            (false, Some(kind)) => Type::BinaryFile(kind),
+            (false, None) => Type::TextFile,
+        };
+        let mut options = match self.open_options(&given) {
+            Ok(options) => options,
+            Err(refused) => return refused,
+        };
+        options.mode = mode_value;
+        if !descriptor
+            && let Some(closefd) = &options.closefd
+            && matches!(
+                closefd.kind,
+                TypedExprKind::Constant(TypedConstant::Bool(false))
+            )
+        {
+            return self.open_refused(
+                404,
+                closefd.span,
+                "`open` raises `ValueError: Cannot use closefd=False with file name` for a path"
+                    .to_owned(),
+                RuleId::LIB_14,
+            );
+        }
+        let shown = if mode.binary {
+            // The buffer's size changes nothing a program sees, so a binary file has none.
+            options.buffering = None;
+            mode.binary_mode().to_owned()
+        } else {
+            written
+        };
+        if path.ty.has_error() {
+            return Self::invalid_call(span);
+        }
+        Self::typed(
+            TypedExprKind::Open {
+                path: Box::new(path),
+                mode: shown,
+                access: mode.access,
+                options: Box::new(options),
+            },
+            ty,
+            span,
+        )
+    }
+
+    /// Returns the class of a binary file, or the error of an argument a binary mode does not
+    /// take: `encoding`, `errors` and `newline` raise CPython's `ValueError`; `buffering=0`
+    /// gives a `FileIO`, and `buffering=1` makes CPython warn with the program's own file and
+    /// line, so it is refused; a `buffering` that is not a literal decides the class only
+    /// when the program runs, which is planned for 1.0 (LIB-19).
+    fn binary_file(
+        &mut self,
+        given: &[Option<&Expr>; 8],
+        mode: OpenMode,
+    ) -> Result<BinaryKind, TypedExpr> {
+        for (index, what) in [(3, "an encoding"), (4, "an errors"), (5, "a newline")] {
+            if let Some(value) = given[index]
+                && !matches!(
+                    value,
+                    Expr::Constant {
+                        value: Constant::None,
+                        ..
+                    }
+                )
+            {
+                return Err(self.open_refused(
+                    404,
+                    value.span(),
+                    format!(
+                        "`open` raises `ValueError: binary mode doesn't take {what} argument` \
+                         for this mode"
+                    ),
+                    RuleId::LIB_14,
+                ));
+            }
+        }
+        let buffered = match mode.access {
+            OpenAccess::Read => BinaryKind::Reader,
+            OpenAccess::Write | OpenAccess::Append | OpenAccess::Create => BinaryKind::Writer,
+            _ => BinaryKind::Random,
+        };
+        let Some(buffering) = given[2] else {
+            return Ok(buffered);
+        };
+        match super::expression::literal_position(buffering) {
+            Some(0) => Ok(BinaryKind::Raw),
+            Some(1) => Err(self.open_refused(
+                404,
+                buffering.span(),
+                "CPython warns that `buffering=1` does not buffer lines in a binary mode, \
+                 naming the program's file and line; leave it out"
+                    .to_owned(),
+                RuleId::LIB_14,
+            )),
+            Some(_) => Ok(buffered),
+            None => {
+                let value = self.expression(buffering);
+                if value.ty.has_error() {
+                    return Err(Self::invalid_call(buffering.span()));
+                }
+                Err(self.open_refused(
+                    201,
+                    buffering.span(),
+                    "a `buffering` that is not a literal decides the class of a binary file \
+                     when the program runs, which is planned for TyPy 1.0 (LIB-19)"
+                        .to_owned(),
+                    RuleId::LIB_19,
+                ))
+            }
+        }
+    }
+
+    /// Returns the arguments of `open` by position in CPython's order, from the call's
+    /// positional and keyword arguments, or the error of one `open` does not take.
+    fn open_arguments<'call>(
+        &mut self,
+        arguments: &'call [Expr],
+        keywords: &'call [Keyword],
+    ) -> Result<[Option<&'call Expr>; 8], TypedExpr> {
         let mut given: [Option<&Expr>; 8] = [None; 8];
         for (index, argument) in arguments.iter().enumerate() {
             if index >= PARAMETERS.len() {
-                return self.open_refused(
+                return Err(self.open_refused(
                     404,
                     argument.span(),
                     format!(
@@ -77,7 +225,7 @@ impl BodyChecker<'_> {
                         arguments.len()
                     ),
                     RuleId::LIB_04,
-                );
+                ));
             }
             given[index] = Some(argument);
         }
@@ -90,145 +238,106 @@ impl BodyChecker<'_> {
                 .iter()
                 .position(|parameter| *parameter == name.name)
             else {
-                return self.open_refused(
+                return Err(self.open_refused(
                     404,
                     name.span,
                     format!("`open` has no parameter named `{}`", name.name),
                     RuleId::LIB_04,
-                );
+                ));
             };
             if given[index].is_some() {
-                return self.open_refused(
+                return Err(self.open_refused(
                     404,
                     name.span,
                     format!("`open` is given `{}` twice", name.name),
                     RuleId::LIB_04,
-                );
+                ));
             }
             given[index] = Some(&keyword.value);
         }
-        let Some(file) = given[0] else {
-            return self.open_refused(
-                404,
-                span,
-                "`open` needs the file to open".to_owned(),
-                RuleId::LIB_04,
-            );
-        };
-        let path = self.expression(file);
-        self.expect(&path, Type::Str, "the file of `open`");
-        if let Some((index, value)) = given
-            .iter()
-            .enumerate()
-            .skip(2)
-            .filter_map(|(index, value)| value.map(|value| (index, value)))
-            .find(|(index, value)| *index != 3 && !is_default(*index, value))
-        {
-            return self.open_refused(
-                201,
-                value.span(),
-                format!(
-                    "the `{}` argument of `open` is planned for TyPy 0.4 (LIB-14)",
-                    PARAMETERS[index]
-                ),
-                RuleId::LIB_14,
-            );
-        }
-        if let Some(encoding) = given[3]
-            && let Some(refused) = self.open_encoding(encoding)
-        {
-            return refused;
-        }
-        let (mode, access) = match given[1] {
-            None => ("r".to_owned(), OpenAccess::Read),
-            Some(mode) => match self.open_mode(mode) {
-                Ok(found) => found,
-                Err(refused) => return refused,
-            },
-        };
-        if path.ty.has_error() {
-            return Self::invalid_call(span);
-        }
-        Self::typed(
-            TypedExprKind::Open {
-                path: Box::new(path),
-                mode,
-                access,
-            },
-            Type::TextFile,
-            span,
-        )
+        Ok(given)
     }
 
-    /// Returns the mode of `open` and its access, or the error of a mode it refuses.
-    fn open_mode(&mut self, mode: &Expr) -> Result<(String, OpenAccess), TypedExpr> {
+    /// Returns the mode of `open` as written and what it gives, or the error of a mode it
+    /// refuses. A mode that is not a literal is a `str` the runtime reads as a text mode
+    /// (ADR-0031); it is returned as `Err(Ok(value))`.
+    fn open_mode(
+        &mut self,
+        mode: &Expr,
+    ) -> Result<(String, OpenMode), Result<TypedExpr, TypedExpr>> {
         let Some(text) = literal(mode) else {
             let value = self.expression(mode);
+            self.expect(&value, Type::Str, "the mode of `open`");
             if value.ty.has_error() {
-                return Err(Self::invalid_call(mode.span()));
+                return Err(Err(Self::invalid_call(mode.span())));
             }
-            return Err(self.open_refused(
-                201,
-                mode.span(),
-                "a mode of `open` that is not a string literal is planned for TyPy 0.4 (LIB-14)"
-                    .to_owned(),
-                RuleId::LIB_14,
-            ));
+            return Err(Ok(value));
         };
         match open_access(text) {
-            Ok(access) => Ok((text.to_owned(), access)),
-            Err(ModeRefusal::Fails(message)) => Err(self.open_refused(
+            Ok(found) => Ok((text.to_owned(), found)),
+            Err(ModeRefusal(message)) => Err(Err(self.open_refused(
                 404,
                 mode.span(),
                 format!("`open` raises `ValueError: {message}` for this mode"),
                 RuleId::LIB_04,
-            )),
-            Err(ModeRefusal::Planned(what)) => Err(self.open_refused(
-                201,
-                mode.span(),
-                format!("{what} of `open` is planned for TyPy 0.4 (LIB-14)"),
-                RuleId::LIB_14,
-            )),
+            ))),
         }
     }
 
-    /// Returns the error of an encoding that is neither `None` nor a name of UTF-8.
-    fn open_encoding(&mut self, encoding: &Expr) -> Option<TypedExpr> {
-        match encoding {
-            Expr::Constant {
-                value: Constant::None,
-                ..
-            } => None,
-            _ if literal(encoding).is_some_and(is_utf8) => None,
-            _ => Some(
-                self.open_refused(
-                    201,
-                    encoding.span(),
-                    "TyPy 0.3 opens files in UTF-8 only, written as `\"utf-8\"` or `None`; other \
-                 encodings are planned for TyPy 0.4 (LIB-14)"
-                        .to_owned(),
-                    RuleId::LIB_14,
-                ),
-            ),
-        }
-    }
-
-    /// Reports a method or attribute a text file does not have in 0.3: E0201 when it is
-    /// planned for 0.4, E0412 otherwise.
-    pub(super) fn missing_file_name(&mut self, name: &str, at: Span, span: Span) -> TypedExpr {
-        let (message, planned) = crate::open::missing_file_name(name);
-        let (code, rule) = if planned {
-            (201, RuleId::LIB_14)
-        } else {
-            (412, RuleId::LIB_04)
+    /// Returns `name`, `mode` or `closed` of a text file, or reports another name (LIB-14).
+    pub(super) fn file_attribute(
+        &mut self,
+        file: TypedExpr,
+        attribute: &Identifier,
+        span: Span,
+    ) -> TypedExpr {
+        let Some((mut kind, mut ty)) = FileAttribute::named(&attribute.name) else {
+            return self.missing_file_name(&file.ty.clone(), attribute, span);
         };
-        self.diagnostics
-            .push(Diagnostic::new(DiagnosticCode::error(code), at, message).with_rule(rule));
-        Self::invalid_call(span)
+        if kind == FileAttribute::Name && matches!(file.ty, Type::DescriptorFile(_)) {
+            (kind, ty) = (FileAttribute::Descriptor, Type::Int);
+        }
+        Self::typed(
+            TypedExprKind::FileAttribute {
+                file: Box::new(file),
+                attribute: kind,
+            },
+            ty,
+            span,
+        )
+    }
+
+    /// Reports a method or attribute a text file does not have, as CPython's
+    /// `AttributeError` names it.
+    pub(super) fn missing_file_name(
+        &mut self,
+        file: &Type,
+        name: &Identifier,
+        span: Span,
+    ) -> TypedExpr {
+        self.error(
+            Diagnostic::new(
+                DiagnosticCode::error(412),
+                name.span,
+                format!(
+                    "{} has no attribute `{}` in TyPy",
+                    file.with_article(),
+                    name.name
+                ),
+            )
+            .with_rule(RuleId::LIB_04),
+            span,
+        )
     }
 
     /// Reports an error of `open` and returns the expression of a call that failed.
-    fn open_refused(&mut self, code: u16, at: Span, message: String, rule: RuleId) -> TypedExpr {
+    pub(super) fn open_refused(
+        &mut self,
+        code: u16,
+        at: Span,
+        message: String,
+        rule: RuleId,
+    ) -> TypedExpr {
         self.diagnostics
             .push(Diagnostic::new(DiagnosticCode::error(code), at, message).with_rule(rule));
         Self::invalid_call(at)

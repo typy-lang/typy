@@ -117,6 +117,7 @@ impl Dump<'_> {
             AssignTarget::Slice { list, .. } => format!("slice of {}", list.ty),
             AssignTarget::Entry { dict, .. } => format!("entry of {}", dict.ty),
             AssignTarget::Attribute { object, index } => self.attribute(&object.ty, *index),
+            AssignTarget::Lazy { target, .. } => format!("lazy {}", self.target(target)),
         }
     }
 
@@ -281,6 +282,7 @@ impl Dump<'_> {
             }
             TypedStmt::Import {
                 modules,
+                pending,
                 bindings,
                 span,
             } => {
@@ -307,9 +309,17 @@ impl Dump<'_> {
                         }
                     })
                     .collect();
+                let runs = pending.iter().fold(String::new(), |mut runs, reify| {
+                    let _ = write!(runs, " runs lazy {}", reify.0);
+                    runs
+                });
                 self.line(
                     depth,
-                    &format!("Import {} binds {}", modules.join(" "), names.join(", ")),
+                    &format!(
+                        "Import {}{runs} binds {}",
+                        modules.join(" "),
+                        names.join(", ")
+                    ),
                     *span,
                 );
             }
@@ -358,6 +368,7 @@ impl Dump<'_> {
         }
     }
 
+    #[allow(clippy::too_many_lines, reason = "one arm per expression kind")]
     fn expression(&mut self, depth: usize, expression: &TypedExpr) {
         let ty = &expression.ty;
         let label = match &expression.kind {
@@ -377,6 +388,13 @@ impl Dump<'_> {
             TypedExprKind::MathCall { function, .. } => format!("MathCall {}", function.name()),
             TypedExprKind::SysValue(value) => format!("SysValue {value:?}"),
             TypedExprKind::SysExit(_) => "SysExit".to_owned(),
+            TypedExprKind::RecursionLimit(_) => "RecursionLimit".to_owned(),
+            TypedExprKind::ExceptionPart { part, .. } => format!("ExceptionPart({part:?})"),
+            TypedExprKind::OsErrorField { field, .. } => format!("OsErrorField({field:?})"),
+            TypedExprKind::FileAttribute { attribute, .. } => {
+                format!("FileAttribute({attribute:?})")
+            }
+            TypedExprKind::PercentDynamic { .. } => "PercentDynamic".to_owned(),
             TypedExprKind::Input(_) => "Input".to_owned(),
             TypedExprKind::Open { mode, access, .. } => format!("Open {mode:?} {access:?}"),
             TypedExprKind::PercentFormat { parts, .. } => {
@@ -432,6 +450,12 @@ impl Dump<'_> {
             TypedExprKind::Set(_) => "Set".to_owned(),
             TypedExprKind::Dict { .. } => "Dict".to_owned(),
             TypedExprKind::Wrap(_) => "Wrap".to_owned(),
+            TypedExprKind::Upcast(_) => "Upcast".to_owned(),
+            TypedExprKind::Downcast(_) => "Downcast".to_owned(),
+            TypedExprKind::IsInstance(_) => "IsInstance".to_owned(),
+            TypedExprKind::EachMember(_) => "EachMember".to_owned(),
+            TypedExprKind::CheckedLength(_) => "CheckedLength".to_owned(),
+            TypedExprKind::OperatorCall(_) => "OperatorCall".to_owned(),
             TypedExprKind::Unwrap(_) => "Unwrap".to_owned(),
             TypedExprKind::Comprehension { .. } => "Comprehension".to_owned(),
             TypedExprKind::DictOf(_) => "DictOf".to_owned(),

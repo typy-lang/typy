@@ -63,9 +63,27 @@ pub struct TyirClass {
     pub repr: Option<FunctionId>,
     /// `__str__`, which `str` of an exception's argument calls, when the class has one.
     pub str: Option<FunctionId>,
+    /// `__eq__`, which the type object's `equal` slot calls, with the class whose instances
+    /// its parameter takes, by index (ADR-0026).
+    pub equal: Option<(FunctionId, u32)>,
+    /// `__lt__`, `__le__`, `__gt__` and `__ge__`, which the type object's `order` slot calls.
+    pub order: [Option<FunctionId>; 4],
+    /// `__hash__`, which the type object's `hash` slot calls.
+    pub hash: Option<FunctionId>,
+    /// `__bool__`, which the type object's `truth` slot calls.
+    pub truth: Option<FunctionId>,
+    /// The method table: the methods a subclass may override, its own or a base's, each at
+    /// the position it has in the base's table, then those the class adds (ADR-0021).
+    pub methods: Vec<FunctionId>,
+    /// The class's base when it is a class of the module, by its index; its attributes come
+    /// first (ADR-0021).
+    pub base: Option<u32>,
     /// The base of an exception class, whose instances are exceptions; `None` for a class
     /// whose base is `object` (ADR-0013).
     pub exception_base: Option<crate::types::TypeObjectRef>,
+    /// For a copy of a generic class, the generic class by its index, which its type object
+    /// names as its base and as the class `type()` gives (ADR-0028).
+    pub public: Option<u32>,
 }
 
 impl TyirModule {

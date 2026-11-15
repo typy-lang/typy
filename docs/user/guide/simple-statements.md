@@ -10,6 +10,7 @@
 | `raise` and `assert`, described in [Exceptions](exceptions.md) | SMT-04, SMT-06 |
 | `del` of list items, list slices and dict keys | SMT-05 |
 | `global` in a function, for the module's variables | SMT-08 |
+| `type` at module level, described in [Types](types.md#type-aliases) | SMT-10 |
 
 `del` removes what each target names, in order: `del xs[i]` with
 `IndexError` outside the list, `del xs[a:b:c]` what the slice selects, and

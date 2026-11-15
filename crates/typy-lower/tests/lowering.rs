@@ -419,3 +419,318 @@ fn print_to_a_file_inside_an_except_clause_lowers_and_verifies() {
         "f()\n",
     ));
 }
+
+#[test]
+fn classes_with_overrides_dispatch_and_tests_narrow() {
+    let source = "\
+class Shape:
+    def area(self) -> float:
+        return 0.0
+
+    def __str__(self) -> str:
+        return 'shape'
+
+
+class Square(Shape):
+    def __init__(self, side: float) -> None:
+        self.side = side
+
+    def area(self) -> float:
+        if self.side < 0:
+            raise ValueError('negative')
+        return self.side * self.side + super().area()
+
+
+class Count:
+    def __init__(self) -> None:
+        self.at = 0
+
+    def __iter__(self) -> 'Count':
+        return self
+
+    def __next__(self) -> int:
+        raise StopIteration
+
+    def __enter__(self) -> 'Count':
+        return self
+
+    def __exit__(self, kind, error, trace) -> None:
+        pass
+
+
+class Twice(Count):
+    def __next__(self) -> int:
+        if self.at > 1:
+            raise StopIteration
+        self.at += 1
+        return self.at
+
+    def __enter__(self) -> 'Count':
+        return self
+
+
+def area(shape: Shape | None) -> float:
+    if isinstance(shape, Square):
+        return shape.side
+    if isinstance(shape, (Shape, object)):
+        return 0.5
+    return 0.0
+
+
+counts: list[Count] = [Count(), Twice()]
+for count in counts:
+    with count as entered:
+        for value in entered:
+            print(value, next(iter(Twice()), 0))
+maybe: Shape | None = Square(2.0)
+print(area(maybe), area(None), type(maybe).__name__, str(maybe), [maybe])
+print(isinstance(3, (int, str)), isinstance(maybe, object), isinstance(None, int))
+
+
+def kind(shape: Shape | None) -> str:
+    return type(shape).__name__
+
+
+def lookup(error: Exception) -> str:
+    if isinstance(error, KeyError):
+        return str(error)
+    return ''
+
+
+print(kind(None), kind(Square(1.0)), lookup(KeyError('k')), repr(Shape()))
+";
+    let printed = text(source);
+    for expected in [
+        "rt.is_instance",
+        "downcast",
+        "upcast",
+        "call class#",
+        "rt.object_type",
+        "rt.object_str",
+    ] {
+        assert!(printed.contains(expected), "{expected} in\n{printed}");
+    }
+}
+
+#[test]
+fn class_variables_are_globals_and_defaults_fill_new_instances() {
+    let printed = text(
+        "class A:\n    count = 0\n    size: int = 1\n    def __init__(self) -> None:\n        A.count += 1\n\
+         class B(A):\n    size: int = 2\n\
+         print(A().size, B().size, A.count)\n",
+    );
+    for expected in ["\"A.count\"", "\"B.size\"", "set_field"] {
+        assert!(printed.contains(expected), "{expected} in\n{printed}");
+    }
+}
+
+#[test]
+fn properties_call_their_accessors_and_static_methods_take_no_instance() {
+    let printed = text(concat!(
+        "class A:\n",
+        "    def __init__(self) -> None:\n",
+        "        self._x = 1\n",
+        "    @staticmethod\n",
+        "    def twice(n: int) -> int:\n",
+        "        return n * 2\n",
+        "    @property\n",
+        "    def x(self) -> int:\n",
+        "        return self._x\n",
+        "    @x.setter\n",
+        "    def x(self, value: int) -> None:\n",
+        "        self._x = value\n",
+        "class B(A):\n",
+        "    @property\n",
+        "    def x(self) -> int:\n",
+        "        return 5\n",
+        "items: list[A] = [A(), B()]\n",
+        "for item in items:\n",
+        "    item.x = A.twice(item.x)\n",
+        "    print(item.x, item.twice(3))\n",
+    ));
+    assert!(printed.contains("call class#0.method#"), "{printed}");
+    assert!(printed.contains("A.twice"), "{printed}");
+}
+
+#[test]
+fn each_class_has_its_own_copy_of_a_class_method() {
+    let printed = text(concat!(
+        "class Shape:\n",
+        "    count = 0\n",
+        "    def __init__(self) -> None:\n",
+        "        self.n = 1\n",
+        "    @classmethod\n",
+        "    def make(cls) -> 'Shape':\n",
+        "        cls.count += 1\n",
+        "        return cls()\n",
+        "class Square(Shape):\n",
+        "    count = 5\n",
+        "print(Shape.make().n, Square.make().n, Square.count)\n",
+    ));
+    assert!(printed.contains("Shape.make"), "{printed}");
+    assert!(printed.contains("Square.make"), "{printed}");
+}
+
+#[test]
+fn comparisons_of_instances_call_their_methods_and_may_swap() {
+    let printed = text(concat!(
+        "class V:\n",
+        "    def __init__(self, n: int) -> None:\n",
+        "        self.n = n\n",
+        "    def __eq__(self, other: 'V') -> bool:\n",
+        "        return self.n == other.n\n",
+        "class W(V):\n",
+        "    def __eq__(self, other: 'V') -> bool:\n",
+        "        return True\n",
+        "a: V = V(1)\n",
+        "b: V = W(2)\n",
+        "print(a == b, a != b, b == a)\n",
+    ));
+    assert!(printed.contains("same_method"), "{printed}");
+    assert!(printed.contains("rt.is_instance"), "{printed}");
+}
+
+#[test]
+fn a_comparison_method_inherited_from_a_base_is_compared_through_the_base_s_table() {
+    let printed = text(concat!(
+        "class B:\n",
+        "    def __eq__(self, other: 'B') -> bool:\n",
+        "        return True\n",
+        "class V(B):\n",
+        "    pass\n",
+        "class W(V):\n",
+        "    def __eq__(self, other: 'B') -> bool:\n",
+        "        return False\n",
+        "a: V = V()\n",
+        "b: V = W()\n",
+        "print(a == b)\n",
+    ));
+    assert!(printed.contains("same_method class#0"), "{printed}");
+}
+
+#[test]
+fn a_comparison_method_that_may_raise_is_refused() {
+    let directory = std::env::temp_dir().join(format!(
+        "typy-lower-raising-{}-{}",
+        std::process::id(),
+        next_id()
+    ));
+    std::fs::create_dir_all(&directory).unwrap();
+    let root = Utf8PathBuf::from_path_buf(directory.clone()).unwrap();
+    let source = concat!(
+        "class V:\n",
+        "    def __init__(self, n: int) -> None:\n",
+        "        self.n = n\n",
+        "    def __lt__(self, other: 'V') -> bool:\n",
+        "        return 1 // other.n > 0\n",
+        "class W(V):\n",
+        "    pass\n",
+        "print(sorted([V(1), V(2)])[0].n)\n",
+    );
+    std::fs::write(root.join("app.py"), source).unwrap();
+    let project = Project::load(&root.join("app.py"), ProjectSettings::new(root)).unwrap();
+    let program = TypeChecker::check(&project).unwrap();
+    let diagnostics = typy_lower::lower(&program).expect_err("a raising `__lt__` is refused");
+    let _ = std::fs::remove_dir_all(directory);
+    assert!(
+        diagnostics
+            .iter()
+            .any(|diagnostic| diagnostic.message().contains("V.__lt__"))
+    );
+}
+
+#[test]
+fn an_operator_whose_reflected_method_is_overridden_decides_in_a_loop() {
+    let printed = text(concat!(
+        "class V:\n",
+        "    def __init__(self, n: int) -> None:\n",
+        "        self.n = n\n",
+        "    def __add__(self, other: 'V') -> 'V':\n",
+        "        return V(self.n + other.n)\n",
+        "    def __radd__(self, other: 'V') -> 'V':\n",
+        "        return V(other.n + self.n)\n",
+        "    def __eq__(self, other: 'V') -> bool:\n",
+        "        return self.n == other.n\n",
+        "class W(V):\n",
+        "    def __radd__(self, other: 'V') -> 'V':\n",
+        "        return V(0)\n",
+        "    def __eq__(self, other: 'V') -> bool:\n",
+        "        return True\n",
+        "total: V = V(0)\n",
+        "for each in [V(1), W(2)]:\n",
+        "    total = total + each\n",
+        "    print(total == each)\n",
+        "print(total.n)\n",
+    ));
+    assert!(printed.contains("same_method"), "{printed}");
+}
+
+#[test]
+fn a_right_operand_typed_as_a_base_is_compared_through_the_left_class_s_table() {
+    let printed = text(concat!(
+        "class B:\n",
+        "    def __eq__(self, other: 'B') -> bool:\n",
+        "        return True\n",
+        "class V(B):\n",
+        "    def __eq__(self, other: 'B') -> bool:\n",
+        "        return False\n",
+        "class W(V):\n",
+        "    def __eq__(self, other: 'B') -> bool:\n",
+        "        return True\n",
+        "left: V = V()\n",
+        "right: B = W()\n",
+        "print(left == right)\n",
+    ));
+    assert!(printed.contains("downcast"), "{printed}");
+}
+
+#[test]
+fn container_methods_and_truth_call_the_class_s_methods() {
+    let printed = text(concat!(
+        "class G:\n",
+        "    def __len__(self) -> int:\n",
+        "        return 2\n",
+        "    def __delitem__(self, key: int) -> None:\n",
+        "        pass\n",
+        "class F:\n",
+        "    def __bool__(self) -> bool:\n",
+        "        return False\n",
+        "g = G()\n",
+        "del g[0]\n",
+        "print(len(g), bool(g), not F(), any([F()]))\n",
+        "if g:\n",
+        "    print('full')\n",
+    ));
+    assert!(printed.contains("rt.int_length"), "{printed}");
+}
+
+#[test]
+fn rarely_written_programs_lower_and_verify() {
+    for source in [
+        "d = {1: 2}\nd.update()\nprint(d)\n",
+        "def f(x: int | None = 3) -> int | None:\n    return x\nprint(f(), f(None))\n",
+        "f = open('out.txt', 'w')\ntry:\n    print(f'{f:>3}')\nexcept TypeError as e:\n    print(e)\nf.close()\n",
+        "e: list[int] = []\nprint(max([1, 2], default=0), max(e, default=0), min(e, default=5))\n",
+        "try:\n    for i in range(0, 3, 0):\n        print(i)\nexcept ValueError as e:\n    print(e)\n",
+        "import math\nprint(math.perm(5, None), math.perm(5))\n",
+        "def f() -> None:\n    x = None\n    print(x)\nf()\n",
+        "xs = [1, 2]\nxs[0] += 1\nprint(xs)\n",
+    ] {
+        lower(source);
+    }
+}
+
+#[test]
+fn a_bool_recursion_limit_is_set_as_an_int() {
+    let module = lower("import sys\nflag = True\nsys.setrecursionlimit(flag)\n");
+    assert!(typy_tyir::verify(&module).is_ok());
+    let text = print(&module);
+    // The `bool` picks the `int` 1 or 0, which the runtime takes.
+    for line in [
+        "const int 1",
+        "const int 0",
+        "invoke rt.sys_setrecursionlimit(",
+    ] {
+        assert!(text.contains(line), "{line:?} missing from\n{text}");
+    }
+}

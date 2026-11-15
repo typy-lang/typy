@@ -43,7 +43,11 @@ impl FunctionLowerer<'_> {
                 value,
                 span,
             } => {
-                let result = match target {
+                let inner = match target {
+                    typy_check::AssignTarget::Lazy { target, .. } => target.as_ref(),
+                    other => other,
+                };
+                let result = match inner {
                     typy_check::AssignTarget::Name(symbol) => {
                         self.program.symbol(*symbol).ty.clone()
                     }
@@ -63,9 +67,9 @@ impl FunctionLowerer<'_> {
                             "the checker allows an attribute target only on an instance"
                         ),
                     },
-                    typy_check::AssignTarget::Tuple(_) | typy_check::AssignTarget::Slice { .. } => {
-                        typy_check::Type::Error
-                    }
+                    typy_check::AssignTarget::Tuple(_)
+                    | typy_check::AssignTarget::Slice { .. }
+                    | typy_check::AssignTarget::Lazy { .. } => typy_check::Type::Error,
                 };
                 self.augmented_assignment(target, *operator, value, &result, *span);
             }
@@ -196,9 +200,10 @@ impl FunctionLowerer<'_> {
             }
             TypedStmt::Import {
                 modules,
+                pending,
                 bindings,
                 span,
-            } => self.import_statement(modules, bindings, *span),
+            } => self.import_statement((modules, pending), bindings, *span),
             TypedStmt::LazyImport {
                 reifies,
                 targets,

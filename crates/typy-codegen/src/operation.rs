@@ -9,6 +9,7 @@ use crate::runtime::runtime_function;
 
 impl<'ctx> FunctionEmitter<'_, '_, 'ctx> {
     /// Emits one operation and returns its value, if it has one.
+    #[allow(clippy::too_many_lines, reason = "one arm per operation")]
     pub(crate) fn operation(
         &mut self,
         operation: &Operation,
@@ -66,6 +67,49 @@ impl<'ctx> FunctionEmitter<'_, '_, 'ctx> {
                 function,
                 arguments,
             } => self.call_runtime(*function, arguments)?,
+            Operation::SameMethod {
+                class,
+                slot,
+                left,
+                right,
+            } => {
+                let (left, _) = self.method(*class, *slot, *left)?;
+                let (right, _) = self.method(*class, *slot, *right)?;
+                Some(
+                    self.builder
+                        .build_int_compare(
+                            inkwell::IntPredicate::EQ,
+                            self.builder.build_ptr_to_int(
+                                left,
+                                self.shared.context.i64_type(),
+                                "",
+                            )?,
+                            self.builder.build_ptr_to_int(
+                                right,
+                                self.shared.context.i64_type(),
+                                "",
+                            )?,
+                            "",
+                        )?
+                        .into(),
+                )
+            }
+            Operation::CallMethod {
+                class,
+                slot,
+                arguments,
+            } => {
+                let (pointer, ty) = self.method(*class, *slot, arguments[0])?;
+                let arguments = self.arguments(arguments)?;
+                match self
+                    .builder
+                    .build_indirect_call(ty, pointer, &arguments, "")?
+                    .try_as_basic_value()
+                {
+                    inkwell::values::ValueKind::Basic(value) => Some(value),
+                    inkwell::values::ValueKind::Instruction(_) => None,
+                }
+            }
             Operation::Call {
                 function,
                 arguments,
@@ -87,6 +131,11 @@ impl<'ctx> FunctionEmitter<'_, '_, 'ctx> {
             Operation::TupleItem { tuple, index } => self.tuple_item(*tuple, *index)?,
             Operation::Wrap { value, ty } => Some(self.wrap(*value, *ty)?),
             Operation::Unwrap(value) => Some(self.unwrap(*value)?),
+            // An instance of a class keeps its address as an instance of its base, whose
+            // attributes come first (ADR-0021).
+            Operation::Upcast { value, .. } | Operation::Downcast { value, .. } => {
+                Some(self.value(*value)?)
+            }
             Operation::IsNone(value) => Some(self.is_none(*value)?),
             Operation::NewInstance { class } => Some(self.new_instance(*class)?),
             Operation::Field {

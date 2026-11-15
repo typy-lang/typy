@@ -93,3 +93,13 @@ fn texts_hash_as_cpython_does_with_a_zero_seed() {
         assert_eq!(unsafe { text(from_str(value)) }, expected, "{value:?}");
     }
 }
+
+#[test]
+fn an_int_from_hash_is_reduced_as_cpython_reduces_it() {
+    let word = |value| crate::word::inline(value).unwrap();
+    // SAFETY: inline words are live `int` words.
+    unsafe {
+        assert_eq!(super::typy_rt_int_hash(word(42)), 42);
+        assert_eq!(super::typy_rt_int_hash(word(-1)), -2);
+    }
+}

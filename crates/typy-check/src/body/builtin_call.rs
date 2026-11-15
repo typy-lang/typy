@@ -39,6 +39,9 @@ impl BodyChecker<'_> {
         if builtin == Builtin::Type {
             return self.call_type(arguments, keywords, span);
         }
+        if builtin == Builtin::IsInstance {
+            return self.call_isinstance(arguments, keywords, span);
+        }
         if builtin == Builtin::Round {
             return self.call_round(arguments, keywords, span);
         }
@@ -58,6 +61,22 @@ impl BodyChecker<'_> {
             .iter()
             .map(|argument| self.expression(argument))
             .collect();
+        // `len` of an instance calls its class's `__len__` (CLS-07).
+        if builtin == Builtin::Len
+            && keywords.is_empty()
+            && let [value] = values.as_slice()
+            && let Some(call) = self.length_call(value, span)
+        {
+            return call;
+        }
+        // `abs` of an instance calls its class's `__abs__` (CLS-07).
+        if builtin == Builtin::Abs
+            && keywords.is_empty()
+            && let [value] = values.as_slice()
+            && let Some(call) = self.operator_unary("__abs__", value, span)
+        {
+            return call;
+        }
         if let Some(keyword) = keywords.first() {
             return self.error(
                 Diagnostic::new(
@@ -92,6 +111,7 @@ impl BodyChecker<'_> {
             | Builtin::Next
             | Builtin::Open
             | Builtin::Type
+            | Builtin::IsInstance
             | Builtin::Sorted
             | Builtin::Sum
             | Builtin::Any
@@ -316,7 +336,10 @@ impl BodyChecker<'_> {
     ) -> TypedExpr {
         let values: Vec<TypedExpr> = arguments
             .iter()
-            .map(|argument| self.expression(argument))
+            .map(|argument| {
+                self.written_part(argument, false)
+                    .unwrap_or_else(|| self.expression(argument))
+            })
             .collect();
         let mut sep = None;
         let mut end = None;
@@ -339,7 +362,10 @@ impl BodyChecker<'_> {
                 // `file=None` is standard output, as no `file` is.
                 "file" if value.ty == Type::NoneType => {}
                 "file" => {
-                    self.expect(&value, Type::TextFile, "`file`");
+                    // A text file opened for a file descriptor writes as any other.
+                    if value.ty != Type::DescriptorFile(None) {
+                        self.expect(&value, Type::TextFile, "`file`");
+                    }
                     file = Some(value);
                 }
                 "flush" => {

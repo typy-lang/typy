@@ -7,7 +7,7 @@ use typy_source::syntax::{Constant, Expr, Identifier, Parameter, Stmt};
 
 use super::annotation::{AnnotationScope, annotation_type};
 use crate::typed::ClassId;
-use crate::typed::{FunctionSignature, SignatureParameter, TypedConstant};
+use crate::typed::{FunctionId, FunctionSignature, SignatureParameter, TypedConstant};
 use crate::types::Type;
 
 /// A function definition with its signature: a module-level function, or a method of a class.
@@ -18,7 +18,15 @@ pub(crate) struct Definition<'tree> {
     pub(crate) qualified_name: String,
     /// The class of a method.
     pub(crate) class: Option<ClassId>,
+    /// Whether the first parameter is the instance: a method other than a static method or a
+    /// class method.
+    pub(crate) takes_instance: bool,
+    /// For a copy of a class method a class inherits, the copy of the class that defines it,
+    /// whose diagnostics this copy does not repeat (ADR-0025).
+    pub(crate) copy_of: Option<FunctionId>,
     pub(crate) signature: FunctionSignature,
+    /// The type parameters of a generic function, whose copies run in its place (GEN-01).
+    pub(crate) type_parameters: Vec<crate::generic::TypeParameter>,
     pub(crate) parameters: Vec<(String, Span)>,
     pub(crate) body: &'tree [Stmt],
     pub(crate) span: Span,
@@ -27,13 +35,46 @@ pub(crate) struct Definition<'tree> {
 /// The parts of a `def` statement a definition is built from.
 pub(super) struct FunctionParts<'tree> {
     pub(super) name: &'tree Identifier,
+    /// The decorators, of which a method may have one of CLS-06.
+    pub(super) decorators: &'tree [Expr],
     pub(super) parameters: &'tree [Parameter],
+    /// The type parameters of a generic function (GEN-01).
+    pub(super) type_parameters: &'tree [typy_source::syntax::TypeParameter],
     pub(super) returns: Option<&'tree Expr>,
     pub(super) body: &'tree [Stmt],
     pub(super) span: Span,
 }
 
+/// What a decorator makes of a method (CLS-06).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(super) enum MethodKind {
+    /// A method of the instance, without a decorator.
+    Instance,
+    /// `@staticmethod`: a function of the class, without the instance.
+    Static,
+    /// `@classmethod`: a function of the class, which takes it.
+    Class,
+    /// `@property`: read as the attribute of its name.
+    Getter,
+    /// `@name.setter`: called when the attribute `name` is assigned.
+    Setter(String),
+}
+
 impl<'tree> FunctionParts<'tree> {
+    /// Returns what the method's decorator makes of it.
+    pub(super) fn method_kind(&self) -> MethodKind {
+        match self.decorators.first() {
+            Some(Expr::Name { id, .. }) if id == "staticmethod" => MethodKind::Static,
+            Some(Expr::Name { id, .. }) if id == "classmethod" => MethodKind::Class,
+            Some(Expr::Name { id, .. }) if id == "property" => MethodKind::Getter,
+            Some(Expr::Attribute { value, .. }) => match value.as_ref() {
+                Expr::Name { id, .. } => MethodKind::Setter(id.clone()),
+                _ => MethodKind::Instance,
+            },
+            _ => MethodKind::Instance,
+        }
+    }
+
     /// Returns the parts of a `def` statement, or `None` for any other statement.
     pub(super) fn of(statement: &'tree Stmt) -> Option<Self> {
         let Stmt::FunctionDef {
@@ -41,6 +82,8 @@ impl<'tree> FunctionParts<'tree> {
             parameters,
             returns,
             body,
+            decorators,
+            type_parameters,
             span,
             ..
         } = statement
@@ -49,7 +92,9 @@ impl<'tree> FunctionParts<'tree> {
         };
         Some(Self {
             name,
+            decorators,
             parameters,
+            type_parameters,
             returns: returns.as_ref(),
             body,
             span: *span,
@@ -70,18 +115,32 @@ pub(super) fn defined_twice(name: &Identifier) -> Diagnostic {
     .with_rule(RuleId::STD_04)
 }
 
+/// What a module's function signatures may name: its classes, with the type of their
+/// instances, the names its imports give, and the generic classes and their copies.
+#[derive(Clone, Copy)]
+pub(super) struct FunctionScope<'known> {
+    pub(super) classes: &'known BTreeMap<String, ClassId>,
+    pub(super) instances: &'known BTreeMap<ClassId, Type>,
+    pub(super) names: &'known crate::check::ImportedNames,
+    pub(super) copies: &'known std::cell::RefCell<crate::body::ClassCopies>,
+}
+
 /// Collects the module's functions in source order, with their signatures (TYP-01). Each
 /// signature may name the classes whose `class` statements come before its `def`, and the
 /// classes of the modules checked before it, numbered below `first_class`.
 pub(super) fn collect_functions<'tree>(
     statements: &'tree [Stmt],
     first_class: usize,
-    classes: &BTreeMap<String, ClassId>,
-    exceptions: &BTreeMap<ClassId, crate::exception::ExceptionClass>,
-    names: &crate::check::ImportedNames,
+    known: &FunctionScope<'_>,
     floor_defers: bool,
     diagnostics: &mut Diagnostics,
 ) -> Vec<Definition<'tree>> {
+    let FunctionScope {
+        classes,
+        instances,
+        names,
+        copies,
+    } = *known;
     let mut functions: Vec<Definition<'tree>> = Vec::new();
     let mut classes_before = u32::try_from(first_class).unwrap_or(u32::MAX);
     for statement in statements {
@@ -98,21 +157,77 @@ pub(super) fn collect_functions<'tree>(
             diagnostics.push(defined_twice(parts.name));
             continue;
         }
-        let scope = AnnotationScope {
+        let mut scope = AnnotationScope {
             classes,
-            exceptions,
+            instances,
             modules: &names.modules,
+            module_aliases: &names.module_aliases,
             names: &names.names,
             standard: &names.standard,
+            parameters: &super::annotation::NO_PARAMETERS,
+            copies,
             bound: if floor_defers {
                 u32::MAX
             } else {
                 classes_before
             },
         };
-        functions.push(definition(&parts, None, &scope, diagnostics));
+        let type_parameters = type_parameters(&parts, &scope, diagnostics);
+        let in_scope: BTreeMap<String, Type> = type_parameters
+            .iter()
+            .map(|parameter| (parameter.name.clone(), Type::parameter(parameter.clone())))
+            .collect();
+        scope.parameters = &in_scope;
+        let mut made = definition(&parts, None, &scope, diagnostics);
+        made.type_parameters = type_parameters;
+        super::protocol::protocol_parameters(&mut made, diagnostics);
+        functions.push(made);
     }
     functions
+}
+
+/// Returns the type parameters of a generic function, each with its bound or its
+/// constraints (GEN-01, GEN-02).
+fn type_parameters(
+    parts: &FunctionParts<'_>,
+    scope: &AnnotationScope<'_>,
+    diagnostics: &mut Diagnostics,
+) -> Vec<crate::generic::TypeParameter> {
+    resolve_type_parameters(parts.type_parameters, parts.span, scope, diagnostics)
+}
+
+/// Returns the type parameters a list declares for the definition at `owner`, each with its
+/// bound or its constraints (GEN-01, GEN-02).
+pub(super) fn resolve_type_parameters(
+    parameters: &[typy_source::syntax::TypeParameter],
+    owner: Span,
+    scope: &AnnotationScope<'_>,
+    diagnostics: &mut Diagnostics,
+) -> Vec<crate::generic::TypeParameter> {
+    parameters
+        .iter()
+        .enumerate()
+        .map(|(index, parameter)| {
+            let (bound, constraints) = match &parameter.bound {
+                Some(Expr::Tuple { elements, .. }) => (
+                    None,
+                    elements
+                        .iter()
+                        .map(|each| annotation_type(each, scope, diagnostics))
+                        .collect(),
+                ),
+                Some(bound) => (Some(annotation_type(bound, scope, diagnostics)), Vec::new()),
+                None => (None, Vec::new()),
+            };
+            crate::generic::TypeParameter {
+                owner,
+                index,
+                name: parameter.name.name.clone(),
+                bound,
+                constraints,
+            }
+        })
+        .collect()
 }
 
 /// The class a method belongs to, which types its first parameter.
@@ -120,6 +235,37 @@ pub(super) struct Owner {
     pub(super) id: ClassId,
     /// The type of the class's instances.
     pub(super) instance: Type,
+    /// Whether the first parameter is the instance: false for a static method (CLS-06).
+    pub(super) takes_instance: bool,
+}
+
+/// Returns the type of a method's first parameter, the instance, after reporting an
+/// annotation that names another type.
+fn instance_parameter(
+    owner: &Owner,
+    annotation: Option<&Expr>,
+    scope: &AnnotationScope<'_>,
+    diagnostics: &mut Diagnostics,
+) -> Type {
+    let instance = owner.instance.clone();
+    // A class method's first parameter is the class each copy is made for (ADR-0025).
+    if let Some(annotation) = annotation.filter(|_| !matches!(instance, Type::TypeObject(_))) {
+        let annotated = annotation_type(annotation, scope, diagnostics);
+        if !annotated.matches(&instance) {
+            diagnostics.push(
+                Diagnostic::new(
+                    DiagnosticCode::error(404),
+                    annotation.span(),
+                    format!(
+                        "the first parameter of a method is the instance, {}",
+                        instance.with_article()
+                    ),
+                )
+                .with_rule(RuleId::CLS_01),
+            );
+        }
+    }
+    instance
 }
 
 /// Returns the definition of a function, or of a method of `owner`, whose first parameter is
@@ -135,29 +281,14 @@ pub(super) fn definition<'tree>(
     let mut parameter_names = Vec::new();
     for (index, parameter) in parts.parameters.iter().enumerate() {
         let ty = match (owner, &parameter.annotation) {
-            (Some(owner), annotation) if index == 0 => {
-                let instance = owner.instance.clone();
-                if let Some(annotation) = annotation {
-                    let annotated = annotation_type(annotation, scope, diagnostics);
-                    if !annotated.matches(&instance) {
-                        diagnostics.push(
-                            Diagnostic::new(
-                                DiagnosticCode::error(404),
-                                annotation.span(),
-                                format!(
-                                    "the first parameter of a method is the instance, {}",
-                                    instance.with_article()
-                                ),
-                            )
-                            .with_rule(RuleId::CLS_01),
-                        );
-                    }
-                }
-                instance
+            (Some(owner), annotation) if index == 0 && owner.takes_instance => {
+                instance_parameter(owner, annotation.as_ref(), scope, diagnostics)
             }
             (_, Some(annotation)) => annotation_type(annotation, scope, diagnostics),
             // The parameters of `__exit__` have the types CPython gives them (CST-10).
-            (Some(_), None) if name == "__exit__" && (1..=3).contains(&index) => {
+            (Some(owner), None)
+                if owner.takes_instance && name == "__exit__" && (1..=3).contains(&index) =>
+            {
                 exit_parameter(index)
             }
             (_, None) => {
@@ -222,6 +353,13 @@ pub(super) fn definition<'tree>(
             |owner| format!("{}.{name}", owner.instance),
         ),
         class: owner.map(|owner| owner.id),
+        takes_instance: owner.is_some_and(|owner| owner.takes_instance)
+            && !matches!(
+                owner.map(|owner| &owner.instance),
+                Some(Type::TypeObject(_))
+            ),
+        copy_of: None,
+        type_parameters: Vec::new(),
         signature: FunctionSignature {
             parameters: signature_parameters,
             returns,

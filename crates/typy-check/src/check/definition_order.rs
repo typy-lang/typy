@@ -54,10 +54,11 @@ pub(super) fn check_calls_follow_definitions(
         referenced_functions(definition.body, &names, &mut found);
         calls.insert(definition.name.clone(), found);
     }
-    for method in methods {
-        let Some((class, _)) = method.qualified_name.split_once('.') else {
-            continue;
-        };
+    // A method's qualified name is its class's name, a dot and its own.
+    for (method, class) in methods.iter().filter_map(|method| {
+        let (class, _) = method.qualified_name.split_once('.')?;
+        Some((method, class))
+    }) {
         let mut found = BTreeSet::new();
         referenced_functions(method.body, &names, &mut found);
         calls.entry(class.to_owned()).or_default().extend(found);

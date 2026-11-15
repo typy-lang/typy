@@ -211,33 +211,57 @@ fn lazy_imports_outside_module_level_are_rejected() {
 }
 
 #[test]
-fn lazy_imports_planned_for_a_later_release_give_e0201() {
-    let cases: &[&str] = &[
-        "lazy import tools\nif tools.LIMIT:\n    lazy import tools\n",
-        "lazy import tools\ntools.LIMIT = 3\n",
-    ];
-    for source in cases {
-        let found = rejected(&[("app.py", source), ("tools.py", TOOLS), ("other.py", OTHER)]);
-        assert_eq!(found, ["E0201"], "{source}");
+fn a_function_bound_by_two_lazy_imports_gives_e0201() {
+    let found = rejected(&[
+        (
+            "app.py",
+            "lazy from tools import double\nif double(1):\n    lazy from other import double\n",
+        ),
+        ("tools.py", TOOLS),
+        ("other.py", OTHER),
+    ]);
+    assert_eq!(found, ["E0201"]);
+}
+
+#[test]
+fn a_module_bound_twice_or_assigned_through_lazily_is_accepted() {
+    for (source, node) in [
+        (
+            "lazy import tools\nif tools.LIMIT:\n    lazy import tools\n",
+            "Lazy ",
+        ),
+        ("lazy import tools\ntools.LIMIT = 3\n", "Assign lazy LIMIT"),
+    ] {
+        let dump = accepted_at(
+            PythonFloor::V3_15,
+            &[("app.py", source), ("tools.py", TOOLS), ("other.py", OTHER)],
+        );
+        assert_contains(&dump, &["LazyImport", node]);
     }
 }
 
 #[test]
-fn a_name_another_module_imports_lazily_gives_e0201() {
-    for source in [
-        "from middle import double\n",
-        "import middle\nprint(middle.double(1))\n",
-        "import middle\nprint(middle.tools)\n",
+fn a_name_another_module_imports_lazily_is_read_through_its_function() {
+    for (source, node) in [
+        (
+            "from middle import double\nprint(double(1))\n",
+            "runs lazy ",
+        ),
+        ("import middle\nprint(middle.double(1))\n", "Lazy "),
+        ("import middle\nprint(middle.LIMIT + 1)\n", "Lazy "),
     ] {
-        let found = rejected(&[
-            ("app.py", source),
-            (
-                "middle.py",
-                "lazy import tools\nlazy from tools import double\n",
-            ),
-            ("tools.py", TOOLS),
-        ]);
-        assert_eq!(found, ["E0201"], "{source}");
+        let dump = accepted_at(
+            PythonFloor::V3_15,
+            &[
+                ("app.py", source),
+                (
+                    "middle.py",
+                    "lazy import tools\nlazy from tools import double, LIMIT\n",
+                ),
+                ("tools.py", TOOLS),
+            ],
+        );
+        assert_contains(&dump, &["LazyImport", node]);
     }
 }
 

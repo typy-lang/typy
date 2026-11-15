@@ -1,5 +1,4 @@
-//! The names of the `sys` module (LIB-04, MOD-09, ADR-0018): the four TyPy 0.3 provides,
-//! the ones planned for 0.4, the switches of lazy imports it refuses, and the rest of the
+//! The names of the `sys` module (LIB-04, LIB-13, MOD-09, ADR-0018): the ones TyPy provides, the switches of lazy imports it refuses, and the rest of the
 //! names CPython 3.12 to 3.15 define, which TyPy does not provide.
 
 /// A value of `sys`.
@@ -11,6 +10,17 @@ pub enum SysValue {
     Stdout,
     /// `sys.stderr`.
     Stderr,
+    /// `sys.stdin`, a text file read from standard input (LIB-13).
+    Stdin,
+}
+
+/// A constant of `sys`, the same for every program TyPy builds (LIB-13).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum SysConstant {
+    /// An `int`, by its decimal digits.
+    Int(&'static str),
+    /// A `str`.
+    Str(&'static str),
 }
 
 /// What a name of `sys` is.
@@ -20,11 +30,18 @@ pub(crate) enum SysName {
     Value(SysValue),
     /// `sys.exit`.
     Exit,
+    /// A constant: `maxsize`, `maxunicode`, `byteorder` or `platform`.
+    Constant(SysConstant),
+    /// `sys.getrecursionlimit`.
+    GetRecursionLimit,
+    /// `sys.setrecursionlimit`.
+    SetRecursionLimit,
     /// A switch of lazy imports, which changes how imports behave from outside the module
     /// that imports (MOD-09).
     LazySwitch,
-    /// A name planned for TyPy 0.4 (LIB-13).
-    Planned,
+    /// `sys.version_info`, which TyPy folds where a program compares or reads it, and plans
+    /// as a value (LIB-13, LIB-16).
+    VersionInfo,
     /// A name of CPython's `sys` that TyPy does not provide.
     Unprovided,
 }
@@ -36,20 +53,6 @@ const LAZY_SWITCHES: [&str; 5] = [
     "lazy_modules",
     "set_lazy_imports",
     "set_lazy_imports_filter",
-];
-
-/// The names planned for TyPy 0.4 (LIB-13).
-const PLANNED: [&str; 10] = [
-    "byteorder",
-    "getrecursionlimit",
-    "hexversion",
-    "maxsize",
-    "maxunicode",
-    "platform",
-    "setrecursionlimit",
-    "stdin",
-    "version",
-    "version_info",
 ];
 
 /// The other public names of CPython 3.12 to 3.15's `sys`, in name order.
@@ -128,9 +131,25 @@ pub(crate) fn sys_name(name: &str) -> Option<SysName> {
         "argv" => SysName::Value(SysValue::Argv),
         "stdout" => SysName::Value(SysValue::Stdout),
         "stderr" => SysName::Value(SysValue::Stderr),
+        "stdin" => SysName::Value(SysValue::Stdin),
         "exit" => SysName::Exit,
+        // TyPy 0.4 builds for Linux x86_64 only (SRS 2.3); `platform` follows the target
+        // once macOS is one.
+        "maxsize" => SysName::Constant(SysConstant::Int("9223372036854775807")),
+        "maxunicode" => SysName::Constant(SysConstant::Int("1114111")),
+        "byteorder" => SysName::Constant(SysConstant::Str("little")),
+        "platform" => SysName::Constant(SysConstant::Str("linux")),
+        // The version of CPython whose behaviour TyPy follows (ADR-0029).
+        "version" => SysName::Constant(SysConstant::Str(concat!(
+            "3.15.0 (TyPy ",
+            env!("CARGO_PKG_VERSION"),
+            ")"
+        ))),
+        "hexversion" => SysName::Constant(SysConstant::Int("51314928")),
+        "version_info" => SysName::VersionInfo,
+        "getrecursionlimit" => SysName::GetRecursionLimit,
+        "setrecursionlimit" => SysName::SetRecursionLimit,
         _ if LAZY_SWITCHES.contains(&name) => SysName::LazySwitch,
-        _ if PLANNED.contains(&name) => SysName::Planned,
         _ if OTHERS.binary_search(&name).is_ok() => SysName::Unprovided,
         _ => return None,
     })
@@ -138,7 +157,7 @@ pub(crate) fn sys_name(name: &str) -> Option<SysName> {
 
 #[cfg(test)]
 mod tests {
-    use super::{OTHERS, SysName, SysValue, sys_name};
+    use super::{OTHERS, SysConstant, SysName, SysValue, sys_name};
 
     #[test]
     fn each_kind_of_name_is_found() {
@@ -148,7 +167,16 @@ mod tests {
         assert_eq!(sys_name("stderr"), Some(SysName::Value(SysValue::Stderr)));
         assert_eq!(sys_name("exit"), Some(SysName::Exit));
         assert_eq!(sys_name("set_lazy_imports"), Some(SysName::LazySwitch));
-        assert_eq!(sys_name("maxsize"), Some(SysName::Planned));
+        assert_eq!(sys_name("stdin"), Some(SysName::Value(SysValue::Stdin)));
+        assert_eq!(
+            sys_name("byteorder"),
+            Some(SysName::Constant(SysConstant::Str("little")))
+        );
+        assert_eq!(
+            sys_name("setrecursionlimit"),
+            Some(SysName::SetRecursionLimit)
+        );
+        assert_eq!(sys_name("version_info"), Some(SysName::VersionInfo));
         assert_eq!(sys_name("settrace"), Some(SysName::Unprovided));
         assert_eq!(sys_name("argvs"), None);
     }

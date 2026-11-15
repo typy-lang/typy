@@ -81,7 +81,7 @@ fn a_try_statement_types_each_clause_and_its_name() {
         .iter()
         .find(|symbol| symbol.name == "e")
         .expect("the clause's name is a symbol");
-    assert_eq!(e.ty.to_string(), "LookupError");
+    assert_eq!(e.ty.to_string(), "IndexError | KeyError");
 }
 
 #[test]
@@ -385,7 +385,6 @@ fn rejected_programs_give_their_codes() {
         ("n: int | None = None\nprint(n is True)\n", &["E0301"]),
         ("print(1[0])\n", &["E0401"]),
         ("print(\"a\"[\"b\"])\n", &["E0404"]),
-        ("template = \"%d\"\nprint(template % 1)\n", &["E0201"]),
         ("print(~\"a\")\n", &["E0401"]),
         (
             "def f(a: int) -> int:\n    return a\nprint(f(1, 2))\n",
@@ -685,7 +684,7 @@ fn each_operator_gives_python_s_result_type_or_its_diagnostic() {
         ("s * f", Err(&["E0401"])),
         ("s - s", Err(&["E0401"])),
         ("s + i", Err(&["E0401"])),
-        ("s % i", Err(&["E0201"])),
+        ("s % i", Ok("str")),
         // Arithmetic: int with int stays int, anything with float is float (EXP-02).
         ("i + i", Ok("int")),
         ("i + f", Ok("float")),
@@ -948,6 +947,8 @@ fn list_rules_give_their_codes() {
         ("x = [1]\nx.append(item=2)\n", &["E0404"]),
         ("x = [1]\nx.append()\n", &["E0404"]),
         ("x = 'a'.format()\n", &["E0412"]),
+        ("x = [1]\ny = x.copy(1)\n", &["E0404"]),
+        ("x = 'ab'.fromkeys(['a'])\n", &["E0412"]),
         ("print(1 in 2)\n", &["E0407"]),
         ("def f(x: list) -> None:\n    pass\n", &["E0408"]),
     ];
@@ -1053,7 +1054,7 @@ fn builtins_of_one_iterable_give_their_codes() {
         ("x = sum([True])\n", &["E0406"]),
         ("x = sum([1], 0.5)\n", &["E0404"]),
         ("x = sum([1], 0, 1)\n", &["E0404"]),
-        ("x = sum([1], start=0, start=1)\n", &["E0404"]),
+        ("x = sum([1], start=0, start=1)\n", &["E0103"]),
         ("x = sum([1], key=1)\n", &["E0404"]),
         ("x = sorted()\n", &["E0404"]),
         ("x = sorted([1], key=abs)\n", &["E0201"]),
@@ -1064,12 +1065,12 @@ fn builtins_of_one_iterable_give_their_codes() {
         ("x = sorted(3)\n", &["E0411"]),
         ("x = sorted(missing)\n", &["E0205"]),
         ("x = max([1], default='a')\n", &["E0404"]),
-        ("x = min([1], default=1, default=2)\n", &["E0404"]),
+        ("x = min([1], default=1, default=2)\n", &["E0103"]),
         ("x = any(5)\n", &["E0411"]),
         ("x = [1]\nx.sort(True)\n", &["E0404"]),
         ("x = [1]\nx.sort(key=abs)\n", &["E0201"]),
         ("x = [1]\nx.sort(order=1)\n", &["E0404"]),
-        ("x = [1]\nx.sort(reverse=True, reverse=False)\n", &["E0404"]),
+        ("x = [1]\nx.sort(reverse=True, reverse=False)\n", &["E0103"]),
         ("x = [1]\nx.append(1, key=2)\n", &["E0404"]),
         ("x = any([])\n", &["E0410"]),
     ];
@@ -1118,7 +1119,7 @@ fn loop_sources_give_their_codes() {
         ("for i in enumerate([1], begin=1):\n    pass\n", &["E0404"]),
         (
             "for i in enumerate([1], start=1, start=2):\n    pass\n",
-            &["E0404"],
+            &["E0103"],
         ),
         ("for i in enumerate(3):\n    pass\n", &["E0411"]),
         ("for i in zip([1], strict=1):\n    pass\n", &["E0404"]),
@@ -1254,8 +1255,9 @@ fn str_method_arguments_bind_by_position_and_name() {
     let cases: &[(&str, &[&str])] = &[
         ("x = 'a'.split(1)\n", &["E0404"]),
         ("x = 'a'.split(',', 1, 2)\n", &["E0404"]),
-        ("x = 'a'.split(sep=',', sep=',')\n", &["E0404"]),
+        ("x = 'a'.split(sep=',', sep=',')\n", &["E0103"]),
         ("x = 'a'.split(separator=',')\n", &["E0404"]),
+        ("x = 'a'.split(',', sep=',')\n", &["E0404"]),
         ("x = 'a'.find(sub='a')\n", &["E0404"]),
         ("x = 'a'.find()\n", &["E0404"]),
         ("x = 'a'.find('a', 1.5)\n", &["E0404"]),
@@ -1263,6 +1265,8 @@ fn str_method_arguments_bind_by_position_and_name() {
         ("x = 'a'.startswith(('a', 1))\n", &["E0404"]),
         ("x = ','.join([1, 2])\n", &["E0404"]),
         ("x = ','.join(5)\n", &["E0411"]),
+        // An item whose type is already an error gives no second report.
+        ("x = ','.join([missing])\n", &["E0205"]),
         ("x = 'a'.strip(**{})\n", &["E0201"]),
         ("x = 'a'.format()\n", &["E0412"]),
         ("x = 'a'.center(5, fillchar='*')\n", &["E0404"]),
@@ -1467,7 +1471,7 @@ fn dict_rules_give_their_codes() {
         ("d = dict([1, 2])\n", &["E0404"]),
         ("d = dict([(1, 2, 3)])\n", &["E0404"]),
         ("d = dict([([1], 2)])\n", &["E0413"]),
-        ("d = dict(a=1, a=2)\n", &["E0404"]),
+        ("d = dict(a=1, a=2)\n", &["E0103"]),
         ("d = dict({1: 2}, a=3)\n", &["E0404"]),
         ("d = dict(a=1, b='x')\n", &["E0409"]),
         ("d = dict([1], a=1)\n", &["E0404"]),
@@ -1673,7 +1677,7 @@ fn optional_rules_give_their_codes() {
             "def g(x: str | None) -> str:\n    return x.upper()\n",
             &["E0412"],
         ),
-        ("h: int | str = 1\n", &["E0201"]),
+        ("h: int | str = 1.5\n", &["E0402"]),
         ("j: list[int] = [1]\nk: list[int | None] = j\n", &["E0402"]),
         ("m: int | None = 'a'\n", &["E0402"]),
         ("n = {'a': 1}\nn.setdefault('b')\n", &["E0404"]),
@@ -1763,7 +1767,7 @@ else:
 fn statements_and_expressions_outside_the_subset_give_their_codes() {
     let cases: &[(&str, &[&str])] = &[
         ("@d\ndef f() -> None:\n    pass\n", &["E0201"]),
-        ("def f[T](a: T) -> None:\n    pass\n", &["E0201"]),
+        ("def f[*Ts](a: int) -> None:\n    pass\n", &["E0201"]),
         ("return 1\n", &["E0103"]),
         ("break\n", &["E0103"]),
         ("continue\n", &["E0103"]),
@@ -1801,23 +1805,14 @@ fn statements_and_expressions_outside_the_subset_give_their_codes() {
             "try:\n    x = 1\nexcept ValueError:\n    pass\nfinally:\n    pass\nprint(x)\n",
             &["E0306"],
         ),
-        // A class derives from an exception class defined before it, and redefines only
-        // `__init__`, `__str__` and `__repr__` (CLS-03, CLS-13, CLS-14, EXC-12).
-        ("class A(Exception, ValueError):\n    pass\n", &["E0201"]),
-        ("class B:\n    pass\nclass A(B):\n    pass\n", &["E0201"]),
-        ("class A(int):\n    pass\n", &["E0201"]),
         (
             "class A(B):\n    pass\nclass B(Exception):\n    pass\n",
             &["E0306"],
         ),
         ("class A(UnicodeEncodeError):\n    pass\n", &["E0417"]),
         (
-            "class A(Exception):\n    def f(self) -> None:\n        pass\nclass B(A):\n    def f(self) -> None:\n        pass\n",
-            &["E0201"],
-        ),
-        (
             "class A(Exception):\n    def f(self) -> None:\n        super().__init__()\n",
-            &["E0201"],
+            &["E0414"],
         ),
         (
             "class A(Exception):\n    def __init__(self) -> None:\n        super().__init__(x=1)\n",
@@ -1831,8 +1826,8 @@ fn statements_and_expressions_outside_the_subset_give_their_codes() {
         ("class A(Exception):\n    pass\nA().n\n", &["E0414"]),
         ("try:\n    pass\nexcept int:\n    pass\n", &["E0418"]),
         (
-            "class A:\n    def __init__(self) -> None:\n        super().__init__()\n",
-            &["E0201"],
+            "class A:\n    def __init__(self) -> None:\n        super().__init__(1)\n",
+            &["E0404"],
         ),
         // The name `as` binds is deleted after its clause (EXC-01).
         (
@@ -1851,6 +1846,65 @@ fn statements_and_expressions_outside_the_subset_give_their_codes() {
         ),
         ("x: set[Thing] = {1}\n", &["E0205"]),
         ("print(sorted([{1: 2}]))\n", &["E0407"]),
+    ];
+    for (source, expected) in cases {
+        assert_eq!(&rejected(source), expected, "\n{source}");
+    }
+}
+
+#[test]
+fn a_base_must_be_a_class_before_it_and_an_override_must_fit() {
+    let cases: &[(&str, &[&str])] = &[
+        // A class derives from one class defined before it, and an override fits the method
+        // it overrides (CLS-03, CLS-04, CLS-14, EXC-12).
+        ("class A(Exception, ValueError):\n    pass\n", &["E0201"]),
+        ("class A(B):\n    pass\nclass B:\n    pass\n", &["E0306"]),
+        ("class A(A):\n    pass\n", &["E0306"]),
+        ("class A(len):\n    pass\n", &["E0201"]),
+        (
+            "class B:\n    x: int\nclass A(B):\n    x: str\n",
+            &["E0202"],
+        ),
+        (
+            "class B:\n    def __init__(self) -> None:\n        self.x = 1\nclass A(B):\n    x: int\n",
+            &["E0202"],
+        ),
+        ("class A(int):\n    pass\n", &["E0201"]),
+        ("import sys\nclass A(sys.Missing):\n    pass\n", &["E0201"]),
+        ("class A(len(\"x\")):\n    pass\n", &["E0201"]),
+        ("class A(B.C.D):\n    pass\n", &["E0201"]),
+        (
+            "class A:\n    def f(self, n: int = 1) -> int:\n        return n\nclass B(A):\n    def f(self) -> int:\n        return 1\n",
+            &["E0404"],
+        ),
+        (
+            "class A:\n    def f(self, n: int = 1) -> int:\n        return n\nclass B(A):\n    def f(self, m: int = 1) -> int:\n        return m\n",
+            &["E0404"],
+        ),
+        (
+            "class A:\n    def f(self, n: int = 1) -> int:\n        return n\nclass B(A):\n    def f(self, n: bool = True) -> int:\n        return 1\n",
+            &["E0404"],
+        ),
+        (
+            "class A:\n    def f(self, n: int = 1) -> int:\n        return n\nclass B(A):\n    def f(self, n: int) -> int:\n        return n\n",
+            &["E0404"],
+        ),
+        (
+            "class A:\n    def f(self, n: int = 1) -> int:\n        return n\nclass B(A):\n    def f(self, n: int = 1) -> str:\n        return \"\"\n",
+            &["E0404"],
+        ),
+        (
+            "class A:\n    def f(self, n: int = 1) -> int:\n        return n\nclass B(A):\n    def f(self, n: int | None = 1) -> int:\n        return 1\n",
+            &["E0201"],
+        ),
+        (
+            "class A(Exception):\n    def f(self) -> None:\n        pass\nclass B(A):\n    def f(self) -> int:\n        return 1\n",
+            &["E0404"],
+        ),
+        (
+            "class A:\n    def f(self, x: int = 1) -> None:\n        pass\nclass B(A):\n    def f(self, x: int = 2) -> None:\n        pass\n",
+            &["E0201"],
+        ),
     ];
     for (source, expected) in cases {
         assert_eq!(&rejected(source), expected, "\n{source}");
@@ -1986,7 +2040,7 @@ fn classes_give_their_codes() {
             "class A:\n    def m(self) -> None:\n        pass\n    def m(self) -> None:\n        pass\n",
             &["E0202"],
         ),
-        ("class A:\n    def m() -> None:\n        pass\n", &["E0201"]),
+        ("class A:\n    def m() -> None:\n        pass\n", &["E0404"]),
         (
             "class A:\n    def __str__(self) -> int:\n        return 1\n",
             &["E0404"],
@@ -2069,11 +2123,40 @@ fn a_floor_that_defers_annotations_lets_a_signature_name_a_later_class() {
 fn class_statements_outside_the_subset_give_their_codes() {
     let cases: &[(&str, &[&str])] = &[
         ("@d\nclass C:\n    pass\n", &["E0201"]),
-        ("class C[T]:\n    pass\n", &["E0201"]),
+        ("class B:\n    pass\nclass C[T](B):\n    pass\n", &["E0201"]),
         ("class C(metaclass=M):\n    pass\n", &["E0202"]),
         ("def f() -> None:\n    class C:\n        pass\n", &["E0202"]),
         ("class C:\n    if True:\n        pass\n", &["E0202"]),
-        ("class C:\n    x: int = 1\n", &["E0201"]),
+        ("class C:\n    x, y = 1, 2\n", &["E0202"]),
+        (
+            "from typing import ClassVar\nclass C:\n    x: ClassVar[int]\n",
+            &["E0408"],
+        ),
+        (
+            "from typing import ClassVar\nv: ClassVar[int] = 1\n",
+            &["E0408"],
+        ),
+        ("class E(Exception):\n    code: int = 1\n", &["E0201"]),
+        (
+            "class C:\n    x = 1\n    def x(self) -> None:\n        pass\n",
+            &["E0202"],
+        ),
+        ("class C:\n    x = 1\nC.x = 'a'\n", &["E0402"]),
+        ("class C:\n    x = 1\nC.x += 'a'\n", &["E0401"]),
+        ("class C:\n    x: int = 1\nC.x = 2\n", &["E0414"]),
+        ("class C:\n    x = 1\nC.x += 1.5\n", &["E0402"]),
+        ("x = range()\n", &["E0404"]),
+        ("for i in range(missing):\n    pass\n", &["E0205"]),
+        (
+            "class C:\n    def __init__(self) -> None:\n        self.x = 1\nc = C()\nc.x += 1.5\n",
+            &["E0402"],
+        ),
+        ("class C:\n    x: int = 1\nC.x += 2\n", &["E0414"]),
+        (
+            "class C:\n    x = 1\n    def f(self) -> None:\n        self.x = 2\n",
+            &["E0414"],
+        ),
+        ("class C:\n    x = 1\nc = C()\nc.x += 1\n", &["E0414"]),
         ("class C(B, object):\n    pass\n", &["E0201"]),
         ("class C:\n    x: 'int('\n", &["E0202"]),
     ];
@@ -2114,4 +2197,584 @@ fn fstrings_check_every_field() {
     assert_eq!(rejected("print(f'{undefined}')\n"), ["E0205"]);
     assert_eq!(rejected("print(f'{1:{undefined}}')\n"), ["E0205"]);
     assert_eq!(rejected("print(f'{1 + \"a\"}')\n"), ["E0401"]);
+}
+
+#[test]
+fn super_calls_the_nearest_base_s_method_in_any_method() {
+    accepted(
+        "class A:\n    def __init__(self) -> None:\n        self.x = 1\n    def f(self, n: int) -> int:\n        return n\n\
+         class B(A):\n    def __init__(self) -> None:\n        super(B, self).__init__()\n    def f(self, n: int) -> int:\n        return super().f(n) + super(B, self).f(n=n)\n\
+         class C(B):\n    def g(self) -> int:\n        return super().f(1)\n\
+         print(C().g())\n",
+    );
+    accepted(
+        "class A:\n    def __init__(self) -> None:\n        print(self)\n\
+         class B(A):\n    def __init__(self) -> None:\n        super().__init__()\n\
+         class C(A):\n    def __init__(self) -> None:\n        self.y = 2\n        super().__init__()\n\
+         print(B(), C().y)\n",
+    );
+    let cases: &[(&str, &[&str])] = &[
+        (
+            "class A:\n    def f(self) -> int:\n        return super().f()\n",
+            &["E0414"],
+        ),
+        (
+            "class A:\n    pass\nclass B(A):\n    def f(self) -> int:\n        return super(A, self).f()\n",
+            &["E0201"],
+        ),
+        (
+            "class A:\n    pass\nclass B(A):\n    def f(self, other: 'B') -> None:\n        super(B, other).f()\n",
+            &["E0201"],
+        ),
+        (
+            "class A:\n    def __init__(self) -> None:\n        super().__init__(x=1)\n",
+            &["E0404"],
+        ),
+        (
+            "class A:\n    def __init__(self, n: int) -> None:\n        self.n = n\nclass B(A):\n    def __init__(self) -> None:\n        super().__init__('one')\n",
+            &["E0404"],
+        ),
+        (
+            "class A:\n    def f(self, n: int) -> None:\n        pass\nclass B(A):\n    def g(self) -> None:\n        super().f('one')\n",
+            &["E0404"],
+        ),
+        (
+            "class E(Exception):\n    def __init__(self) -> None:\n        super().__init__(code=1)\n",
+            &["E0404"],
+        ),
+        (
+            "class A:\n    def __init__(self) -> None:\n        self.f()\n    def f(self) -> None:\n        pass\n\
+             class B(A):\n    def __init__(self) -> None:\n        super().__init__()\n        self.z = 1\n",
+            &["E0309"],
+        ),
+        ("class A:\n    x: int\nA()\n", &["E0309"]),
+    ];
+    for (source, expected) in cases {
+        assert_eq!(&rejected(source), expected, "\n{source}");
+    }
+}
+
+#[test]
+fn isinstance_narrows_variables_where_its_test_holds() {
+    accepted(
+        "class A:\n    pass\nclass B(A):\n    def __init__(self) -> None:\n        self.b = 1\n\
+         class C(B):\n    def __init__(self) -> None:\n        self.b = 2\n        self.c = 3\n\
+         class D(B):\n    def __init__(self) -> None:\n        self.b = 4\n\
+         def f(a: A) -> int:\n    if isinstance(a, (C, D)):\n        return a.b\n    if isinstance(a, B):\n        if isinstance(a, C):\n            return a.c\n        return a.b\n    return 0\n\
+         def g(e: Exception) -> str:\n    if isinstance(e, (KeyError, IndexError)):\n        return 'lookup'\n    return 'other'\n\
+         def h(n: int, b: bool, s: str) -> bool:\n    return isinstance(n, int) and isinstance(b, int) and not isinstance(s, (int, bytes))\n\
+         def k(a: A, e: Exception, o: A | None) -> bool:\n    return isinstance(a, (B, int)) or isinstance(a, A) or isinstance(e, (KeyError, int)) or isinstance(KeyError(), ValueError) or isinstance(o, object) or isinstance(o, B)\n\
+         def m(o: A | None) -> None:\n    if isinstance(o, A):\n        print(o)\n\
+         def n(e: KeyError) -> bool:\n    return isinstance(e, (KeyError, ValueError))\n\
+         print(list([1]) == [])\n\
+         print(f(C()), g(KeyError()), h(1, True, 'x'), isinstance(iter([1]), list), k(A(), KeyError(), None), C() == B(), A() != D(), isinstance(C(), A), m(None))\n",
+    );
+    let cases: &[(&str, &[&str])] = &[
+        ("print(isinstance(1))\n", &["E0404"]),
+        ("print(issubclass(int, object))\n", &["E0201"]),
+        (
+            "class A:\n    pass\nclass B(A):\n    def f(self) -> None:\n        super().missing(1)\n",
+            &["E0414"],
+        ),
+        (
+            "class A:\n    pass\nclass E(Exception):\n    pass\ndef f(a: A, e: Exception) -> None:\n    print(isinstance(a, E), isinstance(e, ()))\n    if isinstance(a, E):\n        print(a.x)\n",
+            &["E0414"],
+        ),
+        ("print(isinstance(1, int, x=2))\n", &["E0404"]),
+        ("t = int\nprint(isinstance(1, t))\n", &["E0201"]),
+        ("print(isinstance(1, Missing))\n", &["E0205"]),
+        (
+            "class A:\n    pass\nclass B(A):\n    def __init__(self) -> None:\n        self.b = 1\n\
+             def f(a: A) -> int:\n    if isinstance(a, B):\n        a = A()\n        return a.b\n    return 0\n",
+            &["E0414"],
+        ),
+        (
+            "class A:\n    pass\nclass B:\n    def __init__(self) -> None:\n        self.b = 1\n\
+             def f(a: A) -> int:\n    if isinstance(a, B):\n        return a.b\n    return 0\n",
+            &["E0414"],
+        ),
+    ];
+    for (source, expected) in cases {
+        assert_eq!(&rejected(source), expected, "\n{source}");
+    }
+}
+
+#[test]
+fn class_bodies_give_class_variables_and_defaults() {
+    accepted(
+        "from typing import ClassVar\nimport typing\n\
+         class A:\n    count = 0\n    label: ClassVar[str] = 'a'\n    other: typing.ClassVar = 1.5\n    size: int = 1\n    def __init__(self) -> None:\n        A.count += 1\n        self.size = A.size + A.count\n    def read(self) -> int:\n        return self.count + self.size\n\
+         class B(A):\n    size: int = 2\n    count = 10\n\
+         class C(B):\n    pass\n\
+         def bump() -> None:\n    A.count = A.count + 1\n    B.count += 1\n\
+         bump()\nprint(A().read(), B().read(), C().size, B.count, C.count, A.label, C.other, A.size)\n",
+    );
+}
+
+#[test]
+fn static_methods_and_properties_are_checked() {
+    accepted(concat!(
+        "class A:\n",
+        "    def __init__(self) -> None:\n",
+        "        self._x = 1\n",
+        "    @staticmethod\n",
+        "    def make(n: int) -> int:\n",
+        "        return n\n",
+        "    @property\n",
+        "    def x(self) -> int:\n",
+        "        return self._x\n",
+        "    @x.setter\n",
+        "    def x(self, value: int) -> None:\n",
+        "        self._x = value\n",
+        "class B(A):\n",
+        "    @property\n",
+        "    def x(self) -> int:\n",
+        "        return 2\n",
+        "a = A()\n",
+        "a.x = A.make(3)\n",
+        "print(a.x, a.make(1), B().x)\n",
+        "class D:\n",
+        "    def __init__(self):\n",
+        "        self.v = 1\n",
+        "def loop(a: A) -> None:\n",
+        "    if isinstance(a, B):\n",
+        "        while a.x > 0:\n",
+        "            a = A()\n",
+        "with open('notes.txt', 'w'):\n",
+        "    pass\n",
+        "print(D().v)\n",
+    ));
+    let cases: &[(&str, &[&str])] = &[
+        (
+            "class A:\n    @staticmethod\n    def __str__() -> str:\n        return ''\n",
+            &["E0404"],
+        ),
+        (
+            "class A:\n    def f(self) -> None:\n        pass\nclass B(A):\n    @staticmethod\n    def f() -> None:\n        pass\n",
+            &["E0201"],
+        ),
+        (
+            "class A:\n    @staticmethod\n    def f() -> None:\n        pass\nclass B(A):\n    def f(self) -> None:\n        pass\n",
+            &["E0201"],
+        ),
+        (
+            "class A:\n    @property\n    def x(self) -> int:\n        return 1\n    @x.setter\n    def y(self, v: int) -> None:\n        pass\n",
+            &["E0404"],
+        ),
+        (
+            "class A:\n    @x.setter\n    def x(self, v: int) -> None:\n        pass\n",
+            &["E0404"],
+        ),
+        (
+            "class A:\n    @property\n    def x(self, n: int) -> int:\n        return n\n",
+            &["E0404"],
+        ),
+        (
+            "class A:\n    @property\n    def x(self) -> int:\n        return 1\n    @x.setter\n    def x(self, v: str) -> None:\n        pass\n",
+            &["E0404"],
+        ),
+        (
+            "class A:\n    @property\n    def x(self) -> int:\n        return 1\na = A()\nprint(a.x())\n",
+            &["E0201"],
+        ),
+        (
+            "class A:\n    @property\n    def x(self) -> int:\n        return 1\n    @x.setter\n    def x(self, v: int) -> None:\n        pass\na = A()\na.x = 'no'\n",
+            &["E0402"],
+        ),
+        (
+            "class A:\n    @property\n    def x(self) -> int:\n        return 1\n    @x.setter\n    def x(self, v: int) -> None:\n        pass\nl = [A()]\nl[0].x = 2\n",
+            &["E0201"],
+        ),
+        (
+            "class A:\n    def f(self) -> None:\n        pass\nA.f()\n",
+            &["E0201"],
+        ),
+        ("class A:\n    pass\nA.g()\n", &["E0414"]),
+        ("from math import *\n", &["E0201"]),
+        ("class C:\n    x: int\n    x = 1\n", &["E0202"]),
+        (
+            "class C:\n    def __iter__(self, n: int) -> 'C':\n        return self\n",
+            &["E0404"],
+        ),
+        (
+            "class A:\n    @staticmethod\n    def f() -> int:\n        return 1\ndef g() -> A:\n    return A()\nprint(g().f())\n",
+            &["E0201"],
+        ),
+    ];
+    for (source, expected) in cases {
+        assert_eq!(&rejected(source), expected, "\n{source}");
+    }
+}
+
+#[test]
+fn class_methods_are_called_through_their_class() {
+    let cases: &[(&str, &[&str])] = &[
+        (
+            "class A:\n    @classmethod\n    def f() -> None:\n        pass\n",
+            &["E0404"],
+        ),
+        (
+            "class A:\n    @classmethod\n    def f(cls) -> None:\n        pass\na = A()\na.f()\n",
+            &["E0201"],
+        ),
+        (
+            "class A:\n    count = 0\nclass B(A):\n    pass\nB.count = 1\n",
+            &["E0201"],
+        ),
+        (
+            "class A:\n    def __init__(self, n: int) -> None:\n        self.n = n\n    @classmethod\n    def make(cls) -> 'A':\n        return cls(1)\nclass B(A):\n    def __init__(self) -> None:\n        self.n = 2\n",
+            &["E0404"],
+        ),
+        (
+            "class A:\n    count = 0\nclass B(A):\n    pass\nB.count += 1\n",
+            &["E0201"],
+        ),
+        (
+            "class A:\n    @classmethod\n    def f(cls) -> int:\n        return 'x'\nclass B(A):\n    pass\n",
+            &["E0405"],
+        ),
+    ];
+    for (source, expected) in cases {
+        assert_eq!(&rejected(source), expected, "\n{source}");
+    }
+}
+
+#[test]
+fn comparison_methods_are_checked() {
+    accepted(concat!(
+        "class V:\n",
+        "    def __init__(self, n: int) -> None:\n",
+        "        self.n = n\n",
+        "    def __eq__(self, other: 'V') -> bool:\n",
+        "        return self.n == other.n\n",
+        "    def __lt__(self, other: 'V') -> bool:\n",
+        "        return self.n < other.n\n",
+        "    def __hash__(self) -> int:\n",
+        "        return self.n\n",
+        "class W(V):\n",
+        "    def __gt__(self, other: 'V') -> bool:\n",
+        "        return False\n",
+        "a = V(1)\n",
+        "b = W(2)\n",
+        "print(a == b, a != b, a < b, a > b, b > a, {a}, sorted([a, b]))\n",
+    ));
+    accepted(
+        "class A:\n    pass\nMaker = A\ndef make() -> A:\n    return Maker()\nprint(make())\n",
+    );
+    accepted("class S:\n    def f(self: 'S') -> None:\n        pass\nS().f()\n");
+    accepted(concat!(
+        "class V:\n",
+        "    def __eq__(self, other: 'V | None') -> bool:\n",
+        "        return other is not None\n",
+        "maybe: V | None = None\n",
+        "print(maybe == V(), V() == maybe)\n",
+    ));
+    let cases: &[(&str, &[&str])] = &[
+        ("x = missing\ndef f() -> None:\n    x()\n", &["E0205"]),
+        ("x = 1\ndef f() -> None:\n    x()\n", &["E0401"]),
+        (
+            "class V:\n    def __eq__(self, other: 'V') -> bool:\n        return True\na = V()\nprint(a == a == a)\n",
+            &["E0201"],
+        ),
+        (
+            "class V:\n    def __eq__(self, a: 'V', b: 'V') -> bool:\n        return True\n",
+            &["E0404"],
+        ),
+        (
+            "class V:\n    @property\n    def x(self) -> int:\n        return 1\n    @x.setter\n    def x(self, a: int, b: int) -> None:\n        pass\n",
+            &["E0404"],
+        ),
+        (
+            "class V:\n    @property\n    def x(self) -> int:\n        return 1\n    @x.setter\n    def x(self, a: int) -> int:\n        return a\n",
+            &["E0404"],
+        ),
+        ("class V:\n    pass\nprint(V() < V())\n", &["E0407"]),
+        (
+            "class V:\n    def __hash__(self, n: int) -> int:\n        return n\n",
+            &["E0404"],
+        ),
+        (
+            "class V:\n    def __eq__(self, other: int) -> bool:\n        return True\n",
+            &["E0404"],
+        ),
+        (
+            "class V:\n    def __lt__(self, other: 'V') -> int:\n        return 1\n",
+            &["E0404"],
+        ),
+        (
+            "class V:\n    def __hash__(self) -> str:\n        return ''\n",
+            &["E0404"],
+        ),
+        (
+            "class V:\n    def __eq__(self, other: 'V') -> bool:\n        return True\nprint({V()})\n",
+            &["E0413"],
+        ),
+        (
+            "class V:\n    def __lt__(self, other: 'V') -> bool:\n        return True\na = V()\nprint(a < a < a)\n",
+            &["E0201"],
+        ),
+        (
+            "class V:\n    def __eq__(self, other: 'V') -> bool:\n        return True\nprint(V() == 1)\n",
+            &["E0407"],
+        ),
+        (
+            "class B:\n    pass\nclass V(B):\n    pass\nclass W(V):\n    def __gt__(self, other: B) -> bool:\n        return True\nclass X(B):\n    def __lt__(self, other: B) -> bool:\n        return True\nv: V = W()\nprint(X() < v)\n",
+            &["E0201"],
+        ),
+    ];
+    for (source, expected) in cases {
+        assert_eq!(&rejected(source), expected, "\n{source}");
+    }
+}
+
+#[test]
+fn arithmetic_methods_are_checked() {
+    accepted(concat!(
+        "class V:\n",
+        "    def __init__(self, n: int) -> None:\n",
+        "        self.n = n\n",
+        "    def __add__(self, other: 'V') -> 'V':\n",
+        "        return V(self.n + other.n)\n",
+        "    def __rmul__(self, factor: int) -> 'V':\n",
+        "        return V(self.n * factor)\n",
+        "    def __neg__(self) -> 'V':\n",
+        "        return V(-self.n)\n",
+        "    def __abs__(self) -> int:\n",
+        "        return 1\n",
+        "class H:\n",
+        "    def __init__(self) -> None:\n",
+        "        self.v = V(1)\n",
+        "v = V(1)\n",
+        "v += V(2)\n",
+        "h = H()\n",
+        "h.v += v\n",
+        "print((v + v).n, (2 * v).n, (-v).n, abs(v), h.v.n)\n",
+    ));
+    let cases: &[(&str, &[&str])] = &[
+        ("print(abs(1, key=2))\n", &["E0404"]),
+        (
+            "class V:\n    def __invert__(self, n: int) -> int:\n        return n\n",
+            &["E0404"],
+        ),
+        (
+            "class V:\n    def __neg__(self, n: int) -> int:\n        return n\n",
+            &["E0404"],
+        ),
+        (
+            "class V:\n    def __rsub__(self) -> int:\n        return 1\n",
+            &["E0404"],
+        ),
+        (
+            "class V:\n    def __call__(self) -> int:\n        return 1\n",
+            &["E0201"],
+        ),
+        (
+            "class V:\n    def __getattr__(self, name: str) -> int:\n        return 1\n",
+            &["E0201"],
+        ),
+        (
+            "class V:\n    def __add__(self, other: 'V') -> 'V':\n        return self\nitems = [V()]\nitems[0] += V()\n",
+            &["E0201"],
+        ),
+        (
+            "class V:\n    def __add__(self, other: 'V') -> int:\n        return 1\n    def __radd__(self, other: 'V') -> str:\n        return ''\nprint(V() + V())\n",
+            &["E0201"],
+        ),
+    ];
+    for (source, expected) in cases {
+        assert_eq!(&rejected(source), expected, "\n{source}");
+    }
+}
+
+#[test]
+fn container_methods_are_checked() {
+    accepted(concat!(
+        "class G:\n",
+        "    def __init__(self) -> None:\n",
+        "        self.cells: dict[int, str] = {}\n",
+        "    def __len__(self) -> int:\n",
+        "        return len(self.cells)\n",
+        "    def __getitem__(self, key: int) -> str:\n",
+        "        return self.cells[key]\n",
+        "    def __setitem__(self, key: int, value: str) -> None:\n",
+        "        self.cells[key] = value\n",
+        "    def __delitem__(self, key: int) -> None:\n",
+        "        del self.cells[key]\n",
+        "    def __contains__(self, key: int) -> bool:\n",
+        "        return key in self.cells\n",
+        "class H:\n",
+        "    def __init__(self) -> None:\n",
+        "        self.g = G()\n",
+        "g = G()\n",
+        "g[1] = 'a'\n",
+        "h = H()\n",
+        "h.g[2] = 'b'\n",
+        "del g[1]\n",
+        "print(len(g), 1 in g, 2 not in h.g, h.g[2], bool(g), not g)\n",
+    ));
+    let cases: &[(&str, &[&str])] = &[
+        (
+            "class G:\n    def __len__(self) -> str:\n        return ''\n",
+            &["E0404"],
+        ),
+        (
+            "class G:\n    def __bool__(self, n: int) -> bool:\n        return True\n",
+            &["E0404"],
+        ),
+        (
+            "class G:\n    def __contains__(self, key: int) -> int:\n        return 1\n",
+            &["E0404"],
+        ),
+        (
+            "class G:\n    def __getitem__(self) -> int:\n        return 1\n",
+            &["E0404"],
+        ),
+        (
+            "class G:\n    def __delitem__(self, key: int) -> int:\n        return 1\n",
+            &["E0404"],
+        ),
+        (
+            "class G:\n    def __getitem__(self, key: int) -> int:\n        return key\nprint(G()['a'])\n",
+            &["E0404"],
+        ),
+        (
+            "class G:\n    def __getitem__(self, key: int) -> int:\n        return key\nprint(G()[1:2])\n",
+            &["E0201"],
+        ),
+        (
+            "class G:\n    def __setitem__(self, key: int, value: int) -> None:\n        pass\ng = G()\ng[1:2] = 3\n",
+            &["E0201"],
+        ),
+        (
+            "class G:\n    def __delitem__(self, key: int) -> None:\n        pass\ng = G()\ndel g[1:2]\n",
+            &["E0201"],
+        ),
+        (
+            "class G:\n    def __len__(self) -> int:\n        return 1\nprint(any([G()]))\n",
+            &["E0201"],
+        ),
+        (
+            "class G:\n    pass\nclass H(G):\n    def __bool__(self) -> bool:\n        return False\ng: G = H()\nprint(not g)\n",
+            &["E0201"],
+        ),
+    ];
+    for (source, expected) in cases {
+        assert_eq!(&rejected(source), expected, "\n{source}");
+    }
+}
+
+#[test]
+fn dataclasses_get_their_methods_and_refuse_what_cpython_refuses() {
+    accepted(concat!(
+        "from dataclasses import dataclass, field\n",
+        "import dataclasses as dc\n",
+        "from typing import ClassVar\n",
+        "@dataclass\n",
+        "class Empty:\n",
+        "    pass\n",
+        "@dc.dataclass(eq=False)\n",
+        "class Plain:\n",
+        "    x: int\n",
+        "    count: ClassVar[int] = 0\n",
+        "    def __repr__(self) -> str:\n",
+        "        return 'plain'\n",
+        "@dataclass(order=True, frozen=True)\n",
+        "class Pair:\n",
+        "    a: int\n",
+        "    b: int = field()\n",
+        "@dataclass(frozen=True)\n",
+        "class Wide(Pair):\n",
+        "    b: int = 2\n",
+        "@dataclass(eq=False)\n",
+        "class Own(Plain):\n",
+        "    def __init__(self, x: int) -> None:\n",
+        "        self.x = x\n",
+        "print(Empty(), Plain(1), Pair(1, 2) < Pair(1, 3), Empty() == Empty())\n",
+    ));
+}
+
+#[test]
+fn dataclass_forms_cpython_refuses_are_refused() {
+    accepted("import typing\nclass C:\n    x: typing.ClassVar = 1\nprint(C.x)\n");
+    let cases: &[(&str, &[&str])] = &[
+        (
+            "import types\nclass C:\n    x: types.ClassVar = 1\n",
+            &["E0205"],
+        ),
+        (
+            "from dataclasses import dataclass\nimport math\n@dataclass\nclass P(math.Base):\n    a: int\n",
+            &["E0201"],
+        ),
+        (
+            "import dataclasses as dc\n@dc.field\nclass P:\n    pass\n",
+            &["E0201"],
+        ),
+        (
+            "import dataclasses as dc\nimport math\n@math.dataclass\nclass P:\n    pass\n",
+            &["E0201"],
+        ),
+        (
+            "from dataclasses import dataclass\n@dataclass(frozen=True)\nclass P:\n    x: int\nclass Q:\n    def __init__(self, p: P) -> None:\n        p.x = 1\n",
+            &["E0414"],
+        ),
+        (
+            "from dataclasses import dataclass\n@dataclass\nclass P:\n    x: int = 1\n    y: int\n",
+            &["E0404"],
+        ),
+        (
+            "from dataclasses import dataclass\n@dataclass(order=True, eq=False)\nclass P:\n    x: int\n",
+            &["E0404"],
+        ),
+        (
+            "from dataclasses import dataclass\n@dataclass\nclass P:\n    x: int = int()\n",
+            &["E0201"],
+        ),
+        (
+            "from dataclasses import dataclass\n@dataclass(True)\nclass P:\n    x: int\n",
+            &["E0201"],
+        ),
+        (
+            "from dataclasses import dataclass\nflags = {}\n@dataclass(**flags)\nclass P:\n    x: int\n",
+            &["E0201"],
+        ),
+        (
+            "from dataclasses import dataclass\n@dataclass(order=1)\nclass P:\n    x: int\n",
+            &["E0201"],
+        ),
+        (
+            "from dataclasses import dataclass, field\n@dataclass\nclass P:\n    x: int = field(1)\n",
+            &["E0201"],
+        ),
+        (
+            "from dataclasses import dataclass, field\nd = {}\n@dataclass\nclass P:\n    x: int = field(**d)\n",
+            &["E0201"],
+        ),
+        (
+            "from dataclasses import dataclass\n@dataclass\nclass P:\n    x: dict[int, int] = {}\n",
+            &["E0404"],
+        ),
+        (
+            "from dataclasses import dataclass\n@dataclass\nclass P:\n    x: set[int] = {1}\n",
+            &["E0404"],
+        ),
+        (
+            "from dataclasses import dataclass\n@dataclass(order=True)\nclass P:\n    x: int\n    def __lt__(self, other: 'P') -> bool:\n        return True\n",
+            &["E0404"],
+        ),
+        (
+            "from dataclasses import dataclass\n@dataclass(frozen=True)\nclass P:\n    x: int\n    def __init__(self) -> None:\n        self.x = 1\n",
+            &["E0414"],
+        ),
+        (
+            "from dataclasses import dataclass\n@dataclass(frozen=True)\nclass P:\n    x: int\n@dataclass\nclass Q(P):\n    y: int = 0\n",
+            &["E0404"],
+        ),
+        (
+            "from dataclasses import dataclass\n@dataclass\nclass P:\n    x: int\n@dataclass(frozen=True)\nclass Q(P):\n    y: int = 0\n",
+            &["E0404"],
+        ),
+    ];
+    for (source, expected) in cases {
+        assert_eq!(&rejected(source), expected, "\n{source}");
+    }
 }

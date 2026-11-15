@@ -61,6 +61,20 @@ impl FunctionLowerer<'_> {
                 self.set_display(items, item, span)
             }
             TypedExprKind::Wrap(inner) => self.wrap(inner, ty, span),
+            TypedExprKind::Upcast(inner) => self.converted(inner, &expression.ty, ty, true, span),
+            TypedExprKind::Downcast(inner) => {
+                self.converted(inner, &expression.ty, ty, false, span)
+            }
+            TypedExprKind::IsInstance(test) => self.isinstance(test, span),
+            TypedExprKind::EachMember(each) => self.each_member(each, ty, span),
+            TypedExprKind::CheckedLength(call) => {
+                let length = self.expression(call);
+                let checked =
+                    self.call_runtime(RuntimeFunction::IntLength, vec![length.value], span);
+                self.release(length, span);
+                checked
+            }
+            TypedExprKind::OperatorCall(call) => self.operator_call(call, ty, span),
             TypedExprKind::Unwrap(inner) => self.unwrap(inner, ty, span),
             TypedExprKind::Dict { keys, values } => {
                 self.dict_display(keys, values, &expression.ty, span)
@@ -172,6 +186,7 @@ impl FunctionLowerer<'_> {
             TypedExprKind::Call {
                 function,
                 arguments,
+                dispatch,
             } => {
                 let values: Vec<(usize, Lowered)> = arguments
                     .iter()
@@ -183,7 +198,11 @@ impl FunctionLowerer<'_> {
                         )
                     })
                     .collect();
-                self.call_function(*function, values, ty, span)
+                if *dispatch {
+                    self.call_method(*function, values, ty, span)
+                } else {
+                    self.call_function(*function, values, ty, span)
+                }
             }
             TypedExprKind::New {
                 class,
@@ -202,8 +221,28 @@ impl FunctionLowerer<'_> {
             }
             TypedExprKind::Print(call) => self.print(call, span),
             TypedExprKind::SysValue(value) => self.sys_value(*value, span),
-            TypedExprKind::Open { path, mode, access } => self.open(path, mode, *access, span),
+            TypedExprKind::Open {
+                path,
+                mode,
+                access,
+                options,
+            } => self.open(path, mode, *access, options, &expression.ty, span),
             TypedExprKind::SysExit(code) => self.sys_exit(code.as_deref(), span),
+            TypedExprKind::RecursionLimit(limit) => self.recursion_limit(limit.as_deref(), span),
+            TypedExprKind::PercentDynamic { format, values } => {
+                self.percent_dynamic(format, values, span)
+            }
+            TypedExprKind::OsErrorField { exception, field } => {
+                self.os_error_field(exception, *field, span)
+            }
+            TypedExprKind::FileAttribute { file, attribute } => {
+                self.file_attribute(file, *attribute, span)
+            }
+            TypedExprKind::ExceptionPart {
+                exception,
+                part,
+                operation,
+            } => self.exception_part(exception, *part, operation, span),
             TypedExprKind::Input(prompt) => self.input(prompt.as_deref(), span),
             TypedExprKind::IterableBuiltin {
                 builtin,
@@ -274,20 +313,34 @@ impl FunctionLowerer<'_> {
                     TyirType::VIEW => RuntimeFunction::DictViewLength,
                     _ => RuntimeFunction::BytesLength,
                 };
-                let length = self.call_runtime(function, vec![lowered.value], span).value;
-                return self.builder.push_value(
+                let length = self.call_runtime(function, vec![lowered.value], span);
+                let truth = self.builder.push_value(
                     Operation::IsTrue {
                         kind: ScalarKind::Int,
-                        value: length,
+                        value: length.value,
                     },
                     TyirType::Bool,
                     span,
                 );
+                // The length is a new `int`, released once tested, as `list_truth` does.
+                self.release(length, span);
+                return truth;
             }
-            // An instance of a class without `__bool__` or `__len__` is true (CLS-07), and so
-            // is a type object.
-            TyirType::Object(id) if id.class_index().is_some() || id == typy_tyir::TypeId::TYPE => {
+            // An instance's class decides its truth with `__bool__`, or with `__len__` when it
+            // has no `__bool__`; without either, the instance is true (CLS-07), and so is a type
+            // object.
+            TyirType::Object(id) if id.class_index().is_some() => {
+                return self.instance_truth(lowered, id, span);
+            }
+            TyirType::Object(typy_tyir::TypeId::TYPE) => {
                 return self.constant(Constant::Bool(true), span);
+            }
+            // The object's type tests it, as CPython's truth test does (TYP-14).
+            TyirType::UNION => {
+                let object = self.bits(Self::borrowed(lowered.value, lowered.ty), span);
+                return self
+                    .call_runtime(RuntimeFunction::ObjectIsTrue, vec![object], span)
+                    .value;
             }
             // A range is true when it holds its own start; its length may pass `sys.maxsize`,
             // where CPython's truth test still answers.
@@ -309,6 +362,15 @@ impl FunctionLowerer<'_> {
             TyirType::Object(_) => ScalarKind::Str,
             TyirType::Bits => unreachable!("list items are converted before they are tested"),
             TyirType::Optional(_) => return self.optional_truth(lowered, span),
+            // A tagged union is as true as the member it holds (TYP-14).
+            TyirType::Tuple(_) if self.is_tagged(lowered.ty) => {
+                return self
+                    .tag_switch(lowered, TyirType::Bool, span, |this, _, slot| {
+                        let truth = this.truth(slot, span);
+                        Self::borrowed(truth, TyirType::Bool)
+                    })
+                    .value;
+            }
             // A tuple's length is fixed by its type, so its truth is too.
             TyirType::Tuple(_) => {
                 let filled = self.tuple_length(lowered.ty) > 0;
@@ -323,6 +385,35 @@ impl FunctionLowerer<'_> {
             TyirType::Bool,
             span,
         )
+    }
+
+    /// Returns the truth of an instance: its class's `__bool__`, or its `__len__` checked and
+    /// compared with zero, or true (CLS-07); the instance is not released.
+    fn instance_truth(&mut self, lowered: Lowered, id: typy_tyir::TypeId, span: Span) -> ValueId {
+        let class = typy_check::ClassId(id.class_index().unwrap_or(0));
+        let instance = Self::borrowed(lowered.value, lowered.ty);
+        if let Some(method) = self.program.method(class, "__bool__") {
+            return self
+                .call_method(method, vec![(0, instance)], TyirType::Bool, span)
+                .value;
+        }
+        let Some(method) = self.program.method(class, "__len__") else {
+            return self.constant(Constant::Bool(true), span);
+        };
+        let length = self.call_method(method, vec![(0, instance)], TyirType::Int, span);
+        let checked = self.call_runtime(RuntimeFunction::IntLength, vec![length.value], span);
+        self.release(length, span);
+        let truth = self.builder.push_value(
+            Operation::IsTrue {
+                kind: ScalarKind::Int,
+                value: checked.value,
+            },
+            TyirType::Bool,
+            span,
+        );
+        // A large `int` is an object, so the checked length is released once tested.
+        self.release(checked, span);
+        truth
     }
 
     /// `a or b` and `a and b` return one of their operands, evaluating each only while the result is undecided (EXP-09).
@@ -405,10 +496,37 @@ impl FunctionLowerer<'_> {
         self.produced(result, ty)
     }
 
-    /// Calls a program function: arguments were evaluated in source order; missing ones take their constant defaults (EXP-16).
+    /// Calls a program function directly: arguments were evaluated in source order; missing ones take their constant defaults (EXP-16).
     pub(crate) fn call_function(
         &mut self,
         function: FunctionId,
+        arguments: Vec<(usize, Lowered)>,
+        ty: TyirType,
+        span: Span,
+    ) -> Lowered {
+        self.call(function, None, arguments, ty, span)
+    }
+
+    /// Calls a method on the instance that is its first argument: through the method table
+    /// when a class derived from the method's class defines it again, so the instance's
+    /// class decides which runs, and directly otherwise (ADR-0021).
+    pub(crate) fn call_method(
+        &mut self,
+        function: FunctionId,
+        arguments: Vec<(usize, Lowered)>,
+        ty: TyirType,
+        span: Span,
+    ) -> Lowered {
+        let dispatch = self.methods.dispatch(function);
+        self.call(function, dispatch, arguments, ty, span)
+    }
+
+    /// Calls `function`, or the entry `dispatch` names of the table of the class of the first
+    /// argument, which takes the arguments `function` takes.
+    fn call(
+        &mut self,
+        function: FunctionId,
+        dispatch: Option<(u32, u32)>,
         arguments: Vec<(usize, Lowered)>,
         ty: TyirType,
         span: Span,
@@ -420,7 +538,21 @@ impl FunctionLowerer<'_> {
             let value = if let Some((_, lowered)) =
                 arguments.iter().find(|(position, _)| *position == index)
             {
-                lowered.value
+                // A call the lowering makes itself, such as of an inherited `__init__` or
+                // `__repr__`, may pass an instance of a subclass (ADR-0021).
+                let wanted = self.lowered_type(&parameter.ty);
+                if lowered.ty == wanted {
+                    lowered.value
+                } else {
+                    self.builder.push_value(
+                        Operation::Upcast {
+                            value: lowered.value,
+                            ty: wanted,
+                        },
+                        wanted,
+                        span,
+                    )
+                }
             } else {
                 let default = parameter.default.clone().unwrap_or(TypedConstant::None);
                 let constant = self.typed_constant(&default, span).value;
@@ -442,32 +574,36 @@ impl FunctionLowerer<'_> {
             };
             ordered.push(value);
         }
-        let callee = typy_tyir::FunctionId(function.0);
+        let function_id = typy_tyir::FunctionId(function.0);
+        let (callee, operation) = match dispatch {
+            Some((class, slot)) => (
+                Callee::Method { class, slot },
+                Operation::CallMethod {
+                    class,
+                    slot,
+                    arguments: ordered.clone(),
+                },
+            ),
+            None => (
+                Callee::Function(function_id),
+                Operation::Call {
+                    function: function_id,
+                    arguments: ordered.clone(),
+                },
+            ),
+        };
         let value = if self
             .may_raise
             .get(function.0 as usize)
             .copied()
             .unwrap_or(false)
         {
-            self.invoke(Callee::Function(callee), ordered, ty, span)
+            self.invoke(callee, ordered, ty, span)
         } else if ty == TyirType::Unit {
-            self.builder.push(
-                Operation::Call {
-                    function: callee,
-                    arguments: ordered,
-                },
-                span,
-            );
+            self.builder.push(operation, span);
             self.constant(Constant::Unit, span)
         } else {
-            self.builder.push_value(
-                Operation::Call {
-                    function: callee,
-                    arguments: ordered,
-                },
-                ty,
-                span,
-            )
+            self.builder.push_value(operation, ty, span)
         };
         let result = self.produced(value, ty);
         for (_, lowered) in arguments.into_iter().rev() {

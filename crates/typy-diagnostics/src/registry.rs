@@ -244,6 +244,11 @@ pub const CODES: &[CodeInfo] = &[
         "`%` format that does not fit its values",
         RuleId::LIB_10,
     ),
+    active(
+        428,
+        "copies of a generic function without end",
+        RuleId::GEN_03,
+    ),
     active(701, "C toolchain program not found", RuleId::A_01),
     active(702, "link failed", RuleId::A_01),
     CodeInfo {
@@ -306,11 +311,9 @@ mod tests {
         for info in CODES {
             let first_word = info.summary.split(' ').next().unwrap();
             let first = first_word.chars().next().unwrap();
-            assert!(
-                !first.is_uppercase() || PROPER_NAMES.contains(&first_word),
-                "{}",
-                info.code
-            );
+            if first.is_uppercase() {
+                assert!(PROPER_NAMES.contains(&first_word), "{}", info.code);
+            }
             assert!(!info.summary.ends_with('.'), "{}", info.code);
         }
     }

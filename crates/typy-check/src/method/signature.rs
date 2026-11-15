@@ -24,6 +24,8 @@ pub enum ParameterType {
     Exact(Type),
     /// A `str`, or `None` for the method's default, as `sep` of `str.split`.
     StrOrNone,
+    /// An `int`, or `None` for the method's default, as `pos` of `file.truncate`.
+    IntOrNone,
     /// A `str`, or a tuple of them, as `prefix` of `str.startswith`.
     Affixes,
     /// Any iterable of `str`, as the argument of `str.join`.
@@ -109,6 +111,7 @@ impl Method {
             Type::Set(item) => item.as_ref().clone(),
             _ => receiver.sequence_item().cloned().unwrap_or(Type::Error),
         };
+        let line = || receiver.file_line().unwrap_or(Type::Str);
         let other = || {
             vec![positional_as(
                 "other",
@@ -160,16 +163,33 @@ impl Method {
             | Self::SetClear
             | Self::TextFlush
             | Self::TextClose => (Vec::new(), Type::NoneType),
-            Self::TextRead | Self::TextReadline => {
-                (vec![positional("size", Type::Int, false)], Type::Str)
+            // A text file reads and writes `str`, a binary file `bytes` (LIB-14).
+            Self::TextRead | Self::TextReadline => (
+                vec![positional_as("size", ParameterType::IntOrNone, false)],
+                line(),
+            ),
+            Self::TextReadlines => (Vec::new(), Type::List(Box::new(line()))),
+            Self::TextFileno | Self::TextTell => (Vec::new(), Type::Int),
+            Self::TextIsatty | Self::TextReadable | Self::TextWritable | Self::TextSeekable => {
+                (Vec::new(), Type::Bool)
             }
-            Self::TextReadlines => (Vec::new(), Type::List(Box::new(Type::Str))),
+            Self::TextSeek => (
+                vec![
+                    positional("cookie", Type::Int, true),
+                    positional("whence", Type::Int, false),
+                ],
+                Type::Int,
+            ),
+            Self::TextTruncate => (
+                vec![positional_as("pos", ParameterType::IntOrNone, false)],
+                Type::Int,
+            ),
             Self::TextWritelines => (
                 vec![positional_as("lines", ParameterType::Strings, true)],
                 Type::NoneType,
             ),
             Self::ListCopy | Self::SetCopy => (Vec::new(), receiver.clone()),
-            Self::TextWrite => (vec![positional("text", Type::Str, true)], Type::Int),
+            Self::TextWrite => (vec![positional("text", line(), true)], Type::Int),
             Self::ListSort => (
                 vec![parameter(
                     "reverse",

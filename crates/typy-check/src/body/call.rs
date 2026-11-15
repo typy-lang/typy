@@ -21,6 +21,13 @@ impl BodyChecker<'_> {
     ) -> TypedExpr {
         if let Some(symbol) = self.locals.get(name) {
             let ty = self.types.get(symbol).cloned().unwrap_or(Type::Error);
+            // A variable of `type[C]` holds the type object of `C` itself, such as `cls` in a
+            // copy of a class method, so calling it makes an instance of `C` (ADR-0025).
+            if let Type::TypeObject(Some(of)) = &ty
+                && let Some(class) = Self::program_class(of)
+            {
+                return self.new_instance(class, arguments, keywords, span);
+            }
             return self.error(
                 Diagnostic::new(
                     DiagnosticCode::error(401),
@@ -49,8 +56,33 @@ impl BodyChecker<'_> {
         if let Some(class) = BuiltinException::named(name) {
             return self.new_exception(class, arguments, keywords, span);
         }
+        // A module variable a function reads holds a value, which TyPy calls only when it is
+        // a class's type object; CPython raises `TypeError` for an `int` or a `str`.
         if self.in_function() && self.program.module_variables.contains(name) {
-            return self.name(name, name_span);
+            let read = self.name(name, name_span);
+            if let Type::TypeObject(Some(of)) = &read.ty
+                && let Some(class) = Self::program_class(of)
+            {
+                return self.new_instance(class, arguments, keywords, span);
+            }
+            for argument in arguments {
+                self.expression(argument);
+            }
+            if read.ty == Type::Error {
+                return TypedExpr { span, ..read };
+            }
+            return self.error(
+                Diagnostic::new(
+                    DiagnosticCode::error(401),
+                    name_span,
+                    format!(
+                        "`{name}` is {} and cannot be called",
+                        read.ty.with_article()
+                    ),
+                )
+                .with_rule(RuleId::EXP_02),
+                span,
+            );
         }
         let result = self.unknown_name(name, name_span);
         for argument in arguments {
@@ -67,11 +99,15 @@ impl BodyChecker<'_> {
         keywords: &[Keyword],
         span: Span,
     ) -> TypedExpr {
+        if self.program.generic(function).is_some() {
+            return self.generic_call(function, name, arguments, keywords, span);
+        }
         match self.bind_arguments(function, 0, name, arguments, keywords, span) {
             Ok(bound) => Self::typed(
                 TypedExprKind::Call {
                     function,
                     arguments: bound,
+                    dispatch: false,
                 },
                 self.program.signatures[function.0 as usize].returns.clone(),
                 span,
@@ -93,6 +129,19 @@ impl BodyChecker<'_> {
         span: Span,
     ) -> Result<Vec<Argument>, TypedExpr> {
         let signature = self.program.signatures[function.0 as usize].clone();
+        self.bind_to(&signature, skip, name, arguments, keywords, span)
+    }
+
+    /// Binds the arguments of a call to the parameters of `signature` after the first `skip`.
+    pub(super) fn bind_to(
+        &mut self,
+        signature: &crate::typed::FunctionSignature,
+        skip: usize,
+        name: &str,
+        arguments: &[Expr],
+        keywords: &[Keyword],
+        span: Span,
+    ) -> Result<Vec<Argument>, TypedExpr> {
         let parameters = &signature.parameters[skip.min(signature.parameters.len())..];
         let mut bound: Vec<Argument> = Vec::new();
         let mut filled = vec![false; parameters.len()];

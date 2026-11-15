@@ -79,75 +79,72 @@ pub extern "C" fn typy_rt_sys_argv() -> *mut ListObject {
     })
 }
 
-/// What `input` has read from standard input but not given out yet.
-struct Input {
-    bytes: [u8; INPUT_BLOCK],
-    start: usize,
-    end: usize,
+/// The limit `sys.getrecursionlimit` gives, CPython's default until the program sets one.
+static RECURSION_LIMIT: ProgramCell<i64> = ProgramCell::new(1000);
+
+/// Returns `sys.getrecursionlimit()`, an `int` word.
+#[unsafe(no_mangle)]
+pub extern "C" fn typy_rt_sys_getrecursionlimit() -> i64 {
+    RECURSION_LIMIT.with(|limit| crate::word::inline(*limit).unwrap_or(1))
 }
 
-/// The bytes `input` asks standard input for at a time.
-const INPUT_BLOCK: usize = 4096;
-
-static INPUT: ProgramCell<Input> = ProgramCell::new(Input {
-    bytes: [0; INPUT_BLOCK],
-    start: 0,
-    end: 0,
-});
+/// Sets the limit `sys.setrecursionlimit(limit)` gives, after CPython's checks: a C `int`,
+/// then at least 1. TyPy's recursion stops at the stack's own limit (FUN-02), so the number
+/// is kept for `getrecursionlimit` only.
+///
+/// # Safety
+///
+/// `limit` is an `int` word whose large integer is live.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn typy_rt_sys_setrecursionlimit(limit: i64) -> *mut ExceptionObject {
+    let value = if crate::word::is_inline(limit) {
+        Some(i128::from(crate::word::inline_value(limit)))
+    } else {
+        // SAFETY: the caller's guarantee.
+        unsafe { crate::int::value::Integer::from_word(limit) }.to_i128()
+    };
+    let Some(value) = value.and_then(|value| i32::try_from(value).ok()) else {
+        return raise(
+            ExceptionKind::OverflowError,
+            "Python int too large to convert to C int",
+        );
+    };
+    if value < 1 {
+        return raise(
+            ExceptionKind::ValueError,
+            "recursion limit must be greater or equal than 1",
+        );
+    }
+    RECURSION_LIMIT.with(|kept| *kept = i64::from(value));
+    core::ptr::null_mut()
+}
 
 /// Returns `input(prompt)`: the prompt written to standard output, which is then flushed,
-/// and the next line of standard input without its `\n`, or `EOFError` at its end.
+/// and the next line of standard input without its `\n`, or `EOFError` at its end. It reads
+/// through `sys.stdin`, so the two share what has been read.
 ///
 /// # Safety
 ///
 /// `prompt` is null or points to a live string.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn typy_rt_input(prompt: *const StrObject) -> Raising<*mut StrObject> {
+    // CPython writes the prompt to `sys.stdout` and flushes it, which raises once it is closed.
+    if crate::io::standard_closed(crate::libc::STDOUT) {
+        return Raising::error(core::ptr::null_mut(), crate::text_file::closed_error());
+    }
     if !prompt.is_null() {
         // SAFETY: the caller's guarantee.
         unsafe { crate::io::typy_rt_write_stdout(prompt) };
     }
     crate::io::flush_stdout();
-    INPUT.with(|input| read_line(input, |bytes| crate::libc::read(crate::libc::STDIN, bytes)))
-}
-
-/// Returns the next line of `input`, which `read` refills when it is empty, decoded and
-/// without its `\n`; the last line may end without one. Raises `EOFError` when `read` gives
-/// nothing before a line starts.
-fn read_line(
-    input: &mut Input,
-    mut read: impl FnMut(&mut [u8]) -> usize,
-) -> Raising<*mut StrObject> {
-    let mut line = crate::byte_buffer::ByteBuffer::new();
-    let mut read_any = false;
-    loop {
-        if input.start == input.end {
-            input.start = 0;
-            input.end = read(&mut input.bytes);
-            if input.end == 0 {
-                break;
-            }
-        }
-        read_any = true;
-        let rest = &input.bytes[input.start..input.end];
-        if let Some(at) = rest.iter().position(|byte| *byte == b'\n') {
-            line.extend(&rest[..at]);
-            input.start += at + 1;
-            break;
-        }
-        line.extend(rest);
-        input.start = input.end;
-    }
-    if !read_any {
-        line.discard();
-        return Raising::error(
+    match crate::text_file::input_line() {
+        Ok(Some(line)) => Raising::ok(line),
+        Ok(None) => Raising::error(
             core::ptr::null_mut(),
             raise(ExceptionKind::EOFError, "EOF when reading a line"),
-        );
+        ),
+        Err(error) => Raising::error(core::ptr::null_mut(), error),
     }
-    let text = decode(line.bytes());
-    line.discard();
-    Raising::ok(text)
 }
 
 /// Returns the exit status an uncaught exception gives, and whether it is reported: a
@@ -190,7 +187,10 @@ pub(crate) unsafe fn exit_status(exception: *mut ExceptionObject) -> (i32, bool)
                 unsafe {
                     let text = str(exception.cast());
                     if text.exception.is_null() {
-                        crate::string::write_utf8(text.value, crate::io::write_stderr);
+                        // CPython writes only the line ending when `sys.stderr` is closed.
+                        if !crate::io::standard_closed(crate::libc::STDERR) {
+                            crate::string::write_utf8(text.value, crate::io::write_stderr);
+                        }
                         crate::io::write_stderr(b"\n");
                         crate::refcount::typy_rt_decrement(text.value.cast());
                     } else {

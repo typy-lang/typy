@@ -86,10 +86,15 @@ prints differently there.
 A lazy import is allowed at module level, also inside `if`, `for`,
 `while` and `with`. As in CPython, it is E0103 inside a function, a
 `try` statement, or with `*` or `__future__`; inside a class it is E0202,
-since a class body holds only its methods. TyPy 0.4 adds what 0.3 refuses
-with E0201 (MOD-11): using a name another module imports lazily, such as
-`from app import heavy`, assigning `m.x = v` through a lazily imported
-`m`, and binding one name by two lazy imports.
+since a class body holds only its methods.
+
+Another module may use a name a module imports lazily, as
+`from app import heavy` or `app.heavy` does: reading it runs the import
+first, as in CPython. Assigning `m.x = v` through a lazily imported `m`
+runs `m`'s import before the assignment. A variable may be bound by more
+than one lazy import, and its first use runs the one that ran last
+(MOD-11). A function or a class bound by two lazy imports is planned for
+0.5 (MOD-12).
 
 The switches of `sys` that change lazy imports from outside the module,
 `sys.set_lazy_imports`, `sys.set_lazy_imports_filter`, their `get_`
@@ -104,14 +109,17 @@ imports into the function that uses the module breaks the cycle. A name a
 module does not define is E0425, at compile time.
 
 `from m import *` is planned for after 1.0. Standard library modules come
-with their releases: `math` and `sys` in 0.3, `dataclasses` and the rest
-of `typing` in 0.4 (LIB-04 to LIB-07). In 0.3, `typing` and
-`collections.abc` give `Iterator` and `Iterable`, and `types` gives
-`TracebackType` and `ModuleType`, for annotations (TYP-15). The
-library page describes [`math`](library.md#the-math-module) and
+with their releases: `math` and `sys` in 0.3, `dataclasses` in 0.4, and
+`ctypes` in 0.5 (LIB-04 to LIB-07, FFI-01). `typing` and
+`collections.abc` give `Iterator` and `Iterable`, `typing` gives
+`ClassVar`, `Final` and `Protocol`, and `types` gives `TracebackType`
+and `ModuleType`, for annotations (TYP-15, LIB-06). `dataclasses` gives
+`dataclass` and `field`, as [Classes](classes.md#dataclasses) describes
+(CLS-05). The library page
+describes [`math`](library.md#the-math-module) and
 [`sys`](library.md#the-sys-module):
 
 <!-- typy-expect: rejected E0201 at 1:1 -->
 ```python
-import dataclasses
+import ctypes
 ```

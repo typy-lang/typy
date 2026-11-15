@@ -6,6 +6,252 @@ All notable changes to TyPy are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-11-15
+
+### Added
+
+- Single inheritance between classes of the program: a class may derive
+  from a class defined before it, named by its name or as
+  `module.Class`, and holds its base's attributes and methods. An
+  instance is accepted wherever its base is, as an argument, in a
+  variable, in a `list[Base]` and as a `Base | None`, and `type()`,
+  `str`, `repr` and `print` use its own class. A subclass may declare an
+  inherited attribute again with the same type (CLS-04, ADR-0021).
+- Overriding methods: a subclass, including an exception class, may
+  define a method of its base again, and a call runs the method of the
+  instance's own class, also for `for`, `next` and `with`. An override
+  is checked against the base method as type checkers check it, E0404
+  otherwise; one that changes a default, or takes or returns a type
+  held differently, such as `int | None` for `int`, is planned for 0.5
+  (CLS-04, CLS-13, ADR-0021).
+- `super()` in any method: `super().name(...)` and `super(Class, self)`
+  call the nearest base's method, and `super().__init__()` in a class
+  whose bases have no `__init__` does nothing, as `object.__init__`
+  does. Outside a method it is E0414 (CLS-14). It comes after a
+  subclass assigns its own attributes when the base's `__init__` uses
+  the instance, which could run an override that reads them, E0309
+  otherwise (CLS-04).
+- `isinstance` with a class of the program, a built-in type or an
+  exception class, or a tuple of them; a variable narrows to the tested
+  class where the test holds, also after an `if` that returns and in
+  the right operand of `and`. A class held in a variable and
+  `issubclass` are planned for 0.5 (CLS-09, TYP-07).
+- Class variables, `name = value` and `name: ClassVar[T] = value` in a
+  class body, read through the class or an instance and assigned
+  through the class; and attribute defaults, `name: T = value`, which
+  each new instance starts with (CLS-11, ADR-0024).
+- Comparison methods `__eq__`, `__ne__`, `__lt__`, `__le__`, `__gt__`
+  and `__ge__`, and `__hash__`: operators call them, with CPython's
+  reflected methods and the subclass's method first, and lists, sets,
+  dicts, `in`, `sorted`, `min` and `max` call them through the class's
+  type object. A class with `__eq__` and no `__hash__` has no hash
+  (CLS-07, ADR-0026).
+- `@dataclass` from `dataclasses`, with `eq`, `order` and `frozen` and
+  `field(default=...)`: it writes `__init__`, `__repr__`, `__eq__` and
+  the ordering methods as CPython does, and refuses what CPython
+  refuses, such as a mutable default. The hash of a frozen dataclass
+  and `default_factory` are planned for 0.5 (CLS-05, LIB-06).
+- Unions, such as `int | str`, `str | list[int] | None` or
+  `Circle | Square`: a union of objects is held as the object itself, and
+  any other with a tag that names its member, so an `int` stored in an
+  `int | str` allocates nothing. A union can be passed, returned, stored,
+  printed, written with
+  `str` and `repr`, given to `type()` and tested for truth. `isinstance`
+  narrows it in both branches, and a union of classes that share a base
+  has that base's attributes and methods. Any other operation on a
+  variable that holds a union, such as `value.upper()`, `len(value)` or
+  `value + value`, is checked for each member and runs the one for the
+  object's member. Lists, sets and dicts of a union compare and hash
+  each item as its member, so `1` and `1.0` are one key (TYP-14, TYP-07,
+  ADR-0027).
+- Generic functions written with PEP 695 type parameter lists, such as
+  `def first[T](items: list[T]) -> T`, with bounds, `[S: Shape]`, and
+  constraints, `[N: (int, float)]`. A call takes the types from its
+  arguments, and TyPy compiles one copy of the function for each set of
+  types, so a generic call costs what a written-out call does. `TypeVar`
+  and `Generic` are E0202; a function that would need copies without
+  end is E0428. Calling a generic function of another module is planned
+  for 0.5 (GEN-07), and `*Ts`, `**P` and defaults for 1.0 (GEN-01 to
+  GEN-03, GEN-06, ADR-0023).
+- Generic classes, `class Box[T]:`, made by `Box(1)`, whose types come
+  from `__init__`'s arguments, or by `Box[str]("a")`, and named
+  `Box[int]` in annotations. Each copy holds its attributes in place, and
+  answers as the generic class: `type(Box(1)) is Box` and
+  `isinstance(Box(1), Box)` hold. A generic class with a base, a class
+  derived from one, and its class variables and defaults are planned for
+  0.5 (GEN-01, GEN-03, GEN-08, ADR-0028).
+- Protocols: `class Shape(Protocol):` from `typing` lists methods and
+  attributes, and any class that has them satisfies it. A parameter
+  typed with a protocol, also inside `list[Shape]`, compiles to one copy
+  for each class it is called with, and `[S: Shape]` bounds a type
+  parameter by one. A class that falls short is E0404, naming the
+  member; calling a protocol and `isinstance` with one are E0401. A
+  protocol as any other type, as a base, or with properties, static and
+  class methods or class variables is planned for 0.5 (GEN-04, GEN-05,
+  GEN-10, ADR-0023).
+- `...` alone as a statement does nothing, as `pass` does.
+- `open` takes a file descriptor, giving a file whose `name` is that `int`,
+  and `closefd`, with CPython's errors (LIB-14).
+- `open` takes a mode held in a variable, which opens a text file and is
+  checked with CPython's errors when the program runs; a binary mode in a
+  variable raises `TypeError` (LIB-14, ADR-0031).
+- `open` takes binary modes, which give a `BufferedReader`,
+  `BufferedWriter` or `BufferedRandom`, or a `FileIO` with `buffering=0`,
+  reading and writing `bytes` with CPython's results and errors (LIB-14,
+  ADR-0031).
+- `open` takes the modes `"r+"`, `"w+"`, `"a+"` and `"x+"`, which read and
+  write one text file as CPython's do (LIB-14).
+- `close()` of `sys.stdin`, `sys.stdout` or `sys.stderr` closes it, as in
+  CPython: reading it, writing to it, `input()` and `print()` then raise
+  `ValueError: I/O operation on closed file.` (LIB-14).
+- `open` takes `buffering`, `encoding` (`utf-8`, `ascii` or `latin-1`),
+  `errors` (`strict`, `ignore`, `replace`, `backslashreplace`,
+  `xmlcharrefreplace` or `surrogateescape`) and `newline`, with CPython's
+  results and errors; `buffering=1` writes out each line (LIB-14).
+- Text files have `name`, `mode` and `closed`, and the methods `fileno`,
+  `isatty`, `readable`, `writable`, `seekable`, `seek`, `tell` and
+  `truncate`, with CPython's results and errors; a file opened with `"a"`
+  starts at its end (LIB-14).
+- Names a module binds by a lazy import can be used from another module,
+  `m.x = v` assigns through a lazily imported `m`, and a variable may be
+  bound by more than one lazy import; each runs the pending import first,
+  as CPython does (MOD-11). A function or a class bound by two lazy
+  imports is planned for 0.5 (MOD-12).
+- `format % values` with a format that is not a literal, also through
+  `%=`, and with a `tuple[T, ...]` of values: the runtime reads the format
+  and raises what CPython raises (LIB-11).
+- `OSError` and its subclasses built with two to five arguments, read as
+  `errno`, `strerror`, `filename`, `winerror` and `filename2`, with the
+  attributes `errno`, `strerror`, `filename` and `filename2`. `OSError`
+  itself becomes the subclass for `errno`, as in CPython. Other argument
+  types are planned for 0.5 (EXC-14, EXC-16).
+- `args` of an exception and `code` of a `SystemExit`, where a program
+  prints, formats, compares with `==` or `!=`, or tests them, and
+  `len(error.args)`. Other uses, such as `error.args[0]`, are planned for
+  0.5 (EXC-11, EXC-13, EXC-15, ADR-0030).
+- `sys.stdin`, a text file that `input()` reads too, and `sys.maxsize`,
+  `sys.maxunicode`, `sys.byteorder`, `sys.platform`,
+  `sys.getrecursionlimit` and `sys.setrecursionlimit`. The recursion
+  limit is kept for `getrecursionlimit`; recursion still stops at the
+  stack's limit (LIB-13, FUN-02).
+- `sys.version`, `sys.hexversion` and `sys.version_info` report CPython
+  3.15.0, whose behaviour TyPy follows. `sys.version_info` is compared
+  with a tuple of `int`s, indexed and read by field; as a value of its
+  own it is planned for 0.5 (LIB-13, LIB-16, ADR-0029).
+- `math.fsum`, `math.dist`, `math.prod`, `math.sumprod`, `math.gamma`
+  and `math.lgamma`, with CPython's results to the last bit. The first
+  four take iterables of `int`, `bool` or `float` items; `prod` of
+  `float`s with the default start and `sumprod` with a `float` are
+  `int | float`, since CPython gives the `int` start or 0 for no items.
+  Items of a union and a `bool` start are planned for 0.5 (LIB-12,
+  LIB-15).
+- Methods with type parameters, `def pair[T](self, value: T)`, also
+  static methods, in a class that is not generic. A call takes the types
+  from the arguments after `self` and runs the copy for them. Type
+  parameters of a method of a generic class, of a special method, a
+  property or a class method, and of a method that overrides or is
+  overridden are planned for 0.5 (GEN-01, GEN-09).
+- `Final` and `Final[T]` from `typing`: a module or function variable, a
+  class variable or an attribute that `__init__` declares `Final` is
+  assigned only by its declaration, and any other assignment is E0414. A
+  `Final` without a value is E0408 (TYP-08).
+- The `type` statement at module level: `type Name = annotation` makes
+  `Name` stand for the annotation in the module's annotations, and may
+  name a class defined below it, as CPython reads the value late. An
+  alias may take type parameters, `type Pair[T] = tuple[T, T]`, and
+  `Pair[int]` stands for its value with `int` in place of `T`. An alias
+  of another module, read as a value, defined inside a function, a class
+  or a block, or with a bound on a type parameter is planned for 0.5
+  (SMT-10, SMT-12).
+- Container methods: `len(x)`, `x[k]`, `x[k] = v`, `del x[k]` and
+  `v in x` call `__len__`, `__getitem__`, `__setitem__`, `__delitem__`
+  and `__contains__`, and truth tests, `any` and `all` call `__bool__`,
+  or test `__len__` against zero. A negative `__len__` raises
+  `ValueError` as in CPython (CLS-07).
+- Arithmetic methods: the binary operators call `__add__`, `__sub__`,
+  `__mul__` and the others, with their reflected forms such as
+  `__radd__`; `-x`, `+x`, `~x` and `abs(x)` call `__neg__`, `__pos__`,
+  `__invert__` and `__abs__`; and `x += y` rebinds `x` to `x + y`. The
+  in-place methods such as `__iadd__` are planned for 0.5 (CLS-07).
+- `@classmethod`: `Class.name(...)` passes the class, so `cls(...)` in
+  an alternative constructor makes an instance of the class the call
+  names, as in CPython; TyPy compiles a copy for each class of the
+  module that has it (CLS-06, ADR-0025).
+- `@staticmethod`, called through the class or an instance, and
+  `@property` with its `@name.setter`: reading the attribute calls the
+  getter of the instance's class, and assigning it calls the setter.
+  A property without a setter cannot be assigned (CLS-06).
+- An exception class may derive from an exception class imported from
+  another module, as `from errors import AppError` or `errors.AppError`
+  (CLS-03).
+
+### Changed
+
+- Allocation on the stack is planned for 0.5 (MEM-03), with the benchmarks
+  that measure what it gains.
+- A class decorator other than `@dataclass` is planned for 1.0 with the
+  other user-defined decorators (FUN-06), not for 0.4.
+- `open(..., encoding="csutf8")` is E0404, as for `str.encode`: CPython
+  3.12 does not know the name, so its result depends on the version.
+  Write `"utf-8"` instead.
+- A binary mode with a `buffering` that is not a literal is planned for 1.0
+  (LIB-19), since the value decides the class of the file.
+- The `opener` argument of `open` is planned for 1.0 (LIB-18), since it
+  takes a function as a value.
+- Importing a module inside a function of a module that it imports at
+  module level is planned for 0.5 (MOD-13).
+- Names of `typing` that TyPy does not give are planned for 0.5 rather
+  than 0.4: `Optional`, `Union`, `List`, `Dict` and the other older names
+  (LIB-17), and `Iterator` and `Iterable` as values (TYP-17).
+  `typing.Any` and `typing.cast` are refused with E0202, since every
+  value has one type (TYP-10).
+- A surrogate escape in a `str` literal, such as `"\udcff"`, is planned
+  for 0.5 rather than 0.4: string constants would have to carry code
+  points instead of UTF-8 text through the whole compiler (LEX-10).
+- The name of `except (A, B) as name` is the union `A | B`, as type
+  checkers read it, and no longer their common base; its attributes and
+  methods are still the base's, and it can be stored in a variable
+  declared `A | B` (TYP-14).
+
+- A base that is not `object`, an exception class or a class of the
+  program, such as `int` or `list`, is E0201 with a message that names
+  what a base may be, in place of "planned for TyPy 0.4" (CLS-04).
+
+### Fixed
+
+- A class method with a parameter that names a protocol is E0201, planned
+  for 0.5 (GEN-09); it was accepted and every call with a matching class
+  was refused.
+- A `for` loop whose variable is a `T | None`, such as one bound earlier by
+  a loop over `None` and `"a"`, over items of type `T` no longer stops the
+  compiler with an internal error; the variable is not `None` in the
+  loop's body (CST-03, TYP-13).
+- A call that names one keyword twice, such as `print(1, sep="", sep="")`,
+  is E0103 with CPython's `SyntaxError` message, `keyword argument
+  repeated: sep`; it used to compile, or report the wrong error (STD-01).
+- A `%` format whose width is past a C `ssize_t` or whose precision is
+  past a C `int`, such as `"%99999999999999999999d"`, is refused with
+  CPython's `width too big` or `precision too big` (LIB-10).
+- `input()` reads standard input as CPython does: a line that ends with
+  `\r\n` or `\r` loses it, where it used to keep the `\r` (LIB-04).
+- A truth test of a list, a set, a dict or `bytes` in a recursive
+  function, such as `if not items:` before `return f(items[1:])`, stopped
+  the compiler with an internal error (EXP-10).
+
+- Repeating a list, a `str` or `bytes` by a count from 2**62 up to the
+  largest index-sized integer raised `OverflowError`. An empty sequence
+  now stays empty however many times it is repeated, and a longer one is
+  refused as CPython refuses it. A list whose repeated length passes the
+  address space now runs out of memory, which prints `MemoryError` and
+  ends the program, where it used to raise `OverflowError` (DAT-05,
+  DAT-06, DAT-07).
+- Calling a class whose body declares an attribute that no `__init__`
+  assigns is E0309. The program used to compile and crash when the
+  attribute was read, where CPython raises `AttributeError` (CLS-01).
+- Calling a module variable that holds a value, such as an `int`, from a
+  function is E0401. The call used to be dropped, where CPython raises
+  `TypeError` (EXP-02).
+
 ## [0.3.0] - 2026-11-13
 
 ### Added
@@ -502,7 +748,8 @@ compiler needs glibc 2.39 or later and a C toolchain.
   non-ASCII text, checks that every requirement has a row in the test plan,
   and checks that every diagram is rendered from its source.
 
-[Unreleased]: https://github.com/typy-lang/typy/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/typy-lang/typy/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/typy-lang/typy/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/typy-lang/typy/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/typy-lang/typy/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/typy-lang/typy/releases/tag/v0.1.0

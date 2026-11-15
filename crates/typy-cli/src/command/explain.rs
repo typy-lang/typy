@@ -121,9 +121,10 @@ mod tests {
             } else {
                 format!("<!-- typy-expect: rejected {code} at ")
             };
-            if !section.contains(&causes) || !section.contains("This one is correct:") {
-                missing.push(code);
-            }
+            let complete = [causes.as_str(), "This one is correct:"]
+                .iter()
+                .all(|needle| section.contains(needle));
+            missing.extend((!complete).then_some(code));
         }
         assert!(
             missing.is_empty(),
@@ -136,10 +137,8 @@ mod tests {
         let text = explanation(DiagnosticCode::error(402), "unused");
         assert!(text.starts_with("E0402: assignment changes the type of a variable\n"));
         assert!(text.contains("\n    count = \"none\"\n"), "{text}");
-        assert!(
-            !text.contains("typy-expect") && !text.contains("```"),
-            "{text}"
-        );
+        assert!(!text.contains("typy-expect"), "{text}");
+        assert!(!text.contains("```"), "{text}");
         assert!(text.ends_with("print(count, label)\n"), "{text}");
     }
 

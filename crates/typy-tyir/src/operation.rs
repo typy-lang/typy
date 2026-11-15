@@ -193,6 +193,37 @@ pub enum Operation {
         /// The arguments, borrowed.
         arguments: Vec<ValueId>,
     },
+    /// An instance, or an optional one, as a value of type `ty`, an instance of a class
+    /// derived from its class, which a test showed it is: the same object (TYP-07).
+    Downcast {
+        /// The instance.
+        value: ValueId,
+        /// The type of the derived class's instances.
+        ty: crate::types::TyirType,
+    },
+    /// Whether two instances of class `class`, or of classes derived from it, have one method
+    /// at `slot` of their classes' tables, as CPython asks before it calls a reflected
+    /// operator method first (ADR-0026).
+    SameMethod {
+        /// The class whose table the slot is in.
+        class: u32,
+        /// The position in the table.
+        slot: u32,
+        /// One instance.
+        left: ValueId,
+        /// The other.
+        right: ValueId,
+    },
+    /// Calls the method at `slot` of the table of the class of the first argument, which
+    /// cannot raise; see `Callee::Method`.
+    CallMethod {
+        /// The class whose table gives the entry's parameters and result.
+        class: u32,
+        /// The position in the table.
+        slot: u32,
+        /// The arguments, borrowed; the first is the instance.
+        arguments: Vec<ValueId>,
+    },
     /// A tuple of these values, which it takes over (DAT-08).
     MakeTuple {
         /// The tuple's type.
@@ -226,6 +257,14 @@ pub enum Operation {
     },
     /// The value an optional holds, which is not `None`.
     Unwrap(ValueId),
+    /// An instance, or an optional one, as a value of type `ty`, an instance of a class it
+    /// derives from: the same object (ADR-0021).
+    Upcast {
+        /// The instance.
+        value: ValueId,
+        /// The type of the base's instances, optional when the value is.
+        ty: crate::types::TyirType,
+    },
     /// Whether an optional value is `None`.
     IsNone(ValueId),
     /// A new instance of class `class`, with one reference and every attribute zero (CLS-01).

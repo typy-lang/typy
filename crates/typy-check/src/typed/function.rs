@@ -32,4 +32,7 @@ pub struct TypedFunction {
     pub body: Vec<TypedStmt>,
     /// The whole definition.
     pub span: Span,
+    /// Whether it is a generic function, whose copies run in its place; it holds no body
+    /// (GEN-03, ADR-0023).
+    pub generic: bool,
 }

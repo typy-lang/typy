@@ -137,6 +137,24 @@ impl Checker<'_> {
                     function.symbol.clone(),
                 ))
             }
+            Callee::Method { class, slot } => {
+                let entry = self
+                    .module
+                    .classes
+                    .get(class as usize)
+                    .and_then(|owner| owner.methods.get(slot as usize))
+                    .ok_or_else(|| {
+                        self.error(format!("class#{class} has no method#{slot} in its table"))
+                    })?;
+                let (parameters, result, may_raise, _) =
+                    self.callee_signature(Callee::Function(*entry))?;
+                Ok((
+                    parameters,
+                    result,
+                    may_raise,
+                    format!("class#{class}.method#{slot}"),
+                ))
+            }
         }
     }
 
@@ -213,6 +231,45 @@ impl Checker<'_> {
                 function,
                 arguments,
             } => self.call(Callee::Function(*function), arguments)?,
+            Operation::SameMethod {
+                class,
+                slot,
+                left,
+                right,
+            } => {
+                if self
+                    .module
+                    .classes
+                    .get(*class as usize)
+                    .is_none_or(|owner| owner.methods.len() <= *slot as usize)
+                {
+                    return Err(
+                        self.error(format!("class#{class} has no method#{slot} in its table"))
+                    );
+                }
+                let of_class = TyirType::Object(TypeId::class(*class));
+                for value in [left, right] {
+                    let ty = self.ty(*value)?;
+                    if !self.derives_from(ty, of_class) {
+                        return Err(self.error(format!(
+                            "v{} of type {ty} is not an instance of class#{class}",
+                            value.0
+                        )));
+                    }
+                }
+                Some(TyirType::Bool)
+            }
+            Operation::CallMethod {
+                class,
+                slot,
+                arguments,
+            } => self.call(
+                Callee::Method {
+                    class: *class,
+                    slot: *slot,
+                },
+                arguments,
+            )?,
             Operation::ToBits(value) => {
                 let ty = self.ty(*value)?;
                 if !matches!(
@@ -243,6 +300,26 @@ impl Checker<'_> {
                 Some(*ty)
             }
             Operation::Unwrap(value) => Some(self.optional_value(*value)?),
+            Operation::Downcast { value, ty } => {
+                let from = self.ty(*value)?;
+                if !self.derives_from(*ty, from) {
+                    return Err(self.error(format!(
+                        "{ty} is not the type of a class derived from v{}'s {from}",
+                        value.0
+                    )));
+                }
+                Some(*ty)
+            }
+            Operation::Upcast { value, ty } => {
+                let from = self.ty(*value)?;
+                if !self.derives_from(from, *ty) {
+                    return Err(self.error(format!(
+                        "v{} of type {from} is not an instance of a class derived from {ty}",
+                        value.0
+                    )));
+                }
+                Some(*ty)
+            }
             Operation::IsNone(value) => {
                 self.optional_value(*value)?;
                 Some(TyirType::Bool)
@@ -287,6 +364,46 @@ impl Checker<'_> {
                 None
             }
         })
+    }
+
+    /// Returns true when `from` holds instances of a class of the module that is `to`'s class
+    /// or derives from it, both optional or neither.
+    fn derives_from(&self, from: TyirType, to: TyirType) -> bool {
+        // Every object is held as a union of objects as it is (TYP-14).
+        if let (TyirType::Object(_), TyirType::UNION)
+        | (
+            TyirType::Optional(crate::types::OptionalBase::Object(_)),
+            TyirType::Optional(crate::types::OptionalBase::Object(TypeId::UNION)),
+        ) = (from, to)
+        {
+            return true;
+        }
+        let classes = match (from, to) {
+            (TyirType::Object(from), TyirType::Object(to))
+            | (
+                TyirType::Optional(crate::types::OptionalBase::Object(from)),
+                TyirType::Optional(crate::types::OptionalBase::Object(to)),
+            ) => from.class_index().zip(to.class_index()),
+            _ => None,
+        };
+        let Some((mut current, base)) = classes else {
+            return false;
+        };
+        // Each base has a lower index than the classes derived from it, so the walk ends.
+        loop {
+            if current == base {
+                return true;
+            }
+            match self
+                .module
+                .classes
+                .get(current as usize)
+                .and_then(|class| class.base)
+            {
+                Some(next) if next < current => current = next,
+                _ => return false,
+            }
+        }
     }
 
     /// Returns the type an optional value holds, after checking it is optional.

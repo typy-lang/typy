@@ -1,18 +1,28 @@
 //! Checks one function body, or the module body: names, types and definite assignment.
 
+mod accessor;
 mod builtin_call;
 mod builtin_module;
 mod call;
 mod class;
+mod class_copy;
+mod class_value;
 mod comprehension;
+mod container_method;
 mod delete;
 mod dict;
 mod dict_call;
+mod each_member;
+mod generic_call;
+mod generic_copy;
+pub use each_member::member_class;
 mod exception;
+mod exception_part;
 mod expression;
 mod flow;
 mod fstring;
 mod import;
+mod isinstance;
 mod iterable_call;
 mod iterator;
 mod list;
@@ -20,21 +30,30 @@ mod list_call;
 mod locals;
 mod loop_source;
 mod math_call;
+mod math_iterable;
 mod method_call;
 mod name;
 mod open_call;
+mod open_options;
 mod operator;
+mod operator_method;
+mod os_error;
 mod percent;
 mod program;
+mod protocol;
 mod round_call;
 mod set;
 mod slice;
 mod statement;
+mod super_call;
 mod sys_call;
 mod type_object;
+mod union;
+mod version_info;
 mod view_operator;
 
 pub(crate) use builtin_module::ModuleFunction;
+pub(crate) use class_copy::{ClassCopies, GenericClass};
 pub(crate) use import::Imported;
 pub(crate) use program::Program;
 
@@ -66,6 +85,14 @@ pub(crate) struct BodyChecker<'program> {
     returns: Option<Type>,
     /// The class and instance of the `__init__` being checked.
     initializing: Option<class::Initializing>,
+    /// The types `isinstance` tests narrow variables to, which `Fact::Narrowed` names by
+    /// position (TYP-07).
+    narrowings: Vec<Type>,
+    /// The variables an operation is being checked for each member of, innermost last, each
+    /// with the member it is checked for now (TYP-14).
+    splitting: Vec<(SymbolId, Type)>,
+    /// The class and instance of the method being checked, which `super()` reads.
+    method: Option<class::Initializing>,
     /// Whether a use of the incomplete instance has been reported, so one cause gives one error.
     reported_incomplete: bool,
     /// How many `except` clauses enclose the statement being checked, in this function.
@@ -94,6 +121,9 @@ impl<'program> BodyChecker<'program> {
             reported_unassigned: BTreeSet::new(),
             returns,
             initializing: None,
+            method: None,
+            narrowings: Vec::new(),
+            splitting: Vec::new(),
             reported_incomplete: false,
             handling: 0,
             finally_loops: Vec::new(),
@@ -130,6 +160,16 @@ impl<'program> BodyChecker<'program> {
                 .insert(flow::Fact::Assigned(symbol));
             parameters.push(symbol);
         }
+        if let (Some(class), true, Some(instance)) = (
+            definition.class,
+            definition.takes_instance,
+            parameters.first(),
+        ) {
+            checker.method = Some(class::Initializing {
+                class,
+                instance: *instance,
+            });
+        }
         if let (Some(class), "__init__", Some(instance)) = (
             definition.class,
             definition.name.as_str(),
@@ -139,15 +179,30 @@ impl<'program> BodyChecker<'program> {
                 class,
                 instance: *instance,
             });
+            // An attribute with a default holds it before `__init__` runs (ADR-0024).
+            let defaults = checker.defaults(class);
+            if let Some(facts) = &mut checker.assigned {
+                facts.extend(defaults.into_iter().map(flow::Fact::Attribute));
+            }
         }
-        checker.declare_globals(definition.body);
-        let saved = checker.import_names_of(definition.body);
-        let statements: Vec<&Stmt> = definition.body.iter().collect();
+        // A protocol's method only says what a class that satisfies the protocol has, so its
+        // body, often `...`, is never run or checked (GEN-04).
+        let protocol = definition
+            .class
+            .is_some_and(|class| checker.program.is_protocol(class));
+        let checked_body: &[Stmt] = if protocol { &[] } else { definition.body };
+        checker.declare_globals(checked_body);
+        let saved = checker.import_names_of(checked_body);
+        let statements: Vec<&Stmt> = checked_body.iter().collect();
         checker.collect_locals(&statements);
         let body = checker.statements(&statements);
         checker.restore_names(saved);
         checker.check_instance_complete(definition.span);
-        if checker.assigned.is_some() && returns != Type::NoneType && returns != Type::Error {
+        if checker.assigned.is_some()
+            && !protocol
+            && returns != Type::NoneType
+            && returns != Type::Error
+        {
             checker.diagnostics.push(
                 Diagnostic::new(
                     DiagnosticCode::error(405),
@@ -162,6 +217,11 @@ impl<'program> BodyChecker<'program> {
             );
         }
         let locals = checker.finish_locals();
+        // A generic function is checked, never run: its copies run in its place, so it keeps
+        // no body (ADR-0023). A protocol's method only says what a class that satisfies the
+        // protocol has (GEN-04).
+        let generic =
+            program.generic(function).is_some() || program.is_opaque_copy(function) || protocol;
         program.functions[function.0 as usize] = Some(TypedFunction {
             id: function,
             name: definition.name.clone(),
@@ -169,9 +229,10 @@ impl<'program> BodyChecker<'program> {
             module: program.module.clone(),
             signature: definition.signature.clone(),
             parameters,
-            locals,
-            body,
+            locals: if generic { Vec::new() } else { locals },
+            body: if generic { Vec::new() } else { body },
             span: definition.span,
+            generic,
         });
     }
 
@@ -209,6 +270,7 @@ impl<'program> BodyChecker<'program> {
             locals,
             body,
             span,
+            generic: false,
         }));
         entry
     }

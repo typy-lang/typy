@@ -22,6 +22,11 @@ impl FunctionLowerer<'_> {
         span: Span,
     ) {
         match target {
+            // A module bound lazily is imported before its attribute is read (MOD-11).
+            AssignTarget::Lazy { reify, target } => {
+                self.run_lazy_import(*reify, span);
+                self.augmented_assignment(target, operator, value, result, span);
+            }
             AssignTarget::Name(symbol) => {
                 let current = self.read_name(*symbol, span);
                 let right = self.expression(value);

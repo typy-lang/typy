@@ -50,6 +50,8 @@ fn the_names_typy_provides_are_accepted() {
         "print(input(), input(\"prompt\"), input(1))\n",
         "print(1, file=None)\n",
         "def main() -> None:\n    import sys\n    sys.exit(2)\n\n\nmain()\n",
+        "import sys\nprint(sys.maxsize + 1, sys.maxunicode, sys.byteorder.upper(), sys.platform)\n",
+        "from sys import stdin, setrecursionlimit, getrecursionlimit\nsetrecursionlimit(True)\nprint(stdin.readline(), getrecursionlimit() + 1)\n",
     ] {
         assert_eq!(diagnostics(source), [], "{source}");
     }
@@ -82,12 +84,27 @@ fn names_of_sys_typy_does_not_have_give_their_codes() {
         (
             "import sys\nprint(sys.version_info)\n",
             "E0201",
-            "`sys.version_info` is planned for TyPy 0.4 (LIB-13)",
+            "using `sys.version_info` as a value is planned for TyPy 0.5 (LIB-16); compare it with a tuple of `int`s, or read an item or a field",
         ),
         (
-            "from sys import stdin\n",
+            "import sys\nprint(sys.version_info == 3)\n",
             "E0201",
-            "`sys.stdin` is planned for TyPy 0.4 (LIB-13)",
+            "using `sys.version_info` as a value is planned for TyPy 0.5 (LIB-16); compare it with a tuple of `int`s, or read an item or a field",
+        ),
+        (
+            "import sys\nsys.setrecursionlimit('a')\n",
+            "E0404",
+            "'str' object cannot be interpreted as an integer",
+        ),
+        (
+            "import sys\nprint(sys.getrecursionlimit(1))\n",
+            "E0404",
+            "`sys.getrecursionlimit` takes 0 positional arguments, and 1 is given",
+        ),
+        (
+            "import sys\nsys.setrecursionlimit(limit=5)\n",
+            "E0404",
+            "`sys.setrecursionlimit` takes 1 positional argument, and 1 is given",
         ),
         (
             "import sys\nprint(sys.getrefcount(1))\n",
@@ -220,7 +237,7 @@ fn assigning_a_name_of_a_built_in_module_is_refused() {
         (
             "import sys\nsys.version_info = 1\n",
             "E0201",
-            "`sys.version_info` is planned for TyPy 0.4 (LIB-13)",
+            "using `sys.version_info` as a value is planned for TyPy 0.5 (LIB-16); compare it with a tuple of `int`s, or read an item or a field",
         ),
     ] {
         let found = diagnostics(source);

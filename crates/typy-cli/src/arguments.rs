@@ -144,22 +144,22 @@ mod tests {
 
     #[test]
     fn build_takes_a_stage_an_output_and_a_mode() {
-        let Ok(Command::Build {
-            file,
-            emit,
-            output,
-            mode,
-            ..
-        }) = parse(&[
+        let (file, emit, output, mode) = match parse(&[
             "build",
             "app.py",
             "--emit=tyir",
             "-o",
             "out.txt",
             "--release-small",
-        ])
-        else {
-            panic!("not a build");
+        ]) {
+            Ok(Command::Build {
+                file,
+                emit,
+                output,
+                mode,
+                ..
+            }) => (file, emit, output, mode),
+            other => panic!("not a build: {other:?}"),
         };
         assert_eq!((file.as_str(), emit), ("app.py", Some(EmitStage::Tyir)));
         assert_eq!(
@@ -171,11 +171,11 @@ mod tests {
 
     #[test]
     fn run_passes_the_arguments_after_two_dashes() {
-        let Ok(Command::Run {
-            arguments, mode, ..
-        }) = parse(&["run", "app.py", "--release", "--", "-x", "two"])
-        else {
-            panic!("not a run");
+        let (arguments, mode) = match parse(&["run", "app.py", "--release", "--", "-x", "two"]) {
+            Ok(Command::Run {
+                arguments, mode, ..
+            }) => (arguments, mode),
+            other => panic!("not a run: {other:?}"),
         };
         assert_eq!(arguments, ["-x", "two"]);
         assert_eq!(mode.build_mode(), BuildMode::Release);

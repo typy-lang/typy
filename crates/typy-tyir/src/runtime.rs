@@ -37,6 +37,7 @@ pub enum RuntimeFunction {
     Chr,
     Ord,
     WriteStdout,
+    WriteStdoutChecked,
     CheckStack,
     RangeCheckStep,
     NameError,
@@ -176,6 +177,14 @@ pub enum RuntimeFunction {
     TypeText,
     TypeName,
     ExceptionNew,
+    ExceptionPartText,
+    ExceptionArgsLength,
+    ExceptionPartTruth,
+    ExceptionPartEqual,
+    OsErrorNew,
+    OsErrorErrno,
+    OsErrorText,
+    PercentDynamic,
     ExceptionSetCause,
     ExceptionThrow,
     ExceptionHandled,
@@ -191,6 +200,10 @@ pub enum RuntimeFunction {
     IteratorItem,
     ObjectType,
     ObjectRepr,
+    ObjectStr,
+    ObjectIsTrue,
+    IsInstance,
+    IntLength,
     Traceback,
     ListDelete,
     ListDeleteSlice,
@@ -214,6 +227,9 @@ pub enum RuntimeFunction {
     PercentCharStr,
     SysArgv,
     SysStdout,
+    SysStdin,
+    SysGetRecursionLimit,
+    SysSetRecursionLimit,
     SysStderr,
     TextWrite,
     TextFlush,
@@ -224,6 +240,19 @@ pub enum RuntimeFunction {
     TextReadline,
     TextReadlines,
     TextWritelines,
+    TextName,
+    TextMode,
+    TextFileno,
+    TextState,
+    TextSeek,
+    TextTell,
+    TextTruncate,
+    BinaryRead,
+    BinaryReadline,
+    BinaryReadlines,
+    BinaryWrite,
+    OpenDescriptor,
+    TextDescriptorName,
     ListAppendMoved,
     ListSetMoved,
     ListInsertMoved,
@@ -292,6 +321,14 @@ pub enum RuntimeFunction {
     MathPerm,
     MathGcd,
     MathLcm,
+    MathGamma,
+    MathLgamma,
+    MathFsum,
+    MathDist,
+    MathProdInt,
+    MathProdFloat,
+    MathSumprodInt,
+    MathSumprodFloat,
     Ascii,
 }
 
@@ -323,7 +360,7 @@ const FLOAT_FLOAT: &[TyirType] = &[TyirType::Float, TyirType::Float];
 
 impl RuntimeFunction {
     /// Every runtime function.
-    pub const ALL: [Self; 284] = [
+    pub const ALL: [Self; 321] = [
         Self::IntFloorDivide,
         Self::IntModulo,
         Self::IntPower,
@@ -352,6 +389,7 @@ impl RuntimeFunction {
         Self::Chr,
         Self::Ord,
         Self::WriteStdout,
+        Self::WriteStdoutChecked,
         Self::CheckStack,
         Self::RangeCheckStep,
         Self::NameError,
@@ -491,6 +529,14 @@ impl RuntimeFunction {
         Self::TypeText,
         Self::TypeName,
         Self::ExceptionNew,
+        Self::ExceptionPartText,
+        Self::ExceptionArgsLength,
+        Self::ExceptionPartTruth,
+        Self::ExceptionPartEqual,
+        Self::OsErrorNew,
+        Self::OsErrorErrno,
+        Self::OsErrorText,
+        Self::PercentDynamic,
         Self::ExceptionSetCause,
         Self::ExceptionThrow,
         Self::ExceptionHandled,
@@ -506,6 +552,10 @@ impl RuntimeFunction {
         Self::IteratorItem,
         Self::ObjectType,
         Self::ObjectRepr,
+        Self::ObjectStr,
+        Self::ObjectIsTrue,
+        Self::IsInstance,
+        Self::IntLength,
         Self::Traceback,
         Self::ListDelete,
         Self::ListDeleteSlice,
@@ -529,6 +579,9 @@ impl RuntimeFunction {
         Self::PercentCharStr,
         Self::SysArgv,
         Self::SysStdout,
+        Self::SysStdin,
+        Self::SysGetRecursionLimit,
+        Self::SysSetRecursionLimit,
         Self::SysStderr,
         Self::TextWrite,
         Self::TextFlush,
@@ -539,6 +592,19 @@ impl RuntimeFunction {
         Self::TextReadline,
         Self::TextReadlines,
         Self::TextWritelines,
+        Self::TextName,
+        Self::TextMode,
+        Self::TextFileno,
+        Self::TextState,
+        Self::TextSeek,
+        Self::TextTell,
+        Self::TextTruncate,
+        Self::BinaryRead,
+        Self::BinaryReadline,
+        Self::BinaryReadlines,
+        Self::BinaryWrite,
+        Self::OpenDescriptor,
+        Self::TextDescriptorName,
         Self::ListAppendMoved,
         Self::ListSetMoved,
         Self::ListInsertMoved,
@@ -607,6 +673,14 @@ impl RuntimeFunction {
         Self::MathPerm,
         Self::MathGcd,
         Self::MathLcm,
+        Self::MathGamma,
+        Self::MathLgamma,
+        Self::MathFsum,
+        Self::MathDist,
+        Self::MathProdInt,
+        Self::MathProdFloat,
+        Self::MathSumprodInt,
+        Self::MathSumprodFloat,
         Self::Ascii,
     ];
 
@@ -619,6 +693,9 @@ impl RuntimeFunction {
     pub const fn signature(self) -> RuntimeSignature {
         use TyirType::{Bits, Bool, Float, Int, Unit};
         const STR: TyirType = TyirType::STR;
+        const OPTIONAL_STR: TyirType = TyirType::Optional(crate::types::OptionalBase::Object(
+            crate::types::TypeId::STR,
+        ));
         const LIST: TyirType = TyirType::LIST;
         const BYTES: TyirType = TyirType::BYTES;
         const SET: TyirType = TyirType::SET;
@@ -667,8 +744,8 @@ impl RuntimeFunction {
             Self::Ord => signature(&[STR], Int, true),
             Self::WriteStdout => signature(&[STR], Unit, false),
             Self::CheckStack => signature(&[], Unit, true),
-            Self::RangeCheckStep => signature(&[Int], Unit, true),
-            Self::NameError => signature(&[STR], Unit, true),
+            Self::RangeCheckStep | Self::SysSetRecursionLimit => signature(&[Int], Unit, true),
+            Self::NameError | Self::WriteStdoutChecked => signature(&[STR], Unit, true),
             Self::ModuleAttributeError | Self::ModuleImportError => {
                 signature(&[TyirType::MODULE, STR, Int], Unit, true)
             }
@@ -696,7 +773,7 @@ impl RuntimeFunction {
             Self::ListRepeat => signature(&[LIST, Int], LIST, true),
             Self::ListCompare => signature(&[LIST, LIST, Int], Bool, false),
             Self::ListSort => signature(&[LIST, Int], Unit, false),
-            Self::ListSumInt => signature(&[LIST, Int], Int, false),
+            Self::ListSumInt | Self::MathProdInt => signature(&[LIST, Int], Int, false),
             Self::ListSumFloat => signature(&[LIST, Float], Float, false),
             Self::ListAny | Self::ListAll => signature(&[LIST], Bool, false),
             Self::ZipUnequal => signature(INT_INT, Unit, true),
@@ -779,7 +856,24 @@ impl RuntimeFunction {
             Self::RangeLast => signature(&[Int, Int, Int], Int, false),
             Self::InstanceText => signature(&[Bits], STR, false),
             Self::TypeText | Self::TypeName => signature(&[TYPE], STR, false),
-            Self::ExceptionNew => signature(&[TYPE, Bits, Bits], EXCEPTION, false),
+            Self::ExceptionNew | Self::OsErrorNew => {
+                signature(&[TYPE, Bits, Bits], EXCEPTION, false)
+            }
+            Self::PercentDynamic => signature(&[STR, Bits, Bits, Int], STR, true),
+            Self::OsErrorErrno => signature(
+                &[EXCEPTION],
+                TyirType::Optional(crate::OptionalBase::Int),
+                false,
+            ),
+            Self::OsErrorText => signature(
+                &[EXCEPTION, Int],
+                TyirType::Optional(crate::OptionalBase::Object(crate::TypeId::STR)),
+                false,
+            ),
+            Self::ExceptionPartText => signature(&[EXCEPTION, Int, Int], STR, true),
+            Self::ExceptionArgsLength => signature(&[EXCEPTION], Int, false),
+            Self::ExceptionPartTruth => signature(&[EXCEPTION, Int], Bool, false),
+            Self::ExceptionPartEqual => signature(&[EXCEPTION, Int, Bits, Bits], Bool, false),
             Self::ExceptionSetCause => signature(&[EXCEPTION, Bits], Unit, false),
             Self::ExceptionThrow => signature(&[EXCEPTION], Unit, true),
             Self::ExceptionHandled => signature(&[], EXCEPTION, false),
@@ -796,7 +890,10 @@ impl RuntimeFunction {
             Self::IteratorAdvance => signature(&[ITERATOR, Int], Bool, true),
             Self::IteratorItem => signature(&[ITERATOR], Bits, false),
             Self::ObjectType => signature(&[Bits], TYPE, false),
-            Self::ObjectRepr => signature(&[Bits], STR, true),
+            Self::ObjectRepr | Self::ObjectStr => signature(&[Bits], STR, true),
+            Self::ObjectIsTrue => signature(&[Bits], Bool, false),
+            Self::IsInstance => signature(&[Bits, TYPE], Bool, false),
+            Self::IntLength => signature(&[Int], Int, true),
             Self::Traceback => signature(&[], TyirType::TRACEBACK, false),
             Self::ListDelete => signature(&[LIST, Int], Unit, true),
             Self::ListDeleteSlice => signature(&[LIST, Int, Int, Int, Int], Unit, true),
@@ -819,17 +916,42 @@ impl RuntimeFunction {
             Self::FormatOther | Self::PercentCharStr => signature(&[STR, STR, STR], STR, true),
             Self::PercentInt => signature(&[Int, STR, Int], STR, true),
             Self::SysArgv => signature(&[], LIST, false),
-            Self::SysStdout | Self::SysStderr => signature(&[], TyirType::TEXT_FILE, false),
+            Self::SysStdout | Self::SysStderr | Self::SysStdin => {
+                signature(&[], TyirType::TEXT_FILE, false)
+            }
+            Self::SysGetRecursionLimit => signature(&[], Int, false),
             Self::TextWrite => signature(&[TyirType::TEXT_FILE, STR], Int, true),
             Self::TextFlush | Self::TextClose | Self::TextEnter => {
                 signature(&[TyirType::TEXT_FILE], Unit, true)
             }
-            Self::Open => signature(&[STR, STR, Int], TyirType::TEXT_FILE, true),
+            Self::Open => signature(
+                &[STR, STR, Int, Int, STR, OPTIONAL_STR],
+                TyirType::TEXT_FILE,
+                true,
+            ),
             Self::TextRead | Self::TextReadline => {
                 signature(&[TyirType::TEXT_FILE, Int], STR, true)
             }
-            Self::TextReadlines => signature(&[TyirType::TEXT_FILE], LIST, true),
+            Self::TextReadlines | Self::BinaryReadlines => {
+                signature(&[TyirType::TEXT_FILE], LIST, true)
+            }
             Self::TextWritelines => signature(&[TyirType::TEXT_FILE, LIST], Unit, true),
+            Self::TextName | Self::TextMode => signature(&[TyirType::TEXT_FILE], STR, false),
+            Self::TextFileno | Self::TextTell => signature(&[TyirType::TEXT_FILE], Int, true),
+            Self::TextState => signature(&[TyirType::TEXT_FILE, Int], Bool, true),
+            Self::BinaryRead | Self::BinaryReadline => {
+                signature(&[TyirType::TEXT_FILE, Int], BYTES, true)
+            }
+            Self::BinaryWrite => signature(&[TyirType::TEXT_FILE, BYTES], Int, true),
+            Self::OpenDescriptor => signature(
+                &[Int, STR, Int, Int, STR, OPTIONAL_STR],
+                TyirType::TEXT_FILE,
+                true,
+            ),
+            Self::TextDescriptorName => signature(&[TyirType::TEXT_FILE], Int, false),
+            Self::TextSeek | Self::TextTruncate => {
+                signature(&[TyirType::TEXT_FILE, Int, Int], Int, true)
+            }
             Self::Input => signature(&[STR], STR, true),
             Self::MathAcos
             | Self::MathAcosh
@@ -853,7 +975,9 @@ impl RuntimeFunction {
             | Self::MathTanh
             | Self::MathLogFloat
             | Self::MathLog2Float
-            | Self::MathLog10Float => signature(&[Float], Float, true),
+            | Self::MathLog10Float
+            | Self::MathGamma
+            | Self::MathLgamma => signature(&[Float], Float, true),
             Self::MathFrexpExponent => signature(&[Float], Int, false),
             Self::MathIsfinite
             | Self::MathIsinf
@@ -872,6 +996,10 @@ impl RuntimeFunction {
             Self::MathNextafter => signature(&[Float, Float, Int], Float, true),
             Self::MathIsclose => signature(&[Float, Float, Float, Float], Bool, true),
             Self::MathHypot => signature(&[LIST], Float, false),
+            Self::MathFsum => signature(&[LIST], Float, true),
+            Self::MathDist | Self::MathSumprodFloat => signature(&[LIST, LIST], Float, true),
+            Self::MathProdFloat => signature(&[LIST, Float], Float, true),
+            Self::MathSumprodInt => signature(&[LIST, LIST], Int, true),
             Self::MathLogInt | Self::MathLog2Int | Self::MathLog10Int => {
                 signature(&[Int], Float, true)
             }
@@ -937,6 +1065,7 @@ impl RuntimeFunction {
             Self::Chr => "chr",
             Self::Ord => "ord",
             Self::WriteStdout => "write_stdout",
+            Self::WriteStdoutChecked => "write_stdout_checked",
             Self::CheckStack => "check_stack",
             Self::RangeCheckStep => "range_check_step",
             Self::NameError => "name_error",
@@ -1076,6 +1205,14 @@ impl RuntimeFunction {
             Self::TypeText => "type_text",
             Self::TypeName => "type_name",
             Self::ExceptionNew => "exception_new",
+            Self::ExceptionPartText => "exception_part_text",
+            Self::ExceptionArgsLength => "exception_args_length",
+            Self::ExceptionPartTruth => "exception_part_truth",
+            Self::ExceptionPartEqual => "exception_part_equal",
+            Self::OsErrorNew => "os_error_new",
+            Self::OsErrorErrno => "os_error_errno",
+            Self::OsErrorText => "os_error_text",
+            Self::PercentDynamic => "percent_dynamic",
             Self::ExceptionSetCause => "exception_set_cause",
             Self::ExceptionThrow => "exception_throw",
             Self::ExceptionHandled => "exception_handled",
@@ -1091,6 +1228,10 @@ impl RuntimeFunction {
             Self::IteratorItem => "iterator_item",
             Self::ObjectType => "object_type",
             Self::ObjectRepr => "object_repr",
+            Self::ObjectStr => "object_str",
+            Self::ObjectIsTrue => "object_is_true",
+            Self::IsInstance => "is_instance",
+            Self::IntLength => "int_length",
             Self::Traceback => "traceback",
             Self::ListDelete => "list_delete",
             Self::ListDeleteSlice => "list_delete_slice",
@@ -1114,6 +1255,9 @@ impl RuntimeFunction {
             Self::PercentCharStr => "percent_char_str",
             Self::SysArgv => "sys_argv",
             Self::SysStdout => "sys_stdout",
+            Self::SysStdin => "sys_stdin",
+            Self::SysGetRecursionLimit => "sys_getrecursionlimit",
+            Self::SysSetRecursionLimit => "sys_setrecursionlimit",
             Self::SysStderr => "sys_stderr",
             Self::TextWrite => "text_write",
             Self::TextFlush => "text_flush",
@@ -1124,6 +1268,19 @@ impl RuntimeFunction {
             Self::TextReadline => "text_readline",
             Self::TextReadlines => "text_readlines",
             Self::TextWritelines => "text_writelines",
+            Self::TextName => "text_name",
+            Self::TextMode => "text_mode",
+            Self::TextFileno => "text_fileno",
+            Self::TextState => "text_state",
+            Self::TextSeek => "text_seek",
+            Self::TextTell => "text_tell",
+            Self::TextTruncate => "text_truncate",
+            Self::BinaryRead => "binary_read",
+            Self::BinaryReadline => "binary_readline",
+            Self::BinaryReadlines => "binary_readlines",
+            Self::BinaryWrite => "binary_write",
+            Self::OpenDescriptor => "open_descriptor",
+            Self::TextDescriptorName => "text_descriptor_name",
             Self::ListAppendMoved => "list_append_moved",
             Self::ListSetMoved => "list_set_moved",
             Self::ListInsertMoved => "list_insert_moved",
@@ -1191,6 +1348,14 @@ impl RuntimeFunction {
             Self::MathComb => "math_comb",
             Self::MathPerm => "math_perm",
             Self::MathGcd => "math_gcd",
+            Self::MathGamma => "math_gamma",
+            Self::MathLgamma => "math_lgamma",
+            Self::MathFsum => "math_fsum",
+            Self::MathDist => "math_dist",
+            Self::MathProdInt => "math_prod_int",
+            Self::MathProdFloat => "math_prod_float",
+            Self::MathSumprodInt => "math_sumprod_int",
+            Self::MathSumprodFloat => "math_sumprod_float",
             Self::MathLcm => "math_lcm",
             Self::Ascii => "ascii",
         }
@@ -1208,11 +1373,14 @@ mod tests {
             .map(|function| function.name())
             .collect();
         // The C names of `math`, such as `log10`, hold digits after a letter.
+        assert!(
+            names
+                .iter()
+                .all(|name| name.starts_with(|c: char| c.is_ascii_lowercase()))
+        );
         assert!(names.iter().all(|name| {
-            name.starts_with(|c: char| c.is_ascii_lowercase())
-                && name
-                    .chars()
-                    .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '_')
+            name.chars()
+                .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '_')
         }));
         names.sort_unstable();
         names.dedup();

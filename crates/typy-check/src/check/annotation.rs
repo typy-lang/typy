@@ -15,17 +15,28 @@ use crate::types::Type;
 #[derive(Clone, Copy, Debug)]
 pub(crate) struct AnnotationScope<'classes> {
     pub(crate) classes: &'classes BTreeMap<String, ClassId>,
-    /// The classes that derive from an exception class, whose instances are exceptions.
-    pub(crate) exceptions: &'classes BTreeMap<ClassId, ExceptionClass>,
+    /// The type of each class's instances: an exception for an exception class.
+    pub(crate) instances: &'classes BTreeMap<ClassId, Type>,
     /// For each name bound to a module at module level, that module's classes, which an
     /// annotation such as `shapes.Point` names (MOD-10).
     pub(crate) modules: &'classes BTreeMap<String, BTreeMap<String, ClassId>>,
+    /// For each of those names, that module's type aliases (SMT-10).
+    pub(crate) module_aliases: &'classes BTreeMap<String, std::collections::BTreeSet<String>>,
     /// The names imported from `typing`, `collections.abc` and `types` (TYP-15).
     pub(crate) names: &'classes BTreeMap<String, AnnotationName>,
     /// For each name bound to one of those modules, the module.
     pub(crate) standard: &'classes BTreeMap<String, String>,
+    /// The type each type parameter in scope stands for: its opaque type while a generic
+    /// body is checked, and its argument while a copy is (GEN-01).
+    pub(crate) parameters: &'classes BTreeMap<String, Type>,
+    /// The generic classes and their copies, which an annotation such as `Box[int]` asks
+    /// for (ADR-0028).
+    pub(crate) copies: &'classes std::cell::RefCell<crate::body::ClassCopies>,
     pub(crate) bound: u32,
 }
+
+/// The type parameters of a scope that has none.
+pub(crate) static NO_PARAMETERS: BTreeMap<String, Type> = BTreeMap::new();
 
 /// A name of `typing`, `collections.abc` or `types` that TyPy 0.3 gives for annotations
 /// (TYP-15, CST-10, ADR-0015).
@@ -35,10 +46,20 @@ pub(crate) enum AnnotationName {
     Iterable,
     TracebackType,
     ModuleType,
+    /// `typing.ClassVar`, which declares a class variable in a class body (CLS-11).
+    ClassVar,
+    /// `typing.Final`, which declares a name that is not assigned again (TYP-08).
+    Final,
+    /// `dataclasses.dataclass` and `dataclasses.field`, which the dataclass expansion reads
+    /// (CLS-05).
+    Dataclasses,
+    /// `typing.Protocol`, the base of a protocol class (GEN-04).
+    Protocol,
 }
 
 /// The modules that give names for annotations only in 0.3.
-pub(crate) const ANNOTATION_MODULES: [&str; 3] = ["typing", "collections.abc", "types"];
+pub(crate) const ANNOTATION_MODULES: [&str; 4] =
+    ["typing", "collections.abc", "types", "dataclasses"];
 
 /// Returns the annotation name `name` of the module `module`, if TyPy 0.3 gives it.
 pub(crate) fn annotation_name(module: &str, name: &str) -> Option<AnnotationName> {
@@ -47,7 +68,31 @@ pub(crate) fn annotation_name(module: &str, name: &str) -> Option<AnnotationName
         ("typing" | "collections.abc", "Iterable") => Some(AnnotationName::Iterable),
         ("types", "TracebackType") => Some(AnnotationName::TracebackType),
         ("types", "ModuleType") => Some(AnnotationName::ModuleType),
+        ("typing", "ClassVar") => Some(AnnotationName::ClassVar),
+        ("typing", "Final") => Some(AnnotationName::Final),
+        ("typing", "Protocol") => Some(AnnotationName::Protocol),
+        ("dataclasses", "dataclass" | "field") => Some(AnnotationName::Dataclasses),
         _ => None,
+    }
+}
+
+/// Returns true when an expression names `typing.Protocol`, as the base of a protocol class
+/// does (GEN-04).
+pub(crate) fn is_protocol(
+    expression: &Expr,
+    names: &BTreeMap<String, AnnotationName>,
+    standard: &BTreeMap<String, String>,
+) -> bool {
+    match expression {
+        Expr::Name { id, .. } => names.get(id) == Some(&AnnotationName::Protocol),
+        Expr::Attribute {
+            value, attribute, ..
+        } => {
+            attribute.name == "Protocol"
+                && matches!(value.as_ref(), Expr::Name { id, .. }
+                    if standard.get(id).is_some_and(|module| module == "typing"))
+        }
+        _ => false,
     }
 }
 
@@ -85,7 +130,41 @@ fn standard_annotation(
                 Type::Iterable(item)
             }
         }
+        Expr::Subscript { value, .. }
+            if standard_name(value, scope) == Some(AnnotationName::ClassVar) =>
+        {
+            class_var_elsewhere(annotation, diagnostics)
+        }
+        Expr::Subscript { value, .. }
+            if standard_name(value, scope) == Some(AnnotationName::Final) =>
+        {
+            final_elsewhere(annotation, diagnostics)
+        }
         _ if let Some(name) = standard_name(annotation, scope) => match name {
+            AnnotationName::ClassVar => class_var_elsewhere(annotation, diagnostics),
+            AnnotationName::Final => final_elsewhere(annotation, diagnostics),
+            AnnotationName::Dataclasses => {
+                diagnostics.push(
+                    Diagnostic::new(
+                        DiagnosticCode::error(408),
+                        annotation.span(),
+                        "`dataclass` and `field` are not types",
+                    )
+                    .with_rule(RuleId::CLS_05),
+                );
+                Type::Error
+            }
+            AnnotationName::Protocol => {
+                diagnostics.push(
+                    Diagnostic::new(
+                        DiagnosticCode::error(408),
+                        annotation.span(),
+                        "`Protocol` is not a type; a protocol class derives from it",
+                    )
+                    .with_rule(RuleId::GEN_04),
+                );
+                Type::Error
+            }
             AnnotationName::TracebackType => Type::Traceback,
             AnnotationName::ModuleType => Type::AnyModule,
             AnnotationName::Iterator | AnnotationName::Iterable => {
@@ -102,6 +181,153 @@ fn standard_annotation(
         },
         _ => return None,
     })
+}
+
+/// Reports `Final` outside the declaration of a variable, a class variable or an attribute
+/// given a value.
+fn final_elsewhere(annotation: &Expr, diagnostics: &mut Diagnostics) -> Type {
+    diagnostics.push(
+        Diagnostic::new(
+            DiagnosticCode::error(408),
+            annotation.span(),
+            "`Final` declares a variable, a class variable or an attribute given a value",
+        )
+        .with_rule(RuleId::TYP_08),
+    );
+    Type::Error
+}
+
+/// Reports `ClassVar` outside the declaration of a class variable in a class body.
+fn class_var_elsewhere(annotation: &Expr, diagnostics: &mut Diagnostics) -> Type {
+    diagnostics.push(
+        Diagnostic::new(
+            DiagnosticCode::error(408),
+            annotation.span(),
+            "`ClassVar` declares a class variable in a class body, given a value there",
+        )
+        .with_rule(RuleId::CLS_11),
+    );
+    Type::Error
+}
+
+/// The annotation of a class variable (CLS-11).
+pub(crate) enum ClassVarAnnotation<'tree> {
+    /// `ClassVar[T]`, with the annotation of its type.
+    Typed(&'tree Expr),
+    /// `ClassVar`, whose type its value gives.
+    Bare,
+}
+
+/// Returns the annotation of a class variable written `ClassVar[T]` or `ClassVar`, or `None`
+/// for any other annotation (CLS-11).
+pub(crate) fn class_var_type<'tree>(
+    annotation: &'tree Expr,
+    names: &BTreeMap<String, AnnotationName>,
+    standard: &BTreeMap<String, String>,
+) -> Option<ClassVarAnnotation<'tree>> {
+    qualified(annotation, AnnotationName::ClassVar, names, standard)
+}
+
+/// Returns the annotation of a name declared `Final[T]` or `Final`, or `None` for any other
+/// annotation (TYP-08).
+pub(crate) fn final_type<'tree>(
+    annotation: &'tree Expr,
+    names: &BTreeMap<String, AnnotationName>,
+    standard: &BTreeMap<String, String>,
+) -> Option<ClassVarAnnotation<'tree>> {
+    qualified(annotation, AnnotationName::Final, names, standard)
+}
+
+/// Returns the annotation inside a qualifier of `typing`, `ClassVar` or `Final`, written with a
+/// type or bare, or `None` when the annotation is not one.
+fn qualified<'tree>(
+    annotation: &'tree Expr,
+    qualifier: AnnotationName,
+    names: &BTreeMap<String, AnnotationName>,
+    standard: &BTreeMap<String, String>,
+) -> Option<ClassVarAnnotation<'tree>> {
+    let word = match qualifier {
+        AnnotationName::Final => "Final",
+        _ => "ClassVar",
+    };
+    let is_qualifier = |expression: &Expr| match expression {
+        Expr::Name { id, .. } => names.get(id) == Some(&qualifier),
+        Expr::Attribute {
+            value, attribute, ..
+        } => {
+            matches!(value.as_ref(), Expr::Name { id, .. }
+                if standard.get(id).map(String::as_str) == Some("typing"))
+                && attribute.name == word
+        }
+        _ => false,
+    };
+    match annotation {
+        Expr::Subscript { value, index, .. } if is_qualifier(value) => {
+            Some(ClassVarAnnotation::Typed(index))
+        }
+        other if is_qualifier(other) => Some(ClassVarAnnotation::Bare),
+        _ => None,
+    }
+}
+
+/// Returns the type `module.Class` names, through the name `id` bound to a module of the
+/// program whose classes are `classes` (MOD-10).
+fn module_class_type(
+    id: &str,
+    classes: &BTreeMap<String, ClassId>,
+    attribute: &typy_source::syntax::Identifier,
+    span: typy_diagnostics::Span,
+    scope: &AnnotationScope<'_>,
+    diagnostics: &mut Diagnostics,
+) -> Type {
+    let only = BTreeMap::from([(
+        attribute.name.clone(),
+        classes
+            .get(&attribute.name)
+            .copied()
+            .unwrap_or(ClassId(u32::MAX)),
+    )]);
+    if classes.contains_key(&attribute.name) {
+        let inner = AnnotationScope {
+            classes: &only,
+            bound: u32::MAX,
+            ..*scope
+        };
+        return named_type(&attribute.name, span, &inner, diagnostics);
+    }
+    if scope
+        .module_aliases
+        .get(id)
+        .is_some_and(|aliases| aliases.contains(&attribute.name))
+    {
+        diagnostics.push(other_module_alias(id, &attribute.name, span));
+        return Type::Error;
+    }
+    diagnostics.push(
+        Diagnostic::new(
+            DiagnosticCode::error(425),
+            attribute.span,
+            format!("the module `{id}` has no class `{}`", attribute.name),
+        )
+        .with_rule(RuleId::SMT_07),
+    );
+    Type::Error
+}
+
+/// Reports a type alias of another module, whose expansion in this module is planned
+/// (SMT-12).
+pub(crate) fn other_module_alias(
+    module: &str,
+    name: &str,
+    span: typy_diagnostics::Span,
+) -> Diagnostic {
+    Diagnostic::new(
+        DiagnosticCode::error(201),
+        span,
+        format!("using the type alias `{module}.{name}` of another module is planned for TyPy 0.5 (SMT-12)"),
+    )
+    .with_rule(RuleId::SMT_12)
+    .with_help(format!("define the alias in this module, or annotate with what `{name}` stands for"))
 }
 
 /// Returns the standard module a name, or a dotted name through one, stands for.
@@ -141,30 +367,7 @@ pub(crate) fn annotation_type(
         } if let Expr::Name { id, .. } = value.as_ref()
             && let Some(classes) = scope.modules.get(id) =>
         {
-            let only = BTreeMap::from([(
-                attribute.name.clone(),
-                classes
-                    .get(&attribute.name)
-                    .copied()
-                    .unwrap_or(ClassId(u32::MAX)),
-            )]);
-            if classes.contains_key(&attribute.name) {
-                let inner = AnnotationScope {
-                    classes: &only,
-                    bound: u32::MAX,
-                    ..*scope
-                };
-                return named_type(&attribute.name, *span, &inner, diagnostics);
-            }
-            diagnostics.push(
-                Diagnostic::new(
-                    DiagnosticCode::error(425),
-                    attribute.span,
-                    format!("the module `{id}` has no class `{}`", attribute.name),
-                )
-                .with_rule(RuleId::SMT_07),
-            );
-            Type::Error
+            module_class_type(id, classes, attribute, *span, scope, diagnostics)
         }
         // A string is read when the annotation is, so it may name any class (CLS-01).
         Expr::Quoted { annotation, .. } => {
@@ -173,6 +376,14 @@ pub(crate) fn annotation_type(
                 ..*scope
             };
             annotation_type(annotation, &deferred, diagnostics)
+        }
+        // A generic class given its type arguments (GEN-01, ADR-0028).
+        Expr::Subscript { value, index, .. }
+            if let Expr::Name { id, .. } = value.as_ref()
+                && let Some(class) = scope.classes.get(id)
+                && scope.copies.borrow().roots.contains_key(class) =>
+        {
+            super::generic_class::applied_annotation(*class, id, index, scope, diagnostics)
         }
         Expr::Subscript { value, index, .. } if matches!(value.as_ref(), Expr::Name { id, .. } if id == "tuple") => {
             tuple_annotation(index, scope, diagnostics)
@@ -191,15 +402,9 @@ pub(crate) fn annotation_type(
             right,
             ..
         } => {
-            // The subset checker lets only `T | None` and `None | T` through.
-            let inner = match left.as_ref() {
-                Expr::Constant {
-                    value: Constant::None,
-                    ..
-                } => right,
-                _ => left,
-            };
-            Type::optional(annotation_type(inner, scope, diagnostics))
+            let left = annotation_type(left, scope, diagnostics);
+            let right = annotation_type(right, scope, diagnostics);
+            Type::union(vec![left, right])
         }
         Expr::Subscript { value, index, span } if matches!(value.as_ref(), Expr::Name { id, .. } if id == "dict") => {
             dict_annotation(index, *span, scope, diagnostics)
@@ -235,7 +440,13 @@ fn named_type(
     scope: &AnnotationScope<'_>,
     diagnostics: &mut Diagnostics,
 ) -> Type {
+    if let Some(parameter) = scope.parameters.get(id) {
+        return parameter.clone();
+    }
     if let Some(class) = scope.classes.get(id) {
+        if scope.copies.borrow().roots.contains_key(class) {
+            return super::generic_class::bare_annotation(*class, id, span, scope, diagnostics);
+        }
         if class.0 >= scope.bound {
             diagnostics.push(
                 Diagnostic::new(
@@ -248,10 +459,11 @@ fn named_type(
             );
             return Type::Error;
         }
-        if let Some(exception) = scope.exceptions.get(class) {
-            return Type::Exception(exception.clone());
-        }
-        return Type::Instance(*class, id.to_owned());
+        return scope
+            .instances
+            .get(class)
+            .cloned()
+            .unwrap_or_else(|| Type::instance(crate::class_type::InstanceClass::root(*class, id)));
     }
     match id {
         "int" => Type::Int,

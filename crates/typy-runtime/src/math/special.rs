@@ -160,7 +160,7 @@ pub extern "C" fn typy_rt_math_ulp(x: f64) -> f64 {
 pub unsafe extern "C" fn typy_rt_math_nextafter(x: f64, y: f64, steps: i64) -> Raising<f64> {
     // SAFETY: the caller's guarantee.
     let integer = unsafe { super::integer(steps) };
-    if integer.negative && !integer.is_zero() {
+    if integer.negative {
         return Raising::error(
             0.0,
             raise(

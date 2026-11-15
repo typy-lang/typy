@@ -18,17 +18,36 @@ impl FunctionLowerer<'_> {
         span: Span,
     ) {
         for reify in reifies {
-            let armed = self.module_globals.armed[reify];
-            self.store_flag(armed, true, span);
+            // The statement run last decides the variable, so an earlier one no longer waits.
+            for other in self.siblings(*reify) {
+                let armed = self.module_globals.armed[&other];
+                self.store_flag(armed, other == *reify, span);
+            }
         }
         for target in targets {
             self.unbind_name(*target, span);
         }
     }
 
-    /// Runs the lazy import of `reify` when it waits: its statement ran, and the variable it
-    /// binds, if any, was not bound since.
+    /// Returns the functions of the lazy imports that bind the variable `reify` binds, or
+    /// `reify` alone.
+    fn siblings(&self, reify: FunctionId) -> Vec<FunctionId> {
+        self.module_globals
+            .siblings
+            .get(&reify)
+            .cloned()
+            .unwrap_or_else(|| vec![reify])
+    }
+
+    /// Runs the lazy import of `reify`, or of another that binds the same variable, when it
+    /// waits: its statement ran, and the variable it binds, if any, was not bound since.
     pub(crate) fn run_lazy_import(&mut self, reify: FunctionId, span: Span) {
+        for each in self.siblings(reify) {
+            self.run_one_lazy_import(each, span);
+        }
+    }
+
+    fn run_one_lazy_import(&mut self, reify: FunctionId, span: Span) {
         let armed = self.module_globals.armed[&reify];
         let waiting = self
             .builder

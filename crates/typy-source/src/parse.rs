@@ -72,10 +72,10 @@ pub fn parse_with_warnings(
     if !errors.is_empty() {
         return Err(errors);
     }
-    let ast::Mod::Module(module) = parsed.into_syntax() else {
-        unreachable!("Mode::Module always produces a module");
+    let body = match parsed.into_syntax() {
+        ast::Mod::Module(module) => converter.statements(&module.body),
+        ast::Mod::Expression(_) => unreachable!("Mode::Module always produces a module"),
     };
-    let body = converter.statements(&module.body);
     if let Some(range) = converter.too_deep.get() {
         let message = format!(
             "the program nests more than {MAX_DEPTH} levels deep, past what CPython compiles"

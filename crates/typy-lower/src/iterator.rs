@@ -19,7 +19,7 @@ fn iterator_kind(ty: &Type) -> i64 {
         Type::DictView(View::Values, ..) => 6,
         Type::DictView(View::Items, ..) => 7,
         Type::Range => 9,
-        Type::TextFile => 11,
+        Type::TextFile | Type::BinaryFile(_) | Type::DescriptorFile(_) => 11,
         _ => 5,
     }
 }
@@ -45,13 +45,7 @@ impl FunctionLowerer<'_> {
         let object = self.bits(object, span);
         let kind = self.constant(Constant::Int(iterator_kind(&source.ty).to_string()), span);
         let pair = if let Type::DictView(View::Items, key, value) = &source.ty {
-            let pair = self.lowered_type(&Type::Tuple(vec![
-                key.as_ref().clone(),
-                value.as_ref().clone(),
-            ]));
-            let TyirType::Tuple(id) = pair else {
-                unreachable!("a tuple type lowers to a tuple");
-            };
+            let id = self.tuple_type_id(&[key.as_ref().clone(), value.as_ref().clone()]);
             self.constant(Constant::TupleDescriptor(id), span)
         } else {
             let unit = self.constant(Constant::Unit, span);
@@ -71,11 +65,8 @@ impl FunctionLowerer<'_> {
         item: &Type,
         span: Span,
     ) -> Lowered {
-        let pair = if let Type::Tuple(_) = item {
-            let pair = self.lowered_type(item);
-            let TyirType::Tuple(id) = pair else {
-                unreachable!("a tuple type lowers to a tuple");
-            };
+        let pair = if let Type::Tuple(items) = item {
+            let id = self.tuple_type_id(items);
             self.constant(Constant::TupleDescriptor(id), span)
         } else {
             let unit = self.constant(Constant::Unit, span);
@@ -106,7 +97,7 @@ impl FunctionLowerer<'_> {
         };
         let Some(default) = default else {
             let value = if let Some(next) = method {
-                self.call_function(
+                self.call_method(
                     next,
                     vec![(0, Self::borrowed(lowered.value, lowered.ty))],
                     item,

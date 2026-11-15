@@ -5,7 +5,10 @@ use ruff_text_size::{Ranged, TextRange};
 
 use super::Converter;
 use super::operator::binary_operator;
-use crate::syntax::{Alias, ExceptHandler, NodeKind, Parameter, ParameterKind, Stmt, WithItem};
+use crate::syntax::{
+    Alias, ExceptHandler, Identifier, NodeKind, Parameter, ParameterKind, Stmt, TypeParameter,
+    TypeParameterKind, WithItem,
+};
 
 impl Converter<'_> {
     pub(super) fn statements(&self, statements: &[ast::Stmt]) -> Vec<Stmt> {
@@ -53,10 +56,7 @@ impl Converter<'_> {
                     .iter()
                     .map(|decorator| self.expression(&decorator.expression))
                     .collect(),
-                type_parameter_count: node
-                    .type_params
-                    .as_ref()
-                    .map_or(0, |parameters| parameters.type_params.len()),
+                type_parameters: self.type_parameters(node.type_params.as_deref()),
                 span,
             },
             ast::Stmt::ClassDef(node) => Stmt::ClassDef {
@@ -82,10 +82,7 @@ impl Converter<'_> {
                     .iter()
                     .map(|decorator| self.expression(&decorator.expression))
                     .collect(),
-                type_parameter_count: node
-                    .type_params
-                    .as_ref()
-                    .map_or(0, |parameters| parameters.type_params.len()),
+                type_parameters: self.type_parameters(node.type_params.as_deref()),
                 span,
             },
             ast::Stmt::Return(node) => Stmt::Return {
@@ -100,7 +97,16 @@ impl Converter<'_> {
                     .collect(),
                 span,
             },
-            ast::Stmt::TypeAlias(node) => self.other_statement(NodeKind::TypeAlias, node.range),
+            // The grammar makes the alias's name a name, so its text is the identifier.
+            ast::Stmt::TypeAlias(node) => Stmt::TypeAlias {
+                name: Identifier {
+                    name: self.text[node.name.range()].to_owned(),
+                    span: self.span(node.name.range()),
+                },
+                type_parameters: self.type_parameters(node.type_params.as_deref()),
+                value: self.annotation(&node.value),
+                span,
+            },
             ast::Stmt::Assign(node) => Stmt::Assign {
                 targets: node
                     .targets
@@ -316,5 +322,47 @@ impl Converter<'_> {
                 .map(variadic(ParameterKind::VarKeyword)),
         );
         result
+    }
+
+    /// Converts a type parameter list, or none.
+    fn type_parameters(&self, parameters: Option<&ast::TypeParams>) -> Vec<TypeParameter> {
+        parameters.map_or_else(Vec::new, |parameters| {
+            parameters
+                .type_params
+                .iter()
+                .map(|parameter| match parameter {
+                    ast::TypeParam::TypeVar(node) => TypeParameter {
+                        name: self.identifier(&node.name),
+                        kind: TypeParameterKind::Type,
+                        bound: node.bound.as_deref().map(|bound| self.annotation(bound)),
+                        default: node
+                            .default
+                            .as_deref()
+                            .map(|default| self.annotation(default)),
+                        span: self.span(node.range),
+                    },
+                    ast::TypeParam::TypeVarTuple(node) => TypeParameter {
+                        name: self.identifier(&node.name),
+                        kind: TypeParameterKind::TypeTuple,
+                        bound: None,
+                        default: node
+                            .default
+                            .as_deref()
+                            .map(|default| self.annotation(default)),
+                        span: self.span(node.range),
+                    },
+                    ast::TypeParam::ParamSpec(node) => TypeParameter {
+                        name: self.identifier(&node.name),
+                        kind: TypeParameterKind::Parameters,
+                        bound: None,
+                        default: node
+                            .default
+                            .as_deref()
+                            .map(|default| self.annotation(default)),
+                        span: self.span(node.range),
+                    },
+                })
+                .collect()
+        })
     }
 }

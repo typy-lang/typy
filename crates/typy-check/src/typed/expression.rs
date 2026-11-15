@@ -87,6 +87,10 @@ pub enum TypedExprKind {
     Call {
         function: FunctionId,
         arguments: Vec<Argument>,
+        /// True for a method called on an instance, which runs the method of the instance's
+        /// class when that class defines it again; false for a function and for `super()`
+        /// (ADR-0021).
+        dispatch: bool,
     },
     /// A new instance of a class, made by calling the class: the instance is made, then
     /// `__init__` runs on it with the arguments (CLS-01).
@@ -137,6 +141,33 @@ pub enum TypedExprKind {
     SysValue(crate::sys::SysValue),
     /// `sys.exit(code)`, which raises `SystemExit` with `code` (LIB-04).
     SysExit(Option<Box<TypedExpr>>),
+    /// `sys.getrecursionlimit()`, without a value, or `sys.setrecursionlimit(limit)`
+    /// (LIB-13).
+    RecursionLimit(Option<Box<TypedExpr>>),
+    /// `format % values` with a format the runtime reads, which is known only when the
+    /// program runs or takes the items of a `tuple[T, ...]` (LIB-11).
+    PercentDynamic {
+        format: Box<TypedExpr>,
+        values: Box<TypedExpr>,
+    },
+    /// An operation on `args` of an exception or `code` of a `SystemExit`, read from the
+    /// exception (EXC-11, EXC-13, ADR-0030).
+    ExceptionPart {
+        exception: Box<TypedExpr>,
+        part: ExceptionPart,
+        operation: PartOperation,
+    },
+    /// `errno`, `strerror`, `filename` or `filename2` of an `OSError`, `None` when it was not
+    /// given (EXC-14).
+    OsErrorField {
+        exception: Box<TypedExpr>,
+        field: OsErrorField,
+    },
+    /// `name`, `mode` or `closed` of a text file (LIB-14).
+    FileAttribute {
+        file: Box<TypedExpr>,
+        attribute: FileAttribute,
+    },
     /// `input(prompt)`: a line of standard input (LIB-04).
     Input(Option<Box<TypedExpr>>),
     /// `open(path, mode)` in a text mode: `mode` as written, which the file's `repr` shows,
@@ -145,6 +176,7 @@ pub enum TypedExprKind {
         path: Box<TypedExpr>,
         mode: String,
         access: crate::open::OpenAccess,
+        options: Box<OpenOptions>,
     },
     /// A call of a function of `math`, with its arguments in the order the function takes
     /// them; a keyword not given is `None` (LIB-05).
@@ -186,8 +218,23 @@ pub enum TypedExprKind {
     },
     /// A value of `T`, or `None`, held as a `T | None` (TYP-06, ADR-0011).
     Wrap(Box<TypedExpr>),
+    /// An instance, or an optional one, held as an instance of a class it derives from: the
+    /// same object, whose type is the expression's (CLS-04).
+    Upcast(Box<TypedExpr>),
     /// The value of a `T | None` that a test showed is not `None` (TYP-13).
     Unwrap(Box<TypedExpr>),
+    /// An instance, or an exception, held as an instance of a class derived from its static
+    /// class, which an `isinstance` test showed it is: the same object (TYP-07).
+    Downcast(Box<TypedExpr>),
+    /// `isinstance(value, classes)` (CLS-09).
+    IsInstance(Box<IsInstanceTest>),
+    /// An operation on a variable that holds a union, checked for each member (TYP-14).
+    EachMember(Box<EachMember>),
+    /// The `int` a class's `__len__` returned, checked to be a length, which raises
+    /// `ValueError` when it is negative (CLS-07).
+    CheckedLength(Box<TypedExpr>),
+    /// A comparison of instances that calls a comparison method (CLS-07, ADR-0026).
+    OperatorCall(Box<OperatorCall>),
     /// A dict display: each key and its value, in order (DAT-09).
     Dict {
         keys: Vec<TypedExpr>,
@@ -317,6 +364,64 @@ pub struct InitCall {
     pub positional: usize,
 }
 
+/// `left op right` that calls a comparison method: `forward` of the left operand's class, or
+/// `reflected` of the right operand's. With both, the reflected method runs first when the
+/// right operand's class derives from the left's and defines it otherwise, as in CPython;
+/// with one, that one runs (CLS-07, ADR-0026).
+#[derive(Clone, Debug, PartialEq)]
+pub struct OperatorCall {
+    /// The left operand, evaluated first.
+    pub left: TypedExpr,
+    /// The right operand.
+    pub right: TypedExpr,
+    /// The method of the left operand's class, which takes the right operand.
+    pub forward: Option<FunctionId>,
+    /// The reflected method of the right operand's class, which takes the left operand.
+    pub reflected: Option<FunctionId>,
+    /// The reflected method of the left operand's class, whose entry the runtime compares
+    /// with the right operand's to decide which runs.
+    pub left_reflected: Option<FunctionId>,
+    /// Whether the result is negated: `!=` without `__ne__` is `not` of `__eq__`.
+    pub negated: bool,
+}
+
+/// `isinstance(value, classes)`, with what the checker could decide when the program is
+/// compiled (CLS-09).
+#[derive(Clone, Debug, PartialEq)]
+pub struct IsInstanceTest {
+    /// The value, evaluated once.
+    pub value: TypedExpr,
+    /// Whether `None`, for an optional value, is an instance of one of the classes: `NoneType`
+    /// or `object` is among them.
+    pub none_matches: bool,
+    /// Whether every value of the static type that is not `None` is an instance of one of the
+    /// classes.
+    pub always: bool,
+    /// The classes the value's class decides, tested when the program runs, when `always` is
+    /// false.
+    pub checks: Vec<crate::types::TypeObjectOf>,
+    /// The position, in the function's table of narrowed types, of the type a true test gives
+    /// the variable the value reads, when it narrows one (TYP-07).
+    pub narrowed: Option<u32>,
+    /// The position of the type a false test gives that variable: the members of a union no
+    /// tested class takes in every case (TYP-07, TYP-14).
+    pub otherwise: Option<u32>,
+    /// For a union, each member in order: whether every value of it is an instance of one of
+    /// the classes, and the classes its value's class decides (TYP-14).
+    pub members: Vec<(bool, Vec<crate::types::TypeObjectOf>)>,
+}
+
+/// An operation on a variable that holds a union of objects, checked once for each member
+/// with the variable narrowed to it (TYP-14, ADR-0027).
+#[derive(Clone, Debug, PartialEq)]
+pub struct EachMember {
+    /// The read of the variable, whose object decides which member it is.
+    pub value: TypedExpr,
+    /// Each member's class with the operation checked for it; the last runs when no class
+    /// before it is the object's.
+    pub arms: Vec<(crate::types::TypeObjectOf, TypedExpr)>,
+}
+
 impl TypedExpr {
     /// Returns the expression's operands in source order, the expressions it evaluates directly.
     #[must_use]
@@ -367,16 +472,45 @@ impl TypedExpr {
                 .flat_map(|(key, value)| [key, value])
                 .collect(),
             TypedExprKind::DictItem { dict, key } => vec![dict, key],
+            TypedExprKind::IsInstance(test) => vec![&test.value],
+            TypedExprKind::EachMember(each) => std::iter::once(&each.value)
+                .chain(each.arms.iter().map(|(_, body)| body))
+                .collect(),
+            TypedExprKind::OperatorCall(call) => vec![&call.left, &call.right],
             TypedExprKind::Wrap(inner)
+            | TypedExprKind::CheckedLength(inner)
+            | TypedExprKind::Upcast(inner)
+            | TypedExprKind::Downcast(inner)
             | TypedExprKind::Unwrap(inner)
             | TypedExprKind::AsIterable(inner)
             | TypedExprKind::Lazy { value: inner, .. } => vec![inner],
             TypedExprKind::PercentFormat { values, .. } => vec![values],
             TypedExprKind::MathCall { arguments, .. } => arguments.iter().collect(),
-            TypedExprKind::Open { path, .. } => vec![path],
-            TypedExprKind::SysExit(value) | TypedExprKind::Input(value) => {
-                value.iter().map(Box::as_ref).collect()
-            }
+            TypedExprKind::Open { path, options, .. } => [
+                Some(path),
+                options.mode.as_ref(),
+                options.buffering.as_ref(),
+                options.newline.as_ref(),
+                options.closefd.as_ref(),
+            ]
+            .into_iter()
+            .flatten()
+            .map(Box::as_ref)
+            .collect(),
+            TypedExprKind::SysExit(value)
+            | TypedExprKind::Input(value)
+            | TypedExprKind::RecursionLimit(value) => value.iter().map(Box::as_ref).collect(),
+            TypedExprKind::OsErrorField { exception, .. } => vec![exception],
+            TypedExprKind::FileAttribute { file, .. } => vec![file],
+            TypedExprKind::PercentDynamic { format, values } => vec![format, values],
+            TypedExprKind::ExceptionPart {
+                exception,
+                operation,
+                ..
+            } => match operation {
+                PartOperation::Equal(other) => vec![exception, other],
+                _ => vec![exception],
+            },
             TypedExprKind::Comprehension {
                 element,
                 value,
@@ -459,4 +593,88 @@ impl TypedExpr {
                 .collect(),
         }
     }
+}
+
+/// A part of an exception that may hold any value (EXC-11, EXC-13, ADR-0030).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ExceptionPart {
+    /// `exception.args`, the tuple of its arguments.
+    Arguments,
+    /// `system_exit.code`: `None`, its one argument, or the tuple of its arguments.
+    Code,
+}
+
+/// What a program does with a part of an exception.
+#[derive(Clone, Debug, PartialEq)]
+pub enum PartOperation {
+    /// `str` of it, or `repr` when `repr`.
+    Text {
+        /// Whether it is `repr`.
+        repr: bool,
+    },
+    /// `len` of `args`.
+    Length,
+    /// Its truth.
+    Truth,
+    /// Whether it equals the value.
+    Equal(Box<TypedExpr>),
+}
+
+/// An attribute of an `OSError` that its arguments give (EXC-14).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum OsErrorField {
+    /// `errno`, the first argument.
+    Errno,
+    /// `strerror`, the second.
+    Strerror,
+    /// `filename`, the third.
+    Filename,
+    /// `filename2`, the fifth.
+    Filename2,
+}
+
+/// An attribute of a text file (LIB-14).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum FileAttribute {
+    /// `name`: the path it was opened with, or `<stdin>`, `<stdout>` or `<stderr>`.
+    Name,
+    /// `mode`: the mode as written to `open`, or `r` or `w` for a standard file.
+    Mode,
+    /// `closed`: whether the file is closed.
+    Closed,
+    /// `name` of a file opened for a file descriptor: that descriptor, an `int`.
+    Descriptor,
+}
+
+impl FileAttribute {
+    /// Returns the attribute `name` names, with its type.
+    #[must_use]
+    pub fn named(name: &str) -> Option<(Self, crate::types::Type)> {
+        use crate::types::Type;
+        match name {
+            "name" => Some((Self::Name, Type::Str)),
+            "mode" => Some((Self::Mode, Type::Str)),
+            "closed" => Some((Self::Closed, Type::Bool)),
+            _ => None,
+        }
+    }
+}
+
+/// The arguments of `open` after its mode, as the runtime takes them (LIB-14).
+#[derive(Clone, Debug, PartialEq, Default)]
+pub struct OpenOptions {
+    /// `buffering`, when given and not -1.
+    pub buffering: Option<Box<TypedExpr>>,
+    /// `encoding` as written, which the file's `repr` shows; `None` for `None` or not given.
+    pub encoding: Option<String>,
+    /// The codec `encoding` names, numbered as the runtime takes it.
+    pub codec: i64,
+    /// The error handler `errors` names, numbered as the runtime takes it.
+    pub handler: i64,
+    /// `newline`, when given and not `None`.
+    pub newline: Option<Box<TypedExpr>>,
+    /// The mode, when it is not a literal: a text mode the runtime reads (ADR-0031).
+    pub mode: Option<Box<TypedExpr>>,
+    /// `closefd`, when given and not the literal `True`.
+    pub closefd: Option<Box<TypedExpr>>,
 }

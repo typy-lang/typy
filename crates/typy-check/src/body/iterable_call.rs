@@ -75,7 +75,9 @@ impl BodyChecker<'_> {
                     DiagnosticCode::error(404),
                     span,
                     format!(
-                        "`{}` takes 1{} positional argument{}, and {} {} given",
+                        // One argument is always accepted, so a refused call has none or
+                        // several.
+                        "`{}` takes 1{} positional argument{}, and {} are given",
                         builtin.name(),
                         if *most == 1 {
                             String::new()
@@ -84,7 +86,6 @@ impl BodyChecker<'_> {
                         },
                         if *most == 1 { "" } else { "s" },
                         arguments.len(),
-                        if arguments.len() == 1 { "is" } else { "are" }
                     ),
                 )
                 .with_rule(RuleId::LIB_02),
@@ -189,7 +190,32 @@ impl BodyChecker<'_> {
         span: Span,
     ) -> Option<Type> {
         match builtin {
-            Builtin::Any | Builtin::All => Some(Type::Bool),
+            Builtin::Any | Builtin::All => {
+                // The runtime tests each item with its type object's slot, which calls
+                // `__bool__`; a length cannot raise from there (CLS-07).
+                let by_length = item.members().iter().any(|member| {
+                    matches!(member, Type::Instance(class)
+                        if self.program.method(class.id, "__bool__").is_none()
+                            && self.program.method(class.id, "__len__").is_some())
+                });
+                if by_length {
+                    self.diagnostics.push(
+                        Diagnostic::new(
+                            DiagnosticCode::error(201),
+                            span,
+                            format!(
+                                "`{}` of instances whose truth comes from `__len__` is planned for \
+                                 TyPy 0.5 (CLS-07)",
+                                builtin.name()
+                            ),
+                        )
+                        .with_rule(RuleId::CLS_07)
+                        .with_help("define `__bool__`, or test `len(item) > 0` in a loop"),
+                    );
+                    return None;
+                }
+                Some(Type::Bool)
+            }
             Builtin::Sorted | Builtin::Min | Builtin::Max => {
                 if !item.can_order(item) {
                     self.comparison_error(item, item, span);
@@ -258,7 +284,8 @@ impl BodyChecker<'_> {
                 item.as_ref().clone()
             }
             Type::DictView(view, key, value) => view.item(key, value),
-            Type::Str | Type::TextFile => Type::Str,
+            Type::Str => Type::Str,
+            file if file.is_file() => file.file_line().unwrap_or(Type::Error),
             Type::Bytes | Type::Range => Type::Int,
             Type::Iterator(item) | Type::Iterable(item) => item.as_ref().clone(),
             Type::Error => Type::Error,

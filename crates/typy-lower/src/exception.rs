@@ -38,12 +38,11 @@ impl FunctionLowerer<'_> {
         if let Some(init) = init {
             return self.new_exception_with_init(class, init, span);
         }
+        let built_in = class.builtin();
         let class = self.constant(Constant::TypeObject(exception_class(class)), span);
-        let types = arguments.iter().map(|value| value.ty.clone()).collect();
-        let layout = self.lowered_type(&Type::Tuple(types));
-        let TyirType::Tuple(id) = layout else {
-            unreachable!("a tuple type lowers to a tuple");
-        };
+        let types: Vec<Type> = arguments.iter().map(|value| value.ty.clone()).collect();
+        let id = self.tuple_type_id(&types);
+        let layout = TyirType::Tuple(id);
         let descriptor = self.constant(Constant::TupleDescriptor(id), span);
         if arguments.is_empty() {
             let unit = self.constant(Constant::Unit, span);
@@ -56,11 +55,13 @@ impl FunctionLowerer<'_> {
         }
         let tuple = self.tuple_display(arguments, layout, span);
         let address = self.bits(Self::borrowed(tuple.value, tuple.ty), span);
-        let exception = self.call_runtime(
-            RuntimeFunction::ExceptionNew,
-            vec![class, descriptor, address],
-            span,
-        );
+        // An `OSError` of two or more arguments reads them as `errno` and the rest (EXC-14).
+        let constructor = if built_in.is_os_error() && arguments.len() >= 2 {
+            RuntimeFunction::OsErrorNew
+        } else {
+            RuntimeFunction::ExceptionNew
+        };
+        let exception = self.call_runtime(constructor, vec![class, descriptor, address], span);
         self.release(tuple, span);
         exception
     }
@@ -87,14 +88,12 @@ impl FunctionLowerer<'_> {
             })
             .collect();
         let positional = &init.arguments[..init.positional];
-        let types = positional
+        let types: Vec<Type> = positional
             .iter()
             .map(|argument| argument.value.ty.clone())
             .collect();
-        let layout = self.lowered_type(&Type::Tuple(types));
-        let TyirType::Tuple(id) = layout else {
-            unreachable!("a tuple type lowers to a tuple");
-        };
+        let id = self.tuple_type_id(&types);
+        let layout = TyirType::Tuple(id);
         let items: Vec<ValueId> = values[..init.positional]
             .iter()
             .map(|(_, lowered)| {
@@ -137,11 +136,9 @@ impl FunctionLowerer<'_> {
         span: Span,
     ) -> Lowered {
         let exception = self.expression(exception);
-        let types = arguments.iter().map(|value| value.ty.clone()).collect();
-        let layout = self.lowered_type(&Type::Tuple(types));
-        let TyirType::Tuple(id) = layout else {
-            unreachable!("a tuple type lowers to a tuple");
-        };
+        let types: Vec<Type> = arguments.iter().map(|value| value.ty.clone()).collect();
+        let id = self.tuple_type_id(&types);
+        let layout = TyirType::Tuple(id);
         let descriptor = self.constant(Constant::TupleDescriptor(id), span);
         let tuple = self.tuple_display(arguments, layout, span);
         let address = if arguments.is_empty() {
@@ -475,21 +472,29 @@ impl FunctionLowerer<'_> {
         exhausted: BlockId,
         span: Span,
     ) -> Lowered {
-        let callee = typy_tyir::FunctionId(next.0);
+        let dispatch = self.methods.dispatch(next);
+        let callee = match dispatch {
+            Some((class, slot)) => typy_tyir::Callee::Method { class, slot },
+            None => typy_tyir::Callee::Function(typy_tyir::FunctionId(next.0)),
+        };
         if !self
             .may_raise
             .get(next.0 as usize)
             .copied()
             .unwrap_or(false)
         {
-            let value = self.builder.push_value(
-                Operation::Call {
-                    function: callee,
+            let operation = match dispatch {
+                Some((class, slot)) => Operation::CallMethod {
+                    class,
+                    slot,
                     arguments: vec![iterator],
                 },
-                item,
-                span,
-            );
+                None => Operation::Call {
+                    function: typy_tyir::FunctionId(next.0),
+                    arguments: vec![iterator],
+                },
+            };
+            let value = self.builder.push_value(operation, item, span);
             return self.produced(value, item);
         }
         let normal = self.builder.create_block();
@@ -497,7 +502,7 @@ impl FunctionLowerer<'_> {
         let error = self.builder.create_block();
         let exception = self.builder.add_block_parameter(error, TyirType::EXCEPTION);
         self.builder.terminate(Terminator::Invoke {
-            callee: typy_tyir::Callee::Function(callee),
+            callee,
             arguments: vec![iterator],
             normal,
             error,
@@ -557,7 +562,7 @@ impl FunctionLowerer<'_> {
             WithProtocol::Methods { enter, .. } => {
                 let entered_type =
                     self.lowered_type(&self.program.function(enter).signature.returns);
-                self.call_function(enter, vec![(0, current)], entered_type, span)
+                self.call_method(enter, vec![(0, current)], entered_type, span)
             }
             // A file enters as itself, once it is checked to be open.
             WithProtocol::TextFile => {
@@ -636,7 +641,7 @@ impl FunctionLowerer<'_> {
             arguments.push((index + 1, Self::borrowed(value, ty)));
         }
         let returns = self.lowered_type(&signature.returns);
-        let result = self.call_function(exit, arguments, returns, span);
+        let result = self.call_method(exit, arguments, returns, span);
         if exception.is_none() {
             self.release(result, span);
             let unit = self.constant(Constant::Unit, span);

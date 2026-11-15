@@ -20,6 +20,7 @@ pub(crate) fn assigned_symbols(body: &[TypedStmt]) -> BTreeSet<SymbolId> {
                     target(each, found);
                 }
             }
+            AssignTarget::Lazy { target: inner, .. } => target(inner, found),
             AssignTarget::Item { .. }
             | AssignTarget::Slice { .. }
             | AssignTarget::Entry { .. }

@@ -35,6 +35,15 @@ impl BodyChecker<'_> {
             }
             (other, _) => other,
         };
+        // A display where a union is expected is built as the member of its kind (TYP-14).
+        let member = match target {
+            Some(Type::Union(members)) => {
+                let called = self.called_builtin(expression).map(|(builtin, ..)| builtin);
+                display_member(expression, called, members)
+            }
+            _ => None,
+        };
+        let target = member.as_ref().or(target);
         let value = match expression {
             Expr::List { elements, span } => self.list_display(elements, target, *span),
             Expr::Set { elements, span } => self.set_display(elements, target, *span),
@@ -102,6 +111,14 @@ impl BodyChecker<'_> {
         let Some(expected) = expected else {
             return value;
         };
+        if value.ty != *expected && value.ty.is_upcast_to(expected) {
+            let span = value.span;
+            return Self::typed(
+                TypedExprKind::Upcast(Box::new(value)),
+                expected.clone(),
+                span,
+            );
+        }
         match expected {
             // A collection or an iterator becomes an iterable as it is.
             Type::Iterable(item)
@@ -281,13 +298,23 @@ impl BodyChecker<'_> {
             let membership = matches!(operator, CompareOperator::In | CompareOperator::NotIn);
             let wanted = if membership {
                 match &right {
-                    Type::Set(item) => Some(item.as_ref().clone()),
+                    Type::Set(item) | Type::Dict(item, _) => Some(item.as_ref().clone()),
                     _ => right.sequence_item().cloned(),
                 }
             } else {
                 Some(right.clone())
             };
-            if let Some(wanted) = wanted.filter(|wanted| matches!(wanted, Type::TupleOf(_))) {
+            // An item of a union, or an optional one, is looked for as a value of the item type,
+            // which the runtime compares as the member it holds (TYP-14).
+            let union_item = |wanted: &Type| {
+                membership
+                    && matches!(wanted, Type::Union(_) | Type::Optional(_))
+                    && left != *wanted
+                    && left.is_assignable_to(wanted)
+            };
+            if let Some(wanted) =
+                wanted.filter(|wanted| matches!(wanted, Type::TupleOf(_)) || union_item(wanted))
+            {
                 let value = typed[position].clone();
                 typed[position] = Self::converted(value, Some(&wanted));
             }
@@ -436,6 +463,23 @@ pub(super) fn converted_all(items: Vec<TypedExpr>, item_type: &Type) -> Vec<Type
         .into_iter()
         .map(|item| BodyChecker::converted(item, Some(item_type)))
         .collect()
+}
+
+/// Returns the member of a union a display, a comprehension or a call of `list`, `set` or
+/// `dict` builds: the member of its kind, when there is one.
+fn display_member(expression: &Expr, called: Option<Builtin>, members: &[Type]) -> Option<Type> {
+    let kind = |member: &Type| match (expression, member) {
+        (Expr::List { .. } | Expr::ListComp { .. }, Type::List(_))
+        | (Expr::Set { .. } | Expr::SetComp { .. }, Type::Set(_))
+        | (Expr::Dict { .. } | Expr::DictComp { .. }, Type::Dict(..)) => true,
+        (Expr::Call { .. }, Type::List(_)) => called == Some(Builtin::List),
+        (Expr::Call { .. }, Type::Set(_)) => called == Some(Builtin::Set),
+        (Expr::Call { .. }, Type::Dict(..)) => called == Some(Builtin::Dict),
+        _ => false,
+    };
+    let mut found = members.iter().filter(|member| kind(member));
+    let member = found.next()?;
+    found.next().is_none().then(|| member.clone())
 }
 
 fn is_empty_list(expression: &Expr) -> bool {

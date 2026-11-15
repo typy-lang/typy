@@ -3,18 +3,25 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use typy_check::{
-    AssignTarget, FunctionId, LoopSource, RaiseCause, TypedExpr, TypedExprKind, TypedProgram,
-    TypedStmt,
+    AssignTarget, ClassId, FunctionId, LoopSource, RaiseCause, TypedExpr, TypedExprKind,
+    TypedProgram, TypedStmt,
 };
 
 /// Returns the functions that can call themselves, directly or through others.
 pub(crate) fn recursive_functions(program: &TypedProgram) -> BTreeSet<FunctionId> {
+    let overrides = overrides(program);
     let calls: BTreeMap<FunctionId, BTreeSet<FunctionId>> = program
         .functions
         .iter()
         .map(|function| {
             let mut callees = BTreeSet::new();
             statements(&function.body, &mut callees);
+            // A call of a method may run any method that overrides it (ADR-0021).
+            let reached: Vec<FunctionId> = callees
+                .iter()
+                .flat_map(|callee| overrides.get(callee).into_iter().flatten().copied())
+                .collect();
+            callees.extend(reached);
             (function.id, callees)
         })
         .collect();
@@ -35,6 +42,35 @@ pub(crate) fn recursive_functions(program: &TypedProgram) -> BTreeSet<FunctionId
             false
         })
         .collect()
+}
+
+/// Returns, for each method, the methods of the same name of the classes derived from its
+/// class.
+fn overrides(program: &TypedProgram) -> BTreeMap<FunctionId, Vec<FunctionId>> {
+    let derives_from = |class: ClassId, base: ClassId| {
+        let mut current = program.class(class).base;
+        while let Some(each) = current {
+            if each == base {
+                return true;
+            }
+            current = program.class(each).base;
+        }
+        false
+    };
+    let mut found: BTreeMap<FunctionId, Vec<FunctionId>> = BTreeMap::new();
+    for class in &program.classes {
+        for (name, method) in &class.methods {
+            let below = program
+                .classes
+                .iter()
+                .filter(|other| derives_from(other.id, class.id))
+                .flat_map(|other| &other.methods)
+                .filter(|(each, _)| each == name)
+                .map(|(_, id)| *id);
+            found.entry(*method).or_default().extend(below);
+        }
+    }
+    found
 }
 
 #[allow(clippy::too_many_lines, reason = "one arm per statement kind")]
@@ -146,9 +182,10 @@ fn statements(body: &[TypedStmt], callees: &mut BTreeSet<FunctionId>) {
                 statements(body, callees);
                 statements(orelse, callees);
             }
+            // Another module's lazy import a name needs is a call.
+            TypedStmt::Import { pending, .. } => callees.extend(pending.iter().copied()),
             // A module's code runs once and never recursively, so an import adds no edge.
             TypedStmt::Return { value: None, .. }
-            | TypedStmt::Import { .. }
             | TypedStmt::LazyImport { .. }
             | TypedStmt::Pass { .. }
             | TypedStmt::Break { .. }
@@ -161,6 +198,10 @@ fn statements(body: &[TypedStmt], callees: &mut BTreeSet<FunctionId>) {
 fn assign_target(target: &AssignTarget, callees: &mut BTreeSet<FunctionId>) {
     match target {
         AssignTarget::Name(_) => {}
+        AssignTarget::Lazy { reify, target } => {
+            callees.insert(*reify);
+            assign_target(target, callees);
+        }
         AssignTarget::Tuple(targets) => {
             for target in targets {
                 assign_target(target, callees);
@@ -195,6 +236,7 @@ fn expression(expression_value: &TypedExpr, callees: &mut BTreeSet<FunctionId>) 
         TypedExprKind::Call {
             function,
             arguments,
+            ..
         } => {
             callees.insert(*function);
             for argument in arguments {
@@ -205,7 +247,23 @@ fn expression(expression_value: &TypedExpr, callees: &mut BTreeSet<FunctionId>) 
             expression(left, callees);
             expression(right, callees);
         }
+        TypedExprKind::IsInstance(test) => expression(&test.value, callees),
+        TypedExprKind::EachMember(each) => {
+            expression(&each.value, callees);
+            for (_, body) in &each.arms {
+                expression(body, callees);
+            }
+        }
+        TypedExprKind::OperatorCall(call) => {
+            callees.extend(call.forward);
+            callees.extend(call.reflected);
+            expression(&call.left, callees);
+            expression(&call.right, callees);
+        }
         TypedExprKind::Wrap(operand)
+        | TypedExprKind::CheckedLength(operand)
+        | TypedExprKind::Upcast(operand)
+        | TypedExprKind::Downcast(operand)
         | TypedExprKind::Unwrap(operand)
         | TypedExprKind::Unary { operand, .. }
         | TypedExprKind::TupleOf(operand)
@@ -392,8 +450,32 @@ fn expression(expression_value: &TypedExpr, callees: &mut BTreeSet<FunctionId>) 
         | TypedExprKind::SysValue(_) => {}
         TypedExprKind::AsIterable(inner) => expression(inner, callees),
         TypedExprKind::PercentFormat { values, .. } => expression(values, callees),
-        TypedExprKind::Open { path, .. } => expression(path, callees),
-        TypedExprKind::SysExit(value) | TypedExprKind::Input(value) => {
+        TypedExprKind::Open { .. } => {
+            for part in expression_value.operands() {
+                expression(part, callees);
+            }
+        }
+        TypedExprKind::OsErrorField { exception, .. }
+        | TypedExprKind::FileAttribute {
+            file: exception, ..
+        } => expression(exception, callees),
+        TypedExprKind::PercentDynamic { format, values } => {
+            expression(format, callees);
+            expression(values, callees);
+        }
+        TypedExprKind::ExceptionPart {
+            exception,
+            operation,
+            ..
+        } => {
+            expression(exception, callees);
+            if let typy_check::PartOperation::Equal(other) = operation {
+                expression(other, callees);
+            }
+        }
+        TypedExprKind::SysExit(value)
+        | TypedExprKind::Input(value)
+        | TypedExprKind::RecursionLimit(value) => {
             if let Some(value) = value {
                 expression(value, callees);
             }

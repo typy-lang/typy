@@ -1,7 +1,7 @@
 //! Checks statements against the feature table.
 
 use typy_diagnostics::{Diagnostic, DiagnosticCode, RuleId};
-use typy_source::syntax::{Expr, ParameterKind, Stmt};
+use typy_source::syntax::{Expr, ParameterKind, Stmt, TypeParameter, TypeParameterKind};
 
 use super::feature::{Feature, feature, planned};
 use super::{Place, Walker};
@@ -15,7 +15,7 @@ impl Walker {
                 returns,
                 body,
                 decorators,
-                type_parameter_count,
+                type_parameters,
                 span,
                 ..
             } => {
@@ -31,15 +31,16 @@ impl Walker {
                     ),
                     Place::ModuleTop | Place::Class => {}
                 }
-                if let Some(decorator) = decorators.first() {
+                // A method may carry one of the decorators of CLS-06; the checker reads which.
+                let method_decorator = place == Place::Class
+                    && matches!(decorators.as_slice(), [one] if is_method_decorator(one));
+                if !method_decorator && let Some(decorator) = decorators.first() {
                     self.report(
                         decorator.span(),
                         planned("decorators", "1.0", RuleId::FUN_06),
                     );
                 }
-                if *type_parameter_count > 0 {
-                    self.report(*span, planned("type parameters", "0.4", RuleId::GEN_01));
-                }
+                self.type_parameters(type_parameters);
                 for parameter in parameters {
                     match parameter.kind {
                         ParameterKind::Normal => {}
@@ -86,7 +87,7 @@ impl Walker {
                 keyword_count,
                 body,
                 decorators,
-                type_parameter_count,
+                type_parameters,
                 span,
                 ..
             } => self.class(
@@ -95,7 +96,7 @@ impl Walker {
                     keyword_count: *keyword_count,
                     body,
                     decorators,
-                    type_parameter_count: *type_parameter_count,
+                    type_parameters,
                     span: *span,
                 },
                 place,
@@ -233,6 +234,16 @@ impl Walker {
                     },
                 );
             }
+            // `...` alone does nothing, as `pass` does, and is the usual body of a protocol's
+            // method (GEN-04).
+            Stmt::Expr {
+                value:
+                    Expr::Constant {
+                        value: typy_source::syntax::Constant::Ellipsis,
+                        ..
+                    },
+                ..
+            } => {}
             Stmt::Expr { value, .. } => self.expression(value),
             Stmt::Break { span } if self.loop_depth == 0 => {
                 self.syntax_error(*span, "`break` outside a loop");
@@ -241,6 +252,38 @@ impl Walker {
                 self.syntax_error(*span, "`continue` outside a loop");
             }
             Stmt::Global { names, .. } => self.global_statement(names),
+            Stmt::TypeAlias {
+                type_parameters,
+                value,
+                span,
+                ..
+            } => {
+                // The checker expands the aliases of the module's top level only.
+                if place != Place::ModuleTop {
+                    self.report(
+                        *span,
+                        planned(
+                            "`type` statements inside functions, classes and blocks",
+                            "0.5",
+                            RuleId::SMT_12,
+                        ),
+                    );
+                }
+                self.type_parameters(type_parameters);
+                // An alias is expanded before types are known, so nothing could check a
+                // bound.
+                for parameter in type_parameters.iter().filter(|each| each.bound.is_some()) {
+                    self.report(
+                        parameter.span,
+                        planned(
+                            "bounds and constraints of a type alias's parameters",
+                            "0.5",
+                            RuleId::SMT_12,
+                        ),
+                    );
+                }
+                self.annotation(value);
+            }
             // The checker resolves each import against the modules of the program.
             Stmt::Import { .. }
             | Stmt::ImportFrom { .. }
@@ -248,6 +291,34 @@ impl Walker {
             | Stmt::Break { .. }
             | Stmt::Continue { .. } => {}
             Stmt::Other { kind, span } => self.report(*span, feature(*kind)),
+        }
+    }
+
+    /// Checks a list of type parameters: a bound or the constraints are annotations, and
+    /// `*Ts`, `**P` and defaults are planned (GEN-01, GEN-06).
+    pub(super) fn type_parameters(&mut self, parameters: &[TypeParameter]) {
+        for parameter in parameters {
+            if parameter.kind != TypeParameterKind::Type {
+                self.report(
+                    parameter.span,
+                    planned("`*Ts` and `**P` type parameters", "1.0", RuleId::GEN_06),
+                );
+            }
+            if parameter.default.is_some() {
+                self.report(
+                    parameter.span,
+                    planned("defaults of type parameters", "1.0", RuleId::GEN_06),
+                );
+            }
+            match &parameter.bound {
+                Some(Expr::Tuple { elements, .. }) => {
+                    for constraint in elements {
+                        self.annotation(constraint);
+                    }
+                }
+                Some(bound) => self.annotation(bound),
+                None => {}
+            }
         }
     }
 
@@ -269,5 +340,17 @@ impl Walker {
             Expr::Attribute { value, .. } => self.expression(value),
             other => self.expression(other),
         }
+    }
+}
+
+/// Returns true for `@staticmethod`, `@classmethod`, `@property` and `@name.setter`, the
+/// decorators of a method (CLS-06).
+fn is_method_decorator(decorator: &Expr) -> bool {
+    match decorator {
+        Expr::Name { id, .. } => matches!(id.as_str(), "staticmethod" | "classmethod" | "property"),
+        Expr::Attribute {
+            value, attribute, ..
+        } => attribute.name == "setter" && matches!(value.as_ref(), Expr::Name { .. }),
+        _ => false,
     }
 }

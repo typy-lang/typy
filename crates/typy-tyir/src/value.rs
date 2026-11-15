@@ -11,7 +11,7 @@ pub struct ValueId(pub u32);
 pub enum ValueRepresentation {
     /// In a register or a slot: `int`, `float`, `bool` and unit.
     Inline,
-    /// On the stack; chosen by escape analysis from 0.4 (MEM-03).
+    /// On the stack; chosen by escape analysis from 0.5 (MEM-03).
     Stack,
     /// A pointer to a counted heap object.
     Heap,

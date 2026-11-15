@@ -164,8 +164,26 @@ fn names_math_does_not_have_at_the_floor_are_e0425() {
 #[test]
 fn other_uses_of_math_give_their_codes() {
     for (source, code) in [
-        ("import math\nprint(math.fsum([1.0]))\n", "E0201"),
-        ("from math import prod\n", "E0201"),
+        ("import math\nprint(math.fsum(['a']))\n", "E0404"),
+        ("import math\nprint(math.fsum([1.0], [2.0]))\n", "E0404"),
+        ("import math\nprint(math.dist([1.0]))\n", "E0404"),
+        ("import math\nprint(math.fsum(missing))\n", "E0205"),
+        (
+            "import math\nx: list[int | str] = [1]\nprint(math.fsum(x))\n",
+            "E0404",
+        ),
+        ("import math\nprint(math.fsum([1.0], start=2))\n", "E0404"),
+        ("import math\nprint(math.prod([1.0], begin=2))\n", "E0404"),
+        (
+            "import math\nprint(math.prod([1.0], start=True))\n",
+            "E0201",
+        ),
+        ("import math\nprint(math.prod([1.0], start='a'))\n", "E0201"),
+        (
+            "import math\nx: list[int | float] = [1]\nprint(math.dist(x, x))\n",
+            "E0201",
+        ),
+        ("from math import prod\nf = prod\n", "E0201"),
         ("import math\nf = math.sqrt\n", "E0201"),
         ("from math import sqrt\nf = sqrt\n", "E0201"),
         ("import math\nprint(math.pi())\n", "E0401"),

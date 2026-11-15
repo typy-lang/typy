@@ -96,6 +96,10 @@ fn objects_find_their_types() {
         assert!(same(type_of(text.cast()), &STR));
         assert!(same(type_of(list.cast()), &LIST));
         assert!(same(type_of(dict.cast()), &DICT));
+        // An object is an instance of its type and of each base, and of nothing else.
+        assert!(super::typy_rt_is_instance(list.cast(), &raw const LIST));
+        assert!(super::typy_rt_is_instance(list.cast(), &raw const OBJECT));
+        assert!(!super::typy_rt_is_instance(list.cast(), &raw const STR));
         for (view, ty) in views
             .into_iter()
             .zip([&DICT_KEYS, &DICT_VALUES, &DICT_ITEMS])
@@ -220,7 +224,76 @@ fn the_traceback_is_one_immortal_object_written_with_its_address() {
             .collect();
         assert!(shown.starts_with("<traceback object at 0x"), "{shown}");
         crate::refcount::typy_rt_decrement(text.value.cast());
+        // A type without `__str__` writes `str` of an object as its `__repr__`.
+        let text = super::typy_rt_object_str(traceback.cast_mut());
+        let length = crate::string::length(text.value);
+        let written: String = (0..length)
+            .map(|index| char::from_u32(crate::string::code_point(text.value, index)).unwrap())
+            .collect();
+        assert!(written.starts_with("<traceback object at 0x"), "{written}");
+        crate::refcount::typy_rt_decrement(text.value.cast());
         crate::refcount::typy_rt_decrement(traceback.cast_mut());
         assert_eq!((*traceback).reference_count, IMMORTAL);
+    }
+}
+
+#[test]
+fn str_of_a_string_is_the_string_and_repr_quotes_it() {
+    let string = crate::string::from_str("abc");
+    // SAFETY: the string is live until it is released below.
+    unsafe {
+        let same_string = super::typy_rt_object_str(string.cast());
+        assert_eq!(same_string.value, string);
+        assert_eq!(text(same_string.value), "abc");
+        assert_eq!(
+            text(super::typy_rt_object_repr(string.cast()).value),
+            "'abc'"
+        );
+        crate::refcount::typy_rt_decrement(string.cast());
+    }
+}
+
+#[test]
+fn an_object_is_true_as_its_type_tests_it() {
+    let empty = crate::string::from_str("");
+    let full = crate::string::from_str("a");
+    let traceback = super::typy_rt_traceback();
+    // SAFETY: each object is live until it is released below.
+    unsafe {
+        assert!(!super::typy_rt_object_is_true(empty.cast()));
+        assert!(super::typy_rt_object_is_true(full.cast()));
+        // A type without a test of its own leaves every object true.
+        assert!(super::typy_rt_object_is_true(traceback.cast_mut()));
+        crate::refcount::typy_rt_decrement(empty.cast());
+        crate::refcount::typy_rt_decrement(full.cast());
+    }
+}
+
+#[test]
+fn type_of_a_copy_of_a_generic_class_is_the_generic_class() {
+    let generic = Box::leak(Box::new(TypeObject::new("Box", &raw const OBJECT)));
+    let copy = Box::leak(Box::new(TypeObject {
+        public: &raw const *generic,
+        ..TypeObject::new("Box", &raw const *generic)
+    }));
+    let instance = crate::instance::InstanceObject {
+        header: ObjectHeader {
+            reference_count: IMMORTAL,
+            type_id: crate::header::INSTANCE_TYPE_ID,
+        },
+        class: &raw const *copy,
+    };
+    let object = (&raw const instance).cast::<ObjectHeader>();
+    // SAFETY: the instance and both classes live until the end of the test.
+    unsafe {
+        assert!(same(&*super::typy_rt_object_type(object), generic));
+        assert!(same(type_of(object), copy));
+        assert!(super::typy_rt_is_instance(object, &raw const *generic));
+    }
+    let plain = crate::string::from_str("a");
+    // SAFETY: the string is live until it is released.
+    unsafe {
+        assert!(same(&*super::typy_rt_object_type(plain.cast()), &STR));
+        crate::refcount::typy_rt_decrement(plain.cast());
     }
 }

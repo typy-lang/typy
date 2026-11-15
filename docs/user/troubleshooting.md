@@ -92,31 +92,34 @@ python-floor = "3.15"
 ## E0201: feature planned for a later TyPy release
 
 The program uses valid Python that a later TyPy release accepts, such as
-`try`, `import` or inheritance. The message names the release and the rule.
-Write the code without the feature, for example an f-string instead of `%`
-formatting, or wait for that release.
+a `match` statement or class decorators. The message names the release
+and the rule. Write the code without the feature, for example with `if`
+and `elif`, or wait for that release.
 
 This program gives E0201:
 
-<!-- typy-expect: rejected E0201 at 5:14 -->
+<!-- typy-expect: rejected E0201 at 2:5 -->
 ```python
-class Shape:
-    pass
-
-
-class Square(Shape):
-    pass
+def show(value: int) -> None:
+    match value:
+        case 0:
+            print("zero")
+        case _:
+            print(value)
 ```
 
 This one is correct:
 
 <!-- typy-expect: accepted -->
 ```python
-class Square:
-    pass
+def show(value: int) -> None:
+    if value == 0:
+        print("zero")
+    else:
+        print(value)
 
 
-print(Square.__name__)
+show(0)
 ```
 
 ## E0202: feature TyPy cannot compile with CPython's meaning
@@ -1206,6 +1209,41 @@ This one is correct:
 <!-- typy-expect: accepted -->
 ```python
 print("%d of %d done" % (3, 4))
+```
+
+## E0428: copies of a generic function without end
+
+A generic function calls itself with a larger type each time, as `f(x)`
+calling `f([x])`. TyPy compiles one copy of a generic function for each
+set of types it is called with (GEN-03, ADR-0023), and each copy here
+needs a copy for a larger type, so the copies would never end; past 64
+copies inside one another the program is refused. Call the function with
+the same type, or write the recursion over a type that does not grow.
+
+This program gives E0428:
+
+<!-- typy-expect: rejected E0428 at 4:12 -->
+```python
+def depth[T](value: T, levels: int) -> int:
+    if levels == 0:
+        return 0
+    return depth([value], levels - 1) + 1
+
+
+print(depth(1, 3))
+```
+
+This one is correct:
+
+<!-- typy-expect: accepted -->
+```python
+def depth[T](value: list[T], levels: int) -> int:
+    if levels == 0:
+        return 0
+    return depth(value, levels - 1) + 1
+
+
+print(depth([1], 3))
 ```
 
 ## E0701: C toolchain program not found

@@ -13,6 +13,15 @@ impl BodyChecker<'_> {
     #[allow(clippy::too_many_lines, reason = "one arm per expression kind")]
     pub(super) fn expression(&mut self, expression: &Expr) -> TypedExpr {
         let span = expression.span();
+        if let Some(each) = self.each_member(expression) {
+            return each;
+        }
+        if let Some(folded) = self.version_info_use(expression) {
+            return folded;
+        }
+        if let Some(part) = self.exception_part_use(expression) {
+            return part;
+        }
         match expression {
             Expr::Constant { value, .. } => {
                 let constant = match value {
@@ -39,21 +48,11 @@ impl BodyChecker<'_> {
                 operator: typy_source::syntax::BinaryOperator::Mod,
                 right,
                 ..
-            } if matches!(
-                **left,
-                Expr::Constant {
-                    value: typy_source::syntax::Constant::Str(_),
-                    ..
-                }
-            ) =>
+            } if let Expr::Constant {
+                value: typy_source::syntax::Constant::Str(format),
+                span: format_span,
+            } = &**left =>
             {
-                let Expr::Constant {
-                    value: typy_source::syntax::Constant::Str(format),
-                    span: format_span,
-                } = &**left
-                else {
-                    unreachable!("the guard matched a string literal");
-                };
                 self.percent_format(format, *format_span, right, span)
             }
             Expr::BinOp {
@@ -64,7 +63,15 @@ impl BodyChecker<'_> {
             } => {
                 let left = self.expression(left);
                 let right = self.expression(right);
+                // An instance's class may define the operator's method (CLS-07).
+                let (left, right) = match self.operator_binary(*operator, left, right, span) {
+                    super::operator_method::Comparison::Called(call) => return call,
+                    super::operator_method::Comparison::Builtin(left, right) => (left, right),
+                };
                 let (left, right) = Self::tuple_operands(*operator, left, right);
+                if let Some(formatted) = Self::percent_dynamic(*operator, &left, &right, span) {
+                    return formatted;
+                }
                 let ty = self.binary_type(*operator, &left, &right, span);
                 Self::typed(
                     TypedExprKind::Binary {
@@ -80,6 +87,11 @@ impl BodyChecker<'_> {
                 operator, operand, ..
             } => {
                 let operand = self.expression(operand);
+                if let Some(call) = super::operator_method::unary_name(*operator)
+                    .and_then(|name| self.operator_unary(name, &operand, span))
+                {
+                    return call;
+                }
                 let ty = self.unary_type(*operator, &operand, span);
                 Self::typed(
                     TypedExprKind::Unary {
@@ -146,8 +158,34 @@ impl BodyChecker<'_> {
                 ..
             } => {
                 let mut operands = self.comparison_operands(left, comparators, operators);
-                let comparators = operands.split_off(1);
-                let left = operands.remove(0);
+                let mut comparators = operands.split_off(1);
+                let mut left = operands.remove(0);
+                // A comparison of instances may call a comparison method (CLS-07).
+                if let ([operator], [right]) = (operators.as_slice(), comparators.as_slice()) {
+                    let right = right.clone();
+                    match self.operator_comparison(*operator, left, right, span) {
+                        super::operator_method::Comparison::Called(call) => return call,
+                        super::operator_method::Comparison::Builtin(back, other) => {
+                            left = back;
+                            comparators = vec![other];
+                        }
+                    }
+                } else if std::iter::once(&left).chain(&comparators).any(|operand| {
+                    matches!(&operand.ty, Type::Instance(class)
+                        if class.operators.compares() || class.operators.orders())
+                }) {
+                    return self.error(
+                        Diagnostic::new(
+                            DiagnosticCode::error(201),
+                            span,
+                            "a chain of comparisons of instances whose classes define comparison \
+                             methods is planned for TyPy 0.5 (CLS-07)",
+                        )
+                        .with_rule(RuleId::CLS_07)
+                        .with_help("write each comparison and join them with `and`"),
+                        span,
+                    );
+                }
                 let mut previous = &left;
                 for (operator, right) in operators.iter().zip(&comparators) {
                     self.compare_types(*operator, previous, right);
@@ -234,6 +272,11 @@ impl BodyChecker<'_> {
             }
             Expr::Subscript { value, index, .. } => {
                 let value = self.expression(value);
+                // An instance's class may define `__getitem__` (CLS-07).
+                let value = match self.item_call(value, index, span) {
+                    Ok(call) => return call,
+                    Err(value) => value,
+                };
                 if let Expr::Slice {
                     lower, upper, step, ..
                 } = index.as_ref()
@@ -310,6 +353,10 @@ impl BodyChecker<'_> {
                 Expr::Attribute {
                     value, attribute, ..
                 } => self.method_call(value, attribute, arguments, keywords, span),
+                // The subset check lets only a generic class given its arguments through.
+                Expr::Subscript { .. } => {
+                    self.applied_class_call(function, arguments, keywords, span)
+                }
                 _ => Self::typed(
                     TypedExprKind::Constant(TypedConstant::None),
                     Type::Error,
@@ -332,7 +379,22 @@ impl BodyChecker<'_> {
         }
     }
 
+    /// Returns true when the class's truth is CPython's default and a class derived from it
+    /// defines `__bool__` or `__len__`, so the object's class would decide it (CLS-07).
+    pub(super) fn subclass_decides_truth(&self, class: crate::typed::ClassId) -> bool {
+        self.program.method(class, "__bool__").is_none()
+            && self.program.method(class, "__len__").is_none()
+            && self.program.classes.iter().any(|other| {
+                (other.method("__bool__").is_some() || other.method("__len__").is_some())
+                    && matches!(self.program.instance_type(other.id), Type::Instance(derived)
+                        if derived.ancestors.iter().any(|(id, _)| *id == class))
+            })
+    }
+
     pub(super) fn truth_test(&mut self, test: &Expr) -> TypedExpr {
+        if let Some(truth) = self.tested_part(test) {
+            return truth;
+        }
         let test = self.expression(test);
         self.check_truth(&test);
         test
@@ -341,6 +403,28 @@ impl BodyChecker<'_> {
     /// Reports a value whose truth cannot be tested: a condition, `not`, `and`, `or` and
     /// `bool()` all test it (EXP-10).
     pub(super) fn check_truth(&mut self, value: &TypedExpr) {
+        // An instance's truth comes from its class, so a subclass that defines `__bool__` or
+        // `__len__` where its base defines neither would need the object's class (CLS-07).
+        if self.union_truth_planned(value) {
+            return;
+        }
+        if let Type::Instance(class) = &value.ty
+            && self.subclass_decides_truth(class.id)
+        {
+            self.diagnostics.push(
+                Diagnostic::new(
+                    DiagnosticCode::error(201),
+                    value.span,
+                    format!(
+                        "a truth test of {} whose subclass defines `__bool__` or `__len__` is \
+                         planned for TyPy 0.5 (CLS-07)",
+                        value.ty.with_article()
+                    ),
+                )
+                .with_rule(RuleId::CLS_07)
+                .with_help(format!("define `__bool__` in `{}`", class.name)),
+            );
+        }
         if !value.ty.is_truth_testable() {
             self.diagnostics.push(
                 Diagnostic::new(

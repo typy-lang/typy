@@ -63,15 +63,27 @@ impl Walker {
                 }
             }
             // `Iterator[T]` and `Iterable[T]`, by name or through `typing` or
-            // `collections.abc`; the checker resolves where the name comes from (TYP-15).
+            // `collections.abc`, `ClassVar[T]` and `Final[T]`; the checker resolves where the
+            // name comes from (TYP-15, CLS-11, TYP-08).
             Expr::Subscript { value, index, .. }
                 if matches!(
                     value.as_ref(),
                     Expr::Name { id, .. } | Expr::Attribute { attribute: typy_source::syntax::Identifier { name: id, .. }, .. }
-                        if matches!(id.as_str(), "Iterator" | "Iterable")
+                        if matches!(id.as_str(), "Iterator" | "Iterable" | "ClassVar" | "Final")
                 ) =>
             {
                 self.annotation(index);
+            }
+            // A generic class or type alias of the module, given its type arguments (GEN-01).
+            Expr::Subscript { value, index, .. } if matches!(value.as_ref(), Expr::Name { id, .. } if self.generic_classes.contains(id) || self.generic_aliases.contains(id)) => {
+                match index.as_ref() {
+                    Expr::Tuple { elements, .. } => {
+                        for element in elements {
+                            self.annotation(element);
+                        }
+                    }
+                    single => self.annotation(single),
+                }
             }
             // Only the generic types of TYP-06, CLS-12 and TYP-15 are provided.
             Expr::Subscript { span, .. } => {
@@ -82,35 +94,16 @@ impl Walker {
                     },
                 );
             }
+            // `T | None` is an optional type (TYP-06), and any other union a union, whose
+            // members the checker reads (TYP-14).
             Expr::BinOp {
                 operator: BinaryOperator::BitOr,
                 left,
                 right,
-                span,
+                ..
             } => {
-                let is_none = |side: &Expr| {
-                    matches!(
-                        side,
-                        Expr::Constant {
-                            value: Constant::None,
-                            ..
-                        }
-                    )
-                };
-                // `T | None` and `None | T` are optional types (TYP-06); any other union waits
-                // for `isinstance` narrowing.
-                match (is_none(left), is_none(right)) {
-                    (false, true) => self.annotation(left),
-                    (true, false) => self.annotation(right),
-                    _ => self.report(
-                        *span,
-                        planned(
-                            "union annotations such as `int | str`",
-                            "0.4",
-                            RuleId::TYP_14,
-                        ),
-                    ),
-                }
+                self.annotation(left);
+                self.annotation(right);
             }
             Expr::Constant {
                 value: Constant::Str(_),
@@ -181,6 +174,11 @@ impl Walker {
                     Expr::Name { .. } => {}
                     // A method call: the checker decides whether the value has the method.
                     Expr::Attribute { value, .. } => self.expression(value),
+                    // A generic class given its type arguments, such as `Box[int](1)`.
+                    Expr::Subscript { value, index, .. } if matches!(value.as_ref(), Expr::Name { id, .. } if self.generic_classes.contains(id)) =>
+                    {
+                        self.annotation(index);
+                    }
                     other => self.report(
                         other.span(),
                         planned("calls of values that are not names", "1.0", RuleId::FUN_05),
@@ -188,6 +186,22 @@ impl Walker {
                 }
                 for argument in arguments {
                     self.expression(argument);
+                }
+                // CPython refuses a call that names one keyword twice when it compiles it.
+                for (index, keyword) in keywords.iter().enumerate() {
+                    if let Some(name) = &keyword.name
+                        && keywords[..index].iter().any(|before| {
+                            before
+                                .name
+                                .as_ref()
+                                .is_some_and(|earlier| earlier.name == name.name)
+                        })
+                    {
+                        self.syntax_error(
+                            keyword.span,
+                            &format!("keyword argument repeated: {}", name.name),
+                        );
+                    }
                 }
                 for keyword in keywords {
                     if keyword.name.is_none() {

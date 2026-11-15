@@ -316,6 +316,18 @@ fn a_range_of_small_bounds_past_a_c_long_in_length_is_a_longrange() {
 }
 
 #[test]
+fn a_range_that_starts_below_a_c_long_is_a_longrange() {
+    let start = crate::int::value::Integer::from_i128(-(1 << 70)).into_word();
+    let source = range(start, word(0), word(1));
+    // SAFETY: the range holds a reference of its own to the start.
+    unsafe { crate::refcount::typy_rt_int_decrement(start) };
+    let values = iterator(source, 9, core::ptr::null());
+    release(source);
+    assert_eq!(type_name(values), "longrange_iterator");
+    release(values);
+}
+
+#[test]
 fn an_iterable_gives_the_iterator_its_header_calls_for() {
     use super::typy_rt_iterable_iterator;
     let list = int_list(&[1, 2]);

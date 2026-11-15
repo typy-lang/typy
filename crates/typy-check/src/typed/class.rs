@@ -40,6 +40,15 @@ pub struct TypedClass {
     pub methods: Vec<(String, FunctionId)>,
     /// The `__init__` method, the class's own or the nearest base's, when there is one.
     pub init: Option<FunctionId>,
+    /// For each attribute with a default, its position and the module variable that holds
+    /// the default, which a new instance holds before `__init__` runs (ADR-0024).
+    pub defaults: Vec<(usize, super::symbol::SymbolId)>,
     /// The whole definition.
     pub span: Span,
+    /// For a copy of a generic class, the generic class, which `type()` and `isinstance`
+    /// answer as (ADR-0028).
+    pub generic: Option<ClassId>,
+    /// Whether the class has no instances: a generic class, or a copy whose type arguments
+    /// hold a type parameter, which is checked and never laid out (ADR-0028).
+    pub opaque: bool,
 }

@@ -144,6 +144,11 @@ impl FunctionLowerer<'_> {
     pub(crate) fn assign_target(&mut self, target: &AssignTarget, value: Lowered, span: Span) {
         match target {
             AssignTarget::Name(symbol) => self.assign_name(*symbol, value, span),
+            // A module bound lazily is imported before the assignment (MOD-11).
+            AssignTarget::Lazy { reify, target } => {
+                self.run_lazy_import(*reify, span);
+                self.assign_target(target, value, span);
+            }
             AssignTarget::Item { list, index } => self.assign_item(list, index, value, span),
             AssignTarget::Slice {
                 list,
@@ -306,7 +311,7 @@ impl FunctionLowerer<'_> {
 
     /// Returns a value of type `ty` that is never freed: zero, false, `None`, the empty string,
     /// or a tuple of such values.
-    fn zero_value(&mut self, ty: TyirType, span: Span) -> ValueId {
+    pub(crate) fn zero_value(&mut self, ty: TyirType, span: Span) -> ValueId {
         match ty {
             TyirType::Int => self.constant(Constant::Int("0".to_owned()), span),
             TyirType::Float => self.constant(Constant::Float(0.0), span),
@@ -340,7 +345,8 @@ impl FunctionLowerer<'_> {
                     || id == typy_tyir::TypeId::RANGE
                     || id == typy_tyir::TypeId::MODULE
                     || id == typy_tyir::TypeId::ITERABLE
-                    || id == typy_tyir::TypeId::TEXT_FILE =>
+                    || id == typy_tyir::TypeId::TEXT_FILE
+                    || id == typy_tyir::TypeId::UNION =>
             {
                 self.constant(Constant::NoInstance(id), span)
             }

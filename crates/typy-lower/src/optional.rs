@@ -35,6 +35,44 @@ impl FunctionLowerer<'_> {
         self.transfer(value, wrapped, ty)
     }
 
+    /// Returns an instance, or an optional one, as an instance of a base, of type `ty`; the
+    /// result takes over the value's reference.
+    pub(crate) fn upcast(&mut self, inner: &TypedExpr, ty: TyirType, span: Span) -> Lowered {
+        let value = self.expression(inner);
+        // A union whose members are held alike is held as they are.
+        if value.ty == ty {
+            return value;
+        }
+        let upcast = self.builder.push_value(
+            Operation::Upcast {
+                value: value.value,
+                ty,
+            },
+            ty,
+            span,
+        );
+        self.transfer(value, upcast, ty)
+    }
+
+    /// Returns `value` as a variable of type `ty` holds it: a value of the base of an optional
+    /// `ty` is wrapped, as a `for` loop binds an item to a `T | None` variable; any other value
+    /// is returned as it is. The result takes over the value's reference.
+    pub(crate) fn held_as(&mut self, value: Lowered, ty: TyirType, span: Span) -> Lowered {
+        if value.ty == ty || !matches!(ty, TyirType::Optional(_)) || self.base_type(ty) != value.ty
+        {
+            return value;
+        }
+        let wrapped = self.builder.push_value(
+            Operation::Wrap {
+                value: value.value,
+                ty,
+            },
+            ty,
+            span,
+        );
+        self.transfer(value, wrapped, ty)
+    }
+
     /// Returns the value an optional holds, which a test showed is not `None`; it takes over
     /// the optional's reference.
     pub(crate) fn unwrap(&mut self, inner: &TypedExpr, ty: TyirType, span: Span) -> Lowered {

@@ -14,6 +14,15 @@ pub enum Callee {
     Function(FunctionId),
     /// A runtime function.
     Runtime(RuntimeFunction),
+    /// The method at `slot` of the method table of the class of the first argument, an
+    /// instance of class `class` or of a class derived from it, whose table starts as
+    /// `class`'s does (ADR-0021). Its parameters and result are those of `class`'s entry.
+    Method {
+        /// The class whose table gives the entry's parameters and result.
+        class: u32,
+        /// The position in the table.
+        slot: u32,
+    },
 }
 
 /// How a basic block ends.

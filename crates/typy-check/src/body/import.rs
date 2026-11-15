@@ -41,6 +41,8 @@ pub(crate) enum Named {
     Function(FunctionId),
     Class(ClassId),
     Variable(SymbolId),
+    /// A type alias, which only the annotations of its own module read (SMT-10).
+    TypeAlias,
     Nothing,
 }
 
@@ -50,6 +52,9 @@ pub(crate) enum Named {
 pub(crate) struct Resolved {
     pub(crate) modules: Vec<String>,
     pub(crate) names: Vec<(String, Imported, Span)>,
+    /// The lazy imports of other modules whose names this import reads, which run first, as
+    /// reading the module's attribute runs them in CPython (MOD-11).
+    pub(crate) pending: Vec<FunctionId>,
 }
 
 impl Resolved {
@@ -144,6 +149,9 @@ impl Program {
                 self.check_provided(&base, *span)?;
                 resolved.initialise(&base);
                 for alias in names {
+                    if let Some(reify) = self.lazy_elsewhere(base.as_str(), &alias.name.name) {
+                        resolved.pending.push(reify);
+                    }
                     let imported = self.imported_name(&base, alias, *span)?;
                     if let Imported::Module(child) = &imported {
                         resolved.initialise(child);
@@ -163,11 +171,21 @@ impl Program {
     /// which its own functions may import by name; `None` when the module is not checked
     /// yet. The tables are read in place, so a lookup costs the same in any module.
     pub(crate) fn named(&self, module: &str, name: &str) -> Option<Named> {
-        let (functions, classes, symbols) = if module == self.module {
-            (&self.function_ids, &self.class_ids, &self.module_symbols)
+        let (functions, classes, symbols, aliases) = if module == self.module {
+            (
+                &self.function_ids,
+                &self.class_ids,
+                &self.module_symbols,
+                &self.type_aliases,
+            )
         } else {
             let scope = self.scopes.get(module)?;
-            (&scope.function_ids, &scope.class_ids, &scope.module_symbols)
+            (
+                &scope.function_ids,
+                &scope.class_ids,
+                &scope.module_symbols,
+                &scope.type_aliases,
+            )
         };
         Some(if let Some(function) = functions.get(name) {
             Named::Function(*function)
@@ -175,6 +193,8 @@ impl Program {
             Named::Class(*class)
         } else if let Some(symbol) = symbols.get(name) {
             Named::Variable(*symbol)
+        } else if aliases.contains(name) {
+            Named::TypeAlias
         } else {
             Named::Nothing
         })
@@ -236,7 +256,6 @@ impl Program {
         if base.as_str() == self.module && self.loaded.contains(child.as_str()) {
             return Ok(Imported::Module(child));
         }
-        self.check_not_lazy(base.as_str(), name, alias.name.span)?;
         match self.named(base.as_str(), name) {
             None => return Err(Box::new(checked_later(span, base))),
             Some(Named::Function(function)) => return Ok(Imported::Function(function)),
@@ -246,6 +265,13 @@ impl Program {
                     module: base.as_str().to_owned(),
                     source,
                 });
+            }
+            Some(Named::TypeAlias) => {
+                return Err(Box::new(crate::check::other_module_alias(
+                    base.as_str(),
+                    name,
+                    alias.name.span,
+                )));
             }
             Some(Named::Nothing) => {}
         }
@@ -262,35 +288,15 @@ impl Program {
         ))
     }
 
-    /// Fails for a name another module binds by a lazy import: reaching it from outside
-    /// would run that import first, which is planned for 0.4 (MOD-11).
-    pub(super) fn check_not_lazy(
-        &self,
-        module: &str,
-        name: &str,
-        span: Span,
-    ) -> Result<(), Box<Diagnostic>> {
-        if module == self.module
-            || !self
-                .lazy_names
-                .contains_key(&(module.to_owned(), name.to_owned()))
-        {
-            return Ok(());
+    /// Returns the function of the lazy import by which another module binds `name`, if it
+    /// does: reaching the name from outside runs that import first (MOD-11).
+    pub(super) fn lazy_elsewhere(&self, module: &str, name: &str) -> Option<FunctionId> {
+        if module == self.module {
+            return None;
         }
-        Err(Box::new(
-            Diagnostic::new(
-                DiagnosticCode::error(201),
-                span,
-                format!(
-                    "using `{module}.{name}`, which `{module}` imports lazily, from another module \
-                     is planned for TyPy 0.4 (MOD-11)"
-                ),
-            )
-            .with_rule(RuleId::MOD_11)
-            .with_help(format!(
-                "import it eagerly in `{module}`, or import it from its own module"
-            )),
-        ))
+        self.lazy_names
+            .get(&(module.to_owned(), name.to_owned()))
+            .copied()
     }
 
     /// Fails for a standard library module, which TyPy provides from a later release or not
@@ -337,8 +343,9 @@ fn not_a_package(module: &ModuleName, span: Span) -> Diagnostic {
     .with_rule(RuleId::LIB_08)
 }
 
-/// Returns the error for a name of `typing`, `collections.abc` or `types` that TyPy 0.3 does
-/// not give: the rest of `typing` and `collections.abc` come in 0.4 (LIB-06).
+/// Returns the error for a name of `typing`, `collections.abc` or `types` that TyPy does not
+/// give: `Any` and `cast` are refused (TYP-10), and the rest of `typing` and
+/// `collections.abc` is planned (LIB-17).
 fn not_given(module: &ModuleName, alias: &Alias) -> Diagnostic {
     let name = &alias.name.name;
     if module.as_str() == "types" {
@@ -349,13 +356,45 @@ fn not_given(module: &ModuleName, alias: &Alias) -> Diagnostic {
         )
         .with_rule(RuleId::TYP_15);
     }
+    // A generic is written with a type parameter list, which needs no `TypeVar` (GEN-01).
+    if module.as_str() == "typing" && matches!(name.as_str(), "TypeVar" | "Generic") {
+        return Diagnostic::new(
+            DiagnosticCode::error(202),
+            alias.name.span,
+            format!(
+                "`typing.{name}` is refused: TyPy writes generic functions and classes with \
+                 type parameter lists (GEN-01)"
+            ),
+        )
+        .with_rule(RuleId::GEN_01)
+        .with_help("write `def first[T](items: list[T]) -> T:` or `class Box[T]:`");
+    }
+    // A value of any type, or one forced to a type, would carry its type when the program
+    // runs, which TyPy's values do not (TYP-10, TYP-11).
+    if module.as_str() == "typing" && matches!(name.as_str(), "Any" | "cast") {
+        return Diagnostic::new(
+            DiagnosticCode::error(202),
+            alias.name.span,
+            format!("`typing.{name}` is refused: every value in TyPy has one type (TYP-10)"),
+        )
+        .with_rule(RuleId::TYP_10)
+        .with_help("annotate the value with its type, or a union of its types");
+    }
+    let help = match name.as_str() {
+        "Optional" => "write `T | None`",
+        "Union" => "write `A | B`",
+        "List" | "Dict" | "Set" | "Tuple" | "Type" | "FrozenSet" => {
+            "write the built-in type, such as `list[int]` or `dict[str, int]`"
+        }
+        _ => "TyPy gives `Iterator`, `Iterable`, `Final`, `ClassVar` and `Protocol`",
+    };
     Diagnostic::new(
         DiagnosticCode::error(201),
         alias.name.span,
-        format!("`{module}.{name}` is planned for TyPy 0.4 (LIB-06)"),
+        format!("`{module}.{name}` is planned for TyPy 0.5 (LIB-17)"),
     )
-    .with_rule(RuleId::LIB_06)
-    .with_help("TyPy 0.3 gives `Iterator` and `Iterable` for annotations")
+    .with_rule(RuleId::LIB_17)
+    .with_help(help)
 }
 
 /// Returns the error for a relative import that names no module, with CPython's message.
@@ -370,10 +409,11 @@ fn checked_later(span: Span, module: &ModuleName) -> Diagnostic {
         DiagnosticCode::error(426),
         span,
         format!(
-            "`{module}` imports this module at module level, so importing it inside this function is planned for TyPy 0.4"
+            "`{module}` imports this module at module level, so importing it inside this \
+             function is planned for TyPy 0.5 (MOD-13)"
         ),
     )
-    .with_rule(RuleId::MOD_05)
+    .with_rule(RuleId::MOD_13)
     .with_help("import it at module level in the other direction, or move the shared code to a third module")
 }
 
@@ -443,6 +483,7 @@ impl BodyChecker<'_> {
         }
         let import = TypedStmt::Import {
             modules: resolved.modules,
+            pending: resolved.pending,
             bindings,
             span,
         };
@@ -463,7 +504,10 @@ impl BodyChecker<'_> {
         span: Span,
     ) -> Option<TypedStmt> {
         let TypedStmt::Import {
-            modules, bindings, ..
+            modules,
+            pending,
+            bindings,
+            ..
         } = import
         else {
             return None;
@@ -481,11 +525,23 @@ impl BodyChecker<'_> {
         names.extend(callables.into_iter().map(|name| (name, None)));
         let first = self.program.next_function().0;
         let module = self.program.module.clone();
-        let twice = names.iter().zip(first..).find(|((name, _), id)| {
+        // A variable may be bound by several lazy imports, the last one run giving its value;
+        // a function or a class would need the call to choose its target when it runs.
+        let twice = names.iter().zip(first..).find(|((name, binding), id)| {
             self.program
                 .lazy_names
                 .get(&(module.clone(), name.clone()))
-                .is_some_and(|known| known.0 != *id)
+                .is_some_and(|known| {
+                    known.0 != *id
+                        && (binding.is_none()
+                            || self
+                                .program
+                                .lazy_imports
+                                .get(known)
+                                .copied()
+                                .flatten()
+                                .is_none())
+                })
         });
         if let Some(((name, _), _)) = twice {
             self.diagnostics.push(
@@ -493,10 +549,11 @@ impl BodyChecker<'_> {
                     DiagnosticCode::error(201),
                     span,
                     format!(
-                        "binding `{name}` by a second lazy import is planned for TyPy 0.4 (MOD-11)"
+                        "binding the function or class `{name}` by a second lazy import is \
+                         planned for TyPy 0.5 (MOD-12)"
                     ),
                 )
-                .with_rule(RuleId::MOD_11),
+                .with_rule(RuleId::MOD_12),
             );
             return None;
         }
@@ -507,6 +564,7 @@ impl BodyChecker<'_> {
             targets.extend(target);
             let import = TypedStmt::Import {
                 modules: modules.clone(),
+                pending: pending.clone(),
                 bindings: binding.into_iter().collect(),
                 span,
             };
@@ -593,9 +651,15 @@ impl BodyChecker<'_> {
             };
             return self.builtin_attribute(module, &name, span);
         }
-        if let Err(diagnostic) = self.program.check_not_lazy(module, name, span) {
-            return self.error(*diagnostic, span);
+        if let Some(reify) = self.program.lazy_elsewhere(module, name) {
+            let read = self.module_attribute_now(module, name, span);
+            return Self::lazy_value(Some(reify), read);
         }
+        self.module_attribute_now(module, name, span)
+    }
+
+    /// Reads `module.name` without running a lazy import of it.
+    fn module_attribute_now(&mut self, module: &str, name: &str, span: Span) -> TypedExpr {
         let Some(found) = self.program.named(module, name) else {
             let module = ModuleName::new(module).unwrap_or_else(|_| ModuleName::main());
             return self.error(checked_later(span, &module), span);
@@ -634,6 +698,15 @@ impl BodyChecker<'_> {
                 201,
                 RuleId::FUN_05,
                 format!("using `{module}.{name}` as a value is planned for TyPy 1.0 (FUN-05)"),
+            )
+        } else if let Named::TypeAlias = found {
+            (
+                201,
+                RuleId::SMT_12,
+                format!(
+                    "using the type alias `{module}.{name}` as a value is planned for TyPy 0.5 \
+                     (SMT-12)"
+                ),
             )
         } else {
             (
@@ -675,7 +748,7 @@ impl BodyChecker<'_> {
 
     /// Returns the type object of a class as a value, an exception class's for one.
     pub(super) fn class_object(&self, class: ClassId, name: &str, span: Span) -> TypedExpr {
-        let of = match self.program.exceptions.get(&class) {
+        let of = match self.program.exception(class) {
             Some(exception) => crate::types::TypeObjectOf::Exception(exception.clone()),
             None => crate::types::TypeObjectOf::Instance(class, name.to_owned()),
         };
@@ -745,9 +818,22 @@ impl BodyChecker<'_> {
                 Err(diagnostic) => self.error(*diagnostic, span),
             };
         }
-        if let Err(diagnostic) = self.program.check_not_lazy(module, &name.name, name.span) {
-            return self.error(*diagnostic, span);
+        if let Some(reify) = self.program.lazy_elsewhere(module, &name.name) {
+            let call = self.module_call_now(module, name, arguments, keywords, span);
+            return Self::lazy_value(Some(reify), call);
         }
+        self.module_call_now(module, name, arguments, keywords, span)
+    }
+
+    /// Checks `module.name(arguments)` without running a lazy import of `name`.
+    fn module_call_now(
+        &mut self,
+        module: &str,
+        name: &typy_source::syntax::Identifier,
+        arguments: &[Expr],
+        keywords: &[typy_source::syntax::Keyword],
+        span: Span,
+    ) -> TypedExpr {
         match self.program.named(module, &name.name) {
             None => {
                 let module = ModuleName::new(module).unwrap_or_else(|_| ModuleName::main());
@@ -759,7 +845,7 @@ impl BodyChecker<'_> {
             Some(Named::Class(class)) => {
                 return self.new_instance(class, arguments, keywords, span);
             }
-            Some(Named::Variable(_) | Named::Nothing) => {}
+            Some(Named::Variable(_) | Named::TypeAlias | Named::Nothing) => {}
         }
         for argument in arguments {
             self.expression(argument);
@@ -806,6 +892,9 @@ impl BodyChecker<'_> {
             }
             return None;
         };
+        if self.final_reassigned(symbol, &attribute.name, span) {
+            return None;
+        }
         if !ty.is_assignable_to(&read.ty) {
             self.diagnostics.push(
                 Diagnostic::new(

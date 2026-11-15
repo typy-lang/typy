@@ -1,7 +1,9 @@
 //! The static types: the scalars of 0.1, and from 0.2 the types built from other types.
 
 use std::fmt;
+use std::sync::Arc;
 
+use crate::class_type::InstanceClass;
 use crate::exception::{BuiltinException, ExceptionClass};
 
 /// The static type of a value (TYP-11). Types built from others, such as a tuple, hold their
@@ -36,8 +38,14 @@ pub enum Type {
     /// `T | None`: a value of `T`, or `None` (TYP-06, ADR-0011). `T` is never `None` or
     /// optional itself; `optional` builds the type and keeps that rule.
     Optional(Box<Type>),
-    /// An instance of a class of the program, with the class's name for messages (CLS-01).
-    Instance(crate::typed::ClassId, String),
+    /// `A | B | ...`: a value of one of two or more types other than `None`, in the normal
+    /// form `Type::union` builds (TYP-14, ADR-0027).
+    Union(Vec<Type>),
+    /// A type parameter of a generic function, as its body is checked: an opaque type that
+    /// offers what its bound offers, and which no copy of the body holds (GEN-01, ADR-0023).
+    Parameter(Arc<crate::generic::TypeParameter>),
+    /// An instance of a class of the program, or of a class derived from it (CLS-01, CLS-04).
+    Instance(Arc<InstanceClass>),
     /// An exception of a class (ADR-0013).
     Exception(ExceptionClass),
     /// An iterator that `iter()` makes, of the type of its items (ADR-0014).
@@ -53,6 +61,12 @@ pub enum Type {
     /// A text file, `_io.TextIOWrapper`: `sys.stdout`, `sys.stderr` and the files `open`
     /// gives (LIB-04).
     TextFile,
+    /// A binary file `open` gives, of the class CPython makes for its mode and buffering
+    /// (LIB-14).
+    BinaryFile(BinaryKind),
+    /// A file `open` gives for a file descriptor, whose `name` is that `int`: a text file, or
+    /// a binary one of this class (LIB-14).
+    DescriptorFile(Option<BinaryKind>),
     /// `range` held as a value: a sequence of `int` (DAT-17).
     Range,
     /// The module object of the module of this qualified name, whose attributes are known
@@ -126,7 +140,14 @@ impl TypeObjectOf {
             Type::Set(_) => Self::Set,
             Type::Dict(..) => Self::Dict,
             Type::DictView(view, ..) => Self::View(*view),
-            Type::Instance(class, name) => Self::Instance(*class, name.clone()),
+            // A copy of a generic class answers as the generic class (ADR-0028).
+            Type::Instance(class) => match &class.generic {
+                Some((root, _)) => Self::Instance(
+                    *root,
+                    class.name.split('[').next().unwrap_or_default().to_owned(),
+                ),
+                None => Self::Instance(class.id, class.name.clone()),
+            },
             Type::TypeObject(_) => Self::Type,
             Type::Range => Self::Range,
             // An exception's class may derive from its static class, so it is read from the
@@ -136,9 +157,13 @@ impl TypeObjectOf {
             | Type::Iterable(_)
             | Type::AnyModule
             | Type::TextFile
+            | Type::BinaryFile(_)
+            | Type::DescriptorFile(_)
             | Type::Traceback
             | Type::Module(_)
             | Type::Optional(_)
+            | Type::Union(_)
+            | Type::Parameter(_)
             | Type::Error => {
                 return None;
             }
@@ -189,6 +214,32 @@ impl TypeObjectOf {
     }
 }
 
+/// The class of a binary file, which its mode and buffering decide (LIB-14).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum BinaryKind {
+    /// `_io.BufferedReader`: a mode that only reads.
+    Reader,
+    /// `_io.BufferedWriter`: a mode that only writes.
+    Writer,
+    /// `_io.BufferedRandom`: a mode with `+`.
+    Random,
+    /// `_io.FileIO`: any binary mode with `buffering=0`.
+    Raw,
+}
+
+impl BinaryKind {
+    /// Returns the name of CPython's class.
+    #[must_use]
+    pub const fn class_name(self) -> &'static str {
+        match self {
+            Self::Reader => "BufferedReader",
+            Self::Writer => "BufferedWriter",
+            Self::Random => "BufferedRandom",
+            Self::Raw => "FileIO",
+        }
+    }
+}
+
 /// What a view of a dict shows.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum View {
@@ -233,6 +284,12 @@ impl View {
 }
 
 impl Type {
+    /// Returns the type of the instances of a class, shared so a type stays small.
+    #[must_use]
+    pub fn instance(class: InstanceClass) -> Self {
+        Self::Instance(Arc::new(class))
+    }
+
     /// Returns `T | None`: `None` for `None`, and `T | None` itself for an optional `T`, as
     /// Python's typing joins them.
     #[must_use]
@@ -254,12 +311,48 @@ impl Type {
             | (Self::NoneType, Self::Optional(_))
             | (Self::Module(_), Self::AnyModule)
             | (Self::TypeObject(_), Self::TypeObject(None)) => true,
-            // An exception of a class is one of each of its bases (EXC-01).
+            // An exception of a class is one of each of its bases (EXC-01), and so is an
+            // instance (CLS-04).
             (Self::Exception(class), Self::Exception(base)) => class.derives_from(base),
-            (Self::Optional(_), _) => self.matches(target),
+            (Self::Instance(class), Self::Instance(base)) => class.derives_from(base),
+            // A bounded type parameter is held where its bound is (GEN-02).
+            (Self::Parameter(parameter), _) if *self != *target => parameter
+                .bound
+                .as_ref()
+                .is_some_and(|bound| bound.is_assignable_to(target)),
+            // A union is held where each of its members is, and a member where its union is
+            // (TYP-14).
+            (Self::Union(members), _) => {
+                members.iter().all(|member| member.is_assignable_to(target))
+            }
+            (_, Self::Union(members)) if !matches!(self, Self::Optional(_)) => {
+                members.iter().any(|member| self.is_assignable_to(member))
+            }
+            (Self::Optional(_), _) => self.matches(target) || self.is_upcast_to(target),
             (_, Self::Optional(inner)) => self.is_assignable_to(inner),
             (_, Self::Iterable(item)) => self.iterable_item().is_some_and(|own| own.matches(item)),
             _ => self.matches(target),
+        }
+    }
+
+    /// Returns true when a value of this type is an instance, or an optional one, of a class
+    /// that derives from the class of `target`, which is of the same kind (CLS-04).
+    #[must_use]
+    pub fn is_upcast_to(&self, target: &Self) -> bool {
+        match (self, target) {
+            (Self::Instance(class), Self::Instance(base)) => class.derives_from(base),
+            (Self::Optional(inner), Self::Optional(base)) => inner.is_upcast_to(base),
+            (Self::Parameter(_), _) => *self != *target && self.is_assignable_to(target),
+            // A union with `None` is an optional of the other members, so a union target
+            // never holds `None`.
+            (Self::Optional(_), Self::Union(_)) => false,
+            // A value becomes a union, or a wider one, or the class every member derives
+            // from, as the object it is (TYP-14).
+            // An optional target is converted as an optional is: its base, then wrapped.
+            (Self::Union(_), _) | (_, Self::Union(_)) if !matches!(target, Self::Optional(_)) => {
+                !self.matches(target) && self.is_assignable_to(target)
+            }
+            _ => false,
         }
     }
 
@@ -298,7 +391,7 @@ impl Type {
     #[must_use]
     pub fn class_id(&self) -> Option<crate::typed::ClassId> {
         match self {
-            Self::Instance(class, _) => Some(*class),
+            Self::Instance(class) => Some(class.id),
             Self::Exception(exception) => exception.class_id(),
             _ => None,
         }
@@ -338,10 +431,17 @@ impl Type {
             | (Self::TupleOf(left), Self::TupleOf(right))
             | (Self::Set(left), Self::Set(right)) => left == right,
             (Self::Dict(..), Self::Dict(..)) => self == other,
+            // An instance is equal only to itself, so a class compares with its bases and its
+            // subclasses, whose instances it may be (CLS-04).
+            (Self::Instance(left), Self::Instance(right)) => {
+                left.derives_from(right) || right.derives_from(left)
+            }
             // Views compare by the rules of `body/view_operator.rs` (DAT-16), an optional value
-            // is compared with `None` by `is`, and iterators by `is`.
+            // is compared with `None` by `is`, and iterators by `is`. A union in a variable is
+            // compared member by member, and one computed in place is not compared (TYP-14).
             (
-                Self::DictView(..)
+                Self::Union(_)
+                | Self::DictView(..)
                 | Self::Optional(_)
                 | Self::Iterator(_)
                 | Self::Iterable(_)
@@ -352,7 +452,8 @@ impl Type {
             )
             | (
                 _,
-                Self::DictView(..)
+                Self::Union(_)
+                | Self::DictView(..)
                 | Self::Optional(_)
                 | Self::Iterator(_)
                 | Self::Iterable(_)
@@ -385,6 +486,11 @@ impl Type {
                 left == right && left.can_order(right)
             }
             (Self::Set(left), Self::Set(right)) => left == right,
+            // Instances order through `__lt__`, or a reflected `__gt__` (CLS-07).
+            (Self::Instance(left), Self::Instance(right)) => {
+                (left.derives_from(right) || right.derives_from(left))
+                    && (left.operators.orders() || right.operators.orders())
+            }
             (Self::Tuple(left), Self::Tuple(right)) => {
                 left.len() == right.len()
                     && left.iter().zip(right).all(|(left, right)| {
@@ -395,7 +501,9 @@ impl Type {
             // A class orders its instances with `__lt__` and the other operator methods, which
             // are planned for 0.4 (CLS-07).
             (
-                Self::NoneType
+                Self::Parameter(_)
+                | Self::Union(_)
+                | Self::NoneType
                 | Self::Dict(..)
                 | Self::DictView(..)
                 | Self::Optional(_)
@@ -412,7 +520,9 @@ impl Type {
             )
             | (
                 _,
-                Self::NoneType
+                Self::Parameter(_)
+                | Self::Union(_)
+                | Self::NoneType
                 | Self::Dict(..)
                 | Self::DictView(..)
                 | Self::Optional(_)
@@ -461,6 +571,8 @@ impl Type {
             | Self::Iterable(_) => false,
             Self::Tuple(items) => items.iter().all(Self::is_hashable),
             Self::TupleOf(item) | Self::Optional(item) => item.is_hashable(),
+            // A class that defines `__eq__` and not `__hash__` has no hash (CLS-07).
+            Self::Instance(class) => class.operators.hashable(),
             _ => true,
         }
     }
@@ -480,8 +592,13 @@ impl Type {
 
     /// Returns the type of the items a loop over a value of this type reads, when it is one
     /// that `Iterable[T]` takes: a built-in iterable or an iterator (TYP-15).
+    ///
+    /// See also `file_line`, the line a file gives.
     #[must_use]
     pub fn iterable_item(&self) -> Option<Type> {
+        if let Some(line) = self.file_line() {
+            return Some(line);
+        }
         match self {
             Self::List(item)
             | Self::TupleOf(item)
@@ -490,7 +607,7 @@ impl Type {
             | Self::Iterator(item)
             | Self::Iterable(item) => Some(item.as_ref().clone()),
             Self::DictView(view, key, value) => Some(view.item(key, value)),
-            Self::Str | Self::TextFile => Some(Self::Str),
+            Self::Str => Some(Self::Str),
             Self::Bytes | Self::Range => Some(Self::Int),
             // A fixed tuple whose items have one type is held as a `tuple[T, ...]` first.
             Self::Tuple(items) => {
@@ -512,8 +629,47 @@ impl Type {
             Self::Set(_) => "set".to_owned(),
             Self::Dict(..) => "dict".to_owned(),
             Self::Optional(_) | Self::NoneType => "NoneType".to_owned(),
-            Self::Instance(_, name) => name.clone(),
+            Self::Instance(class) => class.name.clone(),
             other => other.to_string(),
+        }
+    }
+
+    /// Returns the type of a line of a file: `str` for a text file, `bytes` for a binary one,
+    /// and `None` for any other type.
+    #[must_use]
+    pub const fn file_line(&self) -> Option<Type> {
+        match self {
+            Self::TextFile | Self::DescriptorFile(None) => Some(Self::Str),
+            Self::BinaryFile(_) | Self::DescriptorFile(Some(_)) => Some(Self::Bytes),
+            _ => None,
+        }
+    }
+
+    /// Returns whether this is a file, text or binary.
+    #[must_use]
+    pub const fn is_file(&self) -> bool {
+        matches!(
+            self,
+            Self::TextFile | Self::BinaryFile(_) | Self::DescriptorFile(_)
+        )
+    }
+
+    /// Returns the class of a binary file, or `None` for a text file and any other type.
+    #[must_use]
+    pub const fn binary_kind(&self) -> Option<BinaryKind> {
+        match self {
+            Self::BinaryFile(kind) | Self::DescriptorFile(Some(kind)) => Some(*kind),
+            _ => None,
+        }
+    }
+
+    /// Returns the name of CPython's class of a file, or `None` for any other type.
+    #[must_use]
+    pub const fn file_class_name(&self) -> Option<&'static str> {
+        match self {
+            Self::TextFile | Self::DescriptorFile(None) => Some("TextIOWrapper"),
+            Self::BinaryFile(kind) | Self::DescriptorFile(Some(kind)) => Some(kind.class_name()),
+            _ => None,
         }
     }
 
@@ -523,13 +679,23 @@ impl Type {
         match self {
             Self::Int => "an int".to_owned(),
             Self::NoneType => "None".to_owned(),
-            Self::Instance(_, name) if name.starts_with(['A', 'E', 'I', 'O', 'U']) => {
-                format!("an {name}")
+            Self::Instance(class) if class.name.starts_with(['A', 'E', 'I', 'O', 'U']) => {
+                format!("an {class}")
             }
             Self::Exception(class) if class.name().starts_with(['A', 'E', 'I', 'O', 'U']) => {
                 format!("an {class}")
             }
             Self::Iterator(_) | Self::Iterable(_) => format!("an {self}"),
+            Self::Parameter(parameter) => format!("a value of type {}", parameter.name),
+            // The article reads with the first member, as in `an A | B`.
+            Self::Union(members) => {
+                let rest: Vec<String> = members[1..].iter().map(ToString::to_string).collect();
+                format!("{} | {}", members[0].with_article(), rest.join(" | "))
+            }
+            // The article reads with the first member, as in `an int | None`.
+            Self::Optional(inner) => {
+                format!("{} | None", inner.with_article())
+            }
             other => format!("a {other}"),
         }
     }
@@ -569,12 +735,23 @@ impl fmt::Display for Type {
                 write!(formatter, "{}[{key}, {value}]", view.name())
             }
             Self::Optional(inner) => write!(formatter, "{inner} | None"),
-            Self::Instance(_, name) => formatter.write_str(name),
+            Self::Union(members) => {
+                let text: Vec<String> = members.iter().map(ToString::to_string).collect();
+                formatter.write_str(&text.join(" | "))
+            }
+            Self::Parameter(parameter) => formatter.write_str(&parameter.name),
+            Self::Instance(class) => write!(formatter, "{class}"),
             Self::Exception(class) => write!(formatter, "{class}"),
             Self::Iterator(item) => write!(formatter, "Iterator[{item}]"),
             Self::Iterable(item) => write!(formatter, "Iterable[{item}]"),
             Self::AnyModule => formatter.write_str("ModuleType"),
             Self::TextFile => formatter.write_str("TextIOWrapper"),
+            Self::BinaryFile(kind) => formatter.write_str(kind.class_name()),
+            Self::DescriptorFile(kind) => write!(
+                formatter,
+                "{} of a file descriptor",
+                kind.map_or("TextIOWrapper", BinaryKind::class_name)
+            ),
             Self::Traceback => formatter.write_str("TracebackType"),
             Self::Range => formatter.write_str("range"),
             Self::Module(name) => write!(formatter, "module `{name}`"),
@@ -615,9 +792,10 @@ mod tests {
 
     #[test]
     fn instances_compare_by_identity_and_have_no_order() {
+        use crate::class_type::InstanceClass;
         use crate::typed::ClassId;
-        let point = Type::Instance(ClassId(0), "Point".to_owned());
-        let item = Type::Instance(ClassId(1), "Item".to_owned());
+        let point = Type::instance(InstanceClass::root(ClassId(0), "Point"));
+        let item = Type::instance(InstanceClass::root(ClassId(1), "Item"));
         assert!(point.can_test_equality(&point));
         assert!(!point.can_test_equality(&item));
         assert!(!point.can_order(&point));

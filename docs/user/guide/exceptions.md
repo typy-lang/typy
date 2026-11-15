@@ -27,7 +27,8 @@ An `except` clause catches an exception of the class it names or of any
 class derived from it, so `except LookupError` catches a `KeyError`. The
 clauses are tried in order. The name after `as` holds the exception while
 the clause runs and is deleted when it ends, as in CPython; with several
-classes it has the type of their nearest common base. An exception no
+classes it is a union of them, such as `ValueError | KeyError`, whose
+attributes and methods are those of their nearest common base. An exception no
 clause catches goes on to the code around the `try`. `else` runs when the
 body raised nothing. `finally` runs on every way out of the `try`: after
 the body, a clause or `else`, on `return`, `break` and `continue`, and
@@ -149,13 +150,12 @@ handled, so it is refused outside an `except` clause with E0416.
 TyPy does not check, so a program cannot call them (E0417); it can still
 catch them.
 
-## Planned
+## Overriding methods
 
-Redefining a method of a base other than `__init__`, `__str__` and
-`__repr__`, and `super()` beyond `super().__init__(...)`, come with
-inheritance in 0.4 (CLS-04):
+An exception class may define a method of its base again, as any class
+may (CLS-04). The exception's own class decides which method runs:
 
-<!-- typy-expect: rejected E0201 at 7:9 -->
+<!-- typy-expect: accepted -->
 ```python
 class AppError(Exception):
     def code(self) -> int:
@@ -165,11 +165,65 @@ class AppError(Exception):
 class OtherError(AppError):
     def code(self) -> int:
         return 2
+
+
+try:
+    raise OtherError("busy")
+except AppError as error:
+    print(error, error.code())
 ```
 
-The `args` attribute comes in 0.4 (EXC-11), and so does `code` of a
-`SystemExit` (EXC-13). An `OSError` built with two to five arguments,
-which CPython reads as `errno`, `strerror` and `filename`, is planned for
-0.4 too (EXC-14), so `OSError(2, "missing")` is E0201 in 0.3; give it one
-argument, the message. Exception groups and `except*` are planned for
-after 1.0.
+## The arguments and the exit code
+
+`error.args` is the tuple of the arguments an exception was built with
+(EXC-11), and `stop.code` of a `SystemExit` is `None`, its one argument,
+or the tuple of several (EXC-13). Either may hold any value, so TyPy
+reads them where a program writes, compares or tests them: `print`,
+`str`, `repr`, `bool`, an f-string field, `==` and `!=` with any value, a
+condition, `not`, and `len` of `args` (ADR-0030):
+
+<!-- typy-expect: accepted -->
+```python
+import sys
+
+try:
+    raise ValueError("bad value", 3)
+except ValueError as error:
+    print(error.args, len(error.args), error.args == ("bad value", 3))
+try:
+    sys.exit(2)
+except SystemExit as stop:
+    if stop.code == 2:
+        print(f"exit code {stop.code!r}")
+```
+
+Any other use, such as `error.args[0]` or `saved = error.args`, is
+planned for 0.5 (E0201, EXC-15).
+
+## OS errors
+
+`OSError` and its subclasses built with two to five arguments read them
+as CPython does (EXC-14): `errno`, `strerror`, `filename`, `winerror` and
+`filename2`. `OSError` itself becomes the subclass for `errno`, so
+`OSError(2, "gone")` is a `FileNotFoundError`. The attributes `errno`,
+`strerror`, `filename` and `filename2` are `None` when not given, as for
+an `OSError` of one argument, and `open` gives them too:
+
+<!-- typy-expect: accepted -->
+```python
+try:
+    raise OSError(2, "No such file or directory", "data.txt")
+except FileNotFoundError as error:
+    print(error, repr(error))
+    print(error.errno, error.strerror, error.filename)
+```
+
+To keep their types known, `errno` is an `int`, `strerror` a `str`, the
+file names a `str` or `None` and `winerror` an `int` or `None`; other
+arguments, more than five, two or more through `super().__init__`, and
+two or more to a subclass with an `__init__` of its own are planned for
+0.5 (E0201, EXC-16).
+
+## Planned
+
+Exception groups and `except*` are planned for after 1.0.

@@ -411,3 +411,19 @@ fn a_sealed_list_is_a_tuple_in_text_errors_and_results() {
         crate::refcount::typy_rt_decrement(pair.cast());
     }
 }
+
+#[test]
+fn reserving_room_in_a_list_without_items_allocates_them() {
+    let list = new_list(ItemKind::Int, 0);
+    // SAFETY: the list is live, and the room reserved holds the items pushed.
+    unsafe {
+        assert!((*list).items.is_null());
+        super::reserve(list, 3);
+        assert!((*list).capacity >= 3);
+        for value in 1..=3 {
+            super::push_retained(list, inline(value).unwrap().cast_unsigned());
+        }
+        assert_eq!((*list).length, 3);
+        crate::refcount::typy_rt_decrement(list.cast());
+    }
+}

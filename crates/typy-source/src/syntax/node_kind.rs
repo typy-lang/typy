@@ -22,7 +22,6 @@ pub enum NodeKind {
     Starred,
     TemplateStr,
     TryStar,
-    TypeAlias,
     Yield,
     YieldFrom,
 }

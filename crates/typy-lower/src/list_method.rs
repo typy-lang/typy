@@ -19,6 +19,7 @@ impl FunctionLowerer<'_> {
         result: TyirType,
         span: Span,
     ) -> Lowered {
+        let binary = receiver.ty.binary_kind().is_some();
         let receiver = self.expression(receiver);
         // Every value in source order, and each parameter's value, which is the last given for
         // a parameter that takes many.
@@ -40,7 +41,7 @@ impl FunctionLowerer<'_> {
         } else if receiver.ty == TyirType::SET {
             self.set_method(receiver.value, method, &values, result, span)
         } else if receiver.ty == TyirType::TEXT_FILE {
-            self.text_method(receiver.value, method, &given, span)
+            self.text_method(receiver.value, binary, method, &given, span)
         } else {
             let arguments: Vec<Lowered> = given.iter().flatten().copied().collect();
             self.list_method(receiver.value, method, &arguments, result, span)

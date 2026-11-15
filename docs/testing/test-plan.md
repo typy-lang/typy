@@ -3,10 +3,10 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy test plan |
-| Version | 0.43 |
+| Version | 0.44 |
 | Status | Draft |
 | Owner | typy-lang contributors |
-| Last updated | 2026-11-12 |
+| Last updated | 2026-11-13 |
 
 ## 1. Purpose
 
@@ -273,7 +273,7 @@ that the specification does not define.
 | LEX-07 | 0.2 | IT | `tests/conformance/lex/LEX-07_*.py` |
 | LEX-08 | 0.1 | IT | `tests/conformance/lex/LEX-08_*.py` |
 | LEX-09 | 0.1 | IT | `tests/conformance/lex/LEX-09_*.py` |
-| LEX-10 | 0.4 | IT | `tests/conformance/lex/LEX-10_*.py` |
+| LEX-10 | 0.5 | IT | `tests/conformance/lex/LEX-10_*.py` |
 | LEX-11 | 0.3 | UT, IT, E2E | `crates/typy-source/src/parse/tests.rs` for each limit just inside and just past it; `crates/typy-tyir/src/verify/tests.rs` for a function of 100000 blocks; `crates/typy-cli/tests/nesting.rs` for a program as deep as CPython compiles and each refusal; `tests/conformance/lex/LEX-11_*.py` |
 | TYP-01 | 0.1 | IT | `tests/conformance/typ/TYP-01_*.py` |
 | TYP-02 | 0.1 | IT | `tests/conformance/typ/TYP-02_*.py` |
@@ -290,6 +290,8 @@ that the specification does not define.
 | TYP-13 | 0.2 | IT | `tests/conformance/typ/TYP-13_*.py` |
 | TYP-14 | 0.4 | IT | `tests/conformance/typ/TYP-14_*.py` |
 | TYP-15 | 0.3 | IT | `tests/conformance/typ/TYP-15_*.py` |
+| TYP-16 | 0.5 | IT | `tests/conformance/typ/TYP-16_*.py` |
+| TYP-17 | 0.5 | IT | `tests/conformance/typ/TYP-17_*.py` |
 | DAT-01 | 0.1 | IT | `tests/conformance/dat/DAT-01_*.py` |
 | DAT-02 | 0.1 | IT | `tests/conformance/dat/DAT-02_*.py` |
 | DAT-03 | 0.1 | IT | `tests/conformance/dat/DAT-03_*.py` |
@@ -335,6 +337,7 @@ that the specification does not define.
 | SMT-09 | 1.0 | IT | `tests/conformance/smt/SMT-09_*.py` |
 | SMT-10 | 0.4 | IT | `tests/conformance/smt/SMT-10_*.py` |
 | SMT-11 | 1.0 | IT | `tests/conformance/smt/SMT-11_*.py` |
+| SMT-12 | 0.5 | IT | `tests/conformance/smt/SMT-12_*.py` |
 | CST-01 | 0.1 | IT | `tests/conformance/cst/CST-01_*.py` |
 | CST-02 | 0.1 | IT | `tests/conformance/cst/CST-02_*.py` |
 | CST-03 | 0.2 | IT | `tests/conformance/cst/CST-03_*.py` |
@@ -355,7 +358,7 @@ that the specification does not define.
 | CLS-01 | 0.2 | IT | `tests/conformance/cls/CLS-01_*.py` |
 | CLS-02 | 0.2 | IT | `tests/conformance/cls/CLS-02_*.py` |
 | CLS-03 | 0.3 | IT | `tests/conformance/cls/CLS-03_*.py` |
-| CLS-04 | 0.4 | IT | `tests/conformance/cls/CLS-04_*.py` |
+| CLS-04 | 0.4 | IT | `tests/conformance/cls/CLS-04_*` |
 | CLS-05 | 0.4 | IT | `tests/conformance/cls/CLS-05_*.py` |
 | CLS-06 | 0.4 | IT | `tests/conformance/cls/CLS-06_*.py` |
 | CLS-07 | 0.4 | IT | `tests/conformance/cls/CLS-07_*.py` |
@@ -371,6 +374,11 @@ that the specification does not define.
 | GEN-03 | 0.4 | IT | `tests/conformance/gen/GEN-03_*.py` |
 | GEN-04 | 0.4 | IT | `tests/conformance/gen/GEN-04_*.py` |
 | GEN-05 | 0.4 | IT | `tests/conformance/gen/GEN-05_*.py` |
+| GEN-06 | 1.0 | IT | `tests/conformance/gen/GEN-06_*.py` |
+| GEN-07 | 0.5 | IT | `tests/conformance/gen/GEN-07_*.py` |
+| GEN-08 | 0.5 | IT | `tests/conformance/gen/GEN-08_*.py` |
+| GEN-09 | 0.5 | IT | `tests/conformance/gen/GEN-09_*.py` |
+| GEN-10 | 0.5 | IT | `tests/conformance/gen/GEN-10_*.py` |
 | EXC-01 | 0.3 | IT | `tests/conformance/exc/EXC-01_*.py` |
 | EXC-02 | 0.3 | IT | `tests/conformance/exc/EXC-02_*.py` |
 | EXC-03 | 0.3 | Golden | `tests/golden/llvm-ir/`, where each call that may raise is followed by one compare of the exception against null and a branch |
@@ -385,6 +393,8 @@ that the specification does not define.
 | EXC-12 | 0.3 | IT | `tests/conformance/exc/EXC-12_*.py` |
 | EXC-13 | 0.4 | IT | `tests/conformance/exc/EXC-13_*.py` |
 | EXC-14 | 0.4 | IT | `tests/conformance/exc/EXC-14_*.py` |
+| EXC-15 | 0.5 | IT | `tests/conformance/exc/EXC-15_*.py` |
+| EXC-16 | 0.5 | IT | `tests/conformance/exc/EXC-16_*.py` |
 | MOD-01 | 0.3 | IT, E2E | `tests/conformance/mod/MOD-01_*`; module paths in `crates/typy-cli/tests/cli.rs`, tests named for MOD-01 |
 | MOD-02 | 0.3 | IT | `tests/conformance/mod/MOD-02_*.py` |
 | MOD-03 | 0.3 | IT | `tests/conformance/mod/MOD-03_*.py` |
@@ -396,6 +406,8 @@ that the specification does not define.
 | MOD-09 | 0.3 | IT | `crates/typy-check/tests/sys.rs` for each switch, as an attribute and in `from sys import`; `tests/conformance/mod/MOD-09_*.py` |
 | MOD-10 | 0.3 | IT | `tests/conformance/mod/MOD-10_*.py` |
 | MOD-11 | 0.4 | IT | `tests/conformance/mod/MOD-11_*` |
+| MOD-12 | 0.5 | IT | `tests/conformance/mod/MOD-12_*` |
+| MOD-13 | 0.5 | IT | `tests/conformance/mod/MOD-13_*` |
 | LIB-01 | 0.1 | IT | `tests/conformance/lib/LIB-01_*.py` |
 | LIB-02 | 0.2 | IT | `tests/conformance/lib/LIB-02_*.py` |
 | LIB-03 | 0.2 | IT | `tests/conformance/lib/LIB-03_*.py` |
@@ -408,11 +420,16 @@ that the specification does not define.
 | LIB-10 | 0.3 | UT, IT | `crates/typy-runtime/src/format/percent/tests.rs`, a table of CPython 3.12's results; `crates/typy-check/tests/percent.rs` for each refusal message; `tests/conformance/lib/LIB-10_*.py` |
 | LIB-11 | 0.4 | IT | `tests/conformance/lib/LIB-11_*.py` |
 | LIB-12 | 0.4 | IT | `tests/conformance/lib/LIB-12_*.py` |
+| LIB-15 | 0.5 | IT | `tests/conformance/lib/LIB-15_*.py` |
+| LIB-16 | 0.5 | IT | `tests/conformance/lib/LIB-16_*.py` |
+| LIB-17 | 0.5 | IT | `tests/conformance/lib/LIB-17_*.py` |
+| LIB-18 | 1.0 | IT | `tests/conformance/lib/LIB-18_*.py` |
+| LIB-19 | 1.0 | IT | `tests/conformance/lib/LIB-19_*.py` |
 | LIB-13 | 0.4 | IT | `tests/conformance/lib/LIB-13_*.py` |
 | LIB-14 | 0.4 | IT | `tests/conformance/lib/LIB-14_*.py` |
 | MEM-01 | 0.1 | UT, IT | `typy-runtime` unit tests; `tests/conformance/mem/MEM-01_*.py` under sanitizers |
 | MEM-02 | 0.2 | UT, IT | `typy-runtime` list unit tests; `tests/conformance/dat/DAT-07_*.py`, which name MEM-02, also under the sanitizers |
-| MEM-03 | 0.4 | UT, IT | `typy-runtime` unit tests; `tests/conformance/mem/MEM-03_*.py` under sanitizers |
+| MEM-03 | 0.5 | UT, IT | `typy-runtime` unit tests; `tests/conformance/mem/MEM-03_*.py` under sanitizers |
 | MEM-04 | 0.2 | UT, IT | `typy-lower` lowering tests of the counting; `tests/conformance/mem/MEM-04_*.py` under sanitizers |
 | MEM-05 | 1.0 | UT, IT | `typy-runtime` unit tests; `tests/conformance/mem/MEM-05_*.py` under sanitizers |
 | MEM-06 | 1.0 | UT, IT | `typy-runtime` unit tests; `tests/conformance/mem/MEM-06_*.py` under sanitizers |

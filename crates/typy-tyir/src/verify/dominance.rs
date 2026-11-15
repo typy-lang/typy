@@ -7,6 +7,9 @@
 use crate::block::BlockId;
 use crate::function::TyirFunction;
 
+/// The index of the entry block, where control enters a function.
+const ENTRY: usize = 0;
+
 /// The dominator tree of a function, numbered for constant-time queries.
 pub(super) struct Dominance {
     /// The position of each block in a preorder walk of the dominator tree; `None` for a
@@ -31,16 +34,14 @@ impl Dominance {
     }
 }
 
-/// Returns the blocks that a path from the entry reaches, in reverse postorder.
+/// Returns the blocks that a path from the entry, block 0, reaches, in reverse postorder; the
+/// entry comes first.
 fn reverse_postorder(successors: &[Vec<usize>]) -> Vec<usize> {
     let mut visited = vec![false; successors.len()];
     let mut order = Vec::with_capacity(successors.len());
-    if successors.is_empty() {
-        return order;
-    }
     // Each entry of the stack is a block and how many of its successors are done.
-    let mut stack = vec![(0_usize, 0_usize)];
-    visited[0] = true;
+    let mut stack = vec![(ENTRY, 0_usize)];
+    visited[ENTRY] = true;
     while let Some((block, next)) = stack.last_mut() {
         if let Some(&successor) = successors[*block].get(*next) {
             *next += 1;
@@ -57,7 +58,7 @@ fn reverse_postorder(successors: &[Vec<usize>]) -> Vec<usize> {
     order
 }
 
-/// Returns the dominator tree of `function`.
+/// Returns the dominator tree of `function`, which has an entry block.
 pub(super) fn dominance(function: &TyirFunction) -> Dominance {
     let count = function.blocks.len();
     let mut successors: Vec<Vec<usize>> = vec![Vec::new(); count];
@@ -77,9 +78,7 @@ pub(super) fn dominance(function: &TyirFunction) -> Dominance {
         rank[*block] = position;
     }
     let mut immediate: Vec<Option<usize>> = vec![None; count];
-    if let Some(&entry) = order.first() {
-        immediate[entry] = Some(entry);
-    }
+    immediate[ENTRY] = Some(ENTRY);
     let intersect = |immediate: &[Option<usize>], mut left: usize, mut right: usize| {
         while left != right {
             while rank[left] > rank[right] {
@@ -105,7 +104,9 @@ pub(super) fn dominance(function: &TyirFunction) -> Dominance {
                     Some(current) => intersect(&immediate, predecessor, current),
                 });
             }
-            if new.is_some() && immediate[block] != new {
+            // A block a path reaches follows one of its predecessors in reverse postorder,
+            // so `new` is always found.
+            if immediate[block] != new {
                 immediate[block] = new;
                 changed = true;
             }
@@ -117,20 +118,18 @@ pub(super) fn dominance(function: &TyirFunction) -> Dominance {
 /// Numbers the dominator tree given by `immediate` in preorder and postorder, from the entry.
 fn number(order: &[usize], immediate: &[Option<usize>], count: usize) -> Dominance {
     let mut children: Vec<Vec<usize>> = vec![Vec::new(); count];
-    for &block in order.iter().skip(1) {
-        if let Some(parent) = immediate[block] {
-            children[parent].push(block);
-        }
+    for (block, parent) in order
+        .iter()
+        .skip(1)
+        .filter_map(|&block| Some((block, immediate[block]?)))
+    {
+        children[parent].push(block);
     }
     let mut preorder = vec![None; count];
     let mut postorder = vec![0; count];
-    let (mut before, mut after) = (0, 0);
-    let mut stack: Vec<(usize, usize)> =
-        order.first().map(|&entry| (entry, 0)).into_iter().collect();
-    if let Some(&entry) = order.first() {
-        preorder[entry] = Some(before);
-        before += 1;
-    }
+    preorder[ENTRY] = Some(0);
+    let (mut before, mut after) = (1, 0);
+    let mut stack = vec![(ENTRY, 0_usize)];
     while let Some((block, next)) = stack.last_mut() {
         if let Some(&child) = children[*block].get(*next) {
             *next += 1;

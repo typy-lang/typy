@@ -1,5 +1,5 @@
-//! The modes and encodings of `open` (LIB-04, LIB-14, ADR-0019): a text mode as CPython's
-//! `_io.open` reads it, with its messages for a mode it refuses, and the names of UTF-8.
+//! The modes of `open` (LIB-04, LIB-14, ADR-0019): a text mode as CPython's `_io.open` reads
+//! it, with its messages for a mode it refuses.
 
 /// How a text file is opened, numbered as the runtime takes it.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -12,21 +12,49 @@ pub enum OpenAccess {
     Append = 2,
     /// `x`: a new file, written.
     Create = 3,
+    /// `r+`: an existing file, read and written.
+    ReadPlus = 4,
+    /// `w+`: a file emptied or created, read and written.
+    WritePlus = 5,
+    /// `a+`: a file created if missing, read, and written at its end.
+    AppendPlus = 6,
+    /// `x+`: a new file, read and written.
+    CreatePlus = 7,
 }
 
-/// Why a mode is refused.
+/// Why a mode is refused: CPython raises `ValueError` with this message for the mode,
+/// whatever the file.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub(crate) enum ModeRefusal {
-    /// CPython raises `ValueError` with this message for the mode, whatever the file.
-    Fails(String),
-    /// A binary mode or a `+` mode, planned for 0.4 (LIB-14).
-    Planned(&'static str),
+pub(crate) struct ModeRefusal(pub(crate) String);
+
+/// What a mode of `open` gives: how the file is opened, and whether it is binary.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct OpenMode {
+    pub(crate) access: OpenAccess,
+    pub(crate) binary: bool,
+}
+
+impl OpenMode {
+    /// Returns the mode a binary file shows, as CPython 3.15's `FileIO` writes it: the
+    /// access letter, `b`, and `+` for a mode that reads and writes.
+    pub(crate) const fn binary_mode(self) -> &'static str {
+        match self.access {
+            OpenAccess::Read => "rb",
+            OpenAccess::Write => "wb",
+            OpenAccess::Append => "ab",
+            OpenAccess::Create => "xb",
+            OpenAccess::ReadPlus => "rb+",
+            OpenAccess::WritePlus => "wb+",
+            OpenAccess::AppendPlus => "ab+",
+            OpenAccess::CreatePlus => "xb+",
+        }
+    }
 }
 
 /// Returns how `mode` opens a file, as CPython's `_io.open` checks it: each character one of
 /// `rwxabt+` and given once, not both `t` and `b`, and exactly one of `r`, `w`, `a` and `x`.
-pub(crate) fn open_access(mode: &str) -> Result<OpenAccess, ModeRefusal> {
-    let invalid = || ModeRefusal::Fails(format!("invalid mode: '{mode}'"));
+pub(crate) fn open_access(mode: &str) -> Result<OpenMode, ModeRefusal> {
+    let invalid = || ModeRefusal(format!("invalid mode: '{mode}'"));
     for (index, character) in mode.char_indices() {
         if !"rwxabt+".contains(character)
             || mode[index + character.len_utf8()..].contains(character)
@@ -36,7 +64,7 @@ pub(crate) fn open_access(mode: &str) -> Result<OpenAccess, ModeRefusal> {
     }
     let has = |character: char| mode.contains(character);
     if has('t') && has('b') {
-        return Err(ModeRefusal::Fails(
+        return Err(ModeRefusal(
             "can't have text and binary mode at once".to_owned(),
         ));
     }
@@ -46,78 +74,36 @@ pub(crate) fn open_access(mode: &str) -> Result<OpenAccess, ModeRefusal> {
     let access = match accesses.collect::<Vec<_>>()[..] {
         [one] => one,
         [] => {
-            return Err(ModeRefusal::Fails(
+            return Err(ModeRefusal(
                 "Must have exactly one of create/read/write/append mode and at most one plus"
                     .to_owned(),
             ));
         }
         _ => {
-            return Err(ModeRefusal::Fails(
+            return Err(ModeRefusal(
                 "must have exactly one of create/read/write/append mode".to_owned(),
             ));
         }
     };
-    if has('b') {
-        return Err(ModeRefusal::Planned("a binary mode"));
-    }
-    if has('+') {
-        return Err(ModeRefusal::Planned("a mode with `+`"));
-    }
-    Ok(match access {
-        'r' => OpenAccess::Read,
-        'w' => OpenAccess::Write,
-        'a' => OpenAccess::Append,
-        _ => OpenAccess::Create,
+    let access = match (access, has('+')) {
+        ('r', false) => OpenAccess::Read,
+        ('w', false) => OpenAccess::Write,
+        ('a', false) => OpenAccess::Append,
+        (_, false) => OpenAccess::Create,
+        ('r', true) => OpenAccess::ReadPlus,
+        ('w', true) => OpenAccess::WritePlus,
+        ('a', true) => OpenAccess::AppendPlus,
+        (_, true) => OpenAccess::CreatePlus,
+    };
+    Ok(OpenMode {
+        access,
+        binary: has('b'),
     })
-}
-
-/// Returns whether CPython's codec lookup finds UTF-8 for `name`: lowercased, each run of
-/// characters other than letters, digits and `.` read as one `_`, without one at either end.
-pub(crate) fn is_utf8(name: &str) -> bool {
-    let mut normalized = String::new();
-    let mut gap = false;
-    for character in name.chars().flat_map(char::to_lowercase) {
-        if character.is_alphanumeric() || character == '.' {
-            if gap && !normalized.is_empty() {
-                normalized.push('_');
-            }
-            gap = false;
-            normalized.push(character);
-        } else {
-            gap = true;
-        }
-    }
-    matches!(
-        normalized.as_str(),
-        "utf_8" | "utf8" | "u8" | "utf" | "cp65001" | "csutf8" | "utf8_ucs2" | "utf8_ucs4"
-    )
-}
-
-/// The methods and attributes of a text file planned for 0.4 (LIB-14).
-const PLANNED_NAMES: [&str; 11] = [
-    "closed", "fileno", "isatty", "mode", "name", "readable", "seek", "seekable", "tell",
-    "truncate", "writable",
-];
-
-/// Returns the error message for a name of a text file that TyPy 0.3 does not have: planned
-/// for 0.4, or not provided.
-pub(crate) fn missing_file_name(name: &str) -> (String, bool) {
-    if PLANNED_NAMES.contains(&name) {
-        (
-            format!("`{name}` of a text file is planned for TyPy 0.4 (LIB-14)"),
-            true,
-        )
-    } else {
-        (
-            format!("a TextIOWrapper has no attribute `{name}` in TyPy"),
-            false,
-        )
-    }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{ModeRefusal, OpenAccess, is_utf8, open_access};
+    use super::{ModeRefusal, OpenAccess, open_access};
 
     #[test]
     fn text_modes_give_their_access() {
@@ -131,7 +117,11 @@ mod tests {
             ("x", OpenAccess::Create),
             ("xt", OpenAccess::Create),
         ] {
-            assert_eq!(open_access(mode), Ok(access), "{mode}");
+            assert_eq!(
+                open_access(mode).map(|found| found.access),
+                Ok(access),
+                "{mode}"
+            );
         }
     }
 
@@ -162,44 +152,43 @@ mod tests {
         ] {
             assert_eq!(
                 open_access(mode),
-                Err(ModeRefusal::Fails(message.to_owned())),
+                Err(ModeRefusal(message.to_owned())),
                 "{mode}"
             );
         }
     }
 
     #[test]
-    fn binary_and_plus_modes_are_planned() {
-        for (mode, what) in [
-            ("rb", "a binary mode"),
-            ("wb+", "a binary mode"),
-            ("r+", "a mode with `+`"),
-            ("a+t", "a mode with `+`"),
+    fn plus_modes_read_and_write() {
+        for (mode, access) in [
+            ("r+", OpenAccess::ReadPlus),
+            ("+r", OpenAccess::ReadPlus),
+            ("w+t", OpenAccess::WritePlus),
+            ("a+", OpenAccess::AppendPlus),
+            ("x+", OpenAccess::CreatePlus),
         ] {
-            assert_eq!(open_access(mode), Err(ModeRefusal::Planned(what)), "{mode}");
+            assert_eq!(
+                open_access(mode).map(|found| found.access),
+                Ok(access),
+                "{mode}"
+            );
         }
     }
 
     #[test]
-    fn the_names_of_utf_8_are_found_as_cpython_finds_them() {
-        for name in [
-            "utf-8",
-            "UTF-8",
-            "utf8",
-            "U8",
-            "utf",
-            "Utf_8",
-            "utf-8 ",
-            "  utf8",
-            "UTF8-UCS2",
-            "cp65001",
-            "utf--8",
-            "csutf8",
+    fn binary_modes_show_as_cpython_3_15_shows_them() {
+        for (mode, shown) in [
+            ("rb", "rb"),
+            ("br", "rb"),
+            ("wb+", "wb+"),
+            ("+ab", "ab+"),
+            ("xb", "xb"),
+            ("r+b", "rb+"),
         ] {
-            assert!(is_utf8(name), "{name}");
+            let found = open_access(mode).unwrap();
+            assert!(found.binary, "{mode}");
+            assert_eq!(found.binary_mode(), shown, "{mode}");
         }
-        for name in ["utf.8", "utf_8_sig", "latin-1", "ascii", "", "nope"] {
-            assert!(!is_utf8(name), "{name}");
-        }
+        assert!(!open_access("rt").unwrap().binary);
     }
 }

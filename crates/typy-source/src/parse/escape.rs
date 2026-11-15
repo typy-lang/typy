@@ -77,7 +77,7 @@ impl Converter<'_> {
                         DiagnosticCode::error(201),
                         span,
                         format!(
-                            "the surrogate escape `{}` in a `str` is planned for TyPy 0.4 \
+                            "the surrogate escape `{}` in a `str` is planned for TyPy 0.5 \
                              (LEX-10)",
                             &text[backslash..backslash + 2 + width]
                         ),

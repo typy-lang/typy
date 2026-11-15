@@ -399,7 +399,7 @@ unsafe fn step(iterator: &mut IteratorObject) -> Result<bool, *mut crate::Except
                 return dict_step(iterator, source.cast());
             }
             IteratorKind::TextFile => {
-                let Some(line) = crate::text_file::next_line(source.cast())? else {
+                let Some(line) = crate::text_file::loop_line(source.cast())? else {
                     return Ok(false);
                 };
                 let old = core::mem::replace(&mut iterator.held, line);

@@ -26,6 +26,9 @@ pub(crate) struct Program {
     /// The module variables some function declares `global`, which a test cannot narrow,
     /// because a call may assign them.
     pub(super) assigned_in_functions: BTreeSet<String>,
+    /// Each variable declared `Final`, with the name its declaration assigns, which alone may
+    /// assign it (TYP-08).
+    pub(super) final_variables: BTreeMap<SymbolId, Span>,
     /// Whether the module variables have only the types a first look at the module body gave
     /// them, while the `__init__` methods are checked.
     pub(super) provisional: bool,
@@ -34,7 +37,7 @@ pub(crate) struct Program {
     pub(super) class_modules: Vec<String>,
     pub(super) class_ids: BTreeMap<String, ClassId>,
     /// The classes that derive from an exception class (CLS-03).
-    pub(super) exceptions: BTreeMap<ClassId, ExceptionClass>,
+    pub(super) instances: BTreeMap<ClassId, Type>,
     /// The modules checked so far, in the order they were checked.
     pub(super) modules: Vec<TypedModule>,
     /// The names each module checked so far defines, by the module's name (ADR-0015).
@@ -49,6 +52,19 @@ pub(crate) struct Program {
     /// For each name the module binds to a module at module level, the classes of that
     /// module, which annotations such as `shapes.Point` name.
     pub(super) module_classes: BTreeMap<String, BTreeMap<String, ClassId>>,
+    /// For each name bound to a module of the program, that module's type aliases (SMT-10).
+    pub(super) module_aliases: BTreeMap<String, BTreeSet<String>>,
+    /// The type aliases of the module being checked, which only its annotations read
+    /// (SMT-10).
+    pub(super) type_aliases: BTreeSet<String>,
+    /// The type each type parameter stands for while a generic body or a copy of it is
+    /// checked (GEN-01).
+    pub(crate) type_arguments: BTreeMap<String, Type>,
+    /// The generic functions of the program and the copies made of them (GEN-03).
+    pub(crate) generics: super::generic_copy::Generics,
+    /// The generic classes of the program and the copies made of them, which annotations,
+    /// read where only a shared reference is at hand, may add to (ADR-0028).
+    pub(crate) class_copies: std::cell::RefCell<super::class_copy::ClassCopies>,
     /// The names of `typing`, `collections.abc` and `types` the module imports, and the
     /// names bound to those modules, which annotations read (TYP-15).
     pub(super) annotation_names: BTreeMap<String, crate::check::AnnotationName>,
@@ -58,6 +74,8 @@ pub(crate) struct Program {
     pub(super) module_functions: BTreeMap<String, super::builtin_module::ModuleFunction>,
     /// The built-in modules the program imports, whose module objects it holds.
     pub(super) builtin_modules: BTreeSet<String>,
+    /// Whether the program closes a text file, by `close()` or a `with` block (LIB-14).
+    pub(super) closes_text_files: bool,
     /// The minor version of the program's Python floor, such as 12 for 3.12.
     pub(super) floor: u8,
     /// The modules the module's `__lazy_modules__` lists, whose imports are lazy (MOD-07).
@@ -81,6 +99,9 @@ pub(crate) struct Snapshot {
     signatures: usize,
     classes: Vec<ClassInfo>,
     first_class: usize,
+    /// The generic copies made before the first look, whose IDs the look's copies follow.
+    generics: super::generic_copy::Generics,
+    class_copies: super::class_copy::ClassCopies,
 }
 
 /// The names one module defines, which other modules import.
@@ -89,6 +110,7 @@ pub(crate) struct ModuleScope {
     pub(super) function_ids: BTreeMap<String, FunctionId>,
     pub(super) class_ids: BTreeMap<String, ClassId>,
     pub(super) module_symbols: BTreeMap<String, SymbolId>,
+    pub(super) type_aliases: BTreeSet<String>,
 }
 
 impl Program {
@@ -103,11 +125,12 @@ impl Program {
             module_variables: BTreeSet::new(),
             module_symbols: BTreeMap::new(),
             assigned_in_functions: BTreeSet::new(),
+            final_variables: BTreeMap::new(),
             provisional: false,
             classes: Vec::new(),
             class_modules: Vec::new(),
             class_ids: BTreeMap::new(),
-            exceptions: BTreeMap::new(),
+            instances: BTreeMap::new(),
             modules: Vec::new(),
             scopes: BTreeMap::new(),
             loaded: BTreeSet::new(),
@@ -115,10 +138,16 @@ impl Program {
             package: None,
             path: String::new(),
             module_classes: BTreeMap::new(),
+            module_aliases: BTreeMap::new(),
+            type_aliases: BTreeSet::new(),
+            type_arguments: BTreeMap::new(),
+            generics: super::generic_copy::Generics::default(),
+            class_copies: std::cell::RefCell::default(),
             annotation_names: BTreeMap::new(),
             annotation_modules: BTreeMap::new(),
             module_functions: BTreeMap::new(),
             builtin_modules: BTreeSet::new(),
+            closes_text_files: false,
             floor: 12,
             lazy_modules: BTreeSet::new(),
             lazy_imports: BTreeMap::new(),
@@ -164,9 +193,10 @@ impl Program {
         module_variables: BTreeSet<String>,
         classes: Vec<ClassInfo>,
         class_ids: BTreeMap<String, ClassId>,
-        exceptions: BTreeMap<ClassId, ExceptionClass>,
+        instances: BTreeMap<ClassId, Type>,
     ) {
         let first = self.functions.len();
+        self.note_generics(first, definitions);
         // Methods are reached through their instances, so only module functions have names.
         self.function_ids = definitions
             .iter()
@@ -193,15 +223,25 @@ impl Program {
             .map(|(_, name)| name.clone())
             .collect();
         self.module_classes = BTreeMap::new();
+        self.module_aliases = BTreeMap::new();
         self.class_modules
             .extend(std::iter::repeat_n(self.module.clone(), classes.len()));
         self.classes.extend(classes);
         self.class_ids = class_ids;
-        self.exceptions.extend(exceptions);
+        self.instances.extend(instances);
     }
 
     /// Notes the module about to be checked, whose imports resolve against its package.
     pub(crate) fn prepare_module(&mut self, module: &typy_source::Module) {
+        self.type_aliases = module
+            .syntax
+            .body
+            .iter()
+            .filter_map(|statement| match statement {
+                typy_source::syntax::Stmt::TypeAlias { name, .. } => Some(name.name.clone()),
+                _ => None,
+            })
+            .collect();
         self.package = module.package();
         module.name.as_str().clone_into(&mut self.module);
         self.lazy_modules = typy_source::lazy_modules(&module.syntax.body);
@@ -256,9 +296,14 @@ impl Program {
             locals: Vec::new(),
             body: vec![import],
             span,
+            generic: false,
         }));
         self.lazy_imports.insert(id, target);
-        self.lazy_names.insert((self.module.clone(), name), id);
+        // A name a later lazy import binds again keeps its first function, which lowering
+        // reads together with the others that bind the same variable (MOD-11).
+        self.lazy_names
+            .entry((self.module.clone(), name))
+            .or_insert(id);
         id
     }
 
@@ -276,9 +321,41 @@ impl Program {
             .collect()
     }
 
+    /// Returns, for each name bound to a module of the program, that module's type aliases.
+    pub(crate) fn module_aliases_of(
+        &self,
+        modules: &BTreeMap<String, String>,
+    ) -> BTreeMap<String, BTreeSet<String>> {
+        modules
+            .iter()
+            .filter_map(|(name, module)| {
+                let scope = self.scopes.get(module)?;
+                Some((name.clone(), scope.type_aliases.clone()))
+            })
+            .collect()
+    }
+
     /// Returns the exception classes of the modules checked so far.
-    pub(crate) fn known_exceptions(&self) -> BTreeMap<ClassId, ExceptionClass> {
-        self.exceptions.clone()
+    pub(crate) fn known_instances(&self) -> &BTreeMap<ClassId, Type> {
+        &self.instances
+    }
+
+    /// Returns the signatures of the functions of the modules checked so far, indexed by ID.
+    pub(crate) fn signatures(&self) -> &[FunctionSignature] {
+        &self.signatures
+    }
+
+    /// Returns the classes of the modules checked so far, indexed by ID.
+    pub(crate) fn classes(&self) -> &[ClassInfo] {
+        &self.classes
+    }
+
+    /// Returns the class of an exception class, or `None` for any other class.
+    pub(super) fn exception(&self, class: ClassId) -> Option<&ExceptionClass> {
+        match self.instances.get(&class) {
+            Some(Type::Exception(exception)) => Some(exception),
+            _ => None,
+        }
     }
 
     /// Adds the functions a module imports by name to its table of functions, and the
@@ -291,6 +368,7 @@ impl Program {
         self.function_ids
             .extend(functions.iter().map(|(name, id)| (name.clone(), *id)));
         self.module_classes = annotations.modules;
+        self.module_aliases = annotations.module_aliases;
         self.annotation_names = annotations.names;
         self.annotation_modules = annotations.standard;
     }
@@ -309,16 +387,24 @@ impl Program {
                 function_ids: self.function_ids.clone(),
                 class_ids: self.class_ids.clone(),
                 module_symbols: self.module_symbols.clone(),
+                type_aliases: std::mem::take(&mut self.type_aliases),
             },
         );
     }
 
     /// Returns the type of the instances of a class: an exception for an exception class.
     pub(super) fn instance_type(&self, class: ClassId) -> Type {
-        self.exceptions.get(&class).cloned().map_or_else(
-            || Type::Instance(class, self.classes[class.0 as usize].name.clone()),
-            Type::Exception,
-        )
+        self.instances.get(&class).cloned().unwrap_or_else(|| {
+            Type::instance(crate::class_type::InstanceClass::root(
+                class,
+                &self.classes[class.0 as usize].name,
+            ))
+        })
+    }
+
+    /// Returns true when the class is a protocol, which has no instances (GEN-04).
+    pub(crate) fn is_protocol(&self, class: ClassId) -> bool {
+        matches!(self.instances.get(&class), Some(Type::Instance(instance)) if instance.protocol)
     }
 
     /// Returns the method `name` of a class, its own or the nearest base's.
@@ -332,6 +418,33 @@ impl Program {
             current = info.base;
         }
         None
+    }
+
+    /// Returns each attribute of `class` with a default, its own or a base's, with the module
+    /// variable that holds the default (ADR-0024).
+    fn default_variables(&self, class: ClassId) -> Vec<(usize, SymbolId)> {
+        let mut found = Vec::new();
+        let mut current = Some(class);
+        while let Some(each) = current {
+            let info = &self.classes[each.0 as usize];
+            let module = &self.class_modules[each.0 as usize];
+            for index in &info.defaults {
+                // The nearest class's default is the one an instance holds.
+                if found.iter().any(|(each, _)| each == index) {
+                    continue;
+                }
+                let name =
+                    crate::check::class_value_variable(&info.name, &info.attributes[*index].name);
+                let symbol = self
+                    .scopes
+                    .get(module)
+                    .and_then(|scope| scope.module_symbols.get(&name))
+                    .copied();
+                found.extend(symbol.map(|symbol| (*index, symbol)));
+            }
+            current = info.base;
+        }
+        found
     }
 
     /// Returns the class whose own attribute is the attribute at `index` of `class`: the base
@@ -350,7 +463,10 @@ impl Program {
     /// Returns the type of the attribute at `index` of `class`, once it is known.
     pub(super) fn attribute_ty(&self, class: ClassId, index: usize) -> Option<Type> {
         let owner = self.declaring(class, index);
-        self.classes[owner.0 as usize].attributes[index].ty.clone()
+        let known = self.classes[owner.0 as usize].attributes[index].ty.clone();
+        // A copy of a generic class has the generic class's attribute types, with its type
+        // arguments, before its own `__init__` is checked (ADR-0028).
+        known.or_else(|| self.copied_attribute_ty(owner, index))
     }
 
     /// Makes the symbol of each module variable, before any body is checked, and notes those
@@ -363,6 +479,11 @@ impl Program {
         for (name, span) in variables {
             let symbol = self.add_symbol(name, SymbolKind::ModuleVariable, Type::Error, *span);
             self.module_symbols.insert(name.clone(), symbol);
+            // A class variable, `Class.name`, may be assigned by any function, so a test of it
+            // narrows nothing (ADR-0024).
+            if name.contains('.') {
+                self.assigned_in_functions.insert(name.clone());
+            }
         }
         for definition in definitions {
             for name in crate::check::declared_globals(definition.body) {
@@ -381,6 +502,8 @@ impl Program {
             signatures: self.signatures.len(),
             classes: self.classes[first_class..].to_vec(),
             first_class,
+            generics: self.generics.clone(),
+            class_copies: self.class_copies.borrow().clone(),
         }
     }
 
@@ -400,6 +523,9 @@ impl Program {
         self.signatures.truncate(snapshot.signatures);
         self.classes.truncate(snapshot.first_class);
         self.classes.extend(snapshot.classes);
+        // The copies the look made took IDs it gives back; the module body makes them again.
+        self.generics = snapshot.generics;
+        self.class_copies.replace(snapshot.class_copies);
         let symbols: Vec<SymbolId> = self.module_symbols.values().copied().collect();
         for (symbol, ty) in symbols.into_iter().zip(found) {
             self.symbols[symbol.0 as usize].ty = ty;
@@ -441,26 +567,50 @@ impl Program {
             .classes
             .iter()
             .enumerate()
-            .map(|(index, class)| TypedClass {
-                id: ClassId(id(index)),
-                name: class.name.clone(),
-                module: self.class_modules[index].clone(),
-                base: class.base,
-                exception: class.exception.clone(),
-                attributes: class
-                    .attributes
-                    .iter()
-                    .enumerate()
-                    .map(|(position, attribute)| Attribute {
-                        name: attribute.name.clone(),
-                        ty: self
-                            .attribute_ty(class.id, position)
-                            .unwrap_or(crate::types::Type::Error),
-                    })
-                    .collect(),
-                methods: class.methods.clone(),
-                init: self.method(class.id, "__init__"),
-                span: class.span,
+            .map(|(index, class)| {
+                let opaque = self.is_opaque_class(class.id);
+                let generic = self
+                    .class_copies
+                    .borrow()
+                    .copy(class.id)
+                    .map(|copy| copy.root);
+                TypedClass {
+                    id: ClassId(id(index)),
+                    name: class.name.clone(),
+                    module: self.class_modules[index].clone(),
+                    base: class.base,
+                    exception: class.exception.clone(),
+                    // An opaque class has no instances, so it holds nothing to lay out.
+                    attributes: if opaque {
+                        Vec::new()
+                    } else {
+                        class
+                            .attributes
+                            .iter()
+                            .enumerate()
+                            .map(|(position, attribute)| Attribute {
+                                name: attribute.name.clone(),
+                                ty: self
+                                    .attribute_ty(class.id, position)
+                                    .unwrap_or(crate::types::Type::Error),
+                            })
+                            .collect()
+                    },
+                    methods: if opaque {
+                        Vec::new()
+                    } else {
+                        class.methods.clone()
+                    },
+                    init: if opaque {
+                        None
+                    } else {
+                        self.method(class.id, "__init__")
+                    },
+                    defaults: self.default_variables(class.id),
+                    span: class.span,
+                    generic,
+                    opaque,
+                }
             })
             .collect();
         TypedProgram {
@@ -470,6 +620,7 @@ impl Program {
             modules: self.modules,
             lazy_imports: self.lazy_imports,
             builtin_modules: self.builtin_modules.into_iter().collect(),
+            closes_text_files: self.closes_text_files,
             entry,
             warnings: typy_diagnostics::Diagnostics::new(),
         }

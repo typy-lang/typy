@@ -40,6 +40,9 @@ pub(crate) struct ModuleGlobals {
     pub(crate) armed: BTreeMap<typy_check::FunctionId, GlobalId>,
     /// For each variable bound by a lazy import, the function that runs the import.
     pub(crate) lazy: BTreeMap<SymbolId, typy_check::FunctionId>,
+    /// For each function of a lazy import, the functions of every lazy import that binds the
+    /// same variable, itself among them; at most one waits at a time (MOD-11).
+    pub(crate) siblings: BTreeMap<typy_check::FunctionId, Vec<typy_check::FunctionId>>,
 }
 
 impl ModuleGlobals {
@@ -83,11 +86,18 @@ impl ModuleGlobals {
             let state = made.add(format!("{} state", module.name), TyirType::Int);
             made.states.push(state);
         }
+        let mut binders: BTreeMap<SymbolId, Vec<typy_check::FunctionId>> = BTreeMap::new();
         for (reify, target) in &program.lazy_imports {
             let armed = made.add(format!("lazy import {} armed", reify.0), TyirType::Bool);
             made.armed.insert(*reify, armed);
             if let Some(target) = target {
-                made.lazy.insert(*target, *reify);
+                made.lazy.entry(*target).or_insert(*reify);
+                binders.entry(*target).or_default().push(*reify);
+            }
+        }
+        for group in binders.values() {
+            for reify in group {
+                made.siblings.insert(*reify, group.clone());
             }
         }
         made
@@ -199,9 +209,12 @@ impl FunctionLowerer<'_> {
     pub(crate) fn assign_name(&mut self, symbol: SymbolId, lowered: Lowered, span: Span) {
         let Some(global) = self.module_globals.of.get(&symbol).copied() else {
             let slot = self.slots[&symbol];
+            let lowered = self.held_as(lowered, self.builder.slot_type(slot), span);
             self.store(slot, lowered, span);
             return;
         };
+        let ty = self.module_globals.globals[global.value.0 as usize].ty;
+        let lowered = self.held_as(lowered, ty, span);
         let value = self.take_reference(lowered, span);
         let old = self.counted(lowered.ty).then(|| {
             self.builder

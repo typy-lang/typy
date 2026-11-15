@@ -63,6 +63,17 @@ unsafe extern "C" fn str_repr(object: *mut ObjectHeader) -> Raising<*mut StrObje
     Raising::ok(unsafe { crate::string::typy_rt_str_repr(object.cast()) })
 }
 
+/// Returns a `str` as `str` gives it: the object itself, with a reference for the caller.
+#[allow(
+    clippy::cast_ptr_alignment,
+    reason = "every object comes from malloc, aligned for every type, and starts with its header"
+)]
+unsafe extern "C" fn str_itself(object: *mut ObjectHeader) -> Raising<*mut StrObject> {
+    // SAFETY: the caller's object is live, and the type of the object says it is a `str`.
+    unsafe { crate::refcount::typy_rt_increment(object) };
+    Raising::ok(object.cast())
+}
+
 #[allow(
     clippy::cast_ptr_alignment,
     reason = "every object comes from malloc, aligned for every type, and starts with its header"
@@ -228,6 +239,7 @@ pub(crate) static STR: TypeObject = TypeObject {
     equal: Some(text_equal),
     order: Some(text_order),
     repr: Some(str_repr),
+    str: Some(str_itself),
     ..builtin("str")
 };
 

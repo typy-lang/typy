@@ -37,6 +37,9 @@ pub(crate) enum ItemKind {
     /// A `tuple | None`: a two-item tuple of a presence flag and the tuple, as its descriptor
     /// lays out the pair.
     OptionalTuple = 10,
+    /// A union with a member held by value: a tuple of an `int` tag and a slot for each
+    /// member, as its descriptor lays it out, read as the member the tag names (ADR-0027).
+    Union = 11,
 }
 
 impl ItemKind {
@@ -54,6 +57,7 @@ impl ItemKind {
             8 => Self::OptionalBool,
             9 => Self::OptionalObject,
             10 => Self::OptionalTuple,
+            11 => Self::Union,
             _ => crate::libc::abort_with(b"typy runtime: a list has an unknown item kind\n"),
         }
     }
@@ -80,10 +84,7 @@ impl ItemType {
     pub(crate) fn of(kind: u32, tuple: *const TupleType) -> Self {
         match ItemKind::from_code(kind) {
             ItemKind::Tuple => Self::tuple(tuple),
-            ItemKind::OptionalTuple => Self {
-                kind: ItemKind::OptionalTuple,
-                tuple,
-            },
+            kind @ (ItemKind::OptionalTuple | ItemKind::Union) => Self { kind, tuple },
             kind => Self::from(kind),
         }
     }
@@ -96,10 +97,9 @@ impl ItemType {
             ItemKind::OptionalFloat => Self::from(ItemKind::Float),
             ItemKind::OptionalBool => Self::from(ItemKind::Bool),
             ItemKind::OptionalObject => Self::from(ItemKind::Object),
-            // SAFETY: an optional tuple's descriptor is the pair of its flag and its tuple.
-            ItemKind::OptionalTuple => unsafe {
-                Self::tuple(crate::tuple::field_tuple(self.tuple, 1))
-            },
+            // SAFETY: an optional tuple's descriptor is the pair of its flag and its tuple,
+            // which may be a union.
+            ItemKind::OptionalTuple => unsafe { crate::tuple::field_type(self.tuple, 1) },
             _ => return None,
         })
     }
@@ -140,6 +140,20 @@ impl ItemType {
     ///
     /// `item` is a live item of this type.
     unsafe fn held(self, item: u64) -> Held {
+        if self.kind == ItemKind::Union {
+            // SAFETY: the caller passes the address of a live union; its tag, an inline
+            // `int`, names the slot after it that holds the value.
+            return unsafe {
+                let tag = crate::word::inline_value(
+                    crate::tuple::field(self.tuple, item, 0).cast_signed(),
+                );
+                let slot = usize::try_from(tag).unwrap_or(0) + 1;
+                Held::Value(
+                    crate::tuple::field_type(self.tuple, slot),
+                    crate::tuple::field(self.tuple, item, slot),
+                )
+            };
+        }
         let Some(base) = self.base() else {
             return Held::Plain;
         };
@@ -150,6 +164,23 @@ impl ItemType {
             } else {
                 Held::Value(base, self.unwrapped(item))
             }
+        }
+    }
+
+    /// Returns the value an item holds with the value's type: the item itself for a type that
+    /// is not optional or a union, and `None` for `None` of an optional item.
+    ///
+    /// # Safety
+    ///
+    /// `item` is a live item of this type.
+    pub(crate) unsafe fn held_value(self, item: u64) -> Option<(Self, u64)> {
+        // SAFETY: the caller's guarantee.
+        match unsafe { self.held(item) } {
+            Held::Plain => Some((self, item)),
+            Held::None => None,
+            // A union's member may itself be optional.
+            // SAFETY: the value is a live item of its type.
+            Held::Value(ty, value) => unsafe { ty.held_value(value) },
         }
     }
 
@@ -175,7 +206,9 @@ impl ItemType {
     pub(crate) fn words(self) -> usize {
         match self.kind {
             // SAFETY: a tuple item type always has a live descriptor, emitted by the compiler.
-            ItemKind::Tuple | ItemKind::OptionalTuple => unsafe { (*self.tuple).words() },
+            ItemKind::Tuple | ItemKind::OptionalTuple | ItemKind::Union => unsafe {
+                (*self.tuple).words()
+            },
             _ => 1,
         }
     }
@@ -187,7 +220,9 @@ impl ItemType {
     /// `slot` points to an item of this type.
     pub(crate) unsafe fn load(self, slot: *const u64) -> u64 {
         match self.kind {
-            ItemKind::Tuple | ItemKind::OptionalTuple => slot.expose_provenance() as u64,
+            ItemKind::Tuple | ItemKind::OptionalTuple | ItemKind::Union => {
+                slot.expose_provenance() as u64
+            }
             // SAFETY: the caller passes a slot that holds an item.
             _ => unsafe { *slot },
         }
@@ -203,7 +238,7 @@ impl ItemType {
         // SAFETY: the caller passes a slot with room for the item and a live item.
         unsafe {
             match self.kind {
-                ItemKind::Tuple | ItemKind::OptionalTuple => {
+                ItemKind::Tuple | ItemKind::OptionalTuple | ItemKind::Union => {
                     core::ptr::copy_nonoverlapping(address(item), slot, self.words());
                 }
                 _ => *slot = item,
@@ -227,7 +262,14 @@ impl ItemType {
                 ItemKind::Object | ItemKind::OptionalObject => {
                     crate::refcount::typy_rt_increment(pointer(item));
                 }
-                ItemKind::Tuple | ItemKind::OptionalTuple => crate::tuple::retain(self.tuple, item),
+                ItemKind::Tuple => crate::tuple::retain(self.tuple, item),
+                // Only the value held is live: an optional tuple's pair holds nothing for
+                // `None`, and a union only the slot its tag names.
+                ItemKind::OptionalTuple | ItemKind::Union => {
+                    if let Held::Value(ty, value) = self.held(item) {
+                        ty.retain(value);
+                    }
+                }
                 ItemKind::Float
                 | ItemKind::Bool
                 | ItemKind::NoneValue
@@ -252,8 +294,11 @@ impl ItemType {
                 ItemKind::Object | ItemKind::OptionalObject => {
                     crate::refcount::typy_rt_decrement(pointer(item));
                 }
-                ItemKind::Tuple | ItemKind::OptionalTuple => {
-                    crate::tuple::release(self.tuple, item);
+                ItemKind::Tuple => crate::tuple::release(self.tuple, item),
+                ItemKind::OptionalTuple | ItemKind::Union => {
+                    if let Held::Value(ty, value) = self.held(item) {
+                        ty.release(value);
+                    }
                 }
                 ItemKind::Float
                 | ItemKind::Bool
@@ -278,9 +323,9 @@ impl ItemType {
         match unsafe { (self.held(left), self.held(right)) } {
             (Held::Plain, _) | (_, Held::Plain) => {}
             (Held::None, Held::None) => return true,
-            (Held::Value(base, left), Held::Value(_, right)) => {
-                // SAFETY: both are live values of the optional type's base.
-                return unsafe { base.equal(left, right) };
+            (Held::Value(left_type, left), Held::Value(right_type, right)) => {
+                // SAFETY: both are live values of their types.
+                return unsafe { values_equal(left_type, left, right_type, right) };
             }
             _ => return false,
         }
@@ -530,16 +575,150 @@ unsafe fn object_hash(object: *mut ObjectHeader) -> i64 {
     }
 }
 
-/// Returns `left == right` for two objects of one type; without a test of its own, a type's
-/// objects are equal only to themselves.
+/// Returns `left == right` for two values of two item types, as CPython compares them: two of
+/// one type by that type, two numbers by value, two tuples item by item, and two of other
+/// types never equal. The members of a union reach here with their own types (ADR-0027).
 ///
 /// # Safety
 ///
-/// Both point to live objects of one type.
-unsafe fn objects_equal(left: *mut ObjectHeader, right: *mut ObjectHeader) -> bool {
-    // SAFETY: the caller passes live objects of one type, and its function takes them.
+/// Each is a live value of its type.
+pub(crate) unsafe fn values_equal(
+    left_type: ItemType,
+    left: u64,
+    right_type: ItemType,
+    right: u64,
+) -> bool {
+    if left_type == right_type {
+        // SAFETY: the caller's guarantee.
+        return unsafe { left_type.equal(left, right) };
+    }
+    // An optional or a union of one type is compared with a value of another as the value it
+    // holds, and `None` as `None`.
+    if left_type.base().is_some()
+        || right_type.base().is_some()
+        || left_type.kind == ItemKind::Union
+        || right_type.kind == ItemKind::Union
+    {
+        // SAFETY: the caller's guarantee.
+        let held = unsafe { (left_type.held_value(left), right_type.held_value(right)) };
+        return match held {
+            (None, None) => true,
+            (None, Some((ty, _))) | (Some((ty, _)), None) => ty.kind == ItemKind::NoneValue,
+            // SAFETY: each is the live value an item holds.
+            (Some((a, l)), Some((b, r))) => unsafe { values_equal(a, l, b, r) },
+        };
+    }
+    match (left_type.kind, right_type.kind) {
+        (ItemKind::Object, ItemKind::Object) => {
+            // SAFETY: the caller passes live objects.
+            unsafe { objects_equal(pointer(left), pointer(right)) }
+        }
+        (ItemKind::Tuple, ItemKind::Tuple) => {
+            // SAFETY: the caller passes live tuples of these layouts, whose items are live.
+            unsafe {
+                crate::tuple::equal_across(
+                    left_type.tuple,
+                    left,
+                    right_type.tuple,
+                    right,
+                    |a, l, b, r| values_equal(a, l, b, r),
+                )
+            }
+        }
+        // A `bool` is the `int` 0 or 1.
+        (ItemKind::Bool, _) => {
+            // SAFETY: the caller's guarantee.
+            unsafe {
+                values_equal(
+                    ItemType::from(ItemKind::Int),
+                    int_of_bool(left),
+                    right_type,
+                    right,
+                )
+            }
+        }
+        (_, ItemKind::Bool) => {
+            // SAFETY: the caller's guarantee.
+            unsafe {
+                values_equal(
+                    left_type,
+                    left,
+                    ItemType::from(ItemKind::Int),
+                    int_of_bool(right),
+                )
+            }
+        }
+        // SAFETY: the caller passes a live `int` word.
+        (ItemKind::Int, ItemKind::Float) => unsafe {
+            int_equals_float(left, f64::from_bits(right))
+        },
+        // SAFETY: the caller passes a live `int` word.
+        (ItemKind::Float, ItemKind::Int) => unsafe {
+            int_equals_float(right, f64::from_bits(left))
+        },
+        _ => false,
+    }
+}
+
+/// Returns true when a finite float is a whole number; every one of 2**63 or more is.
+#[allow(
+    clippy::cast_possible_truncation,
+    clippy::cast_precision_loss,
+    clippy::float_cmp,
+    reason = "below 2**63 a float converts to an i64 and back unchanged exactly when it is whole"
+)]
+fn is_whole(float: f64) -> bool {
+    float.abs() >= 9_223_372_036_854_775_808.0 || (float as i64) as f64 == float
+}
+
+/// Returns the `int` word of a `bool` item, 0 or 1.
+fn int_of_bool(item: u64) -> u64 {
+    inline(i64::from(item != 0)).unwrap_or(1).cast_unsigned()
+}
+
+/// Returns `word == float` for an `int` and a `float`, exactly, as CPython compares them: a
+/// float that is not a whole number, or not finite, equals no `int`.
+///
+/// # Safety
+///
+/// `word` is an `int` word whose large integer is live.
+unsafe fn int_equals_float(word: u64, float: f64) -> bool {
+    if !float.is_finite() || !is_whole(float) {
+        return false;
+    }
+    let converted = crate::float::typy_rt_float_to_int(float).value;
+    // SAFETY: both are `int` words; the converted one is new and released here.
     unsafe {
-        match type_of(left).equal {
+        let equal =
+            crate::int::typy_rt_int_compare(word.cast_signed(), converted, inline(0).unwrap_or(1));
+        crate::refcount::typy_rt_int_decrement(converted);
+        equal
+    }
+}
+
+/// Returns `left == right` for two objects, as CPython compares them; without a test of its
+/// own, a type's objects are equal only to themselves.
+///
+/// # Safety
+///
+/// Both point to live objects.
+unsafe fn objects_equal(left: *mut ObjectHeader, right: *mut ObjectHeader) -> bool {
+    // SAFETY: the caller passes live objects, and each type's function takes its own.
+    unsafe {
+        let (left_type, right_type) = (type_of(left), type_of(right));
+        if !core::ptr::eq(left_type, right_type) {
+            // Objects of two types, as a union of objects holds them: a built-in type is equal
+            // only to its own objects, and a class's `__eq__`, whose slot tests the other
+            // object's class, decides for its instances, the left one first (TYP-14).
+            let class_equal =
+                |ty: &crate::type_object::TypeObject| ty.equal.filter(|_| !ty.fields.is_null());
+            return match (class_equal(left_type), class_equal(right_type)) {
+                (Some(equal), _) => equal(left, right),
+                (None, Some(equal)) => equal(right, left),
+                (None, None) => core::ptr::eq(left, right),
+            };
+        }
+        match left_type.equal {
             Some(equal) => equal(left, right),
             None => core::ptr::eq(left, right),
         }

@@ -13,7 +13,7 @@ pub(super) struct ClassParts<'tree> {
     pub(super) keyword_count: usize,
     pub(super) body: &'tree [Stmt],
     pub(super) decorators: &'tree [Expr],
-    pub(super) type_parameter_count: usize,
+    pub(super) type_parameters: &'tree [typy_source::syntax::TypeParameter],
     pub(super) span: Span,
 }
 
@@ -27,26 +27,50 @@ impl Walker {
                 },
             );
         }
+        // `@dataclass` is taken off the class before this walk (CLS-05); any other class
+        // decorator is a user-defined decorator (FUN-06).
         if let Some(decorator) = class.decorators.first() {
             self.report(
                 decorator.span(),
-                planned("class decorators", "0.4", RuleId::CLS_05),
+                planned("class decorators", "1.0", RuleId::FUN_06),
             );
         }
-        if class.type_parameter_count > 0 {
+        // A generic class, or one of its copies, as a base is planned (GEN-08).
+        let generic_base = class.bases.iter().any(|base| {
+            let named = match base {
+                Expr::Subscript { value, .. } => value.as_ref(),
+                other => other,
+            };
+            matches!(named, Expr::Name { id, .. } if self.generic_classes.contains(id))
+        });
+        if generic_base {
             self.report(
                 class.span,
-                planned("type parameters", "0.4", RuleId::GEN_01),
+                planned(
+                    "classes derived from a generic class",
+                    "0.5",
+                    RuleId::GEN_08,
+                ),
             );
+            return;
         }
-        // One base named by its name is resolved with the other classes: `object`, or an
-        // exception class (CLS-03).
+        if !class.type_parameters.is_empty() {
+            self.type_parameters(class.type_parameters);
+            if !class.bases.is_empty() || !class.decorators.is_empty() {
+                self.report(
+                    class.span,
+                    planned(
+                        "generic classes with a base or a decorator",
+                        "0.5",
+                        RuleId::GEN_08,
+                    ),
+                );
+            }
+        }
+        // One base is resolved with the other classes, which reports one that is not
+        // `object`, an exception class or a class of the program (CLS-03, CLS-04).
         match class.bases {
-            [] | [Expr::Name { .. }] => {}
-            [base] => self.report(
-                base.span(),
-                planned("base classes other than `object`", "0.4", RuleId::CLS_04),
-            ),
+            [] | [_] => {}
             [_, second, ..] => self.report(
                 second.span(),
                 Feature::AfterOne {
@@ -69,15 +93,34 @@ impl Walker {
 
     fn class_statement(&mut self, statement: &Stmt) {
         match statement {
-            Stmt::FunctionDef { .. } => self.statement(statement, Place::Class),
+            Stmt::FunctionDef { .. } | Stmt::TypeAlias { .. } => {
+                self.statement(statement, Place::Class);
+            }
+            // A name declared with or without a value, and a value given to one name, which
+            // the checker reads as a class variable or the default of an attribute (CLS-11).
             Stmt::AnnAssign {
                 target: Expr::Name { .. },
                 annotation,
-                value: None,
+                value,
                 ..
-            } => self.annotation(annotation),
+            } => {
+                self.annotation(annotation);
+                if let Some(value) = value {
+                    self.expression(value);
+                }
+            }
+            Stmt::Assign { targets, value, .. }
+                if matches!(targets.as_slice(), [Expr::Name { .. }]) =>
+            {
+                self.expression(value);
+            }
             Stmt::AnnAssign { span, .. } | Stmt::Assign { span, .. } => {
-                self.report(*span, planned("class variables", "0.4", RuleId::CLS_11));
+                self.report(
+                    *span,
+                    Feature::Excluded {
+                        what: "assignments in a class body to anything but one name",
+                    },
+                );
             }
             Stmt::Expr {
                 value:

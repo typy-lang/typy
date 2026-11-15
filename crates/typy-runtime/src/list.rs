@@ -12,6 +12,8 @@ pub(crate) use methods::typy_rt_list_insert_moved;
 #[cfg(test)]
 pub(crate) use operations::{typy_rt_list_append_moved, typy_rt_list_set, typy_rt_list_set_moved};
 #[cfg(test)]
+mod mixed_tests;
+#[cfg(test)]
 mod optional_tests;
 mod order;
 #[cfg(test)]
@@ -19,7 +21,7 @@ mod tests;
 
 #[cfg(test)]
 pub(crate) use aggregate::{typy_rt_list_any, typy_rt_list_extreme, typy_rt_list_sort};
-pub(crate) use item::{ItemKind, ItemType};
+pub(crate) use item::{ItemKind, ItemType, values_equal};
 pub(crate) use methods::typy_rt_list_reverse;
 #[cfg(test)]
 pub(crate) use methods::{
