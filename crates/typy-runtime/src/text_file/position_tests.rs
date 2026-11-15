@@ -119,8 +119,12 @@ fn the_standard_files_give_their_names_modes_and_descriptors() {
         assert_eq!(state(file, READABLE), Ok(readable), "{name}");
         assert_eq!(state(file, WRITABLE), Ok(!readable), "{name}");
         assert_eq!(state(file, CLOSED), Ok(false), "{name}");
-        assert!(state(file, TERMINAL).is_ok());
-        assert!(state(file, SEEKABLE).is_ok());
+        // Miri cannot ask a standard file whether it is a terminal or can seek.
+        #[cfg(not(miri))]
+        {
+            assert!(state(file, TERMINAL).is_ok());
+            assert!(state(file, SEEKABLE).is_ok());
+        }
     }
 }
 
@@ -318,6 +322,10 @@ fn an_appended_file_starts_at_its_end() {
 }
 
 #[test]
+#[cfg_attr(
+    miri,
+    ignore = "closing a standard file closes it for every test, and Miri runs them in one process"
+)]
 fn closing_standard_output_keeps_its_descriptor_and_refuses_what_follows() {
     let stdout = typy_rt_sys_stdout().cast_mut();
     let text = from_str("x");
@@ -350,11 +358,17 @@ fn closing_standard_output_keeps_its_descriptor_and_refuses_what_follows() {
         );
         typy_rt_decrement(text.cast());
     }
-    // The descriptor stays open, as CPython opens standard output with `closefd=False`.
+    // The descriptor stays open, as CPython opens standard output with `closefd=False`;
+    // Miri does not seek on standard output.
+    #[cfg(not(miri))]
     assert_ne!(crate::libc::seek(1, 0, crate::libc::SEEK_CUR), Err(9));
 }
 
 #[test]
+#[cfg_attr(
+    miri,
+    ignore = "closing a standard file closes it for every test, and Miri runs them in one process"
+)]
 fn closing_standard_input_refuses_reading_it() {
     let stdin = (&raw const STDIN).cast_mut();
     let closed = (

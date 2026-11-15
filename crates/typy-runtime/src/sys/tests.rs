@@ -289,6 +289,10 @@ fn system_exit_whose_value_has_no_text_ends_with_one() {
 }
 
 #[test]
+#[cfg_attr(
+    miri,
+    ignore = "closing a standard file closes it for every test, and Miri runs them in one process"
+)]
 fn system_exit_with_another_value_ends_with_one_once_standard_error_is_closed() {
     crate::io::close_standard(crate::libc::STDERR);
     let exception = with_argument(
