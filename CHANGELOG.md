@@ -16,6 +16,12 @@ All notable changes to TyPy are recorded here. The format follows
   case narrows the subject as the test it stands for does, so after
   `case None:` an optional subject is no longer `None` (CST-06).
 
+### Fixed
+
+- A function that returns before a later loop over `dict.items()`,
+  `keys()` or `values()`, or a later comprehension over one, no longer
+  leaks a view object of 24 bytes (CST-03).
+
 ## [0.4.0] - 2026-11-15
 
 ### Added

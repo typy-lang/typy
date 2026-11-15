@@ -326,19 +326,13 @@ impl FunctionLowerer<'_> {
             TyirType::Object(typy_tyir::TypeId::DICT) => {
                 self.constant(Constant::PlaceholderDict, span)
             }
-            // A view slot starts as a view of the placeholder dict, which holds no reference
-            // to an immortal object that matters, and is freed like any other view.
-            TyirType::Object(typy_tyir::TypeId::DICT_VIEW) => {
-                let dict = self.constant(Constant::PlaceholderDict, span);
-                let kind = self.constant(Constant::Int("0".to_owned()), span);
-                self.call_runtime(RuntimeFunction::DictView, vec![dict, kind], span)
-                    .value
-            }
             TyirType::Object(typy_tyir::TypeId::BYTES) => self.bytes_constant(&[], span),
-            // An instance, exception, iterator or range slot starts as null, which counting
-            // passes over.
+            // An instance, exception, iterator, range or view slot starts as null, which
+            // counting passes over. Nothing is allocated, so a `return` lowered before a later
+            // loop adds its hidden slot has nothing of that slot to release.
             TyirType::Object(id)
                 if id.class_index().is_some()
+                    || id == typy_tyir::TypeId::DICT_VIEW
                     || id == typy_tyir::TypeId::EXCEPTION
                     || id == typy_tyir::TypeId::ITERATOR
                     || id == typy_tyir::TypeId::TRACEBACK
