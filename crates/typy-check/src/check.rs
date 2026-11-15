@@ -276,7 +276,8 @@ fn check_module(
     let first_class = program.class_count();
     let first_function = program.function_count();
     program.prepare_module(module);
-    let imports = module_imports::module_imports(program, &tree.body);
+    let mut imports = module_imports::module_imports(program, &tree.body);
+    imports.add_binding_variables();
     let annotations = ImportedNames::of(program, &imports);
     let classes = collect_classes(&tree.body, first_class, diagnostics);
     let class_ids = class_table(&imports, &classes);
@@ -343,6 +344,7 @@ fn check_module(
     program.import_names(&imports.functions, annotations);
     program.import_module_functions(&imports.module_functions);
     program.declare_module_variables(&module_variable_spans, &definitions);
+    program.set_rebound(imports.rebound());
     let module_body: Vec<&Stmt> = tree
         .body
         .iter()

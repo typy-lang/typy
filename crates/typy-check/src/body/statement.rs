@@ -19,6 +19,7 @@ impl BodyChecker<'_> {
                 typed.extend(self.class_body_values(&name.name, body));
             } else {
                 typed.extend(self.statement(statement));
+                typed.append(&mut self.following);
             }
         }
         typed

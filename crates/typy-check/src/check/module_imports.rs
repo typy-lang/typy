@@ -7,7 +7,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use typy_diagnostics::{Diagnostic, DiagnosticCode, Diagnostics, RuleId, Span};
 use typy_source::syntax::{Expr, Stmt};
 
-use crate::body::{Imported, Program};
+use crate::body::{Binding, Bound, Imported, Program};
 use crate::typed::{ClassId, FunctionId};
 
 /// What a module's module-level imports bind.
@@ -29,23 +29,11 @@ pub(super) struct ModuleImports {
     pub(super) module_functions: BTreeMap<String, crate::body::ModuleFunction>,
     /// The type aliases of other modules imported by name (SMT-12).
     pub(super) aliases: crate::check::AliasTable,
-    /// Each name an import binds to a function or a class, with what it binds, whether the
-    /// import is lazy, and where.
-    pub(super) bound: BTreeMap<String, (Bound, bool, Span)>,
-    /// A name bound to two functions or classes, which TyPy refuses since one name keeps one
-    /// definition.
-    pub(super) clashes: Vec<Diagnostic>,
+    /// Each import that binds a name to a function or a class, in source order.
+    pub(super) bound: BTreeMap<String, Vec<Binding>>,
     /// The names an import inside a block, such as an `if` or a `try`, binds to a function
     /// or a class.
     pub(super) in_blocks: BTreeSet<String>,
-}
-
-/// What an import binds a name to that a call or an annotation reads when compiling.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(super) enum Bound {
-    Function(FunctionId),
-    Class(ClassId),
-    ModuleFunction(crate::body::ModuleFunction),
 }
 
 /// Returns what the imports at module level bind, in any block outside a `def` or a `class`.
@@ -126,37 +114,64 @@ fn collect(program: &Program, statements: &[Stmt], found: &mut ModuleImports, in
 }
 
 impl ModuleImports {
-    /// Notes that an import binds `name` to `target`, and reports a name an earlier import
-    /// bound to another function or class: a call compiled for one would run the other.
-    /// Two lazy imports of one name are left to the lazy import's own check (MOD-12).
+    /// Notes that an import binds `name` to `target`.
     fn bind(&mut self, name: &str, target: Bound, lazy: bool, span: Span, in_block: bool) {
         if in_block {
             self.in_blocks.insert(name.to_owned());
         }
-        if let Some((earlier, earlier_lazy, _)) = self.bound.get(name)
-            && *earlier != target
-            && !(lazy && *earlier_lazy)
-        {
-            self.clashes.push(bound_twice(name, span));
-        }
-        self.bound.insert(name.to_owned(), (target, lazy, span));
+        self.bound
+            .entry(name.to_owned())
+            .or_default()
+            .push(Binding { target, span, lazy });
     }
 
-    /// Reports each name imports bind to two functions or classes, each one an import binds
-    /// to a function or a class that the module also defines with `def` or `class`, and each
-    /// one an import binds to a function that the module also assigns as a variable.
+    /// Returns the names whose calls test a binding variable: those imports bind to more
+    /// than one function or class, and those an import inside a block binds (ADR-0036).
+    pub(super) fn rebound(&self) -> Vec<(String, Vec<Binding>)> {
+        self.bound
+            .iter()
+            .filter(|(name, bindings)| {
+                self.in_blocks.contains(*name)
+                    || bindings
+                        .iter()
+                        .any(|binding| binding.target != bindings[0].target)
+            })
+            .map(|(name, bindings)| (name.clone(), bindings.clone()))
+            .collect()
+    }
+
+    /// Takes the names imports bind to more than one function or class out of the tables of
+    /// functions and classes, so only a call through the binding variable reads them, and
+    /// adds each binding variable to the module's variables.
+    pub(super) fn add_binding_variables(&mut self) {
+        for (name, bindings) in self.rebound() {
+            if bindings
+                .iter()
+                .any(|binding| binding.target != bindings[0].target)
+            {
+                self.functions.remove(&name);
+                self.classes.remove(&name);
+                self.module_functions.remove(&name);
+                self.annotations
+                    .insert(name.clone(), crate::check::AnnotationName::Rebound);
+            }
+            self.variables
+                .insert(crate::body::binding_variable(&name), bindings[0].span);
+        }
+    }
+
+    /// Reports each name an import binds to a function or a class that the module also
+    /// defines with `def` or `class`, and each one an import binds to a function that the
+    /// module also assigns as a variable.
     pub(super) fn report_clashes(
         &self,
         defined: &[String],
         variables: &BTreeMap<String, Span>,
         diagnostics: &mut Diagnostics,
     ) {
-        for clash in &self.clashes {
-            diagnostics.push(clash.clone());
-        }
         for name in defined {
-            if let Some((_, _, span)) = self.bound.get(name) {
-                diagnostics.push(bound_twice(name, *span));
+            if let Some(bindings) = self.bound.get(name) {
+                diagnostics.push(bound_twice(name, bindings[0].span));
             }
         }
         self.report_assigned(variables, diagnostics);
@@ -167,9 +182,10 @@ impl ModuleImports {
     /// Returns the names only imports outside any block bind to a function or a class, which
     /// a statement may reach only after such an import runs.
     pub(super) fn bound_at_top(&self) -> BTreeSet<String> {
+        let rebound: BTreeSet<String> = self.rebound().into_iter().map(|(name, _)| name).collect();
         self.bound
             .keys()
-            .filter(|name| !self.in_blocks.contains(*name))
+            .filter(|name| !rebound.contains(*name))
             .cloned()
             .collect()
     }
@@ -177,9 +193,9 @@ impl ModuleImports {
     /// Reports each name an import binds to a function that the module also assigns as a
     /// variable, as a `def` of the name is; a class is reported with the module's own.
     fn report_assigned(&self, variables: &BTreeMap<String, Span>, diagnostics: &mut Diagnostics) {
-        for (name, (bound, _, _)) in &self.bound {
+        for (name, bindings) in &self.bound {
             if let (Bound::Function(_) | Bound::ModuleFunction(_), Some(span)) =
-                (bound, variables.get(name))
+                (bindings[0].target, variables.get(name))
             {
                 diagnostics.push(
                     Diagnostic::new(
@@ -194,14 +210,14 @@ impl ModuleImports {
     }
 }
 
-/// Returns the error for a name bound to two functions or classes.
+/// Returns the error for a name an import binds that the module also defines.
 fn bound_twice(name: &str, span: Span) -> Diagnostic {
     Diagnostic::new(
         DiagnosticCode::error(202),
         span,
         format!(
-            "`{name}` is bound to more than one function or class; TyPy keeps one definition \
-             per name"
+            "`{name}` is bound by an import and defined by the module; TyPy keeps one \
+             definition per name"
         ),
     )
     .with_rule(RuleId::STD_04)

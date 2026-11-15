@@ -85,12 +85,16 @@ All notable changes to TyPy are recorded here. The format follows
 - A module-level statement that can call a function or a class before
   the import that binds it has run is E0306, as one before its `def` is.
   TyPy called it anyway, where CPython raises `NameError` (TYP-12).
-- A module-level name that imports bind to two different functions or
-  classes, such as `from first import run` and later
-  `from second import run` or `from math import floor as sqrt` after
-  `from math import sqrt`, or to a function or class the module also
-  defines or assigns, is E0202, as a second `def` is. TyPy called the
-  last one bound wherever the name was used (STD-04).
+- A function or a class that imports bind more than once, such as
+  `from first import run` and later `from second import run`, one in
+  each branch of an `if`, or two lazy imports, is called as the import
+  that ran last bound it, and a name an import inside a block binds
+  raises `NameError` when that import has not run. TyPy called the last
+  one in the source wherever the name was used, even before any import
+  ran (MOD-12, ADR-0036).
+- A name an import binds to a function or a class that the module also
+  defines with `def` or `class` or assigns as a variable is E0202, as a
+  second `def` is (STD-04).
 - An `OSError` subclass with an `__init__` of its own starts with no
   arguments, as CPython's `OSError.__new__` leaves them to
   `OSError.__init__`: `Quiet("q")` is `Quiet()` with `args` `()` unless its

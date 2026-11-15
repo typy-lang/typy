@@ -49,6 +49,9 @@ impl BodyChecker<'_> {
                 span,
             );
         }
+        if let Some(call) = self.rebound_call(name, arguments, keywords, span) {
+            return call;
+        }
         if let Some(function) = self.program.function_ids.get(name).copied() {
             let call = self.call_function(function, name, arguments, keywords, span);
             return self.through_lazy(name, call);

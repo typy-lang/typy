@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy detailed design |
-| Version | 1.78 |
+| Version | 1.79 |
 | Status | Approved |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-15 |
@@ -1590,11 +1590,27 @@ imports with `Program::resolve_import`: a function or a class imported by
 name enters the module's tables, so calls and annotations find it, and a
 name bound to a module or to a module variable's value becomes a module
 variable of the importer, typed `Type::Module` or with the source's type.
-A call or an annotation reads such a name when compiling, so
-`ModuleImports::bind` reports E0202 for a name that imports bind to two
-functions or classes, and `report_defined` and `report_assigned` for one
+A call or an annotation reads such a name when compiling.
+`ModuleImports::report_clashes` gives E0202 for a name an import binds that
 the module also defines with `def` or `class` or assigns as a variable
-(STD-04); two lazy imports of a name are left to the lazy import's check.
+(STD-04). A name imports bind to more than one function, class or function
+of a built-in module, or that an import inside a block binds, is a
+`body::rebound::Rebound` (MOD-12, ADR-0036): `add_binding_variables` adds
+the module variable `<bound name>`, an `int` whose symbol is named `name` so
+its `NameError` names it, and takes a name with several targets out of the
+tables of functions and classes and into the annotation names as
+`AnnotationName::Rebound`, which an annotation reports as E0201 (MOD-14).
+The module body starts by storing 0 in each, and each import statement that
+binds the name stores its number, from 1 in source order, as an
+`ImportBinding::Expression`; a lazy import does it in an `Import` with no
+modules that follows its `LazyImport`, and notes its function in
+`Program::rebound_reify`. `rebound_call` checks a call once for each
+binding and chains `TypedExprKind::IfExp`s on the number, each arm the call
+of that import's target, wrapped in `Lazy` for a lazy one, and a last arm
+of `Raise` of a `NameError`; `rebound_read` guards a class read as a value
+the same way. A function's own import of the name hides it. Another module
+that reads a name with several targets gets E0201 through
+`Program::rebound_elsewhere`.
 A function's own imports enter the tables while it is checked. An import
 statement is `TypedStmt::Import { modules, bindings }`: the modules to
 initialise, each package before its submodules, and each `ImportBinding`,
@@ -1640,9 +1656,10 @@ and E0206 otherwise (LIB-08). For each module it runs:
    A variable bound by several lazy imports keeps its first function in
    `lazy_names`; lowering reads every function that binds the variable,
    and each `LazyImport` arms its own and disarms the others, so at most
-   one waits. A function or a class bound by two is E0201 (MOD-11,
-   MOD-12). The subset walker reports CPython's `SyntaxError`s for `lazy`
-   inside a function or a `try`, and with `*` or `__future__`, as E0103;
+   one waits. A function or a class bound by two is called through its
+   binding variable (MOD-11, MOD-12, ADR-0036). The subset walker reports
+   CPython's `SyntaxError`s for `lazy` inside a function or a `try`, and
+   with `*` or `__future__`, as E0103;
    a class body holds only methods, so one there is E0202.
    `format % values` with a string literal on the left is checked by
    `body/percent.rs` (LIB-10). `percent_format::parse` reads the format

@@ -107,6 +107,11 @@ pub(crate) struct Program {
     pub(super) known_creations: Option<std::rc::Rc<crate::exception_arguments::Creations>>,
     /// Where a body first reads `args` as a value, if one does.
     pub(super) arguments_read: Option<Span>,
+    /// The names of the module being checked that imports bind to several functions or
+    /// classes, or inside a block, with their binding variables (MOD-12, ADR-0036).
+    pub(super) rebound: BTreeMap<String, super::rebound::Rebound>,
+    /// The function of each lazy import that binds such a name, by where it names it.
+    pub(super) rebound_reify: BTreeMap<Span, FunctionId>,
 }
 
 /// What a first look at a module body may change, which `keep_module_types` undoes.
@@ -130,6 +135,9 @@ pub(crate) struct ModuleScope {
     pub(super) type_aliases: BTreeSet<String>,
     /// The module's type aliases as other modules read them (SMT-12).
     pub(super) alias_values: crate::check::AliasTable,
+    /// The names imports bind to more than one function or class, which another module
+    /// cannot read yet (MOD-14).
+    pub(super) rebound: BTreeSet<String>,
 }
 
 impl Program {
@@ -179,6 +187,8 @@ impl Program {
             creations: crate::exception_arguments::Creations::default(),
             known_creations: None,
             arguments_read: None,
+            rebound: BTreeMap::new(),
+            rebound_reify: BTreeMap::new(),
         }
     }
 
@@ -466,8 +476,28 @@ impl Program {
                 module_symbols: self.module_symbols.clone(),
                 type_aliases: std::mem::take(&mut self.type_aliases),
                 alias_values: std::mem::take(&mut self.exported_aliases),
+                rebound: self
+                    .rebound
+                    .iter()
+                    .filter(|(_, rebound)| rebound.several())
+                    .map(|(name, _)| name.clone())
+                    .collect(),
             },
         );
+    }
+
+    /// Returns the error for `module.name` read from another module, when imports bind the
+    /// name to more than one function or class there.
+    pub(super) fn rebound_elsewhere(
+        &self,
+        module: &str,
+        name: &str,
+        span: Span,
+    ) -> Option<typy_diagnostics::Diagnostic> {
+        self.scopes
+            .get(module)
+            .is_some_and(|scope| scope.rebound.contains(name))
+            .then(|| super::rebound::rebound_planned(name, "used from another module", span))
     }
 
     /// Returns the type of the instances of a class: an exception for an exception class.

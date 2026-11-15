@@ -102,6 +102,9 @@ impl BodyChecker<'_> {
         if id == "__name__" {
             return Self::typed(TypedExprKind::ModuleName, Type::Str, span);
         }
+        if let Some(read) = self.rebound_read(id, span) {
+            return read;
+        }
         if let Some(refused) = self.annotation_only(id, span) {
             return refused;
         }

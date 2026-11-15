@@ -293,6 +293,9 @@ impl Program {
         if self.loaded.contains(child.as_str()) {
             return Ok(Imported::Module(child));
         }
+        if let Some(planned) = self.rebound_elsewhere(base.as_str(), name, alias.name.span) {
+            return Err(Box::new(planned));
+        }
         Err(Box::new(
             Diagnostic::new(
                 DiagnosticCode::error(425),
@@ -456,10 +459,12 @@ impl BodyChecker<'_> {
         };
         let mut bindings = Vec::new();
         let mut lazy_callables = Vec::new();
+        let mut numbers = Vec::new();
         for (name, imported, name_span) in resolved.names {
             let ty = match &imported {
                 Imported::Function(_) | Imported::Class(_) | Imported::ModuleFunction(_) => {
-                    lazy_callables.push(name);
+                    numbers.extend(self.rebound_binding(&name, name_span));
+                    lazy_callables.push((name, name_span));
                     continue;
                 }
                 Imported::ModuleValue(value) => value.expression(name_span).ty,
@@ -510,26 +515,41 @@ impl BodyChecker<'_> {
             };
             bindings.extend(self.assign(&target, ty, &value).and_then(binding));
         }
+        let lazy =
+            !self.in_function() && typy_source::is_lazy(statement, &self.program.lazy_modules);
+        if !lazy {
+            // The import stores its number in each binding variable once its names are bound.
+            bindings.append(&mut numbers);
+        }
         let import = TypedStmt::Import {
             modules: resolved.modules,
             pending: resolved.pending,
             bindings,
             span,
         };
-        if self.in_function() || !typy_source::is_lazy(statement, &self.program.lazy_modules) {
+        if !lazy {
             return Some(import);
+        }
+        // A lazy import stores its number when its statement runs, as it binds its names then.
+        if !numbers.is_empty() {
+            self.following.push(TypedStmt::Import {
+                modules: Vec::new(),
+                pending: Vec::new(),
+                bindings: numbers,
+                span,
+            });
         }
         self.lazy_import(import, lazy_callables, span)
     }
 
     /// Makes a lazy import of an import statement. Each name it binds gets its own function,
     /// which runs the import for that name alone, so rebinding one name cancels only its own
-    /// import, as in CPython. A name bound by two lazy imports is refused, since its first
-    /// use would have to know which of them ran last.
+    /// import, as in CPython. A function or a class several imports bind is called through
+    /// its binding variable (ADR-0036).
     fn lazy_import(
         &mut self,
         import: TypedStmt,
-        callables: Vec<String>,
+        callables: Vec<(String, Span)>,
         span: Span,
     ) -> Option<TypedStmt> {
         let TypedStmt::Import {
@@ -541,54 +561,25 @@ impl BodyChecker<'_> {
         else {
             return None;
         };
-        let mut names: Vec<(String, Option<ImportBinding>)> = bindings
+        let mut names: Vec<(String, Option<ImportBinding>, Option<Span>)> = bindings
             .into_iter()
             .map(|binding| {
                 let target = binding.target();
                 (
                     self.program.symbols[target.0 as usize].name.clone(),
                     Some(binding),
+                    None,
                 )
             })
             .collect();
-        names.extend(callables.into_iter().map(|name| (name, None)));
-        let first = self.program.next_function().0;
-        let module = self.program.module.clone();
-        // A variable may be bound by several lazy imports, the last one run giving its value;
-        // a function or a class would need the call to choose its target when it runs.
-        let twice = names.iter().zip(first..).find(|((name, binding), id)| {
-            self.program
-                .lazy_names
-                .get(&(module.clone(), name.clone()))
-                .is_some_and(|known| {
-                    known.0 != *id
-                        && (binding.is_none()
-                            || self
-                                .program
-                                .lazy_imports
-                                .get(known)
-                                .copied()
-                                .flatten()
-                                .is_none())
-                })
-        });
-        if let Some(((name, _), _)) = twice {
-            self.diagnostics.push(
-                Diagnostic::new(
-                    DiagnosticCode::error(201),
-                    span,
-                    format!(
-                        "binding the function or class `{name}` by a second lazy import is \
-                         planned for TyPy 0.5 (MOD-12)"
-                    ),
-                )
-                .with_rule(RuleId::MOD_12),
-            );
-            return None;
-        }
+        names.extend(
+            callables
+                .into_iter()
+                .map(|(name, name_span)| (name, None, Some(name_span))),
+        );
         let mut reifies = Vec::new();
         let mut targets = Vec::new();
-        for (name, binding) in names {
+        for (name, binding, name_span) in names {
             let target = binding.as_ref().map(ImportBinding::target);
             targets.extend(target);
             let import = TypedStmt::Import {
@@ -597,7 +588,13 @@ impl BodyChecker<'_> {
                 bindings: binding.into_iter().collect(),
                 span,
             };
-            reifies.push(self.program.add_lazy_import(name, import, target, span));
+            let reify = self
+                .program
+                .add_lazy_import(name.clone(), import, target, span);
+            if let Some(name_span) = name_span {
+                self.note_rebound_reify(&name, name_span, reify);
+            }
+            reifies.push(reify);
         }
         Some(TypedStmt::LazyImport {
             reifies,
@@ -724,6 +721,9 @@ impl BodyChecker<'_> {
                 Type::Module(child),
                 span,
             );
+        }
+        if let Some(planned) = self.program.rebound_elsewhere(module, name, span) {
+            return self.error(planned, span);
         }
         let (code, rule, message) = if let Named::Function(_) = found {
             (
@@ -948,10 +948,14 @@ impl BodyChecker<'_> {
                 continue;
             };
             for (name, imported, _) in resolved.names {
-                // A function's own import of a name hides the module's lazy import of it.
+                // A function's own import of a name hides the module's lazy import of it, and
+                // the module's binding variable for it.
                 let key = (self.program.module.clone(), name.clone());
                 if let Some(lazy) = self.program.lazy_names.remove(&key) {
                     saved.lazy.push((name.clone(), lazy));
+                }
+                if let Some(rebound) = self.program.rebound.remove(&name) {
+                    saved.rebound.push((name.clone(), rebound));
                 }
                 match imported {
                     Imported::Function(function) => saved.functions.push((
@@ -1002,6 +1006,9 @@ impl BodyChecker<'_> {
             let key = (self.program.module.clone(), name);
             self.program.lazy_names.insert(key, lazy);
         }
+        for (name, rebound) in saved.rebound {
+            self.program.rebound.insert(name, rebound);
+        }
         for (name, previous) in saved.functions.into_iter().rev() {
             match previous {
                 Some(function) => self.program.function_ids.insert(name, function),
@@ -1039,6 +1046,7 @@ pub(super) struct SavedNames {
     lazy: Vec<(String, FunctionId)>,
     math: Vec<(String, Option<ModuleFunction>)>,
     aliases: Vec<(String, Option<std::rc::Rc<crate::check::ExportedAlias>>)>,
+    rebound: Vec<(String, super::rebound::Rebound)>,
 }
 
 /// Collects the import statements of a block, at any depth outside nested definitions.

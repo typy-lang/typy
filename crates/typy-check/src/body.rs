@@ -48,6 +48,7 @@ mod pattern_sequence;
 mod percent;
 mod program;
 mod protocol;
+mod rebound;
 mod round_call;
 mod set;
 mod slice;
@@ -66,6 +67,7 @@ pub(crate) use builtin_module::ModuleFunction;
 pub(crate) use class_copy::{ClassCopies, GenericClass};
 pub(crate) use import::Imported;
 pub(crate) use program::Program;
+pub(crate) use rebound::{Binding, Bound, binding_variable, rebound_planned};
 
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -100,6 +102,9 @@ pub(crate) struct BodyChecker<'program> {
     /// The types `isinstance` tests narrow variables to, which `Fact::Narrowed` names by
     /// position (TYP-07).
     narrowings: Vec<Type>,
+    /// Statements that follow the statement being checked, such as the one that stores a
+    /// lazy import's number in its binding variables (ADR-0036).
+    following: Vec<crate::typed::TypedStmt>,
     /// The variables, or `args` of the exceptions variables hold, an operation is being
     /// checked for each member of, innermost last, each with the member it is checked for now
     /// (TYP-14).
@@ -141,6 +146,7 @@ impl<'program> BodyChecker<'program> {
             method: None,
             narrowings: Vec::new(),
             splitting: Vec::new(),
+            following: Vec::new(),
             reported_incomplete: false,
             handling: 0,
             finally_loops: Vec::new(),
@@ -264,7 +270,9 @@ impl<'program> BodyChecker<'program> {
     ) -> FunctionId {
         let mut checker = BodyChecker::new(program, diagnostics, None);
         checker.collect_locals(statements);
-        let body = checker.statements(statements);
+        let first = statements.first().map(|statement| statement.span());
+        let mut body = first.map_or_else(Vec::new, |span| checker.program.rebound_starts(span));
+        body.extend(checker.statements(statements));
         let named_targets = std::mem::take(&mut checker.named_targets);
         let locals = checker.finish_locals();
         // A lazy import adds the function that runs it, so the body's ID comes after those.

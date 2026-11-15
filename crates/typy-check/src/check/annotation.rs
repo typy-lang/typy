@@ -74,6 +74,9 @@ pub(crate) enum AnnotationName {
     Dataclasses,
     /// `typing.Protocol`, the base of a protocol class (GEN-04).
     Protocol,
+    /// A name that imports bind to more than one class, whose type depends on the import
+    /// that ran last (MOD-14).
+    Rebound,
     /// `typing.Optional`, `Optional[T]` being `T | None` (LIB-17).
     Optional,
     /// `typing.Union`, `Union[A, B]` being `A | B` (LIB-17).
@@ -231,6 +234,17 @@ fn bare_standard(
                 )
                 .with_rule(RuleId::GEN_04),
             );
+            Type::Error
+        }
+        AnnotationName::Rebound => {
+            let Expr::Name { id, .. } = annotation else {
+                return Type::Error;
+            };
+            diagnostics.push(crate::body::rebound_planned(
+                id,
+                "named in an annotation",
+                annotation.span(),
+            ));
             Type::Error
         }
         AnnotationName::Builtin(builtin) => {

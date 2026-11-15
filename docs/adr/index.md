@@ -41,3 +41,4 @@ supersedes it.
 | [ADR-0033](0033-warn-about-a-match-that-leaves-members-of-its-subject-unmatched.md) | Warn about a match that leaves members of its subject unmatched | Accepted | 2026-11-15 |
 | [ADR-0034](0034-type-exception-args-by-the-raises-that-create-them.md) | Type exception args by the raises that create them | Accepted | 2026-11-15 |
 | [ADR-0035](0035-type-os-error-attributes-by-the-raises-that-create-them.md) | Type OSError attributes by the raises that create them | Accepted | 2026-11-15 |
+| [ADR-0036](0036-call-the-function-the-last-run-import-bound.md) | Call the function the last-run import bound | Accepted | 2026-11-15 |

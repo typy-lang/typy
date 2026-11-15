@@ -211,16 +211,19 @@ fn lazy_imports_outside_module_level_are_rejected() {
 }
 
 #[test]
-fn a_function_bound_by_two_lazy_imports_gives_e0201() {
-    let found = rejected(&[
-        (
-            "app.py",
-            "lazy from tools import double\nif double(1):\n    lazy from other import double\n",
-        ),
-        ("tools.py", TOOLS),
-        ("other.py", OTHER),
-    ]);
-    assert_eq!(found, ["E0201"]);
+fn a_function_bound_by_two_lazy_imports_is_called_through_its_binding_variable() {
+    let dump = accepted_at(
+        PythonFloor::V3_15,
+        &[
+            (
+                "app.py",
+                "lazy from tools import double\nif double(1):\n    lazy from other import double\nprint(double(2))\n",
+            ),
+            ("tools.py", TOOLS),
+            ("other.py", OTHER),
+        ],
+    );
+    assert_contains(&dump, &["LazyImport", "IfExp", "Raise"]);
 }
 
 #[test]

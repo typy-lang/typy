@@ -93,8 +93,36 @@ Another module may use a name a module imports lazily, as
 first, as in CPython. Assigning `m.x = v` through a lazily imported `m`
 runs `m`'s import before the assignment. A variable may be bound by more
 than one lazy import, and its first use runs the one that ran last
-(MOD-11). A function or a class bound by two lazy imports is planned for
-0.5 (MOD-12).
+(MOD-11). So may a function or a class, as the next section describes.
+
+## A name bound by more than one import
+
+A function or a class may be bound by several imports, eager or lazy, such
+as one in each branch of an `if`, and a call runs the one the import that
+ran last bound, as in CPython (MOD-12). A name an import inside a block
+binds raises `NameError` when that import has not run:
+
+<!-- typy-expect: accepted -->
+```python
+import sys
+
+if len(sys.argv) > 9:
+    from math import sqrt as root
+else:
+    from math import isqrt as root
+print(root(17))
+if len(sys.argv) > 9:
+    from math import floor
+try:
+    print(floor(2.5))
+except NameError as error:
+    print(error)
+```
+
+The arguments of such a call are checked against each function it may
+run. A name bound to more than one function or class read as a value,
+named in an annotation or used from another module is planned for 1.0
+(E0201, MOD-14).
 
 The switches of `sys` that change lazy imports from outside the module,
 `sys.set_lazy_imports`, `sys.set_lazy_imports_filter`, their `get_`
@@ -109,16 +137,16 @@ imports into the function that uses the module breaks the cycle. A name a
 module does not define is E0425, at compile time.
 
 A module keeps one definition per name, as for `def` (STD-04). A name
-that imports bind to two different functions or classes, or to a function
-or a class that the module also defines or assigns, is E0202, since a call
-compiled for one would run the other. Import the second under another
-name:
+that an import binds to a function or a class and that the module also
+defines or assigns is E0202. Import it under another name:
 
-<!-- typy-expect: rejected E0202 at 3:18 -->
+<!-- typy-expect: rejected E0202 at 1:18 -->
 ```python
 from math import sqrt
-print(sqrt(4))
-from math import floor as sqrt
+
+
+def sqrt(value: float) -> float:
+    return value / 2
 ```
 
 `from m import *` is planned for after 1.0. Standard library modules come

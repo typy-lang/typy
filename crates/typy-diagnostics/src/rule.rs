@@ -237,10 +237,12 @@ impl RuleId {
     pub const MOD_09: Self = Self("MOD-09");
     /// A name bound by a lazy import shall be usable from another module, assignable through a lazily imported module, and bindable by more than one lazy import.
     pub const MOD_11: Self = Self("MOD-11");
-    /// A function or a class shall be bindable by more than one lazy import of a module, a call running the one bound last.
+    /// A function or a class shall be bindable by more than one import of a module, eager or lazy, and by an import inside a block, a call running the one the import that ran last bound, and raising `NameError` when none has run.
     pub const MOD_12: Self = Self("MOD-12");
     /// A module shall be importable inside a function of a module that it imports at module level.
     pub const MOD_13: Self = Self("MOD-13");
+    /// A name that imports bind to more than one function or class shall be usable as a value, in an annotation and from another module.
+    pub const MOD_14: Self = Self("MOD-14");
     /// The compiler shall not crash on any input; an internal error shall be reported as `E9xxx` with a hint to report it.
     pub const NFR_09: Self = Self("NFR-09");
     /// Unpacking assignment to several targets shall be accepted for tuples and lists.
@@ -417,6 +419,7 @@ impl RuleId {
         Self::MOD_11,
         Self::MOD_12,
         Self::MOD_13,
+        Self::MOD_14,
         Self::NFR_09,
         Self::SMT_02,
         Self::SMT_04,
