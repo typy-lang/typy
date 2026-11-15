@@ -484,7 +484,11 @@ fn expression(expression_value: &TypedExpr, callees: &mut BTreeSet<FunctionId>) 
         | TypedExprKind::FileAttribute {
             file: exception, ..
         } => expression(exception, callees),
-        TypedExprKind::PercentDynamic { format, values } => {
+        TypedExprKind::PercentDynamic { format, values }
+        | TypedExprKind::Sequence {
+            first: format,
+            then: values,
+        } => {
             expression(format, callees);
             expression(values, callees);
         }

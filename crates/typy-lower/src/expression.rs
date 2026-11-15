@@ -133,6 +133,11 @@ impl FunctionLowerer<'_> {
                 self.tuple_slice(tuple, positions, ty, span)
             }
             TypedExprKind::Raise(exception) => self.raise_in_place(exception, ty, span),
+            TypedExprKind::Sequence { first, then } => {
+                let first = self.expression(first);
+                self.release(first, span);
+                self.expression(then)
+            }
             TypedExprKind::Hash(value) => {
                 let value = self.expression(value);
                 let (kind, descriptor) = self.item_layout(value.ty, span);

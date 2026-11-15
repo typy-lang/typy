@@ -349,8 +349,10 @@ class Square(Shape):
 print(Shape.unit().name, Square.unit().name, type(Square.unit()).__name__)
 ```
 
-A class method is called through its class. Calling it through an
-instance, and through a subclass defined in another module than the
+A static method is called through its class, or through any expression
+that gives the class or one of its instances, which is evaluated first,
+as in CPython. A class method is called through its class. Calling it
+through an instance, and through a subclass defined in another module than the
 class that defines the method, are planned for 0.5, and so is
 assigning a class variable through a subclass that inherits it, which
 in CPython gives the subclass a variable of its own (CLS-25).

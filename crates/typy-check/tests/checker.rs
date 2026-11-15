@@ -2312,6 +2312,13 @@ fn class_bodies_give_class_variables_and_defaults() {
 }
 
 #[test]
+fn a_static_method_is_called_through_any_instance() {
+    accepted(
+        "class A:\n    @staticmethod\n    def f() -> int:\n        return 1\ndef g() -> A:\n    return A()\nprint(g().f())\n",
+    );
+}
+
+#[test]
 fn static_methods_and_properties_are_checked() {
     accepted(concat!(
         "class A:\n",
@@ -2395,10 +2402,6 @@ fn static_methods_and_properties_are_checked() {
         (
             "class C:\n    def __iter__(self, n: int) -> 'C':\n        return self\n",
             &["E0404"],
-        ),
-        (
-            "class A:\n    @staticmethod\n    def f() -> int:\n        return 1\ndef g() -> A:\n    return A()\nprint(g().f())\n",
-            &["E0201"],
         ),
     ];
     for (source, expected) in cases {

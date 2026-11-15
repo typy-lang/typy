@@ -534,27 +534,25 @@ impl BodyChecker<'_> {
             return self.uncallable_property(class, name, arguments, span);
         }
         if let Some(method) = found.filter(|_| self.is_static_method(class, &name.name)) {
-            // The instance only names the class, so reading it has no effect to keep.
-            if !matches!(
+            let call = self.static_call(method, class, name, arguments, keywords, span);
+            // A variable only names the class; any other instance is evaluated first for its
+            // effects, as CPython evaluates it to find the method (CLS-25).
+            if matches!(
                 receiver.kind,
                 TypedExprKind::Local(_) | TypedExprKind::ModuleVariable(_)
-            ) {
-                for argument in arguments {
-                    self.expression(argument);
-                }
-                return self.error(
-                    Diagnostic::new(
-                        DiagnosticCode::error(201),
-                        name.span,
-                        "calling a static method through an expression other than a variable \
-                         is planned for TyPy 0.5 (CLS-25)",
-                    )
-                    .with_rule(RuleId::CLS_25)
-                    .with_help("call it through its class"),
-                    span,
-                );
+            ) || call.ty.has_error()
+            {
+                return call;
             }
-            return self.static_call(method, class, name, arguments, keywords, span);
+            let ty = call.ty.clone();
+            return Self::typed(
+                TypedExprKind::Sequence {
+                    first: Box::new(receiver),
+                    then: Box::new(call),
+                },
+                ty,
+                span,
+            );
         }
         let info = &self.program.classes[class.0 as usize];
         let Some(method) = found else {

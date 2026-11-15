@@ -327,6 +327,12 @@ pub enum TypedExprKind {
         tuple: Box<TypedExpr>,
         index: usize,
     },
+    /// `first`, evaluated for its effects and dropped, then `then`, which gives the value: a
+    /// static method called through an instance that is not a variable (CLS-25).
+    Sequence {
+        first: Box<TypedExpr>,
+        then: Box<TypedExpr>,
+    },
     /// The hash of a value as a set or a dict hashes it, which the `__hash__` a dataclass gets
     /// returns for the tuple of its fields (CLS-16). No program names it; `hash` itself is
     /// not provided, since CPython draws the key of a `str` hash at random.
@@ -538,6 +544,7 @@ impl TypedExpr {
             | TypedExprKind::Input(value)
             | TypedExprKind::RecursionLimit(value) => value.iter().map(Box::as_ref).collect(),
             TypedExprKind::ExceptionArguments { exception, .. } => vec![exception],
+            TypedExprKind::Sequence { first, then } => vec![first, then],
             TypedExprKind::FileAttribute { file, .. } => vec![file],
             TypedExprKind::PercentDynamic { format, values } => vec![format, values],
             TypedExprKind::ExceptionPart {

@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy detailed design |
-| Version | 1.83 |
+| Version | 1.84 |
 | Status | Approved |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-15 |
@@ -1281,7 +1281,8 @@ program runs; assigning the variable ends the narrowing (TYP-07). `is`
 compares two exceptions. `FunctionParts::method_kind` reads a method's
 decorator (CLS-06). A static method's definition takes no instance, is recorded
 in `ClassInfo::static_methods`, has no entry in the method tables, and is called
-directly as `Class.name(...)` or through a variable that holds an instance; a
+directly as `Class.name(...)` or through an instance; an instance that is not a
+variable is evaluated first, in a `TypedExprKind::Sequence` (CLS-25); a
 subclass redefining it, and a static method over a base's method, are E0201,
 planned for 0.5. A property's getter is a method of its name, recorded in
 `ClassInfo::properties`, and its setter the method `name.setter`, so both
