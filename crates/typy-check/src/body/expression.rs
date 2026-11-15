@@ -30,6 +30,7 @@ impl BodyChecker<'_> {
                     Constant::Int(digits) => TypedConstant::Int(digits.clone()),
                     Constant::Float(value) => TypedConstant::Float(*value),
                     Constant::Str(value) => TypedConstant::Str(value.clone()),
+                    Constant::StrPoints(points) => TypedConstant::StrPoints(points.clone()),
                     Constant::Bytes(value) => TypedConstant::Bytes(value.clone()),
                     Constant::Complex { .. } | Constant::Ellipsis => {
                         return Self::typed(
@@ -40,6 +41,7 @@ impl BodyChecker<'_> {
                     }
                 };
                 let ty = constant.ty();
+                self.program.makes_surrogates |= constant.holds_unescapable_surrogate();
                 Self::typed(TypedExprKind::Constant(constant), ty, span)
             }
             Expr::Name { id, .. } => self.name(id, span),

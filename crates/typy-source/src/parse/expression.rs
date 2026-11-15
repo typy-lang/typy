@@ -1,6 +1,7 @@
 //! Converts Ruff's expressions and literals.
 
 use ruff_python_ast as ast;
+use ruff_python_ast::StringFlags as _;
 use ruff_text_size::{Ranged, TextRange};
 
 use super::Converter;
@@ -27,13 +28,80 @@ impl Converter<'_> {
         self.expression(annotation)
     }
 
+    /// Returns the value of a string literal and the literals implicitly joined to it, as
+    /// code points when one holds an escaped surrogate (LEX-10).
+    fn string_constant(&self, node: &ast::ExprStringLiteral) -> Constant {
+        let parts: Vec<Option<Vec<u32>>> = node
+            .value
+            .iter()
+            .map(|part| self.literal_points(part))
+            .collect();
+        if parts.iter().all(Option::is_none) {
+            return Constant::Str(node.value.to_str().to_owned());
+        }
+        let points = node
+            .value
+            .iter()
+            .zip(parts)
+            .flat_map(|(part, points)| {
+                points.unwrap_or_else(|| part.value.chars().map(u32::from).collect())
+            })
+            .collect();
+        Constant::StrPoints(points)
+    }
+
+    /// Returns the code points of one string literal when it holds an escaped surrogate.
+    fn literal_points(&self, literal: &ast::StringLiteral) -> Option<Vec<u32>> {
+        if literal.flags.prefix().is_raw() {
+            return None;
+        }
+        let range = literal.range;
+        let content = TextRange::new(
+            range.start() + literal.flags.opener_len(),
+            range.end() - literal.flags.closer_len(),
+        );
+        self.surrogate_points(&literal.value, content)
+    }
+
+    /// Returns literal text of an f-string, whose source is `range`. Text that holds an
+    /// escaped surrogate becomes a replacement field of that string, which formats as the
+    /// string itself, since an f-string's text is Rust text (LEX-10).
+    fn fstring_text(&self, value: &str, range: TextRange, raw: bool) -> FStringPart {
+        match (!raw)
+            .then(|| self.surrogate_points(value, range))
+            .flatten()
+        {
+            None => FStringPart::Literal(value.to_owned()),
+            Some(points) => self.points_field(points, range),
+        }
+    }
+
+    /// Returns the replacement field `{text}` of the string with code points `points`.
+    fn points_field(&self, points: Vec<u32>, range: TextRange) -> FStringPart {
+        let span = self.span(range);
+        FStringPart::Field(Box::new(ReplacementField {
+            value: Expr::Constant {
+                value: Constant::StrPoints(points),
+                span,
+            },
+            debug: None,
+            conversion: None,
+            spec: None,
+            span,
+        }))
+    }
+
     /// Converts the elements of an f-string or of a format specification.
-    fn fstring_parts(&self, elements: &ast::InterpolatedStringElements) -> Vec<FStringPart> {
+    fn fstring_parts(
+        &self,
+        elements: &ast::InterpolatedStringElements,
+        raw: bool,
+    ) -> Vec<FStringPart> {
         elements
             .iter()
             .map(|element| match element {
                 ast::InterpolatedStringElement::Literal(literal) => {
-                    FStringPart::Literal(literal.value.to_string())
+                    self.fstring_text(&literal.value, literal.range, raw)
                 }
                 ast::InterpolatedStringElement::Interpolation(field) => {
                     FStringPart::Field(Box::new(ReplacementField {
@@ -51,7 +119,7 @@ impl Converter<'_> {
                         spec: field
                             .format_spec
                             .as_ref()
-                            .map(|spec| self.fstring_parts(&spec.elements)),
+                            .map(|spec| self.fstring_parts(&spec.elements, raw)),
                         span: self.span(field.range),
                     }))
                 }
@@ -160,9 +228,7 @@ impl Converter<'_> {
                     .collect(),
                 span,
             },
-            ast::Expr::StringLiteral(node) => {
-                self.constant(Constant::Str(node.value.to_str().to_owned()), node.range)
-            }
+            ast::Expr::StringLiteral(node) => self.constant(self.string_constant(node), node.range),
             ast::Expr::BytesLiteral(node) => {
                 self.constant(Constant::Bytes(node.value.bytes().collect()), node.range)
             }
@@ -249,10 +315,13 @@ impl Converter<'_> {
                     .iter()
                     .flat_map(|part| match part {
                         ast::FStringPartRef::Literal(literal) => {
-                            vec![FStringPart::Literal(literal.value.to_string())]
+                            vec![match self.literal_points(literal) {
+                                None => FStringPart::Literal(literal.value.to_string()),
+                                Some(points) => self.points_field(points, literal.range),
+                            }]
                         }
                         ast::FStringPartRef::FString(fstring) => {
-                            self.fstring_parts(&fstring.elements)
+                            self.fstring_parts(&fstring.elements, fstring.flags.prefix().is_raw())
                         }
                     })
                     .collect(),

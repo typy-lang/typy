@@ -2,7 +2,7 @@
 
 use super::ExceptionObject;
 use crate::io::{flush_stdout, write_stderr};
-use crate::string::write_utf8;
+use crate::string::{Surrogates, write_utf8};
 
 /// The number of identical entries in a row a traceback shows before it counts the rest, as
 /// CPython's `TB_RECURSIVE_CUTOFF`; a deep recursion then prints a few lines, not one per frame.
@@ -182,7 +182,7 @@ unsafe fn write_last_line(exception: *const ExceptionObject, write: &mut dyn FnM
         unsafe {
             if crate::string::length(text.value) > 0 {
                 write(b": ");
-                write_utf8(text.value, |bytes| write(bytes));
+                write_utf8(text.value, Surrogates::Backslash, |bytes| write(bytes));
             }
             crate::refcount::typy_rt_decrement(text.value.cast());
         }

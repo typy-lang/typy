@@ -31,7 +31,7 @@ pub(crate) use split::{
     typy_rt_str_join, typy_rt_str_partition, typy_rt_str_split, typy_rt_str_splitlines,
 };
 pub(crate) use unicode::decimal_value;
-pub(crate) use utf8::write_utf8;
+pub(crate) use utf8::{Surrogates, unescapable, write_utf8};
 
 /// The width of each code point of a string.
 #[repr(u32)]

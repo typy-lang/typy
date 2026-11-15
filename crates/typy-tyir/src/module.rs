@@ -41,6 +41,9 @@ pub struct TyirModule {
     pub modules: Vec<TyirModuleObject>,
     /// The string constants, indexed by `StringId`.
     pub strings: Vec<String>,
+    /// The code points of the string constants that hold a surrogate, indexed as
+    /// `Constant::StrPoints` names them (LEX-10).
+    pub str_points: Vec<Vec<u32>>,
     /// The tuple types its values use.
     pub tuple_types: TupleTypes,
     /// The classes, indexed by the class index of their `TypeId`.

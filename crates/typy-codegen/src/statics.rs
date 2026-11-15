@@ -8,7 +8,7 @@ use inkwell::values::{BasicValueEnum, IntValue, PointerValue};
 
 use crate::layout::{
     BIG_INT_TYPE_ID, BYTES_TYPE_ID, IMMORTAL, IntEncoding, STR_TYPE_ID, StrKind, encode_int,
-    encode_str,
+    encode_str, str_kind,
 };
 
 /// Creates each static object once per module.
@@ -18,6 +18,7 @@ pub(crate) struct Statics<'ctx> {
     c_strings: BTreeMap<String, PointerValue<'ctx>>,
     big_ints: BTreeMap<String, PointerValue<'ctx>>,
     bytes: BTreeMap<String, PointerValue<'ctx>>,
+    point_strings: BTreeMap<u32, PointerValue<'ctx>>,
     descriptors: BTreeMap<u32, PointerValue<'ctx>>,
     type_objects: BTreeMap<u32, PointerValue<'ctx>>,
     modules: BTreeMap<u32, PointerValue<'ctx>>,
@@ -31,6 +32,7 @@ impl<'ctx> Statics<'ctx> {
             c_strings: BTreeMap::new(),
             big_ints: BTreeMap::new(),
             bytes: BTreeMap::new(),
+            point_strings: BTreeMap::new(),
             descriptors: BTreeMap::new(),
             type_objects: BTreeMap::new(),
             modules: BTreeMap::new(),
@@ -76,13 +78,35 @@ impl<'ctx> Statics<'ctx> {
         if let Some(pointer) = self.strings.get(text) {
             return *pointer;
         }
+        let (_, points) = encode_str(text);
         let pointer = self.text_object(
             module,
-            text,
+            &points,
             STR_TYPE_ID,
             &format!("typy.str.{}", self.strings.len()),
         );
         self.strings.insert(text.to_owned(), pointer);
+        pointer
+    }
+
+    /// Returns the `str` object of the string at `index` of the module's strings that hold a
+    /// surrogate, given as its code points (LEX-10).
+    pub(crate) fn str_points(
+        &mut self,
+        module: &Module<'ctx>,
+        index: u32,
+        points: &[u32],
+    ) -> PointerValue<'ctx> {
+        if let Some(pointer) = self.point_strings.get(&index) {
+            return *pointer;
+        }
+        let pointer = self.text_object(
+            module,
+            points,
+            STR_TYPE_ID,
+            &format!("typy.str.points.{index}"),
+        );
+        self.point_strings.insert(index, pointer);
         pointer
     }
 
@@ -92,9 +116,10 @@ impl<'ctx> Statics<'ctx> {
         if let Some(pointer) = self.bytes.get(text) {
             return *pointer;
         }
+        let (_, points) = encode_str(text);
         let pointer = self.text_object(
             module,
-            text,
+            &points,
             BYTES_TYPE_ID,
             &format!("typy.bytes.{}", self.bytes.len()),
         );
@@ -105,12 +130,12 @@ impl<'ctx> Statics<'ctx> {
     fn text_object(
         &mut self,
         module: &Module<'ctx>,
-        text: &str,
+        points: &[u32],
         type_id: u32,
         name: &str,
     ) -> PointerValue<'ctx> {
         let context = self.context;
-        let (kind, points) = encode_str(text);
+        let kind = str_kind(points);
         let unit = match kind {
             StrKind::Latin1 => context.i8_type(),
             StrKind::Ucs2 => context.i16_type(),

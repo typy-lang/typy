@@ -883,33 +883,66 @@ fn an_invalid_escape_is_w0101_at_the_escape_with_its_fix() {
 }
 
 #[test]
-fn a_surrogate_escape_in_a_str_is_refused_and_any_other_is_not() {
-    let refused = [
-        (r#"x = "\ud800""#, r"`\ud800`", 5, 11),
-        (r#"x = "a\uDFFF""#, r"`\uDFFF`", 6, 12),
-        (r#"x = "\U0000dc80""#, r"`\U0000dc80`", 5, 15),
-        (r#"x = f"{1}\udc80""#, r"`\udc80`", 9, 15),
+fn a_surrogate_escape_keeps_its_code_point_and_no_other_text_changes() {
+    let kept: &[(&str, &[u32])] = &[
+        (r#""\ud800""#, &[0xd800]),
+        (r#""a\uDFFF""#, &[0x61, 0xdfff]),
+        (r#""\U0000dc80" "b""#, &[0xdc80, 0x62]),
+        // A U+FFFD of the source, or of another escape, stays U+FFFD.
+        (
+            "\"\\ufffd\\ud800\\N{REPLACEMENT CHARACTER}\u{fffd}\"",
+            &[0xfffd, 0xd800, 0xfffd, 0xfffd],
+        ),
+        // A raw part keeps its backslash; the escape after it is still read.
+        (r#"r"\u" "\udbff""#, &[0x5c, 0x75, 0xdbff]),
     ];
-    for (source, escape, start, end) in refused {
-        let errors = parse(&file(source), PythonFloor::V3_12).unwrap_err();
-        assert_eq!(errors.len(), 1, "{source}");
-        let span = errors[0].span().unwrap();
-        assert_eq!((span.start().0, span.end().0), (start, end), "{source}");
-        assert_eq!(errors[0].code().to_string(), "E0201", "{source}");
-        assert!(
-            errors[0].message().contains(escape),
-            "{}",
-            errors[0].message()
-        );
+    for (source, points) in kept {
+        let Expr::Constant {
+            value: Constant::StrPoints(found),
+            ..
+        } = only_expression(&format!("{source}\n"))
+        else {
+            panic!("{source} holds a surrogate");
+        };
+        assert_eq!(found, *points, "{source}");
     }
     for source in [
-        r#"x = r"\ud800""#,
-        r#"x = "\\ud800""#,
-        r#"x = b"\\ud800""#,
-        r#"x = "\ud7ff\ue000\U0010ffff""#,
+        r#"r"\ud800""#,
+        r#""\\ud800""#,
+        r#""\ud7ff\ue000\U0010ffff""#,
     ] {
-        assert!(parse(&file(source), PythonFloor::V3_12).is_ok(), "{source}");
+        assert!(
+            matches!(
+                only_expression(&format!("{source}\n")),
+                Expr::Constant {
+                    value: Constant::Str(_),
+                    ..
+                }
+            ),
+            "{source}"
+        );
     }
+}
+
+#[test]
+fn a_surrogate_in_an_f_string_becomes_a_field_of_its_string() {
+    let Expr::FString { parts, .. } = only_expression("f\"{1}\\udc80\" \"\\ud800\"\n") else {
+        panic!("an f-string");
+    };
+    assert_eq!(parts.len(), 3);
+    for (part, point) in parts[1..].iter().zip([0xdc80, 0xd800]) {
+        let FStringPart::Field(field) = part else {
+            panic!("a field");
+        };
+        assert!(matches!(
+            &field.value,
+            Expr::Constant { value: Constant::StrPoints(points), .. } if *points == [point]
+        ));
+    }
+    let Expr::FString { parts, .. } = only_expression("rf\"\\ud800\"\n") else {
+        panic!("an f-string");
+    };
+    assert_eq!(parts, [FStringPart::Literal("\\ud800".to_owned())]);
 }
 
 /// Runs `work` on a stack as large as the one `typy` gives the compiler, which converting a

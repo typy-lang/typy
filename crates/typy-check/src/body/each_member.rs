@@ -243,7 +243,7 @@ fn constant_type(value: &Constant) -> Option<Type> {
         Constant::Bool(_) => Type::Bool,
         Constant::Int(_) => Type::Int,
         Constant::Float(_) => Type::Float,
-        Constant::Str(_) => Type::Str,
+        Constant::Str(_) | Constant::StrPoints(_) => Type::Str,
         Constant::Bytes(_) => Type::Bytes,
         Constant::Complex { .. } | Constant::Ellipsis => return None,
     })

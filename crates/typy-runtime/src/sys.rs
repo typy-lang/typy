@@ -189,7 +189,11 @@ pub(crate) unsafe fn exit_status(exception: *mut ExceptionObject) -> (i32, bool)
                     if text.exception.is_null() {
                         // CPython writes only the line ending when `sys.stderr` is closed.
                         if !crate::io::standard_closed(crate::libc::STDERR) {
-                            crate::string::write_utf8(text.value, crate::io::write_stderr);
+                            crate::string::write_utf8(
+                                text.value,
+                                crate::string::Surrogates::Backslash,
+                                crate::io::write_stderr,
+                            );
                         }
                         crate::io::write_stderr(b"\n");
                         crate::refcount::typy_rt_decrement(text.value.cast());

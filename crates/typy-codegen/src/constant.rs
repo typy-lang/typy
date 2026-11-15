@@ -64,6 +64,15 @@ impl<'ctx> FunctionEmitter<'_, '_, 'ctx> {
                 let text = self.shared.tyir.string(*id);
                 Some(self.shared.statics.string(self.shared.module, text).into())
             }
+            Constant::StrPoints(index) => {
+                let points = &self.shared.tyir.str_points[*index as usize];
+                Some(
+                    self.shared
+                        .statics
+                        .str_points(self.shared.module, *index, points)
+                        .into(),
+                )
+            }
             Constant::Bytes(id) => {
                 let text = self.shared.tyir.string(*id);
                 Some(self.shared.statics.bytes(self.shared.module, text).into())

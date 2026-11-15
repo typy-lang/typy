@@ -294,6 +294,13 @@ impl FunctionLowerer<'_> {
                 TyirType::Float,
             ),
             TypedConstant::Str(text) => (self.string(text, span), TyirType::STR),
+            TypedConstant::StrPoints(points) => {
+                let index = self.strings.intern_points(points);
+                (
+                    self.constant(Constant::StrPoints(index), span),
+                    TyirType::STR,
+                )
+            }
             TypedConstant::Bytes(data) => (self.bytes_constant(data, span), TyirType::BYTES),
         };
         Self::borrowed(value, ty)

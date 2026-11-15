@@ -385,6 +385,7 @@ fn default_value(
         Constant::Int(digits) => TypedConstant::Int(digits.clone()),
         Constant::Float(value) => TypedConstant::Float(*value),
         Constant::Str(value) => TypedConstant::Str(value.clone()),
+        Constant::StrPoints(points) => TypedConstant::StrPoints(points.clone()),
         Constant::Complex { .. } | Constant::Bytes(_) | Constant::Ellipsis => return None,
     };
     if !constant.ty().is_assignable_to(ty) {

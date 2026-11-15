@@ -50,6 +50,7 @@ fn on_point(body: impl FnOnce(ValueId, ValueId) -> Body) -> TyirModule {
         modules: Vec::new(),
         functions: vec![builder.finish()],
         strings: Vec::new(),
+        str_points: Vec::new(),
         tuple_types,
         classes: vec![TyirClass {
             name: "Point".to_owned(),
@@ -217,6 +218,7 @@ fn on_exception(parameter: TyirType, operation: Operation) -> TyirModule {
         modules: Vec::new(),
         functions: vec![builder.finish()],
         strings: Vec::new(),
+        str_points: Vec::new(),
         tuple_types,
         classes: vec![TyirClass {
             name: "AppError".to_owned(),
@@ -294,6 +296,7 @@ fn on_circle(make: impl FnOnce(ValueId, ValueId) -> (Operation, TyirType)) -> Ty
         modules: Vec::new(),
         functions: vec![builder.finish()],
         strings: Vec::new(),
+        str_points: Vec::new(),
         tuple_types,
         classes: vec![
             class("Shape", None),
@@ -437,6 +440,7 @@ fn dispatching(slot: u32, circle: Vec<FunctionId>, circle_area: TyirType) -> Tyi
             method(2, 1, circle_area),
         ],
         strings: Vec::new(),
+        str_points: Vec::new(),
         tuple_types,
         classes: vec![
             class("Shape", None, vec![FunctionId(1)]),

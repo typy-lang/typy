@@ -282,9 +282,10 @@ impl FunctionLowerer<'_> {
                 let written = self.call_runtime(RuntimeFunction::TextWrite, vec![file, text], span);
                 self.release(written, span);
             }
-            // Only a program that closes a text file can close standard output, so only its
-            // `print` checks, and may raise (LIB-14).
-            None if self.program.closes_text_files => {
+            // Only a program that closes a text file can close standard output, and only one
+            // that makes a surrogate can hold one standard output cannot write, so only
+            // their `print` checks, and may raise (LIB-14, LEX-10).
+            None if self.program.closes_text_files || self.program.makes_surrogates => {
                 self.call_runtime(RuntimeFunction::WriteStdoutChecked, vec![text], span);
             }
             None => {

@@ -25,9 +25,20 @@ All notable changes to TyPy are recorded here. The format follows
   returns from each case needs no `return` after it (CST-07, ADR-0033).
 - `@dataclass` writes `__match_args__`, the names of the fields, and
   takes `match_args=False` to leave it out (CLS-05, CST-06).
+- A `\u` or `\U` escape of a surrogate in a `str` literal or an
+  f-string gives that code point, as CPython keeps it (LEX-10).
 
 ### Fixed
 
+- Printing a string with a surrogate writes it as CPython does in UTF-8
+  mode: standard output writes U+DC80 to U+DCFF as bytes, so a stray
+  byte of `sys.argv` or of standard input is written back, and raises
+  `UnicodeEncodeError` for any other surrogate; standard error and the
+  report of an uncaught exception write `\ud800`. TyPy wrote `?` for
+  each (LEX-10).
+- `encode` with `surrogateescape` starts its `UnicodeEncodeError` at the
+  first character it cannot escape, as CPython does, not at the start of
+  the run (LIB-03).
 - A function that returns before a later loop over `dict.items()`,
   `keys()` or `values()`, or a later comprehension over one, no longer
   leaks a view object of 24 bytes (CST-03).

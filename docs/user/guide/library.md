@@ -144,7 +144,8 @@ LIB-13):
 | `sys.version`, `sys.hexversion`, `sys.version_info` | CPython 3.15.0, whose behaviour TyPy follows: `'3.15.0 (TyPy 0.4.0)'`, `0x030F00F0` and `(3, 15, 0, 'final', 0)` |
 
 An argument that is not valid UTF-8 keeps each stray byte as a
-surrogate, as CPython decodes it, so `b"a\xffb"` becomes `'a\udcffb'`.
+surrogate, as CPython decodes it, so `b"a\xffb"` becomes `'a\udcffb'`,
+and printing it writes the byte back.
 `sys.argv[0]` is the path of the executable, where CPython gives the
 path of the script. The names of `sys` and `math` cannot be assigned:
 `sys.argv = ["x"]` is E0402, so change the list in place, with

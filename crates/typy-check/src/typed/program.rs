@@ -24,6 +24,11 @@ pub struct TypedProgram {
     /// Whether the program closes a text file, by `close()` or a `with` block, which may be
     /// `sys.stdout`; `print` then checks that standard output is open (LIB-14).
     pub closes_text_files: bool,
+    /// Whether the program can make a `str` with a surrogate that standard output's
+    /// `surrogateescape` cannot write: it calls `chr`, or a literal holds one outside U+DC80
+    /// to U+DCFF; `print` then checks what it writes and may raise `UnicodeEncodeError`
+    /// (LEX-10).
+    pub makes_surrogates: bool,
     /// The module body of `__main__`.
     pub entry: FunctionId,
     /// The warnings of checking the program, such as W0301 (DIA-08).

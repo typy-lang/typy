@@ -38,14 +38,22 @@ z = 2j
 ```
 
 An escape of a surrogate code point, `\ud800` to `\udfff` or
-`\U0000d800` to `\U0000dfff`, in a `str` literal is E0201: TyPy 0.5
-keeps the code point, as CPython does (LEX-10). A string that holds a
-surrogate can still be made by decoding, as
-`b"\xff".decode("utf-8", "surrogateescape")` gives `'\udcff'`.
+`\U0000d800` to `\U0000dfff`, in a `str` literal or an f-string gives
+that code point, as CPython keeps it (LEX-10). Such a string is written
+as CPython writes it in UTF-8 mode: standard output writes U+DC80 to
+U+DCFF as the bytes 0x80 to 0xFF, as `surrogateescape` does, and raises
+`UnicodeEncodeError` for any other surrogate before it writes any of the
+string; standard error and the report of an uncaught exception write
+`\ud800`, as `backslashreplace` does.
 
-<!-- typy-expect: rejected E0201 at 1:12 -->
+<!-- typy-expect: accepted -->
 ```python
-escaped = "\udcff"
+lone = "a\ud800b"
+print(len(lone), repr(lone), ord(lone[1]))
+try:
+    print(lone)
+except UnicodeEncodeError as error:
+    print(error)
 ```
 
 Nesting has the limits CPython has, so a program CPython refuses is

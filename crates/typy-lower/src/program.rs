@@ -66,11 +66,13 @@ pub fn lower(program: &TypedProgram) -> Result<TyirModule, Diagnostics> {
         if !raising.is_empty() {
             return Err(raising);
         }
+        let (strings, str_points) = strings.into_tables();
         let module = TyirModule {
             functions,
             globals: module_globals.globals,
             modules: module_objects(program),
-            strings: strings.into_strings(),
+            strings,
+            str_points,
             tuple_types,
             classes,
             entry: FunctionId(program.entry.0),

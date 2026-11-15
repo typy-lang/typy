@@ -24,6 +24,9 @@ pub enum Constant {
     },
     /// A string literal, after escapes and concatenation.
     Str(String),
+    /// A string literal that holds a surrogate, U+D800 to U+DFFF, as its code points, since
+    /// Rust's text cannot hold one (LEX-10).
+    StrPoints(Vec<u32>),
     /// A bytes literal.
     Bytes(Vec<u8>),
     /// `...`.

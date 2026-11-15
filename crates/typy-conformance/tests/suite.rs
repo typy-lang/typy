@@ -13,9 +13,9 @@ use typy_conformance::{Report, Suite};
 /// the order expressions evaluate in (EXP-01), the order modules initialise in (MOD-03) and
 /// the report of an exception nothing caught (STD-05), which describe what an accepted
 /// program does.
-const NO_REJECTED_FILE: [&str; 10] = [
-    "LEX-01", "LEX-09", "EXP-01", "CST-07", "MEM-01", "MEM-02", "MEM-04", "MEM-09", "MOD-03",
-    "STD-05",
+const NO_REJECTED_FILE: [&str; 11] = [
+    "LEX-01", "LEX-09", "LEX-10", "EXP-01", "CST-07", "MEM-01", "MEM-02", "MEM-04", "MEM-09",
+    "MOD-03", "STD-05",
 ];
 
 fn workspace() -> Utf8PathBuf {

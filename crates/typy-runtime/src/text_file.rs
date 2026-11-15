@@ -28,7 +28,7 @@ use crate::exception::ExceptionObject;
 use crate::header::{IMMORTAL, ObjectHeader, TEXT_FILE_TYPE_ID};
 use crate::list::ListObject;
 use crate::message::MessageBuffer;
-use crate::string::{StrObject, length, write_utf8};
+use crate::string::{StrObject, Surrogates, length, unescapable, write_utf8};
 use crate::type_object::{OBJECT, TypeObject};
 
 /// The file can be read.
@@ -219,7 +219,23 @@ pub unsafe extern "C" fn typy_rt_write_stdout_checked(
         return disk::closed_error();
     }
     // SAFETY: the caller's guarantee.
-    unsafe { crate::io::typy_rt_write_stdout(text) };
+    unsafe { write_standard_output(text) }
+}
+
+/// Writes a string to standard output, or returns the `UnicodeEncodeError` of a surrogate
+/// `surrogateescape` cannot write, before writing any of it, as CPython's encoder does.
+///
+/// # Safety
+///
+/// `text` points to a live string.
+unsafe fn write_standard_output(text: *const StrObject) -> *mut ExceptionObject {
+    // SAFETY: the caller's guarantee.
+    unsafe {
+        if let Some((start, end)) = unescapable(text) {
+            return crate::codec::utf8_encode_error(text, start, end);
+        }
+        crate::io::typy_rt_write_stdout(text);
+    }
     core::ptr::null_mut()
 }
 
@@ -305,9 +321,12 @@ pub unsafe extern "C" fn typy_rt_text_write(
                 return Raising::error(0, error);
             }
         } else if file.is_null() || (*file).descriptor == crate::libc::STDOUT {
-            crate::io::typy_rt_write_stdout(text);
+            let error = write_standard_output(text);
+            if !error.is_null() {
+                return Raising::error(0, error);
+            }
         } else {
-            write_utf8(text, crate::io::write_stderr);
+            write_utf8(text, Surrogates::Backslash, crate::io::write_stderr);
         }
     }
     // SAFETY: the caller passes a live string.

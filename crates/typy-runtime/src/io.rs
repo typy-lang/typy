@@ -2,7 +2,7 @@
 
 use crate::cell::ProgramCell;
 use crate::libc::{STDERR, STDOUT, write_all};
-use crate::string::{StrObject, write_utf8};
+use crate::string::{StrObject, Surrogates, write_utf8};
 
 const CAPACITY: usize = 8192;
 
@@ -60,7 +60,7 @@ pub(crate) fn write_stderr(bytes: &[u8]) {
     write_all(STDERR, bytes);
 }
 
-/// Writes a string to standard output as UTF-8.
+/// Writes a string to standard output as UTF-8, a surrogate as `surrogateescape` writes it.
 ///
 /// # Safety
 ///
@@ -68,7 +68,7 @@ pub(crate) fn write_stderr(bytes: &[u8]) {
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn typy_rt_write_stdout(text: *const StrObject) {
     // SAFETY: the caller passes a live string.
-    unsafe { write_utf8(text, write_stdout_bytes) };
+    unsafe { write_utf8(text, Surrogates::Escape, write_stdout_bytes) };
 }
 
 #[cfg(test)]

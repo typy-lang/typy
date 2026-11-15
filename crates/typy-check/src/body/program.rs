@@ -76,6 +76,9 @@ pub(crate) struct Program {
     pub(super) builtin_modules: BTreeSet<String>,
     /// Whether the program closes a text file, by `close()` or a `with` block (LIB-14).
     pub(super) closes_text_files: bool,
+    /// Whether the program can make a `str` with a surrogate standard output cannot write
+    /// (LEX-10).
+    pub(super) makes_surrogates: bool,
     /// The minor version of the program's Python floor, such as 12 for 3.12.
     pub(super) floor: u8,
     /// The modules the module's `__lazy_modules__` lists, whose imports are lazy (MOD-07).
@@ -148,6 +151,7 @@ impl Program {
             module_functions: BTreeMap::new(),
             builtin_modules: BTreeSet::new(),
             closes_text_files: false,
+            makes_surrogates: false,
             floor: 12,
             lazy_modules: BTreeSet::new(),
             lazy_imports: BTreeMap::new(),
@@ -622,6 +626,15 @@ impl Program {
             lazy_imports: self.lazy_imports,
             builtin_modules: self.builtin_modules.into_iter().collect(),
             closes_text_files: self.closes_text_files,
+            makes_surrogates: self.makes_surrogates
+                || self.signatures.iter().any(|signature| {
+                    signature.parameters.iter().any(|parameter| {
+                        parameter
+                            .default
+                            .as_ref()
+                            .is_some_and(crate::typed::TypedConstant::holds_unescapable_surrogate)
+                    })
+                }),
             entry,
             warnings: typy_diagnostics::Diagnostics::new(),
         }

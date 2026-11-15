@@ -27,6 +27,10 @@ fn print_with(module: &TyirModule, counting: bool) -> String {
     for (index, string) in module.strings.iter().enumerate() {
         let _ = writeln!(text, "string s{index} = {string:?}");
     }
+    for (index, points) in module.str_points.iter().enumerate() {
+        let written: Vec<String> = points.iter().map(|point| format!("{point:#x}")).collect();
+        let _ = writeln!(text, "points p{index} = [{}]", written.join(", "));
+    }
     for (index, global) in module.globals.iter().enumerate() {
         let _ = writeln!(text, "global g{index}: {} = {:?}", global.ty, global.name);
     }

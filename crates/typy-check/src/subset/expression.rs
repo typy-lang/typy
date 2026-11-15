@@ -280,6 +280,7 @@ impl Walker {
                 | Constant::Int(_)
                 | Constant::Float(_)
                 | Constant::Str(_)
+                | Constant::StrPoints(_)
                 | Constant::Bytes(_) => {}
             },
             Expr::Subscript { value, index, .. } => {

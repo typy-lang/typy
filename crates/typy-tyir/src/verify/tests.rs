@@ -25,6 +25,7 @@ fn module(function: TyirFunction) -> TyirModule {
         functions: vec![function],
         tuple_types: crate::TupleTypes::default(),
         strings: vec!["hi\n".to_owned()],
+        str_points: Vec::new(),
         classes: Vec::new(),
         entry: FunctionId(0),
     }
@@ -489,6 +490,7 @@ fn every_operation() -> TyirModule {
         functions: vec![builder.finish(), callee.finish()],
         tuple_types: crate::TupleTypes::default(),
         strings: vec!["a".to_owned()],
+        str_points: Vec::new(),
         classes: Vec::new(),
         entry: FunctionId(0),
     }

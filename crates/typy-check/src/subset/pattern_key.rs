@@ -28,7 +28,8 @@ pub(super) fn literal_key(key: &Expr) -> Option<Key> {
             Constant::Float(value) => Some(Key::Float(*value)),
             Constant::Str(text) => Some(Key::Str(text.clone())),
             Constant::Bytes(bytes) => Some(Key::Bytes(bytes.clone())),
-            Constant::Complex { .. } | Constant::Ellipsis => None,
+            // CPython compares such keys too; TyPy leaves them to the program's run.
+            Constant::StrPoints(_) | Constant::Complex { .. } | Constant::Ellipsis => None,
         },
         Expr::UnaryOp {
             operator: UnaryOperator::USub,

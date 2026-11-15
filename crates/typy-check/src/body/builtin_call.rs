@@ -315,6 +315,8 @@ impl BodyChecker<'_> {
                     );
                 }
                 self.expect(&values[0], Type::Int, "the argument of `chr`");
+                // `chr` gives any code point, a surrogate among them (LEX-10).
+                self.program.makes_surrogates = true;
                 Type::Str
             }
         };
