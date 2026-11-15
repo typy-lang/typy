@@ -22,7 +22,7 @@ supersedes it.
 | [ADR-0014](0014-iterate-with-runtime-iterator-objects-and-the-iterator-protocol.md) | Iterate with runtime iterator objects and the iterator protocol | Accepted | 2026-11-11 |
 | [ADR-0015](0015-compile-modules-into-one-program-with-module-objects.md) | Compile modules into one program, with module objects | Accepted | 2026-11-11 |
 | [ADR-0016](0016-compile-each-module-separately-and-verify-interfaces-at-link-time.md) | Compile each module separately and verify interfaces at link time | Proposed | 2026-11-11 |
-| [ADR-0017](0017-warn-where-cpython-warns-while-compiling.md) | Warn where CPython warns while compiling | Accepted | 2026-11-12 |
+| [ADR-0017](0017-warn-where-cpython-warns-while-compiling.md) | Warn where CPython warns while compiling | Superseded by ADR-0033 | 2026-11-12 |
 | [ADR-0018](0018-provide-math-and-sys-as-checker-tables-over-runtime-functions.md) | Provide math and sys as checker tables over runtime functions | Accepted | 2026-11-12 |
 | [ADR-0019](0019-open-text-files-over-buffered-descriptors-with-cpythons-errors.md) | Open text files over buffered descriptors with CPython's errors | Accepted | 2026-11-12 |
 | [ADR-0020](0020-bound-nesting-as-cpython-does-and-compile-on-a-large-stack.md) | Bound nesting as CPython does and compile on a large stack | Accepted | 2026-11-13 |
@@ -38,3 +38,4 @@ supersedes it.
 | [ADR-0030](0030-read-exception-args-and-exit-codes-where-a-program-uses-them.md) | Read exception args and exit codes where a program uses them | Accepted | 2026-11-14 |
 | [ADR-0031](0031-type-a-file-by-its-literal-mode-and-a-mode-value-as-text.md) | Type a file by its literal mode, and a mode value as text | Accepted | 2026-11-14 |
 | [ADR-0032](0032-export-a-module-as-a-c-library-described-by-its-own-annotations.md) | Export a module as a C library described by its own annotations | Accepted | 2026-11-15 |
+| [ADR-0033](0033-warn-about-a-match-that-leaves-members-of-its-subject-unmatched.md) | Warn about a match that leaves members of its subject unmatched | Accepted | 2026-11-15 |

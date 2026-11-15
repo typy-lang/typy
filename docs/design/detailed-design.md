@@ -324,6 +324,7 @@ it enforces and its status. `typy explain` reads the same table.
 | E9001 | Internal compiler error | NFR-09 |
 | W0101 | Invalid escape sequence | DIA-08 |
 | W0301 | Assertion that is always true, of a tuple with items | DIA-08 |
+| W0401 | `match` that leaves members of the subject's type unmatched | CST-07 |
 
 ## 5. typy-source
 
@@ -1080,10 +1081,19 @@ GEN-08, still has them. A part that a nested pattern tests is stored
 first in its own hidden local, so it is read once and narrows as a
 variable does. Lowering gives each case a block its pattern jumps to when
 it fails, so the cases are tried in order and a subject no case matches
-goes on after the statement. The
-subset walker reports CPython's compile-time `SyntaxError`s for patterns as
-E0103: a capture or wildcard before the last case or alternative,
-alternatives that bind different names, a name bound twice, `__debug__`
+goes on after the statement. `body/pattern_coverage.rs` splits the
+subject's type into members, each member of a union, `None` of an
+optional and `True` and `False` of a `bool`, and finds the members no
+case without a guard covers, reading the patterns without their values
+and resolving a class pattern's class with `type_object_named`, which
+reports nothing. When none is left, the `match` cannot end without
+running a case, so no assigned state falls through it and a function
+returning from each case does not reach its end; otherwise a subject of
+two or more members gives W0401 naming the members left, unless checking
+the `match` reported an error (CST-07, ADR-0033). The subset walker
+reports CPython's compile-time `SyntaxError`s for patterns as E0103: a
+capture or wildcard before the last case or alternative, alternatives that
+bind different names, a name bound twice, `__debug__`
 as a target, an f-string as a value, two starred names in one sequence
 pattern, a keyword repeated in a class pattern, and a literal key repeated
 in a mapping pattern, where `1`,
@@ -1986,11 +1996,12 @@ files of a program that did not, and `Sources::None` when the build stopped
 before reading any file, as a missing runtime archive does. Each stage runs
 only when the stages before it found no errors.
 
-Warnings come from two places (ADR-0017). `parse_with_warnings` scans the
-parser's tokens for invalid escapes, W0101, and `Project::warnings` keeps
-them; the subset walker gives W0301, and `TypedProgram::warnings` keeps
-the checker's. After checking, the pipeline joins them. With
-`deny_warnings` set, any warning makes a `Failure` before lowering, so no
+Warnings come from two places (ADR-0017, ADR-0033). `parse_with_warnings`
+scans the parser's tokens for invalid escapes, W0101, and
+`Project::warnings` keeps them; the subset walker gives W0301, the body
+checker W0401, and `TypedProgram::warnings` keeps the checker's. After
+checking, the pipeline joins them. With `deny_warnings` set, any warning
+makes a `Failure` before lowering, so no
 code is generated; otherwise `Warnings` holds them with the project's
 `Sources`, and with `Sources::None` when there are none, so a clean build
 copies nothing.

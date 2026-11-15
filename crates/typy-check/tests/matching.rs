@@ -3,7 +3,33 @@
 
 mod common;
 
+use camino::Utf8PathBuf;
 use common::app;
+use typy_check::TypeChecker;
+use typy_source::{Project, ProjectSettings};
+
+/// Returns each warning of the accepted one-module program `source`, as its code and message.
+fn warnings(source: &str) -> Vec<String> {
+    use std::sync::atomic::{AtomicU32, Ordering};
+    static NEXT: AtomicU32 = AtomicU32::new(0);
+    let base = Utf8PathBuf::from_path_buf(std::env::temp_dir()).unwrap();
+    let root = base.join(format!(
+        "typy-check-warnings-{}-{}",
+        std::process::id(),
+        NEXT.fetch_add(1, Ordering::Relaxed)
+    ));
+    std::fs::create_dir_all(&root).unwrap();
+    std::fs::write(root.join("app.py"), source).unwrap();
+    let project = Project::load(&root.join("app.py"), ProjectSettings::new(root.clone())).unwrap();
+    let checked = TypeChecker::check(&project);
+    let _ = std::fs::remove_dir_all(&root);
+    checked
+        .expect("the program is accepted")
+        .warnings
+        .iter()
+        .map(|warning| format!("{}: {}", warning.code(), warning.message()))
+        .collect()
+}
 
 #[test]
 fn patterns_narrow_their_subject_and_parts() {
@@ -98,4 +124,55 @@ fn class_patterns_that_cannot_be_checked_give_one_error() {
     for (source, expected) in cases {
         assert_eq!(app(&format!("{POINT}{source}")), *expected, "{source}");
     }
+}
+
+const SHAPES: &str = "from dataclasses import dataclass\n@dataclass\nclass Circle:\n    radius: int\n@dataclass\nclass Square:\n    side: int\n";
+
+#[test]
+fn cases_that_cover_every_member_need_no_wildcard() {
+    let cases = [
+        "def f(s: Circle | Square) -> int:\n    match s:\n        case Circle(r):\n            return r\n        case Square(side=n):\n            return n\n",
+        "def f(b: bool) -> int:\n    match b:\n        case True:\n            return 1\n        case False:\n            return 0\n",
+        "def f(v: int | None) -> int:\n    match v:\n        case None:\n            return 0\n        case int(n) | n:\n            return n\n",
+        "def f(v: tuple[int, str] | int) -> int:\n    match v:\n        case (n, _):\n            return n\n        case int(n):\n            return n\n",
+        "def f(v: list[int] | None) -> int:\n    match v:\n        case None:\n            return 0\n        case [*rest]:\n            return len(rest)\n",
+        "def f(v: dict[str, int] | bool) -> int:\n    match v:\n        case {}:\n            return 0\n        case int():\n            return 1\n",
+    ];
+    for source in cases {
+        let program = format!("{SHAPES}{source}");
+        assert_eq!(app(&program), Vec::<String>::new(), "{source}");
+        assert_eq!(warnings(&program), Vec::<String>::new(), "{source}");
+    }
+}
+
+#[test]
+fn a_match_that_leaves_members_unmatched_warns_and_names_them() {
+    let cases = [
+        (
+            "def f(s: Circle | Square | None) -> int:\n    match s:\n        case Circle():\n            return 1\n        case Square(side=2):\n            return 2\n    return 0\n",
+            "W0401: this `match` has no case for None, Square",
+        ),
+        // A case with a guard covers nothing, as the guard may be false.
+        (
+            "def f(b: bool) -> int:\n    match b:\n        case True:\n            return 1\n        case False if b is False:\n            return 0\n    return 2\n",
+            "W0401: this `match` has no case for False",
+        ),
+        (
+            "def f(v: list[int] | str) -> int:\n    match v:\n        case [a, *_]:\n            return a\n        case str():\n            return 0\n    return 1\n",
+            "W0401: this `match` has no case for list[int]",
+        ),
+    ];
+    for (source, expected) in cases {
+        assert_eq!(
+            warnings(&format!("{SHAPES}{source}")),
+            [expected],
+            "{source}"
+        );
+    }
+}
+
+#[test]
+fn a_match_on_a_type_of_one_member_never_warns() {
+    let source = "def f(n: int) -> int:\n    match n:\n        case 1:\n            return 1\n    return 0\n";
+    assert_eq!(warnings(source), Vec::<String>::new());
 }

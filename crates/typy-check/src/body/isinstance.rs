@@ -321,6 +321,12 @@ fn member_outcome(member: &Type, classes: &[TypeObjectOf]) -> (bool, Vec<TypeObj
     (always, checks)
 }
 
+/// Returns whether every value of type `ty`, which is not optional, is an instance of
+/// `class`.
+pub(super) fn always_instance(ty: &Type, class: &TypeObjectOf) -> bool {
+    matches!(outcome(ty, class), Outcome::Always)
+}
+
 /// Returns what testing a value of type `ty`, which is not optional, against `class` gives.
 fn outcome(ty: &Type, class: &TypeObjectOf) -> Outcome {
     match (ty, class) {

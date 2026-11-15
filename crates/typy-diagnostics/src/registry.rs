@@ -264,6 +264,11 @@ pub const CODES: &[CodeInfo] = &[
         "assertion that is always true, of a tuple with items",
         RuleId::DIA_08,
     ),
+    warning(
+        401,
+        "`match` that leaves members of the subject's type unmatched",
+        RuleId::CST_07,
+    ),
 ];
 
 /// Returns what the registry knows about `code`, or `None` for an unknown code.

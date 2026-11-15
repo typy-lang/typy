@@ -45,6 +45,8 @@ impl RuleId {
     pub const CST_05: Self = Self("CST-05");
     /// `match` shall be accepted with literal, capture, wildcard, value, sequence, mapping and class patterns, guards and `\\|` alternatives.
     pub const CST_06: Self = Self("CST-06");
+    /// A `match` whose cases without a guard leave a member of the subject's union, optional or `bool` type unmatched shall report a warning that names the members (ADR-0033).
+    pub const CST_07: Self = Self("CST-07");
     /// `for` shall iterate over any class with `__iter__` and `__next__`, and end when `__next__` raises `StopIteration` (OI-17).
     pub const CST_08: Self = Self("CST-08");
     /// `iter` and `next`, with and without a default, shall be available for the built-in iterables.
@@ -297,6 +299,7 @@ impl RuleId {
         Self::CST_04,
         Self::CST_05,
         Self::CST_06,
+        Self::CST_07,
         Self::CST_08,
         Self::CST_09,
         Self::CST_10,

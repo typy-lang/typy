@@ -162,8 +162,6 @@ def where(point: Point | int) -> str:
             return f"at {x},{y}"
         case int(n):
             return f"number {n}"
-        case _:
-            return "unknown"
 
 
 print(where(Point(0, 0)), where(Point(3, 0)), where(Point(1, 2)))
@@ -176,6 +174,34 @@ positional sub-patterns than `__match_args__` names, and two sub-patterns
 for one attribute. A keyword naming an attribute the class does not have
 is refused as reading that attribute is. A `__match_args__` other than a
 tuple of `str` literals is planned for 1.0.
+
+### Missing cases
+
+When the subject's type is a union, an optional or a `bool`, TyPy checks
+that the cases without a guard match every member of it: each class of
+the union, `None`, and `True` and `False`. A `match` that does is
+complete, so `where` above returns from every case and needs no `return`
+after the `match`. A `match` that leaves members unmatched gets the
+warning W0401, which names them (CST-07, ADR-0033):
+
+<!-- typy-expect: accepted -->
+```python
+def switch(state: bool | None) -> str:
+    match state:
+        case True:
+            return "on"
+        case None:
+            return "unknown"
+    return "off"
+
+
+print(switch(False))
+```
+
+Here W0401 names `False`. A case covers a member when its pattern matches
+every value of it: a capture or `_`, `None`, `True` or `False`, a class
+pattern whose sub-patterns are captures or `_`, `[*rest]` for a list or a
+tuple, and `{}` or `{**rest}` for a dict.
 
 ## Context managers
 

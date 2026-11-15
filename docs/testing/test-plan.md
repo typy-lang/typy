@@ -3,10 +3,10 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy test plan |
-| Version | 0.44 |
+| Version | 0.45 |
 | Status | Draft |
 | Owner | typy-lang contributors |
-| Last updated | 2026-11-13 |
+| Last updated | 2026-11-15 |
 
 ## 1. Purpose
 
@@ -344,7 +344,7 @@ that the specification does not define.
 | CST-04 | 0.3 | IT | `tests/conformance/cst/CST-04_*.py` |
 | CST-05 | 0.3 | IT | `tests/conformance/cst/CST-05_*.py` |
 | CST-06 | 0.5 | IT | `tests/conformance/cst/CST-06_*.py` |
-| CST-07 | 0.5 | IT | `tests/conformance/cst/CST-07_*.py` |
+| CST-07 | 0.5 | IT | `tests/conformance/cst/CST-07_*.py` for complete matches; `crates/typy-check/tests/matching.rs` for W0401 |
 | CST-08 | 0.3 | IT | `tests/conformance/cst/CST-08_*.py` |
 | CST-09 | 0.3 | IT | `tests/conformance/cst/CST-09_*.py` |
 | CST-10 | 0.3 | IT | `tests/conformance/cst/CST-10_*.py` |

@@ -1282,6 +1282,48 @@ This one is correct:
 print("\\d+ digits")
 ```
 
+## W0401: `match` leaves members of its subject's type unmatched
+
+The subject's type is a union, an optional or a `bool`, and no case
+without a guard matches every value of some of its members, which the
+warning names (CST-07, ADR-0033). The program builds and runs; a subject
+no case matches skips the `match`. Add a case for each member, or end
+with `case _:` when the rest need nothing. Here the warning names `None`.
+
+This program gives W0401 and still runs:
+
+<!-- typy-expect: accepted -->
+```python
+def describe(code: int | None) -> str:
+    match code:
+        case int(number):
+            return f"code {number}"
+    return "no code"
+
+
+print(describe(None))
+```
+
+This one is correct:
+
+<!-- typy-expect: accepted -->
+```python
+def describe(code: int | None) -> str:
+    match code:
+        case int(number):
+            return f"code {number}"
+        case None:
+            return "no code"
+
+
+print(describe(None))
+```
+
+Its cases cover every value, so the function needs no `return` after the
+`match`. A case with a guard covers nothing, since the guard may be false,
+and a set of cases that covers a member only together, such as `case []:`
+and `case [first, *rest]:` for a list, needs `case _:` as well.
+
 ## W0301: assertion that is always true
 
 `assert (test, "message")` asserts a tuple with two items, which is always

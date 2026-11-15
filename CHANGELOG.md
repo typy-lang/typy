@@ -19,6 +19,10 @@ All notable changes to TyPy are recorded here. The format follows
   the test it stands for does, so after `case None:` an optional subject
   is no longer `None`, and `case [x, *rest]` narrows a
   `list[int] | None` to the list (CST-06).
+- The warning W0401 for a `match` whose cases leave members of the
+  subject's union, optional or `bool` type unmatched, naming them. A
+  `match` whose cases cover every member is complete, so a function that
+  returns from each case needs no `return` after it (CST-07, ADR-0033).
 - `@dataclass` writes `__match_args__`, the names of the fields, and
   takes `match_args=False` to leave it out (CLS-05, CST-06).
 

@@ -2,11 +2,12 @@
 //! terms of the subject, checked as the expressions they stand for, so `case 1:` is checked
 //! as `subject == 1` and `case None:` narrows as `subject is None` does.
 
-use typy_diagnostics::Span;
+use typy_diagnostics::{Diagnostic, DiagnosticCode, RuleId, Severity, Span};
 use typy_source::syntax::{CompareOperator, Expr, MatchCase, Pattern};
 
 use super::BodyChecker;
 use super::flow::{meet, test_facts};
+use super::pattern_coverage::{Member, members};
 use crate::typed::{
     SymbolId, SymbolKind, TypedCase, TypedExpr, TypedExprKind, TypedPattern, TypedStmt,
 };
@@ -22,7 +23,9 @@ impl BodyChecker<'_> {
         cases: &[MatchCase],
         span: Span,
     ) -> TypedStmt {
+        let errors = self.error_count();
         let checked = self.expression(subject);
+        let subject_type = checked.ty.clone();
         let (name, stored) =
             if let (TypedExprKind::Local(_), Expr::Name { id, .. }) = (&checked.kind, subject) {
                 (id.clone(), None)
@@ -61,6 +64,13 @@ impl BodyChecker<'_> {
                 body,
             });
         }
+        let uncovered = self.uncovered(&subject_type, cases);
+        if uncovered.is_empty() {
+            matched_all = true;
+        } else if members(&subject_type).len() > 1 && self.error_count() == errors {
+            // A `match` with an error has that one diagnostic, so no warning follows it.
+            self.missing_cases(&uncovered, subject.span());
+        }
         // Without a case that matches everything, the subject may match none.
         let fallthrough = if matched_all {
             None
@@ -73,6 +83,29 @@ impl BodyChecker<'_> {
             cases: typed,
             span,
         }
+    }
+
+    /// Returns how many errors have been reported.
+    fn error_count(&self) -> usize {
+        self.diagnostics
+            .iter()
+            .filter(|diagnostic| diagnostic.severity() == Severity::Error)
+            .count()
+    }
+
+    /// Warns that the cases leave members of the subject's type unmatched (CST-07,
+    /// ADR-0033).
+    fn missing_cases(&mut self, uncovered: &[Member], span: Span) {
+        let names: Vec<String> = uncovered.iter().map(ToString::to_string).collect();
+        self.diagnostics.push(
+            Diagnostic::new(
+                DiagnosticCode::warning(401),
+                span,
+                format!("this `match` has no case for {}", names.join(", ")),
+            )
+            .with_rule(RuleId::CST_07)
+            .with_help("add a case for each, or end with `case _:` for the rest"),
+        );
     }
 
     /// Stores `value` in a new variable whose name no program can write, and returns the
