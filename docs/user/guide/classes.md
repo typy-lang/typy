@@ -233,7 +233,7 @@ as `if not isinstance(shape, Circle): return`, and in the right operand
 of `and`. When the checker can tell the answer, as for
 `isinstance(3, int)`, nothing is tested when the program runs; `bool`
 counts as `int`, as in CPython. A class held in a variable, and
-`issubclass`, are planned for 0.5.
+`issubclass`, are planned for 1.0 (CLS-18, CLS-19).
 
 ## Class variables and defaults
 
@@ -501,8 +501,9 @@ without a default after one with a default, a mutable default such as
 `[]`, `order=True` without `eq`, a frozen dataclass deriving from a
 non-frozen one or the reverse, and assigning a field of a frozen
 instance are errors. A method the class defines itself is kept. The
-hash of a frozen dataclass, `field(default_factory=...)` and the other
-options such as `slots=True` are planned for 0.5.
+hash of a frozen dataclass, `field(default_factory=...)` and the
+options `init`, `repr`, `unsafe_hash` and `slots` are planned for 0.5
+(CLS-15, CLS-16, CLS-17).
 
 ## Attributes are declared
 

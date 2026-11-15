@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy software requirements specification |
-| Version | 1.44 |
+| Version | 1.45 |
 | Status | Approved |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-15 |
@@ -292,6 +292,11 @@ formatter applies; Ruff's formatter is the project's recommendation.
 | CLS-11 | Class variables, given a value in the class body, shall be accepted. | S | 0.4 | |
 | CLS-12 | `type(x)` shall give the type object of the value `x`, and a class name or the name of a built-in type shall be its type object as a value; a type object shall print as `<class 'name'>`, give its name as `__name__`, and compare with `is`, `is not`, `==` and `!=`. | M | 0.2 | |
 | CLS-13 | A class derived from an exception class shall be accepted with new methods and attributes and with its own `__init__`, `__str__` and `__repr__`; redefining another method of a base shall be rejected until CLS-04. | M | 0.3 | 8.8 |
+| CLS-15 | `field(default_factory=f)` in a dataclass shall call `f`, a class or a function that takes no arguments, for each instance whose `__init__` is given no value for the field. | S | 0.5 | |
+| CLS-16 | A dataclass that is frozen with `eq=True`, or given `unsafe_hash=True`, shall hash as the tuple of its fields, and one with `eq=True` that is neither shall be unhashable, as CPython's `dataclasses` writes `__hash__`. | S | 0.5 | |
+| CLS-17 | `@dataclass` shall accept the options `init`, `repr`, `unsafe_hash` and `slots`. | S | 0.5 | |
+| CLS-18 | `isinstance` and a class pattern shall accept a class held in a variable or computed. | S | 1.0 | |
+| CLS-19 | `issubclass` shall be accepted with a class or a tuple of classes. | S | 1.0 | |
 | CLS-14 | `super().__init__(...)` shall be accepted in the `__init__` of an exception class and shall set the exception's arguments; any other use of `super()` shall be rejected until 0.4. | M | 0.3 | |
 
 ### 3.11 Generics and protocols (GEN)
@@ -464,9 +469,9 @@ cache, unless a row says otherwise.
 | 0.2 | `list`, `tuple`, `dict`, `set`, `bytes`, classes without inheritance, f-strings, comprehensions, slicing | Unboxed values, reference count elision; user documentation |
 | 0.3 | `try`, `raise`, user exceptions, `with`, `assert`, `del`, `global`, modules and packages, lazy imports | `sys`, `math`, `open`; `typy.toml` with `python-floor`; JSON diagnostics; the first warnings and `--deny-warnings` |
 | 0.4 | Dataclasses, inheritance, protocols, PEP 695 generics, narrowing, `Final`, `type` aliases | Binary files and the rest of `open` |
-| 0.5 | `match`, `:=`, C interoperability through `ctypes` | Stack allocation; libraries and exports described by their annotations (ADR-0032) |
+| 0.5 | `match`, `:=`, dataclass `default_factory`, hashing and options, C interoperability through `ctypes` | Stack allocation; libraries and exports described by their annotations (ADR-0032) |
 | 0.6 | | Linux and macOS AArch64; cross-compilation |
-| 1.0 | Closures, `lambda`, `nonlocal`, generators, `*args`, keyword-only parameters | Cycle collection, `weakref`; Windows; performance budgets |
+| 1.0 | Closures, `lambda`, `nonlocal`, generators, `*args`, keyword-only parameters, `isinstance` with a class held in a variable, `issubclass` | Cycle collection, `weakref`; Windows; performance budgets |
 
 ## 6. Out of scope
 

@@ -37,6 +37,8 @@ impl RuleId {
     pub const CLS_13: Self = Self("CLS-13");
     /// `super().__init__(...)` shall be accepted in the `__init__` of an exception class and shall set the exception's arguments; any other use of `super()` shall be rejected until 0.4.
     pub const CLS_14: Self = Self("CLS-14");
+    /// `isinstance` and a class pattern shall accept a class held in a variable or computed.
+    pub const CLS_18: Self = Self("CLS-18");
     /// `for` shall iterate over `range`, `str`, `bytes`, `list`, `tuple`, `dict`, `set` and any class with `__iter__` and `__next__`.
     pub const CST_03: Self = Self("CST-03");
     /// `try` with `except`, `else` and `finally` clauses shall be accepted, and `finally` shall run on `return`, `break`, `continue` and exceptions.
@@ -295,6 +297,7 @@ impl RuleId {
         Self::CLS_12,
         Self::CLS_13,
         Self::CLS_14,
+        Self::CLS_18,
         Self::CST_03,
         Self::CST_04,
         Self::CST_05,
