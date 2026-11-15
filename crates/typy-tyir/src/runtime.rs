@@ -330,6 +330,8 @@ pub enum RuntimeFunction {
     MathDist,
     MathProdInt,
     MathProdFloat,
+    MathProdMixed,
+    MathHasFloat,
     MathSumprodInt,
     MathSumprodFloat,
     Ascii,
@@ -363,7 +365,7 @@ const FLOAT_FLOAT: &[TyirType] = &[TyirType::Float, TyirType::Float];
 
 impl RuntimeFunction {
     /// Every runtime function.
-    pub const ALL: [Self; 324] = [
+    pub const ALL: [Self; 326] = [
         Self::IntFloorDivide,
         Self::IntModulo,
         Self::IntPower,
@@ -685,6 +687,8 @@ impl RuntimeFunction {
         Self::MathDist,
         Self::MathProdInt,
         Self::MathProdFloat,
+        Self::MathProdMixed,
+        Self::MathHasFloat,
         Self::MathSumprodInt,
         Self::MathSumprodFloat,
         Self::Ascii,
@@ -781,7 +785,7 @@ impl RuntimeFunction {
             Self::ListSort => signature(&[LIST, Int], Unit, false),
             Self::ListSumInt | Self::MathProdInt => signature(&[LIST, Int], Int, false),
             Self::ListSumFloat => signature(&[LIST, Float], Float, false),
-            Self::ListAny | Self::ListAll => signature(&[LIST], Bool, false),
+            Self::ListAny | Self::ListAll | Self::MathHasFloat => signature(&[LIST], Bool, false),
             Self::ZipUnequal => signature(INT_INT, Unit, true),
             Self::FloatRoundDigits | Self::MathLdexp => signature(&[Float, Int], Float, true),
             Self::IntRoundDigits | Self::MathGcd | Self::MathLcm => signature(INT_INT, Int, false),
@@ -1002,6 +1006,7 @@ impl RuntimeFunction {
             Self::MathFsum => signature(&[LIST], Float, true),
             Self::MathDist | Self::MathSumprodFloat => signature(&[LIST, LIST], Float, true),
             Self::MathProdFloat => signature(&[LIST, Float], Float, true),
+            Self::MathProdMixed => signature(&[LIST, Int], Float, true),
             Self::MathSumprodInt => signature(&[LIST, LIST], Int, true),
             Self::MathLogInt | Self::MathLog2Int | Self::MathLog10Int => {
                 signature(&[Int], Float, true)
@@ -1360,6 +1365,8 @@ impl RuntimeFunction {
             Self::MathDist => "math_dist",
             Self::MathProdInt => "math_prod_int",
             Self::MathProdFloat => "math_prod_float",
+            Self::MathProdMixed => "math_prod_mixed",
+            Self::MathHasFloat => "math_has_float",
             Self::MathSumprodInt => "math_sumprod_int",
             Self::MathSumprodFloat => "math_sumprod_float",
             Self::MathLcm => "math_lcm",

@@ -20,40 +20,96 @@ fn value_error<T>(value: T, message: &str) -> Raising<T> {
     Raising::error(value, raise(ExceptionKind::ValueError, message))
 }
 
-/// Returns item `index` of a list of numbers as a `float`, as CPython converts it: an `int`
-/// too large for one raises `OverflowError`.
+/// An item of a list of numbers: an `int` or a `bool` as an integer, with whether it is a
+/// `bool`, or a `float`.
+enum Number {
+    Whole(Integer, bool),
+    Real(f64),
+}
+
+/// Returns the kind of item `index` of a list of numbers: the item's own, or for a union of
+/// number types the member it holds (LIB-15).
 ///
 /// # Safety
 ///
-/// `list` is a live list of `int`, `bool` or `float` items, and `index` is below its length.
-unsafe fn real(list: &ListObject, index: usize) -> Raising<f64> {
-    // SAFETY: the caller keeps the index below the length.
-    let bits = unsafe { list.item(index) };
-    match list.item_type().kind() {
-        ItemKind::Float => ok(f64::from_bits(bits)),
-        ItemKind::Bool => ok(if bits == 0 { 0.0 } else { 1.0 }),
-        #[allow(clippy::cast_possible_wrap, reason = "an `int` item is an `int` word")]
-        // SAFETY: the list holds the large integer of its item.
-        _ => unsafe { crate::float::typy_rt_int_to_float(bits as i64) },
+/// `list` is a live list of `int`, `bool` or `float` items, or of a union of them, and
+/// `index` is below its length.
+unsafe fn held(list: &ListObject, index: usize) -> (ItemKind, u64) {
+    // SAFETY: the caller keeps the index below the length; a number is never `None`.
+    unsafe {
+        let item = list.item(index);
+        list.item_type()
+            .held_value(item)
+            .map_or((ItemKind::Int, item), |(ty, value)| (ty.kind(), value))
     }
 }
 
-/// Returns item `index` of a list of `int` or `bool` items as an integer.
+/// Returns item `index` of a list of numbers.
 ///
 /// # Safety
 ///
-/// As `real`, for a list of `int` or `bool` items.
+/// As `held`.
+unsafe fn number(list: &ListObject, index: usize) -> Number {
+    // SAFETY: the caller's guarantee.
+    let (kind, bits) = unsafe { held(list, index) };
+    match kind {
+        ItemKind::Float => Number::Real(f64::from_bits(bits)),
+        ItemKind::Bool => Number::Whole(Integer::from_i128(i128::from(bits != 0)), true),
+        #[allow(clippy::cast_possible_wrap, reason = "an `int` item is an `int` word")]
+        // SAFETY: the list holds the large integer of its item.
+        _ => Number::Whole(unsafe { integer(bits as i64) }, false),
+    }
+}
+
+impl Number {
+    /// Returns the number as a `float`, as CPython converts it: an `int` too large for one
+    /// raises `OverflowError`.
+    fn real(&self) -> Raising<f64> {
+        match self {
+            Self::Real(value) => ok(*value),
+            Self::Whole(value, _) => crate::float::integer_to_float(value),
+        }
+    }
+}
+
+/// Returns item `index` of a list of numbers as a `float`, as CPython converts it.
+///
+/// # Safety
+///
+/// As `held`.
+unsafe fn real(list: &ListObject, index: usize) -> Raising<f64> {
+    // SAFETY: the caller's guarantee.
+    unsafe { number(list, index) }.real()
+}
+
+/// Returns item `index` of a list of `int` or `bool` items, or of a union of them, as an
+/// integer.
+///
+/// # Safety
+///
+/// As `held`, for a list with no `float` item.
 unsafe fn whole(list: &ListObject, index: usize) -> Integer {
-    // SAFETY: the caller keeps the index below the length.
-    let bits = unsafe { list.item(index) };
-    if list.item_type().kind() == ItemKind::Bool {
-        return Integer::from_i128(i128::from(bits != 0));
+    // SAFETY: the caller's guarantee.
+    match unsafe { number(list, index) } {
+        Number::Whole(value, _) => value,
+        Number::Real(_) => Integer::from_i128(0),
     }
-    #[allow(clippy::cast_possible_wrap, reason = "an `int` item is an `int` word")]
-    // SAFETY: the list holds the large integer of its item.
-    unsafe {
-        integer(bits as i64)
-    }
+}
+
+/// Returns true when a list of numbers holds a `float`, which makes the result of `prod` or
+/// `sumprod` a `float` (LIB-15).
+///
+/// # Safety
+///
+/// `values` is a live list of `int`, `bool` or `float` items, or of a union of them.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn typy_rt_math_has_float(values: *const ListObject) -> bool {
+    // SAFETY: the caller's guarantee.
+    let list = unsafe { &*values };
+    (0..list.length).any(|index| {
+        // SAFETY: the index is below the length.
+        unsafe { held(list, index) }.0 == ItemKind::Float
+    })
 }
 
 /// A buffer of `count` doubles from the runtime's allocator, freed when dropped.
@@ -270,6 +326,54 @@ pub unsafe extern "C" fn typy_rt_math_prod_float(
     ok(product)
 }
 
+/// `math.prod(values, start=start)` of an `int` start and items with a `float` among them:
+/// the exact product of the integers up to the first `float`, then each item multiplies the
+/// product as a `float`, as CPython's `math.prod` does.
+///
+/// # Safety
+///
+/// `values` is a live list of `int`, `bool` or `float` items, or of a union of them, and
+/// `start` an `int` word.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn typy_rt_math_prod_mixed(
+    values: *const ListObject,
+    start: i64,
+) -> Raising<f64> {
+    // SAFETY: the caller's guarantee.
+    let (list, mut exact) = unsafe { (&*values, Some(integer(start))) };
+    let mut product = 0.0_f64;
+    for index in 0..list.length {
+        // SAFETY: the index is below the length.
+        let item = unsafe { number(list, index) };
+        let factor = match (exact.take(), item) {
+            (Some(so_far), Number::Whole(value, _)) => {
+                exact = Some(so_far.multiply(&value));
+                continue;
+            }
+            (Some(so_far), Number::Real(value)) => {
+                let converted = crate::float::integer_to_float(&so_far);
+                if !converted.exception.is_null() {
+                    return converted;
+                }
+                product = converted.value;
+                value
+            }
+            (None, item) => {
+                let converted = item.real();
+                if !converted.exception.is_null() {
+                    return converted;
+                }
+                converted.value
+            }
+        };
+        product *= factor;
+    }
+    match exact {
+        Some(whole) => crate::float::integer_to_float(&whole),
+        None => ok(product),
+    }
+}
+
 /// Returns `ValueError` for two iterables of different lengths given to `sumprod`.
 fn different_lengths<T>(value: T) -> Raising<T> {
     value_error(value, "Inputs are not the same length")
@@ -343,13 +447,88 @@ impl TripleLength {
     }
 }
 
-/// `math.sumprod(p, q)` with a `float` among the items: the products are summed in triple
-/// length while the sum stays finite, then one by one as `float`s, as CPython does. The
-/// result is a `float`; the caller gives the `int` 0 for empty iterables.
+/// The running total of `sumprod` past its fast paths: an exact integer until a `float`
+/// joins it.
+enum Total {
+    Whole(Integer),
+    Real(f64),
+}
+
+impl Total {
+    /// Returns `self + other`, as CPython adds an `int` and a `float`: the `int` converted,
+    /// which raises `OverflowError` when it is too large.
+    fn plus(self, other: Self) -> Raising<Self> {
+        let (left, right) = match (self, other) {
+            (Self::Whole(left), Self::Whole(right)) => {
+                return Raising::ok(Self::Whole(left.add(&right)));
+            }
+            (Self::Real(left), Self::Real(right)) => return Raising::ok(Self::Real(left + right)),
+            (Self::Whole(whole), Self::Real(real)) | (Self::Real(real), Self::Whole(whole)) => {
+                (crate::float::integer_to_float(&whole), real)
+            }
+        };
+        if left.exception.is_null() {
+            Raising::ok(Self::Real(left.value + right))
+        } else {
+            Raising::error(Self::Real(0.0), left.exception)
+        }
+    }
+}
+
+/// Returns `p * q` of two numbers, as CPython multiplies them.
+fn product(p: &Number, q: &Number) -> Raising<Total> {
+    if let (Number::Whole(p, _), Number::Whole(q, _)) = (p, q) {
+        return Raising::ok(Total::Whole(p.multiply(q)));
+    }
+    let (p, q) = (p.real(), q.real());
+    for each in [&p, &q] {
+        if !each.exception.is_null() {
+            return Raising::error(Total::Real(0.0), each.exception);
+        }
+    }
+    Raising::ok(Total::Real(p.value * q.value))
+}
+
+/// Returns a number as a machine integer, as `PyLong_AsLongAndOverflow` gives an exact `int`,
+/// or `None` for a `bool`, a `float`, or an `int` too large.
+fn small(number: &Number) -> Option<i64> {
+    match number {
+        Number::Whole(value, false) => value.to_i128().and_then(|value| i64::try_from(value).ok()),
+        _ => None,
+    }
+}
+
+/// Returns the pair as two doubles for the extended sum: two `float`s, or a `float` with an
+/// `int` or a `bool` that converts, or `None`.
+fn reals(p: &Number, q: &Number) -> Option<(f64, f64)> {
+    match (p, q) {
+        (Number::Real(p), Number::Real(q)) => Some((*p, *q)),
+        (Number::Real(real), whole) | (whole, Number::Real(real)) => {
+            let converted = whole.real();
+            if !converted.exception.is_null() {
+                // CPython clears this error and takes the pair the slow way, which raises it
+                // again.
+                // SAFETY: the exception is new and owned here.
+                unsafe { crate::refcount::typy_rt_decrement(converted.exception.cast()) };
+                return None;
+            }
+            // The order of the factors does not change their product.
+            Some((*real, converted.value))
+        }
+        _ => None,
+    }
+}
+
+/// `math.sumprod(p, q)` with a `float` among the items, as CPython's `math_sumprod_impl`
+/// computes it: pairs of exact `int`s summed in a machine integer while it does not
+/// overflow, then pairs with a `float` summed in triple length while the sum stays finite,
+/// each path closing for good at the first pair it cannot take and adding its sum to the
+/// total; every pair after that adds its product to the total, an exact integer until a
+/// `float` joins it. The caller gives the `int` 0 for empty iterables.
 ///
 /// # Safety
 ///
-/// Both are live lists of `int`, `bool` or `float` items.
+/// Both are live lists of `int`, `bool` or `float` items, or of a union of them.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn typy_rt_math_sumprod_float(
     p: *const ListObject,
@@ -357,39 +536,72 @@ pub unsafe extern "C" fn typy_rt_math_sumprod_float(
 ) -> Raising<f64> {
     // SAFETY: the caller's guarantee.
     let (p, q) = unsafe { (&*p, &*q) };
-    let mut extended = Some(TripleLength::ZERO);
-    let mut in_use = false;
-    let mut total = 0.0_f64;
-    for index in 0..p.length.min(q.length) {
-        // SAFETY: the index is below both lengths.
-        let (x, y) = unsafe { (real(p, index), real(q, index)) };
-        if let Some(sum) = extended {
-            if x.exception.is_null() && y.exception.is_null() {
-                let next = sum.add_product(x.value, y.value);
-                if next.high.is_finite() {
-                    extended = Some(next);
-                    in_use = true;
-                    continue;
+    let mut total = Total::Whole(Integer::from_i128(0));
+    let mut whole_path = Some(0_i64);
+    let mut whole_in_use = false;
+    let mut real_path = Some(TripleLength::ZERO);
+    let mut real_in_use = false;
+    let common = p.length.min(q.length);
+    for index in 0..=common {
+        let finished = index == common;
+        // SAFETY: an index below the common length is below both lengths.
+        let pair = (!finished).then(|| unsafe { (number(p, index), number(q, index)) });
+        if let Some(sum) = whole_path {
+            let next = pair
+                .as_ref()
+                .and_then(|(x, y)| small(x)?.checked_mul(small(y)?)?.checked_add(sum));
+            if let Some(next) = next {
+                whole_path = Some(next);
+                whole_in_use = true;
+                continue;
+            }
+            whole_path = None;
+            if whole_in_use {
+                let added = total.plus(Total::Whole(Integer::from_i128(i128::from(sum))));
+                if !added.exception.is_null() {
+                    return Raising::error(0.0, added.exception);
                 }
-            }
-            // An overflow, or a value no `float` holds, ends the extended sum.
-            extended = None;
-            if in_use {
-                total += sum.rounded();
+                total = added.value;
             }
         }
-        for each in [&x, &y] {
-            if !each.exception.is_null() {
-                return Raising::error(0.0, each.exception);
+        if let Some(sum) = real_path {
+            let next = pair
+                .as_ref()
+                .and_then(|(x, y)| reals(x, y))
+                .map(|(x, y)| sum.add_product(x, y))
+                .filter(|next| next.high.is_finite());
+            if let Some(next) = next {
+                real_path = Some(next);
+                real_in_use = true;
+                continue;
+            }
+            real_path = None;
+            if real_in_use {
+                let added = total.plus(Total::Real(sum.rounded()));
+                if !added.exception.is_null() {
+                    return Raising::error(0.0, added.exception);
+                }
+                total = added.value;
             }
         }
-        total += x.value * y.value;
+        let Some((x, y)) = pair else {
+            break;
+        };
+        let term = product(&x, &y);
+        if !term.exception.is_null() {
+            return Raising::error(0.0, term.exception);
+        }
+        let added = total.plus(term.value);
+        if !added.exception.is_null() {
+            return Raising::error(0.0, added.exception);
+        }
+        total = added.value;
     }
     if p.length != q.length {
         return different_lengths(0.0);
     }
-    if let Some(sum) = extended.filter(|_| in_use) {
-        total += sum.rounded();
+    match total {
+        Total::Real(value) => ok(value),
+        Total::Whole(value) => crate::float::integer_to_float(&value),
     }
-    ok(total)
 }

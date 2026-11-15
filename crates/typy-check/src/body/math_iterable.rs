@@ -1,8 +1,8 @@
 //! Checks calls of the functions of `math` that take iterables of numbers: `fsum`, `dist`,
-//! `prod` and `sumprod` (LIB-12). Each iterable becomes a list of its items, which must be
-//! `int`, `bool` or `float`, and the result type follows CPython's: `prod` of `float`s with
-//! the default start, and `sumprod` with a `float`, give the `int` start or 0 for no items,
-//! so their type is `int | float`.
+//! `prod` and `sumprod` (LIB-12, LIB-15). Each iterable becomes a list of its items, which
+//! must be `int`, `bool` or `float`, or a union of them, and the result type follows
+//! CPython's: `prod` of `float`s with the default start, and `sumprod` with a `float`, give
+//! the `int` start or 0 for no items, so their type is `int | float`.
 
 use typy_diagnostics::{Diagnostic, DiagnosticCode, RuleId, Span};
 use typy_source::syntax::{Expr, Keyword};
@@ -45,7 +45,7 @@ impl BodyChecker<'_> {
         }
         let mut lists = Vec::new();
         for argument in arguments {
-            match self.numbers(&name, argument) {
+            match self.numbers(&name, shape, argument) {
                 Some(list) => lists.push(list),
                 None => return Self::invalid_call(span),
             }
@@ -112,21 +112,20 @@ impl BodyChecker<'_> {
     }
 
     /// Returns the list of an iterable argument's items, or `None` after reporting items that
-    /// are not `int`, `bool` or `float`.
-    fn numbers(&mut self, name: &str, argument: &Expr) -> Option<TypedExpr> {
+    /// are not `int`, `bool` or `float`, or a union of them (LIB-15).
+    fn numbers(&mut self, name: &str, shape: MathShape, argument: &Expr) -> Option<TypedExpr> {
         let (source, item) = self.loop_source(argument, &format!("`{name}`"));
         if item.has_error() {
             return None;
         }
-        if !is_number(&item) {
-            let planned = matches!(&item, Type::Union(members) if members.iter().all(is_number));
-            let diagnostic = if planned {
+        if !item.members().iter().all(is_number) {
+            let diagnostic = if shape == MathShape::Prod {
                 Diagnostic::new(
                     DiagnosticCode::error(201),
                     argument.span(),
-                    format!("`{name}` of items of type {item} is planned for TyPy 0.5 (LIB-15)"),
+                    format!("`{name}` of items of type {item} is planned for TyPy 1.0 (LIB-21)"),
                 )
-                .with_rule(RuleId::LIB_15)
+                .with_rule(RuleId::LIB_21)
             } else {
                 Diagnostic::new(
                     DiagnosticCode::error(404),
@@ -148,36 +147,24 @@ impl BodyChecker<'_> {
         ))
     }
 
-    /// Returns the `start` of `prod`, an `int` or a `float`, or `None` after reporting another
-    /// type.
+    /// Returns the `start` of `prod`, an `int`, a `bool` or a `float`, or `None` after
+    /// reporting another type.
     fn start_value(&mut self, name: &str, expression: &Expr) -> Option<TypedExpr> {
         let value = self.expression(expression);
         match value.ty {
-            Type::Int | Type::Float => Some(value),
+            Type::Int | Type::Bool | Type::Float => Some(value),
             Type::Error => None,
-            // `prod([], start=True)` gives `True`, and with items an `int`.
-            Type::Bool => {
-                self.diagnostics.push(
-                    Diagnostic::new(
-                        DiagnosticCode::error(201),
-                        value.span,
-                        format!("`{name}` with a `bool` start is planned for TyPy 0.5 (LIB-15)"),
-                    )
-                    .with_rule(RuleId::LIB_15),
-                );
-                None
-            }
             other => {
                 self.diagnostics.push(
                     Diagnostic::new(
                         DiagnosticCode::error(201),
                         value.span,
                         format!(
-                            "`{name}` with a start of type {other} is planned for TyPy 0.5 \
-                             (LIB-15)"
+                            "`{name}` with a start of type {other} is planned for TyPy 1.0 \
+                             (LIB-21)"
                         ),
                     )
-                    .with_rule(RuleId::LIB_15),
+                    .with_rule(RuleId::LIB_21),
                 );
                 None
             }
@@ -190,15 +177,23 @@ fn is_number(ty: &Type) -> bool {
     matches!(ty, Type::Int | Type::Bool | Type::Float)
 }
 
-/// Returns the type of the result.
+/// Returns the type of the result: a `float` for `fsum` and `dist`; for `prod` and
+/// `sumprod` an `int` without `float` items, and `int | float` with them, since no items give
+/// the `int` start or 0. `prod` with a `float` start gives a `float`, and with a `bool` start
+/// the start itself for no items.
 fn result_type(shape: MathShape, lists: &[TypedExpr], start: &Type) -> Type {
-    let whole = lists.iter().all(
-        |list| matches!(&list.ty, Type::List(item) if matches!(**item, Type::Int | Type::Bool)),
-    );
+    let real = lists
+        .iter()
+        .any(|list| matches!(&list.ty, Type::List(item) if item.members().contains(&Type::Float)));
+    let product = if real {
+        Type::union(vec![Type::Int, Type::Float])
+    } else {
+        Type::Int
+    };
     match shape {
         MathShape::Prod if *start == Type::Float => Type::Float,
-        MathShape::Prod | MathShape::Sumprod if whole => Type::Int,
-        MathShape::Prod | MathShape::Sumprod => Type::union(vec![Type::Int, Type::Float]),
+        MathShape::Prod if *start == Type::Bool => Type::union(vec![Type::Bool, product]),
+        MathShape::Prod | MathShape::Sumprod => product,
         _ => Type::Float,
     }
 }

@@ -42,7 +42,12 @@ pub unsafe extern "C" fn typy_rt_int_to_float(value: i64) -> Raising<f64> {
         return Raising::ok(exact(small));
     }
     // SAFETY: the caller passes an `int` word whose large integer is live.
-    let integer = unsafe { Integer::from_word(value) };
+    integer_to_float(&unsafe { Integer::from_word(value) })
+}
+
+/// Returns an integer as the nearest double, or `OverflowError` for one too large, as
+/// CPython's `PyLong_AsDouble` gives it.
+pub(crate) fn integer_to_float(integer: &Integer) -> Raising<f64> {
     match ratio(integer.magnitude.as_slice(), &[1]) {
         Some(magnitude) => Raising::ok(signed(integer.negative, magnitude)),
         None => Raising::error(

@@ -124,8 +124,11 @@ print(math.prod(range(1, 6)), math.prod(prices, start=1.0))
 print(math.sumprod(prices, counts), math.gamma(0.5), math.lgamma(10.0))
 ```
 
-Items of a union, such as a `list[int | float]`, a `bool` start and
-`prod` of items that are not numbers are planned for 0.5 (LIB-15).
+Items of a union of number types, such as a `list[int | float]`, and a
+`bool` start of `prod` give CPython's results too (LIB-15): `prod` keeps
+the exact `int` product until its first `float` item, and `prod([],
+start=True)` is `True`. `prod` of items that are not numbers, such as
+strings, is planned for 1.0 (LIB-21).
 
 ## The sys module
 

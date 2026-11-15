@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy test plan |
-| Version | 0.52 |
+| Version | 0.53 |
 | Status | Draft |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-15 |
@@ -444,6 +444,7 @@ that the specification does not define.
 | LIB-18 | 1.0 | IT | `tests/conformance/lib/LIB-18_*.py` |
 | LIB-19 | 1.0 | IT | `tests/conformance/lib/LIB-19_*.py` |
 | LIB-20 | 1.0 | IT | `tests/conformance/lib/LIB-20_*.py` |
+| LIB-21 | 1.0 | IT | `tests/conformance/lib/LIB-21_*.py` |
 | LIB-13 | 0.4 | IT | `tests/conformance/lib/LIB-13_*.py` |
 | LIB-14 | 0.4 | IT | `tests/conformance/lib/LIB-14_*.py` |
 | MEM-01 | 0.1 | UT, IT | `typy-runtime` unit tests; `tests/conformance/mem/MEM-01_*.py` under sanitizers |
