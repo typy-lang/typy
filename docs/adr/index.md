@@ -39,3 +39,4 @@ supersedes it.
 | [ADR-0031](0031-type-a-file-by-its-literal-mode-and-a-mode-value-as-text.md) | Type a file by its literal mode, and a mode value as text | Accepted | 2026-11-14 |
 | [ADR-0032](0032-export-a-module-as-a-c-library-described-by-its-own-annotations.md) | Export a module as a C library described by its own annotations | Accepted | 2026-11-15 |
 | [ADR-0033](0033-warn-about-a-match-that-leaves-members-of-its-subject-unmatched.md) | Warn about a match that leaves members of its subject unmatched | Accepted | 2026-11-15 |
+| [ADR-0034](0034-type-exception-args-by-the-raises-that-create-them.md) | Type exception args by the raises that create them | Accepted | 2026-11-15 |
