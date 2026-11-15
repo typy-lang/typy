@@ -90,7 +90,7 @@ supported standard library modules. Nothing is installed into CPython.
 | Release | Host and target platforms |
 | --- | --- |
 | 0.1 | Linux x86_64 with glibc or musl |
-| 0.5 | Adds Linux AArch64 and macOS AArch64 |
+| 0.6 | Adds Linux AArch64 and macOS AArch64 |
 | 1.0 | Adds Windows x86_64 |
 
 Building needs a system C linker driver (`cc`), or `lld`. Running the
@@ -140,7 +140,7 @@ oracle needs CPython 3.12 or later.
 | CLI-05 | `typy build` shall offer the modes `debug` (default), `--release` and `--release-small`: LLVM's `O0` pipeline, its `O2` pipeline, and its `O2` pipeline with every function marked `minsize`, because LLVM 23 has no `Oz` pipeline. | M | 0.1 |
 | CLI-06 | The exit status of `typy` shall be 0 on success, 1 when the program has errors, 2 on wrong command usage, and 101 on an internal compiler error. | M | 0.1 |
 | CLI-07 | Project settings shall be read from `typy.toml`, and a command line flag shall override the same setting in the file. | S | 0.3 |
-| CLI-08 | `typy build --target TRIPLE` shall cross-compile for every supported target. | S | 0.5 |
+| CLI-08 | `typy build --target TRIPLE` shall cross-compile for every supported target. | S | 0.6 |
 | CLI-09 | `typy build --lib static` shall produce a static library and `--lib shared` a shared library. | M | 0.5 |
 | CLI-10 | `typy explain CODE` shall print an explanation of the diagnostic with a wrong and a corrected example. | S | 0.3 |
 | CLI-11 | `typy` shall read no environment variable that changes the output, except `TYPY_HOME`. | M | 0.1 |
@@ -398,9 +398,10 @@ direct calls and links the library when the program is built.
 | FFI-02 | A C function shall be callable when its `argtypes` and `restype` are assigned at module level, with ctypes types, before its first call. A call to a function without both shall be rejected. | M | 0.5 |
 | FFI-03 | The ctypes types `c_int8` to `c_uint64`, `c_int`, `c_long`, `c_size_t`, `c_ssize_t`, `c_float`, `c_double`, `c_bool`, `c_char_p`, `c_void_p`, `POINTER(T)` and `Structure` subclasses with a literal `_fields_` list shall be accepted, with the conversions and the wrap-around that ctypes defines. | M | 0.5 |
 | FFI-04 | Whether a library is linked statically or dynamically shall be set in `typy.toml`, not in the source. | M | 0.5 |
-| FFI-05 | A function listed under `[export]` in `typy.toml` shall be exported with an unmangled C symbol and the C types given there, and the build shall write a matching C header. | M | 0.5 |
+| FFI-05 | A function that `__all__` of a module built with `--lib` lists shall be exported with an unmangled C symbol and the C types its annotations give, and the build shall write a matching C header (ADR-0032). | M | 0.5 |
 | FFI-06 | `ctypes.CFUNCTYPE` callbacks shall be accepted. | C | 1.0 |
 | FFI-07 | A C header shall be convertible into a module of ctypes declarations. | C | 1.0 |
+| FFI-08 | A library build shall write, beside the library and its C header, a `.pyi` stub of its exported functions and a `ctypes` module that loads the library and declares them, so CPython and TyPy programs call it with the same source (ADR-0032). | S | 0.5 |
 
 ### 3.17 Diagnostics (DIA)
 
@@ -463,7 +464,8 @@ cache, unless a row says otherwise.
 | 0.2 | `list`, `tuple`, `dict`, `set`, `bytes`, classes without inheritance, f-strings, comprehensions, slicing | Unboxed values, reference count elision; user documentation |
 | 0.3 | `try`, `raise`, user exceptions, `with`, `assert`, `del`, `global`, modules and packages, lazy imports | `sys`, `math`, `open`; `typy.toml` with `python-floor`; JSON diagnostics; the first warnings and `--deny-warnings` |
 | 0.4 | Dataclasses, inheritance, protocols, PEP 695 generics, narrowing, `Final`, `type` aliases | Binary files and the rest of `open` |
-| 0.5 | `match`, `:=`, C interoperability through `ctypes` | Stack allocation; libraries and exports; Linux and macOS AArch64; cross-compilation |
+| 0.5 | `match`, `:=`, C interoperability through `ctypes` | Stack allocation; libraries and exports described by their annotations (ADR-0032) |
+| 0.6 | | Linux and macOS AArch64; cross-compilation |
 | 1.0 | Closures, `lambda`, `nonlocal`, generators, `*args`, keyword-only parameters | Cycle collection, `weakref`; Windows; performance budgets |
 
 ## 6. Out of scope
@@ -507,6 +509,7 @@ resolved issues below.
 | ID | Question | Raised |
 | --- | --- | --- |
 | OI-23 | Which ABI lets TyPy modules link dynamically: the layouts of objects, the exception state, the identity of type objects across shared libraries, and one runtime shared by every library (ADR-0016)? It is settled after 1.0, once those layouts are fixed. | 2026-11-11 |
+| OI-25 | Should the modules of the standard library TyPy provides ship prebuilt, one static library and interface per module and target, so a development build links them without compiling them? It depends on separate compilation (ADR-0016). | 2026-11-15 |
 
 ## 8. Resolved issues
 
@@ -535,6 +538,7 @@ resolved issues below.
 | OI-21 | Which imports form the cycle MOD-05 rejects, when an import inside a function runs only once the function is called? | The imports at module level. An import inside a function adds no edge and may find a module still initialising, as in CPython, whose names not yet bound raise CPython's `NameError`, `AttributeError` or `ImportError` (ADR-0015). | 2026-11-11 |
 | OI-22 | How is a module checked whose function imports a module that imports it at module level, when each module is checked after the modules it imports? | Such an import is E0426, planned for 0.4: TyPy checks the modules in the order their imports give, an import inside a function counting when it closes no cycle, so the importing function's module comes first and cannot see the other's names yet (ADR-0015). | 2026-11-11 |
 | OI-24 | What is `sys.argv[0]`, when CPython gives the path of the script it runs and a TyPy program has no script? | The path of the executable as the operating system passes it to `main`, which is what a C program receives and what a shell user typed. The other items are the arguments, decoded as CPython decodes them. A conformance test does not print `sys.argv[0]`, because the oracle's differs (LIB-04, STD-03). | 2026-11-12 |
+| OI-26 | Do the AArch64 targets and cross-compilation (CLI-08) stay in 0.5? They need a cross toolchain and an emulator or arm64 runners for their tests. | They move to 0.6, so 0.5 holds the language, stack allocation, libraries and `ctypes`. | 2026-11-15 |
 
 ## Appendix A. Disposition of the specification pack
 

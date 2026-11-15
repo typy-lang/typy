@@ -183,7 +183,7 @@ the test stays, named for the behaviour it checks.
 
 Each release adds its platforms to the CI matrix as section 2.3 of the
 specification lists them: Linux x86_64 in 0.1, Linux and macOS AArch64 in
-0.5, Windows x86_64 in 1.0.
+0.6, Windows x86_64 in 1.0.
 
 ## 5. Entry and exit criteria
 
@@ -259,7 +259,7 @@ that the specification does not define.
 | CLI-05 | 0.1 | E2E | `crates/typy-cli/tests/cli.rs`, tests named for CLI-05 |
 | CLI-06 | 0.1 | E2E | `crates/typy-cli/tests/cli.rs`, tests named for CLI-06 |
 | CLI-07 | 0.3 | E2E | `crates/typy-cli/tests/cli.rs`, tests named for CLI-07 |
-| CLI-08 | 0.5 | E2E | `crates/typy-cli/tests/cli.rs`, tests named for CLI-08 |
+| CLI-08 | 0.6 | E2E | `crates/typy-cli/tests/cli.rs`, tests named for CLI-08 |
 | CLI-09 | 0.5 | E2E | `crates/typy-cli/tests/cli.rs`, tests named for CLI-09 |
 | CLI-10 | 0.3 | E2E | `crates/typy-cli/tests/cli.rs`, tests named for CLI-10 |
 | CLI-11 | 0.1 | E2E | `crates/typy-cli/tests/cli.rs`, tests named for CLI-11 |
@@ -441,6 +441,7 @@ that the specification does not define.
 | FFI-03 | 0.5 | IT | `tests/conformance/ffi/FFI-03_*.py` |
 | FFI-04 | 0.5 | IT | `tests/conformance/ffi/FFI-04_*.py` |
 | FFI-05 | 0.5 | IT | `tests/conformance/ffi/FFI-05_*.py` |
+| FFI-08 | 0.5 | E2E | `crates/typy-cli/tests/`, building a library and calling it through its binding from CPython and from a TyPy program |
 | FFI-06 | 1.0 | IT | `tests/conformance/ffi/FFI-06_*.py` |
 | FFI-07 | 1.0 | IT | `tests/conformance/ffi/FFI-07_*.py` |
 | DIA-01 | 0.1 | UT, IT | `typy-diagnostics` unit tests; `tests/golden/diagnostics/DIA-01_*` |
