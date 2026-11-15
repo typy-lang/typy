@@ -235,16 +235,31 @@ fn class_table(
     table
 }
 
-/// Returns the names the module's `class` and `def` statements bind.
-fn defined_names(
-    classes: &[class::ClassStatement<'_>],
-    definitions: &[Definition<'_>],
-) -> Vec<String> {
-    classes
+/// Reports the names imports bind that clash with another binding, and a module-level
+/// statement that can reach a function or a class before its `def`, `class` or import runs.
+fn check_bindings(
+    body: &[Stmt],
+    imports: &module_imports::ModuleImports,
+    (classes, definitions, methods): (
+        &[class::ClassStatement<'_>],
+        &[Definition<'_>],
+        &[Definition<'_>],
+    ),
+    variables: &BTreeMap<String, typy_diagnostics::Span>,
+    diagnostics: &mut Diagnostics,
+) {
+    let defined: Vec<String> = classes
         .iter()
         .map(|class| class.name.name.clone())
         .chain(definitions.iter().map(|definition| definition.name.clone()))
-        .collect()
+        .collect();
+    imports.report_clashes(&defined, variables, diagnostics);
+    check_calls_follow_definitions(
+        body,
+        (definitions, methods),
+        &imports.bound_at_top(),
+        diagnostics,
+    );
 }
 
 /// Checks one module into the program, its functions and classes numbered after those of
@@ -307,12 +322,12 @@ fn check_module(
         &variables,
         diagnostics,
     );
-    imports.report_clashes(
-        &defined_names(&classes, &definitions),
-        &variables,
-        diagnostics,
+    let defined = (
+        classes.as_slice(),
+        definitions.as_slice(),
+        methods.as_slice(),
     );
-    check_calls_follow_definitions(&tree.body, &definitions, &methods, diagnostics);
+    check_bindings(&tree.body, &imports, defined, &variables, diagnostics);
     definitions.extend(methods);
 
     program.begin_module(

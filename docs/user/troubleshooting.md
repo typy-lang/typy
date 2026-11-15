@@ -365,9 +365,9 @@ print("many" if count > 1 else str(count))
 
 A variable, a function or a class is read where it may not be assigned
 yet, which CPython would report as `UnboundLocalError` or `NameError`
-(TYP-12). Assign the variable on every path, move a definition above the
-statement that uses it, or quote a class name in an annotation, such as
-`"Node"`.
+(TYP-12). Assign the variable on every path, move a definition or the
+import of a function or a class above the statement that uses it, or
+quote a class name in an annotation, such as `"Node"`.
 
 This program gives E0306:
 

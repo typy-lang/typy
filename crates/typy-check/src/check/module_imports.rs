@@ -35,6 +35,9 @@ pub(super) struct ModuleImports {
     /// A name bound to two functions or classes, which TyPy refuses since one name keeps one
     /// definition.
     pub(super) clashes: Vec<Diagnostic>,
+    /// The names an import inside a block, such as an `if` or a `try`, binds to a function
+    /// or a class.
+    pub(super) in_blocks: BTreeSet<String>,
 }
 
 /// What an import binds a name to that a call or an annotation reads when compiling.
@@ -49,11 +52,11 @@ pub(super) enum Bound {
 /// An import that cannot be resolved binds nothing here; the module body reports it.
 pub(super) fn module_imports(program: &Program, statements: &[Stmt]) -> ModuleImports {
     let mut found = ModuleImports::default();
-    collect(program, statements, &mut found);
+    collect(program, statements, &mut found, false);
     found
 }
 
-fn collect(program: &Program, statements: &[Stmt], found: &mut ModuleImports) {
+fn collect(program: &Program, statements: &[Stmt], found: &mut ModuleImports, in_block: bool) {
     for statement in statements {
         match statement {
             Stmt::Import { .. } | Stmt::ImportFrom { .. } => {
@@ -64,11 +67,11 @@ fn collect(program: &Program, statements: &[Stmt], found: &mut ModuleImports) {
                 for (name, imported, span) in resolved.names {
                     match imported {
                         Imported::Function(function) => {
-                            found.bind(&name, Bound::Function(function), lazy, span);
+                            found.bind(&name, Bound::Function(function), lazy, span, in_block);
                             found.functions.insert(name, function);
                         }
                         Imported::Class(class) => {
-                            found.bind(&name, Bound::Class(class), lazy, span);
+                            found.bind(&name, Bound::Class(class), lazy, span, in_block);
                             found.classes.insert(name, class);
                         }
                         Imported::Module(module) => {
@@ -85,7 +88,13 @@ fn collect(program: &Program, statements: &[Stmt], found: &mut ModuleImports) {
                             found.standard.insert(name, module);
                         }
                         Imported::ModuleFunction(function) => {
-                            found.bind(&name, Bound::ModuleFunction(function), lazy, span);
+                            found.bind(
+                                &name,
+                                Bound::ModuleFunction(function),
+                                lazy,
+                                span,
+                                in_block,
+                            );
                             found.module_functions.insert(name, function);
                         }
                         Imported::TypeAlias(alias) => {
@@ -97,18 +106,18 @@ fn collect(program: &Program, statements: &[Stmt], found: &mut ModuleImports) {
             Stmt::If { body, orelse, .. }
             | Stmt::For { body, orelse, .. }
             | Stmt::While { body, orelse, .. } => {
-                collect(program, body, found);
-                collect(program, orelse, found);
+                collect(program, body, found, true);
+                collect(program, orelse, found, true);
             }
-            Stmt::With { body, .. } => collect(program, body, found),
+            Stmt::With { body, .. } => collect(program, body, found, true),
             Stmt::Match { cases, .. } => {
                 for case in cases {
-                    collect(program, &case.body, found);
+                    collect(program, &case.body, found, true);
                 }
             }
             Stmt::Try { .. } => {
                 for block in statement.try_blocks() {
-                    collect(program, block, found);
+                    collect(program, block, found, true);
                 }
             }
             _ => {}
@@ -120,7 +129,10 @@ impl ModuleImports {
     /// Notes that an import binds `name` to `target`, and reports a name an earlier import
     /// bound to another function or class: a call compiled for one would run the other.
     /// Two lazy imports of one name are left to the lazy import's own check (MOD-12).
-    fn bind(&mut self, name: &str, target: Bound, lazy: bool, span: Span) {
+    fn bind(&mut self, name: &str, target: Bound, lazy: bool, span: Span, in_block: bool) {
+        if in_block {
+            self.in_blocks.insert(name.to_owned());
+        }
         if let Some((earlier, earlier_lazy, _)) = self.bound.get(name)
             && *earlier != target
             && !(lazy && *earlier_lazy)
@@ -152,6 +164,16 @@ impl ModuleImports {
 }
 
 impl ModuleImports {
+    /// Returns the names only imports outside any block bind to a function or a class, which
+    /// a statement may reach only after such an import runs.
+    pub(super) fn bound_at_top(&self) -> BTreeSet<String> {
+        self.bound
+            .keys()
+            .filter(|name| !self.in_blocks.contains(*name))
+            .cloned()
+            .collect()
+    }
+
     /// Reports each name an import binds to a function that the module also assigns as a
     /// variable, as a `def` of the name is; a class is reported with the module's own.
     fn report_assigned(&self, variables: &BTreeMap<String, Span>, diagnostics: &mut Diagnostics) {

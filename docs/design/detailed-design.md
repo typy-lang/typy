@@ -1671,8 +1671,10 @@ and E0206 otherwise (LIB-08). For each module it runs:
 Two checks look at the module as a whole. A name may be a function or a
 module variable, not both, because CPython would rebind it. And a
 module-level statement may only reach, through any chain of calls,
-functions whose `def` has already run; otherwise CPython raises
-`NameError`, so TyPy refuses it with E0306.
+functions whose `def` has already run, and functions and classes that an
+import outside any block binds only once that import has run
+(`ModuleImports::bound_at_top`); otherwise CPython raises `NameError`, so
+TyPy refuses it with E0306.
 
 The subset walker also reports `return` outside a function and `break` or
 `continue` outside a loop as E0103, because CPython's compiler rejects them

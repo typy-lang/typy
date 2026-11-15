@@ -82,6 +82,9 @@ All notable changes to TyPy are recorded here. The format follows
 - A function that returns before a later loop over `dict.items()`,
   `keys()` or `values()`, or a later comprehension over one, no longer
   leaks a view object of 24 bytes (CST-03).
+- A module-level statement that can call a function or a class before
+  the import that binds it has run is E0306, as one before its `def` is.
+  TyPy called it anyway, where CPython raises `NameError` (TYP-12).
 - A module-level name that imports bind to two different functions or
   classes, such as `from first import run` and later
   `from second import run` or `from math import floor as sqrt` after
