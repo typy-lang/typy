@@ -218,6 +218,12 @@ impl FunctionLowerer<'_> {
                 let value = self.constant(Constant::TypeAlias(*index), span);
                 Self::borrowed(value, TyirType::TYPE_ALIAS)
             }
+            // The value is evaluated for what it does, then read as its constant items (LIB-16).
+            TypedExprKind::VersionRead { value, result } => {
+                let value = self.expression(value);
+                self.release(value, span);
+                self.expression(result)
+            }
             TypedExprKind::TypeAliasPart { alias, module } => {
                 let alias = self.expression(alias);
                 let function = if *module {

@@ -85,6 +85,7 @@ impl Type {
                 | Self::Range
                 | Self::Module(_)
                 | Self::TypeAlias
+                | Self::VersionInfo
                 | Self::TypeObject(_)
                 | Self::Union(_)
         )

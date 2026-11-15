@@ -60,6 +60,13 @@ impl BodyChecker<'_> {
         let values: Vec<TypedExpr> = arguments
             .iter()
             .map(|argument| self.expression(argument))
+            .map(|value| {
+                if builtin == Builtin::Len {
+                    Self::version_tuple(value)
+                } else {
+                    value
+                }
+            })
             .collect();
         // `len` of an instance calls its class's `__len__` (CLS-07).
         if builtin == Builtin::Len

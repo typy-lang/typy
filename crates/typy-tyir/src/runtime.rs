@@ -230,6 +230,7 @@ pub enum RuntimeFunction {
     SysArgv,
     SysStdout,
     SysStdin,
+    SysVersionInfo,
     SysGetRecursionLimit,
     SysSetRecursionLimit,
     SysStderr,
@@ -362,7 +363,7 @@ const FLOAT_FLOAT: &[TyirType] = &[TyirType::Float, TyirType::Float];
 
 impl RuntimeFunction {
     /// Every runtime function.
-    pub const ALL: [Self; 323] = [
+    pub const ALL: [Self; 324] = [
         Self::IntFloorDivide,
         Self::IntModulo,
         Self::IntPower,
@@ -584,6 +585,7 @@ impl RuntimeFunction {
         Self::SysArgv,
         Self::SysStdout,
         Self::SysStdin,
+        Self::SysVersionInfo,
         Self::SysGetRecursionLimit,
         Self::SysSetRecursionLimit,
         Self::SysStderr,
@@ -923,6 +925,7 @@ impl RuntimeFunction {
             Self::FormatOther | Self::PercentCharStr => signature(&[STR, STR, STR], STR, true),
             Self::PercentInt => signature(&[Int, STR, Int], STR, true),
             Self::SysArgv => signature(&[], LIST, false),
+            Self::SysVersionInfo => signature(&[], TyirType::VERSION_INFO, false),
             Self::SysStdout | Self::SysStderr | Self::SysStdin => {
                 signature(&[], TyirType::TEXT_FILE, false)
             }
@@ -1265,6 +1268,7 @@ impl RuntimeFunction {
             Self::SysArgv => "sys_argv",
             Self::SysStdout => "sys_stdout",
             Self::SysStdin => "sys_stdin",
+            Self::SysVersionInfo => "sys_version_info",
             Self::SysGetRecursionLimit => "sys_getrecursionlimit",
             Self::SysSetRecursionLimit => "sys_setrecursionlimit",
             Self::SysStderr => "sys_stderr",

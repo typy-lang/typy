@@ -63,8 +63,8 @@ impl BodyChecker<'_> {
                 right,
                 ..
             } => {
-                let left = self.expression(left);
-                let right = self.expression(right);
+                let left = Self::version_tuple(self.expression(left));
+                let right = Self::version_tuple(self.expression(right));
                 // An instance's class may define the operator's method (CLS-07).
                 let (left, right) = match self.operator_binary(*operator, left, right, span) {
                     super::operator_method::Comparison::Called(call) => return call,
@@ -162,6 +162,12 @@ impl BodyChecker<'_> {
                 let mut operands = self.comparison_operands(left, comparators, operators);
                 let mut comparators = operands.split_off(1);
                 let mut left = operands.remove(0);
+                // `sys.version_info` held as a value compares as CPython compares it (LIB-16).
+                if let ([operator], [right]) = (operators.as_slice(), comparators.as_slice())
+                    && let Some(folded) = Self::version_comparison(*operator, &left, right, span)
+                {
+                    return folded;
+                }
                 // A comparison of instances may call a comparison method (CLS-07).
                 if let ([operator], [right]) = (operators.as_slice(), comparators.as_slice()) {
                     let right = right.clone();
@@ -274,7 +280,7 @@ impl BodyChecker<'_> {
                 Self::typed(TypedExprKind::Tuple(elements), ty, span)
             }
             Expr::Subscript { value, index, .. } => {
-                let value = self.expression(value);
+                let value = Self::version_tuple(self.expression(value));
                 // An instance's class may define `__getitem__` (CLS-07).
                 let value = match self.item_call(value, index, span) {
                     Ok(call) => return call,

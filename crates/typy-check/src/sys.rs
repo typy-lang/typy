@@ -12,6 +12,8 @@ pub enum SysValue {
     Stderr,
     /// `sys.stdin`, a text file read from standard input (LIB-13).
     Stdin,
+    /// `sys.version_info`, held as a value (LIB-16).
+    VersionInfo,
 }
 
 /// A constant of `sys`, the same for every program TyPy builds (LIB-13).
@@ -39,9 +41,6 @@ pub(crate) enum SysName {
     /// A switch of lazy imports, which changes how imports behave from outside the module
     /// that imports (MOD-09).
     LazySwitch,
-    /// `sys.version_info`, which TyPy folds where a program compares or reads it, and plans
-    /// as a value (LIB-13, LIB-16).
-    VersionInfo,
     /// A name of CPython's `sys` that TyPy does not provide.
     Unprovided,
 }
@@ -146,7 +145,7 @@ pub(crate) fn sys_name(name: &str) -> Option<SysName> {
             ")"
         ))),
         "hexversion" => SysName::Constant(SysConstant::Int("51314928")),
-        "version_info" => SysName::VersionInfo,
+        "version_info" => SysName::Value(SysValue::VersionInfo),
         "getrecursionlimit" => SysName::GetRecursionLimit,
         "setrecursionlimit" => SysName::SetRecursionLimit,
         _ if LAZY_SWITCHES.contains(&name) => SysName::LazySwitch,
@@ -176,7 +175,10 @@ mod tests {
             sys_name("setrecursionlimit"),
             Some(SysName::SetRecursionLimit)
         );
-        assert_eq!(sys_name("version_info"), Some(SysName::VersionInfo));
+        assert_eq!(
+            sys_name("version_info"),
+            Some(SysName::Value(SysValue::VersionInfo))
+        );
         assert_eq!(sys_name("settrace"), Some(SysName::Unprovided));
         assert_eq!(sys_name("argvs"), None);
     }

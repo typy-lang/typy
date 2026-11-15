@@ -17,6 +17,7 @@ impl FunctionLowerer<'_> {
             SysValue::Stdout => (RuntimeFunction::SysStdout, TyirType::TEXT_FILE),
             SysValue::Stderr => (RuntimeFunction::SysStderr, TyirType::TEXT_FILE),
             SysValue::Stdin => (RuntimeFunction::SysStdin, TyirType::TEXT_FILE),
+            SysValue::VersionInfo => (RuntimeFunction::SysVersionInfo, TyirType::VERSION_INFO),
         };
         let found = self.call_runtime(function, Vec::new(), span);
         self.borrowed_result(Lowered { ty, ..found })

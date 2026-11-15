@@ -31,6 +31,10 @@ All notable changes to TyPy are recorded here. The format follows
   `List`, `Dict`, `Set`, `Tuple`, `Type`, `Optional[...]` and
   `Union[...]` of `typing`, as the class of `isinstance` and of a class
   pattern, with CPython's answers (TYP-17).
+- `sys.version_info` as a value of its own: stored, put in containers,
+  imported with `from sys import version_info` and printed as CPython
+  writes it, and read as the tuple of its items by indexing, slicing,
+  comparing, `len`, loops and unpacking (LIB-16).
 - Type aliases of another module, by name or through the module, `type`
   statements inside functions, classes and blocks, and bounds and
   constraints on an alias's type parameters, and an alias read as a

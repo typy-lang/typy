@@ -249,7 +249,7 @@ impl BodyChecker<'_> {
     /// Checks a sequence a loop reads. A fixed tuple whose items have one type is read as a
     /// `tuple[T, ...]` (DAT-14).
     pub(super) fn sequence(&mut self, expression: &Expr) -> TypedExpr {
-        let value = self.expression(expression);
+        let value = Self::version_tuple(self.expression(expression));
         let Type::Tuple(items) = &value.ty else {
             return value;
         };

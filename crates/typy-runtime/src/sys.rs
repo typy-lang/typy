@@ -223,5 +223,9 @@ fn is_system_exit(class: &crate::type_object::TypeObject) -> bool {
     false
 }
 
+mod version_info;
+
+pub(crate) use version_info::VERSION_INFO_TYPE;
+
 #[cfg(test)]
 mod tests;

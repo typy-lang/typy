@@ -170,6 +170,9 @@ impl BodyChecker<'_> {
         if object.ty == Type::TypeAlias {
             return self.type_alias_attribute(object, attribute, span);
         }
+        if object.ty == Type::VersionInfo {
+            return self.version_info_attribute(object, attribute, span);
+        }
         if object.ty.is_file() {
             return self.file_attribute(object, attribute, span);
         }

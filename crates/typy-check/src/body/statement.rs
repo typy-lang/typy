@@ -79,6 +79,15 @@ impl BodyChecker<'_> {
                     _ => None,
                 };
                 let value = self.expression_expecting(value, expected.as_ref());
+                // Unpacking reads `sys.version_info` as the tuple of its items (LIB-16).
+                let value = if targets
+                    .iter()
+                    .any(|target| matches!(target, Expr::Tuple { .. } | Expr::List { .. }))
+                {
+                    Self::version_tuple(value)
+                } else {
+                    value
+                };
                 let targets = targets
                     .iter()
                     .filter_map(|target| self.assign_target(target, value.ty.clone(), &value))

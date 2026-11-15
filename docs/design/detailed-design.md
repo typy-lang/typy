@@ -510,13 +510,22 @@ runtime has checked the lengths.
 
 `sys` is built the same way. `crates/typy-check/src/sys.rs` sorts every
 public name of CPython 3.12 to 3.15's `sys` into a `SysName`: a
-`SysValue` (`argv`, `stdout`, `stderr`, `stdin`), `exit`, a switch of lazy imports
-(E0202, MOD-09), a `SysConstant` folded into the program, `getrecursionlimit`
-and `setrecursionlimit`, which `TypedExprKind::RecursionLimit` reads and sets
-in the runtime, `version_info`, which `body/version_info.rs` folds into
-constants where it is compared with a tuple of `int`s, indexed or read by
-field, and refuses elsewhere (E0201, LIB-16, ADR-0029), or a name TyPy
-does not provide (E0202). `body/builtin_module.rs` holds what the two
+`SysValue` (`argv`, `stdout`, `stderr`, `stdin`, `version_info`), `exit`, a
+switch of lazy imports (E0202, MOD-09), a `SysConstant` folded into the
+program, `getrecursionlimit` and `setrecursionlimit`, which
+`TypedExprKind::RecursionLimit` reads and sets in the runtime, or a name TyPy
+does not provide (E0202). `body/version_info.rs` folds `sys.version_info`
+written out into constants where it is compared with a tuple of `int`s,
+indexed or read by field (ADR-0029). Held as a value it is
+`Type::VersionInfo`, the runtime's one immortal object of type
+`sys.version_info`, type ID 20, which `typy_rt_sys_version_info` gives and
+writes as CPython 3.15.0 writes it (LIB-16). An index, a slice, a
+comparison other than `is`, `len`, a loop, `+` and unpacking read it through
+`version_tuple`, which makes `TypedExprKind::VersionRead`: the value is
+evaluated, then the constant tuple `(3, 15, 0, 'final', 0)` is what the
+operation reads, so the tuple's own checks apply; a comparison with a tuple
+of `int` literals is made when compiling, its result the read's constant,
+and a field is item `i` of the tuple. `body/builtin_module.rs` holds what the two
 modules share: `BUILTIN_MODULES`, the `ModuleFunction` and
 `BuiltinValue` a name gives, and `Program::builtin_lookup`, whose
 refusals point at the name. A value of `sys` is `TypedExprKind::SysValue`,

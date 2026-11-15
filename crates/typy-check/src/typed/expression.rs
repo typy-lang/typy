@@ -52,6 +52,15 @@ pub enum TypedExprKind {
     Submodule(String),
     /// The type alias object at this index of `TypedProgram::type_aliases` (SMT-12).
     TypeAliasObject(u32),
+    /// A read of `sys.version_info` held as a value: `value` is evaluated, then `result`,
+    /// a constant: the tuple of its items, which a tuple's operations read, or a comparison
+    /// of them already made (LIB-16).
+    VersionRead {
+        /// The `sys.version_info` value.
+        value: Box<TypedExpr>,
+        /// What the read gives.
+        result: Box<TypedExpr>,
+    },
     /// `alias.__name__`, or `alias.__module__` when `module` is set, of a type alias (SMT-12).
     TypeAliasPart {
         /// The type alias.
@@ -578,6 +587,7 @@ impl TypedExpr {
             | TypedExprKind::TypeOf(object)
             | TypedExprKind::TypeName(object)
             | TypedExprKind::TypeAliasPart { alias: object, .. } => vec![object],
+            TypedExprKind::VersionRead { value, result } => vec![value, result],
             TypedExprKind::NewException {
                 arguments, init, ..
             } => arguments

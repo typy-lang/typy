@@ -343,6 +343,7 @@ fn has_identity(ty: &Type) -> bool {
                 | Type::Traceback
                 | Type::Module(_)
                 | Type::TypeAlias
+                | Type::VersionInfo
                 | Type::AnyModule
                 | Type::TextFile
                 | Type::BinaryFile(_)

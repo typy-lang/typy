@@ -290,7 +290,21 @@ impl BodyChecker<'_> {
             typed[position] =
                 Some(self.expression_expecting(operands[position], expected.as_ref()));
         }
-        let mut typed: Vec<TypedExpr> = typed.into_iter().flatten().collect();
+        // `sys.version_info` compares as the tuple of its items, and by identity with `is`.
+        let identity = operators
+            .iter()
+            .any(|operator| matches!(operator, CompareOperator::Is | CompareOperator::IsNot));
+        let mut typed: Vec<TypedExpr> = typed
+            .into_iter()
+            .flatten()
+            .map(|operand| {
+                if identity {
+                    operand
+                } else {
+                    Self::version_tuple(operand)
+                }
+            })
+            .collect();
         // A fixed tuple compared with a `tuple[T, ...]`, or looked for among them, becomes one
         // (DAT-14).
         for (position, operator) in operators.iter().enumerate() {

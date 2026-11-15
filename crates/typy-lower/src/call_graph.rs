@@ -455,6 +455,10 @@ fn expression(expression_value: &TypedExpr, callees: &mut BTreeSet<FunctionId>) 
         | TypedExprKind::TypeOf(object)
         | TypedExprKind::TypeName(object)
         | TypedExprKind::TypeAliasPart { alias: object, .. } => expression(object, callees),
+        TypedExprKind::VersionRead { value, result } => {
+            expression(value, callees);
+            expression(result, callees);
+        }
         TypedExprKind::FString(parts) => fstring(parts, callees),
         TypedExprKind::TypeObject(_)
         | TypedExprKind::Constant(_)

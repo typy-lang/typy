@@ -82,14 +82,9 @@ fn each_switch_of_lazy_imports_is_refused() {
 fn names_of_sys_typy_does_not_have_give_their_codes() {
     for (source, code, message) in [
         (
-            "import sys\nprint(sys.version_info)\n",
-            "E0201",
-            "using `sys.version_info` as a value is planned for TyPy 0.5 (LIB-16); compare it with a tuple of `int`s, or read an item or a field",
-        ),
-        (
             "import sys\nprint(sys.version_info == 3)\n",
-            "E0201",
-            "using `sys.version_info` as a value is planned for TyPy 0.5 (LIB-16); compare it with a tuple of `int`s, or read an item or a field",
+            "E0407",
+            "tuple[int, int, int, str, int] and int cannot be compared",
         ),
         (
             "import sys\nsys.setrecursionlimit('a')\n",
@@ -236,8 +231,8 @@ fn assigning_a_name_of_a_built_in_module_is_refused() {
         ),
         (
             "import sys\nsys.version_info = 1\n",
-            "E0201",
-            "using `sys.version_info` as a value is planned for TyPy 0.5 (LIB-16); compare it with a tuple of `int`s, or read an item or a field",
+            "E0402",
+            "`sys.version_info` is not a module variable",
         ),
     ] {
         let found = diagnostics(source);

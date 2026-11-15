@@ -42,6 +42,8 @@ impl TypeId {
     pub const UNION: Self = Self(18);
     /// A type alias object, `typing.TypeAliasType`, immortal (SMT-12).
     pub const TYPE_ALIAS: Self = Self(19);
+    /// `sys.version_info`, one immortal object (LIB-16).
+    pub const VERSION_INFO: Self = Self(20);
     /// The first ID of the program's classes; class `n` of the module is this plus `n`.
     const FIRST_CLASS: u32 = 1 << 16;
 
@@ -132,6 +134,8 @@ impl TyirType {
     pub const UNION: Self = Self::Object(TypeId::UNION);
     /// A type alias object (SMT-12).
     pub const TYPE_ALIAS: Self = Self::Object(TypeId::TYPE_ALIAS);
+    /// `sys.version_info` (LIB-16).
+    pub const VERSION_INFO: Self = Self::Object(TypeId::VERSION_INFO);
 }
 
 impl fmt::Display for TyirType {
@@ -156,6 +160,7 @@ impl fmt::Display for TyirType {
             Self::Object(TypeId::TEXT_FILE) => formatter.write_str("text_file"),
             Self::Object(TypeId::UNION) => formatter.write_str("union"),
             Self::Object(TypeId::TYPE_ALIAS) => formatter.write_str("type_alias"),
+            Self::Object(TypeId::VERSION_INFO) => formatter.write_str("version_info"),
             Self::Bits => formatter.write_str("bits"),
             Self::Object(id) if id.class_index().is_some() => {
                 write!(formatter, "class#{}", id.class_index().unwrap_or(0))

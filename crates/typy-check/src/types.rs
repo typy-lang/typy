@@ -71,6 +71,8 @@ pub enum Type {
     Range,
     /// A `typing.TypeAliasType`, the value a `type` statement binds (SMT-12).
     TypeAlias,
+    /// `sys.version_info` held as a value, whose items are those of CPython 3.15.0 (LIB-16).
+    VersionInfo,
     /// The module object of the module of this qualified name, whose attributes are known
     /// when the program is checked (MOD-10, ADR-0015).
     Module(String),
@@ -183,6 +185,7 @@ impl TypeObjectOf {
             | Type::Traceback
             | Type::Module(_)
             | Type::TypeAlias
+            | Type::VersionInfo
             | Type::Optional(_)
             | Type::Union(_)
             | Type::Parameter(_)
@@ -477,6 +480,7 @@ impl Type {
                 | Self::Iterable(_)
                 | Self::Module(_)
                 | Self::TypeAlias
+                | Self::VersionInfo
                 | Self::AnyModule
                 | Self::Traceback,
                 _,
@@ -490,6 +494,7 @@ impl Type {
                 | Self::Iterable(_)
                 | Self::Module(_)
                 | Self::TypeAlias
+                | Self::VersionInfo
                 | Self::AnyModule
                 | Self::Traceback,
             ) => false,
@@ -545,6 +550,7 @@ impl Type {
                 | Self::Iterable(_)
                 | Self::Module(_)
                 | Self::TypeAlias
+                | Self::VersionInfo
                 | Self::AnyModule
                 | Self::Traceback
                 | Self::Range
@@ -565,6 +571,7 @@ impl Type {
                 | Self::Iterable(_)
                 | Self::Module(_)
                 | Self::TypeAlias
+                | Self::VersionInfo
                 | Self::AnyModule
                 | Self::Traceback
                 | Self::Range
@@ -780,6 +787,7 @@ impl fmt::Display for Type {
             Self::Iterable(item) => write!(formatter, "Iterable[{item}]"),
             Self::AnyModule => formatter.write_str("ModuleType"),
             Self::TypeAlias => formatter.write_str("TypeAliasType"),
+            Self::VersionInfo => formatter.write_str("sys.version_info"),
             Self::TextFile => formatter.write_str("TextIOWrapper"),
             Self::BinaryFile(kind) => formatter.write_str(kind.class_name()),
             Self::DescriptorFile(kind) => write!(

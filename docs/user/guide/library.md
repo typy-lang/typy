@@ -203,8 +203,26 @@ if sys.version_info >= (3, 12):
 print(sys.version.startswith("3."), sys.hexversion >= 0x030C0000)
 ```
 
-`sys.version_info` as a value of its own, printed, stored or imported
-with `from sys import version_info`, is planned for 0.5 (E0201, LIB-16).
+`sys.version_info` is also a value of its own, as in CPython: it may be
+stored, put in a container, imported with `from sys import version_info`
+and printed, as
+`sys.version_info(major=3, minor=15, micro=0, releaselevel='final', serial=0)`,
+and indexing, slicing, comparing, `len`, a loop and unpacking read it as
+the tuple of its items (LIB-16).
+
+<!-- typy-expect: accepted -->
+```python
+import sys
+from sys import version_info
+
+kept = [version_info]
+major, minor, micro, level, serial = kept[0]
+print(major, level, kept[0] >= (3, 12), kept[0] is sys.version_info)
+```
+
+A function parameter cannot name its type, so pass `version_info[:]`,
+a plain tuple, where a function takes the items; `tuple(version_info)`
+and `in` are refused, as for any tuple whose items differ in type.
 The rest
 of CPython's `sys`, such as `sys.modules` or `sys.getrefcount`, depends
 on the interpreter and is E0202. The switches of lazy imports,

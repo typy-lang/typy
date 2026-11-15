@@ -435,6 +435,7 @@ impl Dump<'_> {
             }
             TypedExprKind::Submodule(module) => format!("Submodule {module}"),
             TypedExprKind::TypeAliasObject(index) => format!("TypeAliasObject {index}"),
+            TypedExprKind::VersionRead { .. } => "VersionRead".to_owned(),
             TypedExprKind::TypeAliasPart { module, .. } => if *module {
                 "TypeAliasModule"
             } else {

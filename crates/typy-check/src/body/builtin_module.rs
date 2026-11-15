@@ -57,6 +57,7 @@ impl BuiltinValue {
                 match value {
                     SysValue::Argv => Type::List(Box::new(Type::Str)),
                     SysValue::Stdout | SysValue::Stderr | SysValue::Stdin => Type::TextFile,
+                    SysValue::VersionInfo => Type::VersionInfo,
                 },
             ),
             Self::SysConstant(SysConstant::Int(digits)) => (
@@ -150,14 +151,6 @@ impl Program {
                 )
                 .with_rule(RuleId::MOD_09)
                 .with_help("make an import lazy in its own module, with `lazy import` or `__lazy_modules__`"),
-            )),
-            Some(SysName::VersionInfo) => Err(error(
-                201,
-                span,
-                "using `sys.version_info` as a value is planned for TyPy 0.5 (LIB-16); compare \
-                 it with a tuple of `int`s, or read an item or a field"
-                    .to_owned(),
-                RuleId::LIB_16,
             )),
             Some(SysName::Unprovided) => Err(error(
                 202,
