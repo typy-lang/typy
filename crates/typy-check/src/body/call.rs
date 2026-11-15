@@ -7,7 +7,7 @@ use typy_source::syntax::{Expr, Keyword};
 use super::BodyChecker;
 use crate::builtin::Builtin;
 use crate::exception::BuiltinException;
-use crate::typed::{Argument, FunctionId, TypedExpr, TypedExprKind};
+use crate::typed::{Argument, FunctionId, TypedConstant, TypedExpr, TypedExprKind};
 use crate::types::Type;
 
 impl BodyChecker<'_> {
@@ -27,6 +27,17 @@ impl BodyChecker<'_> {
                 && let Some(class) = Self::program_class(of)
             {
                 return self.new_instance(class, arguments, keywords, span);
+            }
+            // A variable whose type is an error was reported where the error arose.
+            if ty.has_error() {
+                for argument in arguments {
+                    self.expression(argument);
+                }
+                return Self::typed(
+                    TypedExprKind::Constant(TypedConstant::None),
+                    Type::Error,
+                    span,
+                );
             }
             return self.error(
                 Diagnostic::new(

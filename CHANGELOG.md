@@ -82,6 +82,12 @@ All notable changes to TyPy are recorded here. The format follows
 - A function that returns before a later loop over `dict.items()`,
   `keys()` or `values()`, or a later comprehension over one, no longer
   leaks a view object of 24 bytes (CST-03).
+- A module-level name that imports bind to two different functions or
+  classes, such as `from first import run` and later
+  `from second import run` or `from math import floor as sqrt` after
+  `from math import sqrt`, or to a function or class the module also
+  defines or assigns, is E0202, as a second `def` is. TyPy called the
+  last one bound wherever the name was used (STD-04).
 - An `OSError` subclass with an `__init__` of its own starts with no
   arguments, as CPython's `OSError.__new__` leaves them to
   `OSError.__init__`: `Quiet("q")` is `Quiet()` with `args` `()` unless its

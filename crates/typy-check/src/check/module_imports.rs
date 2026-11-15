@@ -4,7 +4,7 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use typy_diagnostics::Span;
+use typy_diagnostics::{Diagnostic, DiagnosticCode, Diagnostics, RuleId, Span};
 use typy_source::syntax::{Expr, Stmt};
 
 use crate::body::{Imported, Program};
@@ -29,6 +29,20 @@ pub(super) struct ModuleImports {
     pub(super) module_functions: BTreeMap<String, crate::body::ModuleFunction>,
     /// The type aliases of other modules imported by name (SMT-12).
     pub(super) aliases: crate::check::AliasTable,
+    /// Each name an import binds to a function or a class, with what it binds, whether the
+    /// import is lazy, and where.
+    pub(super) bound: BTreeMap<String, (Bound, bool, Span)>,
+    /// A name bound to two functions or classes, which TyPy refuses since one name keeps one
+    /// definition.
+    pub(super) clashes: Vec<Diagnostic>,
+}
+
+/// What an import binds a name to that a call or an annotation reads when compiling.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) enum Bound {
+    Function(FunctionId),
+    Class(ClassId),
+    ModuleFunction(crate::body::ModuleFunction),
 }
 
 /// Returns what the imports at module level bind, in any block outside a `def` or a `class`.
@@ -46,12 +60,15 @@ fn collect(program: &Program, statements: &[Stmt], found: &mut ModuleImports) {
                 let Ok(resolved) = program.resolve_import(statement) else {
                     continue;
                 };
+                let lazy = typy_source::is_lazy(statement, program.lazy_modules());
                 for (name, imported, span) in resolved.names {
                     match imported {
                         Imported::Function(function) => {
+                            found.bind(&name, Bound::Function(function), lazy, span);
                             found.functions.insert(name, function);
                         }
                         Imported::Class(class) => {
+                            found.bind(&name, Bound::Class(class), lazy, span);
                             found.classes.insert(name, class);
                         }
                         Imported::Module(module) => {
@@ -68,6 +85,7 @@ fn collect(program: &Program, statements: &[Stmt], found: &mut ModuleImports) {
                             found.standard.insert(name, module);
                         }
                         Imported::ModuleFunction(function) => {
+                            found.bind(&name, Bound::ModuleFunction(function), lazy, span);
                             found.module_functions.insert(name, function);
                         }
                         Imported::TypeAlias(alias) => {
@@ -96,6 +114,76 @@ fn collect(program: &Program, statements: &[Stmt], found: &mut ModuleImports) {
             _ => {}
         }
     }
+}
+
+impl ModuleImports {
+    /// Notes that an import binds `name` to `target`, and reports a name an earlier import
+    /// bound to another function or class: a call compiled for one would run the other.
+    /// Two lazy imports of one name are left to the lazy import's own check (MOD-12).
+    fn bind(&mut self, name: &str, target: Bound, lazy: bool, span: Span) {
+        if let Some((earlier, earlier_lazy, _)) = self.bound.get(name)
+            && *earlier != target
+            && !(lazy && *earlier_lazy)
+        {
+            self.clashes.push(bound_twice(name, span));
+        }
+        self.bound.insert(name.to_owned(), (target, lazy, span));
+    }
+
+    /// Reports each name imports bind to two functions or classes, each one an import binds
+    /// to a function or a class that the module also defines with `def` or `class`, and each
+    /// one an import binds to a function that the module also assigns as a variable.
+    pub(super) fn report_clashes(
+        &self,
+        defined: &[String],
+        variables: &BTreeMap<String, Span>,
+        diagnostics: &mut Diagnostics,
+    ) {
+        for clash in &self.clashes {
+            diagnostics.push(clash.clone());
+        }
+        for name in defined {
+            if let Some((_, _, span)) = self.bound.get(name) {
+                diagnostics.push(bound_twice(name, *span));
+            }
+        }
+        self.report_assigned(variables, diagnostics);
+    }
+}
+
+impl ModuleImports {
+    /// Reports each name an import binds to a function that the module also assigns as a
+    /// variable, as a `def` of the name is; a class is reported with the module's own.
+    fn report_assigned(&self, variables: &BTreeMap<String, Span>, diagnostics: &mut Diagnostics) {
+        for (name, (bound, _, _)) in &self.bound {
+            if let (Bound::Function(_) | Bound::ModuleFunction(_), Some(span)) =
+                (bound, variables.get(name))
+            {
+                diagnostics.push(
+                    Diagnostic::new(
+                        DiagnosticCode::error(202),
+                        *span,
+                        format!("`{name}` is a function and is also assigned as a variable"),
+                    )
+                    .with_rule(RuleId::STD_04),
+                );
+            }
+        }
+    }
+}
+
+/// Returns the error for a name bound to two functions or classes.
+fn bound_twice(name: &str, span: Span) -> Diagnostic {
+    Diagnostic::new(
+        DiagnosticCode::error(202),
+        span,
+        format!(
+            "`{name}` is bound to more than one function or class; TyPy keeps one definition \
+             per name"
+        ),
+    )
+    .with_rule(RuleId::STD_04)
+    .with_help("import it under another name with `as`")
 }
 
 /// Returns each `(module, name)` that a statement of `statements`, at any depth, assigns

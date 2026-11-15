@@ -220,6 +220,33 @@ impl Checked<'_> {
     }
 }
 
+/// Returns the classes a module's annotations and calls name: those it imports by name, then
+/// its own.
+fn class_table(
+    imports: &module_imports::ModuleImports,
+    classes: &[class::ClassStatement<'_>],
+) -> BTreeMap<String, ClassId> {
+    let mut table = imports.classes.clone();
+    table.extend(
+        classes
+            .iter()
+            .map(|class| (class.name.name.clone(), class.id)),
+    );
+    table
+}
+
+/// Returns the names the module's `class` and `def` statements bind.
+fn defined_names(
+    classes: &[class::ClassStatement<'_>],
+    definitions: &[Definition<'_>],
+) -> Vec<String> {
+    classes
+        .iter()
+        .map(|class| class.name.name.clone())
+        .chain(definitions.iter().map(|definition| definition.name.clone()))
+        .collect()
+}
+
 /// Checks one module into the program, its functions and classes numbered after those of
 /// the modules before it.
 fn check_module(
@@ -237,12 +264,7 @@ fn check_module(
     let imports = module_imports::module_imports(program, &tree.body);
     let annotations = ImportedNames::of(program, &imports);
     let classes = collect_classes(&tree.body, first_class, diagnostics);
-    let mut class_ids: BTreeMap<String, ClassId> = imports.classes.clone();
-    class_ids.extend(
-        classes
-            .iter()
-            .map(|class| (class.name.name.clone(), class.id)),
-    );
+    let class_ids = class_table(&imports, &classes);
     program.export_aliases(aliases, &class_ids, &annotations);
     let instances = module_instances(program, &classes, &class_ids, &annotations, diagnostics);
     let known_scope = (&class_ids, &instances, &annotations);
@@ -259,7 +281,7 @@ fn check_module(
         floor_defers,
         diagnostics,
     );
-    let (class_infos, methods) = collect_members(
+    let (mut class_infos, methods) = collect_members(
         &classes,
         &KnownClasses {
             ids: &class_ids,
@@ -273,7 +295,6 @@ fn check_module(
         first_function + definitions.len(),
         diagnostics,
     );
-    let mut class_infos = class_infos;
     mark_dataclasses(&mut class_infos, dataclasses);
     let mut variables = imports.variables.clone();
     module_variables(&tree.body, &mut variables);
@@ -283,6 +304,11 @@ fn check_module(
         &tree.body,
         &definitions,
         &class_ids,
+        &variables,
+        diagnostics,
+    );
+    imports.report_clashes(
+        &defined_names(&classes, &definitions),
         &variables,
         diagnostics,
     );

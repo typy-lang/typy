@@ -1590,6 +1590,11 @@ imports with `Program::resolve_import`: a function or a class imported by
 name enters the module's tables, so calls and annotations find it, and a
 name bound to a module or to a module variable's value becomes a module
 variable of the importer, typed `Type::Module` or with the source's type.
+A call or an annotation reads such a name when compiling, so
+`ModuleImports::bind` reports E0202 for a name that imports bind to two
+functions or classes, and `report_defined` and `report_assigned` for one
+the module also defines with `def` or `class` or assigns as a variable
+(STD-04); two lazy imports of a name are left to the lazy import's check.
 A function's own imports enter the tables while it is checked. An import
 statement is `TypedStmt::Import { modules, bindings }`: the modules to
 initialise, each package before its submodules, and each `ImportBinding`,

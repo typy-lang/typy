@@ -108,6 +108,19 @@ E0422, shown with each import of the cycle (MOD-05). Moving one of the
 imports into the function that uses the module breaks the cycle. A name a
 module does not define is E0425, at compile time.
 
+A module keeps one definition per name, as for `def` (STD-04). A name
+that imports bind to two different functions or classes, or to a function
+or a class that the module also defines or assigns, is E0202, since a call
+compiled for one would run the other. Import the second under another
+name:
+
+<!-- typy-expect: rejected E0202 at 3:18 -->
+```python
+from math import sqrt
+print(sqrt(4))
+from math import floor as sqrt
+```
+
 `from m import *` is planned for after 1.0. Standard library modules come
 with their releases: `math` and `sys` in 0.3, `dataclasses` in 0.4, and
 `ctypes` in 0.5 (LIB-04 to LIB-07, FFI-01). `typing` and

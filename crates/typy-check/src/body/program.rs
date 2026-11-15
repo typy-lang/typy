@@ -182,6 +182,11 @@ impl Program {
         }
     }
 
+    /// Returns the modules the module's `__lazy_modules__` lists, whose imports are lazy.
+    pub(crate) const fn lazy_modules(&self) -> &BTreeSet<String> {
+        &self.lazy_modules
+    }
+
     /// Notes the modules of the program and the standard library modules it imports, and
     /// the module variables assigned through module objects, before any module is checked.
     pub(crate) fn set_project(
