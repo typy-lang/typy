@@ -11,6 +11,10 @@ All notable changes to TyPy are recorded here. The format follows
 - Assignment expressions, `name := value`, with CPython's scoping in
   comprehensions and its syntax errors; a test of `(name := value) is not
   None` narrows `name` (EXP-13).
+- `match` statements with literal, value, capture, wildcard, `as` and
+  `|` patterns and guards, with CPython's syntax errors for patterns. A
+  case narrows the subject as the test it stands for does, so after
+  `case None:` an optional subject is no longer `None` (CST-06).
 
 ## [0.4.0] - 2026-11-15
 

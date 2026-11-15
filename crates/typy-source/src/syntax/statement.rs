@@ -156,6 +156,12 @@ pub enum Stmt {
         orelse: Vec<Stmt>,
         span: Span,
     },
+    /// `match subject:` with its cases, in order (CST-06).
+    Match {
+        subject: Expr,
+        cases: Vec<super::pattern::MatchCase>,
+        span: Span,
+    },
     If {
         test: Expr,
         body: Vec<Stmt>,
@@ -269,6 +275,7 @@ impl Stmt {
             | Self::AnnAssign { span, .. }
             | Self::For { span, .. }
             | Self::While { span, .. }
+            | Self::Match { span, .. }
             | Self::If { span, .. }
             | Self::Import { span, .. }
             | Self::ImportFrom { span, .. }

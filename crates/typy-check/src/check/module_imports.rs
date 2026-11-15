@@ -78,6 +78,11 @@ fn collect(program: &Program, statements: &[Stmt], found: &mut ModuleImports) {
                 collect(program, orelse, found);
             }
             Stmt::With { body, .. } => collect(program, body, found),
+            Stmt::Match { cases, .. } => {
+                for case in cases {
+                    collect(program, &case.body, found);
+                }
+            }
             Stmt::Try { .. } => {
                 for block in statement.try_blocks() {
                     collect(program, block, found);
@@ -173,6 +178,11 @@ fn each_block(statement: &Stmt, mut visit: impl FnMut(&[Stmt])) {
         | Stmt::While { body, orelse, .. } => {
             visit(body);
             visit(orelse);
+        }
+        Stmt::Match { cases, .. } => {
+            for case in cases {
+                visit(&case.body);
+            }
         }
         Stmt::Try { .. } => {
             for block in statement.try_blocks() {

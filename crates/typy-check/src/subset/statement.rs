@@ -197,6 +197,7 @@ impl Walker {
                 self.loop_body(body, place);
                 self.block(orelse, place);
             }
+            Stmt::Match { subject, cases, .. } => self.match_statement(subject, cases, place),
             Stmt::If {
                 test, body, orelse, ..
             } => {

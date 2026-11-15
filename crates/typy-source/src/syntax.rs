@@ -4,6 +4,7 @@ mod dump;
 mod expression;
 mod node_kind;
 mod operator;
+mod pattern;
 mod relocate;
 mod statement;
 mod tree;
@@ -12,6 +13,7 @@ pub use dump::dump;
 pub use expression::{Comprehension, Constant, Expr, FStringPart, Keyword, ReplacementField};
 pub use node_kind::NodeKind;
 pub use operator::{BinaryOperator, BoolOperator, CompareOperator, UnaryOperator};
+pub use pattern::{MatchCase, Pattern};
 pub use statement::{
     Alias, ExceptHandler, Parameter, ParameterKind, Stmt, TypeParameter, TypeParameterKind,
     WithItem,

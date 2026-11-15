@@ -68,6 +68,18 @@ impl BodyChecker<'_> {
                 Stmt::While { body, orelse, .. } | Stmt::If { body, orelse, .. } => {
                     self.collect_locals(&body.iter().chain(orelse).collect::<Vec<_>>());
                 }
+                // The names a pattern binds are locals, as an assignment's are (CST-06).
+                Stmt::Match { cases, .. } => {
+                    for case in cases {
+                        for name in case.pattern.bound_names() {
+                            self.bind_local(&Expr::Name {
+                                id: name.name.clone(),
+                                span: name.span,
+                            });
+                        }
+                        self.collect_locals(&case.body.iter().collect::<Vec<_>>());
+                    }
+                }
                 Stmt::With { items, body, .. } => {
                     for target in items.iter().filter_map(|item| item.target.as_ref()) {
                         self.bind_local(target);

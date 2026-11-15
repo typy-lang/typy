@@ -29,6 +29,7 @@ mod list;
 mod list_call;
 mod locals;
 mod loop_source;
+mod matching;
 mod math_call;
 mod math_iterable;
 mod method_call;

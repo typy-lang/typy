@@ -3,10 +3,10 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy detailed design |
-| Version | 1.75 |
+| Version | 1.76 |
 | Status | Approved |
 | Owner | typy-lang contributors |
-| Last updated | 2026-11-13 |
+| Last updated | 2026-11-15 |
 
 ## 1. Purpose and scope
 
@@ -1038,6 +1038,26 @@ by `:=` is not borrowed. The subset walker keeps the names enclosing
 comprehensions bind and whether a comprehension's source is being walked,
 and reports CPython's `SyntaxError`s as E0103: rebinding a comprehension
 variable, `:=` in a source, and `__debug__` as the target.
+
+A `match` statement (CST-06) is `Stmt::Match { subject, cases }`, each
+`MatchCase` holding a `Pattern`, a guard and a body, as CPython's `ast`
+module has them. `body/matching.rs` writes each pattern as the test it
+stands for and checks that test as an expression: a value pattern is
+`subject == value`, a singleton `subject is None`, a capture or an `as`
+name an assignment of the subject, and `p | q` the alternatives, whose
+assigned variables meet. The facts a test gives hold in its guard and
+body, and the facts of its failure hold in the later cases when a case is
+one test without a guard, so `case None:` narrows an optional subject in
+the cases after it. A local subject is tested as it is; any other subject
+is first stored in a hidden local named `<match N>`, which no program can
+write. The result is `TypedStmt::Match` with a `TypedCase` per case, whose
+`TypedPattern` is `Test`, `Bind`, `All` or `Any`. Lowering gives each case
+a block its pattern jumps to when it fails, so the cases are tried in
+order and a subject no case matches goes on after the statement. The
+subset walker reports CPython's compile-time `SyntaxError`s for patterns as
+E0103: a capture or wildcard before the last case or alternative,
+alternatives that bind different names, a name bound twice, `__debug__`
+as a target and an f-string as a value.
 
 Classes (CLS-01, CLS-02, CLS-08, ADR-0012) are collected before any
 signature: `collect_classes` gives each `class` statement at the top of the

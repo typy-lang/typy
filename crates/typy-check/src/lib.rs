@@ -34,8 +34,8 @@ pub use typed::{
     FileAttribute, FormattedValue, FunctionId, FunctionSignature, Generator, ImportBinding,
     InitCall, IsInstanceTest, LoopSource, OpenOptions, OperatorCall, OsErrorField, PartOperation,
     PercentConversion, PercentField, PercentNumber, PercentPart, PercentValue, PrintCall,
-    RaiseCause, SignatureParameter, Symbol, SymbolId, SymbolKind, TypedClass, TypedConstant,
-    TypedExpr, TypedExprKind, TypedFunction, TypedHandler, TypedModule, TypedProgram, TypedStmt,
-    WithProtocol, dump,
+    RaiseCause, SignatureParameter, Symbol, SymbolId, SymbolKind, TypedCase, TypedClass,
+    TypedConstant, TypedExpr, TypedExprKind, TypedFunction, TypedHandler, TypedModule,
+    TypedPattern, TypedProgram, TypedStmt, WithProtocol, dump,
 };
 pub use types::{BinaryKind, Type, TypeObjectOf, View};

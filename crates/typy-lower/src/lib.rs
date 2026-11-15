@@ -29,6 +29,7 @@ mod list;
 mod list_method;
 mod loop_source;
 mod mangle;
+mod matching;
 mod math;
 mod math_iterable;
 mod methods;

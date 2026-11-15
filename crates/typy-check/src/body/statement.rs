@@ -255,6 +255,11 @@ impl BodyChecker<'_> {
                     span: *span,
                 }
             }
+            Stmt::Match {
+                subject,
+                cases,
+                span,
+            } => self.match_statement(subject, cases, *span),
             Stmt::While {
                 test,
                 body,
@@ -574,6 +579,17 @@ fn assigned_names<'tree>(statements: &'tree [Stmt], names: &mut BTreeSet<&'tree 
             Stmt::While { body, orelse, .. } | Stmt::If { body, orelse, .. } => {
                 assigned_names(body, names);
                 assigned_names(orelse, names);
+            }
+            Stmt::Match { cases, .. } => {
+                for case in cases {
+                    names.extend(
+                        case.pattern
+                            .bound_names()
+                            .into_iter()
+                            .map(|name| name.name.as_str()),
+                    );
+                    assigned_names(&case.body, names);
+                }
             }
             Stmt::Try { .. } => {
                 for block in statement.try_blocks() {

@@ -1019,6 +1019,11 @@ fn imports_in<'tree>(statements: &'tree [Stmt], found: &mut Vec<&'tree Stmt>) {
                 imports_in(orelse, found);
             }
             Stmt::With { body, .. } => imports_in(body, found),
+            Stmt::Match { cases, .. } => {
+                for case in cases {
+                    imports_in(&case.body, found);
+                }
+            }
             Stmt::Try { .. } => {
                 for block in statement.try_blocks() {
                     imports_in(block, found);

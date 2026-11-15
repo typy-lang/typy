@@ -1448,6 +1448,11 @@ fn initialized_attributes(parts: &FunctionParts<'_>) -> Vec<String> {
                     statements(body, instance, found);
                     statements(orelse, instance, found);
                 }
+                Stmt::Match { cases, .. } => {
+                    for case in cases {
+                        statements(&case.body, instance, found);
+                    }
+                }
                 Stmt::Try { .. } => {
                     for block in statement.try_blocks() {
                         statements(block, instance, found);

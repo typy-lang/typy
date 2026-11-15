@@ -304,6 +304,11 @@ impl Expansion<'_, '_> {
                 self.hidden.truncate(outer);
             }
             Stmt::With { body, .. } => self.block(body),
+            Stmt::Match { cases, .. } => {
+                for case in cases {
+                    self.block(&mut case.body);
+                }
+            }
             Stmt::AnnAssign {
                 annotation: each, ..
             } => self.annotation(each),

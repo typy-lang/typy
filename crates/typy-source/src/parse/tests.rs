@@ -230,9 +230,6 @@ fn constructs_beyond_the_release_keep_their_kind_and_span() {
     let source = "\
 async def a():
     pass
-match v:
-    case _:
-        pass
 nonlocal g
 ";
     let kinds: Vec<NodeKind> = body(source)
@@ -242,14 +239,51 @@ nonlocal g
             other => panic!("converted in detail: {other:?}"),
         })
         .collect();
+    assert_eq!(kinds, [NodeKind::AsyncFunctionDef, NodeKind::Nonlocal,]);
+}
+
+#[test]
+fn a_match_statement_keeps_its_cases_patterns_and_guards() {
+    let source = "\
+match v:
+    case 1 | None as found if found:
+        pass
+    case [first, *rest]:
+        pass
+    case {\"k\": value, **others}:
+        pass
+    case Point(0, y=height):
+        pass
+    case _:
+        pass
+";
+    let statements = body(source);
+    let [Stmt::Match { cases, .. }] = statements.as_slice() else {
+        panic!("one match statement");
+    };
+    assert_eq!(cases.len(), 5);
+    assert!(cases[0].guard.is_some());
+    let names: Vec<Vec<&str>> = cases
+        .iter()
+        .map(|case| {
+            case.pattern
+                .bound_names()
+                .into_iter()
+                .map(|name| name.name.as_str())
+                .collect()
+        })
+        .collect();
     assert_eq!(
-        kinds,
+        names,
         [
-            NodeKind::AsyncFunctionDef,
-            NodeKind::Match,
-            NodeKind::Nonlocal,
+            vec!["found"],
+            vec!["first", "rest"],
+            vec!["value", "others"],
+            vec!["height"],
+            vec![]
         ]
     );
+    assert_eq!(cases[3].pattern.expressions().len(), 2);
 }
 
 #[test]

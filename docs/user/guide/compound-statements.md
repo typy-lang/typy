@@ -11,8 +11,10 @@
 | `for` over an instance of a class with `__iter__`, whose result has `__next__` | CST-08 |
 | `iter` and `next`, with or without a default, and `for` over an iterator | CST-09 |
 | `with`, with one or more context managers and `as` targets | CST-05, CST-10 |
+| `match` with literal, value, capture, wildcard, `as` and `\|` patterns and guards | CST-06 |
 
-`match` comes in 0.5 (CST-06).
+Sequence, mapping and class patterns in `match` are planned for 0.5
+(CST-06).
 
 ## Example
 
@@ -42,6 +44,51 @@ refused:
 ```python
 for item in (1, "a"):
     print(item)
+```
+
+## Matching values
+
+`match` tries its cases in order and runs the first whose pattern matches
+the subject and whose guard, the `if` after the pattern, is true. A
+literal or a dotted name such as `Color.RED` matches a subject equal to
+it, and `None`, `True` and `False` match the subject that is them. A name
+captures the subject, `_` matches anything and binds nothing, `p as name`
+binds what `p` matched, and `p | q` tries each alternative. When no case
+matches, the statement does nothing.
+
+<!-- typy-expect: accepted -->
+```python
+def describe(code: int | None) -> str:
+    match code:
+        case None:
+            return "no code"
+        case 200 | 201:
+            return "ok"
+        case 404 as missing:
+            return f"missing {missing}"
+        case other if other >= 500:
+            return f"server {other}"
+        case other:
+            return f"code {other}"
+
+
+for code in [200, None, 404, 503, 302]:
+    print(describe(code))
+```
+
+A case narrows the subject as the test it stands for does: after
+`case None:`, a later case sees an `int | None` subject as `int`. A
+pattern that matches anything, a capture or `_`, must come last, as
+CPython requires:
+
+<!-- typy-expect: rejected E0103 at 3:10 -->
+```python
+code = 1
+match code:
+    case other:
+        print(other)
+    case 1:
+        print("one")
 ```
 
 ## Context managers

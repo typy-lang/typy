@@ -57,6 +57,20 @@ pub(crate) fn visit_statement(statement: &Stmt, visit: &mut dyn FnMut(&Expr)) {
                 .chain(orelse)
                 .for_each(|inner| visit_statement(inner, visit));
         }
+        Stmt::Match { subject, cases, .. } => {
+            visit_expression(subject, visit);
+            for case in cases {
+                for expression in case.pattern.expressions() {
+                    visit_expression(expression, visit);
+                }
+                if let Some(guard) = &case.guard {
+                    visit_expression(guard, visit);
+                }
+                for inner in &case.body {
+                    visit_statement(inner, visit);
+                }
+            }
+        }
         Stmt::While {
             test, body, orelse, ..
         }

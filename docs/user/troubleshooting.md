@@ -92,34 +92,27 @@ python-floor = "3.15"
 ## E0201: feature planned for a later TyPy release
 
 The program uses valid Python that a later TyPy release accepts, such as
-a `match` statement or class decorators. The message names the release
-and the rule. Write the code without the feature, for example with `if`
-and `elif`, or wait for that release.
+a `lambda` expression or class decorators. The message names the release
+and the rule. Write the code without the feature, for example with a
+function defined by `def`, or wait for that release.
 
 This program gives E0201:
 
-<!-- typy-expect: rejected E0201 at 2:5 -->
+<!-- typy-expect: rejected E0201 at 1:11 -->
 ```python
-def show(value: int) -> None:
-    match value:
-        case 0:
-            print("zero")
-        case _:
-            print(value)
+largest = lambda a, b: a if a > b else b
+print(largest(2, 3))
 ```
 
 This one is correct:
 
 <!-- typy-expect: accepted -->
 ```python
-def show(value: int) -> None:
-    if value == 0:
-        print("zero")
-    else:
-        print(value)
+def largest(a: int, b: int) -> int:
+    return a if a > b else b
 
 
-show(0)
+print(largest(2, 3))
 ```
 
 ## E0202: feature TyPy cannot compile with CPython's meaning

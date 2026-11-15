@@ -4,6 +4,7 @@ mod class;
 mod expression;
 mod feature;
 mod global_scope;
+mod matching;
 mod statement;
 
 use typy_diagnostics::{Diagnostic, DiagnosticCode, Diagnostics, RuleId, Span};

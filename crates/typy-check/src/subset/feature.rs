@@ -29,7 +29,6 @@ pub(super) const fn planned(what: &'static str, release: &'static str, rule: Rul
 /// Classifies every node kind the syntax tree does not convert in detail; the match has no wildcard, so a new kind does not compile until it is classified.
 pub(super) fn feature(kind: NodeKind) -> Feature {
     match kind {
-        NodeKind::Match => planned("`match` statements", "0.5", RuleId::CST_06),
         // The parser refuses `:=` to anything but a name, so only that error reaches here.
         NodeKind::NamedExpr => Feature::Excluded {
             what: "assignment expressions to anything but a name",

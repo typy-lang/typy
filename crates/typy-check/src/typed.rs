@@ -24,7 +24,7 @@ pub use percent::{PercentConversion, PercentField, PercentNumber, PercentPart, P
 pub use program::{TypedModule, TypedProgram};
 pub use signature::{FunctionSignature, SignatureParameter};
 pub use statement::{
-    AssignTarget, Generator, ImportBinding, LoopSource, RaiseCause, TypedHandler, TypedStmt,
-    WithProtocol,
+    AssignTarget, Generator, ImportBinding, LoopSource, RaiseCause, TypedCase, TypedHandler,
+    TypedPattern, TypedStmt, WithProtocol,
 };
 pub use symbol::{Symbol, SymbolId, SymbolKind};

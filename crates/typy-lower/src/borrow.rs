@@ -40,6 +40,13 @@ pub(crate) fn assigned_symbols(body: &[TypedStmt]) -> BTreeSet<SymbolId> {
                     found.extend(bindings.iter().map(typy_check::ImportBinding::target));
                 }
                 TypedStmt::LazyImport { targets, .. } => found.extend(targets.iter().copied()),
+                TypedStmt::Match { subject, cases, .. } => {
+                    found.extend(subject.iter().map(|(symbol, _)| *symbol));
+                    for case in cases {
+                        found.extend(case.pattern.bound());
+                        statements(&case.body, found);
+                    }
+                }
                 TypedStmt::If { body, orelse, .. } | TypedStmt::While { body, orelse, .. } => {
                     statements(body, found);
                     statements(orelse, found);

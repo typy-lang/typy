@@ -6,6 +6,7 @@ mod escape;
 mod expression;
 mod limits;
 mod operator;
+mod pattern;
 mod statement;
 
 use ruff_python_ast::{self as ast, PythonVersion};

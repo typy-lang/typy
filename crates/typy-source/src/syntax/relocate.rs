@@ -109,6 +109,20 @@ impl Stmt {
                 relocate_statements(body, span);
                 relocate_statements(orelse, span);
             }
+            Self::Match {
+                subject,
+                cases,
+                span: at,
+            } => {
+                *at = span;
+                subject.relocate(span);
+                for case in cases {
+                    case.span = span;
+                    case.pattern.relocate(span);
+                    relocate_optional(case.guard.as_mut(), span);
+                    relocate_statements(&mut case.body, span);
+                }
+            }
             Self::Import {
                 names, span: at, ..
             } => {

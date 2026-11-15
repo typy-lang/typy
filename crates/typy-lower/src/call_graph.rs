@@ -168,6 +168,17 @@ fn statements(body: &[TypedStmt], callees: &mut BTreeSet<FunctionId>) {
                 statements(body, callees);
                 statements(orelse, callees);
             }
+            TypedStmt::Match { subject, cases, .. } => {
+                if let Some((_, value)) = subject {
+                    expression(value, callees);
+                }
+                for case in cases {
+                    for each in case.pattern.expressions().into_iter().chain(&case.guard) {
+                        expression(each, callees);
+                    }
+                    statements(&case.body, callees);
+                }
+            }
             TypedStmt::ForRange {
                 start,
                 stop,

@@ -60,6 +60,15 @@ pub(super) fn module_variables(statements: &[Stmt], names: &mut BTreeMap<String,
                 }
                 module_variables(body, names);
             }
+            // The names a pattern binds are module variables, as an assignment's are (CST-06).
+            Stmt::Match { cases, .. } => {
+                for case in cases {
+                    for name in case.pattern.bound_names() {
+                        names.entry(name.name.clone()).or_insert(name.span);
+                    }
+                    module_variables(&case.body, names);
+                }
+            }
             _ => {}
         }
     }
@@ -80,6 +89,11 @@ pub(crate) fn declared_globals(statements: &[Stmt]) -> Vec<&Identifier> {
                 names.extend(declared_globals(orelse));
             }
             Stmt::With { body, .. } => names.extend(declared_globals(body)),
+            Stmt::Match { cases, .. } => {
+                for case in cases {
+                    names.extend(declared_globals(&case.body));
+                }
+            }
             Stmt::Try { .. } => {
                 for block in statement.try_blocks() {
                     names.extend(declared_globals(block));

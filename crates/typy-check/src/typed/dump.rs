@@ -95,6 +95,32 @@ impl Dump<'_> {
         self.block(1, "body", &function.body);
     }
 
+    fn pattern(&mut self, depth: usize, pattern: &crate::typed::TypedPattern) {
+        use crate::typed::TypedPattern;
+        match pattern {
+            TypedPattern::Test(test) => {
+                self.line(depth, "Test", test.span);
+                self.expression(depth + 1, test);
+            }
+            TypedPattern::Bind(symbol, value) => {
+                let name = self.program.symbol(*symbol).name.clone();
+                self.line(depth, &format!("Bind {name}"), value.span);
+                self.expression(depth + 1, value);
+            }
+            TypedPattern::All(patterns) | TypedPattern::Any(patterns) => {
+                let label = if matches!(pattern, TypedPattern::All(_)) {
+                    "All"
+                } else {
+                    "Any"
+                };
+                let _ = writeln!(self.text, "{}{label}", "  ".repeat(depth));
+                for inner in patterns {
+                    self.pattern(depth + 1, inner);
+                }
+            }
+        }
+    }
+
     fn block(&mut self, depth: usize, label: &str, statements: &[TypedStmt]) {
         if statements.is_empty() {
             return;
@@ -174,6 +200,27 @@ impl Dump<'_> {
                 self.expression(depth + 1, test);
                 self.block(depth + 1, "body", body);
                 self.block(depth + 1, "orelse", orelse);
+            }
+            TypedStmt::Match {
+                subject,
+                cases,
+                span,
+            } => {
+                self.line(depth, "Match", *span);
+                if let Some((symbol, value)) = subject {
+                    let name = self.program.symbol(*symbol).name.clone();
+                    self.line(depth + 1, &format!("subject {name}"), value.span);
+                    self.expression(depth + 2, value);
+                }
+                for case in cases {
+                    self.line(depth + 1, "case", *span);
+                    self.pattern(depth + 2, &case.pattern);
+                    if let Some(guard) = &case.guard {
+                        self.line(depth + 2, "guard", guard.span);
+                        self.expression(depth + 3, guard);
+                    }
+                    self.block(depth + 2, "body", &case.body);
+                }
             }
             TypedStmt::ForEach {
                 target,
