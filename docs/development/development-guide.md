@@ -189,7 +189,7 @@ read-only permissions, and only the job that creates a release may write.
 | `ci.yml` | Quality gate and package | Every pull request | `make check`, then `make dist` |
 | `ci.yml` | Miri and fuzzing | On demand, before a release | `make miri`, then `FUZZ_SECONDS=1800 make fuzz`; the inputs that crashed are kept as an artifact |
 | `ci.yml` | Dependency review | Every pull request | Fails on a new dependency with a known vulnerability |
-| `codeql.yml` | Analyze | Every push to `main`, and weekly | Code scanning of the Rust sources and the workflows |
+| `codeql.yml` | Analyze | Every push to `main`, and weekly | Code scanning of the Rust sources and the workflows, leaving out the test files that `.github/codeql/codeql-config.yml` lists |
 | `release.yml` | Check and build, then Publish | A tag `vX.Y.Z` | Section 9 |
 
 CI minutes are spent on whole changes. `main` changes only through a pull
