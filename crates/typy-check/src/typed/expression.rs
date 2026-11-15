@@ -175,6 +175,9 @@ pub enum TypedExprKind {
         part: ExceptionPart,
         operation: PartOperation,
     },
+    /// `args` of an exception as a value of its own, read from the exception's arguments by
+    /// their layout; `code` of a `SystemExit` is read through it (EXC-15, ADR-0034).
+    ExceptionArguments(Box<TypedExpr>),
     /// `errno`, `strerror`, `filename` or `filename2` of an `OSError`, `None` when it was not
     /// given (EXC-14).
     OsErrorField {
@@ -530,7 +533,8 @@ impl TypedExpr {
             TypedExprKind::SysExit(value)
             | TypedExprKind::Input(value)
             | TypedExprKind::RecursionLimit(value) => value.iter().map(Box::as_ref).collect(),
-            TypedExprKind::OsErrorField { exception, .. } => vec![exception],
+            TypedExprKind::OsErrorField { exception, .. }
+            | TypedExprKind::ExceptionArguments(exception) => vec![exception],
             TypedExprKind::FileAttribute { file, .. } => vec![file],
             TypedExprKind::PercentDynamic { format, values } => vec![format, values],
             TypedExprKind::ExceptionPart {

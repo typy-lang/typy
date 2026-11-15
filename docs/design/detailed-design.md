@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy detailed design |
-| Version | 1.76 |
+| Version | 1.77 |
 | Status | Approved |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-15 |
@@ -1409,8 +1409,32 @@ needs no `return`.
 of a `SystemExit` where `print`, `str`, `repr`, `bool`, `len` of `args`, an
 f-string field, a condition, `not`, `==` or `!=` reads them, before the operand
 is checked, and gives `TypedExprKind::ExceptionPart { exception, part, operation
-}` with a `PartOperation`; any other use is E0201 (EXC-11, EXC-13, EXC-15,
-ADR-0030).
+}` with a `PartOperation` (EXC-11, EXC-13, ADR-0030). Any other use reads them
+as values (EXC-15, ADR-0034). `exception_arguments::Creations` records each
+creation of an exception: `exception_with_arguments` and a call of a class with
+its own `__init__` record the class with the tuple of the arguments given by
+position, `super().__init__` records the initializing class with its
+arguments, `sys.exit` records `SystemExit`, and a dict lookup, `dict.pop`,
+`set.remove`, an entry target and a `%` format of a dict record the key type.
+`Creations::arguments_of(class)` gives the type of `args`: the tuples of every
+creation of the class and of the classes derived from it, of every
+initialization of a related class, and of the runtime's own raises (a message,
+`tuple[str]`; the key of a `KeyError`; `(int, str)` of an `OSError`; the five
+items of a Unicode error; `()` of `StopIteration`). Tuples of one layout, as
+many items with one type or two object types at each position, merge into one
+member, so the layout of an exception's arguments names its member; the
+members are not given to `Type::union`, which would drop `tuple[int]` for
+`tuple[float]`. `name.args` becomes `TypedExprKind::ExceptionArguments`, and
+`name.code` reads it and takes, for each member, `None`, its one item, or the
+tuple. `each_member::Split` lets an operation be checked for each member of a
+union of tuples that `name.args` is, as for a variable. `TypeChecker::check`
+checks the program once; when a body read `args` or `code` as a value, the
+first check typed them as errors, so it checks again with the creations found,
+and again while a check finds a creation the ones before did not, up to eight
+checks, after which the read is E0201 (EXC-17). Lowering reads the arguments
+with `typy_rt_exception_arguments_address` and, for a union, tests each member
+but the last with `typy_rt_exception_arguments_match`, which compares the
+layouts field by field, the runtime's text standing for one `str`.
 
 `body/os_error.rs` accepts an `OSError` of two to five arguments when `errno` is
 an `int`, `strerror` a `str`, the file names a `str` or `None` and `winerror` an
@@ -2165,7 +2189,7 @@ installed `typy` finds `<prefix>/lib/typy/` and a `typy` in
 | `text_file::os_error` | `os_error(errno, filename)` gives the `OSError` subclass CPython's errno table names, written as `[Errno 2] No such file or directory: 'name'` with the `repr` of the file name, and with the arguments `(errno, strerror)` for its `repr`. The texts are glibc's, in a table `make errno-texts` writes, so both targets print the oracle's words |
 | `text_file::os_error` (programs) | `typy_rt_os_error_new` makes an `OSError` the program built with two to five arguments: `OSError` itself becomes the subclass for `errno`, and the text is `[Errno N] strerror`, then a colon and the `repr` of `filename`, and an arrow and the `repr` of `filename2`, when given. `typy_rt_os_error_errno` and `typy_rt_os_error_text` read `errno`, `strerror`, `filename` and `filename2`, checking each argument's type, since a class's `__init__` may have given others. `args`, `str` and `repr` show only `errno` and `strerror` when a `filename` other than `None` was given, as CPython does; `exit_code` reads arguments without that rule, so a program links no `OSError` code for its exit status (EXC-14, NFR-02) |
 | `format::percent::dynamic` | `typy_rt_percent_dynamic` formats `format % values` when the format is not a literal or the values are a `tuple[T, ...]` (LIB-11): it reads the format with the grammar of CPython's `unicode_format_arg_parse`, takes the values from a tuple of their layout, from one value, or from the list that holds a `tuple[T, ...]`, reads a key from a dict, converts each value by its kind with the code of the literal path, and raises CPython 3.15's errors |
-| `exception::part` | `typy_rt_exception_part_text`, `typy_rt_exception_args_length`, `typy_rt_exception_part_truth` and `typy_rt_exception_part_equal` read `args` or `code` from an exception: `args` is the tuple of its arguments, or of the runtime's text, and `code` `None`, the one argument as the value it holds, or the tuple of several. `==` takes the other value as a tuple of one, and `values_equal` compares an optional or a union with a value of another type as the value it holds (ADR-0030) |
+| `exception::part` | `typy_rt_exception_part_text`, `typy_rt_exception_args_length`, `typy_rt_exception_part_truth` and `typy_rt_exception_part_equal` read `args` or `code` from an exception: `args` is the tuple of its arguments, or of the runtime's text, and `code` `None`, the one argument as the value it holds, or the tuple of several. `==` takes the other value as a tuple of one, and `values_equal` compares an optional or a union with a value of another type as the value it holds (ADR-0030). `typy_rt_exception_arguments_match(exception, layout)` says whether `args` is laid out as a member of the union of tuples `args` has, and `typy_rt_exception_arguments_address` gives the address of its items: the arguments, or the field that holds the runtime's text (EXC-15, ADR-0034) |
 | `sys` | `typy_rt_sys_argv` builds the list once from the arguments of `main`, decoded as UTF-8 with each stray byte as U+DC80 to U+DCFF, as CPython's `surrogateescape` does. `typy_rt_input` writes the prompt, flushes standard output, then reads a line through `sys.stdin`'s reader without its `\n`, and raises `EOFError: EOF when reading a line` when nothing is left. `typy_rt_sys_getrecursionlimit` and `typy_rt_sys_setrecursionlimit` keep the limit, checked as a C `int` of at least 1. `exit_status` gives the status of an uncaught exception: for a `SystemExit` or a subclass, 0 for no code or `None`, the low byte of an `int`, 255 for one outside `i128` as CPython 3.15 gives, and 1 after writing any other value to standard error, all without a traceback; 1 with the report for any other exception |
 | `exception` | Defines the built-in exception classes with CPython's bases: `BaseException`, with `SystemExit` and `Exception`; under `Exception` `ArithmeticError` with `OverflowError` and `ZeroDivisionError`, `LookupError` with `IndexError` and `KeyError`, `RuntimeError` with `NotImplementedError` and `RecursionError`, `ValueError` with `UnicodeError` and its `UnicodeDecodeError` and `UnicodeEncodeError`, `OSError` with its fifteen subclasses and `io.UnsupportedOperation`, which `derives_from` also counts as a `ValueError`, its second base in CPython, and `AssertionError`, `AttributeError`, `EOFError`, `StopIteration` and `TypeError` (EXC-02, EXC-10). Each hashes by identity and writes its objects with `typy_rt_exception_repr` and `typy_rt_exception_str`. `str` is the runtime's message, or from the arguments: empty for none, the `str` of one, its `repr` for a `KeyError`, and the `repr` of the tuple of several; `repr` is the class name and the arguments between parentheses, with no comma after one, and a runtime message stands for the one argument (EXC-08). `typy_rt_exception_matches` walks the chain of bases (EXC-01). The exception being handled is one value, which `typy_rt_exception_enter` sets and returns the one before and `typy_rt_exception_leave` restores; every exception raised meanwhile, by the runtime or through `typy_rt_exception_raise`, takes it as its context, unless it is that exception, and a link back to the raised exception in the context's chain is cut first, as CPython's `_PyErr_SetObject` does. `typy_rt_exception_set_cause` sets the cause, or none, and suppresses the context (EXC-04). The runtime creates its exceptions with CPython's message for each operation. Where the oracle versions word a message differently, the runtime uses the wording of the newest, CPython 3.15 (OI-14): `division by zero` for every division and modulo of `int` and `float`, and `zero to a negative power` for `0.0 ** -1.0`. A conformance test cannot check such a message, because the oracles disagree on it, so the runtime's unit tests check it. It adds `TracebackEntry` values, and it prints an uncaught exception as CPython does: the oldest exception of its chain first, each followed by `The above exception was the direct cause of the following exception:` for a cause or `During handling of the above exception, another exception occurred:` for a context that `from` did not suppress, each exception shown once; for each, `Traceback (most recent call last):` when it was raised, one line per entry, an entry repeated in a row shown at most three times and the rest counted as `[Previous line repeated N more times]`, as CPython's `TB_RECURSIVE_CUTOFF` does, then `Type: message`, or `Type` alone when the message is empty, with the module before the class name unless it is `__main__`, and `<exception str() failed>` when `str` raises (STD-05). The report calls `str` through the class, so a program that raises nothing links none of the code that writes arguments (NFR-01) |
 | `bytes` | A `bytes` is a `str` object of one byte per code point under the type ID 6, so it shares the string algorithms; `typy_rt_bytes_concat`, `_repeat`, `_slice`, `_length`, `_compare` and `_contains` call them and keep the result a `bytes`. `_get` gives an item as an `int`, with `IndexError: index out of range` outside; `_contains_byte` raises `ValueError: byte must be in range(0, 256)` for an `int` outside; `_zeros` and `_from_list` build one, `bytes must be in range(0, 256)` and `negative count` as CPython words them; `_repr` writes `b'...'` in double quotes when the bytes hold a single quote and no double quote, and escapes every byte outside 0x20 to 0x7e as `\xhh` |

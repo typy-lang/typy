@@ -62,6 +62,63 @@ fn part_of(exception: &ExceptionObject, part: i64) -> Part {
     }
 }
 
+/// The layout of `args` of an exception the runtime raised with a text: one `str`, the
+/// text, read from the field that holds it.
+static TEXT_ARGUMENTS: TupleType = TupleType {
+    size: 8,
+    length: 1,
+    fields: &raw const TEXT_FIELD,
+};
+
+static TEXT_FIELD: crate::tuple::Field = crate::tuple::Field::plain(ItemKind::Object, 0);
+
+/// Returns true when `args` of `exception` is laid out as `layout`, the layout of one
+/// member of the union of tuples `args` has in the program: its arguments as `args` shows
+/// them, the runtime's text as one `str`, or no items (EXC-15, ADR-0034).
+///
+/// # Safety
+///
+/// `exception` points to a live exception, and `layout` to a descriptor the compiler emitted.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn typy_rt_exception_arguments_match(
+    exception: *const ExceptionObject,
+    layout: *const TupleType,
+) -> bool {
+    // SAFETY: the caller's guarantee.
+    unsafe {
+        let exception = self::exception(exception);
+        match Arguments::of(exception) {
+            Some(arguments) => crate::tuple::same_layout(arguments.layout(), layout),
+            None if !exception.message.is_null() => {
+                crate::tuple::same_layout(&raw const TEXT_ARGUMENTS, layout)
+            }
+            None => (*layout).length == 0,
+        }
+    }
+}
+
+/// Returns the address of the items of `args` of `exception`, borrowed from it: its
+/// arguments, whose first two an `OSError` with file names shows, the field that holds the
+/// runtime's text, or 0 for none.
+///
+/// # Safety
+///
+/// `exception` points to a live exception.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn typy_rt_exception_arguments_address(
+    exception: *const ExceptionObject,
+) -> u64 {
+    // SAFETY: the caller's guarantee.
+    let exception = unsafe { self::exception(exception) };
+    if !exception.arguments.is_null() {
+        exception.arguments.expose_provenance() as u64
+    } else if exception.message.is_null() {
+        0
+    } else {
+        (&raw const exception.message).expose_provenance() as u64
+    }
+}
+
 /// Returns the exception a part is read from.
 ///
 /// # Safety

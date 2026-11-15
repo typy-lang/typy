@@ -131,6 +131,7 @@ impl BodyChecker<'_> {
             (Method::DictGet, 1, _) => Type::optional(signature.result),
             _ => signature.result,
         };
+        self.record_missing_key(method, &receiver.ty);
         Self::typed(
             TypedExprKind::Method {
                 receiver: Box::new(receiver),
@@ -140,6 +141,15 @@ impl BodyChecker<'_> {
             result,
             span,
         )
+    }
+
+    /// Records the key a method may find missing, whose `KeyError` holds it (ADR-0034).
+    fn record_missing_key(&mut self, method: Method, receiver: &Type) {
+        if let (Method::DictPop, Type::Dict(key, _)) | (Method::SetRemove, Type::Set(key)) =
+            (method, receiver)
+        {
+            self.program.record_key(key);
+        }
     }
 
     pub(super) fn invalid_call(span: Span) -> TypedExpr {

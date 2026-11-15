@@ -179,7 +179,7 @@ impl BodyChecker<'_> {
                     super::operator_method::Comparison::Builtin(current, value) => (current, value),
                 };
                 let (current, value) = Self::tuple_operands(*operator, current, value);
-                if let Some(formatted) = Self::percent_dynamic(*operator, &current, &value, *span) {
+                if let Some(formatted) = self.percent_dynamic(*operator, &current, &value, *span) {
                     return self.rebound(target, formatted, *span);
                 }
                 let result = self.binary_type(*operator, &current, &value, *span);

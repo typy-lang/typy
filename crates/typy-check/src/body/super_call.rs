@@ -218,6 +218,8 @@ impl BodyChecker<'_> {
             if let Some(error) = self.os_error_arguments(exception.builtin(), &values, true, span) {
                 return error;
             }
+            let types: Vec<Type> = values.iter().map(|value| value.ty.clone()).collect();
+            self.program.record_initialization(&exception, &types);
             Self::typed(
                 TypedExprKind::SetArguments {
                     exception: Box::new(instance),

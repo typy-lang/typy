@@ -100,6 +100,13 @@ pub(crate) struct Program {
     /// The module variables some other module assigns through its module object, such as
     /// `settings.debug = True`, which a test cannot narrow either.
     pub(super) assigned_elsewhere: BTreeSet<(String, String)>,
+    /// The creations of exceptions this check records (EXC-15, ADR-0034).
+    pub(super) creations: crate::exception_arguments::Creations,
+    /// The creations the checks before this one recorded, which type `args`; none in a first
+    /// check.
+    pub(super) known_creations: Option<std::rc::Rc<crate::exception_arguments::Creations>>,
+    /// Where a body first reads `args` as a value, if one does.
+    pub(super) arguments_read: Option<Span>,
 }
 
 /// What a first look at a module body may change, which `keep_module_types` undoes.
@@ -169,6 +176,9 @@ impl Program {
             lazy_imports: BTreeMap::new(),
             lazy_names: BTreeMap::new(),
             assigned_elsewhere: BTreeSet::new(),
+            creations: crate::exception_arguments::Creations::default(),
+            known_creations: None,
+            arguments_read: None,
         }
     }
 

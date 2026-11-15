@@ -47,6 +47,7 @@ pub(crate) use definition::Definition;
 pub(crate) use protocol::outside_signature;
 
 use crate::body::{BodyChecker, Program};
+use crate::exception_arguments::Creations;
 use crate::subset;
 use crate::typed::{ClassId, FunctionId, TypedProgram};
 use crate::types::Type;
@@ -99,10 +100,88 @@ impl TypeChecker {
         // From 3.14 CPython evaluates annotations only when they are read, so a signature may
         // name a class defined below it.
         let floor_defers = project.settings().python_floor.minor() >= 14;
+        let checked = Checked {
+            project,
+            modules: &modules,
+            aliases: &aliases,
+            dataclasses: &dataclasses,
+            floor_defers,
+        };
+        // A program that reads `args` as a value is checked again with the creations of
+        // exceptions the check before found, until a check finds no new one (ADR-0034).
+        let mut known: Option<Creations> = None;
+        let mut checks = 1;
+        let (program, diagnostics) = loop {
+            let mut found = diagnostics.clone();
+            let program = checked.run(known.as_ref(), &mut found);
+            let Some(read) = program.first_arguments_read() else {
+                break (program, found);
+            };
+            if found.has_errors() {
+                break (program, found);
+            }
+            let recorded = program.creations();
+            if known.as_ref().is_some_and(|known| known.covers(recorded)) {
+                break (program, found);
+            }
+            if checks == MAXIMUM_CHECKS {
+                found.push(unsettled_arguments(read));
+                break (program, found);
+            }
+            match &mut known {
+                Some(known) => known.extend(recorded),
+                None => known = Some(recorded.clone()),
+            }
+            checks += 1;
+        };
+        if diagnostics.has_errors() {
+            return Err(diagnostics);
+        }
+        let mut program = program.finish(ModuleName::main().as_str());
+        program.warnings = diagnostics;
+        Ok(program)
+    }
+}
+
+/// The checks a program that reads `args` as a value may take before the creations of its
+/// exceptions settle; one more would only find an `args` held in the arguments of an
+/// exception of a related class, whose type grows with each check (EXC-17).
+const MAXIMUM_CHECKS: u32 = 8;
+
+/// Returns the error for a program whose checks keep finding new types of arguments, read
+/// as `args` at `read`.
+fn unsettled_arguments(read: typy_diagnostics::Span) -> typy_diagnostics::Diagnostic {
+    use typy_diagnostics::{Diagnostic, DiagnosticCode, RuleId};
+    Diagnostic::new(
+        DiagnosticCode::error(201),
+        read,
+        "`args` of an exception whose arguments hold the `args` of an exception of a \
+         related class, a type without end, is planned for TyPy 1.0 (EXC-17)",
+    )
+    .with_rule(RuleId::EXC_17)
+    .with_help("pass the items of `args` to the new exception, not `args` itself")
+}
+
+/// What each check of the modules reads: the modules in the order they are checked, with
+/// their type aliases and dataclasses.
+struct Checked<'project> {
+    project: &'project Project,
+    modules: &'project [Module],
+    aliases: &'project [BTreeMap<String, type_alias::Alias>],
+    dataclasses: &'project dataclass::Dataclasses,
+    floor_defers: bool,
+}
+
+impl Checked<'_> {
+    /// Checks every module into a new program, with `args` typed by the creations of
+    /// exceptions `known` records, or as errors in a first check, which knows none.
+    fn run(&self, known: Option<&Creations>, diagnostics: &mut Diagnostics) -> Program {
+        let project = self.project;
         let mut program = Program::empty();
         program.set_floor(project.settings().python_floor.minor());
+        program.set_known_creations(known.cloned());
         let mut assigned = BTreeSet::new();
-        for module in &modules {
+        for module in self.modules {
             assigned.extend(module_imports::assigned_through_modules(
                 &module.syntax.body,
             ));
@@ -119,9 +198,10 @@ impl TypeChecker {
             assigned,
         );
         // Each module is checked after the modules its module-level imports need.
-        for (module, aliases) in modules.iter().zip(&aliases) {
+        for (module, aliases) in self.modules.iter().zip(self.aliases) {
             let path = project.path(module.file).to_owned();
-            let frozen = dataclasses
+            let frozen = self
+                .dataclasses
                 .info
                 .get(module.name.as_str())
                 .cloned()
@@ -130,17 +210,12 @@ impl TypeChecker {
                 &mut program,
                 (module, aliases),
                 &path,
-                floor_defers,
+                self.floor_defers,
                 &frozen,
-                &mut diagnostics,
+                diagnostics,
             );
         }
-        if diagnostics.has_errors() {
-            return Err(diagnostics);
-        }
-        let mut program = program.finish(ModuleName::main().as_str());
-        program.warnings = diagnostics;
-        Ok(program)
+        program
     }
 }
 

@@ -17,7 +17,7 @@ impl BodyChecker<'_> {
     /// other than those that take any object. `None` leaves the expression to its own check.
     pub(super) fn each_member(&mut self, expression: &Expr) -> Option<TypedExpr> {
         let operand = self.member_operand(expression)?;
-        let (symbol, members) = self.union_operand(operand)?;
+        let (split, members) = self.union_operand(operand)?;
         let span = expression.span();
         let Some(tests) = members.iter().map(member_class).collect::<Option<Vec<_>>>() else {
             return Some(
@@ -74,7 +74,7 @@ impl BodyChecker<'_> {
             }
             // The variable reads as the member while the operation is checked for it, also in
             // code no path reaches, whose flow state holds nothing.
-            self.splitting.push((symbol, member));
+            self.splitting.push((split, member));
             let body = self.expression(expression);
             self.splitting.pop();
             self.assigned.clone_from(&before);
@@ -250,11 +250,13 @@ impl BodyChecker<'_> {
         })
     }
 
-    /// Returns the variable an operand reads, with the members of the union it holds, when it
-    /// is a variable that `union_variable` splits on.
-    pub(super) fn union_operand(&self, operand: &Expr) -> Option<(SymbolId, Vec<Type>)> {
+    /// Returns what an operand reads, with the members of the union it holds, when it is a
+    /// variable that `union_variable` splits on, or `args` of the exception a variable holds,
+    /// which `union_arguments` splits on.
+    pub(super) fn union_operand(&self, operand: &Expr) -> Option<(Split, Vec<Type>)> {
         match operand {
             Expr::Name { id, .. } => self.union_variable(id),
+            Expr::Attribute { .. } => self.union_arguments(operand),
             _ => None,
         }
     }
@@ -262,9 +264,12 @@ impl BodyChecker<'_> {
     /// Returns the variable `id` with the members of the union it holds here, when it holds
     /// one whose members share no class, and no operation is already split on it. A variable
     /// a function declares `global` is not narrowed, so it is not split either.
-    fn union_variable(&self, id: &str) -> Option<(SymbolId, Vec<Type>)> {
+    fn union_variable(&self, id: &str) -> Option<(Split, Vec<Type>)> {
         let symbol = *self.locals.get(id)?;
-        let split = self.splitting.iter().any(|(each, _)| *each == symbol);
+        let split = self
+            .splitting
+            .iter()
+            .any(|(each, _)| *each == Split::variable(symbol));
         if split || self.program.assigned_in_functions.contains(id) {
             return None;
         }
@@ -280,7 +285,7 @@ impl BodyChecker<'_> {
         if ty.union_base().is_some() || exceptions {
             return None;
         }
-        Some((symbol, members.clone()))
+        Some((Split::variable(symbol), members.clone()))
     }
 }
 
@@ -301,6 +306,24 @@ fn short_members(expression: &Expr, members: &[Type]) -> Vec<bool> {
             _ => false,
         })
         .collect()
+}
+
+/// What an operation checked for each member splits on: a variable, or `args` of the
+/// exception a variable holds.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) struct Split {
+    pub(super) symbol: SymbolId,
+    pub(super) arguments: bool,
+}
+
+impl Split {
+    /// Returns the split on a variable.
+    pub(super) const fn variable(symbol: SymbolId) -> Self {
+        Self {
+            symbol,
+            arguments: false,
+        }
+    }
 }
 
 /// Returns true for a builtin that takes any object, as a union is.

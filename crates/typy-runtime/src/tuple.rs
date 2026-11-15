@@ -111,6 +111,35 @@ pub(crate) unsafe fn field(tuple: *const TupleType, address: u64, index: usize) 
     unsafe { (*tuple).fields()[index].value(address) }
 }
 
+/// Returns true when two tuple types lay out the same items: as many of them, each of one
+/// kind at one offset, and each nested tuple laid out alike.
+///
+/// # Safety
+///
+/// Both are live descriptors, of the compiler's or the runtime's.
+pub(crate) unsafe fn same_layout(left: *const TupleType, right: *const TupleType) -> bool {
+    if core::ptr::eq(left, right) {
+        return true;
+    }
+    // SAFETY: the caller's guarantee; a nested descriptor is live as long as its parent.
+    unsafe {
+        let (left, right) = (&*left, &*right);
+        left.length == right.length
+            && left
+                .fields()
+                .iter()
+                .zip(right.fields())
+                .all(|(left, right)| {
+                    left.kind == right.kind
+                        && left.offset == right.offset
+                        && (left.tuple.is_null() && right.tuple.is_null()
+                            || !left.tuple.is_null()
+                                && !right.tuple.is_null()
+                                && same_layout(left.tuple, right.tuple))
+                })
+    }
+}
+
 /// Returns the type of item `index` of a tuple type.
 ///
 /// # Safety

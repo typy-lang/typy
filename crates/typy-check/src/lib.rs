@@ -7,6 +7,7 @@ mod check;
 mod class_type;
 mod codec;
 mod exception;
+mod exception_arguments;
 mod generic;
 mod math;
 mod method;

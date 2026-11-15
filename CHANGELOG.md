@@ -34,6 +34,12 @@ All notable changes to TyPy are recorded here. The format follows
 - A loop, a comprehension, `list`, `sorted`, `sum` and the other builtins
   that read an iterable go over a variable that holds a union of fixed
   tuples, such as `tuple[str] | tuple[str, int]` (TYP-14, ADR-0034).
+- `args` of an exception and `code` of a `SystemExit` are values of
+  their own: stored, passed, indexed, unpacked and looped over. The type
+  of `args` comes from every creation of the class and of the classes
+  derived from it, in the program and in TyPy's own raises, such as
+  `tuple[str, int] | tuple[str]`; `code` is `None`, the one argument, or
+  the tuple (EXC-15, ADR-0034).
 - A literal index into a variable that holds a union of fixed tuples
   raises `IndexError` when the tuple it holds is too short, as CPython
   does, in place of E0307; a position outside every member is still E0307

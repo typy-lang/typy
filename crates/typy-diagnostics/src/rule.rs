@@ -109,6 +109,8 @@ impl RuleId {
     pub const EXC_15: Self = Self("EXC-15");
     /// An `OSError` shall take arguments of any type, more than five of them, and two or more through `super().__init__`, as CPython does.
     pub const EXC_16: Self = Self("EXC-16");
+    /// `args` of an exception shall hold the `args` of an exception of a related class, a type that nests without end, as CPython allows.
+    pub const EXC_17: Self = Self("EXC-17");
     /// `+`, `-`, `*`, `/`, `//`, `%` and `**` shall give Python's results for `int` and `float`, including `/` on two `int` values returning `float` and `%` taking the sign of the divisor.
     pub const EXP_02: Self = Self("EXP-02");
     /// `int ** int` shall be accepted only when the exponent is a non-negative integer literal, because CPython returns `float` for a negative exponent.
@@ -347,6 +349,7 @@ impl RuleId {
         Self::EXC_14,
         Self::EXC_15,
         Self::EXC_16,
+        Self::EXC_17,
         Self::EXP_02,
         Self::EXP_04,
         Self::EXP_06,

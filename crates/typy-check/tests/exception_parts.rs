@@ -17,14 +17,42 @@ fn a_part_compares_from_either_side_of_the_operator() {
 }
 
 #[test]
-fn the_length_of_code_is_planned() {
-    let program = concat!(
-        "try:\n",
-        "    raise SystemExit(3)\n",
-        "except SystemExit as stop:\n",
-        "    print(len(stop.code))\n",
-    );
-    assert_eq!(app(program), ["E0201"]);
+fn the_length_of_code_is_its_type_s_length() {
+    let cases = [
+        ("raise SystemExit(3)", vec!["E0404".to_owned()]),
+        ("raise SystemExit(3, 'stop')", Vec::<String>::new()),
+    ];
+    for (raise, expected) in cases {
+        let program =
+            format!("try:\n    {raise}\nexcept SystemExit as stop:\n    print(len(stop.code))\n");
+        assert_eq!(app(&program), expected, "{raise}");
+    }
+}
+
+#[test]
+fn args_and_code_are_typed_by_every_creation_of_their_class() {
+    let cases = [
+        (
+            "raise TypeError('bad', 3)",
+            "x: tuple[str] | tuple[str, int] = error.args",
+        ),
+        ("raise SystemExit", "x: None = error.code"),
+        ("raise SystemExit('stop')", "x: str = error.code"),
+        (
+            "raise KeyError(1.5)",
+            "x: tuple[str] | tuple[float] = error.args",
+        ),
+    ];
+    for (raise, read) in cases {
+        let class = if raise.contains("SystemExit") {
+            "SystemExit"
+        } else {
+            raise[6..raise.find('(').unwrap_or(raise.len())].trim()
+        };
+        let program =
+            format!("try:\n    {raise}\nexcept {class} as error:\n    {read}\n    print(x)\n");
+        assert_eq!(app(&program), Vec::<String>::new(), "{program}");
+    }
 }
 
 #[test]

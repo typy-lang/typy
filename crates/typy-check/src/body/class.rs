@@ -452,19 +452,28 @@ impl BodyChecker<'_> {
                 }
                 Some(function) => {
                     match self.bind_arguments(function, 1, &name, arguments, keywords, span) {
-                        Ok(bound) => Self::typed(
-                            TypedExprKind::NewException {
-                                class: exception,
-                                arguments: Vec::new(),
-                                init: Some(Box::new(InitCall {
-                                    function,
-                                    arguments: bound,
-                                    positional: arguments.len(),
-                                })),
-                            },
-                            ty,
-                            span,
-                        ),
+                        Ok(bound) => {
+                            // `BaseException.__new__` keeps the arguments given by position
+                            // as `args`, before `__init__` runs (ADR-0034).
+                            let given: Vec<Type> = bound[..arguments.len()]
+                                .iter()
+                                .map(|argument| argument.value.ty.clone())
+                                .collect();
+                            self.program.record_creation(&exception, &given);
+                            Self::typed(
+                                TypedExprKind::NewException {
+                                    class: exception,
+                                    arguments: Vec::new(),
+                                    init: Some(Box::new(InitCall {
+                                        function,
+                                        arguments: bound,
+                                        positional: arguments.len(),
+                                    })),
+                                },
+                                ty,
+                                span,
+                            )
+                        }
                         Err(error) => error,
                     }
                 }

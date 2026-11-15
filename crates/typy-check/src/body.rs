@@ -17,6 +17,7 @@ mod generic_call;
 mod generic_copy;
 pub use each_member::member_class;
 mod exception;
+mod exception_creation;
 mod exception_part;
 mod expression;
 mod flow;
@@ -99,9 +100,10 @@ pub(crate) struct BodyChecker<'program> {
     /// The types `isinstance` tests narrow variables to, which `Fact::Narrowed` names by
     /// position (TYP-07).
     narrowings: Vec<Type>,
-    /// The variables an operation is being checked for each member of, innermost last, each
-    /// with the member it is checked for now (TYP-14).
-    splitting: Vec<(SymbolId, Type)>,
+    /// The variables, or `args` of the exceptions variables hold, an operation is being
+    /// checked for each member of, innermost last, each with the member it is checked for now
+    /// (TYP-14).
+    splitting: Vec<(each_member::Split, Type)>,
     /// The class and instance of the method being checked, which `super()` reads.
     method: Option<class::Initializing>,
     /// Whether a use of the incomplete instance has been reported, so one cause gives one error.

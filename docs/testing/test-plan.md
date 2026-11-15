@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy test plan |
-| Version | 0.48 |
+| Version | 0.49 |
 | Status | Draft |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-15 |
@@ -409,6 +409,7 @@ that the specification does not define.
 | EXC-14 | 0.4 | IT | `tests/conformance/exc/EXC-14_*.py` |
 | EXC-15 | 0.5 | IT | `tests/conformance/exc/EXC-15_*.py` |
 | EXC-16 | 0.5 | IT | `tests/conformance/exc/EXC-16_*.py` |
+| EXC-17 | 1.0 | IT | `tests/conformance/exc/EXC-17_*.py` |
 | MOD-01 | 0.3 | IT, E2E | `tests/conformance/mod/MOD-01_*`; module paths in `crates/typy-cli/tests/cli.rs`, tests named for MOD-01 |
 | MOD-02 | 0.3 | IT | `tests/conformance/mod/MOD-02_*.py` |
 | MOD-03 | 0.3 | IT | `tests/conformance/mod/MOD-03_*.py` |

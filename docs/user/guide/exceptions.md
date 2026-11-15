@@ -197,8 +197,40 @@ except SystemExit as stop:
         print(f"exit code {stop.code!r}")
 ```
 
-Any other use, such as `error.args[0]` or `saved = error.args`, is
-planned for 0.5 (E0201, EXC-15).
+Each is also a value of its own, which you store, pass, index, unpack
+and loop over (EXC-15). Its type comes from every place the program and
+TyPy itself create an exception of the class or of a class derived from
+it: `ValueError("bad", 3)` gives `tuple[str, int]`, and the message of a
+`ValueError` TyPy raises, such as the one of `int("x")`, gives
+`tuple[str]`. So `args` of a `ValueError` here is
+`tuple[str, int] | tuple[str]`, and `error.args[1]` raises `IndexError`
+when the exception holds one argument, as CPython does:
+
+<!-- typy-expect: accepted -->
+```python
+def parse(text: str) -> int:
+    if not text:
+        raise ValueError("empty input", 0)
+    return int(text)
+
+
+for text in ["", "x"]:
+    try:
+        parse(text)
+    except ValueError as error:
+        message = error.args[0]
+        print(message.upper(), len(error.args))
+        for item in error.args:
+            print(item)
+```
+
+`code` of a `SystemExit` is `None` for `sys.exit()`, the argument for
+one, and the tuple for several. A `KeyError` TyPy raises holds the
+missing key, so `args` of a `KeyError` includes `tuple[K]` for the key
+type `K` of each dict the program looks up. An exception whose arguments
+hold `args` of an exception of a related class, such as
+`raise ValueError(error.args)` in an `except ValueError` clause, has a
+type without end; it is planned for 1.0 (E0201, EXC-17).
 
 ## OS errors
 

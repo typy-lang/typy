@@ -272,6 +272,9 @@ impl FunctionLowerer<'_> {
                 part,
                 operation,
             } => self.exception_part(exception, *part, operation, span),
+            TypedExprKind::ExceptionArguments(exception) => {
+                self.exception_arguments(exception, &expression.ty, ty, span)
+            }
             TypedExprKind::Input(prompt) => self.input(prompt.as_deref(), span),
             TypedExprKind::IterableBuiltin {
                 builtin,

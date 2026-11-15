@@ -124,6 +124,13 @@ impl BodyChecker<'_> {
         if code.as_ref().is_some_and(|code| code.ty.has_error()) {
             return Self::invalid_call(span);
         }
+        let given: Vec<Type> = code.iter().map(|code| code.ty.clone()).collect();
+        self.program.record_creation(
+            &crate::exception::ExceptionClass::Builtin(
+                crate::exception::BuiltinException::SystemExit,
+            ),
+            &given,
+        );
         Self::typed(TypedExprKind::SysExit(code), Type::NoneType, span)
     }
 }

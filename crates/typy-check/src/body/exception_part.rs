@@ -1,17 +1,20 @@
-//! `args` of an exception and `code` of a `SystemExit` (EXC-11, EXC-13, ADR-0030). Each may
-//! hold any value, which TyPy has no type for yet, so a program reads them where it prints,
-//! formats, compares or tests them: `print`, `str`, `repr`, `bool`, `len` of `args`, an
-//! f-string field, `==` and `!=`, a condition and `not`. Each such use is one operation on
-//! the exception; any other use is planned (EXC-15).
+//! `args` of an exception and `code` of a `SystemExit` (EXC-11, EXC-13, EXC-15, ADR-0030,
+//! ADR-0034). Printing, formatting, comparing with `==` and `!=`, testing and `len` of
+//! `args` are one operation on the exception, which the runtime answers from its arguments.
+//! Read as a value of its own, `args` has the type the creations of the exception's class
+//! give it, and `code` the type that follows from that.
 
-use typy_diagnostics::{Diagnostic, DiagnosticCode, RuleId, Span};
+use typy_diagnostics::Span;
 use typy_source::syntax::{CompareOperator, Expr, UnaryOperator};
 
 use super::BodyChecker;
+use super::each_member::Split;
 use crate::builtin::Builtin;
 use crate::exception::{BuiltinException, ExceptionClass};
-use crate::typed::{ExceptionPart, PartOperation, TypedExpr, TypedExprKind};
-use crate::types::Type;
+use crate::typed::{
+    EachMember, ExceptionPart, PartOperation, SymbolId, TypedConstant, TypedExpr, TypedExprKind,
+};
+use crate::types::{Type, TypeObjectOf};
 
 impl BodyChecker<'_> {
     /// Returns the operation an expression makes of `args` or `code`, when it makes one; a
@@ -21,22 +24,10 @@ impl BodyChecker<'_> {
         match expression {
             Expr::Attribute { value, .. } => {
                 let (part, _) = self.part_access(expression)?;
-                self.expression(value);
-                Some(
-                    self.error(
-                        Diagnostic::new(
-                            DiagnosticCode::error(201),
-                            span,
-                            format!(
-                                "using `{}` as a value of its own is planned for TyPy 0.5 (EXC-15)",
-                                part.name()
-                            ),
-                        )
-                        .with_rule(RuleId::EXC_15)
-                        .with_help("print it, format it, compare it with `==` or test it"),
-                        span,
-                    ),
-                )
+                Some(match part {
+                    ExceptionPart::Arguments => self.arguments_value(expression, value, span),
+                    ExceptionPart::Code => self.code_value(expression, value, span),
+                })
             }
             Expr::Compare {
                 left,
@@ -78,14 +69,15 @@ impl BodyChecker<'_> {
                 let ([argument], []) = (arguments, keywords) else {
                     return None;
                 };
+                let (part, _) = self.part_access(argument)?;
                 let operation = match builtin {
                     Builtin::Str => PartOperation::Text { repr: false },
                     Builtin::Repr => PartOperation::Text { repr: true },
                     Builtin::Bool => PartOperation::Truth,
-                    Builtin::Len => PartOperation::Length,
+                    // `code` has a length only when it is a tuple, which its type says.
+                    Builtin::Len if part == ExceptionPart::Arguments => PartOperation::Length,
                     _ => return None,
                 };
-                self.part_access(argument)?;
                 self.part_operation(argument, operation, span)
             }
             _ => None,
@@ -139,8 +131,134 @@ impl BodyChecker<'_> {
         }
     }
 
-    /// Returns `operation` on the part `accessed` reads, or `None` after reporting `len` of
-    /// `code`, which has no length.
+    /// Returns `args` of the exception `value` holds, read as a value: a tuple, or a union of
+    /// tuples of the layouts the program and the runtime create it with (ADR-0034). While an
+    /// operation is checked for each member, it is the member.
+    fn arguments_value(&mut self, accessed: &Expr, value: &Expr, span: Span) -> TypedExpr {
+        let (symbol, class) = self
+            .arguments_access(accessed)
+            .expect("`args` of a variable that holds an exception");
+        let split = Split {
+            symbol,
+            arguments: true,
+        };
+        let member = self
+            .splitting
+            .iter()
+            .rev()
+            .find(|(each, _)| *each == split)
+            .map(|(_, member)| member.clone());
+        let ty = self.program.arguments_type(&class, span);
+        let exception = self.expression(value);
+        Self::typed(
+            TypedExprKind::ExceptionArguments(Box::new(exception)),
+            member.unwrap_or(ty),
+            span,
+        )
+    }
+
+    /// Returns `code` of the `SystemExit` `value` holds, read as a value: for each member of
+    /// the type of its `args`, `None` for no arguments, the argument for one, and the tuple
+    /// for several, as CPython's `SystemExit.__init__` sets it (EXC-13, ADR-0034).
+    fn code_value(&mut self, accessed: &Expr, value: &Expr, span: Span) -> TypedExpr {
+        let (_, class) = self
+            .exception_access(accessed)
+            .expect("`code` of a variable that holds a `SystemExit`");
+        let arguments = self.program.arguments_type(&class, span);
+        let read = |this: &mut Self, ty: Type| {
+            let exception = this.expression(value);
+            Self::typed(
+                TypedExprKind::ExceptionArguments(Box::new(exception)),
+                ty,
+                span,
+            )
+        };
+        if arguments.has_error() {
+            return read(self, Type::Error);
+        }
+        let members = arguments.members().to_vec();
+        let ty = Type::union(members.iter().map(code_of).collect());
+        let arm = |this: &mut Self, member: &Type| {
+            let code = match member {
+                Type::Tuple(items) if items.is_empty() => Self::typed(
+                    TypedExprKind::Constant(TypedConstant::None),
+                    Type::NoneType,
+                    span,
+                ),
+                Type::Tuple(items) if items.len() == 1 => Self::typed(
+                    TypedExprKind::TupleItem {
+                        tuple: Box::new(read(this, member.clone())),
+                        index: 0,
+                    },
+                    items[0].clone(),
+                    span,
+                ),
+                _ => read(this, member.clone()),
+            };
+            Self::converted(code, Some(&ty))
+        };
+        if let [member] = members.as_slice() {
+            return arm(self, member);
+        }
+        let value = read(self, arguments);
+        let arms = members
+            .iter()
+            .map(|member| (TypeObjectOf::Tuple, arm(self, member)))
+            .collect();
+        Self::typed(
+            TypedExprKind::EachMember(Box::new(EachMember { value, arms })),
+            ty,
+            span,
+        )
+    }
+
+    /// Returns `args` of the exception a variable holds, with the members of the union of
+    /// tuples it is, when no operation is already split on it.
+    pub(super) fn union_arguments(&self, operand: &Expr) -> Option<(Split, Vec<Type>)> {
+        let (symbol, class) = self.arguments_access(operand)?;
+        let split = Split {
+            symbol,
+            arguments: true,
+        };
+        if self.splitting.iter().any(|(each, _)| *each == split) {
+            return None;
+        }
+        match self.program.known_arguments_type(&class)? {
+            Type::Union(members) => Some((split, members)),
+            _ => None,
+        }
+    }
+
+    /// Returns the variable and the class of the exception it holds, when `expression` is
+    /// `name.args` of a variable that holds an exception.
+    fn arguments_access(&self, expression: &Expr) -> Option<(SymbolId, ExceptionClass)> {
+        match self.part_access(expression)? {
+            (ExceptionPart::Arguments, _) => self.exception_access(expression),
+            (ExceptionPart::Code, _) => None,
+        }
+    }
+
+    /// Returns the variable and the class of the exception it holds, when `expression` is
+    /// `name.args` or `name.code` of a variable that holds an exception.
+    fn exception_access(&self, expression: &Expr) -> Option<(SymbolId, ExceptionClass)> {
+        let (_, Expr::Name { id, .. }) = self.part_access(expression)? else {
+            return None;
+        };
+        let symbol = *self
+            .locals
+            .get(id)
+            .or_else(|| self.program.module_symbols.get(id))?;
+        let ty = self
+            .types
+            .get(&symbol)
+            .unwrap_or(&self.program.symbols[symbol.0 as usize].ty);
+        let Type::Exception(class) = ty else {
+            return None;
+        };
+        Some((symbol, class.clone()))
+    }
+
+    /// Returns `operation` on the part `accessed` reads.
     fn part_operation(
         &mut self,
         accessed: &Expr,
@@ -148,17 +266,6 @@ impl BodyChecker<'_> {
         span: Span,
     ) -> Option<TypedExpr> {
         let (part, value) = self.part_access(accessed)?;
-        if part == ExceptionPart::Code && operation == PartOperation::Length {
-            self.diagnostics.push(
-                Diagnostic::new(
-                    DiagnosticCode::error(201),
-                    span,
-                    "`len` of `code` is planned for TyPy 0.5 (EXC-15)",
-                )
-                .with_rule(RuleId::EXC_15),
-            );
-            return Some(Self::invalid_call(span));
-        }
         let exception = self.expression(value);
         let ty = match operation {
             PartOperation::Text { .. } => Type::Str,
@@ -177,13 +284,12 @@ impl BodyChecker<'_> {
     }
 }
 
-impl ExceptionPart {
-    /// Returns the attribute's name.
-    const fn name(self) -> &'static str {
-        match self {
-            Self::Arguments => "args",
-            Self::Code => "code",
-        }
+/// Returns the type of `code` of a `SystemExit` whose `args` is `arguments`.
+fn code_of(arguments: &Type) -> Type {
+    match arguments {
+        Type::Tuple(items) if items.is_empty() => Type::NoneType,
+        Type::Tuple(items) if items.len() == 1 => items[0].clone(),
+        other => other.clone(),
     }
 }
 

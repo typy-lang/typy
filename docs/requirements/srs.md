@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy software requirements specification |
-| Version | 1.48 |
+| Version | 1.49 |
 | Status | Approved |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-15 |
@@ -343,6 +343,7 @@ formatter applies; Ruff's formatter is the project's recommendation.
 | EXC-14 | `OSError` and its subclasses built with two to five arguments shall give the subclass for the `errno`, and the attributes `errno`, `strerror` and `filename`, as CPython does. | S | 0.4 | |
 | EXC-15 | `args` of an exception and `code` of a `SystemExit` shall be values of their own: stored, passed, indexed and iterated. | S | 0.5 | |
 | EXC-16 | An `OSError` shall take arguments of any type, more than five of them, and two or more through `super().__init__`, as CPython does. | C | 0.5 | |
+| EXC-17 | `args` of an exception shall hold the `args` of an exception of a related class, a type that nests without end, as CPython allows. | C | 1.0 | |
 
 ### 3.13 Modules and imports (MOD)
 

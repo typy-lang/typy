@@ -183,6 +183,8 @@ pub enum RuntimeFunction {
     ExceptionArgsLength,
     ExceptionPartTruth,
     ExceptionPartEqual,
+    ExceptionArgumentsMatch,
+    ExceptionArgumentsAddress,
     OsErrorNew,
     OsErrorErrno,
     OsErrorText,
@@ -363,7 +365,7 @@ const FLOAT_FLOAT: &[TyirType] = &[TyirType::Float, TyirType::Float];
 
 impl RuntimeFunction {
     /// Every runtime function.
-    pub const ALL: [Self; 324] = [
+    pub const ALL: [Self; 326] = [
         Self::IntFloorDivide,
         Self::IntModulo,
         Self::IntPower,
@@ -538,6 +540,8 @@ impl RuntimeFunction {
         Self::ExceptionArgsLength,
         Self::ExceptionPartTruth,
         Self::ExceptionPartEqual,
+        Self::ExceptionArgumentsMatch,
+        Self::ExceptionArgumentsAddress,
         Self::OsErrorNew,
         Self::OsErrorErrno,
         Self::OsErrorText,
@@ -883,6 +887,7 @@ impl RuntimeFunction {
             Self::ExceptionArgsLength => signature(&[EXCEPTION], Int, false),
             Self::ExceptionPartTruth => signature(&[EXCEPTION, Int], Bool, false),
             Self::ExceptionPartEqual => signature(&[EXCEPTION, Int, Bits, Bits], Bool, false),
+            Self::ExceptionArgumentsMatch => signature(&[EXCEPTION, Bits], Bool, false),
             Self::ExceptionSetCause => signature(&[EXCEPTION, Bits], Unit, false),
             Self::ExceptionThrow => signature(&[EXCEPTION], Unit, true),
             Self::ExceptionHandled => signature(&[], EXCEPTION, false),
@@ -891,7 +896,9 @@ impl RuntimeFunction {
             Self::ExceptionMatches => signature(&[EXCEPTION, TYPE], Bool, false),
             // The exception handled before is null or borrowed, so it travels as bits and is
             // never counted.
-            Self::ExceptionEnter => signature(&[EXCEPTION], Bits, false),
+            Self::ExceptionEnter | Self::ExceptionArgumentsAddress => {
+                signature(&[EXCEPTION], Bits, false)
+            }
             Self::ExceptionLeave => signature(&[Bits], Unit, false),
             Self::ExceptionSetArguments => signature(&[EXCEPTION, Bits, Bits], Unit, false),
             Self::IteratorNew => signature(&[Bits, Int, Bits], ITERATOR, false),
@@ -1221,6 +1228,8 @@ impl RuntimeFunction {
             Self::ExceptionArgsLength => "exception_args_length",
             Self::ExceptionPartTruth => "exception_part_truth",
             Self::ExceptionPartEqual => "exception_part_equal",
+            Self::ExceptionArgumentsMatch => "exception_arguments_match",
+            Self::ExceptionArgumentsAddress => "exception_arguments_address",
             Self::OsErrorNew => "os_error_new",
             Self::OsErrorErrno => "os_error_errno",
             Self::OsErrorText => "os_error_text",

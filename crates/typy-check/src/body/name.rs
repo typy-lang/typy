@@ -186,7 +186,7 @@ impl BodyChecker<'_> {
             .splitting
             .iter()
             .rev()
-            .find(|(each, _)| *each == symbol)
+            .find(|(each, _)| *each == super::each_member::Split::variable(symbol))
         {
             return Some(member.clone());
         }
