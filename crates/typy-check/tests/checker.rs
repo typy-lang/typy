@@ -2220,7 +2220,7 @@ fn super_calls_the_nearest_base_s_method_in_any_method() {
         ),
         (
             "class A:\n    pass\nclass B(A):\n    def f(self) -> int:\n        return super(A, self).f()\n",
-            &["E0201"],
+            &["E0414"],
         ),
         (
             "class A:\n    pass\nclass B(A):\n    def f(self, other: 'B') -> None:\n        super(B, other).f()\n",

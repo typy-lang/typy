@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy software requirements specification |
-| Version | 1.54 |
+| Version | 1.55 |
 | Status | Approved |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-15 |
@@ -307,6 +307,7 @@ formatter applies; Ruff's formatter is the project's recommendation.
 | CLS-26 | `super(Class, instance)` shall be accepted with any class of the instance's chain of bases. | S | 0.5 | |
 | CLS-27 | A class derived from `typing.NamedTuple` shall be accepted, its fields read by name and by position. | S | 1.0 | |
 | CLS-28 | `@dataclass` shall accept the options `kw_only` and `weakref_slot` and options given other than as `True` or `False`, `field` its options `init`, `repr`, `hash`, `compare`, `kw_only` and `metadata`, and a generic dataclass a field with a `default_factory`. | C | 1.0 | |
+| CLS-29 | `super(Class, instance)` shall be accepted with an instance other than the method's own, and outside a method. | C | 1.0 | |
 | CLS-14 | `super().__init__(...)` shall be accepted in the `__init__` of an exception class and shall set the exception's arguments; any other use of `super()` shall be rejected until 0.4. | M | 0.3 | |
 
 ### 3.11 Generics and protocols (GEN)

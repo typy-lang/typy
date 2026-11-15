@@ -33,14 +33,15 @@ impl BodyChecker<'_> {
             .with_rule(RuleId::CLS_14);
             return self.refused_super(diagnostic, arguments, span);
         };
-        if let Some(diagnostic) = self.super_arguments_refused(receiver, method) {
-            return self.refused_super(diagnostic, arguments, span);
-        }
+        let start = match self.super_start(receiver, method) {
+            Ok(start) => start,
+            Err(diagnostic) => return self.refused_super(*diagnostic, arguments, span),
+        };
         match self.initializing {
             Some(initializing) if name.name == "__init__" => {
-                self.super_init(initializing, arguments, keywords, span)
+                self.super_init(initializing, start, arguments, keywords, span)
             }
-            _ => self.super_method(method, name, arguments, keywords, span),
+            _ => self.super_method(method, start, name, arguments, keywords, span),
         }
     }
 
@@ -57,54 +58,81 @@ impl BodyChecker<'_> {
         self.error(diagnostic, span)
     }
 
-    /// Returns why the arguments of `super(...)` are refused, if they are: with arguments, it
-    /// takes the enclosing class and the method's instance, by their names.
-    fn super_arguments_refused(&self, receiver: &Expr, method: Initializing) -> Option<Diagnostic> {
+    /// Returns the class whose base the lookup of `super(...)` starts at: the enclosing class
+    /// for `super()`, and `C` for `super(C, self)`, where `C` is the enclosing class or one of
+    /// its bases, as CPython's lookup starts after `C` in the instance's chain (CLS-26).
+    fn super_start(
+        &self,
+        receiver: &Expr,
+        method: Initializing,
+    ) -> Result<crate::typed::ClassId, Box<Diagnostic>> {
         let arguments = match receiver {
             Expr::Call { arguments, .. } => arguments.as_slice(),
             _ => &[],
         };
-        let names_class = |expression: &Expr| {
-            matches!(expression, Expr::Name { id, .. }
-                if self.program.class_ids.get(id) == Some(&method.class))
+        let chain = |class: crate::typed::ClassId| {
+            std::iter::successors(Some(method.class), |each| {
+                self.program.classes[each.0 as usize].base
+            })
+            .any(|each| each == class)
+        };
+        let named_class = |expression: &Expr| match expression {
+            Expr::Name { id, .. } => self
+                .program
+                .class_ids
+                .get(id)
+                .copied()
+                .filter(|class| chain(*class)),
+            _ => None,
         };
         let names_instance = |expression: &Expr| {
             matches!(expression, Expr::Name { id, .. }
                 if self.locals.get(id) == Some(&method.instance))
         };
         match arguments {
-            [] => None,
-            [class, instance] if names_class(class) && names_instance(instance) => None,
-            _ => Some(
+            [] => Ok(method.class),
+            [class, instance] if names_instance(instance) => named_class(class).ok_or_else(|| {
+                Box::new(
+                    Diagnostic::new(
+                        DiagnosticCode::error(404),
+                        class.span(),
+                        "super(type, obj): obj must be an instance or subtype of type",
+                    )
+                    .with_rule(RuleId::CLS_26),
+                )
+            }),
+            _ => Err(Box::new(
                 Diagnostic::new(
                     DiagnosticCode::error(201),
                     receiver.span(),
-                    "`super()` with arguments other than the enclosing class and `self` is \
-                     planned for TyPy 0.5 (CLS-26)",
+                    "`super()` with an instance other than the method's own is planned for \
+                     TyPy 1.0 (CLS-29)",
                 )
-                .with_rule(RuleId::CLS_26)
-                .with_help("write `super()`"),
-            ),
+                .with_rule(RuleId::CLS_29)
+                .with_help("write `super()`, or `super(Class, self)`"),
+            )),
         }
     }
 
-    /// Checks `super().name(arguments)` outside `__init__`: a direct call of the base's method.
+    /// Checks `super().name(arguments)` outside `__init__`: a direct call of the method of the
+    /// nearest base of `start` that has it.
     fn super_method(
         &mut self,
         method: Initializing,
+        start: crate::typed::ClassId,
         name: &Identifier,
         arguments: &[Expr],
         keywords: &[Keyword],
         span: Span,
     ) -> TypedExpr {
-        let base = self.program.classes[method.class.0 as usize].base;
+        let base = self.program.classes[start.0 as usize].base;
         let Some((function, base)) =
             base.and_then(|base| Some((self.program.method(base, &name.name)?, base)))
         else {
             for argument in arguments {
                 self.expression(argument);
             }
-            let class = &self.program.classes[method.class.0 as usize].name;
+            let class = &self.program.classes[start.0 as usize].name;
             return self.error(
                 Diagnostic::new(
                     DiagnosticCode::error(414),
@@ -161,11 +189,12 @@ impl BodyChecker<'_> {
     fn super_init(
         &mut self,
         initializing: Initializing,
+        start: crate::typed::ClassId,
         arguments: &[Expr],
         keywords: &[Keyword],
         span: Span,
     ) -> TypedExpr {
-        let info = &self.program.classes[initializing.class.0 as usize];
+        let info = &self.program.classes[start.0 as usize];
         let (base, inherited) = (info.base, info.inherited);
         let base_init = base.and_then(|base| self.program.method(base, "__init__"));
         let call = if let (Some(function), Some(base)) = (base_init, base) {

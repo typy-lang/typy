@@ -41,6 +41,9 @@ All notable changes to TyPy are recorded here. The format follows
   `tuple[str, int] | tuple[str]`; `code` is `None`, the one argument, or
   the tuple. The five items of a Unicode error join only in a program
   that encodes, decodes or opens a file (EXC-15, ADR-0034).
+- `super(Base, self)` takes any class of the enclosing class's chain of
+  bases, and finds the method of the nearest base of `Base`, as CPython
+  does; with another instance it is planned for 1.0 (CLS-26, CLS-29).
 - Dataclasses take `field(default_factory=f)`, called for each instance
   that is not given the field, hash as the tuple of their fields when
   frozen or given `unsafe_hash=True`, and take the options `init`,

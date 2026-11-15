@@ -55,6 +55,8 @@ impl RuleId {
     pub const CLS_27: Self = Self("CLS-27");
     /// `@dataclass` shall accept the options `kw_only` and `weakref_slot` and options given other than as `True` or `False`, `field` its options `init`, `repr`, `hash`, `compare`, `kw_only` and `metadata`, and a generic dataclass a field with a `default_factory`.
     pub const CLS_28: Self = Self("CLS-28");
+    /// `super(Class, instance)` shall be accepted with an instance other than the method's own, and outside a method.
+    pub const CLS_29: Self = Self("CLS-29");
     /// `for` shall iterate over `range`, `str`, `bytes`, `list`, `tuple`, `dict`, `set` and any class with `__iter__` and `__next__`.
     pub const CST_03: Self = Self("CST-03");
     /// `try` with `except`, `else` and `finally` clauses shall be accepted, and `finally` shall run on `return`, `break`, `continue` and exceptions.
@@ -336,6 +338,7 @@ impl RuleId {
         Self::CLS_26,
         Self::CLS_27,
         Self::CLS_28,
+        Self::CLS_29,
         Self::CST_03,
         Self::CST_04,
         Self::CST_05,

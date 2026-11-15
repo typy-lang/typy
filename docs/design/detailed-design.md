@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy detailed design |
-| Version | 1.82 |
+| Version | 1.83 |
 | Status | Approved |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-15 |
@@ -1249,10 +1249,12 @@ an `InitCall` with them and the count of those written by position, which become
 the exception's arguments; an `OSError` starts with none, as `OSError.__new__`
 leaves them to `OSError.__init__` for a class with an `__init__` of its own.
 `body::super_call` checks `super().name(...)`, and
-`super(Class, self)` naming the enclosing class and its instance, in any method
-(CLS-14): a `Call` of the nearest base's method on the instance with
-`dispatch` clear, E0414 when no base of the program's has the method or outside
-a method, and E0201, planned for 0.5, for other arguments. In `__init__`,
+`super(Class, self)` naming the enclosing class or one of its bases and the
+method's instance, in any method (CLS-14, CLS-26): a `Call` of the method of
+the nearest base of that class on the instance with `dispatch` clear, E0414
+when no base of the program's has the method or outside a method, E0404 for
+a class outside the chain, and E0201, planned for 1.0, for another instance
+(CLS-29). In `__init__`,
 `super().__init__(...)` calls the nearest base's `__init__`; with none, an
 exception class gets `TypedExprKind::SetArguments` and any other class nothing,
 as `object.__init__()` does, E0404 with arguments. After it the inherited

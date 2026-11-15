@@ -184,8 +184,10 @@ attributes, as by calling a method, it may run an override that reads
 an attribute of the subclass. Such a call of `super().__init__(...)`
 comes after the subclass assigns its own attributes, E0309 otherwise,
 so no attribute is read before it holds a value. `super()` outside a
-method is E0414, and `super(Base, self)` naming another class is
-planned for 0.5 (CLS-26).
+method is E0414. `super(Base, self)` names the enclosing class or one of
+its bases, and the method found is that of the nearest base of `Base`, as
+in CPython (CLS-26); with an instance other than `self` it is planned for
+1.0 (CLS-29).
 
 An instance never holds an attribute without a value: calling a class
 whose body declares an attribute that no `__init__` that runs assigns,
