@@ -112,6 +112,9 @@ pub(crate) struct Program {
     pub(super) rebound: BTreeMap<String, super::rebound::Rebound>,
     /// The function of each lazy import that binds such a name, by where it names it.
     pub(super) rebound_reify: BTreeMap<Span, FunctionId>,
+    /// The names each module checked so far reads, kept for bodies of that module checked
+    /// later (MOD-13, ADR-0037).
+    pub(super) contexts: BTreeMap<String, super::ModuleContext>,
 }
 
 /// What a first look at a module body may change, which `keep_module_types` undoes.
@@ -189,6 +192,7 @@ impl Program {
             arguments_read: None,
             rebound: BTreeMap::new(),
             rebound_reify: BTreeMap::new(),
+            contexts: BTreeMap::new(),
         }
     }
 
@@ -208,6 +212,16 @@ impl Program {
         self.loaded = loaded;
         self.standard = standard;
         self.assigned_elsewhere = assigned_elsewhere;
+    }
+
+    /// Returns the name of the module being checked.
+    pub(crate) fn module_name(&self) -> &str {
+        &self.module
+    }
+
+    /// Returns the names the module `module` read when it was checked.
+    pub(crate) fn context_of(&self, module: &str) -> Option<super::ModuleContext> {
+        self.contexts.get(module).cloned()
     }
 
     /// Returns how many classes the modules checked so far define, the first ID of the next.
@@ -463,6 +477,8 @@ impl Program {
     /// Ends checking a module whose body is the function `body`, and keeps its names for
     /// the modules that import it.
     pub(crate) fn end_module(&mut self, body: FunctionId) {
+        let context = self.module_context();
+        self.contexts.insert(self.module.clone(), context);
         self.modules.push(TypedModule {
             name: self.module.clone(),
             path: self.path.clone(),

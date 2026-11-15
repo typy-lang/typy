@@ -200,6 +200,8 @@ impl Checked<'_> {
         );
         // Each module is checked after the modules its module-level imports need.
         let mut deferred = Vec::new();
+        let mut definitions = ModuleDefinitions::new();
+        let mut copies = class::ClassMethodCopies::default();
         for (module, aliases) in self.modules.iter().zip(self.aliases) {
             let path = project.path(module.file).to_owned();
             let frozen = self
@@ -208,40 +210,55 @@ impl Checked<'_> {
                 .get(module.name.as_str())
                 .cloned()
                 .unwrap_or_default();
-            deferred.extend(check_module(
+            copies.begin_module(module.name.as_str());
+            let (waiting, checked) = check_module(
                 &mut program,
-                (module, aliases),
+                (module, aliases, &mut copies),
                 &path,
                 self.floor_defers,
                 &frozen,
                 diagnostics,
-            ));
+            );
+            deferred.extend(waiting);
+            definitions.insert(module.name.as_str().to_owned(), checked);
         }
-        for functions in deferred {
-            functions.check(&mut program, diagnostics);
+        for bodies in deferred {
+            bodies.check(&mut program, &definitions, diagnostics);
         }
         program
     }
 }
 
-/// The functions of a module whose bodies import a module checked after it, which are
-/// checked once every module is, in their own module's names (MOD-13).
+/// Bodies checked once every module is, in the names of `module`: the functions of a module
+/// that import a module checked after it (MOD-13), and the copies of a class method of
+/// `module` that classes of other modules inherit (ADR-0037).
 struct Deferred<'tree> {
-    context: crate::body::ModuleContext,
-    functions: Vec<usize>,
-    definitions: Vec<Definition<'tree>>,
-    first_function: usize,
+    module: String,
+    bodies: Vec<(FunctionId, Definition<'tree>)>,
 }
+
+/// The definitions of each module checked, with the ID of the first, which the copies of a
+/// module's generic functions are made from (GEN-03).
+type ModuleDefinitions<'tree> = BTreeMap<String, (Vec<Definition<'tree>>, usize)>;
 
 impl Deferred<'_> {
     /// Checks the bodies, then the copies of the module's generic functions they need.
-    fn check(self, program: &mut Program, diagnostics: &mut Diagnostics) {
-        let current = program.swap_module_context(self.context);
-        for index in self.functions {
-            let id = FunctionId(u32::try_from(self.first_function + index).unwrap_or(u32::MAX));
-            check_body(program, id, &self.definitions[index], diagnostics);
+    fn check(
+        self,
+        program: &mut Program,
+        definitions: &ModuleDefinitions<'_>,
+        diagnostics: &mut Diagnostics,
+    ) {
+        let Some(context) = program.context_of(&self.module) else {
+            return;
+        };
+        let current = program.swap_module_context(context);
+        for (id, definition) in &self.bodies {
+            check_body(program, *id, definition, diagnostics);
         }
-        check_copies(program, &self.definitions, self.first_function, diagnostics);
+        if let Some((definitions, first_function)) = definitions.get(&self.module) {
+            check_copies(program, definitions, *first_function, diagnostics);
+        }
         program.swap_module_context(current);
     }
 }
@@ -292,12 +309,16 @@ fn check_bindings(
 /// the modules before it.
 fn check_module<'tree>(
     program: &mut Program,
-    (module, aliases): (&'tree Module, &BTreeMap<String, type_alias::Alias>),
+    (module, aliases, copies): (
+        &'tree Module,
+        &BTreeMap<String, type_alias::Alias>,
+        &mut class::ClassMethodCopies<'tree>,
+    ),
     path: &str,
     floor_defers: bool,
     dataclasses: &BTreeMap<String, dataclass::DataclassInfo>,
     diagnostics: &mut Diagnostics,
-) -> Option<Deferred<'tree>> {
+) -> (Vec<Deferred<'tree>>, (Vec<Definition<'tree>>, usize)) {
     let tree = &module.syntax;
     let first_class = program.class_count();
     let first_function = program.function_count();
@@ -334,7 +355,7 @@ fn check_module<'tree>(
         },
         &annotations,
         floor_defers,
-        first_function + definitions.len(),
+        (first_function + definitions.len(), copies),
         diagnostics,
     );
     mark_dataclasses(&mut class_infos, dataclasses);
@@ -405,33 +426,42 @@ fn check_module<'tree>(
     let body = BodyChecker::check_module(program, &module_body, diagnostics);
     let deferred = check_bodies(program, others, &definitions, first_function, diagnostics);
     program.end_module(body);
-    deferred
+    (deferred, (definitions, first_function))
 }
 
 /// Checks the bodies of the module's functions after the module body, then the copies of
 /// its generic functions that the calls need (GEN-03). A function that imports a module
-/// checked after this one waits for it, and is returned with the module's names (MOD-13).
+/// checked after this one waits for it (MOD-13), and a copy of a class method of another
+/// module waits to be checked in that module's names (ADR-0037).
 fn check_bodies<'tree>(
     program: &mut Program,
     others: Vec<(usize, &Definition<'tree>)>,
     definitions: &[Definition<'tree>],
     first_function: usize,
     diagnostics: &mut Diagnostics,
-) -> Option<Deferred<'tree>> {
-    let (later, others): (Vec<_>, Vec<_>) = others
-        .into_iter()
-        .partition(|(_, definition)| program.imports_later_modules(definition.body));
+) -> Vec<Deferred<'tree>> {
+    let id = |index: usize| FunctionId(u32::try_from(first_function + index).unwrap_or(u32::MAX));
+    let mut waiting: BTreeMap<String, Vec<(FunctionId, Definition<'tree>)>> = BTreeMap::new();
+    let own = program.module_name().to_owned();
     for (index, definition) in others {
-        let id = FunctionId(u32::try_from(first_function + index).unwrap_or(u32::MAX));
-        check_body(program, id, definition, diagnostics);
+        let module = match &definition.home {
+            Some(home) => home.clone(),
+            None if program.imports_later_modules(definition.body) => own.clone(),
+            None => {
+                check_body(program, id(index), definition, diagnostics);
+                continue;
+            }
+        };
+        waiting
+            .entry(module)
+            .or_default()
+            .push((id(index), definition.clone()));
     }
     check_copies(program, definitions, first_function, diagnostics);
-    (!later.is_empty()).then(|| Deferred {
-        context: program.module_context(),
-        functions: later.iter().map(|(index, _)| *index).collect(),
-        definitions: definitions.to_vec(),
-        first_function,
-    })
+    waiting
+        .into_iter()
+        .map(|(module, bodies)| Deferred { module, bodies })
+        .collect()
 }
 
 /// Adds the module variables that hold the values the module's class bodies give, each named

@@ -320,25 +320,6 @@ impl BodyChecker<'_> {
     ) -> Option<TypedExpr> {
         let info = &self.program.classes[class.0 as usize];
         let class_name = info.name.clone();
-        if info.remote_class_methods.contains(&name.name) {
-            for argument in arguments {
-                self.expression(argument);
-            }
-            return Some(self.error(
-                Diagnostic::new(
-                    DiagnosticCode::error(201),
-                    name.span,
-                    format!(
-                        "calling the class method `{}` that `{class_name}` inherits from a class \
-                         of another module is planned for TyPy 0.5 (CLS-06)",
-                        name.name
-                    ),
-                )
-                .with_rule(RuleId::CLS_06)
-                .with_help("define the class in the module of its base"),
-                span,
-            ));
-        }
         let function = info
             .class_methods
             .iter()
@@ -386,8 +367,7 @@ impl BodyChecker<'_> {
         let class_method = info
             .class_methods
             .iter()
-            .any(|(each, _)| *each == name.name)
-            || info.remote_class_methods.contains(&name.name);
+            .any(|(each, _)| *each == name.name);
         if !class_method {
             return false;
         }

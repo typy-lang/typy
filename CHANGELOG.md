@@ -41,6 +41,9 @@ All notable changes to TyPy are recorded here. The format follows
   `tuple[str, int] | tuple[str]`; `code` is `None`, the one argument, or
   the tuple. The five items of a Unicode error join only in a program
   that encodes, decodes or opens a file (EXC-15, ADR-0034).
+- A class method may be called through a subclass defined in another
+  module than the class that defines it, which gets a copy of its own
+  (CLS-25, ADR-0037).
 - A static method may be called through any expression that gives an
   instance, such as `make().helper()`, which is evaluated first, as
   CPython does (CLS-25).

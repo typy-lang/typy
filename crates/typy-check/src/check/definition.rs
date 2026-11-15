@@ -24,6 +24,9 @@ pub(crate) struct Definition<'tree> {
     /// For a copy of a class method a class inherits, the copy of the class that defines it,
     /// whose diagnostics this copy does not repeat (ADR-0025).
     pub(crate) copy_of: Option<FunctionId>,
+    /// For a copy of a class method of another module, that module, whose names its body
+    /// reads once every module is checked (ADR-0037).
+    pub(crate) home: Option<String>,
     pub(crate) signature: FunctionSignature,
     /// The type parameters of a generic function, whose copies run in its place (GEN-01).
     pub(crate) type_parameters: Vec<crate::generic::TypeParameter>,
@@ -363,6 +366,7 @@ pub(super) fn definition<'tree>(
                 Some(Type::TypeObject(_))
             ),
         copy_of: None,
+        home: None,
         type_parameters: Vec::new(),
         signature: FunctionSignature {
             parameters: signature_parameters,

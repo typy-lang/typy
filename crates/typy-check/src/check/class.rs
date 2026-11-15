@@ -46,9 +46,6 @@ pub(crate) struct ClassInfo {
     pub(crate) class_variables: Vec<String>,
     /// The copies of the class methods the class has, each by its name (ADR-0025).
     pub(crate) class_methods: Vec<(String, FunctionId)>,
-    /// The class methods the class inherits from a base of another module, whose copies are
-    /// planned (ADR-0025).
-    pub(crate) remote_class_methods: Vec<String>,
     /// The static methods the class defines (CLS-06).
     pub(crate) static_methods: Vec<String>,
     /// The methods with type parameters the class defines, each called through its copies
@@ -391,12 +388,11 @@ pub(super) fn collect_members<'tree>(
     known: &KnownClasses<'_>,
     names: &crate::check::ImportedNames,
     floor_defers: bool,
-    first_function: usize,
+    (first_function, copies): (usize, &mut ClassMethodCopies<'tree>),
     diagnostics: &mut Diagnostics,
 ) -> (Vec<ClassInfo>, Vec<Definition<'tree>>) {
     let mut infos = Vec::new();
     let mut methods: Vec<Definition<'tree>> = Vec::new();
-    let mut copies = ClassMethodCopies::default();
     for class in classes {
         let mut own_class_methods: Vec<&'tree Stmt> = Vec::new();
         let in_scope = super::generic_class::parameters_in_scope(known.copies, class.id);
@@ -482,8 +478,7 @@ pub(super) fn collect_members<'tree>(
         copies.make(
             &own_class_methods,
             &mut info,
-            classes,
-            &scope,
+            (known, &scope),
             &mut collected,
             diagnostics,
         );
@@ -493,6 +488,7 @@ pub(super) fn collect_members<'tree>(
         finish_generic_class(&info, own_methods, known.copies, class.span, diagnostics);
         infos.push(info);
     }
+    copies.end_module(known.ids, names);
     (infos, methods)
 }
 
@@ -550,7 +546,6 @@ fn new_info(class: &ClassStatement<'_>, instance: &Type, classes: Classes<'_>) -
         init: None,
         class_variables: Vec::new(),
         class_methods: Vec::new(),
-        remote_class_methods: Vec::new(),
         static_methods: Vec::new(),
         generic_methods: Vec::new(),
         properties: Vec::new(),
@@ -636,23 +631,43 @@ struct Collected<'methods, 'tree> {
     first_function: usize,
 }
 
-/// The class methods each class of the module has, its own and those it inherits from a
-/// class of the module, each with the copy of the class that defines it (ADR-0025).
+/// The class methods each class of the program has, its own and those it inherits, each with
+/// the copy of the class that defines it and that class's module; and the names each module
+/// checked so far gives its annotations, which a copy made in another module reads
+/// (ADR-0025, ADR-0037).
 #[derive(Default)]
-struct ClassMethodCopies<'tree> {
-    by_class: BTreeMap<ClassId, Vec<(&'tree Stmt, FunctionId)>>,
+pub(crate) struct ClassMethodCopies<'tree> {
+    by_class: BTreeMap<ClassId, Vec<(&'tree Stmt, FunctionId, String)>>,
+    names: BTreeMap<String, (BTreeMap<String, ClassId>, crate::check::ImportedNames)>,
+    module: String,
 }
 
 impl<'tree> ClassMethodCopies<'tree> {
+    /// Starts the copies of the module `module`.
+    pub(crate) fn begin_module(&mut self, module: &str) {
+        module.clone_into(&mut self.module);
+    }
+
+    /// Keeps the names of the module just collected, for copies its class methods get in
+    /// modules checked after it.
+    fn end_module(
+        &mut self,
+        classes: &BTreeMap<String, ClassId>,
+        names: &crate::check::ImportedNames,
+    ) {
+        self.names
+            .insert(self.module.clone(), (classes.clone(), names.clone()));
+    }
+
     /// Makes a copy, for the class `info` describes, of each class method it has: its own, and
-    /// each one a base of the module defines that it does not define again. A class method a
-    /// base of another module defines is noted, since its copy is planned (ADR-0025).
+    /// each one a base defines that it does not define again. A copy of a class method of
+    /// another module reads its signature in that module's names, and notes the module, whose
+    /// names its body is checked in (ADR-0037).
     fn make(
         &mut self,
         own: &[&'tree Stmt],
         info: &mut ClassInfo,
-        classes: Classes<'_>,
-        scope: &AnnotationScope<'_>,
+        (known, scope): (&KnownClasses<'_>, &AnnotationScope<'_>),
         collected: &mut Collected<'_, 'tree>,
         diagnostics: &mut Diagnostics,
     ) {
@@ -661,27 +676,17 @@ impl<'tree> ClassMethodCopies<'tree> {
             _ => String::new(),
         };
         let own_names: Vec<String> = own.iter().map(|statement| name_of(statement)).collect();
-        let mut visible: Vec<(&'tree Stmt, Option<FunctionId>)> =
-            own.iter().map(|statement| (*statement, None)).collect();
-        if let Some(base) = info.base {
-            if let Some(inherited) = self.by_class.get(&base) {
-                visible.extend(
-                    inherited
-                        .iter()
-                        .filter(|(statement, _)| !own_names.contains(&name_of(statement)))
-                        .map(|(statement, origin)| (*statement, Some(*origin))),
-                );
-            } else if let Some(base_info) = classes.get(base) {
-                let remote = base_info
-                    .class_methods
+        let mut visible: Vec<(&'tree Stmt, Option<FunctionId>, String)> = own
+            .iter()
+            .map(|statement| (*statement, None, self.module.clone()))
+            .collect();
+        if let Some(inherited) = info.base.and_then(|base| self.by_class.get(&base)) {
+            visible.extend(
+                inherited
                     .iter()
-                    .map(|(name, _)| name)
-                    .chain(&base_info.remote_class_methods)
-                    .filter(|name| !own_names.contains(name))
-                    .cloned()
-                    .collect::<Vec<_>>();
-                info.remote_class_methods.extend(remote);
-            }
+                    .filter(|(statement, _, _)| !own_names.contains(&name_of(statement)))
+                    .map(|(statement, origin, module)| (*statement, Some(*origin), module.clone())),
+            );
         }
         let class_object = match &info.exception {
             Some(exception) => TypeObjectOf::Exception(exception.clone()),
@@ -694,9 +699,13 @@ impl<'tree> ClassMethodCopies<'tree> {
         };
         let mut made = Vec::new();
         // Each statement is a `def`, since only methods are copied.
-        for (statement, parts, origin) in visible.into_iter().filter_map(|(statement, origin)| {
-            Some((statement, FunctionParts::of(statement)?, origin))
-        }) {
+        for (statement, parts, origin, module) in
+            visible
+                .into_iter()
+                .filter_map(|(statement, origin, module)| {
+                    Some((statement, FunctionParts::of(statement)?, origin, module))
+                })
+        {
             let id = FunctionId(
                 u32::try_from(collected.first_function + collected.methods.len())
                     .unwrap_or(u32::MAX),
@@ -709,7 +718,25 @@ impl<'tree> ClassMethodCopies<'tree> {
             } else {
                 &mut *diagnostics
             };
-            let mut method = definition(&parts, Some(&owner), scope, sink);
+            let home = (module != self.module).then(|| module.clone());
+            let mut method = match home.as_ref().and_then(|home| self.names.get(home)) {
+                // A copy of another module's class method reads its annotations there.
+                Some((classes, names)) => {
+                    let remote = AnnotationScope {
+                        classes,
+                        modules: &names.modules,
+                        module_aliases: &names.module_aliases,
+                        imported_aliases: &names.aliases,
+                        names: &names.names,
+                        standard: &names.standard,
+                        bound: u32::MAX,
+                        ..class_scope(known, names, true, info.id, scope.parameters)
+                    };
+                    definition(&parts, Some(&owner), &remote, sink)
+                }
+                None => definition(&parts, Some(&owner), scope, sink),
+            };
+            method.home = home;
             // A parameter that names a protocol would make the copy generic (GEN-09).
             let written = method.type_parameters.len();
             super::protocol::protocol_parameters(&mut method, sink);
@@ -722,7 +749,7 @@ impl<'tree> ClassMethodCopies<'tree> {
             method.qualified_name = format!("{}.{}", info.name, parts.name.name);
             method.copy_of = origin;
             info.class_methods.push((parts.name.name.clone(), id));
-            made.push((statement, origin.unwrap_or(id)));
+            made.push((statement, origin.unwrap_or(id), module));
             collected.methods.push(method);
         }
         self.by_class.insert(info.id, made);
