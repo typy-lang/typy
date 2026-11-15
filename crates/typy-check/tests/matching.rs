@@ -49,3 +49,53 @@ fn each_mistake_in_a_pattern_gives_one_error() {
         assert_eq!(app(source), *expected, "{source}");
     }
 }
+
+const POINT: &str = "class Point:\n    __match_args__ = ('x', 'y')\n    def __init__(self, x: int, y: int) -> None:\n        self.x = x\n        self.y = y\n";
+
+#[test]
+fn class_patterns_take_match_args_from_the_class_or_its_base() {
+    let cases = [
+        // A subclass without `__match_args__` takes its base's.
+        "class Point3(Point):\n    def __init__(self, x: int, y: int) -> None:\n        super().__init__(x, y)\ndef f(p: Point3) -> int:\n    match p:\n        case Point3(a, b):\n            return a + b\n    return 0\n",
+        // A dataclass gets its fields as `__match_args__`.
+        "from dataclasses import dataclass\n@dataclass\nclass Pair:\n    left: int\n    right: str\ndef f(p: Pair) -> str:\n    match p:\n        case Pair(n, text):\n            return text * n\n    return ''\n",
+        // A generic dataclass gets no class variable before GEN-08, but its fields still
+        // name the positional sub-patterns.
+        "from dataclasses import dataclass\n@dataclass\nclass Box[T]:\n    item: T\ndef f(b: Box[int]) -> int:\n    match b:\n        case Box(n):\n            return n\n    return 0\n",
+        // A dataclass may write its own.
+        "from dataclasses import dataclass\n@dataclass\nclass Pair:\n    left: int\n    right: str\n    __match_args__ = ('right',)\ndef f(p: Pair) -> str:\n    match p:\n        case Pair(text):\n            return text\n    return ''\n",
+    ];
+    for source in cases {
+        assert_eq!(
+            app(&format!("{POINT}{source}")),
+            Vec::<String>::new(),
+            "{source}"
+        );
+    }
+}
+
+#[test]
+fn class_patterns_that_cannot_be_checked_give_one_error() {
+    let cases: &[(&str, &[&str])] = &[
+        // CPython raises `TypeError` for a positional sub-pattern without `__match_args__`.
+        (
+            "from dataclasses import dataclass\n@dataclass(match_args=False)\nclass Pair:\n    left: int\nmatch Pair(1):\n    case Pair(n):\n        print(n)\n",
+            &["E0401"],
+        ),
+        (
+            "class Odd:\n    __match_args__ = ['a']\n    def __init__(self) -> None:\n        self.a = 1\nmatch Odd():\n    case Odd(n):\n        print(n)\n",
+            &["E0201"],
+        ),
+        (
+            "match 1:\n    case Missing(n):\n        print(n)\n",
+            &["E0205"],
+        ),
+        (
+            "match Point(1, 2):\n    case Point(n, x=m):\n        print(n, m)\n",
+            &["E0401"],
+        ),
+    ];
+    for (source, expected) in cases {
+        assert_eq!(app(&format!("{POINT}{source}")), *expected, "{source}");
+    }
+}

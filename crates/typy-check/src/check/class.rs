@@ -4,7 +4,7 @@
 use std::collections::BTreeMap;
 
 use typy_diagnostics::{Diagnostic, DiagnosticCode, Diagnostics, RuleId, Span};
-use typy_source::syntax::{Expr, Identifier, Stmt};
+use typy_source::syntax::{Constant, Expr, Identifier, Stmt};
 
 use super::annotation::{AnnotationName, AnnotationScope, annotation_type, is_protocol};
 use super::definition::{
@@ -65,6 +65,10 @@ pub(crate) struct ClassInfo {
     pub(crate) frozen: bool,
     /// Whether `@dataclass` wrote the class's `__init__`.
     pub(crate) generated_init: bool,
+    /// What the class body assigns to `__match_args__`, which a class pattern's positional
+    /// sub-patterns name: the names of a tuple of `str` literals, or where a value of another
+    /// form is assigned; `None` when the body assigns none, so the base's apply (CST-06).
+    pub(crate) match_args: Option<Result<Vec<String>, Span>>,
     /// Whether the class's `__init__` uses the instance other than through its attributes,
     /// once checked.
     pub(crate) init_uses_instance: bool,
@@ -553,6 +557,7 @@ fn new_info(class: &ClassStatement<'_>, instance: &Type, classes: Classes<'_>) -
         defaults: Vec::new(),
         frozen: false,
         generated_init: false,
+        match_args: None,
         init_uses_instance: false,
         final_attributes: Vec::new(),
         span: class.span,
@@ -1083,13 +1088,34 @@ fn class_body_name(
                 default_value(info, id, *span, diagnostics);
             }
         }
-        Stmt::Assign { targets, .. } => {
+        Stmt::Assign { targets, value, .. } => {
             if let [Expr::Name { id, .. }] = targets.as_slice() {
+                if id == "__match_args__" {
+                    info.match_args = Some(match_arg_names(value));
+                }
                 info.class_variables.push(id.clone());
             }
         }
         _ => {}
     }
+}
+
+/// Returns the names a `__match_args__` tuple of `str` literals holds, or where a value of
+/// another form is.
+fn match_arg_names(value: &Expr) -> Result<Vec<String>, Span> {
+    let Expr::Tuple { elements, .. } = value else {
+        return Err(value.span());
+    };
+    elements
+        .iter()
+        .map(|element| match element {
+            Expr::Constant {
+                value: Constant::Str(name),
+                ..
+            } => Ok(name.clone()),
+            other => Err(other.span()),
+        })
+        .collect()
 }
 
 /// Notes that the class body gives the attribute `name` a default. An exception is made by

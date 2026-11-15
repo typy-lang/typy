@@ -21,10 +21,13 @@ pub(crate) struct Field {
 
 /// What the expansion of a dataclass tells the checker: whether its instances are frozen, and
 /// whether it wrote the `__init__` that alone may assign a frozen instance's fields.
-#[derive(Clone, Copy, Debug, Default)]
+#[derive(Clone, Debug, Default)]
 pub(crate) struct DataclassInfo {
     pub(crate) frozen: bool,
     pub(crate) generated_init: bool,
+    /// The fields class patterns take positionally, unless `match_args=False` is given or the
+    /// class writes its own `__match_args__` (CST-06).
+    pub(crate) match_args: Option<Vec<String>>,
 }
 
 /// The dataclasses of the modules expanded so far: each one's fields, by module and class.
@@ -53,10 +56,16 @@ struct Names {
 
 /// The options of `@dataclass(...)` CLS-05 covers.
 #[derive(Clone, Copy)]
+#[expect(
+    clippy::struct_excessive_bools,
+    reason = "each flag is the `@dataclass` keyword of the same name"
+)]
 struct Options {
     eq: bool,
     order: bool,
     frozen: bool,
+    /// Whether the class gets `__match_args__`, the fields in order (CST-06).
+    match_args: bool,
 }
 
 impl Dataclasses {
@@ -94,6 +103,7 @@ impl Dataclasses {
             bases,
             body,
             decorators,
+            type_parameters,
             ..
         } = statement
         else {
@@ -113,27 +123,9 @@ impl Dataclasses {
             _ => name.name.clone(),
         };
         if inherited.is_some()
-            && let Some(base_frozen) = bases
-                .first()
-                .and_then(|base| self.base_frozen(base, module_name, names))
-            && base_frozen != options.frozen
+            && let Some(base) = bases.first()
+            && !self.frozen_as_base(base, module_name, names, (options, at), diagnostics)
         {
-            let (this, that) = if options.frozen {
-                ("frozen", "non-frozen")
-            } else {
-                ("non-frozen", "frozen")
-            };
-            diagnostics.push(
-                Diagnostic::new(
-                    DiagnosticCode::error(404),
-                    at,
-                    format!(
-                        "a {this} dataclass cannot derive from a {that} one, as CPython \
-                         refuses"
-                    ),
-                )
-                .with_rule(RuleId::CLS_05),
-            );
             return None;
         }
         let inherited = inherited.unwrap_or_default();
@@ -157,6 +149,10 @@ impl Dataclasses {
             .iter()
             .filter_map(|statement| match statement {
                 Stmt::FunctionDef { name, .. } => Some(name.name.clone()),
+                Stmt::Assign { targets, .. } => match targets.as_slice() {
+                    [Expr::Name { id, .. }] => Some(id.clone()),
+                    _ => None,
+                },
                 _ => None,
             })
             .collect();
@@ -172,9 +168,16 @@ impl Dataclasses {
             |method| matches!(method, Stmt::FunctionDef { name, .. } if name.name == "__init__"),
         );
         body.extend(generated);
+        let match_args = match_args(options, &defined, &fields);
+        // A generic class takes no class variables before GEN-08, so a class pattern reads
+        // its fields from `DataclassInfo` alone.
+        if match_args.is_some() && type_parameters.is_empty() {
+            body.extend(match_args_statement(&fields, at));
+        }
         let class_info = DataclassInfo {
             frozen: options.frozen,
             generated_init,
+            match_args,
         };
         self.fields
             .insert((module_name.to_owned(), name.name.clone()), fields);
@@ -183,6 +186,41 @@ impl Dataclasses {
         self.pending
             .insert((module_name.to_owned(), name.name.clone()), options.frozen);
         Some((name.name.clone(), class_info))
+    }
+
+    /// Returns whether the dataclass is frozen as its dataclass base is, reporting it when
+    /// not, as CPython refuses the class.
+    fn frozen_as_base(
+        &self,
+        base: &Expr,
+        module_name: &str,
+        names: &Names,
+        (options, at): (Options, Span),
+        diagnostics: &mut Diagnostics,
+    ) -> bool {
+        let Some(base_frozen) = self.base_frozen(base, module_name, names) else {
+            return true;
+        };
+        if base_frozen == options.frozen {
+            return true;
+        }
+        let (this, that) = if options.frozen {
+            ("frozen", "non-frozen")
+        } else {
+            ("non-frozen", "frozen")
+        };
+        diagnostics.push(
+            Diagnostic::new(
+                DiagnosticCode::error(404),
+                at,
+                format!(
+                    "a {this} dataclass cannot derive from a {that} one, as CPython \
+                     refuses"
+                ),
+            )
+            .with_rule(RuleId::CLS_05),
+        );
+        false
     }
 
     /// Returns whether a dataclass base is frozen.
@@ -327,6 +365,7 @@ fn options(decorator: &Expr, diagnostics: &mut Diagnostics) -> Option<Options> {
         eq: true,
         order: false,
         frozen: false,
+        match_args: true,
     };
     let Expr::Call {
         arguments,
@@ -355,6 +394,7 @@ fn options(decorator: &Expr, diagnostics: &mut Diagnostics) -> Option<Options> {
             (Some("eq"), Some(flag)) => options.eq = flag,
             (Some("order"), Some(flag)) => options.order = flag,
             (Some("frozen"), Some(flag)) => options.frozen = flag,
+            (Some("match_args"), Some(flag)) => options.match_args = flag,
             (Some(option), _) => {
                 diagnostics.push(planned(
                     *span,
@@ -594,6 +634,27 @@ fn write_repr(source: &mut String, fields: &[Field]) {
     let _ = writeln!(source, " + \")\"");
 }
 
+/// Returns the fields class patterns take positionally: all of them, in order, unless
+/// `match_args=False` is given or the class assigns its own `__match_args__` (CST-06).
+fn match_args(
+    options: Options,
+    defined: &BTreeSet<String>,
+    fields: &[Field],
+) -> Option<Vec<String>> {
+    (options.match_args && !defined.contains("__match_args__"))
+        .then(|| fields.iter().map(|field| field.name.clone()).collect())
+}
+
+/// Returns `__match_args__ = ('a', 'b', )`, the names of the fields, at the decorator.
+fn match_args_statement(fields: &[Field], at: Span) -> Vec<Stmt> {
+    let mut source = String::from("__match_args__ = (");
+    for field in fields {
+        let _ = write!(source, "'{}', ", field.name);
+    }
+    source.push_str(")\n");
+    parsed(&source, &[], at)
+}
+
 /// Returns the methods `source` holds, each moved to the decorator, `__init__` with the
 /// fields' own annotations and defaults.
 fn parsed(source: &str, fields: &[Field], at: Span) -> Vec<Stmt> {
@@ -604,7 +665,7 @@ fn parsed(source: &str, fields: &[Field], at: Span) -> Vec<Stmt> {
         .unwrap_or_default();
     for method in &mut methods {
         method.relocate(at);
-        // Each statement written is a `def`.
+        // Each statement written is a `def`, or the assignment of `__match_args__`.
         match method {
             Stmt::FunctionDef {
                 name, parameters, ..

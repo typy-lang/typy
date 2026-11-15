@@ -3,12 +3,11 @@
 
 use std::collections::BTreeSet;
 
-use typy_diagnostics::{RuleId, Span};
+use typy_diagnostics::Span;
 use typy_source::syntax::{Expr, Identifier, MatchCase, Pattern};
 
 use super::pattern_key::{key_repr, literal_key, same_key};
 
-use super::feature::planned;
 use super::{Place, Walker};
 
 impl Walker {
@@ -83,8 +82,25 @@ impl Walker {
                 rest,
                 span,
             } => self.mapping_pattern(keys, patterns, rest.as_ref(), *span, bound),
-            Pattern::Class { span, .. } => {
-                self.report(*span, planned("class patterns", "0.5", RuleId::CST_06));
+            Pattern::Class {
+                class,
+                patterns,
+                keywords,
+                ..
+            } => {
+                self.expression(class);
+                for each in patterns {
+                    self.pattern(each, bound);
+                }
+                let mut attributes = BTreeSet::new();
+                for (name, each) in keywords {
+                    if !attributes.insert(name.name.as_str()) {
+                        let message =
+                            format!("attribute name repeated in class pattern: {}", name.name);
+                        self.syntax_error(name.span, &message);
+                    }
+                    self.pattern(each, bound);
+                }
             }
         }
     }

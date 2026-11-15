@@ -196,9 +196,14 @@ impl BodyChecker<'_> {
                 rest,
                 span,
             } => self.mapping_pattern(pattern, keys, patterns, rest.as_ref(), subject, *span),
-            // The subset walker refuses class patterns before any body is checked, and a
-            // starred name only appears inside a sequence pattern, which handles it.
-            Pattern::Class { .. } | Pattern::Star { .. } => TypedPattern::All(Vec::new()),
+            Pattern::Class {
+                class,
+                patterns,
+                keywords,
+                span,
+            } => self.class_pattern(pattern, class, (patterns, keywords), subject, *span),
+            // A starred name only appears inside a sequence pattern, which binds it.
+            Pattern::Star { .. } => TypedPattern::All(Vec::new()),
         }
     }
 

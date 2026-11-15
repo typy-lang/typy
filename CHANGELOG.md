@@ -12,11 +12,15 @@ All notable changes to TyPy are recorded here. The format follows
   comprehensions and its syntax errors; a test of `(name := value) is not
   None` narrows `name` (EXP-13).
 - `match` statements with literal, value, capture, wildcard, `as`, `|`,
-  sequence and mapping patterns and guards, with CPython's syntax errors
-  for patterns. A case narrows the subject as the test it stands for
-  does, so after `case None:` an optional subject is no longer `None`,
-  and `case [x, *rest]` narrows a `list[int] | None` to the list
-  (CST-06).
+  sequence, mapping and class patterns and guards, with CPython's syntax
+  errors for patterns. A class pattern reads `__match_args__` from the
+  class body or a base, and a class pattern that CPython would answer
+  with `TypeError` is refused with E0401. A case narrows the subject as
+  the test it stands for does, so after `case None:` an optional subject
+  is no longer `None`, and `case [x, *rest]` narrows a
+  `list[int] | None` to the list (CST-06).
+- `@dataclass` writes `__match_args__`, the names of the fields, and
+  takes `match_args=False` to leave it out (CLS-05, CST-06).
 
 ### Fixed
 

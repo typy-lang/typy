@@ -11,10 +11,7 @@
 | `for` over an instance of a class with `__iter__`, whose result has `__next__` | CST-08 |
 | `iter` and `next`, with or without a default, and `for` over an iterator | CST-09 |
 | `with`, with one or more context managers and `as` targets | CST-05, CST-10 |
-| `match` with literal, value, capture, wildcard, `as`, `\|`, sequence and mapping patterns and guards | CST-06 |
-
-Class patterns in `match`, such as `Point(x, y=0)`, are planned for 0.5
-(CST-06).
+| `match` with literal, value, capture, wildcard, `as`, `\|`, sequence, mapping and class patterns and guards | CST-06 |
 
 ## Example
 
@@ -132,6 +129,53 @@ A pattern that no value of the subject's type can match is refused with
 E0407, as a sequence pattern on a `str` or a tuple pattern of the wrong
 length is. A sequence pattern on a union of several sequence types, such
 as `list[int] | tuple[int, int]`, is planned for 1.0.
+
+### Class patterns
+
+`Point(x, y=0)` matches an instance of `Point`, or of a class derived from
+it, whose attributes match: a keyword names the attribute, and a
+positional sub-pattern takes the name at its position in the class's
+`__match_args__`. A dataclass has its fields as `__match_args__`, unless
+it is declared with `match_args=False`; any other class writes the tuple
+in its body, or takes its base's. For `bool`, `bytes`, `dict`, `float`,
+`int`, `list`, `set`, `str` and `tuple`, one positional sub-pattern
+matches the subject itself, so `case int(n):` binds the number.
+
+<!-- typy-expect: accepted -->
+```python
+from dataclasses import dataclass
+
+
+@dataclass
+class Point:
+    x: int
+    y: int
+
+
+def where(point: Point | int) -> str:
+    match point:
+        case Point(0, 0):
+            return "origin"
+        case Point(x, 0) | Point(0, x):
+            return f"on an axis at {x}"
+        case Point(x=x, y=y):
+            return f"at {x},{y}"
+        case int(n):
+            return f"number {n}"
+        case _:
+            return "unknown"
+
+
+print(where(Point(0, 0)), where(Point(3, 0)), where(Point(1, 2)))
+print(where(7))
+```
+
+Where CPython raises `TypeError` for a class pattern whenever the
+subject is an instance, TyPy refuses the pattern with E0401: more
+positional sub-patterns than `__match_args__` names, and two sub-patterns
+for one attribute. A keyword naming an attribute the class does not have
+is refused as reading that attribute is. A `__match_args__` other than a
+tuple of `str` literals is planned for 1.0.
 
 ## Context managers
 

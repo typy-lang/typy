@@ -1063,16 +1063,30 @@ a starred name. The starred name binds a list: a slice, `list()` of a
 slice, or for a fixed tuple a list display whose type is the union of the
 items it takes. A mapping pattern tests `key in subject` and matches
 `subject[key]`; `**rest` binds a dict comprehension over the items whose
-key is not one of the pattern's. A part that a nested pattern tests is
-stored first in its own hidden local, so it is read once and narrows as a
-variable does. Lowering gives each case
-a block its pattern jumps to when it fails, so the cases are tried in
-order and a subject no case matches goes on after the statement. The
+key is not one of the pattern's. A class pattern (`body/pattern_class.rs`)
+resolves its class as `isinstance` does, tests the subject the same way,
+then matches each sub-pattern against `subject.attribute`. A positional
+sub-pattern takes its attribute from `ClassInfo::match_args`, which class
+collection reads from a `__match_args__ = (...)` of `str` literals in the
+class body, the nearest base's applying when a class has none; for the
+nine built-in classes CPython names, one positional sub-pattern matches
+the subject itself. More positional sub-patterns than the class takes,
+and two for one attribute, are E0401, since CPython raises `TypeError`
+for them on every instance. `@dataclass` writes `__match_args__` from the
+fields unless `match_args=False` is given or the class assigns its own,
+and `DataclassInfo::match_args` carries the names to the class's
+information, so a generic dataclass, which takes no class variable before
+GEN-08, still has them. A part that a nested pattern tests is stored
+first in its own hidden local, so it is read once and narrows as a
+variable does. Lowering gives each case a block its pattern jumps to when
+it fails, so the cases are tried in order and a subject no case matches
+goes on after the statement. The
 subset walker reports CPython's compile-time `SyntaxError`s for patterns as
 E0103: a capture or wildcard before the last case or alternative,
 alternatives that bind different names, a name bound twice, `__debug__`
 as a target, an f-string as a value, two starred names in one sequence
-pattern, and a literal key repeated in a mapping pattern, where `1`,
+pattern, a keyword repeated in a class pattern, and a literal key repeated
+in a mapping pattern, where `1`,
 `1.0` and `True` are one key (`subset/pattern_key.rs`).
 
 Classes (CLS-01, CLS-02, CLS-08, ADR-0012) are collected before any

@@ -110,10 +110,6 @@ fn later_features_name_their_release_and_rule() {
             "`*Ts` and `**P` type parameters are planned for TyPy 1.0 (GEN-06)",
         ),
         (
-            "match x:\n    case Point(y):\n        pass\n",
-            "class patterns are planned for TyPy 0.5 (CST-06)",
-        ),
-        (
             "f = lambda: 1\n",
             "`lambda` expressions are planned for TyPy 1.0 (EXP-14)",
         ),

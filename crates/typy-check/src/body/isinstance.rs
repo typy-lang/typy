@@ -108,7 +108,7 @@ impl BodyChecker<'_> {
 
     /// Returns the classes the second argument names: a class or a tuple of them, each named
     /// as a value.
-    fn isinstance_classes(
+    pub(super) fn isinstance_classes(
         &mut self,
         classes: &Expr,
     ) -> Result<Vec<TypeObjectOf>, Option<Box<Diagnostic>>> {

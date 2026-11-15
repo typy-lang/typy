@@ -40,6 +40,7 @@ mod open_options;
 mod operator;
 mod operator_method;
 mod os_error;
+mod pattern_class;
 mod pattern_mapping;
 mod pattern_sequence;
 mod percent;

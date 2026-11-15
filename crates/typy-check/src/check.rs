@@ -425,7 +425,7 @@ fn check_copies(
     program.end_copies();
 }
 
-/// Notes in each frozen dataclass's information what its expansion wrote (CLS-05).
+/// Notes in each dataclass's information what its expansion wrote (CLS-05, CST-06).
 fn mark_dataclasses(
     infos: &mut [ClassInfo],
     dataclasses: &BTreeMap<String, dataclass::DataclassInfo>,
@@ -434,6 +434,9 @@ fn mark_dataclasses(
         if let Some(dataclass) = dataclasses.get(&info.name) {
             info.frozen = dataclass.frozen;
             info.generated_init = dataclass.generated_init;
+            if info.match_args.is_none() {
+                info.match_args = dataclass.match_args.clone().map(Ok);
+            }
         }
     }
 }

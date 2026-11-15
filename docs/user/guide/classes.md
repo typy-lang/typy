@@ -15,7 +15,7 @@ class body or assigned in `__init__`, and has one type.
 | `__eq__`, `__ne__`, `__lt__`, `__le__`, `__gt__`, `__ge__` and `__hash__` | CLS-07 |
 | `__add__`, `__radd__` and the other arithmetic, bitwise and unary methods | CLS-07 |
 | `__len__`, `__getitem__`, `__setitem__`, `__delitem__`, `__contains__` and `__bool__` | CLS-07 |
-| `@dataclass`, with `eq`, `order`, `frozen` and `field(default=...)` | CLS-05 |
+| `@dataclass`, with `eq`, `order`, `frozen`, `match_args` and `field(default=...)` | CLS-05, CST-06 |
 | `__str__` and `__repr__`, used by `print`, `str`, `repr`, f-strings and containers | CLS-08 |
 | A type object for every type, with `object` as the root | CLS-10 |
 | `type(x)`, class and built-in type names as values, `__name__` | CLS-12 |
@@ -469,8 +469,10 @@ a subclass defines one, are planned for 0.5, and so is `in` without
 `@dataclass` from `dataclasses` writes the methods CPython writes for a
 class: `__init__` taking the fields in order, `__repr__`, and `__eq__`;
 with `order=True` also `__lt__`, `__le__`, `__gt__` and `__ge__`, which
-compare the fields as a tuple; and with `frozen=True` the fields cannot
-be assigned after `__init__` (CLS-05, LIB-06):
+compare the fields as a tuple; with `frozen=True` the fields cannot be
+assigned after `__init__`; and unless `match_args=False`,
+`__match_args__`, the names of the fields, which class patterns in
+`match` read (CLS-05, CST-06, LIB-06):
 
 <!-- typy-expect: accepted -->
 ```python
