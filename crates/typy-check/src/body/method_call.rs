@@ -131,7 +131,7 @@ impl BodyChecker<'_> {
             (Method::DictGet, 1, _) => Type::optional(signature.result),
             _ => signature.result,
         };
-        self.record_missing_key(method, &receiver.ty);
+        self.record_runtime_raises(method, &receiver.ty);
         Self::typed(
             TypedExprKind::Method {
                 receiver: Box::new(receiver),
@@ -143,12 +143,16 @@ impl BodyChecker<'_> {
         )
     }
 
-    /// Records the key a method may find missing, whose `KeyError` holds it (ADR-0034).
-    fn record_missing_key(&mut self, method: Method, receiver: &Type) {
-        if let (Method::DictPop, Type::Dict(key, _)) | (Method::SetRemove, Type::Set(key)) =
-            (method, receiver)
-        {
-            self.program.record_key(key);
+    /// Records what a method may make the runtime raise: a `KeyError` that holds a missing
+    /// key, or the Unicode error of `encode` or `decode` (ADR-0034).
+    fn record_runtime_raises(&mut self, method: Method, receiver: &Type) {
+        match (method, receiver) {
+            (Method::DictPop, Type::Dict(key, _)) | (Method::SetRemove, Type::Set(key)) => {
+                self.program.record_key(key);
+            }
+            (Method::StrEncode, _) => self.program.record_codec(true, false),
+            (Method::BytesDecode, _) => self.program.record_codec(false, true),
+            _ => {}
         }
     }
 

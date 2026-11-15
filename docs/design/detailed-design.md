@@ -1419,8 +1419,13 @@ arguments, `sys.exit` records `SystemExit`, and a dict lookup, `dict.pop`,
 `Creations::arguments_of(class)` gives the type of `args`: the tuples of every
 creation of the class and of the classes derived from it, of every
 initialization of a related class, and of the runtime's own raises (a message,
-`tuple[str]`; the key of a `KeyError`; `(int, str)` of an `OSError`; the five
-items of a Unicode error; `()` of `StopIteration`). Tuples of one layout, as
+`tuple[str]`; the key of a `KeyError`; `(int, str)` of an `OSError`; `()` of
+`StopIteration`; and the five items of a `UnicodeEncodeError` or a
+`UnicodeDecodeError` only when the program encodes, decodes, opens a file or
+makes a `str` with a surrogate standard output cannot write, so `args` of a
+`ValueError` stays narrow in most programs). A call of `OSError` itself with two
+to five arguments becomes the subclass for its `errno`, so it counts for every
+related class, as an initialization does. Tuples of one layout, as
 many items with one type or two object types at each position, merge into one
 member, so the layout of an exception's arguments names its member; the
 members are not given to `Type::union`, which would drop `tuple[int]` for
@@ -1431,7 +1436,9 @@ union of tuples that `name.args` is, as for a variable. `TypeChecker::check`
 checks the program once; when a body read `args` or `code` as a value, the
 first check typed them as errors, so it checks again with the creations found,
 and again while a check finds a creation the ones before did not, up to eight
-checks, after which the read is E0201 (EXC-17). Lowering reads the arguments
+checks, after which the read is E0201 (EXC-17). Only the errors of the check
+whose creations settled are reported, since an earlier check may type `args`
+without a creation it later finds. Lowering reads the arguments
 with `typy_rt_exception_arguments_address` and, for a union, tests each member
 but the last with `typy_rt_exception_arguments_match`, which compares the
 layouts field by field, the runtime's text standing for one `str`.

@@ -204,7 +204,9 @@ it: `ValueError("bad", 3)` gives `tuple[str, int]`, and the message of a
 `ValueError` TyPy raises, such as the one of `int("x")`, gives
 `tuple[str]`. So `args` of a `ValueError` here is
 `tuple[str, int] | tuple[str]`, and `error.args[1]` raises `IndexError`
-when the exception holds one argument, as CPython does:
+when the exception holds one argument, as CPython does. The five items of
+a `UnicodeEncodeError` or `UnicodeDecodeError`, both `ValueError`
+classes, join only when the program encodes, decodes or opens a file:
 
 <!-- typy-expect: accepted -->
 ```python

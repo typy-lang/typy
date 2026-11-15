@@ -117,20 +117,21 @@ impl TypeChecker {
             let Some(read) = program.first_arguments_read() else {
                 break (program, found);
             };
-            if found.has_errors() {
-                break (program, found);
-            }
+            // An error found before the creations settle may come from a type of `args` that
+            // lacked one, so only a settled check's errors are reported.
             let recorded = program.creations();
-            if known.as_ref().is_some_and(|known| known.covers(recorded)) {
+            if known.as_ref().is_some_and(|known| known.covers(&recorded)) {
                 break (program, found);
             }
             if checks == MAXIMUM_CHECKS {
-                found.push(unsettled_arguments(read));
+                if !found.has_errors() {
+                    found.push(unsettled_arguments(read));
+                }
                 break (program, found);
             }
             match &mut known {
-                Some(known) => known.extend(recorded),
-                None => known = Some(recorded.clone()),
+                Some(known) => known.extend(&recorded),
+                None => known = Some(recorded),
             }
             checks += 1;
         };

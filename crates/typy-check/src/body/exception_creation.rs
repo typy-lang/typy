@@ -15,9 +15,13 @@ impl Program {
         self.known_creations = known.map(std::rc::Rc::new);
     }
 
-    /// Returns the creations of exceptions this check recorded.
-    pub(crate) const fn creations(&self) -> &Creations {
-        &self.creations
+    /// Returns the creations of exceptions this check recorded; a program that makes a `str`
+    /// with a surrogate standard output cannot write may raise `UnicodeEncodeError` printing
+    /// it (LEX-10).
+    pub(crate) fn creations(&self) -> Creations {
+        let mut creations = self.creations.clone();
+        creations.codec(self.makes_surrogates, false);
+        creations
     }
 
     /// Returns where a body first reads `args` as a value, if one does.
@@ -33,6 +37,12 @@ impl Program {
     /// Records `super().__init__(arguments)` in the `__init__` of `class`.
     pub(super) fn record_initialization(&mut self, class: &ExceptionClass, arguments: &[Type]) {
         self.creations.initialize(class, arguments);
+    }
+
+    /// Records that the runtime may raise `UnicodeEncodeError` when `encodes`, and
+    /// `UnicodeDecodeError` when `decodes`.
+    pub(super) fn record_codec(&mut self, encodes: bool, decodes: bool) {
+        self.creations.codec(encodes, decodes);
     }
 
     /// Records a key the runtime looks up, whose `KeyError` holds it when it is missing.

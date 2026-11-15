@@ -18,6 +18,12 @@ pub(crate) struct Creations {
     initialized: Vec<(ExceptionClass, Type)>,
     /// The type of each key the runtime can find missing, as the argument of its `KeyError`.
     keys: Vec<Type>,
+    /// Whether the runtime can raise `UnicodeEncodeError`: the program encodes a `str`,
+    /// opens a file, or makes a `str` with a surrogate standard output cannot write.
+    encodes: bool,
+    /// Whether the runtime can raise `UnicodeDecodeError`: the program decodes `bytes` or
+    /// opens a file.
+    decodes: bool,
 }
 
 impl Creations {
@@ -25,22 +31,32 @@ impl Creations {
     /// three to five arguments whose third is a file name keeps the first two as `args`, as
     /// CPython does (EXC-14).
     pub(crate) fn make(&mut self, class: &ExceptionClass, arguments: &[Type]) {
+        // `OSError` itself of two to five arguments becomes the subclass for its `errno`, so
+        // its arguments may be those of an exception of any related class.
+        let mapped = *class == ExceptionClass::Builtin(BuiltinException::OSError)
+            && (2..=5).contains(&arguments.len());
+        let made = if mapped {
+            &mut self.initialized
+        } else {
+            &mut self.made
+        };
         if class.builtin().is_os_error() && (3..=5).contains(&arguments.len()) {
             let file_name = &arguments[2];
             if *file_name != Type::NoneType {
-                push(
-                    &mut self.made,
-                    (class.clone(), Type::Tuple(arguments[..2].to_vec())),
-                );
+                push(made, (class.clone(), Type::Tuple(arguments[..2].to_vec())));
             }
             if !matches!(file_name, Type::NoneType | Type::Optional(_)) {
                 return;
             }
         }
-        push(
-            &mut self.made,
-            (class.clone(), Type::Tuple(arguments.to_vec())),
-        );
+        push(made, (class.clone(), Type::Tuple(arguments.to_vec())));
+    }
+
+    /// Records that the runtime may raise `UnicodeEncodeError` when `encodes`, and
+    /// `UnicodeDecodeError` when `decodes`.
+    pub(crate) fn codec(&mut self, encodes: bool, decodes: bool) {
+        self.encodes |= encodes;
+        self.decodes |= decodes;
     }
 
     /// Records `super().__init__(arguments)` in the `__init__` of `class`.
@@ -66,6 +82,8 @@ impl Creations {
                 .iter()
                 .all(|each| self.initialized.contains(each))
             && other.keys.iter().all(|each| self.keys.contains(each))
+            && (self.encodes || !other.encodes)
+            && (self.decodes || !other.decodes)
     }
 
     /// Adds the creations of `other` that these lack.
@@ -79,6 +97,7 @@ impl Creations {
         for key in &other.keys {
             self.key(key);
         }
+        self.codec(other.encodes, other.decodes);
     }
 
     /// Returns the type of `args` of an exception of `class`: a tuple, or a union of tuples
@@ -136,19 +155,26 @@ impl Creations {
 
     /// Returns the argument tuples of the exceptions of `class` the runtime raises: its
     /// message for most classes, the missing key for `KeyError`, the code and the text for
-    /// `OSError`, the five of a Unicode error, and none for `StopIteration`. It raises no
-    /// `SystemExit` or `AssertionError` of its own.
+    /// `OSError`, the five of a Unicode error when the program can cause one, and none for
+    /// `StopIteration`. It raises no `SystemExit`, `AssertionError` or `UnicodeError` itself.
+    /// An `OSError` keeps both, since reading or writing a standard file the wrong way raises
+    /// `io.UnsupportedOperation` with a message in any program.
     fn runtime_arguments(&self, class: BuiltinException) -> Vec<Type> {
         let message = Type::Tuple(vec![Type::Str]);
         match class {
-            BuiltinException::SystemExit | BuiltinException::AssertionError => Vec::new(),
+            BuiltinException::SystemExit
+            | BuiltinException::AssertionError
+            | BuiltinException::UnicodeError => Vec::new(),
             BuiltinException::StopIteration => vec![Type::Tuple(Vec::new())],
             BuiltinException::UnicodeEncodeError | BuiltinException::UnicodeDecodeError => {
-                let object = if class == BuiltinException::UnicodeEncodeError {
-                    Type::Str
+                let (object, raised) = if class == BuiltinException::UnicodeEncodeError {
+                    (Type::Str, self.encodes)
                 } else {
-                    Type::Bytes
+                    (Type::Bytes, self.decodes)
                 };
+                if !raised {
+                    return Vec::new();
+                }
                 vec![Type::Tuple(vec![
                     Type::Str,
                     object,
@@ -210,10 +236,20 @@ mod tests {
     }
 
     #[test]
-    fn a_base_class_has_the_unicode_errors_five_arguments() {
-        let Type::Union(members) =
-            Creations::default().arguments_of(&builtin(BuiltinException::ValueError))
-        else {
+    fn a_base_class_has_the_unicode_errors_five_arguments_when_the_program_can_cause_them() {
+        let value_error = builtin(BuiltinException::ValueError);
+        let mut creations = Creations::default();
+        assert_eq!(creations.arguments_of(&value_error), tuple(&[Type::Str]));
+        creations.codec(false, true);
+        assert_eq!(
+            creations.arguments_of(&value_error),
+            Type::Union(vec![
+                tuple(&[Type::Str, Type::Bytes, Type::Int, Type::Int, Type::Str]),
+                tuple(&[Type::Str])
+            ])
+        );
+        creations.codec(true, false);
+        let Type::Union(members) = creations.arguments_of(&value_error) else {
             panic!("a union");
         };
         let object = Type::union(vec![Type::Str, Type::Bytes]);
@@ -332,10 +368,26 @@ mod tests {
     }
 
     #[test]
+    fn an_os_error_that_becomes_a_subclass_applies_to_the_subclasses() {
+        let mut creations = Creations::default();
+        let os_error = builtin(BuiltinException::OSError);
+        creations.make(&os_error, &[Type::Int, Type::Str, Type::NoneType]);
+        creations.make(&os_error, &[Type::Float]);
+        let Type::Union(members) =
+            creations.arguments_of(&builtin(BuiltinException::FileNotFoundError))
+        else {
+            panic!("a union");
+        };
+        assert!(members.contains(&tuple(&[Type::Int, Type::Str, Type::NoneType])));
+        assert!(!members.contains(&tuple(&[Type::Float])));
+    }
+
+    #[test]
     fn covering_and_extending_compare_every_creation() {
         let mut first = Creations::default();
         let mut second = Creations::default();
         second.key(&Type::Str);
+        second.codec(true, false);
         assert!(!first.covers(&second));
         first.extend(&second);
         assert!(first.covers(&second));
