@@ -5,6 +5,7 @@ mod expression;
 mod feature;
 mod global_scope;
 mod matching;
+mod pattern_key;
 mod statement;
 
 use typy_diagnostics::{Diagnostic, DiagnosticCode, Diagnostics, RuleId, Span};

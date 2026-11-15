@@ -11,9 +11,9 @@
 | `for` over an instance of a class with `__iter__`, whose result has `__next__` | CST-08 |
 | `iter` and `next`, with or without a default, and `for` over an iterator | CST-09 |
 | `with`, with one or more context managers and `as` targets | CST-05, CST-10 |
-| `match` with literal, value, capture, wildcard, `as` and `\|` patterns and guards | CST-06 |
+| `match` with literal, value, capture, wildcard, `as`, `\|`, sequence and mapping patterns and guards | CST-06 |
 
-Sequence, mapping and class patterns in `match` are planned for 0.5
+Class patterns in `match`, such as `Point(x, y=0)`, are planned for 0.5
 (CST-06).
 
 ## Example
@@ -90,6 +90,48 @@ match code:
     case 1:
         print("one")
 ```
+
+### Sequence and mapping patterns
+
+`[p, q]` or `(p, q)` matches a list, tuple or `range` of two items whose
+items match `p` and `q`; the brackets do not decide the type. `*rest`
+takes the items between the others as a new list, and `*_` skips them. A
+`str` or `bytes` subject is not a sequence to a pattern, as in CPython.
+`{"key": p}` matches a dict that holds the key with a value matching `p`,
+and `**rest` takes the other items as a new dict.
+
+<!-- typy-expect: accepted -->
+```python
+def describe(command: list[str]) -> str:
+    match command:
+        case []:
+            return "nothing"
+        case ["go", direction]:
+            return f"going {direction}"
+        case ["say", *words]:
+            return " ".join(words)
+        case [verb, *_]:
+            return f"unknown {verb}"
+        case _:
+            return "not a command"
+
+
+def size(settings: dict[str, int]) -> str:
+    match settings:
+        case {"width": width, "height": height, **others}:
+            return f"{width}x{height} and {len(others)} more"
+        case _:
+            return "no size"
+
+
+print(describe(["go", "north"]), describe(["say", "hi", "there"]))
+print(size({"width": 3, "height": 4, "depth": 1}), size({}))
+```
+
+A pattern that no value of the subject's type can match is refused with
+E0407, as a sequence pattern on a `str` or a tuple pattern of the wrong
+length is. A sequence pattern on a union of several sequence types, such
+as `list[int] | tuple[int, int]`, is planned for 1.0.
 
 ## Context managers
 

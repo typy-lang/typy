@@ -55,6 +55,17 @@ impl BodyChecker<'_> {
                 );
             }
         };
+        self.isinstance_test(value, &classes, span)
+    }
+
+    /// Returns the test `isinstance(value, classes)` with the classes known, and what it
+    /// narrows the value to; a `match` pattern tests its subject this way too (CST-06).
+    pub(super) fn isinstance_test(
+        &mut self,
+        value: TypedExpr,
+        classes: &[TypeObjectOf],
+        span: Span,
+    ) -> TypedExpr {
         let inner = match &value.ty {
             Type::Optional(inner) => inner.as_ref().clone(),
             other => other.clone(),
@@ -71,12 +82,12 @@ impl BodyChecker<'_> {
             .filter(|(_, outcome)| matches!(outcome, Outcome::Checked))
             .map(|(class, _)| class.clone())
             .collect();
-        let narrowed = self.narrowing(&value, &inner, &classes, always, none_matches);
-        let otherwise = self.union_otherwise(&value, &inner, &classes);
+        let narrowed = self.narrowing(&value, &inner, classes, always, none_matches);
+        let otherwise = self.union_otherwise(&value, &inner, classes);
         let members = match &inner {
             Type::Union(members) => members
                 .iter()
-                .map(|member| member_outcome(member, &classes))
+                .map(|member| member_outcome(member, classes))
                 .collect(),
             _ => Vec::new(),
         };

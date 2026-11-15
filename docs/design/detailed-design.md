@@ -1051,13 +1051,29 @@ one test without a guard, so `case None:` narrows an optional subject in
 the cases after it. A local subject is tested as it is; any other subject
 is first stored in a hidden local named `<match N>`, which no program can
 write. The result is `TypedStmt::Match` with a `TypedCase` per case, whose
-`TypedPattern` is `Test`, `Bind`, `All` or `Any`. Lowering gives each case
+`TypedPattern` is `Test`, `Bind`, `All` or `Any`. A sequence or mapping
+pattern (`body/pattern_sequence.rs`, `body/pattern_mapping.rs`) first
+tests the subject with `isinstance_test` against `list`, `tuple` and
+`range`, or `dict`, which narrows a union or an optional subject; a type
+no class takes is E0407. A sequence pattern then tests the length, with
+the built-in `len` called directly so a function of that name in the
+program does not change it, or compares a fixed tuple's length when it is
+checked, and matches item `i` as `subject[i]`, counting from the end after
+a starred name. The starred name binds a list: a slice, `list()` of a
+slice, or for a fixed tuple a list display whose type is the union of the
+items it takes. A mapping pattern tests `key in subject` and matches
+`subject[key]`; `**rest` binds a dict comprehension over the items whose
+key is not one of the pattern's. A part that a nested pattern tests is
+stored first in its own hidden local, so it is read once and narrows as a
+variable does. Lowering gives each case
 a block its pattern jumps to when it fails, so the cases are tried in
 order and a subject no case matches goes on after the statement. The
 subset walker reports CPython's compile-time `SyntaxError`s for patterns as
 E0103: a capture or wildcard before the last case or alternative,
 alternatives that bind different names, a name bound twice, `__debug__`
-as a target and an f-string as a value.
+as a target, an f-string as a value, two starred names in one sequence
+pattern, and a literal key repeated in a mapping pattern, where `1`,
+`1.0` and `True` are one key (`subset/pattern_key.rs`).
 
 Classes (CLS-01, CLS-02, CLS-08, ADR-0012) are collected before any
 signature: `collect_classes` gives each `class` statement at the top of the

@@ -6,6 +6,8 @@ use std::collections::BTreeSet;
 use typy_diagnostics::{RuleId, Span};
 use typy_source::syntax::{Expr, Identifier, MatchCase, Pattern};
 
+use super::pattern_key::{key_repr, literal_key, same_key};
+
 use super::feature::planned;
 use super::{Place, Walker};
 
@@ -57,19 +59,65 @@ impl Walker {
                 }
             }
             Pattern::Or { patterns, span } => self.or_pattern(patterns, *span, bound),
-            Pattern::Sequence { span, .. }
-            | Pattern::Mapping { span, .. }
-            | Pattern::Class { span, .. }
-            | Pattern::Star { span, .. } => {
-                self.report(
-                    *span,
-                    planned(
-                        "sequence, mapping and class patterns",
-                        "0.5",
-                        RuleId::CST_06,
-                    ),
-                );
+            Pattern::Sequence { patterns, span } => {
+                if patterns
+                    .iter()
+                    .filter(|each| matches!(each, Pattern::Star { .. }))
+                    .count()
+                    > 1
+                {
+                    self.syntax_error(*span, "multiple starred names in sequence pattern");
+                }
+                for each in patterns {
+                    self.pattern(each, bound);
+                }
             }
+            Pattern::Star { name, span } => {
+                if let Some(name) = name {
+                    self.bind_pattern_name(name, *span, bound);
+                }
+            }
+            Pattern::Mapping {
+                keys,
+                patterns,
+                rest,
+                span,
+            } => self.mapping_pattern(keys, patterns, rest.as_ref(), *span, bound),
+            Pattern::Class { span, .. } => {
+                self.report(*span, planned("class patterns", "0.5", RuleId::CST_06));
+            }
+        }
+    }
+
+    /// Checks `{key: pattern, **rest}`: no literal key repeats, and the names bound are
+    /// bound once. The parser refuses a key that is not a literal or a dotted name.
+    fn mapping_pattern(
+        &mut self,
+        keys: &[Expr],
+        patterns: &[Pattern],
+        rest: Option<&Identifier>,
+        span: Span,
+        bound: &mut BTreeSet<String>,
+    ) {
+        let mut seen = Vec::new();
+        for key in keys {
+            self.expression(key);
+            if let Some(literal) = literal_key(key) {
+                if seen.iter().any(|earlier| same_key(earlier, &literal)) {
+                    let message = format!(
+                        "mapping pattern checks duplicate key ({})",
+                        key_repr(&literal)
+                    );
+                    self.syntax_error(span, &message);
+                }
+                seen.push(literal);
+            }
+        }
+        for each in patterns {
+            self.pattern(each, bound);
+        }
+        if let Some(rest) = rest {
+            self.bind_pattern_name(rest, span, bound);
         }
     }
 

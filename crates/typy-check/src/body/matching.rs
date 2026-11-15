@@ -7,7 +7,10 @@ use typy_source::syntax::{CompareOperator, Expr, MatchCase, Pattern};
 
 use super::BodyChecker;
 use super::flow::{meet, test_facts};
-use crate::typed::{SymbolKind, TypedCase, TypedExprKind, TypedPattern, TypedStmt};
+use crate::typed::{
+    SymbolId, SymbolKind, TypedCase, TypedExpr, TypedExprKind, TypedPattern, TypedStmt,
+};
+use crate::types::Type;
 
 impl BodyChecker<'_> {
     /// Checks a `match` statement. A local subject is matched as it is, so what a case shows
@@ -24,17 +27,7 @@ impl BodyChecker<'_> {
             if let (TypedExprKind::Local(_), Expr::Name { id, .. }) = (&checked.kind, subject) {
                 (id.clone(), None)
             } else {
-                let name = format!("<match {}>", self.local_order.len());
-                let symbol =
-                    self.program
-                        .add_symbol(&name, SymbolKind::Local, checked.ty.clone(), span);
-                self.locals.insert(name.clone(), symbol);
-                self.local_order.push(symbol);
-                let target = Expr::Name {
-                    id: name.clone(),
-                    span: subject.span(),
-                };
-                self.assign(&target, checked.ty.clone(), &checked);
+                let (name, symbol) = self.hidden_local(&checked, subject.span());
                 (name, Some((symbol, checked)))
             };
         let subject = Expr::Name {
@@ -82,9 +75,71 @@ impl BodyChecker<'_> {
         }
     }
 
+    /// Stores `value` in a new variable whose name no program can write, and returns the
+    /// name and the variable.
+    fn hidden_local(&mut self, value: &TypedExpr, span: Span) -> (String, SymbolId) {
+        let name = format!("<match {}>", self.local_order.len());
+        let symbol = self
+            .program
+            .add_symbol(&name, SymbolKind::Local, value.ty.clone(), span);
+        self.locals.insert(name.clone(), symbol);
+        self.local_order.push(symbol);
+        let target = Expr::Name {
+            id: name.clone(),
+            span,
+        };
+        self.assign(&target, value.ty.clone(), value);
+        (name, symbol)
+    }
+
+    /// Adds to `steps` what matching `pattern` against the part `value` of the subject does:
+    /// a capture binds the part, and any other pattern but `_` tests it, stored first so it
+    /// is read once and narrows as a variable does.
+    pub(super) fn part_pattern(
+        &mut self,
+        pattern: &Pattern,
+        value: &Expr,
+        steps: &mut Vec<TypedPattern>,
+    ) {
+        match pattern {
+            Pattern::As {
+                pattern: None,
+                name: None,
+                ..
+            } => {}
+            Pattern::As {
+                pattern: None,
+                name: Some(_),
+                ..
+            } => steps.push(self.pattern(pattern, value)),
+            _ => {
+                let checked = self.expression(value);
+                let (name, symbol) = self.hidden_local(&checked, value.span());
+                steps.push(TypedPattern::Bind(symbol, checked));
+                let part = Expr::Name {
+                    id: name,
+                    span: value.span(),
+                };
+                steps.push(self.pattern(pattern, &part));
+            }
+        }
+    }
+
+    /// Binds each name `pattern` binds to a value of no type, after an error, so the names
+    /// are not reported again as unassigned.
+    pub(super) fn bind_after_error(&mut self, pattern: &Pattern, error: &TypedExpr) {
+        for name in pattern.bound_names() {
+            let target = Expr::Name {
+                id: name.name.clone(),
+                span: name.span,
+            };
+            self.assign(&target, Type::Error, error);
+        }
+    }
+
     /// Returns what a pattern does to `subject`, adding what each test shows to what is known
     /// while the rest of the case is checked.
-    fn pattern(&mut self, pattern: &Pattern, subject: &Expr) -> TypedPattern {
+    pub(super) fn pattern(&mut self, pattern: &Pattern, subject: &Expr) -> TypedPattern {
         match pattern {
             Pattern::Value { value, span } => {
                 self.pattern_test(subject, CompareOperator::Eq, value.clone(), *span)
@@ -132,11 +187,18 @@ impl BodyChecker<'_> {
                 self.assigned = ends;
                 TypedPattern::Any(alternatives)
             }
-            // The subset walker refuses these patterns before any body is checked.
-            Pattern::Sequence { .. }
-            | Pattern::Mapping { .. }
-            | Pattern::Class { .. }
-            | Pattern::Star { .. } => TypedPattern::All(Vec::new()),
+            Pattern::Sequence { patterns, span } => {
+                self.sequence_pattern(pattern, patterns, subject, *span)
+            }
+            Pattern::Mapping {
+                keys,
+                patterns,
+                rest,
+                span,
+            } => self.mapping_pattern(pattern, keys, patterns, rest.as_ref(), subject, *span),
+            // The subset walker refuses class patterns before any body is checked, and a
+            // starred name only appears inside a sequence pattern, which handles it.
+            Pattern::Class { .. } | Pattern::Star { .. } => TypedPattern::All(Vec::new()),
         }
     }
 
