@@ -144,6 +144,17 @@ impl FunctionLowerer<'_> {
     pub(crate) fn assign_target(&mut self, target: &AssignTarget, value: Lowered, span: Span) {
         match target {
             AssignTarget::Name(symbol) => self.assign_name(*symbol, value, span),
+            // The value is kept in its hidden variable, whose converted read the target takes
+            // (TYP-16).
+            AssignTarget::Converted {
+                holder,
+                value: converted,
+                target,
+            } => {
+                self.assign_name(*holder, value, span);
+                let lowered = self.expression(converted);
+                self.assign_target(target, lowered, span);
+            }
             // A module bound lazily is imported before the assignment (MOD-11).
             AssignTarget::Lazy { reify, target } => {
                 self.run_lazy_import(*reify, span);

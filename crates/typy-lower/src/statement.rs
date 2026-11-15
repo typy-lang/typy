@@ -69,7 +69,8 @@ impl FunctionLowerer<'_> {
                     },
                     typy_check::AssignTarget::Tuple(_)
                     | typy_check::AssignTarget::Slice { .. }
-                    | typy_check::AssignTarget::Lazy { .. } => typy_check::Type::Error,
+                    | typy_check::AssignTarget::Lazy { .. }
+                    | typy_check::AssignTarget::Converted { .. } => typy_check::Type::Error,
                 };
                 self.augmented_assignment(target, *operator, value, &result, *span);
             }

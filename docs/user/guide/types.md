@@ -135,8 +135,9 @@ The results join into one type: `value.upper()` above is a
 such as `value * 2`, is used member by member once it is assigned to a
 variable. Lists, sets and dicts of a union compare, hash and write each
 item as the member it holds, so `1` and `1.0` are one key, as in CPython.
-One value assigned to several targets, one of which holds a union, as in
-`a = items[0] = 1`, is planned for 0.5 (TYP-16). A truth test
+One value assigned to several targets, as in `a = items[0] = 1`, or
+unpacked into targets, is held by each target as its own type, a union
+or an optional among them (TYP-16). A truth test
 whose member classes test themselves with `__len__`, or differently from
 their base, is planned for 0.5.
 

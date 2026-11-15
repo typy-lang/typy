@@ -74,6 +74,9 @@ impl FunctionLowerer<'_> {
             AssignTarget::Slice { .. } => {
                 unreachable!("the checker refuses an augmented assignment to a slice")
             }
+            AssignTarget::Converted { .. } => {
+                unreachable!("an augmented assignment computes the item's own type")
+            }
         }
     }
 

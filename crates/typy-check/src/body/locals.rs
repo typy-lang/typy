@@ -304,9 +304,27 @@ impl BodyChecker<'_> {
                     super::class_value::ClassValueAssignment::Refused => None,
                 };
             }
+            if let Some(declared) = self.conversion_for(target, &ty) {
+                let inner = self.attribute_target(object, attribute, &declared, None, *span)?;
+                let (holder, converted) = self.conversion(&ty, &declared, *span);
+                return Some(AssignTarget::Converted {
+                    holder,
+                    value: Box::new(converted),
+                    target: Box::new(inner),
+                });
+            }
             return self.attribute_target(object, attribute, &ty, None, *span);
         }
         let (Expr::Tuple { elements, span } | Expr::List { elements, span }) = target else {
+            if let Some(declared) = self.conversion_for(target, &ty) {
+                let (holder, converted) = self.conversion(&ty, &declared, target.span());
+                let symbol = self.assign(target, declared, &converted)?;
+                return Some(AssignTarget::Converted {
+                    holder,
+                    value: Box::new(converted),
+                    target: Box::new(AssignTarget::Name(symbol)),
+                });
+            }
             return self.assign(target, ty, value).map(AssignTarget::Name);
         };
         let items = match ty {
@@ -452,9 +470,6 @@ impl BodyChecker<'_> {
             }
         };
         self.expect(&index, Type::Int, "an index");
-        if self.union_item_needs_its_type(ty, &item, span) {
-            return None;
-        }
         if !ty.is_assignable_to(&item) {
             self.diagnostics.push(
                 Diagnostic::new(
@@ -465,10 +480,11 @@ impl BodyChecker<'_> {
                 .with_rule(RuleId::TYP_03),
             );
         }
-        Some(AssignTarget::Item {
+        let target = AssignTarget::Item {
             list: Box::new(list),
             index: Box::new(index),
-        })
+        };
+        Some(self.converted_target(ty, &item, target, span))
     }
 
     fn unassignable_item(&mut self, container: &Type, span: Span) {
@@ -633,30 +649,60 @@ impl BodyChecker<'_> {
         true
     }
 
-    /// Reports a value assigned to an item or an entry that holds a union, when the value is
-    /// not yet of the union's type: only `a = b[0] = value`, whose one value serves several
-    /// targets, gives one, and a union item needs a value of its own type (TYP-14).
-    pub(super) fn union_item_needs_its_type(&mut self, ty: &Type, item: &Type, span: Span) -> bool {
-        let union = match item {
-            Type::Optional(inner) => inner.as_ref(),
-            other => other,
-        };
-        if !matches!(union, Type::Union(_)) || ty.matches(item) || !ty.is_assignable_to(item) {
+    /// Returns `target`, which holds values of type `declared`, taking a value of type `ty`
+    /// converted to `declared` when the two differ, as a member of a union or the base of an
+    /// optional does. Only one value assigned to several targets, or a tuple unpacked into
+    /// targets, gives such a value, since a single target's value is checked as the target's
+    /// type already (TYP-16).
+    pub(super) fn converted_target(
+        &mut self,
+        ty: &Type,
+        declared: &Type,
+        target: AssignTarget,
+        span: Span,
+    ) -> AssignTarget {
+        if !Self::needs_conversion(ty, declared, span) {
+            return target;
+        }
+        let (holder, value) = self.conversion(ty, declared, span);
+        AssignTarget::Converted {
+            holder,
+            value: Box::new(value),
+            target: Box::new(target),
+        }
+    }
+
+    /// Returns a hidden variable for a value of type `ty`, and its read converted to
+    /// `declared`.
+    fn conversion(&mut self, ty: &Type, declared: &Type, span: Span) -> (SymbolId, TypedExpr) {
+        let name = format!("<converted {}>", self.local_order.len());
+        let holder = self
+            .program
+            .add_symbol(&name, SymbolKind::Local, ty.clone(), span);
+        self.locals.insert(name, holder);
+        self.local_order.push(holder);
+        self.types.insert(holder, ty.clone());
+        let stored = Self::typed(TypedExprKind::Local(holder), ty.clone(), span);
+        (holder, Self::converted(stored, Some(declared)))
+    }
+
+    /// Returns the declared type of a variable or an attribute target, when a value of type
+    /// `ty` changes its form to be held there.
+    fn conversion_for(&self, target: &Expr, ty: &Type) -> Option<Type> {
+        let declared = self.known_type(target)?;
+        Self::needs_conversion(ty, &declared, target.span()).then_some(declared)
+    }
+
+    /// Returns whether a value of type `ty` changes its form to be held as `declared`.
+    fn needs_conversion(ty: &Type, declared: &Type, span: Span) -> bool {
+        if ty.matches(declared) || !ty.is_assignable_to(declared) {
             return false;
         }
-        self.diagnostics.push(
-            Diagnostic::new(
-                DiagnosticCode::error(201),
-                span,
-                format!(
-                    "one value assigned to several targets, one of which holds {}, is planned \
-                     for TyPy 0.5 (TYP-16)",
-                    item.with_article()
-                ),
-            )
-            .with_rule(RuleId::TYP_16)
-            .with_help("assign each target in a statement of its own"),
+        let probe = Self::typed(
+            TypedExprKind::Constant(TypedConstant::None),
+            ty.clone(),
+            span,
         );
-        true
+        Self::converted(probe, Some(declared)).ty != *ty
     }
 }

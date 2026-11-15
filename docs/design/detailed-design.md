@@ -986,8 +986,14 @@ operation checked for each member. The runtime's `ItemKind::Union` holds a union
 item as the member its tag names, and `values_equal` compares two members as
 CPython does: numbers by value, exactly, tuples item by item, and other types
 never equal. An expected union converts the value given for a method's argument,
-an item, an entry and a needle of `in`; one value assigned to several targets,
-one an item that holds a union, is E0201, planned for 0.5 (TYP-16).
+an item, an entry and a needle of `in`. A single target's value is checked as
+the target's type already; one value assigned to several targets, or a tuple
+unpacked into targets, may reach a target of another form, a union or an
+optional of the value's type. `converted_target` then gives the target
+`AssignTarget::Converted`: lowering stores the value in a hidden variable,
+`<converted N>`, and assigns the target that variable's read converted to the
+target's type, as `converted` builds it for a single value (TYP-16). A
+variable, an instance attribute, a list item and a dict entry take it.
 
 Optional values (TYP-06, TYP-13, ADR-0011) add `Type::Optional(T)`, written `T |
 None` or `None | T`, which `Type::optional` builds so that `T` is never `None`

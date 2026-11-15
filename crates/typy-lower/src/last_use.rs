@@ -364,6 +364,10 @@ fn target_reads(target: &AssignTarget, reads: &mut Vec<SymbolId>) {
     match target {
         AssignTarget::Name(_) => {}
         AssignTarget::Lazy { target, .. } => target_reads(target, reads),
+        AssignTarget::Converted { value, target, .. } => {
+            expression_reads(value, reads);
+            target_reads(target, reads);
+        }
         AssignTarget::Tuple(targets) => {
             for each in targets {
                 target_reads(each, reads);

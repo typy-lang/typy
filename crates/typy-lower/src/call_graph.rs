@@ -238,6 +238,10 @@ fn assign_target(target: &AssignTarget, callees: &mut BTreeSet<FunctionId>) {
             expression(key, callees);
         }
         AssignTarget::Attribute { object, .. } => expression(object, callees),
+        AssignTarget::Converted { value, target, .. } => {
+            expression(value, callees);
+            assign_target(target, callees);
+        }
     }
 }
 

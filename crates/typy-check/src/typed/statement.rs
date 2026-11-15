@@ -14,6 +14,17 @@ use crate::types::Type;
 pub enum AssignTarget {
     /// A variable.
     Name(SymbolId),
+    /// A target that takes the value converted to the union it holds (TYP-16): the value is
+    /// stored in the hidden variable `holder`, and `value`, which reads it, is what `target`
+    /// is assigned.
+    Converted {
+        /// The hidden variable that holds the value.
+        holder: SymbolId,
+        /// The value converted, read from `holder`.
+        value: Box<TypedExpr>,
+        /// The item or entry assigned.
+        target: Box<AssignTarget>,
+    },
     /// One target for each item of a tuple value.
     Tuple(Vec<AssignTarget>),
     /// An item of a list, `list[index] = value`; the list and the index are evaluated after the

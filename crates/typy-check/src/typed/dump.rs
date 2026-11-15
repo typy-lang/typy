@@ -144,6 +144,9 @@ impl Dump<'_> {
             AssignTarget::Entry { dict, .. } => format!("entry of {}", dict.ty),
             AssignTarget::Attribute { object, index } => self.attribute(&object.ty, *index),
             AssignTarget::Lazy { target, .. } => format!("lazy {}", self.target(target)),
+            AssignTarget::Converted { value, target, .. } => {
+                format!("{} as {}", self.target(target), value.ty)
+            }
         }
     }
 

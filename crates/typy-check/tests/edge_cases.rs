@@ -43,7 +43,6 @@ fn refused_forms_give_their_codes() {
             "E0411",
         ),
         ("print(open('x', opener=len))\n", "E0201"),
-        ("v: dict[int, int | str] = {}\na = v[1] = 2\n", "E0201"),
         (
             "class B:\n    def __init__(self, n: int) -> None:\n        self.n: int = n\n        self.n: str = 'a'\n",
             "E0402",

@@ -25,6 +25,9 @@ All notable changes to TyPy are recorded here. The format follows
   returns from each case needs no `return` after it (CST-07, ADR-0033).
 - `@dataclass` writes `__match_args__`, the names of the fields, and
   takes `match_args=False` to leave it out (CLS-05, CST-06).
+- One value assigned to several targets, as in `a = items[0] = value`, or
+  unpacked into targets, is held by each target as its own type, a union
+  or an optional among them (TYP-16).
 - A `\u` or `\U` escape of a surrogate in a `str` literal or an
   f-string gives that code point, as CPython keeps it (LEX-10).
 
