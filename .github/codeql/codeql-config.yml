@@ -1,0 +1,10 @@
+# Code scanning configuration. Test files are left out: they are never part of
+# a built program, and their checks of results the tests know to succeed read
+# as null pointers to the path-insensitive data flow of the Rust queries.
+name: TyPy code scanning
+
+paths-ignore:
+  - "crates/**/tests/**"
+  - "crates/**/tests.rs"
+  - "crates/**/*_tests.rs"
+  - "fuzz/**"
