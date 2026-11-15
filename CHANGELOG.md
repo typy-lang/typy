@@ -31,6 +31,9 @@ All notable changes to TyPy are recorded here. The format follows
   `List`, `Dict`, `Set`, `Tuple`, `Type`, `Optional[...]` and
   `Union[...]` of `typing`, as the class of `isinstance` and of a class
   pattern, with CPython's answers (TYP-17).
+- A loop, a comprehension, `list`, `sorted`, `sum` and the other builtins
+  that read an iterable go over a variable that holds a union of fixed
+  tuples, such as `tuple[str] | tuple[str, int]` (TYP-14, ADR-0034).
 - `sys.version_info` as a value of its own: stored, put in containers,
   imported with `from sys import version_info` and printed as CPython
   writes it, and read as the tuple of its items by indexing, slicing,

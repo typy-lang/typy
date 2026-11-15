@@ -57,6 +57,7 @@ mod type_alias_value;
 mod type_object;
 mod typing_class;
 mod union;
+mod union_loop;
 mod version_info;
 mod view_operator;
 

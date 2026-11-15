@@ -978,10 +978,15 @@ to it, and joins the results with `Type::union`. `TypedExprKind::EachMember`
 keeps the variable's read and each member's class with its checked expression,
 and lowering tests the object with `typy_rt_is_instance` against each class but
 the last, whose branch runs when none holds; the branches pass their result to
-one block. Equality and order refuse a union that is not a variable, which no
-split reaches. A container of a union of objects stores each as an object item,
-and the runtime compares two objects of different types as CPython does: a
-built-in type is equal only to its own objects, and a class's slot, which tests
+one block. A loop, a comprehension or a builtin that reads an iterable over a
+variable that holds a union of fixed tuples goes over
+`body::union_loop::union_tuple_items`: an `EachMember` whose arm for each
+member is a list display of that member's items, each converted to the union
+of every member's item types, so the loop reads one list (ADR-0034). Equality
+and order refuse a union that is not a variable, which no split reaches. A
+container of a union of objects stores each as an object item, and the runtime
+compares two objects of different types as CPython does: a built-in type is
+equal only to its own objects, and a class's slot, which tests
 the other object's class, decides for its instances. A union with a member that
 is not an object (`Type::is_object`) is held as `TupleTypes::intern_union`, a
 tuple of an `int` tag and a slot for each member, which the descriptor marks

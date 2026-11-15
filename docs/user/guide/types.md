@@ -109,6 +109,10 @@ holds, so storing an `int` in an `int | str` allocates nothing
 
 A union can be passed, returned, stored in a container, printed, written
 with `str`, `repr` and f-strings, given to `type()` and tested for truth.
+A variable that holds a union of fixed tuples, such as
+`tuple[str] | tuple[str, int]`, is gone over item by item by a loop, a
+comprehension, `list`, `sorted`, `sum` and the other builtins that read an
+iterable, each item of the union of the members' item types.
 `isinstance` narrows it, in the branch where the test holds and in the
 branch where it fails. A union of classes that share a base has that
 base's attributes and methods:

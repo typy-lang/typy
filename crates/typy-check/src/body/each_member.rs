@@ -146,7 +146,13 @@ impl BodyChecker<'_> {
                     if takes_any_object(builtin) {
                         return None;
                     }
-                    arguments.iter().find(|each| is_union(each))
+                    let found = arguments.iter().find(|each| is_union(each))?;
+                    // A builtin that reads an iterable goes over a union of fixed tuples as the
+                    // list of its member's items (ADR-0034).
+                    if reads_iterable(builtin) && self.holds_fixed_tuples(found) {
+                        return None;
+                    }
+                    Some(found)
                 }
                 _ => None,
             },
@@ -171,9 +177,18 @@ impl BodyChecker<'_> {
         }
     }
 
+    /// Returns true when the operand is a variable that holds a union of fixed tuples.
+    fn holds_fixed_tuples(&self, operand: &Expr) -> bool {
+        self.union_operand(operand).is_some_and(|(_, members)| {
+            members
+                .iter()
+                .all(|member| matches!(member, Type::Tuple(_)))
+        })
+    }
+
     /// Returns the variable an operand reads, with the members of the union it holds, when it
     /// is a variable that `union_variable` splits on.
-    fn union_operand(&self, operand: &Expr) -> Option<(SymbolId, Vec<Type>)> {
+    pub(super) fn union_operand(&self, operand: &Expr) -> Option<(SymbolId, Vec<Type>)> {
         match operand {
             Expr::Name { id, .. } => self.union_variable(id),
             _ => None,
@@ -249,4 +264,22 @@ fn constant_type(value: &Constant) -> Option<Type> {
         Constant::Bytes(_) => Type::Bytes,
         Constant::Complex { .. } | Constant::Ellipsis => return None,
     })
+}
+
+/// Returns true for a builtin that reads its argument as an iterable.
+const fn reads_iterable(builtin: Builtin) -> bool {
+    matches!(
+        builtin,
+        Builtin::List
+            | Builtin::Tuple
+            | Builtin::Set
+            | Builtin::Sorted
+            | Builtin::Sum
+            | Builtin::Any
+            | Builtin::All
+            | Builtin::Min
+            | Builtin::Max
+            | Builtin::Enumerate
+            | Builtin::Zip
+    )
 }

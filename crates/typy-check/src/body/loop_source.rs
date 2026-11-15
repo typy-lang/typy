@@ -44,6 +44,11 @@ impl BodyChecker<'_> {
             )
         });
         let Some((builtin, arguments, keywords)) = call else {
+            // A union of fixed tuples is gone over as the list of its member's items.
+            if let Some(items) = self.union_tuple_items(iter) {
+                let item = self.iterated_item(&items, user);
+                return (LoopSource::Items(items), item);
+            }
             let sequence = self.sequence(iter);
             if sequence.ty.class_id().is_some() {
                 return self.protocol_source(sequence, user);
