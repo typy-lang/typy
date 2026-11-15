@@ -454,8 +454,14 @@ impl BodyChecker<'_> {
                     match self.bind_arguments(function, 1, &name, arguments, keywords, span) {
                         Ok(bound) => {
                             // `BaseException.__new__` keeps the arguments given by position
-                            // as `args`, before `__init__` runs (ADR-0034).
-                            let given: Vec<Type> = bound[..arguments.len()]
+                            // as `args`, before `__init__` runs; `OSError.__new__` keeps none
+                            // (ADR-0034).
+                            let kept = if exception.builtin().is_os_error() {
+                                0
+                            } else {
+                                arguments.len()
+                            };
+                            let given: Vec<Type> = bound[..kept]
                                 .iter()
                                 .map(|argument| argument.value.ty.clone())
                                 .collect();

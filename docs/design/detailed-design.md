@@ -1241,7 +1241,9 @@ exception class without
 an `__init__` of the program's takes positional arguments of any type; with one,
 its arguments are bound as for a call and `TypedExprKind::NewException` carries
 an `InitCall` with them and the count of those written by position, which become
-the exception's arguments. `body::super_call` checks `super().name(...)`, and
+the exception's arguments; an `OSError` starts with none, as `OSError.__new__`
+leaves them to `OSError.__init__` for a class with an `__init__` of its own.
+`body::super_call` checks `super().name(...)`, and
 `super(Class, self)` naming the enclosing class and its instance, in any method
 (CLS-14): a `Call` of the nearest base's method on the instance with
 `dispatch` clear, E0414 when no base of the program's has the method or outside

@@ -68,8 +68,9 @@ impl FunctionLowerer<'_> {
 
     /// Lowers a call of an exception class with an `__init__` of the program's: the arguments
     /// are evaluated in order, the exception is made with those written by position as its
-    /// arguments, then `__init__` runs on it, as CPython's `BaseException.__new__` and the
-    /// class's `__init__` do (CLS-03).
+    /// arguments, or with none for an `OSError`, then `__init__` runs on it, as CPython's
+    /// `BaseException.__new__`, `OSError.__new__` and the class's `__init__` do (CLS-03,
+    /// EXC-14).
     fn new_exception_with_init(
         &mut self,
         class: &ExceptionClass,
@@ -87,14 +88,21 @@ impl FunctionLowerer<'_> {
                 )
             })
             .collect();
-        let positional = &init.arguments[..init.positional];
+        // `OSError.__new__` leaves the arguments of a class with an `__init__` of its own to
+        // `OSError.__init__`, so the exception starts with none.
+        let kept = if class.builtin().is_os_error() {
+            0
+        } else {
+            init.positional
+        };
+        let positional = &init.arguments[..kept];
         let types: Vec<Type> = positional
             .iter()
             .map(|argument| argument.value.ty.clone())
             .collect();
         let id = self.tuple_type_id(&types);
         let layout = TyirType::Tuple(id);
-        let items: Vec<ValueId> = values[..init.positional]
+        let items: Vec<ValueId> = values[..kept]
             .iter()
             .map(|(_, lowered)| {
                 if self.counted(lowered.ty) {
@@ -109,7 +117,7 @@ impl FunctionLowerer<'_> {
         let tuple = self.produced(tuple, layout);
         let class = self.constant(Constant::TypeObject(exception_class(class)), span);
         let descriptor = self.constant(Constant::TupleDescriptor(id), span);
-        let address = if init.positional == 0 {
+        let address = if kept == 0 {
             let unit = self.constant(Constant::Unit, span);
             self.bits(Self::borrowed(unit, TyirType::Unit), span)
         } else {
