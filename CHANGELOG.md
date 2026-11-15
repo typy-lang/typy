@@ -6,7 +6,7 @@ All notable changes to TyPy are recorded here. The format follows
 
 ## [Unreleased]
 
-## [0.4.0] - 2026-11-14
+## [0.4.0] - 2026-11-15
 
 ### Added
 
