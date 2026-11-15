@@ -37,6 +37,10 @@ impl RuleId {
     pub const CLS_13: Self = Self("CLS-13");
     /// `super().__init__(...)` shall be accepted in the `__init__` of an exception class and shall set the exception's arguments; any other use of `super()` shall be rejected until 0.4.
     pub const CLS_14: Self = Self("CLS-14");
+    /// `field(default_factory=f)` in a dataclass shall call `f`, a class or a function that takes no arguments, for each instance whose `__init__` is given no value for the field.
+    pub const CLS_15: Self = Self("CLS-15");
+    /// A dataclass that is frozen with `eq=True`, or given `unsafe_hash=True`, shall hash as the tuple of its fields, and one with `eq=True` that is neither shall be unhashable, as CPython's `dataclasses` writes `__hash__`.
+    pub const CLS_16: Self = Self("CLS-16");
     /// `isinstance` and a class pattern shall accept a class held in a variable or computed.
     pub const CLS_18: Self = Self("CLS-18");
     /// Comparison and hash methods that may raise, a chain such as `a < b < c` of instances, and an operator whose method and reflected method return different types shall be accepted.
@@ -49,6 +53,8 @@ impl RuleId {
     pub const CLS_26: Self = Self("CLS-26");
     /// A class derived from `typing.NamedTuple` shall be accepted, its fields read by name and by position.
     pub const CLS_27: Self = Self("CLS-27");
+    /// `@dataclass` shall accept the options `kw_only` and `weakref_slot` and options given other than as `True` or `False`, `field` its options `init`, `repr`, `hash`, `compare`, `kw_only` and `metadata`, and a generic dataclass a field with a `default_factory`.
+    pub const CLS_28: Self = Self("CLS-28");
     /// `for` shall iterate over `range`, `str`, `bytes`, `list`, `tuple`, `dict`, `set` and any class with `__iter__` and `__next__`.
     pub const CST_03: Self = Self("CST-03");
     /// `try` with `except`, `else` and `finally` clauses shall be accepted, and `finally` shall run on `return`, `break`, `continue` and exceptions.
@@ -321,12 +327,15 @@ impl RuleId {
         Self::CLS_12,
         Self::CLS_13,
         Self::CLS_14,
+        Self::CLS_15,
+        Self::CLS_16,
         Self::CLS_18,
         Self::CLS_22,
         Self::CLS_24,
         Self::CLS_25,
         Self::CLS_26,
         Self::CLS_27,
+        Self::CLS_28,
         Self::CST_03,
         Self::CST_04,
         Self::CST_05,

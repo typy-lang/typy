@@ -500,10 +500,40 @@ dataclass base, `ClassVar` ones excepted. As in CPython, a field
 without a default after one with a default, a mutable default such as
 `[]`, `order=True` without `eq`, a frozen dataclass deriving from a
 non-frozen one or the reverse, and assigning a field of a frozen
-instance are errors. A method the class defines itself is kept. The
-hash of a frozen dataclass, `field(default_factory=...)` and the
-options `init`, `repr`, `unsafe_hash` and `slots` are planned for 0.5
-(CLS-15, CLS-16, CLS-17).
+instance are errors. A method the class defines itself is kept.
+
+`field(default_factory=f)` calls `f`, a class or a function that takes
+no arguments, for each instance whose `__init__` is not given the field
+(CLS-15). A frozen dataclass, or one given `unsafe_hash=True`, hashes as
+the tuple of its fields, so it can be an item of a set or a key of a
+dict, and one with `eq=True` that is neither cannot (CLS-16). The
+options `init=False`, `repr=False`, `unsafe_hash` and `slots` are taken
+too (CLS-17):
+
+<!-- typy-expect: accepted -->
+```python
+from dataclasses import dataclass, field
+
+
+@dataclass(frozen=True)
+class Point:
+    x: int
+    y: int = 0
+
+
+@dataclass
+class Path:
+    name: str
+    points: list[Point] = field(default_factory=list)
+
+
+first = Path("a")
+first.points.append(Point(1))
+print(first, Path("b"), {Point(1, 2), Point(1, 2)})
+```
+
+The other options of `field`, such as `repr` or `compare`, `kw_only` and
+`weakref_slot` are planned for 1.0 (CLS-28).
 
 ## Attributes are declared
 

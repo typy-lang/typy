@@ -12,6 +12,9 @@ pub struct SignatureParameter {
     pub ty: Type,
     /// Its default value; a constant in 0.1, so it is evaluated once (EXP-16).
     pub default: Option<TypedConstant>,
+    /// The module-level function whose call gives the argument each time a call leaves it
+    /// out: the `default_factory` of a dataclass field (CLS-15).
+    pub default_call: Option<String>,
 }
 
 /// The parameters and return type of a function.

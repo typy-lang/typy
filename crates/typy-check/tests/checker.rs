@@ -2731,7 +2731,7 @@ fn dataclass_forms_cpython_refuses_are_refused() {
         ),
         (
             "from dataclasses import dataclass\n@dataclass(True)\nclass P:\n    x: int\n",
-            &["E0201"],
+            &["E0404"],
         ),
         (
             "from dataclasses import dataclass\nflags = {}\n@dataclass(**flags)\nclass P:\n    x: int\n",
@@ -2743,7 +2743,7 @@ fn dataclass_forms_cpython_refuses_are_refused() {
         ),
         (
             "from dataclasses import dataclass, field\n@dataclass\nclass P:\n    x: int = field(1)\n",
-            &["E0201"],
+            &["E0404"],
         ),
         (
             "from dataclasses import dataclass, field\nd = {}\n@dataclass\nclass P:\n    x: int = field(**d)\n",
@@ -2772,6 +2772,22 @@ fn dataclass_forms_cpython_refuses_are_refused() {
         (
             "from dataclasses import dataclass\n@dataclass\nclass P:\n    x: int\n@dataclass(frozen=True)\nclass Q(P):\n    y: int = 0\n",
             &["E0404"],
+        ),
+        (
+            "from dataclasses import dataclass\n@dataclass(unsafe_hash=True)\nclass P:\n    x: int\n    def __hash__(self) -> int:\n        return 1\n",
+            &["E0404"],
+        ),
+        (
+            "from dataclasses import dataclass, field\n@dataclass\nclass P:\n    x: list[int] = field(default=[1], default_factory=list)\n",
+            &["E0404"],
+        ),
+        (
+            "from dataclasses import dataclass\n@dataclass(kw_only=True)\nclass P:\n    x: int\n",
+            &["E0201"],
+        ),
+        (
+            "from dataclasses import dataclass, field\n@dataclass\nclass P[T]:\n    x: list[T] = field(default_factory=list)\n",
+            &["E0201"],
         ),
     ];
     for (source, expected) in cases {

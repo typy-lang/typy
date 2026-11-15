@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy detailed design |
-| Version | 1.81 |
+| Version | 1.82 |
 | Status | Approved |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-15 |
@@ -1335,7 +1335,21 @@ base's, writes `__init__`, `__repr__`, `__eq__` and, with `order=True`, the
 ordering methods as Python source, parses it, moves every node to the
 decorator with `Stmt::relocate`, and gives `__init__` the fields' own
 annotations and defaults; the methods take the first dataclass of the chain,
-and test the other object's class, as CPython does. A frozen dataclass's
+and test the other object's class, as CPython does. `init=False` and
+`repr=False` leave out those methods, and `slots=True` keeps no class
+attribute of a default. `__hash__` follows CPython's table of actions
+(CLS-16): `unsafe_hash=True`, or `eq=True` with `frozen=True`, writes one
+that returns `TypedExprKind::Hash` of the tuple of the fields, the hash a
+set takes through `typy_rt_hash_value`, unless a field's annotation names a
+`list`, `dict` or `set` or a dataclass that has none, and `unsafe_hash=True`
+with the class's own `__hash__` is E0404. A field with
+`field(default_factory=f)` becomes a module-level function
+`<default module:Class.field>` that returns `f()`, written before the class,
+and `__init__` takes its call as the field's default, which
+`SignatureParameter::default_call` holds, so a call that leaves the field out
+calls it each time (CLS-15). Other options of `field` and `@dataclass`, and
+a `default_factory` in a generic dataclass, are E0201, planned for 1.0
+(CLS-28). A frozen dataclass's
 `ClassInfo::frozen` makes assigning a field E0414 outside the `__init__` the
 expansion wrote. `check::type_alias` expands the module's `type` statements
 after the dataclass expansion and before the subset check: it expands each

@@ -43,7 +43,7 @@ pub(crate) struct ImportedNames {
 }
 pub(crate) use annotation::{AliasTable, ClassVarAnnotation, ExportedAlias, final_type};
 pub(crate) use class::{ClassInfo, class_value_variable, class_values};
-pub(crate) use definition::Definition;
+pub(crate) use definition::{Definition, factory_call};
 pub(crate) use protocol::outside_signature;
 
 use crate::body::{BodyChecker, Program};

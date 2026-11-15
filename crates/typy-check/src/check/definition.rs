@@ -308,14 +308,17 @@ pub(super) fn definition<'tree>(
                 Type::Error
             }
         };
+        let default_call = parameter.default.as_ref().and_then(factory_call);
         let default = parameter
             .default
             .as_ref()
+            .filter(|_| default_call.is_none())
             .and_then(|default| default_value(default, &ty, diagnostics));
         signature_parameters.push(SignatureParameter {
             name: parameter.name.name.clone(),
             ty,
             default,
+            default_call,
         });
         parameter_names.push((parameter.name.name.clone(), parameter.name.span));
     }
@@ -368,6 +371,29 @@ pub(super) fn definition<'tree>(
         parameters: parameter_names,
         body: parts.body,
         span: parts.span,
+    }
+}
+
+/// Returns the name of the function a dataclass's `__init__` calls for a field with a
+/// `default_factory`, when `default` is its call (CLS-15). Its name holds `<`, so no
+/// program can write it.
+pub(crate) fn factory_call(default: &Expr) -> Option<String> {
+    let Expr::Call {
+        function,
+        arguments,
+        keywords,
+        ..
+    } = default
+    else {
+        return None;
+    };
+    match function.as_ref() {
+        Expr::Name { id, .. }
+            if id.starts_with("<default ") && arguments.is_empty() && keywords.is_empty() =>
+        {
+            Some(id.clone())
+        }
+        _ => None,
     }
 }
 

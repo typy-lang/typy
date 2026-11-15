@@ -332,6 +332,7 @@ pub enum RuntimeFunction {
     MathProdFloat,
     MathProdMixed,
     MathHasFloat,
+    HashValue,
     MathSumprodInt,
     MathSumprodFloat,
     Ascii,
@@ -365,7 +366,7 @@ const FLOAT_FLOAT: &[TyirType] = &[TyirType::Float, TyirType::Float];
 
 impl RuntimeFunction {
     /// Every runtime function.
-    pub const ALL: [Self; 326] = [
+    pub const ALL: [Self; 327] = [
         Self::IntFloorDivide,
         Self::IntModulo,
         Self::IntPower,
@@ -689,6 +690,7 @@ impl RuntimeFunction {
         Self::MathProdFloat,
         Self::MathProdMixed,
         Self::MathHasFloat,
+        Self::HashValue,
         Self::MathSumprodInt,
         Self::MathSumprodFloat,
         Self::Ascii,
@@ -1007,6 +1009,7 @@ impl RuntimeFunction {
             Self::MathDist | Self::MathSumprodFloat => signature(&[LIST, LIST], Float, true),
             Self::MathProdFloat => signature(&[LIST, Float], Float, true),
             Self::MathProdMixed => signature(&[LIST, Int], Float, true),
+            Self::HashValue => signature(&[Int, Bits, Bits], Int, false),
             Self::MathSumprodInt => signature(&[LIST, LIST], Int, true),
             Self::MathLogInt | Self::MathLog2Int | Self::MathLog10Int => {
                 signature(&[Int], Float, true)
@@ -1367,6 +1370,7 @@ impl RuntimeFunction {
             Self::MathProdFloat => "math_prod_float",
             Self::MathProdMixed => "math_prod_mixed",
             Self::MathHasFloat => "math_has_float",
+            Self::HashValue => "hash_value",
             Self::MathSumprodInt => "math_sumprod_int",
             Self::MathSumprodFloat => "math_sumprod_float",
             Self::MathLcm => "math_lcm",

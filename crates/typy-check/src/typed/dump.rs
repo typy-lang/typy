@@ -531,6 +531,7 @@ impl Dump<'_> {
             TypedExprKind::Method { method, .. } => format!("Method {}", method.name()),
             TypedExprKind::TupleItem { index, .. } => format!("TupleItem {index}"),
             TypedExprKind::Raise(_) => "Raise".to_owned(),
+            TypedExprKind::Hash(_) => "Hash".to_owned(),
             TypedExprKind::ExceptionArguments { raw, .. } => {
                 format!("ExceptionArguments{}", if *raw { " raw" } else { "" })
             }

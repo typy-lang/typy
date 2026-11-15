@@ -52,6 +52,9 @@ impl BodyChecker<'_> {
         if let Some(call) = self.rebound_call(name, arguments, keywords, span) {
             return call;
         }
+        if let ("<hash>", [value]) = (name, arguments) {
+            return self.hash_of(value, span);
+        }
         if let Some(function) = self.program.function_ids.get(name).copied() {
             let call = self.call_function(function, name, arguments, keywords, span);
             return self.through_lazy(name, call);
@@ -151,6 +154,44 @@ impl BodyChecker<'_> {
     /// Binds the arguments of a call of `function` to its parameters after the first `skip`,
     /// which a method's instance fills; returns the bound arguments, or the error expression
     /// after reporting what does not fit.
+    /// Returns the hash of `value`, which the `__hash__` of a dataclass returns (CLS-16).
+    fn hash_of(&mut self, value: &Expr, span: Span) -> TypedExpr {
+        let value = self.expression(value);
+        if !value.ty.has_error() && !value.ty.is_hashable() {
+            return self.error(crate::check::unhashable(&value.ty, span), span);
+        }
+        Self::typed(TypedExprKind::Hash(Box::new(value)), Type::Int, span)
+    }
+
+    /// Returns the call of the function that gives a left-out argument its default each
+    /// time, a dataclass field's `default_factory` (CLS-15). The function is of the module
+    /// that defines the dataclass, by a name no other function has.
+    fn default_call(&mut self, factory: &str, ty: &Type, span: Span) -> TypedExpr {
+        let function = self.program.function_ids.get(factory).copied().or_else(|| {
+            self.program
+                .scopes
+                .values()
+                .find_map(|scope| scope.function_ids.get(factory).copied())
+        });
+        let Some(function) = function else {
+            return Self::typed(
+                TypedExprKind::Constant(TypedConstant::None),
+                Type::Error,
+                span,
+            );
+        };
+        let call = Self::typed(
+            TypedExprKind::Call {
+                function,
+                arguments: Vec::new(),
+                dispatch: false,
+            },
+            self.program.signatures[function.0 as usize].returns.clone(),
+            span,
+        );
+        Self::converted(call, Some(ty))
+    }
+
     pub(super) fn bind_arguments(
         &mut self,
         function: FunctionId,
@@ -249,7 +290,15 @@ impl BodyChecker<'_> {
                 value,
             });
         }
-        for (parameter, is_filled) in parameters.iter().zip(&filled) {
+        for (index, (parameter, is_filled)) in parameters.iter().zip(&filled).enumerate() {
+            if !is_filled && let Some(factory) = &parameter.default_call {
+                let value = self.default_call(factory, &parameter.ty, span);
+                bound.push(Argument {
+                    parameter: index + skip,
+                    value,
+                });
+                continue;
+            }
             if !is_filled && parameter.default.is_none() {
                 return Err(self.error(
                     Diagnostic::new(

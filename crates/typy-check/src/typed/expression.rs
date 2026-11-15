@@ -327,6 +327,10 @@ pub enum TypedExprKind {
         tuple: Box<TypedExpr>,
         index: usize,
     },
+    /// The hash of a value as a set or a dict hashes it, which the `__hash__` a dataclass gets
+    /// returns for the tuple of its fields (CLS-16). No program names it; `hash` itself is
+    /// not provided, since CPython draws the key of a `str` hash at random.
+    Hash(Box<TypedExpr>),
     /// Raises the exception its operand makes, in place of a value of the expression's type,
     /// which no path receives: the item of a union's tuple member that is too short for the
     /// position (DAT-08, ADR-0034).
@@ -476,6 +480,7 @@ impl TypedExpr {
             TypedExprKind::Unary { operand, .. }
             | TypedExprKind::TupleOf(operand)
             | TypedExprKind::Raise(operand)
+            | TypedExprKind::Hash(operand)
             | TypedExprKind::TupleItem { tuple: operand, .. }
             | TypedExprKind::TupleSlice { tuple: operand, .. } => {
                 vec![operand]

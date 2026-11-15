@@ -134,6 +134,7 @@ mod tests {
             name: name.to_owned(),
             ty,
             default: None,
+            default_call: None,
         }
     }
 

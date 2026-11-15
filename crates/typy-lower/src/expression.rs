@@ -133,6 +133,18 @@ impl FunctionLowerer<'_> {
                 self.tuple_slice(tuple, positions, ty, span)
             }
             TypedExprKind::Raise(exception) => self.raise_in_place(exception, ty, span),
+            TypedExprKind::Hash(value) => {
+                let value = self.expression(value);
+                let (kind, descriptor) = self.item_layout(value.ty, span);
+                let bits = self.bits(Self::borrowed(value.value, value.ty), span);
+                let hash = self.call_runtime(
+                    RuntimeFunction::HashValue,
+                    vec![kind, descriptor, bits],
+                    span,
+                );
+                self.release(value, span);
+                hash
+            }
             TypedExprKind::TupleItem { tuple, index } => {
                 let tuple = self.expression(tuple);
                 self.tuple_item(tuple, *index, ty, span)

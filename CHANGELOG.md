@@ -41,6 +41,12 @@ All notable changes to TyPy are recorded here. The format follows
   `tuple[str, int] | tuple[str]`; `code` is `None`, the one argument, or
   the tuple. The five items of a Unicode error join only in a program
   that encodes, decodes or opens a file (EXC-15, ADR-0034).
+- Dataclasses take `field(default_factory=f)`, called for each instance
+  that is not given the field, hash as the tuple of their fields when
+  frozen or given `unsafe_hash=True`, and take the options `init`,
+  `repr`, `unsafe_hash` and `slots`, as CPython's `dataclasses` does.
+  Other options of `field` and `@dataclass` are planned for 1.0
+  (CLS-15, CLS-16, CLS-17, CLS-28).
 - `math.fsum`, `dist`, `prod` and `sumprod` take items of a union of
   number types, such as a `list[int | float]`, and `prod` a `bool` start,
   with CPython's results. `prod` of items that are not numbers is planned
