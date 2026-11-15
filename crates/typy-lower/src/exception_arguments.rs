@@ -11,17 +11,21 @@ use crate::function::FunctionLowerer;
 use crate::ownership::Lowered;
 
 impl FunctionLowerer<'_> {
-    /// Returns `args` of `exception`, of the checked type `checked`, held as `ty`.
+    /// Returns `args` of `exception`, or its arguments as it holds them when `raw`, of the
+    /// checked type `checked`, held as `ty`.
     pub(crate) fn exception_arguments(
         &mut self,
         exception: &TypedExpr,
+        raw: bool,
         checked: &Type,
         ty: TyirType,
         span: Span,
     ) -> Lowered {
         let exception = self.expression(exception);
         let result = match checked {
-            Type::Union(members) => self.arguments_of_union(exception, members, checked, ty, span),
+            Type::Union(members) => {
+                self.arguments_of_union(exception, raw, members, checked, ty, span)
+            }
             member => self.arguments_as(exception, member, span),
         };
         self.release(exception, span);
@@ -34,6 +38,7 @@ impl FunctionLowerer<'_> {
     fn arguments_of_union(
         &mut self,
         exception: Lowered,
+        raw: bool,
         members: &[Type],
         checked: &Type,
         ty: TyirType,
@@ -49,10 +54,11 @@ impl FunctionLowerer<'_> {
                 };
                 let id = self.tuple_type_id(items);
                 let layout = self.constant(Constant::TupleDescriptor(id), span);
+                let raw = self.constant(Constant::Int(u8::from(raw).to_string()), span);
                 let matches = self
                     .call_runtime(
                         RuntimeFunction::ExceptionArgumentsMatch,
-                        vec![exception.value, layout],
+                        vec![exception.value, layout, raw],
                         span,
                     )
                     .value;

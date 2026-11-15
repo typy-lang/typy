@@ -479,8 +479,7 @@ fn expression(expression_value: &TypedExpr, callees: &mut BTreeSet<FunctionId>) 
                 expression(part, callees);
             }
         }
-        TypedExprKind::OsErrorField { exception, .. }
-        | TypedExprKind::ExceptionArguments(exception)
+        TypedExprKind::ExceptionArguments { exception, .. }
         | TypedExprKind::FileAttribute {
             file: exception, ..
         } => expression(exception, callees),

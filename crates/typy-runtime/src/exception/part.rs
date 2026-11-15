@@ -74,7 +74,9 @@ static TEXT_FIELD: crate::tuple::Field = crate::tuple::Field::plain(ItemKind::Ob
 
 /// Returns true when `args` of `exception` is laid out as `layout`, the layout of one
 /// member of the union of tuples `args` has in the program: its arguments as `args` shows
-/// them, the runtime's text as one `str`, or no items (EXC-15, ADR-0034).
+/// them, the runtime's text as one `str`, or no items (EXC-15, ADR-0034). When `raw` is the
+/// `int` word of 1, the arguments are compared as the exception holds them, file names
+/// included, which the attributes of an `OSError` read (ADR-0035).
 ///
 /// # Safety
 ///
@@ -83,10 +85,14 @@ static TEXT_FIELD: crate::tuple::Field = crate::tuple::Field::plain(ItemKind::Ob
 pub unsafe extern "C" fn typy_rt_exception_arguments_match(
     exception: *const ExceptionObject,
     layout: *const TupleType,
+    raw: i64,
 ) -> bool {
     // SAFETY: the caller's guarantee.
     unsafe {
         let exception = self::exception(exception);
+        if decoded(raw) != 0 && !exception.arguments.is_null() {
+            return crate::tuple::same_layout(exception.arguments_type, layout);
+        }
         match Arguments::of(exception) {
             Some(arguments) => crate::tuple::same_layout(arguments.layout(), layout),
             None if !exception.message.is_null() => {

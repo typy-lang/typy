@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy detailed design |
-| Version | 1.77 |
+| Version | 1.78 |
 | Status | Approved |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-15 |
@@ -583,8 +583,9 @@ gives `str`, a `for` loop and `iter()` make a runtime iterator over it,
 and `next(file)` is `next(iter(file))`. `TypedStmt::With` carries a
 `WithProtocol`: `Methods { enter, exit }` for a class, or `TextFile`,
 which enters with `typy_rt_text_enter` and leaves with
-`typy_rt_text_close`. An `OSError`, or a class derived from it, built with
-two or more arguments is E0201 (EXC-14).
+`typy_rt_text_close`. An `OSError` the runtime raises for a file opened from
+a descriptor holds the descriptor as its third argument, CPython's
+`filename` for it (ADR-0035).
 
 The builtins (LIB-01, LIB-02) are not written in Python. `print`, `min`
 and `max` take any number of arguments, which the 0.1 subset cannot declare
@@ -1445,14 +1446,25 @@ with `typy_rt_exception_arguments_address` and, for a union, tests each member
 but the last with `typy_rt_exception_arguments_match`, which compares the
 layouts field by field, the runtime's text standing for one `str`.
 
-`body/os_error.rs` accepts an `OSError` of two to five arguments when `errno` is
-an `int`, `strerror` a `str`, the file names a `str` or `None` and `winerror` an
-`int` or `None`, and gives `TypedExprKind::OsErrorField` for `errno`,
-`strerror`, `filename` and `filename2`, typed `int | None` or `str | None`,
-unless the class declares an attribute of that name; other arguments, two or
-more through `super().__init__`, and two or more to a class with an `__init__`
-of its own are E0201 (EXC-14, EXC-16). Lowering calls `os_error_new` in place of
-`exception_new` for such an `OSError`.
+`body/os_error.rs` accepts an `OSError` of arguments of any type, as CPython
+does (EXC-14, EXC-16, ADR-0035), except a number as the third of three to five
+arguments of `OSError` or `BlockingIOError`, which a `BlockingIOError` reads as
+`characters_written`: E0201, planned for 1.0 (EXC-18). `errno`, `strerror`,
+`filename` and `filename2` of an `OSError` whose class declares no attribute of
+that name are read from the arguments the exception holds, file names
+included: `Creations::raw_arguments_of` gives their type, a union of tuples,
+and for each member the attribute is the item its position names (the first
+two of two to five, the third of three to five, the fifth of five when the
+third is not `None`, through a `TypedExprKind::IfExp` when it may be), or
+`None`. The read is a `TypedExprKind::EachMember` over
+`TypedExprKind::ExceptionArguments { raw: true }`, whose arms read the
+exception again, held first in a hidden variable unless it is one; like `args`,
+it makes the program checked again. `Creations` keeps each creation's raw
+tuple and gives `args` from it by CPython's rule, a file name that is not
+`None` leaving `errno` and `strerror` alone. Lowering calls `os_error_new` in
+place of `exception_new` for an `OSError` of two to five arguments, and gives a
+class derived from `OSError` the `str` of `typy_rt_os_error_str` through
+`TyirClass::os_error`.
 
 `assert test, message` gives `TypedStmt::Assert { test, exception }`, whose
 exception is an `AssertionError` of the message, and the facts the test gives
@@ -2196,7 +2208,7 @@ installed `typy` finds `<prefix>/lib/typy/` and a `typy` in
 | `text_file::binary` | Binary files, flagged `BINARY`, and `RAW` for a `FileIO` (ADR-0031). A buffered file reads through a `Reader` of `latin-1` with `read_bytes`, and writes through its `Writer` with `add`; a `BufferedRandom` moves the descriptor back by what the reader holds before a write, so it writes where `tell` says, and `tell` counts what the writer holds without writing it out, as CPython's buffered layer does. A `FileIO` calls the descriptor for each operation and reads a line a byte at a time. Each operation refuses in CPython's order and words: a buffered file checks that it can read or write before it checks that it is open, and names the operation (`read of closed file`, `seek of closed file`); a `FileIO` checks that it is open first. `seek` of a buffered file allows `whence` 0 to 4 and refuses an offset past an `i64` with `ValueError`; a `FileIO` gives `whence` to `lseek` and refuses such an offset with `OverflowError` |
 | `text_file::newline` | `Newline::of` reads `newline`: `None` is `Universal`, `""` `Untranslated`, and `"\n"`, `"\r"` and `"\r\n"` end lines there; any other value raises `ValueError: illegal newline value: x`. `typy_rt_open` checks `buffering` as a C `int` before opening and checks `buffering=0` and `newline` after, closing the descriptor, as CPython opens the file before it checks them |
 | `text_file::os_error` | `os_error(errno, filename)` gives the `OSError` subclass CPython's errno table names, written as `[Errno 2] No such file or directory: 'name'` with the `repr` of the file name, and with the arguments `(errno, strerror)` for its `repr`. The texts are glibc's, in a table `make errno-texts` writes, so both targets print the oracle's words |
-| `text_file::os_error` (programs) | `typy_rt_os_error_new` makes an `OSError` the program built with two to five arguments: `OSError` itself becomes the subclass for `errno`, and the text is `[Errno N] strerror`, then a colon and the `repr` of `filename`, and an arrow and the `repr` of `filename2`, when given. `typy_rt_os_error_errno` and `typy_rt_os_error_text` read `errno`, `strerror`, `filename` and `filename2`, checking each argument's type, since a class's `__init__` may have given others. `args`, `str` and `repr` show only `errno` and `strerror` when a `filename` other than `None` was given, as CPython does; `exit_code` reads arguments without that rule, so a program links no `OSError` code for its exit status (EXC-14, NFR-02) |
+| `text_file::os_error` (programs) | `typy_rt_os_error_new` makes an `OSError` the program built with two to five arguments of any type: `OSError` itself becomes the subclass for `errno` when it is an `int` that fits a word or a `bool`. `typy_rt_os_error_str`, the `str` of every `OSError` class, writes the runtime's text, or for arguments of two to five `[Errno N] strerror` with `str` of each, then a colon and the `repr` of `filename`, and an arrow and the `repr` of `filename2`, when they are not `None`, raising what a `str` raises, as CPython's `OSError_str` does; other arguments are written as `BaseException` writes them (ADR-0035). `args`, `str` and `repr` show only `errno` and `strerror` when a `filename` other than `None` was given, as CPython does; `exit_code` reads arguments without that rule, so a program links no `OSError` code for its exit status (EXC-14, NFR-02) |
 | `format::percent::dynamic` | `typy_rt_percent_dynamic` formats `format % values` when the format is not a literal or the values are a `tuple[T, ...]` (LIB-11): it reads the format with the grammar of CPython's `unicode_format_arg_parse`, takes the values from a tuple of their layout, from one value, or from the list that holds a `tuple[T, ...]`, reads a key from a dict, converts each value by its kind with the code of the literal path, and raises CPython 3.15's errors |
 | `exception::part` | `typy_rt_exception_part_text`, `typy_rt_exception_args_length`, `typy_rt_exception_part_truth` and `typy_rt_exception_part_equal` read `args` or `code` from an exception: `args` is the tuple of its arguments, or of the runtime's text, and `code` `None`, the one argument as the value it holds, or the tuple of several. `==` takes the other value as a tuple of one, and `values_equal` compares an optional or a union with a value of another type as the value it holds (ADR-0030). `typy_rt_exception_arguments_match(exception, layout)` says whether `args` is laid out as a member of the union of tuples `args` has, and `typy_rt_exception_arguments_address` gives the address of its items: the arguments, or the field that holds the runtime's text (EXC-15, ADR-0034) |
 | `sys` | `typy_rt_sys_argv` builds the list once from the arguments of `main`, decoded as UTF-8 with each stray byte as U+DC80 to U+DCFF, as CPython's `surrogateescape` does. `typy_rt_input` writes the prompt, flushes standard output, then reads a line through `sys.stdin`'s reader without its `\n`, and raises `EOFError: EOF when reading a line` when nothing is left. `typy_rt_sys_getrecursionlimit` and `typy_rt_sys_setrecursionlimit` keep the limit, checked as a C `int` of at least 1. `exit_status` gives the status of an uncaught exception: for a `SystemExit` or a subclass, 0 for no code or `None`, the low byte of an `int`, 255 for one outside `i128` as CPython 3.15 gives, and 1 after writing any other value to standard error, all without a traceback; 1 with the report for any other exception |

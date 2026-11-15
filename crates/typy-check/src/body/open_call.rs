@@ -96,6 +96,9 @@ impl BodyChecker<'_> {
         // Reading and writing a text file, and a path with a surrogate, may raise a Unicode
         // error (ADR-0034).
         self.program.record_codec(true, true);
+        if descriptor {
+            self.program.record_descriptors();
+        }
         let ty = match (descriptor, binary) {
             (true, kind) => Type::DescriptorFile(kind),
             (false, Some(kind)) => Type::BinaryFile(kind),

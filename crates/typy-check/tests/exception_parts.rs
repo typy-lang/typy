@@ -56,17 +56,28 @@ fn args_and_code_are_typed_by_every_creation_of_their_class() {
 }
 
 #[test]
-fn an_os_error_takes_a_file_name_that_is_a_str_or_none() {
+fn an_os_error_takes_a_file_name_of_any_type_but_a_number() {
     let cases = [
         ("str | None", Vec::<String>::new()),
+        ("list[int] | None", Vec::<String>::new()),
         ("int | None", vec!["E0201".to_owned()]),
+        ("float", vec!["E0201".to_owned()]),
     ];
     for (annotation, expected) in cases {
-        let program = format!(
-            "def main(name: {annotation}) -> None:\n    print(OSError(2, 'x', name))\nmain(None)\n"
-        );
+        let program =
+            format!("def main(name: {annotation}) -> None:\n    print(OSError(2, 'x', name))\n");
         assert_eq!(app(&program), expected, "{annotation}");
     }
+}
+
+#[test]
+fn a_subclass_of_os_error_takes_a_number_as_its_file_name() {
+    let program = concat!(
+        "class Busy(BlockingIOError):\n",
+        "    pass\n",
+        "print(Busy(11, 'x', 5).filename, FileNotFoundError(2, 'x', 3).filename)\n",
+    );
+    assert_eq!(app(program), Vec::<String>::new());
 }
 
 #[test]

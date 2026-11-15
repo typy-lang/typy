@@ -95,6 +95,9 @@ pub struct TyirClass {
     /// The base of an exception class, whose instances are exceptions; `None` for a class
     /// whose base is `object` (ADR-0013).
     pub exception_base: Option<crate::types::TypeObjectRef>,
+    /// Whether the class derives from `OSError`, whose objects a program built with two to
+    /// five arguments are written as `[Errno 2] text` (EXC-14, ADR-0035).
+    pub os_error: bool,
     /// For a copy of a generic class, the generic class by its index, which its type object
     /// names as its base and as the class `type()` gives (ADR-0028).
     pub public: Option<u32>,

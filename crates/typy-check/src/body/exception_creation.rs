@@ -59,6 +59,20 @@ impl Program {
             .map_or(Type::Error, |known| known.arguments_of(class))
     }
 
+    /// Returns the type of the arguments an exception of `class` holds, file names included,
+    /// read at `span`, or an error in a first check (ADR-0035).
+    pub(super) fn raw_arguments_type(&mut self, class: &ExceptionClass, span: Span) -> Type {
+        self.arguments_read.get_or_insert(span);
+        self.known_creations
+            .as_ref()
+            .map_or(Type::Error, |known| known.raw_arguments_of(class))
+    }
+
+    /// Records that the program opens a file from a descriptor, whose errors hold it.
+    pub(super) fn record_descriptors(&mut self) {
+        self.creations.descriptors();
+    }
+
     /// Returns the type of `args` of an exception of `class`, when a check before this one
     /// recorded the creations that give it.
     pub(super) fn known_arguments_type(&self, class: &ExceptionClass) -> Option<Type> {

@@ -186,8 +186,6 @@ pub enum RuntimeFunction {
     ExceptionArgumentsMatch,
     ExceptionArgumentsAddress,
     OsErrorNew,
-    OsErrorErrno,
-    OsErrorText,
     PercentDynamic,
     ExceptionSetCause,
     ExceptionThrow,
@@ -365,7 +363,7 @@ const FLOAT_FLOAT: &[TyirType] = &[TyirType::Float, TyirType::Float];
 
 impl RuntimeFunction {
     /// Every runtime function.
-    pub const ALL: [Self; 326] = [
+    pub const ALL: [Self; 324] = [
         Self::IntFloorDivide,
         Self::IntModulo,
         Self::IntPower,
@@ -543,8 +541,6 @@ impl RuntimeFunction {
         Self::ExceptionArgumentsMatch,
         Self::ExceptionArgumentsAddress,
         Self::OsErrorNew,
-        Self::OsErrorErrno,
-        Self::OsErrorText,
         Self::PercentDynamic,
         Self::ExceptionSetCause,
         Self::ExceptionThrow,
@@ -873,21 +869,11 @@ impl RuntimeFunction {
                 signature(&[TYPE, Bits, Bits], EXCEPTION, false)
             }
             Self::PercentDynamic => signature(&[STR, Bits, Bits, Int], STR, true),
-            Self::OsErrorErrno => signature(
-                &[EXCEPTION],
-                TyirType::Optional(crate::OptionalBase::Int),
-                false,
-            ),
-            Self::OsErrorText => signature(
-                &[EXCEPTION, Int],
-                TyirType::Optional(crate::OptionalBase::Object(crate::TypeId::STR)),
-                false,
-            ),
             Self::ExceptionPartText => signature(&[EXCEPTION, Int, Int], STR, true),
             Self::ExceptionArgsLength => signature(&[EXCEPTION], Int, false),
             Self::ExceptionPartTruth => signature(&[EXCEPTION, Int], Bool, false),
             Self::ExceptionPartEqual => signature(&[EXCEPTION, Int, Bits, Bits], Bool, false),
-            Self::ExceptionArgumentsMatch => signature(&[EXCEPTION, Bits], Bool, false),
+            Self::ExceptionArgumentsMatch => signature(&[EXCEPTION, Bits, Int], Bool, false),
             Self::ExceptionSetCause => signature(&[EXCEPTION, Bits], Unit, false),
             Self::ExceptionThrow => signature(&[EXCEPTION], Unit, true),
             Self::ExceptionHandled => signature(&[], EXCEPTION, false),
@@ -1231,8 +1217,6 @@ impl RuntimeFunction {
             Self::ExceptionArgumentsMatch => "exception_arguments_match",
             Self::ExceptionArgumentsAddress => "exception_arguments_address",
             Self::OsErrorNew => "os_error_new",
-            Self::OsErrorErrno => "os_error_errno",
-            Self::OsErrorText => "os_error_text",
             Self::PercentDynamic => "percent_dynamic",
             Self::ExceptionSetCause => "exception_set_cause",
             Self::ExceptionThrow => "exception_throw",

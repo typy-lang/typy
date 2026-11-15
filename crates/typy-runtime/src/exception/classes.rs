@@ -15,6 +15,15 @@ const fn class(name: &'static str, base: &'static TypeObject) -> TypeObject {
     }
 }
 
+/// Returns an `OSError` class named `name` with `base`, whose objects a program built with
+/// two to five arguments are written as `[Errno 2] text: 'name'` (EXC-14, EXC-16).
+const fn os_class(name: &'static str, base: &'static TypeObject) -> TypeObject {
+    TypeObject {
+        str: Some(crate::text_file::typy_rt_os_error_str),
+        ..class(name, base)
+    }
+}
+
 /// The root of every exception class.
 #[unsafe(export_name = "typy_rt_exception_BaseException")]
 pub(crate) static BASE_EXCEPTION: TypeObject = class("BaseException", &OBJECT);
@@ -87,61 +96,61 @@ pub(crate) static ZERO_DIVISION_ERROR: TypeObject = class("ZeroDivisionError", &
 
 /// An error the operating system reports, with its `errno` (ADR-0019).
 #[unsafe(export_name = "typy_rt_exception_OSError")]
-pub(crate) static OS_ERROR: TypeObject = class("OSError", &EXCEPTION);
+pub(crate) static OS_ERROR: TypeObject = os_class("OSError", &EXCEPTION);
 /// An operation that would block.
 #[unsafe(export_name = "typy_rt_exception_BlockingIOError")]
-pub(crate) static BLOCKING_IO_ERROR: TypeObject = class("BlockingIOError", &OS_ERROR);
+pub(crate) static BLOCKING_IO_ERROR: TypeObject = os_class("BlockingIOError", &OS_ERROR);
 /// An operation on a child process that failed.
 #[unsafe(export_name = "typy_rt_exception_ChildProcessError")]
-pub(crate) static CHILD_PROCESS_ERROR: TypeObject = class("ChildProcessError", &OS_ERROR);
+pub(crate) static CHILD_PROCESS_ERROR: TypeObject = os_class("ChildProcessError", &OS_ERROR);
 /// The base of the errors of a connection.
 #[unsafe(export_name = "typy_rt_exception_ConnectionError")]
-pub(crate) static CONNECTION_ERROR: TypeObject = class("ConnectionError", &OS_ERROR);
+pub(crate) static CONNECTION_ERROR: TypeObject = os_class("ConnectionError", &OS_ERROR);
 /// A write to a pipe or socket whose other end is closed.
 #[unsafe(export_name = "typy_rt_exception_BrokenPipeError")]
-pub(crate) static BROKEN_PIPE_ERROR: TypeObject = class("BrokenPipeError", &CONNECTION_ERROR);
+pub(crate) static BROKEN_PIPE_ERROR: TypeObject = os_class("BrokenPipeError", &CONNECTION_ERROR);
 /// A connection the other end aborted.
 #[unsafe(export_name = "typy_rt_exception_ConnectionAbortedError")]
 pub(crate) static CONNECTION_ABORTED_ERROR: TypeObject =
-    class("ConnectionAbortedError", &CONNECTION_ERROR);
+    os_class("ConnectionAbortedError", &CONNECTION_ERROR);
 /// A connection the other end refused.
 #[unsafe(export_name = "typy_rt_exception_ConnectionRefusedError")]
 pub(crate) static CONNECTION_REFUSED_ERROR: TypeObject =
-    class("ConnectionRefusedError", &CONNECTION_ERROR);
+    os_class("ConnectionRefusedError", &CONNECTION_ERROR);
 /// A connection the other end reset.
 #[unsafe(export_name = "typy_rt_exception_ConnectionResetError")]
 pub(crate) static CONNECTION_RESET_ERROR: TypeObject =
-    class("ConnectionResetError", &CONNECTION_ERROR);
+    os_class("ConnectionResetError", &CONNECTION_ERROR);
 /// A file created that exists already.
 #[unsafe(export_name = "typy_rt_exception_FileExistsError")]
-pub(crate) static FILE_EXISTS_ERROR: TypeObject = class("FileExistsError", &OS_ERROR);
+pub(crate) static FILE_EXISTS_ERROR: TypeObject = os_class("FileExistsError", &OS_ERROR);
 /// A file or directory that does not exist.
 #[unsafe(export_name = "typy_rt_exception_FileNotFoundError")]
-pub(crate) static FILE_NOT_FOUND_ERROR: TypeObject = class("FileNotFoundError", &OS_ERROR);
+pub(crate) static FILE_NOT_FOUND_ERROR: TypeObject = os_class("FileNotFoundError", &OS_ERROR);
 /// A call a signal interrupted.
 #[unsafe(export_name = "typy_rt_exception_InterruptedError")]
-pub(crate) static INTERRUPTED_ERROR: TypeObject = class("InterruptedError", &OS_ERROR);
+pub(crate) static INTERRUPTED_ERROR: TypeObject = os_class("InterruptedError", &OS_ERROR);
 /// A file operation on a directory.
 #[unsafe(export_name = "typy_rt_exception_IsADirectoryError")]
-pub(crate) static IS_A_DIRECTORY_ERROR: TypeObject = class("IsADirectoryError", &OS_ERROR);
+pub(crate) static IS_A_DIRECTORY_ERROR: TypeObject = os_class("IsADirectoryError", &OS_ERROR);
 /// A directory operation on something that is not a directory.
 #[unsafe(export_name = "typy_rt_exception_NotADirectoryError")]
-pub(crate) static NOT_A_DIRECTORY_ERROR: TypeObject = class("NotADirectoryError", &OS_ERROR);
+pub(crate) static NOT_A_DIRECTORY_ERROR: TypeObject = os_class("NotADirectoryError", &OS_ERROR);
 /// An operation without the access rights it needs.
 #[unsafe(export_name = "typy_rt_exception_PermissionError")]
-pub(crate) static PERMISSION_ERROR: TypeObject = class("PermissionError", &OS_ERROR);
+pub(crate) static PERMISSION_ERROR: TypeObject = os_class("PermissionError", &OS_ERROR);
 /// A process that does not exist.
 #[unsafe(export_name = "typy_rt_exception_ProcessLookupError")]
-pub(crate) static PROCESS_LOOKUP_ERROR: TypeObject = class("ProcessLookupError", &OS_ERROR);
+pub(crate) static PROCESS_LOOKUP_ERROR: TypeObject = os_class("ProcessLookupError", &OS_ERROR);
 /// An operation that timed out.
 #[unsafe(export_name = "typy_rt_exception_TimeoutError")]
-pub(crate) static TIMEOUT_ERROR: TypeObject = class("TimeoutError", &OS_ERROR);
+pub(crate) static TIMEOUT_ERROR: TypeObject = os_class("TimeoutError", &OS_ERROR);
 /// `io.UnsupportedOperation`: reading a file opened for writing, or the other way round. Its
 /// bases in CPython are `OSError` and `ValueError`; `derives_from` adds the second.
 pub(crate) static UNSUPPORTED_OPERATION: TypeObject = TypeObject {
     module: "io".as_ptr(),
     module_length: 2,
-    ..class("UnsupportedOperation", &OS_ERROR)
+    ..os_class("UnsupportedOperation", &OS_ERROR)
 };
 
 /// Every built-in exception class.

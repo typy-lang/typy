@@ -444,12 +444,6 @@ impl BodyChecker<'_> {
         if let Type::Exception(exception) = &ty {
             let exception = exception.clone();
             return match init {
-                Some(_)
-                    if let Some(refused) =
-                        self.os_error_with_init(&exception, &name, arguments, span) =>
-                {
-                    refused
-                }
                 Some(function) => {
                     match self.bind_arguments(function, 1, &name, arguments, keywords, span) {
                         Ok(bound) => {

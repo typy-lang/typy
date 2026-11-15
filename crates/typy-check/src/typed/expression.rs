@@ -176,13 +176,12 @@ pub enum TypedExprKind {
         operation: PartOperation,
     },
     /// `args` of an exception as a value of its own, read from the exception's arguments by
-    /// their layout; `code` of a `SystemExit` is read through it (EXC-15, ADR-0034).
-    ExceptionArguments(Box<TypedExpr>),
-    /// `errno`, `strerror`, `filename` or `filename2` of an `OSError`, `None` when it was not
-    /// given (EXC-14).
-    OsErrorField {
+    /// their layout; `code` of a `SystemExit` is read through it (EXC-15, ADR-0034). When
+    /// `raw`, the arguments as the exception holds them, file names included, which the
+    /// attributes of an `OSError` read (ADR-0035).
+    ExceptionArguments {
         exception: Box<TypedExpr>,
-        field: OsErrorField,
+        raw: bool,
     },
     /// `name`, `mode` or `closed` of a text file (LIB-14).
     FileAttribute {
@@ -533,8 +532,7 @@ impl TypedExpr {
             TypedExprKind::SysExit(value)
             | TypedExprKind::Input(value)
             | TypedExprKind::RecursionLimit(value) => value.iter().map(Box::as_ref).collect(),
-            TypedExprKind::OsErrorField { exception, .. }
-            | TypedExprKind::ExceptionArguments(exception) => vec![exception],
+            TypedExprKind::ExceptionArguments { exception, .. } => vec![exception],
             TypedExprKind::FileAttribute { file, .. } => vec![file],
             TypedExprKind::PercentDynamic { format, values } => vec![format, values],
             TypedExprKind::ExceptionPart {
@@ -654,19 +652,6 @@ pub enum PartOperation {
     Truth,
     /// Whether it equals the value.
     Equal(Box<TypedExpr>),
-}
-
-/// An attribute of an `OSError` that its arguments give (EXC-14).
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum OsErrorField {
-    /// `errno`, the first argument.
-    Errno,
-    /// `strerror`, the second.
-    Strerror,
-    /// `filename`, the third.
-    Filename,
-    /// `filename2`, the fifth.
-    Filename2,
 }
 
 /// An attribute of a text file (LIB-14).

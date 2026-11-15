@@ -97,12 +97,18 @@ fn str_function<'ctx>(
         (Some(method), _) => Ok(method_writer(shared, index, method, "str")?
             .as_global_value()
             .as_pointer_value()),
-        // An exception's `str` comes from its arguments (EXC-08).
-        (None, Some(_)) => Ok(
-            runtime_symbol(shared, "typy_rt_exception_str", repr_type(shared))
+        // An exception's `str` comes from its arguments (EXC-08), as `OSError` writes them
+        // for a class derived from it (EXC-14).
+        (None, Some(_)) => {
+            let writer = if class.os_error {
+                "typy_rt_os_error_str"
+            } else {
+                "typy_rt_exception_str"
+            };
+            Ok(runtime_symbol(shared, writer, repr_type(shared))
                 .as_global_value()
-                .as_pointer_value(),
-        ),
+                .as_pointer_value())
+        }
         (None, None) => Ok(shared
             .context
             .ptr_type(AddressSpace::default())

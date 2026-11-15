@@ -261,9 +261,6 @@ impl FunctionLowerer<'_> {
                 self.assign_name(*target, Self::borrowed(lowered.value, lowered.ty), span);
                 lowered
             }
-            TypedExprKind::OsErrorField { exception, field } => {
-                self.os_error_field(exception, *field, span)
-            }
             TypedExprKind::FileAttribute { file, attribute } => {
                 self.file_attribute(file, *attribute, span)
             }
@@ -272,8 +269,8 @@ impl FunctionLowerer<'_> {
                 part,
                 operation,
             } => self.exception_part(exception, *part, operation, span),
-            TypedExprKind::ExceptionArguments(exception) => {
-                self.exception_arguments(exception, &expression.ty, ty, span)
+            TypedExprKind::ExceptionArguments { exception, raw } => {
+                self.exception_arguments(exception, *raw, &expression.ty, ty, span)
             }
             TypedExprKind::Input(prompt) => self.input(prompt.as_deref(), span),
             TypedExprKind::IterableBuiltin {

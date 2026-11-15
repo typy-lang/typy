@@ -7,6 +7,7 @@ mod disk;
 mod errno_text;
 mod newline;
 mod os_error;
+pub(crate) use os_error::typy_rt_os_error_str;
 mod position;
 mod reader;
 mod state;

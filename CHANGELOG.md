@@ -41,6 +41,14 @@ All notable changes to TyPy are recorded here. The format follows
   `tuple[str, int] | tuple[str]`; `code` is `None`, the one argument, or
   the tuple. The five items of a Unicode error join only in a program
   that encodes, decodes or opens a file (EXC-15, ADR-0034).
+- `OSError` takes arguments of any type, more than five of them, and two
+  or more through `super().__init__` or to a subclass with an `__init__`
+  of its own, as CPython does: `OSError("a", "b")` is `[Errno a] b`.
+  `errno`, `strerror`, `filename` and `filename2` take their types from
+  every creation of the class, and an error about a file opened from a
+  descriptor has the descriptor as `filename`. A number as the third
+  argument of `OSError` or `BlockingIOError` is planned for 1.0 (EXC-16,
+  EXC-18, ADR-0035).
 - A literal index into a variable that holds a union of fixed tuples
   raises `IndexError` when the tuple it holds is too short, as CPython
   does, in place of E0307; a position outside every member is still E0307

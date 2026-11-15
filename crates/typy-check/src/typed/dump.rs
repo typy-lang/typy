@@ -448,7 +448,6 @@ impl Dump<'_> {
             TypedExprKind::SysExit(_) => "SysExit".to_owned(),
             TypedExprKind::RecursionLimit(_) => "RecursionLimit".to_owned(),
             TypedExprKind::ExceptionPart { part, .. } => format!("ExceptionPart({part:?})"),
-            TypedExprKind::OsErrorField { field, .. } => format!("OsErrorField({field:?})"),
             TypedExprKind::FileAttribute { attribute, .. } => {
                 format!("FileAttribute({attribute:?})")
             }
@@ -532,7 +531,9 @@ impl Dump<'_> {
             TypedExprKind::Method { method, .. } => format!("Method {}", method.name()),
             TypedExprKind::TupleItem { index, .. } => format!("TupleItem {index}"),
             TypedExprKind::Raise(_) => "Raise".to_owned(),
-            TypedExprKind::ExceptionArguments(_) => "ExceptionArguments".to_owned(),
+            TypedExprKind::ExceptionArguments { raw, .. } => {
+                format!("ExceptionArguments{}", if *raw { " raw" } else { "" })
+            }
             TypedExprKind::TupleSlice { positions, .. } => format!("TupleSlice {positions:?}"),
         };
         self.line(depth, &format!("{label} : {ty}"), expression.span);

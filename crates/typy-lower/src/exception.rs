@@ -55,8 +55,9 @@ impl FunctionLowerer<'_> {
         }
         let tuple = self.tuple_display(arguments, layout, span);
         let address = self.bits(Self::borrowed(tuple.value, tuple.ty), span);
-        // An `OSError` of two or more arguments reads them as `errno` and the rest (EXC-14).
-        let constructor = if built_in.is_os_error() && arguments.len() >= 2 {
+        // An `OSError` of two to five arguments reads them as `errno` and the rest, and one of
+        // more reads none (EXC-14, EXC-16).
+        let constructor = if built_in.is_os_error() && (2..=5).contains(&arguments.len()) {
             RuntimeFunction::OsErrorNew
         } else {
             RuntimeFunction::ExceptionNew

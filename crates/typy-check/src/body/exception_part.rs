@@ -151,7 +151,10 @@ impl BodyChecker<'_> {
         let ty = self.program.arguments_type(&class, span);
         let exception = self.expression(value);
         Self::typed(
-            TypedExprKind::ExceptionArguments(Box::new(exception)),
+            TypedExprKind::ExceptionArguments {
+                exception: Box::new(exception),
+                raw: false,
+            },
             member.unwrap_or(ty),
             span,
         )
@@ -168,7 +171,10 @@ impl BodyChecker<'_> {
         let read = |this: &mut Self, ty: Type| {
             let exception = this.expression(value);
             Self::typed(
-                TypedExprKind::ExceptionArguments(Box::new(exception)),
+                TypedExprKind::ExceptionArguments {
+                    exception: Box::new(exception),
+                    raw: false,
+                },
                 ty,
                 span,
             )

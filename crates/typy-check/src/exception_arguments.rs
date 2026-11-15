@@ -24,12 +24,13 @@ pub(crate) struct Creations {
     /// Whether the runtime can raise `UnicodeDecodeError`: the program decodes `bytes` or
     /// opens a file.
     decodes: bool,
+    /// Whether the program opens a file from a descriptor (ADR-0035).
+    descriptors: bool,
 }
 
 impl Creations {
-    /// Records a call or a raise of `class` with arguments of `arguments`. An `OSError` of
-    /// three to five arguments whose third is a file name keeps the first two as `args`, as
-    /// CPython does (EXC-14).
+    /// Records a call or a raise of `class` with arguments of `arguments`, all of them as the
+    /// exception holds them.
     pub(crate) fn make(&mut self, class: &ExceptionClass, arguments: &[Type]) {
         // `OSError` itself of two to five arguments becomes the subclass for its `errno`, so
         // its arguments may be those of an exception of any related class.
@@ -40,16 +41,13 @@ impl Creations {
         } else {
             &mut self.made
         };
-        if class.builtin().is_os_error() && (3..=5).contains(&arguments.len()) {
-            let file_name = &arguments[2];
-            if *file_name != Type::NoneType {
-                push(made, (class.clone(), Type::Tuple(arguments[..2].to_vec())));
-            }
-            if !matches!(file_name, Type::NoneType | Type::Optional(_)) {
-                return;
-            }
-        }
         push(made, (class.clone(), Type::Tuple(arguments.to_vec())));
+    }
+
+    /// Records that the runtime may raise an `OSError` about a file opened from a
+    /// descriptor, which holds the descriptor as its third argument.
+    pub(crate) fn descriptors(&mut self) {
+        self.descriptors = true;
     }
 
     /// Records that the runtime may raise `UnicodeEncodeError` when `encodes`, and
@@ -84,6 +82,7 @@ impl Creations {
             && other.keys.iter().all(|each| self.keys.contains(each))
             && (self.encodes || !other.encodes)
             && (self.decodes || !other.decodes)
+            && (self.descriptors || !other.descriptors)
     }
 
     /// Adds the creations of `other` that these lack.
@@ -98,59 +97,51 @@ impl Creations {
             self.key(key);
         }
         self.codec(other.encodes, other.decodes);
+        self.descriptors |= other.descriptors;
     }
 
     /// Returns the type of `args` of an exception of `class`: a tuple, or a union of tuples
     /// no two of which have the same layout, so the layout of an exception's arguments
     /// names the member it holds.
     pub(crate) fn arguments_of(&self, class: &ExceptionClass) -> Type {
+        union_of(self.tuples(class, false))
+    }
+
+    /// Returns the type of the arguments an exception of `class` holds, file names included,
+    /// which the attributes of an `OSError` read (ADR-0035).
+    pub(crate) fn raw_arguments_of(&self, class: &ExceptionClass) -> Type {
+        union_of(self.tuples(class, true))
+    }
+
+    /// Returns the argument tuples of every creation of an exception of `class`, as the
+    /// exception holds them when `raw`, and as `args` shows them otherwise.
+    fn tuples(&self, class: &ExceptionClass, raw: bool) -> Vec<Type> {
         let mut tuples = Vec::new();
         for builtin in BuiltinException::ALL {
             if ExceptionClass::Builtin(builtin).derives_from(class) {
-                tuples.extend(self.runtime_arguments(builtin));
+                tuples.extend(self.runtime_arguments(builtin, raw));
             }
         }
+        let mut add = |made: &ExceptionClass, arguments: &Type| {
+            if raw {
+                tuples.push(arguments.clone());
+            } else {
+                tuples.extend(shown(made, arguments));
+            }
+        };
         for (made, arguments) in &self.made {
             if made.derives_from(class) {
-                tuples.push(arguments.clone());
+                add(made, arguments);
             }
         }
         // An `__init__` runs for the classes derived from its own, so its arguments may be
         // those of an exception of a base or of a derived class.
         for (initialized, arguments) in &self.initialized {
             if initialized.derives_from(class) || class.derives_from(initialized) {
-                tuples.push(arguments.clone());
+                add(initialized, arguments);
             }
         }
-        let mut members: Vec<Vec<Type>> = Vec::new();
-        for tuple in tuples {
-            let Type::Tuple(items) = tuple else {
-                continue;
-            };
-            match members
-                .iter_mut()
-                .find(|member| same_layout(member, &items))
-            {
-                Some(member) => {
-                    for (held, item) in member.iter_mut().zip(items) {
-                        if *held != item {
-                            *held = Type::union(vec![held.clone(), item]);
-                        }
-                    }
-                }
-                None => members.push(items),
-            }
-        }
-        let mut members: Vec<Type> = members.into_iter().map(Type::Tuple).collect();
-        // A union's members stand in one order, as `Type::union` puts them; it is not used,
-        // since it drops a tuple another accepts, such as `tuple[int]` for `tuple[float]`,
-        // whose layout differs.
-        members.sort_by_cached_key(|member| format!("{member:?}"));
-        match members.len() {
-            0 => Type::Tuple(Vec::new()),
-            1 => members.remove(0),
-            _ => Type::Union(members),
-        }
+        tuples
     }
 
     /// Returns the argument tuples of the exceptions of `class` the runtime raises: its
@@ -158,8 +149,9 @@ impl Creations {
     /// `OSError`, the five of a Unicode error when the program can cause one, and none for
     /// `StopIteration`. It raises no `SystemExit`, `AssertionError` or `UnicodeError` itself.
     /// An `OSError` keeps both, since reading or writing a standard file the wrong way raises
-    /// `io.UnsupportedOperation` with a message in any program.
-    fn runtime_arguments(&self, class: BuiltinException) -> Vec<Type> {
+    /// `io.UnsupportedOperation` with a message in any program; when `raw`, it also holds the
+    /// file name, or the descriptor, that `args` leaves out.
+    fn runtime_arguments(&self, class: BuiltinException, raw: bool) -> Vec<Type> {
         let message = Type::Tuple(vec![Type::Str]);
         match class {
             BuiltinException::SystemExit
@@ -187,10 +179,70 @@ impl Creations {
                 .chain(self.keys.iter().map(|key| Type::Tuple(vec![key.clone()])))
                 .collect(),
             other if other.is_os_error() => {
-                vec![message, Type::Tuple(vec![Type::Int, Type::Str])]
+                let mut tuples = vec![message, Type::Tuple(vec![Type::Int, Type::Str])];
+                if raw {
+                    tuples.push(Type::Tuple(vec![Type::Int, Type::Str, Type::Str]));
+                    if self.descriptors {
+                        tuples.push(Type::Tuple(vec![Type::Int, Type::Str, Type::Int]));
+                    }
+                }
+                tuples
             }
             _ => vec![message],
         }
+    }
+}
+
+/// Returns the tuples `args` shows for an exception of `class` that holds `arguments`: an
+/// `OSError` of three to five whose file name is not `None` shows `errno` and `strerror`
+/// alone, as CPython's `OSError.__init__` cuts them (EXC-14), and a file name that may be
+/// `None` gives both.
+fn shown(class: &ExceptionClass, arguments: &Type) -> Vec<Type> {
+    let Type::Tuple(items) = arguments else {
+        return vec![arguments.clone()];
+    };
+    if !class.builtin().is_os_error() || !(3..=5).contains(&items.len()) {
+        return vec![arguments.clone()];
+    }
+    let cut = Type::Tuple(items[..2].to_vec());
+    match &items[2] {
+        Type::NoneType => vec![arguments.clone()],
+        Type::Optional(_) => vec![arguments.clone(), cut],
+        _ => vec![cut],
+    }
+}
+
+/// Returns `tuples` as one type: a tuple, or a union whose members have distinct layouts,
+/// those of one layout joined item by item.
+fn union_of(tuples: Vec<Type>) -> Type {
+    let mut members: Vec<Vec<Type>> = Vec::new();
+    for tuple in tuples {
+        let Type::Tuple(items) = tuple else {
+            continue;
+        };
+        match members
+            .iter_mut()
+            .find(|member| same_layout(member, &items))
+        {
+            Some(member) => {
+                for (held, item) in member.iter_mut().zip(items) {
+                    if *held != item {
+                        *held = Type::union(vec![held.clone(), item]);
+                    }
+                }
+            }
+            None => members.push(items),
+        }
+    }
+    let mut members: Vec<Type> = members.into_iter().map(Type::Tuple).collect();
+    // A union's members stand in one order, as `Type::union` puts them; it is not used,
+    // since it drops a tuple another accepts, such as `tuple[int]` for `tuple[float]`, whose
+    // layout differs.
+    members.sort_by_cached_key(|member| format!("{member:?}"));
+    match members.len() {
+        0 => Type::Tuple(Vec::new()),
+        1 => members.remove(0),
+        _ => Type::Union(members),
     }
 }
 

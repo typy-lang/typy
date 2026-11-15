@@ -215,6 +215,10 @@ fn tyir_class(
         truth: method("__bool__"),
         base: class.base.map(|base| base.0),
         exception_base,
+        os_error: class
+            .exception
+            .as_ref()
+            .is_some_and(|exception| exception.builtin().is_os_error()),
         public: class.generic.map(|generic| generic.0),
     }
 }

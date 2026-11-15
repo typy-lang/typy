@@ -66,6 +66,7 @@ fn on_point(body: impl FnOnce(ValueId, ValueId) -> Body) -> TyirModule {
             truth: None,
             base: None,
             exception_base: None,
+            os_error: false,
             public: None,
         }],
         entry: FunctionId(0),
@@ -235,6 +236,7 @@ fn on_exception(parameter: TyirType, operation: Operation) -> TyirModule {
             truth: None,
             base: None,
             exception_base: Some(typy_tyir::TypeObjectRef::Exception("ValueError")),
+            os_error: false,
             public: None,
         }],
         entry: FunctionId(0),
@@ -291,6 +293,7 @@ fn on_circle(make: impl FnOnce(ValueId, ValueId) -> (Operation, TyirType)) -> Ty
         truth: None,
         base,
         exception_base: None,
+        os_error: false,
         public: None,
     };
     TyirModule {
@@ -432,6 +435,7 @@ fn dispatching(slot: u32, circle: Vec<FunctionId>, circle_area: TyirType) -> Tyi
         truth: None,
         base,
         exception_base: None,
+        os_error: false,
         public: None,
     };
     TyirModule {
