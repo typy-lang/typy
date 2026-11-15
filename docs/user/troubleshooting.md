@@ -1150,37 +1150,39 @@ Importing a name the module defines is correct:
 from shapes import area
 ```
 
-## E0426: import inside a function of a module that imports this one
+## E0426: import inside `__init__` of a module that imports this one
 
-TyPy checks each module after the modules it imports at module level.
-When module `a` imports `b` at module level and a function of `b` imports
-`a`, `b` is checked before `a`, so its function cannot see `a`'s names
-yet; this is planned for 0.4 (MOD-05). Move the code both modules share
-into a third module that each imports at module level.
+TyPy checks each module after the modules it imports at module level, and
+checks a function that imports a module checked later once that module is
+(MOD-13). An `__init__` is checked first, since it gives the attributes
+their types, so when module `a` imports `b` at module level, an `__init__`
+of `b` that imports `a` cannot see `a`'s names yet; this is planned for
+1.0 (MOD-15). Import `a` in a method other than `__init__`, or move the
+code both modules share into a third module that each imports at module
+level.
 
-These two modules give E0426, since `main` imports `shapes` at module
-level and a function of `shapes` imports `main`:
+These two modules give E0426, since `shapes` imports `config` at module
+level and the `__init__` of a class of `config` imports `shapes`:
 
 ```text
-# main.py
-import shapes
-
 # shapes.py
-def draw() -> None:
-    import main
-    main.show()
+import config
+
+# config.py
+class Settings:
+    def __init__(self) -> None:
+        import shapes
+        self.size = shapes.DEFAULT
 ```
 
-Moving the shared function into a third module that both import is
-correct:
+Reading the value in a method of its own is correct:
 
 ```text
-# main.py
-import shapes
-import display
-
-# shapes.py
-import display
+# config.py
+class Settings:
+    def size(self) -> int:
+        import shapes
+        return shapes.DEFAULT
 ```
 
 ## E0427: `%` format that does not fit its values

@@ -133,8 +133,9 @@ is lazy is decided where it is written.
 
 Two modules that import each other at module level are a circular import,
 E0422, shown with each import of the cycle (MOD-05). Moving one of the
-imports into the function that uses the module breaks the cycle. A name a
-module does not define is E0425, at compile time.
+imports into the function that uses the module breaks the cycle, as in
+CPython (MOD-13); inside `__init__` it is planned for 1.0 (E0426,
+MOD-15). A name a module does not define is E0425, at compile time.
 
 A module keeps one definition per name, as for `def` (STD-04). A name
 that an import binds to a function or a class and that the module also

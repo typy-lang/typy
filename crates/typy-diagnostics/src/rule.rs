@@ -243,6 +243,8 @@ impl RuleId {
     pub const MOD_13: Self = Self("MOD-13");
     /// A name that imports bind to more than one function or class shall be usable as a value, in an annotation and from another module.
     pub const MOD_14: Self = Self("MOD-14");
+    /// An `__init__` shall be able to import a module that imports its own module at module level.
+    pub const MOD_15: Self = Self("MOD-15");
     /// The compiler shall not crash on any input; an internal error shall be reported as `E9xxx` with a hint to report it.
     pub const NFR_09: Self = Self("NFR-09");
     /// Unpacking assignment to several targets shall be accepted for tuples and lists.
@@ -420,6 +422,7 @@ impl RuleId {
         Self::MOD_12,
         Self::MOD_13,
         Self::MOD_14,
+        Self::MOD_15,
         Self::NFR_09,
         Self::SMT_02,
         Self::SMT_04,

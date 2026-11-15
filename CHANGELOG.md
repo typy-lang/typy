@@ -41,6 +41,10 @@ All notable changes to TyPy are recorded here. The format follows
   `tuple[str, int] | tuple[str]`; `code` is `None`, the one argument, or
   the tuple. The five items of a Unicode error join only in a program
   that encodes, decodes or opens a file (EXC-15, ADR-0034).
+- A function may import a module that imports its own module at module
+  level, the usual way to break an import cycle, as CPython allows; the
+  function is checked once that module is. Inside `__init__` it is
+  planned for 1.0 (MOD-13, MOD-15).
 - `OSError` takes arguments of any type, more than five of them, and two
   or more through `super().__init__` or to a subclass with an `__init__`
   of its own, as CPython does: `OSError("a", "b")` is `[Errno a] b`.

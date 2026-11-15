@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy software requirements specification |
-| Version | 1.51 |
+| Version | 1.52 |
 | Status | Approved |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-15 |
@@ -363,6 +363,7 @@ formatter applies; Ruff's formatter is the project's recommendation.
 | MOD-11 | A name a module binds by a lazy import shall be usable from another module, a module variable shall be assignable as `m.x = v` through a lazily imported module `m`, and a name shall be bindable by more than one lazy import of the module. | S | 0.4 | |
 | MOD-12 | A function or a class shall be bindable by more than one import of a module, eager or lazy, and by an import inside a block, a call running the one the import that ran last bound, and raising `NameError` when none has run. | C | 0.5 | |
 | MOD-14 | A name that imports bind to more than one function or class shall be usable as a value, in an annotation and from another module. | C | 1.0 | |
+| MOD-15 | An `__init__` shall be able to import a module that imports its own module at module level. | C | 1.0 | |
 | MOD-13 | A module shall be importable inside a function of a module that it imports at module level. | S | 0.5 | |
 
 ### 3.14 Built-in functions and standard library (LIB)

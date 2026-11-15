@@ -34,6 +34,7 @@ mod matching;
 mod math_call;
 mod math_iterable;
 mod method_call;
+mod module_context;
 mod name;
 mod named;
 mod open_call;
@@ -66,6 +67,7 @@ mod view_operator;
 pub(crate) use builtin_module::ModuleFunction;
 pub(crate) use class_copy::{ClassCopies, GenericClass};
 pub(crate) use import::Imported;
+pub(crate) use module_context::ModuleContext;
 pub(crate) use program::Program;
 pub(crate) use rebound::{Binding, Bound, binding_variable, rebound_planned};
 

@@ -179,16 +179,31 @@ fn imports_that_cannot_resolve_give_their_codes() {
 }
 
 #[test]
-fn a_function_importing_a_module_that_imports_its_own_gives_e0426() {
-    let codes = rejected(&[
+fn a_function_importing_a_module_that_imports_its_own_waits_for_it() {
+    accepted(&[
         ("app.py", "import first\n"),
-        ("first.py", "import second\n"),
+        (
+            "first.py",
+            "import second\nVALUE = 1\n\n\ndef go() -> None:\n    pass\n",
+        ),
         (
             "second.py",
             "def later() -> None:\n    import first\n    print(first.VALUE)\n    first.go()\n    from first import VALUE\n",
         ),
     ]);
-    assert_eq!(codes, ["E0426", "E0426", "E0426"]);
+}
+
+#[test]
+fn an_init_importing_a_module_that_imports_its_own_gives_e0426() {
+    let codes = rejected(&[
+        ("app.py", "import first\n"),
+        ("first.py", "import second\nVALUE = 1\n"),
+        (
+            "second.py",
+            "class Counter:\n    def __init__(self) -> None:\n        import first\n        self.count = first.VALUE\n",
+        ),
+    ]);
+    assert_eq!(codes, ["E0426"]);
 }
 
 #[test]

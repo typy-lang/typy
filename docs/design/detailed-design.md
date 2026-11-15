@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy detailed design |
-| Version | 1.79 |
+| Version | 1.80 |
 | Status | Approved |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-15 |
@@ -316,7 +316,7 @@ it enforces and its status. `typy explain` reads the same table.
 | E0423 | `global` of a name the module does not bind | SMT-08 |
 | E0424 | Module variable an `__init__` reads before the module's code gives it a type | SMT-08 |
 | E0425 | Import of a name its module does not define | SMT-07 |
-| E0426 | Import inside a function of a module that the imported module imports | MOD-05 |
+| E0426 | Import inside `__init__` of a module that the imported module imports | MOD-15 |
 | E0427 | `%` format that does not fit its values | LIB-10 |
 | E0701 | C toolchain program not found | A-01 |
 | E0702 | Link failed | A-01 |
@@ -1618,8 +1618,14 @@ a module object or a copied value. `module_of` sees through a name of type
 `Type::Module`, so `m.x` is `ModuleAttribute`, `m.f()` a call of `m`'s
 function, `m.C()` an instance, `m.x = v` an assignment of `m`'s variable,
 `pkg.sub` a `Submodule`, and `m.C` an annotation. A name a module does not
-define is E0425, and an import of a module not checked yet, which only an
-import inside a function that closes a cycle can make, is E0426 (OI-22).
+define is E0425. A function whose body imports a module not checked yet,
+which only an import that closes a cycle can make, waits: `check_module`
+gives it to a `Deferred` with a copy of the module's `ModuleContext`, and
+once every module is checked `Deferred::check` swaps that context in,
+checks the body and the copies of generics it needs, and swaps back
+(MOD-13, OI-22). An `__init__` is checked before the rest of its module,
+since it gives the attributes their types, so such an import there is
+E0426, planned for 1.0 (MOD-15).
 A standard library module gives E0201 when a later release provides it,
 and E0206 otherwise (LIB-08). For each module it runs:
 

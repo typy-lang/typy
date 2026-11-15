@@ -431,18 +431,19 @@ fn imports_nothing(span: Span, message: &str) -> Diagnostic {
     Diagnostic::new(DiagnosticCode::error(206), span, message).with_rule(RuleId::MOD_02)
 }
 
-/// Returns E0426 for an import of a module that is checked after this one: an import inside
-/// a function of a module that the imported module imports at module level.
+/// Returns E0426 for an import of a module that is checked after this one inside an
+/// `__init__`, which is checked before the rest of its module since it gives the attributes
+/// their types; any other function waits for the module (MOD-13).
 fn checked_later(span: Span, module: &ModuleName) -> Diagnostic {
     Diagnostic::new(
         DiagnosticCode::error(426),
         span,
         format!(
-            "`{module}` imports this module at module level, so importing it inside this \
-             function is planned for TyPy 0.5 (MOD-13)"
+            "`{module}` imports this module at module level, so importing it inside \
+             `__init__` is planned for TyPy 1.0 (MOD-15)"
         ),
     )
-    .with_rule(RuleId::MOD_13)
+    .with_rule(RuleId::MOD_15)
     .with_help("import it at module level in the other direction, or move the shared code to a third module")
 }
 
@@ -1047,6 +1048,18 @@ pub(super) struct SavedNames {
     math: Vec<(String, Option<ModuleFunction>)>,
     aliases: Vec<(String, Option<std::rc::Rc<crate::check::ExportedAlias>>)>,
     rebound: Vec<(String, super::rebound::Rebound)>,
+}
+
+impl Program {
+    /// Returns true when a function body imports a module of the program that is not
+    /// checked yet, so the body waits until it is (MOD-13).
+    pub(crate) fn imports_later_modules(&self, body: &[Stmt]) -> bool {
+        let mut statements = Vec::new();
+        imports_in(body, &mut statements);
+        statements
+            .iter()
+            .any(|statement| self.imports_later_module(statement))
+    }
 }
 
 /// Collects the import statements of a block, at any depth outside nested definitions.
