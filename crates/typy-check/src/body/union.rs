@@ -72,11 +72,11 @@ impl BodyChecker<'_> {
                     format!(
                         "a truth test of {} whose member classes test themselves with \
                          `__len__`, or differently from their base, is planned for TyPy 0.5 \
-                         (CLS-07, TYP-14)",
+                         (CLS-24)",
                         value.ty.with_article()
                     ),
                 )
-                .with_rule(RuleId::TYP_14)
+                .with_rule(RuleId::CLS_24)
                 .with_help("define `__bool__` in each member class"),
             );
         }

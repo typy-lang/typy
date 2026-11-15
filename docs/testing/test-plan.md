@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy test plan |
-| Version | 0.46 |
+| Version | 0.47 |
 | Status | Draft |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-15 |
@@ -372,6 +372,13 @@ that the specification does not define.
 | CLS-15 | 0.5 | IT | `tests/conformance/cls/CLS-15_*.py` |
 | CLS-16 | 0.5 | IT | `tests/conformance/cls/CLS-16_*.py` |
 | CLS-17 | 0.5 | IT | `tests/conformance/cls/CLS-17_*.py` |
+| CLS-20 | 0.5 | IT | `tests/conformance/cls/CLS-20_*.py` |
+| CLS-21 | 0.5 | IT | `tests/conformance/cls/CLS-21_*.py` |
+| CLS-22 | 0.5 | IT | `tests/conformance/cls/CLS-22_*.py` |
+| CLS-23 | 0.5 | IT | `tests/conformance/cls/CLS-23_*.py` |
+| CLS-24 | 0.5 | IT | `tests/conformance/cls/CLS-24_*.py` |
+| CLS-25 | 0.5 | IT | `tests/conformance/cls/CLS-25_*.py` |
+| CLS-26 | 0.5 | IT | `tests/conformance/cls/CLS-26_*.py` |
 | CLS-18 | 1.0 | IT | `tests/conformance/cls/CLS-18_*.py` |
 | CLS-19 | 1.0 | IT | `tests/conformance/cls/CLS-19_*.py` |
 | GEN-01 | 0.4 | IT | `tests/conformance/gen/GEN-01_*.py` |

@@ -80,9 +80,9 @@ impl BodyChecker<'_> {
                     DiagnosticCode::error(201),
                     receiver.span(),
                     "`super()` with arguments other than the enclosing class and `self` is \
-                     planned for TyPy 0.5 (CLS-14)",
+                     planned for TyPy 0.5 (CLS-26)",
                 )
-                .with_rule(RuleId::CLS_14)
+                .with_rule(RuleId::CLS_26)
                 .with_help("write `super()`"),
             ),
         }

@@ -139,7 +139,7 @@ One value assigned to several targets, as in `a = items[0] = 1`, or
 unpacked into targets, is held by each target as its own type, a union
 or an optional among them (TYP-16). A truth test
 whose member classes test themselves with `__len__`, or differently from
-their base, is planned for 0.5.
+their base, is planned for 0.5 (CLS-24).
 
 ## Names that keep their value
 

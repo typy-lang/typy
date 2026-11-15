@@ -39,6 +39,14 @@ impl RuleId {
     pub const CLS_14: Self = Self("CLS-14");
     /// `isinstance` and a class pattern shall accept a class held in a variable or computed.
     pub const CLS_18: Self = Self("CLS-18");
+    /// Comparison and hash methods that may raise, a chain such as `a < b < c` of instances, and an operator whose method and reflected method return different types shall be accepted.
+    pub const CLS_22: Self = Self("CLS-22");
+    /// The truth of an instance shall come from the `__bool__` or `__len__` of its own class, also where its static type is a base or a union that tests truth otherwise, and in `any` and `all`.
+    pub const CLS_24: Self = Self("CLS-24");
+    /// A class method shall be callable through an instance and through a subclass defined in another module, a class variable shall be assignable through a subclass, and a static method shall be callable through any expression that gives its class or an instance.
+    pub const CLS_25: Self = Self("CLS-25");
+    /// `super(Class, instance)` shall be accepted with any class of the instance's chain of bases.
+    pub const CLS_26: Self = Self("CLS-26");
     /// `for` shall iterate over `range`, `str`, `bytes`, `list`, `tuple`, `dict`, `set` and any class with `__iter__` and `__next__`.
     pub const CST_03: Self = Self("CST-03");
     /// `try` with `except`, `else` and `finally` clauses shall be accepted, and `finally` shall run on `return`, `break`, `continue` and exceptions.
@@ -298,6 +306,10 @@ impl RuleId {
         Self::CLS_13,
         Self::CLS_14,
         Self::CLS_18,
+        Self::CLS_22,
+        Self::CLS_24,
+        Self::CLS_25,
+        Self::CLS_26,
         Self::CST_03,
         Self::CST_04,
         Self::CST_05,

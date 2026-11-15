@@ -532,9 +532,9 @@ impl BodyChecker<'_> {
                         DiagnosticCode::error(201),
                         name.span,
                         "calling a static method through an expression other than a variable \
-                         is planned for TyPy 0.5 (CLS-06)",
+                         is planned for TyPy 0.5 (CLS-25)",
                     )
-                    .with_rule(RuleId::CLS_06)
+                    .with_rule(RuleId::CLS_25)
                     .with_help("call it through its class"),
                     span,
                 );

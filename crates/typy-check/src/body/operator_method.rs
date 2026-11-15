@@ -163,10 +163,10 @@ impl BodyChecker<'_> {
                             format!(
                                 "an operator whose method `{name}` returns {ty} and whose \
                                  reflected `{reflected}` returns {other} is planned for TyPy 0.5 \
-                                 (CLS-07)"
+                                 (CLS-22)"
                             ),
                         )
-                        .with_rule(RuleId::CLS_07),
+                        .with_rule(RuleId::CLS_22),
                     );
                 }
                 ty

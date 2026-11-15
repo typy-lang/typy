@@ -185,7 +185,7 @@ an attribute of the subclass. Such a call of `super().__init__(...)`
 comes after the subclass assigns its own attributes, E0309 otherwise,
 so no attribute is read before it holds a value. `super()` outside a
 method is E0414, and `super(Base, self)` naming another class is
-planned for 0.5.
+planned for 0.5 (CLS-26).
 
 An instance never holds an attribute without a value: calling a class
 whose body declares an attribute that no `__init__` that runs assigns,
@@ -351,7 +351,7 @@ A class method is called through its class. Calling it through an
 instance, and through a subclass defined in another module than the
 class that defines the method, are planned for 0.5, and so is
 assigning a class variable through a subclass that inherits it, which
-in CPython gives the subclass a variable of its own.
+in CPython gives the subclass a variable of its own (CLS-25).
 
 ## Comparison methods
 
@@ -391,7 +391,7 @@ left's and defines it again, and a class that defines `__eq__` without
 container compares an instance with an object its `__eq__` does not
 take as unequal. A comparison or hash method that may raise, a chain
 such as `a < b < c` of such instances, and a method returning
-`NotImplemented` are planned for 0.5.
+`NotImplemented` are planned for 0.5 (CLS-21, CLS-22).
 
 ## Arithmetic methods
 
@@ -424,7 +424,7 @@ As in CPython, `3 * total` falls back to the right operand's
 `__rmul__`, and the right operand's reflected method comes first when
 its class derives from the left's and defines it again. `x += y` is
 `x = x + y` for a variable or an attribute of one; the in-place methods
-such as `__iadd__` are planned for 0.5.
+such as `__iadd__` are planned for 0.5 (CLS-20).
 
 ## Container methods
 
@@ -462,7 +462,7 @@ As in CPython, a negative `__len__` raises `ValueError`. A slice such
 as `x[1:2]`, `any` and `all` of instances whose truth comes from
 `__len__`, and a truth test whose static class has neither method while
 a subclass defines one, are planned for 0.5, and so is `in` without
-`__contains__`, which CPython answers by iterating.
+`__contains__`, which CPython answers by iterating (CLS-23, CLS-24).
 
 ## Dataclasses
 

@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy software requirements specification |
-| Version | 1.45 |
+| Version | 1.46 |
 | Status | Approved |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-15 |
@@ -297,6 +297,13 @@ formatter applies; Ruff's formatter is the project's recommendation.
 | CLS-17 | `@dataclass` shall accept the options `init`, `repr`, `unsafe_hash` and `slots`. | S | 0.5 | |
 | CLS-18 | `isinstance` and a class pattern shall accept a class held in a variable or computed. | S | 1.0 | |
 | CLS-19 | `issubclass` shall be accepted with a class or a tuple of classes. | S | 1.0 | |
+| CLS-20 | An augmented assignment to an instance shall call the class's in-place method, such as `__iadd__`, and the binary method when the class has none, as CPython does. | S | 0.5 | |
+| CLS-21 | An operator or comparison method that returns `NotImplemented` shall give way to the reflected method, and then to CPython's default or its `TypeError`. | S | 0.5 | |
+| CLS-22 | Comparison and hash methods that may raise, a chain such as `a < b < c` of instances, and an operator whose method and reflected method return different types shall be accepted. | S | 0.5 | |
+| CLS-23 | `in` on an instance whose class has no `__contains__` shall iterate it, and an instance shall be sliced through its `__getitem__`, as CPython does. | S | 0.5 | |
+| CLS-24 | The truth of an instance shall come from the `__bool__` or `__len__` of its own class, also where its static type is a base or a union that tests truth otherwise, and in `any` and `all`. | S | 0.5 | |
+| CLS-25 | A class method shall be callable through an instance and through a subclass defined in another module, a class variable shall be assignable through a subclass, and a static method shall be callable through any expression that gives its class or an instance. | S | 0.5 | |
+| CLS-26 | `super(Class, instance)` shall be accepted with any class of the instance's chain of bases. | S | 0.5 | |
 | CLS-14 | `super().__init__(...)` shall be accepted in the `__init__` of an exception class and shall set the exception's arguments; any other use of `super()` shall be rejected until 0.4. | M | 0.3 | |
 
 ### 3.11 Generics and protocols (GEN)
@@ -469,7 +476,7 @@ cache, unless a row says otherwise.
 | 0.2 | `list`, `tuple`, `dict`, `set`, `bytes`, classes without inheritance, f-strings, comprehensions, slicing | Unboxed values, reference count elision; user documentation |
 | 0.3 | `try`, `raise`, user exceptions, `with`, `assert`, `del`, `global`, modules and packages, lazy imports | `sys`, `math`, `open`; `typy.toml` with `python-floor`; JSON diagnostics; the first warnings and `--deny-warnings` |
 | 0.4 | Dataclasses, inheritance, protocols, PEP 695 generics, narrowing, `Final`, `type` aliases | Binary files and the rest of `open` |
-| 0.5 | `match`, `:=`, dataclass `default_factory`, hashing and options, C interoperability through `ctypes` | Stack allocation; libraries and exports described by their annotations (ADR-0032) |
+| 0.5 | `match`, `:=`, dataclass `default_factory`, hashing and options, the rest of the class protocols (CLS-20 to CLS-26), C interoperability through `ctypes` | Stack allocation; libraries and exports described by their annotations (ADR-0032) |
 | 0.6 | | Linux and macOS AArch64; cross-compilation |
 | 1.0 | Closures, `lambda`, `nonlocal`, generators, `*args`, keyword-only parameters, `isinstance` with a class held in a variable, `issubclass` | Cycle collection, `weakref`; Windows; performance budgets |
 
