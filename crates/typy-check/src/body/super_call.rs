@@ -196,6 +196,21 @@ impl BodyChecker<'_> {
     ) -> TypedExpr {
         let info = &self.program.classes[start.0 as usize];
         let (base, inherited) = (info.base, info.inherited);
+        self.base_init(initializing, (base, inherited), arguments, keywords, span)
+    }
+
+    /// Checks a call of the `__init__` of `base`, or of `object` or the exception class the
+    /// class derives from when `base` is `None`, on the instance `__init__` is building, with
+    /// the arguments after the instance; the first `inherited` attributes count as assigned
+    /// after it.
+    pub(super) fn base_init(
+        &mut self,
+        initializing: Initializing,
+        (base, inherited): (Option<crate::typed::ClassId>, usize),
+        arguments: &[Expr],
+        keywords: &[Keyword],
+        span: Span,
+    ) -> TypedExpr {
         let base_init = base.and_then(|base| self.program.method(base, "__init__"));
         let call = if let (Some(function), Some(base)) = (base_init, base) {
             if let Some(error) = self.init_shares_too_early(initializing, base, span) {
@@ -319,13 +334,13 @@ impl BodyChecker<'_> {
             DiagnosticCode::error(309),
             span,
             format!(
-                "`super().__init__()` runs an `__init__` of `{base_name}` that uses the \
-                 instance, which may call a method that reads {}, before it is assigned",
+                "this call runs an `__init__` of `{base_name}` that uses the instance, which \
+                 may call a method that reads {}, before it is assigned",
                 missing.join(", ")
             ),
         )
         .with_rule(RuleId::CLS_01)
-        .with_help("assign the attributes of this class before calling `super().__init__()`");
+        .with_help("assign the attributes of this class before calling the base's `__init__`");
         Some(self.error(diagnostic, span))
     }
 

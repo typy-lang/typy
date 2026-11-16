@@ -80,7 +80,9 @@ impl BodyChecker<'_> {
         None
     }
 
-    /// Checks `Class.name(arguments)`: a static method, called directly.
+    /// Checks `Class.name(arguments)`: a static method, called directly, or a method of the
+    /// class or a base, called directly with the instance as its first argument, as CPython
+    /// calls the function the class holds (CLS-06).
     pub(super) fn class_method_call(
         &mut self,
         class: ClassId,
@@ -89,33 +91,172 @@ impl BodyChecker<'_> {
         keywords: &[Keyword],
         span: Span,
     ) -> TypedExpr {
-        let class_name = self.program.classes[class.0 as usize].name.clone();
         if let Some(call) = self.class_method_call_of(class, name, arguments, keywords, span) {
             return call;
         }
+        if let Some(call) = self.base_init_through_class(class, name, arguments, keywords, span) {
+            return call;
+        }
+        let class_name = self.program.classes[class.0 as usize].name.clone();
         let function = self.program.method(class, &name.name);
-        let Some(function) = function.filter(|_| self.is_static_method(class, &name.name)) else {
+        let property = self.property_getter(class, &name.name).is_some();
+        let Some(function) = function.filter(|_| !property) else {
             for argument in arguments {
                 self.expression(argument);
             }
-            let message = if function.is_some() {
-                format!(
-                    "calling the method `{class_name}.{}` through its class is planned for \
-                     TyPy 0.5 (CLS-06)",
-                    name.name
+            let diagnostic = if property {
+                Diagnostic::new(
+                    DiagnosticCode::error(401),
+                    name.span,
+                    format!(
+                        "`{class_name}.{}` is a property, which is read through an instance and \
+                         cannot be called",
+                        name.name
+                    ),
                 )
+                .with_rule(RuleId::CLS_06)
             } else {
-                format!("`{class_name}` has no static method `{}`", name.name)
+                Diagnostic::new(
+                    DiagnosticCode::error(414),
+                    name.span,
+                    format!("`{class_name}` has no method `{}`", name.name),
+                )
+                .with_rule(RuleId::CLS_06)
             };
-            let code = if function.is_some() { 201 } else { 414 };
-            return self.error(
-                Diagnostic::new(DiagnosticCode::error(code), name.span, message)
-                    .with_rule(RuleId::CLS_06)
-                    .with_help("call it on an instance"),
+            return self.error(diagnostic, span);
+        };
+        if self.is_static_method(class, &name.name) {
+            return self.static_call(function, class, name, arguments, keywords, span);
+        }
+        self.unbound_call(
+            (class, &class_name),
+            function,
+            name,
+            arguments,
+            keywords,
+            span,
+        )
+    }
+
+    /// Checks `Class.name(instance, arguments)` for a method that takes the instance: a direct
+    /// call of the method the class holds or inherits, whose first parameter takes the
+    /// instance; a method of a generic class runs the copy the arguments give.
+    fn unbound_call(
+        &mut self,
+        (class, class_name): (ClassId, &str),
+        function: FunctionId,
+        name: &Identifier,
+        arguments: &[Expr],
+        keywords: &[Keyword],
+        span: Span,
+    ) -> TypedExpr {
+        let qualified = format!("{class_name}.{}", name.name);
+        let generic = self
+            .program
+            .class_copies
+            .borrow()
+            .roots
+            .contains_key(&class);
+        let instance_of = if generic {
+            self.copy_of_instance(class, arguments)
+        } else {
+            None
+        };
+        if let Some(copy) = instance_of.filter(|copy| *copy != class) {
+            // The instance's copy holds the method for its type arguments.
+            let function = self.program.method(copy, &name.name).unwrap_or(function);
+            return self.unbound_call(
+                (copy, class_name),
+                function,
+                name,
+                arguments,
+                keywords,
                 span,
             );
+        }
+        // An instance of the generic class itself is one its own body reads, which is checked,
+        // never run, so the call goes to the method itself.
+        let found = if generic && instance_of.is_none() {
+            self.call_target(function, 0, &qualified, arguments, keywords, span)
+        } else {
+            self.method_target(
+                (class, &name.name),
+                function,
+                0,
+                &qualified,
+                (arguments, keywords),
+                span,
+            )
         };
-        self.static_call(function, class, name, arguments, keywords, span)
+        let (target, signature) = match found {
+            Ok(found) => found,
+            Err(error) => return error,
+        };
+        let bound = match self.bind_to(&signature, 0, &qualified, arguments, keywords, span) {
+            Ok(bound) => bound,
+            Err(error) => return error,
+        };
+        Self::typed(
+            TypedExprKind::Call {
+                function: target,
+                arguments: bound,
+                dispatch: false,
+            },
+            signature.returns,
+            span,
+        )
+    }
+
+    /// Returns the copy of the generic class `class` the first argument is an instance of, or
+    /// `class` itself for an instance of the generic class, typed once with what that look
+    /// reports dropped; `None` when it is neither.
+    fn copy_of_instance(&mut self, class: ClassId, arguments: &[Expr]) -> Option<ClassId> {
+        let first = arguments.first()?;
+        let reported = self.diagnostics.len();
+        let before = self.assigned.clone();
+        let value = self.expression(first);
+        self.diagnostics.truncate(reported);
+        self.assigned = before;
+        match &value.ty {
+            Type::Instance(instance)
+                if instance.id == class
+                    || instance
+                        .generic
+                        .as_ref()
+                        .is_some_and(|(root, _)| *root == class) =>
+            {
+                Some(instance.id)
+            }
+            _ => None,
+        }
+    }
+
+    /// Checks `Base.__init__(self, arguments)` in the `__init__` of a class derived from
+    /// `Base`, on the instance it is building: as `super().__init__(arguments)` does, it
+    /// counts `Base`'s attributes as assigned; `None` for any other call.
+    fn base_init_through_class(
+        &mut self,
+        class: ClassId,
+        name: &Identifier,
+        arguments: &[Expr],
+        keywords: &[Keyword],
+        span: Span,
+    ) -> Option<TypedExpr> {
+        let initializing = self.initializing?;
+        let [Expr::Name { id, .. }, rest @ ..] = arguments else {
+            return None;
+        };
+        let is_instance = self.locals.get(id) == Some(&initializing.instance);
+        let derives = std::iter::successors(
+            self.program.classes[initializing.class.0 as usize].base,
+            |each| self.program.classes[each.0 as usize].base,
+        )
+        .any(|each| each == class);
+        if name.name != "__init__" || !is_instance || !derives {
+            return None;
+        }
+        let inherited = self.program.classes[class.0 as usize].attributes.len();
+        Some(self.base_init(initializing, (Some(class), inherited), rest, keywords, span))
     }
 
     /// Returns the call of a static method through an instance as a call of its bridge

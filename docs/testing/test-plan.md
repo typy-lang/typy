@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy test plan |
-| Version | 0.70 |
+| Version | 0.71 |
 | Status | Draft |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-16 |
@@ -363,7 +363,7 @@ that the specification does not define.
 | CLS-03 | 0.3 | IT | `tests/conformance/cls/CLS-03_*.py` |
 | CLS-04 | 0.4 | IT | `tests/conformance/cls/CLS-04_*` |
 | CLS-05 | 0.4 | IT | `tests/conformance/cls/CLS-05_*.py` |
-| CLS-06 | 0.4 | IT | `tests/conformance/cls/CLS-06_*.py` |
+| CLS-06 | 0.4 | IT | `tests/conformance/cls/CLS-06_*.py`; `crates/typy-check/tests/checker.rs`, tests named for methods called through their class |
 | CLS-07 | 0.4 | IT | `tests/conformance/cls/CLS-07_*.py` |
 | CLS-08 | 0.2 | IT | `tests/conformance/cls/CLS-08_*.py` |
 | CLS-09 | 0.4 | IT | `tests/conformance/cls/CLS-09_*.py` |

@@ -2340,6 +2340,42 @@ fn a_static_method_is_called_through_any_instance() {
 }
 
 #[test]
+fn a_method_is_called_through_its_class_with_the_instance_first() {
+    let classes = concat!(
+        "class Shape:\n",
+        "    def __init__(self, name: str) -> None:\n",
+        "        self.name = name\n",
+        "    def area(self) -> float:\n",
+        "        return 0.0\n",
+        "    @property\n",
+        "    def label(self) -> str:\n",
+        "        return self.name\n",
+        "class Square(Shape):\n",
+        "    def __init__(self, side: float) -> None:\n",
+        "        Shape.__init__(self, 'square')\n",
+        "        self.side = side\n",
+        "    def area(self) -> float:\n",
+        "        return self.side * Shape.area(self)\n",
+    );
+    let cases: &[(&str, &[&str])] = &[
+        ("print(Shape.area(Square(2.0)) + 1.0)\n", &[]),
+        ("Square.__init__(Square(1.0), 2.0)\n", &[]),
+        ("print(Shape.area(5))\n", &["E0404"]),
+        ("print(Square.area(Shape('s')))\n", &["E0404"]),
+        ("print(Shape.label(Shape('s')))\n", &["E0401"]),
+        ("print(Shape.volume(Shape('s')))\n", &["E0414"]),
+        (
+            "class Cube(Square):\n    def __init__(self) -> None:\n        Shape.__init__(self, 'cube')\n",
+            &["E0309"],
+        ),
+    ];
+    for (body, expected) in cases {
+        let found = check(&format!("{classes}{body}")).err().unwrap_or_default();
+        assert_eq!(found, *expected, "{body}");
+    }
+}
+
+#[test]
 fn static_methods_and_properties_are_checked() {
     accepted(concat!(
         "class A:\n",
@@ -2411,7 +2447,7 @@ fn static_methods_and_properties_are_checked() {
         ),
         (
             "class A:\n    def f(self) -> None:\n        pass\nA.f()\n",
-            &["E0201"],
+            &["E0404"],
         ),
         ("class A:\n    pass\nA.g()\n", &["E0414"]),
         ("from math import *\n", &["E0201"]),

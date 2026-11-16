@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy detailed design |
-| Version | 2.05 |
+| Version | 2.06 |
 | Status | Approved |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-16 |
@@ -1312,7 +1312,13 @@ compares two exceptions. `FunctionParts::method_kind` reads a method's
 decorator (CLS-06). A static method's definition takes no instance, is recorded
 in `ClassInfo::static_methods`, and is called directly as `Class.name(...)` or
 through an instance; an instance that is not a variable is evaluated first, in a
-`TypedExprKind::Sequence` (CLS-25). `Program::add_static_bridges` gives each
+`TypedExprKind::Sequence` (CLS-25). Any other method called as
+`Class.name(instance, ...)` is `BodyChecker::unbound_call`: a direct call of the
+method `Class` holds or inherits, its first parameter taking the instance; for
+a generic class, the method of the copy the instance belongs to. In `__init__`,
+`Base.__init__(self, ...)` on the instance being built goes to `base_init`, which
+`super().__init__(...)` also reaches, and counts `Base`'s attributes as
+assigned. `Program::add_static_bridges` gives each
 static method `<static name>`, which takes the instance first and calls it; the
 method tables hold the bridge in the static method's place, so when a class
 derived from the instance's static class defines the name again, as a static

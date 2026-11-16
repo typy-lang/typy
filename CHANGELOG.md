@@ -148,6 +148,11 @@ All notable changes to TyPy are recorded here. The format follows
   `__match_args__`. One whose annotation names a type parameter of the
   class, such as `last: T | None = None`, is planned for 1.0 (GEN-08,
   GEN-11).
+- A method called through a class with the instance first, such as
+  `Shape.describe(square)`, runs the method that class holds or inherits,
+  as in CPython. In `__init__`, `Base.__init__(self, ...)` does what
+  `super().__init__(...)` does and counts the base's attributes as
+  assigned (CLS-06).
 - A generic function or class of another module, imported by name or
   used through its module as `tools.first(items)` or `tools.Box[int]`.
   Its copies read the names of the module that defines it (GEN-07).

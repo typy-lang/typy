@@ -192,6 +192,15 @@ its bases, and the method found is that of the nearest base of `Base`, as
 in CPython (CLS-26); with an instance other than `self` it is planned for
 1.0 (CLS-29).
 
+A method may also be called through a class with the instance first,
+`Shape.describe(square)`, which runs the method that class holds or
+inherits, not an override, as in CPython. In `__init__`,
+`Shape.__init__(self, "square")` on the instance being built does what
+`super().__init__("square")` does, for any base the class derives from,
+and its attributes count as assigned. A property called through its
+class is E0401, since CPython's property object cannot be called
+(CLS-06).
+
 An instance never holds an attribute without a value: calling a class
 whose body declares an attribute that no `__init__` that runs assigns,
 such as a subclass without `__init__` that declares one of its own, is
