@@ -207,6 +207,12 @@ impl RuleId {
     pub const GEN_10: Self = Self("GEN-10");
     /// A class variable or an attribute default of a generic class whose annotation names a type parameter of the class shall be accepted.
     pub const GEN_11: Self = Self("GEN-11");
+    /// A generic class shall be accepted with an exception class as its base.
+    pub const GEN_12: Self = Self("GEN-12");
+    /// A generic protocol shall be accepted, satisfied by the classes whose members fit it for its type arguments.
+    pub const GEN_13: Self = Self("GEN-13");
+    /// `isinstance` and a class pattern with a generic class shall narrow a variable of a base's type to the copies of the class the program makes.
+    pub const GEN_14: Self = Self("GEN-14");
     /// Source files shall be UTF-8 with the `.py` extension.
     pub const LEX_01: Self = Self("LEX-01");
     /// Bytes literals shall be accepted.
@@ -444,6 +450,9 @@ impl RuleId {
         Self::GEN_09,
         Self::GEN_10,
         Self::GEN_11,
+        Self::GEN_12,
+        Self::GEN_13,
+        Self::GEN_14,
         Self::LEX_01,
         Self::LEX_06,
         Self::LEX_07,

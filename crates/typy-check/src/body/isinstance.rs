@@ -279,6 +279,11 @@ impl BodyChecker<'_> {
                 let TypeObjectOf::Instance(id, _) = class else {
                     return None;
                 };
+                // A generic class has no instances of its own: the variable keeps its type, as
+                // the copy the object belongs to is known only when the program runs (GEN-14).
+                if self.program.is_opaque_class(*id) {
+                    return None;
+                }
                 let Type::Instance(tested) = self.program.instance_type(*id) else {
                     return None;
                 };
@@ -329,6 +334,11 @@ impl BodyChecker<'_> {
                 Outcome::Always => return vec![member.clone()],
                 Outcome::Never => {}
                 Outcome::Checked => match (member, class) {
+                    (Type::Instance(_), TypeObjectOf::Instance(id, _))
+                        if self.program.is_opaque_class(*id) =>
+                    {
+                        return vec![member.clone()];
+                    }
                     (Type::Instance(own), TypeObjectOf::Instance(id, _))
                         if matches!(self.program.instance_type(*id),
                             Type::Instance(tested) if tested.derives_from(own)) =>

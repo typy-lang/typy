@@ -142,6 +142,13 @@ All notable changes to TyPy are recorded here. The format follows
   takes the type arguments from its arguments, as in `Box.wrap("a")`, or
   from the class, as in `Box[int].make(3)`, and runs that copy's method
   (GEN-01).
+- A generic class with a base of the program, `class Box[T](Base):`:
+  every copy derives from `Base`, takes its methods and may stand where a
+  `Base` is expected. `isinstance` with a generic class does not narrow a
+  variable of a base's type, and the comparison methods of a generic
+  dataclass derived from a dataclass, which need that, are planned for
+  1.0, with generic exception classes and generic protocols (GEN-08,
+  GEN-12 to GEN-14, ADR-0040).
 - Class variables and defaults in the body of a generic class. Every
   copy, such as `Counter[int]` and `Counter[str]`, shares them, as every
   instance shares them in CPython, and a generic dataclass gets

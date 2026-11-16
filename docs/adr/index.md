@@ -45,3 +45,4 @@ supersedes it.
 | [ADR-0037](0037-reach-class-methods-and-class-variables-through-the-instances-class.md) | Reach class methods and class variables through the instance's class | Accepted | 2026-11-15 |
 | [ADR-0038](0038-give-way-to-the-next-operator-method-on-not-implemented.md) | Give way to the next operator method on NotImplemented | Accepted | 2026-11-16 |
 | [ADR-0039](0039-keep-a-slot-methods-exception-until-the-runtime-call-returns.md) | Keep a slot method's exception until the runtime call returns | Accepted | 2026-11-16 |
+| [ADR-0040](0040-derive-each-copy-of-a-generic-class-from-the-copy-of-its-base.md) | Derive each copy of a generic class from the copy of its base | Accepted | 2026-11-16 |

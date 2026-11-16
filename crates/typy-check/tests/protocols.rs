@@ -140,7 +140,7 @@ fn a_protocol_is_refused_where_typy_does_not_hold_one() {
             "class C:\n    def __eq__(self, other: Shape) -> bool:\n        return True\n",
             "E0201",
         ),
-        // GEN-08: a generic class with a base.
+        // GEN-13: a generic protocol.
         (
             "class P[T](Protocol):\n    def get(self) -> T: ...\n",
             "E0201",

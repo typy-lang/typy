@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy detailed design |
-| Version | 2.06 |
+| Version | 2.07 |
 | Status | Approved |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-16 |
@@ -933,7 +933,18 @@ which a copy's `ClassInfo`, cloned from the generic class's, names as the
 generic class does, so every copy shares it as every instance shares it in
 CPython. One whose annotation names a type parameter of the class, which
 `check::class::refuse_shared_parameter` finds, is E0201, planned for 1.0
-(GEN-11), and `class_values` makes no module variable for it. A copy whose
+(GEN-11), and `class_values` makes no module variable for it. A generic class
+may derive from a class of the program (GEN-08, ADR-0040): its
+`GenericClass::instance` holds the chain `class_types` gives it, and
+`ClassCopies::applied` gives each copy that chain through `copy_ancestors`,
+each copy in it made again for the copy's arguments by
+`ClassCopies::substitute`, which `Program::substitute` now calls. A copy's
+`ClassInfo` keeps the generic class's base, so its layout and method table
+extend the base's. `isinstance` with a generic class does not narrow a
+variable, since `Program::is_opaque_class` holds for the generic class
+(GEN-14); for the same reason `@dataclass` refuses the comparison methods of
+a generic dataclass derived from a dataclass, and a generic exception class or
+protocol is E0201 from `refuse_generic_kind` (GEN-12, GEN-13). A copy whose
 arguments hold a
 parameter, and the generic class itself, are opaque: lowering lays them out
 empty and their methods are stubs. A copy's `TyirClass::public` names the

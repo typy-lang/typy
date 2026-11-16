@@ -2127,7 +2127,6 @@ fn a_floor_that_defers_annotations_lets_a_signature_name_a_later_class() {
 fn class_statements_outside_the_subset_give_their_codes() {
     let cases: &[(&str, &[&str])] = &[
         ("@d\nclass C:\n    pass\n", &["E0201"]),
-        ("class B:\n    pass\nclass C[T](B):\n    pass\n", &["E0201"]),
         ("class C(metaclass=M):\n    pass\n", &["E0202"]),
         ("def f() -> None:\n    class C:\n        pass\n", &["E0202"]),
         ("class C:\n    if True:\n        pass\n", &["E0202"]),

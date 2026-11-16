@@ -185,9 +185,31 @@ pub(super) fn class_types(
                     ..InstanceClass::root(class.id, name)
                 })
             });
+        if !class.type_parameters.is_empty() {
+            refuse_generic_kind(class, &ty, diagnostics);
+        }
         found.insert(class.id, ty);
     }
     found
+}
+
+/// Reports a generic class that is an exception class or a protocol, whose copies would need
+/// exception objects or protocol checks of their own (GEN-12, GEN-13).
+fn refuse_generic_kind(class: &ClassStatement<'_>, ty: &Type, diagnostics: &mut Diagnostics) {
+    let name = &class.name.name;
+    let (what, rule) = match ty {
+        Type::Exception(_) => ("a generic exception class", RuleId::GEN_12),
+        Type::Instance(instance) if instance.protocol => ("a generic protocol", RuleId::GEN_13),
+        _ => return,
+    };
+    diagnostics.push(
+        Diagnostic::new(
+            DiagnosticCode::error(201),
+            class.name.span,
+            format!("`{name}` is {what}, which is planned for TyPy 1.0 ({rule})"),
+        )
+        .with_rule(rule),
+    );
 }
 
 /// Returns the type of the instances of a class with a base other than `object`, or `None`

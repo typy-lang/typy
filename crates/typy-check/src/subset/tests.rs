@@ -73,10 +73,6 @@ fn later_features_name_their_release_and_rule() {
             "class decorators are planned for TyPy 1.0 (FUN-06)",
         ),
         (
-            "class B:\n    pass\nclass C[T](B):\n    pass\n",
-            "generic classes with a base or a decorator are planned for TyPy 0.5 (GEN-08)",
-        ),
-        (
             "class C[T]:\n    pass\nclass D(C[int]):\n    pass\n",
             "classes derived from a generic class are planned for TyPy 0.5 (GEN-08)",
         ),
@@ -86,7 +82,7 @@ fn later_features_name_their_release_and_rule() {
         ),
         (
             "@decorated\nclass C[T]:\n    pass\n",
-            "generic classes with a base or a decorator are planned for TyPy 0.5 (GEN-08)",
+            "class decorators are planned for TyPy 1.0 (FUN-06)",
         ),
         (
             "x = {**y}\n",

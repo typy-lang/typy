@@ -140,6 +140,10 @@ impl Dataclasses {
             (Some(base), Some(_)) => self.compared_class(base, module_name, names),
             _ => name.name.clone(),
         };
+        if !type_parameters.is_empty() && compared != name.name && (options.eq || options.order) {
+            diagnostics.push(generic_comparisons(&name.name, &compared, at));
+            return None;
+        }
         if inherited.is_some()
             && let Some(base) = bases.first()
             && !self.frozen_as_base(base, module_name, names, (options, at), diagnostics)
@@ -948,4 +952,20 @@ fn planned(span: Span, what: &str) -> Diagnostic {
         format!("{what} is planned for TyPy 1.0 (CLS-28)"),
     )
     .with_rule(RuleId::CLS_28)
+}
+
+/// Returns the error for the comparison methods of a generic dataclass derived from the
+/// dataclass `compared`: they take its instances and read the fields after `isinstance`, which
+/// narrows to a copy of a generic class only with GEN-14.
+fn generic_comparisons(class: &str, compared: &str, at: Span) -> Diagnostic {
+    Diagnostic::new(
+        DiagnosticCode::error(201),
+        at,
+        format!(
+            "the comparison methods of `{class}`, a generic dataclass derived from the dataclass \
+             `{compared}`, are planned for TyPy 1.0 (GEN-14)"
+        ),
+    )
+    .with_rule(RuleId::GEN_14)
+    .with_help("pass `eq=False` to `@dataclass`, or derive from a class that is not a dataclass")
 }

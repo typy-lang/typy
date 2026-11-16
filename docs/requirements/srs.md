@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy software requirements specification |
-| Version | 1.68 |
+| Version | 1.69 |
 | Status | Approved |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-16 |
@@ -334,6 +334,9 @@ formatter applies; Ruff's formatter is the project's recommendation.
 | GEN-09 | Type parameters shall be accepted on a method of a generic class, a special method, a property, a class method, and a method that overrides or is overridden. | S | 0.5 | 8.10 |
 | GEN-10 | A protocol shall be usable as the type of a variable, an attribute, a result and a container item outside a parameter, as the base of a class, and with properties, static methods, class methods and class variables. | S | 0.5 | 8.10 |
 | GEN-11 | A class variable or an attribute default of a generic class whose annotation names a type parameter of the class shall be accepted. | C | 1.0 | 8.10 |
+| GEN-12 | A generic class shall be accepted with an exception class as its base. | C | 1.0 | 8.10 |
+| GEN-13 | A generic protocol shall be accepted, satisfied by the classes whose members fit it for its type arguments. | C | 1.0 | 8.10 |
+| GEN-14 | `isinstance` and a class pattern with a generic class shall narrow a variable of a base's type to the copies of the class the program makes. | C | 1.0 | 8.10 |
 
 ### 3.12 Exceptions (EXC)
 

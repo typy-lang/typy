@@ -66,11 +66,14 @@ impl ClassCopies {
         let id = ClassId(u32::try_from(self.next).unwrap_or(u32::MAX));
         self.next += 1;
         let given: Vec<String> = arguments.iter().map(ToString::to_string).collect();
+        let name = format!("{}[{}]", generic.instance.name, given.join(", "));
+        let operators = generic.instance.operators;
+        let ancestors = self.copy_ancestors(root, &arguments);
         let instance = Type::instance(InstanceClass {
             id,
-            name: format!("{}[{}]", generic.instance.name, given.join(", ")),
-            ancestors: Vec::new(),
-            operators: generic.instance.operators,
+            name,
+            ancestors,
+            operators,
             generic: Some((root, arguments.clone())),
             protocol: false,
         });
@@ -88,18 +91,46 @@ impl ClassCopies {
     pub(crate) fn copy(&self, id: ClassId) -> Option<&ClassCopy> {
         self.copies.iter().find(|copy| copy.id == id)
     }
-}
 
-impl Program {
+    /// Returns the classes a copy of `root` for `arguments` derives from: the generic class's,
+    /// each copy among them made for the arguments in place of the generic class's own
+    /// parameters (GEN-08).
+    fn copy_ancestors(&mut self, root: ClassId, arguments: &[Type]) -> Vec<(ClassId, String)> {
+        let Some(generic) = self.roots.get(&root) else {
+            return Vec::new();
+        };
+        let ancestors = generic.instance.ancestors.clone();
+        let Some(owner) = generic.parameters.first().map(|parameter| parameter.owner) else {
+            return ancestors;
+        };
+        ancestors
+            .into_iter()
+            .map(|(id, name)| {
+                let Some(copy) = self.copy(id).cloned() else {
+                    return (id, name);
+                };
+                let replaced = copy
+                    .arguments
+                    .iter()
+                    .map(|each| self.substitute(each, owner, arguments))
+                    .collect();
+                match self.applied(copy.root, replaced) {
+                    Type::Instance(made) => (made.id, made.name.clone()),
+                    _ => (id, name),
+                }
+            })
+            .collect()
+    }
+
     /// Returns `ty` with each type parameter of `owner` replaced by its argument, a generic
     /// class's own instances and each copy becoming the copy for the replaced arguments.
-    pub(crate) fn substitute(&self, ty: &Type, owner: Span, arguments: &[Type]) -> Type {
+    pub(crate) fn substitute(&mut self, ty: &Type, owner: Span, arguments: &[Type]) -> Type {
         ty.substituted_with(owner, arguments, &mut |class: &InstanceClass| {
             let (root, given) = if let Some((root, given)) = &class.generic {
                 (*root, given.clone())
             } else {
-                let roots = &self.class_copies.borrow().roots;
-                let own = roots
+                let own = self
+                    .roots
                     .get(&class.id)?
                     .parameters
                     .iter()
@@ -111,8 +142,18 @@ impl Program {
                 .iter()
                 .map(|each| self.substitute(each, owner, arguments))
                 .collect();
-            Some(self.class_copies.borrow_mut().applied(root, replaced))
+            Some(self.applied(root, replaced))
         })
+    }
+}
+
+impl Program {
+    /// Returns `ty` with each type parameter of `owner` replaced by its argument, a generic
+    /// class's own instances and each copy becoming the copy for the replaced arguments.
+    pub(crate) fn substitute(&self, ty: &Type, owner: Span, arguments: &[Type]) -> Type {
+        self.class_copies
+            .borrow_mut()
+            .substitute(ty, owner, arguments)
     }
 
     /// Adds to the program each copy of a generic class asked for and not yet added: the

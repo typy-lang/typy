@@ -178,6 +178,55 @@ fn every_copy_of_a_generic_class_shares_its_class_variables() {
 }
 
 #[test]
+fn a_generic_class_derives_from_a_class_of_the_program() {
+    let base = concat!(
+        "class Base:\n",
+        "    def __init__(self, name: str) -> None:\n",
+        "        self.name = name\n",
+        "    def get(self) -> int:\n",
+        "        return 1\n",
+        "class Box[T](Base):\n",
+        "    def __init__(self, item: T) -> None:\n",
+        "        super().__init__('box')\n",
+        "        self.item = item\n",
+        "    def held(self) -> T:\n",
+        "        return self.item\n",
+    );
+    let cases: &[(&str, &[&str])] = &[
+        (
+            "def name(b: Base) -> str:\n    return b.name\nprint(name(Box(1)), Box('s').get())\n",
+            &[],
+        ),
+        ("items: list[Base] = [Box(1), Box('a'), Base('b')]\n", &[]),
+        // The variable keeps its type, as the object's copy is known only when it runs.
+        (
+            "def f(b: Base) -> None:\n    if isinstance(b, Box):\n        print(b.held())\n",
+            &["E0414"],
+        ),
+        (
+            "class Wrong[T](Base):\n    def __init__(self, item: T) -> None:\n        super().__init__('w')\n        self.item = item\n    def get(self) -> T:\n        return self.item\n",
+            &["E0404"],
+        ),
+        ("class Failure[T](Exception):\n    pass\n", &["E0201"]),
+        (
+            "from typing import Protocol\nclass Getter[T](Protocol):\n    def get(self) -> T: ...\n",
+            &["E0201"],
+        ),
+        (
+            "from dataclasses import dataclass\n@dataclass\nclass P:\n    x: int\n@dataclass\nclass Q[T](P):\n    y: T\n",
+            &["E0201"],
+        ),
+        (
+            "from dataclasses import dataclass\n@dataclass\nclass P:\n    x: int\n@dataclass(eq=False)\nclass Q[T](P):\n    y: T\nprint(Q(1, 'a').y)\n",
+            &[],
+        ),
+    ];
+    for (body, expected) in cases {
+        assert_eq!(app(&format!("{base}{body}")), *expected, "{body}");
+    }
+}
+
+#[test]
 fn a_generic_of_another_module_is_copied_in_its_own_names() {
     let tools = concat!(
         "SCALE = 10\n",

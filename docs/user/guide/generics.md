@@ -14,6 +14,7 @@ those types costs (GEN-01 to GEN-03, ADR-0023, ADR-0028).
 | `def name[T](self, ...)`: a method with type parameters, also a static method | GEN-01 |
 | `class Name(Protocol):`, satisfied by any class with its members | GEN-04 |
 | `class Name[T]:`, a generic class, and `Name[int]` in annotations and calls | GEN-01 |
+| `class Name[T](Base):`, a generic class with a base of the program | GEN-08 |
 | `[T: Bound]`, a bound, and `[T: (A, B)]`, constraints | GEN-02 |
 | One compiled copy for each set of type arguments, with no type at run time | GEN-03 |
 | A generic function or class of another module, by name or through the module | GEN-07 |
@@ -153,6 +154,51 @@ when neither gives them, the call is E0404.
 `isinstance(x, Node[int])` is refused, as CPython raises `TypeError` for
 it.
 
+## Generic classes with a base
+
+A generic class may derive from a class of the program, and every copy
+then derives from it: a `Box[int]` is a `Base`, takes `Base`'s methods
+and may be passed where a `Base` is expected (GEN-08, ADR-0040):
+
+<!-- typy-expect: accepted -->
+```python
+class Base:
+    def __init__(self, name: str) -> None:
+        self.name = name
+
+    def describe(self) -> str:
+        return self.name + " holds " + self.held()
+
+    def held(self) -> str:
+        return "nothing"
+
+
+class Box[T](Base):
+    def __init__(self, item: T) -> None:
+        super().__init__("box")
+        self.item = item
+
+    def held(self) -> str:
+        return str(self.item)
+
+
+def show(thing: Base) -> str:
+    return thing.describe()
+
+
+print(show(Box(1)), show(Box("a")), isinstance(Box(2.5), Base))
+```
+
+A method that overrides one of the base is checked with the type
+parameters as they are: `def held(self) -> T` would not fit a base
+method that returns `str`, E0404, as type checkers report.
+`isinstance(x, Box)` on a variable whose type is `Base` keeps that type,
+since which copy the object belongs to is known only when the program
+runs; narrowing it is planned for 1.0 (GEN-14), and so are the
+comparison methods of a generic dataclass derived from a dataclass,
+which need it. Pass `eq=False` to such a dataclass, or derive it from a
+class that is not a dataclass.
+
 ## Generic methods
 
 A method of a class that is not generic may take type parameters of its
@@ -263,8 +309,8 @@ overridden are planned for 0.5 (GEN-09). A protocol as the type of a
 variable, an attribute, a result or a container item outside a
 parameter, a class that names a protocol as its base, and properties,
 static methods, class methods and class variables of a protocol are
-planned for 0.5 (GEN-10). A generic class with a base, which includes a
-generic protocol, and a class derived from a generic class are planned
-for 0.5 (GEN-08). A class variable or a default whose annotation names a
-type parameter of its class is planned for 1.0 (GEN-11), and so are
-`*Ts`, `**P` and defaults of type parameters (GEN-06).
+planned for 0.5 (GEN-10). A class derived from a generic class is
+planned for 0.5 (GEN-08). A class variable or a default whose annotation
+names a type parameter of its class (GEN-11), a generic exception class
+(GEN-12), a generic protocol (GEN-13), and `*Ts`, `**P` and defaults of
+type parameters (GEN-06) are planned for 1.0.

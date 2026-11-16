@@ -56,16 +56,6 @@ impl Walker {
         }
         if !class.type_parameters.is_empty() {
             self.type_parameters(class.type_parameters);
-            if !class.bases.is_empty() || !class.decorators.is_empty() {
-                self.report(
-                    class.span,
-                    planned(
-                        "generic classes with a base or a decorator",
-                        "0.5",
-                        RuleId::GEN_08,
-                    ),
-                );
-            }
         }
         // One base is resolved with the other classes, which reports one that is not
         // `object`, an exception class or a class of the program (CLS-03, CLS-04).
