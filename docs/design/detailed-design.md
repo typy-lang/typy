@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy detailed design |
-| Version | 2.08 |
+| Version | 2.09 |
 | Status | Approved |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-16 |
@@ -976,9 +976,16 @@ scope that adds them to the class's, and notes its name in
 a method, through an instance, its class or `super()`, to
 `BodyChecker::call_target`, which solves the parameters from the arguments
 after the first `skip` and returns the copy and its signature; the call does not
-dispatch, so a generic method neither overrides nor is overridden, and a method
-of a generic class, a special method, a property and a class method take no
-type parameters, each E0201 until GEN-09. A generic type alias (SMT-10) is
+dispatch, so a generic method neither overrides nor is overridden, and a special
+method, a property and a class method take no type parameters, each E0201 until
+GEN-09. A method of a generic class with type parameters of its own is generic
+over the class's first and its own after them, two lists with two owners that
+`Program::substitute_each` replaces in turn; `finish_generic_class` keeps it out
+of the copies' methods, and a call takes the class's arguments from the copy
+that holds the method, `holder_arguments`, solves the method's own by
+`solve_each`, and runs the copy `call_target_with` makes for the copy of the
+class. A static method that names none of the class's type parameters is
+generic over its own alone. A generic type alias (SMT-10) is
 expanded by `check::type_alias` before any annotation is read: `Pair[int]`
 becomes the alias's value with `int` in place of `T`, and a type parameter of an
 enclosing function or class hides an alias of its name.

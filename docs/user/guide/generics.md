@@ -275,6 +275,13 @@ A copy is called directly, not looked up through the instance's class,
 so a method with type parameters may not override a method of a base or
 be overridden, E0201 (GEN-09).
 
+A method of a generic class may take type parameters of its own. A call
+takes the class's from the instance's copy and solves the method's own
+from the arguments: `Box(1).paired("a")` runs the copy of `paired` for
+`int` and `str`. A static method that names none of the class's type
+parameters is generic over its own alone, so `Box.both(1, 2)` needs no
+type argument of `Box` (GEN-09).
+
 ## Generics of other modules
 
 A generic function or class of another module is used as one of the
@@ -351,9 +358,9 @@ A protocol has no instances: calling it is E0401, and so is
 `TypeVar` and `Generic` from `typing` are E0202: a type parameter list
 replaces them (GEN-01). A generic type alias, `type Pair[T] = tuple[T,
 T]`, is described with the other [type aliases](types.md#type-aliases).
-Type parameters of a method of a generic class, of a special method, a
-property or a class method, and of a method that overrides or is
-overridden are planned for 0.5 (GEN-09). A protocol as the type of a
+Type parameters of a special method, a property or a class method, and
+of a method that overrides or is overridden are planned for 0.5
+(GEN-09). A protocol as the type of a
 variable, an attribute, a result or a container item outside a
 parameter, a class that names a protocol as its base, and properties,
 static methods, class methods and class variables of a protocol are

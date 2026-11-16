@@ -227,6 +227,34 @@ fn a_generic_class_derives_from_a_class_of_the_program() {
 }
 
 #[test]
+fn a_method_of_a_generic_class_takes_type_parameters_of_its_own() {
+    let classes = concat!(
+        "class Box[T]:\n",
+        "    def __init__(self, value: T) -> None:\n",
+        "        self.value = value\n",
+        "    def paired[U](self, other: U) -> tuple[T, U]:\n",
+        "        return (self.value, other)\n",
+        "    @staticmethod\n",
+        "    def both[U](first: U, second: U) -> list[U]:\n",
+        "        return [first, second]\n",
+        "    @staticmethod\n",
+        "    def tagged[U](value: T, tag: U) -> tuple[T, U]:\n",
+        "        return (value, tag)\n",
+    );
+    let cases: &[(&str, &[&str])] = &[
+        ("x: tuple[int, str] = Box(1).paired('a')\n", &[]),
+        ("print(Box.both(1, 2), Box[str].both(1.5, 2.5))\n", &[]),
+        ("x: tuple[int, str] = Box.tagged(1, 'a')\n", &[]),
+        ("y: tuple[str, int] = Box[str].tagged('a', 1)\n", &[]),
+        ("print(Box(1).paired())\n", &["E0404"]),
+        ("print(Box[str].tagged(1, 'a'))\n", &["E0404"]),
+    ];
+    for (body, expected) in cases {
+        assert_eq!(app(&format!("{classes}{body}")), *expected, "{body}");
+    }
+}
+
+#[test]
 fn a_method_of_a_copy_made_early_assigns_its_attributes() {
     // `Box[int]` in a signature makes the copy before `Box.__init__` is checked.
     let source = concat!(

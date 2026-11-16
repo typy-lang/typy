@@ -142,6 +142,10 @@ All notable changes to TyPy are recorded here. The format follows
   takes the type arguments from its arguments, as in `Box.wrap("a")`, or
   from the class, as in `Box[int].make(3)`, and runs that copy's method
   (GEN-01).
+- A method of a generic class with type parameters of its own,
+  `def paired[U](self, other: U) -> tuple[T, U]`, takes the class's type
+  arguments from the instance and solves its own from the arguments
+  (GEN-09).
 - A class derived from a copy of a generic class, `class IntBox(Box[int]):`,
   and a generic class derived from one for its own type parameters,
   `class Pair[T](Box[T]):`, whose copies derive from the matching copy.

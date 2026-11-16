@@ -55,13 +55,69 @@ impl BodyChecker<'_> {
             .roots
             .contains_key(&class)
             && self.is_static_method(class, name);
-        if self.is_generic_method(class, name) || through_generic_class {
+        if self.is_generic_method(class, name) {
+            // A method with type parameters of its own takes the type arguments of the copy
+            // of a generic class that holds it first (GEN-09).
+            let known = self.holder_arguments(class, function, skip > 0);
+            let given = (arguments, keywords);
+            return self.call_target_with(function, (skip, &known), qualified, given, span);
+        }
+        if through_generic_class {
             return self.call_target(function, skip, qualified, arguments, keywords, span);
         }
         Ok((
             function,
             self.program.signatures[function.0 as usize].clone(),
         ))
+    }
+
+    /// Returns the type arguments of the class that holds the method `function`, from `class`
+    /// up: a copy's; a generic class's own parameters for a call through its own instance,
+    /// which only its body makes; none for any other class or call.
+    fn holder_arguments(
+        &self,
+        class: ClassId,
+        function: FunctionId,
+        through_instance: bool,
+    ) -> Vec<Type> {
+        let holder = std::iter::successors(Some(class), |each| {
+            self.program.classes[each.0 as usize].base
+        })
+        .find(|each| {
+            self.program.classes[each.0 as usize]
+                .methods
+                .iter()
+                .any(|(_, id)| *id == function)
+        });
+        let Some(holder) = holder else {
+            return Vec::new();
+        };
+        let copies = self.program.class_copies.borrow();
+        let root = copies.copy(holder).map_or(holder, |copy| copy.root);
+        // A static method that names none of the class's type parameters is generic over its
+        // own alone.
+        let over_class = copies.roots.get(&root).is_some_and(|generic| {
+            self.program
+                .generic(function)
+                .is_some_and(|method| method.parameters.starts_with(&generic.parameters))
+        });
+        if !over_class {
+            return Vec::new();
+        }
+        if let Some(copy) = copies.copy(holder) {
+            return copy.arguments.clone();
+        }
+        if !through_instance {
+            return Vec::new();
+        }
+        copies.roots.get(&holder).map_or_else(Vec::new, |generic| {
+            generic
+                .parameters
+                .iter()
+                .cloned()
+                .map(Type::parameter)
+                .collect()
+        })
     }
 
     /// Returns the getter of the property `name` of `class` or a base, when it has one.
@@ -614,7 +670,7 @@ impl BodyChecker<'_> {
         if !generic || self.program.generic(function).is_none() {
             return Ok((class, function));
         }
-        let types = self.solved_arguments(function, 1, qualified, given, span)?;
+        let types = self.solved_arguments(function, (1, &[]), qualified, given, span)?;
         // Inside the generic class's own body a parameter may solve to another; that body is
         // checked, never run.
         if types.iter().any(|ty| ty.has_parameter() || ty.has_error()) {

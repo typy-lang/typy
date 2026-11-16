@@ -225,9 +225,10 @@ impl Program {
         }
         let mut renamed: BTreeMap<FunctionId, FunctionId> = BTreeMap::new();
         // A static method that names no type parameter is not generic, and every copy calls
-        // it as it is.
-        for (_, method) in root.methods.iter().chain(&root.class_methods) {
-            if self.generic(*method).is_some() {
+        // it as it is; a method with type parameters of its own is copied for each call, with
+        // the copy's type arguments first (GEN-09).
+        for (name, method) in root.methods.iter().chain(&root.class_methods) {
+            if self.generic(*method).is_some() && !root.generic_methods.contains(name) {
                 let made = self.made_copy(*method, copy.arguments.clone(), Some(copy.id));
                 renamed.insert(*method, made);
             }
@@ -300,6 +301,14 @@ impl Program {
             .ty
             .clone()?;
         Some(self.substitute(&ty, owner, &arguments))
+    }
+
+    /// Returns how many type arguments a copy of a generic class has; none for another class.
+    pub(crate) fn type_argument_count(&self, class: ClassId) -> usize {
+        self.class_copies
+            .borrow()
+            .copy(class)
+            .map_or(0, |copy| copy.arguments.len())
     }
 
     /// Returns the name of a class, as its `class` statement writes it.

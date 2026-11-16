@@ -8,7 +8,7 @@ use typy_source::syntax::{Expr, Keyword};
 use super::BodyChecker;
 use super::generic_copy::Requested;
 use crate::generic::{TypeParameter, infer};
-use crate::typed::{FunctionId, FunctionSignature, TypedExpr, TypedExprKind};
+use crate::typed::{ClassId, FunctionId, FunctionSignature, TypedExpr, TypedExprKind};
 use crate::types::Type;
 
 impl BodyChecker<'_> {
@@ -52,20 +52,35 @@ impl BodyChecker<'_> {
         keywords: &[Keyword],
         span: Span,
     ) -> Result<(FunctionId, FunctionSignature), TypedExpr> {
+        self.call_target_with(function, (skip, &[]), name, (arguments, keywords), span)
+    }
+
+    /// Returns the function a call of `function` runs, as `call_target` does, with the first
+    /// type arguments `known`: those of the copy of a generic class whose method it is, for a
+    /// method with type parameters of its own (GEN-09).
+    pub(super) fn call_target_with(
+        &mut self,
+        function: FunctionId,
+        (skip, known): (usize, &[Type]),
+        name: &str,
+        (arguments, keywords): (&[Expr], &[Keyword]),
+        span: Span,
+    ) -> Result<(FunctionId, FunctionSignature), TypedExpr> {
         if self.program.generic(function).is_none() {
             return Ok((
                 function,
                 self.program.signatures[function.0 as usize].clone(),
             ));
         }
-        let types = self.solved_arguments(function, skip, name, (arguments, keywords), span)?;
+        let given = (arguments, keywords);
+        let types = self.solved_arguments(function, (skip, known), name, given, span)?;
         // Inside a generic body a call may solve a parameter to another one; that body is
         // checked, never run, so its call goes to the generic itself.
         let target = if types.iter().any(|ty| ty.has_parameter() || ty.has_error()) {
             function
         } else {
-            self.make_owner_copy(function, &types);
-            match self.program.request_copy(function, types.clone()) {
+            let class = self.make_owner_copy(function, &types);
+            match self.program.request_copy(function, types.clone(), class) {
                 Requested::Copy(copy) => copy,
                 Requested::TooDeep => return Err(self.copies_too_deep(name, span)),
             }
@@ -76,38 +91,37 @@ impl BodyChecker<'_> {
     }
 
     /// Makes the copy of the generic class whose type parameters `function` is generic over,
-    /// if it is a method of one, so the copy of the method belongs to it (ADR-0028).
-    fn make_owner_copy(&mut self, function: FunctionId, types: &[Type]) {
-        let Some(parameters) = self
+    /// first among its own, if it is a method of one, and returns it, so the copy of the
+    /// method belongs to it (ADR-0028).
+    fn make_owner_copy(&mut self, function: FunctionId, types: &[Type]) -> Option<ClassId> {
+        let parameters = self
             .program
             .generic(function)
-            .map(|generic| generic.parameters.clone())
-        else {
-            return;
-        };
-        let owner = self
+            .map(|generic| generic.parameters.clone())?;
+        let (owner, count) = self
             .program
             .class_copies
             .borrow()
             .roots
             .iter()
-            .find(|(_, generic)| generic.parameters == parameters)
-            .map(|(class, _)| *class);
-        if let Some(owner) = owner {
-            self.program
-                .class_copies
-                .borrow_mut()
-                .applied(owner, types.to_vec());
-            self.program.make_class_copies();
-        }
+            .find(|(_, generic)| parameters.starts_with(&generic.parameters))
+            .map(|(class, generic)| (*class, generic.parameters.len()))?;
+        let copy = self
+            .program
+            .class_copies
+            .borrow_mut()
+            .applied(owner, types[..count].to_vec());
+        self.program.make_class_copies();
+        copy.class_id()
     }
 
-    /// Returns the type arguments of the generic function `function` that the arguments after
-    /// the first `skip` give, each checked against its bound or constraints.
+    /// Returns the type arguments of the generic function `function`: the first `known`, then
+    /// those the arguments after the first `skip` give, each checked against its bound or
+    /// constraints.
     pub(super) fn solved_arguments(
         &mut self,
         function: FunctionId,
-        skip: usize,
+        (skip, known): (usize, &[Type]),
         name: &str,
         (arguments, keywords): (&[Expr], &[Keyword]),
         span: Span,
@@ -118,8 +132,8 @@ impl BodyChecker<'_> {
             .map(|generic| generic.parameters.clone())
             .unwrap_or_default();
         let solved = self.solve(function, skip, &parameters, arguments, keywords);
-        let mut types = Vec::new();
-        for (parameter, solution) in parameters.iter().zip(solved) {
+        let mut types: Vec<Type> = known.to_vec();
+        for (parameter, solution) in parameters.iter().zip(solved).skip(known.len()) {
             match self.type_argument(parameter, solution, name, span) {
                 Some(ty) => types.push(ty),
                 None => return Err(Self::invalid_call(span)),
@@ -140,8 +154,7 @@ impl BodyChecker<'_> {
         keywords: &[Keyword],
     ) -> Vec<Option<Type>> {
         let signature = self.program.signatures[function.0 as usize].clone();
-        let owner = parameters.first().map(|parameter| parameter.owner);
-        let mut solved = vec![None; parameters.len()];
+        let mut pairs: Vec<(Type, Type)> = Vec::new();
         let reported = self.diagnostics.len();
         let before = self.assigned.clone();
         let named = keywords.iter().filter_map(|keyword| {
@@ -158,17 +171,17 @@ impl BodyChecker<'_> {
             .map(|(index, argument)| (index + skip, argument));
         let given: Vec<(usize, &Expr)> = positional.chain(named).collect();
         for (position, argument) in given {
-            let (Some(parameter), Some(owner)) = (signature.parameters.get(position), owner) else {
+            let Some(parameter) = signature.parameters.get(position) else {
                 continue;
             };
             if parameter.ty.has_parameter() {
                 let value = self.expression(argument);
-                infer(&parameter.ty, &value.ty, owner, &mut solved);
+                pairs.push((parameter.ty.clone(), value.ty));
             }
         }
         self.diagnostics.truncate(reported);
         self.assigned = before;
-        solved
+        solve_each(parameters, &pairs)
     }
 
     /// Returns the type argument of `parameter`: its solution, made one of its constraints,
@@ -362,4 +375,33 @@ impl BodyChecker<'_> {
         }
         Self::invalid_call(span)
     }
+}
+
+/// Solves `parameters` from each pair of a parameter's type and its argument's: the parameters
+/// of each definition apart, as a method of a generic class with type parameters of its own has
+/// two (GEN-09).
+fn solve_each(parameters: &[TypeParameter], pairs: &[(Type, Type)]) -> Vec<Option<Type>> {
+    let mut solved = vec![None; parameters.len()];
+    let mut owners: Vec<Span> = Vec::new();
+    for parameter in parameters {
+        if !owners.contains(&parameter.owner) {
+            owners.push(parameter.owner);
+        }
+    }
+    for owner in owners {
+        let count = parameters
+            .iter()
+            .filter(|parameter| parameter.owner == owner)
+            .count();
+        let mut found = vec![None; count];
+        for (parameter, argument) in pairs {
+            infer(parameter, argument, owner, &mut found);
+        }
+        for (position, parameter) in parameters.iter().enumerate() {
+            if parameter.owner == owner {
+                solved[position] = found.get_mut(parameter.index).and_then(Option::take);
+            }
+        }
+    }
+    solved
 }

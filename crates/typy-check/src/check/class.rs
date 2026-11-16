@@ -534,7 +534,7 @@ pub(super) fn collect_members<'tree>(
         report_name_conflicts(&info, class.name.span, diagnostics);
         super::protocol::check_values(&owner.instance, &info, class.name.span, diagnostics);
         let own_methods = &mut methods[first_method..];
-        finish_generic_class(&info, own_methods, known.copies, diagnostics);
+        finish_generic_class(&info, own_methods, known.copies);
         infos.push(info);
     }
     copies.end_module(known.ids, names);

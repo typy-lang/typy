@@ -32,14 +32,24 @@ pub(super) fn check(
         };
         let generic = &definitions[copy.generic.0 as usize - first_function];
         let given: Vec<String> = copy.arguments.iter().map(ToString::to_string).collect();
-        // A copy of a method belongs to its copy of the class, whose name it takes.
+        // A copy of a method belongs to its copy of the class, whose name it takes, followed by
+        // the arguments of the method's own type parameters, if it has some (GEN-09).
         let qualified_name = match copy.class {
-            Some(class) => format!(
-                "{}[{}].{}",
-                program.class_name(class),
-                given.join(", "),
-                generic.name
-            ),
+            Some(class) => {
+                let count = program.type_argument_count(class).min(given.len());
+                let (of_class, own) = given.split_at(count);
+                let own = if own.is_empty() {
+                    String::new()
+                } else {
+                    format!("[{}]", own.join(", "))
+                };
+                format!(
+                    "{}[{}].{}{own}",
+                    program.class_name(class),
+                    of_class.join(", "),
+                    generic.name
+                )
+            }
             None => format!("{}[{}]", generic.qualified_name, given.join(", ")),
         };
         let made = Definition {

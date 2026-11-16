@@ -175,7 +175,6 @@ pub(super) fn finish_generic_class(
     info: &super::ClassInfo,
     methods: &mut [super::Definition<'_>],
     copies: &RefCell<ClassCopies>,
-    diagnostics: &mut Diagnostics,
 ) {
     let Some(generic) = copies.borrow().roots.get(&info.id).cloned() else {
         return;
@@ -186,25 +185,17 @@ pub(super) fn finish_generic_class(
         .map(|parameter| parameter.name.as_str())
         .collect();
     for method in methods {
-        if !method.type_parameters.is_empty() {
-            diagnostics.push(
-                Diagnostic::new(
-                    DiagnosticCode::error(201),
-                    method.span,
-                    format!(
-                        "type parameters of `{}`, a method of a generic class, are planned for \
-                         TyPy 0.5 (GEN-09)",
-                        method.qualified_name
-                    ),
-                )
-                .with_rule(RuleId::GEN_09),
-            );
-        }
+        // A static method that names none of the class's type parameters is the same for every
+        // copy: generic over its own, if it has some, and otherwise not generic at all.
         let is_static = !method.takes_instance && info.static_methods.contains(&method.name);
         if is_static && !names_type_parameter(method, &names) {
             continue;
         }
+        // A method with type parameters of its own is generic over the class's first, whose
+        // arguments a call takes from the copy that holds it (GEN-09).
+        let own = std::mem::take(&mut method.type_parameters);
         method.type_parameters.clone_from(&generic.parameters);
+        method.type_parameters.extend(own);
     }
 }
 
@@ -212,13 +203,25 @@ pub(super) fn finish_generic_class(
 /// an expression or a variable's annotation in its body names one.
 fn names_type_parameter(method: &super::Definition<'_>, names: &[&str]) -> bool {
     let signature = &method.signature;
-    if signature
+    // A parameter of the method's own is not one of the class's.
+    let own: Vec<Span> = method
+        .type_parameters
+        .iter()
+        .map(|parameter| parameter.owner)
+        .collect();
+    let mut in_signature = false;
+    for ty in signature
         .parameters
         .iter()
         .map(|parameter| &parameter.ty)
         .chain(std::iter::once(&signature.returns))
-        .any(Type::has_parameter)
     {
+        ty.visit(&mut |each| {
+            in_signature |=
+                matches!(each, Type::Parameter(parameter) if !own.contains(&parameter.owner));
+        });
+    }
+    if in_signature {
         return true;
     }
     let mut found = false;
