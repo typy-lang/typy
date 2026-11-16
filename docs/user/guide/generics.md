@@ -282,6 +282,12 @@ from the arguments: `Box(1).paired("a")` runs the copy of `paired` for
 parameters is generic over its own alone, so `Box.both(1, 2)` needs no
 type argument of `Box` (GEN-09).
 
+A class method may take type parameters of its own, and so may one
+whose parameter names a protocol: `Registry.make("r", 1.5)` runs the
+copy for a `float`, and a class derived from `Registry` gets copies of
+its own, as for any class method (GEN-09). It is called through its
+class; through an instance it is planned for 1.0 (GEN-16).
+
 ## Generics of other modules
 
 A generic function or class of another module is used as one of the
@@ -358,9 +364,10 @@ A protocol has no instances: calling it is E0401, and so is
 `TypeVar` and `Generic` from `typing` are E0202: a type parameter list
 replaces them (GEN-01). A generic type alias, `type Pair[T] = tuple[T,
 T]`, is described with the other [type aliases](types.md#type-aliases).
-Type parameters of a special method, a property or a class method, and
-of a method that overrides or is overridden are planned for 0.5
-(GEN-09). A protocol as the type of a
+Type parameters of a method that overrides or is overridden are planned
+for 0.5 (GEN-09); type parameters of a special method or a property, and
+a class method with type parameters called through an instance, are
+planned for 1.0 (GEN-16). A protocol as the type of a
 variable, an attribute, a result or a container item outside a
 parameter, a class that names a protocol as its base, and properties,
 static methods, class methods and class variables of a protocol are

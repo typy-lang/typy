@@ -629,7 +629,16 @@ impl BodyChecker<'_> {
             crate::types::TypeObjectOf::type_of(Some(of)),
             span,
         );
-        let bound = match self.bind_arguments(function, 1, &qualified, arguments, keywords, span) {
+        // A class method with type parameters of its own runs the copy its arguments give,
+        // with the type arguments of a copy of a generic class first (GEN-09).
+        let known = self.copy_arguments_of(class, function);
+        let given = (arguments, keywords);
+        let (target, signature) =
+            match self.call_target_with(function, (1, &known), &qualified, given, span) {
+                Ok(found) => found,
+                Err(error) => return Some(error),
+            };
+        let bound = match self.bind_to(&signature, 1, &qualified, arguments, keywords, span) {
             Ok(bound) => bound,
             Err(error) => return Some(error),
         };
@@ -638,16 +647,34 @@ impl BodyChecker<'_> {
             value: class_object,
         }];
         all.extend(bound);
-        let returns = self.program.signatures[function.0 as usize].returns.clone();
         Some(Self::typed(
             TypedExprKind::Call {
-                function,
+                function: target,
                 arguments: all,
                 dispatch: false,
             },
-            returns,
+            signature.returns,
             span,
         ))
+    }
+
+    /// Returns the type arguments of the copy of a generic class `class`, when `function` is
+    /// generic over that class's type parameters first; none otherwise.
+    fn copy_arguments_of(&self, class: ClassId, function: FunctionId) -> Vec<Type> {
+        let copies = self.program.class_copies.borrow();
+        let Some(copy) = copies.copy(class) else {
+            return Vec::new();
+        };
+        let over_class = copies.roots.get(&copy.root).is_some_and(|generic| {
+            self.program
+                .generic(function)
+                .is_some_and(|method| method.parameters.starts_with(&generic.parameters))
+        });
+        if over_class {
+            copy.arguments.clone()
+        } else {
+            Vec::new()
+        }
     }
 
     /// Returns the class a call of the class method `function` through `class` passes as `cls`,
@@ -704,29 +731,43 @@ impl BodyChecker<'_> {
         name: &Identifier,
     ) -> bool {
         let info = &self.program.classes[class.0 as usize];
-        let class_method = info
+        let Some(copy) = info
             .class_methods
             .iter()
-            .any(|(each, _)| *each == name.name);
-        if !class_method {
+            .find(|(each, _)| *each == name.name)
+            .map(|(_, copy)| *copy)
+        else {
             return false;
-        }
+        };
         let class_name = info.name.clone();
-        self.diagnostics.push(
-            Diagnostic::new(
-                DiagnosticCode::error(201),
-                name.span,
+        let of_generic_class = self.program.is_opaque_class(class)
+            || self.program.class_copies.borrow().copy(class).is_some();
+        let (message, rule) = if of_generic_class || self.program.generic(copy).is_none() {
+            (
                 format!(
                     "calling the class method `{}` of a generic class through an instance is \
                      planned for TyPy 1.0 (CLS-30)",
                     name.name
                 ),
+                RuleId::CLS_30,
             )
-            .with_rule(RuleId::CLS_30)
-            .with_help(format!(
-                "call it through its class, `{class_name}.{}(...)`",
-                name.name
-            )),
+        } else {
+            (
+                format!(
+                    "calling the class method `{}`, which has type parameters, through an \
+                     instance is planned for TyPy 1.0 (GEN-16)",
+                    name.name
+                ),
+                RuleId::GEN_16,
+            )
+        };
+        self.diagnostics.push(
+            Diagnostic::new(DiagnosticCode::error(201), name.span, message)
+                .with_rule(rule)
+                .with_help(format!(
+                    "call it through its class, `{class_name}.{}(...)`",
+                    name.name
+                )),
         );
         true
     }

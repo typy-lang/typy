@@ -93,7 +93,7 @@ fn calls_that_give_no_fitting_type_are_refused() {
             "E0201",
         ),
         (
-            "class C:\n    @classmethod\n    def m[T](cls, x: T) -> T:\n        return x\n",
+            "class C:\n    @classmethod\n    def m[T](cls, x: T) -> T:\n        return x\nprint(C().m(1))\n",
             "E0201",
         ),
         (

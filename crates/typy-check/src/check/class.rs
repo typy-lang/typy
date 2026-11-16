@@ -769,30 +769,7 @@ impl<'tree> ClassMethodCopies<'tree> {
             .iter()
             .map(|statement| (*statement, None, self.module.clone()))
             .collect();
-        // A copy of a generic class has no class methods of its own here; the generic
-        // class's would need its type arguments (GEN-15).
-        let through_copy = info
-            .base
-            .and_then(|base| Some(known.copies.borrow().copy(base)?.root));
-        if let Some(root) = through_copy
-            && self
-                .by_class
-                .get(&root)
-                .is_some_and(|made| !made.is_empty())
-        {
-            diagnostics.push(
-                Diagnostic::new(
-                    DiagnosticCode::error(201),
-                    info.span,
-                    format!(
-                        "`{}` derives from a copy of a generic class with class methods, which it \
-                         inherits from TyPy 1.0 (GEN-15)",
-                        info.name
-                    ),
-                )
-                .with_rule(RuleId::GEN_15),
-            );
-        }
+        self.refuse_through_copy(info, known, diagnostics);
         if let Some(inherited) = info.base.and_then(|base| self.by_class.get(&base)) {
             visible.extend(
                 inherited
@@ -832,33 +809,29 @@ impl<'tree> ClassMethodCopies<'tree> {
                 &mut *diagnostics
             };
             let home = (module != self.module).then(|| module.clone());
-            let mut method = match home.as_ref().and_then(|home| self.names.get(home)) {
-                // A copy of another module's class method reads its annotations there.
-                Some((classes, names)) => {
-                    let remote = AnnotationScope {
-                        classes,
-                        modules: &names.modules,
-                        module_aliases: &names.module_aliases,
-                        imported_aliases: &names.aliases,
-                        names: &names.names,
-                        standard: &names.standard,
-                        bound: u32::MAX,
-                        ..class_scope(known, names, true, info.id, scope.parameters)
-                    };
-                    definition(&parts, Some(&owner), &remote, sink)
-                }
-                None => definition(&parts, Some(&owner), scope, sink),
+            // A copy of another module's class method reads its annotations there.
+            let remote = home.as_ref().and_then(|home| self.names.get(home));
+            let read_in = match remote {
+                Some((classes, names)) => AnnotationScope {
+                    classes,
+                    modules: &names.modules,
+                    module_aliases: &names.module_aliases,
+                    imported_aliases: &names.aliases,
+                    names: &names.names,
+                    standard: &names.standard,
+                    bound: u32::MAX,
+                    ..class_scope(known, names, true, info.id, scope.parameters)
+                },
+                None => *scope,
             };
-            method.home = home;
-            // A parameter that names a protocol would make the copy generic (GEN-09).
-            let written = method.type_parameters.len();
-            super::protocol::protocol_parameters(&mut method, sink);
-            if method.type_parameters.len() > written {
-                sink.push(planned_generic_method(
-                    parts.name,
-                    "a protocol parameter of a special method, a property or a class method is",
-                ));
+            let mut method = class_method_definition(&parts, &owner, &read_in, sink);
+            if !method.type_parameters.is_empty() {
+                info.generic_methods.push(parts.name.name.clone());
             }
+            method.home = home;
+            // A parameter that names a protocol makes the copy generic, as its own type
+            // parameters do (GEN-09).
+            super::protocol::protocol_parameters(&mut method, sink);
             method.qualified_name = format!("{}.{}", info.name, parts.name.name);
             method.copy_of = origin;
             info.class_methods.push((parts.name.name.clone(), id));
@@ -867,6 +840,64 @@ impl<'tree> ClassMethodCopies<'tree> {
         }
         self.by_class.insert(info.id, made);
     }
+}
+
+impl ClassMethodCopies<'_> {
+    /// Reports a class derived from a copy of a generic class with class methods: the copy
+    /// has no class methods of its own here, and the generic class's would need its type
+    /// arguments (GEN-15).
+    fn refuse_through_copy(
+        &self,
+        info: &ClassInfo,
+        known: &KnownClasses<'_>,
+        diagnostics: &mut Diagnostics,
+    ) {
+        let through_copy = info
+            .base
+            .and_then(|base| Some(known.copies.borrow().copy(base)?.root));
+        let has_class_methods = through_copy
+            .and_then(|root| self.by_class.get(&root))
+            .is_some_and(|made| !made.is_empty());
+        if has_class_methods {
+            diagnostics.push(
+                Diagnostic::new(
+                    DiagnosticCode::error(201),
+                    info.span,
+                    format!(
+                        "`{}` derives from a copy of a generic class with class methods, which it \
+                         inherits from TyPy 1.0 (GEN-15)",
+                        info.name
+                    ),
+                )
+                .with_rule(RuleId::GEN_15),
+            );
+        }
+    }
+}
+
+/// Returns the definition of a class method for one class, read in `scope` with its own type
+/// parameters in scope too (GEN-09).
+fn class_method_definition<'tree>(
+    parts: &FunctionParts<'tree>,
+    owner: &Owner,
+    scope: &AnnotationScope<'_>,
+    diagnostics: &mut Diagnostics,
+) -> Definition<'tree> {
+    let type_parameters =
+        resolve_type_parameters(parts.type_parameters, parts.span, scope, diagnostics);
+    let mut in_scope = scope.parameters.clone();
+    in_scope.extend(
+        type_parameters
+            .iter()
+            .map(|parameter| (parameter.name.clone(), Type::parameter(parameter.clone()))),
+    );
+    let method_scope = AnnotationScope {
+        parameters: &in_scope,
+        ..*scope
+    };
+    let mut method = definition(parts, Some(owner), &method_scope, diagnostics);
+    method.type_parameters = type_parameters;
+    method
 }
 
 /// Widens the return type of a method that may return `NotImplemented`, as the scan of the
@@ -948,15 +979,17 @@ fn method_definition<'tree>(
     method.type_parameters = type_parameters;
     let written = method.type_parameters.len();
     super::protocol::protocol_parameters(&mut method, diagnostics);
-    // A parameter that names a protocol makes the method generic, which only an instance or
-    // a static method may be yet (GEN-09).
+    // A parameter that names a protocol makes the method generic, which a special method or
+    // a property may not be yet (GEN-16).
     let special = name.starts_with("__") && name.ends_with("__");
-    if method.type_parameters.len() > written
-        && (special || !matches!(kind, MethodKind::Instance | MethodKind::Static))
-    {
-        diagnostics.push(planned_generic_method(
+    let plain = matches!(
+        kind,
+        MethodKind::Instance | MethodKind::Static | MethodKind::Class
+    );
+    if method.type_parameters.len() > written && (special || !plain) {
+        diagnostics.push(later_generic_method(
             parts.name,
-            "a protocol parameter of a special method, a property or a class method is",
+            "a protocol parameter of a special method or a property is",
         ));
     }
     if !method.type_parameters.is_empty() {
@@ -992,10 +1025,14 @@ fn refused_method(
         return Some(planned_method(parts.name));
     }
     let generic = !parts.type_parameters.is_empty();
-    if generic && (special || !matches!(kind, MethodKind::Instance | MethodKind::Static)) {
-        return Some(planned_generic_method(
+    let plain = matches!(
+        kind,
+        MethodKind::Instance | MethodKind::Static | MethodKind::Class
+    );
+    if generic && (special || !plain) {
+        return Some(later_generic_method(
             parts.name,
-            "type parameters of a special method, a property or a class method are",
+            "type parameters of a special method or a property are",
         ));
     }
     if special && *kind != MethodKind::Instance {
@@ -1206,6 +1243,16 @@ fn generic_method_in_bases(classes: Classes<'_>, base: Option<ClassId>, name: &I
     })
     .find(|info| info.method(&name.name).is_some())
     .is_some_and(|info| info.generic_methods.contains(&name.name))
+}
+
+/// Reports a method with type parameters that TyPy 1.0 accepts (GEN-16).
+fn later_generic_method(name: &Identifier, what: &str) -> Diagnostic {
+    Diagnostic::new(
+        DiagnosticCode::error(201),
+        name.span,
+        format!("{what} planned for TyPy 1.0 (GEN-16)"),
+    )
+    .with_rule(RuleId::GEN_16)
 }
 
 /// Reports a method with type parameters that TyPy 0.5 accepts (GEN-09).

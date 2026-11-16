@@ -15,10 +15,14 @@ impl Program {
     /// name for: its own method of that name hides the class method from its instances.
     pub(crate) fn add_class_method_bridges(&mut self, class: ClassId) {
         let info = &self.classes[class.0 as usize];
+        // A class method with type parameters is called through its copies, which a bridge
+        // cannot name (GEN-16).
         let wanted: Vec<(String, FunctionId)> = info
             .class_methods
             .iter()
-            .filter(|(name, _)| info.methods.iter().all(|(each, _)| each != name))
+            .filter(|(name, copy)| {
+                info.methods.iter().all(|(each, _)| each != name) && self.generic(*copy).is_none()
+            })
             .cloned()
             .collect();
         for (name, copy) in wanted {

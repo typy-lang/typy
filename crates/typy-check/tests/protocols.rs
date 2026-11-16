@@ -135,7 +135,7 @@ fn a_protocol_is_refused_where_typy_does_not_hold_one() {
             "class P(Protocol):\n    def merge(self, other: Shape) -> None: ...\n",
             "E0201",
         ),
-        // GEN-09: a protocol parameter makes a method generic.
+        // GEN-16: a protocol parameter makes a special method generic.
         (
             "class C:\n    def __eq__(self, other: Shape) -> bool:\n        return True\n",
             "E0201",

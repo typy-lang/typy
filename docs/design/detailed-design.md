@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy detailed design |
-| Version | 2.09 |
+| Version | 2.10 |
 | Status | Approved |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-16 |
@@ -976,9 +976,14 @@ scope that adds them to the class's, and notes its name in
 a method, through an instance, its class or `super()`, to
 `BodyChecker::call_target`, which solves the parameters from the arguments
 after the first `skip` and returns the copy and its signature; the call does not
-dispatch, so a generic method neither overrides nor is overridden, and a special
-method, a property and a class method take no type parameters, each E0201 until
-GEN-09. A method of a generic class with type parameters of its own is generic
+dispatch, so a generic method neither overrides nor is overridden, E0201 until
+GEN-09. A class method's own type parameters are resolved for each class's copy
+in `ClassMethodCopies::make`, which also lets a protocol parameter make it
+generic; a call through a class goes to `call_target_with` with the arguments of
+a copy of a generic class first, `copy_arguments_of`. Such a class method has
+no bridge, so a call through an instance is E0201, and so are type parameters of
+a special method or a property, from `later_generic_method`, all planned for 1.0
+(GEN-16). A method of a generic class with type parameters of its own is generic
 over the class's first and its own after them, two lists with two owners that
 `Program::substitute_each` replaces in turn; `finish_generic_class` keeps it out
 of the copies' methods, and a call takes the class's arguments from the copy

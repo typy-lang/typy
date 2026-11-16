@@ -142,6 +142,10 @@ All notable changes to TyPy are recorded here. The format follows
   takes the type arguments from its arguments, as in `Box.wrap("a")`, or
   from the class, as in `Box[int].make(3)`, and runs that copy's method
   (GEN-01).
+- A class method with type parameters of its own, or with a parameter
+  that names a protocol, called through its class. Through an instance,
+  and type parameters of a special method or a property, are planned for
+  1.0 (GEN-09, GEN-16).
 - A method of a generic class with type parameters of its own,
   `def paired[U](self, other: U) -> tuple[T, U]`, takes the class's type
   arguments from the instance and solves its own from the arguments

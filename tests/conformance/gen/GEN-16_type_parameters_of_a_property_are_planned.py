@@ -1,4 +1,4 @@
-# typy-test: GEN-09
+# typy-test: GEN-16
 # typy-expect: rejected E0201 at 5:9
 class Size:
     @property
