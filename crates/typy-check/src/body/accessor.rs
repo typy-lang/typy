@@ -356,8 +356,8 @@ impl BodyChecker<'_> {
         ))
     }
 
-    /// Reports `instance.name(arguments)` for a class method, which in CPython passes the
-    /// instance's class; returns true when it reports one.
+    /// Reports `instance.name(arguments)` for a class method of a generic class, which has no
+    /// bridge to the copy of the instance's class; returns true when it reports one.
     pub(super) fn refuse_class_method_through_instance(
         &mut self,
         class: ClassId,
@@ -377,12 +377,12 @@ impl BodyChecker<'_> {
                 DiagnosticCode::error(201),
                 name.span,
                 format!(
-                    "calling the class method `{}` through an instance is planned for TyPy 0.5 \
-                     (CLS-06)",
+                    "calling the class method `{}` of a generic class through an instance is \
+                     planned for TyPy 1.0 (CLS-30)",
                     name.name
                 ),
             )
-            .with_rule(RuleId::CLS_06)
+            .with_rule(RuleId::CLS_30)
             .with_help(format!(
                 "call it through its class, `{class_name}.{}(...)`",
                 name.name

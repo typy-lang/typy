@@ -5,6 +5,7 @@ mod builtin_call;
 mod builtin_module;
 mod call;
 mod class;
+mod class_bridge;
 mod class_copy;
 mod class_value;
 mod comprehension;

@@ -352,10 +352,12 @@ print(Shape.unit().name, Square.unit().name, type(Square.unit()).__name__)
 A static method is called through its class, or through any expression
 that gives the class or one of its instances, which is evaluated first,
 as in CPython. A class method is called through its class, also a
-subclass defined in another module, which gets a copy of its own
-(CLS-25). Calling it through an instance, and assigning a class variable
-through a subclass that inherits it, which in CPython gives the subclass
-a variable of its own, are planned for 0.5 too (CLS-25).
+subclass defined in another module, which gets a copy of its own, and
+through an instance, which passes the instance's class as `cls`
+(CLS-25). Through an instance of a generic class it is planned for 1.0
+(CLS-30). Assigning a class variable through a subclass that inherits
+it, which in CPython gives the subclass a variable of its own, is
+planned for 0.5 (CLS-25).
 
 ## Comparison methods
 

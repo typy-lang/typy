@@ -282,9 +282,18 @@ impl Program {
         self.imported_aliases = BTreeMap::new();
         self.class_modules
             .extend(std::iter::repeat_n(self.module.clone(), classes.len()));
+        let first_class = self.classes.len();
         self.classes.extend(classes);
         self.class_ids = class_ids;
         self.instances.extend(instances);
+        // A generic class's copies are made from its definitions, which have no bridges
+        // (CLS-30).
+        for index in first_class..self.classes.len() {
+            let class = ClassId(id(index));
+            if !self.class_copies.borrow().roots.contains_key(&class) {
+                self.add_class_method_bridges(class);
+            }
+        }
     }
 
     /// Notes the module about to be checked, whose imports resolve against its package.

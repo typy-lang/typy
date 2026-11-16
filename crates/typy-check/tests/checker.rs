@@ -2312,6 +2312,11 @@ fn class_bodies_give_class_variables_and_defaults() {
 }
 
 #[test]
+fn a_class_method_is_called_through_an_instance() {
+    accepted("class A:\n    @classmethod\n    def f(cls) -> None:\n        pass\na = A()\na.f()\n");
+}
+
+#[test]
 fn a_static_method_is_called_through_any_instance() {
     accepted(
         "class A:\n    @staticmethod\n    def f() -> int:\n        return 1\ndef g() -> A:\n    return A()\nprint(g().f())\n",
@@ -2415,10 +2420,6 @@ fn class_methods_are_called_through_their_class() {
         (
             "class A:\n    @classmethod\n    def f() -> None:\n        pass\n",
             &["E0404"],
-        ),
-        (
-            "class A:\n    @classmethod\n    def f(cls) -> None:\n        pass\na = A()\na.f()\n",
-            &["E0201"],
         ),
         (
             "class A:\n    count = 0\nclass B(A):\n    pass\nB.count = 1\n",
