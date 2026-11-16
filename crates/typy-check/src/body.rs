@@ -25,6 +25,7 @@ mod expression;
 mod flow;
 mod fstring;
 mod import;
+mod in_place;
 mod isinstance;
 mod iterable_call;
 mod iterator;
@@ -109,6 +110,9 @@ pub(crate) struct BodyChecker<'program> {
     /// Statements that follow the statement being checked, such as the one that stores a
     /// lazy import's number in its binding variables (ADR-0036).
     following: Vec<crate::typed::TypedStmt>,
+    /// The statements that assign the hidden variables an augmented assignment holds its
+    /// target's object and key in, made while it is checked (CLS-20).
+    pins: Vec<crate::typed::TypedStmt>,
     /// The variables, or `args` of the exceptions variables hold, an operation is being
     /// checked for each member of, innermost last, each with the member it is checked for now
     /// (TYP-14).
@@ -151,6 +155,7 @@ impl<'program> BodyChecker<'program> {
             narrowings: Vec::new(),
             splitting: Vec::new(),
             following: Vec::new(),
+            pins: Vec::new(),
             reported_incomplete: false,
             handling: 0,
             finally_loops: Vec::new(),

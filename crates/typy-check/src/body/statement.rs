@@ -168,10 +168,26 @@ impl BodyChecker<'_> {
                 value,
                 span,
             } => {
+                let checked_value = self.expression(value);
                 let current = self.expression(target);
-                let value = self.expression(value);
-                // Without `__iadd__`, which is planned, `x += y` on an instance is `x = x + y`
-                // (CLS-07).
+                // An operator that calls a method of an instance reads and assigns an item or
+                // an attribute of an expression through hidden variables (CLS-20).
+                if matches!(current.ty, Type::Instance(_))
+                    || matches!(checked_value.ty, Type::Instance(_))
+                {
+                    if let super::in_place::Pinned::Checked(pinned) =
+                        self.pinned_augmented(target, *operator, value, *span)
+                    {
+                        return *pinned;
+                    }
+                    if let Some(call) =
+                        self.in_place_call(*operator, &current, &checked_value, *span)
+                    {
+                        return self.rebound(target, call, *span);
+                    }
+                }
+                let value = checked_value;
+                // Without an in-place method, `x += y` on an instance is `x = x + y` (CLS-20).
                 let (current, value) = match self.operator_binary(*operator, current, value, *span)
                 {
                     super::operator_method::Comparison::Called(call) => {
@@ -334,7 +350,12 @@ impl BodyChecker<'_> {
     fn rebound(&mut self, target: &Expr, value: TypedExpr, span: Span) -> Option<TypedStmt> {
         let simple = match target {
             Expr::Name { .. } => true,
-            Expr::Attribute { value: object, .. } => matches!(object.as_ref(), Expr::Name { .. }),
+            Expr::Attribute { value: object, .. } => super::in_place::is_name(object),
+            Expr::Subscript {
+                value: object,
+                index,
+                ..
+            } => super::in_place::is_name(object) && super::in_place::is_name(index),
             _ => false,
         };
         if !simple {

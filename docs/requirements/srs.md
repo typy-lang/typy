@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy software requirements specification |
-| Version | 1.57 |
+| Version | 1.58 |
 | Status | Approved |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-15 |
@@ -310,6 +310,7 @@ formatter applies; Ruff's formatter is the project's recommendation.
 | CLS-29 | `super(Class, instance)` shall be accepted with an instance other than the method's own, and outside a method. | C | 1.0 | |
 | CLS-30 | A class method of a generic class shall be callable through an instance. | C | 1.0 | |
 | CLS-31 | A class variable shall be assignable through a variable that holds a class derived from the class that gives it, such as `cls` in a class method, giving that class one of its own. | C | 1.0 | |
+| CLS-32 | An augmented assignment shall call the in-place method that only a class derived from its target's class defines, when the target holds an instance of that class. | C | 1.0 | |
 | CLS-14 | `super().__init__(...)` shall be accepted in the `__init__` of an exception class and shall set the exception's arguments; any other use of `super()` shall be rejected until 0.4. | M | 0.3 | |
 
 ### 3.11 Generics and protocols (GEN)

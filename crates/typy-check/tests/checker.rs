@@ -2582,10 +2582,6 @@ fn arithmetic_methods_are_checked() {
             &["E0201"],
         ),
         (
-            "class V:\n    def __add__(self, other: 'V') -> 'V':\n        return self\nitems = [V()]\nitems[0] += V()\n",
-            &["E0201"],
-        ),
-        (
             "class V:\n    def __add__(self, other: 'V') -> int:\n        return 1\n    def __radd__(self, other: 'V') -> str:\n        return ''\nprint(V() + V())\n",
             &["E0201"],
         ),
@@ -2593,6 +2589,19 @@ fn arithmetic_methods_are_checked() {
     for (source, expected) in cases {
         assert_eq!(&rejected(source), expected, "\n{source}");
     }
+}
+
+#[test]
+fn in_place_methods_and_items_of_instances_are_assigned() {
+    accepted(
+        "class V:\n    def __add__(self, other: 'V') -> 'V':\n        return self\n    def __imul__(self, other: int) -> 'V':\n        return self\nitems = [V()]\nitems[0] += V()\nitems[0] *= 2\n",
+    );
+    assert_eq!(
+        rejected(
+            "class V:\n    def __add__(self, other: 'V') -> 'V':\n        return self\nclass W(V):\n    def __iadd__(self, other: V) -> V:\n        return self\nv = V()\nv += V()\n"
+        ),
+        ["E0201"]
+    );
 }
 
 #[test]

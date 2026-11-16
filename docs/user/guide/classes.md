@@ -431,9 +431,12 @@ print(total.cents, (3 * total).cents)
 
 As in CPython, `3 * total` falls back to the right operand's
 `__rmul__`, and the right operand's reflected method comes first when
-its class derives from the left's and defines it again. `x += y` is
-`x = x + y` for a variable or an attribute of one; the in-place methods
-such as `__iadd__` are planned for 0.5 (CLS-20).
+its class derives from the left's and defines it again. `x += y` calls
+the class's in-place method, such as `__iadd__`, when it defines one,
+and `x = x + y` otherwise, for any target: an item or an attribute of an
+expression is evaluated once, as in CPython (CLS-20). An in-place method
+that only a subclass of the target's class defines is planned for 1.0
+(CLS-32).
 
 ## Container methods
 

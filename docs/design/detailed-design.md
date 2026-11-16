@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy detailed design |
-| Version | 1.87 |
+| Version | 1.88 |
 | Status | Approved |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-15 |
@@ -1338,9 +1338,13 @@ ends, planned for 0.5. Arithmetic methods reuse the same call:
 `operator_binary` makes `a op b` an `OperatorCall` with `__add__` and its
 reflected `__radd__`, typed by the method's result, E0201 when the two methods
 return different types; `operator_unary` calls `__neg__`, `__pos__`,
-`__invert__` and, for `abs`, `__abs__`. An augmented assignment whose operator
-calls a method assigns its result to the variable or the variable's
-attribute, E0201 for any other target. `body::container_method` calls
+`__invert__` and, for `abs`, `__abs__`. An augmented assignment on an instance
+calls the class's in-place method, such as `__iadd__`, with `dispatch` set,
+and the binary method when the class has none, and assigns the result to the
+target (CLS-20). `body::in_place::pinned_augmented` first holds the object and
+the key of an item or an attribute of an expression in hidden variables, so the
+target is evaluated once; an in-place method that only a class derived from the
+target's defines is E0201, planned for 1.0 (CLS-32). `body::container_method` calls
 `__len__` for `len`, wrapped in `TypedExprKind::CheckedLength`, which lowers to
 `int_length` and raises CPython's `ValueError` or `OverflowError`;
 `__getitem__` for a subscript; `__setitem__` for `variable[key] = value`, as a

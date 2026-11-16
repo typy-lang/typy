@@ -43,8 +43,14 @@ impl RuleId {
     pub const CLS_16: Self = Self("CLS-16");
     /// `isinstance` and a class pattern shall accept a class held in a variable or computed.
     pub const CLS_18: Self = Self("CLS-18");
+    /// An augmented assignment to an instance shall call the class's in-place method, such as `__iadd__`, and the binary method when the class has none, as CPython does.
+    pub const CLS_20: Self = Self("CLS-20");
+    /// An operator or comparison method that returns `NotImplemented` shall give way to the reflected method, and then to CPython's default or its `TypeError`.
+    pub const CLS_21: Self = Self("CLS-21");
     /// Comparison and hash methods that may raise, a chain such as `a < b < c` of instances, and an operator whose method and reflected method return different types shall be accepted.
     pub const CLS_22: Self = Self("CLS-22");
+    /// `in` on an instance whose class has no `__contains__` shall iterate it, and an instance shall be sliced through its `__getitem__`, as CPython does.
+    pub const CLS_23: Self = Self("CLS-23");
     /// The truth of an instance shall come from the `__bool__` or `__len__` of its own class, also where its static type is a base or a union that tests truth otherwise, and in `any` and `all`.
     pub const CLS_24: Self = Self("CLS-24");
     /// A class method shall be callable through an instance and through a subclass defined in another module, a class variable shall be assignable through a subclass, and a static method shall be callable through any expression that gives its class or an instance.
@@ -61,6 +67,8 @@ impl RuleId {
     pub const CLS_30: Self = Self("CLS-30");
     /// A class variable shall be assignable through a variable that holds a class derived from the class that gives it, such as `cls` in a class method, giving that class one of its own.
     pub const CLS_31: Self = Self("CLS-31");
+    /// An augmented assignment shall call the in-place method that only a class derived from its target's class defines, when the target holds an instance of that class.
+    pub const CLS_32: Self = Self("CLS-32");
     /// `for` shall iterate over `range`, `str`, `bytes`, `list`, `tuple`, `dict`, `set` and any class with `__iter__` and `__next__`.
     pub const CST_03: Self = Self("CST-03");
     /// `try` with `except`, `else` and `finally` clauses shall be accepted, and `finally` shall run on `return`, `break`, `continue` and exceptions.
@@ -336,7 +344,10 @@ impl RuleId {
         Self::CLS_15,
         Self::CLS_16,
         Self::CLS_18,
+        Self::CLS_20,
+        Self::CLS_21,
         Self::CLS_22,
+        Self::CLS_23,
         Self::CLS_24,
         Self::CLS_25,
         Self::CLS_26,
@@ -345,6 +356,7 @@ impl RuleId {
         Self::CLS_29,
         Self::CLS_30,
         Self::CLS_31,
+        Self::CLS_32,
         Self::CST_03,
         Self::CST_04,
         Self::CST_05,

@@ -189,7 +189,7 @@ impl BodyChecker<'_> {
     }
 
     /// Returns true when a class derived from `class`, other than it, defines `name`.
-    fn defined_below(&self, class: crate::typed::ClassId, name: &str) -> bool {
+    pub(super) fn defined_below(&self, class: crate::typed::ClassId, name: &str) -> bool {
         self.program.classes.iter().any(|other| {
             other.id != class
                 && other.method(name).is_some()
@@ -200,7 +200,12 @@ impl BodyChecker<'_> {
 
     /// Returns the comparison method `name` of the class of an instance of type `ty`, when
     /// its class defines or inherits one that takes a value of type `other`.
-    fn operator_method(&self, ty: &Type, name: &str, other: &Type) -> Option<FunctionId> {
+    pub(super) fn operator_method(
+        &self,
+        ty: &Type,
+        name: &str,
+        other: &Type,
+    ) -> Option<FunctionId> {
         let class = ty.class_id().filter(|_| matches!(ty, Type::Instance(_)))?;
         let method = self.program.method(class, name)?;
         let parameter = self.program.signatures[method.0 as usize]
@@ -224,7 +229,7 @@ fn method_names(operator: CompareOperator) -> Option<(&'static str, &'static str
 }
 
 /// Returns the method a binary operator calls and the reflected one.
-fn binary_names(operator: BinaryOperator) -> (&'static str, &'static str) {
+pub(super) fn binary_names(operator: BinaryOperator) -> (&'static str, &'static str) {
     match operator {
         BinaryOperator::Add => ("__add__", "__radd__"),
         BinaryOperator::Sub => ("__sub__", "__rsub__"),

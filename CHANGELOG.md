@@ -41,6 +41,10 @@ All notable changes to TyPy are recorded here. The format follows
   `tuple[str, int] | tuple[str]`; `code` is `None`, the one argument, or
   the tuple. The five items of a Unicode error join only in a program
   that encodes, decodes or opens a file (EXC-15, ADR-0034).
+- A class may define the in-place methods, such as `__iadd__`, which
+  `x += y` calls, falling back to `__add__`; an augmented assignment that
+  calls an operator method takes an item or an attribute of any
+  expression as its target, evaluated once (CLS-20, CLS-32).
 - Assigning a class variable through a subclass that inherits it gives
   the subclass a variable of its own, which it, its subclasses and their
   instances read from then on, as CPython does; through a variable such

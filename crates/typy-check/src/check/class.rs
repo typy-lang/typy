@@ -316,7 +316,7 @@ fn unsupported_base(span: Span) -> Diagnostic {
 /// `__iter__` and `__next__` (CST-08) and `__enter__` and `__exit__` (CST-05). Any other name that starts and ends with two
 /// underscores changes how Python treats the instances, and waits for the operator methods of
 /// 0.4 (CLS-07).
-const SPECIAL_METHODS: [&str; 50] = [
+const SPECIAL_METHODS: [&str; 63] = [
     "__init__",
     "__str__",
     "__repr__",
@@ -367,6 +367,19 @@ const SPECIAL_METHODS: [&str; 50] = [
     "__delitem__",
     "__contains__",
     "__bool__",
+    "__iadd__",
+    "__isub__",
+    "__imul__",
+    "__imatmul__",
+    "__itruediv__",
+    "__ifloordiv__",
+    "__imod__",
+    "__ipow__",
+    "__ilshift__",
+    "__irshift__",
+    "__iand__",
+    "__ior__",
+    "__ixor__",
 ];
 
 /// The classes a module's class bodies may name: each by its name, the type of each one's
@@ -1292,8 +1305,10 @@ fn is_binary_method(name: &str) -> bool {
     else {
         return false;
     };
+    // A reflected method and an in-place one take the operands a binary one does (CLS-20).
     let bare = bare
         .strip_prefix('r')
+        .or_else(|| bare.strip_prefix('i'))
         .filter(|rest| BINARY.contains(rest))
         .unwrap_or(bare);
     BINARY.contains(&bare)
@@ -1428,26 +1443,12 @@ fn check_exit(method: &Definition<'_>, name: &Identifier, diagnostics: &mut Diag
 
 /// Reports a special method a class may not define yet.
 fn planned_method(name: &Identifier) -> Diagnostic {
-    let bare = name
-        .name
-        .strip_prefix("__")
-        .and_then(|rest| rest.strip_suffix("__"))
-        .unwrap_or_default();
-    // The in-place operators come after the container methods of 0.4, and the other special
-    // methods, such as `__call__`, after 1.0.
-    let release = if bare
-        .strip_prefix('i')
-        .is_some_and(|rest| BINARY.contains(&rest))
-    {
-        "TyPy 0.5"
-    } else {
-        "a release after TyPy 1.0"
-    };
+    // The special methods TyPy does not take, such as `__call__`, come after 1.0.
     Diagnostic::new(
         DiagnosticCode::error(201),
         name.span,
         format!(
-            "the special method `{}` is planned for {release} (CLS-07)",
+            "the special method `{}` is planned for a release after TyPy 1.0 (CLS-07)",
             name.name
         ),
     )
