@@ -216,6 +216,11 @@ All notable changes to TyPy are recorded here. The format follows
 - A static method of a generic class that names none of its type
   parameters, such as `Box.count()`, is compiled once and called through
   the class or an instance; TyPy stopped with an internal error (GEN-01).
+- `issubclass`, `super()` held as a value, and `property`, `staticmethod`
+  and `classmethod` called as functions are refused as planned for 1.0
+  (CLS-19, CLS-36, FUN-05); TyPy named 0.4 and 0.5 for them. `import
+  collections` is E0206, as for any module TyPy does not provide, and the
+  help lists `dataclasses` among the modules it provides (LIB-08).
 - Calling a generic class of another module, such as `Box(3)` after
   `from tools import Box`, compiles; TyPy stopped with an internal error
   (GEN-07).

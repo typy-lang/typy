@@ -43,6 +43,8 @@ impl RuleId {
     pub const CLS_16: Self = Self("CLS-16");
     /// `isinstance` and a class pattern shall accept a class held in a variable or computed.
     pub const CLS_18: Self = Self("CLS-18");
+    /// `issubclass` shall be accepted with a class or a tuple of classes.
+    pub const CLS_19: Self = Self("CLS-19");
     /// An augmented assignment to an instance shall call the class's in-place method, such as `__iadd__`, and the binary method when the class has none, as CPython does.
     pub const CLS_20: Self = Self("CLS-20");
     /// An operator or comparison method that returns `NotImplemented` shall give way to the reflected method, and then to CPython's default or its `TypeError`.
@@ -75,6 +77,8 @@ impl RuleId {
     pub const CLS_34: Self = Self("CLS-34");
     /// A static method that overrides a method, or a method that overrides a static method, shall be accepted with a parameter or result held otherwise than the one it overrides.
     pub const CLS_35: Self = Self("CLS-35");
+    /// `super()` shall be usable as a value: held in a variable, passed and returned.
+    pub const CLS_36: Self = Self("CLS-36");
     /// `for` shall iterate over `range`, `str`, `bytes`, `list`, `tuple`, `dict`, `set` and any class with `__iter__` and `__next__`.
     pub const CST_03: Self = Self("CST-03");
     /// `try` with `except`, `else` and `finally` clauses shall be accepted, and `finally` shall run on `return`, `break`, `continue` and exceptions.
@@ -358,6 +362,7 @@ impl RuleId {
         Self::CLS_15,
         Self::CLS_16,
         Self::CLS_18,
+        Self::CLS_19,
         Self::CLS_20,
         Self::CLS_21,
         Self::CLS_22,
@@ -374,6 +379,7 @@ impl RuleId {
         Self::CLS_33,
         Self::CLS_34,
         Self::CLS_35,
+        Self::CLS_36,
         Self::CST_03,
         Self::CST_04,
         Self::CST_05,
@@ -437,6 +443,7 @@ impl RuleId {
         Self::GEN_08,
         Self::GEN_09,
         Self::GEN_10,
+        Self::GEN_11,
         Self::LEX_01,
         Self::LEX_06,
         Self::LEX_07,

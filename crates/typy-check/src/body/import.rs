@@ -326,8 +326,6 @@ impl Program {
             return Ok(());
         }
         let planned = match top {
-            "sys" => Some(("0.3", RuleId::LIB_04)),
-            "dataclasses" | "typing" | "collections" => Some(("0.4", RuleId::LIB_06)),
             "ctypes" => Some(("0.5", RuleId::FFI_01)),
             "os" | "time" | "random" => Some(("1.0", RuleId::LIB_07)),
             _ => None,
@@ -345,7 +343,10 @@ impl Program {
                 format!("TyPy does not provide the standard library module `{module}`"),
             )
             .with_rule(RuleId::LIB_08)
-            .with_help("TyPy 0.3 provides `math`, `sys`, `typing`, `collections.abc` and `types`"),
+            .with_help(
+                "TyPy provides `math`, `sys`, `dataclasses`, `typing`, `collections.abc` and \
+                 `types`",
+            ),
         }))
     }
 }

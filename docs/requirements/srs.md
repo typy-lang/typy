@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy software requirements specification |
-| Version | 1.67 |
+| Version | 1.68 |
 | Status | Approved |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-16 |
@@ -316,6 +316,7 @@ formatter applies; Ruff's formatter is the project's recommendation.
 | CLS-33 | An operator or comparison method that may return both `None` and `NotImplemented` shall be accepted. | C | 1.0 | |
 | CLS-34 | An override whose parameter is held otherwise than its base method's, such as `int \| None` for `int`, shall be accepted with a default of its own for that parameter. | C | 1.0 | |
 | CLS-35 | A static method that overrides a method, or a method that overrides a static method, shall be accepted with a parameter or result held otherwise than the one it overrides. | C | 1.0 | |
+| CLS-36 | `super()` shall be usable as a value: held in a variable, passed and returned. | C | 1.0 | |
 | CLS-14 | `super().__init__(...)` shall be accepted in the `__init__` of an exception class and shall set the exception's arguments; any other use of `super()` shall be rejected until 0.4. | M | 0.3 | |
 
 ### 3.11 Generics and protocols (GEN)

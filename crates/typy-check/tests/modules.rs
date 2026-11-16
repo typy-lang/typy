@@ -142,11 +142,11 @@ fn imports_that_cannot_resolve_give_their_codes() {
         ("import shapes\nshapes.NAME += 1\n", &["E0401"]),
         ("import ctypes\n", &["E0201"]),
         ("import json\n", &["E0206"]),
+        ("import collections\n", &["E0206"]),
         ("from collections.abc import Sized\n", &["E0201"]),
         ("from types import FrameType\n", &["E0425"]),
         ("from typing import Iterator\nprint(Iterator)\n", &["E0201"]),
         ("import typing\nprint(typing)\n", &["E0201"]),
-        ("import collections\n", &["E0201"]),
         (
             "from typing import Iterator\nx: Iterator = iter([1])\n",
             &["E0408"],
