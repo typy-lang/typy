@@ -48,7 +48,7 @@ impl BodyChecker<'_> {
                 })
                 .collect();
             arms.push((
-                TypeObjectOf::Tuple,
+                crate::typed::MemberTest::Class(TypeObjectOf::Tuple),
                 Self::typed(TypedExprKind::List(elements), list.clone(), span),
             ));
         }

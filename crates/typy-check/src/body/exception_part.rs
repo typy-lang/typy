@@ -209,7 +209,12 @@ impl BodyChecker<'_> {
         let value = read(self, arguments);
         let arms = members
             .iter()
-            .map(|member| (TypeObjectOf::Tuple, arm(self, member)))
+            .map(|member| {
+                (
+                    crate::typed::MemberTest::Class(TypeObjectOf::Tuple),
+                    arm(self, member),
+                )
+            })
             .collect();
         Self::typed(
             TypedExprKind::EachMember(Box::new(EachMember { value, arms })),

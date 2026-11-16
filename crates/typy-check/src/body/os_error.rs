@@ -128,7 +128,7 @@ impl BodyChecker<'_> {
             .map(|member| {
                 let read = arguments(again.clone(), member.clone());
                 (
-                    TypeObjectOf::Tuple,
+                    crate::typed::MemberTest::Class(TypeObjectOf::Tuple),
                     Self::converted(projected(read, member, field, span), Some(&ty)),
                 )
             })

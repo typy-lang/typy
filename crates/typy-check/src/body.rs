@@ -23,7 +23,7 @@ mod override_adapter;
 mod static_bridge;
 mod truth_bridge;
 pub use comparison_bridge::{COMPARISON_BRIDGES, EQUAL_BRIDGE};
-pub use each_member::member_class;
+pub use each_member::{member_class, member_test};
 pub use truth_bridge::TRUTH_BRIDGE;
 mod exception;
 mod exception_creation;

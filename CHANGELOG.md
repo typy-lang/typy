@@ -132,6 +132,10 @@ All notable changes to TyPy are recorded here. The format follows
   compared, hashed and written as CPython does (CLS-23).
 - A slice bound may be `None` or an `int | None`, which stands for a
   missing bound, as in `items[start:]` with `start = None` (DAT-12).
+- An operation on a variable of a union with an iterator, a file, a module
+  or a traceback member, such as `Iterator[int] | list[int]`, tests the
+  object's kind; members TyPy cannot tell apart, such as two iterators,
+  are planned for 1.0 (TYP-14, TYP-19).
 - The truth of an instance comes from the `__bool__`, or else the
   `__len__`, of the object's own class, also where the variable's type is
   a base with neither or a union, and in `any` and `all` (CLS-24).

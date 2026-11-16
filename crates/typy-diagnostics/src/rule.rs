@@ -333,6 +333,8 @@ impl RuleId {
     pub const TYP_17: Self = Self("TYP-17");
     /// The names of `typing` and `collections.abc` shall be values of their own: stored, passed, compared and written as CPython writes them; so shall a type alias that a function or a class defines, an alias given its type arguments, and an alias's `__value__` and `__type_params__`.
     pub const TYP_18: Self = Self("TYP-18");
+    /// An operation on a union whose members the runtime cannot tell apart by class or kind, such as two iterators, two file kinds or an iterable, shall be accepted.
+    pub const TYP_19: Self = Self("TYP-19");
 
     /// Every rule a diagnostic can name, in ID order.
     pub const ALL: &'static [Self] = &[
@@ -499,6 +501,7 @@ impl RuleId {
         Self::TYP_16,
         Self::TYP_17,
         Self::TYP_18,
+        Self::TYP_19,
     ];
 
     /// Returns the ID as text, such as `TYP-03`.

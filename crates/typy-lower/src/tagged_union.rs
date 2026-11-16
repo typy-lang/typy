@@ -274,11 +274,10 @@ impl FunctionLowerer<'_> {
             let found = self.borrowed_result(found);
             return self.identical(value, found, span);
         }
-        let class = typy_check::member_class(member).unwrap_or(typy_check::TypeObjectOf::Object);
-        let object = self.bits(Self::borrowed(value.value, value.ty), span);
-        let class = self.type_object(&class, span).value;
-        self.call_runtime(RuntimeFunction::IsInstance, vec![object, class], span)
-            .value
+        let test = typy_check::member_test(member).unwrap_or(typy_check::MemberTest::Class(
+            typy_check::TypeObjectOf::Object,
+        ));
+        self.member_found(value, &test, span)
     }
 
     /// Returns the object of a union of objects as a value of `ty`, borrowed.

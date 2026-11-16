@@ -268,6 +268,19 @@ pub unsafe extern "C" fn typy_rt_object_type(object: *const ObjectHeader) -> *co
     }
 }
 
+/// Returns whether the header of the heap object at `object` holds the type ID `id`, an `int`
+/// word: the kind of the runtime's own objects that have no type object to test against, such
+/// as an iterator or a file (TYP-14).
+///
+/// # Safety
+///
+/// `object` points to a live object with a valid header.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn typy_rt_object_has_type_id(object: *const ObjectHeader, id: i64) -> bool {
+    // SAFETY: the caller's guarantee.
+    i64::from(unsafe { (*object).type_id }) == crate::word::inline_value(id)
+}
+
 /// Returns whether the heap object at `object` is an instance of `class`: its type is
 /// `class` or derives from it, as `isinstance` tests (CLS-09).
 ///

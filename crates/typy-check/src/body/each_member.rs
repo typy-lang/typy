@@ -8,7 +8,9 @@ use super::BodyChecker;
 use super::expression::literal_position;
 use crate::builtin::Builtin;
 use crate::exception::{BuiltinException, ExceptionClass};
-use crate::typed::{EachMember, SymbolId, TypedConstant, TypedExpr, TypedExprKind};
+use crate::typed::{
+    EachMember, MemberTest, RuntimeKind, SymbolId, TypedConstant, TypedExpr, TypedExprKind,
+};
 use crate::types::{Type, TypeObjectOf};
 
 impl BodyChecker<'_> {
@@ -19,19 +21,35 @@ impl BodyChecker<'_> {
         let operand = self.member_operand(expression)?;
         let (split, members) = self.union_operand(operand)?;
         let span = expression.span();
-        let Some(tests) = members.iter().map(member_class).collect::<Option<Vec<_>>>() else {
+        // The runtime tells the members apart by their classes, or by the kind of the
+        // runtime's own objects; members it cannot tell apart are planned (TYP-19).
+        let tests: Option<Vec<MemberTest>> = members.iter().map(member_test).collect();
+        let Some(tests) = tests.filter(|tests| {
+            let kinds: Vec<RuntimeKind> = tests
+                .iter()
+                .filter_map(|test| match test {
+                    MemberTest::Kind(kind) => Some(*kind),
+                    MemberTest::Class(_) => None,
+                })
+                .collect();
+            kinds
+                .iter()
+                .enumerate()
+                .all(|(position, kind)| !kinds[position + 1..].contains(kind))
+        }) else {
             return Some(
                 self.error(
                     Diagnostic::new(
                         DiagnosticCode::error(201),
                         span,
                         format!(
-                            "an operation on {} whose member has no class to test, such as an \
-                         iterator, is planned for TyPy 0.5 (TYP-14)",
+                            "an operation on {} whose members the program cannot tell apart, \
+                             such as two iterators or an iterable, is planned for TyPy 1.0 \
+                             (TYP-19)",
                             Type::Union(members).with_article()
                         ),
                     )
-                    .with_rule(RuleId::TYP_14),
+                    .with_rule(RuleId::TYP_19),
                     span,
                 ),
             );
@@ -177,7 +195,7 @@ impl BodyChecker<'_> {
 
     /// Returns the type of the result: the members' results joined into one type. An arm
     /// that raises gives no result.
-    fn each_member_type(arms: &[(TypeObjectOf, TypedExpr)]) -> Type {
+    fn each_member_type(arms: &[(MemberTest, TypedExpr)]) -> Type {
         let results: Vec<Type> = arms
             .iter()
             .filter(|(_, body)| !matches!(body.kind, TypedExprKind::Raise(_)))
@@ -337,6 +355,24 @@ const fn takes_any_object(builtin: Builtin) -> bool {
             | Builtin::IsInstance
             | Builtin::Bool
     )
+}
+
+/// Returns how the runtime finds an object is of `member`: by its class, or by the kind of
+/// the runtime's own objects; `None` for an iterable, which any object may be (TYP-14).
+#[must_use]
+pub fn member_test(member: &Type) -> Option<MemberTest> {
+    Some(match member {
+        Type::Iterator(_) => MemberTest::Kind(RuntimeKind::Iterator),
+        Type::Traceback => MemberTest::Kind(RuntimeKind::Traceback),
+        Type::Module(_) | Type::AnyModule => MemberTest::Kind(RuntimeKind::Module),
+        Type::TextFile | Type::BinaryFile(_) | Type::DescriptorFile(_) => {
+            MemberTest::Kind(RuntimeKind::File)
+        }
+        Type::TypeAlias => MemberTest::Kind(RuntimeKind::TypeAlias),
+        Type::VersionInfo => MemberTest::Kind(RuntimeKind::VersionInfo),
+        Type::NotImplemented => MemberTest::Kind(RuntimeKind::NotImplemented),
+        other => MemberTest::Class(member_class(other)?),
+    })
 }
 
 /// Returns the class the runtime tests an object against to find it is of `member`, when

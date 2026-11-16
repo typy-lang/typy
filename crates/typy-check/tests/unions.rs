@@ -136,9 +136,14 @@ fn an_operation_on_a_union_variable_is_checked_for_each_member() {
         assert_eq!(with_shapes(body), Vec::<String>::new(), "{body}");
     }
     let refused: &[(&str, &str)] = &[
-        // An iterator has no class to test the object against.
+        // An iterator member is told apart by its kind, and has no length (TYP-14).
         (
             "from collections.abc import Iterator\ndef f(v: Iterator[int] | str) -> int:\n    return len(v)\n",
+            "E0404",
+        ),
+        // Two iterators cannot be told apart (TYP-19).
+        (
+            "from collections.abc import Iterator\ndef f(v: Iterator[int] | Iterator[str]) -> str:\n    return str(next(v))\n",
             "E0201",
         ),
         // A variable a function declares `global` is not narrowed, so it is not split.

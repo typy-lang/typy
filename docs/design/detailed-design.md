@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy detailed design |
-| Version | 2.01 |
+| Version | 2.02 |
 | Status | Approved |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-16 |
@@ -980,10 +980,16 @@ comparison other than `is`, or a builtin call other than `print`, `str`, `repr`,
 `type`, `isinstance` and `bool`, whose operand is a variable that holds a union
 of members with no shared class, once for each member with `Fact::Narrowed` set
 to it, and joins the results with `Type::union`. `TypedExprKind::EachMember`
-keeps the variable's read and each member's class with its checked expression,
-and lowering tests the object with `typy_rt_is_instance` against each class but
-the last, whose branch runs when none holds; the branches pass their result to
-one block. A loop, a comprehension or a builtin that reads an iterable over a
+keeps the variable's read and, for each member, a `MemberTest` with its checked
+expression. The test is the member's class, or for an iterator, a traceback, a
+module, a file, a type alias, `sys.version_info` and `NotImplemented` the
+`RuntimeKind` of the runtime's object. Lowering tests the object with
+`typy_rt_is_instance` against a class, or with `typy_rt_object_has_type_id`
+against the type ID of a kind, for each member but the last, whose branch runs
+when none holds; the branches pass their result to one block. Two members that
+share a kind, such as two iterators, cannot be told apart at run time, so
+`member_test` refuses the operation with `E0201`, planned for 1.0 (TYP-19).
+A loop, a comprehension or a builtin that reads an iterable over a
 variable that holds a union of fixed tuples goes over
 `body::union_loop::union_tuple_items`: an `EachMember` whose arm for each
 member is a list display of that member's items, each converted to the union

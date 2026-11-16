@@ -246,6 +246,8 @@ pub enum RuntimeFunction {
     SliceIndex,
     /// Whether two slices are equal (CLS-23).
     SliceEqual,
+    /// Whether an object's header holds a type ID (TYP-14).
+    ObjectHasTypeId,
     SysGetRecursionLimit,
     SysSetRecursionLimit,
     SysStderr,
@@ -406,7 +408,7 @@ const FLOAT_FLOAT: &[TyirType] = &[TyirType::Float, TyirType::Float];
 
 impl RuntimeFunction {
     /// Every runtime function.
-    pub const ALL: [Self; 335] = [
+    pub const ALL: [Self; 336] = [
         Self::IntFloorDivide,
         Self::IntModulo,
         Self::IntPower,
@@ -637,6 +639,7 @@ impl RuntimeFunction {
         Self::SliceBound,
         Self::SliceIndex,
         Self::SliceEqual,
+        Self::ObjectHasTypeId,
         Self::SysGetRecursionLimit,
         Self::SysSetRecursionLimit,
         Self::SysStderr,
@@ -823,6 +826,7 @@ impl RuntimeFunction {
             ),
             Self::SliceIndex => signature(&[TyirType::SLICE, Int, Int], Int, true),
             Self::SliceEqual => signature(&[TyirType::SLICE, TyirType::SLICE], Bool, false),
+            Self::ObjectHasTypeId => signature(&[Bits, Int], Bool, false),
             Self::RangeCheckStep | Self::SysSetRecursionLimit => signature(&[Int], Unit, true),
             Self::NameError | Self::WriteStdoutChecked => signature(&[STR], Unit, true),
             Self::ModuleAttributeError | Self::ModuleImportError => {
@@ -1349,6 +1353,7 @@ impl RuntimeFunction {
             Self::SliceBound => "slice_bound",
             Self::SliceIndex => "slice_index",
             Self::SliceEqual => "slice_equal",
+            Self::ObjectHasTypeId => "object_has_type_id",
             Self::SysGetRecursionLimit => "sys_getrecursionlimit",
             Self::SysSetRecursionLimit => "sys_setrecursionlimit",
             Self::SysStderr => "sys_stderr",

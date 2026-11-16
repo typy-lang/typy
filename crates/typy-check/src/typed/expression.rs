@@ -515,9 +515,38 @@ pub struct IsInstanceTest {
 pub struct EachMember {
     /// The read of the variable, whose object decides which member it is.
     pub value: TypedExpr,
-    /// Each member's class with the operation checked for it; the last runs when no class
-    /// before it is the object's.
-    pub arms: Vec<(crate::types::TypeObjectOf, TypedExpr)>,
+    /// Each member's test with the operation checked for it; the last runs when no test
+    /// before it holds.
+    pub arms: Vec<(MemberTest, TypedExpr)>,
+}
+
+/// How the runtime finds that the object a union holds is of one member (TYP-14).
+#[derive(Clone, Debug, PartialEq)]
+pub enum MemberTest {
+    /// The object is an instance of this class.
+    Class(crate::types::TypeObjectOf),
+    /// The object's header says it is of this kind of the runtime's own objects, which have
+    /// no type object to test against.
+    Kind(RuntimeKind),
+}
+
+/// A kind of the runtime's own objects, told apart by the type ID in their header.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub enum RuntimeKind {
+    /// An iterator.
+    Iterator,
+    /// A traceback.
+    Traceback,
+    /// A module object.
+    Module,
+    /// A file, text or binary.
+    File,
+    /// A type alias.
+    TypeAlias,
+    /// `sys.version_info`.
+    VersionInfo,
+    /// `NotImplemented`.
+    NotImplemented,
 }
 
 impl TypedExpr {

@@ -3,7 +3,7 @@
 
 use typy_check::EachMember;
 use typy_diagnostics::Span;
-use typy_tyir::{RuntimeFunction, Terminator, TyirType};
+use typy_tyir::{Constant, RuntimeFunction, Terminator, TyirType};
 
 use crate::function::FunctionLowerer;
 use crate::ownership::Lowered;
@@ -27,11 +27,7 @@ impl FunctionLowerer<'_> {
         let last = each.arms.len() - 1;
         for (position, (class, body)) in each.arms.iter().enumerate() {
             if position < last {
-                let object = self.bits(Self::borrowed(value.value, value.ty), span);
-                let class = self.type_object(class, span).value;
-                let found = self
-                    .call_runtime(RuntimeFunction::IsInstance, vec![object, class], span)
-                    .value;
+                let found = self.member_found(value, class, span);
                 let this = self.builder.create_block();
                 let next = self.builder.create_block();
                 self.builder.terminate(Terminator::Branch {
@@ -49,6 +45,38 @@ impl FunctionLowerer<'_> {
         let result = self.joined(join, result, ty, span);
         self.release(value, span);
         result
+    }
+
+    /// Returns whether the object a union of objects holds passes a member's test: an instance
+    /// of its class, or of its kind of the runtime's own objects (TYP-14).
+    pub(crate) fn member_found(
+        &mut self,
+        value: Lowered,
+        test: &typy_check::MemberTest,
+        span: Span,
+    ) -> typy_tyir::ValueId {
+        let object = self.bits(Self::borrowed(value.value, value.ty), span);
+        match test {
+            typy_check::MemberTest::Class(class) => {
+                let class = self.type_object(class, span).value;
+                self.call_runtime(RuntimeFunction::IsInstance, vec![object, class], span)
+                    .value
+            }
+            typy_check::MemberTest::Kind(kind) => {
+                let id = match kind {
+                    typy_check::RuntimeKind::Iterator => typy_tyir::TypeId::ITERATOR,
+                    typy_check::RuntimeKind::Traceback => typy_tyir::TypeId::TRACEBACK,
+                    typy_check::RuntimeKind::Module => typy_tyir::TypeId::MODULE,
+                    typy_check::RuntimeKind::File => typy_tyir::TypeId::TEXT_FILE,
+                    typy_check::RuntimeKind::TypeAlias => typy_tyir::TypeId::TYPE_ALIAS,
+                    typy_check::RuntimeKind::VersionInfo => typy_tyir::TypeId::VERSION_INFO,
+                    typy_check::RuntimeKind::NotImplemented => typy_tyir::TypeId::NOT_IMPLEMENTED,
+                };
+                let id = self.constant(Constant::Int(id.0.to_string()), span);
+                self.call_runtime(RuntimeFunction::ObjectHasTypeId, vec![object, id], span)
+                    .value
+            }
+        }
     }
 
     /// Lowers one member's operation and passes its result, with its reference, to `join`.

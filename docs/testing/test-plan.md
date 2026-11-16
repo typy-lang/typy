@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy test plan |
-| Version | 0.65 |
+| Version | 0.66 |
 | Status | Draft |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-16 |
@@ -293,6 +293,7 @@ that the specification does not define.
 | TYP-16 | 0.5 | IT | `tests/conformance/typ/TYP-16_*.py` |
 | TYP-17 | 0.5 | IT | `tests/conformance/typ/TYP-17_*.py` |
 | TYP-18 | 1.0 | IT | `tests/conformance/typ/TYP-18_*.py` |
+| TYP-19 | 1.0 | IT | `tests/conformance/typ/TYP-19_*.py` |
 | DAT-01 | 0.1 | IT | `tests/conformance/dat/DAT-01_*.py` |
 | DAT-02 | 0.1 | IT | `tests/conformance/dat/DAT-02_*.py` |
 | DAT-03 | 0.1 | IT | `tests/conformance/dat/DAT-03_*.py` |
