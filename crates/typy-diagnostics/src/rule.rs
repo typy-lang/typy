@@ -59,6 +59,8 @@ impl RuleId {
     pub const CLS_29: Self = Self("CLS-29");
     /// A class method of a generic class shall be callable through an instance.
     pub const CLS_30: Self = Self("CLS-30");
+    /// A class variable shall be assignable through a variable that holds a class derived from the class that gives it, such as `cls` in a class method, giving that class one of its own.
+    pub const CLS_31: Self = Self("CLS-31");
     /// `for` shall iterate over `range`, `str`, `bytes`, `list`, `tuple`, `dict`, `set` and any class with `__iter__` and `__next__`.
     pub const CST_03: Self = Self("CST-03");
     /// `try` with `except`, `else` and `finally` clauses shall be accepted, and `finally` shall run on `return`, `break`, `continue` and exceptions.
@@ -342,6 +344,7 @@ impl RuleId {
         Self::CLS_28,
         Self::CLS_29,
         Self::CLS_30,
+        Self::CLS_31,
         Self::CST_03,
         Self::CST_04,
         Self::CST_05,

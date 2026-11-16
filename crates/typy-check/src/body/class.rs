@@ -186,13 +186,18 @@ impl BodyChecker<'_> {
             return self.property_read(object, getter, span);
         }
         // A class variable is read through an instance; reading it does not evaluate the
-        // instance again, which is a variable or an attribute, so it has no effect.
+        // instance again, which is a variable or an attribute, so it has no effect. One a
+        // subclass may hold of its own is read through the instance's class (ADR-0037).
         if self.program.classes[class.0 as usize]
             .attribute(&attribute.name)
             .is_none()
-            && let Some(read) = self.class_value_read(class, attribute, span)
         {
-            return read;
+            if let Some(read) = self.shared_class_variable(&object, class, attribute, span) {
+                return read;
+            }
+            if let Some(read) = self.class_value_read(class, attribute, span) {
+                return read;
+            }
         }
         let Some(index) = self.attribute_index(class, attribute) else {
             return Self::invalid_call(span);

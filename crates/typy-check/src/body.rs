@@ -8,6 +8,7 @@ mod class;
 mod class_bridge;
 mod class_copy;
 mod class_value;
+mod class_variable_chain;
 mod comprehension;
 mod container_method;
 mod delete;

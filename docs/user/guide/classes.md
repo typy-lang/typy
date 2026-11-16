@@ -356,8 +356,11 @@ subclass defined in another module, which gets a copy of its own, and
 through an instance, which passes the instance's class as `cls`
 (CLS-25). Through an instance of a generic class it is planned for 1.0
 (CLS-30). Assigning a class variable through a subclass that inherits
-it, which in CPython gives the subclass a variable of its own, is
-planned for 0.5 (CLS-25).
+it gives the subclass a variable of its own, as in CPython: the
+subclass, its subclasses and their instances read it from then on, and
+the base keeps its own (CLS-25). Assigning it through a variable that
+holds such a subclass, such as `cls` in a class method, is planned for
+1.0 (CLS-31).
 
 ## Comparison methods
 

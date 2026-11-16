@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy detailed design |
-| Version | 1.86 |
+| Version | 1.87 |
 | Status | Approved |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-15 |
@@ -1307,8 +1307,18 @@ inherited copy's `Definition::copy_of`
 names the copy it repeats, and the checker drops the diagnostics of an
 inherited copy that the original reported. `Class.name(...)` calls the class's
 copy with the class's type object first; calling a variable of `type[C]`, such
-as `cls`, makes an instance of `C`. A class variable assigned through a subclass
-that inherits it is E0201, planned for 0.5. Comparison methods follow
+as `cls`, makes an instance of `C`. Before any module is checked,
+`check::subclass_variables` reads every module for `Class.name = value` of a
+class that only inherits `name`, following the bases by name, and notes the
+class in `SubclassVariables::own` and the class whose body gives `name` in
+`shared` (ADR-0037). Each such class holds a module variable `Class.name` of its
+own; a read through a class is `TypedExprKind::ClassVariable` of the holders
+from that class up, which lowering reads as the first one bound, and a read
+through an instance of a `shared` class's chain calls the getter
+`name.class`, which `Program::add_class_variable_getters` gives each class of
+the chain once the first look has typed the variables, through the method
+table. An assignment through a variable that holds a class, such as `cls`, of
+a variable a base gives is E0201, planned for 1.0 (CLS-31). Comparison methods follow
 ADR-0026: `class_types` records in `InstanceClass::operators` which of `__eq__`,
 the ordering methods and `__hash__` a class defines or inherits, so
 `Type::can_order` and `Type::is_hashable` answer for instances, and a class

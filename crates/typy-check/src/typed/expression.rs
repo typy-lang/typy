@@ -327,6 +327,10 @@ pub enum TypedExprKind {
         tuple: Box<TypedExpr>,
         index: usize,
     },
+    /// A class variable some subclass holds one of its own of: the first of these module
+    /// variables that is bound, from the class read through up to the class whose body gives
+    /// it (CLS-25, ADR-0037).
+    ClassVariable(Vec<SymbolId>),
     /// `first`, evaluated for its effects and dropped, then `then`, which gives the value: a
     /// static method called through an instance that is not a variable (CLS-25).
     Sequence {
@@ -475,6 +479,7 @@ impl TypedExpr {
             | TypedExprKind::ModuleName
             | TypedExprKind::TypeObject(_)
             | TypedExprKind::TypeAliasObject(_)
+            | TypedExprKind::ClassVariable(_)
             | TypedExprKind::SysValue(_) => Vec::new(),
             TypedExprKind::Binary { left, right, .. }
             | TypedExprKind::Index {

@@ -115,6 +115,9 @@ pub(crate) struct Program {
     /// The names each module checked so far reads, kept for bodies of that module checked
     /// later (MOD-13, ADR-0037).
     pub(super) contexts: BTreeMap<String, super::ModuleContext>,
+    /// The class variables the program assigns through a subclass that inherits them
+    /// (ADR-0037).
+    pub(super) subclass_variables: crate::check::subclass_variables::SubclassVariables,
 }
 
 /// What a first look at a module body may change, which `keep_module_types` undoes.
@@ -193,6 +196,7 @@ impl Program {
             rebound: BTreeMap::new(),
             rebound_reify: BTreeMap::new(),
             contexts: BTreeMap::new(),
+            subclass_variables: crate::check::subclass_variables::SubclassVariables::default(),
         }
     }
 
@@ -664,6 +668,8 @@ impl Program {
             self.symbols[symbol.0 as usize].ty = ty;
         }
         self.provisional = true;
+        // The variables now have their types, which the getters of class variables give.
+        self.add_class_variable_getters();
     }
 
     /// Ends the first look: the module body is checked next, and gives the final types.

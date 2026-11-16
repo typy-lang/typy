@@ -15,6 +15,7 @@ mod module_imports;
 mod module_scope;
 mod overriding;
 mod protocol;
+pub(crate) mod subclass_variables;
 pub(crate) mod type_alias;
 mod visit;
 pub(crate) use visit::visit_statement;
@@ -199,6 +200,7 @@ impl Checked<'_> {
             assigned,
         );
         // Each module is checked after the modules its module-level imports need.
+        program.set_subclass_variables(subclass_variables::subclass_variables(self.modules));
         let mut deferred = Vec::new();
         let mut definitions = ModuleDefinitions::new();
         let mut copies = class::ClassMethodCopies::default();
@@ -361,7 +363,7 @@ fn check_module<'tree>(
     mark_dataclasses(&mut class_infos, dataclasses);
     let mut variables = imports.variables.clone();
     module_variables(&tree.body, &mut variables);
-    class_value_variables(&classes, &annotations, &mut variables);
+    class_value_variables(&classes, (&annotations, program), &mut variables);
     let module_variable_spans = variables.clone();
     check_module_names(
         &tree.body,
@@ -468,10 +470,15 @@ fn check_bodies<'tree>(
 /// after its class (ADR-0024).
 fn class_value_variables(
     classes: &[class::ClassStatement<'_>],
-    annotations: &ImportedNames,
+    (annotations, program): (&ImportedNames, &Program),
     variables: &mut BTreeMap<String, typy_diagnostics::Span>,
 ) {
     for class in classes {
+        // A class an assignment through it gives a variable of its own holds it too (ADR-0037).
+        for name in program.own_class_variables(&class.name.name) {
+            let variable = class::class_value_variable(&class.name.name, &name);
+            variables.entry(variable).or_insert(class.name.span);
+        }
         for value in class::class_values(
             &class.name.name,
             class.body,

@@ -533,6 +533,7 @@ impl Dump<'_> {
             TypedExprKind::Raise(_) => "Raise".to_owned(),
             TypedExprKind::Hash(_) => "Hash".to_owned(),
             TypedExprKind::Sequence { .. } => "Sequence".to_owned(),
+            TypedExprKind::ClassVariable(holders) => format!("ClassVariable {}", holders.len()),
             TypedExprKind::ExceptionArguments { raw, .. } => {
                 format!("ExceptionArguments{}", if *raw { " raw" } else { "" })
             }

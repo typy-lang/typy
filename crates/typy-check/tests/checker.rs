@@ -2312,6 +2312,19 @@ fn class_bodies_give_class_variables_and_defaults() {
 }
 
 #[test]
+fn a_subclass_gets_a_class_variable_of_its_own_when_assigned_through_it() {
+    accepted(
+        "class A:\n    count = 0\nclass B(A):\n    pass\nB.count = 1\nB.count += 1\nprint(A.count, B.count, B().count)\n",
+    );
+    assert_eq!(
+        rejected(
+            "class A:\n    count = 0\n    @classmethod\n    def bump(cls) -> None:\n        cls.count = 1\nclass B(A):\n    pass\n"
+        ),
+        ["E0201"]
+    );
+}
+
+#[test]
 fn a_class_method_is_called_through_an_instance() {
     accepted("class A:\n    @classmethod\n    def f(cls) -> None:\n        pass\na = A()\na.f()\n");
 }
@@ -2422,16 +2435,8 @@ fn class_methods_are_called_through_their_class() {
             &["E0404"],
         ),
         (
-            "class A:\n    count = 0\nclass B(A):\n    pass\nB.count = 1\n",
-            &["E0201"],
-        ),
-        (
             "class A:\n    def __init__(self, n: int) -> None:\n        self.n = n\n    @classmethod\n    def make(cls) -> 'A':\n        return cls(1)\nclass B(A):\n    def __init__(self) -> None:\n        self.n = 2\n",
             &["E0404"],
-        ),
-        (
-            "class A:\n    count = 0\nclass B(A):\n    pass\nB.count += 1\n",
-            &["E0201"],
         ),
         (
             "class A:\n    @classmethod\n    def f(cls) -> int:\n        return 'x'\nclass B(A):\n    pass\n",
