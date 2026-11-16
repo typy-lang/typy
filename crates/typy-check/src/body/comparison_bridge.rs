@@ -106,6 +106,7 @@ impl Program {
                 left_reflected,
                 negated: false,
                 in_place: None,
+                reflected_below: Vec::new(),
                 kind,
             })),
             ty: Type::Bool,

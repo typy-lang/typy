@@ -130,26 +130,23 @@ impl BodyChecker<'_> {
         let forward = self.operator_method(&left.ty, name, &right.ty);
         let mut left_reflected = None;
         let mut backward = self.operator_method(&right.ty, reflected, &left.ty);
-        forward.or(backward)?;
-        if let (Type::Instance(left_class), Type::Instance(right_class)) = (&left.ty, &right.ty) {
+        // A class derived from the right operand's may define the reflected method its own
+        // class lacks, which CPython calls for an object of that class (CLS-07).
+        let reported = self.diagnostics.len();
+        let below = match &right.ty {
+            Type::Instance(right_class) if backward.is_none() => {
+                self.reflected_below(right_class.id, reflected, &left.ty, span)
+            }
+            _ => Vec::new(),
+        };
+        if forward.is_none() && backward.is_none() && below.is_empty() {
+            // A derived class's method that does not take the operand was reported already.
+            return (self.diagnostics.len() > reported).then(|| Self::invalid_call(span));
+        }
+        if let (Type::Instance(left_class), Type::Instance(_)) = (&left.ty, &right.ty) {
             // Which runs is the runtime's to decide, from the objects' classes, which may
             // derive from the static ones.
             left_reflected = self.program.method(left_class.id, reflected);
-            if backward.is_none() && self.defined_below(right_class.id, reflected) {
-                self.diagnostics.push(
-                    Diagnostic::new(
-                        DiagnosticCode::error(201),
-                        span,
-                        format!(
-                            "an operator whose right operand's class may be a subclass that \
-                             defines `{reflected}`, which CPython would call first, is planned \
-                             for TyPy 0.5 (CLS-07)"
-                        ),
-                    )
-                    .with_rule(RuleId::CLS_07)
-                    .with_help(format!("define `{reflected}` in `{}`", right_class.name)),
-                );
-            }
         } else {
             // The left operand is not an instance, so only the reflected method applies.
             backward = backward.filter(|_| forward.is_none());
@@ -171,7 +168,15 @@ impl BodyChecker<'_> {
                 }
             }
             (Some(method), None) | (None, Some(method)) => returns(method),
-            (None, None) => return None,
+            (None, None) => Type::union(below.iter().map(|(_, method)| returns(*method)).collect()),
+        };
+        // Each method a derived class defines may give the operator's value.
+        let ty = if forward.is_some() && !below.is_empty() {
+            let mut members = vec![ty];
+            members.extend(below.iter().map(|(_, method)| returns(*method)));
+            Type::union(members)
+        } else {
+            ty
         };
         Some(Self::typed(
             TypedExprKind::OperatorCall(Box::new(OperatorCall {
@@ -182,11 +187,68 @@ impl BodyChecker<'_> {
                 left_reflected,
                 negated: false,
                 in_place: None,
+                reflected_below: below,
                 kind,
             })),
             ty,
             span,
         ))
+    }
+
+    /// Returns the classes derived from `class`, which has no method `reflected`, that define
+    /// it, the nearest of each line, each with its method, after reporting one that does not
+    /// take a value of `left`, which CPython would pass it.
+    fn reflected_below(
+        &mut self,
+        class: crate::typed::ClassId,
+        reflected: &str,
+        left: &Type,
+        span: Span,
+    ) -> Vec<(crate::typed::ClassId, FunctionId)> {
+        if self.program.method(class, reflected).is_some() {
+            return Vec::new();
+        }
+        let definers: Vec<(crate::typed::ClassId, FunctionId, String)> = self
+            .program
+            .classes
+            .iter()
+            .filter(|other| other.id != class)
+            .filter_map(|other| Some((other.id, other.method(reflected)?, other.name.clone())))
+            .filter(|(other, _, _)| {
+                matches!(self.program.instance_type(*other), Type::Instance(derived)
+                if derived.ancestors.iter().any(|(id, _)| *id == class)
+                    && derived.ancestors.first().is_none_or(|(base, _)| {
+                        self.program.method(*base, reflected).is_none()
+                    }))
+            })
+            .collect();
+        let mut below = Vec::new();
+        for (other, method, other_name) in definers {
+            let takes = self.program.signatures[method.0 as usize]
+                .parameters
+                .get(1)
+                .map(|parameter| parameter.ty.clone());
+            if takes
+                .as_ref()
+                .is_some_and(|takes| left.is_assignable_to(takes))
+            {
+                below.push((other, method));
+                continue;
+            }
+            self.diagnostics.push(
+                Diagnostic::new(
+                    DiagnosticCode::error(404),
+                    span,
+                    format!(
+                        "`{other_name}.{reflected}`, which CPython would call for an object of \
+                         `{other_name}`, does not take {}",
+                        left.with_article()
+                    ),
+                )
+                .with_rule(RuleId::CLS_07),
+            );
+        }
+        below
     }
 
     /// Returns true when the reflected method of an operator that has both may run: when the

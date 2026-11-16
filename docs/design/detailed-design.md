@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy detailed design |
-| Version | 1.95 |
+| Version | 1.96 |
 | Status | Approved |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-16 |
@@ -1364,8 +1364,12 @@ returns its default, every slot of the program first asks
 checks a chain such as `a < b < c` of such instances as its comparisons
 joined with `and`, each middle operand held in a hidden `<chained N>`
 variable through `TypedExprKind::Named` (CLS-22). Arithmetic methods
-reuse the same call: `operator_binary` makes `a op b` an `OperatorCall` with
-`__add__` and its reflected `__radd__`, typed by the method's result, joined
+reuse the same call, and when the right operand's class has no reflected
+method, `OperatorCall::reflected_below` lists the classes derived from it that
+define one, which lowering tests the right object against in the reflected
+method's place. Arithmetic methods: `operator_binary` makes `a op b` an
+`OperatorCall` with `__add__` and its reflected `__radd__`, typed by the
+method's result, joined
 with the reflected method's when it may run first or after the method gives
 way (CLS-22); `operator_unary` calls
 `__neg__`, `__pos__`, `__invert__` and, for `abs`, `__abs__`. An augmented

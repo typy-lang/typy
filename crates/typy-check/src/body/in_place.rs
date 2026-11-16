@@ -114,6 +114,7 @@ impl BodyChecker<'_> {
                     left_reflected: None,
                     negated: false,
                     in_place: None,
+                    reflected_below: Vec::new(),
                     kind,
                 }),
                 own,

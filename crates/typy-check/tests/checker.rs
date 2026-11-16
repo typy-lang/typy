@@ -2527,8 +2527,8 @@ fn comparison_methods_are_checked() {
             &["E0407"],
         ),
         (
-            "class B:\n    pass\nclass V(B):\n    pass\nclass W(V):\n    def __gt__(self, other: B) -> bool:\n        return True\nclass X(B):\n    def __lt__(self, other: B) -> bool:\n        return True\nv: V = W()\nprint(X() < v)\n",
-            &["E0201"],
+            "class B:\n    pass\nclass V(B):\n    pass\nclass W(V):\n    def __gt__(self, other: V) -> bool:\n        return True\nclass X(B):\n    def __lt__(self, other: B) -> bool:\n        return True\nv: V = W()\nprint(X() < v)\n",
+            &["E0404"],
         ),
     ];
     for (source, expected) in cases {

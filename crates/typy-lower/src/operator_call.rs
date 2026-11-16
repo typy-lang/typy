@@ -12,6 +12,7 @@ use crate::function::FunctionLowerer;
 use crate::ownership::Lowered;
 
 /// One step of an operator call.
+#[derive(Clone)]
 enum Step {
     /// Calls the method, with the operands exchanged when `exchanged`.
     Call { method: FunctionId, exchanged: bool },
@@ -20,6 +21,9 @@ enum Step {
     /// Goes on with `first` when the right operand's reflected method runs first, and with
     /// `second` otherwise.
     Choose { first: Vec<Step>, second: Vec<Step> },
+    /// Calls the reflected method of the class derived from the right operand's that the
+    /// right object is an instance of, when it is of one, with the operands exchanged.
+    Below(Vec<(typy_check::ClassId, FunctionId)>),
 }
 
 /// The operands of an operator call, evaluated once, and its result.
@@ -92,29 +96,34 @@ impl FunctionLowerer<'_> {
             (&call.left.ty, &call.right.ty),
             (Type::Instance(_), Type::Instance(_))
         );
-        let rest = match (call.kind, call.forward, call.reflected) {
-            (OperatorKind::Arithmetic(_), forward_method, Some(method)) => {
+        // The reflected method of the right operand's class, or of the class derived from it
+        // that the right object is of (CLS-07).
+        let reflected_step = call.reflected.map(reflected).or_else(|| {
+            (!call.reflected_below.is_empty()).then(|| Step::Below(call.reflected_below.clone()))
+        });
+        let rest = match (call.kind, call.forward, reflected_step) {
+            (OperatorKind::Arithmetic(_), forward_method, Some(step)) => {
                 let mut later = Vec::new();
                 if both_instances {
                     later.push(Step::UnlessSameClass);
                 }
-                later.push(reflected(method));
+                later.push(step.clone());
                 match forward_method {
                     Some(first) if self.swaps(call) => vec![Step::Choose {
-                        first: vec![reflected(method), forward(first)],
+                        first: vec![step, forward(first)],
                         second: std::iter::once(forward(first)).chain(later).collect(),
                     }],
                     Some(first) => std::iter::once(forward(first)).chain(later).collect(),
                     None => later,
                 }
             }
-            (_, Some(first), Some(method)) if self.may_derive(call) => vec![Step::Choose {
-                first: vec![reflected(method), forward(first)],
-                second: vec![forward(first), reflected(method)],
+            (_, Some(first), Some(step)) if self.may_derive(call) => vec![Step::Choose {
+                first: vec![step.clone(), forward(first)],
+                second: vec![forward(first), step],
             }],
-            (_, Some(first), Some(method)) => vec![forward(first), reflected(method)],
+            (_, Some(first), Some(step)) => vec![forward(first), step],
             (_, Some(first), None) => vec![forward(first)],
-            (_, None, Some(method)) => vec![reflected(method)],
+            (_, None, Some(step)) => vec![step],
             (_, None, None) => Vec::new(),
         };
         steps.extend(rest);
@@ -125,7 +134,8 @@ impl FunctionLowerer<'_> {
     /// reflected method no class overrides is one function for every class, so when the left
     /// object's class has the same one, CPython never calls it first.
     fn swaps(&self, call: &OperatorCall) -> bool {
-        call.reflected != call.left_reflected
+        !call.reflected_below.is_empty()
+            || call.reflected != call.left_reflected
             || call
                 .left_reflected
                 .is_some_and(|method| self.methods.dispatch(method).is_some())
@@ -194,6 +204,7 @@ impl FunctionLowerer<'_> {
                     |this| this.tried(operands, rest, span),
                 )
             }
+            Step::Below(candidates) => self.below(operands, candidates, rest, span),
             Step::Choose { first, second } => {
                 let arithmetic = matches!(operands.call.kind, OperatorKind::Arithmetic(_));
                 let swap = self.reflected_first(
@@ -231,6 +242,56 @@ impl FunctionLowerer<'_> {
             return borrowed;
         }
         self.union_converted(borrowed, from, &parameter.ty, wanted, true, span)
+    }
+
+    /// Returns what the steps give after the reflected method of the first of `candidates`
+    /// the right object is an instance of, called with the right object as an instance of its
+    /// class; with none, what the steps give.
+    fn below(
+        &mut self,
+        operands: Operands<'_>,
+        candidates: &[(typy_check::ClassId, FunctionId)],
+        rest: &[Step],
+        span: Span,
+    ) -> Lowered {
+        let Some((&(class, method), others)) = candidates.split_first() else {
+            return self.tried(operands, rest, span);
+        };
+        let right = operands.right;
+        let object = self.bits(Self::borrowed(right.value, right.ty), span);
+        let name = self.program.class(class).name.clone();
+        let of = self.type_object(&typy_check::TypeObjectOf::Instance(class, name), span);
+        let found = self
+            .call_runtime(RuntimeFunction::IsInstance, vec![object, of.value], span)
+            .value;
+        self.either(
+            found,
+            operands.ty,
+            span,
+            |this| {
+                let ty = TyirType::Object(TypeId::class(class.0));
+                let narrowed = this.builder.push_value(
+                    Operation::Downcast {
+                        value: right.value,
+                        ty,
+                    },
+                    ty,
+                    span,
+                );
+                let narrowed = Operands {
+                    right: Self::borrowed(narrowed, ty),
+                    ..operands
+                };
+                let steps: Vec<Step> = std::iter::once(Step::Call {
+                    method,
+                    exchanged: true,
+                })
+                .chain(rest.iter().cloned())
+                .collect();
+                this.tried(narrowed, &steps, span)
+            },
+            |this| this.below(operands, others, rest, span),
+        )
     }
 
     /// Returns `value`, of the checked type `from`, as a value of the call's result.

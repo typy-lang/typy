@@ -277,6 +277,7 @@ fn expression(expression_value: &TypedExpr, callees: &mut BTreeSet<FunctionId>) 
             callees.extend(call.forward);
             callees.extend(call.reflected);
             callees.extend(call.in_place);
+            callees.extend(call.reflected_below.iter().map(|(_, method)| *method));
             expression(&call.left, callees);
             expression(&call.right, callees);
         }

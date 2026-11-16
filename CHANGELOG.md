@@ -188,6 +188,10 @@ All notable changes to TyPy are recorded here. The format follows
 - `items[f()] %= values` and `make().text %= values` with a format that
   takes its values when the program runs evaluate the target's parts
   once, where TyPy refused them (SMT-01).
+- An operator whose right operand's class has no reflected method, such
+  as `__radd__`, calls the one a class derived from it defines when the
+  right object is of that class, also first when that class derives from
+  the left operand's, as CPython does; TyPy refused it (CLS-07).
 - `obj.prop += v` of a property calls the getter, then the setter with
   the result; TyPy left the statement out. A property is assigned through
   any expression, as `make().prop = value` (CLS-06).

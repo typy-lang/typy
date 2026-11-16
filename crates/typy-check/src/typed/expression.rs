@@ -457,6 +457,10 @@ pub struct OperatorCall {
     /// The in-place method of an augmented assignment, which runs first, when it may give way
     /// to the operator's methods.
     pub in_place: Option<FunctionId>,
+    /// When the right operand's class has no reflected method, the classes derived from it
+    /// that define one, each with it: the one of the right object's class runs where the
+    /// reflected method would (CLS-07).
+    pub reflected_below: Vec<(super::ClassId, FunctionId)>,
     /// The operator, which decides the order of the methods and what follows the last.
     pub kind: OperatorKind,
 }
