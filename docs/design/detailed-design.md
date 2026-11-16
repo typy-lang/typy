@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy detailed design |
-| Version | 1.96 |
+| Version | 1.97 |
 | Status | Approved |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-16 |
@@ -1488,7 +1488,8 @@ and `ClassInfo::defaults` record them, and `body::class_value` reads
 through `module_attribute` for a class of another module, and checks
 `Class.name = value` and `Class.name op= value` as its assignment. Assigning a
 class variable through an instance, and a default through the class, are
-E0414; a default of an exception class's attribute is E0201, planned for 0.5.
+E0414. An exception class's defaults are stored once the runtime makes the
+exception, before its `__init__` runs (`store_defaults`).
 `TypedClass::defaults` gives, for each attribute with a default, the variable
 of the nearest class that gives one; `__init__` starts with those attributes
 assigned, and lowering stores each default into a new instance after

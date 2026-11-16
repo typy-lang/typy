@@ -1158,7 +1158,7 @@ fn class_body_name(
             let ty = super::protocol::outside_signature(ty, annotation.span(), diagnostics);
             declare(info, id, Some(ty), *span, diagnostics);
             if value.is_some() {
-                default_value(info, id, *span, diagnostics);
+                default_value(info, id);
             }
         }
         Stmt::Assign { targets, value, .. } => {
@@ -1191,23 +1191,9 @@ fn match_arg_names(value: &Expr) -> Result<Vec<String>, Span> {
         .collect()
 }
 
-/// Notes that the class body gives the attribute `name` a default. An exception is made by
-/// the runtime's exception path, which copies no defaults, so an exception class's are
-/// planned (ADR-0024).
-fn default_value(info: &mut ClassInfo, name: &str, span: Span, diagnostics: &mut Diagnostics) {
-    if info.exception.is_some() {
-        diagnostics.push(
-            Diagnostic::new(
-                DiagnosticCode::error(201),
-                span,
-                "a default for an attribute of an exception class is planned for TyPy 0.5 \
-                 (CLS-11)",
-            )
-            .with_rule(RuleId::CLS_11)
-            .with_help("assign the attribute in `__init__`"),
-        );
-        return;
-    }
+/// Notes that the class body gives the attribute `name` a default, which an instance, and
+/// an exception once the runtime makes it, holds before `__init__` runs (ADR-0024).
+fn default_value(info: &mut ClassInfo, name: &str) {
     // A subclass may give an inherited attribute a default of its own, which its instances
     // hold in place of the base's.
     if let Some(index) = info.attribute(name) {

@@ -39,6 +39,7 @@ impl FunctionLowerer<'_> {
             return self.new_exception_with_init(class, init, span);
         }
         let built_in = class.builtin();
+        let program_class = class.class_id();
         let class = self.constant(Constant::TypeObject(exception_class(class)), span);
         let types: Vec<Type> = arguments.iter().map(|value| value.ty.clone()).collect();
         let id = self.tuple_type_id(&types);
@@ -47,11 +48,15 @@ impl FunctionLowerer<'_> {
         if arguments.is_empty() {
             let unit = self.constant(Constant::Unit, span);
             let nothing = self.bits(Self::borrowed(unit, TyirType::Unit), span);
-            return self.call_runtime(
+            let exception = self.call_runtime(
                 RuntimeFunction::ExceptionNew,
                 vec![class, descriptor, nothing],
                 span,
             );
+            if let Some(program_class) = program_class {
+                self.store_defaults(exception, program_class, span);
+            }
+            return exception;
         }
         let tuple = self.tuple_display(arguments, layout, span);
         let address = self.bits(Self::borrowed(tuple.value, tuple.ty), span);
@@ -64,6 +69,9 @@ impl FunctionLowerer<'_> {
         };
         let exception = self.call_runtime(constructor, vec![class, descriptor, address], span);
         self.release(tuple, span);
+        if let Some(program_class) = program_class {
+            self.store_defaults(exception, program_class, span);
+        }
         exception
     }
 
@@ -89,6 +97,7 @@ impl FunctionLowerer<'_> {
                 )
             })
             .collect();
+        let program_class = class.class_id();
         // `OSError.__new__` leaves the arguments of a class with an `__init__` of its own to
         // `OSError.__init__`, so the exception starts with none.
         let kept = if class.builtin().is_os_error() {
@@ -130,6 +139,9 @@ impl FunctionLowerer<'_> {
             span,
         );
         self.release(tuple, span);
+        if let Some(program_class) = program_class {
+            self.store_defaults(exception, program_class, span);
+        }
         let mut values = values;
         values.insert(0, (0, Self::borrowed(exception.value, TyirType::EXCEPTION)));
         let done = self.call_function(init.function, values, TyirType::Unit, span);

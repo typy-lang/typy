@@ -192,6 +192,9 @@ All notable changes to TyPy are recorded here. The format follows
   as `__radd__`, calls the one a class derived from it defines when the
   right object is of that class, also first when that class derives from
   the left operand's, as CPython does; TyPy refused it (CLS-07).
+- An exception class may give its attributes defaults in its body, such
+  as `code: int = 1`, which each exception holds until `__init__` or the
+  program assigns them (CLS-11).
 - `obj.prop += v` of a property calls the getter, then the setter with
   the result; TyPy left the statement out. A property is assigned through
   any expression, as `make().prop = value` (CLS-06).

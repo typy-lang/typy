@@ -2144,7 +2144,6 @@ fn class_statements_outside_the_subset_give_their_codes() {
             "from typing import ClassVar\nv: ClassVar[int] = 1\n",
             &["E0408"],
         ),
-        ("class E(Exception):\n    code: int = 1\n", &["E0201"]),
         (
             "class C:\n    x = 1\n    def x(self) -> None:\n        pass\n",
             &["E0202"],
