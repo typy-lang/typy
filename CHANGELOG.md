@@ -192,6 +192,9 @@ All notable changes to TyPy are recorded here. The format follows
   as `__radd__`, calls the one a class derived from it defines when the
   right object is of that class, also first when that class derives from
   the left operand's, as CPython does; TyPy refused it (CLS-07).
+- A subclass may redefine a static method, or a method as a static one;
+  a call through an instance runs the one of the object's class, as
+  CPython does (CLS-06, CLS-35).
 - An override may take or return a type held otherwise than its base's,
   such as `int | None` where the base takes `int`; a call through the base
   reaches it through an adapter. With a default of its own for such a

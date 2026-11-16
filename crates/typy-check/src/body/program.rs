@@ -302,6 +302,7 @@ impl Program {
                 self.add_comparison_bridges(class);
                 self.add_truth_bridge(class);
                 self.add_override_adapters(class);
+                self.add_static_bridges(class);
             }
         }
     }
@@ -756,6 +757,11 @@ impl Program {
                         Vec::new()
                     } else {
                         class.adapters.clone()
+                    },
+                    static_bridges: if opaque {
+                        Vec::new()
+                    } else {
+                        class.static_bridges.clone()
                     },
                     span: class.span,
                     generic,

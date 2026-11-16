@@ -324,8 +324,10 @@ property without a setter is E0414, as CPython raises `AttributeError`
 for it. A method without `self` is E0404; decorate it with
 `@staticmethod`. A property is assigned through any expression, such
 as `make().name = value` or `item.name += 1`, the value evaluated
-first, as in CPython. Redefining a static method in a subclass is
-planned for 0.5.
+first, as in CPython. A subclass may redefine a static method, or a
+method as a static one, and a call through an instance runs the one of
+the object's class, as in CPython; a call through a class runs that
+class's (CLS-06).
 
 ## Class methods
 

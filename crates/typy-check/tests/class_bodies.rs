@@ -130,11 +130,6 @@ fn class_bodies_and_methods_out_of_reach_give_their_codes() {
             "E0408",
         ),
         (
-            "class A:\n    @staticmethod\n    def f() -> int:\n        return 1\n\
-             class B(A):\n    @staticmethod\n    def f() -> int:\n        return 2\n",
-            "E0201",
-        ),
-        (
             "class A:\n    def f(self) -> int:\n        return 1\n\
              class B(A):\n    def f(self) -> int:\n        return super(x=1).f()\n",
             "E0201",

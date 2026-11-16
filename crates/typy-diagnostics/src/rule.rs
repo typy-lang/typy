@@ -73,6 +73,8 @@ impl RuleId {
     pub const CLS_33: Self = Self("CLS-33");
     /// An override whose parameter is held otherwise than its base method's, such as `int | None` for `int`, shall be accepted with a default of its own for that parameter.
     pub const CLS_34: Self = Self("CLS-34");
+    /// A static method that overrides a method, or a method that overrides a static method, shall be accepted with a parameter or result held otherwise than the one it overrides.
+    pub const CLS_35: Self = Self("CLS-35");
     /// `for` shall iterate over `range`, `str`, `bytes`, `list`, `tuple`, `dict`, `set` and any class with `__iter__` and `__next__`.
     pub const CST_03: Self = Self("CST-03");
     /// `try` with `except`, `else` and `finally` clauses shall be accepted, and `finally` shall run on `return`, `break`, `continue` and exceptions.
@@ -367,6 +369,7 @@ impl RuleId {
         Self::CLS_32,
         Self::CLS_33,
         Self::CLS_34,
+        Self::CLS_35,
         Self::CST_03,
         Self::CST_04,
         Self::CST_05,

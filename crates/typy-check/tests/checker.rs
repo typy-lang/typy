@@ -2378,11 +2378,7 @@ fn static_methods_and_properties_are_checked() {
             &["E0404"],
         ),
         (
-            "class A:\n    def f(self) -> None:\n        pass\nclass B(A):\n    @staticmethod\n    def f() -> None:\n        pass\n",
-            &["E0201"],
-        ),
-        (
-            "class A:\n    @staticmethod\n    def f() -> None:\n        pass\nclass B(A):\n    def f(self) -> None:\n        pass\n",
+            "class A:\n    def f(self, n: int) -> None:\n        pass\nclass B(A):\n    @staticmethod\n    def f(n: int | None) -> None:\n        pass\n",
             &["E0201"],
         ),
         (

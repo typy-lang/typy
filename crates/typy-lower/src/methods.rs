@@ -55,7 +55,14 @@ impl MethodTables {
                 .base
                 .map(|base| keys[base.0 as usize].clone())
                 .unwrap_or_default();
-            for (name, id) in &class.methods {
+            for (name, own) in &class.methods {
+                // A static method is held in the table as its bridge, which takes the
+                // instance first (CLS-06).
+                let id = class
+                    .static_bridges
+                    .iter()
+                    .find(|(each, _)| each == name)
+                    .map_or(own, |(_, bridge)| bridge);
                 // A constructor runs on the class being made, whose parameters it takes, so it
                 // is never called through a table.
                 if name == "__init__" {

@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy detailed design |
-| Version | 1.99 |
+| Version | 2.00 |
 | Status | Approved |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-16 |
@@ -1288,13 +1288,18 @@ variable where the fact holds gives `TypedExprKind::Downcast`, which lowers to
 program runs; assigning the variable ends the narrowing (TYP-07). `is`
 compares two exceptions. `FunctionParts::method_kind` reads a method's
 decorator (CLS-06). A static method's definition takes no instance, is recorded
-in `ClassInfo::static_methods`, has no entry in the method tables, and is called
-directly as `Class.name(...)` or through an instance; an instance that is not a
-variable is evaluated first, in a `TypedExprKind::Sequence` (CLS-25); a
-subclass redefining it, and a static method over a base's method, are E0201,
-planned for 0.5. A property's getter is a method of its name, recorded in
-`ClassInfo::properties`, and its setter the method `name.setter`, so both
-override and dispatch as methods do. `body::accessor` reads `instance.name` of a
+in `ClassInfo::static_methods`, and is called directly as `Class.name(...)` or
+through an instance; an instance that is not a variable is evaluated first, in a
+`TypedExprKind::Sequence` (CLS-25). `Program::add_static_bridges` gives each
+static method `<static name>`, which takes the instance first and calls it; the
+method tables hold the bridge in the static method's place, so when a class
+derived from the instance's static class defines the name again, as a static
+method or not, a call through the instance calls the bridge through the table
+(`through_static_bridge`). An override compares a static method as one that
+takes the instance; one held otherwise is E0201, planned for 1.0 (CLS-35). A
+property's getter is a method of its name, recorded in `ClassInfo::properties`,
+and its setter the method `name.setter`, so both override and dispatch as
+methods do. `body::accessor` reads `instance.name` of a
 property as a call of the getter with `dispatch` set, and checks
 `object.name = value` as the target `AssignTarget::Property`, which lowering
 gives the setter after it evaluates the value and the object; `object.name op=

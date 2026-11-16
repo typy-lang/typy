@@ -543,6 +543,11 @@ impl BodyChecker<'_> {
         }
         if let Some(method) = found.filter(|_| self.is_static_method(class, &name.name)) {
             let call = self.static_call(method, class, name, arguments, keywords, span);
+            // A class derived from the instance's may define the name again, so the object's
+            // class decides through the static method's bridge (CLS-06).
+            if let Some(call) = self.through_static_bridge(class, &name.name, &receiver, &call) {
+                return call;
+            }
             // A variable only names the class; any other instance is evaluated first for its
             // effects, as CPython evaluates it to find the method (CLS-25).
             if matches!(

@@ -15,7 +15,7 @@ use super::generic_class::finish_generic_class;
 use super::overriding::Override;
 use crate::class_type::{InstanceClass, Operators};
 use crate::exception::{BuiltinException, ExceptionClass};
-use crate::typed::{ClassId, FunctionId, FunctionSignature};
+use crate::typed::{ClassId, FunctionId, FunctionSignature, SignatureParameter};
 use crate::types::{Type, TypeObjectOf};
 
 /// An attribute of a class: declared in the class body, or assigned in `__init__`, whose
@@ -61,6 +61,9 @@ pub(crate) struct ClassInfo {
     pub(crate) adapted: Vec<(String, FunctionId, FunctionId)>,
     /// The adapter of each such method, by its name.
     pub(crate) adapters: Vec<(String, FunctionId)>,
+    /// The bridge of each static method of the class's own, by its name: a method that takes
+    /// the instance first, which the method table holds in the static method's place (CLS-06).
+    pub(crate) static_bridges: Vec<(String, FunctionId)>,
     pub(crate) defaults: Vec<usize>,
     /// Whether the class is a frozen dataclass, whose fields only the `__init__` `@dataclass`
     /// writes assigns (CLS-05).
@@ -438,10 +441,8 @@ pub(super) fn collect_members<'tree>(
                     let name = &parts.name.name;
                     let kind = parts.method_kind();
                     let registered = registered_name(&kind, name);
-                    if let Some(refused) =
-                        refused_method(&parts, &kind, &registered, &info, classes).or_else(|| {
-                            super::protocol::refused_member(&owner.instance, &kind, &parts)
-                        })
+                    if let Some(refused) = refused_method(&parts, &kind, &registered, &info)
+                        .or_else(|| super::protocol::refused_member(&owner.instance, &kind, &parts))
                     {
                         diagnostics.push(refused);
                         continue;
@@ -481,7 +482,8 @@ pub(super) fn collect_members<'tree>(
                         local: &methods,
                         first_function,
                     };
-                    match check_override(&info, classes, signatures, &method, parts.name) {
+                    let override_of = (&method, kind == MethodKind::Static);
+                    match check_override(&info, classes, signatures, override_of, parts.name) {
                         Err(diagnostic) => diagnostics.push(*diagnostic),
                         // A call through the base reaches the override through an adapter.
                         Ok(Some(base)) => info.adapted.push((name.clone(), base, id)),
@@ -574,6 +576,7 @@ fn new_info(class: &ClassStatement<'_>, instance: &Type, classes: Classes<'_>) -
         defaults: Vec::new(),
         adapted: Vec::new(),
         adapters: Vec::new(),
+        static_bridges: Vec::new(),
         frozen: false,
         generated_init: false,
         match_args: None,
@@ -887,7 +890,6 @@ fn refused_method(
     kind: &MethodKind,
     registered: &str,
     info: &ClassInfo,
-    classes: Classes<'_>,
 ) -> Option<Diagnostic> {
     let name = &parts.name.name;
     let refuse = |code: u16, message: String| {
@@ -916,26 +918,10 @@ fn refused_method(
             format!("the special method `{name}` takes no decorator"),
         );
     }
-    let static_in_bases = static_method_in_bases(classes, info.base, name);
     match kind {
         MethodKind::Class if parts.parameters.is_empty() => refuse(
             404,
             format!("the class method `{name}` takes the class, `cls`, first"),
-        ),
-        // A static method has no entry in the method tables, so a subclass's own would not run
-        // through an instance of it.
-        MethodKind::Static if inherited_method(classes, info.base, name).is_some() => refuse(
-            201,
-            format!(
-                "redefining the method `{name}` of a base as a static method is planned for TyPy 0.5 (CLS-06)"
-            ),
-        ),
-        // A static method of a base is also its method, so the arm above takes a static one.
-        _ if static_in_bases => refuse(
-            201,
-            format!(
-                "redefining the static method `{name}` of a base is planned for TyPy 0.5 (CLS-06)"
-            ),
         ),
         MethodKind::Static => None,
         MethodKind::Setter(property) if property != name => refuse(
@@ -959,18 +945,6 @@ fn refused_method(
         ),
         _ => None,
     }
-}
-
-/// Returns true when `base`, or a class it derives from, defines `name` as a static method.
-fn static_method_in_bases(classes: Classes<'_>, base: Option<ClassId>, name: &str) -> bool {
-    let mut current = base;
-    while let Some(info) = current.and_then(|class| classes.get(class)) {
-        if info.static_methods.iter().any(|each| each == name) {
-            return true;
-        }
-        current = info.base;
-    }
-    false
 }
 
 /// Checks the signature of a property's getter, which takes only the instance, and of its
@@ -1043,7 +1017,7 @@ fn check_override(
     info: &ClassInfo,
     classes: Classes<'_>,
     signatures: Signatures<'_, '_>,
-    method: &Definition<'_>,
+    (method, static_own): (&Definition<'_>, bool),
     name: &Identifier,
 ) -> Result<Option<FunctionId>, Box<Diagnostic>> {
     if name.name == "__init__" {
@@ -1063,15 +1037,61 @@ fn check_override(
     let Some(base) = signatures.get(base_id) else {
         return Ok(None);
     };
+    // A static method is reached through an instance by its bridge, which takes the instance
+    // first, so it is compared as a method that takes one (CLS-06).
+    let static_base = nearest_is_static(classes, info.base, &name.name);
+    let as_method = |signature: &FunctionSignature, is_static: bool| {
+        let mut signature = signature.clone();
+        if is_static {
+            signature.parameters.insert(
+                0,
+                SignatureParameter {
+                    name: "self".to_owned(),
+                    ty: Type::Error,
+                    default: None,
+                    default_call: None,
+                },
+            );
+        }
+        signature
+    };
+    let (own, base) = (
+        as_method(&method.signature, static_own),
+        as_method(base, static_base),
+    );
     let fit = Override {
         name: &format!("{}.{}", info.name, name.name),
-        signature: &method.signature,
+        signature: &own,
         base_name: &format!("{base_class}.{}", name.name),
-        base,
+        base: &base,
         span: name.span,
     }
     .check()?;
+    if fit == super::overriding::Fit::Adapted && (static_own || static_base) {
+        return Err(Box::new(
+            Diagnostic::new(
+                DiagnosticCode::error(201),
+                name.span,
+                format!(
+                    "a static method that overrides `{base_class}.{}`, or is overridden, with a \
+                     parameter or result held otherwise is planned for TyPy 1.0 (CLS-35)",
+                    name.name
+                ),
+            )
+            .with_rule(RuleId::CLS_35),
+        ));
+    }
     Ok((fit == super::overriding::Fit::Adapted).then_some(base_id))
+}
+
+/// Returns true when the nearest class from `base` up that defines `name` defines it as a
+/// static method.
+fn nearest_is_static(classes: Classes<'_>, base: Option<ClassId>, name: &str) -> bool {
+    std::iter::successors(base.and_then(|class| classes.get(class)), |info| {
+        info.base.and_then(|class| classes.get(class))
+    })
+    .find(|info| info.method(name).is_some())
+    .is_some_and(|info| info.static_methods.iter().any(|each| each == name))
 }
 
 /// Returns true when the nearest class from `base` up that defines the method `name` gives

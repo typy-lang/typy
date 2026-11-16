@@ -109,6 +109,58 @@ impl BodyChecker<'_> {
         self.static_call(function, class, name, arguments, keywords, span)
     }
 
+    /// Returns the call of a static method through an instance as a call of its bridge
+    /// through the method table, when a class derived from `class` defines `name` again;
+    /// `None` when the call goes to the static method itself.
+    pub(super) fn through_static_bridge(
+        &self,
+        class: ClassId,
+        name: &str,
+        receiver: &TypedExpr,
+        call: &TypedExpr,
+    ) -> Option<TypedExpr> {
+        let TypedExprKind::Call { arguments, .. } = &call.kind else {
+            return None;
+        };
+        // A copy of a generic static method is called directly.
+        if !self.defined_below(class, name) || self.is_generic_method(class, name) {
+            return None;
+        }
+        let bridge = std::iter::successors(Some(class), |each| {
+            self.program.classes[each.0 as usize].base
+        })
+        .find_map(|each| {
+            self.program.classes[each.0 as usize]
+                .static_bridges
+                .iter()
+                .find(|(each_name, _)| each_name == name)
+                .map(|(_, bridge)| *bridge)
+        })?;
+        let owner = self.program.signatures[bridge.0 as usize]
+            .parameters
+            .first()?
+            .ty
+            .clone();
+        // The bound arguments name the static method's parameters, which follow the instance.
+        let mut shifted = vec![Argument {
+            parameter: 0,
+            value: Self::converted(receiver.clone(), Some(&owner)),
+        }];
+        shifted.extend(arguments.iter().map(|argument| Argument {
+            parameter: argument.parameter + 1,
+            value: argument.value.clone(),
+        }));
+        Some(Self::typed(
+            TypedExprKind::Call {
+                function: bridge,
+                arguments: shifted,
+                dispatch: true,
+            },
+            call.ty.clone(),
+            call.span,
+        ))
+    }
+
     /// Calls a static method of `class` with its arguments, without an instance.
     pub(super) fn static_call(
         &mut self,

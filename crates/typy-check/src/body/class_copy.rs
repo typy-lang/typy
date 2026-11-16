@@ -184,6 +184,7 @@ impl Program {
             .map(|(name, base, own)| (name.clone(), rename(base), rename(own)))
             .collect();
         info.adapters = Vec::new();
+        info.static_bridges = Vec::new();
         let module = self.class_modules[copy.root.0 as usize].clone();
         self.classes.push(info);
         self.class_modules.push(module);
@@ -191,6 +192,7 @@ impl Program {
         self.add_comparison_bridges(copy.id);
         self.add_truth_bridge(copy.id);
         self.add_override_adapters(copy.id);
+        self.add_static_bridges(copy.id);
     }
 
     /// Returns true when the function is a copy whose type arguments hold a type parameter,
