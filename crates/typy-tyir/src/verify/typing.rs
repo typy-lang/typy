@@ -389,8 +389,10 @@ impl Checker<'_> {
         let Some((mut current, base)) = classes else {
             return false;
         };
-        // Each base has a lower index than the classes derived from it, so the walk ends.
-        loop {
+        // A chain of bases visits each class once at most, so a walk of as many steps as
+        // there are classes ends; a class may derive from one with a higher index, such as a
+        // copy of a generic class (ADR-0040).
+        for _ in 0..=self.module.classes.len() {
             if current == base {
                 return true;
             }
@@ -400,10 +402,11 @@ impl Checker<'_> {
                 .get(current as usize)
                 .and_then(|class| class.base)
             {
-                Some(next) if next < current => current = next,
-                _ => return false,
+                Some(next) => current = next,
+                None => return false,
             }
         }
+        false
     }
 
     /// Returns the type an optional value holds, after checking it is optional.

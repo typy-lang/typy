@@ -15,6 +15,7 @@ those types costs (GEN-01 to GEN-03, ADR-0023, ADR-0028).
 | `class Name(Protocol):`, satisfied by any class with its members | GEN-04 |
 | `class Name[T]:`, a generic class, and `Name[int]` in annotations and calls | GEN-01 |
 | `class Name[T](Base):`, a generic class with a base of the program | GEN-08 |
+| `class Sub(Name[int]):` and `class Sub[T](Name[T]):`, a class derived from a copy | GEN-08 |
 | `[T: Bound]`, a bound, and `[T: (A, B)]`, constraints | GEN-02 |
 | One compiled copy for each set of type arguments, with no type at run time | GEN-03 |
 | A generic function or class of another module, by name or through the module | GEN-07 |
@@ -199,6 +200,53 @@ comparison methods of a generic dataclass derived from a dataclass,
 which need it. Pass `eq=False` to such a dataclass, or derive it from a
 class that is not a dataclass.
 
+## Classes derived from a generic class
+
+A class may derive from a copy of a generic class, which names its type
+arguments: `class IntBox(Box[int])` holds an `int` in place and is a
+`Box[int]`. A generic class may derive from a copy for its own type
+parameters, `class Pair[T](Box[T])`, and each of its copies then derives
+from the matching copy, `Pair[str]` from `Box[str]` (GEN-08, ADR-0040):
+
+<!-- typy-expect: accepted -->
+```python
+class Box[T]:
+    def __init__(self, item: T) -> None:
+        self.item = item
+
+    def get(self) -> T:
+        return self.item
+
+
+class IntBox(Box[int]):
+    def get(self) -> int:
+        return super().get() * 10
+
+
+class Pair[T](Box[T]):
+    def __init__(self, item: T, other: T) -> None:
+        super().__init__(item)
+        self.other = other
+
+    def both(self) -> tuple[T, T]:
+        return (self.get(), self.other)
+
+
+def read(box: Box[int]) -> int:
+    return box.get()
+
+
+print(read(IntBox(3)), read(Pair(1, 2)), Pair("a", "b").both())
+print(isinstance(IntBox(1), Box), type(Pair(1, 2)) is Pair)
+```
+
+An override takes the copy's types: `def get(self) -> str` in `IntBox`
+is E0404, since `Box[int].get` returns an `int`. The bare name of a
+generic class as a base, `class Sub(Box)`, is E0408, as in annotations.
+A class derived from a copy of a generic class that has class methods,
+and a dataclass derived from a copy of a generic dataclass, are planned
+for 1.0 (GEN-15).
+
 ## Generic methods
 
 A method of a class that is not generic may take type parameters of its
@@ -309,8 +357,8 @@ overridden are planned for 0.5 (GEN-09). A protocol as the type of a
 variable, an attribute, a result or a container item outside a
 parameter, a class that names a protocol as its base, and properties,
 static methods, class methods and class variables of a protocol are
-planned for 0.5 (GEN-10). A class derived from a generic class is
-planned for 0.5 (GEN-08). A class variable or a default whose annotation
-names a type parameter of its class (GEN-11), a generic exception class
-(GEN-12), a generic protocol (GEN-13), and `*Ts`, `**P` and defaults of
-type parameters (GEN-06) are planned for 1.0.
+planned for 0.5 (GEN-10). A class variable or a default whose
+annotation names a type parameter of its class (GEN-11), a generic
+exception class (GEN-12), a generic protocol (GEN-13), class methods and
+dataclass fields inherited through a copy (GEN-15), and `*Ts`, `**P` and
+defaults of type parameters (GEN-06) are planned for 1.0.

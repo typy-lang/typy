@@ -261,6 +261,8 @@ fn derived_type(
             ),
             _ => (String::new(), None),
         },
+        // A copy of a generic class is read once the generic classes are noted (ADR-0040).
+        Expr::Subscript { .. } => return None,
         _ => (String::new(), None),
     };
     let Some(base_id) = base_id else {
@@ -323,7 +325,7 @@ fn derived_type(
 }
 
 /// Returns the names of the methods a class body defines.
-fn method_names(body: &[Stmt]) -> impl Iterator<Item = &str> {
+pub(super) fn method_names(body: &[Stmt]) -> impl Iterator<Item = &str> {
     body.iter().filter_map(|statement| match statement {
         Stmt::FunctionDef { name, .. } => Some(name.name.as_str()),
         _ => None,
@@ -332,7 +334,7 @@ fn method_names(body: &[Stmt]) -> impl Iterator<Item = &str> {
 
 /// Returns the error for a base other than `object`, an exception class or a class of the
 /// program: a built-in type such as `list`, or an expression that names no class.
-fn unsupported_base(span: Span) -> Diagnostic {
+pub(super) fn unsupported_base(span: Span) -> Diagnostic {
     Diagnostic::new(
         DiagnosticCode::error(201),
         span,
@@ -447,6 +449,7 @@ pub(super) fn collect_members<'tree>(
         let classes = Classes {
             earlier: known.earlier,
             local: &infos,
+            copies: known.copies,
         };
         let mut info = new_info(class, &instance, classes);
         let owner = Owner {
@@ -548,19 +551,45 @@ fn class_instance(known: &KnownClasses<'_>, class: &ClassStatement<'_>) -> Type 
 }
 
 /// The classes collected so far: those of the modules checked before, indexed by ID, and the
-/// module's own classes before the one being collected.
+/// module's own classes before the one being collected; and the copies of generic classes, which
+/// are read through their generic class (ADR-0040).
 #[derive(Clone, Copy)]
 struct Classes<'infos> {
     earlier: &'infos [ClassInfo],
     local: &'infos [ClassInfo],
+    copies: &'infos std::cell::RefCell<crate::body::ClassCopies>,
 }
 
 impl<'infos> Classes<'infos> {
-    /// Returns a class collected before; a base is defined before the class, so it is one.
+    /// Returns a class collected before, or for a copy of a generic class the generic class,
+    /// whose members the copy has; a base is defined before the class, so it is one.
     fn get(self, class: ClassId) -> Option<&'infos ClassInfo> {
+        let class = self
+            .copies
+            .borrow()
+            .copy(class)
+            .map_or(class, |copy| copy.root);
         self.earlier
             .get(class.0 as usize)
             .or_else(|| self.local.iter().find(|info| info.id == class))
+    }
+
+    /// Returns the type parameters' owner and the type arguments of a copy of a generic class,
+    /// or `None` for any other class.
+    fn arguments(self, class: ClassId) -> Option<(Span, Vec<Type>)> {
+        let copies = self.copies.borrow();
+        let copy = copies.copy(class)?;
+        let owner = copies.roots.get(&copy.root)?.parameters.first()?.owner;
+        Some((owner, copy.arguments.clone()))
+    }
+
+    /// Returns `ty` as a member of the copy `class` has it, with its type arguments in place of
+    /// the generic class's parameters; `ty` itself for any other class.
+    fn as_member_of(self, class: ClassId, ty: &Type) -> Type {
+        match self.arguments(class) {
+            Some((owner, arguments)) => self.copies.borrow_mut().substitute(ty, owner, &arguments),
+            None => ty.clone(),
+        }
     }
 }
 
@@ -579,8 +608,19 @@ fn new_info(class: &ClassStatement<'_>, instance: &Type, classes: Classes<'_>) -
         _ => (None, None),
     };
     let attributes: Vec<AttributeInfo> = base
-        .and_then(|base| classes.get(base))
-        .map_or_else(Vec::new, |info| info.attributes.clone());
+        .and_then(|base| Some((base, classes.get(base)?)))
+        .map_or_else(Vec::new, |(base, info)| {
+            info.attributes
+                .iter()
+                .map(|attribute| AttributeInfo {
+                    name: attribute.name.clone(),
+                    ty: attribute
+                        .ty
+                        .as_ref()
+                        .map(|ty| classes.as_member_of(base, ty)),
+                })
+                .collect()
+        });
     ClassInfo {
         id: class.id,
         name: class.name.name.clone(),
@@ -729,6 +769,30 @@ impl<'tree> ClassMethodCopies<'tree> {
             .iter()
             .map(|statement| (*statement, None, self.module.clone()))
             .collect();
+        // A copy of a generic class has no class methods of its own here; the generic
+        // class's would need its type arguments (GEN-15).
+        let through_copy = info
+            .base
+            .and_then(|base| Some(known.copies.borrow().copy(base)?.root));
+        if let Some(root) = through_copy
+            && self
+                .by_class
+                .get(&root)
+                .is_some_and(|made| !made.is_empty())
+        {
+            diagnostics.push(
+                Diagnostic::new(
+                    DiagnosticCode::error(201),
+                    info.span,
+                    format!(
+                        "`{}` derives from a copy of a generic class with class methods, which it \
+                         inherits from TyPy 1.0 (GEN-15)",
+                        info.name
+                    ),
+                )
+                .with_rule(RuleId::GEN_15),
+            );
+        }
         if let Some(inherited) = info.base.and_then(|base| self.by_class.get(&base)) {
             visible.extend(
                 inherited
@@ -1045,7 +1109,8 @@ fn check_override(
     if name.name == "__init__" {
         return Ok(None);
     }
-    let Some((base_id, base_class)) = inherited_method(classes, info.base, &name.name) else {
+    let Some((base_id, base_class, through)) = inherited_method(classes, info.base, &name.name)
+    else {
         return Ok(None);
     };
     // A copy of a generic method is called directly, so neither side of an override may be
@@ -1059,6 +1124,23 @@ fn check_override(
     let Some(base) = signatures.get(base_id) else {
         return Ok(None);
     };
+    // A method a copy of a generic class has takes the copy's type arguments, the copy nearest
+    // the method first (ADR-0040).
+    let mut base = base.clone();
+    for copy in through.iter().rev() {
+        base = FunctionSignature {
+            parameters: base
+                .parameters
+                .iter()
+                .map(|parameter| SignatureParameter {
+                    ty: classes.as_member_of(*copy, &parameter.ty),
+                    ..parameter.clone()
+                })
+                .collect(),
+            returns: classes.as_member_of(*copy, &base.returns),
+        };
+    }
+    let base = &base;
     // A static method is reached through an instance by its bridge, which takes the instance
     // first, so it is compared as a method that takes one (CLS-06).
     let static_base = nearest_is_static(classes, info.base, &name.name);
@@ -1137,16 +1219,22 @@ fn planned_generic_method(name: &Identifier, what: &str) -> Diagnostic {
 }
 
 /// Returns the method `name` of `base` or of the nearest class it derives from that defines
-/// it, with that class's name.
+/// it, with that class's name and the copies of generic classes the search went through,
+/// nearest first.
 fn inherited_method<'infos>(
     classes: Classes<'infos>,
     base: Option<ClassId>,
     name: &str,
-) -> Option<(FunctionId, &'infos str)> {
+) -> Option<(FunctionId, &'infos str, Vec<ClassId>)> {
     let mut current = base;
-    while let Some(info) = current.and_then(|class| classes.get(class)) {
+    let mut through = Vec::new();
+    while let Some(class) = current {
+        let info = classes.get(class)?;
+        if classes.arguments(class).is_some() {
+            through.push(class);
+        }
         if let Some(method) = info.method(name) {
-            return Some((method, &info.name));
+            return Some((method, &info.name, through));
         }
         current = info.base;
     }

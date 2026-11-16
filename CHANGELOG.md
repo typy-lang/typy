@@ -142,6 +142,11 @@ All notable changes to TyPy are recorded here. The format follows
   takes the type arguments from its arguments, as in `Box.wrap("a")`, or
   from the class, as in `Box[int].make(3)`, and runs that copy's method
   (GEN-01).
+- A class derived from a copy of a generic class, `class IntBox(Box[int]):`,
+  and a generic class derived from one for its own type parameters,
+  `class Pair[T](Box[T]):`, whose copies derive from the matching copy.
+  Class methods and dataclass fields inherited through a copy are
+  planned for 1.0 (GEN-08, GEN-15, ADR-0040).
 - A generic class with a base of the program, `class Box[T](Base):`:
   every copy derives from `Base`, takes its methods and may stand where a
   `Base` is expected. `isinstance` with a generic class does not narrow a

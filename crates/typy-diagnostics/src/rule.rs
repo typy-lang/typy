@@ -213,6 +213,8 @@ impl RuleId {
     pub const GEN_13: Self = Self("GEN-13");
     /// `isinstance` and a class pattern with a generic class shall narrow a variable of a base's type to the copies of the class the program makes.
     pub const GEN_14: Self = Self("GEN-14");
+    /// A class derived from a copy of a generic class shall inherit the generic class's class methods, and a dataclass derived from a copy of a generic dataclass its fields.
+    pub const GEN_15: Self = Self("GEN-15");
     /// Source files shall be UTF-8 with the `.py` extension.
     pub const LEX_01: Self = Self("LEX-01");
     /// Bytes literals shall be accepted.
@@ -453,6 +455,7 @@ impl RuleId {
         Self::GEN_12,
         Self::GEN_13,
         Self::GEN_14,
+        Self::GEN_15,
         Self::LEX_01,
         Self::LEX_06,
         Self::LEX_07,

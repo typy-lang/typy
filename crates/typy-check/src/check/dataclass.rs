@@ -133,6 +133,10 @@ impl Dataclasses {
         let decorator = decorators.remove(position);
         let options = options(&decorator, diagnostics)?;
         let at = decorator.span();
+        if self.derives_from_copy(bases.first(), module_name, names) {
+            diagnostics.push(fields_through_copy(&name.name, at));
+            return None;
+        }
         let inherited = bases
             .first()
             .and_then(|base| self.base_fields(base, module_name, names));
@@ -368,6 +372,12 @@ impl Dataclasses {
 
     /// Returns the fields of a base that is a dataclass of this module or one a
     /// `from module import Class` names.
+    /// Returns true when a base is a copy of a generic dataclass, such as `Pair[str, int]`.
+    fn derives_from_copy(&self, base: Option<&Expr>, module: &str, names: &Names) -> bool {
+        matches!(base, Some(Expr::Subscript { value, .. })
+            if self.base_fields(value, module, names).is_some())
+    }
+
     fn base_fields(&self, base: &Expr, module: &str, names: &Names) -> Option<Vec<Field>> {
         let Expr::Name { id, .. } = base else {
             return None;
@@ -968,4 +978,18 @@ fn generic_comparisons(class: &str, compared: &str, at: Span) -> Diagnostic {
     )
     .with_rule(RuleId::GEN_14)
     .with_help("pass `eq=False` to `@dataclass`, or derive from a class that is not a dataclass")
+}
+
+/// Returns the error for a dataclass derived from a copy of a generic dataclass, whose fields
+/// it would take with the copy's type arguments (GEN-15).
+fn fields_through_copy(class: &str, at: Span) -> Diagnostic {
+    Diagnostic::new(
+        DiagnosticCode::error(201),
+        at,
+        format!(
+            "`{class}` is a dataclass derived from a copy of a generic dataclass, whose fields \
+             it takes from TyPy 1.0 (GEN-15)"
+        ),
+    )
+    .with_rule(RuleId::GEN_15)
 }

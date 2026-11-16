@@ -244,6 +244,50 @@ fn a_method_of_a_copy_made_early_assigns_its_attributes() {
 }
 
 #[test]
+fn a_class_derives_from_a_copy_of_a_generic_class() {
+    let classes = concat!(
+        "class Box[T]:\n",
+        "    def __init__(self, item: T) -> None:\n",
+        "        self.item = item\n",
+        "    def get(self) -> T:\n",
+        "        return self.item\n",
+        "    def put(self, item: T) -> None:\n",
+        "        self.item = item\n",
+    );
+    let cases: &[(&str, &[&str])] = &[
+        (
+            "class IntBox(Box[int]):\n    def get(self) -> int:\n        return super().get() + 1\nb: Box[int] = IntBox(1)\nprint(b.get() + IntBox(2).item)\n",
+            &[],
+        ),
+        (
+            "class Pair[T](Box[T]):\n    def __init__(self, item: T, other: T) -> None:\n        super().__init__(item)\n        self.other = other\n    def put(self, item: T) -> None:\n        self.other = item\nprint(Pair(1, 2).get() + Pair(3, 4).other)\n",
+            &[],
+        ),
+        (
+            "class Many[T](Box[list[T]]):\n    def first(self) -> T:\n        return self.get()[0]\nprint(Many([1.5]).first() + 1.0)\n",
+            &[],
+        ),
+        // An override fits the method the copy has, with its type arguments.
+        (
+            "class IntBox(Box[int]):\n    def get(self) -> str:\n        return ''\n",
+            &["E0404"],
+        ),
+        (
+            "class IntBox(Box[int]):\n    def put(self, item: str) -> None:\n        pass\n",
+            &["E0404"],
+        ),
+        (
+            "class StrBox(Box[str]):\n    pass\nprint(StrBox(1))\n",
+            &["E0404"],
+        ),
+        ("class Later(Box[Missing]):\n    pass\n", &["E0205"]),
+    ];
+    for (body, expected) in cases {
+        assert_eq!(app(&format!("{classes}{body}")), *expected, "{body}");
+    }
+}
+
+#[test]
 fn a_generic_of_another_module_is_copied_in_its_own_names() {
     let tools = concat!(
         "SCALE = 10\n",
@@ -304,8 +348,8 @@ fn generic_classes_check_their_type_arguments() {
         ("x: Either[float] = Either(1)\n", "E0408"),
         ("x: Box = Box(1)\n", "E0408"),
         ("class Box2[T]:\n    count: T | None = None\n", "E0201"),
-        ("class Sub(Box[int]):\n    pass\n", "E0201"),
-        ("class Sub(Box):\n    pass\n", "E0201"),
+        ("class Sub(Box):\n    pass\n", "E0408"),
+        ("class Sub(list[int]):\n    pass\n", "E0201"),
         ("@decorated\nclass Box3[T]:\n    pass\n", "E0201"),
     ];
     for (body, code) in refused {

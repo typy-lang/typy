@@ -8,6 +8,7 @@ pub(crate) use annotation::{unhashable, unhashable_key};
 pub(crate) mod class_index;
 mod definition;
 mod definition_order;
+mod generic_base;
 mod generic_body;
 mod generic_class;
 mod generic_copies;
@@ -351,9 +352,12 @@ fn check_module<'tree>(
     let classes = collect_classes(&tree.body, first_class, diagnostics);
     let class_ids = class_table(&imports, &classes);
     program.export_aliases(aliases, &class_ids, &annotations);
-    let instances = module_instances(program, &classes, &class_ids, &annotations, diagnostics);
-    let known_scope = (&class_ids, &instances, &annotations);
-    note_module_generics(program, &classes, first_class, known_scope, diagnostics);
+    let instances = module_class_types(
+        program,
+        (&classes, first_class),
+        (&class_ids, &annotations),
+        diagnostics,
+    );
     let mut definitions = collect_functions(
         &tree.body,
         first_class,
@@ -421,23 +425,7 @@ fn check_module<'tree>(
     let snapshot = program.snapshot(first_class);
     BodyChecker::check_module(program, &module_body, &mut Diagnostics::new());
     program.keep_module_types(snapshot);
-    let (initializers, others): (Vec<_>, Vec<_>) = definitions
-        .iter()
-        .enumerate()
-        .partition(|(_, definition)| definition.class.is_some() && definition.name == "__init__");
-    let function_id =
-        |index: usize| FunctionId(u32::try_from(first_function + index).unwrap_or(u32::MAX));
-    // The `__init__` of a generic class is checked once, with its type parameters opaque,
-    // since the types it gives the attributes hold for every copy.
-    for (index, definition) in initializers {
-        program.type_arguments = definition
-            .type_parameters
-            .iter()
-            .map(|parameter| (parameter.name.clone(), Type::parameter(parameter.clone())))
-            .collect();
-        BodyChecker::check_function(program, function_id(index), definition, diagnostics);
-        program.type_arguments.clear();
-    }
+    let others = check_initializers(program, &definitions, first_function, diagnostics);
     program.end_first_look();
     let body = BodyChecker::check_module(program, &module_body, diagnostics);
     let deferred = check_bodies(
@@ -448,6 +436,33 @@ fn check_module<'tree>(
     );
     program.end_module(body);
     (deferred, (definitions, first_function))
+}
+
+/// Checks each `__init__` of the module, which gives the attributes it assigns their types,
+/// and returns the other definitions, by position, to be checked after the module body. The
+/// `__init__` of a generic class is checked once, with its type parameters opaque, since the
+/// types it gives the attributes hold for every copy.
+fn check_initializers<'definitions, 'tree>(
+    program: &mut Program,
+    definitions: &'definitions [Definition<'tree>],
+    first_function: usize,
+    diagnostics: &mut Diagnostics,
+) -> Vec<(usize, &'definitions Definition<'tree>)> {
+    let (initializers, others): (Vec<_>, Vec<_>) = definitions
+        .iter()
+        .enumerate()
+        .partition(|(_, definition)| definition.class.is_some() && definition.name == "__init__");
+    for (index, definition) in initializers {
+        program.type_arguments = definition
+            .type_parameters
+            .iter()
+            .map(|parameter| (parameter.name.clone(), Type::parameter(parameter.clone())))
+            .collect();
+        let id = FunctionId(u32::try_from(first_function + index).unwrap_or(u32::MAX));
+        BodyChecker::check_function(program, id, definition, diagnostics);
+        program.type_arguments.clear();
+    }
+    others
 }
 
 /// Checks the bodies of the module's functions after the module body, then the copies of
@@ -599,6 +614,57 @@ fn note_module_generics(
             bound: u32::MAX,
         },
         &program.class_copies,
+        diagnostics,
+    );
+}
+
+/// Returns the type of the instances of each class, after noting the module's generic classes,
+/// so a base that names a copy of one is read (ADR-0028, ADR-0040).
+fn module_class_types(
+    program: &Program,
+    (classes, first_class): (&[class::ClassStatement<'_>], usize),
+    (class_ids, annotations): (&BTreeMap<String, ClassId>, &ImportedNames),
+    diagnostics: &mut Diagnostics,
+) -> BTreeMap<ClassId, crate::types::Type> {
+    let mut instances = module_instances(program, classes, class_ids, annotations, diagnostics);
+    let known_scope = (class_ids, &instances, annotations);
+    note_module_generics(program, classes, first_class, known_scope, diagnostics);
+    derive_module_bases(
+        program,
+        (classes, class_ids, annotations),
+        &mut instances,
+        diagnostics,
+    );
+    instances
+}
+
+/// Gives the module's classes whose base is a copy of a generic class, and those derived from
+/// them, the types of their instances, once the module's generic classes are noted (ADR-0040).
+fn derive_module_bases(
+    program: &Program,
+    (classes, class_ids, annotations): (
+        &[class::ClassStatement<'_>],
+        &BTreeMap<String, ClassId>,
+        &ImportedNames,
+    ),
+    instances: &mut BTreeMap<ClassId, crate::types::Type>,
+    diagnostics: &mut Diagnostics,
+) {
+    generic_base::derive_from_copies(
+        classes,
+        &annotation::AnnotationScope {
+            classes: class_ids,
+            instances: &BTreeMap::new(),
+            modules: &annotations.modules,
+            module_aliases: &annotations.module_aliases,
+            imported_aliases: &annotations.aliases,
+            names: &annotations.names,
+            standard: &annotations.standard,
+            parameters: &annotation::NO_PARAMETERS,
+            copies: &program.class_copies,
+            bound: u32::MAX,
+        },
+        instances,
         diagnostics,
     );
 }

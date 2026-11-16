@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy software requirements specification |
-| Version | 1.69 |
+| Version | 1.70 |
 | Status | Approved |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-16 |
@@ -337,6 +337,7 @@ formatter applies; Ruff's formatter is the project's recommendation.
 | GEN-12 | A generic class shall be accepted with an exception class as its base. | C | 1.0 | 8.10 |
 | GEN-13 | A generic protocol shall be accepted, satisfied by the classes whose members fit it for its type arguments. | C | 1.0 | 8.10 |
 | GEN-14 | `isinstance` and a class pattern with a generic class shall narrow a variable of a base's type to the copies of the class the program makes. | C | 1.0 | 8.10 |
+| GEN-15 | A class derived from a copy of a generic class shall inherit the generic class's class methods, and a dataclass derived from a copy of a generic dataclass its fields. | C | 1.0 | 8.10 |
 
 ### 3.12 Exceptions (EXC)
 

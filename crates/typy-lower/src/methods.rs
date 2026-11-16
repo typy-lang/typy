@@ -28,6 +28,23 @@ pub(crate) struct MethodTables {
     overridden: BTreeSet<FunctionId>,
 }
 
+/// Returns the classes of the program, each after its base.
+fn bases_first(program: &TypedProgram) -> Vec<ClassId> {
+    let mut placed = vec![false; program.classes.len()];
+    let mut order = Vec::with_capacity(program.classes.len());
+    for class in &program.classes {
+        let mut chain = Vec::new();
+        let mut current = Some(class.id);
+        while let Some(each) = current.filter(|each| !placed[each.0 as usize]) {
+            placed[each.0 as usize] = true;
+            chain.push(each);
+            current = program.classes[each.0 as usize].base;
+        }
+        order.extend(chain.into_iter().rev());
+    }
+    order
+}
+
 impl MethodTables {
     /// Lays out the tables: a class starts from its base's table, puts its own method in
     /// place of each one it overrides, and adds each new method a class derived from it
@@ -44,9 +61,12 @@ impl MethodTables {
         // For each class, the place under which a call typed at the class finds each method:
         // its name, or for an override held otherwise than its base's, a place of its own
         // (CLS-04).
-        let mut keys: Vec<BTreeMap<String, String>> = Vec::with_capacity(program.classes.len());
-        // A base has a lower ID than the classes derived from it, so its table comes first.
-        for class in &program.classes {
+        let mut keys: Vec<BTreeMap<String, String>> = vec![BTreeMap::new(); program.classes.len()];
+        layout.tables = vec![Vec::new(); program.classes.len()];
+        // A base's table comes before the tables of the classes derived from it; a class
+        // derived from a copy of a generic class has a lower ID than the copy (ADR-0040).
+        for class in bases_first(program) {
+            let class = &program.classes[class.0 as usize];
             let mut table = class
                 .base
                 .map(|base| layout.tables[base.0 as usize].clone())
@@ -98,8 +118,8 @@ impl MethodTables {
                     table.push((key, *id));
                 }
             }
-            layout.tables.push(table);
-            keys.push(class_keys);
+            layout.tables[class.id.0 as usize] = table;
+            keys[class.id.0 as usize] = class_keys;
         }
         layout
     }

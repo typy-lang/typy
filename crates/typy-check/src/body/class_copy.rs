@@ -160,6 +160,9 @@ impl Program {
     /// generic class's information with the type parameters replaced, and a copy of each of
     /// its methods, checked when the module's other copies are.
     pub(crate) fn make_class_copies(&mut self) {
+        // A copy's base may be a copy made for it, after it, so the bridges, which read the
+        // bases, are added once every copy is.
+        let mut made = Vec::new();
         loop {
             let pending = {
                 let copies = self.class_copies.borrow();
@@ -173,11 +176,18 @@ impl Program {
                 pending
             };
             if pending.is_empty() {
-                return;
+                break;
             }
             for copy in pending {
                 self.make_class_copy(&copy);
+                made.push(copy.id);
             }
+        }
+        for class in made {
+            self.add_comparison_bridges(class);
+            self.add_truth_bridge(class);
+            self.add_override_adapters(class);
+            self.add_static_bridges(class);
         }
     }
 
@@ -196,6 +206,17 @@ impl Program {
         info.id = copy.id;
         // A generic class has a parameter, so its owner is known.
         let owner = owner.unwrap_or(root.span);
+        // A generic class derived from a copy derives each copy from the copy of that base
+        // for the copy's arguments (ADR-0040).
+        let base_copy = root
+            .base
+            .and_then(|base| Some(self.class_copies.borrow().copy(base)?.instance.clone()));
+        if let Some(base) = base_copy {
+            info.base = self
+                .substitute(&base, owner, &copy.arguments)
+                .class_id()
+                .or(info.base);
+        }
         for attribute in &mut info.attributes {
             attribute.ty = attribute
                 .ty
@@ -234,10 +255,6 @@ impl Program {
         self.classes.push(info);
         self.class_modules.push(module);
         self.instances.insert(copy.id, copy.instance.clone());
-        self.add_comparison_bridges(copy.id);
-        self.add_truth_bridge(copy.id);
-        self.add_override_adapters(copy.id);
-        self.add_static_bridges(copy.id);
     }
 
     /// Returns true when the function is a copy whose type arguments hold a type parameter,

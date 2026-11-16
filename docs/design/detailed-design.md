@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy detailed design |
-| Version | 2.07 |
+| Version | 2.08 |
 | Status | Approved |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-16 |
@@ -944,8 +944,26 @@ extend the base's. `isinstance` with a generic class does not narrow a
 variable, since `Program::is_opaque_class` holds for the generic class
 (GEN-14); for the same reason `@dataclass` refuses the comparison methods of
 a generic dataclass derived from a dataclass, and a generic exception class or
-protocol is E0201 from `refuse_generic_kind` (GEN-12, GEN-13). A copy whose
-arguments hold a
+protocol is E0201 from `refuse_generic_kind` (GEN-12, GEN-13). A base that
+names a copy, `Box[int]` or `Box[T]`, is read after the module's generic classes
+are noted, by `check::generic_base::derive_from_copies`, which goes over the
+classes in source order, gives each class whose base is a copy, and each class
+derived from one, the chain of the copy, and gives a generic class its new
+`GenericClass::instance`; `class_types` passes over such a base, and a bare
+generic class as a base is E0408. Collecting the members reads a copy base
+through `Classes::get`, which gives the generic class's `ClassInfo`, its
+attributes taking the copy's arguments through `Classes::as_member_of`, and an
+override is checked against the base method's signature with the arguments of
+each copy `inherited_method` passed through. `make_class_copy` gives a copy of
+a generic class derived from a copy the copy of that base for its own
+arguments, and `make_class_copies` adds the bridges of the copies it made once
+all are, since a base copy may be made after the copy that names it. A class
+derived from a copy whose generic class has class methods, and a dataclass
+derived from a copy of a generic dataclass, are E0201, planned for 1.0
+(GEN-15). Since a class may derive from a copy with a higher ID,
+`lower::methods::MethodTables::new` lays out the tables with each base first,
+and the TyIR verifier walks a chain of bases as far as there are classes,
+refusing one that comes back to its class. A copy whose arguments hold a
 parameter, and the generic class itself, are opaque: lowering lays them out
 empty and their methods are stubs. A copy's `TyirClass::public` names the
 generic class, which codegen writes as the type object's base and as its

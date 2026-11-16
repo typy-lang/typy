@@ -494,7 +494,15 @@ fn a_method_call_goes_through_a_table_that_extends_its_base_s() {
                 module.classes[0].base = Some(1);
                 module
             },
-            "the base class#1 is not a class before it",
+            "the bases of class#0 come back to it",
+        ),
+        (
+            {
+                let mut module = dispatching(0, vec![FunctionId(2)], TyirType::Int);
+                module.classes[0].base = Some(9);
+                module
+            },
+            "the base class#9 does not exist",
         ),
         (
             {
