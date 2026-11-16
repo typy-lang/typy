@@ -2368,6 +2368,15 @@ fn a_method_is_called_through_its_class_with_the_instance_first() {
             "class Cube(Square):\n    def __init__(self) -> None:\n        Shape.__init__(self, 'cube')\n",
             &["E0309"],
         ),
+        // Only the instance being built, given first, makes the call the base's `__init__`.
+        (
+            "class Cube(Square):\n    def __init__(self) -> None:\n        Shape.__init__(Shape('a'), 'b')\n        Square.__init__(self, 1.0)\n        Shape.area(self)\n",
+            &[],
+        ),
+        (
+            "class Cube(Square):\n    def __init__(self) -> None:\n        Square.__init__(self, 1.0)\n        Shape.__init__()\n",
+            &["E0404"],
+        ),
     ];
     for (body, expected) in cases {
         let found = check(&format!("{classes}{body}")).err().unwrap_or_default();

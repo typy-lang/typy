@@ -339,3 +339,12 @@ fn version_info_of_another_module_is_its_own_variable() {
     ]);
     assert!(dump.contains("version_info"), "{dump}");
 }
+
+#[test]
+fn a_module_of_the_program_hides_a_standard_module_of_its_name() {
+    // CPython finds `typing.py` beside the program before its own `typing`.
+    accepted(&[
+        ("app.py", "from typing import helper\nprint(helper())\n"),
+        ("typing.py", "def helper() -> int:\n    return 1\n"),
+    ]);
+}
