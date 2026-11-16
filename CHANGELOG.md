@@ -178,6 +178,11 @@ All notable changes to TyPy are recorded here. The format follows
   as CPython's does: `(1,)` for `d[1]` and `(('a', 1),)` for a tuple key,
   where TyPy held the text of its `repr`, `('1',)`. The empty-set and
   empty-dict errors hold their message without quotes (EXC-11).
+- A sort, `min`, `max`, `in`, `index` and `count` of objects of a class
+  and of classes derived from it compare as `a < b` and `a == b` do,
+  calling the right object's reflected method first when its class
+  derives from the left one's, as CPython does; TyPy called the left
+  object's method alone (CLS-07, CLS-22).
 - A comparison whose right operand's class derives from the left
   operand's calls the right operand's reflected method first, also when
   the subclass inherits it, as CPython does: `A() < B()` calls `__gt__`

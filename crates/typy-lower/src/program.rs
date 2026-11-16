@@ -152,9 +152,18 @@ impl Slots {
                 .returns
                 .may_give_way()
         };
+        // Objects of a chain of bases may be of different classes, which CPython compares as
+        // `a < b` does, the right one's reflected method first when its class derives from the
+        // left one's; the bridge compares so (CLS-22).
+        let chain = program.class(class).base.is_some() || program.has_subclass(class);
         let [equal, less, less_equal, greater, greater_equal] =
             typy_check::COMPARISON_BRIDGES.map(|(name, _, _, bridge)| {
-                method(bridge).or_else(|| method(name).filter(|own| !gives_way(*own)))
+                let own = method(name);
+                match (own, method(bridge)) {
+                    (Some(own), Some(bridge)) if chain || gives_way(own) => Some(bridge),
+                    (Some(own), _) if !gives_way(own) => Some(own),
+                    _ => None,
+                }
             });
         Self {
             equal,

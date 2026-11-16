@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy detailed design |
-| Version | 2.00 |
+| Version | 2.01 |
 | Status | Approved |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-16 |
@@ -1366,12 +1366,13 @@ runtime's one object of the type, and `is` tests a result that may hold it.
 `TyirClass` holds `equal`, `order` and `hash`, and codegen fills the type
 object's slots with functions that call them; the `equal` slot compares by
 identity an object its `__eq__` does not take. `Program::add_comparison_bridges`
-writes, for each comparison method that may give way, a bridge such as
+writes, for each comparison method of a class's own, a bridge such as
 `<equal>` or `<less>` that returns `self op other`, and the slot calls the
-bridge in the method's place. A slot method that may raise follows ADR-0039:
-codegen's slot function gives the exception to `typy_rt_slot_failed` and
-returns its default, every slot of the program first asks
-`typy_rt_slot_pending`, and lowering follows each runtime call whose
+bridge in the method's place when the method may give way or the class is one of
+a chain of bases, whose objects a container may hold side by side. A slot method
+that may raise follows ADR-0039: codegen's slot function gives the exception to
+`typy_rt_slot_failed` and returns its default, every slot of the program first
+asks `typy_rt_slot_pending`, and lowering follows each runtime call whose
 `RuntimeFunction::may_call_slots` holds with `slot_raised`, when
 `Calls::raising_slots` says a slot method may raise. `body::comparison_chain`
 checks a chain such as `a < b < c` of such instances as its comparisons

@@ -41,7 +41,9 @@ pub const COMPARISON_BRIDGES: [(&str, &str, OperatorKind, &str); 5] = [
 ];
 
 impl Program {
-    /// Adds to `class` the bridge of each comparison method of its own that may give way.
+    /// Adds to `class` the bridge of each comparison method of its own, which a slot calls
+    /// when the method may give way or the class is one of a chain of bases, where the
+    /// operands may be of different classes (CLS-21, CLS-22).
     pub(crate) fn add_comparison_bridges(&mut self, class: ClassId) {
         for (name, reflected, kind, bridge) in COMPARISON_BRIDGES {
             let own = self.classes[class.0 as usize]
@@ -49,9 +51,7 @@ impl Program {
                 .iter()
                 .find(|(each, _)| each == name)
                 .map(|(_, method)| *method);
-            if let Some(method) = own
-                && self.signatures[method.0 as usize].returns.may_give_way()
-            {
+            if let Some(method) = own {
                 self.add_comparison_bridge(class, method, (reflected, kind, bridge));
             }
         }
