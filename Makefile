@@ -10,7 +10,7 @@ MARKDOWN := "**/*.md" "\#.tmp/**" "\#target/**" "\#dist/**"
 
 
 .PHONY: dev image shell runtime fmt fmt-check lint type test coverage docs-lint ascii-check traceability test-int test-e2e test-all \
-	build dist bless coverage-branches miri fuzz runtime-size diagrams diagrams-check unicode-tables unicode-tables-check format-cases format-cases-check stdlib-names stdlib-names-check errno-texts errno-texts-check mutants mutants-package bench check hooks clean
+	build dist bless bench-peers coverage-branches miri fuzz runtime-size diagrams diagrams-check unicode-tables unicode-tables-check format-cases format-cases-check stdlib-names stdlib-names-check errno-texts errno-texts-check mutants mutants-package bench check hooks clean
 
 dev: ## Start the dev service, building its image the first time
 	@$(COMPOSE) up -d --quiet-pull dev 2>/dev/null
@@ -92,6 +92,10 @@ fuzz: dev ## Fuzz the source, checking and lowering stages for FUZZ_SECONDS seco
 
 MUTANTS_BASE ?= HEAD
 MUTANTS_PACKAGE ?= typy-diagnostics
+
+bench-peers: dev ## Download and install the languages bench-compare measures that the image lacks, about 0.5 GB, once
+	@$(COMPOSE) exec -T -u root dev chown dev:dev /var/cache/typy/bench
+	@$(EXEC) scripts/bench-peers.sh
 
 mutants: ## Mutation-test the Rust lines changed since MUTANTS_BASE, by default the uncommitted work, in a container limited to 6 GB; the report goes to .tmp/mutants/diff/
 	@scripts/mutants.sh diff $(MUTANTS_BASE)

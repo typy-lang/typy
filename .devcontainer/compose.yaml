@@ -20,6 +20,8 @@ services:
       - cargo-registry:/usr/local/cargo/registry
       - cargo-git:/usr/local/cargo/git
       - target:/var/cache/typy/target
+      # The languages the cross-language benchmark compares, downloaded once.
+      - bench-tools:/var/cache/typy/bench
       - bash-history:/home/dev/.history
     environment:
       HISTFILE: /home/dev/.history/bash_history
@@ -46,4 +48,5 @@ volumes:
   cargo-registry:
   cargo-git:
   target:
+  bench-tools:
   bash-history:
