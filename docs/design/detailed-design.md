@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy detailed design |
-| Version | 1.97 |
+| Version | 1.98 |
 | Status | Approved |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-16 |
@@ -1237,11 +1237,14 @@ that a base defines too is checked against it by `check::overriding::Override`,
 except `__init__`: the same number of parameters with the same names, each of a
 type that accepts the base's and with a default where the base has one, and a
 result the base's result type accepts, E0404 otherwise (CLS-04, CLS-13). A
-default other than the base's, and a parameter or result held differently from
-the base's, such as `int | None` for `int`, are E0201, planned for 0.5: a call
-through the base fills the base's default, and the entry would need an
-adapter. A call of a method on an instance is `TypedExprKind::Call` with
-`dispatch` set, and a call through `super()` has it clear. Calling an
+call through the method table that leaves out a parameter whose default an
+override changes takes the default of the object's class: lowering tests the
+instance against each override's class, the nearest first
+(`MethodTables::overrides`, `dispatched_default`). A parameter or result held
+differently from the base's, such as `int | None` for `int`, is E0201, planned
+for 0.5: the entry would need an adapter. A call of a method on an instance is
+`TypedExprKind::Call` with `dispatch` set, and a call through `super()` has it
+clear. Calling an
 exception class without
 an `__init__` of the program's takes positional arguments of any type; with one,
 its arguments are bound as for a call and `TypedExprKind::NewException` carries

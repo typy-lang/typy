@@ -1909,10 +1909,6 @@ fn a_base_must_be_a_class_before_it_and_an_override_must_fit() {
             "class A(Exception):\n    def f(self) -> None:\n        pass\nclass B(A):\n    def f(self) -> int:\n        return 1\n",
             &["E0404"],
         ),
-        (
-            "class A:\n    def f(self, x: int = 1) -> None:\n        pass\nclass B(A):\n    def f(self, x: int = 2) -> None:\n        pass\n",
-            &["E0201"],
-        ),
     ];
     for (source, expected) in cases {
         assert_eq!(&rejected(source), expected, "\n{source}");

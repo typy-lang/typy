@@ -50,23 +50,8 @@ impl Override<'_> {
                     self.name, own.name, self.base_name
                 )));
             }
-            // A call through the base fills a missing argument with the base's default, so an
-            // override that gives another would run with the wrong value.
-            if base.default.is_some() && own.default != base.default {
-                return Some(
-                    Diagnostic::new(
-                        DiagnosticCode::error(201),
-                        self.span,
-                        format!(
-                            "an override whose default for `{}` differs from that of `{}` is \
-                             planned for TyPy 0.5 (CLS-04)",
-                            own.name, self.base_name
-                        ),
-                    )
-                    .with_rule(RuleId::CLS_04)
-                    .with_help("give the parameter the base's default"),
-                );
-            }
+            // A call through the base that leaves the argument out takes the default of the
+            // object's class, which the lowering decides (CLS-04).
             if !same_representation(&base.ty, &own.ty) {
                 return Some(self.adapter_planned(&own.ty, &base.ty));
             }
@@ -206,11 +191,10 @@ mod tests {
         assert!(message(&base, &defaulted).is_some_and(|text| text.contains("has no default")));
         assert_eq!(message(&defaulted, &base), None);
         assert_eq!(message(&defaulted, &defaulted), None);
+        // An override may give the parameter a default of its own (CLS-04).
         let mut other = defaulted.clone();
         other.parameters[1].default = Some(TypedConstant::Int("2".to_owned()));
-        let text = message(&other, &defaulted).unwrap_or_default();
-        assert!(text.starts_with("E0201"), "{text}");
-        assert!(text.contains("default for `scale`"), "{text}");
+        assert_eq!(message(&other, &defaulted), None);
     }
 
     #[test]

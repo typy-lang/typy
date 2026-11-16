@@ -117,6 +117,33 @@ impl MethodTables {
         families.into_values().collect()
     }
 
+    /// Returns each method that overrides `function` in a class derived from its class, with
+    /// that class, the classes nearest the end of a chain of bases first.
+    pub(crate) fn overrides(&self, function: FunctionId) -> Vec<(ClassId, FunctionId)> {
+        let Some((class, name)) = self.owners.get(&function) else {
+            return Vec::new();
+        };
+        let depth = |class: ClassId| {
+            std::iter::successors(Some(class), |each| {
+                self.bases.get(each.0 as usize).copied().flatten()
+            })
+            .count()
+        };
+        let mut found: Vec<(ClassId, FunctionId)> = self
+            .owners
+            .iter()
+            .filter(|(method, (owner, each))| {
+                **method != function
+                    && each == name
+                    && *owner != *class
+                    && self.derives_from(*owner, *class)
+            })
+            .map(|(method, (owner, _))| (*owner, *method))
+            .collect();
+        found.sort_by_key(|(owner, _)| std::cmp::Reverse(depth(*owner)));
+        found
+    }
+
     /// Returns true when a class derived from `class`, other than `class`, defines `name`.
     fn defined_below(&self, program: &TypedProgram, class: ClassId, name: &str) -> bool {
         program.classes.iter().any(|other| {

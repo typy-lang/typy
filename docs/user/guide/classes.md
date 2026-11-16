@@ -128,11 +128,12 @@ print([shape.describe() for shape in shapes])
 An override takes the base method's parameters in the same order and
 with the same names. Each parameter accepts the type the base's takes,
 and the result is one the base's result type accepts, as type checkers
-require; a mismatch is E0404. A parameter keeps the base's default, and
-an override that takes or returns a type held differently from the
-base's, such as `int | None` where the base has `int`, is planned for
-0.5; both are E0201. `__init__` is not compared, since it runs only on
-the class being made.
+require; a mismatch is E0404. A parameter with a default in the base
+has one in the override, which may differ: a call that leaves it out
+takes the default of the object's class, as in CPython. An override that
+takes or returns a type held differently from the base's, such as
+`int | None` where the base has `int`, is planned for 0.5 (E0201).
+`__init__` is not compared, since it runs only on the class being made.
 
 <!-- typy-expect: rejected E0404 at 7:9 -->
 ```python

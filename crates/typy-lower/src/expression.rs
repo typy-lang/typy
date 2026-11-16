@@ -602,6 +602,100 @@ impl FunctionLowerer<'_> {
         self.call(function, None, arguments, ty, span)
     }
 
+    /// Returns the value of the default `default` of `parameter`, held as the parameter is.
+    fn default_value(
+        &mut self,
+        parameter: &SignatureParameter,
+        default: Option<&TypedConstant>,
+        span: Span,
+    ) -> ValueId {
+        let default = default.cloned().unwrap_or(TypedConstant::None);
+        let constant = self.typed_constant(&default, span).value;
+        match self.lowered_type(&parameter.ty) {
+            // A default of an optional parameter is `None` or a value of its base.
+            optional @ TyirType::Optional(_) if default == TypedConstant::None => {
+                self.none_of(optional, span)
+            }
+            optional @ TyirType::Optional(_) => self.builder.push_value(
+                Operation::Wrap {
+                    value: constant,
+                    ty: optional,
+                },
+                optional,
+                span,
+            ),
+            _ => constant,
+        }
+    }
+
+    /// Returns the default of parameter `index` of a call through the method table of the
+    /// instance `instance`: that of the method of the instance's class, the nearest override
+    /// of `function` whose class the instance is of, or `function`'s own.
+    fn dispatched_default(
+        &mut self,
+        function: FunctionId,
+        index: usize,
+        instance: Lowered,
+        span: Span,
+    ) -> ValueId {
+        let parameter = self.program.function(function).signature.parameters[index].clone();
+        let overrides: Vec<(typy_check::ClassId, Option<TypedConstant>)> = self
+            .methods
+            .overrides(function)
+            .into_iter()
+            .map(|(class, method)| {
+                let parameters = &self.program.function(method).signature.parameters;
+                (
+                    class,
+                    parameters.get(index).and_then(|each| each.default.clone()),
+                )
+            })
+            .collect();
+        if overrides
+            .iter()
+            .all(|(_, default)| *default == parameter.default)
+        {
+            return self.default_value(&parameter, parameter.default.as_ref(), span);
+        }
+        let ty = self.lowered_type(&parameter.ty);
+        self.default_of_class((&parameter, &overrides), instance, ty, span)
+            .value
+    }
+
+    /// Returns the default of the first of `overrides` whose class the instance is of, or the
+    /// parameter's own.
+    fn default_of_class(
+        &mut self,
+        (parameter, overrides): (
+            &SignatureParameter,
+            &[(typy_check::ClassId, Option<TypedConstant>)],
+        ),
+        instance: Lowered,
+        ty: TyirType,
+        span: Span,
+    ) -> Lowered {
+        let Some(((class, default), rest)) = overrides.split_first() else {
+            let value = self.default_value(parameter, parameter.default.as_ref(), span);
+            return Self::borrowed(value, ty);
+        };
+        let object = self.bits(instance, span);
+        let name = self.program.class(*class).name.clone();
+        let of = self.type_object(&typy_check::TypeObjectOf::Instance(*class, name), span);
+        let found = self
+            .call_runtime(RuntimeFunction::IsInstance, vec![object, of.value], span)
+            .value;
+        self.either(
+            found,
+            ty,
+            span,
+            |this| {
+                let value = this.default_value(parameter, default.as_ref(), span);
+                Self::borrowed(value, ty)
+            },
+            |this| this.default_of_class((parameter, rest), instance, ty, span),
+        )
+    }
+
     /// Calls a method on the instance that is its first argument: through the method table
     /// when a class derived from the method's class defines it again, so the instance's
     /// class decides which runs, and directly otherwise (ADR-0021).
@@ -648,24 +742,13 @@ impl FunctionLowerer<'_> {
                         span,
                     )
                 }
+            } else if dispatch.is_some() && index > 0 {
+                // A method a class derived from this one defines again may give the parameter
+                // another default, which the object's class decides (CLS-04).
+                let held = self.lowered_type(&parameters[0].ty);
+                self.dispatched_default(function, index, Self::borrowed(ordered[0], held), span)
             } else {
-                let default = parameter.default.clone().unwrap_or(TypedConstant::None);
-                let constant = self.typed_constant(&default, span).value;
-                match self.lowered_type(&parameter.ty) {
-                    // A default of an optional parameter is `None` or a value of its base.
-                    optional @ TyirType::Optional(_) if default == TypedConstant::None => {
-                        self.none_of(optional, span)
-                    }
-                    optional @ TyirType::Optional(_) => self.builder.push_value(
-                        Operation::Wrap {
-                            value: constant,
-                            ty: optional,
-                        },
-                        optional,
-                        span,
-                    ),
-                    _ => constant,
-                }
+                self.default_value(parameter, parameter.default.as_ref(), span)
             };
             ordered.push(value);
         }

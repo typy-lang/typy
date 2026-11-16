@@ -345,7 +345,7 @@ impl FunctionLowerer<'_> {
 
     /// Returns what `then` gives when `condition` holds and what `otherwise` gives when not, a
     /// value of `ty`.
-    fn either(
+    pub(crate) fn either(
         &mut self,
         condition: typy_tyir::ValueId,
         ty: TyirType,
