@@ -185,6 +185,9 @@ All notable changes to TyPy are recorded here. The format follows
 - An arithmetic operator on two instances of one class that defines only
   the reflected method, such as `__radd__`, raises CPython's `TypeError`;
   TyPy called the reflected method (CLS-07).
+- `items[f()] %= values` and `make().text %= values` with a format that
+  takes its values when the program runs evaluate the target's parts
+  once, where TyPy refused them (SMT-01).
 - `obj.prop += v` of a property calls the getter, then the setter with
   the result; TyPy left the statement out. A property is assigned through
   any expression, as `make().prop = value` (CLS-06).

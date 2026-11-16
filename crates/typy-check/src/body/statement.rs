@@ -205,6 +205,7 @@ impl BodyChecker<'_> {
                         return self.rebound(target, call, *span);
                     }
                 }
+                let written = value;
                 let value = checked_value;
                 // Without an in-place method, `x += y` on an instance is `x = x + y` (CLS-20).
                 let (current, value) = match self.operator_binary(*operator, current, value, *span)
@@ -216,6 +217,13 @@ impl BodyChecker<'_> {
                 };
                 let (current, value) = Self::tuple_operands(*operator, current, value);
                 if let Some(formatted) = self.percent_dynamic(*operator, &current, &value, *span) {
+                    // The item or attribute of an expression is read and assigned through
+                    // hidden variables, as an operator method's result is (CLS-20).
+                    if let super::in_place::Pinned::Checked(pinned) =
+                        self.pinned_augmented(target, *operator, written, *span)
+                    {
+                        return *pinned;
+                    }
                     return self.rebound(target, formatted, *span);
                 }
                 let result = self.binary_type(*operator, &current, &value, *span);
@@ -377,16 +385,20 @@ impl BodyChecker<'_> {
             } => super::in_place::is_name(object) && super::in_place::is_name(index),
             _ => false,
         };
+        // Each caller holds the parts of another target in hidden variables first, so the
+        // target is evaluated once; one that does not is a defect of the checker.
         if !simple {
             self.diagnostics.push(
                 Diagnostic::new(
-                    DiagnosticCode::error(201),
+                    DiagnosticCode::error(9001),
                     span,
-                    "an augmented assignment to an item that calls an operator method is planned \
-                     for TyPy 0.5 (CLS-07)",
+                    "internal compiler error: the target of an augmented assignment would be \
+                     evaluated twice",
                 )
-                .with_rule(RuleId::CLS_07)
-                .with_help("write `item = item + value`"),
+                .with_rule(RuleId::NFR_09)
+                .with_help(
+                    "this is a defect in TyPy; please report it with the program that caused it",
+                ),
             );
             return None;
         }
