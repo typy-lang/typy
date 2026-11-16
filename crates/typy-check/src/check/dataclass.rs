@@ -62,6 +62,9 @@ struct Names {
     field: BTreeSet<String>,
     /// Each name a `from module import Class` binds, with the module and the class.
     imported: BTreeMap<String, (String, String)>,
+    /// Each name an `import module` binds to a module other than `dataclasses`, with the
+    /// module, through which a base may name a class.
+    program_modules: BTreeMap<String, String>,
 }
 
 /// The options of `@dataclass(...)` CLS-05 covers.
@@ -313,15 +316,7 @@ impl Dataclasses {
 
     /// Returns whether a dataclass base is frozen.
     fn base_frozen(&self, base: &Expr, module: &str, names: &Names) -> Option<bool> {
-        let Expr::Name { id, .. } = base else {
-            return None;
-        };
-        let (module, class) = names
-            .imported
-            .get(id)
-            .cloned()
-            .unwrap_or_else(|| (module.to_owned(), id.clone()));
-        let key = (module, class);
+        let key = names.class_key(base, module)?;
         self.pending.get(&key).copied().or_else(|| {
             self.info
                 .get(&key.0)
@@ -333,8 +328,18 @@ impl Dataclasses {
     /// Returns the class a dataclass base's comparison methods take, by a name this module
     /// binds: the base's own for a base of another module.
     fn compared_class(&self, base: &Expr, module: &str, names: &Names) -> String {
-        let Expr::Name { id, .. } = base else {
-            return String::new();
+        let id = match base {
+            Expr::Name { id, .. } => id,
+            // A base named through its module is named so in the methods' annotations too.
+            Expr::Attribute {
+                value, attribute, ..
+            } => {
+                return match value.as_ref() {
+                    Expr::Name { id, .. } => format!("{id}.{}", attribute.name),
+                    _ => String::new(),
+                };
+            }
+            _ => return String::new(),
         };
         if names.imported.contains_key(id) {
             return id.clone();
@@ -358,52 +363,67 @@ impl Dataclasses {
                 value.as_ref(),
                 Expr::Name { id, .. } if matches!(id.as_str(), "list" | "dict" | "set" | "List" | "Dict" | "Set")
             ),
-            Expr::Name { id, .. } => {
-                let key = names
-                    .imported
-                    .get(id)
-                    .cloned()
-                    .unwrap_or_else(|| (module.to_owned(), id.clone()));
-                self.unhashable.contains(&key)
-            }
+            Expr::Name { .. } | Expr::Attribute { .. } => names
+                .class_key(annotation, module)
+                .is_some_and(|key| self.unhashable.contains(&key)),
             _ => false,
         }
     }
 
-    /// Returns the fields of a base that is a dataclass of this module or one a
-    /// `from module import Class` names.
     /// Returns true when a base is a copy of a generic dataclass, such as `Pair[str, int]`.
     fn derives_from_copy(&self, base: Option<&Expr>, module: &str, names: &Names) -> bool {
         matches!(base, Some(Expr::Subscript { value, .. })
             if self.base_fields(value, module, names).is_some())
     }
 
+    /// Returns the fields of a base that is a dataclass of this module, or of another module
+    /// named by `from module import Class` or through the module.
     fn base_fields(&self, base: &Expr, module: &str, names: &Names) -> Option<Vec<Field>> {
-        let Expr::Name { id, .. } = base else {
-            return None;
-        };
-        let key = names
-            .imported
-            .get(id)
-            .cloned()
-            .unwrap_or_else(|| (module.to_owned(), id.clone()));
+        let key = names.class_key(base, module)?;
         self.fields.get(&key).cloned()
     }
 }
 
 impl Names {
+    /// Returns the module and the name of the class an expression names: by a name of the
+    /// module or one `from module import Class` binds, or through a module it imports.
+    fn class_key(&self, expression: &Expr, module: &str) -> Option<(String, String)> {
+        match expression {
+            Expr::Name { id, .. } => Some(
+                self.imported
+                    .get(id)
+                    .cloned()
+                    .unwrap_or_else(|| (module.to_owned(), id.clone())),
+            ),
+            Expr::Attribute {
+                value, attribute, ..
+            } => match value.as_ref() {
+                Expr::Name { id, .. } => {
+                    let imported = self.program_modules.get(id)?;
+                    Some((imported.clone(), attribute.name.clone()))
+                }
+                _ => None,
+            },
+            _ => None,
+        }
+    }
+
     /// Returns the names the module's imports bind to `dataclasses`, `dataclass` and `field`.
     fn of(statements: &[Stmt]) -> Self {
         let mut names = Self::default();
         for statement in statements {
             match statement {
                 Stmt::Import { names: aliases, .. } => {
-                    for alias in aliases
-                        .iter()
-                        .filter(|alias| alias.name.name == "dataclasses")
-                    {
+                    for alias in aliases {
                         let bound = alias.as_name.as_ref().unwrap_or(&alias.name);
-                        names.modules.insert(bound.name.clone());
+                        if alias.name.name == "dataclasses" {
+                            names.modules.insert(bound.name.clone());
+                        } else if alias.as_name.is_some() || !alias.name.name.contains('.') {
+                            // `import a.b` binds `a`, whose classes `a.Class` names.
+                            names
+                                .program_modules
+                                .insert(bound.name.clone(), alias.name.name.clone());
+                        }
                     }
                 }
                 Stmt::ImportFrom {

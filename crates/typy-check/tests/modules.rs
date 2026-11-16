@@ -307,6 +307,26 @@ fn a_class_method_inherited_from_another_module_gets_its_copy() {
 }
 
 #[test]
+fn a_dataclass_derives_from_one_named_through_its_module() {
+    let shapes = "from dataclasses import dataclass\n@dataclass\nclass Point:\n    x: int\n";
+    accepted(&[
+        (
+            "app.py",
+            "from dataclasses import dataclass\nimport shapes as s\n@dataclass\nclass Labeled(s.Point):\n    label: str = 'p'\nprint(Labeled(1).x)\n",
+        ),
+        ("shapes.py", shapes),
+    ]);
+    let frozen = rejected(&[
+        (
+            "app.py",
+            "from dataclasses import dataclass\nimport shapes\n@dataclass(frozen=True)\nclass Labeled(shapes.Point):\n    label: str = 'p'\n",
+        ),
+        ("shapes.py", shapes),
+    ]);
+    assert_eq!(frozen, vec!["E0404".to_string()]);
+}
+
+#[test]
 fn a_dataclass_derives_from_one_of_another_module() {
     let base = "from dataclasses import dataclass\n@dataclass\nclass Base:\n    x: int\n";
     let dump = accepted(&[
