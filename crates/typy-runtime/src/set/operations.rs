@@ -93,7 +93,7 @@ pub unsafe extern "C" fn typy_rt_set_remove(
         if discard(set, item, item_type.hash(item)) {
             core::ptr::null_mut()
         } else {
-            crate::exception::key_error(item_type, item)
+            crate::slot::or_pending(crate::exception::key_error(item_type, item))
         }
     }
 }

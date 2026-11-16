@@ -39,6 +39,7 @@ mod range;
 mod refcount;
 mod set;
 mod slice;
+mod slot;
 mod stack;
 mod string;
 mod sys;

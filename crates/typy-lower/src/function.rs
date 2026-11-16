@@ -76,6 +76,8 @@ pub(crate) struct FunctionLowerer<'context> {
     pub(crate) program: &'context TypedProgram,
     pub(crate) may_raise: &'context [bool],
     pub(crate) methods: &'context crate::methods::MethodTables,
+    /// Whether runtime calls are followed by the test of a slot's exception.
+    pub(crate) slot_tests: crate::invoke::SlotTests,
     pub(crate) strings: &'context mut StringPool,
     pub(crate) tuple_types: &'context mut TupleTypes,
     pub(crate) slots: BTreeMap<SymbolId, SlotId>,
@@ -198,6 +200,7 @@ impl<'context> FunctionLowerer<'context> {
             program,
             may_raise: calls.may_raise,
             methods: calls.methods,
+            slot_tests: crate::invoke::SlotTests::of(calls.raising_slots),
             strings,
             tuple_types,
             slots,

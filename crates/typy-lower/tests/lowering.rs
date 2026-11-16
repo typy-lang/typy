@@ -612,56 +612,35 @@ fn a_reflected_method_inherited_from_a_base_is_compared_through_the_base_s_table
 }
 
 #[test]
-fn a_comparison_method_that_may_raise_is_refused() {
-    let directory = std::env::temp_dir().join(format!(
-        "typy-lower-raising-{}-{}",
-        std::process::id(),
-        next_id()
-    ));
-    std::fs::create_dir_all(&directory).unwrap();
-    let root = Utf8PathBuf::from_path_buf(directory.clone()).unwrap();
-    let source = concat!(
+fn a_runtime_call_that_may_run_a_raising_slot_is_followed_by_its_test() {
+    let printed = text(concat!(
         "class V:\n",
         "    def __init__(self, n: int) -> None:\n",
         "        self.n = n\n",
         "    def __lt__(self, other: 'V') -> bool:\n",
         "        return 1 // other.n > 0\n",
-        "class W(V):\n",
-        "    pass\n",
-        "print(sorted([V(1), V(2)])[0].n)\n",
-    );
-    std::fs::write(root.join("app.py"), source).unwrap();
-    let project = Project::load(&root.join("app.py"), ProjectSettings::new(root)).unwrap();
-    let program = TypeChecker::check(&project).unwrap();
-    let diagnostics = typy_lower::lower(&program).expect_err("a raising `__lt__` is refused");
-    let _ = std::fs::remove_dir_all(directory);
-    assert!(
-        diagnostics
-            .iter()
-            .any(|diagnostic| diagnostic.message().contains("V.__lt__"))
-    );
-}
-
-/// Returns the diagnostics that lowering `source` gives, which the checker accepts.
-fn refused(source: &str) -> typy_diagnostics::Diagnostics {
-    let directory = std::env::temp_dir().join(format!(
-        "typy-lower-refused-{}-{}",
-        std::process::id(),
-        next_id()
+        "print(sorted([V(1), V(2)])[0].n, len('ab'))\n",
     ));
-    std::fs::create_dir_all(&directory).unwrap();
-    let root = Utf8PathBuf::from_path_buf(directory.clone()).unwrap();
-    std::fs::write(root.join("app.py"), source).unwrap();
-    let project = Project::load(&root.join("app.py"), ProjectSettings::new(root)).unwrap();
-    let program = TypeChecker::check(&project).unwrap();
-    let diagnostics = typy_lower::lower(&program).expect_err("lowering refuses the program");
-    let _ = std::fs::remove_dir_all(directory);
-    diagnostics
+    let sort = printed.find("rt.list_sort").expect("the list is sorted");
+    assert!(printed[sort..].contains("rt.slot_raised"), "{printed}");
 }
 
 #[test]
-fn an_ordering_method_that_may_give_way_is_refused_until_slots_may_raise() {
-    let diagnostics = refused(concat!(
+fn a_program_whose_slots_cannot_raise_has_no_slot_test() {
+    let printed = text(concat!(
+        "class V:\n",
+        "    def __init__(self, n: int) -> None:\n",
+        "        self.n = n\n",
+        "    def __lt__(self, other: 'V') -> bool:\n",
+        "        return self.n < other.n\n",
+        "print(sorted([V(1), V(2)])[0].n)\n",
+    ));
+    assert!(!printed.contains("rt.slot_raised"), "{printed}");
+}
+
+#[test]
+fn an_ordering_method_that_may_give_way_fills_the_slot_with_its_bridge() {
+    let printed = text(concat!(
         "class V:\n",
         "    def __init__(self, n: int) -> None:\n",
         "        self.n = n\n",
@@ -669,13 +648,11 @@ fn an_ordering_method_that_may_give_way_is_refused_until_slots_may_raise() {
         "        if other.n < 0:\n",
         "            return NotImplemented\n",
         "        return self.n < other.n\n",
-        "print(V(1) < V(2))\n",
+        "print(V(1) < V(2), sorted([V(2), V(1)])[0].n)\n",
     ));
-    assert!(diagnostics.iter().any(|diagnostic| {
-        diagnostic.message().contains("V.__lt__")
-            && diagnostic.message().contains("NotImplemented")
-            && diagnostic.rule() == Some(typy_diagnostics::RuleId::CLS_22)
-    }));
+    for line in ["V.<less>", "rt.ordering_unsupported", "rt.slot_raised"] {
+        assert!(printed.contains(line), "{line:?} missing from\n{printed}");
+    }
 }
 
 #[test]

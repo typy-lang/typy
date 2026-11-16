@@ -224,6 +224,14 @@ fn raise_ends_the_path_it_is_on() {
     }
 }
 
+/// Returns the typed dump of an accepted program.
+fn dumped(source: &str) -> String {
+    let (_directory, project) = load(source);
+    let program = TypeChecker::check(&project)
+        .unwrap_or_else(|diagnostics| panic!("rejected: {diagnostics:?}\n{source}"));
+    typy_check::dump(&program, &project)
+}
+
 fn accepted(source: &str) -> TypedProgram {
     check(source).unwrap_or_else(|codes| panic!("rejected with {codes:?}:\n{source}"))
 }
@@ -2482,10 +2490,6 @@ fn comparison_methods_are_checked() {
         ("x = missing\ndef f() -> None:\n    x()\n", &["E0205"]),
         ("x = 1\ndef f() -> None:\n    x()\n", &["E0401"]),
         (
-            "class V:\n    def __eq__(self, other: 'V') -> bool:\n        return True\na = V()\nprint(a == a == a)\n",
-            &["E0201"],
-        ),
-        (
             "class V:\n    def __eq__(self, a: 'V', b: 'V') -> bool:\n        return True\n",
             &["E0404"],
         ),
@@ -2517,10 +2521,6 @@ fn comparison_methods_are_checked() {
         (
             "class V:\n    def __eq__(self, other: 'V') -> bool:\n        return True\nprint({V()})\n",
             &["E0413"],
-        ),
-        (
-            "class V:\n    def __lt__(self, other: 'V') -> bool:\n        return True\na = V()\nprint(a < a < a)\n",
-            &["E0201"],
         ),
         (
             "class V:\n    def __eq__(self, other: 'V') -> bool:\n        return True\nprint(V() == 1)\n",
@@ -2581,14 +2581,34 @@ fn arithmetic_methods_are_checked() {
             "class V:\n    def __getattr__(self, name: str) -> int:\n        return 1\n",
             &["E0201"],
         ),
-        (
-            "class V:\n    def __add__(self, other: 'V') -> int:\n        return 1\n    def __radd__(self, other: 'V') -> str:\n        return ''\nprint(V() + V())\n",
-            &["E0201"],
-        ),
     ];
     for (source, expected) in cases {
         assert_eq!(&rejected(source), expected, "\n{source}");
     }
+}
+
+#[test]
+fn chains_of_instance_comparisons_join_their_comparisons_with_and() {
+    let dump = dumped(
+        "class V:\n    def __eq__(self, other: 'V') -> bool:\n        return True\n    def __lt__(self, other: 'V') -> bool:\n        return False\na = V()\nprint(a == a == a, a < V() <= a if False else a < a == a)\n",
+    );
+    for node in ["BoolOp And", "Named", "<chained"] {
+        assert!(dump.contains(node), "{node} missing from\n{dump}");
+    }
+}
+
+#[test]
+fn an_operator_whose_reflected_method_may_run_gives_either_result() {
+    // The reflected method of a subclass operand runs first, so the result is either type.
+    let dump = dumped(
+        "class V:\n    def __add__(self, other: 'V') -> int:\n        return 1\n    def __radd__(self, other: 'V') -> str:\n        return ''\nclass W(V):\n    def __radd__(self, other: 'V') -> str:\n        return 'w'\nprint(V() + V())\n",
+    );
+    assert!(dump.contains("OperatorCall : int | str"), "{dump}");
+    // Without a class that could go first, the method's result is the operator's.
+    let dump = dumped(
+        "class V:\n    def __add__(self, other: 'V') -> int:\n        return 1\n    def __radd__(self, other: 'V') -> str:\n        return ''\nprint(V() + V())\n",
+    );
+    assert!(dump.contains("OperatorCall : int"), "{dump}");
 }
 
 #[test]

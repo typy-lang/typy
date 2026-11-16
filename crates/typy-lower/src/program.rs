@@ -18,7 +18,17 @@ pub fn lower(program: &TypedProgram) -> Result<TyirModule, Diagnostics> {
     let methods = MethodTables::new(program);
     let families = methods.families();
     let mut may_raise = vec![false; program.functions.len()];
+    let slot_methods: Vec<FunctionId> = program
+        .classes
+        .iter()
+        .flat_map(|class| Slots::of(program, class.id).methods().collect::<Vec<_>>())
+        .collect();
     loop {
+        // A slot's method that may raise leaves its exception with the runtime, which each
+        // runtime call that may run a slot is then followed by a test of (CLS-22, ADR-0039).
+        let raising_slots = slot_methods
+            .iter()
+            .any(|method| may_raise[method.0 as usize]);
         let mut strings = StringPool::default();
         let mut tuple_types = TupleTypes::default();
         let module_globals = ModuleGlobals::new(program, &mut tuple_types);
@@ -32,6 +42,7 @@ pub fn lower(program: &TypedProgram) -> Result<TyirModule, Diagnostics> {
                     &Calls {
                         may_raise: &may_raise,
                         methods: &methods,
+                        raising_slots,
                     },
                     &mut strings,
                     &mut tuple_types,
@@ -62,10 +73,6 @@ pub fn lower(program: &TypedProgram) -> Result<TyirModule, Diagnostics> {
             .iter()
             .map(|class| tyir_class(program, class, &methods, &mut tuple_types))
             .collect();
-        let raising = raising_slot_methods(program, &classes, &may_raise);
-        if !raising.is_empty() {
-            return Err(raising);
-        }
         let (strings, str_points) = strings.into_tables();
         let module = TyirModule {
             functions,
@@ -125,64 +132,46 @@ fn module_objects(program: &TypedProgram) -> Vec<typy_tyir::TyirModuleObject> {
         .collect()
 }
 
-/// Reports each comparison or hash method that may raise, which a container would call from a
-/// type object's slot, which cannot pass an exception on (ADR-0026).
-fn raising_slot_methods(
-    program: &TypedProgram,
-    classes: &[TyirClass],
-    may_raise: &[bool],
-) -> Diagnostics {
-    let mut found = Diagnostics::new();
-    let mut reported = Vec::new();
-    for class in classes {
-        let methods = class
-            .equal
-            .map(|(method, _)| method)
-            .into_iter()
-            .chain(class.order.iter().flatten().copied())
-            .chain(class.hash)
-            .chain(class.truth);
-        for method in methods {
-            let function = program.function(typy_check::FunctionId(method.0));
-            if function.signature.returns.may_give_way() && !reported.contains(&method) {
-                // Only an ordering method reaches here: `__eq__` that may give way has
-                // `<equal>` in its slot.
-                reported.push(method);
-                found.push(
-                    Diagnostic::new(
-                        DiagnosticCode::error(201),
-                        function.span,
-                        format!(
-                            "`{}` may return `NotImplemented`, which makes sorting its \
-                             instances raise `TypeError`, and a comparison method that may \
-                             raise is planned for TyPy 0.5 (CLS-22)",
-                            function.qualified_name
-                        ),
-                    )
-                    .with_rule(RuleId::CLS_22)
-                    .with_help("sorted lists and `min` and `max` call it"),
-                );
-            }
-            if !may_raise[method.0 as usize] || reported.contains(&method) {
-                continue;
-            }
-            reported.push(method);
-            found.push(
-                Diagnostic::new(
-                    DiagnosticCode::error(201),
-                    function.span,
-                    format!(
-                        "`{}` may raise an exception, and a comparison or hash method that may \
-                         raise is planned for TyPy 0.5 (CLS-07)",
-                        function.qualified_name
-                    ),
-                )
-                .with_rule(RuleId::CLS_07)
-                .with_help("lists, sets and dicts call it, and cannot pass the exception on"),
-            );
+/// The methods a class's type object's slots call (ADR-0026): the bridge of a comparison
+/// method that may give way stands in its place (CLS-21, ADR-0038).
+struct Slots {
+    equal: Option<FunctionId>,
+    order: [Option<FunctionId>; 4],
+    hash: Option<FunctionId>,
+    truth: Option<FunctionId>,
+}
+
+impl Slots {
+    /// Returns the methods of the slots of `class`.
+    fn of(program: &TypedProgram, class: typy_check::ClassId) -> Self {
+        let method = |wanted: &str| program.method(class, wanted).map(|id| FunctionId(id.0));
+        let gives_way = |method: FunctionId| {
+            program
+                .function(typy_check::FunctionId(method.0))
+                .signature
+                .returns
+                .may_give_way()
+        };
+        let [equal, less, less_equal, greater, greater_equal] =
+            typy_check::COMPARISON_BRIDGES.map(|(name, _, _, bridge)| {
+                method(bridge).or_else(|| method(name).filter(|own| !gives_way(*own)))
+            });
+        Self {
+            equal,
+            order: [less, less_equal, greater, greater_equal],
+            hash: method("__hash__"),
+            truth: method("__bool__"),
         }
     }
-    found
+
+    /// Returns each method the slots call.
+    fn methods(&self) -> impl Iterator<Item = FunctionId> + '_ {
+        self.equal
+            .into_iter()
+            .chain(self.order.iter().flatten().copied())
+            .chain(self.hash)
+            .chain(self.truth)
+    }
 }
 
 /// Returns a class as TyIR holds it: its attributes' layout, its method table, and the
@@ -205,18 +194,9 @@ fn tyir_class(
         .as_ref()
         .and_then(typy_check::ExceptionClass::base)
         .map(|base| crate::exception::exception_class(&base));
-    // The `equal` slot calls `__eq__` only for an object of the class its parameter takes, and
-    // `<equal>` in its place when `__eq__` may give way (CLS-21).
-    let gives_way = |method: FunctionId| {
-        program
-            .function(typy_check::FunctionId(method.0))
-            .signature
-            .returns
-            .may_give_way()
-    };
-    let equal = method(typy_check::EQUAL_BRIDGE)
-        .or_else(|| method("__eq__").filter(|equal| !gives_way(*equal)));
-    let equal = equal.map(|equal| {
+    let slots = Slots::of(program, class.id);
+    // The `equal` slot calls `__eq__` only for an object of the class its parameter takes.
+    let equal = slots.equal.map(|equal| {
         let parameters = &program
             .function(typy_check::FunctionId(equal.0))
             .signature
@@ -239,9 +219,9 @@ fn tyir_class(
         repr: method("__repr__"),
         str: method("__str__"),
         equal,
-        order: ["__lt__", "__le__", "__gt__", "__ge__"].map(method),
-        hash: method("__hash__"),
-        truth: method("__bool__"),
+        order: slots.order,
+        hash: slots.hash,
+        truth: slots.truth,
         base: class.base.map(|base| base.0),
         exception_base,
         os_error: class

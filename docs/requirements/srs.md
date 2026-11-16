@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy software requirements specification |
-| Version | 1.59 |
+| Version | 1.60 |
 | Status | Approved |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-16 |
@@ -536,6 +536,7 @@ resolved issues below.
 | --- | --- | --- |
 | OI-23 | Which ABI lets TyPy modules link dynamically: the layouts of objects, the exception state, the identity of type objects across shared libraries, and one runtime shared by every library (ADR-0016)? It is settled after 1.0, once those layouts are fixed. | 2026-11-11 |
 | OI-25 | Should the modules of the standard library TyPy provides ship prebuilt, one static library and interface per module and target, so a development build links them without compiling them? It depends on separate compilation (ADR-0016). | 2026-11-15 |
+| OI-27 | In which order should `list.sort` and `sorted` call `__lt__`? The order shows when the method prints or raises, and CPython 3.12, CPython 3.13 and 3.14, and CPython 3.15 each compare in another order; TyPy's runtime merge sort compares in its own. Matching CPython 3.15's `listsort`, as OI-14 decides for messages, is the candidate answer (CLS-22, ADR-0039). | 2026-11-16 |
 
 ## 8. Resolved issues
 

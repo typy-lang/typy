@@ -299,7 +299,7 @@ impl Program {
             let class = ClassId(id(index));
             if !self.class_copies.borrow().roots.contains_key(&class) {
                 self.add_class_method_bridges(class);
-                self.add_equal_bridge(class);
+                self.add_comparison_bridges(class);
             }
         }
     }

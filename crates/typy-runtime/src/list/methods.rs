@@ -185,7 +185,8 @@ pub unsafe extern "C" fn typy_rt_list_remove(
     // SAFETY: the caller passes a live list and item; `find` returns a position inside it.
     unsafe {
         let Some(position) = find(list, item) else {
-            return raise(ExceptionKind::ValueError, "list.remove(x): x not in list");
+            let error = raise(ExceptionKind::ValueError, "list.remove(x): x not in list");
+            return crate::slot::or_pending(error);
         };
         let removed = take_out(list, position);
         (*list).item_type().release(removed);
@@ -212,7 +213,8 @@ pub unsafe extern "C" fn typy_rt_list_index(list: *const ListObject, item: u64) 
         } else {
             "list.index(x): x not in list"
         };
-        Raising::error(1, raise(ExceptionKind::ValueError, message))
+        let error = raise(ExceptionKind::ValueError, message);
+        Raising::error(1, crate::slot::or_pending(error))
     }
 }
 

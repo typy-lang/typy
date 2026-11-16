@@ -389,7 +389,15 @@ pub(crate) unsafe fn insert_entry(
     unsafe {
         let dict = &mut *dict;
         let value_type = dict.value_type();
-        if let Some(position) = find(dict, key, hash) {
+        let found = find(dict, key, hash);
+        // A key whose hash or comparison raised is not set (CLS-22).
+        if crate::slot::pending() {
+            if !retain {
+                value_type.release(value);
+            }
+            return;
+        }
+        if let Some(position) = found {
             if retain {
                 value_type.retain(value);
             }

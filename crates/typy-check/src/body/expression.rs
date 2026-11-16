@@ -182,17 +182,8 @@ impl BodyChecker<'_> {
                     matches!(&operand.ty, Type::Instance(class)
                         if class.operators.compares() || class.operators.orders())
                 }) {
-                    return self.error(
-                        Diagnostic::new(
-                            DiagnosticCode::error(201),
-                            span,
-                            "a chain of comparisons of instances whose classes define comparison \
-                             methods is planned for TyPy 0.5 (CLS-07)",
-                        )
-                        .with_rule(RuleId::CLS_07)
-                        .with_help("write each comparison and join them with `and`"),
-                        span,
-                    );
+                    // A chain of such comparisons joins its comparisons with `and` (CLS-22).
+                    return self.instance_chain(left, operators, comparators, span);
                 }
                 let mut previous = &left;
                 for (operator, right) in operators.iter().zip(&comparators) {

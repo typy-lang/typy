@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy detailed design |
-| Version | 1.89 |
+| Version | 1.90 |
 | Status | Approved |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-16 |
@@ -1349,13 +1349,22 @@ planned for 1.0 (CLS-33). `TypedExprKind::NotImplemented` reads the
 runtime's one object of the type, and `is` tests a result that may hold it.
 `TyirClass` holds `equal`, `order` and `hash`, and codegen fills the type
 object's slots with functions that call them; the `equal` slot compares by
-identity an object its `__eq__` does not take, and calls `<equal>`, which
-`Program::add_equal_bridge` writes as `self == other`, when `__eq__` may give
-way. A slot method that may raise, or an ordering method that may give way,
-is E0201 when lowering ends, planned for 0.5 (CLS-22). Arithmetic methods
+identity an object its `__eq__` does not take. `Program::add_comparison_bridges`
+writes, for each comparison method that may give way, a bridge such as
+`<equal>` or `<less>` that returns `self op other`, and the slot calls the
+bridge in the method's place. A slot method that may raise follows ADR-0039:
+codegen's slot function gives the exception to `typy_rt_slot_failed` and
+returns its default, every slot of the program first asks
+`typy_rt_slot_pending`, and lowering follows each runtime call whose
+`RuntimeFunction::may_call_slots` holds with `slot_raised`, when
+`Calls::raising_slots` says a slot method may raise. `body::comparison_chain`
+checks a chain such as `a < b < c` of such instances as its comparisons
+joined with `and`, each middle operand held in a hidden `<chained N>`
+variable through `TypedExprKind::Named` (CLS-22). Arithmetic methods
 reuse the same call: `operator_binary` makes `a op b` an `OperatorCall` with
-`__add__` and its reflected `__radd__`, typed by the method's result, E0201
-when the two methods return different types; `operator_unary` calls
+`__add__` and its reflected `__radd__`, typed by the method's result, joined
+with the reflected method's when it may run first or after the method gives
+way (CLS-22); `operator_unary` calls
 `__neg__`, `__pos__`, `__invert__` and, for `abs`, `__abs__`. An augmented
 assignment on an instance calls the class's in-place method, such as
 `__iadd__`, with `dispatch` set, and the binary method when the class has

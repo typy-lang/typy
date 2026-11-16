@@ -236,6 +236,8 @@ pub enum RuntimeFunction {
     OperandsUnsupported,
     /// Raises the `TypeError` of an ordering whose methods all gave way (CLS-21).
     OrderingUnsupported,
+    /// Raises the exception a method a type object's slot called raised (CLS-22).
+    SlotRaised,
     SysGetRecursionLimit,
     SysSetRecursionLimit,
     SysStderr,
@@ -366,12 +368,37 @@ const fn signature(
     }
 }
 
+/// Returns true when a value of `ty` may hold an object whose type object has slots a method
+/// of the program fills: anything but a scalar and the runtime's own text, type, exception and
+/// file objects.
+fn holds_items(ty: TyirType) -> bool {
+    use crate::types::{OptionalBase, TypeId};
+    const OWN: [TypeId; 11] = [
+        TypeId::STR,
+        TypeId::BYTES,
+        TypeId::EXCEPTION,
+        TypeId::TYPE,
+        TypeId::TRACEBACK,
+        TypeId::RANGE,
+        TypeId::MODULE,
+        TypeId::TEXT_FILE,
+        TypeId::TYPE_ALIAS,
+        TypeId::VERSION_INFO,
+        TypeId::NOT_IMPLEMENTED,
+    ];
+    match ty {
+        TyirType::Bits | TyirType::Tuple(_) | TyirType::Optional(OptionalBase::Tuple(_)) => true,
+        TyirType::Object(id) | TyirType::Optional(OptionalBase::Object(id)) => !OWN.contains(&id),
+        _ => false,
+    }
+}
+
 const INT_INT: &[TyirType] = &[TyirType::Int, TyirType::Int];
 const FLOAT_FLOAT: &[TyirType] = &[TyirType::Float, TyirType::Float];
 
 impl RuntimeFunction {
     /// Every runtime function.
-    pub const ALL: [Self; 330] = [
+    pub const ALL: [Self; 331] = [
         Self::IntFloorDivide,
         Self::IntModulo,
         Self::IntPower,
@@ -597,6 +624,7 @@ impl RuntimeFunction {
         Self::NotImplemented,
         Self::OperandsUnsupported,
         Self::OrderingUnsupported,
+        Self::SlotRaised,
         Self::SysGetRecursionLimit,
         Self::SysSetRecursionLimit,
         Self::SysStderr,
@@ -704,6 +732,17 @@ impl RuntimeFunction {
         Self::Ascii,
     ];
 
+    /// Returns true when the function may call a type object's `equal`, `order`, `hash` or
+    /// `truth` slot, which may run a method of the program that raises (CLS-22, ADR-0039): it
+    /// takes an item word, a tuple, a container, an iterator or an instance.
+    #[must_use]
+    pub fn may_call_slots(self) -> bool {
+        self.signature()
+            .parameters
+            .iter()
+            .any(|parameter| holds_items(*parameter))
+    }
+
     #[allow(
         clippy::too_many_lines,
         reason = "one arm for each runtime function, a table"
@@ -763,7 +802,7 @@ impl RuntimeFunction {
             Self::StrRepr | Self::Ascii => signature(&[STR], STR, false),
             Self::Ord => signature(&[STR], Int, true),
             Self::WriteStdout => signature(&[STR], Unit, false),
-            Self::CheckStack => signature(&[], Unit, true),
+            Self::CheckStack | Self::SlotRaised => signature(&[], Unit, true),
             Self::RangeCheckStep | Self::SysSetRecursionLimit => signature(&[Int], Unit, true),
             Self::NameError | Self::WriteStdoutChecked => signature(&[STR], Unit, true),
             Self::ModuleAttributeError | Self::ModuleImportError => {
@@ -1285,6 +1324,7 @@ impl RuntimeFunction {
             Self::NotImplemented => "not_implemented",
             Self::OperandsUnsupported => "operands_unsupported",
             Self::OrderingUnsupported => "ordering_unsupported",
+            Self::SlotRaised => "slot_raised",
             Self::SysGetRecursionLimit => "sys_getrecursionlimit",
             Self::SysSetRecursionLimit => "sys_setrecursionlimit",
             Self::SysStderr => "sys_stderr",

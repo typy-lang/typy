@@ -398,10 +398,16 @@ are, and returns a `bool`; `__hash__` returns an `int`. As in CPython,
 right operand's method comes first when its class derives from the
 left's, and a class that defines `__eq__` without `__hash__` has no
 hash, so a set or a dict key of it is E0413. A container compares an
-instance with an object its `__eq__` does not take as unequal. A
-comparison or hash method that may raise, a chain such as `a < b < c`
-of such instances, and an ordering method that returns
-`NotImplemented` are planned for 0.5 (CLS-22).
+instance with an object its `__eq__` does not take as unequal.
+
+A comparison or hash method may raise, also when a list, a set, a dict,
+`sorted`, `min` or `max` calls it: the exception leaves the operation at
+once, no later method runs, and a set or a dict keeps the items it had,
+as in CPython. A chain such as `low < value < high` calls each
+comparison's method and evaluates `value` once (CLS-22). The order in
+which `sort` and `sorted` call `__lt__` is TyPy's own: CPython 3.12,
+3.13 and 3.15 each call it in another order, so a program that prints
+from `__lt__` while sorting prints in another order (OI-27).
 
 ## Arithmetic methods
 
@@ -432,7 +438,9 @@ print(total.cents, (3 * total).cents)
 
 As in CPython, `3 * total` falls back to the right operand's
 `__rmul__`, and the right operand's reflected method comes first when
-its class derives from the left's and defines it again. `x += y` calls
+its class derives from the left's and defines it again. When the
+reflected method may run, the operator's type joins the two methods'
+results, such as `int | str` (CLS-22). `x += y` calls
 the class's in-place method, such as `__iadd__`, when it defines one,
 and `x = x + y` otherwise, for any target: an item or an attribute of an
 expression is evaluated once, as in CPython (CLS-20). An in-place method

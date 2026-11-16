@@ -109,6 +109,17 @@ All notable changes to TyPy are recorded here. The format follows
   slot methods that may raise (CLS-22), and one that also returns `None`
   for 1.0 (CLS-33). `return NotImplemented` elsewhere is E0405 (CLS-21,
   ADR-0038).
+- Comparison, hash and truth methods that may raise, or that print, inside
+  lists, sets, dicts, `sorted`, `min`, `max`, `any` and `all`: the first
+  exception leaves the operation, no later method runs, and a set or a
+  dict keeps its items. An ordering method that returns `NotImplemented`
+  works in a sort too (CLS-21, CLS-22, ADR-0039).
+- A chain of comparisons of instances, such as `low < value < high`,
+  calls each comparison's method and evaluates each operand once
+  (CLS-22).
+- An operator whose method and reflected method return different types;
+  the operator's type joins them when the reflected method may run
+  (CLS-22).
 
 ### Fixed
 

@@ -10,6 +10,8 @@ use typy_check::{ClassId, FunctionId, TypedProgram};
 pub(crate) struct Calls<'program> {
     pub(crate) may_raise: &'program [bool],
     pub(crate) methods: &'program MethodTables,
+    /// Whether a method a type object's slot calls may raise (CLS-22, ADR-0039).
+    pub(crate) raising_slots: bool,
 }
 
 /// The method table of each class of the program, and the class and name of each method.

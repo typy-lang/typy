@@ -108,10 +108,11 @@ pub unsafe extern "C" fn typy_rt_dict_get(dict: *const DictObject, key: u64) -> 
     // SAFETY: the caller's guarantee.
     unsafe {
         let key_type = (*dict).key_type();
-        match find(dict, key, key_type.hash(key)) {
-            Some(position) => Raising::ok((*dict).value(position)),
-            None => Raising::error(0, crate::exception::key_error(key_type, key)),
+        if let Some(position) = find(dict, key, key_type.hash(key)) {
+            return Raising::ok((*dict).value(position));
         }
+        let error = crate::exception::key_error(key_type, key);
+        Raising::error(0, crate::slot::or_pending(error))
     }
 }
 
@@ -167,13 +168,12 @@ pub unsafe extern "C" fn typy_rt_dict_pop(dict: *mut DictObject, key: u64) -> Ra
     // SAFETY: the caller's guarantee; the removed key is released here.
     unsafe {
         let key_type = (*dict).key_type();
-        match remove(dict, key, key_type.hash(key)) {
-            Some(position) => {
-                key_type.release((*dict).key(position));
-                Raising::ok((*dict).value(position))
-            }
-            None => Raising::error(0, crate::exception::key_error(key_type, key)),
+        if let Some(position) = remove(dict, key, key_type.hash(key)) {
+            key_type.release((*dict).key(position));
+            return Raising::ok((*dict).value(position));
         }
+        let error = crate::exception::key_error(key_type, key);
+        Raising::error(0, crate::slot::or_pending(error))
     }
 }
 

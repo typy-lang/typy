@@ -161,22 +161,14 @@ impl BodyChecker<'_> {
         };
         let ty = match (forward, backward) {
             (Some(forward), Some(backward)) => {
-                let (ty, other) = (returns(forward), returns(backward));
-                if !ty.matches(&other) {
-                    self.diagnostics.push(
-                        Diagnostic::new(
-                            DiagnosticCode::error(201),
-                            span,
-                            format!(
-                                "an operator whose method `{name}` returns {ty} and whose \
-                                 reflected `{reflected}` returns {other} is planned for TyPy 0.5 \
-                                 (CLS-22)"
-                            ),
-                        )
-                        .with_rule(RuleId::CLS_22),
-                    );
+                let ty = returns(forward);
+                // The reflected method's result is the operator's too when it may run (CLS-22).
+                let methods = (forward, backward);
+                if self.reflected_may_run(methods, (reflected, left_reflected), left, right) {
+                    Type::union(vec![ty, returns(backward)])
+                } else {
+                    ty
                 }
-                ty
             }
             (Some(method), None) | (None, Some(method)) => returns(method),
             (None, None) => return None,
@@ -195,6 +187,31 @@ impl BodyChecker<'_> {
             ty,
             span,
         ))
+    }
+
+    /// Returns true when the reflected method of an operator that has both may run: when the
+    /// method may give way, or when the right object's class may derive from the left
+    /// object's and have another reflected method, which then runs first.
+    fn reflected_may_run(
+        &self,
+        (forward, backward): (FunctionId, FunctionId),
+        (reflected, left_reflected): (&str, Option<FunctionId>),
+        left: &TypedExpr,
+        right: &TypedExpr,
+    ) -> bool {
+        if self.program.signatures[forward.0 as usize]
+            .returns
+            .may_give_way()
+        {
+            return true;
+        }
+        let (Type::Instance(left_class), Type::Instance(right_class)) = (&left.ty, &right.ty)
+        else {
+            return false;
+        };
+        let related = left_class.derives_from(right_class) || right_class.derives_from(left_class);
+        related
+            && (Some(backward) != left_reflected || self.defined_below(left_class.id, reflected))
     }
 
     /// Returns true when a class derived from `class`, other than it, defines `name`.

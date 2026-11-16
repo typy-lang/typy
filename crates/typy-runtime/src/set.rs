@@ -292,7 +292,8 @@ pub(crate) unsafe fn add_item(set: *mut SetObject, item: u64, hash: i64, retain:
                 _ => None,
             })
         };
-        if found.is_some() {
+        // An item whose hash or comparison raised is not added (CLS-22).
+        if found.is_some() || crate::slot::pending() {
             if !retain {
                 item_type.release(item);
             }
