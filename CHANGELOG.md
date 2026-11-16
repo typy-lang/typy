@@ -8,6 +8,11 @@ All notable changes to TyPy are recorded here. The format follows
 
 ### Added
 
+- A benchmark report, `docs/testing/benchmark-report.md`, which compares
+  TyPy's programs with CPython 3.12 to 3.15, PyPy, mypyc, Cython, Nuitka,
+  Codon, C, C++, Rust, Go, Java and JavaScript on twelve workloads: time,
+  peak memory, startup, build time and size. `make bench-peers` installs the
+  peers at pinned versions and `make bench-compare` runs it.
 - Assignment expressions, `name := value`, with CPython's scoping in
   comprehensions and its syntax errors; a test of `(name := value) is not
   None` narrows `name` (EXP-13).

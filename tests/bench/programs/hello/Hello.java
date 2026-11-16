@@ -1,0 +1,6 @@
+// Startup: a program that prints one line.
+public final class Hello {
+    public static void main(String[] args) {
+        System.out.println("hello " + (args.length + 1));
+    }
+}
