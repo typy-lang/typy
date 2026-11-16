@@ -517,6 +517,9 @@ impl BodyChecker<'_> {
             ),
         )
         .with_rule(rule);
+        if let Some(help) = self.protocol_help(&value.ty, &expected) {
+            diagnostic = diagnostic.with_help(help);
+        }
         if let (TypedExprKind::Constant(TypedConstant::Int(digits)), Type::Float) =
             (&value.kind, expected)
         {

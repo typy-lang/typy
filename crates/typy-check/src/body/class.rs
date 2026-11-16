@@ -185,6 +185,10 @@ impl BodyChecker<'_> {
         let Some((object, class)) = self.as_instance(object) else {
             return Self::invalid_call(span);
         };
+        // A protocol value reads the attribute of the object's class (ADR-0041).
+        if self.program.is_protocol(class) {
+            return self.protocol_attribute(object, class, attribute, span);
+        }
         if let Some(getter) = self.property_getter(class, &attribute.name) {
             return self.property_read(object, getter, span);
         }
@@ -291,7 +295,9 @@ impl BodyChecker<'_> {
         span: Span,
     ) -> Option<AssignTarget> {
         let (object, class) = self.instance(value)?;
-        if self.class_variable_through_instance(class, attribute, span) {
+        if self.refuse_through_protocol(class, attribute)
+            || self.class_variable_through_instance(class, attribute, span)
+        {
             return None;
         }
         if let Some(getter) = self.property_getter(class, &attribute.name) {

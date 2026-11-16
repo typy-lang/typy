@@ -142,6 +142,15 @@ All notable changes to TyPy are recorded here. The format follows
   takes the type arguments from its arguments, as in `Box.wrap("a")`, or
   from the class, as in `Box[int].make(3)`, and runs that copy's method
   (GEN-01).
+- A protocol as the type of a variable, an attribute, a result or a
+  container item, such as `shapes: list[Shape]`, and of a parameter of
+  `__init__` or another special method. The value holds an instance of
+  any class that satisfies the protocol; a method call, an attribute
+  read, `==`, `len` and `print` reach the object's class. A class derived
+  from a protocol, a protocol's properties, static and class methods and
+  class variables, assigning an attribute through a protocol value, and a
+  built-in value held as a protocol are planned for 1.0 (GEN-10, GEN-17,
+  ADR-0041).
 - A generic method that overrides one with as many type parameters: a
   call through the base runs the copy of the object's class's method for
   the same type arguments. Other overrides of or by a generic method are

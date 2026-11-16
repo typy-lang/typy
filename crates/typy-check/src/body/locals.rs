@@ -193,7 +193,7 @@ impl BodyChecker<'_> {
         let ty = annotation_type(annotation, &scope, self.diagnostics);
         // An annotation may name a copy of a generic class, which the program then holds.
         self.program.make_class_copies();
-        crate::check::outside_signature(ty, annotation.span(), self.diagnostics)
+        ty
     }
 
     pub(super) fn declare(&mut self, target: &Expr, annotation: &Expr, given: bool) {
@@ -659,10 +659,10 @@ impl BodyChecker<'_> {
                 {
                     diagnostic = diagnostic.with_fix(value.span, format!("{digits}.0"));
                 } else {
-                    diagnostic = diagnostic.with_help(format!(
-                        "assign {}, or use a new variable",
-                        existing.with_article()
-                    ));
+                    let help = self.protocol_help(&ty, &existing).unwrap_or_else(|| {
+                        format!("assign {}, or use a new variable", existing.with_article())
+                    });
+                    diagnostic = diagnostic.with_help(help);
                 }
                 self.diagnostics.push(diagnostic);
             }

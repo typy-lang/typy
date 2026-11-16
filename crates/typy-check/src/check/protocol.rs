@@ -1,7 +1,8 @@
 //! Protocols in signatures: a parameter whose annotation names a protocol takes a type
 //! parameter of its own, bounded by the protocol, so the function compiles to one copy for
-//! each class it is called with (GEN-04, ADR-0023). A protocol anywhere else in a signature
-//! is planned (GEN-10).
+//! each class it is called with (GEN-04, ADR-0023). Anywhere else, and in a parameter of a
+//! method that cannot be copied, a protocol is the type of a value that holds an instance of a
+//! class that satisfies it (GEN-10, ADR-0041).
 
 use typy_diagnostics::{Diagnostic, DiagnosticCode, Diagnostics, RuleId, Span};
 
@@ -13,8 +14,13 @@ use crate::generic::TypeParameter;
 use crate::types::Type;
 
 /// Gives each parameter of `definition` that names a protocol a type parameter bounded by
-/// it, and reports a protocol in the return type or in a protocol's own method.
-pub(super) fn protocol_parameters(definition: &mut Definition<'_>, diagnostics: &mut Diagnostics) {
+/// it, unless `as_values`, for a method with one body, whose parameters then take protocol
+/// values; and reports a protocol in the signature of a protocol's own method (GEN-17).
+pub(super) fn protocol_parameters(
+    definition: &mut Definition<'_>,
+    as_values: bool,
+    diagnostics: &mut Diagnostics,
+) {
     let in_protocol = definition.takes_instance
         && definition
             .signature
@@ -27,9 +33,12 @@ pub(super) fn protocol_parameters(definition: &mut Definition<'_>, diagnostics: 
         for protocol in protocols(&ty) {
             // A refused type is an error, so it causes no further report.
             if in_protocol {
-                diagnostics.push(elsewhere(definition.span, &protocol.name));
+                diagnostics.push(in_own_method(definition.span, &protocol.name));
                 definition.signature.parameters[position].ty = Type::Error;
                 break;
+            }
+            if as_values {
+                continue;
             }
             let parameter = TypeParameter {
                 owner: definition.span,
@@ -50,8 +59,8 @@ pub(super) fn protocol_parameters(definition: &mut Definition<'_>, diagnostics: 
             definition.type_parameters.push(parameter);
         }
     }
-    if let Some(protocol) = protocols(&definition.signature.returns).first() {
-        diagnostics.push(elsewhere(definition.span, &protocol.name));
+    if in_protocol && let Some(protocol) = protocols(&definition.signature.returns).first() {
+        diagnostics.push(in_own_method(definition.span, &protocol.name));
         definition.signature.returns = Type::Error;
     }
 }
@@ -70,36 +79,22 @@ pub(crate) fn protocols(ty: &Type) -> Vec<InstanceClass> {
     found
 }
 
-/// Returns the type an annotation outside a signature gives, once it is known to name no
-/// protocol; one that names a protocol is reported, and is an error (GEN-10).
-pub(crate) fn outside_signature(ty: Type, span: Span, diagnostics: &mut Diagnostics) -> Type {
-    match protocols(&ty).first() {
-        Some(protocol) => {
-            diagnostics.push(elsewhere(span, &protocol.name));
-            Type::Error
-        }
-        None => ty,
-    }
-}
-
-/// Reports a protocol as a type somewhere other than a parameter (GEN-10).
-fn elsewhere(span: Span, protocol: &str) -> Diagnostic {
+/// Reports a protocol in the signature of a protocol's own method, which a class's method
+/// would have to take or give as protocol values to satisfy it (GEN-17).
+fn in_own_method(span: Span, protocol: &str) -> Diagnostic {
     Diagnostic::new(
         DiagnosticCode::error(201),
         span,
         format!(
-            "the protocol `{protocol}` as a type other than a parameter's is planned for TyPy \
-             0.5 (GEN-10)"
+            "the protocol `{protocol}` in the signature of a protocol's method is planned for \
+             TyPy 1.0 (GEN-17)"
         ),
     )
-    .with_rule(RuleId::GEN_10)
-    .with_help(format!(
-        "a parameter may name `{protocol}`, and stands for each class that satisfies it"
-    ))
+    .with_rule(RuleId::GEN_17)
 }
 
 /// Returns the error for a property, a static method or a class method of a protocol, which
-/// TyPy 0.5 accepts (GEN-10).
+/// TyPy 1.0 accepts (GEN-17).
 pub(super) fn refused_member(
     instance: &Type,
     kind: &MethodKind,
@@ -113,8 +108,8 @@ pub(super) fn refused_member(
     })
 }
 
-/// Reports class variables and attribute defaults of a protocol, which TyPy 0.5 accepts
-/// (GEN-10).
+/// Reports class variables and attribute defaults of a protocol, which TyPy 1.0 accepts
+/// (GEN-17).
 pub(super) fn check_values(
     instance: &Type,
     info: &ClassInfo,
@@ -131,13 +126,13 @@ fn is_protocol(instance: &Type) -> bool {
     matches!(instance, Type::Instance(class) if class.protocol)
 }
 
-/// Reports what a protocol's body holds that TyPy 0.5 accepts: a member other than an
-/// instance method or an attribute declared by its annotation (GEN-10).
+/// Reports what a protocol's body holds that TyPy 1.0 accepts: a member other than an
+/// instance method or an attribute declared by its annotation (GEN-17).
 fn planned_member(span: Span, what: &str) -> Diagnostic {
     Diagnostic::new(
         DiagnosticCode::error(201),
         span,
-        format!("{what} in a protocol are planned for TyPy 0.5 (GEN-10)"),
+        format!("{what} in a protocol are planned for TyPy 1.0 (GEN-17)"),
     )
-    .with_rule(RuleId::GEN_10)
+    .with_rule(RuleId::GEN_17)
 }

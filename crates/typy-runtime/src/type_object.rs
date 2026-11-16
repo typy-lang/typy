@@ -281,6 +281,22 @@ pub unsafe extern "C" fn typy_rt_object_has_type_id(object: *const ObjectHeader,
     i64::from(unsafe { (*object).type_id }) == crate::word::inline_value(id)
 }
 
+/// Returns `left == right` for two objects of any types, as a union of objects compares them:
+/// the `equal` slot of the class that decides, the left one first, or their identity
+/// (GEN-10, ADR-0041).
+///
+/// # Safety
+///
+/// Each points to a live object with a valid header.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn typy_rt_objects_equal(
+    left: *mut ObjectHeader,
+    right: *mut ObjectHeader,
+) -> bool {
+    // SAFETY: the caller's guarantee.
+    unsafe { crate::list::objects_equal(left, right) }
+}
+
 /// Returns whether the heap object at `object` is an instance of `class`: its type is
 /// `class` or derives from it, as `isinstance` tests (CLS-09).
 ///

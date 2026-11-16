@@ -243,17 +243,19 @@ impl BodyChecker<'_> {
         let items = converted_all(items, &item_type);
         for item in &items {
             if !item.ty.is_assignable_to(&item_type) {
-                self.diagnostics.push(
-                    Diagnostic::new(
-                        DiagnosticCode::error(409),
-                        item.span,
-                        format!(
-                            "the items of a list have one type; this is {}, and the list holds {item_type}",
-                            item.ty.with_article()
-                        ),
-                    )
-                    .with_rule(RuleId::DAT_07),
-                );
+                let mut diagnostic = Diagnostic::new(
+                    DiagnosticCode::error(409),
+                    item.span,
+                    format!(
+                        "the items of a list have one type; this is {}, and the list holds {item_type}",
+                        item.ty.with_article()
+                    ),
+                )
+                .with_rule(RuleId::DAT_07);
+                if let Some(help) = self.protocol_help(&item.ty, &item_type) {
+                    diagnostic = diagnostic.with_help(help);
+                }
+                self.diagnostics.push(diagnostic);
             }
         }
         Self::typed(

@@ -248,6 +248,9 @@ pub enum RuntimeFunction {
     SliceEqual,
     /// Whether an object's header holds a type ID (TYP-14).
     ObjectHasTypeId,
+    /// Whether two objects of any types are equal, through the `equal` slot of the class
+    /// that decides, as a union of objects compares them (GEN-10).
+    ObjectsEqual,
     SysGetRecursionLimit,
     SysSetRecursionLimit,
     SysStderr,
@@ -408,7 +411,7 @@ const FLOAT_FLOAT: &[TyirType] = &[TyirType::Float, TyirType::Float];
 
 impl RuntimeFunction {
     /// Every runtime function.
-    pub const ALL: [Self; 336] = [
+    pub const ALL: [Self; 337] = [
         Self::IntFloorDivide,
         Self::IntModulo,
         Self::IntPower,
@@ -640,6 +643,7 @@ impl RuntimeFunction {
         Self::SliceIndex,
         Self::SliceEqual,
         Self::ObjectHasTypeId,
+        Self::ObjectsEqual,
         Self::SysGetRecursionLimit,
         Self::SysSetRecursionLimit,
         Self::SysStderr,
@@ -827,6 +831,7 @@ impl RuntimeFunction {
             Self::SliceIndex => signature(&[TyirType::SLICE, Int, Int], Int, true),
             Self::SliceEqual => signature(&[TyirType::SLICE, TyirType::SLICE], Bool, false),
             Self::ObjectHasTypeId => signature(&[Bits, Int], Bool, false),
+            Self::ObjectsEqual => signature(&[Bits, Bits], Bool, false),
             Self::RangeCheckStep | Self::SysSetRecursionLimit => signature(&[Int], Unit, true),
             Self::NameError | Self::WriteStdoutChecked => signature(&[STR], Unit, true),
             Self::ModuleAttributeError | Self::ModuleImportError => {
@@ -1354,6 +1359,7 @@ impl RuntimeFunction {
             Self::SliceIndex => "slice_index",
             Self::SliceEqual => "slice_equal",
             Self::ObjectHasTypeId => "object_has_type_id",
+            Self::ObjectsEqual => "objects_equal",
             Self::SysGetRecursionLimit => "sys_getrecursionlimit",
             Self::SysSetRecursionLimit => "sys_setrecursionlimit",
             Self::SysStderr => "sys_stderr",

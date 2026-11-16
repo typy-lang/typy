@@ -16,6 +16,7 @@ those types costs (GEN-01 to GEN-03, ADR-0023, ADR-0028).
 | `class Name[T]:`, a generic class, and `Name[int]` in annotations and calls | GEN-01 |
 | `class Name[T](Base):`, a generic class with a base of the program | GEN-08 |
 | `class Sub(Name[int]):` and `class Sub[T](Name[T]):`, a class derived from a copy | GEN-08 |
+| A protocol as the type of a variable, an attribute, a result or an item | GEN-10 |
 | `[T: Bound]`, a bound, and `[T: (A, B)]`, constraints | GEN-02 |
 | One compiled copy for each set of type arguments, with no type at run time | GEN-03 |
 | A generic function or class of another module, by name or through the module | GEN-07 |
@@ -383,6 +384,62 @@ A protocol has no instances: calling it is E0401, and so is
 `isinstance` with a protocol, which raises `TypeError` in CPython
 (GEN-05).
 
+## Protocol values
+
+A protocol is also the type of a variable, an attribute, a result or a
+container item. Such a value holds an instance of any class of the
+program that satisfies the protocol, and a call of one of its methods,
+or a read of one of its attributes, runs the method or reads the
+attribute of the object's class, as in CPython (GEN-10, ADR-0041):
+
+<!-- typy-expect: accepted -->
+```python
+from typing import Protocol
+
+
+class Shape(Protocol):
+    name: str
+
+    def area(self) -> float: ...
+
+
+class Circle:
+    def __init__(self, radius: float) -> None:
+        self.name = "circle"
+        self.radius = radius
+
+    def area(self) -> float:
+        return 3.0 * self.radius * self.radius
+
+
+class Square:
+    def __init__(self, side: float) -> None:
+        self.name = "square"
+        self.side = side
+
+    def area(self) -> float:
+        return self.side * self.side
+
+
+def largest(shapes: list[Shape]) -> Shape:
+    best = shapes[0]
+    for shape in shapes:
+        if shape.area() > best.area():
+            best = shape
+    return best
+
+
+shapes: list[Shape] = [Circle(1.0), Square(2.0)]
+print(largest(shapes).name, [shape.area() for shape in shapes])
+```
+
+A parameter of `__init__`, of another special method or of a property
+that names a protocol takes such values too, since the method has one
+body. `==`, `print`, `len` and the other operations a protocol value
+meets reach the object's class. A value of a class that lacks a member
+of the protocol, or has it with another type, is refused where it would
+be held, and the message names the member.
+
 ## Refused and planned
 
 `TypeVar` and `Generic` from `typing` are E0202: a type parameter list
@@ -391,11 +448,12 @@ T]`, is described with the other [type aliases](types.md#type-aliases).
 Type parameters of a special method or a property, of a method that
 overrides or is overridden by one with other type parameters, and a
 class method with type parameters called through an instance, are
-planned for 1.0 (GEN-16). A protocol as the type of a
-variable, an attribute, a result or a container item outside a
-parameter, a class that names a protocol as its base, and properties,
-static methods, class methods and class variables of a protocol are
-planned for 0.5 (GEN-10). A class variable or a default whose
+planned for 1.0 (GEN-16). A class that names a protocol as its base,
+properties, static methods, class methods, class variables and defaults
+of a protocol, a protocol in the signature of its own methods,
+assigning an attribute through a protocol value, and a value of a
+built-in type held as a protocol are planned for 1.0 (GEN-17). A class
+variable or a default whose
 annotation names a type parameter of its class (GEN-11), a generic
 exception class (GEN-12), a generic protocol (GEN-13), class methods and
 dataclass fields inherited through a copy (GEN-15), and `*Ts`, `**P` and

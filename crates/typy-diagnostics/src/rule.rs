@@ -203,7 +203,7 @@ impl RuleId {
     pub const GEN_08: Self = Self("GEN-08");
     /// Type parameters shall be accepted on a method of a generic class, a special method, a property, a class method, and a method that overrides or is overridden.
     pub const GEN_09: Self = Self("GEN-09");
-    /// A protocol shall be usable as the type of a variable, an attribute, a result and a container item outside a parameter, as the base of a class, and with properties, static methods, class methods and class variables.
+    /// A protocol shall be usable as the type of a variable, an attribute, a result and a container item outside a parameter, and of a parameter of a special method or a property.
     pub const GEN_10: Self = Self("GEN-10");
     /// A class variable or an attribute default of a generic class whose annotation names a type parameter of the class shall be accepted.
     pub const GEN_11: Self = Self("GEN-11");
@@ -217,6 +217,8 @@ impl RuleId {
     pub const GEN_15: Self = Self("GEN-15");
     /// Type parameters shall be accepted on a special method, on a property, and on a method that overrides or is overridden by one with other type parameters or in a generic class, and a class method with type parameters shall be callable through an instance.
     pub const GEN_16: Self = Self("GEN-16");
+    /// A protocol shall be usable as the base of a class, with properties, static methods, class methods, class variables and defaults, and in the signatures of its own methods; an attribute shall be assignable through a protocol value, and a value of a built-in type shall be held as a protocol.
+    pub const GEN_17: Self = Self("GEN-17");
     /// Source files shall be UTF-8 with the `.py` extension.
     pub const LEX_01: Self = Self("LEX-01");
     /// Bytes literals shall be accepted.
@@ -459,6 +461,7 @@ impl RuleId {
         Self::GEN_14,
         Self::GEN_15,
         Self::GEN_16,
+        Self::GEN_17,
         Self::LEX_01,
         Self::LEX_06,
         Self::LEX_07,

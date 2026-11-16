@@ -49,7 +49,6 @@ pub(crate) struct ImportedNames {
 pub(crate) use annotation::{AliasTable, ClassVarAnnotation, ExportedAlias, final_type};
 pub(crate) use class::{ClassInfo, class_value_variable, class_values};
 pub(crate) use definition::{Definition, factory_call};
-pub(crate) use protocol::outside_signature;
 
 use crate::body::{BodyChecker, Program};
 use crate::exception_arguments::Creations;
@@ -83,6 +82,9 @@ impl TypeChecker {
     /// Returns the typed program with the warnings of checking it, or every diagnostic found; a
     /// program with errors is never returned (TYP-11).
     pub fn check(project: &Project) -> Result<TypedProgram, Diagnostics> {
+        // The classes that satisfy each protocol, which the check notes, last as long as it
+        // (ADR-0041).
+        let _fits = crate::protocol_fits::FitsScope::new([]);
         let mut diagnostics = Diagnostics::new();
         // A dataclass gets its methods, and each annotation the types its aliases stand for,
         // before anything reads the module (CLS-05, SMT-10).
@@ -184,6 +186,7 @@ impl Checked<'_> {
     fn run(&self, known: Option<&Creations>, diagnostics: &mut Diagnostics) -> Program {
         let project = self.project;
         let mut program = Program::empty();
+        crate::protocol_fits::reset(&program.protocol_values.fits);
         program.set_floor(project.settings().python_floor.minor());
         program.set_known_creations(known.cloned());
         let mut assigned = BTreeSet::new();
@@ -232,6 +235,8 @@ impl Checked<'_> {
         for bodies in deferred {
             bodies.check(&mut program, &definitions, diagnostics);
         }
+        // Every class that satisfies a protocol is known now (ADR-0041).
+        program.write_protocol_dispatchers();
         program
     }
 }
@@ -409,6 +414,7 @@ fn check_module<'tree>(
         instances,
     );
     program.make_class_copies();
+    program.note_protocol_fits(None);
     program.import_names(&imports.functions, annotations);
     program.import_module_functions(&imports.module_functions);
     program.declare_module_variables(&module_variable_spans, &definitions);
@@ -427,6 +433,8 @@ fn check_module<'tree>(
     BodyChecker::check_module(program, &module_body, &mut Diagnostics::new());
     program.keep_module_types(snapshot);
     let others = check_initializers(program, &definitions, first_function, diagnostics);
+    // The attributes `__init__` gives now have their types, which a protocol may name.
+    program.note_protocol_fits(None);
     program.end_first_look();
     let body = BodyChecker::check_module(program, &module_body, diagnostics);
     let deferred = check_bodies(

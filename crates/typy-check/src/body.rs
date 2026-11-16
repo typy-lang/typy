@@ -21,6 +21,7 @@ mod generic_call;
 mod generic_copy;
 mod override_adapter;
 mod override_copy;
+mod protocol_value;
 mod static_bridge;
 mod truth_bridge;
 pub use comparison_bridge::{COMPARISON_BRIDGES, EQUAL_BRIDGE};

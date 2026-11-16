@@ -119,10 +119,11 @@ fn a_protocol_is_refused_where_typy_does_not_hold_one() {
         ("print(isinstance(Square(), Shape))\n", "E0401"),
         ("Shape()\n", "E0401"),
         ("x: Protocol = Square()\n", "E0408"),
-        // GEN-10: a result, a variable, an attribute, a base, and members.
-        ("def f() -> Shape:\n    return Square()\n", "E0201"),
-        ("x: list[Shape] = []\n", "E0201"),
-        ("class C:\n    shape: Shape\n", "E0201"),
+        // GEN-10: a value of a class that does not satisfy the protocol.
+        ("def f() -> Shape:\n    return Base()\n", "E0405"),
+        ("x: list[Shape] = [Square(), Base()]\n", "E0409"),
+        ("x: Shape = Square()\nx.sides = 3\n", "E0201"),
+        // GEN-17: a base, members, and the protocol in its own signatures.
         ("class C(Shape):\n    pass\n", "E0201"),
         (
             "class P(Protocol):\n    @property\n    def size(self) -> int: ...\n",
@@ -130,14 +131,8 @@ fn a_protocol_is_refused_where_typy_does_not_hold_one() {
         ),
         ("class P(Protocol):\n    size: int = 0\n", "E0201"),
         ("class P(Protocol):\n    size = 0\n", "E0201"),
-        ("x: dict[Shape, Shape] = {}\n", "E0201"),
         (
             "class P(Protocol):\n    def merge(self, other: Shape) -> None: ...\n",
-            "E0201",
-        ),
-        // GEN-16: a protocol parameter makes a special method generic.
-        (
-            "class C:\n    def __eq__(self, other: Shape) -> bool:\n        return True\n",
             "E0201",
         ),
         // GEN-13: a generic protocol.
@@ -152,6 +147,24 @@ fn a_protocol_is_refused_where_typy_does_not_hold_one() {
             found.first().map(String::as_str),
             Some(*code),
             "{program}\n{found:?}"
+        );
+    }
+}
+
+#[test]
+fn a_protocol_types_values_of_the_classes_that_satisfy_it() {
+    let cases = [
+        "def f() -> Shape:\n    return Square()\nprint(f().area() + f().scaled(2.0))\n",
+        "x: list[Shape] = [Square(), Square()]\nprint(x[0].sides + len(x))\n",
+        "class C:\n    def __init__(self, shape: Shape) -> None:\n        self.shape = shape\nprint(C(Square()).shape.area())\n",
+        "x: dict[str, Shape] = {'a': Square()}\ny: Shape | None = None\nprint(x['a'] == x['a'], y is None)\n",
+        "x: Shape = Square()\nif isinstance(x, Square):\n    print(x.name())\n",
+    ];
+    for program in cases {
+        assert_eq!(
+            app(&format!("{SHAPES}{program}")),
+            Vec::<String>::new(),
+            "{program}"
         );
     }
 }

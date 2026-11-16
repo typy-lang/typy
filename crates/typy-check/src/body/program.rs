@@ -69,6 +69,9 @@ pub(crate) struct Program {
     pub(crate) type_arguments: BTreeMap<String, Type>,
     /// The generic functions of the program and the copies made of them (GEN-03).
     pub(crate) generics: super::generic_copy::Generics,
+    /// The classes that satisfy each protocol, and the dispatchers of protocol values
+    /// (GEN-10, ADR-0041).
+    pub(crate) protocol_values: super::protocol_value::ProtocolValues,
     /// The generic classes of the program and the copies made of them, which annotations,
     /// read where only a shared reference is at hand, may add to (ADR-0028).
     pub(crate) class_copies: std::cell::RefCell<super::class_copy::ClassCopies>,
@@ -132,6 +135,8 @@ pub(crate) struct Snapshot {
     /// The generic copies made before the first look, whose IDs the look's copies follow.
     generics: super::generic_copy::Generics,
     class_copies: super::class_copy::ClassCopies,
+    /// The fits of protocols before the look, whose copies' IDs another copy may take next.
+    protocol_values: super::protocol_value::ProtocolValues,
 }
 
 /// The names one module defines, which other modules import.
@@ -180,6 +185,7 @@ impl Program {
             type_aliases: BTreeSet::new(),
             type_arguments: BTreeMap::new(),
             generics: super::generic_copy::Generics::default(),
+            protocol_values: super::protocol_value::ProtocolValues::default(),
             class_copies: std::cell::RefCell::default(),
             annotation_names: BTreeMap::new(),
             annotation_modules: BTreeMap::new(),
@@ -294,9 +300,14 @@ impl Program {
         self.class_ids = class_ids;
         self.instances.extend(instances);
         // A generic class's copies are made from its definitions, which have no bridges
-        // (CLS-30).
+        // (CLS-30); a protocol has no instances, and a value of it reaches the methods of the
+        // object's class (ADR-0041).
         for index in first_class..self.classes.len() {
             let class = ClassId(id(index));
+            if self.is_protocol(class) {
+                self.make_protocol_dispatchers(class);
+                continue;
+            }
             if !self.class_copies.borrow().roots.contains_key(&class) {
                 self.add_class_method_bridges(class);
                 self.add_comparison_bridges(class);
@@ -553,6 +564,10 @@ impl Program {
 
     /// Returns the method `name` of a class, its own or the nearest base's.
     pub(super) fn method(&self, class: ClassId, name: &str) -> Option<FunctionId> {
+        // A method of a protocol is reached through its dispatcher (ADR-0041).
+        if self.is_protocol(class) && self.classes[class.0 as usize].method(name).is_some() {
+            return self.dispatcher(class, name);
+        }
         let mut current = Some(class);
         while let Some(class) = current {
             let info = &self.classes[class.0 as usize];
@@ -648,6 +663,7 @@ impl Program {
             first_class,
             generics: self.generics.clone(),
             class_copies: self.class_copies.borrow().clone(),
+            protocol_values: self.protocol_values.clone(),
         }
     }
 
@@ -670,6 +686,8 @@ impl Program {
         // The copies the look made took IDs it gives back; the module body makes them again.
         self.generics = snapshot.generics;
         self.class_copies.replace(snapshot.class_copies);
+        self.protocol_values = snapshot.protocol_values;
+        crate::protocol_fits::reset(&self.protocol_values.fits);
         let symbols: Vec<SymbolId> = self.module_symbols.values().copied().collect();
         for (symbol, ty) in symbols.into_iter().zip(found) {
             self.symbols[symbol.0 as usize].ty = ty;

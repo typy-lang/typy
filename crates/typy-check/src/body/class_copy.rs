@@ -183,12 +183,13 @@ impl Program {
                 made.push(copy.id);
             }
         }
-        for class in made {
-            self.add_comparison_bridges(class);
-            self.add_truth_bridge(class);
-            self.add_override_adapters(class);
-            self.add_static_bridges(class);
+        for class in &made {
+            self.add_comparison_bridges(*class);
+            self.add_truth_bridge(*class);
+            self.add_override_adapters(*class);
+            self.add_static_bridges(*class);
         }
+        self.note_protocol_fits(Some(&made));
     }
 
     fn make_class_copy(&mut self, copy: &ClassCopy) {

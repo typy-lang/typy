@@ -270,6 +270,27 @@ impl FunctionLowerer<'_> {
     }
 
     /// Compares two values whose types the checker accepted; the operands are not released.
+    /// Returns `left == right`, or `left != right` when not `equal`, for two objects of any
+    /// classes.
+    fn objects_equality(
+        &mut self,
+        equal: bool,
+        left: Lowered,
+        right: Lowered,
+        span: Span,
+    ) -> ValueId {
+        let left = self.bits(Self::borrowed(left.value, left.ty), span);
+        let right = self.bits(Self::borrowed(right.value, right.ty), span);
+        let found = self
+            .call_runtime(RuntimeFunction::ObjectsEqual, vec![left, right], span)
+            .value;
+        if equal {
+            return found;
+        }
+        self.builder
+            .push_value(Operation::BoolNot(found), TyirType::Bool, span)
+    }
+
     pub(crate) fn compare(
         &mut self,
         operator: CompareOperator,
@@ -299,6 +320,13 @@ impl FunctionLowerer<'_> {
         };
         let kind = match (left.ty, right.ty) {
             (TyirType::Tuple(_), _) => return self.compare_tuples(operator, left, right, span),
+            // A protocol value is an object of any class that satisfies the protocol, compared
+            // through the `equal` slot of the class that decides (ADR-0041).
+            (TyirType::UNION, _) | (_, TyirType::UNION)
+                if matches!(comparison, Comparison::Equal | Comparison::NotEqual) =>
+            {
+                return self.objects_equality(comparison == Comparison::Equal, left, right, span);
+            }
             // An instance of a class without `__eq__` is equal only to itself (CLS-07).
             (TyirType::Object(id), _)
                 if id.class_index().is_some() || id == typy_tyir::TypeId::TYPE =>

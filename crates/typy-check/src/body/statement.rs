@@ -610,6 +610,9 @@ impl BodyChecker<'_> {
             } else {
                 RuleId::TYP_01
             });
+            if let Some(help) = self.protocol_help(&actual, &expected) {
+                diagnostic = diagnostic.with_help(help);
+            }
             if actual == Type::NotImplemented {
                 diagnostic = diagnostic.with_help(
                     "only an operator or comparison method returns `NotImplemented`, to give way \

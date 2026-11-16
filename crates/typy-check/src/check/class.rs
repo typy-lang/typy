@@ -292,18 +292,18 @@ fn derived_type(
             )))
         }
         // A class satisfies a protocol by its members; naming the protocol as its base
-        // would also inherit the protocol's methods (GEN-10).
+        // would also inherit the protocol's methods (GEN-17).
         Type::Instance(parent) if parent.protocol => {
             diagnostics.push(
                 Diagnostic::new(
                     DiagnosticCode::error(201),
                     span,
                     format!(
-                        "a class derived from the protocol `{written}` is planned for TyPy 0.5 \
-                         (GEN-10)"
+                        "a class derived from the protocol `{written}` is planned for TyPy 1.0 \
+                         (GEN-17)"
                     ),
                 )
-                .with_rule(RuleId::GEN_10)
+                .with_rule(RuleId::GEN_17)
                 .with_help("leave the protocol out: a class with its members satisfies it"),
             );
             None
@@ -848,7 +848,7 @@ impl<'tree> ClassMethodCopies<'tree> {
             method.home = home;
             // A parameter that names a protocol makes the copy generic, as its own type
             // parameters do (GEN-09).
-            super::protocol::protocol_parameters(&mut method, sink);
+            super::protocol::protocol_parameters(&mut method, false, sink);
             method.qualified_name = format!("{}.{}", info.name, parts.name.name);
             method.copy_of = origin;
             info.class_methods.push((parts.name.name.clone(), id));
@@ -994,21 +994,14 @@ fn method_definition<'tree>(
     };
     let mut method = definition(parts, Some(&method_owner), &method_scope, diagnostics);
     method.type_parameters = type_parameters;
-    let written = method.type_parameters.len();
-    super::protocol::protocol_parameters(&mut method, diagnostics);
-    // A parameter that names a protocol makes the method generic, which a special method or
-    // a property may not be yet (GEN-16).
+    // A parameter that names a protocol makes the method generic; a special method or a
+    // property has one body, so its parameter takes protocol values (ADR-0041).
     let special = name.starts_with("__") && name.ends_with("__");
     let plain = matches!(
         kind,
         MethodKind::Instance | MethodKind::Static | MethodKind::Class
     );
-    if method.type_parameters.len() > written && (special || !plain) {
-        diagnostics.push(later_generic_method(
-            parts.name,
-            "a protocol parameter of a special method or a property is",
-        ));
-    }
+    super::protocol::protocol_parameters(&mut method, special || !plain, diagnostics);
     if !method.type_parameters.is_empty() {
         info.generic_methods.push(registered.clone());
     }
@@ -1418,7 +1411,6 @@ fn class_body_name(
                 return;
             }
             let ty = annotation_type(annotation, scope, diagnostics);
-            let ty = super::protocol::outside_signature(ty, annotation.span(), diagnostics);
             declare(info, id, Some(ty), *span, diagnostics);
             if value.is_some() {
                 default_value(info, id);

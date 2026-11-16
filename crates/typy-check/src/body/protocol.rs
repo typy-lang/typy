@@ -5,7 +5,7 @@
 
 use typy_diagnostics::{Diagnostic, DiagnosticCode, RuleId};
 
-use super::BodyChecker;
+use super::{BodyChecker, Program};
 use crate::typed::{ClassId, FunctionSignature, TypedExpr};
 use crate::types::Type;
 
@@ -45,7 +45,13 @@ impl BodyChecker<'_> {
     pub(super) fn unsatisfied(&self, ty: &Type, protocol: ClassId) -> Option<String> {
         match ty {
             Type::Error => None,
-            Type::Instance(class) => self.class_unsatisfied(class.id, protocol),
+            // An attribute whose type is not known yet is taken to fit, as it is checked
+            // where its value is assigned.
+            Type::Instance(class) => self
+                .program
+                .class_unsatisfied(class.id, protocol)
+                .filter(|(_, settled)| *settled)
+                .map(|(reason, _)| reason),
             Type::Union(members) => members
                 .iter()
                 .find_map(|member| self.unsatisfied(member, protocol)),
@@ -63,47 +69,75 @@ impl BodyChecker<'_> {
             )),
         }
     }
+}
 
-    /// Returns the first member of `protocol` that `class` lacks or has with another type.
-    fn class_unsatisfied(&self, class: ClassId, protocol: ClassId) -> Option<String> {
+impl Program {
+    /// Returns the first member of `protocol` that `class` lacks or has with another type, and
+    /// whether every attribute type the check read was known: a class whose `__init__` is not
+    /// checked yet may satisfy the protocol once it is.
+    pub(crate) fn class_unsatisfied(
+        &self,
+        class: ClassId,
+        protocol: ClassId,
+    ) -> Option<(String, bool)> {
         if class == protocol {
             return None;
         }
-        let wanted = &self.program.classes[protocol.0 as usize];
-        let name = &self.program.classes[class.0 as usize].name;
+        let wanted = &self.classes[protocol.0 as usize];
+        let name = &self.classes[class.0 as usize].name;
         for (method, wanted_id) in &wanted.methods {
             let Some(found) = self
-                .program
                 .method(class, method)
-                .filter(|_| !self.is_static_method(class, method))
+                .filter(|_| !self.static_in_chain(class, method))
             else {
-                return Some(format!("`{name}` has no method `{method}`"));
+                return Some((format!("`{name}` has no method `{method}`"), true));
             };
-            let signature = &self.program.signatures[found.0 as usize];
-            let protocol_signature = &self.program.signatures[wanted_id.0 as usize];
+            let signature = &self.signatures[found.0 as usize];
+            let protocol_signature = &self.signatures[wanted_id.0 as usize];
             if let Some(reason) = incompatible(signature, protocol_signature) {
-                return Some(format!("its method `{name}.{method}` {reason}"));
+                return Some((format!("its method `{name}.{method}` {reason}"), true));
             }
         }
-        let info = &self.program.classes[class.0 as usize];
+        let info = &self.classes[class.0 as usize];
         for attribute in &wanted.attributes {
             // A class holds the attributes of its bases as its own.
             let Some(index) = info.attribute(&attribute.name) else {
-                return Some(format!("`{name}` has no attribute `{}`", attribute.name));
+                return Some((
+                    format!("`{name}` has no attribute `{}`", attribute.name),
+                    true,
+                ));
             };
-            match (self.program.attribute_ty(class, index), &attribute.ty) {
+            match (self.attribute_ty(class, index), &attribute.ty) {
                 (Some(found), Some(wanted)) if !found.matches(wanted) => {
-                    return Some(format!(
-                        "its attribute `{name}.{}` is {}, and the protocol's is {}",
-                        attribute.name,
-                        found.with_article(),
-                        wanted.with_article()
+                    return Some((
+                        format!(
+                            "its attribute `{name}.{}` is {}, and the protocol's is {}",
+                            attribute.name,
+                            found.with_article(),
+                            wanted.with_article()
+                        ),
+                        true,
+                    ));
+                }
+                (None, _) => {
+                    return Some((
+                        format!("the type of `{name}.{}` is not known yet", attribute.name),
+                        false,
                     ));
                 }
                 _ => {}
             }
         }
         None
+    }
+
+    /// Returns true when the nearest class from `class` up that defines `name` defines it as a
+    /// static method.
+    fn static_in_chain(&self, class: ClassId, name: &str) -> bool {
+        std::iter::successors(Some(class), |each| self.classes[each.0 as usize].base)
+            .map(|each| &self.classes[each.0 as usize])
+            .find(|info| info.method(name).is_some())
+            .is_some_and(|info| info.static_methods.iter().any(|method| method == name))
     }
 }
 

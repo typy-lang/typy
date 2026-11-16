@@ -702,7 +702,7 @@ unsafe fn int_equals_float(word: u64, float: f64) -> bool {
 /// # Safety
 ///
 /// Both point to live objects.
-unsafe fn objects_equal(left: *mut ObjectHeader, right: *mut ObjectHeader) -> bool {
+pub(crate) unsafe fn objects_equal(left: *mut ObjectHeader, right: *mut ObjectHeader) -> bool {
     // SAFETY: the caller passes live objects, and each type's function takes its own.
     unsafe {
         let (left_type, right_type) = (type_of(left), type_of(right));

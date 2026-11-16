@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy detailed design |
-| Version | 2.11 |
+| Version | 2.12 |
 | Status | Approved |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-16 |
@@ -1016,10 +1016,36 @@ members: each method, not static, taking the protocol method's parameters by
 name with types that accept the protocol's and a default where it has one, then
 only parameters with defaults, and returning a type the protocol's accepts; and
 each attribute with the same type. A union satisfies a protocol when each member
-does. `isinstance` with a protocol is E0401 (GEN-05). A protocol as any other
-type, through `check::outside_signature`, as a class's base, and a protocol's
-properties, static and class methods and class variables are E0201 until
-GEN-10.
+does. `isinstance` with a protocol is E0401 (GEN-05).
+
+A protocol as the type of a variable, an attribute, a result or a container
+item, and of a parameter of a special method or a property, which
+`protocol_parameters` leaves as it is for such a method, is a protocol value
+(GEN-10, ADR-0041), which lowering holds as `TyirType::UNION`. When a module's
+classes are collected, and again after its `__init__` methods are checked,
+`Program::note_protocol_fits` notes in `ProtocolValues::fits` each class that
+satisfies each protocol, by `Program::class_unsatisfied`, which skips a pair
+whose attribute types are not all known yet; it does so for each copy of a
+generic class `make_class_copies` makes too. It notes each pair in the table of
+`protocol_fits`, which a `FitsScope` opens for the check and clears when it
+ends, and `InstanceClass::derives_from` holds for a class and a protocol it
+satisfies, so every conversion that takes an instance of a base takes one of a
+satisfying class as an `Upcast`. `begin_module` gives a protocol no bridges and
+makes its dispatchers, `<protocol Protocol.name>`, one for each method, with
+the method's signature, and a getter for each attribute; `Program::method` of a
+protocol gives the dispatcher, so a call through a protocol value, by a method
+call, an operator or a builtin such as `len`, reaches it, and an attribute read
+calls the getter through `protocol_attribute`. Once every module is checked,
+`write_protocol_dispatchers` gives each its body: an `EachMember` over the
+satisfying classes, the most derived first, each arm calling the class's method
+through its table with the arguments and the result converted, or reading its
+attribute. `==` and `!=` of protocol values call `typy_rt_objects_equal`, which
+the `equal` slot of the class that decides answers. A mismatch where a protocol
+is wanted takes the reason as its help, from `protocol_help`. Assigning an
+attribute through a protocol value, a class derived from a protocol, a
+protocol's properties, static and class methods, class variables and defaults,
+a protocol in its own methods' signatures, and a value of a built-in type held
+as a protocol are E0201, planned for 1.0 (GEN-17).
 
 Unions (TYP-14, ADR-0027) add `Type::Union(members)`, which `Type::union` builds
 in normal form in `union_type`: nested unions flatten, `None` makes the union

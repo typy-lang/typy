@@ -1,5 +1,5 @@
 # typy-test: GEN-10
-# typy-expect: rejected E0201 at 15:1
+# typy-expect: rejected E0405 at 16:12
 from typing import Protocol
 
 

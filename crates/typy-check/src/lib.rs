@@ -13,6 +13,7 @@ mod math;
 mod method;
 mod open;
 mod percent_format;
+mod protocol_fits;
 mod subset;
 mod sys;
 mod typed;

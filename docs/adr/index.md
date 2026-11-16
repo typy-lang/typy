@@ -46,3 +46,4 @@ supersedes it.
 | [ADR-0038](0038-give-way-to-the-next-operator-method-on-not-implemented.md) | Give way to the next operator method on NotImplemented | Accepted | 2026-11-16 |
 | [ADR-0039](0039-keep-a-slot-methods-exception-until-the-runtime-call-returns.md) | Keep a slot method's exception until the runtime call returns | Accepted | 2026-11-16 |
 | [ADR-0040](0040-derive-each-copy-of-a-generic-class-from-the-copy-of-its-base.md) | Derive each copy of a generic class from the copy of its base | Accepted | 2026-11-16 |
+| [ADR-0041](0041-hold-a-protocol-value-as-an-object-and-call-it-through-a-dispatcher.md) | Hold a protocol value as an object and call it through a dispatcher | Accepted | 2026-11-16 |
