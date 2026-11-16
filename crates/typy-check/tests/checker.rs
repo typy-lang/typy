@@ -2677,15 +2677,15 @@ fn container_methods_are_checked() {
         ),
         (
             "class G:\n    def __getitem__(self, key: int) -> int:\n        return key\nprint(G()[1:2])\n",
-            &["E0201"],
+            &["E0404"],
         ),
         (
             "class G:\n    def __setitem__(self, key: int, value: int) -> None:\n        pass\ng = G()\ng[1:2] = 3\n",
-            &["E0201"],
+            &["E0404"],
         ),
         (
             "class G:\n    def __delitem__(self, key: int) -> None:\n        pass\ng = G()\ndel g[1:2]\n",
-            &["E0201"],
+            &["E0404"],
         ),
         (
             "class G:\n    def __len__(self) -> int:\n        return 1\nprint(any([G()]))\n",

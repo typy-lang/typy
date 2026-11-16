@@ -292,15 +292,29 @@ impl BodyChecker<'_> {
                     let items = items.clone();
                     return self.tuple_item(value, &items, index, span);
                 }
+                // A slice object slices a built-in sequence as its bounds do (CLS-23).
+                let typed_index = if matches!(
+                    value.ty,
+                    Type::Str | Type::Bytes | Type::List(_) | Type::TupleOf(_) | Type::Range
+                ) {
+                    let index = self.expression(index);
+                    if index.ty == Type::Slice {
+                        return self.sliced_by_object(value, index, span);
+                    }
+                    Some(index)
+                } else {
+                    None
+                };
                 if let Some(item) = value.ty.sequence_item() {
                     let item = item.clone();
-                    return self.list_item(value, item, index, span);
+                    let index = typed_index.unwrap_or_else(|| self.expression(index));
+                    return self.list_item_of(value, item, index, span);
                 }
                 if let Type::Dict(key, entry) = &value.ty {
                     let (key, entry) = (key.as_ref().clone(), entry.as_ref().clone());
                     return self.dict_item(value, &key, entry, index, span);
                 }
-                let index = self.expression(index);
+                let index = typed_index.unwrap_or_else(|| self.expression(index));
                 if value.ty == Type::Error || index.ty == Type::Error {
                     return Self::typed(
                         TypedExprKind::Constant(TypedConstant::None),

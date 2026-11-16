@@ -42,6 +42,20 @@ impl FunctionLowerer<'_> {
             self.set_method(receiver.value, method, &values, result, span)
         } else if receiver.ty == TyirType::TEXT_FILE {
             self.text_method(receiver.value, binary, method, &given, span)
+        } else if receiver.ty == TyirType::SLICE {
+            // `slice.indices(length)`, the one method of a slice (CLS-23).
+            let length = values[0];
+            let parts = (0..3)
+                .map(|part| {
+                    let part = self.constant(Constant::Int(part.to_string()), span);
+                    self.call_runtime(
+                        RuntimeFunction::SliceIndex,
+                        vec![receiver.value, length.value, part],
+                        span,
+                    )
+                })
+                .collect();
+            self.make_tuple(result, parts, span)
         } else {
             let arguments: Vec<Lowered> = given.iter().flatten().copied().collect();
             self.list_method(receiver.value, method, &arguments, result, span)

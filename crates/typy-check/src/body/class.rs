@@ -173,6 +173,9 @@ impl BodyChecker<'_> {
         if object.ty == Type::VersionInfo {
             return self.version_info_attribute(object, attribute, span);
         }
+        if object.ty == Type::Slice {
+            return self.slice_attribute(object, attribute, span);
+        }
         if object.ty.is_file() {
             return self.file_attribute(object, attribute, span);
         }

@@ -27,6 +27,7 @@ fn reference(of: &TypeObjectOf) -> TypeObjectRef {
         TypeObjectOf::Object => RuntimeType::Object,
         TypeObjectOf::Type => RuntimeType::Type,
         TypeObjectOf::Range => RuntimeType::Range,
+        TypeObjectOf::Slice => RuntimeType::Slice,
         TypeObjectOf::Instance(class, _) => return TypeObjectRef::Class(class.0),
         TypeObjectOf::Exception(class) => return crate::exception::exception_class(class),
         TypeObjectOf::Abstract { .. } => {

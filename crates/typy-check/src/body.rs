@@ -59,6 +59,7 @@ mod rebound;
 mod round_call;
 mod set;
 mod slice;
+mod slice_object;
 mod statement;
 mod super_call;
 mod sys_call;

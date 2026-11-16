@@ -18,7 +18,8 @@ the same exceptions.
 | `dict[K, V]`, in insertion order | DAT-09 |
 | `set[T]`, in CPython's order for `int`, `str` and `bytes` items | DAT-10 |
 | Negative indexes and `IndexError` outside a sequence | DAT-11 |
-| Slices with start, stop and step | DAT-12 |
+| Slices with start, stop and step, each an `int` or `None` | DAT-12 |
+| `slice` objects: `slice(a, b, c)`, `start`, `stop`, `step`, `indices`, `seq[s]` | CLS-23 |
 | Assigning a list to a slice of a list, `xs[a:b] = items` | DAT-13 |
 | The set methods that combine a set with other collections | DAT-15 |
 | `range` as a value: `len`, indexing, slicing, `in`, `==` and its text | DAT-17 |
@@ -30,6 +31,20 @@ and the list grows or shrinks to fit: `xs[:0] = items` inserts at the
 front and `xs[:] = []` empties the list. A slice with any other step takes
 exactly as many items as it selects, or raises `ValueError`, as CPython
 does.
+
+A `slice` is a value too. `slice(start, stop, step)` makes one, each
+bound an `int` or `None`, and `items[s]` slices a list, a `str`, a
+`bytes`, a `tuple[T, ...]` or a `range` as `items[s.start:s.stop:s.step]`
+does. A slice is compared, hashed and written as CPython does, and
+`s.indices(length)` adjusts its bounds to a sequence of `length` items:
+
+<!-- typy-expect: accepted -->
+```python
+every_other = slice(None, None, 2)
+letters = "abcdefg"
+print(letters[every_other], every_other, every_other.indices(len(letters)))
+print([10, 20, 30][slice(1, None)], slice(1, 2) == slice(1, 2, None))
+```
 
 A `range` is a value you can store, pass and annotate. Its bounds may be
 of any size, as in CPython, but `len()` of a range longer than

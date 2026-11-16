@@ -670,6 +670,7 @@ fn named_type(
         "str" => Type::Str,
         "bytes" => Type::Bytes,
         "range" => Type::Range,
+        "slice" => Type::Slice,
         "Any" | "object" => {
             diagnostics.push(
                 Diagnostic::new(

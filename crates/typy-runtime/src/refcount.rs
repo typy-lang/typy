@@ -104,6 +104,8 @@ unsafe fn destroy(object: *mut ObjectHeader, type_id: u32) {
         ITERATOR_TYPE_ID => unsafe { crate::iterator::destroy(object.cast()) },
         // SAFETY: the type ID says the object is a range.
         RANGE_TYPE_ID => unsafe { crate::range::destroy(object.cast()) },
+        // SAFETY: the type ID says the object is a slice.
+        crate::header::SLICE_TYPE_ID => unsafe { crate::slice::object::destroy(object.cast()) },
         // SAFETY: the type ID says the object is a text file; a standard one is immortal.
         TEXT_FILE_TYPE_ID => unsafe { crate::text_file::destroy(object) },
         _ => crate::libc::abort_with(b"typy runtime: an object has an unknown type\n"),

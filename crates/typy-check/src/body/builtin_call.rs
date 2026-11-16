@@ -166,6 +166,20 @@ impl BodyChecker<'_> {
                 }
                 Type::Range
             }
+            Builtin::Slice => {
+                if !self.arity(builtin, values.len(), 1..=3, span) {
+                    return Self::typed(
+                        TypedExprKind::Constant(TypedConstant::None),
+                        Type::Error,
+                        span,
+                    );
+                }
+                // TyPy holds a slice's bounds as `int | None`, which every sequence takes.
+                for value in &values {
+                    self.expect(value, Type::optional(Type::Int), "an argument of `slice`");
+                }
+                Type::Slice
+            }
             Builtin::Len => {
                 if !self.arity(builtin, values.len(), 1..=1, span) {
                     return Self::typed(

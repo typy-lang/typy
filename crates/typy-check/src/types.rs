@@ -69,6 +69,8 @@ pub enum Type {
     DescriptorFile(Option<BinaryKind>),
     /// `range` held as a value: a sequence of `int` (DAT-17).
     Range,
+    /// A `slice`, of bounds that are each an `int` or `None` (CLS-23).
+    Slice,
     /// A `typing.TypeAliasType`, the value a `type` statement binds (SMT-12).
     TypeAlias,
     /// `sys.version_info` held as a value, whose items are those of CPython 3.15.0 (LIB-16).
@@ -116,6 +118,8 @@ pub enum TypeObjectOf {
     Object,
     /// `type`, the type of every type object.
     Type,
+    /// `slice` (CLS-23).
+    Slice,
     /// `range`.
     Range,
     /// A class of the program, with its name.
@@ -176,6 +180,7 @@ impl TypeObjectOf {
             },
             Type::TypeObject(_) => Self::Type,
             Type::Range => Self::Range,
+            Type::Slice => Self::Slice,
             // An exception's class may derive from its static class, so it is read from the
             // exception when the program runs.
             Type::Exception(_)
@@ -215,6 +220,7 @@ impl TypeObjectOf {
             "object" => Self::Object,
             "type" => Self::Type,
             "range" => Self::Range,
+            "slice" => Self::Slice,
             _ => Self::Exception(ExceptionClass::Builtin(BuiltinException::named(name)?)),
         })
     }
@@ -237,6 +243,7 @@ impl TypeObjectOf {
             Self::Object => "object",
             Self::Type => "type",
             Self::Range => "range",
+            Self::Slice => "slice",
             Self::Instance(_, name) => name,
             Self::Exception(class) => class.name(),
             Self::Abstract {
@@ -558,6 +565,7 @@ impl Type {
                 | Self::AnyModule
                 | Self::Traceback
                 | Self::Range
+                | Self::Slice
                 | Self::TypeObject(_),
                 _,
             )
@@ -579,6 +587,7 @@ impl Type {
                 | Self::AnyModule
                 | Self::Traceback
                 | Self::Range
+                | Self::Slice
                 | Self::TypeObject(_),
             ) => false,
             _ => self == other || (self.is_numeric() && other.is_numeric()),
@@ -802,6 +811,7 @@ impl fmt::Display for Type {
             ),
             Self::Traceback => formatter.write_str("TracebackType"),
             Self::Range => formatter.write_str("range"),
+            Self::Slice => formatter.write_str("slice"),
             Self::Module(name) => write!(formatter, "module `{name}`"),
             Self::TypeObject(Some(of)) => write!(formatter, "type[{}]", of.name()),
             Self::TypeObject(None) => formatter.write_str("type"),

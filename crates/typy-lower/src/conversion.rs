@@ -46,6 +46,7 @@ impl FunctionLowerer<'_> {
             TyirType::TRACEBACK
             | TyirType::ITERATOR
             | TyirType::RANGE
+            | TyirType::SLICE
             | TyirType::MODULE
             | TyirType::TYPE_ALIAS
             | TyirType::VERSION_INFO

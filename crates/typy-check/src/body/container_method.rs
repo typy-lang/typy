@@ -2,7 +2,7 @@
 //! `__setitem__`, `del x[k]` `__delitem__`, and `v in x` `__contains__` (CLS-07).
 
 use typy_diagnostics::{Diagnostic, DiagnosticCode, RuleId, Span};
-use typy_source::syntax::{BoolOperator, CompareOperator, Expr, UnaryOperator};
+use typy_source::syntax::{BinaryOperator, BoolOperator, CompareOperator, Expr, UnaryOperator};
 
 use super::BodyChecker;
 use crate::typed::{Argument, FunctionId, TypedConstant, TypedExpr, TypedExprKind, TypedStmt};
@@ -81,8 +81,8 @@ impl BodyChecker<'_> {
         ))
     }
 
-    /// Returns `value[index]` through `__getitem__`; a slice is planned, since TyPy has no
-    /// slice object.
+    /// Returns `value[index]` through `__getitem__`, which takes a slice object for
+    /// `value[lower:upper:step]` (CLS-23).
     pub(super) fn item_call(
         &mut self,
         value: TypedExpr,
@@ -92,10 +92,7 @@ impl BodyChecker<'_> {
         let Some(method) = self.instance_method(&value.ty, "__getitem__") else {
             return Err(value);
         };
-        if let Expr::Slice { .. } = index {
-            return Ok(self.slice_planned(index.span(), span));
-        }
-        let index = self.expression(index);
+        let index = self.index_value(index, span);
         Ok(self.container_call("__getitem__", method, value, vec![index], span))
     }
 
@@ -111,14 +108,9 @@ impl BodyChecker<'_> {
     ) -> Option<TypedStmt> {
         let ty = self.peek_type(target)?;
         let method = self.instance_method(&ty, "__setitem__")?;
-        if let Expr::Slice { .. } = index {
-            self.expression(value);
-            self.slice_planned(index.span(), span);
-            return Some(TypedStmt::Pass { span });
-        }
         let value = self.expression(value);
         let target = self.expression(target);
-        let index = self.expression(index);
+        let index = self.index_value(index, span);
         let call = self.container_call("__setitem__", method, target, vec![index, value], span);
         Some(TypedStmt::Expr { value: call, span })
     }
@@ -133,11 +125,8 @@ impl BodyChecker<'_> {
     ) -> Option<TypedExpr> {
         let ty = self.peek_type(target)?;
         let method = self.instance_method(&ty, "__delitem__")?;
-        if let Expr::Slice { .. } = index {
-            return Some(self.slice_planned(index.span(), span));
-        }
         let target = self.expression(target);
-        let index = self.expression(index);
+        let index = self.index_value(index, span);
         Some(self.container_call("__delitem__", method, target, vec![index], span))
     }
 
@@ -261,18 +250,93 @@ impl BodyChecker<'_> {
         ))
     }
 
-    /// Reports a slice of an instance, whose slice object TyPy does not make yet.
-    fn slice_planned(&mut self, at: Span, span: Span) -> TypedExpr {
-        self.error(
-            Diagnostic::new(
-                DiagnosticCode::error(201),
-                at,
-                "a slice of an instance, which passes a slice object to its method, is planned \
-                 for TyPy 0.5 (CLS-07)",
-            )
-            .with_rule(RuleId::CLS_07),
+    /// Returns true when `current`, the item an augmented assignment reads, is a call of
+    /// `__getitem__` of an instance.
+    pub(super) fn is_instance_item(&self, current: &TypedExpr) -> bool {
+        let TypedExprKind::Call {
+            function,
+            arguments,
+            ..
+        } = &current.kind
+        else {
+            return false;
+        };
+        arguments.first().is_some_and(|container| {
+            self.instance_method(&container.value.ty, "__getitem__") == Some(*function)
+        })
+    }
+
+    /// Returns `container[index] op= value` of an instance: the item `__getitem__` gave,
+    /// combined with the value as the operator combines them, given to `__setitem__`, which
+    /// CPython calls in that order. The container and the index are names here, or hidden
+    /// variables `pinned_augmented` made, so each is evaluated once (CLS-07, CLS-23).
+    pub(super) fn instance_item_augmented(
+        &mut self,
+        target: &Expr,
+        operator: BinaryOperator,
+        (current, value): (TypedExpr, TypedExpr),
+        span: Span,
+    ) -> Option<TypedStmt> {
+        let Expr::Subscript {
+            value: container,
+            index,
+            ..
+        } = target
+        else {
+            return None;
+        };
+        let container = self.expression(container);
+        let Some(setter) = self.instance_method(&container.ty, "__setitem__") else {
+            self.unassignable_item(&container.ty, span);
+            return None;
+        };
+        let result = self.augmented_result(operator, current, value, span);
+        let index = self.index_value(index, span);
+        let call = self.container_call("__setitem__", setter, container, vec![index, result], span);
+        Some(TypedStmt::Expr { value: call, span })
+    }
+
+    /// Returns `current op value` as an augmented assignment computes it: the in-place
+    /// method, the operator's method, or the built-in operator.
+    fn augmented_result(
+        &mut self,
+        operator: BinaryOperator,
+        current: TypedExpr,
+        value: TypedExpr,
+        span: Span,
+    ) -> TypedExpr {
+        if let Some(call) = self.in_place_call(operator, &current, &value, span) {
+            return call;
+        }
+        let (current, value) = match self.operator_binary(operator, current, value, span) {
+            super::operator_method::Comparison::Called(call) => return call,
+            super::operator_method::Comparison::Builtin(current, value) => (current, value),
+        };
+        let (current, value) = Self::tuple_operands(operator, current, value);
+        if let Some(formatted) = self.percent_dynamic(operator, &current, &value, span) {
+            return formatted;
+        }
+        let ty = self.binary_type(operator, &current, &value, span);
+        Self::typed(
+            TypedExprKind::Binary {
+                left: Box::new(current),
+                operator,
+                right: Box::new(value),
+            },
+            ty,
             span,
         )
+    }
+
+    /// Returns the index an instance's container method takes: the expression, or the slice
+    /// object `x[lower:upper:step]` passes (CLS-23).
+    pub(super) fn index_value(&mut self, index: &Expr, span: Span) -> TypedExpr {
+        match index {
+            Expr::Slice {
+                lower, upper, step, ..
+            } => self.slice_object((lower.as_deref(), upper.as_deref(), step.as_deref()), span),
+            other => self.expression(other),
+        }
     }
 
     /// Returns the type of an expression that reads a variable or an attribute of one, without

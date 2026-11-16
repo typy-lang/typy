@@ -111,6 +111,7 @@ impl Type {
                 | Self::BinaryFile(_)
                 | Self::DescriptorFile(_)
                 | Self::Range
+                | Self::Slice
                 | Self::Module(_)
                 | Self::TypeAlias
                 | Self::VersionInfo

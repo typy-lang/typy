@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy software requirements specification |
-| Version | 1.61 |
+| Version | 1.62 |
 | Status | Approved |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-16 |
@@ -203,7 +203,7 @@ formatter applies; Ruff's formatter is the project's recommendation.
 | DAT-09 | `dict[K, V]` shall be a mutable mapping that iterates in insertion order. | M | 0.2 | 3.2.7 |
 | DAT-10 | `set[T]` shall be a mutable set. | M | 0.2 | 3.2.6 |
 | DAT-11 | Indexing a sequence with a negative index shall count from the end, and an index outside the sequence shall raise `IndexError`. | M | 0.2 | 6.3.2 |
-| DAT-12 | Slicing shall return a new object with the items selected by start, stop and step, as in Python. | M | 0.2 | 6.3.3 |
+| DAT-12 | Slicing shall return a new object with the items selected by start, stop and step, each an `int` or `None`, as in Python. | M | 0.2 | 6.3.3 |
 | DAT-13 | Assigning to a slice of a list shall replace the selected items with the items of a list, as in Python. | S | 0.3 | 7.2 |
 | DAT-14 | `tuple[T, ...]` shall be an immutable sequence of any number of items of type `T`, and a tuple of a fixed number of items of type `T` shall be accepted where one is expected. | M | 0.2 | 3.2.5 |
 | DAT-15 | The methods of `set` that combine a set with others, `union`, `intersection`, `difference`, `symmetric_difference`, `update`, `intersection_update`, `difference_update`, `symmetric_difference_update`, `issubset`, `issuperset` and `isdisjoint`, shall accept any iterable of the set's item type, and as many arguments as CPython accepts, with CPython's results and order. | M | 0.2 | 3.2.6 |

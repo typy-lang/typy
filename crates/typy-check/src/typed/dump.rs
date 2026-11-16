@@ -535,6 +535,7 @@ impl Dump<'_> {
             TypedExprKind::Hash(_) => "Hash".to_owned(),
             TypedExprKind::Sequence { .. } => "Sequence".to_owned(),
             TypedExprKind::NotImplemented => "NotImplemented".to_owned(),
+            TypedExprKind::SliceBound { part, .. } => format!("SliceBound {part}"),
             TypedExprKind::ClassVariable(holders) => format!("ClassVariable {}", holders.len()),
             TypedExprKind::ExceptionArguments { raw, .. } => {
                 format!("ExceptionArguments{}", if *raw { " raw" } else { "" })

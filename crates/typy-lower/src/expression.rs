@@ -142,6 +142,14 @@ impl FunctionLowerer<'_> {
             }
             TypedExprKind::Raise(exception) => self.raise_in_place(exception, ty, span),
             TypedExprKind::ClassVariable(holders) => self.class_variable(holders, ty, span),
+            TypedExprKind::SliceBound { slice, part } => {
+                let slice = self.expression(slice);
+                let part = self.constant(Constant::Int(part.to_string()), span);
+                let bound =
+                    self.call_runtime(RuntimeFunction::SliceBound, vec![slice.value, part], span);
+                self.release(slice, span);
+                bound
+            }
             TypedExprKind::NotImplemented => {
                 let found = self.call_runtime(RuntimeFunction::NotImplemented, Vec::new(), span);
                 self.borrowed_result(found)
@@ -398,7 +406,7 @@ impl FunctionLowerer<'_> {
             TyirType::Object(id) if id.class_index().is_some() => {
                 return self.instance_truth(lowered, id, span);
             }
-            TyirType::Object(typy_tyir::TypeId::TYPE) => {
+            TyirType::Object(typy_tyir::TypeId::TYPE | typy_tyir::TypeId::SLICE) => {
                 return self.constant(Constant::Bool(true), span);
             }
             // The object's type tests it, as CPython's truth test does (TYP-14).

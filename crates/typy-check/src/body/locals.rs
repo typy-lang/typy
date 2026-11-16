@@ -257,9 +257,13 @@ impl BodyChecker<'_> {
         {
             return self.attribute_type(value, attribute);
         }
-        // A slice of a list takes a list of the same type, which an empty `[]` gets.
+        // A slice of a list takes a list of the same type, which an empty `[]` gets; so does
+        // an item whose index is a slice object (CLS-23).
         if let Expr::Subscript { value, index, .. } = target
-            && let Expr::Slice { .. } = index.as_ref()
+            && (matches!(index.as_ref(), Expr::Slice { .. })
+                || self.peek_type(index) == Some(Type::Slice)
+                || matches!(index.as_ref(), Expr::Call { function, .. }
+                    if matches!(function.as_ref(), Expr::Name { id, .. } if id == "slice")))
         {
             return self
                 .known_type(value)
@@ -396,6 +400,11 @@ impl BodyChecker<'_> {
             return self.slice_target(list, [lower, upper, step], ty, span);
         }
         let index = self.expression(index);
+        // A slice object assigns the slice of its bounds (CLS-23).
+        if index.ty == Type::Slice {
+            let bounds = self.object_bounds(index, span);
+            return self.slice_target_of(list, bounds, ty, span);
+        }
         self.checked_item_target(list, index, ty, span)
     }
 
@@ -506,7 +515,7 @@ impl BodyChecker<'_> {
         Some(self.converted_target(ty, &item, target, span))
     }
 
-    fn unassignable_item(&mut self, container: &Type, span: Span) {
+    pub(super) fn unassignable_item(&mut self, container: &Type, span: Span) {
         let rule = match container {
             Type::Str => RuleId::DAT_05,
             Type::Tuple(_) => RuleId::DAT_08,
@@ -542,13 +551,24 @@ impl BodyChecker<'_> {
         ty: &Type,
         span: Span,
     ) -> Option<AssignTarget> {
-        let [lower, upper, step] = bounds.map(|bound| {
+        let bounds = bounds.map(|bound| {
             bound.as_deref().map(|bound| {
                 let value = self.expression(bound);
-                self.expect(&value, Type::Int, "a slice bound");
+                self.expect(&value, Type::optional(Type::Int), "a slice bound");
                 Box::new(value)
             })
         });
+        self.slice_target_of(list, bounds, ty, span)
+    }
+
+    /// Checks `list[lower:upper:step] = items` of checked bounds.
+    fn slice_target_of(
+        &mut self,
+        list: TypedExpr,
+        [lower, upper, step]: [Option<Box<TypedExpr>>; 3],
+        ty: &Type,
+        span: Span,
+    ) -> Option<AssignTarget> {
         match &list.ty {
             Type::List(_) => {}
             Type::Error => return None,

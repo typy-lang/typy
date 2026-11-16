@@ -25,6 +25,7 @@ pub(crate) fn tyir_type(ty: &Type, tuples: &mut TupleTypes) -> TyirType {
         Type::Iterator(_) => TyirType::ITERATOR,
         Type::Traceback => TyirType::TRACEBACK,
         Type::Range => TyirType::RANGE,
+        Type::Slice => TyirType::SLICE,
         Type::Module(_) | Type::AnyModule => TyirType::MODULE,
         Type::TypeAlias => TyirType::TYPE_ALIAS,
         Type::VersionInfo => TyirType::VERSION_INFO,

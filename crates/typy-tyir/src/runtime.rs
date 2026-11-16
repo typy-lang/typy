@@ -238,6 +238,14 @@ pub enum RuntimeFunction {
     OrderingUnsupported,
     /// Raises the exception a method a type object's slot called raised (CLS-22).
     SlotRaised,
+    /// `slice(start, stop, step)`, each an `int` word or 0 for `None` (CLS-23).
+    SliceNew,
+    /// `start`, `stop` or `step` of a slice, by its position (CLS-23).
+    SliceBound,
+    /// One value of `slice.indices(length)`, by its position (CLS-23).
+    SliceIndex,
+    /// Whether two slices are equal (CLS-23).
+    SliceEqual,
     SysGetRecursionLimit,
     SysSetRecursionLimit,
     SysStderr,
@@ -398,7 +406,7 @@ const FLOAT_FLOAT: &[TyirType] = &[TyirType::Float, TyirType::Float];
 
 impl RuntimeFunction {
     /// Every runtime function.
-    pub const ALL: [Self; 331] = [
+    pub const ALL: [Self; 335] = [
         Self::IntFloorDivide,
         Self::IntModulo,
         Self::IntPower,
@@ -625,6 +633,10 @@ impl RuntimeFunction {
         Self::OperandsUnsupported,
         Self::OrderingUnsupported,
         Self::SlotRaised,
+        Self::SliceNew,
+        Self::SliceBound,
+        Self::SliceIndex,
+        Self::SliceEqual,
         Self::SysGetRecursionLimit,
         Self::SysSetRecursionLimit,
         Self::SysStderr,
@@ -803,6 +815,14 @@ impl RuntimeFunction {
             Self::Ord => signature(&[STR], Int, true),
             Self::WriteStdout => signature(&[STR], Unit, false),
             Self::CheckStack | Self::SlotRaised => signature(&[], Unit, true),
+            Self::SliceNew => signature(&[Int, Int, Int], TyirType::SLICE, false),
+            Self::SliceBound => signature(
+                &[TyirType::SLICE, Int],
+                TyirType::Optional(crate::types::OptionalBase::Int),
+                false,
+            ),
+            Self::SliceIndex => signature(&[TyirType::SLICE, Int, Int], Int, true),
+            Self::SliceEqual => signature(&[TyirType::SLICE, TyirType::SLICE], Bool, false),
             Self::RangeCheckStep | Self::SysSetRecursionLimit => signature(&[Int], Unit, true),
             Self::NameError | Self::WriteStdoutChecked => signature(&[STR], Unit, true),
             Self::ModuleAttributeError | Self::ModuleImportError => {
@@ -1325,6 +1345,10 @@ impl RuntimeFunction {
             Self::OperandsUnsupported => "operands_unsupported",
             Self::OrderingUnsupported => "ordering_unsupported",
             Self::SlotRaised => "slot_raised",
+            Self::SliceNew => "slice_new",
+            Self::SliceBound => "slice_bound",
+            Self::SliceIndex => "slice_index",
+            Self::SliceEqual => "slice_equal",
             Self::SysGetRecursionLimit => "sys_getrecursionlimit",
             Self::SysSetRecursionLimit => "sys_setrecursionlimit",
             Self::SysStderr => "sys_stderr",

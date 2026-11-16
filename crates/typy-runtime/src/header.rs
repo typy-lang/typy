@@ -40,6 +40,8 @@ pub const TYPE_ALIAS_TYPE_ID: u32 = 19;
 pub const VERSION_INFO_TYPE_ID: u32 = 20;
 /// The type ID of `NotImplemented`, one immortal object (CLS-21).
 pub const NOT_IMPLEMENTED_TYPE_ID: u32 = 21;
+/// The type ID of a `slice` (CLS-23).
+pub const SLICE_TYPE_ID: u32 = 22;
 
 /// The first 8 bytes of every heap object.
 #[repr(C)]

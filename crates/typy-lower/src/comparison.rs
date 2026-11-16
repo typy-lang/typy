@@ -321,7 +321,9 @@ impl FunctionLowerer<'_> {
             (TyirType::DICT | TyirType::SET, _) => {
                 return self.compare_collections(comparison, left, right, span);
             }
-            (TyirType::RANGE, _) => return self.compare_ranges(comparison, left, right, span),
+            (TyirType::RANGE | TyirType::SLICE, _) => {
+                return self.compare_ranges(comparison, left, right, span);
+            }
             (TyirType::Bits, _) => {
                 unreachable!("list items are converted before they are compared")
             }
@@ -375,12 +377,13 @@ impl FunctionLowerer<'_> {
         right: Lowered,
         span: Span,
     ) -> ValueId {
+        let function = if left.ty == TyirType::SLICE {
+            RuntimeFunction::SliceEqual
+        } else {
+            RuntimeFunction::RangeEqual
+        };
         let equal = self
-            .call_runtime(
-                RuntimeFunction::RangeEqual,
-                vec![left.value, right.value],
-                span,
-            )
+            .call_runtime(function, vec![left.value, right.value], span)
             .value;
         if comparison == Comparison::Equal {
             equal

@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy detailed design |
-| Version | 1.91 |
+| Version | 1.92 |
 | Status | Approved |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-16 |
@@ -1383,7 +1383,20 @@ instance whose class has `__iter__` is `TypedExprKind::IterContains`: the
 value and each item are held in hidden variables, and lowering iterates the
 instance as `for` does until `item is value or item == value` holds
 (CLS-23); a class with `__getitem__` alone is E0201, planned for 1.0
-(CST-11). Lowering tests an instance's truth with
+(CST-11). `body::slice_object` gives `Type::Slice`, a runtime object of type ID
+22 that owns its three bounds, each an `int` word or 0 for `None`:
+`x[a:b:c]` on an instance passes `Builtin::Slice` of the bounds to the
+container method (`index_value`), a slice's attributes are
+`TypedExprKind::SliceBound`, `indices` is `Method::SliceIndices`, three
+calls of `slice_index`, and `seq[s]` of a built-in sequence is
+`TypedExprKind::Slice` of the bounds, the slice held in a hidden
+variable (`object_bounds`), also as an assignment target. A slice bound
+may be `int | None`: lowering passes its word, and the runtime's
+`slice::select` takes the word 0 as a missing bound (DAT-12). An
+augmented assignment to an item of an instance (`is_instance_item`)
+pins the container and the index, then gives `__setitem__` the item
+`__getitem__` gave, combined with the value (`instance_item_augmented`).
+Lowering tests an instance's truth with
 `__bool__`, or with its checked `__len__` against zero, and `TyirClass::truth`
 puts `__bool__` in the type object's `truth` slot for `any` and `all`; `any`
 and `all` of instances whose truth comes from `__len__`, and a truth test of a

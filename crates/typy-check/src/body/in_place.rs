@@ -139,21 +139,14 @@ impl BodyChecker<'_> {
                 index,
                 span: item_span,
             } if !is_name(container) || !is_name(index) => {
-                if let Expr::Slice { .. } = index.as_ref() {
-                    self.diagnostics.push(
-                        Diagnostic::new(
-                            DiagnosticCode::error(201),
-                            span,
-                            "an augmented assignment to a slice that calls an operator method is \
-                             planned for TyPy 0.5 (CLS-23)",
-                        )
-                        .with_rule(RuleId::CLS_23)
-                        .with_help("write `part = part + value`"),
-                    );
-                    return Pinned::Checked(Box::new(None));
-                }
                 let container = self.pinned(container);
-                let index = self.pinned(index);
+                // A slice is made once, and passed to `__getitem__` and `__setitem__` (CLS-23).
+                let index = if let Expr::Slice { .. } = index.as_ref() {
+                    let slice = self.index_value(index, *item_span);
+                    self.pinned_value(slice)
+                } else {
+                    self.pinned(index)
+                };
                 Expr::Subscript {
                     value: Box::new(container),
                     index: Box::new(index),
@@ -189,8 +182,14 @@ impl BodyChecker<'_> {
     /// Returns a name for `expression`, after noting the statement that assigns its value to
     /// a hidden variable, which `pinned_augmented` runs first.
     fn pinned(&mut self, expression: &Expr) -> Expr {
-        let span = expression.span();
         let value = self.expression(expression);
+        self.pinned_value(value)
+    }
+
+    /// Returns a name for a checked value, after noting the statement that assigns it to a
+    /// hidden variable, as `pinned` does.
+    fn pinned_value(&mut self, value: TypedExpr) -> Expr {
+        let span = value.span;
         let name = format!("<pinned {}>", self.local_order.len());
         let symbol = self
             .program

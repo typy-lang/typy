@@ -533,11 +533,43 @@ print(len(shelf), shelf["Dune"], "Dune" in shelf, bool(Shelf()))
 As in CPython, a negative `__len__` raises `ValueError`, and `in` on an
 instance whose class has `__iter__` and no `__contains__` goes over its
 items until one is the value or equal to it (CLS-23). A slice such as
-`x[1:2]`, `any` and `all` of instances whose truth comes from
-`__len__`, and a truth test whose static class has neither method while
-a subclass defines one, are planned for 0.5 (CLS-23, CLS-24). `in` and
-`for` over a class with `__getitem__` alone, which CPython reads by
-position until `IndexError`, are planned for 1.0 (CST-11).
+`x[1:2]` passes a `slice` object to `__getitem__`, `__setitem__` or
+`__delitem__`, which a parameter annotated `slice` or `int | slice`
+takes, and `x[k] += v` calls `__getitem__`, then `__setitem__`, with
+`x` and `k` evaluated once:
+
+<!-- typy-expect: accepted -->
+```python
+class Row:
+    def __init__(self, cells: list[int]) -> None:
+        self.cells = cells
+
+    def __getitem__(self, part: slice) -> "Row":
+        return Row(self.cells[part])
+
+
+class Tally:
+    def __init__(self) -> None:
+        self.counts = [0, 0]
+
+    def __getitem__(self, index: int) -> int:
+        return self.counts[index]
+
+    def __setitem__(self, index: int, value: int) -> None:
+        self.counts[index] = value
+
+
+print(Row([1, 2, 3, 4])[1:3].cells)
+tally = Tally()
+tally[1] += 5
+print(tally.counts)
+```
+
+`any` and `all` of instances whose truth comes from `__len__`, and a
+truth test whose static class has neither method while a subclass
+defines one, are planned for 0.5 (CLS-24). `in` and `for` over a class
+with `__getitem__` alone, which CPython reads by position until
+`IndexError`, are planned for 1.0 (CST-11).
 
 ## Dataclasses
 

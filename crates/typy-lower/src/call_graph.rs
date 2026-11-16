@@ -286,7 +286,8 @@ fn expression(expression_value: &TypedExpr, callees: &mut BTreeSet<FunctionId>) 
         | TypedExprKind::Raise(operand)
         | TypedExprKind::Hash(operand)
         | TypedExprKind::TupleItem { tuple: operand, .. }
-        | TypedExprKind::TupleSlice { tuple: operand, .. } => {
+        | TypedExprKind::TupleSlice { tuple: operand, .. }
+        | TypedExprKind::SliceBound { slice: operand, .. } => {
             expression(operand, callees);
         }
         TypedExprKind::ListItem { list, index }

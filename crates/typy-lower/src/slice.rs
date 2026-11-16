@@ -66,16 +66,23 @@ impl FunctionLowerer<'_> {
         let mut mask = 0;
         let mut lowered = Vec::with_capacity(3);
         for (bound, bit) in bounds.into_iter().zip(MASK_BITS) {
-            lowered.push(bound.map(|bound| {
+            let bound = bound.map(|bound| self.expression(bound));
+            // A bound written as `None` is a missing one.
+            if bound.is_some_and(|bound| bound.ty != TyirType::Unit) {
                 mask |= bit;
-                self.expression(bound)
-            }));
+            }
+            lowered.push(bound);
         }
         let mut arguments = vec![sliced.value];
+        // A bound of `int | None` passes its word, 0 for `None`, which no `int` is, and the
+        // runtime takes 0 as a missing bound (DAT-12).
         for bound in &lowered {
             let word = match bound {
-                Some(bound) => bound.value,
-                None => self.constant(Constant::Int("0".to_owned()), span),
+                Some(bound) if matches!(bound.ty, TyirType::Optional(_)) => self
+                    .builder
+                    .push_value(Operation::Unwrap(bound.value), TyirType::Int, span),
+                Some(bound) if bound.ty != TyirType::Unit => bound.value,
+                _ => self.constant(Constant::Int("0".to_owned()), span),
             };
             arguments.push(word);
         }

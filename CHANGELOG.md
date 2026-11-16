@@ -124,6 +124,14 @@ All notable changes to TyPy are recorded here. The format follows
   goes over its items until one is the value or equal to it, as CPython
   does; over a class with `__getitem__` alone it is planned for 1.0
   (CLS-23, CST-11).
+- `slice` objects: `x[a:b:c]` on an instance passes one to `__getitem__`,
+  `__setitem__` and `__delitem__`, also in an augmented assignment;
+  `slice(a, b, c)` makes one; `start`, `stop`, `step` and `indices` read
+  it; and `seq[s]` slices a list, `str`, `bytes`, `tuple[T, ...]` or
+  `range`, also as an assignment or `del` target of a list. A slice is
+  compared, hashed and written as CPython does (CLS-23).
+- A slice bound may be `None` or an `int | None`, which stands for a
+  missing bound, as in `items[start:]` with `start = None` (DAT-12).
 
 ### Fixed
 
@@ -167,6 +175,10 @@ All notable changes to TyPy are recorded here. The format follows
 - An arithmetic operator on two instances of one class that defines only
   the reflected method, such as `__radd__`, raises CPython's `TypeError`;
   TyPy called the reflected method (CLS-07).
+- `x[k] += v` on an instance whose class has `__getitem__` and
+  `__setitem__` calls them, with `x` and `k` evaluated once; TyPy left
+  the statement out, and now refuses it with E0401 when the class has no
+  `__setitem__` (CLS-07).
 
 ## [0.4.0] - 2026-11-15
 

@@ -402,15 +402,14 @@ impl BodyChecker<'_> {
         items.into_iter().flatten().collect()
     }
 
-    /// Checks `list[index]`: the index is an `int`, and the item has the list's item type.
-    pub(super) fn list_item(
+    /// Returns `list[index]` of a checked index, an `int`.
+    pub(super) fn list_item_of(
         &mut self,
         list: TypedExpr,
         item: Type,
-        index: &Expr,
+        index: TypedExpr,
         span: Span,
     ) -> TypedExpr {
-        let index = self.expression(index);
         self.expect(&index, Type::Int, "an index");
         Self::typed(
             TypedExprKind::ListItem {

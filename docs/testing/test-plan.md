@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy test plan |
-| Version | 0.61 |
+| Version | 0.62 |
 | Status | Draft |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-16 |

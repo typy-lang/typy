@@ -346,6 +346,14 @@ pub enum TypedExprKind {
     },
     /// `NotImplemented`, the runtime's one object of its type (CLS-21).
     NotImplemented,
+    /// `start`, `stop` or `step` of a slice, by its position 0, 1 or 2: an `int` or `None`
+    /// (CLS-23).
+    SliceBound {
+        /// The slice.
+        slice: Box<TypedExpr>,
+        /// The position of the bound.
+        part: u8,
+    },
     /// A class variable some subclass holds one of its own of: the first of these module
     /// variables that is bound, from the class read through up to the class whose body gives
     /// it (CLS-25, ADR-0037).
@@ -537,7 +545,8 @@ impl TypedExpr {
             | TypedExprKind::Raise(operand)
             | TypedExprKind::Hash(operand)
             | TypedExprKind::TupleItem { tuple: operand, .. }
-            | TypedExprKind::TupleSlice { tuple: operand, .. } => {
+            | TypedExprKind::TupleSlice { tuple: operand, .. }
+            | TypedExprKind::SliceBound { slice: operand, .. } => {
                 vec![operand]
             }
             TypedExprKind::Tuple(items)
