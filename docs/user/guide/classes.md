@@ -404,10 +404,10 @@ A comparison or hash method may raise, also when a list, a set, a dict,
 `sorted`, `min` or `max` calls it: the exception leaves the operation at
 once, no later method runs, and a set or a dict keeps the items it had,
 as in CPython. A chain such as `low < value < high` calls each
-comparison's method and evaluates `value` once (CLS-22). The order in
-which `sort` and `sorted` call `__lt__` is TyPy's own: CPython 3.12,
-3.13 and 3.15 each call it in another order, so a program that prints
-from `__lt__` while sorting prints in another order (OI-27).
+comparison's method and evaluates `value` once (CLS-22). `sort` and
+`sorted` call `__lt__` with the same items in the same order as CPython
+3.15 does; CPython 3.12, 3.13 and 3.14 each call it in another order
+(OI-27).
 
 ## Arithmetic methods
 

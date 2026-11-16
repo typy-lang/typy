@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy software requirements specification |
-| Version | 1.62 |
+| Version | 1.63 |
 | Status | Approved |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-16 |
@@ -537,7 +537,6 @@ resolved issues below.
 | --- | --- | --- |
 | OI-23 | Which ABI lets TyPy modules link dynamically: the layouts of objects, the exception state, the identity of type objects across shared libraries, and one runtime shared by every library (ADR-0016)? It is settled after 1.0, once those layouts are fixed. | 2026-11-11 |
 | OI-25 | Should the modules of the standard library TyPy provides ship prebuilt, one static library and interface per module and target, so a development build links them without compiling them? It depends on separate compilation (ADR-0016). | 2026-11-15 |
-| OI-27 | In which order should `list.sort` and `sorted` call `__lt__`? The order shows when the method prints or raises, and CPython 3.12, CPython 3.13 and 3.14, and CPython 3.15 each compare in another order; TyPy's runtime merge sort compares in its own. Matching CPython 3.15's `listsort`, as OI-14 decides for messages, is the candidate answer (CLS-22, ADR-0039). | 2026-11-16 |
 
 ## 8. Resolved issues
 
@@ -567,6 +566,7 @@ resolved issues below.
 | OI-22 | How is a module checked whose function imports a module that imports it at module level, when each module is checked after the modules it imports? | Such an import is E0426, planned for 0.4: TyPy checks the modules in the order their imports give, an import inside a function counting when it closes no cycle, so the importing function's module comes first and cannot see the other's names yet (ADR-0015). | 2026-11-11 |
 | OI-24 | What is `sys.argv[0]`, when CPython gives the path of the script it runs and a TyPy program has no script? | The path of the executable as the operating system passes it to `main`, which is what a C program receives and what a shell user typed. The other items are the arguments, decoded as CPython decodes them. A conformance test does not print `sys.argv[0]`, because the oracle's differs (LIB-04, STD-03). | 2026-11-12 |
 | OI-26 | Do the AArch64 targets and cross-compilation (CLI-08) stay in 0.5? They need a cross toolchain and an emulator or arm64 runners for their tests. | They move to 0.6, so 0.5 holds the language, stack allocation, libraries and `ctypes`. | 2026-11-15 |
+| OI-27 | In which order should `list.sort` and `sorted` call `__lt__`? The order shows when the method prints or raises, and CPython 3.12, CPython 3.13 and 3.14, and CPython 3.15 each compare in another order. | The order of the newest oracle, CPython 3.15, as OI-14 decides for messages: the runtime's sort is a port of CPython 3.15.2's `listsort`, which compares the same items in the same order, and a comparison that raises leaves the list in the order CPython leaves it. A conformance test that prints from `__lt__` while sorting is invalid unless every oracle prints alike (CLS-22, ADR-0039). | 2026-11-16 |
 
 ## Appendix A. Disposition of the specification pack
 

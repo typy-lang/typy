@@ -136,6 +136,13 @@ All notable changes to TyPy are recorded here. The format follows
   `__len__`, of the object's own class, also where the variable's type is
   a base with neither or a union, and in `any` and `all` (CLS-24).
 
+### Changed
+
+- `list.sort` and `sorted` compare the items CPython 3.15 compares, in its
+  order, so a `__lt__` that prints or raises shows the same calls, and a
+  sort a comparison ends leaves the list as CPython leaves it. TyPy's own
+  merge sort compared other pairs (OI-27).
+
 ### Fixed
 
 - Printing a string with a surrogate writes it as CPython does in UTF-8

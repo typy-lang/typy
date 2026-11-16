@@ -5,6 +5,7 @@
 mod aggregate;
 mod delete;
 mod item;
+mod listsort;
 mod methods;
 mod operations;
 #[cfg(test)]

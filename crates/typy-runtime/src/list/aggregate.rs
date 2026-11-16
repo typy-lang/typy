@@ -11,8 +11,6 @@ use crate::word::inline_value;
 const LESS: i64 = (2 << 1) | 1;
 /// The code of `>`.
 const GREATER: i64 = (4 << 1) | 1;
-/// The length of the runs sorted by insertion before they are merged.
-const RUN: usize = 32;
 
 /// Sorts the items in place, stably, comparing only with `<` as CPython does (`list.sort`).
 /// With `reverse`, an `int` word that is not 0, the list is reversed, sorted and reversed
@@ -38,8 +36,8 @@ pub unsafe extern "C" fn typy_rt_list_sort(list: *mut ListObject, reverse: i64) 
             sort_tuples(list);
         } else {
             let items = core::slice::from_raw_parts_mut((*list).items, length);
-            sort(items, &|left: u64, right: u64| {
-                item_type.order(left, right, LESS)
+            sorted(items, &|left: u64, right: u64| {
+                checked(item_type.order(left, right, LESS))
             });
         }
         if reverse {
@@ -68,8 +66,8 @@ unsafe fn sort_tuples(list: *mut ListObject) {
         for (index, position) in positions.iter_mut().enumerate() {
             *position = index;
         }
-        sort(positions, &|left: usize, right: usize| {
-            item_type.order((*list).item(left), (*list).item(right), LESS)
+        sorted(positions, &|left: usize, right: usize| {
+            checked(item_type.order((*list).item(left), (*list).item(right), LESS))
         });
         let sorted = allocate(array_size(length, 8 * words, 0)).cast::<u64>();
         for (index, position) in positions.iter().enumerate() {
@@ -102,68 +100,35 @@ unsafe fn items_of<'list>(list: *const ListObject) -> &'list [u64] {
     }
 }
 
-/// Sorts `items` stably: runs of `RUN` items by binary insertion, then merged bottom up.
-fn sort<T: Copy>(items: &mut [T], less: &impl Fn(T, T) -> bool) {
-    for run in items.chunks_mut(RUN) {
-        insertion_sort(run, less);
-    }
-    if items.len() <= RUN {
-        return;
-    }
+/// Sorts `items` as CPython 3.15's `list.sort` does (OI-27), with a scratch buffer of half
+/// of them; a comparison that raised ends the sort, its exception waiting with the runtime.
+fn sorted<T: Copy>(items: &mut [T], less: super::listsort::Less<'_, T>) {
     #[allow(
         clippy::cast_ptr_alignment,
         reason = "malloc returns memory aligned for every type"
     )]
-    let buffer = allocate(array_size(items.len(), core::mem::size_of::<T>(), 0)).cast::<T>();
-    // SAFETY: the buffer has room for every item; `merge` writes each slot before reading it.
-    let scratch = unsafe { core::slice::from_raw_parts_mut(buffer, items.len()) };
-    let mut width = RUN;
-    while width < items.len() {
-        let mut start = 0;
-        while start + width < items.len() {
-            let end = (start + 2 * width).min(items.len());
-            merge(&mut items[start..end], width, scratch, less);
-            start = end;
-        }
-        width *= 2;
-    }
+    let buffer = allocate(array_size(
+        items.len() / 2 + 1,
+        core::mem::size_of::<T>(),
+        0,
+    ))
+    .cast::<T>();
+    // SAFETY: the buffer has room for half the items, rounded up; the sort writes each slot
+    // before it reads it.
+    let scratch = unsafe { core::slice::from_raw_parts_mut(buffer, items.len() / 2 + 1) };
+    // The exception of a comparison that raised waits with the runtime, which the program
+    // raises after the call (ADR-0039).
+    let _ = super::listsort::sort(items, scratch, less);
     free(buffer.cast());
 }
 
-/// Sorts a short run by binary insertion; an item goes after every item it is not less than.
-fn insertion_sort<T: Copy>(run: &mut [T], less: &impl Fn(T, T) -> bool) {
-    for next in 1..run.len() {
-        let pivot = run[next];
-        let (mut low, mut high) = (0, next);
-        while low < high {
-            let middle = low + (high - low) / 2;
-            if less(pivot, run[middle]) {
-                high = middle;
-            } else {
-                low = middle + 1;
-            }
-        }
-        run.copy_within(low..next, low + 1);
-        run[low] = pivot;
+/// Returns a comparison's answer, or `Raised` when a slot's method raised during it.
+fn checked(answer: bool) -> Result<bool, super::listsort::Raised> {
+    if crate::slot::pending() {
+        Err(super::listsort::Raised)
+    } else {
+        Ok(answer)
     }
-}
-
-/// Merges the sorted halves `items[..middle]` and `items[middle..]`; an item of the right half
-/// goes first only when it is less than the left one, which keeps the sort stable.
-fn merge<T: Copy>(items: &mut [T], middle: usize, scratch: &mut [T], less: &impl Fn(T, T) -> bool) {
-    scratch[..middle].copy_from_slice(&items[..middle]);
-    let (mut left, mut right, mut out) = (0, middle, 0);
-    while left < middle && right < items.len() {
-        if less(items[right], scratch[left]) {
-            items[out] = items[right];
-            right += 1;
-        } else {
-            items[out] = scratch[left];
-            left += 1;
-        }
-        out += 1;
-    }
-    items[out..out + middle - left].copy_from_slice(&scratch[left..middle]);
 }
 
 /// Returns the smallest item, or with `largest`, an `int` word that is not 0, the largest, with
