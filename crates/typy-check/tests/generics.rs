@@ -128,11 +128,23 @@ fn a_class_method_of_a_generic_class_takes_its_type_arguments_from_the_call() {
         "    def note() -> int:\n",
         "        local: list[T] = []\n",
         "        return len(local)\n",
+        "    @classmethod\n",
+        "    def make(cls, item: T) -> 'Box[T]':\n",
+        "        return cls(item)\n",
+        "    def again(self) -> 'Box[T]':\n",
+        "        return Box.make(self.item)\n",
     );
     let cases: &[(&str, &[&str])] = &[
         ("print(Box[int].name(), Box[str].note())\n", &[]),
         ("print(Box.name())\n", &["E0404"]),
         ("print(Box.note())\n", &["E0404"]),
+        // A method of the generic class through the class takes the instance's copy.
+        ("print(Box.__init__(Box(1), 2))\n", &[]),
+        ("print(Box.__init__(5, 2))\n", &["E0404"]),
+        (
+            "class Other:\n    pass\nprint(Box.__init__(Other(), 2))\n",
+            &["E0404"],
+        ),
     ];
     for (body, expected) in cases {
         assert_eq!(app(&format!("{class}{body}")), *expected, "{body}");

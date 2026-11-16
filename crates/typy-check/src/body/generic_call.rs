@@ -64,6 +64,7 @@ impl BodyChecker<'_> {
         let target = if types.iter().any(|ty| ty.has_parameter() || ty.has_error()) {
             function
         } else {
+            self.make_owner_copy(function, &types);
             match self.program.request_copy(function, types.clone()) {
                 Requested::Copy(copy) => copy,
                 Requested::TooDeep => return Err(self.copies_too_deep(name, span)),
@@ -72,6 +73,33 @@ impl BodyChecker<'_> {
         let signature = self.program.instantiated(function, &types);
         self.program.make_class_copies();
         Ok((target, signature))
+    }
+
+    /// Makes the copy of the generic class whose type parameters `function` is generic over,
+    /// if it is a method of one, so the copy of the method belongs to it (ADR-0028).
+    fn make_owner_copy(&mut self, function: FunctionId, types: &[Type]) {
+        let Some(parameters) = self
+            .program
+            .generic(function)
+            .map(|generic| generic.parameters.clone())
+        else {
+            return;
+        };
+        let owner = self
+            .program
+            .class_copies
+            .borrow()
+            .roots
+            .iter()
+            .find(|(_, generic)| generic.parameters == parameters)
+            .map(|(class, _)| *class);
+        if let Some(owner) = owner {
+            self.program
+                .class_copies
+                .borrow_mut()
+                .applied(owner, types.to_vec());
+            self.program.make_class_copies();
+        }
     }
 
     /// Returns the type arguments of the generic function `function` that the arguments after
