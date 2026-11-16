@@ -550,6 +550,9 @@ pub(crate) fn annotation_type(
     if let Some(ty) = imported_alias_type(annotation, scope, diagnostics) {
         return ty;
     }
+    if let Some(ty) = generic_class_annotation(annotation, scope, diagnostics) {
+        return ty;
+    }
     match annotation {
         Expr::Constant {
             value: Constant::None,
@@ -572,14 +575,6 @@ pub(crate) fn annotation_type(
                 ..*scope
             };
             annotation_type(annotation, &deferred, diagnostics)
-        }
-        // A generic class given its type arguments (GEN-01, ADR-0028).
-        Expr::Subscript { value, index, .. }
-            if let Expr::Name { id, .. } = value.as_ref()
-                && let Some(class) = scope.classes.get(id)
-                && scope.copies.borrow().roots.contains_key(class) =>
-        {
-            super::generic_class::applied_annotation(*class, id, index, scope, diagnostics)
         }
         Expr::Subscript { value, index, .. } if matches!(value.as_ref(), Expr::Name { id, .. } if id == "tuple") => {
             tuple_annotation(index, scope, diagnostics)
@@ -626,6 +621,44 @@ pub(crate) fn annotation_type(
             Type::Error
         }
     }
+}
+
+/// Returns the copy of a generic class an annotation names with its type arguments, the
+/// class written by its name or through its module, or `None` when the annotation names
+/// none (GEN-01, GEN-07, ADR-0028).
+fn generic_class_annotation(
+    annotation: &Expr,
+    scope: &AnnotationScope<'_>,
+    diagnostics: &mut Diagnostics,
+) -> Option<Type> {
+    let Expr::Subscript { value, index, .. } = annotation else {
+        return None;
+    };
+    let (name, class) = match value.as_ref() {
+        Expr::Name { id, .. } => (id, scope.classes.get(id)?),
+        Expr::Attribute {
+            value: module,
+            attribute,
+            ..
+        } => {
+            let Expr::Name { id, .. } = module.as_ref() else {
+                return None;
+            };
+            let class = scope.modules.get(id)?.get(&attribute.name)?;
+            (&attribute.name, class)
+        }
+        _ => return None,
+    };
+    if !scope.copies.borrow().roots.contains_key(class) {
+        return None;
+    }
+    Some(super::generic_class::applied_annotation(
+        *class,
+        name,
+        index,
+        scope,
+        diagnostics,
+    ))
 }
 
 /// Returns the type a bare name names: a scalar, or an error for a name that is not a type or

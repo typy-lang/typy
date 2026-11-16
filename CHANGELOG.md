@@ -105,10 +105,9 @@ All notable changes to TyPy are recorded here. The format follows
   method to the binary methods; when every method gives way, `==` and
   `!=` compare identities and other operators raise CPython's
   `TypeError`. Lists, sets and dicts compare through an `__eq__` that
-  gives way. An ordering method that returns it is planned for 0.5, with
-  slot methods that may raise (CLS-22), and one that also returns `None`
-  for 1.0 (CLS-33). `return NotImplemented` elsewhere is E0405 (CLS-21,
-  ADR-0038).
+  gives way, and so do ordering methods (CLS-22); a method that also
+  returns `None` is planned for 1.0 (CLS-33). `return NotImplemented`
+  elsewhere is E0405 (CLS-21, ADR-0038).
 - Comparison, hash and truth methods that may raise, or that print, inside
   lists, sets, dicts, `sorted`, `min`, `max`, `any` and `all`: the first
   exception leaves the operation, no later method runs, and a set or a
@@ -139,6 +138,9 @@ All notable changes to TyPy are recorded here. The format follows
 - The truth of an instance comes from the `__bool__`, or else the
   `__len__`, of the object's own class, also where the variable's type is
   a base with neither or a union, and in `any` and `all` (CLS-24).
+- A generic function or class of another module, imported by name or
+  used through its module as `tools.first(items)` or `tools.Box[int]`.
+  Its copies read the names of the module that defines it (GEN-07).
 
 ### Changed
 
@@ -201,6 +203,9 @@ All notable changes to TyPy are recorded here. The format follows
   as `__radd__`, calls the one a class derived from it defines when the
   right object is of that class, also first when that class derives from
   the left operand's, as CPython does; TyPy refused it (CLS-07).
+- Calling a generic class of another module, such as `Box(3)` after
+  `from tools import Box`, compiles; TyPy stopped with an internal error
+  (GEN-07).
 - A subclass may redefine a static method, or a method as a static one;
   a call through an instance runs the one of the object's class, as
   CPython does (CLS-06, CLS-35).

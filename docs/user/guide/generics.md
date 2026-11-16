@@ -16,6 +16,7 @@ those types costs (GEN-01 to GEN-03, ADR-0023, ADR-0028).
 | `class Name[T]:`, a generic class, and `Name[int]` in annotations and calls | GEN-01 |
 | `[T: Bound]`, a bound, and `[T: (A, B)]`, constraints | GEN-02 |
 | One compiled copy for each set of type arguments, with no type at run time | GEN-03 |
+| A generic function or class of another module, by name or through the module | GEN-07 |
 
 ## Generic functions
 
@@ -169,6 +170,17 @@ A copy is called directly, not looked up through the instance's class,
 so a method with type parameters may not override a method of a base or
 be overridden, E0201 (GEN-09).
 
+## Generics of other modules
+
+A generic function or class of another module is used as one of the
+module's own: imported by name, `from tools import first, Box`, or
+through the module, `tools.first([1])` and `tools.Box[int]`. Its copies
+are made from its source and read the names of the module that defines
+it, so a copy may call that module's functions, including those whose
+names start with an underscore, and read its variables (GEN-07). A type
+argument outside a bound or the constraints is reported at the call, in
+the module that makes it.
+
 ## Protocols
 
 A protocol lists the methods and attributes a class needs, and any class
@@ -242,7 +254,6 @@ parameter, a class that names a protocol as its base, and properties,
 static methods, class methods and class variables of a protocol are
 planned for 0.5 (GEN-10). A generic class with a base, which includes a
 generic protocol, a class derived from a generic class, and class
-variables and defaults of a generic class are planned for 0.5 (GEN-08),
-as is using a generic function or class of another module (GEN-07);
+variables and defaults of a generic class are planned for 0.5 (GEN-08).
 `*Ts`, `**P` and defaults of type parameters are planned for 1.0
 (GEN-06).

@@ -10,6 +10,7 @@ mod definition;
 mod definition_order;
 mod generic_body;
 mod generic_class;
+mod generic_copies;
 #[cfg(test)]
 mod generic_tests;
 mod module_imports;
@@ -219,7 +220,7 @@ impl Checked<'_> {
             let (waiting, checked) = check_module(
                 &mut program,
                 (module, aliases, &mut copies),
-                &path,
+                (&path, &definitions),
                 self.floor_defers,
                 &frozen,
                 diagnostics,
@@ -243,7 +244,7 @@ struct Deferred<'tree> {
 }
 
 /// The definitions of each module checked, with the ID of the first, which the copies of a
-/// module's generic functions are made from (GEN-03).
+/// module's generic functions are made from (GEN-03, GEN-07).
 type ModuleDefinitions<'tree> = BTreeMap<String, (Vec<Definition<'tree>>, usize)>;
 
 impl Deferred<'_> {
@@ -261,8 +262,8 @@ impl Deferred<'_> {
         for (id, definition) in &self.bodies {
             check_body(program, *id, definition, diagnostics);
         }
-        if let Some((definitions, first_function)) = definitions.get(&self.module) {
-            check_copies(program, definitions, *first_function, diagnostics);
+        if let Some((own, first_function)) = definitions.get(&self.module) {
+            generic_copies::check(program, (own, *first_function), definitions, diagnostics);
         }
         program.swap_module_context(current);
     }
@@ -335,7 +336,7 @@ fn check_module<'tree>(
         &BTreeMap<String, type_alias::Alias>,
         &mut class::ClassMethodCopies<'tree>,
     ),
-    path: &str,
+    (path, earlier): (&str, &ModuleDefinitions<'tree>),
     floor_defers: bool,
     dataclasses: &BTreeMap<String, dataclass::DataclassInfo>,
     diagnostics: &mut Diagnostics,
@@ -439,20 +440,28 @@ fn check_module<'tree>(
     }
     program.end_first_look();
     let body = BodyChecker::check_module(program, &module_body, diagnostics);
-    let deferred = check_bodies(program, others, &definitions, first_function, diagnostics);
+    let deferred = check_bodies(
+        program,
+        others,
+        (&definitions, first_function, earlier),
+        diagnostics,
+    );
     program.end_module(body);
     (deferred, (definitions, first_function))
 }
 
 /// Checks the bodies of the module's functions after the module body, then the copies of
-/// its generic functions that the calls need (GEN-03). A function that imports a module
+/// generic functions that the calls need (GEN-03, GEN-07). A function that imports a module
 /// checked after this one waits for it (MOD-13), and a copy of a class method of another
 /// module waits to be checked in that module's names (ADR-0037).
 fn check_bodies<'tree>(
     program: &mut Program,
     others: Vec<(usize, &Definition<'tree>)>,
-    definitions: &[Definition<'tree>],
-    first_function: usize,
+    (definitions, first_function, earlier): (
+        &[Definition<'tree>],
+        usize,
+        &ModuleDefinitions<'tree>,
+    ),
     diagnostics: &mut Diagnostics,
 ) -> Vec<Deferred<'tree>> {
     let id = |index: usize| FunctionId(u32::try_from(first_function + index).unwrap_or(u32::MAX));
@@ -472,7 +481,7 @@ fn check_bodies<'tree>(
             .or_default()
             .push((id(index), definition.clone()));
     }
-    check_copies(program, definitions, first_function, diagnostics);
+    generic_copies::check(program, (definitions, first_function), earlier, diagnostics);
     waiting
         .into_iter()
         .map(|(module, bodies)| Deferred { module, bodies })
@@ -592,49 +601,6 @@ fn note_module_generics(
         &program.class_copies,
         diagnostics,
     );
-}
-
-/// Checks each copy of a generic function of the module that a call needs, as an ordinary
-/// function whose type parameters stand for its arguments; a copy may need further copies
-/// (GEN-03, ADR-0023).
-fn check_copies(
-    program: &mut Program,
-    definitions: &[Definition<'_>],
-    first_function: usize,
-    diagnostics: &mut Diagnostics,
-) {
-    while let Some(copy) = program.next_pending_copy() {
-        // A copy is made only for a generic of the module being checked (GEN-07).
-        let generic = &definitions[copy.generic.0 as usize - first_function];
-        let given: Vec<String> = copy.arguments.iter().map(ToString::to_string).collect();
-        // A copy of a method belongs to its copy of the class, whose name it takes.
-        let qualified_name = match copy.class {
-            Some(class) => format!(
-                "{}[{}].{}",
-                program.class_name(class),
-                given.join(", "),
-                generic.name
-            ),
-            None => format!("{}[{}]", generic.qualified_name, given.join(", ")),
-        };
-        let made = Definition {
-            qualified_name,
-            class: copy.class.or(generic.class),
-            copy_of: Some(copy.generic),
-            signature: program.instantiated(copy.generic, &copy.arguments),
-            type_parameters: Vec::new(),
-            ..generic.clone()
-        };
-        program.type_arguments = generic
-            .type_parameters
-            .iter()
-            .zip(&copy.arguments)
-            .map(|(parameter, argument)| (parameter.name.clone(), argument.clone()))
-            .collect();
-        check_body(program, copy.copy, &made, diagnostics);
-        program.type_arguments.clear();
-    }
-    program.end_copies();
 }
 
 /// Notes in each dataclass's information what its expansion wrote (CLS-05, CST-06).

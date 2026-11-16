@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy detailed design |
-| Version | 2.02 |
+| Version | 2.03 |
 | Status | Approved |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-16 |
@@ -900,12 +900,16 @@ compiles to an empty stub. `body::generic_call` types the arguments once with
 what that look reports dropped, solves the parameters with `generic::infer`,
 joining two solutions into a union, checks bounds and constraints, and asks
 `Program::request_copy` for the copy of the arguments, which
-`check::check_copies` checks at the end of the module as an ordinary function
-with `Program::type_arguments` naming the arguments. A copy made inside 64
-others is E0428, and a call of another module's generic is E0201 until GEN-07.
-The module body's first look gives back the copies it made, with the function
-IDs they took. Generic classes (ADR-0028) are noted before any signature is
-read, by `check::generic_class::note_generic_classes`, in `body::ClassCopies`
+`check::generic_copies::check` checks at the end of the module as an ordinary
+function with `Program::type_arguments` naming the arguments. A copy made inside
+64 others is E0428. A copy of another module's generic, a function or a method
+of a generic class, is checked in that module's names, which
+`Program::context_of` kept when the module ended, from the definitions
+`ModuleDefinitions` holds for it, so its body reads its own module's functions,
+classes and variables (GEN-07). The module body's first look gives back the
+copies it made, with the function IDs they took. Generic classes (ADR-0028) are
+noted before any signature is read, by
+`check::generic_class::note_generic_classes`, in `body::ClassCopies`
 behind a `RefCell` the annotation scope shares, so `Box[int]` in a signature
 asks for a copy, which takes a class ID after the module's classes.
 `ClassCopies::applied` gives the generic class's own instances for its own

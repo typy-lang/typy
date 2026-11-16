@@ -58,20 +58,6 @@ impl BodyChecker<'_> {
                 self.program.signatures[function.0 as usize].clone(),
             ));
         };
-        if generic.module != self.program.module {
-            return Err(self.error(
-                Diagnostic::new(
-                    DiagnosticCode::error(201),
-                    span,
-                    format!(
-                        "calling `{name}`, a generic function of another module, is planned for \
-                         TyPy 0.5 (GEN-07)"
-                    ),
-                )
-                .with_rule(RuleId::GEN_07),
-                span,
-            ));
-        }
         let solved = self.solve(function, skip, &generic.parameters, arguments, keywords);
         let mut types = Vec::new();
         for (parameter, solution) in generic.parameters.iter().zip(solved) {

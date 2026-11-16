@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy test plan |
-| Version | 0.66 |
+| Version | 0.67 |
 | Status | Draft |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-16 |
@@ -399,7 +399,7 @@ that the specification does not define.
 | GEN-04 | 0.4 | IT | `tests/conformance/gen/GEN-04_*.py` |
 | GEN-05 | 0.4 | IT | `tests/conformance/gen/GEN-05_*.py` |
 | GEN-06 | 1.0 | IT | `tests/conformance/gen/GEN-06_*.py` |
-| GEN-07 | 0.5 | IT | `tests/conformance/gen/GEN-07_*.py` |
+| GEN-07 | 0.5 | IT | `tests/conformance/gen/GEN-07_*`; `crates/typy-check/tests/generics.rs` |
 | GEN-08 | 0.5 | IT | `tests/conformance/gen/GEN-08_*.py` |
 | GEN-09 | 0.5 | IT | `tests/conformance/gen/GEN-09_*.py` |
 | GEN-10 | 0.5 | IT | `tests/conformance/gen/GEN-10_*.py` |

@@ -116,15 +116,37 @@ fn calls_that_give_no_fitting_type_are_refused() {
 }
 
 #[test]
-fn a_generic_of_another_module_is_planned() {
-    let found = codes(&[
-        ("app.py", "from tools import first\nprint(first([1]))\n"),
-        (
-            "tools.py",
-            "def first[T](items: list[T]) -> T:\n    return items[0]\n",
-        ),
+fn a_generic_of_another_module_is_copied_in_its_own_names() {
+    let tools = concat!(
+        "SCALE = 10\n",
+        "class Box[T]:\n",
+        "    def __init__(self, item: T) -> None:\n",
+        "        self.item = item\n",
+        "def _twice[T](item: T) -> list[T]:\n",
+        "    return [item, item]\n",
+        "def doubled[T](item: T) -> list[T]:\n",
+        "    return _twice(item)\n",
+        "def scaled[N: (int, float)](value: N) -> N:\n",
+        "    return value * SCALE\n",
+    );
+    let uses = [
+        "from tools import doubled\nprint(doubled(1)[0] + 1)\n",
+        "import tools\nprint(tools.scaled(2.5) + 1.0)\n",
+        "from tools import Box\nb: Box[str] = Box('x')\nprint(b.item.upper())\n",
+        "import tools\ndef show(box: tools.Box[int]) -> int:\n    return box.item\nprint(show(tools.Box(3)))\n",
+    ];
+    for app in uses {
+        assert_eq!(
+            codes(&[("app.py", app), ("tools.py", tools)]),
+            Vec::<String>::new(),
+            "{app}"
+        );
+    }
+    let refused = codes(&[
+        ("app.py", "import tools\nprint(tools.scaled('x'))\n"),
+        ("tools.py", tools),
     ]);
-    assert_eq!(found, vec!["E0201".to_string()]);
+    assert_eq!(refused, vec!["E0404".to_string()]);
 }
 
 #[test]
