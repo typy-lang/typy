@@ -5,7 +5,7 @@ use std::cell::RefCell;
 use std::collections::BTreeMap;
 
 use typy_diagnostics::{Diagnostic, DiagnosticCode, Diagnostics, RuleId, Span};
-use typy_source::syntax::Expr;
+use typy_source::syntax::{Expr, Stmt};
 
 use super::annotation::{AnnotationScope, annotation_type};
 use super::class::ClassStatement;
@@ -168,8 +168,10 @@ pub(super) fn parameters_in_scope(
 }
 
 /// Makes the methods of a generic class generic over its type parameters, so each is checked
-/// once with them opaque and copied for each copy of the class, and reports what a generic
-/// class does not have yet: class variables and defaults (GEN-08).
+/// once with them opaque and copied for each copy of the class. A static method that names
+/// none of them, in its signature or its body, is the same for every copy, so it is compiled
+/// once and called as it is. Reports what a generic class does not have yet: class variables
+/// and defaults (GEN-08).
 pub(super) fn finish_generic_class(
     info: &super::ClassInfo,
     methods: &mut [super::Definition<'_>],
@@ -180,6 +182,11 @@ pub(super) fn finish_generic_class(
     let Some(generic) = copies.borrow().roots.get(&info.id).cloned() else {
         return;
     };
+    let names: Vec<&str> = generic
+        .parameters
+        .iter()
+        .map(|parameter| parameter.name.as_str())
+        .collect();
     for method in methods {
         if !method.type_parameters.is_empty() {
             diagnostics.push(
@@ -194,6 +201,10 @@ pub(super) fn finish_generic_class(
                 )
                 .with_rule(RuleId::GEN_09),
             );
+        }
+        let is_static = !method.takes_instance && info.static_methods.contains(&method.name);
+        if is_static && !names_type_parameter(method, &names) {
+            continue;
         }
         method.type_parameters.clone_from(&generic.parameters);
     }
@@ -210,5 +221,51 @@ pub(super) fn finish_generic_class(
             )
             .with_rule(RuleId::GEN_08),
         );
+    }
+}
+
+/// Returns true when a method names one of `names`: its signature holds a type parameter, or
+/// an expression or a variable's annotation in its body names one.
+fn names_type_parameter(method: &super::Definition<'_>, names: &[&str]) -> bool {
+    let signature = &method.signature;
+    if signature
+        .parameters
+        .iter()
+        .map(|parameter| &parameter.ty)
+        .chain(std::iter::once(&signature.returns))
+        .any(Type::has_parameter)
+    {
+        return true;
+    }
+    let mut found = false;
+    let mut visit = |expression: &Expr| {
+        if let Expr::Name { id, .. } = expression {
+            found |= names.contains(&id.as_str());
+        }
+    };
+    for statement in method.body {
+        super::visit_statement(statement, &mut visit);
+    }
+    let mut pending: Vec<&Stmt> = method.body.iter().collect();
+    while let Some(statement) = pending.pop() {
+        if let Stmt::AnnAssign { annotation, .. } = statement {
+            super::visit::visit_expression(annotation, &mut visit);
+        }
+        pending.extend(nested_blocks(statement).into_iter().flatten());
+    }
+    found
+}
+
+/// Returns the blocks a statement holds, whose statements `visit_statement` reads but whose
+/// annotations it does not.
+fn nested_blocks(statement: &Stmt) -> Vec<&[Stmt]> {
+    match statement {
+        Stmt::If { body, orelse, .. }
+        | Stmt::While { body, orelse, .. }
+        | Stmt::For { body, orelse, .. } => vec![body, orelse],
+        Stmt::With { body, .. } => vec![body],
+        Stmt::Match { cases, .. } => cases.iter().map(|case| case.body.as_slice()).collect(),
+        Stmt::Try { .. } => statement.try_blocks(),
+        _ => Vec::new(),
     }
 }

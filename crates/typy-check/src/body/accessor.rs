@@ -46,7 +46,16 @@ impl BodyChecker<'_> {
         (arguments, keywords): (&[Expr], &[Keyword]),
         span: Span,
     ) -> Result<(FunctionId, crate::typed::FunctionSignature), TypedExpr> {
-        if self.is_generic_method(class, name) {
+        // A static method of a generic class that names its type parameters is generic over
+        // them, so a call through the generic class takes them from its arguments.
+        let through_generic_class = self
+            .program
+            .class_copies
+            .borrow()
+            .roots
+            .contains_key(&class)
+            && self.is_static_method(class, name);
+        if self.is_generic_method(class, name) || through_generic_class {
             return self.call_target(function, skip, qualified, arguments, keywords, span);
         }
         Ok((
@@ -407,6 +416,13 @@ impl BodyChecker<'_> {
             .iter()
             .find(|(each, _)| *each == name.name)
             .map(|(_, id)| *id)?;
+        let qualified = format!("{class_name}.{}", name.name);
+        let (class, function) =
+            match self.through_class_copy(class, function, &qualified, (arguments, keywords), span)
+            {
+                Ok(found) => found,
+                Err(error) => return Some(error),
+            };
         let of = match self.program.exception(class) {
             Some(exception) => crate::types::TypeObjectOf::Exception(exception.clone()),
             None => crate::types::TypeObjectOf::Instance(class, class_name.clone()),
@@ -416,7 +432,6 @@ impl BodyChecker<'_> {
             crate::types::TypeObjectOf::type_of(Some(of)),
             span,
         );
-        let qualified = format!("{class_name}.{}", name.name);
         let bound = match self.bind_arguments(function, 1, &qualified, arguments, keywords, span) {
             Ok(bound) => bound,
             Err(error) => return Some(error),
@@ -436,6 +451,52 @@ impl BodyChecker<'_> {
             returns,
             span,
         ))
+    }
+
+    /// Returns the class a call of the class method `function` through `class` passes as `cls`,
+    /// with the method it runs: for a generic class, the copy for the type arguments the
+    /// arguments give, and its copy of the method; `class` and `function` for any other.
+    fn through_class_copy(
+        &mut self,
+        class: ClassId,
+        function: FunctionId,
+        qualified: &str,
+        given: (&[Expr], &[Keyword]),
+        span: Span,
+    ) -> Result<(ClassId, FunctionId), TypedExpr> {
+        let generic = self
+            .program
+            .class_copies
+            .borrow()
+            .roots
+            .contains_key(&class);
+        if !generic || self.program.generic(function).is_none() {
+            return Ok((class, function));
+        }
+        let types = self.solved_arguments(function, 1, qualified, given, span)?;
+        // Inside the generic class's own body a parameter may solve to another; that body is
+        // checked, never run.
+        if types.iter().any(|ty| ty.has_parameter() || ty.has_error()) {
+            return Ok((class, function));
+        }
+        let copy = self.program.class_copies.borrow_mut().applied(class, types);
+        self.program.make_class_copies();
+        let Some(copy) = copy.class_id() else {
+            return Ok((class, function));
+        };
+        let name = self.program.classes[class.0 as usize]
+            .class_methods
+            .iter()
+            .find(|(_, each)| *each == function)
+            .map(|(name, _)| name.clone());
+        let made = name.and_then(|name| {
+            self.program.classes[copy.0 as usize]
+                .class_methods
+                .iter()
+                .find(|(each, _)| *each == name)
+                .map(|(_, id)| *id)
+        });
+        Ok((copy, made.unwrap_or(function)))
     }
 
     /// Reports `instance.name(arguments)` for a class method of a generic class, which has no

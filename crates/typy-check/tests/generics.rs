@@ -116,6 +116,30 @@ fn calls_that_give_no_fitting_type_are_refused() {
 }
 
 #[test]
+fn a_class_method_of_a_generic_class_takes_its_type_arguments_from_the_call() {
+    let class = concat!(
+        "class Box[T]:\n",
+        "    def __init__(self, item: T) -> None:\n",
+        "        self.item = item\n",
+        "    @classmethod\n",
+        "    def name(cls) -> str:\n",
+        "        return 'box'\n",
+        "    @staticmethod\n",
+        "    def note() -> int:\n",
+        "        local: list[T] = []\n",
+        "        return len(local)\n",
+    );
+    let cases: &[(&str, &[&str])] = &[
+        ("print(Box[int].name(), Box[str].note())\n", &[]),
+        ("print(Box.name())\n", &["E0404"]),
+        ("print(Box.note())\n", &["E0404"]),
+    ];
+    for (body, expected) in cases {
+        assert_eq!(app(&format!("{class}{body}")), *expected, "{body}");
+    }
+}
+
+#[test]
 fn a_generic_of_another_module_is_copied_in_its_own_names() {
     let tools = concat!(
         "SCALE = 10\n",

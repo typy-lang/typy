@@ -138,6 +138,10 @@ All notable changes to TyPy are recorded here. The format follows
 - The truth of an instance comes from the `__bool__`, or else the
   `__len__`, of the object's own class, also where the variable's type is
   a base with neither or a union, and in `any` and `all` (CLS-24).
+- A static or class method of a generic class called through the class
+  takes the type arguments from its arguments, as in `Box.wrap("a")`, or
+  from the class, as in `Box[int].make(3)`, and runs that copy's method
+  (GEN-01).
 - A generic function or class of another module, imported by name or
   used through its module as `tools.first(items)` or `tools.Box[int]`.
   Its copies read the names of the module that defines it (GEN-07).
@@ -203,6 +207,9 @@ All notable changes to TyPy are recorded here. The format follows
   as `__radd__`, calls the one a class derived from it defines when the
   right object is of that class, also first when that class derives from
   the left operand's, as CPython does; TyPy refused it (CLS-07).
+- A static method of a generic class that names none of its type
+  parameters, such as `Box.count()`, is compiled once and called through
+  the class or an instance; TyPy stopped with an internal error (GEN-01).
 - Calling a generic class of another module, such as `Box(3)` after
   `from tools import Box`, compiles; TyPy stopped with an internal error
   (GEN-07).

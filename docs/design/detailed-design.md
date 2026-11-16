@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy detailed design |
-| Version | 2.03 |
+| Version | 2.04 |
 | Status | Approved |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-16 |
@@ -921,7 +921,14 @@ the generic class while the copy's are unknown, and a copy of each method,
 checked as function copies are. `Program::substitute` maps a copy to the copy
 for the substituted arguments, so a recursive class such as `Node[T]` refers to
 its own copies. A call of a generic class solves its type arguments from
-`__init__` in `BodyChecker::class_to_call`. A copy whose arguments hold a
+`__init__` in `BodyChecker::class_to_call`. A static method that names no type
+parameter of its class, in its signature or in its body, is left out of
+`finish_generic_class`'s copies, so it is compiled once; any other static or
+class method called through the generic class takes the type arguments its
+arguments give, solved by `BodyChecker::solved_arguments`, and a class method
+then runs the copy's method with the copy as `cls`. `Class[arguments].name(...)`
+calls the method of the copy `BodyChecker::applied_class` names. A copy whose
+arguments hold a
 parameter, and the generic class itself, are opaque: lowering lays them out
 empty and their methods are stubs. A copy's `TyirClass::public` names the
 generic class, which codegen writes as the type object's base and as its

@@ -52,20 +52,13 @@ impl BodyChecker<'_> {
         keywords: &[Keyword],
         span: Span,
     ) -> Result<(FunctionId, FunctionSignature), TypedExpr> {
-        let Some(generic) = self.program.generic(function).cloned() else {
+        if self.program.generic(function).is_none() {
             return Ok((
                 function,
                 self.program.signatures[function.0 as usize].clone(),
             ));
-        };
-        let solved = self.solve(function, skip, &generic.parameters, arguments, keywords);
-        let mut types = Vec::new();
-        for (parameter, solution) in generic.parameters.iter().zip(solved) {
-            match self.type_argument(parameter, solution, name, span) {
-                Some(ty) => types.push(ty),
-                None => return Err(Self::invalid_call(span)),
-            }
         }
+        let types = self.solved_arguments(function, skip, name, (arguments, keywords), span)?;
         // Inside a generic body a call may solve a parameter to another one; that body is
         // checked, never run, so its call goes to the generic itself.
         let target = if types.iter().any(|ty| ty.has_parameter() || ty.has_error()) {
@@ -79,6 +72,32 @@ impl BodyChecker<'_> {
         let signature = self.program.instantiated(function, &types);
         self.program.make_class_copies();
         Ok((target, signature))
+    }
+
+    /// Returns the type arguments of the generic function `function` that the arguments after
+    /// the first `skip` give, each checked against its bound or constraints.
+    pub(super) fn solved_arguments(
+        &mut self,
+        function: FunctionId,
+        skip: usize,
+        name: &str,
+        (arguments, keywords): (&[Expr], &[Keyword]),
+        span: Span,
+    ) -> Result<Vec<Type>, TypedExpr> {
+        let parameters = self
+            .program
+            .generic(function)
+            .map(|generic| generic.parameters.clone())
+            .unwrap_or_default();
+        let solved = self.solve(function, skip, &parameters, arguments, keywords);
+        let mut types = Vec::new();
+        for (parameter, solution) in parameters.iter().zip(solved) {
+            match self.type_argument(parameter, solution, name, span) {
+                Some(ty) => types.push(ty),
+                None => return Err(Self::invalid_call(span)),
+            }
+        }
+        Ok(types)
     }
 
     /// Solves the type parameters from the types of the arguments, each typed once without
@@ -134,6 +153,20 @@ impl BodyChecker<'_> {
         span: Span,
     ) -> Option<Type> {
         let Some(solution) = solution else {
+            // A parameter of a generic class may also be given with the class.
+            let of_class = self
+                .program
+                .class_copies
+                .borrow()
+                .roots
+                .values()
+                .any(|generic| generic.parameters.contains(parameter));
+            let help = match name.split_once('.') {
+                Some((class, method)) if of_class => {
+                    format!("give the class its type arguments, as in `{class}[int].{method}(...)`")
+                }
+                _ => "pass a value whose type gives it".to_owned(),
+            };
             self.diagnostics.push(
                 Diagnostic::new(
                     DiagnosticCode::error(404),
@@ -144,7 +177,7 @@ impl BodyChecker<'_> {
                     ),
                 )
                 .with_rule(RuleId::GEN_01)
-                .with_help("pass a value whose type gives it"),
+                .with_help(help),
             );
             return None;
         };

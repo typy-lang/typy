@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy test plan |
-| Version | 0.67 |
+| Version | 0.68 |
 | Status | Draft |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-16 |
@@ -393,7 +393,7 @@ that the specification does not define.
 | CLS-35 | 1.0 | IT | `tests/conformance/cls/CLS-35_*.py` |
 | CLS-18 | 1.0 | IT | `tests/conformance/cls/CLS-18_*.py` |
 | CLS-19 | 1.0 | IT | `tests/conformance/cls/CLS-19_*.py` |
-| GEN-01 | 0.4 | IT | `tests/conformance/gen/GEN-01_*.py` |
+| GEN-01 | 0.4 | IT | `tests/conformance/gen/GEN-01_*.py`; `crates/typy-check/tests/generics.rs` |
 | GEN-02 | 0.4 | IT | `tests/conformance/gen/GEN-02_*.py` |
 | GEN-03 | 0.4 | IT | `tests/conformance/gen/GEN-03_*.py` |
 | GEN-04 | 0.4 | IT | `tests/conformance/gen/GEN-04_*.py` |

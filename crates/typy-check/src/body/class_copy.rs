@@ -162,9 +162,13 @@ impl Program {
                 .map(|ty| self.substitute(ty, owner, &copy.arguments));
         }
         let mut renamed: BTreeMap<FunctionId, FunctionId> = BTreeMap::new();
+        // A static method that names no type parameter is not generic, and every copy calls
+        // it as it is.
         for (_, method) in root.methods.iter().chain(&root.class_methods) {
-            let made = self.made_copy(*method, copy.arguments.clone(), Some(copy.id));
-            renamed.insert(*method, made);
+            if self.generic(*method).is_some() {
+                let made = self.made_copy(*method, copy.arguments.clone(), Some(copy.id));
+                renamed.insert(*method, made);
+            }
         }
         let rename = |id: &FunctionId| renamed.get(id).copied().unwrap_or(*id);
         info.methods = root
