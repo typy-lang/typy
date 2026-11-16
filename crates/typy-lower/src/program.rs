@@ -143,11 +143,30 @@ fn raising_slot_methods(
             .chain(class.hash)
             .chain(class.truth);
         for method in methods {
+            let function = program.function(typy_check::FunctionId(method.0));
+            if function.signature.returns.may_give_way() && !reported.contains(&method) {
+                // Only an ordering method reaches here: `__eq__` that may give way has
+                // `<equal>` in its slot.
+                reported.push(method);
+                found.push(
+                    Diagnostic::new(
+                        DiagnosticCode::error(201),
+                        function.span,
+                        format!(
+                            "`{}` may return `NotImplemented`, which makes sorting its \
+                             instances raise `TypeError`, and a comparison method that may \
+                             raise is planned for TyPy 0.5 (CLS-22)",
+                            function.qualified_name
+                        ),
+                    )
+                    .with_rule(RuleId::CLS_22)
+                    .with_help("sorted lists and `min` and `max` call it"),
+                );
+            }
             if !may_raise[method.0 as usize] || reported.contains(&method) {
                 continue;
             }
             reported.push(method);
-            let function = program.function(typy_check::FunctionId(method.0));
             found.push(
                 Diagnostic::new(
                     DiagnosticCode::error(201),
@@ -186,8 +205,18 @@ fn tyir_class(
         .as_ref()
         .and_then(typy_check::ExceptionClass::base)
         .map(|base| crate::exception::exception_class(&base));
-    // The `equal` slot calls `__eq__` only for an object of the class its parameter takes.
-    let equal = method("__eq__").map(|equal| {
+    // The `equal` slot calls `__eq__` only for an object of the class its parameter takes, and
+    // `<equal>` in its place when `__eq__` may give way (CLS-21).
+    let gives_way = |method: FunctionId| {
+        program
+            .function(typy_check::FunctionId(method.0))
+            .signature
+            .returns
+            .may_give_way()
+    };
+    let equal = method(typy_check::EQUAL_BRIDGE)
+        .or_else(|| method("__eq__").filter(|equal| !gives_way(*equal)));
+    let equal = equal.map(|equal| {
         let parameters = &program
             .function(typy_check::FunctionId(equal.0))
             .signature

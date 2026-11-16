@@ -74,7 +74,7 @@ impl FunctionLowerer<'_> {
                 self.release(length, span);
                 checked
             }
-            TypedExprKind::OperatorCall(call) => self.operator_call(call, ty, span),
+            TypedExprKind::OperatorCall(call) => self.operator_call(call, &expression.ty, ty, span),
             TypedExprKind::Unwrap(inner) => self.unwrap(inner, ty, span),
             TypedExprKind::Dict { keys, values } => {
                 self.dict_display(keys, values, &expression.ty, span)
@@ -134,6 +134,10 @@ impl FunctionLowerer<'_> {
             }
             TypedExprKind::Raise(exception) => self.raise_in_place(exception, ty, span),
             TypedExprKind::ClassVariable(holders) => self.class_variable(holders, ty, span),
+            TypedExprKind::NotImplemented => {
+                let found = self.call_runtime(RuntimeFunction::NotImplemented, Vec::new(), span);
+                self.borrowed_result(found)
+            }
             TypedExprKind::Sequence { first, then } => {
                 let first = self.expression(first);
                 self.release(first, span);

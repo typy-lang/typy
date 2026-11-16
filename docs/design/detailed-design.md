@@ -3,10 +3,10 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy detailed design |
-| Version | 1.88 |
+| Version | 1.89 |
 | Status | Approved |
 | Owner | typy-lang contributors |
-| Last updated | 2026-11-15 |
+| Last updated | 2026-11-16 |
 
 ## 1. Purpose and scope
 
@@ -1326,24 +1326,44 @@ with `__eq__` and no `__hash__` has no hash. A comparison method takes `self`
 and a value of a type that accepts its class, E0404 otherwise.
 `body::operator_method` makes a single comparison of instances whose class
 defines the method `TypedExprKind::OperatorCall`, with the left class's method,
-the right class's reflected one, and the left class's reflected one; `!=`
-without `__ne__` negates `__eq__`. Lowering calls the one method, or, with
-both, the reflected one when the right object's class derives from the left
-object's, is another class and has another method at the reflected method's
-table slot, which `Operation::SameMethod` compares. `TyirClass` holds
-`equal`, `order` and `hash`, and codegen fills the type object's slots with
-functions that call them; the `equal` slot compares by identity an object its
-`__eq__` does not take. A slot method that may raise is E0201 when lowering
-ends, planned for 0.5. Arithmetic methods reuse the same call:
-`operator_binary` makes `a op b` an `OperatorCall` with `__add__` and its
-reflected `__radd__`, typed by the method's result, E0201 when the two methods
-return different types; `operator_unary` calls `__neg__`, `__pos__`,
-`__invert__` and, for `abs`, `__abs__`. An augmented assignment on an instance
-calls the class's in-place method, such as `__iadd__`, with `dispatch` set,
-and the binary method when the class has none, and assigns the result to the
-target (CLS-20). `body::in_place::pinned_augmented` first holds the object and
-the key of an item or an attribute of an expression in hidden variables, so the
-target is evaluated once; an in-place method that only a class derived from the
+the right class's reflected one, the left class's reflected one, and its
+`OperatorKind`: `Arithmetic`, `Ordering` or `Equality`, with the symbol a
+`TypeError` names; `!=` without `__ne__` negates `__eq__`. Lowering
+(`operator_call`) builds the steps CPython takes (ADR-0038). A comparison
+calls the right object's reflected method first when its class derives from
+the left object's and is another class, and the other method after it. An
+arithmetic operator does so only when the right object's class also has
+another method at the reflected method's table slot, which
+`Operation::SameMethod` compares, and calls a reflected method of two
+instances only when their classes differ. A method whose result may be
+`NotImplemented` is followed by a test of the result; when every method gave
+way, equality compares identities, and `operands_unsupported` or
+`ordering_unsupported` raises CPython's `TypeError` with the operands'
+classes. `check::not_implemented` reads every module, through
+`check::class_index`, before any is checked, and each method of an
+arithmetic, reflected, in-place or comparison name in a chain of bases where
+one says `return NotImplemented` returns `T | NotImplementedType`
+(`Type::may_give_way`); the call's type is the methods' result without it
+(`Type::implemented`). Such a method that also returns `None` is E0201,
+planned for 1.0 (CLS-33). `TypedExprKind::NotImplemented` reads the
+runtime's one object of the type, and `is` tests a result that may hold it.
+`TyirClass` holds `equal`, `order` and `hash`, and codegen fills the type
+object's slots with functions that call them; the `equal` slot compares by
+identity an object its `__eq__` does not take, and calls `<equal>`, which
+`Program::add_equal_bridge` writes as `self == other`, when `__eq__` may give
+way. A slot method that may raise, or an ordering method that may give way,
+is E0201 when lowering ends, planned for 0.5 (CLS-22). Arithmetic methods
+reuse the same call: `operator_binary` makes `a op b` an `OperatorCall` with
+`__add__` and its reflected `__radd__`, typed by the method's result, E0201
+when the two methods return different types; `operator_unary` calls
+`__neg__`, `__pos__`, `__invert__` and, for `abs`, `__abs__`. An augmented
+assignment on an instance calls the class's in-place method, such as
+`__iadd__`, with `dispatch` set, and the binary method when the class has
+none, and assigns the result to the target (CLS-20); an in-place method that
+may give way is the first step of an `OperatorCall` whose symbol is `+=`.
+`body::in_place::pinned_augmented` first holds the object and the key of an
+item or an attribute of an expression in hidden variables, so the target is
+evaluated once; an in-place method that only a class derived from the
 target's defines is E0201, planned for 1.0 (CLS-32). `body::container_method` calls
 `__len__` for `len`, wrapped in `TypedExprKind::CheckedLength`, which lowers to
 `int_length` and raises CPython's `ValueError` or `OverflowError`;

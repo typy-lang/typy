@@ -7,7 +7,10 @@ use typy_diagnostics::{Diagnostic, DiagnosticCode, RuleId, Span};
 use typy_source::syntax::{BinaryOperator, Expr, Stmt};
 
 use super::BodyChecker;
-use crate::typed::{Argument, AssignTarget, SymbolKind, TypedExpr, TypedExprKind, TypedStmt};
+use crate::typed::{
+    Argument, AssignTarget, OperatorCall, OperatorKind, SymbolKind, TypedExpr, TypedExprKind,
+    TypedStmt,
+};
 use crate::types::Type;
 
 /// What `pinned_augmented` makes of an augmented assignment.
@@ -20,8 +23,9 @@ pub(super) enum Pinned {
 
 impl BodyChecker<'_> {
     /// Returns `target.__iop__(value)` when the class of the target defines the in-place
-    /// method and it takes the value; a class derived from it that defines the method alone
-    /// is reported, since the call would depend on the class of the object.
+    /// method and it takes the value, and when the method may return `NotImplemented`, the
+    /// call that gives way to `target op value`; a class derived from it that defines the
+    /// method alone is reported, since the call would depend on the class of the object.
     pub(super) fn in_place_call(
         &mut self,
         operator: BinaryOperator,
@@ -54,6 +58,9 @@ impl BodyChecker<'_> {
             return None;
         };
         let signature = self.program.signatures[method.0 as usize].clone();
+        if signature.returns.may_give_way() {
+            return Some(self.giving_way_in_place(operator, method, current, value, span));
+        }
         let parameter = |index: usize| signature.parameters.get(index).map(|each| &each.ty);
         Some(Self::typed(
             TypedExprKind::Call {
@@ -73,6 +80,47 @@ impl BodyChecker<'_> {
             signature.returns,
             span,
         ))
+    }
+
+    /// Returns `target op= value` whose in-place method may give way (CLS-21): the method runs
+    /// first, then the operator's methods, and then the augmented assignment raises
+    /// `TypeError`.
+    fn giving_way_in_place(
+        &mut self,
+        operator: BinaryOperator,
+        method: crate::typed::FunctionId,
+        current: &TypedExpr,
+        value: &TypedExpr,
+        span: Span,
+    ) -> TypedExpr {
+        let (name, reflected) = super::operator_method::binary_names(operator);
+        let kind = OperatorKind::Arithmetic(super::operator_method::binary_symbol(operator, true));
+        let own = self.program.signatures[method.0 as usize]
+            .returns
+            .implemented();
+        let binary = self.operator_method_call((name, reflected), current, value, kind, span);
+        let (mut call, ty) = match binary {
+            Some(TypedExpr {
+                kind: TypedExprKind::OperatorCall(call),
+                ty,
+                ..
+            }) => (call, Type::union(vec![own, ty])),
+            _ => (
+                Box::new(OperatorCall {
+                    left: current.clone(),
+                    right: value.clone(),
+                    forward: None,
+                    reflected: None,
+                    left_reflected: None,
+                    negated: false,
+                    in_place: None,
+                    kind,
+                }),
+                own,
+            ),
+        };
+        call.in_place = Some(method);
+        Self::typed(TypedExprKind::OperatorCall(call), ty, span)
     }
 
     /// Returns `target op= value` for an item or an attribute of an expression whose operator

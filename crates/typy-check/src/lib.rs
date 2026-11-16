@@ -20,7 +20,7 @@ mod types;
 mod union_type;
 mod unprovided;
 
-pub use body::member_class;
+pub use body::{EQUAL_BRIDGE, member_class};
 pub use builtin::Builtin;
 pub use check::TypeChecker;
 pub use class_type::{InstanceClass, Operators};
@@ -33,7 +33,7 @@ pub use sys::SysValue;
 pub use typed::{
     Argument, AssignTarget, Attribute, ClassId, Conversion, EachMember, ExceptionPart, FStringPart,
     FileAttribute, FormattedValue, FunctionId, FunctionSignature, Generator, ImportBinding,
-    InitCall, IsInstanceTest, LoopSource, OpenOptions, OperatorCall, PartOperation,
+    InitCall, IsInstanceTest, LoopSource, OpenOptions, OperatorCall, OperatorKind, PartOperation,
     PercentConversion, PercentField, PercentNumber, PercentPart, PercentValue, PrintCall,
     RaiseCause, SignatureParameter, Symbol, SymbolId, SymbolKind, TypedCase, TypedClass,
     TypedConstant, TypedExpr, TypedExprKind, TypedFunction, TypedHandler, TypedModule,

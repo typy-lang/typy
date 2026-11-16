@@ -146,7 +146,13 @@ impl FunctionLowerer<'_> {
     }
 
     /// Returns `left is right`, or `left is not right` when `is` is false.
-    fn identity(&mut self, is: bool, left: Lowered, right: Lowered, span: Span) -> ValueId {
+    pub(crate) fn identity(
+        &mut self,
+        is: bool,
+        left: Lowered,
+        right: Lowered,
+        span: Span,
+    ) -> ValueId {
         // Two objects are compared by address, and `None` of an optional object is
         // the null address. Otherwise an optional value is `None` when its spare
         // value says so; any other value is `None` only when its type is (ADR-0011).
@@ -160,6 +166,13 @@ impl FunctionLowerer<'_> {
                 TyirType::Object(_) | TyirType::Optional(OptionalBase::Object(_)),
                 TyirType::Object(_) | TyirType::Optional(OptionalBase::Object(_)),
             ) => self.identical(left, right, span),
+            // A tagged union holds `NotImplemented` when its tag says so (CLS-21).
+            (union, TyirType::NOT_IMPLEMENTED) if self.is_tagged(union) => {
+                self.holds_not_implemented(left, span)
+            }
+            (TyirType::NOT_IMPLEMENTED, union) if self.is_tagged(union) => {
+                self.holds_not_implemented(right, span)
+            }
             (TyirType::Optional(_), _) => self.is_none(left, span),
             (_, TyirType::Optional(_)) => self.is_none(right, span),
             (left, right) => self.constant(
@@ -172,6 +185,30 @@ impl FunctionLowerer<'_> {
         }
         self.builder
             .push_value(Operation::BoolNot(holds), TyirType::Bool, span)
+    }
+
+    /// Returns whether a tagged union holds `NotImplemented`, the one object of its type.
+    fn holds_not_implemented(&mut self, union: Lowered, span: Span) -> ValueId {
+        let (_, items) = self.item_types(union.ty);
+        let Some(position) = items
+            .iter()
+            .skip(1)
+            .position(|item| *item == TyirType::NOT_IMPLEMENTED)
+        else {
+            return self.constant(Constant::Bool(false), span);
+        };
+        let tag = self.borrowed_item(union, 0, TyirType::Int, span).value;
+        let expected = self.constant(Constant::Int(position.to_string()), span);
+        self.builder.push_value(
+            Operation::Compare {
+                kind: typy_tyir::ScalarKind::Int,
+                comparison: Comparison::Equal,
+                left: tag,
+                right: expected,
+            },
+            TyirType::Bool,
+            span,
+        )
     }
 
     /// Returns whether two `bool` or `bool | None` values are the same object: both `None`,

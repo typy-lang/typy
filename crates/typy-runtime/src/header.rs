@@ -38,6 +38,8 @@ pub const TEXT_FILE_TYPE_ID: u32 = 17;
 pub const TYPE_ALIAS_TYPE_ID: u32 = 19;
 /// The type ID of `sys.version_info`, one immortal object (LIB-16).
 pub const VERSION_INFO_TYPE_ID: u32 = 20;
+/// The type ID of `NotImplemented`, one immortal object (CLS-21).
+pub const NOT_IMPLEMENTED_TYPE_ID: u32 = 21;
 
 /// The first 8 bytes of every heap object.
 #[repr(C)]

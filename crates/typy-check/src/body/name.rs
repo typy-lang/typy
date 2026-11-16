@@ -99,6 +99,9 @@ impl BodyChecker<'_> {
             }
             return read;
         }
+        if id == "NotImplemented" {
+            return Self::typed(TypedExprKind::NotImplemented, Type::NotImplemented, span);
+        }
         if id == "__name__" {
             return Self::typed(TypedExprKind::ModuleName, Type::Str, span);
         }

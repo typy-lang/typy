@@ -69,6 +69,8 @@ impl RuleId {
     pub const CLS_31: Self = Self("CLS-31");
     /// An augmented assignment shall call the in-place method that only a class derived from its target's class defines, when the target holds an instance of that class.
     pub const CLS_32: Self = Self("CLS-32");
+    /// An operator or comparison method that may return both `None` and `NotImplemented` shall be accepted.
+    pub const CLS_33: Self = Self("CLS-33");
     /// `for` shall iterate over `range`, `str`, `bytes`, `list`, `tuple`, `dict`, `set` and any class with `__iter__` and `__next__`.
     pub const CST_03: Self = Self("CST-03");
     /// `try` with `except`, `else` and `finally` clauses shall be accepted, and `finally` shall run on `return`, `break`, `continue` and exceptions.
@@ -357,6 +359,7 @@ impl RuleId {
         Self::CLS_30,
         Self::CLS_31,
         Self::CLS_32,
+        Self::CLS_33,
         Self::CST_03,
         Self::CST_04,
         Self::CST_05,

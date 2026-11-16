@@ -44,6 +44,8 @@ impl TypeId {
     pub const TYPE_ALIAS: Self = Self(19);
     /// `sys.version_info`, one immortal object (LIB-16).
     pub const VERSION_INFO: Self = Self(20);
+    /// `NotImplemented`, one immortal object (CLS-21).
+    pub const NOT_IMPLEMENTED: Self = Self(21);
     /// The first ID of the program's classes; class `n` of the module is this plus `n`.
     const FIRST_CLASS: u32 = 1 << 16;
 
@@ -136,6 +138,8 @@ impl TyirType {
     pub const TYPE_ALIAS: Self = Self::Object(TypeId::TYPE_ALIAS);
     /// `sys.version_info` (LIB-16).
     pub const VERSION_INFO: Self = Self::Object(TypeId::VERSION_INFO);
+    /// `NotImplemented` (CLS-21).
+    pub const NOT_IMPLEMENTED: Self = Self::Object(TypeId::NOT_IMPLEMENTED);
 }
 
 impl fmt::Display for TyirType {
@@ -161,6 +165,7 @@ impl fmt::Display for TyirType {
             Self::Object(TypeId::UNION) => formatter.write_str("union"),
             Self::Object(TypeId::TYPE_ALIAS) => formatter.write_str("type_alias"),
             Self::Object(TypeId::VERSION_INFO) => formatter.write_str("version_info"),
+            Self::Object(TypeId::NOT_IMPLEMENTED) => formatter.write_str("not_implemented"),
             Self::Bits => formatter.write_str("bits"),
             Self::Object(id) if id.class_index().is_some() => {
                 write!(formatter, "class#{}", id.class_index().unwrap_or(0))

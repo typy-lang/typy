@@ -231,6 +231,11 @@ pub enum RuntimeFunction {
     SysStdout,
     SysStdin,
     SysVersionInfo,
+    NotImplemented,
+    /// Raises the `TypeError` of an arithmetic operator whose methods all gave way (CLS-21).
+    OperandsUnsupported,
+    /// Raises the `TypeError` of an ordering whose methods all gave way (CLS-21).
+    OrderingUnsupported,
     SysGetRecursionLimit,
     SysSetRecursionLimit,
     SysStderr,
@@ -366,7 +371,7 @@ const FLOAT_FLOAT: &[TyirType] = &[TyirType::Float, TyirType::Float];
 
 impl RuntimeFunction {
     /// Every runtime function.
-    pub const ALL: [Self; 327] = [
+    pub const ALL: [Self; 330] = [
         Self::IntFloorDivide,
         Self::IntModulo,
         Self::IntPower,
@@ -589,6 +594,9 @@ impl RuntimeFunction {
         Self::SysStdout,
         Self::SysStdin,
         Self::SysVersionInfo,
+        Self::NotImplemented,
+        Self::OperandsUnsupported,
+        Self::OrderingUnsupported,
         Self::SysGetRecursionLimit,
         Self::SysSetRecursionLimit,
         Self::SysStderr,
@@ -925,6 +933,10 @@ impl RuntimeFunction {
             Self::PercentInt => signature(&[Int, STR, Int], STR, true),
             Self::SysArgv => signature(&[], LIST, false),
             Self::SysVersionInfo => signature(&[], TyirType::VERSION_INFO, false),
+            Self::NotImplemented => signature(&[], TyirType::NOT_IMPLEMENTED, false),
+            Self::OperandsUnsupported | Self::OrderingUnsupported => {
+                signature(&[STR, TYPE, TYPE], Unit, true)
+            }
             Self::SysStdout | Self::SysStderr | Self::SysStdin => {
                 signature(&[], TyirType::TEXT_FILE, false)
             }
@@ -1270,6 +1282,9 @@ impl RuntimeFunction {
             Self::SysStdout => "sys_stdout",
             Self::SysStdin => "sys_stdin",
             Self::SysVersionInfo => "sys_version_info",
+            Self::NotImplemented => "not_implemented",
+            Self::OperandsUnsupported => "operands_unsupported",
+            Self::OrderingUnsupported => "ordering_unsupported",
             Self::SysGetRecursionLimit => "sys_getrecursionlimit",
             Self::SysSetRecursionLimit => "sys_setrecursionlimit",
             Self::SysStderr => "sys_stderr",

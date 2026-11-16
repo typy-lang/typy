@@ -3,10 +3,10 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy test plan |
-| Version | 0.58 |
+| Version | 0.59 |
 | Status | Draft |
 | Owner | typy-lang contributors |
-| Last updated | 2026-11-15 |
+| Last updated | 2026-11-16 |
 
 ## 1. Purpose
 
@@ -386,6 +386,7 @@ that the specification does not define.
 | CLS-30 | 1.0 | IT | `tests/conformance/cls/CLS-30_*.py` |
 | CLS-31 | 1.0 | IT | `tests/conformance/cls/CLS-31_*.py` |
 | CLS-32 | 1.0 | IT | `tests/conformance/cls/CLS-32_*.py` |
+| CLS-33 | 1.0 | IT | `tests/conformance/cls/CLS-33_*.py` |
 | CLS-18 | 1.0 | IT | `tests/conformance/cls/CLS-18_*.py` |
 | CLS-19 | 1.0 | IT | `tests/conformance/cls/CLS-19_*.py` |
 | GEN-01 | 0.4 | IT | `tests/conformance/gen/GEN-01_*.py` |

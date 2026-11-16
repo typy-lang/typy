@@ -350,6 +350,7 @@ pub fn member_class(member: &Type) -> Option<TypeObjectOf> {
         | Type::Module(_)
         | Type::TypeAlias
         | Type::VersionInfo
+        | Type::NotImplemented
         | Type::AnyModule
         | Type::TextFile
         | Type::BinaryFile(_)

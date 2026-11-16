@@ -49,6 +49,7 @@ impl FunctionLowerer<'_> {
             | TyirType::MODULE
             | TyirType::TYPE_ALIAS
             | TyirType::VERSION_INFO
+            | TyirType::NOT_IMPLEMENTED
             | TyirType::ITERABLE
             | TyirType::TEXT_FILE => {
                 let object = self.bits(Self::borrowed(lowered.value, lowered.ty), span);

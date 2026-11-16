@@ -392,13 +392,15 @@ pub(super) struct KnownClasses<'known> {
     pub(super) signatures: &'known [FunctionSignature],
     /// The generic classes and their copies (ADR-0028).
     pub(super) copies: &'known std::cell::RefCell<crate::body::ClassCopies>,
+    /// The methods that return `T | NotImplementedType` (CLS-21).
+    pub(super) giving_way: &'known super::not_implemented::GivingWay,
 }
 
 /// Collects each class's attributes and methods; the methods become definitions whose IDs
 /// follow `first_function`.
 pub(super) fn collect_members<'tree>(
-    classes: &[ClassStatement<'tree>],
     known: &KnownClasses<'_>,
+    classes: &[ClassStatement<'tree>],
     names: &crate::check::ImportedNames,
     floor_defers: bool,
     (first_function, copies): (usize, &mut ClassMethodCopies<'tree>),
@@ -450,7 +452,7 @@ pub(super) fn collect_members<'tree>(
                     if name == "__init__" {
                         note_init(&parts, id, &mut info, names);
                     }
-                    let method = method_definition(
+                    let mut method = method_definition(
                         &parts,
                         &kind,
                         id,
@@ -459,6 +461,7 @@ pub(super) fn collect_members<'tree>(
                         &scope,
                         diagnostics,
                     );
+                    give_way(&mut method, (known, class.span), parts.name, diagnostics);
                     check_accessor(
                         &kind,
                         &method,
@@ -767,6 +770,35 @@ impl<'tree> ClassMethodCopies<'tree> {
         }
         self.by_class.insert(info.id, made);
     }
+}
+
+/// Widens the return type of a method that may return `NotImplemented`, as the scan of the
+/// program found, to take it (CLS-21).
+fn give_way(
+    method: &mut Definition<'_>,
+    (known, class): (&KnownClasses<'_>, Span),
+    name: &Identifier,
+    diagnostics: &mut Diagnostics,
+) {
+    if !known.giving_way.contains(&(class, name.name.clone())) {
+        return;
+    }
+    let declared = std::mem::replace(&mut method.signature.returns, Type::Error);
+    if matches!(declared, Type::Optional(_) | Type::NoneType) {
+        diagnostics.push(
+            Diagnostic::new(
+                DiagnosticCode::error(201),
+                name.span,
+                format!(
+                    "`{}` returns `None` and `NotImplemented`, and an operator method that may \
+                     return both is planned for TyPy 1.0 (CLS-33)",
+                    name.name
+                ),
+            )
+            .with_rule(RuleId::CLS_33),
+        );
+    }
+    method.signature.returns = Type::union(vec![declared, Type::NotImplemented]);
 }
 
 /// Returns the name a method is held under: its own, or `name.setter` for the setter of the
@@ -1298,7 +1330,7 @@ fn check_special_method(method: &Definition<'_>, name: &Identifier, diagnostics:
 
 /// Returns true for the methods of the binary arithmetic and bitwise operators and their
 /// reflected forms, such as `__add__` and `__radd__` (CLS-07).
-fn is_binary_method(name: &str) -> bool {
+pub(super) fn is_binary_method(name: &str) -> bool {
     let Some(bare) = name
         .strip_prefix("__")
         .and_then(|rest| rest.strip_suffix("__"))
@@ -1372,7 +1404,7 @@ fn check_comparison(method: &Definition<'_>, name: &Identifier, diagnostics: &mu
         && signature.parameters[0]
             .ty
             .is_assignable_to(&signature.parameters[1].ty)
-        && signature.returns.matches(&Type::Bool);
+        && signature.returns.implemented().matches(&Type::Bool);
     if !fits {
         let class = signature
             .parameters

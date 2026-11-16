@@ -351,6 +351,7 @@ impl FunctionLowerer<'_> {
                     || id == typy_tyir::TypeId::MODULE
                     || id == typy_tyir::TypeId::TYPE_ALIAS
                     || id == typy_tyir::TypeId::VERSION_INFO
+                    || id == typy_tyir::TypeId::NOT_IMPLEMENTED
                     || id == typy_tyir::TypeId::ITERABLE
                     || id == typy_tyir::TypeId::TEXT_FILE
                     || id == typy_tyir::TypeId::UNION =>

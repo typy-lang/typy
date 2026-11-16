@@ -1,11 +1,12 @@
-//! Comparisons of instances whose classes define comparison methods: `a < b` calls
-//! `a.__lt__(b)`, or the reflected `b.__gt__(a)` (CLS-07, ADR-0026).
+//! Operators on instances whose classes define operator or comparison methods: `a < b` calls
+//! `a.__lt__(b)`, or the reflected `b.__gt__(a)`, and a method that returns `NotImplemented`
+//! gives way to the other (CLS-07, CLS-21, ADR-0026, ADR-0038).
 
 use typy_diagnostics::{Diagnostic, DiagnosticCode, RuleId, Span};
 use typy_source::syntax::{BinaryOperator, CompareOperator, UnaryOperator};
 
 use super::BodyChecker;
-use crate::typed::{Argument, FunctionId, OperatorCall, TypedExpr, TypedExprKind};
+use crate::typed::{Argument, FunctionId, OperatorCall, OperatorKind, TypedExpr, TypedExprKind};
 use crate::types::Type;
 
 /// The outcome of looking for a comparison method.
@@ -31,7 +32,8 @@ impl BodyChecker<'_> {
             return Comparison::Builtin(left, right);
         }
         let (name, reflected) = binary_names(operator);
-        match self.operator_method_call(name, reflected, &left, &right, span) {
+        let kind = OperatorKind::Arithmetic(binary_symbol(operator, false));
+        match self.operator_method_call((name, reflected), &left, &right, kind, span) {
             Some(call) => Comparison::Called(call),
             None => Comparison::Builtin(left, right),
         }
@@ -86,14 +88,17 @@ impl BodyChecker<'_> {
         {
             return Comparison::Called(call);
         }
-        let Some((name, reflected)) = method_names(operator) else {
+        let Some((name, reflected, kind)) = method_names(operator) else {
             return Comparison::Builtin(left, right);
         };
-        if let Some(call) = self.operator_method_call(name, reflected, &left, &right, span) {
+        if let Some(call) = self.operator_method_call((name, reflected), &left, &right, kind, span)
+        {
             return Comparison::Called(call);
         }
+        let equality = OperatorKind::Equality { different: false };
         if operator == CompareOperator::NotEq
-            && let Some(equal) = self.operator_method_call("__eq__", "__eq__", &left, &right, span)
+            && let Some(equal) =
+                self.operator_method_call(("__eq__", "__eq__"), &left, &right, equality, span)
         {
             let negated = match equal.kind {
                 TypedExprKind::OperatorCall(mut call) => {
@@ -111,16 +116,15 @@ impl BodyChecker<'_> {
     }
 
     /// Returns the call of `left.name(right)`, or of `right.reflected(left)`, when one of the
-    /// classes defines the method and it takes the other operand. When the right operand's
-    /// class is a subclass of the left's that defines the reflected method otherwise, CPython
-    /// tries it first; the runtime decides that when the method is overridden, and the static
-    /// classes decide it otherwise.
+    /// classes defines the method and it takes the other operand. Which runs first, and what
+    /// follows a method that gives way, is the runtime's to decide from the objects' classes,
+    /// as `kind` says; the call's type is what the methods return other than `NotImplemented`.
     pub(super) fn operator_method_call(
         &mut self,
-        name: &str,
-        reflected: &str,
+        (name, reflected): (&str, &str),
         left: &TypedExpr,
         right: &TypedExpr,
+        kind: OperatorKind,
         span: Span,
     ) -> Option<TypedExpr> {
         let forward = self.operator_method(&left.ty, name, &right.ty);
@@ -150,8 +154,11 @@ impl BodyChecker<'_> {
             // The left operand is not an instance, so only the reflected method applies.
             backward = backward.filter(|_| forward.is_none());
         }
-        let returns =
-            |method: FunctionId| self.program.signatures[method.0 as usize].returns.clone();
+        let returns = |method: FunctionId| {
+            self.program.signatures[method.0 as usize]
+                .returns
+                .implemented()
+        };
         let ty = match (forward, backward) {
             (Some(forward), Some(backward)) => {
                 let (ty, other) = (returns(forward), returns(backward));
@@ -182,6 +189,8 @@ impl BodyChecker<'_> {
                 reflected: backward,
                 left_reflected,
                 negated: false,
+                in_place: None,
+                kind,
             })),
             ty,
             span,
@@ -215,17 +224,47 @@ impl BodyChecker<'_> {
     }
 }
 
-/// Returns the method an operator calls and the reflected one, `a > b` being `b < a`.
-fn method_names(operator: CompareOperator) -> Option<(&'static str, &'static str)> {
+/// Returns the method a comparison calls, the reflected one, `a > b` being `b < a`, and the
+/// kind of operator it is.
+fn method_names(operator: CompareOperator) -> Option<(&'static str, &'static str, OperatorKind)> {
     Some(match operator {
-        CompareOperator::Eq => ("__eq__", "__eq__"),
-        CompareOperator::NotEq => ("__ne__", "__ne__"),
-        CompareOperator::Lt => ("__lt__", "__gt__"),
-        CompareOperator::LtE => ("__le__", "__ge__"),
-        CompareOperator::Gt => ("__gt__", "__lt__"),
-        CompareOperator::GtE => ("__ge__", "__le__"),
+        CompareOperator::Eq => (
+            "__eq__",
+            "__eq__",
+            OperatorKind::Equality { different: false },
+        ),
+        CompareOperator::NotEq => (
+            "__ne__",
+            "__ne__",
+            OperatorKind::Equality { different: true },
+        ),
+        CompareOperator::Lt => ("__lt__", "__gt__", OperatorKind::Ordering("<")),
+        CompareOperator::LtE => ("__le__", "__ge__", OperatorKind::Ordering("<=")),
+        CompareOperator::Gt => ("__gt__", "__lt__", OperatorKind::Ordering(">")),
+        CompareOperator::GtE => ("__ge__", "__le__", OperatorKind::Ordering(">=")),
         _ => return None,
     })
+}
+
+/// Returns the symbol CPython's `TypeError` names for a binary operator, or for its augmented
+/// assignment when `in_place`.
+pub(super) const fn binary_symbol(operator: BinaryOperator, in_place: bool) -> &'static str {
+    let (plain, augmented) = match operator {
+        BinaryOperator::Add => ("+", "+="),
+        BinaryOperator::Sub => ("-", "-="),
+        BinaryOperator::Mult => ("*", "*="),
+        BinaryOperator::MatMult => ("@", "@="),
+        BinaryOperator::Div => ("/", "/="),
+        BinaryOperator::Mod => ("%", "%="),
+        BinaryOperator::Pow => ("** or pow()", "**="),
+        BinaryOperator::LShift => ("<<", "<<="),
+        BinaryOperator::RShift => (">>", ">>="),
+        BinaryOperator::BitOr => ("|", "|="),
+        BinaryOperator::BitXor => ("^", "^="),
+        BinaryOperator::BitAnd => ("&", "&="),
+        BinaryOperator::FloorDiv => ("//", "//="),
+    };
+    if in_place { augmented } else { plain }
 }
 
 /// Returns the method a binary operator calls and the reflected one.

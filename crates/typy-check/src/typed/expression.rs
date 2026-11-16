@@ -327,6 +327,8 @@ pub enum TypedExprKind {
         tuple: Box<TypedExpr>,
         index: usize,
     },
+    /// `NotImplemented`, the runtime's one object of its type (CLS-21).
+    NotImplemented,
     /// A class variable some subclass holds one of its own of: the first of these module
     /// variables that is bound, from the class read through up to the class whose body gives
     /// it (CLS-25, ADR-0037).
@@ -407,10 +409,11 @@ pub struct InitCall {
     pub positional: usize,
 }
 
-/// `left op right` that calls a comparison method: `forward` of the left operand's class, or
-/// `reflected` of the right operand's. With both, the reflected method runs first when the
-/// right operand's class derives from the left's and defines it otherwise, as in CPython;
-/// with one, that one runs (CLS-07, ADR-0026).
+/// `left op right` that calls an operator or comparison method: `forward` of the left
+/// operand's class, or `reflected` of the right operand's. With both, the reflected method runs
+/// first when the right operand's class derives from the left's, as `kind` says; with one,
+/// that one runs. A method that returns `NotImplemented` gives way to the next one, and the
+/// last to what `kind` says (CLS-07, CLS-21, ADR-0026, ADR-0038).
 #[derive(Clone, Debug, PartialEq)]
 pub struct OperatorCall {
     /// The left operand, evaluated first.
@@ -426,6 +429,29 @@ pub struct OperatorCall {
     pub left_reflected: Option<FunctionId>,
     /// Whether the result is negated: `!=` without `__ne__` is `not` of `__eq__`.
     pub negated: bool,
+    /// The in-place method of an augmented assignment, which runs first, when it may give way
+    /// to the operator's methods.
+    pub in_place: Option<FunctionId>,
+    /// The operator, which decides the order of the methods and what follows the last.
+    pub kind: OperatorKind,
+}
+
+/// The kind of operator an [`OperatorCall`] calls the methods of, as CPython orders the
+/// methods and treats operands that every method gives way for (CLS-21, ADR-0038).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum OperatorKind {
+    /// An arithmetic operator, or an augmented assignment, by the symbol its `TypeError`
+    /// names: the reflected method runs only for operands of different classes, and first only
+    /// when the right operand's class derives from the left's and defines the method again.
+    Arithmetic(&'static str),
+    /// `<`, `<=`, `>` or `>=`, by its symbol: the reflected method runs first when the right
+    /// operand's class derives from the left's; operands no method orders raise `TypeError`.
+    Ordering(&'static str),
+    /// `==`, or `!=` when `different`: ordered as an ordering, then `is`, or `is not`.
+    Equality {
+        /// Whether the operands no method compares are `is not` rather than `is`.
+        different: bool,
+    },
 }
 
 /// `isinstance(value, classes)`, with what the checker could decide when the program is
@@ -480,6 +506,7 @@ impl TypedExpr {
             | TypedExprKind::TypeObject(_)
             | TypedExprKind::TypeAliasObject(_)
             | TypedExprKind::ClassVariable(_)
+            | TypedExprKind::NotImplemented
             | TypedExprKind::SysValue(_) => Vec::new(),
             TypedExprKind::Binary { left, right, .. }
             | TypedExprKind::Index {

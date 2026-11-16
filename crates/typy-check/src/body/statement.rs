@@ -569,6 +569,12 @@ impl BodyChecker<'_> {
             } else {
                 RuleId::TYP_01
             });
+            if actual == Type::NotImplemented {
+                diagnostic = diagnostic.with_help(
+                    "only an operator or comparison method returns `NotImplemented`, to give way \
+                     to the other operand's method (CLS-21)",
+                );
+            }
             if let Some(TypedExpr {
                 kind: TypedExprKind::Constant(TypedConstant::Int(digits)),
                 span,

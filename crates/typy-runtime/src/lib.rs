@@ -34,6 +34,7 @@ mod message;
 mod module;
 #[cfg(test)]
 mod moved_tests;
+mod not_implemented;
 mod range;
 mod refcount;
 mod set;

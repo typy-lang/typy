@@ -100,6 +100,15 @@ All notable changes to TyPy are recorded here. The format follows
   or an optional among them (TYP-16).
 - A `\u` or `\U` escape of a surrogate in a `str` literal or an
   f-string gives that code point, as CPython keeps it (LEX-10).
+- `NotImplemented`. An operator or comparison method that returns it
+  gives way to the other operand's reflected method, and an in-place
+  method to the binary methods; when every method gives way, `==` and
+  `!=` compare identities and other operators raise CPython's
+  `TypeError`. Lists, sets and dicts compare through an `__eq__` that
+  gives way. An ordering method that returns it is planned for 0.5, with
+  slot methods that may raise (CLS-22), and one that also returns `None`
+  for 1.0 (CLS-33). `return NotImplemented` elsewhere is E0405 (CLS-21,
+  ADR-0038).
 
 ### Fixed
 
@@ -136,6 +145,13 @@ All notable changes to TyPy are recorded here. The format follows
   as CPython's does: `(1,)` for `d[1]` and `(('a', 1),)` for a tuple key,
   where TyPy held the text of its `repr`, `('1',)`. The empty-set and
   empty-dict errors hold their message without quotes (EXC-11).
+- A comparison whose right operand's class derives from the left
+  operand's calls the right operand's reflected method first, also when
+  the subclass inherits it, as CPython does: `A() < B()` calls `__gt__`
+  of `B`, where TyPy called `__lt__` of `A` (CLS-07).
+- An arithmetic operator on two instances of one class that defines only
+  the reflected method, such as `__radd__`, raises CPython's `TypeError`;
+  TyPy called the reflected method (CLS-07).
 
 ## [0.4.0] - 2026-11-15
 

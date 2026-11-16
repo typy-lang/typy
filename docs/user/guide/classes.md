@@ -14,6 +14,7 @@ class body or assigned in `__init__`, and has one type.
 | `@staticmethod`, `@classmethod`, and `@property` with its setter | CLS-06 |
 | `__eq__`, `__ne__`, `__lt__`, `__le__`, `__gt__`, `__ge__` and `__hash__` | CLS-07 |
 | `__add__`, `__radd__` and the other arithmetic, bitwise and unary methods | CLS-07 |
+| `NotImplemented`, returned by an operator or comparison method to give way | CLS-21 |
 | `__len__`, `__getitem__`, `__setitem__`, `__delitem__`, `__contains__` and `__bool__` | CLS-07 |
 | `@dataclass`, with `eq`, `order`, `frozen`, `match_args` and `field(default=...)` | CLS-05, CST-06 |
 | `__str__` and `__repr__`, used by `print`, `str`, `repr`, f-strings and containers | CLS-08 |
@@ -395,12 +396,12 @@ A comparison method takes `self` and one value its class's instances
 are, and returns a `bool`; `__hash__` returns an `int`. As in CPython,
 `a > b` falls back to `b.__lt__(a)`, `a != b` to `not a == b`, the
 right operand's method comes first when its class derives from the
-left's and defines it again, and a class that defines `__eq__` without
-`__hash__` has no hash, so a set or a dict key of it is E0413. A
-container compares an instance with an object its `__eq__` does not
-take as unequal. A comparison or hash method that may raise, a chain
-such as `a < b < c` of such instances, and a method returning
-`NotImplemented` are planned for 0.5 (CLS-21, CLS-22).
+left's, and a class that defines `__eq__` without `__hash__` has no
+hash, so a set or a dict key of it is E0413. A container compares an
+instance with an object its `__eq__` does not take as unequal. A
+comparison or hash method that may raise, a chain such as `a < b < c`
+of such instances, and an ordering method that returns
+`NotImplemented` are planned for 0.5 (CLS-22).
 
 ## Arithmetic methods
 
@@ -437,6 +438,57 @@ and `x = x + y` otherwise, for any target: an item or an attribute of an
 expression is evaluated once, as in CPython (CLS-20). An in-place method
 that only a subclass of the target's class defines is planned for 1.0
 (CLS-32).
+
+## Giving way with `NotImplemented`
+
+An operator or comparison method returns `NotImplemented` when it does
+not handle the other operand, and the operator then tries the other
+operand's method, as CPython does (CLS-21):
+
+<!-- typy-expect: accepted -->
+```python
+class Meters:
+    def __init__(self, value: float) -> None:
+        self.value = value
+
+    def __add__(self, other: "Meters | Feet") -> "Meters":
+        if isinstance(other, Meters):
+            return Meters(self.value + other.value)
+        return NotImplemented
+
+    def __eq__(self, other: "Meters | Feet") -> bool:
+        if isinstance(other, Meters):
+            return self.value == other.value
+        return NotImplemented
+
+
+class Feet:
+    def __init__(self, value: float) -> None:
+        self.value = value
+
+    def __radd__(self, other: "Meters | Feet") -> Meters:
+        if isinstance(other, Meters):
+            return Meters(other.value + self.value * 0.3048)
+        return NotImplemented
+
+
+print((Meters(1.0) + Feet(10.0)).value, Meters(1.0) == Feet(1.0))
+print(Meters(2.0) in [Meters(1.0), Meters(2.0)])
+try:
+    print(Feet(1.0) + Feet(2.0))
+except TypeError as error:
+    print(error)
+```
+
+When every method gives way, `==` and `!=` compare identities, and any
+other operator raises CPython's `TypeError`. `x += y` tries the in-place
+method first, then the methods of `x + y`. A method that returns
+`NotImplemented` gives every method of its name in the classes derived
+from the same base the return type `T | NotImplementedType`, so a direct
+call such as `a.__eq__(b)` may give `NotImplemented`, which
+`result is NotImplemented` tests. A method that may return both `None`
+and `NotImplemented` is planned for 1.0 (CLS-33), and `return
+NotImplemented` in any other function is E0405.
 
 ## Container methods
 

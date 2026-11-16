@@ -73,6 +73,9 @@ pub enum Type {
     TypeAlias,
     /// `sys.version_info` held as a value, whose items are those of CPython 3.15.0 (LIB-16).
     VersionInfo,
+    /// The type of `NotImplemented`, which an operator or comparison method returns to give
+    /// way to the other operand's reflected method (CLS-21).
+    NotImplemented,
     /// The module object of the module of this qualified name, whose attributes are known
     /// when the program is checked (MOD-10, ADR-0015).
     Module(String),
@@ -186,6 +189,7 @@ impl TypeObjectOf {
             | Type::Module(_)
             | Type::TypeAlias
             | Type::VersionInfo
+            | Type::NotImplemented
             | Type::Optional(_)
             | Type::Union(_)
             | Type::Parameter(_)
@@ -788,6 +792,7 @@ impl fmt::Display for Type {
             Self::AnyModule => formatter.write_str("ModuleType"),
             Self::TypeAlias => formatter.write_str("TypeAliasType"),
             Self::VersionInfo => formatter.write_str("sys.version_info"),
+            Self::NotImplemented => formatter.write_str("NotImplementedType"),
             Self::TextFile => formatter.write_str("TextIOWrapper"),
             Self::BinaryFile(kind) => formatter.write_str(kind.class_name()),
             Self::DescriptorFile(kind) => write!(

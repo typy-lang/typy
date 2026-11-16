@@ -5,6 +5,7 @@ mod class;
 mod dataclass;
 
 pub(crate) use annotation::{unhashable, unhashable_key};
+pub(crate) mod class_index;
 mod definition;
 mod definition_order;
 mod generic_body;
@@ -13,6 +14,7 @@ mod generic_class;
 mod generic_tests;
 mod module_imports;
 mod module_scope;
+pub(crate) mod not_implemented;
 mod overriding;
 mod protocol;
 pub(crate) mod subclass_variables;
@@ -201,6 +203,7 @@ impl Checked<'_> {
         );
         // Each module is checked after the modules its module-level imports need.
         program.set_subclass_variables(subclass_variables::subclass_variables(self.modules));
+        program.giving_way = not_implemented::not_implemented_methods(self.modules);
         let mut deferred = Vec::new();
         let mut definitions = ModuleDefinitions::new();
         let mut copies = class::ClassMethodCopies::default();
@@ -309,6 +312,22 @@ fn check_bindings(
 
 /// Checks one module into the program, its functions and classes numbered after those of
 /// the modules before it.
+/// Returns what the class bodies of a module may know of the program's classes.
+fn known_classes<'known>(
+    program: &'known Program,
+    ids: &'known BTreeMap<String, ClassId>,
+    instances: &'known BTreeMap<ClassId, Type>,
+) -> KnownClasses<'known> {
+    KnownClasses {
+        ids,
+        instances,
+        earlier: program.classes(),
+        signatures: program.signatures(),
+        copies: &program.class_copies,
+        giving_way: &program.giving_way,
+    }
+}
+
 fn check_module<'tree>(
     program: &mut Program,
     (module, aliases, copies): (
@@ -347,14 +366,8 @@ fn check_module<'tree>(
         diagnostics,
     );
     let (mut class_infos, methods) = collect_members(
+        &known_classes(program, &class_ids, &instances),
         &classes,
-        &KnownClasses {
-            ids: &class_ids,
-            instances: &instances,
-            earlier: program.classes(),
-            signatures: program.signatures(),
-            copies: &program.class_copies,
-        },
         &annotations,
         floor_defers,
         (first_function + definitions.len(), copies),

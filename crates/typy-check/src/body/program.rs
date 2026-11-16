@@ -118,6 +118,8 @@ pub(crate) struct Program {
     /// The class variables the program assigns through a subclass that inherits them
     /// (ADR-0037).
     pub(super) subclass_variables: crate::check::subclass_variables::SubclassVariables,
+    /// The operator and comparison methods that return `T | NotImplementedType` (CLS-21).
+    pub(crate) giving_way: crate::check::not_implemented::GivingWay,
 }
 
 /// What a first look at a module body may change, which `keep_module_types` undoes.
@@ -197,6 +199,7 @@ impl Program {
             rebound_reify: BTreeMap::new(),
             contexts: BTreeMap::new(),
             subclass_variables: crate::check::subclass_variables::SubclassVariables::default(),
+            giving_way: crate::check::not_implemented::GivingWay::new(),
         }
     }
 
@@ -296,6 +299,7 @@ impl Program {
             let class = ClassId(id(index));
             if !self.class_copies.borrow().roots.contains_key(&class) {
                 self.add_class_method_bridges(class);
+                self.add_equal_bridge(class);
             }
         }
     }

@@ -182,6 +182,7 @@ impl Program {
         self.classes.push(info);
         self.class_modules.push(module);
         self.instances.insert(copy.id, copy.instance.clone());
+        self.add_equal_bridge(copy.id);
     }
 
     /// Returns true when the function is a copy whose type arguments hold a type parameter,
