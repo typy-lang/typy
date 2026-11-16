@@ -143,6 +143,7 @@ impl Dump<'_> {
             AssignTarget::Slice { list, .. } => format!("slice of {}", list.ty),
             AssignTarget::Entry { dict, .. } => format!("entry of {}", dict.ty),
             AssignTarget::Attribute { object, index } => self.attribute(&object.ty, *index),
+            AssignTarget::Property { object, .. } => format!("property of {}", object.ty),
             AssignTarget::Lazy { target, .. } => format!("lazy {}", self.target(target)),
             AssignTarget::Converted { value, target, .. } => {
                 format!("{} as {}", self.target(target), value.ty)

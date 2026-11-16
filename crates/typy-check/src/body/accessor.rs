@@ -6,7 +6,9 @@ use typy_diagnostics::{Diagnostic, DiagnosticCode, RuleId, Span};
 use typy_source::syntax::{Expr, Identifier, Keyword};
 
 use super::BodyChecker;
-use crate::typed::{Argument, ClassId, FunctionId, TypedExpr, TypedExprKind, TypedStmt};
+use crate::typed::{
+    Argument, AssignTarget, ClassId, FunctionId, TypedExpr, TypedExprKind, TypedStmt,
+};
 use crate::types::Type;
 
 impl BodyChecker<'_> {
@@ -282,30 +284,58 @@ impl BodyChecker<'_> {
         )
     }
 
-    /// Reports an assignment to a property through an expression other than a variable,
-    /// whose setter call is planned; returns true when it reports one.
-    pub(super) fn refuse_property_target(
+    /// Returns the target `object.name = value` of the property `name` through its setter,
+    /// or `None` after reporting a property without one or a value of another type (CLS-06).
+    pub(super) fn property_target(
         &mut self,
-        class: ClassId,
+        (object, class, getter): (&TypedExpr, ClassId, FunctionId),
         attribute: &Identifier,
+        ty: &Type,
         span: Span,
-    ) -> bool {
-        if self.property_getter(class, &attribute.name).is_none() {
-            return false;
+    ) -> Option<AssignTarget> {
+        let class_name = self.program.classes[class.0 as usize].name.clone();
+        let Some(setter) = self
+            .program
+            .method(class, &format!("{}.setter", attribute.name))
+        else {
+            self.diagnostics.push(
+                Diagnostic::new(
+                    DiagnosticCode::error(414),
+                    span,
+                    format!(
+                        "the property `{class_name}.{}` has no setter, so it is not assigned",
+                        attribute.name
+                    ),
+                )
+                .with_rule(RuleId::CLS_06),
+            );
+            return None;
+        };
+        let expected = self.program.signatures[getter.0 as usize].returns.clone();
+        if !ty.is_assignable_to(&expected) {
+            self.diagnostics.push(
+                Diagnostic::new(
+                    DiagnosticCode::error(402),
+                    span,
+                    format!(
+                        "the property `{class_name}.{}` is {expected} and is assigned {}",
+                        attribute.name,
+                        ty.with_article()
+                    ),
+                )
+                .with_rule(RuleId::TYP_03),
+            );
+            return None;
         }
-        self.diagnostics.push(
-            Diagnostic::new(
-                DiagnosticCode::error(201),
-                span,
-                format!(
-                    "assigning the property `{}` other than as `variable.{} = value` is planned \
-                     for TyPy 0.5 (CLS-06)",
-                    attribute.name, attribute.name
-                ),
-            )
-            .with_rule(RuleId::CLS_06),
-        );
-        true
+        let owner = self.program.signatures[setter.0 as usize]
+            .parameters
+            .first()
+            .map(|parameter| parameter.ty.clone());
+        Some(AssignTarget::Property {
+            object: Box::new(Self::converted(object.clone(), owner.as_ref())),
+            setter,
+            value: ty.clone(),
+        })
     }
 
     /// Checks `Class.name(arguments)` for a class method: a call of the copy of `Class`, which

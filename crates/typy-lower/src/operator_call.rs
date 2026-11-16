@@ -216,7 +216,7 @@ impl FunctionLowerer<'_> {
     /// Returns an operand, of its checked type, as the argument `parameter` takes: a value a
     /// tagged union holds is tagged, which the caller releases after the call; any other is
     /// borrowed, and the call casts an object to the class the parameter names.
-    fn operand_for(
+    pub(crate) fn operand_for(
         &mut self,
         (value, from): (Lowered, &Type),
         parameter: Option<&typy_check::SignatureParameter>,

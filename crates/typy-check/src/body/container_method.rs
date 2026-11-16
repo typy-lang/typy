@@ -250,6 +250,27 @@ impl BodyChecker<'_> {
         ))
     }
 
+    /// Returns true when `current`, what the augmented assignment to `target` reads, is a call
+    /// of the getter of a property, whose setter the result goes to (CLS-06).
+    pub(super) fn is_property_read(&self, target: &Expr, current: &TypedExpr) -> bool {
+        let (
+            Expr::Attribute { attribute, .. },
+            TypedExprKind::Call {
+                function,
+                arguments,
+                ..
+            },
+        ) = (target, &current.kind)
+        else {
+            return false;
+        };
+        arguments.first().is_some_and(|object| {
+            object.value.ty.class_id().is_some_and(|class| {
+                self.property_getter(class, &attribute.name) == Some(*function)
+            })
+        })
+    }
+
     /// Returns true when `current`, the item an augmented assignment reads, is a call of
     /// `__getitem__` of an instance.
     pub(super) fn is_instance_item(&self, current: &TypedExpr) -> bool {
@@ -298,7 +319,7 @@ impl BodyChecker<'_> {
 
     /// Returns `current op value` as an augmented assignment computes it: the in-place
     /// method, the operator's method, or the built-in operator.
-    fn augmented_result(
+    pub(super) fn augmented_result(
         &mut self,
         operator: BinaryOperator,
         current: TypedExpr,

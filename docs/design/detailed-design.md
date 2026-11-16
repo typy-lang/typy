@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy detailed design |
-| Version | 1.94 |
+| Version | 1.95 |
 | Status | Approved |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-16 |
@@ -1288,8 +1288,11 @@ planned for 0.5. A property's getter is a method of its name, recorded in
 `ClassInfo::properties`, and its setter the method `name.setter`, so both
 override and dispatch as methods do. `body::accessor` reads `instance.name` of a
 property as a call of the getter with `dispatch` set, and checks
-`variable.name = value` as a statement that calls the setter; a property without
-a setter is E0414, and calling a property E0201. A class method follows
+`object.name = value` as the target `AssignTarget::Property`, which lowering
+gives the setter after it evaluates the value and the object; `object.name op=
+value` gives the setter the getter's value combined with the value, the
+object held in a hidden variable. A property without a setter is E0414, and
+calling a property E0201. A class method follows
 ADR-0025: `ClassMethodCopies`, kept across modules, makes, for each class, a
 copy of each class method it defines or inherits, whose `cls` has the type of
 that class's type object, recorded in `ClassInfo::class_methods`. A copy of a

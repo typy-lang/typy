@@ -388,7 +388,9 @@ fn target_reads(target: &AssignTarget, reads: &mut Vec<SymbolId>) {
                 expression_reads(bound, reads);
             }
         }
-        AssignTarget::Attribute { object, .. } => expression_reads(object, reads),
+        AssignTarget::Attribute { object, .. } | AssignTarget::Property { object, .. } => {
+            expression_reads(object, reads);
+        }
         AssignTarget::Entry { dict, key } => {
             expression_reads(dict, reads);
             expression_reads(key, reads);

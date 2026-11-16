@@ -71,6 +71,16 @@ pub enum AssignTarget {
         /// The key.
         key: Box<TypedExpr>,
     },
+    /// A property, `object.name = value`, through its setter; the object is evaluated after
+    /// the value, as CPython does (CLS-06).
+    Property {
+        /// The instance.
+        object: Box<TypedExpr>,
+        /// The setter, which takes the instance and the value.
+        setter: super::function::FunctionId,
+        /// The type of the value assigned, converted to the setter's parameter.
+        value: crate::types::Type,
+    },
 }
 
 /// One `for target in source if condition ...` clause of a comprehension (EXP-12).

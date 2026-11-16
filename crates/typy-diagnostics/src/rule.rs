@@ -273,6 +273,8 @@ impl RuleId {
     pub const MOD_15: Self = Self("MOD-15");
     /// The compiler shall not crash on any input; an internal error shall be reported as `E9xxx` with a hint to report it.
     pub const NFR_09: Self = Self("NFR-09");
+    /// Assignment, annotated assignment and augmented assignment shall be accepted.
+    pub const SMT_01: Self = Self("SMT-01");
     /// Unpacking assignment to several targets shall be accepted for tuples and lists.
     pub const SMT_02: Self = Self("SMT-02");
     /// `assert` shall raise `AssertionError` when its test is false, in every build mode.
@@ -463,6 +465,7 @@ impl RuleId {
         Self::MOD_14,
         Self::MOD_15,
         Self::NFR_09,
+        Self::SMT_01,
         Self::SMT_02,
         Self::SMT_04,
         Self::SMT_05,

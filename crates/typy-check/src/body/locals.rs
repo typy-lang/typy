@@ -477,7 +477,23 @@ impl BodyChecker<'_> {
                 self.slice_assignment(span);
                 None
             }
-            _ => None,
+            // A target whose read failed was reported there; any other is reported here, so no
+            // statement is left out without a diagnostic.
+            _ if current.ty.has_error() => None,
+            _ => {
+                self.diagnostics.push(
+                    Diagnostic::new(
+                        DiagnosticCode::error(401),
+                        span,
+                        format!(
+                            "an augmented assignment cannot assign {} read this way",
+                            current.ty.with_article()
+                        ),
+                    )
+                    .with_rule(RuleId::SMT_01),
+                );
+                None
+            }
         }
     }
 

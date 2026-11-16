@@ -2415,8 +2415,8 @@ fn static_methods_and_properties_are_checked() {
             &["E0402"],
         ),
         (
-            "class A:\n    @property\n    def x(self) -> int:\n        return 1\n    @x.setter\n    def x(self, v: int) -> None:\n        pass\nl = [A()]\nl[0].x = 2\n",
-            &["E0201"],
+            "class A:\n    @property\n    def x(self) -> int:\n        return 1\n    @x.setter\n    def x(self, v: int) -> None:\n        pass\nl = [A()]\nl[0].x = 'two'\n",
+            &["E0402"],
         ),
         (
             "class A:\n    def f(self) -> None:\n        pass\nA.f()\n",

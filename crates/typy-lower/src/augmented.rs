@@ -77,6 +77,9 @@ impl FunctionLowerer<'_> {
             AssignTarget::Converted { .. } => {
                 unreachable!("an augmented assignment computes the item's own type")
             }
+            AssignTarget::Property { .. } => {
+                unreachable!("the checker gives an augmented property to its setter")
+            }
         }
     }
 

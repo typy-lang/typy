@@ -171,12 +171,14 @@ impl BodyChecker<'_> {
                 let checked_value = self.expression(value);
                 let current = self.expression(target);
                 let instance_item = self.is_instance_item(&current);
+                let property = self.is_property_read(target, &current);
                 // An operator that calls a method of an instance reads and assigns an item or
                 // an attribute of an expression through hidden variables (CLS-20), and so does
                 // an item of an instance, which `__setitem__` is given (CLS-07).
                 if matches!(current.ty, Type::Instance(_))
                     || matches!(checked_value.ty, Type::Instance(_))
                     || instance_item
+                    || property
                 {
                     if let super::in_place::Pinned::Checked(pinned) =
                         self.pinned_augmented(target, *operator, value, *span)
@@ -190,6 +192,12 @@ impl BodyChecker<'_> {
                             (current, checked_value),
                             *span,
                         );
+                    }
+                    // The getter's value, combined with the value, goes to the setter (CLS-06).
+                    if property {
+                        let result =
+                            self.augmented_result(*operator, current, checked_value, *span);
+                        return self.rebound(target, result, *span);
                     }
                     if let Some(call) =
                         self.in_place_call(*operator, &current, &checked_value, *span)

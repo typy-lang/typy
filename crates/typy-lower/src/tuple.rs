@@ -182,6 +182,27 @@ impl FunctionLowerer<'_> {
             AssignTarget::Attribute { object, index } => {
                 self.assign_attribute(object, *index, value, span);
             }
+            // The object is evaluated after the value, then given it through the setter.
+            AssignTarget::Property {
+                object,
+                setter,
+                value: from,
+            } => {
+                let object = self.expression(object);
+                let parameters = self.program.function(*setter).signature.parameters.clone();
+                let given = self.operand_for((value, from), parameters.get(1), span);
+                let borrowed = |value: Lowered| Self::borrowed(value.value, value.ty);
+                let done = self.call_method(
+                    *setter,
+                    vec![(0, borrowed(object)), (1, borrowed(given))],
+                    TyirType::Unit,
+                    span,
+                );
+                self.release(done, span);
+                self.release(given, span);
+                self.release(value, span);
+                self.release(object, span);
+            }
             AssignTarget::Tuple(targets) => {
                 let (_, items) = self.item_types(value.ty);
                 for (index, (target, ty)) in targets.iter().zip(items).enumerate() {

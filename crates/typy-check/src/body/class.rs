@@ -279,8 +279,8 @@ impl BodyChecker<'_> {
         if self.class_variable_through_instance(class, attribute, span) {
             return None;
         }
-        if self.refuse_property_target(class, attribute, span) {
-            return None;
+        if let Some(getter) = self.property_getter(class, &attribute.name) {
+            return self.property_target((&object, class, getter), attribute, ty, span);
         }
         let index = self.attribute_index(class, attribute)?;
         let initializing = self.initialized_instance(value).is_some();
