@@ -138,6 +138,8 @@ fn a_class_method_of_a_generic_class_takes_its_type_arguments_from_the_call() {
         ("print(Box[int].name(), Box[str].note())\n", &[]),
         ("print(Box.name())\n", &["E0404"]),
         ("print(Box.note())\n", &["E0404"]),
+        // Through an instance of a copy, a class method has no bridge (CLS-30).
+        ("print(Box(1).name())\n", &["E0201"]),
         // A method of the generic class through the class takes the instance's copy.
         ("print(Box.__init__(Box(1), 2))\n", &[]),
         ("print(Box.__init__(5, 2))\n", &["E0404"]),

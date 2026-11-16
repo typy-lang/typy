@@ -2376,6 +2376,11 @@ fn a_method_is_called_through_its_class_with_the_instance_first() {
             "class Cube(Square):\n    def __init__(self) -> None:\n        Square.__init__(self, 1.0)\n        Shape.__init__()\n",
             &["E0404"],
         ),
+        // A class the instance does not derive from takes it as any argument.
+        (
+            "class Other:\n    def __init__(self) -> None:\n        self.x = 1\nclass Cube(Square):\n    def __init__(self) -> None:\n        Square.__init__(self, 1.0)\n        Other.__init__(self)\n",
+            &["E0404"],
+        ),
     ];
     for (body, expected) in cases {
         let found = check(&format!("{classes}{body}")).err().unwrap_or_default();

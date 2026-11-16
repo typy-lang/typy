@@ -170,6 +170,27 @@ fn a_protocol_types_values_of_the_classes_that_satisfy_it() {
 }
 
 #[test]
+fn a_protocol_value_meets_what_it_does_not_hold() {
+    let cases: &[(&str, &[&str])] = &[
+        // An exception class is never a protocol value.
+        (
+            "class Failure(Exception):\n    pass\nx: Shape = Square()\n",
+            &[],
+        ),
+        ("x: Shape = Square()\nprint(x.missing)\n", &["E0414"]),
+        (
+            "def f(s: Square | None) -> Shape:\n    return s\n",
+            &["E0405"],
+        ),
+        ("def f(s: Named) -> Shape:\n    return s\n", &["E0405"]),
+        ("x: Shape = 'text'\n", &["E0402"]),
+    ];
+    for (program, expected) in cases {
+        assert_eq!(app(&format!("{SHAPES}{program}")), *expected, "{program}");
+    }
+}
+
+#[test]
 fn a_parameter_with_a_default_in_the_protocol_needs_one_in_the_class() {
     let program = concat!(
         "from typing import Protocol\n",
