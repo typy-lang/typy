@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy detailed design |
-| Version | 2.10 |
+| Version | 2.11 |
 | Status | Approved |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-16 |
@@ -976,24 +976,32 @@ scope that adds them to the class's, and notes its name in
 a method, through an instance, its class or `super()`, to
 `BodyChecker::call_target`, which solves the parameters from the arguments
 after the first `skip` and returns the copy and its signature; the call does not
-dispatch, so a generic method neither overrides nor is overridden, E0201 until
-GEN-09. A class method's own type parameters are resolved for each class's copy
-in `ClassMethodCopies::make`, which also lets a protocol parameter make it
+dispatch. A generic method may override one with as many type parameters, in
+classes that are not generic: `check_override` compares it with its own
+parameters named as the base's, `as_parameters_of`, and when the copies of a
+module are checked, `Program::make_override_copies` gives each copy of an
+overridden generic method, and the copy of each override for the same type
+arguments, a place in their classes' methods under the key `name[arguments]`,
+which no Python name can be, so lowering's method tables dispatch a call through
+the base to the object's class's copy; the generic stand-ins themselves stay out
+of the tables. Other overrides of or by a generic method are E0201, planned for
+1.0 (GEN-16). A class method's own type parameters are resolved for each class's
+copy in `ClassMethodCopies::make`, which also lets a protocol parameter make it
 generic; a call through a class goes to `call_target_with` with the arguments of
-a copy of a generic class first, `copy_arguments_of`. Such a class method has
-no bridge, so a call through an instance is E0201, and so are type parameters of
-a special method or a property, from `later_generic_method`, all planned for 1.0
+a copy of a generic class first, `copy_arguments_of`. Such a class method has no
+bridge, so a call through an instance is E0201, and so are type parameters of a
+special method or a property, from `later_generic_method`, all planned for 1.0
 (GEN-16). A method of a generic class with type parameters of its own is generic
 over the class's first and its own after them, two lists with two owners that
 `Program::substitute_each` replaces in turn; `finish_generic_class` keeps it out
 of the copies' methods, and a call takes the class's arguments from the copy
 that holds the method, `holder_arguments`, solves the method's own by
 `solve_each`, and runs the copy `call_target_with` makes for the copy of the
-class. A static method that names none of the class's type parameters is
-generic over its own alone. A generic type alias (SMT-10) is
-expanded by `check::type_alias` before any annotation is read: `Pair[int]`
-becomes the alias's value with `int` in place of `T`, and a type parameter of an
-enclosing function or class hides an alias of its name.
+class. A static method that names none of the class's type parameters is generic
+over its own alone. A generic type alias (SMT-10) is expanded by
+`check::type_alias` before any annotation is read: `Pair[int]` becomes the
+alias's value with `int` in place of `T`, and a type parameter of an enclosing
+function or class hides an alias of its name.
 
 A protocol (GEN-04, ADR-0023) is a class whose base names `typing.Protocol`;
 `check::class::class_types` marks its `InstanceClass::protocol`. It has no

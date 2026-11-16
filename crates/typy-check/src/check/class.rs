@@ -426,6 +426,8 @@ pub(super) struct KnownClasses<'known> {
     pub(super) copies: &'known std::cell::RefCell<crate::body::ClassCopies>,
     /// The methods that return `T | NotImplementedType` (CLS-21).
     pub(super) giving_way: &'known super::not_implemented::GivingWay,
+    /// The generic functions of the modules checked before, with their type parameters.
+    pub(super) generics: &'known BTreeMap<FunctionId, crate::body::Generic>,
 }
 
 /// Collects each class's attributes and methods; the methods become definitions whose IDs
@@ -506,6 +508,7 @@ pub(super) fn collect_members<'tree>(
                         earlier: known.signatures,
                         local: &methods,
                         first_function,
+                        generics: known.generics,
                     };
                     let override_of = (&method, kind == MethodKind::Static);
                     match check_override(&info, classes, signatures, override_of, parts.name) {
@@ -572,6 +575,20 @@ impl<'infos> Classes<'infos> {
         self.earlier
             .get(class.0 as usize)
             .or_else(|| self.local.iter().find(|info| info.id == class))
+    }
+
+    /// Returns true when a type parameter is one of a generic class's.
+    fn is_class_parameter(self, parameter: &crate::generic::TypeParameter) -> bool {
+        self.copies
+            .borrow()
+            .roots
+            .values()
+            .any(|generic| generic.parameters.contains(parameter))
+    }
+
+    /// Returns true when a class is a generic class, collected or before.
+    fn is_generic(self, class: ClassId) -> bool {
+        self.copies.borrow().roots.contains_key(&class)
     }
 
     /// Returns the type parameters' owner and the type arguments of a copy of a generic class,
@@ -1119,6 +1136,7 @@ struct Signatures<'definitions, 'tree> {
     earlier: &'definitions [FunctionSignature],
     local: &'definitions [Definition<'tree>],
     first_function: usize,
+    generics: &'definitions BTreeMap<FunctionId, crate::body::Generic>,
 }
 
 impl<'definitions> Signatures<'definitions, '_> {
@@ -1128,6 +1146,24 @@ impl<'definitions> Signatures<'definitions, '_> {
             .map_or_else(
                 || self.earlier.get(id.0 as usize),
                 |local| self.local.get(local).map(|base| &base.signature),
+            )
+    }
+
+    /// Returns the type parameters of a function: none for one that is not generic.
+    fn type_parameters(self, id: FunctionId) -> &'definitions [crate::generic::TypeParameter] {
+        (id.0 as usize)
+            .checked_sub(self.first_function)
+            .map_or_else(
+                || {
+                    self.generics
+                        .get(&id)
+                        .map_or(&[][..], |generic| generic.parameters.as_slice())
+                },
+                |local| {
+                    self.local
+                        .get(local)
+                        .map_or(&[][..], |base| base.type_parameters.as_slice())
+                },
             )
     }
 }
@@ -1150,16 +1186,34 @@ fn check_override(
     else {
         return Ok(None);
     };
-    // A copy of a generic method is called directly, so neither side of an override may be
-    // generic.
-    if !method.type_parameters.is_empty() || generic_method_in_bases(classes, info.base, name) {
-        return Err(Box::new(planned_generic_method(
-            name,
-            "a method with type parameters that overrides or is overridden is",
-        )));
-    }
     let Some(base) = signatures.get(base_id) else {
         return Ok(None);
+    };
+    // A generic method overrides one with as many type parameters, each copy of the one taking
+    // the place of the other's copy for the same arguments; it is compared with its own
+    // parameters named as the base's (GEN-09).
+    // A method of a generic class is generic over the class's parameters too, which a copy
+    // gives; only a method's own count.
+    let base_parameters: Vec<crate::generic::TypeParameter> = signatures
+        .type_parameters(base_id)
+        .iter()
+        .filter(|parameter| !classes.is_class_parameter(parameter))
+        .cloned()
+        .collect();
+    let own_signature = if method.type_parameters.is_empty() && base_parameters.is_empty() {
+        method.signature.clone()
+    } else {
+        let fits = method.type_parameters.len() == base_parameters.len()
+            && through.is_empty()
+            && !classes.is_generic(info.id);
+        if !fits {
+            return Err(Box::new(later_generic_method(
+                name,
+                "a generic method that overrides or is overridden by one with other type \
+                 parameters, or in a generic class, is",
+            )));
+        }
+        as_parameters_of(&method.signature, &method.type_parameters, &base_parameters)
     };
     // A method a copy of a generic class has takes the copy's type arguments, the copy nearest
     // the method first (ADR-0040).
@@ -1197,7 +1251,7 @@ fn check_override(
         signature
     };
     let (own, base) = (
-        as_method(&method.signature, static_own),
+        as_method(&own_signature, static_own),
         as_method(base, static_base),
     );
     let fit = Override {
@@ -1208,6 +1262,13 @@ fn check_override(
         span: name.span,
     }
     .check()?;
+    // An adapter is one function, which cannot stand for each copy of a generic method.
+    if fit == super::overriding::Fit::Adapted && !base_parameters.is_empty() {
+        return Err(Box::new(later_generic_method(
+            name,
+            "a generic method that overrides one with a parameter or result held otherwise is",
+        )));
+    }
     if fit == super::overriding::Fit::Adapted && (static_own || static_base) {
         return Err(Box::new(
             Diagnostic::new(
@@ -1225,6 +1286,30 @@ fn check_override(
     Ok((fit == super::overriding::Fit::Adapted).then_some(base_id))
 }
 
+/// Returns `signature` with each of the method's own type parameters, `own`, named as the
+/// parameter at its position in `base`, so it compares with the method it overrides (GEN-09).
+fn as_parameters_of(
+    signature: &FunctionSignature,
+    own: &[crate::generic::TypeParameter],
+    base: &[crate::generic::TypeParameter],
+) -> FunctionSignature {
+    let Some(owner) = own.first().map(|parameter| parameter.owner) else {
+        return signature.clone();
+    };
+    let named: Vec<Type> = base.iter().cloned().map(Type::parameter).collect();
+    FunctionSignature {
+        parameters: signature
+            .parameters
+            .iter()
+            .map(|parameter| SignatureParameter {
+                ty: parameter.ty.substituted(owner, &named),
+                ..parameter.clone()
+            })
+            .collect(),
+        returns: signature.returns.substituted(owner, &named),
+    }
+}
+
 /// Returns true when the nearest class from `base` up that defines `name` defines it as a
 /// static method.
 fn nearest_is_static(classes: Classes<'_>, base: Option<ClassId>, name: &str) -> bool {
@@ -1235,16 +1320,6 @@ fn nearest_is_static(classes: Classes<'_>, base: Option<ClassId>, name: &str) ->
     .is_some_and(|info| info.static_methods.iter().any(|each| each == name))
 }
 
-/// Returns true when the nearest class from `base` up that defines the method `name` gives
-/// it type parameters (GEN-01).
-fn generic_method_in_bases(classes: Classes<'_>, base: Option<ClassId>, name: &Identifier) -> bool {
-    std::iter::successors(base.and_then(|class| classes.get(class)), |info| {
-        info.base.and_then(|class| classes.get(class))
-    })
-    .find(|info| info.method(&name.name).is_some())
-    .is_some_and(|info| info.generic_methods.contains(&name.name))
-}
-
 /// Reports a method with type parameters that TyPy 1.0 accepts (GEN-16).
 fn later_generic_method(name: &Identifier, what: &str) -> Diagnostic {
     Diagnostic::new(
@@ -1253,16 +1328,6 @@ fn later_generic_method(name: &Identifier, what: &str) -> Diagnostic {
         format!("{what} planned for TyPy 1.0 (GEN-16)"),
     )
     .with_rule(RuleId::GEN_16)
-}
-
-/// Reports a method with type parameters that TyPy 0.5 accepts (GEN-09).
-fn planned_generic_method(name: &Identifier, what: &str) -> Diagnostic {
-    Diagnostic::new(
-        DiagnosticCode::error(201),
-        name.span,
-        format!("{what} planned for TyPy 0.5 (GEN-09)"),
-    )
-    .with_rule(RuleId::GEN_09)
 }
 
 /// Returns the method `name` of `base` or of the nearest class it derives from that defines

@@ -82,8 +82,8 @@ fn calls_that_give_no_fitting_type_are_refused() {
             "def f[T](x: T | str) -> int:\n    return 0\nprint(f('s'))\n",
             "E0404",
         ),
-        // A generic method is called through its copies, so it neither overrides nor is
-        // overridden (GEN-09).
+        // A generic method overrides or is overridden by one with as many type parameters
+        // alone (GEN-09, GEN-16).
         (
             "class B:\n    def m(self, x: int) -> int:\n        return x\nclass C(B):\n    def m[T](self, x: T) -> T:\n        return x\n",
             "E0201",
@@ -251,6 +251,36 @@ fn a_method_of_a_generic_class_takes_type_parameters_of_its_own() {
     ];
     for (body, expected) in cases {
         assert_eq!(app(&format!("{classes}{body}")), *expected, "{body}");
+    }
+}
+
+#[test]
+fn a_generic_method_overrides_one_with_as_many_type_parameters() {
+    let base = concat!(
+        "class B:\n",
+        "    def m[T](self, x: T) -> list[T]:\n",
+        "        return [x]\n",
+    );
+    let cases: &[(&str, &[&str])] = &[
+        (
+            "class C(B):\n    def m[U](self, x: U) -> list[U]:\n        return super().m(x) + [x]\ndef f(b: B) -> int:\n    return len(b.m(1)) + len(b.m('a'))\nprint(f(C()))\n",
+            &[],
+        ),
+        (
+            "class C(B):\n    def m[T](self, x: T) -> T:\n        return x\n",
+            &["E0404"],
+        ),
+        (
+            "class C(B):\n    def m(self, x: int) -> list[int]:\n        return [x]\n",
+            &["E0201"],
+        ),
+        (
+            "class C(B):\n    def m[T, U](self, x: T) -> list[T]:\n        return [x]\n",
+            &["E0201"],
+        ),
+    ];
+    for (body, expected) in cases {
+        assert_eq!(app(&format!("{base}{body}")), *expected, "{body}");
     }
 }
 

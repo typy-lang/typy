@@ -215,7 +215,7 @@ impl RuleId {
     pub const GEN_14: Self = Self("GEN-14");
     /// A class derived from a copy of a generic class shall inherit the generic class's class methods, and a dataclass derived from a copy of a generic dataclass its fields.
     pub const GEN_15: Self = Self("GEN-15");
-    /// Type parameters shall be accepted on a special method and on a property, and a class method with type parameters shall be callable through an instance.
+    /// Type parameters shall be accepted on a special method, on a property, and on a method that overrides or is overridden by one with other type parameters or in a generic class, and a class method with type parameters shall be callable through an instance.
     pub const GEN_16: Self = Self("GEN-16");
     /// Source files shall be UTF-8 with the `.py` extension.
     pub const LEX_01: Self = Self("LEX-01");

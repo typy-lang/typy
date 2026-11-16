@@ -20,6 +20,7 @@ mod each_member;
 mod generic_call;
 mod generic_copy;
 mod override_adapter;
+mod override_copy;
 mod static_bridge;
 mod truth_bridge;
 pub use comparison_bridge::{COMPARISON_BRIDGES, EQUAL_BRIDGE};
@@ -77,6 +78,7 @@ mod view_operator;
 
 pub(crate) use builtin_module::ModuleFunction;
 pub(crate) use class_copy::{ClassCopies, GenericClass};
+pub(crate) use generic_copy::{Generic, GenericCopy};
 pub(crate) use import::Imported;
 pub(crate) use module_context::ModuleContext;
 pub(crate) use program::Program;

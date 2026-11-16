@@ -76,6 +76,15 @@ impl MethodTables {
                 .map(|base| keys[base.0 as usize].clone())
                 .unwrap_or_default();
             for (name, own) in &class.methods {
+                // A generic method is called through its copies, each held under a key of its
+                // own, never itself (GEN-09).
+                if program
+                    .functions
+                    .get(own.0 as usize)
+                    .is_some_and(|function| function.generic)
+                {
+                    continue;
+                }
                 // A static method is held in the table as its bridge, which takes the
                 // instance first (CLS-06).
                 let id = class

@@ -630,8 +630,9 @@ impl BodyChecker<'_> {
             TypedExprKind::Call {
                 function: target,
                 arguments: bound,
-                // A copy of a generic method is in no method table, and no class overrides it.
-                dispatch: target == method,
+                // A copy of a generic method is in a method table when a class derived from
+                // its class defines the method again, which lowering finds (GEN-09).
+                dispatch: true,
             },
             signature.returns,
             span,

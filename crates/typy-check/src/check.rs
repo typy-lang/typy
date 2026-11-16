@@ -327,6 +327,7 @@ fn known_classes<'known>(
         signatures: program.signatures(),
         copies: &program.class_copies,
         giving_way: &program.giving_way,
+        generics: &program.generics.functions,
     }
 }
 

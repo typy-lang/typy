@@ -271,9 +271,33 @@ store = Store("main")
 print(store.pair(1), store.pair("a"), Store.wrap(2.5))
 ```
 
-A copy is called directly, not looked up through the instance's class,
-so a method with type parameters may not override a method of a base or
-be overridden, E0201 (GEN-09).
+A generic method may override one with as many type parameters, and a
+call through the base runs the copy of the object's class's method for
+the same type arguments, as CPython runs the override (GEN-09):
+
+<!-- typy-expect: accepted -->
+```python
+class Visitor:
+    def visit[T](self, value: T) -> list[T]:
+        return [value]
+
+
+class Doubler(Visitor):
+    def visit[T](self, value: T) -> list[T]:
+        return super().visit(value) + [value]
+
+
+def run(visitor: Visitor) -> None:
+    print(visitor.visit(1), visitor.visit("a"))
+
+
+run(Visitor())
+run(Doubler())
+```
+
+A generic method that overrides a method without type parameters, or
+one with another number of them, or one in a generic class, is planned
+for 1.0 (GEN-16).
 
 A method of a generic class may take type parameters of its own. A call
 takes the class's from the instance's copy and solves the method's own
@@ -364,9 +388,9 @@ A protocol has no instances: calling it is E0401, and so is
 `TypeVar` and `Generic` from `typing` are E0202: a type parameter list
 replaces them (GEN-01). A generic type alias, `type Pair[T] = tuple[T,
 T]`, is described with the other [type aliases](types.md#type-aliases).
-Type parameters of a method that overrides or is overridden are planned
-for 0.5 (GEN-09); type parameters of a special method or a property, and
-a class method with type parameters called through an instance, are
+Type parameters of a special method or a property, of a method that
+overrides or is overridden by one with other type parameters, and a
+class method with type parameters called through an instance, are
 planned for 1.0 (GEN-16). A protocol as the type of a
 variable, an attribute, a result or a container item outside a
 parameter, a class that names a protocol as its base, and properties,

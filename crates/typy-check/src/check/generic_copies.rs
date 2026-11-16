@@ -16,7 +16,9 @@ pub(super) fn check(
     others: &ModuleDefinitions<'_>,
     diagnostics: &mut Diagnostics,
 ) {
-    while let Some(copy) = program.next_pending_copy() {
+    // The overrides of a generic method get copies for each copy of it, whose bodies may need
+    // more copies in turn (GEN-09).
+    while let Some(copy) = next_copy(program) {
         let Some(home) = program
             .generic(copy.generic)
             .map(|generic| generic.module.clone())
@@ -78,4 +80,16 @@ pub(super) fn check(
         program.type_arguments.clear();
     }
     program.end_copies();
+}
+
+/// Returns the next copy to check, after making the copies of the overrides of the copies
+/// made so far once none is left.
+fn next_copy(program: &mut Program) -> Option<crate::body::GenericCopy> {
+    if let Some(copy) = program.next_pending_copy() {
+        return Some(copy);
+    }
+    if program.make_override_copies() {
+        return program.next_pending_copy();
+    }
+    None
 }
