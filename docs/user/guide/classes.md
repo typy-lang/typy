@@ -530,11 +530,14 @@ shelf["Dune"] = 412
 print(len(shelf), shelf["Dune"], "Dune" in shelf, bool(Shelf()))
 ```
 
-As in CPython, a negative `__len__` raises `ValueError`. A slice such
-as `x[1:2]`, `any` and `all` of instances whose truth comes from
+As in CPython, a negative `__len__` raises `ValueError`, and `in` on an
+instance whose class has `__iter__` and no `__contains__` goes over its
+items until one is the value or equal to it (CLS-23). A slice such as
+`x[1:2]`, `any` and `all` of instances whose truth comes from
 `__len__`, and a truth test whose static class has neither method while
-a subclass defines one, are planned for 0.5, and so is `in` without
-`__contains__`, which CPython answers by iterating (CLS-23, CLS-24).
+a subclass defines one, are planned for 0.5 (CLS-23, CLS-24). `in` and
+`for` over a class with `__getitem__` alone, which CPython reads by
+position until `IndexError`, are planned for 1.0 (CST-11).
 
 ## Dataclasses
 

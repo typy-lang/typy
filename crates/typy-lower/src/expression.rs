@@ -56,6 +56,14 @@ impl FunctionLowerer<'_> {
                 self.list_display(items, item, span)
             }
             TypedExprKind::ListOf(source) => self.list_of(source, span),
+            TypedExprKind::IterContains {
+                value,
+                held,
+                source,
+                each,
+                test,
+                negated,
+            } => self.iterated_contains((value, *held), source, (*each, test), *negated, span),
             TypedExprKind::Set(items) => {
                 let item = self.set_item_type(&expression.ty);
                 self.set_display(items, item, span)

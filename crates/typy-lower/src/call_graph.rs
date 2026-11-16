@@ -272,6 +272,7 @@ fn expression(expression_value: &TypedExpr, callees: &mut BTreeSet<FunctionId>) 
         TypedExprKind::OperatorCall(call) => {
             callees.extend(call.forward);
             callees.extend(call.reflected);
+            callees.extend(call.in_place);
             expression(&call.left, callees);
             expression(&call.right, callees);
         }
@@ -327,6 +328,16 @@ fn expression(expression_value: &TypedExpr, callees: &mut BTreeSet<FunctionId>) 
         | TypedExprKind::SetOf(source)
         | TypedExprKind::DictOf(source) => {
             loop_source(source, callees);
+        }
+        TypedExprKind::IterContains {
+            value,
+            source,
+            test,
+            ..
+        } => {
+            expression(value, callees);
+            loop_source(source, callees);
+            expression(test, callees);
         }
         TypedExprKind::DictWith { source, entries } => {
             if let Some(source) = source {

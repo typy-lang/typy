@@ -87,6 +87,8 @@ impl RuleId {
     pub const CST_09: Self = Self("CST-09");
     /// The parameters of `__exit__` after `self` may be left without annotations, and shall then have the types `type[BaseException] \| None`, `BaseException \| None` and `TracebackType \| None`; the traceback shall be one object of type `traceback`, written as CPython writes one, which holds no frames.
     pub const CST_10: Self = Self("CST-10");
+    /// A class with `__getitem__` and no `__iter__` shall be iterable through `__getitem__` with the positions 0, 1, 2 and so on until it raises `IndexError`, in `for`, `in` and every builtin that iterates, as CPython's sequence protocol does.
+    pub const CST_11: Self = Self("CST-11");
     /// `bool` shall have the values `True` and `False`.
     pub const DAT_03: Self = Self("DAT-03");
     /// `str` shall be an immutable sequence of Unicode code points. `len()` and indexing shall count code points, and indexing shall return a `str` of length 1.
@@ -368,6 +370,7 @@ impl RuleId {
         Self::CST_08,
         Self::CST_09,
         Self::CST_10,
+        Self::CST_11,
         Self::DAT_03,
         Self::DAT_05,
         Self::DAT_06,

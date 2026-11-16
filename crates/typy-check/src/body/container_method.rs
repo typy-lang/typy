@@ -2,10 +2,10 @@
 //! `__setitem__`, `del x[k]` `__delitem__`, and `v in x` `__contains__` (CLS-07).
 
 use typy_diagnostics::{Diagnostic, DiagnosticCode, RuleId, Span};
-use typy_source::syntax::{Expr, UnaryOperator};
+use typy_source::syntax::{BoolOperator, CompareOperator, Expr, UnaryOperator};
 
 use super::BodyChecker;
-use crate::typed::{Argument, FunctionId, TypedExpr, TypedExprKind, TypedStmt};
+use crate::typed::{Argument, FunctionId, TypedConstant, TypedExpr, TypedExprKind, TypedStmt};
 use crate::types::Type;
 
 impl BodyChecker<'_> {
@@ -149,7 +149,9 @@ impl BodyChecker<'_> {
         negated: bool,
         span: Span,
     ) -> Option<TypedExpr> {
-        let method = self.instance_method(&container.ty, "__contains__")?;
+        let Some(method) = self.instance_method(&container.ty, "__contains__") else {
+            return self.iterated_contains(item, container, negated, span);
+        };
         let call = self.container_call(
             "__contains__",
             method,
@@ -169,6 +171,94 @@ impl BodyChecker<'_> {
         } else {
             call
         })
+    }
+
+    /// Returns `item in container` for an instance whose class has `__iter__` and no
+    /// `__contains__`: each item the instance gives is compared with the value, the item on the
+    /// left, until one is the value or equal to it, as CPython's `PySequence_Contains` does
+    /// (CLS-23).
+    fn iterated_contains(
+        &mut self,
+        item: &TypedExpr,
+        container: &TypedExpr,
+        negated: bool,
+        span: Span,
+    ) -> Option<TypedExpr> {
+        let Type::Instance(class) = &container.ty else {
+            return None;
+        };
+        if self.program.method(class.id, "__iter__").is_none() {
+            // A class with `__getitem__` alone is iterated by index, planned for 1.0.
+            if self.program.method(class.id, "__getitem__").is_some() {
+                self.diagnostics.push(
+                    Diagnostic::new(
+                        DiagnosticCode::error(201),
+                        span,
+                        format!(
+                            "`in` over {}, whose class has `__getitem__` and no `__iter__` or \
+                             `__contains__`, is planned for TyPy 1.0 (CST-11)",
+                            container.ty.with_article()
+                        ),
+                    )
+                    .with_rule(RuleId::CST_11)
+                    .with_help("define `__contains__` or `__iter__` in the class"),
+                );
+                return Some(Self::typed(
+                    TypedExprKind::Constant(TypedConstant::Bool(false)),
+                    Type::Bool,
+                    span,
+                ));
+            }
+            return None;
+        }
+        let (source, each_type) = self.protocol_source(container.clone(), "`in`");
+        if !each_type.can_test_equality(&item.ty) {
+            return None;
+        }
+        let held = self.hidden_variable("sought", item.ty.clone(), span);
+        let each = self.hidden_variable("item", each_type.clone(), span);
+        let read = |symbol, ty: &Type| Self::typed(TypedExprKind::Local(symbol), ty.clone(), span);
+        let equal = self.single_comparison(
+            CompareOperator::Eq,
+            read(each, &each_type),
+            read(held, &item.ty),
+            span,
+        );
+        // An item that is the value is found without calling `__eq__`.
+        let test = if matches!(each_type, Type::Instance(_)) && matches!(item.ty, Type::Instance(_))
+        {
+            let same = Self::typed(
+                TypedExprKind::Compare {
+                    left: Box::new(read(each, &each_type)),
+                    operators: vec![CompareOperator::Is],
+                    comparators: vec![read(held, &item.ty)],
+                },
+                Type::Bool,
+                span,
+            );
+            Self::typed(
+                TypedExprKind::BoolOp {
+                    operator: BoolOperator::Or,
+                    values: vec![same, equal],
+                },
+                Type::Bool,
+                span,
+            )
+        } else {
+            equal
+        };
+        Some(Self::typed(
+            TypedExprKind::IterContains {
+                value: Box::new(item.clone()),
+                held,
+                source: Box::new(source),
+                each,
+                test: Box::new(test),
+                negated,
+            },
+            Type::Bool,
+            span,
+        ))
     }
 
     /// Reports a slice of an instance, whose slice object TyPy does not make yet.

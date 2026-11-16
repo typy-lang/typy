@@ -224,6 +224,23 @@ pub enum TypedExprKind {
     TupleOf(Box<TypedExpr>),
     /// `list(source)`: a new list of every value the source gives, in order (LIB-02).
     ListOf(Box<super::statement::LoopSource>),
+    /// `value in instance` of a class without `__contains__`: the value is held in `held`,
+    /// then the instance is iterated as `for` does, each item held in `each`, until `test`,
+    /// which reads the two, holds (CLS-23).
+    IterContains {
+        /// The value looked for, evaluated first.
+        value: Box<TypedExpr>,
+        /// The hidden variable that holds it.
+        held: SymbolId,
+        /// The instance's items.
+        source: Box<super::statement::LoopSource>,
+        /// The hidden variable that holds each item.
+        each: SymbolId,
+        /// `each is held or each == held`, as CPython compares an item with the value.
+        test: Box<TypedExpr>,
+        /// Whether the result is negated, for `not in`.
+        negated: bool,
+    },
     /// `set(source)`: a new set of every value the source gives, added in order, or a copy of
     /// the source when it is a set (DAT-10).
     SetOf(Box<super::statement::LoopSource>),
@@ -551,6 +568,15 @@ impl TypedExpr {
                 .chain(each.arms.iter().map(|(_, body)| body))
                 .collect(),
             TypedExprKind::OperatorCall(call) => vec![&call.left, &call.right],
+            TypedExprKind::IterContains {
+                value,
+                source,
+                test,
+                ..
+            } => std::iter::once(value.as_ref())
+                .chain(source.expressions())
+                .chain(std::iter::once(test.as_ref()))
+                .collect(),
             TypedExprKind::Wrap(inner)
             | TypedExprKind::CheckedLength(inner)
             | TypedExprKind::Upcast(inner)

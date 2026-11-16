@@ -69,7 +69,11 @@ impl BodyChecker<'_> {
 
     /// Checks iterating over an instance: its class's `__iter__` gives an instance of a class
     /// with `__next__`, whose result is each value (CST-08).
-    fn protocol_source(&mut self, iterable: TypedExpr, user: &str) -> (LoopSource, Type) {
+    pub(super) fn protocol_source(
+        &mut self,
+        iterable: TypedExpr,
+        user: &str,
+    ) -> (LoopSource, Type) {
         let class = iterable.ty.class_id().unwrap_or(crate::typed::ClassId(0));
         let not_iterable = |reason: String| {
             Diagnostic::new(

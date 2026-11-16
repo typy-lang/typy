@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy detailed design |
-| Version | 1.90 |
+| Version | 1.91 |
 | Status | Approved |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-16 |
@@ -1378,7 +1378,12 @@ target's defines is E0201, planned for 1.0 (CLS-32). `body::container_method` ca
 `int_length` and raises CPython's `ValueError` or `OverflowError`;
 `__getitem__` for a subscript; `__setitem__` for `variable[key] = value`, as a
 statement that evaluates the value first; `__delitem__` for `del`; and
-`__contains__` for `in` and `not in`. Lowering tests an instance's truth with
+`__contains__` for `in` and `not in`. Without `__contains__`, `in` on an
+instance whose class has `__iter__` is `TypedExprKind::IterContains`: the
+value and each item are held in hidden variables, and lowering iterates the
+instance as `for` does until `item is value or item == value` holds
+(CLS-23); a class with `__getitem__` alone is E0201, planned for 1.0
+(CST-11). Lowering tests an instance's truth with
 `__bool__`, or with its checked `__len__` against zero, and `TyirClass::truth`
 puts `__bool__` in the type object's `truth` slot for `any` and `all`; `any`
 and `all` of instances whose truth comes from `__len__`, and a truth test of a

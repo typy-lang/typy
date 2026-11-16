@@ -176,6 +176,50 @@ impl FunctionLowerer<'_> {
         self.builder.switch_to(exit);
     }
 
+    /// Returns `value in source` for an instance without `__contains__`: the value, held in
+    /// `held`, then each item of the source, held in `each`, until `test` holds (CLS-23).
+    pub(crate) fn iterated_contains(
+        &mut self,
+        (value, held): (&TypedExpr, typy_check::SymbolId),
+        source: &LoopSource,
+        (each, test): (typy_check::SymbolId, &TypedExpr),
+        negated: bool,
+        span: Span,
+    ) -> Lowered {
+        let sought = self.expression(value);
+        self.assign_name(held, sought, span);
+        let iterator = self.start_iterator(source, span);
+        let header = self.builder.create_block();
+        let (found, missing, join) = (
+            self.builder.create_block(),
+            self.builder.create_block(),
+            self.builder.create_block(),
+        );
+        let result = self.builder.add_block_parameter(join, TyirType::Bool);
+        self.jump_to(header);
+        self.builder.switch_to(header);
+        let item = self.next_value(&iterator, missing, span);
+        self.assign_name(each, item, span);
+        let tested = self.expression(test);
+        let holds = self.truth(tested, span);
+        self.release(tested, span);
+        self.builder.terminate(Terminator::Branch {
+            condition: holds,
+            then: found,
+            otherwise: header,
+        });
+        for (block, answer) in [(found, !negated), (missing, negated)] {
+            self.builder.switch_to(block);
+            let answer = self.constant(Constant::Bool(answer), span);
+            self.builder.terminate(Terminator::Jump {
+                target: join,
+                arguments: vec![answer],
+            });
+        }
+        self.builder.switch_to(join);
+        Self::borrowed(result, TyirType::Bool)
+    }
+
     /// Reads `source` as a `for` loop reads it and calls `visit` with each value, which is
     /// released after the call.
     pub(crate) fn each_value(

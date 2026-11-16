@@ -503,6 +503,7 @@ impl Dump<'_> {
             TypedExprKind::Tuple(_) => "Tuple".to_owned(),
             TypedExprKind::List(_) => "List".to_owned(),
             TypedExprKind::ListOf(_) => "ListOf".to_owned(),
+            TypedExprKind::IterContains { .. } => "IterContains".to_owned(),
             TypedExprKind::SetOf(_) => "SetOf".to_owned(),
             TypedExprKind::Set(_) => "Set".to_owned(),
             TypedExprKind::Dict { .. } => "Dict".to_owned(),

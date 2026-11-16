@@ -4,11 +4,11 @@
 //! held in a hidden variable that the next comparison reads, as CPython evaluates it once.
 
 use typy_diagnostics::Span;
-use typy_source::syntax::{BoolOperator, CompareOperator, Expr};
+use typy_source::syntax::{BoolOperator, CompareOperator};
 
 use super::BodyChecker;
 use super::operator_method::Comparison;
-use crate::typed::{SymbolKind, TypedExpr, TypedExprKind};
+use crate::typed::{TypedExpr, TypedExprKind};
 use crate::types::Type;
 
 impl BodyChecker<'_> {
@@ -50,13 +50,7 @@ impl BodyChecker<'_> {
     /// variable.
     fn held_operand(&mut self, operand: TypedExpr) -> (TypedExpr, Option<TypedExpr>) {
         let (ty, span) = (operand.ty.clone(), operand.span);
-        let name = format!("<chained {}>", self.local_order.len());
-        let symbol = self
-            .program
-            .add_symbol(&name, SymbolKind::Local, ty.clone(), span);
-        self.locals.insert(name.clone(), symbol);
-        self.local_order.push(symbol);
-        self.assign(&Expr::Name { id: name, span }, ty.clone(), &operand);
+        let symbol = self.hidden_variable("chained", ty.clone(), span);
         let read = Self::typed(TypedExprKind::Local(symbol), ty.clone(), span);
         let stored = Self::typed(
             TypedExprKind::Named {
@@ -70,7 +64,7 @@ impl BodyChecker<'_> {
     }
 
     /// Returns one comparison: a call of a comparison method, or the built-in comparison.
-    fn single_comparison(
+    pub(super) fn single_comparison(
         &mut self,
         operator: CompareOperator,
         left: TypedExpr,

@@ -10,6 +10,19 @@ use crate::typed::{AssignTarget, SymbolId, SymbolKind, TypedConstant, TypedExpr,
 use crate::types::Type;
 
 impl BodyChecker<'_> {
+    /// Returns a new hidden variable of type `ty`, named `<kind N>`, which no program can
+    /// name; an expression of the checker's own assigns and reads it by its symbol.
+    pub(super) fn hidden_variable(&mut self, kind: &str, ty: Type, span: Span) -> SymbolId {
+        let name = format!("<{kind} {}>", self.local_order.len());
+        let symbol = self
+            .program
+            .add_symbol(&name, SymbolKind::Local, ty.clone(), span);
+        self.locals.insert(name, symbol);
+        self.local_order.push(symbol);
+        self.types.insert(symbol, ty);
+        symbol
+    }
+
     /// Every name assigned anywhere in the body is a local of the body (LR 4.2.2).
     pub(super) fn collect_locals(&mut self, statements: &[&Stmt]) {
         for statement in statements {

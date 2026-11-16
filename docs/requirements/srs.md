@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy software requirements specification |
-| Version | 1.60 |
+| Version | 1.61 |
 | Status | Approved |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-16 |
@@ -263,6 +263,7 @@ formatter applies; Ruff's formatter is the project's recommendation.
 | CST-08 | `for` shall iterate over any class with `__iter__` and `__next__`, and end when `__next__` raises `StopIteration` (OI-17). | M | 0.3 | 8.3 |
 | CST-09 | `iter` and `next`, with and without a default, shall be available for the built-in iterables. | S | 0.3 | 8.3 |
 | CST-10 | The parameters of `__exit__` after `self` may be left without annotations, and shall then have the types `type[BaseException] \| None`, `BaseException \| None` and `TracebackType \| None`; the traceback shall be one object of type `traceback`, written as CPython writes one, which holds no frames. | S | 0.3 | |
+| CST-11 | A class with `__getitem__` and no `__iter__` shall be iterable through `__getitem__` with the positions 0, 1, 2 and so on until it raises `IndexError`, in `for`, `in` and every builtin that iterates, as CPython's sequence protocol does. | C | 1.0 | |
 
 ### 3.9 Functions (FUN)
 

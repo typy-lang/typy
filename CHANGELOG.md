@@ -120,6 +120,10 @@ All notable changes to TyPy are recorded here. The format follows
 - An operator whose method and reflected method return different types;
   the operator's type joins them when the reflected method may run
   (CLS-22).
+- `in` on an instance whose class has `__iter__` and no `__contains__`
+  goes over its items until one is the value or equal to it, as CPython
+  does; over a class with `__getitem__` alone it is planned for 1.0
+  (CLS-23, CST-11).
 
 ### Fixed
 
