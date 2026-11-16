@@ -227,6 +227,23 @@ fn a_generic_class_derives_from_a_class_of_the_program() {
 }
 
 #[test]
+fn a_method_of_a_copy_made_early_assigns_its_attributes() {
+    // `Box[int]` in a signature makes the copy before `Box.__init__` is checked.
+    let source = concat!(
+        "class Box[T]:\n",
+        "    def __init__(self, item: T) -> None:\n",
+        "        self.item = item\n",
+        "    def put(self, item: T) -> None:\n",
+        "        self.item = item\n",
+        "def make(b: Box[int]) -> int:\n",
+        "    b.put(2)\n",
+        "    return b.item\n",
+        "print(make(Box(5)))\n",
+    );
+    assert_eq!(app(source), Vec::<String>::new());
+}
+
+#[test]
 fn a_generic_of_another_module_is_copied_in_its_own_names() {
     let tools = concat!(
         "SCALE = 10\n",

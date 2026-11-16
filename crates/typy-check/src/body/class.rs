@@ -263,6 +263,21 @@ impl BodyChecker<'_> {
         self.program.attribute_ty(class, index)
     }
 
+    /// Returns the class that declares the attribute at `index` of `class`, with the attribute's
+    /// type once it is known. An inherited attribute takes its type from the class that declares
+    /// it; a copy of a generic class made before the generic class's `__init__` was checked
+    /// takes it from the generic class's, and keeps it (ADR-0028).
+    fn known_attribute(&mut self, class: ClassId, index: usize) -> (ClassId, Option<Type>) {
+        let owner = self.program.declaring(class, index);
+        let known = self.program.attribute_ty(owner, index);
+        if let Some(known) = &known {
+            self.program.classes[owner.0 as usize].attributes[index]
+                .ty
+                .get_or_insert_with(|| known.clone());
+        }
+        (owner, known)
+    }
+
     /// Checks `value.attribute = ...` with a value of type `ty`, or with the annotation
     /// `declared`. In `__init__` the first assignment of an attribute the class body does not
     /// declare gives it its type; anywhere else only an attribute of the class is assigned
@@ -294,10 +309,9 @@ impl BodyChecker<'_> {
         {
             return None;
         }
-        // An inherited attribute takes its type from the class that declares it.
-        let owner = self.program.declaring(class, index);
+        let (owner, known) = self.known_attribute(class, index);
         let info = &mut self.program.classes[owner.0 as usize];
-        let attribute_type = match (&info.attributes[index].ty, declared) {
+        let attribute_type = match (&known, declared) {
             (None, Some(declared)) if initializing => {
                 info.attributes[index].ty = Some(declared.clone());
                 declared
