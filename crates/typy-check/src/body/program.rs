@@ -300,6 +300,7 @@ impl Program {
             if !self.class_copies.borrow().roots.contains_key(&class) {
                 self.add_class_method_bridges(class);
                 self.add_comparison_bridges(class);
+                self.add_truth_bridge(class);
             }
         }
     }

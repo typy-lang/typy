@@ -406,18 +406,6 @@ impl BodyChecker<'_> {
         }
     }
 
-    /// Returns true when the class's truth is CPython's default and a class derived from it
-    /// defines `__bool__` or `__len__`, so the object's class would decide it (CLS-07).
-    pub(super) fn subclass_decides_truth(&self, class: crate::typed::ClassId) -> bool {
-        self.program.method(class, "__bool__").is_none()
-            && self.program.method(class, "__len__").is_none()
-            && self.program.classes.iter().any(|other| {
-                (other.method("__bool__").is_some() || other.method("__len__").is_some())
-                    && matches!(self.program.instance_type(other.id), Type::Instance(derived)
-                        if derived.ancestors.iter().any(|(id, _)| *id == class))
-            })
-    }
-
     pub(super) fn truth_test(&mut self, test: &Expr) -> TypedExpr {
         if let Some(truth) = self.tested_part(test) {
             return truth;
@@ -430,28 +418,8 @@ impl BodyChecker<'_> {
     /// Reports a value whose truth cannot be tested: a condition, `not`, `and`, `or` and
     /// `bool()` all test it (EXP-10).
     pub(super) fn check_truth(&mut self, value: &TypedExpr) {
-        // An instance's truth comes from its class, so a subclass that defines `__bool__` or
-        // `__len__` where its base defines neither would need the object's class (CLS-07).
-        if self.union_truth_planned(value) {
-            return;
-        }
-        if let Type::Instance(class) = &value.ty
-            && self.subclass_decides_truth(class.id)
-        {
-            self.diagnostics.push(
-                Diagnostic::new(
-                    DiagnosticCode::error(201),
-                    value.span,
-                    format!(
-                        "a truth test of {} whose subclass defines `__bool__` or `__len__` is \
-                         planned for TyPy 0.5 (CLS-07)",
-                        value.ty.with_article()
-                    ),
-                )
-                .with_rule(RuleId::CLS_07)
-                .with_help(format!("define `__bool__` in `{}`", class.name)),
-            );
-        }
+        // An instance's truth comes from the `__bool__` or `__len__` of the object's own class,
+        // which the lowering asks through its type object when a subclass may decide (CLS-24).
         if !value.ty.is_truth_testable() {
             self.diagnostics.push(
                 Diagnostic::new(

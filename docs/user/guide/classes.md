@@ -565,11 +565,11 @@ tally[1] += 5
 print(tally.counts)
 ```
 
-`any` and `all` of instances whose truth comes from `__len__`, and a
-truth test whose static class has neither method while a subclass
-defines one, are planned for 0.5 (CLS-24). `in` and `for` over a class
-with `__getitem__` alone, which CPython reads by position until
-`IndexError`, are planned for 1.0 (CST-11).
+An instance's truth comes from the `__bool__` of its own class, or its
+`__len__` when it has no `__bool__`, also where the variable's type is
+a base that has neither, or a union, and in `any` and `all` (CLS-24).
+`in` and `for` over a class with `__getitem__` alone, which CPython
+reads by position until `IndexError`, are planned for 1.0 (CST-11).
 
 ## Dataclasses
 

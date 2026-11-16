@@ -160,7 +160,7 @@ impl Slots {
             equal,
             order: [less, less_equal, greater, greater_equal],
             hash: method("__hash__"),
-            truth: method("__bool__"),
+            truth: method("__bool__").or_else(|| method(typy_check::TRUTH_BRIDGE)),
         }
     }
 

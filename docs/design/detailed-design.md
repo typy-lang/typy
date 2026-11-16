@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy detailed design |
-| Version | 1.92 |
+| Version | 1.93 |
 | Status | Approved |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-16 |
@@ -1398,10 +1398,12 @@ pins the container and the index, then gives `__setitem__` the item
 `__getitem__` gave, combined with the value (`instance_item_augmented`).
 Lowering tests an instance's truth with
 `__bool__`, or with its checked `__len__` against zero, and `TyirClass::truth`
-puts `__bool__` in the type object's `truth` slot for `any` and `all`; `any`
-and `all` of instances whose truth comes from `__len__`, and a truth test of a
-class with neither method whose subclass defines one, are E0201. A class body's
-values follow ADR-0024. `check::dataclass` expands each `@dataclass` before the
+puts `__bool__`, or `<truth>`, which `Program::add_truth_bridge` writes as
+`len(self) != 0` for a class whose truth comes from `__len__`, in the type
+object's `truth` slot for `any` and `all`. When a class derived from the
+static class may decide otherwise, lowering asks the object's type object
+through `object_is_true` (CLS-24). A class body's values follow ADR-0024.
+`check::dataclass` expands each `@dataclass` before the
 subset check reads the module: it finds the fields, its own after a dataclass
 base's, writes `__init__`, `__repr__`, `__eq__` and, with `order=True`, the
 ordering methods as Python source, parses it, moves every node to the

@@ -471,7 +471,18 @@ impl FunctionLowerer<'_> {
                 .call_method(method, vec![(0, instance)], TyirType::Bool, span)
                 .value;
         }
-        let Some(method) = self.program.method(class, "__len__") else {
+        // A class derived from this one may decide its truth otherwise: `__bool__` comes before
+        // `__len__`, so the object's own class, through its type object, decides (CLS-24).
+        let method = self.program.method(class, "__len__");
+        if self.subclass_defines(class, "__bool__")
+            || (method.is_none() && self.subclass_defines(class, "__len__"))
+        {
+            let object = self.bits(instance, span);
+            return self
+                .call_runtime(RuntimeFunction::ObjectIsTrue, vec![object], span)
+                .value;
+        }
+        let Some(method) = method else {
             return self.constant(Constant::Bool(true), span);
         };
         let length = self.call_method(method, vec![(0, instance)], TyirType::Int, span);
@@ -488,6 +499,16 @@ impl FunctionLowerer<'_> {
         // A large `int` is an object, so the checked length is released once tested.
         self.release(checked, span);
         truth
+    }
+
+    /// Returns true when a class derived from `class`, other than it, defines `name`.
+    fn subclass_defines(&self, class: typy_check::ClassId, name: &str) -> bool {
+        self.program.classes.iter().any(|other| {
+            other.id != class
+                && other.methods.iter().any(|(each, _)| each == name)
+                && std::iter::successors(other.base, |base| self.program.class(*base).base)
+                    .any(|base| base == class)
+        })
     }
 
     /// `a or b` and `a and b` return one of their operands, evaluating each only while the result is undecided (EXP-09).

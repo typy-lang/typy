@@ -132,6 +132,9 @@ All notable changes to TyPy are recorded here. The format follows
   compared, hashed and written as CPython does (CLS-23).
 - A slice bound may be `None` or an `int | None`, which stands for a
   missing bound, as in `items[start:]` with `start = None` (DAT-12).
+- The truth of an instance comes from the `__bool__`, or else the
+  `__len__`, of the object's own class, also where the variable's type is
+  a base with neither or a union, and in `any` and `all` (CLS-24).
 
 ### Fixed
 

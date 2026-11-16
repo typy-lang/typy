@@ -20,7 +20,7 @@ mod types;
 mod union_type;
 mod unprovided;
 
-pub use body::{COMPARISON_BRIDGES, EQUAL_BRIDGE, member_class};
+pub use body::{COMPARISON_BRIDGES, EQUAL_BRIDGE, TRUTH_BRIDGE, member_class};
 pub use builtin::Builtin;
 pub use check::TypeChecker;
 pub use class_type::{InstanceClass, Operators};
