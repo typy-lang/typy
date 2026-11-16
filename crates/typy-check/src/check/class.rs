@@ -56,6 +56,11 @@ pub(crate) struct ClassInfo {
     pub(crate) properties: Vec<String>,
     /// The positions of the class's own attributes the class body gives a default, each held
     /// as the module variable `Class.name`.
+    /// Each method that overrides one held otherwise in a base, by its name, with the base
+    /// method and itself, which a call through the base reaches through an adapter (CLS-04).
+    pub(crate) adapted: Vec<(String, FunctionId, FunctionId)>,
+    /// The adapter of each such method, by its name.
+    pub(crate) adapters: Vec<(String, FunctionId)>,
     pub(crate) defaults: Vec<usize>,
     /// Whether the class is a frozen dataclass, whose fields only the `__init__` `@dataclass`
     /// writes assigns (CLS-05).
@@ -476,10 +481,11 @@ pub(super) fn collect_members<'tree>(
                         local: &methods,
                         first_function,
                     };
-                    if let Some(diagnostic) =
-                        check_override(&info, classes, signatures, &method, parts.name)
-                    {
-                        diagnostics.push(diagnostic);
+                    match check_override(&info, classes, signatures, &method, parts.name) {
+                        Err(diagnostic) => diagnostics.push(*diagnostic),
+                        // A call through the base reaches the override through an adapter.
+                        Ok(Some(base)) => info.adapted.push((name.clone(), base, id)),
+                        Ok(None) => {}
                     }
                     check_special_method(&method, parts.name, diagnostics);
                     methods.push(method);
@@ -566,6 +572,8 @@ fn new_info(class: &ClassStatement<'_>, instance: &Type, classes: Classes<'_>) -
         generic_methods: Vec::new(),
         properties: Vec::new(),
         defaults: Vec::new(),
+        adapted: Vec::new(),
+        adapters: Vec::new(),
         frozen: false,
         generated_init: false,
         match_args: None,
@@ -1029,34 +1037,41 @@ impl<'definitions> Signatures<'definitions, '_> {
 
 /// Returns why a method does not fit the base method it overrides, if it overrides one and
 /// does not fit; a constructor runs on its own class only, so `__init__` is not compared.
+/// Checks a method against the base method it overrides, if it overrides one, and returns
+/// the base method when a call through it needs an adapter to reach the override (CLS-04).
 fn check_override(
     info: &ClassInfo,
     classes: Classes<'_>,
     signatures: Signatures<'_, '_>,
     method: &Definition<'_>,
     name: &Identifier,
-) -> Option<Diagnostic> {
+) -> Result<Option<FunctionId>, Box<Diagnostic>> {
     if name.name == "__init__" {
-        return None;
+        return Ok(None);
     }
-    let (base_id, base_class) = inherited_method(classes, info.base, &name.name)?;
+    let Some((base_id, base_class)) = inherited_method(classes, info.base, &name.name) else {
+        return Ok(None);
+    };
     // A copy of a generic method is called directly, so neither side of an override may be
     // generic.
     if !method.type_parameters.is_empty() || generic_method_in_bases(classes, info.base, name) {
-        return Some(planned_generic_method(
+        return Err(Box::new(planned_generic_method(
             name,
             "a method with type parameters that overrides or is overridden is",
-        ));
+        )));
     }
-    let base = signatures.get(base_id)?;
-    Override {
+    let Some(base) = signatures.get(base_id) else {
+        return Ok(None);
+    };
+    let fit = Override {
         name: &format!("{}.{}", info.name, name.name),
         signature: &method.signature,
         base_name: &format!("{base_class}.{}", name.name),
         base,
         span: name.span,
     }
-    .check()
+    .check()?;
+    Ok((fit == super::overriding::Fit::Adapted).then_some(base_id))
 }
 
 /// Returns true when the nearest class from `base` up that defines the method `name` gives

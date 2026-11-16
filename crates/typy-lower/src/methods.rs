@@ -19,7 +19,8 @@ pub(crate) struct MethodTables {
     /// For each class, by ID, its table: each method a subclass overrides, by name, at the
     /// position it has in the base's table, then those the class adds.
     tables: Vec<Vec<(String, FunctionId)>>,
-    /// The class that defines each method, and the method's name.
+    /// The class that defines each method, and the place its calls find it under: its name,
+    /// or one of its own for an override held otherwise than its base's (CLS-04).
     owners: BTreeMap<FunctionId, (ClassId, String)>,
     /// For each class, by ID, its base when that is a class of the program.
     bases: Vec<Option<ClassId>>,
@@ -34,42 +35,64 @@ impl MethodTables {
     /// has empty tables.
     pub(crate) fn new(program: &TypedProgram) -> Self {
         let bases: Vec<Option<ClassId>> = program.classes.iter().map(|class| class.base).collect();
-        let owners = program
-            .classes
-            .iter()
-            .flat_map(|class| {
-                class
-                    .methods
-                    .iter()
-                    .map(move |(name, id)| (*id, (class.id, name.clone())))
-            })
-            .collect();
         let mut layout = Self {
             tables: Vec::with_capacity(program.classes.len()),
-            owners,
+            owners: BTreeMap::new(),
             bases,
             overridden: BTreeSet::new(),
         };
+        // For each class, the place under which a call typed at the class finds each method:
+        // its name, or for an override held otherwise than its base's, a place of its own
+        // (CLS-04).
+        let mut keys: Vec<BTreeMap<String, String>> = Vec::with_capacity(program.classes.len());
         // A base has a lower ID than the classes derived from it, so its table comes first.
         for class in &program.classes {
             let mut table = class
                 .base
                 .map(|base| layout.tables[base.0 as usize].clone())
                 .unwrap_or_default();
-            // A constructor runs on the class being made, whose parameters it takes, so it is
-            // never called through a table.
-            for (name, id) in class.methods.iter().filter(|(name, _)| name != "__init__") {
+            let mut class_keys = class
+                .base
+                .map(|base| keys[base.0 as usize].clone())
+                .unwrap_or_default();
+            for (name, id) in &class.methods {
+                // A constructor runs on the class being made, whose parameters it takes, so it
+                // is never called through a table.
+                if name == "__init__" {
+                    layout.owners.insert(*id, (class.id, name.clone()));
+                    continue;
+                }
+                let inherited = class_keys
+                    .get(name)
+                    .cloned()
+                    .unwrap_or_else(|| name.clone());
+                let key = match class.adapters.iter().find(|(each, _)| each == name) {
+                    // The adapter takes the base method's place, which a call through the base
+                    // reaches, and the override a place of its own.
+                    Some((_, adapter)) => {
+                        if let Some(entry) = table.iter_mut().find(|(each, _)| *each == inherited) {
+                            entry.1 = *adapter;
+                        }
+                        layout.owners.insert(*adapter, (class.id, inherited));
+                        let own = format!("{name} of class {}", class.id.0);
+                        class_keys.insert(name.clone(), own.clone());
+                        own
+                    }
+                    None => inherited,
+                };
+                layout.owners.insert(*id, (class.id, key.clone()));
                 let below = layout.defined_below(program, class.id, name);
                 if below {
                     layout.overridden.insert(*id);
                 }
-                if let Some(entry) = table.iter_mut().find(|(each, _)| each == name) {
+                if let Some(entry) = table.iter_mut().find(|(each, _)| *each == key) {
                     entry.1 = *id;
                 } else if below {
-                    table.push((name.clone(), *id));
+                    table.push((key, *id));
                 }
             }
             layout.tables.push(table);
+            keys.push(class_keys);
         }
         layout
     }

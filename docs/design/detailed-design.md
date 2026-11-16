@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy detailed design |
-| Version | 1.98 |
+| Version | 1.99 |
 | Status | Approved |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-16 |
@@ -1240,11 +1240,16 @@ result the base's result type accepts, E0404 otherwise (CLS-04, CLS-13). A
 call through the method table that leaves out a parameter whose default an
 override changes takes the default of the object's class: lowering tests the
 instance against each override's class, the nearest first
-(`MethodTables::overrides`, `dispatched_default`). A parameter or result held
-differently from the base's, such as `int | None` for `int`, is E0201, planned
-for 0.5: the entry would need an adapter. A call of a method on an instance is
-`TypedExprKind::Call` with `dispatch` set, and a call through `super()` has it
-clear. Calling an
+(`MethodTables::overrides`, `dispatched_default`). An override whose parameter
+or result is held otherwise than the base's, such as `int | None` for `int`
+(`overriding::Fit::Adapted`), gets `<adapter name>`, which
+`Program::add_override_adapters` writes with the base's signature: it widens
+each argument, calls the override through the table, and widens the result.
+`MethodTables` puts the adapter in the base method's place and gives the
+override a place of its own, under which calls typed at its class find it; such
+a parameter with a default of its own is E0201, planned for 1.0 (CLS-34). A
+call of a method on an instance is `TypedExprKind::Call` with `dispatch` set,
+and a call through `super()` has it clear. Calling an
 exception class without
 an `__init__` of the program's takes positional arguments of any type; with one,
 its arguments are bound as for a call and `TypedExprKind::NewException` carries

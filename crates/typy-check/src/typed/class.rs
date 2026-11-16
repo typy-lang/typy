@@ -43,6 +43,9 @@ pub struct TypedClass {
     /// For each attribute with a default, its position and the module variable that holds
     /// the default, which a new instance holds before `__init__` runs (ADR-0024).
     pub defaults: Vec<(usize, super::symbol::SymbolId)>,
+    /// The adapter of each method that overrides one held otherwise, by its name, which the
+    /// method table holds where the base's method is (CLS-04).
+    pub adapters: Vec<(String, FunctionId)>,
     /// The whole definition.
     pub span: Span,
     /// For a copy of a generic class, the generic class, which `type()` and `isinstance`

@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy test plan |
-| Version | 0.63 |
+| Version | 0.64 |
 | Status | Draft |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-16 |
@@ -388,6 +388,7 @@ that the specification does not define.
 | CLS-31 | 1.0 | IT | `tests/conformance/cls/CLS-31_*.py` |
 | CLS-32 | 1.0 | IT | `tests/conformance/cls/CLS-32_*.py` |
 | CLS-33 | 1.0 | IT | `tests/conformance/cls/CLS-33_*.py` |
+| CLS-34 | 1.0 | IT | `tests/conformance/cls/CLS-34_*.py` |
 | CLS-18 | 1.0 | IT | `tests/conformance/cls/CLS-18_*.py` |
 | CLS-19 | 1.0 | IT | `tests/conformance/cls/CLS-19_*.py` |
 | GEN-01 | 0.4 | IT | `tests/conformance/gen/GEN-01_*.py` |

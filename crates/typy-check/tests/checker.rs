@@ -1902,7 +1902,7 @@ fn a_base_must_be_a_class_before_it_and_an_override_must_fit() {
             &["E0404"],
         ),
         (
-            "class A:\n    def f(self, n: int = 1) -> int:\n        return n\nclass B(A):\n    def f(self, n: int | None = 1) -> int:\n        return 1\n",
+            "class A:\n    def f(self, n: int = 1) -> int:\n        return n\nclass B(A):\n    def f(self, n: int | None = None) -> int:\n        return 1\n",
             &["E0201"],
         ),
         (

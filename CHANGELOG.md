@@ -192,6 +192,10 @@ All notable changes to TyPy are recorded here. The format follows
   as `__radd__`, calls the one a class derived from it defines when the
   right object is of that class, also first when that class derives from
   the left operand's, as CPython does; TyPy refused it (CLS-07).
+- An override may take or return a type held otherwise than its base's,
+  such as `int | None` where the base takes `int`; a call through the base
+  reaches it through an adapter. With a default of its own for such a
+  parameter it is planned for 1.0 (CLS-04, CLS-34).
 - An override may give a parameter another default than its base's; a
   call through the base that leaves the argument out takes the default of
   the object's class, as CPython does (CLS-04).

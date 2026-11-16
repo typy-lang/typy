@@ -301,6 +301,7 @@ impl Program {
                 self.add_class_method_bridges(class);
                 self.add_comparison_bridges(class);
                 self.add_truth_bridge(class);
+                self.add_override_adapters(class);
             }
         }
     }
@@ -751,6 +752,11 @@ impl Program {
                         self.method(class.id, "__init__")
                     },
                     defaults: self.default_variables(class.id),
+                    adapters: if opaque {
+                        Vec::new()
+                    } else {
+                        class.adapters.clone()
+                    },
                     span: class.span,
                     generic,
                     opaque,

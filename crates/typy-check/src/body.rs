@@ -19,6 +19,7 @@ mod dict_call;
 mod each_member;
 mod generic_call;
 mod generic_copy;
+mod override_adapter;
 mod truth_bridge;
 pub use comparison_bridge::{COMPARISON_BRIDGES, EQUAL_BRIDGE};
 pub use each_member::member_class;

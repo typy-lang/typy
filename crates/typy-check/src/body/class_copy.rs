@@ -178,12 +178,19 @@ impl Program {
             .map(|(name, id)| (name.clone(), rename(id)))
             .collect();
         info.init = root.init.as_ref().map(rename);
+        info.adapted = root
+            .adapted
+            .iter()
+            .map(|(name, base, own)| (name.clone(), rename(base), rename(own)))
+            .collect();
+        info.adapters = Vec::new();
         let module = self.class_modules[copy.root.0 as usize].clone();
         self.classes.push(info);
         self.class_modules.push(module);
         self.instances.insert(copy.id, copy.instance.clone());
         self.add_comparison_bridges(copy.id);
         self.add_truth_bridge(copy.id);
+        self.add_override_adapters(copy.id);
     }
 
     /// Returns true when the function is a copy whose type arguments hold a type parameter,
