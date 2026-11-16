@@ -15,8 +15,14 @@ impl BodyChecker<'_> {
     pub(super) fn statements(&mut self, statements: &[&Stmt]) -> Vec<TypedStmt> {
         let mut typed = Vec::new();
         for statement in statements {
-            if let Stmt::ClassDef { name, body, .. } = statement {
-                typed.extend(self.class_body_values(&name.name, body));
+            if let Stmt::ClassDef {
+                name,
+                body,
+                type_parameters,
+                ..
+            } = statement
+            {
+                typed.extend(self.class_body_values((&name.name, type_parameters), body));
             } else {
                 typed.extend(self.statement(statement));
                 typed.append(&mut self.following);
@@ -27,7 +33,11 @@ impl BodyChecker<'_> {
 
     /// Checks the values a class body gives, as assignments to the module variables that hold
     /// them, where the `class` statement runs (CLS-11, ADR-0024).
-    fn class_body_values(&mut self, class: &str, body: &[Stmt]) -> Vec<TypedStmt> {
+    fn class_body_values(
+        &mut self,
+        class: (&str, &[typy_source::syntax::TypeParameter]),
+        body: &[Stmt],
+    ) -> Vec<TypedStmt> {
         let values = crate::check::class_values(
             class,
             body,

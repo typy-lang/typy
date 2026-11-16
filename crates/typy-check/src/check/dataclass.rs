@@ -193,9 +193,7 @@ impl Dataclasses {
         );
         body.extend(generated);
         let match_args = match_args(options, &defined, &fields);
-        // A generic class takes no class variables before GEN-08, so a class pattern reads
-        // its fields from `DataclassInfo` alone.
-        if match_args.is_some() && type_parameters.is_empty() {
+        if match_args.is_some() {
             body.extend(match_args_statement(&fields, at));
         }
         let class_info = DataclassInfo {

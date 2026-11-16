@@ -502,7 +502,7 @@ fn class_value_variables(
             variables.entry(variable).or_insert(class.name.span);
         }
         for value in class::class_values(
-            &class.name.name,
+            (&class.name.name, class.type_parameters),
             class.body,
             &annotations.names,
             &annotations.standard,

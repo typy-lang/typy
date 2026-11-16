@@ -170,13 +170,11 @@ pub(super) fn parameters_in_scope(
 /// Makes the methods of a generic class generic over its type parameters, so each is checked
 /// once with them opaque and copied for each copy of the class. A static method that names
 /// none of them, in its signature or its body, is the same for every copy, so it is compiled
-/// once and called as it is. Reports what a generic class does not have yet: class variables
-/// and defaults (GEN-08).
+/// once and called as it is.
 pub(super) fn finish_generic_class(
     info: &super::ClassInfo,
     methods: &mut [super::Definition<'_>],
     copies: &RefCell<ClassCopies>,
-    span: Span,
     diagnostics: &mut Diagnostics,
 ) {
     let Some(generic) = copies.borrow().roots.get(&info.id).cloned() else {
@@ -208,20 +206,6 @@ pub(super) fn finish_generic_class(
         }
         method.type_parameters.clone_from(&generic.parameters);
     }
-    if !info.class_variables.is_empty() || !info.defaults.is_empty() {
-        diagnostics.push(
-            Diagnostic::new(
-                DiagnosticCode::error(201),
-                span,
-                format!(
-                    "class variables and defaults of a generic class, such as those of `{}`, \
-                     are planned for TyPy 0.5 (GEN-08)",
-                    info.name
-                ),
-            )
-            .with_rule(RuleId::GEN_08),
-        );
-    }
 }
 
 /// Returns true when a method names one of `names`: its signature holds a type parameter, or
@@ -249,10 +233,22 @@ fn names_type_parameter(method: &super::Definition<'_>, names: &[&str]) -> bool 
     let mut pending: Vec<&Stmt> = method.body.iter().collect();
     while let Some(statement) = pending.pop() {
         if let Stmt::AnnAssign { annotation, .. } = statement {
-            super::visit::visit_expression(annotation, &mut visit);
+            found |= annotation_names(annotation, names);
         }
         pending.extend(nested_blocks(statement).into_iter().flatten());
     }
+    found
+}
+
+/// Returns true when an annotation names one of `names`, also inside a string.
+pub(super) fn annotation_names(annotation: &Expr, names: &[&str]) -> bool {
+    let mut found = false;
+    let mut visit = |expression: &Expr| match expression {
+        Expr::Name { id, .. } => found |= names.contains(&id.as_str()),
+        Expr::Quoted { annotation, .. } => found |= annotation_names(annotation, names),
+        _ => {}
+    };
+    super::visit::visit_expression(annotation, &mut visit);
     found
 }
 

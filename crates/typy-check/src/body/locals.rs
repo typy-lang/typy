@@ -48,9 +48,14 @@ impl BodyChecker<'_> {
                 }
                 // A class body's values are module variables, assigned where the class
                 // statement runs (ADR-0024).
-                Stmt::ClassDef { name, body, .. } => {
+                Stmt::ClassDef {
+                    name,
+                    body,
+                    type_parameters,
+                    ..
+                } => {
                     let values = crate::check::class_values(
-                        &name.name,
+                        (&name.name, type_parameters),
                         body,
                         &self.program.annotation_names,
                         &self.program.annotation_modules,

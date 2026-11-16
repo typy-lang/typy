@@ -140,6 +140,32 @@ fn a_class_method_of_a_generic_class_takes_its_type_arguments_from_the_call() {
 }
 
 #[test]
+fn every_copy_of_a_generic_class_shares_its_class_variables() {
+    let accepted = concat!(
+        "from typing import ClassVar\n",
+        "class Counter[T]:\n",
+        "    made = 0\n",
+        "    kind: ClassVar[str] = 'counter'\n",
+        "    size: int = 3\n",
+        "    def __init__(self, value: T) -> None:\n",
+        "        self.value = value\n",
+        "        Counter.made += 1\n",
+        "a = Counter(1)\n",
+        "b: Counter[str] = Counter('x')\n",
+        "print(Counter.made + a.made + b.size, a.kind + b.kind)\n",
+    );
+    assert_eq!(app(accepted), Vec::<String>::new());
+    let refused = [
+        "from typing import ClassVar\nclass Box[T]:\n    shared: ClassVar[list[T]] = []\n",
+        "class Box[T]:\n    last: T | None = None\n    def __init__(self, item: T) -> None:\n        self.item = item\nprint(Box(1).last)\n",
+        "class Box[T]:\n    last: 'list[T]' = []\n",
+    ];
+    for source in refused {
+        assert_eq!(app(source), vec!["E0201".to_string()], "{source}");
+    }
+}
+
+#[test]
 fn a_generic_of_another_module_is_copied_in_its_own_names() {
     let tools = concat!(
         "SCALE = 10\n",
@@ -199,7 +225,7 @@ fn generic_classes_check_their_type_arguments() {
         ("x: Held[int] = Held(Shape())\n", "E0408"),
         ("x: Either[float] = Either(1)\n", "E0408"),
         ("x: Box = Box(1)\n", "E0408"),
-        ("class Box2[T]:\n    count = 0\n", "E0201"),
+        ("class Box2[T]:\n    count: T | None = None\n", "E0201"),
         ("class Sub(Box[int]):\n    pass\n", "E0201"),
         ("class Sub(Box):\n    pass\n", "E0201"),
         ("@decorated\nclass Box3[T]:\n    pass\n", "E0201"),

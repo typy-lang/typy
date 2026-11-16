@@ -85,8 +85,7 @@ fn class_patterns_take_match_args_from_the_class_or_its_base() {
         "class Point3(Point):\n    def __init__(self, x: int, y: int) -> None:\n        super().__init__(x, y)\ndef f(p: Point3) -> int:\n    match p:\n        case Point3(a, b):\n            return a + b\n    return 0\n",
         // A dataclass gets its fields as `__match_args__`.
         "from dataclasses import dataclass\n@dataclass\nclass Pair:\n    left: int\n    right: str\ndef f(p: Pair) -> str:\n    match p:\n        case Pair(n, text):\n            return text * n\n    return ''\n",
-        // A generic dataclass gets no class variable before GEN-08, but its fields still
-        // name the positional sub-patterns.
+        // A generic dataclass gets them too.
         "from dataclasses import dataclass\n@dataclass\nclass Box[T]:\n    item: T\ndef f(b: Box[int]) -> int:\n    match b:\n        case Box(n):\n            return n\n    return 0\n",
         // A dataclass may write its own.
         "from dataclasses import dataclass\n@dataclass\nclass Pair:\n    left: int\n    right: str\n    __match_args__ = ('right',)\ndef f(p: Pair) -> str:\n    match p:\n        case Pair(text):\n            return text\n    return ''\n",

@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy detailed design |
-| Version | 2.04 |
+| Version | 2.05 |
 | Status | Approved |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-16 |
@@ -927,7 +927,13 @@ parameter of its class, in its signature or in its body, is left out of
 class method called through the generic class takes the type arguments its
 arguments give, solved by `BodyChecker::solved_arguments`, and a class method
 then runs the copy's method with the copy as `cls`. `Class[arguments].name(...)`
-calls the method of the copy `BodyChecker::applied_class` names. A copy whose
+calls the method of the copy `BodyChecker::applied_class` names. A class
+variable or a default of a generic class is one module variable, `Class.name`,
+which a copy's `ClassInfo`, cloned from the generic class's, names as the
+generic class does, so every copy shares it as every instance shares it in
+CPython. One whose annotation names a type parameter of the class, which
+`check::class::refuse_shared_parameter` finds, is E0201, planned for 1.0
+(GEN-11), and `class_values` makes no module variable for it. A copy whose
 arguments hold a
 parameter, and the generic class itself, are opaque: lowering lays them out
 empty and their methods are stubs. A copy's `TyirClass::public` names the
@@ -1138,8 +1144,7 @@ and two for one attribute, are E0401, since CPython raises `TypeError`
 for them on every instance. `@dataclass` writes `__match_args__` from the
 fields unless `match_args=False` is given or the class assigns its own,
 and `DataclassInfo::match_args` carries the names to the class's
-information, so a generic dataclass, which takes no class variable before
-GEN-08, still has them. A part that a nested pattern tests is stored
+information. A part that a nested pattern tests is stored
 first in its own hidden local, so it is read once and narrows as a
 variable does. Lowering gives each case a block its pattern jumps to when
 it fails, so the cases are tried in order and a subject no case matches

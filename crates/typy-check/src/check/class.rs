@@ -509,7 +509,7 @@ pub(super) fn collect_members<'tree>(
         report_name_conflicts(&info, class.name.span, diagnostics);
         super::protocol::check_values(&owner.instance, &info, class.name.span, diagnostics);
         let own_methods = &mut methods[first_method..];
-        finish_generic_class(&info, own_methods, known.copies, class.span, diagnostics);
+        finish_generic_class(&info, own_methods, known.copies, diagnostics);
         infos.push(info);
     }
     copies.end_module(known.ids, names);
@@ -1179,6 +1179,10 @@ fn class_body_name(
             value,
             ..
         } => {
+            // A refused value leaves the attribute declared with its default, so its uses are
+            // still checked; the program is not compiled.
+            let refused = value.is_some()
+                && refuse_shared_parameter(id, annotation, info, scope, diagnostics);
             // A `Final` the class body gives a value is a class variable, as PEP 591 has it.
             let class_var =
                 super::annotation::class_var_type(annotation, &names.names, &names.standard)
@@ -1186,7 +1190,9 @@ fn class_body_name(
                     || super::annotation::final_type(annotation, &names.names, &names.standard)
                         .is_some();
             if class_var && value.is_some() {
-                info.class_variables.push(id.clone());
+                if !refused {
+                    info.class_variables.push(id.clone());
+                }
                 return;
             }
             let ty = annotation_type(annotation, scope, diagnostics);
@@ -1206,6 +1212,41 @@ fn class_body_name(
         }
         _ => {}
     }
+}
+
+/// Reports a value a generic class's body gives whose annotation names a type parameter of
+/// the class: the module variable that holds it is shared by every copy, so it cannot take
+/// each copy's type (GEN-11). Returns true when it reports one.
+fn refuse_shared_parameter(
+    id: &str,
+    annotation: &Expr,
+    info: &ClassInfo,
+    scope: &AnnotationScope<'_>,
+    diagnostics: &mut Diagnostics,
+) -> bool {
+    let Some(parameter) = scope
+        .parameters
+        .keys()
+        .find(|name| super::generic_class::annotation_names(annotation, &[name]))
+    else {
+        return false;
+    };
+    diagnostics.push(
+        Diagnostic::new(
+            DiagnosticCode::error(201),
+            annotation.span(),
+            format!(
+                "a value of the generic class `{}` whose type names its type parameter \
+                 `{parameter}` is planned for TyPy 1.0 (GEN-11)",
+                info.name
+            ),
+        )
+        .with_rule(RuleId::GEN_11)
+        .with_help(format!(
+            "declare `{id}` without a value and assign it in `__init__`"
+        )),
+    );
+    true
 }
 
 /// Returns the names a `__match_args__` tuple of `str` literals holds, or where a value of
@@ -1595,7 +1636,7 @@ pub(crate) fn class_value_variable(class: &str, name: &str) -> String {
 /// `name: ClassVar[T] = value`, for a class variable, and `name: T = value` for the default
 /// of an instance attribute.
 pub(crate) fn class_values(
-    class: &str,
+    (class, parameters): (&str, &[typy_source::syntax::TypeParameter]),
     body: &[Stmt],
     names: &BTreeMap<String, super::annotation::AnnotationName>,
     standard: &BTreeMap<String, String>,
@@ -1604,8 +1645,18 @@ pub(crate) fn class_values(
         id: class_value_variable(class, id),
         span,
     };
+    let parameters: Vec<&str> = parameters
+        .iter()
+        .map(|parameter| parameter.name.name.as_str())
+        .collect();
     body.iter()
         .filter_map(|statement| match statement {
+            // A value whose type names a type parameter of the class is refused (GEN-11).
+            Stmt::AnnAssign { annotation, .. }
+                if super::generic_class::annotation_names(annotation, &parameters) =>
+            {
+                None
+            }
             Stmt::AnnAssign {
                 target: Expr::Name { id, span },
                 annotation,

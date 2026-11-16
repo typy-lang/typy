@@ -142,6 +142,12 @@ All notable changes to TyPy are recorded here. The format follows
   takes the type arguments from its arguments, as in `Box.wrap("a")`, or
   from the class, as in `Box[int].make(3)`, and runs that copy's method
   (GEN-01).
+- Class variables and defaults in the body of a generic class. Every
+  copy, such as `Counter[int]` and `Counter[str]`, shares them, as every
+  instance shares them in CPython, and a generic dataclass gets
+  `__match_args__`. One whose annotation names a type parameter of the
+  class, such as `last: T | None = None`, is planned for 1.0 (GEN-08,
+  GEN-11).
 - A generic function or class of another module, imported by name or
   used through its module as `tools.first(items)` or `tools.Box[int]`.
   Its copies read the names of the module that defines it (GEN-07).

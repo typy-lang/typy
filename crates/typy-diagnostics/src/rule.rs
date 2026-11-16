@@ -201,6 +201,8 @@ impl RuleId {
     pub const GEN_09: Self = Self("GEN-09");
     /// A protocol shall be usable as the type of a variable, an attribute, a result and a container item outside a parameter, as the base of a class, and with properties, static methods, class methods and class variables.
     pub const GEN_10: Self = Self("GEN-10");
+    /// A class variable or an attribute default of a generic class whose annotation names a type parameter of the class shall be accepted.
+    pub const GEN_11: Self = Self("GEN-11");
     /// Source files shall be UTF-8 with the `.py` extension.
     pub const LEX_01: Self = Self("LEX-01");
     /// Bytes literals shall be accepted.

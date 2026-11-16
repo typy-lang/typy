@@ -139,6 +139,12 @@ Each copy, such as `Node[int]`, is a class of its own, which holds an
 `int` in place, and it answers as the generic class: `type(chain)` is
 `Node`, `isinstance(words, Node)` holds and `__name__` is `"Node"`, as in
 CPython. A generic dataclass gets its methods for each copy.
+A class variable or a default the class body gives belongs to the
+generic class, so every copy shares it, as every instance shares it in
+CPython: `Counter.made += 1` in `Counter[int]` and in `Counter[str]`
+counts in one variable. Its annotation may not name a type parameter,
+since one value cannot have each copy's type; declare such an attribute
+without a value and assign it in `__init__`.
 A static method that names none of the class's type parameters is the
 same for every copy and is compiled once. Another static or class
 method called through the class takes the types from its arguments,
@@ -258,7 +264,7 @@ variable, an attribute, a result or a container item outside a
 parameter, a class that names a protocol as its base, and properties,
 static methods, class methods and class variables of a protocol are
 planned for 0.5 (GEN-10). A generic class with a base, which includes a
-generic protocol, a class derived from a generic class, and class
-variables and defaults of a generic class are planned for 0.5 (GEN-08).
-`*Ts`, `**P` and defaults of type parameters are planned for 1.0
-(GEN-06).
+generic protocol, and a class derived from a generic class are planned
+for 0.5 (GEN-08). A class variable or a default whose annotation names a
+type parameter of its class is planned for 1.0 (GEN-11), and so are
+`*Ts`, `**P` and defaults of type parameters (GEN-06).

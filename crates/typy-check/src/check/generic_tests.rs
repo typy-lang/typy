@@ -56,7 +56,7 @@ fn what_generics_do_not_take_is_refused() {
     let cases: &[(&str, &str)] = &[
         ("x: Box = Box(1)\n", "E0408"),
         ("x: Box[int, int] = Box(1)\n", "E0408"),
-        ("class Counter[T]:\n    made = 0\n", "E0201"),
+        ("class Counter[T]:\n    made: list[T] = []\n", "E0201"),
         ("def f[T](x: T) -> T:\n    return x + x\n", "E0401"),
         (
             "def f[T](x: T, n: int) -> int:\n    return f([x], n)\nprint(f(1, 1))\n",
@@ -71,7 +71,7 @@ fn what_generics_do_not_take_is_refused() {
             "E0404",
         ),
         ("def f[T](x: T) -> T:\n    return x\nprint(f())\n", "E0404"),
-        ("class Sized[T]:\n    size: int = 1\n", "E0201"),
+        ("class Sized[T]:\n    size: T | None = None\n", "E0201"),
         ("print(Box[missing](1))\n", "E0205"),
     ];
     for (body, code) in cases {
