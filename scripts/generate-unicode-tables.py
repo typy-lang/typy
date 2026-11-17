@@ -73,6 +73,7 @@ def render() -> str:
         "//! scripts/generate-unicode-tables.py from the unicodedata of CPython"
         f" {sys.version_info.major}.{sys.version_info.minor},",
         f"//! Unicode {unicodedata.unidata_version} (OI-15). Do not edit; run `make unicode-tables`.",
+        "//! The data is under the Unicode License V3, which THIRD-PARTY-NOTICES.md holds.",
         "",
         array(
             "PRINTABLE_BASIC",
@@ -192,6 +193,7 @@ def render_case() -> str:
         f" {sys.version_info.major}.{sys.version_info.minor},",
         f"//! Unicode {unicodedata.unidata_version} (OI-15). Do not edit;"
         " run `make unicode-tables`.",
+        "//! The data is under the Unicode License V3, which THIRD-PARTY-NOTICES.md holds.",
         "",
     ]
     for name, meaning, test in PROPERTIES:

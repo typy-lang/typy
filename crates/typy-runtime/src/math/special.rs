@@ -1,6 +1,9 @@
 //! The functions of `math` that CPython computes itself rather than leaving to the C
 //! library: `pow`, `fmod`, `remainder`, `ldexp`, `ulp`, `nextafter`, `fma`, `isclose` and
 //! `hypot`, ported from CPython 3.15's `mathmodule.c`.
+//!
+//! Derived from CPython's `Modules/mathmodule.c` under the PSF License Agreement, which
+//! THIRD-PARTY-NOTICES.md holds with a summary of the changes.
 #![allow(
     clippy::float_cmp,
     reason = "CPython's algorithms compare doubles exactly, as IEEE 754 defines"

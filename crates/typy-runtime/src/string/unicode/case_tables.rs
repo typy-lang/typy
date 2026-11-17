@@ -1,6 +1,7 @@
 //! Unicode properties and case mappings for the methods of `str`, written by
 //! scripts/generate-unicode-tables.py from CPython 3.15,
 //! Unicode 17.0.0 (OI-15). Do not edit; run `make unicode-tables`.
+//! The data is under the Unicode License V3, which THIRD-PARTY-NOTICES.md holds.
 
 /// Code points where `str.isalpha` of one code point changes; U+0000 gives false.
 pub(super) const ALPHA: [u32; 1368] = [

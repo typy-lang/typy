@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # Builds the release archive of the compiler for x86_64 Linux in dist/: the
 # `typy` executable and a runtime archive for each target, in the layout of an
-# installation prefix (architecture section 9), with the licences, README and
-# changelog. The tarball is reproducible: its entries are sorted, owned by
+# installation prefix (architecture section 9), with the licences, the
+# third-party notices, README and changelog. The tarball is reproducible: its entries are sorted, owned by
 # root and dated from the last commit. The unpacked archive must then build
 # and run a program, which proves it works away from the build tree.
 set -euo pipefail
@@ -21,7 +21,8 @@ for triple in x86_64-unknown-linux-gnu x86_64-unknown-linux-musl; do
     install -D -m 644 "${target}/lib/typy/${triple}/libtypy_runtime.a" \
         "${stage}/lib/typy/${triple}/libtypy_runtime.a"
 done
-install -m 644 LICENSE-APACHE LICENSE-MIT README.md CHANGELOG.md "${stage}/"
+install -m 644 LICENSE-APACHE LICENSE-MIT THIRD-PARTY-NOTICES.md README.md CHANGELOG.md \
+    "${stage}/"
 
 epoch="$(git log -1 --format=%ct)"
 tar --sort=name --owner=0 --group=0 --numeric-owner --mtime="@${epoch}" \

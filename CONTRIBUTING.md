@@ -34,3 +34,10 @@ says where each kind of test lives.
 
 Unless you state otherwise, a contribution you submit is licensed under
 both the Apache License, Version 2.0 and the MIT license, as TyPy is.
+
+Code ported from another project, such as an algorithm of CPython's C
+source, keeps that project's licence. Say in the module's first lines which
+file it comes from, and add the file, its origin and a summary of the
+changes to [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md), with the
+licence text if it is not there yet. Code that only gives CPython's results
+by an algorithm of its own needs no notice.

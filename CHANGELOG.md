@@ -6,6 +6,16 @@ All notable changes to TyPy are recorded here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- The release archive carries `THIRD-PARTY-NOTICES.md`, with the licence
+  and copyright notice of the Python Software Foundation for the parts of
+  the runtime derived from CPython's source (the list sort and parts of
+  `math`) and the Unicode licence for its Unicode tables. Releases 0.1.0 to
+  0.5.0 shipped these parts without the notices. The runtime's package
+  metadata gives its licence as
+  `(MIT OR Apache-2.0) AND PSF-2.0 AND Unicode-3.0`.
+
 ## [0.5.0] - 2026-11-17
 
 ### Added
