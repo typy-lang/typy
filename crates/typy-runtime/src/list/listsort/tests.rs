@@ -348,6 +348,7 @@ fn digests(values: &[i64]) -> (u64, u64) {
 }
 
 #[test]
+#[cfg_attr(miri, ignore = "a hundred and ten sorts take Miri minutes")]
 fn the_sort_compares_the_items_cpython_3_15_compares_in_its_order() {
     for (pattern, size, seed, compared, sorted) in CASES {
         let values = values(pattern, size, seed);
@@ -410,6 +411,7 @@ fn fewer_than_two_items_are_left_as_they_are_without_a_comparison() {
 }
 
 #[test]
+#[cfg_attr(miri, ignore = "seventy-two sorts take Miri minutes")]
 fn interleaved_runs_merge_with_the_comparisons_cpython_3_15_makes() {
     for (size, runs, longest, seed, compared, sorted) in INTERLEAVED {
         let found = digests(&interleaved(size, runs, longest, seed));
@@ -429,6 +431,10 @@ fn the_last_merges_take_the_shorter_neighbour_of_the_top_run_first() {
 }
 
 #[test]
+#[cfg_attr(
+    miri,
+    ignore = "twenty-four sorts of a hundred items take Miri minutes"
+)]
 fn a_comparison_that_answers_at_random_makes_the_calls_cpython_3_15_makes() {
     for (size, seed, odds, compared, sorted) in RANDOM {
         let mut items: Vec<usize> = (0..size).collect();
@@ -452,6 +458,10 @@ fn a_comparison_that_answers_at_random_makes_the_calls_cpython_3_15_makes() {
 }
 
 #[test]
+#[cfg_attr(
+    miri,
+    ignore = "a sort for each call of sixteen cases takes Miri minutes"
+)]
 fn a_comparison_that_raises_leaves_the_items_in_the_order_cpython_3_15_leaves() {
     for (size, runs, longest, seed, total, digest) in RAISING {
         let values = interleaved(size, runs, longest, seed);

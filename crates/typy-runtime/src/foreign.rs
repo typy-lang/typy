@@ -150,7 +150,11 @@ mod tests {
             let converted =
                 super::typy_rt_ctypes_float_argument(fits, crate::word::inline(1).unwrap_or(0));
             assert!(converted.exception.is_null());
-            assert!((converted.value - 2.0_f64.powi(70)).abs() < 1.0);
+            // 2 to the 70th is exact in a `double`; `powi` is not, under Miri.
+            assert_eq!(
+                converted.value.to_bits(),
+                1_180_591_620_717_411_303_424.0_f64.to_bits()
+            );
             crate::refcount::typy_rt_int_decrement(fits);
         }
         let mut huge = crate::int::value::Integer::from_i128(1);
