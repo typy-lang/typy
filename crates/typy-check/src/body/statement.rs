@@ -195,12 +195,14 @@ impl BodyChecker<'_> {
                 let current = self.expression(target);
                 let instance_item = self.is_instance_item(&current);
                 let property = self.is_property_read(target, &current);
-                // A `ctypes` object's value or item is read, combined and written back, as an
+                // A `ctypes` object's value, item or field is read, combined and written back, as an
                 // assignment of the result (FFI-03).
                 let cdata = matches!(
                     current.kind,
                     TypedExprKind::CData(
-                        crate::typed::CDataExpr::Value(_) | crate::typed::CDataExpr::Item { .. }
+                        crate::typed::CDataExpr::Value(_)
+                            | crate::typed::CDataExpr::Item { .. }
+                            | crate::typed::CDataExpr::Field { .. }
                     )
                 );
                 // An operator that calls a method of an instance reads and assigns an item or

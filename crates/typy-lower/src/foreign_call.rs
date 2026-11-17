@@ -111,6 +111,7 @@ pub(crate) fn foreign_type(
     match ty {
         typy_check::CData::Scalar(scalar) => c_type(*scalar),
         pointer @ typy_check::CData::Pointer(_) => CType::Pointer(classes.intern(pointer)),
+        structure @ typy_check::CData::Structure(_) => CType::Structure(classes.intern(structure)),
         typy_check::CData::Array(..) => {
             unreachable!("the checker refuses an array as a C function's parameter or result")
         }

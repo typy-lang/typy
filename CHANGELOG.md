@@ -53,6 +53,12 @@ All notable changes to TyPy are recorded here. The format follows
   `sizeof` gives a class's size, each as in CPython. `argtypes` and
   `restype` take `POINTER(T)` and names bound to a type (FFI-03,
   ADR-0048).
+- `ctypes.Structure` subclasses with a literal `_fields_` list, laid out as
+  C lays out a struct: fields read and assign as in CPython, a structure,
+  array or pointer field reads as an object over its memory, structures
+  nest, fill arrays and sit behind pointers, and a C function takes and
+  returns a structure by value as the x86-64 System V calling convention
+  passes it, in registers or in memory (FFI-03, ADR-0049).
 - `library-paths` and `[libraries."NAME"]` with `link = "static"` or
   `"dynamic"` in `typy.toml` say where the linker looks for C libraries and
   how each is linked (FFI-04).

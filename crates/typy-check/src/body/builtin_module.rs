@@ -149,18 +149,24 @@ impl Program {
         if let Some(function) = crate::ctypes::CtypesFunction::from_name(name) {
             return Ok(BuiltinName::Function(ModuleFunction::Ctypes(function)));
         }
-        let (release, rule) = match name {
-            "Structure" => ("0.5", RuleId::FFI_03),
-            "CFUNCTYPE" => ("1.0", RuleId::FFI_06),
-            _ => ("1.0", RuleId::FFI_10),
+        let (what, rule) = match name {
+            "Structure" => (
+                "`ctypes.Structure` other than as the one base of a class at module level",
+                RuleId::FFI_11,
+            ),
+            "Union" => ("`ctypes.Union`", RuleId::FFI_11),
+            "CFUNCTYPE" => ("`ctypes.CFUNCTYPE`", RuleId::FFI_06),
+            _ => ("", RuleId::FFI_10),
+        };
+        let what = if what.is_empty() {
+            format!("`ctypes.{name}`")
+        } else {
+            what.to_owned()
         };
         Err(error(
             201,
             span,
-            format!(
-                "`ctypes.{name}` is planned for TyPy {release} ({})",
-                rule.as_str()
-            ),
+            format!("{what} is planned for TyPy 1.0 ({})", rule.as_str()),
             rule,
         ))
     }

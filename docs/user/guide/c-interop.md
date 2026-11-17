@@ -18,6 +18,7 @@ C library (FFI-01 to FFI-05, CLI-09).
 | `NAME = ctypes.CDLL("library")` or `ctypes.cdll.LoadLibrary("library")` at module level declares a library, which the build links | FFI-01 |
 | A C function whose `argtypes` and `restype` are assigned at module level is called directly, with the conversions `ctypes` defines | FFI-02, FFI-03 |
 | `ctypes` objects, pointers and arrays hold C memory as in CPython, and a C function writes them through `byref` and `POINTER` parameters | FFI-03 |
+| `ctypes.Structure` subclasses with a literal `_fields_` list are laid out as C lays out a struct, and pass to C by pointer or by value | FFI-03 |
 | `typy.toml` says whether each library is linked statically or dynamically, and where the linker looks | FFI-04 |
 
 ## Building a library
@@ -219,6 +220,45 @@ A `POINTER(T)` result is a new pointer over memory the C library owns.
 A class is bound to a name, called, multiplied into an array class or
 named in a declaration; using it any other way is E0201 under FFI-10.
 
+## Structures
+
+A class whose one base is `ctypes.Structure`, with a `_fields_` list
+written in the class, is a C struct: each field sits where a C compiler
+puts it, and a C function takes the structure by pointer or by value
+(ADR-0049):
+
+<!-- typy-expect: accepted -->
+```python
+import ctypes
+
+libc = ctypes.CDLL("libc.so.6")
+
+
+class Division(ctypes.Structure):
+    _fields_ = [("quotient", ctypes.c_int), ("remainder", ctypes.c_int)]
+
+
+class Segment(ctypes.Structure):
+    _fields_ = [("start", Division), ("ends", ctypes.c_int * 2)]
+
+
+libc.div.argtypes = [ctypes.c_int, ctypes.c_int]
+libc.div.restype = Division
+
+result = libc.div(17, 5)
+print(result.quotient, result.remainder)
+segment = Segment(result, ends=(ctypes.c_int * 2)(1, 2))
+segment.start.quotient += 10
+print(segment.start.quotient, list(segment.ends), ctypes.sizeof(Segment))
+```
+
+`S(...)` takes the fields in order, then by name; too many values, a name
+that is not a field, or a field given twice is E0404. A scalar field reads
+and assigns as `value` does. A structure, array or pointer field reads as
+an object over the field's memory, so a change through it changes the
+structure, and assigning one copies it. The calling convention is that of
+x86-64 Linux.
+
 ## Linking a library
 
 A library is linked dynamically unless `typy.toml` says otherwise, and the
@@ -241,7 +281,9 @@ says, and CPython runs the same program through `ctypes`.
 
 ## Planned
 
-`Structure` subclasses are planned for 0.5 (FFI-03). Planned for 1.0 are
+Planned for 1.0 are methods and class attributes other than `_fields_`
+in a structure, `_fields_` assigned after the class statement, bit
+fields, a subclass of a structure, and `ctypes.Union` (FFI-11); and
 `c_char`, `c_wchar`, `c_wchar_p`, `create_string_buffer`, `cast` and
 `addressof`, pointers to and arrays of pointers and arrays, arrays whose
 length is not an integer literal, array slices, `byref` other than as a C

@@ -313,7 +313,7 @@ fn each_use_of_a_ctypes_object_ctypes_would_refuse_is_an_error_where_it_is_compi
         ),
         (
             "x = ctypes.Structure\n",
-            "E0201 `ctypes.Structure` is planned for TyPy 0.5 (FFI-03)",
+            "E0201 `ctypes.Structure` other than as the one base of a class at module level",
         ),
         ("s = {c_int(1)}\n", "E0413"),
         (
@@ -429,4 +429,132 @@ fn a_ctypes_object_is_made_read_and_written_as_ctypes_does() {
                   print(bool(q), x == x, x is x, [i for i in a], 2 in a, list(reversed(a)), r[0])\n\
                   def f() -> int:\n    return A(7)[0] + ctypes.sizeof(c_int)\n";
     assert_eq!(refused(source), Vec::<String>::new());
+}
+
+const SHAPES: &str = "\
+class Point(ctypes.Structure):
+    _fields_ = [(\"x\", c_int), (\"y\", ctypes.c_double)]
+
+
+class Box(ctypes.Structure):
+    _fields_ = [(\"corner\", Point), (\"cells\", c_int * 2), (\"next\", ctypes.POINTER(Point))]
+
+
+libc.div.argtypes = [c_int, c_int]
+libc.div.restype = Point
+libc.labs.argtypes = [Point]
+libc.labs.restype = c_int
+";
+
+#[test]
+fn a_structure_is_made_read_written_and_passed_as_ctypes_does() {
+    let source = format!(
+        "{SHAPES}p = Point(1, y=2.5)\nb = Box(p, next=ctypes.pointer(p))\n\
+         b.corner.x += 1\nb.corner = Point()\nb.cells[0] = b.corner.x\nb.next = None\n\
+         points = (Point * 2)(p)\npoints[1] = p\nq = ctypes.POINTER(Point)(p)\n\
+         print(p.x, p.y, b.corner.y, b.cells[1], bool(b.next), points[0].x, q.contents.x, q[0].y)\n\
+         print(ctypes.sizeof(Box), [each.x for each in points], libc.div(7, 2).x, libc.labs(p))\n\
+         def f() -> int:\n    return Point(3).x + Box().corner.x\n"
+    );
+    assert_eq!(refused(&source), Vec::<String>::new());
+}
+
+#[test]
+fn each_use_of_a_structure_ctypes_would_refuse_is_an_error_where_it_is_compiled() {
+    for (source, message) in [
+        (
+            "Point(1, 2.0, 3)\n",
+            "E0404 `Point` has 2 fields, and 3 positional arguments are given",
+        ),
+        ("Point(z=1)\n", "E0404 `Point` has no field `z`"),
+        (
+            "class One(ctypes.Structure):\n    _fields_ = [(\"x\", c_int)]\nOne(1, 2)\n",
+            "E0404 `One` has 1 field, and 2 positional arguments are given",
+        ),
+        (
+            "Point(1, x=2)\n",
+            "E0404 the field `x` of `Point` is given twice",
+        ),
+        (
+            "Point(1.5)\n",
+            "E0404 the field `x` of `Point` is a float, where it takes an `int`",
+        ),
+        (
+            "Box(Box())\n",
+            "E0404 the field `corner` of `Box` is a Box, where it takes a `Point`",
+        ),
+        (
+            "Box(next=Point())\n",
+            "E0404 the field `next` of `Box` is a Point, where it takes a `LP_Point` or `None`",
+        ),
+        ("print(Point().z)\n", "E0412 `Point` has no field `z`"),
+        ("p = Point()\np.z = 1\n", "E0412 `Point` has no field `z`"),
+        (
+            "b = Box()\nb.corner = 5\n",
+            "E0402 the field `corner` of `Box` is assigned an int, where it takes a `Point`",
+        ),
+        ("print(Point()[0])\n", "E0401 a `Point` cannot be indexed"),
+        (
+            "class S(ctypes.Structure, Point):\n    pass\n",
+            "E0201 a `Structure` subclass with other bases is planned for TyPy 1.0 (FFI-11)",
+        ),
+        (
+            "x = ctypes.Union\n",
+            "E0201 `ctypes.Union` is planned for TyPy 1.0 (FFI-11)",
+        ),
+        (
+            "libc.labs(Box())\n",
+            "E0404 argument 1 of `libc.labs` is a Box, where its `argtypes` take a `Point`",
+        ),
+        (
+            "libc.labs(ctypes.byref(Point()))\n",
+            "E0404 argument 1 of `libc.labs` is `byref` of a Point, where",
+        ),
+        (
+            "class U(ctypes.Union):\n    pass\n",
+            "E0201 a `ctypes.Union` subclass is planned for TyPy 1.0 (FFI-11)",
+        ),
+        (
+            "print(Point)\n",
+            "E0201 the class `Point` used as a value is planned for TyPy 1.0 (FFI-10)",
+        ),
+    ] {
+        let found = refused(&format!("{SHAPES}{source}"));
+        assert!(
+            found.iter().any(|each| each.starts_with(message)),
+            "{source}: {found:?}"
+        );
+    }
+}
+
+#[test]
+fn a_structure_class_is_called_and_named_through_the_module_that_declares_it() {
+    let root = Utf8PathBuf::from_path_buf(tempfile_root()).unwrap();
+    std::fs::write(
+        root.join("shapes.py"),
+        "import ctypes\n\nclass Point(ctypes.Structure):\n    _fields_ = [(\"x\", ctypes.c_int)]\n",
+    )
+    .unwrap();
+    std::fs::write(
+        root.join("app.py"),
+        "import ctypes\nimport shapes\nfrom shapes import Point\n\n\
+         class Segment(ctypes.Structure):\n    _fields_ = [(\"start\", Point), (\"end\", shapes.Point)]\n\n\
+         segment = Segment(shapes.Point(1), end=Point(2))\n\
+         print(segment.start.x + segment.end.x, shapes.Point(3).x)\n\
+         print(shapes.Point(4, 5))\n",
+    )
+    .unwrap();
+    let project = Project::load(&root.join("app.py"), ProjectSettings::new(root.clone())).unwrap();
+    let found: Vec<String> = match TypeChecker::check(&project) {
+        Ok(_) => Vec::new(),
+        Err(diagnostics) => diagnostics
+            .iter()
+            .map(|diagnostic| format!("{} {}", diagnostic.code(), diagnostic.message()))
+            .collect(),
+    };
+    let _ = std::fs::remove_dir_all(&root);
+    assert_eq!(
+        found,
+        ["E0404 `Point` has 1 field, and 2 positional arguments are given"]
+    );
 }

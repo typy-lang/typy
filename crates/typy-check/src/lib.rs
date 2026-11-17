@@ -28,7 +28,7 @@ pub use body::{COMPARISON_BRIDGES, EQUAL_BRIDGE, TRUTH_BRIDGE, member_class, mem
 pub use builtin::Builtin;
 pub use check::TypeChecker;
 pub use class_type::{InstanceClass, Operators};
-pub use ctypes::{CData, CType, ForeignFunction, ForeignLibrary};
+pub use ctypes::{CData, CType, ForeignFunction, ForeignLibrary, StructureClass, StructureField};
 pub use exception::{BuiltinException, ExceptionClass, ProgramException};
 pub use exports::{Export, RUNTIME_C_FUNCTIONS};
 pub use generic::TypeParameter;

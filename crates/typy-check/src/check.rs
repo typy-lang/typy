@@ -93,13 +93,24 @@ impl TypeChecker {
         // The `ctypes` declarations do their work when the program is compiled, so they leave
         // each module once read (ADR-0047).
         let mut foreign = BTreeMap::new();
+        let mut structures = Vec::new();
         let expanded: Vec<(Module, BTreeMap<String, type_alias::Alias>)> = project
             .modules_in_order()
             .map(|module| {
                 let mut module = dataclasses.expand(module, &mut diagnostics);
                 let aliases = type_alias::expand(&mut module.syntax.body, &mut diagnostics);
-                let declared = ctypes_declarations::read(&mut module.syntax.body, &mut diagnostics);
-                foreign.insert(module.name.as_str().to_owned(), declared);
+                let (name, package) = (module.name.as_str().to_owned(), module.package());
+                let reading = ctypes_declarations::ReadModule {
+                    name: &name,
+                    package: package.as_ref(),
+                };
+                let declared = ctypes_declarations::read(
+                    &reading,
+                    &mut module.syntax.body,
+                    &mut structures,
+                    &mut diagnostics,
+                );
+                foreign.insert(name, declared);
                 (module, aliases)
             })
             .collect();
@@ -119,6 +130,7 @@ impl TypeChecker {
             aliases: &aliases,
             dataclasses: &dataclasses,
             foreign: &foreign,
+            structures: &structures,
             floor_defers,
         };
         // A program that reads `args` as a value is checked again with the creations of
@@ -203,6 +215,8 @@ struct Checked<'project> {
     dataclasses: &'project dataclass::Dataclasses,
     /// The `ctypes` declarations of each module, by its name.
     foreign: &'project BTreeMap<String, ctypes_declarations::ModuleDeclarations>,
+    /// The program's `ctypes.Structure` subclasses, numbered in the order they are read.
+    structures: &'project [std::sync::Arc<crate::ctypes::StructureClass>],
     floor_defers: bool,
 }
 
@@ -212,7 +226,9 @@ impl Checked<'_> {
     fn run(&self, known: Option<&Creations>, diagnostics: &mut Diagnostics) -> Program {
         let project = self.project;
         let mut program = Program::empty();
-        program.foreign.set_declarations(self.foreign.clone());
+        program
+            .foreign
+            .set_declarations(self.foreign.clone(), self.structures.to_vec());
         crate::protocol_fits::reset(&program.protocol_values.fits);
         program.set_floor(project.settings().python_floor.minor());
         program.set_known_creations(known.cloned());

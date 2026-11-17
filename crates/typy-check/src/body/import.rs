@@ -874,10 +874,14 @@ impl BodyChecker<'_> {
             }
             Some(Named::Variable(_) | Named::TypeAlias | Named::Nothing) => {}
         }
+        let read = self.module_attribute(module, &name.name, name.span);
+        // A module variable bound to a `ctypes` class makes an object of it (FFI-03).
+        if let Type::CDataClass(class) = &read.ty {
+            return self.cdata_new(class, arguments, keywords, span);
+        }
         for argument in arguments {
             self.expression(argument);
         }
-        let read = self.module_attribute(module, &name.name, name.span);
         if read.ty == Type::Error {
             return TypedExpr { span, ..read };
         }

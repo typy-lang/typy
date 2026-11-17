@@ -26,12 +26,27 @@ pub(crate) struct Foreign {
     sites: Vec<(String, String)>,
     /// The functions, indexed by `TypedExprKind::ForeignCall`.
     pub(crate) functions: Vec<ForeignFunction>,
+    /// The `ctypes.Structure` subclasses, by their number (ADR-0049).
+    structures: Vec<std::sync::Arc<crate::ctypes::StructureClass>>,
 }
 
 impl Foreign {
-    /// Sets the declarations each module makes.
-    pub(crate) fn set_declarations(&mut self, declarations: BTreeMap<String, ModuleDeclarations>) {
+    /// Sets the declarations each module makes, and the program's structures.
+    pub(crate) fn set_declarations(
+        &mut self,
+        declarations: BTreeMap<String, ModuleDeclarations>,
+        structures: Vec<std::sync::Arc<crate::ctypes::StructureClass>>,
+    ) {
         self.declarations = declarations;
+        self.structures = structures;
+    }
+
+    /// Returns the structure class a hidden name a structure class statement became stands
+    /// for.
+    pub(crate) fn structure_named(&self, name: &str) -> Option<CData> {
+        let id = crate::check::ctypes_declarations::hidden_id(name)?;
+        let class = self.structures.get(id as usize)?;
+        Some(CData::Structure(std::sync::Arc::clone(class)))
     }
 
     /// Returns the index of the library that the call at `call` in `module` declares,

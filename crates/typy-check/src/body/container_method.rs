@@ -173,11 +173,9 @@ impl BodyChecker<'_> {
         negated: bool,
         span: Span,
     ) -> Option<TypedExpr> {
-        if let Type::CData(crate::ctypes::CData::Array(each, _)) = &container.ty
-            && let Some(scalar) = each.scalar()
-        {
+        if let Type::CData(crate::ctypes::CData::Array(each, _)) = &container.ty {
             let source = crate::typed::LoopSource::Items(container.clone());
-            return self.contains_by_equality(item, (source, scalar.result_type()), negated, span);
+            return self.contains_by_equality(item, (source, each.result_type()), negated, span);
         }
         let Type::Instance(class) = &container.ty else {
             return None;

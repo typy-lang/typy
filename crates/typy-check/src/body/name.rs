@@ -23,6 +23,10 @@ const MODULE_DUNDERS: &[&str] = &[
 impl BodyChecker<'_> {
     /// Resolves a name that is read as a value (LR 4.2.2).
     pub(super) fn name(&mut self, id: &str, span: Span) -> TypedExpr {
+        // A structure class statement binds its name to this hidden name (ADR-0049).
+        if let Some(class) = self.program.foreign.structure_named(id) {
+            return Self::cdata_class(class, span);
+        }
         if self.in_function()
             && !self.global_names.contains(id)
             && !self.locals.contains_key(id)

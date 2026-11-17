@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy software requirements specification |
-| Version | 1.79 |
+| Version | 1.80 |
 | Status | Approved |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-17 |
@@ -444,6 +444,7 @@ direct calls and links the library when the program is built.
 | FFI-08 | A library build shall write, beside the library and its C header, a `.pyi` stub of its exported functions and a `ctypes` module that loads the library and declares them, so CPython and TyPy programs call it with the same source (ADR-0032). | S | 0.5 |
 | FFI-09 | A library a `ctypes` declaration loads, and its functions, shall be values a program stores, passes and prints. | C | 1.0 |
 | FFI-10 | The ctypes names `c_char`, `c_wchar`, `c_wchar_p`, `create_string_buffer`, `cast` and `addressof`, pointers to and arrays of pointers and arrays, arrays whose length is not an integer literal, array slices, `byref` other than as a C function's argument, assigning a pointer's `contents`, and ctypes classes as values, in annotations, `isinstance` and `type` shall be accepted. | C | 1.0 |
+| FFI-11 | Methods and class attributes other than one `_fields_` list in a `Structure` subclass, `_fields_` assigned after the class statement, bit fields, a subclass of a `Structure` subclass, and `ctypes.Union` shall be accepted. | C | 1.0 |
 
 ### 3.17 Diagnostics (DIA)
 

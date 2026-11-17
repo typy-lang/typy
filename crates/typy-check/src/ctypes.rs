@@ -2,6 +2,12 @@
 //! each takes as an argument and gives as a result, the classes of its objects, and the
 //! libraries and functions a program declares (FFI-01 to FFI-03, ADR-0047, ADR-0048).
 
+mod structure;
+
+pub use structure::{StructureClass, StructureField};
+
+use std::sync::Arc;
+
 use crate::types::Type;
 
 /// A C type a `ctypes` declaration names.
@@ -161,9 +167,9 @@ impl CType {
 }
 
 /// A `ctypes` type, whose objects are counted objects over a C buffer: a scalar of a C
-/// type, a pointer to an object of a type, or an array of a number of items of a type
-/// (FFI-03, ADR-0048). Two of one shape are one class, as `c_int32` and `c_int` are in
-/// CPython.
+/// type, a pointer to an object of a type, an array of a number of items of a type, or a
+/// structure (FFI-03, ADR-0048, ADR-0049). Two of one shape are one class, as `c_int32` and
+/// `c_int` are in CPython; two structures are one class only when they are one declaration.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum CData {
     /// A scalar: `c_int`, `c_double`, `c_char_p` and the others of `CType`.
@@ -172,6 +178,8 @@ pub enum CData {
     Pointer(Box<CData>),
     /// `T * length`.
     Array(Box<CData>, u32),
+    /// A `ctypes.Structure` subclass.
+    Structure(Arc<StructureClass>),
 }
 
 impl CData {
@@ -182,6 +190,7 @@ impl CData {
             Self::Scalar(ty) => ty.class_name().to_owned(),
             Self::Pointer(target) => format!("LP_{}", target.class_name()),
             Self::Array(item, length) => format!("{}_Array_{length}", item.class_name()),
+            Self::Structure(structure) => structure.name.clone(),
         }
     }
 
@@ -192,16 +201,36 @@ impl CData {
             Self::Scalar(ty) => ty.size(),
             Self::Pointer(_) => 8,
             Self::Array(item, length) => item.size() * u64::from(*length),
+            Self::Structure(structure) => structure.size,
         }
     }
 
-    /// Returns the type of a pointer's target or an array's item, or `None` for a scalar.
+    /// Returns the alignment C gives an object of the class on 64-bit Linux.
+    #[must_use]
+    pub fn align(&self) -> u64 {
+        match self {
+            Self::Scalar(ty) => ty.size(),
+            Self::Pointer(_) => 8,
+            Self::Array(item, _) => item.align(),
+            Self::Structure(structure) => structure.align,
+        }
+    }
+
+    /// Returns the type of a pointer's target or an array's item, or `None` for a scalar or a
+    /// structure.
     #[must_use]
     pub fn item(&self) -> Option<&Self> {
         match self {
-            Self::Scalar(_) => None,
+            Self::Scalar(_) | Self::Structure(_) => None,
             Self::Pointer(item) | Self::Array(item, _) => Some(item),
         }
+    }
+
+    /// Returns whether a pointer to an object of the class, or an array of them, is one TyPy
+    /// makes: a scalar or a structure (FFI-10).
+    #[must_use]
+    pub const fn is_item(&self) -> bool {
+        matches!(self, Self::Scalar(_) | Self::Structure(_))
     }
 
     /// Returns the C type of a scalar, or `None` for a pointer or an array.
@@ -215,8 +244,9 @@ impl CData {
 
     /// Returns the type a C function's argument of this type takes, as `ctypes` checks it:
     /// a scalar's own values; for `POINTER(T)`, a pointer to `T`, an object of `T` passed by
-    /// reference, an array of `T`, `byref` of an object of `T`, or `None`. `by_reference` is
-    /// true for an argument `ctypes.byref(object)`, whose type is the object's.
+    /// reference, an array of `T`, `byref` of an object of `T`, or `None`; a structure an
+    /// object of its class, passed by value. `by_reference` is true for an argument
+    /// `ctypes.byref(object)`, whose type is the object's.
     #[must_use]
     pub fn accepts(&self, ty: &Type, by_reference: bool) -> bool {
         match self {
@@ -233,6 +263,7 @@ impl CData {
                 Type::NoneType => !by_reference,
                 _ => false,
             },
+            Self::Structure(_) => !by_reference && *ty == Type::CData(self.clone()),
             Self::Array(..) => false,
         }
     }
@@ -253,6 +284,7 @@ impl CData {
                 )
             }
             Self::Array(..) => "an array".to_owned(),
+            Self::Structure(structure) => format!("a `{}`", structure.name),
         }
     }
 

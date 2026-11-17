@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy detailed design |
-| Version | 2.19 |
+| Version | 2.20 |
 | Status | Approved |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-17 |
@@ -2017,6 +2017,20 @@ literal, a value that is not a list or tuple of types or a type or
 `None`, a type `ctypes` has but TyPy does not compile, and a declaration
 made twice are E0430; a pointer to a pointer is E0201 under FFI-10.
 
+A class statement whose one base is `ctypes.Structure` is read by
+`structure::fields` (ADR-0049): a docstring, `pass` and one `_fields_`
+list of `(name, type)` pairs, whose types `Types::declared` reads with
+arrays allowed and with the structures of this module and of the modules
+it imports, by `from` or by `import`. `StructureClass::new` places each
+field at the next offset its alignment allows and rounds the size up to
+the largest alignment. The structure joins the program's table, and the
+statement becomes `NAME = <structure N>`, a hidden name the body checker
+reads as the class. Any other statement in the body, a bit field, a
+decorator, a `Union` base, other bases, and a subclass of a structure are
+E0201 under FFI-11; a field listed twice, `_fields_` other than a literal
+list, and an item other than a pair of a string literal and a type are
+E0430.
+
 The body checker's `Foreign` holds the declarations and the
 `ForeignLibrary` and `ForeignFunction` tables `TypedProgram` carries. A
 call whose span a declaration names is `TypedExprKind::ForeignLibrary` of
@@ -2056,11 +2070,15 @@ holds each `CDataExpr`:
 | `Item { object, index }` | `p[i]`, `a[i]` | A pointer or an array of scalars and an `int` index; a slice is E0201 under FFI-10 |
 | `Length(array)` | `len(a)` | An array |
 | `Size(object)` | `sizeof(x)` | An object; `sizeof(T)` is a constant |
+| `NewStructure(fields)` | `S(...)` | Positional values in field order, keywords by name, each field once; E0404 otherwise |
+| `Field { object, field }` | `s.name` | A field of the structure: a scalar's value, or a new object over the field |
 | `Reference(object)` | `byref(x)` | Only as a C function's argument; elsewhere E0201 under FFI-10 |
 
-`AssignTarget::CData` writes `CDataPlace::Value` or `Item(index)` of an
-object, after `CType::stores` accepts the value's type, E0402 otherwise; a
-`c_bool` stores any value with a truth. An augmented assignment to a value
+`AssignTarget::CData` writes `CDataPlace::Value`, `Item(index)` or
+`Field(position)` of an object, after `check_value` accepts the value's
+type, E0402 otherwise: a scalar takes what `CType::stores` accepts and a
+`c_bool` any value with a truth, a structure or an array an object of its
+class, and a pointer one of its class or `None`. An augmented assignment to a value
 or an item is checked as the assignment of the combined value, with the
 object held in a hidden variable as for a property. A `for` loop, a
 comprehension, `in` and the iterable built-ins read an array's items as
@@ -2505,13 +2523,27 @@ object through `typy_rt_cdata_from_address`.
 `TyirModule::cdata_classes` holds each `TyirCDataClass` a program uses,
 which lowering's `CDataClasses` adds the first time it meets one, the
 class of its item first: its name, its `CDataShape` (`Scalar`, `Pointer`
-or `Array` of another entry) and its size. `Constant::CDataClass(index)`
-is the class's address, of type `bits`, which `cdata::cdata_class` emits
+or `Array` of another entry, or `Structure` with each field's offset and
+class), its size and its alignment. `Constant::CDataClass(index)` is the
+class's address, of type `bits`, which `cdata::cdata_class` emits
 once as the private constant `typy.cdata.N` in the layout of the runtime's
 `CDataClass`. Each `CDataExpr` and `AssignTarget::CData` lowers to calls
 of the `Cdata*` runtime functions: a read of an item takes a short-lived
 object over it from `CdataItem`, reads it with the getter of its type and
 releases it.
+
+A `CType::Structure` parameter or result passes by value as the System V
+calling convention of x86-64 Linux passes a C struct (ADR-0049):
+`structure_abi::passing` gives `Nothing` for no bytes, `Memory` above 16
+bytes, and otherwise one `Piece` for each eight bytes, in a vector
+register when each scalar in it is a `float` or a `double`. `Registers`
+counts the six general and eight vector registers the arguments before
+take; a structure whose pieces do not fit, or one in memory, passes as a
+`byval` pointer to its buffer. Each piece is loaded without reading past
+the structure: a `float`, a `double`, or its bytes widened to a word. A
+result in registers is a piece, or a pair of two, stored into a new
+object; a larger one is written by the callee into a new object's
+buffer, passed first as `sret`.
 
 ### 10.7 Library objects
 
@@ -2700,7 +2732,7 @@ installed `typy` finds `<prefix>/lib/typy/` and a `typy` in
 | `SetObject` | Header, `fill: usize`, `used: usize`, `mask: usize`, `finger: usize`, `kind: u32`, `words: u32`, `tuple: *const TupleType`, `table: *mut u64`, `states: *mut u8` | A table of `mask + 1` slots, a power of two and at least eight, in one allocation with a state byte per slot after it: empty, active or dummy. A slot is a hash word followed by the item's words. `fill` counts the active and dummy slots, `used` the active ones, and `finger` is where `pop` starts, as in CPython's `PySetObject` |
 | `DictObject` | Header, `used: usize`, `filled: usize`, `usable: usize`, `log2: u32`, `key_kind: u32`, `value_kind: u32`, `key_words: u32`, `key_tuple`, `value_tuple`, `indices: *mut i64`, `entries: *mut u64`, `live: *mut u8` | CPython's combined table: the entries in insertion order, each a hash word, the key's words and the value's words, with a byte that says whether it holds an item, and `2**log2` index slots that hold an entry's position, -1 when empty or -2 when its entry was removed. `used` counts the items, `filled` the entries written, holes included, and `usable` the entries left before a resize. A new dict has no table, `log2` 0 |
 | `ViewObject` | Header, `kind: u32`, padding, `dict: *mut DictObject` | A view of a dict under the type ID 9: 0 shows the keys, 1 the values, 2 the items. It holds a reference to its dict, so the dict lives as long as the view |
-| `CDataClass` | `name: *const u8`, `name_length: u64`, `kind: u32`, `ctype: u32`, `size: u64`, `item: *const CDataClass`, `length: u64` | A `ctypes` class the compiler emits once: `kind` 0 for a scalar of C type `ctype`, numbered as `CType`, 1 for a pointer and 2 for an array of `length` items of `item` (ADR-0048) |
+| `CDataClass` | `name: *const u8`, `name_length: u64`, `kind: u32`, `ctype: u32`, `size: u64`, `item: *const CDataClass`, `length: u64` | A `ctypes` class the compiler emits once: `kind` 0 for a scalar of C type `ctype`, numbered as `CType`, 1 for a pointer, 2 for an array of `length` items of `item`, and 3 for a structure, whose name holds its module (ADR-0048, ADR-0049) |
 | `CDataObject` | Header, `class: *const CDataClass`, `address: *mut u8`, `owner: *mut ObjectHeader`, `kept: *mut Kept` | A `ctypes` object under the type ID 23: a scalar or an array owns a buffer after this part; an object over another's memory counts `owner`, the object whose buffer it is or, for C's memory, the pointer it was read through; `kept` is the table of the objects the values in its buffer refer to, by address: a pointer's target and the `bytes` of each `c_char_p` written into it or through an object over it |
 
 ![Design classes of the runtime](../diagrams/class-design-runtime.svg)
@@ -2710,7 +2742,7 @@ installed `typy` finds `<prefix>/lib/typy/` and a `typy` in
 | Module | Behaviour |
 | --- | --- |
 | `entry` | `main` keeps its arguments for `sys.argv`, records the stack limit, calls `__typy_main`, reports an uncaught exception, flushes standard output and returns the exit status `sys::exit_status` gives |
-| `cdata` | `typy_rt_cdata_new(class)` makes an object, every byte zero; the getters and setters read and write a scalar of each C type, wrapping an `int` to its width; `typy_rt_cdata_pointer(class, target)` points to an object and keeps it; `typy_rt_cdata_from_address` makes a pointer of a C result; `typy_rt_cdata_contents` and `typy_rt_cdata_item` give an object over the target or an item, `ValueError: NULL pointer access` for a null pointer and `IndexError: invalid index` outside an array, which counts from its end when negative; `typy_rt_cdata_argument` gives the address a C function takes. The type object's slots give CPython's truth and `repr` (FFI-03, ADR-0048) |
+| `cdata` | `typy_rt_cdata_new(class)` makes an object, every byte zero; the getters and setters read and write a scalar of each C type, wrapping an `int` to its width; `typy_rt_cdata_pointer(class, target)` points to an object and keeps it; `typy_rt_cdata_from_address` makes a pointer of a C result; `typy_rt_cdata_contents` and `typy_rt_cdata_item` give an object over the target or an item, `ValueError: NULL pointer access` for a null pointer and `IndexError: invalid index` outside an array, which counts from its end when negative; `typy_rt_cdata_argument` gives the address a C function takes; `typy_rt_cdata_field` gives an object over a structure's field, `typy_rt_cdata_copy` copies an object's bytes into another of its class and keeps the source, and `typy_rt_cdata_set_pointer` writes a pointer field or item. The type object's slots give CPython's truth and `repr` (FFI-03, ADR-0048) |
 | `foreign` | `typy_rt_int_low_bits(word)` gives the low 64 bits of an `int` word in two's complement, and 0 for the word 0; `typy_rt_int_from_uint64`, `typy_rt_int_from_address` and `typy_rt_bytes_from_c_string` make a C result a TyPy value, null giving `None`; `typy_rt_ctypes_float_argument(word, position)` converts an `int` for a `c_double`, raising `ctypes.ArgumentError`, a class whose module is `ctypes`, with CPython's text for one too large (FFI-03, ADR-0047) |
 | `library` | `typy_rt_library_load(module)` records the stack limit, keeps `['']` for `sys.argv`, runs the module bodies and flushes standard output; `_unload` flushes it and closes the files; `_enter` records the stack limit for the calling thread, `_leave` flushes standard output; `_raised(exception)` exits with a `SystemExit`'s status, or reports any other exception as uncaught and aborts (ADR-0044). `stack::record_limit` reads `getrlimit` once and measures from the current stack pointer |
 | `allocator` | `allocate`, `reallocate` and `free` over the program object's hooks `typy_rt_heap_allocate`, `typy_rt_heap_reallocate` and `typy_rt_heap_free` (section 10.5), asking for at least one byte. Running out of memory prints `MemoryError` and aborts. The unit tests define the hooks over `malloc`, `realloc` and `free`, since they link no program object |

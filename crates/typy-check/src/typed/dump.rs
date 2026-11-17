@@ -147,6 +147,7 @@ impl Dump<'_> {
             AssignTarget::CData { object, place } => match place {
                 crate::typed::CDataPlace::Value => format!("value of {}", object.ty),
                 crate::typed::CDataPlace::Item(_) => format!("item of {}", object.ty),
+                crate::typed::CDataPlace::Field(field) => format!("field {field} of {}", object.ty),
             },
             AssignTarget::Lazy { target, .. } => format!("lazy {}", self.target(target)),
             AssignTarget::Converted { value, target, .. } => {

@@ -25,8 +25,9 @@ enum Kind {
     Bytes,
     /// A set, read slot by slot in its table's order.
     Set,
-    /// A `ctypes` array, whose items are of this scalar type (FFI-03).
-    CData(typy_check::CType),
+    /// A `ctypes` array, whose items are of the class at this index of the module's classes
+    /// (FFI-03).
+    CData(u32),
 }
 
 /// The state of one iterator of a loop, kept in hidden slots.
@@ -410,11 +411,9 @@ impl FunctionLowerer<'_> {
         }
         let (kind, item) = match (&sequence.ty, sequence.ty.sequence_item()) {
             (typy_check::Type::CData(_), _) => {
-                let scalar = crate::cdata::item_scalar(&sequence.ty);
-                (
-                    Kind::CData(scalar),
-                    self.lowered_type(&scalar.result_type()),
-                )
+                let item = crate::cdata::item_class(&sequence.ty);
+                let index = self.cdata_classes.intern(item);
+                (Kind::CData(index), self.lowered_type(&item.result_type()))
             }
             (_, Some(item)) => (Kind::List, self.lowered_type(item)),
             (typy_check::Type::Bytes, None) => (Kind::Bytes, TyirType::Int),
@@ -923,7 +922,10 @@ impl FunctionLowerer<'_> {
                 span,
             ),
             Kind::List => self.list_item(value, index, item, span),
-            Kind::CData(scalar) => self.cdata_item_value(value.value, index.value, scalar, span),
+            Kind::CData(class) => {
+                let item = self.cdata_classes.class(class).clone();
+                self.cdata_item_value(value.value, index.value, &item, span)
+            }
             Kind::Set => unreachable!("a set is read by its own iterator"),
         };
         let current = self.load(position, span);

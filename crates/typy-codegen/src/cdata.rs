@@ -13,6 +13,7 @@ use crate::statics::Statics;
 const SCALAR: u64 = 0;
 const POINTER: u64 = 1;
 const ARRAY: u64 = 2;
+const STRUCTURE: u64 = 3;
 
 /// Returns the runtime's code for the C type of a scalar class.
 fn ctype_code(ty: CType) -> Result<u64, CodegenError> {
@@ -30,9 +31,9 @@ fn ctype_code(ty: CType) -> Result<u64, CodegenError> {
         CType::Bool => 10,
         CType::CharPointer => 11,
         CType::VoidPointer => 12,
-        CType::Pointer(_) => {
+        CType::Pointer(_) | CType::Structure(_) => {
             return Err(CodegenError(
-                "a pointer to a class is a class of its own, not a scalar".to_owned(),
+                "a pointer or a structure is a class of its own, not a scalar".to_owned(),
             ));
         }
     })
@@ -61,6 +62,8 @@ pub(crate) fn cdata_class<'ctx>(
         CDataShape::Scalar(ty) => (SCALAR, ctype_code(ty)?, pointer.const_null(), 0),
         CDataShape::Pointer(item) => (POINTER, 0, cdata_class(shared, item)?, 0),
         CDataShape::Array(item, length) => (ARRAY, 0, cdata_class(shared, item)?, length),
+        // A structure's fields are read where the compiler knows their offsets.
+        CDataShape::Structure(_) => (STRUCTURE, 0, pointer.const_null(), 0),
     };
     let text = context.const_string(class.name.as_bytes(), false);
     let text = Statics::global(

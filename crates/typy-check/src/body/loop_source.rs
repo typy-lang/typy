@@ -53,11 +53,11 @@ impl BodyChecker<'_> {
             if sequence.ty.class_id().is_some() {
                 return self.protocol_source(sequence, user);
             }
-            // A `ctypes` array gives the value of each item (FFI-03).
-            if let Type::CData(crate::ctypes::CData::Array(item, _)) = &sequence.ty
-                && let Some(scalar) = item.scalar()
-            {
-                return (LoopSource::Items(sequence), scalar.result_type());
+            // A `ctypes` array gives the value of each item, or an object over a structure
+            // item (FFI-03).
+            if let Type::CData(crate::ctypes::CData::Array(item, _)) = &sequence.ty {
+                let item = item.result_type();
+                return (LoopSource::Items(sequence), item);
             }
             let item = self.iterated_item(&sequence, user);
             return (LoopSource::Items(sequence), item);

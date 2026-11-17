@@ -20,6 +20,8 @@ pub(crate) const SCALAR: u32 = 0;
 pub(crate) const POINTER: u32 = 1;
 /// An array class, whose buffer holds its items.
 pub(crate) const ARRAY: u32 = 2;
+/// A structure class, whose buffer holds its fields and whose name has its module.
+pub(crate) const STRUCTURE: u32 = 3;
 
 /// The C types of a scalar class, as `CDataClass::ctype` holds them; the compiler's
 /// `CType` numbers them alike.
@@ -573,6 +575,76 @@ pub unsafe extern "C" fn typy_rt_cdata_length(object: *mut CDataObject) -> i64 {
     inline(i64::try_from(class_of(object).length).unwrap_or(0)).unwrap_or(1)
 }
 
+/// Returns a new object of `class` over the field at `offset` of the structure `object`,
+/// which keeps the structure's memory alive.
+///
+/// # Safety
+///
+/// `object` is a live structure, `class` the class the compiler emitted for the field, and
+/// `offset` an `int` word of the field's offset.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn typy_rt_cdata_field(
+    object: *mut CDataObject,
+    class: *const CDataClass,
+    offset: i64,
+) -> *mut CDataObject {
+    let offset = usize::try_from(inline_value(offset)).unwrap_or(0);
+    // SAFETY: the caller's guarantee; the field lies inside the structure's buffer.
+    unsafe { view(class, (*object).address.add(offset), memory_owner(object)) }
+}
+
+/// Copies the bytes of `source` into `destination`, an object of its class, and keeps
+/// `source` alive with the memory, as anything its values refer to stays alive with it; a
+/// source over the same memory as the destination is kept alive by it already.
+///
+/// # Safety
+///
+/// Both are live objects of one class.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn typy_rt_cdata_copy(
+    destination: *mut CDataObject,
+    source: *mut CDataObject,
+) {
+    // SAFETY: the caller's guarantee; the two buffers are of one size, and an object's own
+    // buffer is never another's, so they overlap only when they are the same.
+    unsafe {
+        let size = usize::try_from(class_of(destination).size).unwrap_or(0);
+        let address = (*destination).address;
+        core::ptr::copy((*source).address, address, size);
+        let keeper = keeper(destination);
+        let held = if core::ptr::eq(memory_owner(source), keeper.cast()) {
+            core::ptr::null_mut()
+        } else {
+            source.cast()
+        };
+        kept::keep(&mut (*keeper).kept, address, held);
+    }
+}
+
+/// Writes the address `pointer` holds, or null for `None`, into the pointer `destination`,
+/// a field or an item, and keeps `pointer` alive with the memory.
+///
+/// # Safety
+///
+/// `destination` is a live pointer, and `pointer` null or a live pointer of its class.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn typy_rt_cdata_set_pointer(
+    destination: *mut CDataObject,
+    pointer: *mut CDataObject,
+) {
+    // SAFETY: the caller's guarantee.
+    unsafe {
+        let held = if pointer.is_null() {
+            core::ptr::null_mut()
+        } else {
+            held_address(pointer)
+        };
+        let address = (*destination).address;
+        address.cast::<*mut u8>().write_unaligned(held);
+        kept::keep(&mut (*keeper(destination)).kept, address, pointer.cast());
+    }
+}
+
 /// Returns the bytes of an object's buffer as an `int` word, as `ctypes.sizeof` gives them.
 ///
 /// # Safety
@@ -612,6 +684,7 @@ unsafe extern "C" fn cdata_truth(object: *mut ObjectHeader) -> bool {
     // SAFETY: the object is live and its buffer holds a value of its class.
     unsafe {
         match (class.kind, class.ctype) {
+            (STRUCTURE, _) => true,
             (ARRAY, _) => class.length > 0,
             (POINTER, _) | (_, ctype::CHAR_POINTER | ctype::VOID_POINTER) => {
                 !held_address(object).is_null()
@@ -630,14 +703,12 @@ unsafe extern "C" fn cdata_repr(object: *mut ObjectHeader) -> Raising<*mut StrOb
     let class = class_of(object);
     let mut text = MessageBuffer::new();
     if class.kind != SCALAR {
-        let module = if class.kind == POINTER {
-            "ctypes"
-        } else {
-            "__main__"
-        };
         text.push_str("<");
-        text.push_str(module);
-        text.push_str(".");
+        match class.kind {
+            POINTER => text.push_str("ctypes."),
+            ARRAY => text.push_str("__main__."),
+            _ => {}
+        }
         text.push_str(class.name());
         text.push_str(" object at 0x");
         push_address(&mut text, object.addr());

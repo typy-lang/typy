@@ -92,16 +92,19 @@ numbers[0] += 1
         name: "c_int".to_owned(),
         shape: CDataShape::Scalar(CType::Int32),
         size: 4,
+        align: 4,
     };
     let pointer = TyirCDataClass {
         name: "LP_c_int".to_owned(),
         shape: CDataShape::Pointer(0),
         size: 8,
+        align: 8,
     };
     let array = TyirCDataClass {
         name: "c_int_Array_3".to_owned(),
         shape: CDataShape::Array(0, 3),
         size: 12,
+        align: 4,
     };
     assert_eq!(module.cdata_classes, [int, array, pointer]);
     assert_eq!(
@@ -119,6 +122,57 @@ numbers[0] += 1
         "rt.cdata_length",
         "call_foreign frexp",
     ] {
+        assert!(text.contains(shown), "{shown} missing from\n{text}");
+    }
+}
+
+#[test]
+fn a_structure_is_a_class_of_its_fields_and_passes_by_value_as_its_own_c_type() {
+    use typy_tyir::{CDataShape, TyirField};
+    let source = "\
+import ctypes
+
+class Point(ctypes.Structure):
+    _fields_ = [(\"x\", ctypes.c_int), (\"y\", ctypes.c_double)]
+
+lib = ctypes.CDLL(\"libc.so.6\")
+lib.f.argtypes = [Point, ctypes.POINTER(Point)]
+lib.f.restype = Point
+p = Point(1, y=2.0)
+p.x += 1
+q = lib.f(p, p)
+print(q.y, (Point * 2)(p)[0].x)
+";
+    let module = lower(source);
+    let point = module
+        .cdata_classes
+        .iter()
+        .position(|class| class.name == "__main__.Point")
+        .unwrap();
+    let class = &module.cdata_classes[point];
+    assert_eq!((class.size, class.align), (16, 8));
+    let CDataShape::Structure(fields) = &class.shape else {
+        panic!("{class:?}")
+    };
+    assert_eq!(fields[1].offset, 8);
+    assert_eq!(
+        fields
+            .iter()
+            .map(|field: &TyirField| module.cdata_classes[field.class as usize].name.as_str())
+            .collect::<Vec<_>>(),
+        ["c_int", "c_double"]
+    );
+    let point = u32::try_from(point).unwrap();
+    assert_eq!(
+        module.foreign_functions[0].parameters[0],
+        CType::Structure(point)
+    );
+    assert_eq!(
+        module.foreign_functions[0].result,
+        Some(CType::Structure(point))
+    );
+    let text = print(&module);
+    for shown in ["rt.cdata_field", "rt.cdata_new", "rt.cdata_get_float"] {
         assert!(text.contains(shown), "{shown} missing from\n{text}");
     }
 }

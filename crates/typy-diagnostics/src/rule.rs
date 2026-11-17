@@ -195,6 +195,8 @@ impl RuleId {
     pub const FFI_09: Self = Self("FFI-09");
     /// The ctypes names `c_char`, `c_wchar`, `c_wchar_p`, `create_string_buffer`, `cast` and `addressof`, pointers to and arrays of pointers and arrays, arrays whose length is not an integer literal, array slices, `byref` other than as a C function's argument, assigning a pointer's `contents`, and ctypes classes as values, in annotations, `isinstance` and `type` shall be accepted.
     pub const FFI_10: Self = Self("FFI-10");
+    /// Methods and class attributes other than one `_fields_` list in a `Structure` subclass, `_fields_` assigned after the class statement, bit fields, a subclass of a `Structure` subclass, and `ctypes.Union` shall be accepted.
+    pub const FFI_11: Self = Self("FFI-11");
     /// Module-level function definitions shall be accepted.
     pub const FUN_01: Self = Self("FUN-01");
     /// Keyword-only and positional-only parameters shall be accepted.
@@ -472,6 +474,7 @@ impl RuleId {
         Self::FFI_06,
         Self::FFI_09,
         Self::FFI_10,
+        Self::FFI_11,
         Self::FUN_01,
         Self::FUN_03,
         Self::FUN_04,

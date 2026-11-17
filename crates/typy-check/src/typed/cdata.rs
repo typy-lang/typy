@@ -13,6 +13,17 @@ pub enum CDataExpr {
     /// given its one argument, and an array its items in order, each of a type the value or
     /// the item takes.
     New(Vec<TypedExpr>),
+    /// `S(arguments)` of a structure class: a new object, every byte zero, then each field
+    /// given, by its position, assigned the value given for it, in the order they are given.
+    NewStructure(Vec<(usize, TypedExpr)>),
+    /// `object.name` of a structure: the value of a scalar field, or a new object over the
+    /// field's memory.
+    Field {
+        /// The structure.
+        object: Box<TypedExpr>,
+        /// The field's position.
+        field: usize,
+    },
     /// `ctypes.pointer(target)`, or `POINTER(T)(target)`: a new pointer to the object, which
     /// it keeps alive.
     Pointer(Box<TypedExpr>),
@@ -42,7 +53,9 @@ impl CDataExpr {
         match self {
             Self::Class => Vec::new(),
             Self::New(arguments) => arguments.iter().collect(),
-            Self::Pointer(object)
+            Self::NewStructure(fields) => fields.iter().map(|(_, value)| value).collect(),
+            Self::Field { object, .. }
+            | Self::Pointer(object)
             | Self::Value(object)
             | Self::Contents(object)
             | Self::Length(object)
@@ -60,4 +73,6 @@ pub enum CDataPlace {
     Value,
     /// `object[index]` of a pointer or an array.
     Item(Box<TypedExpr>),
+    /// `object.name` of a structure, by the field's position.
+    Field(usize),
 }

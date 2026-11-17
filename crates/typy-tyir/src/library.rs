@@ -32,6 +32,10 @@ pub enum CType {
     /// `TyirModule::cdata_classes`: an argument passes the address a `ctypes` object gives,
     /// and a result is a new pointer object of the class (FFI-03, ADR-0048).
     Pointer(u32),
+    /// A structure passed by value, of the structure class at this index of
+    /// `TyirModule::cdata_classes`: an argument passes the bytes of a structure object, and a
+    /// result is a new object of the class (FFI-03, ADR-0049).
+    Structure(u32),
 }
 
 impl CType {
@@ -52,6 +56,7 @@ impl CType {
             Self::Bool => "bool",
             Self::CharPointer => "char *",
             Self::VoidPointer | Self::Pointer(_) => "void *",
+            Self::Structure(_) => "struct",
         }
     }
 
@@ -82,7 +87,7 @@ impl CType {
             Self::Bool => TyirType::Bool,
             Self::CharPointer => TyirType::Optional(OptionalBase::Object(TypeId::BYTES)),
             Self::VoidPointer => TyirType::Optional(OptionalBase::Int),
-            Self::Pointer(_) => TyirType::CDATA,
+            Self::Pointer(_) | Self::Structure(_) => TyirType::CDATA,
             _ => TyirType::Int,
         }
     }
@@ -110,6 +115,7 @@ impl CType {
                     || cdata
             }
             Self::Pointer(_) => cdata,
+            Self::Structure(_) => ty == TyirType::CDATA,
             _ => ty == TyirType::Int,
         }
     }
@@ -146,10 +152,12 @@ pub struct TyirCDataClass {
     pub shape: CDataShape,
     /// The bytes of an object's buffer.
     pub size: u64,
+    /// The alignment of an object, which a structure passed by value is copied with.
+    pub align: u64,
 }
 
 /// What the objects of a `ctypes` class hold.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum CDataShape {
     /// One value of a C type other than a pointer to a class.
     Scalar(CType),
@@ -157,6 +165,17 @@ pub enum CDataShape {
     Pointer(u32),
     /// This many items of the class at this index.
     Array(u32, u64),
+    /// The fields of a structure, in order.
+    Structure(Vec<TyirField>),
+}
+
+/// A field of a structure class: where it starts, and its class by its index.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct TyirField {
+    /// The field's offset from the start of the structure.
+    pub offset: u64,
+    /// The field's class, by its index in `TyirModule::cdata_classes`.
+    pub class: u32,
 }
 
 /// A C function a program calls through a `ctypes` declaration.

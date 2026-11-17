@@ -391,6 +391,12 @@ pub enum RuntimeFunction {
     CdataLength,
     /// `ctypes.sizeof` of an object.
     CdataSize,
+    /// An object over a structure's field, of a class, at an offset.
+    CdataField,
+    /// Copies an object's bytes into another of its class, which keeps the source alive.
+    CdataCopy,
+    /// Writes a pointer's address, or null for `None`, into a pointer field or item.
+    CdataSetPointer,
 }
 
 /// The parameter types, result type and raising behaviour of a runtime function.
@@ -447,7 +453,7 @@ const FLOAT_FLOAT: &[TyirType] = &[TyirType::Float, TyirType::Float];
 
 impl RuntimeFunction {
     /// Every runtime function.
-    pub const ALL: [Self; 354] = [
+    pub const ALL: [Self; 357] = [
         Self::IntFloorDivide,
         Self::IntModulo,
         Self::IntPower,
@@ -802,6 +808,9 @@ impl RuntimeFunction {
         Self::CdataItem,
         Self::CdataLength,
         Self::CdataSize,
+        Self::CdataField,
+        Self::CdataCopy,
+        Self::CdataSetPointer,
     ];
 
     /// Returns true when the function may call a type object's `equal`, `order`, `hash` or
@@ -840,6 +849,9 @@ impl RuntimeFunction {
             crate::types::TypeId::BYTES,
         ));
         const OPTIONAL_INT: TyirType = TyirType::Optional(crate::types::OptionalBase::Int);
+        const OPTIONAL_CDATA: TyirType = TyirType::Optional(crate::types::OptionalBase::Object(
+            crate::types::TypeId::CDATA,
+        ));
         match self {
             Self::IntFloorDivide
             | Self::IntModulo
@@ -891,6 +903,9 @@ impl RuntimeFunction {
             Self::CdataGetAddress => signature(&[CDATA], OPTIONAL_INT, false),
             Self::CdataSetAddress => signature(&[CDATA, OPTIONAL_INT], Unit, false),
             Self::CdataPointer => signature(&[Bits, CDATA], CDATA, false),
+            Self::CdataField => signature(&[CDATA, Bits, Int], CDATA, false),
+            Self::CdataCopy => signature(&[CDATA, CDATA], Unit, false),
+            Self::CdataSetPointer => signature(&[CDATA, OPTIONAL_CDATA], Unit, false),
             Self::CdataContents => signature(&[CDATA], CDATA, true),
             Self::CdataItem => signature(&[CDATA, Int], CDATA, true),
             Self::Ord => signature(&[STR], Int, true),
@@ -1557,6 +1572,9 @@ impl RuntimeFunction {
             Self::CdataItem => "cdata_item",
             Self::CdataLength => "cdata_length",
             Self::CdataSize => "cdata_size",
+            Self::CdataField => "cdata_field",
+            Self::CdataCopy => "cdata_copy",
+            Self::CdataSetPointer => "cdata_set_pointer",
         }
     }
 }

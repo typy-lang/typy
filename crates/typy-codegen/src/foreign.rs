@@ -1,6 +1,8 @@
 //! Emits a call of a C function a `ctypes` declaration describes: its declaration with C
 //! types, each argument converted to its C type, and the result converted back, as `ctypes`
-//! converts them (FFI-02, FFI-03, ADR-0047).
+//! converts them; a structure passes by value (FFI-02, FFI-03, ADR-0047, ADR-0049).
+
+mod structure_call;
 
 use inkwell::AddressSpace;
 use inkwell::context::Context;
@@ -12,6 +14,8 @@ use typy_tyir::{CType, TyirType, ValueId};
 use crate::class::runtime_symbol;
 use crate::error::CodegenError;
 use crate::function::FunctionEmitter;
+use crate::structure_abi::Registers;
+use structure_call::CallParts;
 
 /// Returns the LLVM type a C type passes as: a `bool` as a byte.
 pub(crate) fn c_type(context: &Context, ty: CType) -> BasicTypeEnum<'_> {
@@ -22,7 +26,8 @@ pub(crate) fn c_type(context: &Context, ty: CType) -> BasicTypeEnum<'_> {
         CType::Int64 | CType::UInt64 => context.i64_type().into(),
         CType::Float => context.f32_type().into(),
         CType::Double => context.f64_type().into(),
-        CType::CharPointer | CType::VoidPointer | CType::Pointer(_) => {
+        // A structure passes as its pieces, which `structure_call` gives.
+        CType::CharPointer | CType::VoidPointer | CType::Pointer(_) | CType::Structure(_) => {
             context.ptr_type(AddressSpace::default()).into()
         }
     }
@@ -55,14 +60,32 @@ impl<'ctx> FunctionEmitter<'_, '_, 'ctx> {
             .ok_or_else(|| CodegenError(format!("foreign#{function} does not exist")))?
             .clone();
         let context = self.shared.context;
-        let parameters: Vec<BasicMetadataTypeEnum<'ctx>> = foreign
-            .parameters
-            .iter()
-            .map(|ty| argument_type(context, *ty).into())
-            .collect();
-        let ty: FunctionType<'ctx> = match foreign.result {
-            Some(result) => c_type(context, result).fn_type(&parameters, false),
-            None => context.void_type().fn_type(&parameters, false),
+        let mut call = CallParts::new();
+        let mut registers = Registers::new();
+        // A structure result is made before the call, which may write it in memory.
+        let structure = match foreign.result {
+            Some(CType::Structure(class)) => {
+                Some(self.structure_result(class, &mut call, &mut registers)?)
+            }
+            _ => None,
+        };
+        for (value, parameter) in arguments.iter().zip(&foreign.parameters) {
+            if let CType::Structure(class) = parameter {
+                self.structure_argument(*value, *class, &mut call, &mut registers)?;
+                continue;
+            }
+            registers.take_scalar(*parameter);
+            let converted = self.c_argument(*value, *parameter)?;
+            call.push(argument_type(context, *parameter), converted);
+        }
+        let returned = match (&structure, foreign.result) {
+            (Some(structure), _) => structure.return_type(context),
+            (None, result) => result.map(|result| c_type(context, result)),
+        };
+        let parameters: &[BasicMetadataTypeEnum<'ctx>] = &call.types;
+        let ty: FunctionType<'ctx> = match returned {
+            Some(result) => result.fn_type(parameters, false),
+            None => context.void_type().fn_type(parameters, false),
         };
         let callee = self
             .shared
@@ -73,21 +96,20 @@ impl<'ctx> FunctionEmitter<'_, '_, 'ctx> {
                     .module
                     .add_function(&foreign.name, ty, Some(Linkage::External))
             });
-        let mut converted: Vec<BasicMetadataValueEnum<'ctx>> = Vec::new();
-        for (value, parameter) in arguments.iter().zip(&foreign.parameters) {
-            converted.push(self.c_argument(*value, *parameter)?.into());
-        }
         // A function the module already has with another type, as two libraries may declare
         // one name differently, is called through its address with this declaration's type.
-        let call = self.builder.build_indirect_call(
+        let values: &[BasicMetadataValueEnum<'ctx>] = &call.values;
+        let site = self.builder.build_indirect_call(
             ty,
             callee.as_global_value().as_pointer_value(),
-            &converted,
+            values,
             "",
         )?;
-        match foreign.result {
-            Some(result) => Ok(Some(self.typy_result(call, result)?)),
-            None => Ok(None),
+        call.attribute(site);
+        match (structure, foreign.result) {
+            (Some(structure), _) => Ok(Some(self.structure_value(site, &structure)?)),
+            (None, Some(result)) => Ok(Some(self.typy_result(site, result)?)),
+            (None, None) => Ok(None),
         }
     }
 

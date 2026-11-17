@@ -340,3 +340,46 @@ fn a_table_of_kept_bytes_grows_and_forgets_an_entry_set_to_none() {
         drop_object(array);
     }
 }
+
+#[test]
+fn a_structure_reads_its_fields_copies_structures_and_writes_pointers() {
+    let classes = classes();
+    let point = CDataClass {
+        length: 0,
+        ..class("shapes.Point", super::STRUCTURE, 0, 8)
+    };
+    // SAFETY: each object is made, used and dropped here.
+    unsafe {
+        let first = typy_rt_cdata_new(&raw const point);
+        assert!(truth(first));
+        assert!(repr(first).starts_with("<shapes.Point object at 0x"));
+        let y = super::typy_rt_cdata_field(first, &raw const INT, inline(4).unwrap());
+        typy_rt_cdata_set_int(y, inline(7).unwrap());
+        drop_object(y);
+        let second = typy_rt_cdata_new(&raw const point);
+        super::typy_rt_cdata_copy(second, first);
+        drop_object(first);
+        let y = super::typy_rt_cdata_field(second, &raw const INT, inline(4).unwrap());
+        assert_eq!(int_of(typy_rt_cdata_get_int(y)), 7);
+        // A structure copied onto its own memory keeps nothing more.
+        let whole = super::typy_rt_cdata_field(second, &raw const point, inline(0).unwrap());
+        super::typy_rt_cdata_copy(second, whole);
+        drop_object(whole);
+        assert_eq!(int_of(typy_rt_cdata_get_int(y)), 7);
+        drop_object(y);
+        let holder = typy_rt_cdata_new(&raw const classes.pointer);
+        let target = typy_rt_cdata_new(&raw const INT);
+        typy_rt_cdata_set_int(target, inline(3).unwrap());
+        let to_target = typy_rt_cdata_pointer(&raw const classes.pointer, target);
+        drop_object(target);
+        super::typy_rt_cdata_set_pointer(holder, to_target);
+        drop_object(to_target);
+        let read = typy_rt_cdata_contents(holder).value;
+        assert_eq!(int_of(typy_rt_cdata_get_int(read)), 3);
+        drop_object(read);
+        super::typy_rt_cdata_set_pointer(holder, core::ptr::null_mut());
+        assert!(!truth(holder));
+        drop_object(holder);
+        drop_object(second);
+    }
+}

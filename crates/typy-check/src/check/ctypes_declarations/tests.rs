@@ -3,21 +3,42 @@
 use typy_diagnostics::{Diagnostics, FileId};
 use typy_source::{PythonFloor, SourceFile, parse};
 
-use super::{ModuleDeclarations, Restype, read};
-use crate::ctypes::{CData, CType};
+use std::sync::Arc;
 
-/// Returns the declarations of `source`, the codes and messages of its diagnostics, and how
-/// many statements stay in the module.
-fn declarations(source: &str) -> (ModuleDeclarations, Vec<String>, usize) {
-    let file = SourceFile::from_text(FileId(0), "app.py".into(), source);
+use super::{ModuleDeclarations, ReadModule, Restype, read};
+use crate::ctypes::{CData, CType, StructureClass};
+
+/// Reads `source` as the module `name`, after the structures earlier modules declared.
+fn read_module(
+    name: &str,
+    source: &str,
+    structures: &mut Vec<Arc<StructureClass>>,
+) -> (
+    ModuleDeclarations,
+    Vec<String>,
+    Vec<typy_source::syntax::Stmt>,
+) {
+    let file = SourceFile::from_text(FileId(0), format!("{name}.py").into(), source);
     let mut tree = parse(&file, PythonFloor::V3_12).unwrap();
     let mut diagnostics = Diagnostics::new();
-    let found = read(&mut tree.body, &mut diagnostics);
+    let package = typy_source::ModuleName::new("tools").unwrap();
+    let module = ReadModule {
+        name,
+        package: Some(&package),
+    };
+    let found = read(&module, &mut tree.body, structures, &mut diagnostics);
     let messages = diagnostics
         .iter()
         .map(|diagnostic| format!("{} {}", diagnostic.code(), diagnostic.message()))
         .collect();
-    (found, messages, tree.body.len())
+    (found, messages, tree.body)
+}
+
+/// Returns the declarations of `source`, the codes and messages of its diagnostics, and how
+/// many statements stay in the module.
+fn declarations(source: &str) -> (ModuleDeclarations, Vec<String>, usize) {
+    let (found, messages, body) = read_module("app", source, &mut Vec::new());
+    (found, messages, body.len())
 }
 
 #[test]
@@ -214,4 +235,161 @@ fn a_pointer_type_ctypes_has_that_typy_does_not_compile_is_refused() {
             "{source}: {messages:?}"
         );
     }
+}
+
+#[test]
+fn a_structure_class_is_laid_out_and_its_statement_binds_its_name_to_it() {
+    let mut structures = Vec::new();
+    let (_, messages, _) = read_module(
+        "tools.shapes",
+        "import ctypes\n\
+         class Point(ctypes.Structure):\n    _fields_ = [(\"x\", ctypes.c_int), (\"y\", ctypes.c_double)]\n",
+        &mut structures,
+    );
+    assert_eq!(messages, Vec::<String>::new());
+    let (found, messages, body) = read_module(
+        "app",
+        "import ctypes\nfrom ctypes import Structure, POINTER\n\
+         import tools.shapes as shapes\nfrom .shapes import Point\n\
+         Row = ctypes.c_int * 3\n\
+         class Box(Structure):\n    \"\"\"A box.\"\"\"\n    pass\n    \
+         _fields_ = ((\"corner\", Point), (\"far\", shapes.Point), (\"cells\", Row), \
+         (\"next\", POINTER(Point)), (\"many\", 2 * Point))\n\
+         class Empty(ctypes.Structure):\n    pass\n\
+         lib = ctypes.CDLL(\"lib.so\")\n\
+         lib.f.argtypes = [Box, POINTER(Box), shapes.Point]\nlib.f.restype = Point\n",
+        &mut structures,
+    );
+    assert_eq!(messages, Vec::<String>::new());
+    assert_eq!(structures.len(), 3);
+    let point = CData::Structure(Arc::clone(&structures[0]));
+    let boxed = &structures[1];
+    assert_eq!((boxed.name.as_str(), boxed.module.as_str()), ("Box", "app"));
+    let offsets: Vec<u64> = boxed.fields.iter().map(|field| field.offset).collect();
+    assert_eq!(offsets, [0, 16, 32, 48, 56]);
+    assert_eq!(boxed.size, 88);
+    assert_eq!(
+        boxed.fields[3].class,
+        CData::Pointer(Box::new(point.clone()))
+    );
+    assert_eq!(
+        boxed.fields[4].class,
+        CData::Array(Box::new(point.clone()), 2)
+    );
+    assert_eq!(structures[2].size, 0);
+    let declared = found.function("lib", "f").unwrap();
+    assert_eq!(declared.result, Some(Restype::Of(point)));
+    // The class statement became `Box = <structure 1>`.
+    let bound = body.iter().any(|statement| {
+        matches!(statement, typy_source::syntax::Stmt::Assign { targets, value, .. }
+            if matches!(targets.as_slice(), [typy_source::syntax::Expr::Name { id, .. }] if id == "Box")
+                && matches!(value, typy_source::syntax::Expr::Name { id, .. } if super::hidden_id(id) == Some(1)))
+    });
+    assert!(bound, "{body:?}");
+    assert_eq!(super::hidden_id("<structure x>"), None);
+    assert_eq!(super::hidden_id("Box"), None);
+}
+
+#[test]
+fn each_part_of_a_structure_class_typy_does_not_compile_is_refused() {
+    for (source, message) in [
+        (
+            "class S(ctypes.Structure):\n    _fields_ = [(\"x\", ctypes.c_int)]\n    def area(self) -> int:\n        return 0\n",
+            "E0201 a `Structure` subclass with methods or class attributes other than one `_fields_` is planned for TyPy 1.0 (FFI-11)",
+        ),
+        (
+            "class S(ctypes.Structure):\n    _fields_ = [(\"x\", ctypes.c_int, 3)]\n",
+            "E0201 a bit field is planned for TyPy 1.0 (FFI-11)",
+        ),
+        (
+            "@decorate\nclass S(ctypes.Structure):\n    pass\n",
+            "E0201 a `Structure` subclass with decorators, keywords or type parameters is planned",
+        ),
+        (
+            "class S(ctypes.Structure):\n    _fields_ = [(\"x\", ctypes.c_int), (\"x\", ctypes.c_int)]\n",
+            "E0430 the field `x` is listed twice",
+        ),
+        (
+            "class S(ctypes.Structure):\n    _fields_ = fields\n",
+            "E0430 `_fields_` is a list of `(name, type)` pairs written in the class",
+        ),
+        (
+            "class S(ctypes.Structure):\n    _fields_ = [x]\n",
+            "E0430 each item of `_fields_` is a `(name, type)` pair",
+        ),
+        (
+            "class S(ctypes.Structure):\n    _fields_ = [(name, ctypes.c_int)]\n",
+            "E0430 a field is named by a string literal",
+        ),
+        (
+            "class S(ctypes.Structure):\n    _fields_ = [(\"x\", ctypes.c_char)]\n",
+            "E0430 this is not one of the `ctypes` types TyPy compiles",
+        ),
+        (
+            "class S(ctypes.Structure):\n    _fields_ = [(\"x\", ctypes.c_int * n)]\n",
+            "E0201 an array whose length is not an integer literal is planned for TyPy 1.0",
+        ),
+        (
+            "class S(ctypes.Structure):\n    _fields_ = [(\"x\", (ctypes.c_int * 2) * 2)]\n",
+            "E0201 an array of pointers or arrays is planned for TyPy 1.0 (FFI-10)",
+        ),
+        (
+            "class S(ctypes.Structure):\n    pass\nclass T(S):\n    pass\n",
+            "E0201 a subclass of a `Structure` subclass is planned for TyPy 1.0 (FFI-11)",
+        ),
+        (
+            "class S(ctypes.Structure, metaclass=Meta):\n    pass\n",
+            "E0201 a `Structure` subclass with decorators, keywords or type parameters is planned",
+        ),
+        (
+            "class S[T](ctypes.Structure):\n    pass\n",
+            "E0201 a `Structure` subclass with decorators, keywords or type parameters is planned",
+        ),
+        (
+            "class S(ctypes.Structure):\n    pass\n    \"\"\"Late.\"\"\"\n",
+            "E0201 a `Structure` subclass with methods or class attributes other than one",
+        ),
+        (
+            "class S(ctypes.Structure):\n    _fields_ = []\n    _fields_ = []\n",
+            "E0201 a `Structure` subclass with methods or class attributes other than one",
+        ),
+        (
+            "class S(ctypes.Structure):\n    _fields_ = [(\"x\", tools.shapes.Point)]\n",
+            "E0430 this is not one of the `ctypes` types TyPy compiles",
+        ),
+        (
+            "from .shapes import Missing\nclass S(ctypes.Structure):\n    _fields_ = [(\"x\", Missing)]\n",
+            "E0430 this is not one of the `ctypes` types TyPy compiles",
+        ),
+        (
+            "from tools import shapes\nclass S(ctypes.Structure):\n    _fields_ = [(\"x\", shapes.Point)]\n",
+            "E0430 this is not one of the `ctypes` types TyPy compiles",
+        ),
+        (
+            "lib = ctypes.CDLL(\"lib.so\")\nlib.f.argtypes = [ctypes.POINTER(ctypes.c_int * 2)]\n",
+            "E0201 a pointer to a pointer or to an array is planned for TyPy 1.0 (FFI-10)",
+        ),
+        (
+            "lib = ctypes.CDLL(\"lib.so\")\nlib.f.argtypes = [ctypes.POINTER(type=ctypes.c_int)]\n",
+            "E0430 `POINTER` takes one `ctypes` type",
+        ),
+    ] {
+        let (_, messages, _) = declarations(&format!("import ctypes\n{source}"));
+        assert!(
+            messages.iter().any(|each| each.starts_with(message)),
+            "{source}: {messages:?}"
+        );
+    }
+}
+
+#[test]
+fn other_statements_of_a_module_that_declares_structures_stay_as_they_are() {
+    let (_, messages, body) = declarations(
+        "import ctypes\nfrom ....far import Thing\n\
+         class Plain:\n    pass\n\
+         first = second = ctypes.c_int\n\
+         class S(ctypes.Structure):\n    pass\n",
+    );
+    assert_eq!(messages, Vec::<String>::new());
+    assert_eq!(body, 5);
 }
