@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy detailed design |
-| Version | 2.16 |
+| Version | 2.17 |
 | Status | Approved |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-17 |
@@ -2420,6 +2420,15 @@ and a declaration of each export, whose parameters keep their Python
 names, with an underscore after one that C or C++ reads as a keyword, such
 as `default_`, and `argumentN` for one that is not ASCII.
 
+`python_binding(module, soname)` writes the binding module of ADR-0046: it
+imports `ctypes`, lists the exports in `__all__`, loads `soname` with
+`ctypes.CDLL` into `_library`, with underscores added until no export or
+parameter has the name, assigns each export's `argtypes` and `restype`
+from `c_int64`, `c_double`, `c_bool` or `None`, and defines a function of
+each export's name, parameters and Python types that calls it.
+`python_stub(module)` writes the stub of those functions. A string literal
+escapes `"`, the backslash and control characters.
+
 ## 11. typy-build
 
 `BuildMode` is `Debug`, `Release` or `ReleaseSmall`, and
@@ -2518,7 +2527,7 @@ process. Each method returns a `Success`, the `Outcome` with the
 | `check(main)` | Loads and checks the program, and returns `Outcome::Checked` with its `Sources` (CLI-03) |
 | `run(request)` with `emit` set | Runs the stages up to that stage and returns `Outcome::Emitted` with an `Emission`: `Text` for every stage but `obj`, `Bytes` for `obj` (CLI-04). `ast` needs only a program that parses; every later stage needs one that checks |
 | `run(request)` without `emit` | Opens the runtime archive, then loads, checks, lowers, generates the object and links it, and returns `Outcome::Executable` with the `Artifact` |
-| `run(request)` with `library` set | Loads the main file as a library, so its module is named after its file, then links with `link_library` into the layout of `-o`, or `LibraryLayout::beside` the main file with the module's name and release, and writes the C header `NAME.h` beside the library (CLI-09, CLI-13, FFI-05) |
+| `run(request)` with `library` set | Loads the main file as a library, so its module is named after its file, then links with `link_library` into the layout of `-o`, or `LibraryLayout::beside` the main file with the module's name and release, and writes beside the library the C header `NAME.h`, and the binding `NAME_binding.py` and its stub `NAME_binding.pyi`, which load the soname of the shared library of the build's release, also for a static build (CLI-09, CLI-13, FFI-05, FFI-08) |
 
 The root of the project is the main file's directory. A `Failure` holds
 the `Diagnostics` and the `Sources` they are rendered against:

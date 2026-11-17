@@ -1,0 +1,218 @@
+//! Writes the Python files of a library: a `ctypes` module that loads it and defines a typed
+//! function for each export, and a stub of those functions (FFI-08, ADR-0032, ADR-0046).
+
+use std::fmt::Write as _;
+
+use typy_tyir::{CType, TyirExport, TyirLibrary, TyirModule};
+
+/// Returns the binding module of the library `module` is built as, which loads the shared
+/// library `soname` with `ctypes`, or `None` for an executable.
+#[must_use]
+pub fn python_binding(module: &TyirModule, soname: &str) -> Option<String> {
+    let library = module.library.as_ref()?;
+    Some(binding(library, soname))
+}
+
+/// Returns the stub of the binding module of the library `module` is built as, or `None` for
+/// an executable.
+#[must_use]
+pub fn python_stub(module: &TyirModule) -> Option<String> {
+    let library = module.library.as_ref()?;
+    let mut text = format!(
+        "\"\"\"The functions of the C library lib{name}, built by TyPy {version} from \
+         {name}.py, as {name}_binding calls them.\"\"\"\n\n__all__ = [{all}]\n\n",
+        name = library.name,
+        version = env!("CARGO_PKG_VERSION"),
+        all = listed(library),
+    );
+    for export in &library.exports {
+        let _ = writeln!(text, "def {}: ...", signature(export));
+    }
+    Some(text)
+}
+
+fn binding(library: &TyirLibrary, soname: &str) -> String {
+    let handle = handle_name(library);
+    let mut text = format!(
+        "\"\"\"The C library lib{name}, built by TyPy {version} from {name}.py: loads it with \
+         ctypes and calls its functions.\"\"\"\n\nimport ctypes\n\n__all__ = [{all}]\n\n\
+         {handle} = ctypes.CDLL({soname})\n",
+        name = library.name,
+        version = env!("CARGO_PKG_VERSION"),
+        all = listed(library),
+        soname = python_string(soname),
+    );
+    for export in &library.exports {
+        let argument_types: Vec<&str> = export
+            .parameters
+            .iter()
+            .map(|ty| ctypes_name(*ty))
+            .collect();
+        let result_type = export.result.map_or("None", ctypes_name);
+        let _ = writeln!(
+            text,
+            "{handle}.{name}.argtypes = [{}]\n{handle}.{name}.restype = {result_type}",
+            argument_types.join(", "),
+            name = export.name,
+        );
+    }
+    for export in &library.exports {
+        let call = format!(
+            "{handle}.{}({})",
+            export.name,
+            export.parameter_names.join(", ")
+        );
+        let body = if export.result.is_some() {
+            format!("return {call}")
+        } else {
+            call
+        };
+        let _ = write!(text, "\n\ndef {}:\n    {body}\n", signature(export));
+    }
+    text
+}
+
+/// Returns `name(parameter: type, ...) -> type` of an export, with its Python types.
+fn signature(export: &TyirExport) -> String {
+    let parameters: Vec<String> = export
+        .parameter_names
+        .iter()
+        .zip(&export.parameters)
+        .map(|(name, ty)| format!("{name}: {}", python_name(*ty)))
+        .collect();
+    let result = export.result.map_or("None", python_name);
+    format!("{}({}) -> {result}", export.name, parameters.join(", "))
+}
+
+/// Returns the names of the exports as the items of `__all__`.
+fn listed(library: &TyirLibrary) -> String {
+    let names: Vec<String> = library
+        .exports
+        .iter()
+        .map(|export| python_string(&export.name))
+        .collect();
+    names.join(", ")
+}
+
+/// Returns the name of the module variable that holds the library: `_library`, with
+/// underscores after it until no export or parameter has its name, which would hide it.
+fn handle_name(library: &TyirLibrary) -> String {
+    let taken = |name: &str| {
+        library.exports.iter().any(|export| {
+            export.name == name || export.parameter_names.iter().any(|each| each == name)
+        })
+    };
+    let mut name = "_library".to_owned();
+    while taken(&name) {
+        name.push('_');
+    }
+    name
+}
+
+const fn python_name(ty: CType) -> &'static str {
+    match ty {
+        CType::Int64 => "int",
+        CType::Double => "float",
+        CType::Bool => "bool",
+    }
+}
+
+const fn ctypes_name(ty: CType) -> &'static str {
+    match ty {
+        CType::Int64 => "ctypes.c_int64",
+        CType::Double => "ctypes.c_double",
+        CType::Bool => "ctypes.c_bool",
+    }
+}
+
+/// Returns `text` as a Python string literal in double quotes.
+fn python_string(text: &str) -> String {
+    let mut literal = String::from("\"");
+    for character in text.chars() {
+        match character {
+            '"' => literal.push_str("\\\""),
+            '\\' => literal.push_str("\\\\"),
+            control if control.is_control() => {
+                let _ = write!(literal, "\\u{:04x}", u32::from(control));
+            }
+            other => literal.push(other),
+        }
+    }
+    literal.push('"');
+    literal
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{binding, handle_name, python_string};
+    use typy_tyir::{CType, FunctionId, TyirExport, TyirLibrary};
+
+    fn export(name: &str, parameters: &[(&str, CType)], result: Option<CType>) -> TyirExport {
+        TyirExport {
+            name: name.to_owned(),
+            function: FunctionId(0),
+            parameters: parameters.iter().map(|(_, ty)| *ty).collect(),
+            parameter_names: parameters
+                .iter()
+                .map(|(name, _)| (*name).to_owned())
+                .collect(),
+            result,
+        }
+    }
+
+    fn library(exports: Vec<TyirExport>) -> TyirLibrary {
+        TyirLibrary {
+            name: "tools".to_owned(),
+            version: Some("5.0".to_owned()),
+            exports,
+        }
+    }
+
+    #[test]
+    fn the_binding_declares_each_export_and_wraps_it_in_a_typed_function() {
+        let text = binding(
+            &library(vec![
+                export(
+                    "add",
+                    &[("a", CType::Int64), ("b", CType::Int64)],
+                    Some(CType::Int64),
+                ),
+                export("reset", &[], None),
+                export("ready", &[("ratio", CType::Double)], Some(CType::Bool)),
+            ]),
+            "libtools.so.5",
+        );
+        for line in [
+            "import ctypes",
+            "__all__ = [\"add\", \"reset\", \"ready\"]",
+            "_library = ctypes.CDLL(\"libtools.so.5\")",
+            "_library.add.argtypes = [ctypes.c_int64, ctypes.c_int64]",
+            "_library.add.restype = ctypes.c_int64",
+            "_library.reset.argtypes = []",
+            "_library.reset.restype = None",
+            "_library.ready.restype = ctypes.c_bool",
+            "def add(a: int, b: int) -> int:",
+            "    return _library.add(a, b)",
+            "def reset() -> None:",
+            "    _library.reset()",
+            "def ready(ratio: float) -> bool:",
+        ] {
+            assert!(text.lines().any(|each| each == line), "{line}\n{text}");
+        }
+    }
+
+    #[test]
+    fn the_library_variable_never_takes_a_name_the_module_uses() {
+        let clashing = library(vec![
+            export("_library", &[], None),
+            export("f", &[("_library_", CType::Int64)], None),
+        ]);
+        assert_eq!(handle_name(&clashing), "_library__");
+    }
+
+    #[test]
+    fn a_string_literal_escapes_what_python_would_read_otherwise() {
+        assert_eq!(python_string("a\"b\\c\n"), "\"a\\\"b\\\\c\\u000a\"");
+        assert_eq!(python_string("libtools.so.5"), "\"libtools.so.5\"");
+    }
+}

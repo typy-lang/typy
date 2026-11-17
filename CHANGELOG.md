@@ -32,6 +32,10 @@ All notable changes to TyPy are recorded here. The format follows
   libraries: `libNAME.so.5.0` with the soname `libNAME.so.5` and links
   `libNAME.so.5` and `libNAME.so`, and `libNAME.5.0.a` with a link
   `libNAME.a` (CLI-13, ADR-0045).
+- A library build also writes `NAME_binding.py`, a module that loads the
+  library with `ctypes` by its soname and defines a typed function for
+  each export, and its stub `NAME_binding.pyi`, so a Python program
+  imports the binding and calls the library (FFI-08, ADR-0046).
 - A benchmark report, `docs/testing/benchmark-report.md`, which compares
   TyPy's programs with CPython 3.12 to 3.15, PyPy, mypyc, Cython, Nuitka,
   Codon, C, C++, Rust, Go, Java and JavaScript on twelve workloads: time,

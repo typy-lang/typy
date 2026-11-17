@@ -1,6 +1,6 @@
 //! End-to-end tests of C libraries built with `typy build --lib`: the library is built as a
 //! developer builds it, then linked into a C program, or loaded by CPython through `ctypes`,
-//! and run (CLI-09, CLI-13, FFI-05, EXC-05, ADR-0044, ADR-0045).
+//! and run (CLI-09, CLI-13, FFI-05, FFI-08, EXC-05, ADR-0044, ADR-0045, ADR-0046).
 
 use std::process::{Command, Output};
 
@@ -469,4 +469,74 @@ fn cli_13_two_versions_that_differ_stop_the_build() {
         "{error}"
     );
     assert!(!project.root.join("libtools.1.2.a").exists());
+}
+
+#[test]
+fn ffi_08_cpython_calls_a_library_through_the_binding_the_build_writes() {
+    let script = "\
+import sys
+
+sys.path.insert(0, '.')
+import tools_binding as tools
+
+print('python', tools.add(2, 3), tools.positive(-1), tools.scale(2.0, 0.25))
+tools.describe(9)
+print(tools.__all__)
+";
+    let versioned = format!("{TOOLS}__version__ = '3.2'\n");
+    let project = Project::new(&[("tools.py", &versioned), ("use_tools.py", script)]);
+    project.build(&["build", "--lib", "shared", "tools.py"]);
+    let binding = std::fs::read_to_string(project.root.join("tools_binding.py")).unwrap();
+    assert!(
+        binding.contains("_library = ctypes.CDLL(\"libtools.so.3\")"),
+        "{binding}"
+    );
+    assert!(binding.contains("def add(a: int, b: int) -> int:\n    return _library.add(a, b)\n"));
+    let stub = std::fs::read_to_string(project.root.join("tools_binding.pyi")).unwrap();
+    assert!(
+        stub.contains("def describe(number: int) -> None: ..."),
+        "{stub}"
+    );
+    let run = Command::new("python3")
+        .args(["-I", "-u", "use_tools.py"])
+        .current_dir(&project.root)
+        .env("LD_LIBRARY_PATH", &project.root)
+        .output()
+        .unwrap();
+    assert_eq!(run.status.code(), Some(0), "{}", text(&run.stderr));
+    assert_eq!(
+        text(&run.stdout),
+        "tools loaded as tools\npython 5 False 0.5\nnumber 9 calls 1 module tools\n\
+         ['add', 'scale', 'positive', 'describe', 'fail', 'leave', 'depth']\n"
+    );
+}
+
+#[test]
+fn ffi_08_the_binding_and_its_stub_are_python_every_oracle_compiles() {
+    let project = Project::new(&[("tools.py", TOOLS)]);
+    project.build(&["build", "--lib", "static", "tools.py"]);
+    let binding = std::fs::read_to_string(project.root.join("tools_binding.py")).unwrap();
+    assert!(
+        binding.contains("ctypes.CDLL(\"libtools.so\")"),
+        "{binding}"
+    );
+    for python in ["python3.12", "python3.13", "python3.14", "python3.15"] {
+        for file in ["tools_binding.py", "tools_binding.pyi"] {
+            let compiled = Command::new(python)
+                .args([
+                    "-I",
+                    "-c",
+                    "import ast, sys; ast.parse(open(sys.argv[1]).read())",
+                    file,
+                ])
+                .current_dir(&project.root)
+                .output()
+                .unwrap();
+            assert!(
+                compiled.status.success(),
+                "{python} {file}: {}",
+                text(&compiled.stderr)
+            );
+        }
+    }
 }

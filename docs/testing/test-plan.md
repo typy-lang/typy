@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy test plan |
-| Version | 0.81 |
+| Version | 0.82 |
 | Status | Draft |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-17 |
@@ -481,7 +481,7 @@ that the specification does not define.
 | FFI-03 | 0.5 | IT | `tests/conformance/ffi/FFI-03_*.py` |
 | FFI-04 | 0.5 | IT | `tests/conformance/ffi/FFI-04_*.py` |
 | FFI-05 | 0.5 | UT, IT, E2E | `crates/typy-check/tests/exports.rs` for each name `__all__` lists and each E0429; `crates/typy-tyir/tests/library.rs` for the verifier and the text form; `crates/typy-codegen/tests/codegen.rs` and `src/header.rs` for the wrappers and the header; `crates/typy-runtime/src/int/fixed.rs` for the conversions; `crates/typy-cli/tests/library.rs`, tests named for FFI-05, also comparing the refused names with what the runtime archive calls |
-| FFI-08 | 0.5 | E2E | `crates/typy-cli/tests/`, building a library and calling it through its binding from CPython and from a TyPy program |
+| FFI-08 | 0.5 | UT, E2E | `crates/typy-codegen/src/binding.rs` for the binding and the stub; `crates/typy-cli/tests/library.rs`, tests named for FFI-08: CPython calls a library through its binding, and CPython 3.12 to 3.15 parse the binding and the stub; a TyPy program calls it through the binding once `ctypes` compiles (FFI-01 to FFI-03) |
 | FFI-06 | 1.0 | IT | `tests/conformance/ffi/FFI-06_*.py` |
 | FFI-07 | 1.0 | IT | `tests/conformance/ffi/FFI-07_*.py` |
 | DIA-01 | 0.1 | UT, IT | `typy-diagnostics` unit tests; `tests/golden/diagnostics/DIA-01_*` |

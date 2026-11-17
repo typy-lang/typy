@@ -3,6 +3,7 @@
 
 mod abi;
 mod arithmetic;
+mod binding;
 mod bits;
 mod call;
 mod class;
@@ -30,6 +31,7 @@ mod tuple;
 use typy_diagnostics::{Diagnostic, DiagnosticCode, Diagnostics, RuleId, SourceLookup};
 use typy_tyir::TyirModule;
 
+pub use binding::{python_binding, python_stub};
 pub use header::c_header;
 pub use layout::{
     BIG_INT_TYPE_ID, BYTES_TYPE_ID, EXCEPTION_TYPE_ID, IMMORTAL, INLINE_MAX, INLINE_MIN,

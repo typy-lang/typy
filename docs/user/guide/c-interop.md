@@ -12,6 +12,7 @@ later in 0.5 (FFI-01 to FFI-03).
 | `typy build --lib static FILE` writes `libNAME.a`, and `--lib shared` writes `libNAME.so`, beside the file or at `-o PATH`, for the module `NAME` | CLI-09 |
 | A library with a version is named as Linux names libraries, such as `libNAME.so.5.0` with links | CLI-13 |
 | The functions the module's `__all__` lists are exported under their own names, and the build writes the C header `NAME.h` beside the library | FFI-05 |
+| The build also writes `NAME_binding.py`, a module that loads the library with `ctypes` and defines a typed function for each export, and its stub `NAME_binding.pyi` | FFI-08 |
 | `int`, `float` and `bool` are `int64_t`, `double` and `bool` in C, and a result of `None` is `void` | FFI-05 |
 | An exception never reaches C: a `SystemExit` ends the process with its status, and any other exception is printed and the process aborts | EXC-05 |
 
@@ -53,17 +54,35 @@ cc -o shapes shapes.c -L. -lgeometry -lm -Wl,--gc-sections
 ```
 
 `--gc-sections` leaves out the parts of the runtime that no export
-reaches. `typy build --lib shared geometry.py` writes `libgeometry.so`,
-which CPython loads with `ctypes`:
+reaches.
+
+## Calling a library from Python
+
+`typy build --lib shared geometry.py` writes `libgeometry.so`, and beside
+it `geometry_binding.py`, a module that loads the library with `ctypes`
+and defines a function of the same name and types for each export, and
+its stub `geometry_binding.pyi`, which type checkers read. A Python
+program imports the binding:
 
 ```text
->>> import ctypes
->>> geometry = ctypes.CDLL("./libgeometry.so")
->>> geometry.area.argtypes = [ctypes.c_double, ctypes.c_double]
->>> geometry.area.restype = ctypes.c_double
+>>> import geometry_binding as geometry
 >>> geometry.area(2.0, 3.5)
 7.0
+>>> geometry.is_square(3, 3)
+True
 ```
+
+The binding loads the library by its soname, as a program loads any C
+library, so the dynamic loader finds it where the library is installed,
+or in a directory `LD_LIBRARY_PATH` names:
+
+```sh
+LD_LIBRARY_PATH=$PWD python3 shapes.py
+```
+
+A library built with `--lib static` gets the same binding, which loads
+the shared library of the same release, since CPython loads only shared
+libraries.
 
 ## Naming a library by its version
 
@@ -113,10 +132,9 @@ diagnostics without writing a library.
 
 ## Planned
 
-`ctypes` is refused until later in 0.5, together with the `.pyi` stub and
-the `ctypes` module a library build will write, so CPython and TyPy
-programs call a library with the same source (FFI-01 to FFI-03, FFI-08,
-ADR-0032):
+`ctypes` is refused until later in 0.5, when a TyPy program will also
+import a library's binding and call it with the same source as CPython
+(FFI-01 to FFI-03, FFI-08, ADR-0032):
 
 <!-- typy-expect: rejected E0201 at 1:1 -->
 ```python

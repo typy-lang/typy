@@ -1,7 +1,9 @@
 //! Runs the stages of one build in order and stops after the stage `--emit` names.
 
 use camino::{Utf8Path, Utf8PathBuf};
-use typy_build::{Artifact, BuildRequest, EmitStage, LibraryLayout, Linker, RuntimeArchive};
+use typy_build::{
+    Artifact, BuildRequest, EmitStage, LibraryKind, LibraryLayout, Linker, RuntimeArchive,
+};
 use typy_check::{TypeChecker, TypedProgram};
 use typy_codegen::{assembly, llvm_ir, object};
 use typy_diagnostics::Diagnostics;
@@ -173,6 +175,20 @@ impl Pipeline {
                     .link_library(&object, &layout, kind, &exports)
                     .map_err(failed)?;
                 write_header(&module, &layout.path, &library.name).map_err(failed)?;
+                // CPython loads the shared library of the build's release, also for a static
+                // build, whose binding serves CPython and TyPy alike (ADR-0046).
+                let soname = match (kind, &layout.soname) {
+                    (LibraryKind::Shared, Some(soname)) => soname.clone(),
+                    _ => LibraryLayout::beside(
+                        Utf8Path::new(""),
+                        LibraryKind::Shared,
+                        &library.name,
+                        library.version.as_deref(),
+                    )
+                    .soname
+                    .unwrap_or_default(),
+                };
+                write_binding(&module, &layout.path, &library.name, &soname).map_err(failed)?;
                 artifact
             }
             _ => linker
@@ -258,15 +274,46 @@ fn write_header(module: &TyirModule, output: &Utf8Path, name: &str) -> Result<()
         return Ok(());
     };
     let path = output.with_file_name(format!("{name}.h"));
-    std::fs::write(&path, text).map_err(|error| {
-        Diagnostics::from(
-            typy_diagnostics::Diagnostic::without_location(
-                typy_diagnostics::DiagnosticCode::error(106),
-                format!("cannot write the C header {path}: {error}"),
-            )
-            .with_help("check that the directory exists and is writable"),
+    std::fs::write(&path, text).map_err(|error| cannot_write(&path, &error))
+}
+
+/// Writes the binding module `NAME_binding.py`, which loads the shared library `soname`, and
+/// its stub `NAME_binding.pyi`, beside the library `output` (FFI-08, ADR-0046).
+fn write_binding(
+    module: &TyirModule,
+    output: &Utf8Path,
+    name: &str,
+    soname: &str,
+) -> Result<(), Diagnostics> {
+    let files = [
+        (
+            format!("{name}_binding.py"),
+            typy_codegen::python_binding(module, soname),
+        ),
+        (
+            format!("{name}_binding.pyi"),
+            typy_codegen::python_stub(module),
+        ),
+    ];
+    for (file_name, text) in files {
+        let Some(text) = text else {
+            continue;
+        };
+        let path = output.with_file_name(file_name);
+        std::fs::write(&path, text).map_err(|error| cannot_write(&path, &error))?;
+    }
+    Ok(())
+}
+
+/// Returns the E0106 of a file the build writes beside the library.
+fn cannot_write(path: &Utf8Path, error: &std::io::Error) -> Diagnostics {
+    Diagnostics::from(
+        typy_diagnostics::Diagnostic::without_location(
+            typy_diagnostics::DiagnosticCode::error(106),
+            format!("cannot write {path}: {error}"),
         )
-    })
+        .with_help("check that the directory exists and is writable"),
+    )
 }
 
 /// Returns the linker of the request's target, with the libraries the project names.
