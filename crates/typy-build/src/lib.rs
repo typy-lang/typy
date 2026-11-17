@@ -5,6 +5,7 @@
 mod artifact;
 mod emit_stage;
 mod library_kind;
+mod library_layout;
 mod library_link;
 mod linker;
 mod mode;
@@ -15,6 +16,7 @@ mod tool;
 pub use artifact::{Artifact, ArtifactKind};
 pub use emit_stage::EmitStage;
 pub use library_kind::LibraryKind;
+pub use library_layout::LibraryLayout;
 pub use linker::Linker;
 pub use mode::BuildMode;
 pub use request::{BuildRequest, RequestError};

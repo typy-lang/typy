@@ -72,9 +72,9 @@ directory exists and can be written, or give another path with `-o`.
 The project's `typy.toml` cannot be used: it is not valid TOML, it has a
 setting TyPy does not know, a value has the wrong type, such as
 `python-floor = 3.15` where the string `"3.15"` is meant, a module path
-is not a directory under the project root, or the `[allocator]` table
-leaves out one of its three functions or names one that is not a C
-function (CLI-07, CLI-12, MEM-08). The diagnostic
+is not a directory under the project root, `version` does not start with
+a number, or the `[allocator]` table leaves out one of its three functions
+or names one that is not a C function (CLI-07, CLI-12, CLI-13, MEM-08). The diagnostic
 points at the line. TyPy exits with status 2 before it reads any module.
 Correct the line; the settings are listed in the
 [command line](guide/command-line.md) page.
@@ -1261,7 +1261,9 @@ lists, each as a C function (FFI-05). This error names what cannot be one:
   such as `read`, `free`, `sqrt` or `main`, or one of the project's
   allocator functions;
 - the file's name is not an ASCII identifier, which the library and its
-  header are named after (CLI-09).
+  header are named after (CLI-09);
+- `__version__` is not one string literal that starts with a number, or
+  differs from `version` in `typy.toml` (CLI-13).
 
 Rename the function, or export one of C types that calls it. This module
 is a correct program, but built with `--lib` it gives E0429 for `label`,

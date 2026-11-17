@@ -15,7 +15,7 @@ use crate::source_file::SourceFile;
 pub const SETTINGS_FILE: &str = "typy.toml";
 
 /// The keys `typy.toml` may hold.
-const KEYS: [&str; 3] = ["python-floor", "module-paths", "allocator"];
+const KEYS: [&str; 4] = ["python-floor", "module-paths", "allocator", "version"];
 
 /// The settings flags on the command line give, which win over `typy.toml` (CLI-07).
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -84,6 +84,7 @@ impl ProjectSettings {
                 "allocator" => allocator::allocator(item).map(|allocator| {
                     self.allocator = Some(allocator);
                 }),
+                "version" => self.version(item),
                 _ => Err(Problem {
                     range: document
                         .as_table()
@@ -121,6 +122,26 @@ impl ProjectSettings {
             }
         })?;
         self.python_floor = floor;
+        Ok(())
+    }
+
+    /// Reads `version`, a string that starts with a release such as `5.0` (CLI-13).
+    fn version(&mut self, item: &Item) -> Result<(), Problem> {
+        let text = item
+            .as_str()
+            .filter(|text| crate::version_release(text).is_some());
+        let Some(text) = text else {
+            return Err(Problem {
+                range: item.span().unwrap_or(0..0),
+                message: format!(
+                    "`version` is {}, not a string that starts with a release such as `5.0`",
+                    shown(item)
+                ),
+                help: Some("write it as a string, such as `version = \"5.0\"`".to_owned()),
+                rule: RuleId::CLI_13,
+            });
+        };
+        self.version = Some(text.to_owned());
         Ok(())
     }
 
@@ -317,6 +338,36 @@ mod tests {
                 .message()
                 .to_owned();
             assert!(found.contains(message), "{text}: {found}");
+        }
+    }
+
+    #[test]
+    fn version_names_a_librarys_release() {
+        let (_guard, project) = root(Some("version = \"5.0rc1\"\n"));
+        let settings = ProjectSettings::read(&project, SettingOverrides::default()).unwrap();
+        assert_eq!(settings.version.as_deref(), Some("5.0rc1"));
+        for (text, message) in [
+            (
+                "version = 5.0\n",
+                "`version` is a float, not a string that starts with a release",
+            ),
+            (
+                "version = \"latest\"\n",
+                "`version` is the string \"latest\", not a string",
+            ),
+        ] {
+            let (_wrong_guard, wrong) = root(Some(text));
+            let failure = ProjectSettings::read(&wrong, SettingOverrides::default()).unwrap_err();
+            let diagnostic = failure.diagnostics.iter().next().unwrap();
+            assert!(
+                diagnostic.message().starts_with(message),
+                "{}",
+                diagnostic.message()
+            );
+            assert_eq!(
+                diagnostic.rule().map(typy_diagnostics::RuleId::as_str),
+                Some("CLI-13")
+            );
         }
     }
 

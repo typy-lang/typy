@@ -27,6 +27,11 @@ All notable changes to TyPy are recorded here. The format follows
   with its status, any other with its report and an abort. E0429 names a
   module or an export a library cannot have; `typy check --lib` reports it
   too (CLI-09, FFI-05, EXC-05, ADR-0044).
+- A library's files carry the release of its version, from the module's
+  `__version__` or else `version` in `typy.toml`, as Linux names
+  libraries: `libNAME.so.5.0` with the soname `libNAME.so.5` and links
+  `libNAME.so.5` and `libNAME.so`, and `libNAME.5.0.a` with a link
+  `libNAME.a` (CLI-13, ADR-0045).
 - A benchmark report, `docs/testing/benchmark-report.md`, which compares
   TyPy's programs with CPython 3.12 to 3.15, PyPy, mypyc, Cython, Nuitka,
   Codon, C, C++, Rust, Go, Java and JavaScript on twelve workloads: time,

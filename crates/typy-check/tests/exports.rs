@@ -1,6 +1,7 @@
 //! Tests of the functions a library exports, through the public API: the names `__all__`
 //! lists, each a function with C types, and E0429 for each that cannot be one (FFI-05,
-//! ADR-0032, ADR-0044).
+//! ADR-0032, ADR-0044); and the release of its version that names its files (CLI-13,
+//! ADR-0045).
 
 use camino::Utf8PathBuf;
 use typy_check::{Export, TypeChecker, TypedProgram};
@@ -250,4 +251,98 @@ fn a_library_module_is_named_after_its_file() {
         .find(|module| module.body == program.entry)
         .unwrap();
     assert_eq!(module.name, "tools");
+}
+
+/// Checks `source` as a library whose `typy.toml` holds `settings`.
+fn library_with_settings(source: &str, settings: &str) -> Result<TypedProgram, Diagnostics> {
+    let root = fresh_root();
+    std::fs::write(root.join("tools.py"), source).unwrap();
+    std::fs::write(root.join("typy.toml"), settings).unwrap();
+    let overrides = typy_source::SettingOverrides {
+        library: true,
+        ..typy_source::SettingOverrides::default()
+    };
+    let project = Project::load(
+        &root.join("tools.py"),
+        ProjectSettings::read(&root, overrides).unwrap(),
+    )
+    .unwrap();
+    let checked = TypeChecker::check(&project);
+    let _ = std::fs::remove_dir_all(&root);
+    checked
+}
+
+#[test]
+fn the_release_of_version_names_the_library() {
+    for (version, release) in [
+        ("5.0", "5.0"),
+        ("5.0rc1", "5.0"),
+        ("v2", "2"),
+        ("2024.11.1", "2024.11.1"),
+    ] {
+        let source = format!("{FUNCTIONS}\n__all__ = ['area']\n__version__ = '{version}'\n");
+        let program = library(&source).unwrap();
+        assert_eq!(
+            program.library_version.as_deref(),
+            Some(release),
+            "{version}"
+        );
+    }
+    let unversioned = library(&format!("{FUNCTIONS}\n__all__ = ['area']\n")).unwrap();
+    assert_eq!(unversioned.library_version, None);
+}
+
+#[test]
+fn typy_toml_versions_a_module_without_a_version() {
+    let source = format!("{FUNCTIONS}\n__all__ = ['area']\n");
+    let program = library_with_settings(&source, "version = \"3.1.4\"\n").unwrap();
+    assert_eq!(program.library_version.as_deref(), Some("3.1.4"));
+    let same = format!("{source}__version__ = '3.1.4'\n");
+    let program = library_with_settings(&same, "version = \"3.1.4\"\n").unwrap();
+    assert_eq!(program.library_version.as_deref(), Some("3.1.4"));
+}
+
+#[test]
+fn a_version_that_cannot_name_the_library_is_e0429() {
+    let base = format!("{FUNCTIONS}\n__all__ = ['area']\n");
+    for (version, message) in [
+        (
+            "__version__ = 'latest'\n",
+            "`__version__` is \"latest\", which does not start with a release",
+        ),
+        (
+            "VERSION = '1'\n__version__ = VERSION\n",
+            "a library's `__version__` is a string literal",
+        ),
+        (
+            "__version__ = '1.0'\n__version__ = '1.1'\n",
+            "binds `__version__` once",
+        ),
+    ] {
+        let found = refusals(&format!("{base}{version}"));
+        assert!(
+            found
+                .iter()
+                .any(|each| each.starts_with("E0429 CLI-13 ") && each.contains(message)),
+            "{version}: {found:?}"
+        );
+    }
+    let differs = library_with_settings(
+        &format!("{base}__version__ = '5.0'\n"),
+        "version = \"5.1\"\n",
+    )
+    .unwrap_err();
+    let message = differs.iter().next().unwrap().message().to_owned();
+    assert_eq!(
+        message,
+        "`__version__` is \"5.0\" and `version` in typy.toml is \"5.1\"; a library has one version"
+    );
+}
+
+#[test]
+fn an_export_and_a_version_that_are_wrong_are_both_reported() {
+    let found = refusals(&format!(
+        "{FUNCTIONS}\n__all__ = ['label']\n__version__ = 'x'\n"
+    ));
+    assert_eq!(found.len(), 2, "{found:?}");
 }

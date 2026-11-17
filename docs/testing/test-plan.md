@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy test plan |
-| Version | 0.80 |
+| Version | 0.81 |
 | Status | Draft |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-17 |
@@ -261,6 +261,7 @@ that the specification does not define.
 | CLI-07 | 0.3 | E2E | `crates/typy-cli/tests/cli.rs`, tests named for CLI-07 |
 | CLI-08 | 0.6 | E2E | `crates/typy-cli/tests/cli.rs`, tests named for CLI-08 |
 | CLI-09 | 0.5 | UT, E2E | `crates/typy-build/src/request.rs` and `library_kind.rs` for the output's name; `crates/typy-cli/tests/library.rs`, tests named for CLI-09: a static library in a C program, its only global symbols, a shared library from CPython through `ctypes`, two libraries in one program with a call from another thread, and a file name that is not a module name |
+| CLI-13 | 0.5 | UT, E2E | `crates/typy-source/src/version.rs` for the release of a version; `crates/typy-source/src/settings_file.rs` for `version`; `crates/typy-check/tests/exports.rs` for `__version__` and E0429; `crates/typy-build/src/library_layout.rs` for each layout; `crates/typy-cli/tests/library.rs`, tests named for CLI-13: a shared library's soname and links, a new release that moves them, a static library's link, `-o`, and two versions that differ |
 | CLI-10 | 0.3 | E2E | `crates/typy-cli/tests/cli.rs`, tests named for CLI-10 |
 | CLI-11 | 0.1 | E2E | `crates/typy-cli/tests/cli.rs`, tests named for CLI-11 |
 | CLI-12 | 0.3 | E2E | `crates/typy-cli/tests/cli.rs`, tests named for CLI-12 |

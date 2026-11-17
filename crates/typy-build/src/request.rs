@@ -126,20 +126,13 @@ impl BuildRequest {
         self.output.as_deref()
     }
 
-    /// Returns where the executable or the library goes: the output path, or beside the main
-    /// file, the main file without `.py` for an executable and `libNAME.a` or `libNAME.so`
-    /// for a library of the module `NAME`.
+    /// Returns where the executable goes: the output path, or the main file without `.py`.
+    /// A library's files are named by `LibraryLayout`, after its module's version.
     #[must_use]
     pub fn output_path(&self) -> Utf8PathBuf {
-        if let Some(output) = &self.output {
-            return output.clone();
-        }
-        match self.library {
-            Some(kind) => self
-                .main
-                .with_file_name(kind.file_name(self.main.file_stem().unwrap_or_default())),
-            None => self.main.with_extension(""),
-        }
+        self.output
+            .clone()
+            .unwrap_or_else(|| self.main.with_extension(""))
     }
 }
 
@@ -177,17 +170,11 @@ mod tests {
     }
 
     #[test]
-    fn a_library_goes_beside_its_main_file_unless_an_output_is_given() {
+    fn a_request_may_ask_for_a_library() {
         let request = BuildRequest::new("src/tools.py").unwrap();
         assert_eq!(request.library(), None);
         let request = request.with_library(LibraryKind::Static);
         assert_eq!(request.library(), Some(LibraryKind::Static));
-        assert_eq!(request.output_path(), "src/libtools.a");
-        let shared = BuildRequest::new("tools.py")
-            .unwrap()
-            .with_library(LibraryKind::Shared);
-        assert_eq!(shared.output_path(), "libtools.so");
-        assert_eq!(shared.with_output("out/t.so").output_path(), "out/t.so");
     }
 
     #[test]

@@ -55,6 +55,8 @@ pub struct TyirExport {
 pub struct TyirLibrary {
     /// The library's name, which its module and its C header have.
     pub name: String,
+    /// The release its file names carry, such as `5.0`, or `None` (CLI-13).
+    pub version: Option<String>,
     /// The functions it exports, in the order `__all__` lists them.
     pub exports: Vec<TyirExport>,
 }

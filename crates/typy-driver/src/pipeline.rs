@@ -1,7 +1,7 @@
 //! Runs the stages of one build in order and stops after the stage `--emit` names.
 
 use camino::{Utf8Path, Utf8PathBuf};
-use typy_build::{Artifact, BuildRequest, EmitStage, Linker, RuntimeArchive};
+use typy_build::{Artifact, BuildRequest, EmitStage, LibraryLayout, Linker, RuntimeArchive};
 use typy_check::{TypeChecker, TypedProgram};
 use typy_codegen::{assembly, llvm_ir, object};
 use typy_diagnostics::Diagnostics;
@@ -153,21 +153,31 @@ impl Pipeline {
             &project,
         )
         .map_err(failed)?;
-        let output = request.output_path();
         let artifact = match (request.library(), &module.library) {
             (Some(kind), Some(library)) => {
+                let layout = match request.output() {
+                    Some(path) => LibraryLayout::at(path, kind),
+                    None => LibraryLayout::beside(
+                        request.main().parent().unwrap_or(Utf8Path::new("")),
+                        kind,
+                        &library.name,
+                        library.version.as_deref(),
+                    ),
+                };
                 let exports: Vec<String> = library
                     .exports
                     .iter()
                     .map(|export| export.name.clone())
                     .collect();
                 let artifact = linker
-                    .link_library(&object, &output, kind, &exports)
+                    .link_library(&object, &layout, kind, &exports)
                     .map_err(failed)?;
-                write_header(&module, &output, &library.name).map_err(failed)?;
+                write_header(&module, &layout.path, &library.name).map_err(failed)?;
                 artifact
             }
-            _ => linker.link(&object, &output).map_err(failed)?,
+            _ => linker
+                .link(&object, &request.output_path())
+                .map_err(failed)?,
         };
         Ok((artifact, warnings))
     }

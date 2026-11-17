@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy detailed design |
-| Version | 2.15 |
+| Version | 2.16 |
 | Status | Approved |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-17 |
@@ -341,6 +341,7 @@ it enforces and its status. `typy explain` reads the same table.
 | `python_floor` | `PythonFloor` | `PythonFloor::V3_12` | One of 3.12 to 3.15; the parser's target version and the lowest oracle version (ADR-0008). Read from `python-floor` in `typy.toml` (CLI-12) |
 | `module_paths` | `Vec<Utf8PathBuf>` | empty | Directories relative to `root`, each made only of normal components and existing; the loader looks for a module in `root`, then in each, in order (MOD-01) |
 | `library` | `bool` | `false` | Set by `--lib` through `SettingOverrides::library`: the main file is a module named after its file, and the checker reads its exports from `__all__` (CLI-09, ADR-0044) |
+| `version` | `Option<String>` | `None` | `version` in `typy.toml`, a string whose release `version_release` finds; the version of a library whose module has no `__version__` (CLI-13) |
 | `allocator` | `Option<Allocator>` | `None` | The table `[allocator]`: the C functions `allocate`, `reallocate` and `free`, each an identifier of at most 255 characters outside the prefixes `typy_`, `__typy` and `_TY`, all three different, and an optional `library`, a name the linker takes as `-lname` that starts with a letter, a digit or `_` (MEM-08, ADR-0043) |
 
 `ProjectSettings::read(root, overrides)` builds the settings once, when a
@@ -1984,6 +1985,15 @@ FFI-05:
 
 An executable has no exports, and `exports` is `None`.
 
+`library_version::library_version` gives `TypedProgram::library_version`,
+the release its files carry (CLI-13, ADR-0045): of `__version__` when the
+module binds it once to a string literal, else of
+`ProjectSettings::version`, else `None`. `typy_source::version_release`
+finds the release, the numbers and dots a version starts with after an
+optional `v`. A `__version__` bound otherwise, one without a release, and
+one that differs from `version` are E0429 under CLI-13, reported with the
+problems of the exports.
+
 ## 8. typy-tyir
 
 ### 8.1 Types
@@ -2151,7 +2161,8 @@ many blocks verifies in time and memory in proportion to them
 `--emit=tyir-mem`, and `print_without_counting(module)` the same text without
 its `inc` and `dec` instructions, for `--emit=tyir`. An instance held in the
 frame ends its line with `in frame`, as in `v6 = new class#0 in frame`. A
-library adds a line `library NAME` after the entry, and a line
+library adds a line `library NAME`, or `library NAME version X.Y`, after
+the entry, and a line
 `export add(int64_t, int64_t) -> int64_t = fn3` for each export:
 
 ```text
@@ -2390,11 +2401,11 @@ code.
 
 ### 10.6 Library objects
 
-`TyirModule::library` holds the `TyirLibrary` of a library build: its name
-and a `TyirExport` for each export, with its function, the `CType` of each
-parameter and of the result (`Int64`, `Double` or `Bool`, and `None` for
-`void`), and the parameters' Python names. `LibraryEmitter` adds to the
-object (ADR-0044):
+`TyirModule::library` holds the `TyirLibrary` of a library build: its name,
+the release of its version, and a `TyirExport` for each export, with its
+function, the `CType` of each parameter and of the result (`Int64`,
+`Double` or `Bool`, and `None` for `void`), and the parameters' Python
+names. `LibraryEmitter` adds to the object (ADR-0044):
 
 | Item | Form |
 | --- | --- |
@@ -2424,7 +2435,7 @@ as `default_`, and `argumentN` for one that is not ASCII.
 | `mode` | `BuildMode` | `Debug` | `--release` and `--release-small` are exclusive |
 | `target` | `Target` | `Target::host()` | Supported (section 10.1) |
 | `emit` | `Option<EmitStage>` | `None` | When set, no executable is written |
-| `output` | `Option<Utf8PathBuf>` | `None` | `output_path()` defaults it, next to the main file, to the main file without `.py`, or for a library to `LibraryKind::file_name`, `libNAME.a` or `libNAME.so` |
+| `output` | `Option<Utf8PathBuf>` | `None` | `output_path()` defaults an executable's to the main file without `.py`, next to it; a library's files are named by `LibraryLayout` |
 | `library` | `Option<LibraryKind>` | `None` | `Static` or `Shared` builds a C library instead of an executable (CLI-09) |
 
 Each field has a `with_` method that returns the changed request.
@@ -2451,14 +2462,21 @@ as a subprocess with an argument list and no shell:
 
 `Linker::with_libraries(libraries)` adds `-lLIBRARY` for each library after
 the runtime archive; the driver passes the allocator's library (MEM-08).
-`Linker::link_library(object, output, kind, exports)` builds a library in
-a temporary directory beside the output and renames it into place when
-every step succeeded (ADR-0044):
+`LibraryLayout::beside(directory, kind, name, release)` names a library's
+files as ADR-0045 decides: `libNAME.so.X.Y` with the soname `libNAME.so.X`
+and links of that name and `libNAME.so`, or `libNAME.X.Y.a` with a link
+`libNAME.a`, and without a release `libNAME.so`, whose soname is its name,
+or `libNAME.a`. `LibraryLayout::at(path, kind)` is the layout of `-o
+PATH`: the file alone, a shared library's soname its file name.
+`Linker::link_library(object, layout, kind, exports)` builds the library in
+a temporary directory beside it, renames it into place when every step
+succeeded, then makes each link in the temporary directory and renames it
+over the name it replaces (ADR-0044):
 
 | Kind | Steps |
 | --- | --- |
 | `Static` | `cc -r -nostdlib -o library.o program.o RUNTIME_ARCHIVE`; `objcopy --keep-global-symbols=exports.txt library.o`, with `--strip-debug` for a release; `ar rcsD library.a library.o`, whose `D` writes no times or owners |
-| `Shared` | `cc -shared -o library.so` with the arguments an executable's link has after its output, and `-Wl,--version-script=exports.map`, which makes the exports global and every other symbol local |
+| `Shared` | `cc -shared -o library.so -Wl,-soname,SONAME` with the arguments an executable's link has after its output, and `-Wl,--version-script=exports.map`, which makes the exports global and every other symbol local |
 
 `tool::run_tool` runs each program, with E0701 when it is missing and
 E0702 when it fails, as for an executable.
@@ -2500,7 +2518,7 @@ process. Each method returns a `Success`, the `Outcome` with the
 | `check(main)` | Loads and checks the program, and returns `Outcome::Checked` with its `Sources` (CLI-03) |
 | `run(request)` with `emit` set | Runs the stages up to that stage and returns `Outcome::Emitted` with an `Emission`: `Text` for every stage but `obj`, `Bytes` for `obj` (CLI-04). `ast` needs only a program that parses; every later stage needs one that checks |
 | `run(request)` without `emit` | Opens the runtime archive, then loads, checks, lowers, generates the object and links it, and returns `Outcome::Executable` with the `Artifact` |
-| `run(request)` with `library` set | Loads the main file as a library, so its module is named after its file, then links with `link_library` and writes the C header `NAME.h` beside the library (CLI-09, FFI-05) |
+| `run(request)` with `library` set | Loads the main file as a library, so its module is named after its file, then links with `link_library` into the layout of `-o`, or `LibraryLayout::beside` the main file with the module's name and release, and writes the C header `NAME.h` beside the library (CLI-09, CLI-13, FFI-05) |
 
 The root of the project is the main file's directory. A `Failure` holds
 the `Diagnostics` and the `Sources` they are rendered against:

@@ -150,7 +150,7 @@ fn the_help_names_what_the_table_takes() {
     let (_, _, help) = read("other = 1\n").unwrap_err();
     assert_eq!(
         help.as_deref(),
-        Some("the settings are python-floor, module-paths and allocator")
+        Some("the settings are python-floor, module-paths, allocator and version")
     );
 }
 

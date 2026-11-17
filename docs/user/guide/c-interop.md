@@ -10,6 +10,7 @@ later in 0.5 (FFI-01 to FFI-03).
 | Item | Rule |
 | --- | --- |
 | `typy build --lib static FILE` writes `libNAME.a`, and `--lib shared` writes `libNAME.so`, beside the file or at `-o PATH`, for the module `NAME` | CLI-09 |
+| A library with a version is named as Linux names libraries, such as `libNAME.so.5.0` with links | CLI-13 |
 | The functions the module's `__all__` lists are exported under their own names, and the build writes the C header `NAME.h` beside the library | FFI-05 |
 | `int`, `float` and `bool` are `int64_t`, `double` and `bool` in C, and a result of `None` is `void` | FFI-05 |
 | An exception never reaches C: a `SystemExit` ends the process with its status, and any other exception is printed and the process aborts | EXC-05 |
@@ -63,6 +64,25 @@ which CPython loads with `ctypes`:
 >>> geometry.area(2.0, 3.5)
 7.0
 ```
+
+## Naming a library by its version
+
+A library's files carry the release of its version: the module's
+`__version__`, or else `version` in `typy.toml`, for a module that has
+none. The release is the numbers the version starts with, so
+`__version__ = "5.0rc1"` names the files after `5.0`:
+
+| Kind | Library | Links | Soname |
+| --- | --- | --- | --- |
+| `--lib shared` | `libgeometry.so.5.0` | `libgeometry.so.5` and `libgeometry.so` | `libgeometry.so.5` |
+| `--lib static` | `libgeometry.5.0.a` | `libgeometry.a` | none |
+
+`-lgeometry` finds the library through its link, and a program linked
+with a shared library loads it by its soname, so it keeps working when
+release 5.1 replaces 5.0. Without a version, the files are
+`libgeometry.so` and `libgeometry.a`. With `-o PATH`, the library is
+written at that path alone. A `__version__` that does not start with a
+number, or that differs from `version` in `typy.toml`, is E0429.
 
 ## How a library runs
 

@@ -81,7 +81,7 @@ pub const RUNTIME_C_FUNCTIONS: [&str; 55] = [
 /// The prefix of the runtime's symbols.
 const RUNTIME_PREFIX: &str = "typy_";
 
-fn refused(span: Span, message: String, help: &str) -> Box<Diagnostic> {
+pub(crate) fn refused(span: Span, message: String, help: &str) -> Box<Diagnostic> {
     Box::new(
         Diagnostic::new(DiagnosticCode::error(429), span, message)
             .with_rule(RuleId::FFI_05)
@@ -141,28 +141,7 @@ pub(crate) fn exports(
 /// Returns the names `__all__` lists, each with the span of its string, from the one
 /// statement at module level that binds it to a list or tuple of string literals.
 fn listed_names(module: &Module) -> Result<Vec<(String, Span)>, Box<Diagnostic>> {
-    let mut bindings = module
-        .syntax
-        .body
-        .iter()
-        .filter_map(|statement| match statement {
-            Stmt::Assign {
-                targets,
-                value,
-                span,
-            } => targets
-                .iter()
-                .any(names_all)
-                .then_some((Some(value), *span)),
-            Stmt::AnnAssign {
-                target,
-                value,
-                span,
-                ..
-            } if names_all(target) => Some((value.as_ref(), *span)),
-            Stmt::AugAssign { target, span, .. } if names_all(target) => Some((None, *span)),
-            _ => None,
-        });
+    let mut bindings = module_bindings(module, "__all__").into_iter();
     let Some((value, span)) = bindings.next() else {
         return Err(refused(
             Span::empty(module.file, TextOffset(0)),
@@ -202,8 +181,33 @@ fn listed_names(module: &Module) -> Result<Vec<(String, Span)>, Box<Diagnostic>>
         .collect()
 }
 
-fn names_all(target: &Expr) -> bool {
-    matches!(target, Expr::Name { id, .. } if id == "__all__")
+/// Returns each statement at module level that binds `name`: the value of an assignment,
+/// none for an annotation without a value or an augmented assignment, and its span.
+pub(crate) fn module_bindings<'module>(
+    module: &'module Module,
+    name: &str,
+) -> Vec<(Option<&'module Expr>, Span)> {
+    let names = |target: &Expr| matches!(target, Expr::Name { id, .. } if id == name);
+    module
+        .syntax
+        .body
+        .iter()
+        .filter_map(|statement| match statement {
+            Stmt::Assign {
+                targets,
+                value,
+                span,
+            } => targets.iter().any(names).then_some((Some(value), *span)),
+            Stmt::AnnAssign {
+                target,
+                value,
+                span,
+                ..
+            } if names(target) => Some((value.as_ref(), *span)),
+            Stmt::AugAssign { target, span, .. } if names(target) => Some((None, *span)),
+            _ => None,
+        })
+        .collect()
 }
 
 /// Checks that an export's name can be a C symbol of its own: ASCII, and none of the names

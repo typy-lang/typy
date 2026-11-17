@@ -139,6 +139,7 @@ fn library(program: &TypedProgram, exports: &[typy_check::Export]) -> TyirLibrar
         .unwrap_or_default();
     TyirLibrary {
         name,
+        version: program.library_version.clone(),
         exports: exports
             .iter()
             .map(|export| {

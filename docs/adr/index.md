@@ -50,3 +50,4 @@ supersedes it.
 | [ADR-0042](0042-allocate-an-instance-that-does-not-escape-in-its-functions-frame.md) | Allocate an instance that does not escape in its function's frame | Accepted | 2026-11-17 |
 | [ADR-0043](0043-name-the-allocator-in-typy-toml-and-call-it-through-program-hooks.md) | Name the allocator in typy.toml and call it through program hooks | Accepted | 2026-11-17 |
 | [ADR-0044](0044-run-a-librarys-module-when-it-loads-and-guard-each-export.md) | Run a library's module when it loads and guard each export | Accepted | 2026-11-17 |
+| [ADR-0045](0045-name-a-librarys-files-by-its-release-as-linux-names-libraries.md) | Name a library's files by its release as Linux names libraries | Accepted | 2026-11-17 |

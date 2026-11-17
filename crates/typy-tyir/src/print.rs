@@ -36,7 +36,14 @@ fn print_with(module: &TyirModule, counting: bool) -> String {
     }
     let _ = writeln!(text, "entry fn{}", module.entry.0);
     if let Some(library) = &module.library {
-        let _ = writeln!(text, "library {}", library.name);
+        match &library.version {
+            Some(version) => {
+                let _ = writeln!(text, "library {} version {version}", library.name);
+            }
+            None => {
+                let _ = writeln!(text, "library {}", library.name);
+            }
+        }
         for export in &library.exports {
             let parameters: Vec<&str> = export
                 .parameters

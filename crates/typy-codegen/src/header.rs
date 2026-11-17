@@ -145,6 +145,7 @@ mod tests {
     fn the_header_declares_each_export_for_c_and_cpp() {
         let library = TyirLibrary {
             name: "geometry".to_owned(),
+            version: None,
             exports: vec![
                 export(
                     "area",

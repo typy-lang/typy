@@ -99,6 +99,9 @@ pub struct ProjectSettings {
     /// The main file is built as a C library: its module is named after its file, and its
     /// `__all__` names the functions it exports (CLI-09, FFI-05, ADR-0044).
     pub library: bool,
+    /// The version of a library whose module has no `__version__`, which its file names
+    /// carry (CLI-13).
+    pub version: Option<String>,
 }
 
 impl ProjectSettings {
@@ -112,6 +115,7 @@ impl ProjectSettings {
             module_paths: Vec::new(),
             allocator: None,
             library: false,
+            version: None,
         }
     }
 }

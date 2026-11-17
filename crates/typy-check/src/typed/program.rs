@@ -46,6 +46,9 @@ pub struct TypedProgram {
     /// The functions a library exports, or `None` when the program is an executable
     /// (FFI-05).
     pub exports: Option<Vec<crate::exports::Export>>,
+    /// The release a library's file names carry, such as `5.0`, or `None` when it has no
+    /// version (CLI-13).
+    pub library_version: Option<String>,
     /// The warnings of checking the program, such as W0301 (DIA-08).
     pub warnings: typy_diagnostics::Diagnostics,
 }

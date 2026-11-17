@@ -34,6 +34,7 @@ defaults apply.
 | --- | --- | --- | --- |
 | `python-floor` | The oldest CPython version the program supports: `"3.12"`, `"3.13"`, `"3.14"` or `"3.15"`, written as a string | `"3.12"` | CLI-12 |
 | `module-paths` | Directories under the project root, named relative to it, where imports look for modules after the main file's directory, in order, as CPython looks in `PYTHONPATH` | `[]` | MOD-01 |
+| `version` | The version of a library whose module has no `__version__`, such as `"5.0"`, whose release names its files; see [C interoperability](c-interop.md#naming-a-library-by-its-version) | none | CLI-13 |
 | `[allocator]` | The C functions the program allocates its memory with, and their library; see [Memory](memory.md#choosing-the-allocator) | `malloc`, `realloc` and `free` | MEM-08 |
 
 The floor decides which syntax the program may use and which CPython

@@ -292,6 +292,7 @@ fn a_library_runs_its_module_when_it_loads_and_wraps_each_export() {
         .id;
     module.library = Some(typy_tyir::TyirLibrary {
         name: "app".to_owned(),
+        version: None,
         exports: vec![typy_tyir::TyirExport {
             name: "test".to_owned(),
             function,

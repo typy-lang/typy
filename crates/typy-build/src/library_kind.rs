@@ -3,9 +3,9 @@
 /// A static or a shared C library.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum LibraryKind {
-    /// An archive, `libNAME.a`, that the host links into its executable.
+    /// An archive that the host links into its executable.
     Static,
-    /// A shared object, `libNAME.so`, that the host links or loads when it runs.
+    /// A shared object that the host links or loads when it runs.
     Shared,
 }
 
@@ -27,15 +27,6 @@ impl LibraryKind {
     pub fn parse(text: &str) -> Option<Self> {
         Self::ALL.into_iter().find(|kind| kind.name() == text)
     }
-
-    /// Returns the file name of the library of module `name`: `libNAME.a` or `libNAME.so`.
-    #[must_use]
-    pub fn file_name(self, name: &str) -> String {
-        match self {
-            Self::Static => format!("lib{name}.a"),
-            Self::Shared => format!("lib{name}.so"),
-        }
-    }
 }
 
 #[cfg(test)]
@@ -43,12 +34,10 @@ mod tests {
     use super::LibraryKind;
 
     #[test]
-    fn each_kind_parses_from_its_name_and_names_its_file() {
+    fn each_kind_parses_from_its_name() {
         for kind in LibraryKind::ALL {
             assert_eq!(LibraryKind::parse(kind.name()), Some(kind));
         }
         assert_eq!(LibraryKind::parse("dynamic"), None);
-        assert_eq!(LibraryKind::Static.file_name("tools"), "libtools.a");
-        assert_eq!(LibraryKind::Shared.file_name("tools"), "libtools.so");
     }
 }

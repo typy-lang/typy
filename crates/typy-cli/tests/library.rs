@@ -1,6 +1,6 @@
 //! End-to-end tests of C libraries built with `typy build --lib`: the library is built as a
 //! developer builds it, then linked into a C program, or loaded by CPython through `ctypes`,
-//! and run (CLI-09, FFI-05, EXC-05, ADR-0044).
+//! and run (CLI-09, CLI-13, FFI-05, EXC-05, ADR-0044, ADR-0045).
 
 use std::process::{Command, Output};
 
@@ -369,4 +369,104 @@ fn ffi_05_the_refused_names_cover_every_c_function_the_runtime_calls() {
         .filter(|name| !typy_check::RUNTIME_C_FUNCTIONS.contains(&name.as_str()))
         .collect();
     assert_eq!(missing, Vec::<String>::new());
+}
+
+/// Returns what the symbolic link `name` names, or `None` when it is not a link.
+fn link_target(project: &Project, name: &str) -> Option<String> {
+    std::fs::read_link(project.root.join(name))
+        .ok()
+        .map(|target| target.to_string_lossy().into_owned())
+}
+
+/// Returns the soname the shared library `name` records.
+fn soname(project: &Project, name: &str) -> String {
+    let dynamic = Command::new("readelf")
+        .args(["-d", name])
+        .current_dir(&project.root)
+        .output()
+        .unwrap();
+    text(&dynamic.stdout)
+        .lines()
+        .find(|line| line.contains("(SONAME)"))
+        .and_then(|line| line.split('[').nth(1))
+        .map(|rest| rest.trim_end_matches(']').to_owned())
+        .unwrap_or_default()
+}
+
+#[test]
+fn cli_13_a_versioned_shared_library_is_named_as_linux_names_libraries() {
+    let versioned = format!("{TOOLS}__version__ = '5.0rc1'\n");
+    let project = Project::new(&[("tools.py", &versioned), ("host.c", HOST)]);
+    project.build(&["build", "--lib", "shared", "tools.py"]);
+    assert!(project.root.join("libtools.so.5.0").is_file());
+    assert_eq!(link_target(&project, "libtools.so.5.0"), None);
+    assert_eq!(
+        link_target(&project, "libtools.so.5").as_deref(),
+        Some("libtools.so.5.0")
+    );
+    assert_eq!(
+        link_target(&project, "libtools.so").as_deref(),
+        Some("libtools.so.5.0")
+    );
+    assert_eq!(soname(&project, "libtools.so.5.0"), "libtools.so.5");
+    project.tool("cc", &["-o", "host", "host.c", "-L.", "-ltools", "-lm"]);
+    let run = project.run("host", &[]);
+    assert_eq!(run.status.code(), Some(0), "{}", text(&run.stderr));
+    assert_eq!(text(&run.stdout), format!("{HOST_OUTPUT}host ends\n"));
+    // A new release moves the links, and the program finds it through its soname.
+    std::fs::write(
+        project.root.join("tools.py"),
+        format!("{TOOLS}__version__ = '5.1'\n"),
+    )
+    .unwrap();
+    project.build(&["build", "--lib", "shared", "tools.py"]);
+    assert_eq!(
+        link_target(&project, "libtools.so.5").as_deref(),
+        Some("libtools.so.5.1")
+    );
+    assert_eq!(
+        link_target(&project, "libtools.so").as_deref(),
+        Some("libtools.so.5.1")
+    );
+    assert_eq!(project.run("host", &[]).status.code(), Some(0));
+}
+
+#[test]
+fn cli_13_a_versioned_static_library_has_the_link_a_linker_finds() {
+    let project = Project::new(&[("tools.py", TOOLS), ("host.c", HOST)]);
+    std::fs::write(project.root.join("typy.toml"), "version = \"2.4\"\n").unwrap();
+    project.build(&["build", "--lib", "static", "tools.py"]);
+    assert!(project.root.join("libtools.2.4.a").is_file());
+    assert_eq!(
+        link_target(&project, "libtools.a").as_deref(),
+        Some("libtools.2.4.a")
+    );
+    project.tool("cc", &["-o", "host", "host.c", "-L.", "-ltools", "-lm"]);
+    assert_eq!(project.run("host", &[]).status.code(), Some(0));
+}
+
+#[test]
+fn cli_13_an_output_path_names_the_library_alone() {
+    let versioned = format!("{TOOLS}__version__ = '1.2'\n");
+    let project = Project::new(&[("tools.py", &versioned)]);
+    project.build(&["build", "--lib", "shared", "tools.py", "-o", "custom.so"]);
+    assert!(project.root.join("custom.so").is_file());
+    assert_eq!(soname(&project, "custom.so"), "custom.so");
+    assert!(!project.root.join("libtools.so").exists());
+    assert!(!project.root.join("libtools.so.1").exists());
+}
+
+#[test]
+fn cli_13_two_versions_that_differ_stop_the_build() {
+    let versioned = format!("{TOOLS}__version__ = '1.2'\n");
+    let project = Project::new(&[("tools.py", &versioned)]);
+    std::fs::write(project.root.join("typy.toml"), "version = \"1.3\"\n").unwrap();
+    let output = project.typy(&["build", "--lib", "static", "tools.py"]);
+    assert_eq!(output.status.code(), Some(1));
+    let error = text(&output.stderr);
+    assert!(
+        error.starts_with("error[E0429]: `__version__` is \"1.2\" and `version`"),
+        "{error}"
+    );
+    assert!(!project.root.join("libtools.1.2.a").exists());
 }

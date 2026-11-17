@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy software requirements specification |
-| Version | 1.76 |
+| Version | 1.77 |
 | Status | Approved |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-17 |
@@ -145,6 +145,7 @@ oracle needs CPython 3.12 or later.
 | CLI-10 | `typy explain CODE` shall print an explanation of the diagnostic with a wrong and a corrected example. | S | 0.3 |
 | CLI-11 | `typy` shall read no environment variable that changes the output, except `TYPY_HOME`. | M | 0.1 |
 | CLI-12 | The setting `python-floor` in `typy.toml` shall set the program's Python floor to one of `3.12`, `3.13`, `3.14` or `3.15`, and any other value shall be rejected. | S | 0.3 |
+| CLI-13 | A library build shall carry the release of the version that its module's `__version__`, or else `version` in `typy.toml`, gives in its file names, as Linux names libraries: `libNAME.so.X.Y` with the soname `libNAME.so.X`, and `libNAME.X.Y.a`, each with links of the names a linker finds. | S | 0.5 |
 
 TyPy has no formatter of its own. TyPy source is Python, so a standard
 formatter applies; Ruff's formatter is the project's recommendation.

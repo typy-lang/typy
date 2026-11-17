@@ -15,6 +15,8 @@ impl RuleId {
     pub const CLI_09: Self = Self("CLI-09");
     /// The setting `python-floor` in `typy.toml` shall set the program's Python floor to one of `3.12`, `3.13`, `3.14` or `3.15`, and any other value shall be rejected.
     pub const CLI_12: Self = Self("CLI-12");
+    /// A library build shall carry the release of the version that its module's `__version__`, or else `version` in `typy.toml`, gives in its file names, as Linux names libraries: `libNAME.so.X.Y` with the soname `libNAME.so.X`, and `libNAME.X.Y.a`, each with links of the names a linker finds.
+    pub const CLI_13: Self = Self("CLI-13");
     /// Classes with methods and an `__init__` shall be accepted, with each instance attribute assigned in `__init__` or declared in the class body.
     pub const CLS_01: Self = Self("CLS-01");
     /// Adding an attribute that the class does not declare shall be rejected.
@@ -368,6 +370,7 @@ impl RuleId {
         Self::CLI_07,
         Self::CLI_09,
         Self::CLI_12,
+        Self::CLI_13,
         Self::CLS_01,
         Self::CLS_02,
         Self::CLS_04,

@@ -40,6 +40,7 @@ fn module(export: TyirExport) -> TyirModule {
         allocator: TyirAllocator::default(),
         library: Some(TyirLibrary {
             name: "tools".to_owned(),
+            version: None,
             exports: vec![export],
         }),
     }

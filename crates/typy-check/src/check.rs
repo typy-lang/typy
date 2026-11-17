@@ -147,7 +147,21 @@ impl TypeChecker {
         }
         let mut program = program.finish(project.main_module().name.as_str());
         if project.settings().library {
-            program.exports = Some(crate::exports::exports(project, &program)?);
+            let exports = crate::exports::exports(project, &program);
+            let version = crate::library_version::library_version(project);
+            match (exports, version) {
+                (Ok(exports), Ok(version)) => {
+                    program.exports = Some(exports);
+                    program.library_version = version;
+                }
+                (exports, version) => {
+                    let mut found = exports.err().unwrap_or_default();
+                    if let Err(diagnostic) = version {
+                        found.push(*diagnostic);
+                    }
+                    return Err(found);
+                }
+            }
         }
         program.warnings = diagnostics;
         Ok(program)
