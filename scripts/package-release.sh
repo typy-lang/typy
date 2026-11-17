@@ -29,6 +29,10 @@ install -m 644 LICENSE-APACHE LICENSE-MIT THIRD-PARTY-NOTICES.md README.md CHANG
 # links and whose core every program gets through the runtime archive.
 licenses="${stage}/licenses"
 install -d "${licenses}"
+# cargo metadata reads every package of Cargo.lock, including those of other
+# platforms that a Linux build never downloads, so they are fetched first and
+# the listing itself stays offline.
+cargo fetch --locked
 cargo about generate --frozen -c about.toml -m crates/typy-cli/Cargo.toml about.hbs \
     -o "${licenses}/crates.html"
 llvm_major="$("${LLVM_SYS_231_PREFIX}/bin/llvm-config" --version | cut -d. -f1)"
