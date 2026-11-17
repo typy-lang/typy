@@ -3,10 +3,10 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy detailed design |
-| Version | 2.12 |
+| Version | 2.13 |
 | Status | Approved |
 | Owner | typy-lang contributors |
-| Last updated | 2026-11-16 |
+| Last updated | 2026-11-17 |
 
 ## 1. Purpose and scope
 
@@ -2041,7 +2041,8 @@ is a pointer to a `BigInt` (ADR-0001, DAT-01). `Str` values are
 `ValueInfo` holds a value's `ty: TyirType` and its
 `representation: ValueRepresentation`: `Inline`, `Stack` or `Heap`. In 0.1
 `Int`, `Float`, `Bool` and `Unit` are `Inline` and objects are `Heap`;
-`Stack` is chosen by escape analysis from 0.5 (MEM-03).
+from 0.5 escape analysis marks `Stack` each new instance its function holds
+in its frame (section 8.3, MEM-03).
 
 A function's locals are `Slot`s, stack variables read with `load` and
 written with `store`, as LLVM's `alloca` is. LLVM's `mem2reg` pass turns
@@ -2105,8 +2106,9 @@ by dominance; that operands, stored values, arguments and results have the
 types their operations take; that a call of a function that may raise is
 an `invoke` and every other call is not; that an `invoke`'s blocks take
 the result and the exception; that branch targets take no parameters; that
-only a function marked `may_raise` returns an exception; and that only
-counted values are counted. A `VerifyError` names the function and the
+only a function marked `may_raise` returns an exception; that only
+counted values are counted; and that only a new instance of a class that is
+not an exception is held in the frame. A `VerifyError` names the function and the
 block, and the caller reports it as E9001 with the pass that ran last. The
 verifier runs after every pass in every build of the compiler. Dominance comes
 from the immediate dominators, found with Cooper, Harvey and Kennedy's
@@ -2117,7 +2119,8 @@ many blocks verifies in time and memory in proportion to them
 
 `print(module) -> String` writes the deterministic text form used by
 `--emit=tyir-mem`, and `print_without_counting(module)` the same text without
-its `inc` and `dec` instructions, for `--emit=tyir`:
+its `inc` and `dec` instructions, for `--emit=tyir`. An instance held in the
+frame ends its line with `in frame`, as in `v6 = new class#0 in frame`:
 
 ```text
 string s0 = "hi\n"
@@ -2141,6 +2144,34 @@ b4(v5: exception):
   return_error v5
 }
 ```
+
+### 8.3 Escape analysis
+
+`place_instances(module)` runs once the whole program is lowered, before
+the verifier, in every build mode, so a debug and a release build hold the
+same instances in frames (NFR-15, ADR-0042). It marks `Stack` the result of
+each `NewInstance` of a class that is not an exception when no value that
+may hold the instance escapes.
+
+Within a function the analysis puts values and slots in sets with a
+union-find forest, without regard to order: a `store` joins the value and
+its slot, a `load` the slot and its result, `Downcast`, `Upcast`, `Wrap`,
+`Unwrap`, `ToBits` and `FromBits` their operand and result, and a `jump`
+each argument and its target's parameter. A set escapes when one of its
+values is returned or raised, stored in a module variable or in an
+attribute, put in a tuple, passed to a runtime function, or passed to a
+parameter that escapes. The runtime functions `IsInstance`,
+`ObjectHasTypeId` and `ObjectType` read only the object's type, so their
+arguments do not escape. An attribute read, a tuple item and a call's
+result start sets of their own: an object stored in an attribute or a tuple
+has already escaped, and a callee that returns its parameter lets it escape.
+
+| Rule | Reason |
+| --- | --- |
+| Parameters start as not escaping, and each round adds those whose set escapes, until a round adds none | Every function is analysed against the others, also when they call each other |
+| A call through a method table counts the function each table of the class and of every class derived from it holds at that position | Any of them may run, as for `may_raise` (ADR-0021) |
+| A position past a callee's parameters escapes | An unknown argument is kept |
+| An exception class never qualifies | An exception's layout is the runtime's, and it outlives the function as the error it returns |
 
 ## 9. typy-lower
 
@@ -2268,7 +2299,7 @@ comparisons, calls and counting, terminators, and emission.
 | Traceback | One immortal object with the type ID 13 and the type `traceback`, exported as `typy_rt_traceback`, written as `<traceback object at 0x...>`; it holds no frames, which the exception keeps for its report (CST-10) |
 | Iterator | Header with the type ID 12, `kind` (0 list, 1 tuple, 2 `str`, 3 `bytes`, 4 set, 5 dict keys, 6 dict values, 7 dict items, 8 an ASCII `str`, 9 a range, 10 a range past a C `long`), `source`, null once exhausted, `position`, `length` and `visited` for the checks of a set or dict, `current`, the borrowed item of the last step, `held`, a `str` iterator's current string, `number`, a range iterator's current `int` word, and `pair_type` and `pair` for a dict's items. Its type object has CPython's name, such as `list_iterator` or `dict_itemiterator`. The compiler gives a range kind 9, and the runtime makes it 10, `longrange_iterator`, when the start, stop, step or length does not fit a C `long`, as CPython does |
 | Range | Header with the type ID 14, then `start`, `stop`, `step` and `length`, four `int` words the range owns, so a range reaches past 64 bits as CPython's does. Its type object `typy_rt_type_range` is true when the range is not empty, hashes and compares as CPython's `range_hash` and `range_richcompare` do, by length, then first value, then step, and is written `range(0, 3)` or `range(0, 9, 3)`. A range slot starts as null (DAT-17) |
-| Instance | Header, `class: ptr` to the class's type object, then the attributes laid out as the class's tuple descriptor says. `typy_rt_instance_new(class)` makes one with every attribute zero; the runtime frees it by releasing each attribute the descriptor counts. A class's type object is a private constant `typy.classN`, whose base is the runtime's `typy_rt_object`, whose hash is `typy_rt_identity_hash` and whose `repr` is `typy_rt_instance_repr`, or `typy.classN.repr`, which calls the class's `__repr__` and adds a null exception when it cannot raise |
+| Instance | Header, `class: ptr` to the class's type object, then the attributes laid out as the class's tuple descriptor says. `typy_rt_instance_new(class)` makes one with every attribute zero; the runtime frees it by releasing each attribute the descriptor counts. `typy_rt_instance_on_stack(block, class)` and `typy_rt_instance_off_stack(block)` make and release an instance in a frame block (section 10.4). A class's type object is a private constant `typy.classN`, whose base is the runtime's `typy_rt_object`, whose hash is `typy_rt_identity_hash` and whose `repr` is `typy_rt_instance_repr`, or `typy.classN.repr`, which calls the class's `__repr__` and adds a null exception when it cannot raise |
 | Type object | Header, `name: ptr` to UTF-8 bytes, `name_length: u64`, `base: ptr` (null only for `object`), then five nullable function pointers with the C calling convention: `truth(object) -> bool`, `hash(object) -> i64`, `equal(left, right) -> bool`, `order(left, right, comparison) -> bool` and `repr(object) -> { str, exception }`, then `module: ptr` to UTF-8 bytes, `module_length: u64`, `fields: ptr` to the tuple descriptor of a class's attributes, null for the runtime's own types, and last `str(object) -> { str, exception }`, null when `str` is `repr`. An absent function means what it means for `object`: true, equal only to itself, and no hash, order or text. A class's `str` is `typy.classN.str`, which calls its `__str__`, or null when it has none. The runtime frees its own objects by type ID, so the type objects stay out of a program that never tests, compares or writes an object of unknown type (ADR-0012) |
 | Exception | Header, `class: ptr` at the offset an instance keeps its class, `message: ptr` to the `str` the runtime gave it or null, `arguments_type: ptr` to the tuple descriptor of the arguments the program built it with or null, `arguments: ptr` to them or null when there are none, the traceback, `cause: ptr`, `context: ptr` and `suppress_context: u64`, then a class's attributes as its descriptor lays them out (ADR-0013). `typy_rt_exception_new(class, arguments_type, arguments)` makes one with a copy of the arguments, whose items it retains |
 | `str` object | Header, `length: u64` in code points, `kind: u32` (1, 2 or 4 bytes per code point), 4 bytes of padding, then the code points |
@@ -2290,6 +2321,27 @@ A TyPy function's symbol is `_TY`, then the length and text of each part of
 its module name, then the length and text of the function name:
 `_TY8__main__3fib`. The module body of `__main__` is `__typy_main`. Symbols
 are internal and may change in any release.
+
+### 10.4 Frame blocks
+
+For each instance marked `Stack`, code generation adds an `alloca` of
+16 bytes plus the attributes' size, as the class's descriptor gives it,
+aligned to 16, in the entry block, and stores zero in its header there.
+`NewInstance` then calls `typy_rt_instance_on_stack(block, class)`, and
+each `return` and `return_error` first calls
+`typy_rt_instance_off_stack(block)` for every block of the function.
+
+| Block state | `on_stack` does | `off_stack` does |
+| --- | --- | --- |
+| Header cleared | Makes the instance in the block with a count of 2^30 + 1 | Nothing |
+| Instance at count 2^30 | Releases its attributes and makes the new instance in the block | Releases its attributes and clears the header |
+| Instance above count 2^30 | Returns `typy_rt_instance_new(class)` from the heap | Stops the program: `typy runtime: an instance in a frame is still held when its function returns` |
+
+The bias keeps the count of an instance in a frame from reaching zero, so
+the ordinary decrements never free it, and a count back at 2^30 means no
+reference is left. A site in a loop reuses its block only then, and an
+instance still held, as `previous = current` keeps one, sends the next to
+the heap.
 
 ## 11. typy-build
 

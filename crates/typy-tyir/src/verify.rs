@@ -2,6 +2,7 @@
 
 mod definitions;
 mod dominance;
+mod frame;
 mod tables;
 mod typing;
 
@@ -54,6 +55,7 @@ pub fn verify(module: &TyirModule) -> Result<(), VerifyError> {
         }
         definitions::check(function)?;
         typing::check(module, function)?;
+        frame::check(module, function)?;
     }
     tables::check(module)
 }

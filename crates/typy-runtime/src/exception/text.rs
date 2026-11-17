@@ -17,7 +17,7 @@ use crate::tuple::TupleType;
 /// `object` points to a live exception.
 #[allow(
     clippy::cast_ptr_alignment,
-    reason = "every object comes from malloc, aligned for every type, and starts with its header"
+    reason = "every object comes from malloc, a frame block or a static, aligned for every type, and starts with its header"
 )]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn typy_rt_exception_str(
@@ -53,7 +53,7 @@ pub unsafe extern "C" fn typy_rt_exception_str(
 /// `object` points to a live exception.
 #[allow(
     clippy::cast_ptr_alignment,
-    reason = "every object comes from malloc, aligned for every type, and starts with its header"
+    reason = "every object comes from malloc, a frame block or a static, aligned for every type, and starts with its header"
 )]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn typy_rt_exception_repr(

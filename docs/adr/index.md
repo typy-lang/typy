@@ -47,3 +47,4 @@ supersedes it.
 | [ADR-0039](0039-keep-a-slot-methods-exception-until-the-runtime-call-returns.md) | Keep a slot method's exception until the runtime call returns | Accepted | 2026-11-16 |
 | [ADR-0040](0040-derive-each-copy-of-a-generic-class-from-the-copy-of-its-base.md) | Derive each copy of a generic class from the copy of its base | Accepted | 2026-11-16 |
 | [ADR-0041](0041-hold-a-protocol-value-as-an-object-and-call-it-through-a-dispatcher.md) | Hold a protocol value as an object and call it through a dispatcher | Accepted | 2026-11-16 |
+| [ADR-0042](0042-allocate-an-instance-that-does-not-escape-in-its-functions-frame.md) | Allocate an instance that does not escape in its function's frame | Accepted | 2026-11-17 |

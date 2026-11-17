@@ -319,7 +319,7 @@ pub unsafe extern "C" fn typy_rt_is_instance(
 /// `object` points to a live object with a valid header.
 #[allow(
     clippy::cast_ptr_alignment,
-    reason = "every object comes from malloc, aligned for every type, and starts with its header"
+    reason = "every object comes from malloc, a frame block or a static, aligned for every type, and starts with its header"
 )]
 pub(crate) unsafe fn type_of(object: *const ObjectHeader) -> &'static TypeObject {
     // SAFETY: the caller passes a live object; the type ID says which it is.

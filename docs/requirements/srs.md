@@ -3,10 +3,10 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy software requirements specification |
-| Version | 1.73 |
+| Version | 1.74 |
 | Status | Approved |
 | Owner | typy-lang contributors |
-| Last updated | 2026-11-16 |
+| Last updated | 2026-11-17 |
 
 ## 1. Introduction
 
@@ -416,13 +416,14 @@ formatter applies; Ruff's formatter is the project's recommendation.
 | --- | --- | --- | --- |
 | MEM-01 | An object shall be freed when its last reference goes, with no tracing garbage collector and no pause. | M | 0.1 |
 | MEM-02 | `float`, `bool` and inline `int` values shall be held without a heap allocation in variables, fields and containers, so a `list[float]` stores 8 bytes per item. | M | 0.2 |
-| MEM-03 | An object the compiler proves does not outlive its function shall be allocated without a heap call. | S | 0.5 |
+| MEM-03 | An instance of a class of the program, other than an exception, that the compiler proves does not outlive its function shall be allocated without a heap call. | S | 0.5 |
 | MEM-04 | Passing a variable or a constant as an argument shall cost no reference count operation, and returning a variable shall move its value to the caller. | M | 0.2 |
 | MEM-05 | Freed memory of one object shall be reused for a new object of the same size in the same function when the compiler can prove it safe. | C | 1.0 |
 | MEM-06 | Reference cycles shall be collected, without a background thread, and only objects whose class can be part of a cycle shall pay for cycle tracking (ADR-0001). | S | 1.0 |
 | MEM-07 | `weakref.ref` shall be available. | S | 1.0 |
 | MEM-08 | The allocator shall be replaceable per project through three functions: allocate, reallocate and free. | S | 0.5 |
 | MEM-09 | The last use of a variable in an assignment, or as an item a collection stores, shall move its value instead of counting it. | S | 0.3 |
+| MEM-10 | A list, dict, set, string or exception object that the compiler proves does not outlive its function shall be allocated without a heap call. | C | 1.0 |
 
 ### 3.16 C interoperability (FFI)
 

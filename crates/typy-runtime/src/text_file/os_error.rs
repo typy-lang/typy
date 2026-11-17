@@ -226,7 +226,7 @@ unsafe fn errno_number(layout: *const TupleType, address: u64) -> Option<i64> {
 #[unsafe(no_mangle)]
 #[allow(
     clippy::cast_ptr_alignment,
-    reason = "every object comes from malloc, aligned for every type, and starts with its header"
+    reason = "every object comes from malloc, a frame block or a static, aligned for every type, and starts with its header"
 )]
 pub unsafe extern "C" fn typy_rt_os_error_str(
     object: *mut ObjectHeader,

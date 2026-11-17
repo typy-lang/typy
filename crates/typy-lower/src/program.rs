@@ -2,7 +2,7 @@
 
 use typy_check::TypedProgram;
 use typy_diagnostics::{Diagnostic, DiagnosticCode, Diagnostics, RuleId};
-use typy_tyir::{FunctionId, TupleTypes, TyirClass, TyirModule, verify};
+use typy_tyir::{FunctionId, TupleTypes, TyirClass, TyirModule, place_instances, verify};
 
 use crate::types::tyir_type;
 
@@ -12,7 +12,9 @@ use crate::methods::{Calls, MethodTables};
 use crate::module_variable::ModuleGlobals;
 use crate::strings::StringPool;
 
-/// Returns the program in TyIR, verified. A function may raise when its lowered code contains an `invoke`, so lowering repeats until that set stops growing (detailed design section 9).
+/// Returns the program in TyIR, verified, with each instance that does not escape its function
+/// held in its frame (MEM-03). A function may raise when its lowered code contains an `invoke`,
+/// so lowering repeats until that set stops growing (detailed design section 9).
 pub fn lower(program: &TypedProgram) -> Result<TyirModule, Diagnostics> {
     let recursive = recursive_functions(program);
     let methods = MethodTables::new(program);
@@ -74,7 +76,7 @@ pub fn lower(program: &TypedProgram) -> Result<TyirModule, Diagnostics> {
             .map(|class| tyir_class(program, class, &methods, &mut tuple_types))
             .collect();
         let (strings, str_points) = strings.into_tables();
-        let module = TyirModule {
+        let mut module = TyirModule {
             functions,
             globals: module_globals.globals,
             modules: module_objects(program),
@@ -92,6 +94,7 @@ pub fn lower(program: &TypedProgram) -> Result<TyirModule, Diagnostics> {
             classes,
             entry: FunctionId(program.entry.0),
         };
+        place_instances(&mut module);
         return match verify(&module) {
             Ok(()) => Ok(module),
             Err(error) => {

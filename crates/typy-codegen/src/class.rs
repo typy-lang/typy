@@ -17,7 +17,7 @@ use crate::layout::{IMMORTAL, TYPE_TYPE_ID};
 use crate::statics::Statics;
 
 /// Returns a function the runtime defines, declared on first use.
-fn runtime_symbol<'ctx>(
+pub(crate) fn runtime_symbol<'ctx>(
     shared: &Shared<'_, 'ctx>,
     name: &str,
     ty: inkwell::types::FunctionType<'ctx>,

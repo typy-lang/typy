@@ -210,3 +210,29 @@ fn counting_attributes_placeholders_and_descriptors_reach_the_ir() {
     assert!(!ir.contains("@typy.tuple0.1"), "{ir}");
     assert!(!ir.contains("@typy.class0.1 "), "{ir}");
 }
+
+#[test]
+fn an_instance_held_in_the_frame_is_made_in_a_block_released_before_each_return() {
+    let source = "class P:\n    def __init__(self, x: int) -> None:\n        self.x = x\n\n\ndef f(n: int) -> int:\n    p = P(n)\n    if n > 0:\n        return p.x\n    return 0\n\n\nprint(f(1))\n";
+    let (project, module) = compile(source);
+    let ir = llvm_ir(&module, Target::host(), Optimization::None, &project).unwrap();
+    let start = ir.find("@_TY8__main__1f(").expect("f is defined");
+    let body = &ir[start..start + ir[start..].find("\n}\n").expect("f ends")];
+    // The header and the class take two words and the one `int` attribute a third.
+    assert!(body.contains("alloca [3 x i64], align 16"), "{body}");
+    assert!(body.contains("store i64 0, ptr"), "{body}");
+    assert_eq!(
+        body.matches("call ptr @typy_rt_instance_on_stack(").count(),
+        1,
+        "{body}"
+    );
+    let returns = body.matches("\n  ret ").count();
+    assert!(returns > 0, "{body}");
+    assert_eq!(
+        body.matches("call void @typy_rt_instance_off_stack(")
+            .count(),
+        returns,
+        "{body}"
+    );
+    assert!(!body.contains("@typy_rt_instance_new("), "{body}");
+}

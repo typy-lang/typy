@@ -142,7 +142,7 @@ fn word(value: i64) -> i64 {
 /// `object` points to a live slice.
 #[allow(
     clippy::cast_ptr_alignment,
-    reason = "every object comes from malloc, aligned for every type, and starts with its header"
+    reason = "every object comes from malloc, a frame block or a static, aligned for every type, and starts with its header"
 )]
 unsafe fn bounds(object: *mut ObjectHeader) -> [i64; 3] {
     // SAFETY: the caller's guarantee.

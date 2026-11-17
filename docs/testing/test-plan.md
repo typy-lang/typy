@@ -3,10 +3,10 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy test plan |
-| Version | 0.77 |
+| Version | 0.78 |
 | Status | Draft |
 | Owner | typy-lang contributors |
-| Last updated | 2026-11-16 |
+| Last updated | 2026-11-17 |
 
 ## 1. Purpose
 
@@ -467,12 +467,13 @@ that the specification does not define.
 | LIB-14 | 0.4 | IT | `tests/conformance/lib/LIB-14_*.py` |
 | MEM-01 | 0.1 | UT, IT | `typy-runtime` unit tests; `tests/conformance/mem/MEM-01_*.py` under sanitizers |
 | MEM-02 | 0.2 | UT, IT | `typy-runtime` list unit tests; `tests/conformance/dat/DAT-07_*.py`, which name MEM-02, also under the sanitizers |
-| MEM-03 | 0.5 | UT, IT | `typy-runtime` unit tests; `tests/conformance/mem/MEM-03_*.py` under sanitizers |
+| MEM-03 | 0.5 | UT, IT | `crates/typy-tyir/src/escape/tests.rs` for each way an instance escapes; `crates/typy-runtime/src/instance/tests.rs` for a frame block made, reused and released; `crates/typy-lower/tests/frames.rs` for the instances programs hold in frames; `crates/typy-codegen/tests/codegen.rs` for the block and the release before each return; `tests/conformance/mem/MEM-03_*.py` under sanitizers |
 | MEM-04 | 0.2 | UT, IT | `typy-lower` lowering tests of the counting; `tests/conformance/mem/MEM-04_*.py` under sanitizers |
 | MEM-05 | 1.0 | UT, IT | `typy-runtime` unit tests; `tests/conformance/mem/MEM-05_*.py` under sanitizers |
 | MEM-06 | 1.0 | UT, IT | `typy-runtime` unit tests; `tests/conformance/mem/MEM-06_*.py` under sanitizers |
 | MEM-07 | 1.0 | UT, IT | `typy-runtime` unit tests; `tests/conformance/mem/MEM-07_*.py` under sanitizers |
 | MEM-08 | 0.5 | UT, IT | `typy-runtime` unit tests; `tests/conformance/mem/MEM-08_*.py` under sanitizers |
+| MEM-10 | 1.0 | UT, IT | `crates/typy-tyir/src/escape/tests.rs`; `tests/conformance/mem/MEM-10_*.py` under sanitizers |
 | MEM-09 | 0.3 | UT, IT | `crates/typy-lower/tests/moves.rs` for each store that moves and each read that must not; `crates/typy-runtime/src/moved_tests.rs` for the counts of each moved store; `tests/conformance/mem/MEM-09_*.py` under sanitizers |
 | FFI-01 | 0.5 | IT | `tests/conformance/ffi/FFI-01_*.py` |
 | FFI-02 | 0.5 | IT | `tests/conformance/ffi/FFI-02_*.py` |

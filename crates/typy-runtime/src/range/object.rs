@@ -276,7 +276,7 @@ pub unsafe extern "C" fn typy_rt_range_equal(
 
 #[allow(
     clippy::cast_ptr_alignment,
-    reason = "every object comes from malloc, aligned for every type, and starts with its header"
+    reason = "every object comes from malloc, a frame block or a static, aligned for every type, and starts with its header"
 )]
 unsafe extern "C" fn range_equal_objects(
     left: *mut ObjectHeader,
@@ -288,7 +288,7 @@ unsafe extern "C" fn range_equal_objects(
 
 #[allow(
     clippy::cast_ptr_alignment,
-    reason = "every object comes from malloc, aligned for every type, and starts with its header"
+    reason = "every object comes from malloc, a frame block or a static, aligned for every type, and starts with its header"
 )]
 unsafe extern "C" fn range_is_true(object: *mut ObjectHeader) -> bool {
     // SAFETY: the type of the object says it is a range.
@@ -299,7 +299,7 @@ unsafe extern "C" fn range_is_true(object: *mut ObjectHeader) -> bool {
 /// start and step, each `None` where the length leaves it out.
 #[allow(
     clippy::cast_ptr_alignment,
-    reason = "every object comes from malloc, aligned for every type, and starts with its header"
+    reason = "every object comes from malloc, a frame block or a static, aligned for every type, and starts with its header"
 )]
 unsafe extern "C" fn range_hash(object: *mut ObjectHeader) -> i64 {
     // SAFETY: the type of the object says it is a range, whose words are live.
@@ -320,7 +320,7 @@ unsafe extern "C" fn range_hash(object: *mut ObjectHeader) -> i64 {
 /// Writes a range as CPython does: `range(start, stop)`, with the step when it is not 1.
 #[allow(
     clippy::cast_ptr_alignment,
-    reason = "every object comes from malloc, aligned for every type, and starts with its header"
+    reason = "every object comes from malloc, a frame block or a static, aligned for every type, and starts with its header"
 )]
 unsafe extern "C" fn range_repr(object: *mut ObjectHeader) -> Raising<*mut StrObject> {
     // SAFETY: the type of the object says it is a range, whose words are live.

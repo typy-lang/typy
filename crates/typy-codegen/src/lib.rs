@@ -11,6 +11,7 @@ mod constant;
 mod descriptor;
 mod emit;
 mod error;
+mod frame;
 mod function;
 mod layout;
 mod object;

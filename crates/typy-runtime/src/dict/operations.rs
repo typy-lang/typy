@@ -411,7 +411,7 @@ pub unsafe extern "C" fn typy_rt_dict_copy(dict: *const DictObject) -> *mut Dict
 #[unsafe(no_mangle)]
 #[allow(
     clippy::cast_ptr_alignment,
-    reason = "every object comes from malloc, aligned for every type, and starts with its header"
+    reason = "every object comes from malloc, a frame block or a static, aligned for every type, and starts with its header"
 )]
 pub unsafe extern "C" fn typy_rt_dict_update(dict: *mut DictObject, other: u64) {
     let header = core::ptr::with_exposed_provenance::<crate::header::ObjectHeader>(

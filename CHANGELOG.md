@@ -8,6 +8,11 @@ All notable changes to TyPy are recorded here. The format follows
 
 ### Added
 
+- An instance of a class of the program that never outlives the function
+  that makes it is made in the function's frame, with no allocator call:
+  one the function reads, assigns attributes of, calls methods on, or
+  passes to functions that do no more. `--emit=tyir` ends the line of each
+  such instance with `in frame` (MEM-03, ADR-0042).
 - A benchmark report, `docs/testing/benchmark-report.md`, which compares
   TyPy's programs with CPython 3.12 to 3.15, PyPy, mypyc, Cython, Nuitka,
   Codon, C, C++, Rust, Go, Java and JavaScript on twelve workloads: time,
@@ -197,6 +202,9 @@ All notable changes to TyPy are recorded here. The format follows
 
 ### Changed
 
+- Lists, dicts, sets, strings and exceptions that do not outlive their
+  function are made in its frame from 1.0, as MEM-10; in 0.5 MEM-03 covers
+  instances of the program's classes.
 - `list.sort` and `sorted` compare the items CPython 3.15 compares, in its
   order, so a `__lt__` that prints or raises shows the same calls, and a
   sort a comparison ends leaves the list as CPython leaves it. TyPy's own

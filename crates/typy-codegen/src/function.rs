@@ -39,6 +39,8 @@ pub(crate) struct FunctionEmitter<'shared, 'module, 'ctx> {
     pub(crate) phis: BTreeMap<ValueId, PhiValue<'ctx>>,
     pub(crate) values: Vec<Option<BasicValueEnum<'ctx>>>,
     pub(crate) slots: Vec<Option<PointerValue<'ctx>>>,
+    /// The block of each instance held in the frame, by the value it makes (MEM-03).
+    pub(crate) frames: BTreeMap<ValueId, PointerValue<'ctx>>,
     pub(crate) raising_abi: bool,
 }
 
@@ -70,6 +72,7 @@ impl<'shared, 'module, 'ctx> FunctionEmitter<'shared, 'module, 'ctx> {
             phis: BTreeMap::new(),
             values: vec![None; function.values.len()],
             slots: Vec::new(),
+            frames: BTreeMap::new(),
             raising_abi,
         };
         emitter.prepare()?;
@@ -78,7 +81,10 @@ impl<'shared, 'module, 'ctx> FunctionEmitter<'shared, 'module, 'ctx> {
                 .builder
                 .position_at_end(emitter.blocks[block.id.0 as usize]);
             for instruction in &block.instructions {
-                let value = emitter.operation(&instruction.operation)?;
+                let value = match emitter.frame_site(instruction) {
+                    Some((frame, class)) => Some(emitter.frame_instance(frame, class)?),
+                    None => emitter.operation(&instruction.operation)?,
+                };
                 if let (Some(result), Some(value)) = (instruction.result, value) {
                     emitter.values[result.0 as usize] = Some(value);
                 }
@@ -88,7 +94,8 @@ impl<'shared, 'module, 'ctx> FunctionEmitter<'shared, 'module, 'ctx> {
         Ok(())
     }
 
-    /// Maps the parameters, adds a phi node for each parameter of every other block, and an alloca for each slot.
+    /// Maps the parameters, adds a phi node for each parameter of every other block, an alloca
+    /// for each slot and a block for each instance held in the frame.
     fn prepare(&mut self) -> Result<(), CodegenError> {
         let context = self.shared.context;
         let mut parameters = self.llvm_function.get_param_iter();
@@ -126,7 +133,7 @@ impl<'shared, 'module, 'ctx> FunctionEmitter<'shared, 'module, 'ctx> {
             };
             self.slots.push(pointer);
         }
-        Ok(())
+        self.prepare_frames()
     }
 
     /// Returns the LLVM value of a TyIR value, which the verifier has checked is defined before this use.

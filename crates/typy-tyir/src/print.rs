@@ -7,7 +7,7 @@ use crate::function::TyirFunction;
 use crate::module::TyirModule;
 use crate::operation::{IntUnaryOperator, Operation};
 use crate::terminator::{Callee, Terminator};
-use crate::value::ValueId;
+use crate::value::{ValueId, ValueRepresentation};
 
 /// Returns the module as text, the string pool and then each function in order, with every
 /// reference count operation, for `--emit=tyir-mem`.
@@ -111,6 +111,9 @@ fn print_block(
         }
         let operation = operation(module, &instruction.operation);
         match instruction.result {
+            Some(value) if function.value(value).representation == ValueRepresentation::Stack => {
+                let _ = writeln!(text, "  v{} = {operation} in frame", value.0);
+            }
             Some(value) => {
                 let _ = writeln!(text, "  v{} = {operation}", value.0);
             }
