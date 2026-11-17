@@ -61,7 +61,8 @@ mod tests {
                     .bytes()
                     .all(|byte| byte.is_ascii_digit() || byte == b'.')
             );
-            assert!(!release.ends_with('.') && !release.starts_with('.'));
+            assert!(!release.ends_with('.'));
+            assert!(!release.starts_with('.'));
             assert!(!release.contains(".."));
         }
     }

@@ -272,10 +272,11 @@ pub unsafe extern "C" fn typy_rt_exception_part_equal(
 #[cfg(test)]
 mod tests {
     use super::{
-        typy_rt_exception_args_length, typy_rt_exception_part_equal, typy_rt_exception_part_text,
-        typy_rt_exception_part_truth,
+        typy_rt_exception_args_length, typy_rt_exception_arguments_address,
+        typy_rt_exception_arguments_match, typy_rt_exception_part_equal,
+        typy_rt_exception_part_text, typy_rt_exception_part_truth,
     };
-    use crate::exception::classes::{SYSTEM_EXIT, VALUE_ERROR};
+    use crate::exception::classes::{FILE_NOT_FOUND_ERROR, SYSTEM_EXIT, VALUE_ERROR};
     use crate::exception::{ExceptionKind, ExceptionObject, raise, typy_rt_exception_new};
     use crate::list::ItemKind;
     use crate::refcount::typy_rt_decrement;
@@ -457,6 +458,85 @@ mod tests {
         for each in texts {
             // SAFETY: the test holds the only reference.
             unsafe { typy_rt_decrement(each.cast()) };
+        }
+    }
+
+    /// Returns a `ValueError` built with no arguments.
+    fn built_none() -> *mut ExceptionObject {
+        built(&VALUE_ERROR, &[], &[])
+    }
+
+    /// Returns whether `args` of `object` is laid out as a tuple of these kinds, as `args`
+    /// shows it, or as the exception holds it when `raw`.
+    fn laid_out(object: *mut ExceptionObject, kinds: &[ItemKind], raw: bool) -> bool {
+        let raw = inline(i64::from(raw)).unwrap();
+        // SAFETY: the exception and the layout are live.
+        unsafe { typy_rt_exception_arguments_match(object, layout(kinds), raw) }
+    }
+
+    #[test]
+    fn args_matches_the_layout_of_its_arguments_its_text_or_no_items() {
+        let three = inline(3).unwrap().cast_unsigned();
+        let built = built(&VALUE_ERROR, &[ItemKind::Int, ItemKind::Bool], &[three, 1]);
+        let raised = raise(ExceptionKind::ValueError, "bad");
+        let none = built_none();
+        let text = ItemKind::Object;
+        for raw in [false, true] {
+            assert!(laid_out(built, &[ItemKind::Int, ItemKind::Bool], raw));
+            assert!(!laid_out(built, &[ItemKind::Int], raw));
+            assert!(laid_out(raised, &[text], raw));
+            assert!(!laid_out(raised, &[], raw));
+            assert!(laid_out(none, &[], raw));
+            assert!(!laid_out(none, &[text], raw));
+        }
+        for exception in [built, raised, none] {
+            release(exception);
+        }
+    }
+
+    #[test]
+    fn an_os_error_with_a_file_name_matches_two_items_unless_raw() {
+        let two = inline(2).unwrap().cast_unsigned();
+        let names = crate::string::from_str("missing.txt");
+        let reason = crate::string::from_str("No such file or directory");
+        let text = ItemKind::Object;
+        let words = [
+            two,
+            reason.expose_provenance() as u64,
+            names.expose_provenance() as u64,
+        ];
+        let error = built(&FILE_NOT_FOUND_ERROR, &[ItemKind::Int, text, text], &words);
+        assert!(laid_out(error, &[ItemKind::Int, text], false));
+        assert!(!laid_out(error, &[ItemKind::Int, text, text], false));
+        assert!(laid_out(error, &[ItemKind::Int, text, text], true));
+        assert!(!laid_out(error, &[ItemKind::Int, text], true));
+        release(error);
+        for each in [names, reason] {
+            // SAFETY: the test holds its own reference.
+            unsafe { typy_rt_decrement(each.cast()) };
+        }
+    }
+
+    #[test]
+    fn the_items_of_args_are_the_arguments_the_field_of_the_text_or_none() {
+        let three = inline(3).unwrap().cast_unsigned();
+        let built = built(&VALUE_ERROR, &[ItemKind::Int], &[three]);
+        let raised = raise(ExceptionKind::ValueError, "bad");
+        let none = built_none();
+        // SAFETY: the exceptions are live.
+        unsafe {
+            assert_eq!(
+                typy_rt_exception_arguments_address(built),
+                (*built).arguments.expose_provenance() as u64
+            );
+            assert_eq!(
+                typy_rt_exception_arguments_address(raised),
+                (&raw const (*raised).message).expose_provenance() as u64
+            );
+            assert_eq!(typy_rt_exception_arguments_address(none), 0);
+        }
+        for exception in [built, raised, none] {
+            release(exception);
         }
     }
 }

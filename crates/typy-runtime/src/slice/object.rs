@@ -313,4 +313,25 @@ mod tests {
             }
         }
     }
+
+    #[test]
+    fn indices_give_a_missing_step_as_one_and_refuse_a_large_negative_length() {
+        let text = crate::string::from_str(&format!("-{}", "9".repeat(30)));
+        // SAFETY: the words are live, and every object made here is released here; the base
+        // is the `int` word of 10.
+        unsafe {
+            let negative = crate::int::typy_rt_int_from_str(text, word(10)).value;
+            crate::refcount::typy_rt_decrement(text.cast());
+            let forwards = typy_rt_slice_new(word(1), word(3), 0);
+            let parts: Vec<i64> = (0..3)
+                .map(|part| inline_value(typy_rt_slice_index(forwards, word(5), word(part)).value))
+                .collect();
+            assert_eq!(parts, [1, 3, 1]);
+            let error = typy_rt_slice_index(forwards, negative, word(0)).exception;
+            assert_eq!((*error).class().name(), "ValueError");
+            crate::refcount::typy_rt_decrement(error.cast());
+            crate::refcount::typy_rt_int_decrement(negative);
+            crate::refcount::typy_rt_decrement(forwards.cast());
+        }
+    }
 }

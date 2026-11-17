@@ -357,10 +357,9 @@ impl<T: Copy> MergeState<'_, T> {
             items.copy_within(at(a + 1 - count)..at(a + 1), at(destination + 1 - count));
             items[at(destination - count)] = scratch[at(b)];
         };
+        // `merge_at` calls this merge only when the first run is longer than the second, which
+        // holds an item, so the first run still holds one here; CPython's `merge_hi` tests it.
         'merge: {
-            if count == 0 {
-                break 'merge;
-            }
             if others == 1 {
                 copy_a(items, destination, a, count, b);
                 return Ok(());

@@ -108,7 +108,8 @@ mod tests {
         }
         assert!(pending());
         assert_eq!(typy_rt_slot_raised(), first);
-        assert!(!pending() && typy_rt_slot_raised().is_null());
+        assert!(!pending());
+        assert!(typy_rt_slot_raised().is_null());
         // SAFETY: the program owns the exception it raises.
         unsafe { crate::refcount::typy_rt_decrement(first.cast()) };
     }

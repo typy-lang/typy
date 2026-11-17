@@ -248,9 +248,8 @@ impl FunctionLowerer<'_> {
         span: Span,
     ) -> Lowered {
         let argument = |index: usize| given.get(index).copied().flatten();
-        let Some(target) = argument(0) else {
-            unreachable!("the checker gives a search what it looks for")
-        };
+        let target = argument(0)
+            .unwrap_or_else(|| unreachable!("the checker gives a search what it looks for"));
         let (function, flags) = match method {
             Method::StrStartswith | Method::StrEndswith => {
                 let function = if target.ty == TyirType::LIST {

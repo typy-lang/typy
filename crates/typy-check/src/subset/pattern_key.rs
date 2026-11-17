@@ -194,6 +194,10 @@ mod tests {
             (Key::Str("it's".to_owned()), "\"it's\""),
             (Key::Str("'\"\n".to_owned()), "'\\'\"\\n'"),
             (Key::Bytes(vec![b'a', 0xff, b'\\']), "b'a\\xff\\\\'"),
+            (
+                Key::Str("\u{1}\u{7f}\u{e9}".to_owned()),
+                "'\\x01\\x7f\u{e9}'",
+            ),
             (Key::Int("007".to_owned()), "7"),
             (Key::Bool(true), "True"),
             (Key::None, "None"),
@@ -207,6 +211,8 @@ mod tests {
     fn floats_are_written_as_repr_writes_them() {
         let cases = [
             (1.0, "1.0"),
+            (0.0, "0.0"),
+            (-0.0, "-0.0"),
             (0.1, "0.1"),
             (-2.5, "-2.5"),
             (1e16, "1e+16"),

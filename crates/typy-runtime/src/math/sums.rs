@@ -538,7 +538,6 @@ pub unsafe extern "C" fn typy_rt_math_sumprod_float(
     let (p, q) = unsafe { (&*p, &*q) };
     let mut total = Total::Whole(Integer::from_i128(0));
     let mut whole_path = Some(0_i64);
-    let mut whole_in_use = false;
     let mut real_path = Some(TripleLength::ZERO);
     let mut real_in_use = false;
     let common = p.length.min(q.length);
@@ -552,17 +551,11 @@ pub unsafe extern "C" fn typy_rt_math_sumprod_float(
                 .and_then(|(x, y)| small(x)?.checked_mul(small(y)?)?.checked_add(sum));
             if let Some(next) = next {
                 whole_path = Some(next);
-                whole_in_use = true;
                 continue;
             }
             whole_path = None;
-            if whole_in_use {
-                let added = total.plus(Total::Whole(Integer::from_i128(i128::from(sum))));
-                if !added.exception.is_null() {
-                    return Raising::error(0.0, added.exception);
-                }
-                total = added.value;
-            }
+            // The exact path runs first, so the total is still 0 and becomes its sum.
+            total = Total::Whole(Integer::from_i128(i128::from(sum)));
         }
         if let Some(sum) = real_path {
             let next = pair

@@ -146,6 +146,32 @@ fn assert_builds_an_assertion_error_and_narrows_after_it() {
 }
 
 #[test]
+fn the_typed_dump_shows_matches_alias_parts_and_exception_arguments() {
+    let source = "type Pair = tuple[int, int]\n\
+                  def f(x: int | None) -> int:\n    match x:\n        case None:\n            return 0\n\
+                  \x20       case n if n > 1:\n            return n\n        case _:\n            pass\n\
+                  \x20   match x is None:\n        case True:\n            return 2\n\
+                  \x20       case False:\n            return 3\n\
+                  try:\n    open('missing.txt')\nexcept OSError as e:\n    print(e.args, e.filename)\n\
+                  try:\n    raise SystemExit(3)\nexcept SystemExit as s:\n    code = s.code\n\
+                  print(Pair.__name__, Pair.__module__, f(None), code)\n";
+    let (_directory, project) = load(source);
+    let program = TypeChecker::check(&project).expect("the program is accepted");
+    let dump = typy_check::dump(&program, &project);
+    for expected in [
+        "Match @3:5",
+        "guard @6:19",
+        "subject <match 1> @10:11",
+        "ExceptionArguments raw : tuple[int, str, str] @18:19",
+        "ExceptionArguments : tuple[int] @22:12",
+        "TypeAliasName : str @23:7",
+        "TypeAliasModule : str @23:22",
+    ] {
+        assert!(dump.contains(expected), "{expected} in\n{dump}");
+    }
+}
+
+#[test]
 fn iterators_type_their_items_and_next_its_default() {
     let source = "class C:\n    def __iter__(self) -> 'C':\n        return self\n    def __next__(self) -> int:\n        raise StopIteration\n\
                   items = iter({'a': 1}.items())\n\

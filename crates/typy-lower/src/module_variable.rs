@@ -168,9 +168,9 @@ impl FunctionLowerer<'_> {
     ) -> Lowered {
         let join = self.builder.create_block();
         let result = self.builder.add_block_parameter(join, ty);
-        let Some((last, rest)) = holders.split_last() else {
+        let (last, rest) = holders.split_last().unwrap_or_else(|| {
             unreachable!("a class variable has the holder of the class that gives it")
-        };
+        });
         for holder in rest {
             let global = self.module_globals.of[holder];
             let bound =

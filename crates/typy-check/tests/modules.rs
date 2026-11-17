@@ -368,3 +368,38 @@ fn a_module_of_the_program_hides_a_standard_module_of_its_name() {
         ("typing.py", "def helper() -> int:\n    return 1\n"),
     ]);
 }
+
+/// A module that defines a class `Shape`.
+const SHAPES_A: &str =
+    "class Shape:\n    def __init__(self, n: int) -> None:\n        self.n = n\n";
+/// Another module that defines a class `Shape`.
+const SHAPES_B: &str =
+    "class Shape:\n    def __init__(self, n: int) -> None:\n        self.n = n * 10\n";
+
+#[test]
+fn a_class_an_import_in_a_block_binds_is_read_as_a_value_unless_a_local_hides_it() {
+    let dump = accepted(&[
+        (
+            "app.py",
+            "import sys\nif len(sys.argv) < 5:\n    from shapes_a import Shape\n\
+             made = Shape\nprint(made(2).n)\n\
+             def shadow() -> int:\n    Shape = 3\n    return Shape\nprint(shadow())\n",
+        ),
+        ("shapes_a.py", SHAPES_A),
+    ]);
+    assert!(dump.contains("Local Shape : int"), "{dump}");
+}
+
+#[test]
+fn a_class_two_imports_bind_read_as_a_value_is_planned() {
+    let found = rejected(&[
+        (
+            "app.py",
+            "import sys\nif len(sys.argv) > 5:\n    from shapes_a import Shape\n\
+             else:\n    from shapes_b import Shape\nmade = Shape\n",
+        ),
+        ("shapes_a.py", SHAPES_A),
+        ("shapes_b.py", SHAPES_B),
+    ]);
+    assert_eq!(found, ["E0201"]);
+}

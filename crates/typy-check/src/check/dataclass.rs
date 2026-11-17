@@ -147,12 +147,14 @@ impl Dataclasses {
             (Some(base), Some(_)) => self.compared_class(base, module_name, names),
             _ => name.name.clone(),
         };
-        if !type_parameters.is_empty() && compared != name.name && (options.eq || options.order) {
+        // `options` refuses `order=True` without `eq=True`, so `eq` alone says whether the
+        // class gets comparison methods.
+        if !type_parameters.is_empty() && compared != name.name && options.eq {
             diagnostics.push(generic_comparisons(&name.name, &compared, at));
             return None;
         }
-        if inherited.is_some()
-            && let Some(base) = bases.first()
+        if let Some(base) = bases.first()
+            && inherited.is_some()
             && !self.frozen_as_base(base, module_name, names, (options, at), diagnostics)
         {
             return None;
@@ -289,10 +291,10 @@ impl Dataclasses {
         (options, at): (Options, Span),
         diagnostics: &mut Diagnostics,
     ) -> bool {
-        let Some(base_frozen) = self.base_frozen(base, module_name, names) else {
-            return true;
-        };
-        if base_frozen == options.frozen {
+        if self
+            .base_frozen(base, module_name, names)
+            .is_none_or(|frozen| frozen == options.frozen)
+        {
             return true;
         }
         let (this, that) = if options.frozen {
@@ -670,24 +672,29 @@ fn factory_default(name: &str, span: Span) -> Expr {
 fn factory_function(name: &str, annotation: &Expr, factory: Expr, at: Span) -> Stmt {
     let mut function = parsed("def made() -> int:\n    return 0\n", &[], at)
         .pop()
-        .unwrap_or(Stmt::Pass { span: at });
-    if let Stmt::FunctionDef {
-        name: function_name,
-        returns,
-        body,
-        ..
-    } = &mut function
-    {
-        name.clone_into(&mut function_name.name);
-        *returns = Some(annotation.clone());
-        if let Some(Stmt::Return { value, .. }) = body.first_mut() {
-            *value = Some(Expr::Call {
-                function: Box::new(factory),
-                arguments: Vec::new(),
-                keywords: Vec::new(),
-                span: at,
-            });
+        .unwrap_or_else(|| unreachable!("the source is one function"));
+    match &mut function {
+        Stmt::FunctionDef {
+            name: function_name,
+            returns,
+            body,
+            ..
+        } => {
+            name.clone_into(&mut function_name.name);
+            *returns = Some(annotation.clone());
+            match body.first_mut() {
+                Some(Stmt::Return { value, .. }) => {
+                    *value = Some(Expr::Call {
+                        function: Box::new(factory),
+                        arguments: Vec::new(),
+                        keywords: Vec::new(),
+                        span: at,
+                    });
+                }
+                _ => unreachable!("the function returns a value"),
+            }
         }
+        _ => unreachable!("the source is one function"),
     }
     function
 }
@@ -941,13 +948,17 @@ fn parsed(source: &str, fields: &[Field], at: Span) -> Vec<Stmt> {
             Stmt::FunctionDef { name, body, .. } if name.name == "__hash__" => {
                 // The tuple of the fields is hashed as a set hashes it; no program can name
                 // the function, since `hash` is not provided.
-                if let Some(Stmt::Return {
-                    value: Some(Expr::Call { function, .. }),
-                    ..
-                }) = body.first_mut()
-                    && let Expr::Name { id, .. } = function.as_mut()
-                {
-                    "<hash>".clone_into(id);
+                match body.as_mut_slice() {
+                    [
+                        Stmt::Return {
+                            value: Some(Expr::Call { function, .. }),
+                            ..
+                        },
+                    ] => match function.as_mut() {
+                        Expr::Name { id, .. } => "<hash>".clone_into(id),
+                        _ => unreachable!("`__hash__` calls `HASH`"),
+                    },
+                    _ => unreachable!("`__hash__` returns a call"),
                 }
             }
             Stmt::FunctionDef {

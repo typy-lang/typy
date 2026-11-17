@@ -149,7 +149,16 @@ fn gamma_and_lgamma_refuse_poles_and_overflow() {
     check(typy_rt_math_lgamma(1e308), &overflow, "lgamma(1e308)");
 }
 
-const FSUM: [(&[u64], u64); 10] = [
+const FSUM: [(&[u64], u64); 11] = [
+    // The partials of `[1.0, 0.1, -1.0]` add up exactly, so the sum goes on to the next.
+    (
+        &[
+            0x3ff0_0000_0000_0000,
+            0x3fb9_9999_9999_999a,
+            0xbff0_0000_0000_0000,
+        ],
+        0x3fb9_9999_9999_999a,
+    ),
     (&[0x3fb9_9999_9999_999a; 10], 0x3ff0_0000_0000_0000),
     (
         &[
@@ -502,7 +511,14 @@ fn sumprod_adds_exact_int_pairs_before_a_float_joins_the_total() {
         assert!(mixed.exception.is_null());
         assert_eq!(mixed.value, 1.5);
     }
-    for list in [p, q, x, y] {
+    let (small, other) = (ints(&["2", "3"]), ints(&["4", "5"]));
+    // SAFETY: the lists are live.
+    check(
+        unsafe { typy_rt_math_sumprod_float(small, other) },
+        &Ok(23.0_f64.to_bits()),
+        "sumprod of small ints",
+    );
+    for list in [p, q, x, y, small, other] {
         release(list);
     }
 }

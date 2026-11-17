@@ -659,6 +659,56 @@ fn type_errors_in_operations_are_reported() {
 }
 
 #[test]
+fn a_call_of_a_c_function_the_module_lacks_or_with_wrong_arguments_fails() {
+    let cases: Vec<(Breaker, &str)> = vec![
+        (
+            Box::new(|module| {
+                first_block_instruction(module, 1).operation = Operation::CallForeign {
+                    function: 9,
+                    arguments: vec![],
+                };
+            }),
+            "foreign#9 is not a C function of the module",
+        ),
+        (
+            Box::new(|module| {
+                first_block_instruction(module, 1).operation = Operation::CallForeign {
+                    function: 0,
+                    arguments: vec![],
+                };
+            }),
+            "labs takes 1 arguments, not 0",
+        ),
+        (
+            Box::new(|module| {
+                first_block_instruction(module, 2).operation = Operation::CallForeign {
+                    function: 0,
+                    arguments: vec![ValueId(1)],
+                };
+            }),
+            "an argument of labs v1 is float, which does not pass as",
+        ),
+    ];
+    for (break_rule, expected) in cases {
+        let mut module = every_operation();
+        module
+            .foreign_functions
+            .push(crate::library::TyirForeignFunction {
+                name: "labs".to_owned(),
+                library: 0,
+                parameters: vec![crate::library::CType::Int64],
+                result: Some(crate::library::CType::Int64),
+            });
+        break_rule(&mut module);
+        let found = message(&module);
+        assert!(
+            found.contains(expected),
+            "expected {expected:?}, found {found:?}"
+        );
+    }
+}
+
+#[test]
 fn terminator_type_errors_are_reported() {
     let mut broken = module(division());
     broken.functions[0].blocks[2].terminator = Terminator::Return(ValueId(3));

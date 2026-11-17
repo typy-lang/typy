@@ -1048,3 +1048,20 @@ fn a_type_statement_keeps_its_name_parameters_and_value() {
         assert!(dumped.contains(line), "{line} in\n{dumped}");
     }
 }
+
+#[test]
+fn dump_writes_a_match_with_its_guards_and_capture_patterns() {
+    let source = "match x:\n    case [1, *rest] as whole if rest:\n        pass\n    case _:\n        pass\n";
+    let tree = parse(&file(source), PythonFloor::V3_12).unwrap();
+    let dumped = dump(&tree, &file(source));
+    for line in [
+        "Match @1:1",
+        "MatchAs whole @2:10",
+        "MatchSequence @2:10",
+        "MatchStar rest",
+        "guard\n",
+        "MatchAs _ @4:10",
+    ] {
+        assert!(dumped.contains(line), "{line} in\n{dumped}");
+    }
+}

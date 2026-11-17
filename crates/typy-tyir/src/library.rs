@@ -259,10 +259,13 @@ mod tests {
                 _ => assert_eq!(result, TyirType::Int),
             }
         }
-        assert!(CType::Int8.takes(TyirType::Int) && !CType::Int8.takes(TyirType::Bool));
-        assert!(CType::Float.takes(TyirType::Float) && !CType::Float.takes(TyirType::Int));
+        assert!(CType::Int8.takes(TyirType::Int));
+        assert!(!CType::Int8.takes(TyirType::Bool));
+        assert!(CType::Float.takes(TyirType::Float));
+        assert!(!CType::Float.takes(TyirType::Int));
         assert!(CType::Bool.takes(TyirType::Bool));
-        assert!(CType::CharPointer.takes(bytes) && CType::CharPointer.takes(optional_bytes));
+        assert!(CType::CharPointer.takes(bytes));
+        assert!(CType::CharPointer.takes(optional_bytes));
         assert!(!CType::CharPointer.takes(TyirType::Int));
         for taken in [TyirType::Int, optional_int, bytes, optional_bytes] {
             assert!(CType::VoidPointer.takes(taken), "{taken}");
@@ -277,7 +280,8 @@ mod tests {
         assert_eq!(pointer.result_type(), TyirType::CDATA);
         assert_eq!(pointer.c_name(), "void *");
         assert_eq!(pointer.integer(), None);
-        assert!(pointer.takes(TyirType::CDATA) && pointer.takes(optional_cdata));
+        assert!(pointer.takes(TyirType::CDATA));
+        assert!(pointer.takes(optional_cdata));
         assert!(!pointer.takes(TyirType::Int));
         assert!(CType::VoidPointer.takes(TyirType::CDATA));
         assert!(CType::VoidPointer.takes(optional_cdata));

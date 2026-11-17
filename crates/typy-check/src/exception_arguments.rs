@@ -198,17 +198,16 @@ impl Creations {
 /// alone, as CPython's `OSError.__init__` cuts them (EXC-14), and a file name that may be
 /// `None` gives both.
 fn shown(class: &ExceptionClass, arguments: &Type) -> Vec<Type> {
-    let Type::Tuple(items) = arguments else {
-        return vec![arguments.clone()];
-    };
-    if !class.builtin().is_os_error() || !(3..=5).contains(&items.len()) {
-        return vec![arguments.clone()];
-    }
-    let cut = Type::Tuple(items[..2].to_vec());
-    match &items[2] {
-        Type::NoneType => vec![arguments.clone()],
-        Type::Optional(_) => vec![arguments.clone(), cut],
-        _ => vec![cut],
+    match arguments {
+        Type::Tuple(items) if class.builtin().is_os_error() && (3..=5).contains(&items.len()) => {
+            let cut = Type::Tuple(items[..2].to_vec());
+            match &items[2] {
+                Type::NoneType => vec![arguments.clone()],
+                Type::Optional(_) => vec![arguments.clone(), cut],
+                _ => vec![cut],
+            }
+        }
+        _ => vec![arguments.clone()],
     }
 }
 
@@ -216,10 +215,11 @@ fn shown(class: &ExceptionClass, arguments: &Type) -> Vec<Type> {
 /// those of one layout joined item by item.
 fn union_of(tuples: Vec<Type>) -> Type {
     let mut members: Vec<Vec<Type>> = Vec::new();
-    for tuple in tuples {
-        let Type::Tuple(items) = tuple else {
-            continue;
-        };
+    let tuples = tuples.into_iter().filter_map(|tuple| match tuple {
+        Type::Tuple(items) => Some(items),
+        _ => None,
+    });
+    for items in tuples {
         match members
             .iter_mut()
             .find(|member| same_layout(member, &items))
@@ -287,6 +287,14 @@ mod tests {
         Type::Tuple(items.to_vec())
     }
 
+    /// Returns the members of a union.
+    fn members(ty: Type) -> Vec<Type> {
+        match ty {
+            Type::Union(members) => members,
+            other => panic!("a union, not {other:?}"),
+        }
+    }
+
     #[test]
     fn a_base_class_has_the_unicode_errors_five_arguments_when_the_program_can_cause_them() {
         let value_error = builtin(BuiltinException::ValueError);
@@ -301,9 +309,7 @@ mod tests {
             ])
         );
         creations.codec(true, false);
-        let Type::Union(members) = creations.arguments_of(&value_error) else {
-            panic!("a union");
-        };
+        let members = members(creations.arguments_of(&value_error));
         let object = Type::union(vec![Type::Str, Type::Bytes]);
         assert_eq!(
             members,
@@ -333,9 +339,7 @@ mod tests {
         let type_error = builtin(BuiltinException::TypeError);
         creations.make(&type_error, &[Type::Str, Type::Int]);
         creations.make(&type_error, &[Type::Int]);
-        let Type::Union(members) = creations.arguments_of(&type_error) else {
-            panic!("a union");
-        };
+        let members = members(creations.arguments_of(&type_error));
         assert_eq!(members.len(), 3, "{members:?}");
         assert!(members.contains(&tuple(&[Type::Str, Type::Int])));
         assert!(members.contains(&tuple(&[Type::Int])));
@@ -388,9 +392,7 @@ mod tests {
         let class = builtin(BuiltinException::FileNotFoundError);
         creations.make(&class, &[Type::Int, Type::Str, Type::Str]);
         creations.make(&class, &[Type::Int, Type::Str, Type::NoneType]);
-        let Type::Union(members) = creations.arguments_of(&class) else {
-            panic!("a union");
-        };
+        let members = members(creations.arguments_of(&class));
         assert!(members.contains(&tuple(&[Type::Int, Type::Str])));
         assert!(members.contains(&tuple(&[Type::Int, Type::Str, Type::NoneType])));
         assert_eq!(members.len(), 3, "{members:?}");
@@ -425,11 +427,8 @@ mod tests {
         let os_error = builtin(BuiltinException::OSError);
         creations.make(&os_error, &[Type::Int, Type::Str, Type::NoneType]);
         creations.make(&os_error, &[Type::Float]);
-        let Type::Union(members) =
-            creations.arguments_of(&builtin(BuiltinException::FileNotFoundError))
-        else {
-            panic!("a union");
-        };
+        let members =
+            members(creations.arguments_of(&builtin(BuiltinException::FileNotFoundError)));
         assert!(members.contains(&tuple(&[Type::Int, Type::Str, Type::NoneType])));
         assert!(!members.contains(&tuple(&[Type::Float])));
     }
@@ -444,5 +443,52 @@ mod tests {
         first.extend(&second);
         assert!(first.covers(&second));
         assert_eq!(first, second);
+    }
+
+    #[test]
+    fn creations_cover_others_only_with_each_call_and_each_codec() {
+        let mut made = Creations::default();
+        made.make(&builtin(BuiltinException::TypeError), &[Type::Int]);
+        let mut initialized = Creations::default();
+        initialized.initialize(&builtin(BuiltinException::TypeError), &[Type::Int]);
+        let mut encodes = Creations::default();
+        encodes.codec(true, false);
+        let mut decodes = Creations::default();
+        decodes.codec(false, true);
+        let none = Creations::default();
+        for other in [&made, &initialized, &encodes, &decodes] {
+            assert!(!none.covers(other), "{other:?}");
+            assert!(other.covers(&none), "{other:?}");
+        }
+        assert!(!encodes.covers(&decodes));
+        assert!(!decodes.covers(&encodes));
+    }
+
+    #[test]
+    fn a_key_of_an_error_type_is_not_recorded() {
+        let mut creations = Creations::default();
+        creations.key(&Type::Error);
+        creations.key(&Type::List(Box::new(Type::Error)));
+        assert_eq!(creations, Creations::default());
+        assert_eq!(
+            creations.arguments_of(&builtin(BuiltinException::KeyError)),
+            tuple(&[Type::Str])
+        );
+    }
+
+    #[test]
+    fn an_os_error_of_one_or_two_arguments_shows_them_all() {
+        let mut creations = Creations::default();
+        let class = builtin(BuiltinException::FileNotFoundError);
+        creations.make(&class, &[Type::Float]);
+        creations.make(&class, &[Type::Int, Type::Int]);
+        let members = members(creations.arguments_of(&class));
+        for shown in [
+            tuple(&[Type::Float]),
+            tuple(&[Type::Int, Type::Int]),
+            tuple(&[Type::Int, Type::Str]),
+        ] {
+            assert!(members.contains(&shown), "{shown:?} in {members:?}");
+        }
     }
 }

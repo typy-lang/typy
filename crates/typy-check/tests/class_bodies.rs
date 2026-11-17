@@ -51,6 +51,25 @@ fn a_dataclass_without_eq_and_an_exit_without_annotations_are_accepted() {
 }
 
 #[test]
+fn a_dataclass_takes_union_fields_its_own_hash_and_eq_and_a_copy_of_a_generic_base() {
+    accepted(&[
+        // Fields of unions, one with a list among its members.
+        "from dataclasses import dataclass\n@dataclass(eq=False)\nclass P:\n    x: int | None\n\
+         \x20   y: list[int] | None\nprint(P(1, None).x, P(None, [2]).y)\n",
+        // The methods the class writes take the place of those the decorator would write.
+        "from dataclasses import dataclass\n@dataclass(frozen=True)\nclass Key:\n    name: str\n\
+         \x20   def __hash__(self) -> int:\n        return len(self.name)\n\
+         \x20   def __eq__(self, other: 'Key') -> bool:\n\
+         \x20       return self.name.lower() == other.name.lower()\n\
+         print(Key('Ab') == Key('aB'), {Key('Ab'): 1}[Key('aB')])\n",
+        // A copy of a generic class that is not a dataclass gives no fields.
+        "from dataclasses import dataclass\nclass Echo[T]:\n    def echo(self, item: T) -> T:\n\
+         \x20       return item\n@dataclass\nclass Labelled(Echo[int]):\n    label: str\n\
+         print(Labelled('a'), Labelled('a').echo(3))\n",
+    ]);
+}
+
+#[test]
 fn super_reaches_the_methods_of_the_bases() {
     accepted(&[
         // Another method of the base, from `__init__`.
