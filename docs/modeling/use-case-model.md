@@ -54,7 +54,7 @@ extend UC-02 add one option to a build.
 | UC-05 | Inspect a compiler stage | Compiler contributor | 0.1 |
 | UC-06 | Call a C library | Library binder | 0.5 |
 | UC-07 | Export functions to C | Library binder | 0.5 |
-| UC-08 | Cross-compile for another target | Application developer | 0.5 |
+| UC-08 | Cross-compile for another target | Application developer | 0.6 |
 | UC-09 | Verify conformance against CPython | Compiler contributor | 0.1 |
 | UC-10 | Read diagnostics in an editor or CI | Tool integrator | 0.3 |
 | UC-11 | Configure a project | Application developer | 0.3 |
@@ -304,14 +304,15 @@ Alternate flows:
 | Preconditions | A C linker and C library for the target are installed (A-01). |
 | Trigger | The developer runs `typy build FILE --target TRIPLE`. |
 | Postconditions | An executable for the target is written. |
-| Requirements | CLI-08, NFR-06 |
+| Requirements | CLI-08, CLI-14, NFR-06 |
 
 Main flow:
 
 1. The developer runs `typy build FILE --target TRIPLE`.
 2. TyPy checks that `TRIPLE` is a supported target.
-3. TyPy builds as in UC-02, generating code for the target and using the
-   target's linker.
+3. TyPy builds as in UC-02, generating code for the target, linking the
+   target's runtime archive and using the target's C toolchain: the tools
+   named after its GNU triple, or those `typy.toml` names (ADR-0051).
 4. TyPy writes the executable for the target.
 
 Alternate flows:

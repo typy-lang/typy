@@ -54,5 +54,8 @@ supersedes it.
 | [ADR-0046](0046-write-a-librarys-binding-as-a-typed-function-for-each-export.md) | Write a library's binding as a typed function for each export | Accepted | 2026-11-17 |
 | [ADR-0047](0047-compile-ctypes-declarations-into-direct-calls-linked-at-build-time.md) | Compile ctypes declarations into direct calls linked at build time | Accepted | 2026-11-17 |
 | [ADR-0048](0048-hold-a-ctypes-object-as-a-counted-object-over-a-c-buffer.md) | Hold a ctypes object as a counted object over a C buffer | Accepted | 2026-11-17 |
-| [ADR-0049](0049-lay-out-a-ctypes-structure-as-c-and-pass-it-as-system-v-does.md) | Lay out a ctypes structure as C and pass it as System V does | Accepted | 2026-11-17 |
+| [ADR-0049](0049-lay-out-a-ctypes-structure-as-c-and-pass-it-as-system-v-does.md) | Lay out a ctypes structure as C and pass it as System V does | Superseded by ADR-0052 | 2026-11-17 |
 | [ADR-0050](0050-build-the-documentation-with-zensical-and-publish-it-on-github-pages.md) | Build the documentation with Zensical and publish it on GitHub Pages | Accepted | 2026-11-17 |
+| [ADR-0051](0051-build-for-a-target-with-the-cross-toolchain-named-after-its-triple.md) | Build for a target with the cross toolchain named after its triple | Accepted | 2026-11-17 |
+| [ADR-0052](0052-pass-a-ctypes-structure-by-value-as-the-targets-c-convention-does.md) | Pass a ctypes structure by value as the target's C convention does | Accepted | 2026-11-17 |
+| [ADR-0053](0053-return-a-float-the-runtime-may-raise-beside-as-its-bits.md) | Return a float the runtime may raise beside as its bits | Accepted | 2026-11-17 |

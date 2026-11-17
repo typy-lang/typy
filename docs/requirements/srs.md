@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy software requirements specification |
-| Version | 1.82 |
+| Version | 1.83 |
 | Status | Approved |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-17 |
@@ -90,11 +90,14 @@ supported standard library modules. Nothing is installed into CPython.
 | Release | Host and target platforms |
 | --- | --- |
 | 0.1 | Linux x86_64 with glibc or musl |
-| 0.6 | Adds Linux AArch64 and macOS AArch64 |
+| 0.6 | Adds Linux AArch64 with glibc |
+| 0.7 | Adds macOS AArch64 |
 | 1.0 | Adds Windows x86_64 |
 
-Building needs a system C linker driver (`cc`), or `lld`. Running the
-oracle needs CPython 3.12 or later.
+Building needs a C linker driver for the target: `cc` for the host's own
+target, and for another target the cross toolchain a Linux distribution
+packages, such as Debian's `gcc-aarch64-linux-gnu` (A-01, ADR-0051).
+Running the oracle needs CPython 3.12 or later.
 
 ### 2.4 Constraints
 
@@ -140,12 +143,13 @@ oracle needs CPython 3.12 or later.
 | CLI-05 | `typy build` shall offer the modes `debug` (default), `--release` and `--release-small`: LLVM's `O0` pipeline, its `O2` pipeline, and its `O2` pipeline with every function marked `minsize`, because LLVM 23 has no `Oz` pipeline. | M | 0.1 |
 | CLI-06 | The exit status of `typy` shall be 0 on success, 1 when the program has errors, 2 on wrong command usage, and 101 on an internal compiler error. | M | 0.1 |
 | CLI-07 | Project settings shall be read from `typy.toml`, and a command line flag shall override the same setting in the file. | S | 0.3 |
-| CLI-08 | `typy build --target TRIPLE` shall cross-compile for every supported target. | S | 0.6 |
+| CLI-08 | `typy build --target TRIPLE` and `typy check --target TRIPLE` shall build and check for each supported target from each supported host, and an unsupported triple shall be a usage error that lists the supported ones. | S | 0.6 |
 | CLI-09 | `typy build --lib static` shall produce a static library and `--lib shared` a shared library. | M | 0.5 |
 | CLI-10 | `typy explain CODE` shall print an explanation of the diagnostic with a wrong and a corrected example. | S | 0.3 |
 | CLI-11 | `typy` shall read no environment variable that changes the output, except `TYPY_HOME`. | M | 0.1 |
 | CLI-12 | The setting `python-floor` in `typy.toml` shall set the program's Python floor to one of `3.12`, `3.13`, `3.14` or `3.15`, and any other value shall be rejected. | S | 0.3 |
 | CLI-13 | A library build shall carry the release of the version that its module's `__version__`, or else `version` in `typy.toml`, gives in its file names, as Linux names libraries: `libNAME.so.X.Y` with the soname `libNAME.so.X`, and `libNAME.X.Y.a`, each with links of the names a linker finds. | S | 0.5 |
+| CLI-14 | The C linker driver, `ar` and `objcopy` that build for a target shall be the host's own tools for the host's target and the tools named after the target's GNU triple for another, such as `aarch64-linux-gnu-gcc`, unless `typy.toml` names others for that target. | S | 0.6 |
 
 TyPy has no formatter of its own. TyPy source is Python, so a standard
 formatter applies; Ruff's formatter is the project's recommendation.
@@ -445,6 +449,7 @@ direct calls and links the library when the program is built.
 | FFI-09 | A library a `ctypes` declaration loads, and its functions, shall be values a program stores, passes and prints. | C | 1.0 |
 | FFI-10 | The ctypes names `c_char`, `c_wchar`, `c_wchar_p`, `create_string_buffer`, `cast` and `addressof`, pointers to and arrays of pointers and arrays, arrays whose length is not an integer literal, array slices, `byref` other than as a C function's argument, assigning a pointer's `contents`, and ctypes classes as values, in annotations, `isinstance` and `type` shall be accepted. | C | 1.0 |
 | FFI-11 | Methods and class attributes other than one `_fields_` list in a `Structure` subclass, `_fields_` assigned after the class statement, bit fields, a subclass of a `Structure` subclass, and `ctypes.Union` shall be accepted. | C | 1.0 |
+| FFI-12 | A `ctypes` structure passed to or returned from a C function by value shall follow the C calling convention of the target: System V on x86_64 Linux and AAPCS64 on AArch64 Linux. | M | 0.6 |
 
 ### 3.17 Diagnostics (DIA)
 
@@ -500,6 +505,7 @@ cache, unless a row says otherwise.
 | NFR-13 | A `list[int]` of one million small values shall use at most 8.5 MB. | 0.2 | Layout test of the runtime's list |
 | NFR-14 | The compiler shall use at most 1 GB of memory to build a 10,000-line project. | 1.0 | Benchmark with budget |
 | NFR-15 | A debug build and a release build of a program shall run alike. | 0.1 | Differential tests in CI |
+| NFR-16 | Every run test of the conformance suite shall give the same output and exit status when built for each supported target and run on it. | 0.6 | Conformance suite on an arm64 CI runner and under qemu-user |
 
 ## 5. Release plan
 
@@ -510,7 +516,8 @@ cache, unless a row says otherwise.
 | 0.3 | `try`, `raise`, user exceptions, `with`, `assert`, `del`, `global`, modules and packages, lazy imports | `sys`, `math`, `open`; `typy.toml` with `python-floor`; JSON diagnostics; the first warnings and `--deny-warnings` |
 | 0.4 | Dataclasses, inheritance, protocols, PEP 695 generics, narrowing, `Final`, `type` aliases | Binary files and the rest of `open` |
 | 0.5 | `match`, `:=`, dataclass `default_factory`, hashing and options, the rest of the class protocols (CLS-20 to CLS-26), C interoperability through `ctypes` | Stack allocation; libraries and exports described by their annotations (ADR-0032) |
-| 0.6 | | Linux and macOS AArch64; cross-compilation; the documentation site |
+| 0.6 | | Linux AArch64 as host and target; cross-compilation between the Linux targets; the documentation site |
+| 0.7 | | macOS AArch64 as host and target |
 | 1.0 | Closures, `lambda`, `nonlocal`, generators, `*args`, keyword-only parameters, `isinstance` with a class held in a variable, `issubclass`, `typing` names as values, `NamedTuple`, `Sequence` and the other abstract collections | Cycle collection, `weakref`; Windows; performance budgets |
 
 ## 6. Out of scope
@@ -555,6 +562,7 @@ resolved issues below.
 | --- | --- | --- |
 | OI-23 | Which ABI lets TyPy modules link dynamically: the layouts of objects, the exception state, the identity of type objects across shared libraries, and one runtime shared by every library (ADR-0016)? It is settled after 1.0, once those layouts are fixed. | 2026-11-11 |
 | OI-25 | Should the modules of the standard library TyPy provides ship prebuilt, one static library and interface per module and target, so a development build links them without compiling them? It depends on separate compilation (ADR-0016). | 2026-11-15 |
+| OI-28 | How is LLVM pinned so that a release built in CI is byte for byte the build a developer makes of the same commit (NFR-06)? The dev image installs LLVM 23 from apt.llvm.org, which publishes dated snapshot builds of 23.1.x and removes old ones, so a CI image built later gets a newer build than a local image, and the 0.5.0 archive rebuilt locally differs from the published one. | 2026-11-17 |
 
 ## 8. Resolved issues
 
