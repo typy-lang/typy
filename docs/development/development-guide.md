@@ -73,7 +73,7 @@ Container". VS Code attaches to the same `dev` service.
 | `make test-e2e` | Runs the end-to-end tests of the `typy` executable |
 | `make test-all` | Runs `make test` and `make miri` |
 | `make docs-lint` | Lints every Markdown file with markdownlint-cli2 |
-| `make docs` | Builds the documentation site into `site/` with `scripts/build-docs.sh`: Zensical in strict mode, which fails on a link to a page or an anchor that does not exist (DOC-05). The first run installs Zensical 0.1.1 and its dependencies from `scripts/docs-requirements.txt`, each checked against its sha256, into a CPython 3.14 environment in the `docs-tools` volume, `/var/cache/typy/docs`, about 20 MB to download. Open `site/index.html`, or serve the directory, to read the result |
+| `make docs` | Builds the documentation site into `site/` with `scripts/build-docs.sh`: Zensical in strict mode, which fails on a link to a page or an anchor that does not exist (DOC-05). The first run installs Zensical 0.1.1 and its dependencies from `scripts/docs-requirements.txt`, each checked against its sha256, into a CPython 3.14 environment at `/var/cache/typy/docs` in the dev container, about 20 MB to download, which a container built anew installs again. Open `site/index.html`, or serve the directory, to read the result |
 | `make ascii-check` | Fails on any non-ASCII byte in tracked text files, except rendered SVG |
 | `make traceability` | Fails when a requirement has no row in the test plan's matrix, or a document cites an ID that is not defined |
 | `make diagrams` | Renders every PlantUML source to the SVG beside it |
@@ -154,10 +154,11 @@ to change as it grows:
   line in the `nav` of `mkdocs.yml`. An accepted record is not rewritten;
   a later record supersedes it.
 - A new page gets a line in the `nav` of `mkdocs.yml`, where the site
-  shows it; the documentation test fails on a page the navigation leaves
-  out (DOC-05). A link to a file outside `docs/`, such as a source file,
-  is a link to it on GitHub, `https://github.com/typy-lang/typy/blob/main/`
-  and its path, since the site holds only `docs/`.
+  shows it; `make docs` fails on a page the navigation leaves out, through
+  `scripts/check-docs-nav.py` (DOC-05). A link to a file outside `docs/`,
+  such as a source file, is a link to it on GitHub,
+  `https://github.com/typy-lang/typy/blob/main/` and its path, since the
+  site holds only `docs/`.
 - A document's header carries its version, status and date. A change
   raises the version and the date.
 
@@ -200,12 +201,23 @@ to GitHub Pages.
 
 | Workflow | Job | Runs on | Does |
 | --- | --- | --- | --- |
-| `ci.yml` | Quality gate and package | Every pull request | `make check`, then `make dist` |
+| `ci.yml` | Quality gate and package | Every pull request | `make check`, then `make dist`; for a pull request of documents alone, the light run below |
 | `ci.yml` | Miri and fuzzing | On demand, before a release | `make miri`, then `FUZZ_SECONDS=1800 make fuzz`; the inputs that crashed are kept as an artifact |
 | `ci.yml` | Dependency review | Every pull request | Fails on a new dependency with a known vulnerability |
 | `codeql.yml` | Analyze | Every push to `main`, and weekly | Code scanning of the Rust sources and the workflows, leaving out the test files that `.github/codeql/codeql-config.yml` lists |
 | `release.yml` | Check and build, Publish, then Documentation | A tag `vX.Y.Z` | Section 9 |
 | `pages.yml` | Build the site, then Deploy | Called by `release.yml` once a release is created; a release published by hand; on demand, on a release tag | Builds the site with `scripts/build-docs.sh` on the runner after `astral-sh/setup-uv`, without the dev image, and deploys it to GitHub Pages at <https://typy-lang.org> (DOC-05) |
+
+A pull request whose every file is a document that no compiled test reads
+gets a light run of the same job, which builds no dev image and takes a
+minute or two: markdownlint, the strict site build with its navigation
+check, the diagrams, the ASCII check and traceability. `scripts/ci-changes.sh`
+decides from the files the pull request changes. The engineering documents,
+the diagrams, the site's settings and style, and the Markdown files at the
+root and in `.github/` qualify; so does a page of the user documentation
+while it holds no Python block, which the documentation test compiles
+(DOC-04). The troubleshooting page, which `typy explain` embeds, and every
+other file give the full run.
 
 CI minutes are spent on whole changes. `main` changes only through a pull
 request that is up to date and passes the quality gate, so CI does not run

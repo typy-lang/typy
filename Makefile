@@ -62,10 +62,7 @@ coverage-branches: build ## Measure line and branch coverage with nightly; fail 
 docs-lint: dev ## Lint every Markdown file with markdownlint-cli2
 	@$(EXEC) markdownlint-cli2 $(MARKDOWN)
 
-# The docs-tools volume is created owned by root, and the build installs
-# Zensical into it as the dev user.
 docs: dev ## Build the documentation site into site/ with Zensical in strict mode, installing it the first time (DOC-05)
-	@$(COMPOSE) exec -T -u root dev install -d -o dev -g dev /var/cache/typy/docs
 	@$(EXEC) scripts/build-docs.sh
 
 ascii-check: dev ## Fail on non-ASCII text in sources, documents and scripts
