@@ -172,6 +172,9 @@ nav:
           - adr/0048-hold-a-ctypes-object-as-a-counted-object-over-a-c-buffer.md
           - adr/0049-lay-out-a-ctypes-structure-as-c-and-pass-it-as-system-v-does.md
           - adr/0050-build-the-documentation-with-zensical-and-publish-it-on-github-pages.md
+          - adr/0051-build-for-a-target-with-the-cross-toolchain-named-after-its-triple.md
+          - adr/0052-pass-a-ctypes-structure-by-value-as-the-targets-c-convention-does.md
+          - adr/0053-return-a-float-the-runtime-may-raise-beside-as-its-bits.md
       - Detailed design: design/detailed-design.md
       - Test plan: testing/test-plan.md
       - Benchmark report: testing/benchmark-report.md
