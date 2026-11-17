@@ -3,18 +3,18 @@
 use std::io;
 
 use camino::Utf8Path;
-use typy_codegen::{ObjectFile, TargetTriple};
+use typy_codegen::{ObjectFile, Target, TargetTriple};
 use typy_diagnostics::Diagnostics;
 
 use crate::artifact::{Artifact, ArtifactKind};
 use crate::runtime_archive::RuntimeArchive;
 use crate::tool::{cannot_write, output_directory, run_tool, utf8};
+use crate::toolchain::Toolchain;
 
 /// Links object files for one target with that target's runtime archive.
 #[derive(Clone, Debug)]
 pub struct Linker {
-    pub(crate) program: String,
-    static_link: bool,
+    pub(crate) tools: Toolchain,
     pub(crate) strip_debug: bool,
     pub(crate) archive: RuntimeArchive,
     /// What follows `-l` for each library, such as `mimalloc`, the allocator's (MEM-08),
@@ -25,16 +25,11 @@ pub struct Linker {
 }
 
 impl Linker {
-    /// Returns the linker of `triple`: `cc` for glibc, and `musl-gcc` with `-static` for musl.
+    /// Returns the linker of `triple` with the tools this host builds it with (ADR-0051).
     #[must_use]
     pub fn new(triple: TargetTriple, archive: RuntimeArchive) -> Self {
-        let (program, static_link) = match triple {
-            TargetTriple::X86_64LinuxGnu => ("cc", false),
-            TargetTriple::X86_64LinuxMusl => ("musl-gcc", true),
-        };
         Self {
-            program: program.to_owned(),
-            static_link,
+            tools: Toolchain::of(triple, Target::host().triple),
             strip_debug: false,
             archive,
             libraries: Vec::new(),
@@ -69,7 +64,7 @@ impl Linker {
     /// Returns the arguments that link `object` into `output`.
     fn arguments(&self, object: &Utf8Path, output: &Utf8Path) -> Vec<String> {
         let mut arguments = Vec::new();
-        if self.static_link {
+        if self.tools.static_link {
             arguments.push("-static".to_owned());
         }
         arguments.extend(["-o".to_owned(), output.to_string()]);
@@ -129,7 +124,7 @@ impl Linker {
         let object_path = utf8(object_file.path());
         let temporary_path = utf8(&temporary);
         let arguments = self.arguments(&object_path, &temporary_path);
-        run_tool(&self.program, &arguments)?;
+        run_tool(&self.tools.linker, &arguments)?;
         temporary
             .persist(output)
             .map_err(|error| cannot_write(error.error))?;
@@ -176,7 +171,7 @@ mod tests {
         let gnu = Linker::new(TargetTriple::X86_64LinuxGnu, archive(&root));
         let arguments = gnu.arguments(Utf8Path::new("a.o"), Utf8Path::new("out"));
         let expected_archive = root.join("libtypy_runtime.a").to_string();
-        assert_eq!(gnu.program, "cc");
+        assert_eq!(gnu.tools.linker, "cc");
         assert_eq!(
             arguments,
             [
@@ -211,7 +206,7 @@ mod tests {
             ]
         );
         let musl = Linker::new(TargetTriple::X86_64LinuxMusl, archive(&root));
-        assert_eq!(musl.program, "musl-gcc");
+        assert_eq!(musl.tools.linker, "musl-gcc");
         assert_eq!(
             musl.arguments(Utf8Path::new("a.o"), Utf8Path::new("out"))[0],
             "-static"
@@ -222,7 +217,7 @@ mod tests {
     fn a_missing_toolchain_program_is_named() {
         let (_guard, root) = directory();
         let mut linker = Linker::new(TargetTriple::X86_64LinuxGnu, archive(&root));
-        linker.program = "typy-no-such-linker".to_owned();
+        linker.tools.linker = "typy-no-such-linker".to_owned();
         let diagnostics = linker.link(&object(), &root.join("app")).unwrap_err();
         let diagnostic = diagnostics.iter().next().unwrap();
         assert_eq!(diagnostic.code().to_string(), "E0701");

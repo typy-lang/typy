@@ -8,7 +8,7 @@ set -euo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
 
 target="${CARGO_TARGET_DIR:-target}"
-for triple in x86_64-unknown-linux-gnu x86_64-unknown-linux-musl; do
+for triple in x86_64-unknown-linux-gnu x86_64-unknown-linux-musl aarch64-unknown-linux-gnu; do
     cargo rustc -p typy-runtime --profile runtime --locked --crate-type staticlib \
         --target "${triple}"
     for stage in "${target}" "${target}/llvm-cov-target"; do

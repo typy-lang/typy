@@ -11,6 +11,7 @@ The `typy` command checks, builds and runs a program from its main file.
 | `typy run FILE [-- ARGS]` | Builds the program and runs it with `ARGS` | CLI-02 |
 | `typy explain CODE` | Prints what a diagnostic code means, a program that gives it and the corrected program | CLI-10 |
 | `typy build --lib KIND FILE` | Writes a `static` or `shared` C library of the functions the module's `__all__` lists, and its C header; see [C interoperability](../extending/c-interop.md) | CLI-09 |
+| `typy build --target TRIPLE FILE` | Builds for another target, `x86_64-unknown-linux-gnu`, `x86_64-unknown-linux-musl` or `aarch64-unknown-linux-gnu`, with that target's C toolchain; `typy check` takes `--target` too | CLI-08, CLI-14 |
 | `typy build --emit=STAGE FILE` | Writes one stage as text: `ast`, `typed-ast`, `tyir`, `tyir-mem`, `llvm-ir` or `asm`, or `obj` | CLI-04 |
 | `--release`, `--release-small` | Optimise for speed or for size, without debug information; the default is a debug build, which keeps it | CLI-05 |
 | `--deny-warnings` | Fails with status 1 when there are warnings | DIA-07 |
@@ -22,6 +23,40 @@ The exit status of `typy` is 0 on success, 1 when the program has errors,
 `typy` reads no environment variable that changes its output, except
 `TYPY_HOME` (CLI-11). A program reads its arguments through `sys.argv`,
 which comes with imports in 0.3.
+
+## Building for another target
+
+`typy build` builds for the machine it runs on unless `--target` names
+another target. On an x86_64 Linux machine, this builds `app` for 64-bit
+Arm Linux:
+
+```console
+typy build app.py --target aarch64-unknown-linux-gnu
+```
+
+TyPy generates the code itself and links it with the C toolchain of the
+target. For the host's own architecture that is `cc`, `ar` and `objcopy`,
+and `musl-gcc` for `x86_64-unknown-linux-musl`. For the other architecture
+it is the toolchain named after the target's GNU triple, such as
+`aarch64-linux-gnu-gcc`, which Debian and Ubuntu package with the target's
+C library:
+
+```console
+sudo apt install gcc-aarch64-linux-gnu libc6-dev-arm64-cross
+```
+
+A missing tool is E0701, which names the program TyPy looked for. The
+program runs on the target's machines, or on this one under an emulator
+such as `qemu-aarch64` from the `qemu-user` package:
+
+```console
+qemu-aarch64 -L /usr/aarch64-linux-gnu ./app
+```
+
+`typy run` builds for the host only, since a program for another
+architecture does not run on it. `typy check --target` gives the same
+diagnostics for every target of 0.6, whose `sys.platform` is `linux` and
+whose C types have the same sizes.
 
 ## Project settings in typy.toml
 

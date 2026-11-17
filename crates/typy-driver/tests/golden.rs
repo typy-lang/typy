@@ -5,6 +5,7 @@
 
 use camino::{Utf8Path, Utf8PathBuf};
 use typy_build::{BuildRequest, EmitStage};
+use typy_codegen::{Target, TargetTriple};
 use typy_diagnostics::render_text;
 use typy_driver::{Emission, Outcome, Pipeline};
 
@@ -75,7 +76,13 @@ fn every_text_stage_of_every_program_matches_its_golden_file() {
     for program in programs(&golden().join("programs")) {
         let name = program.file_stem().unwrap();
         for stage in TEXT_STAGES {
-            let request = BuildRequest::new(&program).unwrap().with_emit(stage);
+            // The golden files hold x86-64 code, whichever host builds them.
+            let request = BuildRequest::new(&program)
+                .unwrap()
+                .with_emit(stage)
+                .with_target(Target {
+                    triple: TargetTriple::X86_64LinuxGnu,
+                });
             let text = match pipeline().run(&request).map(|success| success.outcome) {
                 Ok(Outcome::Emitted(Emission::Text(text))) => text,
                 other => panic!("{program} --emit={}: {other:?}", stage.name()),

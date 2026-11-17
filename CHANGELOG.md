@@ -20,6 +20,12 @@ All notable changes to TyPy are recorded here. The format follows
   the quality gate (DOC-05, ADR-0050).
 - A What's new page for each release, starting with TyPy 0.5, and the
   changelog as a page of the site.
+- `typy build --target TRIPLE` builds for another target, and
+  `aarch64-unknown-linux-gnu`, 64-bit Arm Linux with glibc, is one. An
+  x86_64 host links with the cross toolchain named after the target's GNU
+  triple, such as `aarch64-linux-gnu-gcc`. `typy check` takes `--target`
+  too, and an unsupported triple is a usage error that lists the supported
+  ones (CLI-08, CLI-14, ADR-0051).
 
 ### Changed
 

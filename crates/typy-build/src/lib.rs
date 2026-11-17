@@ -12,6 +12,7 @@ mod mode;
 mod request;
 mod runtime_archive;
 mod tool;
+mod toolchain;
 
 pub use artifact::{Artifact, ArtifactKind};
 pub use emit_stage::EmitStage;
@@ -21,3 +22,4 @@ pub use linker::Linker;
 pub use mode::BuildMode;
 pub use request::{BuildRequest, RequestError};
 pub use runtime_archive::RuntimeArchive;
+pub use toolchain::Toolchain;

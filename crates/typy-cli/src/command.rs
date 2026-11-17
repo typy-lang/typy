@@ -23,10 +23,13 @@ pub(crate) fn run(command: Command, deny_warnings: bool, reporter: Reporter) -> 
     };
     match command {
         Command::Explain { code } => explain::explain(&code),
+        // Checking gives the same diagnostics for every target of 0.6, whose `sys.platform` is
+        // `linux` and whose C types are LP64, so the target is only validated (ADR-0051).
         Command::Check {
             file,
             settings,
             library,
+            target: _,
         } => check::check(
             &pipeline.with_overrides(settings.overrides_for(library)),
             &file,
@@ -39,13 +42,17 @@ pub(crate) fn run(command: Command, deny_warnings: bool, reporter: Reporter) -> 
             mode,
             settings,
             library,
+            target,
         } => build::build(
             &pipeline.with_overrides(settings.overrides_for(library)),
             file,
-            emit,
-            output.as_deref(),
-            mode.build_mode(),
-            library.kind,
+            &build::Flags {
+                emit,
+                output,
+                mode: mode.build_mode(),
+                library: library.kind,
+                target: target.triple,
+            },
             reporter,
         ),
         Command::Run {

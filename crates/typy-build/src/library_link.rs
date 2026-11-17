@@ -72,7 +72,7 @@ impl Linker {
         let kept = work.join("exports.txt");
         let archive = work.join("library.a");
         run_tool(
-            &self.program,
+            &self.tools.linker,
             &[
                 "-r".to_owned(),
                 "-nostdlib".to_owned(),
@@ -92,11 +92,11 @@ impl Linker {
             keep.push("--strip-debug".to_owned());
         }
         keep.push(combined.to_string());
-        run_tool("objcopy", &keep)?;
+        run_tool(&self.tools.object_copier, &keep)?;
         // `D` writes zero for the times and owners, so a build gives the same bytes each time
         // (NFR-06).
         run_tool(
-            "ar",
+            &self.tools.archiver,
             &["rcsD".to_owned(), archive.to_string(), combined.to_string()],
         )?;
         Ok(archive)
@@ -129,7 +129,7 @@ impl Linker {
         }
         arguments.extend(self.link_arguments(object));
         arguments.push(format!("-Wl,--version-script={script}"));
-        run_tool(&self.program, &arguments)?;
+        run_tool(&self.tools.linker, &arguments)?;
         Ok(library)
     }
 }

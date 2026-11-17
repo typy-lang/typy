@@ -4,6 +4,7 @@
 use camino::Utf8PathBuf;
 use clap::{Args, Parser, Subcommand};
 use typy_build::{BuildMode, EmitStage, LibraryKind};
+use typy_codegen::TargetTriple;
 use typy_source::{PythonFloor, SettingOverrides};
 
 use crate::output::ErrorFormat;
@@ -39,6 +40,8 @@ pub(crate) enum Command {
         settings: Settings,
         #[command(flatten)]
         library: Library,
+        #[command(flatten)]
+        target: TargetFlag,
     },
     /// Build an executable, or write the output of one compiler stage.
     Build {
@@ -57,6 +60,8 @@ pub(crate) enum Command {
         settings: Settings,
         #[command(flatten)]
         library: Library,
+        #[command(flatten)]
+        target: TargetFlag,
     },
     /// Explain a diagnostic code, with a program that causes it and the corrected program.
     Explain {
@@ -108,6 +113,15 @@ pub(crate) struct Library {
     pub(crate) kind: Option<LibraryKind>,
 }
 
+/// The flag that names the target to build or check for (CLI-08).
+#[derive(Clone, Copy, Debug, Args)]
+pub(crate) struct TargetFlag {
+    /// Build for this target instead of the host: x86_64-unknown-linux-gnu,
+    /// x86_64-unknown-linux-musl or aarch64-unknown-linux-gnu.
+    #[arg(long = "target", value_name = "TRIPLE", value_parser = parse_target)]
+    pub(crate) triple: Option<TargetTriple>,
+}
+
 /// The flags that override a setting of `typy.toml` (CLI-07).
 #[derive(Clone, Copy, Debug, Args)]
 pub(crate) struct Settings {
@@ -141,6 +155,16 @@ fn parse_floor(text: &str) -> Result<PythonFloor, String> {
             .map(|floor| floor.as_str())
             .collect();
         format!("expected one of {}", floors.join(", "))
+    })
+}
+
+fn parse_target(text: &str) -> Result<TargetTriple, String> {
+    TargetTriple::parse(text).ok_or_else(|| {
+        let triples: Vec<&str> = TargetTriple::ALL
+            .iter()
+            .map(|triple| triple.as_str())
+            .collect();
+        format!("expected one of {}", triples.join(", "))
     })
 }
 
