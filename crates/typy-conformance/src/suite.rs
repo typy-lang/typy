@@ -6,6 +6,7 @@ use std::sync::Mutex;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 use camino::{Utf8Path, Utf8PathBuf};
+use typy_codegen::{Target, TargetTriple};
 use typy_driver::Pipeline;
 use typy_source::SettingOverrides;
 
@@ -50,6 +51,7 @@ pub struct Suite {
     compiler: Utf8PathBuf,
     pipeline: Pipeline,
     sanitizers: bool,
+    target: TargetTriple,
 }
 
 impl Suite {
@@ -62,7 +64,17 @@ impl Suite {
             pipeline: Pipeline::new(compiler.clone()),
             compiler,
             sanitizers: false,
+            target: Target::host().triple,
         }
+    }
+
+    /// Builds each accepted test for `target` instead of the host, and runs it under the
+    /// target architecture's emulator when the host cannot run it (NFR-16). The sanitizers
+    /// stay with the host's target.
+    #[must_use]
+    pub const fn with_target(mut self, target: TargetTriple) -> Self {
+        self.target = target;
+        self
     }
 
     /// Also builds each accepted test with AddressSanitizer and LeakSanitizer, which must show
@@ -165,8 +177,11 @@ impl Suite {
                         version.as_str()
                     ));
                 }
-                let verdict = judge_accepted(&pipeline, case, expected);
-                if verdict != Verdict::Pass || !self.sanitizers {
+                let verdict = judge_accepted(&pipeline, case, expected, self.target);
+                if verdict != Verdict::Pass
+                    || !self.sanitizers
+                    || self.target != Target::host().triple
+                {
                     return verdict;
                 }
                 judge_sanitized(&pipeline, &self.compiler, case, expected)
