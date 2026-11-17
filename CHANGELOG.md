@@ -6,6 +6,21 @@ All notable changes to TyPy are recorded here. The format follows
 
 ## [Unreleased]
 
+### Changed
+
+- The user documentation is laid out in sections, as Python's
+  documentation is, and its pages moved under `docs/`.
+  `user/getting-started.md` is `tutorial/index.md`. `user/guide/index.md`
+  is `reference/index.md`, the language reference, which holds the
+  guide's pages on the language under their names. `built-in-types.md`
+  and `exceptions.md` moved to `library/`, and `library.md` is
+  `library/functions-and-modules.md`. `command-line.md` is
+  `using/command-line.md`, `c-interop.md` is `extending/c-interop.md`,
+  `diagnostics.md` is `diagnostics/index.md`, and
+  `user/troubleshooting.md` is `diagnostics/troubleshooting.md`.
+  `docs/index.md` is the start page of the user documentation, and the
+  list of engineering documents moved to `docs/engineering.md` (DOC-02).
+
 ### Fixed
 
 - The release archive carries `THIRD-PARTY-NOTICES.md`, with the licence

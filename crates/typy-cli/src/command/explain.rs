@@ -10,7 +10,7 @@ use crate::exit_status::ExitStatus;
 
 /// The troubleshooting page, the one text both the documentation and this command show, so
 /// they never disagree. The documentation test runs every sample in it.
-const PAGE: &str = include_str!("../../../../docs/user/troubleshooting.md");
+const PAGE: &str = include_str!("../../../../docs/diagnostics/troubleshooting.md");
 
 /// Prints the explanation of `text`, a code such as `E0402`. A text that is no code, or a
 /// code no diagnostic has, is wrong usage.

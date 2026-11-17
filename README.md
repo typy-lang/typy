@@ -4,9 +4,9 @@ TyPy is an independent implementation of Python that compiles a strict,
 typed subset of standard Python ahead of time to small native executables
 through LLVM.
 
-Documentation: [docs/user/index.md](docs/user/index.md) for users, and
-[docs/index.md](docs/index.md) for the engineering documents. Source:
-<https://github.com/typy-lang/typy>.
+Documentation: [docs/index.md](docs/index.md) for users, and
+[docs/engineering.md](docs/engineering.md) for the engineering documents.
+Source: <https://github.com/typy-lang/typy>.
 
 ## Features
 
@@ -44,7 +44,7 @@ libraries through `ctypes`, with objects, pointers, arrays and structures.
 `typy build --lib` builds a module as a static or shared C library with a
 C header and a Python binding. Programs print what CPython prints,
 including the traceback of an uncaught exception. Closures and generators
-come in later releases; the [language guide](docs/user/guide/index.md)
+come in later releases; the [language reference](docs/reference/index.md)
 lists what each release accepts.
 
 ## Quick start

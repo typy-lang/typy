@@ -3,10 +3,10 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy development guide |
-| Version | 0.17 |
+| Version | 0.18 |
 | Status | Draft |
 | Owner | typy-lang contributors |
-| Last updated | 2026-11-12 |
+| Last updated | 2026-11-17 |
 
 ## 1. Purpose
 
@@ -98,8 +98,9 @@ compiler and the runtime. The runtime's branches are measured by its unit tests,
 because the programs the other tests build link the runtime archive without
 instrumentation. `make bench` builds the compiler in release mode and times it
 on generated 10,000-line projects against the budgets of NFR-04, NFR-05 and
-NFR-14; CI runs it after the release archive. The user documentation in
-`docs/user` is Markdown that `make docs-lint` checks, and
+NFR-14; CI runs it after the release archive. The user documentation, every
+page under `docs/` outside the engineering documents' directories, is
+Markdown that `make docs-lint` checks, and
 `crates/typy-conformance/tests/documentation.rs` judges its samples (DOC-04).
 
 ## 4. Repository layout
@@ -109,7 +110,7 @@ NFR-14; CI runs it after the release archive. The user documentation in
 | `.devcontainer/` | The dev image, and the compose file with the `dev` and `diagrams` services |
 | `.github/` | The CI, release and code scanning workflows, Dependabot's settings and the pull request template |
 | `.githooks/` | The pre-commit hook, which runs `make check` |
-| `docs/` | The engineering documents, listed with their status in `docs/index.md` |
+| `docs/` | The user documentation, whose sections `docs/index.md` lists: `tutorial/`, `reference/`, `library/`, `using/`, `extending/` and `diagnostics/`; and the engineering documents, listed with their status in `docs/engineering.md` |
 | `docs/diagrams/` | PlantUML sources, the shared `style.puml`, and the rendered SVG of each |
 | `fuzz/` | The fuzz targets, a Cargo workspace of their own that builds with the pinned nightly |
 | `scripts/` | The checks and builds that `make` runs, the release scripts, and the generator of the Unicode tables |
@@ -157,7 +158,7 @@ to change as it grows:
    `!include style.puml` and a `title`.
 2. Run `make diagrams` and open the SVG. Check that nothing overlaps and
    that it reads at the width of the site; split a diagram that does not.
-3. Add a row for it to the diagram table in `docs/index.md`.
+3. Add a row for it to the diagram table in `docs/engineering.md`.
 4. Stage the source and the SVG together.
 
 ## 6. Adding a tool

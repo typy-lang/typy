@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy software requirements specification |
-| Version | 1.80 |
+| Version | 1.81 |
 | Status | Approved |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-17 |
@@ -466,13 +466,14 @@ internal errors, and `Wxxxx` warnings in the same ranges.
 
 ### 3.18 User documentation (DOC)
 
-The user documentation is written as Markdown under `docs/user/`, beside
-the engineering documents, and describes the release it ships with.
+The user documentation is written as Markdown under `docs/`, in the
+sections of `docs/index.md`, beside the engineering documents, and
+describes the release it ships with.
 
 | ID | Requirement | Priority | Release |
 | --- | --- | --- | --- |
 | DOC-01 | A getting-started page shall show how to install TyPy from a release archive, and how to check, build and run a first program. | M | 0.2 |
-| DOC-02 | A language guide shall have one page per area of the specification, listing what the release accepts with the rule ID of each item, and an accepted and a rejected example. | M | 0.2 |
+| DOC-02 | The language and library references shall have one page per area of the specification, listing what the release accepts with the rule ID of each item, and an accepted and a rejected example. | M | 0.2 |
 | DOC-03 | A troubleshooting page shall list each active diagnostic code with its cause and how to change the program. | M | 0.2 |
 | DOC-04 | Every Python sample in the user documentation shall be checked by the test suite against the current compiler, with the outcome the page states. | M | 0.2 |
 

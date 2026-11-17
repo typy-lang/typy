@@ -99,5 +99,6 @@ error[E0409]: the items of a list have one type; this is a str, and the list hol
  --> mixed.py:1:13
 ```
 
-[Troubleshooting](troubleshooting.md) explains each code, and the
-[language guide](guide/index.md) lists what each release accepts.
+[Troubleshooting](../diagnostics/troubleshooting.md) explains each code,
+and the [language reference](../reference/index.md) lists what each
+release accepts.

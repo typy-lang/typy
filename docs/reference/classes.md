@@ -29,7 +29,7 @@ the name, such as `"Node | None"`.
 Instances are equal only to themselves, hashed by identity and true
 unless their class defines the methods below (CLS-07).
 A class may derive from an exception class, as
-[Exceptions](exceptions.md) describes (CLS-03).
+[Exceptions](../library/exceptions.md) describes (CLS-03).
 
 ## Example
 
