@@ -223,6 +223,17 @@ fn operation(module: &TyirModule, operation: &Operation) -> String {
             function,
             arguments,
         } => format!("call rt.{}({})", function.name(), names(arguments)),
+        Operation::CallForeign {
+            function,
+            arguments,
+        } => format!(
+            "call_foreign {}({})",
+            module
+                .foreign_functions
+                .get(*function as usize)
+                .map_or("?", |foreign| foreign.name.as_str()),
+            names(arguments)
+        ),
         Operation::Call {
             function,
             arguments,

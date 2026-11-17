@@ -157,6 +157,16 @@ pub enum TypedExprKind {
     FString(Vec<FStringPart>),
     /// A value of `sys`: `argv`, `stdout` or `stderr` (LIB-04).
     SysValue(crate::sys::SysValue),
+    /// The C library a `ctypes.CDLL` or `ctypes.cdll.LoadLibrary` call declares, by its index
+    /// in `TypedProgram::foreign_libraries`; the build links it, and it holds no value when
+    /// the program runs (FFI-01).
+    ForeignLibrary(u32),
+    /// A call of a C function, by its index in `TypedProgram::foreign_functions`, with its
+    /// arguments in order (FFI-02, FFI-03).
+    ForeignCall {
+        function: u32,
+        arguments: Vec<TypedExpr>,
+    },
     /// `sys.exit(code)`, which raises `SystemExit` with `code` (LIB-04).
     SysExit(Option<Box<TypedExpr>>),
     /// `sys.getrecursionlimit()`, without a value, or `sys.setrecursionlimit(limit)`
@@ -565,6 +575,7 @@ impl TypedExpr {
             | TypedExprKind::TypeAliasObject(_)
             | TypedExprKind::ClassVariable(_)
             | TypedExprKind::NotImplemented
+            | TypedExprKind::ForeignLibrary(_)
             | TypedExprKind::SysValue(_) => Vec::new(),
             TypedExprKind::Binary { left, right, .. }
             | TypedExprKind::Index {
@@ -584,7 +595,10 @@ impl TypedExpr {
             }
             TypedExprKind::Tuple(items)
             | TypedExprKind::List(items)
-            | TypedExprKind::Set(items) => items.iter().collect(),
+            | TypedExprKind::Set(items)
+            | TypedExprKind::ForeignCall {
+                arguments: items, ..
+            } => items.iter().collect(),
             TypedExprKind::ListItem { list, index } => vec![list, index],
             TypedExprKind::ListOf(source)
             | TypedExprKind::SetOf(source)

@@ -446,6 +446,23 @@ impl Dump<'_> {
             TypedExprKind::AsIterable(_) => "AsIterable".to_owned(),
             TypedExprKind::MathCall { function, .. } => format!("MathCall {}", function.name()),
             TypedExprKind::SysValue(value) => format!("SysValue {value:?}"),
+            TypedExprKind::ForeignLibrary(index) => {
+                format!(
+                    "ForeignLibrary {}",
+                    self.program.foreign_libraries[*index as usize].name
+                )
+            }
+            TypedExprKind::ForeignCall {
+                function,
+                arguments,
+            } => {
+                let name = &self.program.foreign_functions[*function as usize].name;
+                self.line(depth, &format!("ForeignCall {name}: {ty}"), expression.span);
+                for argument in arguments {
+                    self.expression(depth + 1, argument);
+                }
+                return;
+            }
             TypedExprKind::SysExit(_) => "SysExit".to_owned(),
             TypedExprKind::RecursionLimit(_) => "RecursionLimit".to_owned(),
             TypedExprKind::ExceptionPart { part, .. } => format!("ExceptionPart({part:?})"),

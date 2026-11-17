@@ -144,9 +144,9 @@ impl Pipeline {
     fn build(&self, request: &BuildRequest) -> Result<(Artifact, Warnings), Failure> {
         let archive = self.runtime_archive(request)?;
         let project = self.load(request.main(), request.library().is_some())?;
-        let linker = linker(request, archive, &project);
         let (program, warnings) = self.check_program(&project)?;
         let module = lower(&program, &project)?;
+        let linker = linker(request, archive, &project, &module);
         let failed = |diagnostics| with_project(diagnostics, &project);
         let object = object(
             &module,
@@ -316,20 +316,41 @@ fn cannot_write(path: &Utf8Path, error: &std::io::Error) -> Diagnostics {
     )
 }
 
-/// Returns the linker of the request's target, with the libraries the project names.
-fn linker(request: &BuildRequest, archive: RuntimeArchive, project: &Project) -> Linker {
+/// Returns the linker of the request's target, with the allocator's library, each library
+/// the program's `ctypes` declarations name, linked as `typy.toml` says, and the
+/// directories it names (MEM-08, FFI-01, FFI-04).
+fn linker(
+    request: &BuildRequest,
+    archive: RuntimeArchive,
+    project: &Project,
+    module: &TyirModule,
+) -> Linker {
     // A release build leaves out the debug information, which a debug build keeps for a
     // debugger (CLI-05).
     let release = request.mode() != typy_build::BuildMode::Debug;
-    let libraries = project
-        .settings()
+    let settings = project.settings();
+    let mut libraries: Vec<String> = settings
         .allocator
         .iter()
         .filter_map(|allocator| allocator.library.clone())
         .collect();
+    for library in &module.foreign_libraries {
+        let link = settings
+            .libraries
+            .get(library)
+            .copied()
+            .unwrap_or(typy_source::LibraryLink::Dynamic);
+        libraries.push(link.linker_name(library));
+    }
+    let paths = settings
+        .library_paths
+        .iter()
+        .map(|path| settings.root.join(path))
+        .collect();
     Linker::new(request.target().triple, archive)
         .with_strip_debug(release)
         .with_libraries(libraries)
+        .with_library_paths(paths)
 }
 
 /// Returns the program in TyIR, allocating with the functions the project names (MEM-08).

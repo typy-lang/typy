@@ -81,6 +81,34 @@ pub struct Allocator {
     pub library: Option<String>,
 }
 
+/// How a C library a `ctypes` declaration names is linked (FFI-04, ADR-0047).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum LibraryLink {
+    /// The shared library, `-l:NAME`, which the system loads when the program starts.
+    Dynamic,
+    /// The archive of the same name up to `.so`, `-l:BASE.a`, linked into the program.
+    Static,
+}
+
+impl LibraryLink {
+    /// Returns what follows `-l` to link `library`: `:libtools.so.3` dynamically, and
+    /// `:libtools.a`, the name up to `.so`, statically.
+    #[must_use]
+    pub fn linker_name(self, library: &str) -> String {
+        match self {
+            Self::Dynamic => format!(":{library}"),
+            Self::Static => {
+                let base = library.split(".so").next().unwrap_or(library);
+                if base.len() == library.len() {
+                    format!(":{library}")
+                } else {
+                    format!(":{base}.a")
+                }
+            }
+        }
+    }
+}
+
 /// The settings of one command; immutable once the project is loaded.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ProjectSettings {
@@ -102,6 +130,12 @@ pub struct ProjectSettings {
     /// The version of a library whose module has no `__version__`, which its file names
     /// carry (CLI-13).
     pub version: Option<String>,
+    /// The directories, relative to the root, where the linker looks for libraries first
+    /// (FFI-04).
+    pub library_paths: Vec<Utf8PathBuf>,
+    /// How each C library a `ctypes` declaration names is linked, by its name; one not
+    /// named is linked dynamically (FFI-04).
+    pub libraries: std::collections::BTreeMap<String, LibraryLink>,
 }
 
 impl ProjectSettings {
@@ -116,6 +150,8 @@ impl ProjectSettings {
             allocator: None,
             library: false,
             version: None,
+            library_paths: Vec::new(),
+            libraries: std::collections::BTreeMap::new(),
         }
     }
 }
@@ -137,6 +173,18 @@ mod tests {
         for text in ["", "3.11", "3.16", "3", "3.12.0", " 3.12", "312"] {
             assert_eq!(PythonFloor::parse(text), None, "{text:?}");
         }
+    }
+
+    #[test]
+    fn a_library_links_by_its_file_name_or_its_archive() {
+        use super::LibraryLink;
+        assert_eq!(LibraryLink::Dynamic.linker_name("libm.so.6"), ":libm.so.6");
+        assert_eq!(
+            LibraryLink::Static.linker_name("libtools.so.3"),
+            ":libtools.a"
+        );
+        assert_eq!(LibraryLink::Static.linker_name("libz.so"), ":libz.a");
+        assert_eq!(LibraryLink::Static.linker_name("libpool.a"), ":libpool.a");
     }
 
     #[test]

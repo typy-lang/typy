@@ -17,6 +17,7 @@ mod delete;
 mod dict;
 mod dict_call;
 mod each_member;
+mod foreign_call;
 mod generic_call;
 mod generic_copy;
 mod override_adapter;

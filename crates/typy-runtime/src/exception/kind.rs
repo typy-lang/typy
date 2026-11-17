@@ -10,6 +10,7 @@ use crate::type_object::TypeObject;
     reason = "each variant is the Python exception class of the same name"
 )]
 pub enum ExceptionKind {
+    ArgumentError,
     AssertionError,
     AttributeError,
     EOFError,
@@ -31,7 +32,8 @@ pub enum ExceptionKind {
 impl ExceptionKind {
     /// Every kind, in the order of the variants.
     #[cfg(test)]
-    pub(crate) const ALL: [Self; 16] = [
+    pub(crate) const ALL: [Self; 17] = [
+        Self::ArgumentError,
         Self::AssertionError,
         Self::AttributeError,
         Self::EOFError,
@@ -54,6 +56,7 @@ impl ExceptionKind {
     #[must_use]
     pub fn class(self) -> &'static TypeObject {
         match self {
+            Self::ArgumentError => &classes::ARGUMENT_ERROR,
             Self::AssertionError => &classes::ASSERTION_ERROR,
             Self::AttributeError => &classes::ATTRIBUTE_ERROR,
             Self::EOFError => &classes::EOF_ERROR,

@@ -71,6 +71,8 @@ fn on_point(body: impl FnOnce(ValueId, ValueId) -> Body) -> TyirModule {
         }],
         entry: FunctionId(0),
         allocator: typy_tyir::TyirAllocator::default(),
+        foreign_libraries: Vec::new(),
+        foreign_functions: Vec::new(),
         library: None,
     }
 }
@@ -243,6 +245,8 @@ fn on_exception(parameter: TyirType, operation: Operation) -> TyirModule {
         }],
         entry: FunctionId(0),
         allocator: typy_tyir::TyirAllocator::default(),
+        foreign_libraries: Vec::new(),
+        foreign_functions: Vec::new(),
         library: None,
     }
 }
@@ -315,6 +319,8 @@ fn on_circle(make: impl FnOnce(ValueId, ValueId) -> (Operation, TyirType)) -> Ty
         ],
         entry: FunctionId(0),
         allocator: typy_tyir::TyirAllocator::default(),
+        foreign_libraries: Vec::new(),
+        foreign_functions: Vec::new(),
         library: None,
     }
 }
@@ -462,6 +468,8 @@ fn dispatching(slot: u32, circle: Vec<FunctionId>, circle_area: TyirType) -> Tyi
         ],
         entry: FunctionId(0),
         allocator: typy_tyir::TyirAllocator::default(),
+        foreign_libraries: Vec::new(),
+        foreign_functions: Vec::new(),
         library: None,
     }
 }

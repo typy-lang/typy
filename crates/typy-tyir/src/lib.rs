@@ -25,7 +25,7 @@ pub use constant::{Constant, StringId};
 pub use escape::place_instances;
 pub use function::{FunctionId, TyirFunction};
 pub use instruction::Instruction;
-pub use library::{CType, TyirExport, TyirLibrary};
+pub use library::{CType, TyirExport, TyirForeignFunction, TyirLibrary};
 pub use module::{
     GlobalId, TyirAllocator, TyirClass, TyirGlobal, TyirModule, TyirModuleObject, TyirTypeAlias,
 };

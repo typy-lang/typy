@@ -44,7 +44,13 @@ impl BodyChecker<'_> {
                 self.program.makes_surrogates |= constant.holds_unescapable_surrogate();
                 Self::typed(TypedExprKind::Constant(constant), ty, span)
             }
-            Expr::Name { id, .. } => self.name(id, span),
+            Expr::Name { id, .. } => {
+                let read = self.name(id, span);
+                if matches!(read.ty, Type::ForeignLibrary(_)) {
+                    return self.library_as_value(id, span);
+                }
+                read
+            }
             Expr::BinOp {
                 left,
                 operator: typy_source::syntax::BinaryOperator::Mod,
@@ -373,6 +379,8 @@ impl BodyChecker<'_> {
                 keywords,
                 ..
             } => match function.as_ref() {
+                // A module's declaration of a library holds nothing to evaluate (FFI-01).
+                _ if let Some(library) = self.foreign_library(span) => library,
                 Expr::Name {
                     id,
                     span: name_span,

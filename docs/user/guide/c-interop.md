@@ -1,9 +1,9 @@
 # C interoperability
 
-`typy build --lib` builds a module as a C library that C, C++, Rust and
-Python programs call as they call any C library (CLI-09, FFI-05). Calling C
-libraries from a TyPy program through the standard `ctypes` module comes
-later in 0.5 (FFI-01 to FFI-03).
+A TyPy program calls C libraries through the standard `ctypes` module, so
+the same program runs under CPython, and `typy build --lib` builds a module
+as a C library that C, C++, Rust and Python programs call as they call any
+C library (FFI-01 to FFI-05, CLI-09).
 
 ## What TyPy accepts
 
@@ -15,6 +15,9 @@ later in 0.5 (FFI-01 to FFI-03).
 | The build also writes `NAME_binding.py`, a module that loads the library with `ctypes` and defines a typed function for each export, and its stub `NAME_binding.pyi` | FFI-08 |
 | `int`, `float` and `bool` are `int64_t`, `double` and `bool` in C, and a result of `None` is `void` | FFI-05 |
 | An exception never reaches C: a `SystemExit` ends the process with its status, and any other exception is printed and the process aborts | EXC-05 |
+| `NAME = ctypes.CDLL("library")` or `ctypes.cdll.LoadLibrary("library")` at module level declares a library, which the build links | FFI-01 |
+| A C function whose `argtypes` and `restype` are assigned at module level is called directly, with the conversions `ctypes` defines | FFI-02, FFI-03 |
+| `typy.toml` says whether each library is linked statically or dynamically, and where the linker looks | FFI-04 |
 
 ## Building a library
 
@@ -130,13 +133,77 @@ build reports E0429 and names the function. Building with `--lib` checks
 the names: `typy check --lib static geometry.py` reports the same
 diagnostics without writing a library.
 
-## Planned
+## Calling C through ctypes
 
-`ctypes` is refused until later in 0.5, when a TyPy program will also
-import a library's binding and call it with the same source as CPython
-(FFI-01 to FFI-03, FFI-08, ADR-0032):
+A program declares a library and each function it calls, as a program for
+CPython does, and TyPy compiles each call into a direct call of the C
+function, with the library linked when the program is built (ADR-0047):
 
-<!-- typy-expect: rejected E0201 at 1:1 -->
+<!-- typy-expect: accepted -->
 ```python
 import ctypes
+
+libm = ctypes.CDLL("libm.so.6")
+libm.cbrt.argtypes = [ctypes.c_double]
+libm.cbrt.restype = ctypes.c_double
+
+
+def side(volume: float) -> float:
+    return libm.cbrt(volume)
+
+
+print(side(27.0), side(1000.0))
+```
+
+The library is named by a string literal, and both `argtypes` and
+`restype` are assigned at module level, once, before the function is
+called at module level; a declaration that breaks one of these is E0430.
+An argument of a type the declaration does not take is E0404 when the
+program is compiled. Each value converts as `ctypes` converts it:
+
+| Type | Argument | Result |
+| --- | --- | --- |
+| `c_int8` to `c_uint64`, `c_byte`, `c_short`, `c_int`, `c_long`, `c_longlong` and their unsigned forms, `c_size_t`, `c_ssize_t` | An `int` or a `bool`, wrapped to the type's width | An `int` |
+| `c_float`, `c_double` | An `int`, a `float` or a `bool` | A `float` |
+| `c_bool` | Any value, by its truth | A `bool` |
+| `c_char_p` | `bytes`, whose own buffer C reads, or `None` | `bytes`, or `None` for null |
+| `c_void_p` | An `int`, `bytes` or `None` | An `int`, or `None` for null |
+
+An `int` too large for a `float` raises `ctypes.ArgumentError`, as in
+CPython. A library or a function the linker cannot find stops the build
+with E0702, where CPython raises `OSError` or `AttributeError` when the
+program runs.
+
+## Linking a library
+
+A library is linked dynamically unless `typy.toml` says otherwise, and the
+system loads it when the program starts. A project that ships its own
+libraries names where the linker looks, and which to link into the
+program:
+
+```toml
+library-paths = ["lib"]
+
+[libraries."libtools.so.2"]
+link = "static"
+```
+
+A static library is the archive named like the shared one up to `.so`, so
+`libtools.so.2` links `lib/libtools.a`. A TyPy library's binding,
+`tools_binding.py`, loads the library by its soname, so a TyPy program that
+imports the binding calls the library directly, linked as `typy.toml`
+says, and CPython runs the same program through `ctypes`.
+
+## Planned
+
+Pointers, `byref`, arrays and `Structure` subclasses are planned for 0.5
+(FFI-03), and a library or a C function used as a value, stored, passed or
+printed, for 1.0 (FFI-09):
+
+<!-- typy-expect: rejected E0201 at 4:7 -->
+```python
+import ctypes
+
+libc = ctypes.CDLL("libc.so.6")
+print(libc)
 ```

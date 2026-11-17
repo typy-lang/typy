@@ -24,6 +24,9 @@ impl BodyChecker<'_> {
         if is_super(receiver) {
             return Some(self.super_call(receiver, name, arguments, keywords, span));
         }
+        if let Some(call) = self.foreign_call(receiver, name, arguments, keywords, span) {
+            return Some(call);
+        }
         if let Some(copy) = self.applied_class(receiver) {
             return Some(self.class_method_call(copy, name, arguments, keywords, span));
         }

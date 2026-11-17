@@ -109,7 +109,12 @@ impl Aliases {
             Operation::StoreGlobal { value, .. } | Operation::SetField { value, .. } => {
                 escaping.push(*value);
             }
-            Operation::MakeTuple { items, .. } => escaping.extend(items),
+            // C may keep what it is given; no instance converts to a C type, so this is a
+            // rule for the analysis, not a case it meets.
+            Operation::MakeTuple { items, .. }
+            | Operation::CallForeign {
+                arguments: items, ..
+            } => escaping.extend(items),
             Operation::CallRuntime {
                 function: runtime,
                 arguments,

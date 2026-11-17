@@ -2,6 +2,7 @@
 
 mod annotation;
 mod class;
+pub(crate) mod ctypes_declarations;
 mod dataclass;
 
 pub(crate) use annotation::{unhashable, unhashable_key};
@@ -89,11 +90,16 @@ impl TypeChecker {
         // A dataclass gets its methods, and each annotation the types its aliases stand for,
         // before anything reads the module (CLS-05, SMT-10).
         let mut dataclasses = dataclass::Dataclasses::default();
+        // The `ctypes` declarations do their work when the program is compiled, so they leave
+        // each module once read (ADR-0047).
+        let mut foreign = BTreeMap::new();
         let expanded: Vec<(Module, BTreeMap<String, type_alias::Alias>)> = project
             .modules_in_order()
             .map(|module| {
                 let mut module = dataclasses.expand(module, &mut diagnostics);
                 let aliases = type_alias::expand(&mut module.syntax.body, &mut diagnostics);
+                let declared = ctypes_declarations::read(&mut module.syntax.body, &mut diagnostics);
+                foreign.insert(module.name.as_str().to_owned(), declared);
                 (module, aliases)
             })
             .collect();
@@ -112,6 +118,7 @@ impl TypeChecker {
             modules: &modules,
             aliases: &aliases,
             dataclasses: &dataclasses,
+            foreign: &foreign,
             floor_defers,
         };
         // A program that reads `args` as a value is checked again with the creations of
@@ -194,6 +201,8 @@ struct Checked<'project> {
     modules: &'project [Module],
     aliases: &'project [BTreeMap<String, type_alias::Alias>],
     dataclasses: &'project dataclass::Dataclasses,
+    /// The `ctypes` declarations of each module, by its name.
+    foreign: &'project BTreeMap<String, ctypes_declarations::ModuleDeclarations>,
     floor_defers: bool,
 }
 
@@ -203,6 +212,7 @@ impl Checked<'_> {
     fn run(&self, known: Option<&Creations>, diagnostics: &mut Diagnostics) -> Program {
         let project = self.project;
         let mut program = Program::empty();
+        program.foreign.set_declarations(self.foreign.clone());
         crate::protocol_fits::reset(&program.protocol_values.fits);
         program.set_floor(project.settings().python_floor.minor());
         program.set_known_creations(known.cloned());

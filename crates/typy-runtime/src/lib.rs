@@ -20,6 +20,7 @@ mod dict;
 mod entry;
 mod exception;
 mod float;
+mod foreign;
 mod format;
 mod hash;
 mod header;

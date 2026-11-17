@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy software requirements specification |
-| Version | 1.77 |
+| Version | 1.78 |
 | Status | Approved |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-17 |
@@ -442,6 +442,7 @@ direct calls and links the library when the program is built.
 | FFI-06 | `ctypes.CFUNCTYPE` callbacks shall be accepted. | C | 1.0 |
 | FFI-07 | A C header shall be convertible into a module of ctypes declarations. | C | 1.0 |
 | FFI-08 | A library build shall write, beside the library and its C header, a `.pyi` stub of its exported functions and a `ctypes` module that loads the library and declares them, so CPython and TyPy programs call it with the same source (ADR-0032). | S | 0.5 |
+| FFI-09 | A library a `ctypes` declaration loads, and its functions, shall be values a program stores, passes and prints. | C | 1.0 |
 
 ### 3.17 Diagnostics (DIA)
 

@@ -251,6 +251,9 @@ pub enum RuntimeFunction {
     /// Whether two objects of any types are equal, through the `equal` slot of the class
     /// that decides, as a union of objects compares them (GEN-10).
     ObjectsEqual,
+    /// An `int` as a `double` for a `c_float` or `c_double` argument at the position the
+    /// second argument gives, or `ctypes.ArgumentError` for one too large (FFI-03).
+    CtypesFloatArgument,
     SysGetRecursionLimit,
     SysSetRecursionLimit,
     SysStderr,
@@ -411,7 +414,7 @@ const FLOAT_FLOAT: &[TyirType] = &[TyirType::Float, TyirType::Float];
 
 impl RuntimeFunction {
     /// Every runtime function.
-    pub const ALL: [Self; 337] = [
+    pub const ALL: [Self; 338] = [
         Self::IntFloorDivide,
         Self::IntModulo,
         Self::IntPower,
@@ -644,6 +647,7 @@ impl RuntimeFunction {
         Self::SliceEqual,
         Self::ObjectHasTypeId,
         Self::ObjectsEqual,
+        Self::CtypesFloatArgument,
         Self::SysGetRecursionLimit,
         Self::SysSetRecursionLimit,
         Self::SysStderr,
@@ -832,6 +836,7 @@ impl RuntimeFunction {
             Self::SliceEqual => signature(&[TyirType::SLICE, TyirType::SLICE], Bool, false),
             Self::ObjectHasTypeId => signature(&[Bits, Int], Bool, false),
             Self::ObjectsEqual => signature(&[Bits, Bits], Bool, false),
+            Self::CtypesFloatArgument => signature(&[Int, Int], Float, true),
             Self::RangeCheckStep | Self::SysSetRecursionLimit => signature(&[Int], Unit, true),
             Self::NameError | Self::WriteStdoutChecked => signature(&[STR], Unit, true),
             Self::ModuleAttributeError | Self::ModuleImportError => {
@@ -1360,6 +1365,7 @@ impl RuntimeFunction {
             Self::SliceEqual => "slice_equal",
             Self::ObjectHasTypeId => "object_has_type_id",
             Self::ObjectsEqual => "objects_equal",
+            Self::CtypesFloatArgument => "ctypes_float_argument",
             Self::SysGetRecursionLimit => "sys_getrecursionlimit",
             Self::SysSetRecursionLimit => "sys_setrecursionlimit",
             Self::SysStderr => "sys_stderr",

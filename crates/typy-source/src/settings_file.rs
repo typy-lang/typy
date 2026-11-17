@@ -2,6 +2,7 @@
 //! command line wins over the file (CLI-07, CLI-12, UC-11).
 
 mod allocator;
+mod libraries;
 
 use camino::{Utf8Component, Utf8Path, Utf8PathBuf};
 use toml_edit::{Document, Item};
@@ -15,7 +16,14 @@ use crate::source_file::SourceFile;
 pub const SETTINGS_FILE: &str = "typy.toml";
 
 /// The keys `typy.toml` may hold.
-const KEYS: [&str; 4] = ["python-floor", "module-paths", "allocator", "version"];
+const KEYS: [&str; 6] = [
+    "python-floor",
+    "module-paths",
+    "allocator",
+    "version",
+    "library-paths",
+    "libraries",
+];
 
 /// The settings flags on the command line give, which win over `typy.toml` (CLI-07).
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -85,6 +93,12 @@ impl ProjectSettings {
                     self.allocator = Some(allocator);
                 }),
                 "version" => self.version(item),
+                "library-paths" => self.directories(item, "library-paths").map(|paths| {
+                    self.library_paths = paths;
+                }),
+                "libraries" => libraries::libraries(item).map(|libraries| {
+                    self.libraries = libraries;
+                }),
                 _ => Err(Problem {
                     range: document
                         .as_table()
@@ -147,17 +161,29 @@ impl ProjectSettings {
 
     /// Reads `module-paths`, an array of directories under the root (MOD-01).
     fn module_paths(&mut self, item: &Item) -> Result<(), Problem> {
+        self.module_paths = self.directories(item, "module-paths")?;
+        Ok(())
+    }
+
+    /// Reads an array of directories under the root, the setting `key`: `module-paths`
+    /// (MOD-01) or `library-paths` (FFI-04).
+    fn directories(&self, item: &Item, key: &str) -> Result<Vec<Utf8PathBuf>, Problem> {
+        let rule = if key == "library-paths" {
+            RuleId::FFI_04
+        } else {
+            RuleId::CLI_07
+        };
         let problem = |range, message, help| Problem {
             range,
             message,
             help,
-            rule: RuleId::CLI_07,
+            rule,
         };
         let Some(array) = item.as_array() else {
             return Err(problem(
                 item.span().unwrap_or(0..0),
-                format!("`module-paths` is {}, not an array of strings", shown(item)),
-                Some("write it as an array, such as `module-paths = [\"lib\"]`".to_owned()),
+                format!("`{key}` is {}, not an array of strings", shown(item)),
+                Some(format!("write it as an array, such as `{key} = [\"lib\"]`")),
             ));
         };
         let mut paths = Vec::new();
@@ -165,7 +191,10 @@ impl ProjectSettings {
             let range = value.span().unwrap_or(0..0);
             let Some(text) = value.as_str() else {
                 let name = value.type_name();
-                let message = format!("a module path is {} {name}, not a string", article(name));
+                let message = format!(
+                    "a path of `{key}` is {} {name}, not a string",
+                    article(name)
+                );
                 return Err(problem(range, message, None));
             };
             match self.module_path(text) {
@@ -173,12 +202,11 @@ impl ProjectSettings {
                 Err(message) => return Err(problem(range, message, None)),
             }
         }
-        self.module_paths = paths;
-        Ok(())
+        Ok(paths)
     }
 
-    /// Checks one module path: a directory under the root, named relative to it, so the
-    /// build never reads outside the project.
+    /// Checks one path of `module-paths` or `library-paths`: a directory under the root,
+    /// named relative to it, so the build never reads outside the project.
     fn module_path(&self, text: &str) -> Result<Utf8PathBuf, String> {
         let path = Utf8Path::new(text);
         let inside = !text.is_empty()
@@ -187,12 +215,12 @@ impl ProjectSettings {
                 .all(|component| matches!(component, Utf8Component::Normal(_)));
         if !inside {
             return Err(format!(
-                "the module path `{text}` is not a directory under the project root, named \
-                 relative to it"
+                "the path `{text}` is not a directory under the project root, named relative \
+                 to it"
             ));
         }
         if !self.root.join(path).is_dir() {
-            return Err(format!("the module path `{text}` is not a directory"));
+            return Err(format!("the path `{text}` is not a directory"));
         }
         Ok(path.to_owned())
     }
@@ -317,11 +345,11 @@ mod tests {
                 "module-paths = \"lib\"\n",
                 "`module-paths` is the string \"lib\"",
             ),
-            ("module-paths = [true]\n", "a module path is a boolean"),
             (
-                "module-paths = [\"lib\", \"\"]\n",
-                "the module path `` is not",
+                "module-paths = [true]\n",
+                "a path of `module-paths` is a boolean",
             ),
+            ("module-paths = [\"lib\", \"\"]\n", "the path `` is not"),
             (
                 "module-paths = [\"missing\"]\n",
                 "`missing` is not a directory",

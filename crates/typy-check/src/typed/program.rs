@@ -43,6 +43,11 @@ pub struct TypedProgram {
     pub makes_surrogates: bool,
     /// The module body of the main module.
     pub entry: FunctionId,
+    /// The C libraries the program's `ctypes` declarations load, which the build links,
+    /// indexed by `TypedExprKind::ForeignLibrary` (FFI-01).
+    pub foreign_libraries: Vec<crate::ctypes::ForeignLibrary>,
+    /// The C functions the program calls, indexed by `TypedExprKind::ForeignCall` (FFI-02).
+    pub foreign_functions: Vec<crate::ctypes::ForeignFunction>,
     /// The functions a library exports, or `None` when the program is an executable
     /// (FFI-05).
     pub exports: Option<Vec<crate::exports::Export>>,

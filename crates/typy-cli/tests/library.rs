@@ -540,3 +540,71 @@ fn ffi_08_the_binding_and_its_stub_are_python_every_oracle_compiles() {
         }
     }
 }
+
+#[test]
+fn ffi_04_a_program_calls_a_library_through_its_binding_linked_as_typy_toml_says() {
+    let program = "\
+import tools_binding as tools
+
+print('program', tools.add(40, 2), tools.scale(1.5, 2.0), tools.positive(-4))
+";
+    let library = format!("{TOOLS}__version__ = '2.0'\n");
+    let project = Project::new(&[("app.py", program)]);
+    std::fs::create_dir(project.root.join("lib")).unwrap();
+    std::fs::write(project.root.join("lib/tools.py"), library).unwrap();
+    project.build(&["build", "--lib", "shared", "lib/tools.py"]);
+    project.build(&["build", "--lib", "static", "lib/tools.py"]);
+    let expected = "tools loaded as tools\nprogram 42 3.0 False\n";
+    let oracle = Command::new("python3")
+        .args(["-u", "app.py"])
+        .current_dir(&project.root)
+        .env("PYTHONPATH", "lib")
+        .env("LD_LIBRARY_PATH", project.root.join("lib"))
+        .output()
+        .unwrap();
+    assert_eq!(text(&oracle.stdout), expected, "{}", text(&oracle.stderr));
+    let settings = "module-paths = [\"lib\"]\nlibrary-paths = [\"lib\"]\n";
+    std::fs::write(project.root.join("typy.toml"), settings).unwrap();
+    project.build(&["build", "app.py", "-o", "dynamic"]);
+    let dynamic = Command::new(project.root.join("dynamic"))
+        .env("LD_LIBRARY_PATH", project.root.join("lib"))
+        .output()
+        .unwrap();
+    assert_eq!(text(&dynamic.stdout), expected, "{}", text(&dynamic.stderr));
+    std::fs::write(
+        project.root.join("typy.toml"),
+        format!("{settings}\n[libraries.\"libtools.so.2\"]\nlink = \"static\"\n"),
+    )
+    .unwrap();
+    project.build(&["build", "app.py", "-o", "static"]);
+    let linked = Command::new("readelf")
+        .args(["-d", "static"])
+        .current_dir(&project.root)
+        .output()
+        .unwrap();
+    assert!(
+        !text(&linked.stdout).contains("libtools"),
+        "{}",
+        text(&linked.stdout)
+    );
+    let run = Command::new(project.root.join("static")).output().unwrap();
+    assert_eq!(text(&run.stdout), expected, "{}", text(&run.stderr));
+}
+
+#[test]
+fn ffi_04_a_library_the_linker_cannot_find_fails_the_build() {
+    let program = "\
+import ctypes
+
+missing = ctypes.CDLL(\"libtypy_missing.so.1\")
+missing.nothing.argtypes = []
+missing.nothing.restype = None
+missing.nothing()
+";
+    let project = Project::new(&[("app.py", program)]);
+    let output = project.typy(&["build", "app.py"]);
+    assert_eq!(output.status.code(), Some(1));
+    let error = text(&output.stderr);
+    assert!(error.starts_with("error[E0702]"), "{error}");
+    assert!(error.contains("libtypy_missing.so.1"), "{error}");
+}

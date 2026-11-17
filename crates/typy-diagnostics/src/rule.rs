@@ -181,8 +181,16 @@ impl RuleId {
     pub const EXP_17: Self = Self("EXP-17");
     /// A module-level `ctypes.CDLL` or `ctypes.cdll.LoadLibrary` call with a string literal shall link the named library.
     pub const FFI_01: Self = Self("FFI-01");
+    /// A C function shall be callable when its `argtypes` and `restype` are assigned at module level, with ctypes types, before its first call. A call to a function without both shall be rejected.
+    pub const FFI_02: Self = Self("FFI-02");
+    /// The ctypes types `c_int8` to `c_uint64`, `c_int`, `c_long`, `c_size_t`, `c_ssize_t`, `c_float`, `c_double`, `c_bool`, `c_char_p`, `c_void_p`, `POINTER(T)` and `Structure` subclasses with a literal `_fields_` list shall be accepted, with the conversions and the wrap-around that ctypes defines.
+    pub const FFI_03: Self = Self("FFI-03");
+    /// Whether a library is linked statically or dynamically shall be set in `typy.toml`, not in the source.
+    pub const FFI_04: Self = Self("FFI-04");
     /// A function that `__all__` of a module built with `--lib` lists shall be exported with an unmangled C symbol and the C types its annotations give, and the build shall write a matching C header (ADR-0032).
     pub const FFI_05: Self = Self("FFI-05");
+    /// A library a `ctypes` declaration loads, and its functions, shall be values a program stores, passes and prints.
+    pub const FFI_09: Self = Self("FFI-09");
     /// Module-level function definitions shall be accepted.
     pub const FUN_01: Self = Self("FUN-01");
     /// Keyword-only and positional-only parameters shall be accepted.
@@ -453,7 +461,11 @@ impl RuleId {
         Self::EXP_16,
         Self::EXP_17,
         Self::FFI_01,
+        Self::FFI_02,
+        Self::FFI_03,
+        Self::FFI_04,
         Self::FFI_05,
+        Self::FFI_09,
         Self::FUN_01,
         Self::FUN_03,
         Self::FUN_04,

@@ -767,7 +767,7 @@ typy_rt_heap_free:
 	.local	typy.global.8
 	.comm	typy.global.8,8,8
 	.type	.Ltypy.str.0,@object
-	.section	.rodata,"a",@progbits
+	.section	.rodata.cst32,"aM",@progbits,32
 	.p2align	4, 0x0
 .Ltypy.str.0:
 	.long	4294967295
@@ -775,10 +775,11 @@ typy_rt_heap_free:
 	.quad	0
 	.long	1
 	.long	0
-	.size	.Ltypy.str.0, 24
+	.zero	1
+	.zero	7
+	.size	.Ltypy.str.0, 32
 
 	.type	.Ltypy.str.1,@object
-	.section	.rodata.cst32,"aM",@progbits,32
 	.p2align	4, 0x0
 .Ltypy.str.1:
 	.long	4294967295
@@ -786,8 +787,8 @@ typy_rt_heap_free:
 	.quad	3
 	.long	1
 	.long	0
-	.ascii	"caf"
-	.zero	5
+	.asciz	"caf"
+	.zero	4
 	.size	.Ltypy.str.1, 32
 
 	.type	.Ltypy.cstr.0,@object
@@ -810,8 +811,8 @@ typy_rt_heap_free:
 	.quad	1
 	.long	1
 	.long	0
-	.byte	33
-	.zero	7
+	.asciz	"!"
+	.zero	6
 	.size	.Ltypy.str.2, 32
 
 	.type	.Ltypy.str.3,@object
@@ -822,8 +823,8 @@ typy_rt_heap_free:
 	.quad	1
 	.long	1
 	.long	0
-	.byte	63
-	.zero	7
+	.asciz	"?"
+	.zero	6
 	.size	.Ltypy.str.3, 32
 
 	.type	.Ltypy.str.4,@object
@@ -834,8 +835,8 @@ typy_rt_heap_free:
 	.quad	1
 	.long	1
 	.long	0
-	.byte	10
-	.zero	7
+	.asciz	"\n"
+	.zero	6
 	.size	.Ltypy.str.4, 32
 
 	.type	.Ltypy.str.5,@object
@@ -846,8 +847,8 @@ typy_rt_heap_free:
 	.quad	1
 	.long	1
 	.long	0
-	.byte	32
-	.zero	7
+	.asciz	" "
+	.zero	6
 	.size	.Ltypy.str.5, 32
 
 	.type	.Ltypy.str.6,@object
@@ -858,8 +859,8 @@ typy_rt_heap_free:
 	.quad	4
 	.long	1
 	.long	0
-	.ascii	"True"
-	.zero	4
+	.asciz	"True"
+	.zero	3
 	.size	.Ltypy.str.6, 32
 
 	.type	.Ltypy.str.7,@object
@@ -870,8 +871,8 @@ typy_rt_heap_free:
 	.quad	5
 	.long	1
 	.long	0
-	.ascii	"False"
-	.zero	3
+	.asciz	"False"
+	.zero	2
 	.size	.Ltypy.str.7, 32
 
 	.section	".note.GNU-stack","",@progbits

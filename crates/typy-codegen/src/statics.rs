@@ -143,9 +143,12 @@ impl<'ctx> Statics<'ctx> {
             StrKind::Ucs2 => context.i16_type(),
             StrKind::Ucs4 => context.i32_type(),
         };
+        // A zero unit follows the data, as it follows every string the runtime makes, so a
+        // `bytes` constant is a string C reads (ADR-0047).
         let data: Vec<IntValue<'ctx>> = points
             .iter()
             .map(|point| unit.const_int(u64::from(*point), false))
+            .chain([unit.const_zero()])
             .collect();
         let value = context.const_struct(
             &[

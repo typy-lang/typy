@@ -107,12 +107,7 @@ impl<'ctx> LibraryEmitter<'_, 'ctx> {
     }
 
     fn c_type(&self, ty: CType) -> BasicTypeEnum<'ctx> {
-        match ty {
-            CType::Int64 => self.context.i64_type().into(),
-            CType::Double => self.context.f64_type().into(),
-            // C passes and returns a `bool` as one byte holding 0 or 1.
-            CType::Bool => self.context.i8_type().into(),
-        }
+        crate::foreign::c_type(self.context, ty)
     }
 
     /// Defines the export: a function with C types that converts each argument, calls the
@@ -186,6 +181,7 @@ impl<'ctx> ExportCall<'_, '_, 'ctx> {
                 .wrapper
                 .get_nth_param(index)
                 .ok_or_else(|| CodegenError(format!("{} has no parameter {index}", export.name)))?;
+            // The checker gives an export the C types of `int`, `float` and `bool` only.
             let argument: BasicValueEnum<'ctx> = match ty {
                 CType::Int64 => {
                     let converted = call_value(self.builder.build_call(
@@ -196,7 +192,6 @@ impl<'ctx> ExportCall<'_, '_, 'ctx> {
                     owned.push(converted);
                     converted
                 }
-                CType::Double => parameter,
                 CType::Bool => self
                     .builder
                     .build_int_compare(
@@ -206,6 +201,7 @@ impl<'ctx> ExportCall<'_, '_, 'ctx> {
                         "",
                     )?
                     .into(),
+                _ => parameter,
             };
             arguments.push(argument.into());
         }
@@ -250,7 +246,7 @@ impl<'ctx> ExportCall<'_, '_, 'ctx> {
                     .build_int_z_extend(value.into_int_value(), context.i8_type(), "")?
                     .into(),
             ),
-            (Some(CType::Double), Some(value)) => Some(value),
+            (Some(_), Some(value)) => Some(value),
             (None, _) => None,
             (Some(_), None) => {
                 return Err(CodegenError(format!(

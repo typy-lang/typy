@@ -114,11 +114,25 @@ impl BodyChecker<'_> {
         if let Some(type_object) = self.type_object_named(id, span) {
             return self.through_lazy(id, type_object);
         }
-        if self.program.function_ids.contains_key(id)
-            || self.program.module_functions.contains_key(id)
-            || Builtin::named(id).is_some()
+        if let Some(refused) = self.function_as_value(id, span) {
+            return refused;
+        }
+        self.unknown_name(id, span)
+    }
+
+    /// Returns the error for a function read as a value: a `ctypes` type is planned for 0.5
+    /// (FFI-03), and any other function for 1.0 (FUN-05).
+    fn function_as_value(&mut self, id: &str, span: Span) -> Option<TypedExpr> {
+        if let Some(super::builtin_module::ModuleFunction::CtypesType(_)) =
+            self.program.module_functions.get(id)
         {
-            return self.error(
+            return Some(self.ctypes_value(&[], span));
+        }
+        let function = self.program.function_ids.contains_key(id)
+            || self.program.module_functions.contains_key(id)
+            || Builtin::named(id).is_some();
+        function.then(|| {
+            self.error(
                 Diagnostic::new(
                     DiagnosticCode::error(201),
                     span,
@@ -126,9 +140,8 @@ impl BodyChecker<'_> {
                 )
                 .with_rule(RuleId::FUN_05),
                 span,
-            );
-        }
-        self.unknown_name(id, span)
+            )
+        })
     }
 
     /// Reads a module variable from a function: its value as it is now, which may be unbound

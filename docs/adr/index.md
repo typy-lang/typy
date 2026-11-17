@@ -52,3 +52,4 @@ supersedes it.
 | [ADR-0044](0044-run-a-librarys-module-when-it-loads-and-guard-each-export.md) | Run a library's module when it loads and guard each export | Accepted | 2026-11-17 |
 | [ADR-0045](0045-name-a-librarys-files-by-its-release-as-linux-names-libraries.md) | Name a library's files by its release as Linux names libraries | Accepted | 2026-11-17 |
 | [ADR-0046](0046-write-a-librarys-binding-as-a-typed-function-for-each-export.md) | Write a library's binding as a typed function for each export | Accepted | 2026-11-17 |
+| [ADR-0047](0047-compile-ctypes-declarations-into-direct-calls-linked-at-build-time.md) | Compile ctypes declarations into direct calls linked at build time | Accepted | 2026-11-17 |

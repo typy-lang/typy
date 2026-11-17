@@ -81,6 +81,9 @@ pub enum Type {
     /// The module object of the module of this qualified name, whose attributes are known
     /// when the program is checked (MOD-10, ADR-0015).
     Module(String),
+    /// A C library a `ctypes` declaration loads, by its index in the program's libraries; a
+    /// program calls its declared functions and uses it no other way (FFI-01, ADR-0047).
+    ForeignLibrary(u32),
     /// A type object, of the type it stands for, or of any type when that is known only
     /// when the program runs, as for `type(x)` of an optional `x` (CLS-12).
     TypeObject(Option<Box<TypeObjectOf>>),
@@ -192,6 +195,7 @@ impl TypeObjectOf {
             | Type::DescriptorFile(_)
             | Type::Traceback
             | Type::Module(_)
+            | Type::ForeignLibrary(_)
             | Type::TypeAlias
             | Type::VersionInfo
             | Type::NotImplemented
@@ -813,6 +817,7 @@ impl fmt::Display for Type {
             Self::Range => formatter.write_str("range"),
             Self::Slice => formatter.write_str("slice"),
             Self::Module(name) => write!(formatter, "module `{name}`"),
+            Self::ForeignLibrary(_) => formatter.write_str("CDLL"),
             Self::TypeObject(Some(of)) => write!(formatter, "type[{}]", of.name()),
             Self::TypeObject(None) => formatter.write_str("type"),
             Self::Error => formatter.write_str("<error>"),

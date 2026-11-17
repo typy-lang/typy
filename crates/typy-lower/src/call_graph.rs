@@ -489,6 +489,7 @@ fn expression(expression_value: &TypedExpr, callees: &mut BTreeSet<FunctionId>) 
         | TypedExprKind::NotImplemented
         | TypedExprKind::ClassVariable(_)
         | TypedExprKind::TypeAliasObject(_)
+        | TypedExprKind::ForeignLibrary(_)
         | TypedExprKind::SysValue(_) => {}
         TypedExprKind::AsIterable(inner) | TypedExprKind::Named { value: inner, .. } => {
             expression(inner, callees);
@@ -528,7 +529,8 @@ fn expression(expression_value: &TypedExpr, callees: &mut BTreeSet<FunctionId>) 
                 expression(value, callees);
             }
         }
-        TypedExprKind::MathCall { arguments, .. } => {
+        TypedExprKind::MathCall { arguments, .. }
+        | TypedExprKind::ForeignCall { arguments, .. } => {
             for argument in arguments {
                 expression(argument, callees);
             }

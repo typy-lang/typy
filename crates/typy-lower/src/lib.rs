@@ -17,6 +17,7 @@ mod exception;
 mod exception_arguments;
 mod exception_part;
 mod expression;
+mod foreign_call;
 mod fstring;
 mod function;
 mod import;

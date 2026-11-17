@@ -118,6 +118,8 @@ pub(crate) struct Program {
     /// The names each module checked so far reads, kept for bodies of that module checked
     /// later (MOD-13, ADR-0037).
     pub(super) contexts: BTreeMap<String, super::ModuleContext>,
+    /// The `ctypes` declarations, libraries and functions (FFI-01 to FFI-03).
+    pub(crate) foreign: super::foreign_call::Foreign,
     /// The class variables the program assigns through a subclass that inherits them
     /// (ADR-0037).
     pub(super) subclass_variables: crate::check::subclass_variables::SubclassVariables,
@@ -204,6 +206,7 @@ impl Program {
             rebound: BTreeMap::new(),
             rebound_reify: BTreeMap::new(),
             contexts: BTreeMap::new(),
+            foreign: super::foreign_call::Foreign::default(),
             subclass_variables: crate::check::subclass_variables::SubclassVariables::default(),
             giving_way: crate::check::not_implemented::GivingWay::new(),
         }
@@ -806,6 +809,8 @@ impl Program {
                     })
                 }),
             entry,
+            foreign_libraries: self.foreign.libraries,
+            foreign_functions: self.foreign.functions,
             exports: None,
             library_version: None,
             warnings: typy_diagnostics::Diagnostics::new(),

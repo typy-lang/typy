@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy detailed design |
-| Version | 2.17 |
+| Version | 2.18 |
 | Status | Approved |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-17 |
@@ -320,6 +320,7 @@ it enforces and its status. `typy explain` reads the same table.
 | E0427 | `%` format that does not fit its values | LIB-10 |
 | E0428 | Copies of a generic function without end | GEN-03 |
 | E0429 | Module or export that a C library cannot have | FFI-05, CLI-09 |
+| E0430 | `ctypes` declaration TyPy cannot compile | FFI-01, FFI-02, FFI-03 |
 | E0701 | C toolchain program not found | A-01 |
 | E0702 | Link failed | A-01 |
 | E0703 | Runtime archive missing, or from another TyPy version | None |
@@ -342,6 +343,8 @@ it enforces and its status. `typy explain` reads the same table.
 | `module_paths` | `Vec<Utf8PathBuf>` | empty | Directories relative to `root`, each made only of normal components and existing; the loader looks for a module in `root`, then in each, in order (MOD-01) |
 | `library` | `bool` | `false` | Set by `--lib` through `SettingOverrides::library`: the main file is a module named after its file, and the checker reads its exports from `__all__` (CLI-09, ADR-0044) |
 | `version` | `Option<String>` | `None` | `version` in `typy.toml`, a string whose release `version_release` finds; the version of a library whose module has no `__version__` (CLI-13) |
+| `library_paths` | `Vec<Utf8PathBuf>` | empty | `library-paths`: directories under `root`, checked as `module_paths` are, where the linker looks for C libraries first (FFI-04) |
+| `libraries` | `BTreeMap<String, LibraryLink>` | empty | `[libraries."NAME"]`, each a table of one `link`, `"static"` or `"dynamic"`, for a name of letters, digits and `_.+-` that does not start with `-`; `LibraryLink::linker_name` gives `:NAME` or `:BASE.a` (FFI-04) |
 | `allocator` | `Option<Allocator>` | `None` | The table `[allocator]`: the C functions `allocate`, `reallocate` and `free`, each an identifier of at most 255 characters outside the prefixes `typy_`, `__typy` and `_TY`, all three different, and an optional `library`, a name the linker takes as `-lname` that starts with a letter, a digit or `_` (MEM-08, ADR-0043) |
 
 `ProjectSettings::read(root, overrides)` builds the settings once, when a
@@ -1994,6 +1997,35 @@ optional `v`. A `__version__` bound otherwise, one without a release, and
 one that differs from `version` are E0429 under CLI-13, reported with the
 problems of the exports.
 
+### 7.4 ctypes declarations
+
+`check::ctypes_declarations::read` runs on each module after its type
+aliases, before checking (ADR-0047). It finds the names the module's
+imports give `ctypes` and its members, then reads its statements at
+module level: `NAME = ctypes.CDLL("library")` or
+`ctypes.cdll.LoadLibrary("library")` declares a `DeclaredLibrary`, kept
+by the span of its call, and `NAME.function.argtypes = [...]` and
+`NAME.function.restype = ...` declare a `DeclaredFunction`, whose
+`declared` is the end of the later of the two. The assignments to
+`argtypes` and `restype` then leave the module. `CType::from_name` maps
+each name of `ctypes` the declarations take to a `CType`, with the sizes
+of 64-bit Linux, so `c_long` is `Int64`. A library named other than by one
+literal, a value that is not a list or tuple of types or a type or
+`None`, a type `ctypes` has but TyPy does not compile, and a declaration
+made twice are E0430.
+
+The body checker's `Foreign` holds the declarations and the
+`ForeignLibrary` and `ForeignFunction` tables `TypedProgram` carries. A
+call whose span a declaration names is `TypedExprKind::ForeignLibrary` of
+type `Type::ForeignLibrary`, before its callee is checked. A method call
+whose receiver is a module variable a library is bound to, which no local
+name hides, is `TypedExprKind::ForeignCall`: E0430 without both
+declarations, or at module level before them; E0404 for a keyword, a wrong
+count, or an argument `CType::accepts` refuses, and a truth test for a
+`c_bool`. Its type is `CType::result_type`. A library read as a value is
+E0201 under FFI-09, and a `ctypes` type outside a declaration E0201 under
+FFI-03 until its objects arrive.
+
 ## 8. typy-tyir
 
 ### 8.1 Types
@@ -2146,7 +2178,8 @@ an `invoke` and every other call is not; that an `invoke`'s blocks take
 the result and the exception; that branch targets take no parameters; that
 only a function marked `may_raise` returns an exception; that only
 counted values are counted; that only a new instance of a class that is
-not an exception is held in the frame; and that each export of a library
+not an exception is held in the frame; that each argument of a
+`CallForeign` has a type its `CType::takes`; and that each export of a library
 calls a function whose parameters and result are the TyPy types of its C
 types. A `VerifyError` names the function and the
 block, and the caller reports it as E9001 with the pass that ran last. The
@@ -2399,7 +2432,34 @@ with another type still verifies. `TyirAllocator::default()` names
 `ProjectSettings::allocator` after lowering, for every stage that emits
 code.
 
-### 10.6 Library objects
+### 10.6 C calls
+
+`TyirModule::foreign_libraries` names the libraries a program declares,
+and `foreign_functions` holds each `TyirForeignFunction`: its symbol, its
+library and the `CType` of each parameter and of the result, from
+`Int8` to `UInt64`, `Float`, `Double`, `Bool`, `CharPointer` and
+`VoidPointer`. Lowering gives each argument the type its C type takes: a
+`bool` becomes an `int` for an integer type, an `int` becomes a `float`
+through `CtypesFloatArgument`, which raises `ctypes.ArgumentError` for one
+too large, any value becomes its truth for a `c_bool`, and `None` becomes
+the `None` of an optional `bytes` or `int`. `Operation::CallForeign` then
+calls the function, which the text form shows as
+`call_foreign name(arguments)`.
+
+Code generation declares the function with the C types, an integer and a
+`bool` as a 64-bit word widened by its sign or by zeros, as `libffi`
+passes it for CPython, and calls it through its address, so a name the
+module already has with another type still verifies. An integer argument
+is `typy_rt_int_low_bits` of its word, wrapped to its width and widened
+again; a `float` narrows for `c_float`; `bytes` passes
+`typy_rt_bytes_data`, its own buffer, which a zero ends; and an `int` for
+`c_void_p` becomes an address. A result of 32 bits or fewer becomes an
+inline `int` word in place; `int64_t`, `uint64_t`, `char *` and `void *`
+results go through `typy_rt_int_from_int64`, `typy_rt_int_from_uint64`,
+`typy_rt_bytes_from_c_string` and `typy_rt_int_from_address`, which give
+`None` for null.
+
+### 10.7 Library objects
 
 `TyirModule::library` holds the `TyirLibrary` of a library build: its name,
 the release of its version, and a `TyirExport` for each export, with its
@@ -2469,8 +2529,12 @@ as a subprocess with an argument list and no shell:
 | `x86_64-unknown-linux-gnu` | `cc` | `-o TEMP OBJECT -Wl,--push-state,--no-as-needed -lm -Wl,--pop-state RUNTIME_ARCHIVE [-lLIBRARY] -lm -Wl,--gc-sections` |
 | `x86_64-unknown-linux-musl` | `musl-gcc` | `-static`, then the same |
 
-`Linker::with_libraries(libraries)` adds `-lLIBRARY` for each library after
-the runtime archive; the driver passes the allocator's library (MEM-08).
+`Linker::with_libraries(libraries)` adds `-l` and each library after the
+runtime archive, and `with_library_paths(paths)` adds `-L` and each path
+before the object. The driver passes the allocator's library (MEM-08),
+and for each library a `ctypes` declaration names its
+`LibraryLink::linker_name`, `-l:NAME` or `-l:BASE.a` as `typy.toml` says,
+with the directories of `library-paths` (FFI-01, FFI-04).
 `LibraryLayout::beside(directory, kind, name, release)` names a library's
 files as ADR-0045 decides: `libNAME.so.X.Y` with the soname `libNAME.so.X`
 and links of that name and `libNAME.so`, or `libNAME.X.Y.a` with a link
@@ -2590,6 +2654,7 @@ installed `typy` finds `<prefix>/lib/typy/` and a `typy` in
 | Module | Behaviour |
 | --- | --- |
 | `entry` | `main` keeps its arguments for `sys.argv`, records the stack limit, calls `__typy_main`, reports an uncaught exception, flushes standard output and returns the exit status `sys::exit_status` gives |
+| `foreign` | `typy_rt_int_low_bits(word)` gives the low 64 bits of an `int` word in two's complement, and 0 for the word 0; `typy_rt_int_from_uint64`, `typy_rt_int_from_address` and `typy_rt_bytes_from_c_string` make a C result a TyPy value, null giving `None`; `typy_rt_ctypes_float_argument(word, position)` converts an `int` for a `c_double`, raising `ctypes.ArgumentError`, a class whose module is `ctypes`, with CPython's text for one too large (FFI-03, ADR-0047) |
 | `library` | `typy_rt_library_load(module)` records the stack limit, keeps `['']` for `sys.argv`, runs the module bodies and flushes standard output; `_unload` flushes it and closes the files; `_enter` records the stack limit for the calling thread, `_leave` flushes standard output; `_raised(exception)` exits with a `SystemExit`'s status, or reports any other exception as uncaught and aborts (ADR-0044). `stack::record_limit` reads `getrlimit` once and measures from the current stack pointer |
 | `allocator` | `allocate`, `reallocate` and `free` over the program object's hooks `typy_rt_heap_allocate`, `typy_rt_heap_reallocate` and `typy_rt_heap_free` (section 10.5), asking for at least one byte. Running out of memory prints `MemoryError` and aborts. The unit tests define the hooks over `malloc`, `realloc` and `free`, since they link no program object |
 | `refcount` | `typy_rt_increment` and `typy_rt_decrement`, not atomic (A-03). A decrement to zero calls the type's `drop`, then frees the memory |
@@ -2597,7 +2662,7 @@ installed `typy` finds `<prefix>/lib/typy/` and a `typy` in
 | `float` | Division, floor division, modulo and power with the special cases of CPython's `float_divmod` and `float_pow`. `int / int`, `float(int)` and `float(str)` round once to the nearest double, ties to even, by CPython's `long_true_divide` method on exact integers. `int(float)` and `int` against `float` comparisons are exact. `round` rounds half to even on the exact value: `round(x)` to an integer, `round(x, n)` by rounding `x * 10**n` exactly and reading the result back with one correct rounding, as CPython's `_Py_dg_dtoa` and `_Py_dg_strtod` do, so `round(2.675, 2)` is `2.67`. Beyond 323 digits a `float` rounds to itself and below -308 to zero; a result too large raises `OverflowError: rounded value too large to represent`. `round` of an `int` with negative `ndigits` gives the even multiple of `10**-ndigits`, as `long_round` does. `repr` writes the shortest digits that read back as the same double, found exactly with large integers, and breaks an exact tie toward the even digit as CPython does; the layout is positional when the decimal exponent is from -4 to 15, otherwise scientific with a sign and at least two exponent digits, and `inf`, `-inf`, `nan` and `-0.0` are written as CPython writes them (DAT-02) |
 | `libm` | `floor`, `fmod`, `pow` and `ldexp` from the C maths library, which is why every link passes `-lm` |
 | `math` | The functions behind the `math` module (LIB-05, ADR-0018), one `typy_rt_math_*` symbol each. A function of the C library runs inside CPython 3.15's `math_1` or `math_2` checks: a NaN from a number is `ValueError`, with the function's 3.15 message such as `expected a nonnegative input, got -1.0`, or `math domain error`, and an infinity from a finite number `OverflowError: math range error` where the function can overflow. `pow`, `fmod`, `remainder`, `ldexp`, `ulp`, `nextafter`, `fma`, `isclose`, `hypot` and `dist`, with CPython's `vector_norm`, `gamma` and `lgamma`, with its Lanczos sum, `fsum`, with Shewchuk's partials, and `sumprod`, with its machine-integer path, its triple-length path and the exact total it falls back to, are ported from `mathmodule.c`; `prod` of an `int` start keeps the exact product until its first `float` item, and each reads the member a union item holds (LIB-15), and `fmax` and `fmin` keep `x` when the two are equal, as the oracle's Clang build does. A logarithm of an `int` too large for a `float` is that of its top 55 bits, rounded once, plus its bit count times the logarithm of 2, by `fma`, as 3.15 does. `factorial` multiplies by halves, `isqrt` runs Newton's method from a power of two, `comb` and `perm` take exact running quotients, and `gcd` is Euclid's; each refuses what CPython refuses, with its message and its limit of a C `long`. The C functions are named with `#[link(name = "m")]`, so a Rust test binary of the runtime also calls the C library before `compiler_builtins` |
-| `string` | Creation, concatenation, repetition, indexing with negative indexes (DAT-11), slicing into a string as narrow as the code points it selects (DAT-12), length, the methods of LIB-03 that need no Unicode tables, with CPython's index adjustment for `start` and `end` and its rules for an empty substring, whitespace as `str.isspace` defines it, and the line breaks of `str.splitlines`, built through a `StrBuilder` that makes the new string as narrow as its widest code point, and the case methods and `is` tests. Their tables in `string/unicode/case_tables.rs` are read off CPython 3.15 itself, code point by code point, by `scripts/generate-unicode-tables.py`: for each property the code points where it changes, and for each case mapping runs of a constant difference over a stride of one or two, about 200 for each, with the few mappings to more than one code point listed apart. A program links only the tables its methods use. `lower` makes a capital sigma final sigma, when a cased code point comes before it and none after it, skipping case-ignorable ones, as CPython does; both properties are read from CPython by lowering a sigma beside each code point. `title` lowercases a code point after a cased one, comparison, `repr`, `chr` and `ord`. `repr` escapes the code points `str.isprintable` rejects, and `int()` and `float()` read the decimal digits of every script, from tables that `scripts/generate-unicode-tables.py` writes from CPython 3.15's Unicode 17.0 data (OI-15). The tables hold 676 boundaries up to U+FFFF as `u16`, 806 above it as `u32`, and 77 digit zeros, about 4.9 KB |
+| `string` | Every `str` and `bytes` object, and every constant one, keeps a zero unit after its data, so `typy_rt_bytes_data` gives C the object's own buffer as a string (ADR-0047). Creation, concatenation, repetition, indexing with negative indexes (DAT-11), slicing into a string as narrow as the code points it selects (DAT-12), length, the methods of LIB-03 that need no Unicode tables, with CPython's index adjustment for `start` and `end` and its rules for an empty substring, whitespace as `str.isspace` defines it, and the line breaks of `str.splitlines`, built through a `StrBuilder` that makes the new string as narrow as its widest code point, and the case methods and `is` tests. Their tables in `string/unicode/case_tables.rs` are read off CPython 3.15 itself, code point by code point, by `scripts/generate-unicode-tables.py`: for each property the code points where it changes, and for each case mapping runs of a constant difference over a stride of one or two, about 200 for each, with the few mappings to more than one code point listed apart. A program links only the tables its methods use. `lower` makes a capital sigma final sigma, when a cased code point comes before it and none after it, skipping case-ignorable ones, as CPython does; both properties are read from CPython by lowering a sigma beside each code point. `title` lowercases a code point after a cased one, comparison, `repr`, `chr` and `ord`. `repr` escapes the code points `str.isprintable` rejects, and `int()` and `float()` read the decimal digits of every script, from tables that `scripts/generate-unicode-tables.py` writes from CPython 3.15's Unicode 17.0 data (OI-15). The tables hold 676 boundaries up to U+FFFF as `u16`, 806 above it as `u32`, and 77 digit zeros, about 4.9 KB |
 | `list` | `typy_rt_list_new(kind, capacity, descriptor)`, `_append`, `_length`, `_get`, `_set`, `_equal`, `_contains`, `_repr`, `_slice`, `_pop`, `_insert`, `_extend`, `_remove`, `_index`, `_count`, `_clear`, `_copy`, `_reverse`, `_concat`, `_repeat`, `_compare`, `_sort`, `_extreme`, `_sum_int`, `_sum_float`, `_any` and `_all`. A list grows to `n + n/8 + 4` items while small and to `n + n/32 + 4` from 65,536 items, so a list of a million `int` values built one `append` at a time takes at most 8.5 MB (NFR-13). A position counts from the end when negative; one outside the list raises `IndexError: list index out of range`, or `list assignment index out of range`, and a large integer `cannot fit 'int' into an index-sized integer`. An `Object` item is compared and written by the type ID in its header, so a list of lists needs nothing from the compiler. `repr` joins the `repr` of each item once, in a string as wide as its widest piece. `pop` takes its index with an `int` flag, 1 when an index is given, so no `bool` crosses into the runtime as an argument, and returns the item with the reference the list held. `insert` clamps its position to the list, as CPython does. `extend` reads the other list's length first, so `xs.extend(xs)` doubles the list once. `clear` sets the length to zero before releasing the items, so an item's `drop` never sees a half-cleared list. `remove` and `index` raise `ValueError` with CPython 3.14's messages, `list.remove(x): x not in list` and `list.index(x): x not in list` (OI-14). `repeat` raises `OverflowError` for a count that does not fit an index. `compare` decides by the first unequal pair, then by length. `sort` is `list::listsort`, a port of CPython 3.15.2's `listsort` that calls `<` on the same items in the same order: natural runs that `count_run` finds, extended by binary insertion to the `minrun` that `minrun_next` spreads over the list, merged by the powersort strategy with galloping through a buffer of half the list; a comparison whose slot method raised ends it, the items a permutation of the input as CPython leaves them (OI-27). With `reverse` it reverses, sorts and reverses again, as CPython does, so equal items keep their order; a `nan` makes the order of a list depend on the algorithm, and CPython's own versions differ on it. `extreme` keeps the first item until a later one is less, for `min`, or greater, for `max`, so the first of equal items wins, and an empty list raises `ValueError: min() iterable argument is empty`. `sum_float` is CPython 3.12's compensated sum, Neumaier's improvement of Kahan's: each rounding error is collected and added once at the end unless it is not finite. A `tuple[T, ...]` is a list object whose header has the tuple type ID, 5, set by `typy_rt_tuple_seal` once its items are in: `repr` writes it between parentheses, `(1,)` for one item, its index error is `tuple index out of range` and `index` raises `tuple.index(x): x not in tuple`, and a slice, `+` or `*` of a tuple is a tuple. `typy_rt_placeholder_list` is an immortal empty list. Freeing a list releases each item |
 | `format` | `typy_rt_format_int`, `_bool`, `_float`, `_str` and `_other` give `format(value, spec)` as f-strings call it (LEX-07), a port of CPython's `formatter_unicode.c`: the specification `[[fill]align][sign][z][#][0][width][grouping][.precision][type]` is read with CPython's checks and `ValueError` messages, the digits of a number are grouped by `,` or `_` with zeros added inside the groups when `0` pads it after its sign, and the number or text is padded and aligned. A `float` is written as `PyOS_double_to_string` writes it for `e`, `f`, `g` and `repr`, from digits rounded half to even on the exact value with large integers, as `_Py_dg_dtoa` rounds them, then laid out as `format_float_short` lays them out. A `bool` comes as an `int` word, and any other type as its `str` and its type's name, which an empty specification gives back and any other raises `TypeError`. `typy_rt_ascii` escapes every code point outside ASCII for `!a`. `scripts/generate-format-cases.py` writes the test table, 4,628 results that CPython 3.12 to 3.15 all give |
 | `message` | Builds an exception message of up to 1024 code points from text, numbers and `repr` of a string, so an error about a long input stays short |

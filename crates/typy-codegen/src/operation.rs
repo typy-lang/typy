@@ -138,6 +138,10 @@ impl<'ctx> FunctionEmitter<'_, '_, 'ctx> {
             }
             Operation::IsNone(value) => Some(self.is_none(*value)?),
             Operation::NewInstance { class } => Some(self.new_instance(*class)?),
+            Operation::CallForeign {
+                function,
+                arguments,
+            } => self.foreign_call(*function, arguments)?,
             Operation::Field {
                 object,
                 class,

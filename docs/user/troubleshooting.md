@@ -1293,6 +1293,48 @@ def label_length(number: int) -> int:
     return len(label(number))
 ```
 
+## E0430: `ctypes` declaration TyPy cannot compile
+
+TyPy compiles a program's `ctypes` declarations into direct calls when it
+builds the program, so it reads them from the module's statements
+(FFI-01 to FFI-03, ADR-0047). This error names a declaration it cannot
+read that way:
+
+- a library named other than by one string literal, or loaded other than
+  at module level and bound to a name;
+- `argtypes` assigned something other than a list or tuple of `ctypes`
+  types, `restype` something other than a `ctypes` type or `None`, or
+  either assigned twice;
+- a `ctypes` type TyPy does not compile, such as `c_char`;
+- a function called without both its `argtypes` and its `restype`, or
+  called at module level before them.
+
+Declare each library and function once, at module level, before the
+first call at module level. This program gives E0430, since the function
+is called before its `restype` is assigned:
+
+<!-- typy-expect: rejected E0430 at 5:7 -->
+```python
+import ctypes
+
+libc = ctypes.CDLL("libc.so.6")
+libc.abs.argtypes = [ctypes.c_int]
+print(libc.abs(-3))
+libc.abs.restype = ctypes.c_int
+```
+
+This one is correct:
+
+<!-- typy-expect: accepted -->
+```python
+import ctypes
+
+libc = ctypes.CDLL("libc.so.6")
+libc.abs.argtypes = [ctypes.c_int]
+libc.abs.restype = ctypes.c_int
+print(libc.abs(-3))
+```
+
 ## E0701: C toolchain program not found
 
 TyPy links programs with the system C toolchain, which is not installed

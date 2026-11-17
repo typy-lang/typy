@@ -12,7 +12,8 @@ pub(crate) fn tyir_type(ty: &Type, tuples: &mut TupleTypes) -> TyirType {
         Type::Bool => TyirType::Bool,
         Type::Str => TyirType::STR,
         Type::Bytes => TyirType::BYTES,
-        Type::NoneType | Type::Error => TyirType::Unit,
+        // A library is linked when the program is built and holds no value (FFI-01).
+        Type::NoneType | Type::Error | Type::ForeignLibrary(_) => TyirType::Unit,
         // A `tuple[T, ...]` is a list object with the tuple type ID, so every list function
         // of the runtime reads it (DAT-14).
         Type::List(_) | Type::TupleOf(_) => TyirType::LIST,

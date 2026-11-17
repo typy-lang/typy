@@ -17,8 +17,11 @@ pub struct Linker {
     static_link: bool,
     pub(crate) strip_debug: bool,
     pub(crate) archive: RuntimeArchive,
-    /// Libraries linked as `-lname`, such as the allocator's (MEM-08).
+    /// What follows `-l` for each library, such as `mimalloc`, the allocator's (MEM-08),
+    /// or `:libm.so.6`, a `ctypes` declaration's (FFI-01).
     pub(crate) libraries: Vec<String>,
+    /// The directories the linker looks in first, as `-L` (FFI-04).
+    library_paths: Vec<camino::Utf8PathBuf>,
 }
 
 impl Linker {
@@ -35,6 +38,7 @@ impl Linker {
             strip_debug: false,
             archive,
             libraries: Vec::new(),
+            library_paths: Vec::new(),
         }
     }
 
@@ -46,12 +50,19 @@ impl Linker {
         self
     }
 
-    /// Returns the linker with each of `libraries` linked as `-lname` after the runtime
-    /// archive; each is a name `typy.toml` has checked, passed as one argument and never to a
-    /// shell.
+    /// Returns the linker with each of `libraries` linked as `-l` and the library after the
+    /// runtime archive; each is a name `typy.toml` or a declaration has checked, passed as
+    /// one argument and never to a shell.
     #[must_use]
     pub fn with_libraries(mut self, libraries: Vec<String>) -> Self {
         self.libraries = libraries;
+        self
+    }
+
+    /// Returns the linker that looks for libraries in each of `paths` first, as `-L`.
+    #[must_use]
+    pub fn with_library_paths(mut self, paths: Vec<camino::Utf8PathBuf>) -> Self {
+        self.library_paths = paths;
         self
     }
 
@@ -75,13 +86,18 @@ impl Linker {
         // an archive is taken only for a symbol still undefined. `--no-as-needed` keeps it
         // although nothing refers to it yet. The second `-lm` serves a static link, where the
         // order of archives matters the other way.
-        let mut arguments = vec![
+        let mut arguments: Vec<String> = self
+            .library_paths
+            .iter()
+            .map(|path| format!("-L{path}"))
+            .collect();
+        arguments.extend([
             object.to_string(),
             "-Wl,--push-state,--no-as-needed".to_owned(),
             "-lm".to_owned(),
             "-Wl,--pop-state".to_owned(),
             self.archive.path().to_string(),
-        ];
+        ]);
         arguments.extend(self.libraries.iter().map(|library| format!("-l{library}")));
         arguments.extend(["-lm".to_owned(), "-Wl,--gc-sections".to_owned()]);
         if self.strip_debug {

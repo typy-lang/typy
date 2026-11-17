@@ -152,16 +152,19 @@ def sqrt(value: float) -> float:
 
 `from m import *` is planned for after 1.0. Standard library modules come
 with their releases: `math` and `sys` in 0.3, `dataclasses` in 0.4, and
-`ctypes` in 0.5 (LIB-04 to LIB-07, FFI-01). `typing` and
+`ctypes` in 0.5 (LIB-04 to LIB-07, FFI-01); `os`, `time` and `random`
+are planned for 1.0. `typing` and
 `collections.abc` give `Iterator` and `Iterable`, `typing` gives
 `ClassVar`, `Final` and `Protocol`, and `types` gives `TracebackType`
 and `ModuleType`, for annotations (TYP-15, LIB-06). `dataclasses` gives
 `dataclass` and `field`, as [Classes](classes.md#dataclasses) describes
 (CLS-05). The library page
 describes [`math`](library.md#the-math-module) and
-[`sys`](library.md#the-sys-module):
+[`sys`](library.md#the-sys-module), and
+[C interoperability](c-interop.md) describes `ctypes`. A module planned for
+a later release is refused:
 
 <!-- typy-expect: rejected E0201 at 1:1 -->
 ```python
-import ctypes
+import time
 ```

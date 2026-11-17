@@ -2,7 +2,7 @@
 //! `int`, `repr`, and `float()` of a string.
 
 mod arithmetic;
-mod convert;
+pub(crate) mod convert;
 mod parse;
 mod ratio;
 mod repr;

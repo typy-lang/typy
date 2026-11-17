@@ -28,6 +28,8 @@ impl BodyChecker<'_> {
             ModuleFunction::SetRecursionLimit => {
                 self.recursion_limit(true, arguments, keywords, span)
             }
+            ModuleFunction::LoadLibrary => self.misplaced_library(arguments, span),
+            ModuleFunction::CtypesType(_) => self.ctypes_value(arguments, span),
         }
     }
 

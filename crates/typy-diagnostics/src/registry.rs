@@ -254,6 +254,11 @@ pub const CODES: &[CodeInfo] = &[
         "module or export that a C library cannot have",
         RuleId::FFI_05,
     ),
+    active(
+        430,
+        "`ctypes` declaration TyPy cannot compile",
+        RuleId::FFI_02,
+    ),
     active(701, "C toolchain program not found", RuleId::A_01),
     active(702, "link failed", RuleId::A_01),
     CodeInfo {

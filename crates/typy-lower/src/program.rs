@@ -97,6 +97,8 @@ pub fn lower(program: &TypedProgram) -> Result<TyirModule, Diagnostics> {
             classes,
             entry: FunctionId(program.entry.0),
             allocator: typy_tyir::TyirAllocator::default(),
+            foreign_libraries: foreign_libraries(program),
+            foreign_functions: foreign_functions(program),
             library: program
                 .exports
                 .as_ref()
@@ -119,6 +121,34 @@ pub fn lower(program: &TypedProgram) -> Result<TyirModule, Diagnostics> {
             }
         };
     }
+}
+
+/// Returns the names of the C libraries the program declares, which the build links
+/// (FFI-01).
+fn foreign_libraries(program: &TypedProgram) -> Vec<String> {
+    program
+        .foreign_libraries
+        .iter()
+        .map(|library| library.name.clone())
+        .collect()
+}
+
+/// Returns the C functions the program calls, with their C types (FFI-02).
+fn foreign_functions(program: &TypedProgram) -> Vec<typy_tyir::TyirForeignFunction> {
+    program
+        .foreign_functions
+        .iter()
+        .map(|function| typy_tyir::TyirForeignFunction {
+            name: function.name.clone(),
+            library: function.library,
+            parameters: function
+                .parameters
+                .iter()
+                .map(|ty| crate::foreign_call::c_type(*ty))
+                .collect(),
+            result: function.result.map(crate::foreign_call::c_type),
+        })
+        .collect()
 }
 
 /// Returns what a library exports, each function with the C types of its parameters and

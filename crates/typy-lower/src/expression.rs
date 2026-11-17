@@ -282,6 +282,15 @@ impl FunctionLowerer<'_> {
             }
             TypedExprKind::Print(call) => self.print(call, span),
             TypedExprKind::SysValue(value) => self.sys_value(*value, span),
+            // A library is linked when the program is built and holds no value (FFI-01).
+            TypedExprKind::ForeignLibrary(_) => Self::borrowed(
+                self.constant(typy_tyir::Constant::Unit, span),
+                TyirType::Unit,
+            ),
+            TypedExprKind::ForeignCall {
+                function,
+                arguments,
+            } => self.foreign_call(*function, arguments, span),
             TypedExprKind::Open {
                 path,
                 mode,

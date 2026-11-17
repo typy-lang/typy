@@ -326,7 +326,6 @@ impl Program {
             return Ok(());
         }
         let planned = match top {
-            "ctypes" => Some(("0.5", RuleId::FFI_01)),
             "os" | "time" | "random" => Some(("1.0", RuleId::LIB_07)),
             _ => None,
         };

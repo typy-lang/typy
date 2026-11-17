@@ -60,6 +60,40 @@ impl Checker<'_> {
         }
     }
 
+    /// Checks a call of a C function: each argument has a type its C type takes, and the
+    /// result is the TyPy type of the C result, or none for `void` (FFI-03).
+    fn foreign_call(
+        &self,
+        function: u32,
+        arguments: &[ValueId],
+    ) -> Result<Option<TyirType>, VerifyError> {
+        let Some(foreign) = self.module.foreign_functions.get(function as usize) else {
+            return Err(self.error(format!(
+                "foreign#{function} is not a C function of the module"
+            )));
+        };
+        if arguments.len() != foreign.parameters.len() {
+            return Err(self.error(format!(
+                "{} takes {} arguments, not {}",
+                foreign.name,
+                foreign.parameters.len(),
+                arguments.len()
+            )));
+        }
+        for (argument, parameter) in arguments.iter().zip(&foreign.parameters) {
+            let ty = self.ty(*argument)?;
+            if !parameter.takes(ty) {
+                return Err(self.error(format!(
+                    "an argument of {} v{} is {ty}, which does not pass as {}",
+                    foreign.name,
+                    argument.0,
+                    parameter.c_name()
+                )));
+            }
+        }
+        Ok(foreign.result.map(crate::library::CType::result_type))
+    }
+
     fn ty(&self, value: ValueId) -> Result<TyirType, VerifyError> {
         self.function
             .values
@@ -231,6 +265,10 @@ impl Checker<'_> {
                 function,
                 arguments,
             } => self.call(Callee::Function(*function), arguments)?,
+            Operation::CallForeign {
+                function,
+                arguments,
+            } => self.foreign_call(*function, arguments)?,
             Operation::SameMethod {
                 class,
                 slot,

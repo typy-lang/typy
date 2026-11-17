@@ -36,6 +36,17 @@ All notable changes to TyPy are recorded here. The format follows
   library with `ctypes` by its soname and defines a typed function for
   each export, and its stub `NAME_binding.pyi`, so a Python program
   imports the binding and calls the library (FFI-08, ADR-0046).
+- `ctypes`: a library a module declares with `ctypes.CDLL("name")` or
+  `ctypes.cdll.LoadLibrary("name")` is linked when the program is built,
+  and a C function whose `argtypes` and `restype` are assigned at module
+  level is called directly, with every integer type from `c_int8` to
+  `c_uint64`, `c_float`, `c_double`, `c_bool`, `c_char_p` and `c_void_p`
+  converted as `ctypes` converts them, also `ctypes.ArgumentError` for an
+  `int` too large for a `float`. E0430 names a declaration TyPy cannot
+  compile (FFI-01 to FFI-03, ADR-0047).
+- `library-paths` and `[libraries."NAME"]` with `link = "static"` or
+  `"dynamic"` in `typy.toml` say where the linker looks for C libraries and
+  how each is linked (FFI-04).
 - A benchmark report, `docs/testing/benchmark-report.md`, which compares
   TyPy's programs with CPython 3.12 to 3.15, PyPy, mypyc, Cython, Nuitka,
   Codon, C, C++, Rust, Go, Java and JavaScript on twelve workloads: time,

@@ -66,6 +66,11 @@ pub struct TyirModule {
     /// What the module exports when it is built as a C library, or `None` for an executable
     /// (CLI-09).
     pub library: Option<crate::library::TyirLibrary>,
+    /// The C libraries the program's `ctypes` declarations load, by name, which the build
+    /// links (FFI-01).
+    pub foreign_libraries: Vec<String>,
+    /// The C functions the program calls, indexed by `Operation::CallForeign` (FFI-02).
+    pub foreign_functions: Vec<crate::library::TyirForeignFunction>,
 }
 
 /// The C functions through which the runtime allocates, frees and resizes memory: by

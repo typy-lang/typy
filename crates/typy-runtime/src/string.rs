@@ -74,9 +74,11 @@ pub struct StrObject {
 
 const DATA_OFFSET: usize = core::mem::size_of::<StrObject>();
 
-/// Returns a new string of `length` code points of `kind`, with its data not yet written.
+/// Returns a new string of `length` code points of `kind`, with its data not yet written and
+/// a zero unit after it. A string never changes its length, so the zero stays there, and a
+/// `bytes` gives C its own buffer as a string ended by a zero byte (FFI-03, ADR-0047).
 pub(crate) fn new_string(length: usize, kind: StrKind) -> *mut StrObject {
-    let size = array_size(length, kind as usize, DATA_OFFSET);
+    let size = array_size(length.saturating_add(1), kind as usize, DATA_OFFSET);
     #[allow(
         clippy::cast_ptr_alignment,
         reason = "malloc returns memory aligned for every type"
@@ -90,8 +92,31 @@ pub(crate) fn new_string(length: usize, kind: StrKind) -> *mut StrObject {
             kind,
             padding: 0,
         });
+        core::ptr::write_bytes(
+            object
+                .cast::<u8>()
+                .add(DATA_OFFSET + length * kind as usize),
+            0,
+            kind as usize,
+        );
     }
     object
+}
+
+/// Returns the address of a `bytes` object's data, which a zero byte follows, for a
+/// `c_char_p` or `c_void_p` argument, or null for null, `None` of an optional `bytes`
+/// (FFI-03, ADR-0047).
+///
+/// # Safety
+///
+/// `bytes` is null or points to a live `bytes` object.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn typy_rt_bytes_data(bytes: *const StrObject) -> *const u8 {
+    if bytes.is_null() {
+        return core::ptr::null();
+    }
+    // SAFETY: the data follows the fixed part of the object.
+    unsafe { bytes.cast::<u8>().add(DATA_OFFSET) }
 }
 
 /// Returns the number of code points of a string.

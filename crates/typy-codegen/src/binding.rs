@@ -111,17 +111,29 @@ fn handle_name(library: &TyirLibrary) -> String {
 
 const fn python_name(ty: CType) -> &'static str {
     match ty {
-        CType::Int64 => "int",
-        CType::Double => "float",
+        CType::Float | CType::Double => "float",
         CType::Bool => "bool",
+        CType::CharPointer => "bytes | None",
+        CType::VoidPointer => "int | None",
+        _ => "int",
     }
 }
 
 const fn ctypes_name(ty: CType) -> &'static str {
     match ty {
+        CType::Int8 => "ctypes.c_int8",
+        CType::UInt8 => "ctypes.c_uint8",
+        CType::Int16 => "ctypes.c_int16",
+        CType::UInt16 => "ctypes.c_uint16",
+        CType::Int32 => "ctypes.c_int32",
+        CType::UInt32 => "ctypes.c_uint32",
         CType::Int64 => "ctypes.c_int64",
+        CType::UInt64 => "ctypes.c_uint64",
+        CType::Float => "ctypes.c_float",
         CType::Double => "ctypes.c_double",
         CType::Bool => "ctypes.c_bool",
+        CType::CharPointer => "ctypes.c_char_p",
+        CType::VoidPointer => "ctypes.c_void_p",
     }
 }
 

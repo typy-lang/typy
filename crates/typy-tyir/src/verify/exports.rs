@@ -6,13 +6,10 @@ use crate::library::CType;
 use crate::module::TyirModule;
 use crate::types::TyirType;
 
-/// Returns the TyPy type a C type converts to and from.
+/// Returns the TyPy type an export's C type converts to and from; an export has the C
+/// types of `int`, `float` and `bool` only (ADR-0032).
 const fn tyir_type(ty: CType) -> TyirType {
-    match ty {
-        CType::Int64 => TyirType::Int,
-        CType::Double => TyirType::Float,
-        CType::Bool => TyirType::Bool,
-    }
+    ty.result_type()
 }
 
 pub(super) fn check(module: &TyirModule) -> Result<(), VerifyError> {

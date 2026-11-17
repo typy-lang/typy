@@ -13,7 +13,7 @@ use crate::typed::{TypedConstant, TypedExpr, TypedExprKind};
 use crate::types::Type;
 
 /// The standard library modules TyPy provides as built-in modules.
-const BUILTIN_MODULES: [&str; 2] = ["math", "sys"];
+const BUILTIN_MODULES: [&str; 3] = ["math", "sys", "ctypes"];
 
 /// Returns whether `module` is a built-in module of TyPy.
 pub(crate) fn is_builtin_module(module: &str) -> bool {
@@ -31,6 +31,10 @@ pub(crate) enum ModuleFunction {
     GetRecursionLimit,
     /// `sys.setrecursionlimit`.
     SetRecursionLimit,
+    /// `ctypes.CDLL` and `ctypes.cdll`, whose calls declare a library (FFI-01).
+    LoadLibrary,
+    /// A type of `ctypes`, which a declaration names (FFI-03).
+    CtypesType(crate::ctypes::CType),
 }
 
 /// A value of a built-in module.
@@ -96,6 +100,9 @@ impl Program {
         if module == "sys" {
             return Self::sys_lookup(name, span);
         }
+        if module == "ctypes" {
+            return Self::ctypes_lookup(name, span);
+        }
         match math_name(name) {
             None => Err(error(
                 425,
@@ -125,6 +132,26 @@ impl Program {
             }
             Some(MathName::Constant(value)) => Ok(BuiltinName::Value(BuiltinValue::Float(value))),
         }
+    }
+
+    /// Returns what `name` of `ctypes` is outside a declaration: `CDLL` and `cdll` load a
+    /// library, and every other name is planned for 0.5 (FFI-03).
+    fn ctypes_lookup(name: &str, span: Span) -> Result<BuiltinName, Box<Diagnostic>> {
+        if matches!(name, "CDLL" | "cdll") {
+            return Ok(BuiltinName::Function(ModuleFunction::LoadLibrary));
+        }
+        if let Some(ty) = crate::ctypes::CType::from_name(name) {
+            return Ok(BuiltinName::Function(ModuleFunction::CtypesType(ty)));
+        }
+        Err(error(
+            201,
+            span,
+            format!(
+                "`ctypes.{name}` other than in a function's `argtypes` or `restype` is planned \
+                 for TyPy 0.5 (FFI-03)"
+            ),
+            RuleId::FFI_03,
+        ))
     }
 
     fn sys_lookup(name: &str, span: Span) -> Result<BuiltinName, Box<Diagnostic>> {

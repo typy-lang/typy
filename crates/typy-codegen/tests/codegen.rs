@@ -113,7 +113,7 @@ fn raising_calls_add_a_traceback_entry_with_the_line() {
 fn constants_are_immortal_static_objects() {
     let (project, module) = compile("print(\"hi\", 123456789012345678901234567890)\n");
     let ir = llvm_ir(&module, Target::host(), Optimization::None, &project).unwrap();
-    assert!(ir.contains("private unnamed_addr constant { i32, i32, i64, i32, i32, [2 x i8] } { i32 -1, i32 1, i64 2, i32 1, i32 0, [2 x i8] c\"hi\" }"), "{ir}");
+    assert!(ir.contains("private unnamed_addr constant { i32, i32, i64, i32, i32, [3 x i8] } { i32 -1, i32 1, i64 2, i32 1, i32 0, [3 x i8] c\"hi\\00\" }"), "{ir}");
     assert!(
         ir.contains("{ i32 -1, i32 3, i32 2, i32 0, [2 x i64]"),
         "{ir}"

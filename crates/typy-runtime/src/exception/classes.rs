@@ -153,9 +153,18 @@ pub(crate) static UNSUPPORTED_OPERATION: TypeObject = TypeObject {
     ..os_class("UnsupportedOperation", &OS_ERROR)
 };
 
+/// `ctypes.ArgumentError`: an argument of a C function that its declared type does not take,
+/// such as an `int` too large for a `c_double` (FFI-03, ADR-0047).
+#[unsafe(export_name = "typy_rt_exception_ArgumentError")]
+pub(crate) static ARGUMENT_ERROR: TypeObject = TypeObject {
+    module: "ctypes".as_ptr(),
+    module_length: 6,
+    ..class("ArgumentError", &EXCEPTION)
+};
+
 /// Every built-in exception class.
 #[cfg(test)]
-pub(crate) const EVERY_CLASS: [&TypeObject; 40] = [
+pub(crate) const EVERY_CLASS: [&TypeObject; 41] = [
     &BASE_EXCEPTION,
     &EXCEPTION,
     &SYSTEM_EXIT,
@@ -196,6 +205,7 @@ pub(crate) const EVERY_CLASS: [&TypeObject; 40] = [
     &UNICODE_DECODE_ERROR,
     &UNICODE_ENCODE_ERROR,
     &ZERO_DIVISION_ERROR,
+    &ARGUMENT_ERROR,
 ];
 
 /// Returns an exception class built when the program runs, as a test builds one.
