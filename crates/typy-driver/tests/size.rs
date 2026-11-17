@@ -9,6 +9,10 @@ use typy_driver::{Outcome, Pipeline};
 const LIMIT: u64 = 100 * 1024;
 
 #[test]
+#[cfg_attr(
+    not(target_arch = "x86_64"),
+    ignore = "the musl target links with musl-gcc, which only an x86_64 host has (ADR-0051)"
+)]
 fn a_static_musl_hello_world_is_smaller_than_100_kb() {
     let directory = tempfile::tempdir().unwrap();
     let root = Utf8PathBuf::from_path_buf(directory.path().to_owned()).unwrap();

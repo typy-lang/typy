@@ -347,7 +347,9 @@ fn ffi_05_the_refused_names_cover_every_c_function_the_runtime_calls() {
         .parent()
         .and_then(Utf8Path::parent)
         .unwrap()
-        .join("lib/typy/x86_64-unknown-linux-gnu/libtypy_runtime.a");
+        .join("lib/typy")
+        .join(typy_codegen::Target::host().triple.as_str())
+        .join("libtypy_runtime.a");
     let listed = Command::new("nm")
         .args(["--undefined-only", archive.as_str()])
         .output()

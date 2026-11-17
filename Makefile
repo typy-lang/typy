@@ -4,7 +4,9 @@
 
 COMPOSE := USER_UID=$(shell id -u) USER_GID=$(shell id -g) \
 	docker compose -f .devcontainer/compose.yaml
-EXEC := $(COMPOSE) exec -T dev
+# CARGO_PROFILE_DEV_DEBUG passes through when set, so a runner short of disk
+# builds the tests with less debug information.
+EXEC := $(COMPOSE) exec -T -e CARGO_PROFILE_DEV_DEBUG dev
 DIAGRAMS := $(filter-out docs/diagrams/style.puml,$(wildcard docs/diagrams/*.puml))
 MARKDOWN := "**/*.md" "\#.tmp/**" "\#target/**" "\#dist/**" "\#site/**"
 

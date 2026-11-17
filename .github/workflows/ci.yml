@@ -78,6 +78,41 @@ jobs:
         if: steps.changes.outputs.light != 'true'
         run: make bench
 
+  # The tests on an AArch64 host: every unit, integration and conformance test
+  # natively, and the conformance suite built for x86-64 under qemu-x86_64
+  # (NFR-16, ADR-0051). The coverage, Miri and fuzzing stay on x86-64.
+  arm64:
+    name: AArch64 tests
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Find what the pull request changes
+        id: changes
+        env:
+          BASE: ${{ github.event.pull_request.base.sha }}
+        run: |
+          git fetch --no-tags --depth=1 origin "${BASE}"
+          scripts/ci-changes.sh "${BASE}" >> "${GITHUB_OUTPUT}"
+      - name: Start the dev container
+        if: steps.changes.outputs.light != 'true'
+        run: make dev
+      # The runner's 14 GB disk holds the dev image and a build whose debug
+      # information is line tables only.
+      - name: Unit, integration and conformance tests
+        if: steps.changes.outputs.light != 'true'
+        env:
+          CARGO_PROFILE_DEV_DEBUG: line-tables-only
+        run: make test
+      # The archive for AArch64 hosts, which builds and runs a program itself,
+      # so a release finds no new fault in it.
+      - name: Release archive
+        if: steps.changes.outputs.light != 'true'
+        run: make dist
+
   weekly:
     name: Miri and fuzzing
     if: github.event_name == 'workflow_dispatch'

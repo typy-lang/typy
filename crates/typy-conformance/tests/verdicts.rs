@@ -102,7 +102,7 @@ fn each_way_a_test_fails_or_cannot_judge_typy_gets_its_verdict() {
 fn the_sanitizer_run_without_its_instrumented_runtime_is_invalid() {
     let prefix = tempfile::tempdir().unwrap();
     let prefix = Utf8PathBuf::from_path_buf(prefix.path().to_owned()).unwrap();
-    let triple = "x86_64-unknown-linux-gnu";
+    let triple = typy_codegen::Target::host().triple.as_str();
     let plain = Utf8Path::new("lib/typy")
         .join(triple)
         .join("libtypy_runtime.a");

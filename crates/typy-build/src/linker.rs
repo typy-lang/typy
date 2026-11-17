@@ -181,7 +181,9 @@ mod tests {
     #[test]
     fn each_target_links_with_its_toolchain() {
         let (_guard, root) = directory();
-        let gnu = Linker::new(TargetTriple::X86_64LinuxGnu, archive(&root));
+        // The host's own target links with `cc`; `toolchain.rs` tests the tools of the others.
+        let host = Target::host().triple;
+        let gnu = Linker::new(host, archive(&root));
         let arguments = gnu.arguments(Utf8Path::new("a.o"), Utf8Path::new("out"));
         let expected_archive = root.join("libtypy_runtime.a").to_string();
         assert_eq!(gnu.tools.linker, "cc");
@@ -199,15 +201,13 @@ mod tests {
                 "-Wl,--gc-sections"
             ]
         );
-        let stripped =
-            Linker::new(TargetTriple::X86_64LinuxGnu, archive(&root)).with_strip_debug(true);
+        let stripped = Linker::new(host, archive(&root)).with_strip_debug(true);
         let arguments = stripped.arguments(Utf8Path::new("a.o"), Utf8Path::new("out"));
         assert_eq!(
             arguments.last().map(String::as_str),
             Some("-Wl,--strip-debug")
         );
-        let pooled = Linker::new(TargetTriple::X86_64LinuxGnu, archive(&root))
-            .with_libraries(vec!["mimalloc".to_owned()]);
+        let pooled = Linker::new(host, archive(&root)).with_libraries(vec!["mimalloc".to_owned()]);
         let arguments = pooled.arguments(Utf8Path::new("a.o"), Utf8Path::new("out"));
         assert_eq!(
             arguments[6..],
@@ -219,7 +219,6 @@ mod tests {
             ]
         );
         let musl = Linker::new(TargetTriple::X86_64LinuxMusl, archive(&root));
-        assert_eq!(musl.tools.linker, "musl-gcc");
         assert_eq!(
             musl.arguments(Utf8Path::new("a.o"), Utf8Path::new("out"))[0],
             "-static"
