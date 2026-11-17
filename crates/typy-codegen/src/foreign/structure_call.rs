@@ -1,9 +1,9 @@
-//! Passes a `ctypes` structure to a C function and takes one back by value, as the System V
-//! calling convention of x86-64 Linux passes a C struct (FFI-03, ADR-0049).
+//! Passes a `ctypes` structure to a C function and takes one back by value, as the target's C
+//! calling convention passes a C struct (FFI-03, FFI-12, ADR-0052).
 
 use inkwell::AddressSpace;
 use inkwell::attributes::{Attribute, AttributeLoc};
-use inkwell::types::{AnyType, BasicMetadataTypeEnum, BasicTypeEnum, IntType};
+use inkwell::types::{AnyType, BasicMetadataTypeEnum, BasicType, BasicTypeEnum, IntType};
 use inkwell::values::{BasicMetadataValueEnum, BasicValueEnum, CallSiteValue, PointerValue};
 use typy_tyir::{CType, ValueId};
 
@@ -56,22 +56,25 @@ pub(super) struct StructureResult<'ctx> {
 }
 
 impl<'ctx> StructureResult<'ctx> {
-    /// Returns the LLVM type the C function returns: its one piece, a pair of its two, or
-    /// `None` when it returns nothing in registers.
+    /// Returns the LLVM type the C function returns: its one piece, a pair of its two, an
+    /// array of its pieces, or `None` when it returns nothing in registers.
     pub(super) fn return_type(
         &self,
         context: &'ctx inkwell::context::Context,
     ) -> Option<BasicTypeEnum<'ctx>> {
-        let Passing::Registers(pieces) = &self.passing else {
-            return None;
-        };
-        let types: Vec<BasicTypeEnum<'ctx>> = pieces
-            .iter()
-            .map(|piece| piece.llvm_type(context))
-            .collect();
-        match types.as_slice() {
-            [one] => Some(*one),
-            _ => Some(context.struct_type(&types, false).into()),
+        match &self.passing {
+            Passing::Registers(pieces) => {
+                let types: Vec<BasicTypeEnum<'ctx>> = pieces
+                    .iter()
+                    .map(|piece| piece.llvm_type(context))
+                    .collect();
+                match types.as_slice() {
+                    [one] => Some(*one),
+                    _ => Some(context.struct_type(&types, false).into()),
+                }
+            }
+            Passing::Array(pieces) => Some(array_type(context, pieces).into()),
+            Passing::Nothing | Passing::Memory | Passing::Reference => None,
         }
     }
 }
@@ -123,9 +126,9 @@ impl<'ctx> FunctionEmitter<'_, '_, 'ctx> {
         call: &mut CallParts<'ctx>,
         registers: &mut Registers,
     ) -> Result<StructureResult<'ctx>, CodegenError> {
-        let passing = passing(&self.shared.tyir.cdata_classes, class);
+        let passing = passing(&self.shared.tyir.cdata_classes, class, self.shared.target);
         let (object, buffer) = self.new_structure(class)?;
-        if passing == Passing::Memory {
+        if matches!(passing, Passing::Memory | Passing::Reference) {
             let attribute = self.memory_attribute("sret", class);
             call.attributes.push((call.next(), attribute));
             let pointer = self.shared.context.ptr_type(AddressSpace::default());
@@ -140,7 +143,8 @@ impl<'ctx> FunctionEmitter<'_, '_, 'ctx> {
     }
 
     /// Adds the structure object `value`, of the class at `class`, as the parameters it
-    /// passes as: its pieces in registers when enough are left, or a copy in memory.
+    /// passes as: its pieces in registers when enough are left, an array of its pieces, a copy
+    /// in memory, or the address of a copy.
     pub(super) fn structure_argument(
         &mut self,
         value: ValueId,
@@ -150,19 +154,44 @@ impl<'ctx> FunctionEmitter<'_, '_, 'ctx> {
     ) -> Result<(), CodegenError> {
         let object = self.value(value)?;
         let buffer = self.buffer_of(object)?;
-        match passing(&self.shared.tyir.cdata_classes, class) {
+        let pointer = self.shared.context.ptr_type(AddressSpace::default());
+        match passing(&self.shared.tyir.cdata_classes, class, self.shared.target) {
             Passing::Nothing => {}
             Passing::Registers(pieces) if registers.take(&pieces) => {
-                for (index, piece) in pieces.iter().enumerate() {
-                    let loaded = self.load_piece(buffer, index, *piece)?;
+                for piece in &pieces {
+                    let loaded = self.load_piece(buffer, *piece)?;
                     call.push(piece.llvm_type(self.shared.context), loaded);
                 }
             }
             Passing::Registers(_) | Passing::Memory => {
                 let attribute = self.memory_attribute("byval", class);
                 call.attributes.push((call.next(), attribute));
-                let pointer = self.shared.context.ptr_type(AddressSpace::default());
                 call.push(pointer.into(), buffer.into());
+            }
+            Passing::Array(pieces) => {
+                let ty = array_type(self.shared.context, &pieces);
+                let mut array = ty.get_undef();
+                for (index, piece) in (0_u32..).zip(&pieces) {
+                    let loaded = self.load_piece(buffer, *piece)?;
+                    array = self
+                        .builder
+                        .build_insert_value(array, loaded, index, "")?
+                        .into_array_value();
+                }
+                call.push(ty.into(), array.into());
+            }
+            Passing::Reference => {
+                // The callee may change its argument, so it gets a copy of its own.
+                let size = self.shared.tyir.cdata_classes[class as usize].size;
+                let bytes = self
+                    .shared
+                    .context
+                    .i8_type()
+                    .array_type(u32::try_from(size).unwrap_or(u32::MAX));
+                let copy = self.entry_alloca(bytes.into())?;
+                let length = self.shared.context.i64_type().const_int(size, false);
+                self.builder.build_memcpy(copy, 16, buffer, 1, length)?;
+                call.push(pointer.into(), copy.into());
             }
         }
         Ok(())
@@ -189,51 +218,52 @@ impl<'ctx> FunctionEmitter<'_, '_, 'ctx> {
         call: CallSiteValue<'ctx>,
         result: &StructureResult<'ctx>,
     ) -> Result<BasicValueEnum<'ctx>, CodegenError> {
-        let Passing::Registers(pieces) = &result.passing else {
+        let (Passing::Registers(pieces) | Passing::Array(pieces)) = &result.passing else {
             return Ok(result.object);
         };
         let returned = call
             .try_as_basic_value()
             .basic()
             .ok_or_else(|| CodegenError("a structure in registers is returned".to_owned()))?;
-        for (index, piece) in pieces.iter().enumerate() {
-            let part = if pieces.len() == 1 {
-                returned
-            } else {
-                let index = u32::try_from(index).unwrap_or(u32::MAX);
-                self.builder
-                    .build_extract_value(returned.into_struct_value(), index, "")?
+        for (index, piece) in (0_u32..).zip(pieces) {
+            let part = match returned {
+                BasicValueEnum::ArrayValue(array) => {
+                    self.builder.build_extract_value(array, index, "")?
+                }
+                BasicValueEnum::StructValue(pair) => {
+                    self.builder.build_extract_value(pair, index, "")?
+                }
+                one => one,
             };
-            self.store_piece(result.buffer, index, *piece, part)?;
+            self.store_piece(result.buffer, *piece, part)?;
         }
         Ok(result.object)
     }
 
-    /// Returns the address of piece `index` of a buffer.
+    /// Returns the address of a piece of a buffer.
     fn piece_address(
         &mut self,
         buffer: PointerValue<'ctx>,
-        index: usize,
+        piece: Piece,
     ) -> Result<PointerValue<'ctx>, CodegenError> {
         let context = self.shared.context;
         let word = context.i64_type();
         let start = self.builder.build_ptr_to_int(buffer, word, "")?;
-        let offset = word.const_int(u64::try_from(index).unwrap_or(0) * 8, false);
+        let offset = word.const_int(piece.offset, false);
         let address = self.builder.build_int_add(start, offset, "")?;
         let pointer = context.ptr_type(AddressSpace::default());
         Ok(self.builder.build_int_to_ptr(address, pointer, "")?)
     }
 
-    /// Returns piece `index` of a buffer as it passes: a `float` or a `double`, or its bytes
-    /// widened to a word, read without reading past them.
+    /// Returns a piece of a buffer as it passes: a `float` or a `double`, or its bytes widened
+    /// to a word, read without reading past them.
     fn load_piece(
         &mut self,
         buffer: PointerValue<'ctx>,
-        index: usize,
         piece: Piece,
     ) -> Result<BasicValueEnum<'ctx>, CodegenError> {
         let context = self.shared.context;
-        let address = self.piece_address(buffer, index)?;
+        let address = self.piece_address(buffer, piece)?;
         let ty: BasicTypeEnum<'ctx> = if piece.vector {
             piece.llvm_type(context)
         } else {
@@ -258,17 +288,15 @@ impl<'ctx> FunctionEmitter<'_, '_, 'ctx> {
             .into())
     }
 
-    /// Stores piece `index` of a structure a C function returned into a buffer, its own
-    /// bytes only.
+    /// Stores a piece of a structure a C function returned into a buffer, its own bytes only.
     fn store_piece(
         &mut self,
         buffer: PointerValue<'ctx>,
-        index: usize,
         piece: Piece,
         part: BasicValueEnum<'ctx>,
     ) -> Result<(), CodegenError> {
         let context = self.shared.context;
-        let address = self.piece_address(buffer, index)?;
+        let address = self.piece_address(buffer, piece)?;
         let stored = if piece.vector || piece.size == 8 {
             part
         } else {
@@ -283,6 +311,18 @@ impl<'ctx> FunctionEmitter<'_, '_, 'ctx> {
             .map_err(|error| CodegenError(format!("a store is not aligned: {error:?}")))?;
         Ok(())
     }
+}
+
+/// Returns the array type AAPCS64 passes `pieces` as, all of one LLVM type.
+fn array_type<'ctx>(
+    context: &'ctx inkwell::context::Context,
+    pieces: &[Piece],
+) -> inkwell::types::ArrayType<'ctx> {
+    let element = pieces.first().map_or_else(
+        || context.i64_type().into(),
+        |piece| piece.llvm_type(context),
+    );
+    element.array_type(u32::try_from(pieces.len()).unwrap_or(u32::MAX))
 }
 
 /// Returns the integer type of `size` bytes.

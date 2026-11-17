@@ -1,21 +1,26 @@
 //! End-to-end tests of C functions that take and return `ctypes` structures by value, as
-//! the System V calling convention of x86-64 Linux passes them: the C library is built as a
-//! developer builds it, and CPython and the TyPy program call it with the same source
-//! (FFI-03, ADR-0049).
+//! each target's C calling convention passes them: the C library is built as a developer
+//! builds it, and CPython and the TyPy program call it with the same source; the program is
+//! also built for the other architecture and run under its emulator (FFI-03, FFI-12,
+//! ADR-0052).
 
 use std::process::Command;
 
-use camino::Utf8PathBuf;
+use camino::{Utf8Path, Utf8PathBuf};
 
 /// Functions of structures that pass in general registers, vector registers, both, and
-/// memory, and of calls whose registers run out before a structure.
+/// memory, of calls whose registers run out before a structure, of four doubles, which
+/// AArch64 passes in registers, and of five floats, which it passes as a copy the callee may
+/// change. `c_byte` is C's `signed char`: plain `char` is unsigned on AArch64.
 const SHAPES: &str = r"
 typedef struct { int a; double b; } Mixed;
 typedef struct { float x, y, z; } Vec3;
 typedef struct { double x, y; } Pair;
 typedef struct { long a, b, c; } Triple;
-typedef struct { char c; short s; } Small;
-typedef struct { char a, b, c; } Odd;
+typedef struct { signed char c; short s; } Small;
+typedef struct { signed char a, b, c; } Odd;
+typedef struct { double a, b, c, d; } Quad;
+typedef struct { float a, b, c, d, e; } Five;
 
 Mixed mixed_scale(Mixed m, int k) { Mixed r = { m.a * k, m.b * k }; return r; }
 Vec3 vec3_add(Vec3 a, Vec3 b) { Vec3 r = { a.x + b.x, a.y + b.y, a.z + b.z }; return r; }
@@ -30,6 +35,13 @@ long crowd(long a, long b, long c, long d, long e, long f, Mixed m) {
 }
 double floats(double a, double b, double c, double d, double e, double f, double g, Pair p) {
     return a + b + c + d + e + f + g + p.x * 10 + p.y * 100;
+}
+Quad quad_scale(Quad q, double k) { Quad r = { q.a * k, q.b * k, q.c * k, q.d * k }; return r; }
+double quad_sum(Quad q) { return q.a + q.b + q.c + q.d; }
+Five five_add(Five x, Five y) {
+    Five r = { x.a + y.a, x.b + y.b, x.c + y.c, x.d + y.d, x.e + y.e };
+    x.a = 99;
+    return r;
 }
 ";
 
@@ -64,6 +76,25 @@ class Odd(ctypes.Structure):
     _fields_ = [("a", ctypes.c_byte), ("b", ctypes.c_byte), ("c", ctypes.c_byte)]
 
 
+class Quad(ctypes.Structure):
+    _fields_ = [
+        ("a", ctypes.c_double),
+        ("b", ctypes.c_double),
+        ("c", ctypes.c_double),
+        ("d", ctypes.c_double),
+    ]
+
+
+class Five(ctypes.Structure):
+    _fields_ = [
+        ("a", ctypes.c_float),
+        ("b", ctypes.c_float),
+        ("c", ctypes.c_float),
+        ("d", ctypes.c_float),
+        ("e", ctypes.c_float),
+    ]
+
+
 lib.mixed_scale.argtypes = [Mixed, ctypes.c_int]
 lib.mixed_scale.restype = Mixed
 lib.vec3_add.argtypes = [Vec3, Vec3]
@@ -86,6 +117,12 @@ lib.crowd.restype = ctypes.c_long
 D = ctypes.c_double
 lib.floats.argtypes = [D, D, D, D, D, D, D, Pair]
 lib.floats.restype = ctypes.c_double
+lib.quad_scale.argtypes = [Quad, D]
+lib.quad_scale.restype = Quad
+lib.quad_sum.argtypes = [Quad]
+lib.quad_sum.restype = D
+lib.five_add.argtypes = [Five, Five]
+lib.five_add.restype = Five
 
 m = lib.mixed_scale(Mixed(3, 1.5), 4)
 print(m.a, m.b)
@@ -101,6 +138,11 @@ o = lib.odd_next(Odd(1, 2, 3))
 print(o.a, o.b, o.c)
 print(lib.crowd(1, 2, 3, 4, 5, 6, Mixed(7, 8.5)))
 print(lib.floats(1, 2, 3, 4, 5, 6, 7, Pair(1, 2)))
+q = lib.quad_scale(Quad(1, 2, 3, 4), 0.5)
+print(q.a, q.b, q.c, q.d, lib.quad_sum(q))
+f = Five(1, 2, 3, 4, 5)
+g = lib.five_add(f, Five(0.5, 0.5, 0.5, 0.5, 0.5))
+print(g.a, g.b, g.c, g.d, g.e, f.a)
 "#;
 
 /// What CPython prints for `PROGRAM`.
@@ -113,21 +155,29 @@ const EXPECTED: &str = "12 6.0\n\
 2 3 4\n\
 36\n\
 238.0\n\
+0.5 1.0 1.5 2.0 5.0\n\
+1.5 2.5 3.5 4.5 5.5 1.0\n\
 ";
 
 fn text(bytes: &[u8]) -> String {
     String::from_utf8_lossy(bytes).into_owned()
 }
 
-#[test]
-fn ffi_03_structures_pass_by_value_as_cpython_passes_them() {
+/// A directory with the C library's source and the program, set to find the library in `lib`.
+fn project() -> (tempfile::TempDir, Utf8PathBuf) {
     let directory = tempfile::tempdir().unwrap();
     let root = Utf8PathBuf::from_path_buf(directory.path().to_owned()).unwrap();
     std::fs::create_dir(root.join("lib")).unwrap();
     std::fs::write(root.join("shapes.c"), SHAPES).unwrap();
     std::fs::write(root.join("app.py"), PROGRAM).unwrap();
     std::fs::write(root.join("typy.toml"), "library-paths = [\"lib\"]\n").unwrap();
-    let compiled = Command::new("cc")
+    (directory, root)
+}
+
+/// Builds the C library with the C compiler `cc` and the program with `typy build` and
+/// `arguments`.
+fn build(root: &Utf8Path, cc: &str, arguments: &[&str]) {
+    let compiled = Command::new(cc)
         .args([
             "-shared",
             "-fPIC",
@@ -136,10 +186,24 @@ fn ffi_03_structures_pass_by_value_as_cpython_passes_them() {
             "lib/libshapes.so",
             "shapes.c",
         ])
-        .current_dir(&root)
+        .current_dir(root)
         .output()
         .unwrap();
     assert!(compiled.status.success(), "{}", text(&compiled.stderr));
+    let built = Command::new(env!("CARGO_BIN_EXE_typy"))
+        .args(["build", "app.py", "-o", "app"])
+        .args(arguments)
+        .current_dir(root)
+        .env("TYPY_HOME", root.join("home"))
+        .output()
+        .unwrap();
+    assert!(built.status.success(), "{}", text(&built.stderr));
+}
+
+#[test]
+fn ffi_03_structures_pass_by_value_as_cpython_passes_them() {
+    let (_directory, root) = project();
+    build(&root, "cc", &[]);
     let oracle = Command::new("python3")
         .args(["-I", "app.py"])
         .current_dir(&root)
@@ -147,15 +211,34 @@ fn ffi_03_structures_pass_by_value_as_cpython_passes_them() {
         .output()
         .unwrap();
     assert_eq!(text(&oracle.stdout), EXPECTED, "{}", text(&oracle.stderr));
-    let built = Command::new(env!("CARGO_BIN_EXE_typy"))
-        .args(["build", "app.py", "-o", "app"])
-        .current_dir(&root)
-        .env("TYPY_HOME", root.join("home"))
-        .output()
-        .unwrap();
-    assert!(built.status.success(), "{}", text(&built.stderr));
     let run = Command::new(root.join("app"))
         .env("LD_LIBRARY_PATH", root.join("lib"))
+        .output()
+        .unwrap();
+    assert_eq!(text(&run.stdout), EXPECTED, "{}", text(&run.stderr));
+}
+
+#[test]
+fn ffi_12_structures_pass_by_value_on_the_other_architecture() {
+    let (triple, gnu, emulator) = if cfg!(target_arch = "aarch64") {
+        (
+            "x86_64-unknown-linux-gnu",
+            "x86_64-linux-gnu",
+            "qemu-x86_64",
+        )
+    } else {
+        (
+            "aarch64-unknown-linux-gnu",
+            "aarch64-linux-gnu",
+            "qemu-aarch64",
+        )
+    };
+    let (_directory, root) = project();
+    build(&root, &format!("{gnu}-gcc"), &["--target", triple]);
+    let run = Command::new(emulator)
+        .args(["-L", &format!("/usr/{gnu}")])
+        .args(["-E", &format!("LD_LIBRARY_PATH={}", root.join("lib"))])
+        .arg(root.join("app"))
         .output()
         .unwrap();
     assert_eq!(text(&run.stdout), EXPECTED, "{}", text(&run.stderr));

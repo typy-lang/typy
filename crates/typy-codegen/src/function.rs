@@ -27,6 +27,8 @@ pub(crate) struct Shared<'module, 'ctx> {
     pub(crate) globals: &'module [Option<PointerValue<'ctx>>],
     pub(crate) raising: &'module [bool],
     pub(crate) lookup: &'module dyn SourceLookup,
+    /// The target, whose C calling convention a structure passed by value follows (FFI-12).
+    pub(crate) target: crate::target::TargetTriple,
 }
 
 /// Emits the body of one function.

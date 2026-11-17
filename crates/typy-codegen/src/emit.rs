@@ -104,6 +104,7 @@ pub(crate) fn generate(
         globals: &globals,
         raising: &raising,
         lookup,
+        target: target.triple,
     };
     for function in &module.functions {
         FunctionEmitter::emit(&mut shared, function)?;

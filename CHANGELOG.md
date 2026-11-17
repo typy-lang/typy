@@ -27,6 +27,10 @@ All notable changes to TyPy are recorded here. The format follows
   too, and an unsupported triple is a usage error that lists the supported
   ones. A table `[target."TRIPLE"]` in `typy.toml` names other tools for a
   target: `linker`, `ar` and `objcopy` (CLI-08, CLI-14, ADR-0051).
+- A `ctypes` structure passed to or returned from a C function by value
+  follows AAPCS64 on AArch64: up to four `float`s or `double`s in
+  floating-point registers, other structures of up to 16 bytes in general
+  registers, and a larger one as the address of a copy (FFI-12, ADR-0052).
 
 ### Changed
 

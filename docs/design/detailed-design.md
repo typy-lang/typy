@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy detailed design |
-| Version | 2.24 |
+| Version | 2.25 |
 | Status | Approved |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-17 |
@@ -2536,18 +2536,24 @@ of the `Cdata*` runtime functions: a read of an item takes a short-lived
 object over it from `CdataItem`, reads it with the getter of its type and
 releases it.
 
-A `CType::Structure` parameter or result passes by value as the System V
-calling convention of x86-64 Linux passes a C struct (ADR-0049):
-`structure_abi::passing` gives `Nothing` for no bytes, `Memory` above 16
-bytes, and otherwise one `Piece` for each eight bytes, in a vector
-register when each scalar in it is a `float` or a `double`. `Registers`
-counts the six general and eight vector registers the arguments before
-take; a structure whose pieces do not fit, or one in memory, passes as a
-`byval` pointer to its buffer. Each piece is loaded without reading past
-the structure: a `float`, a `double`, or its bytes widened to a word. A
-result in registers is a piece, or a pair of two, stored into a new
-object; a larger one is written by the callee into a new object's
-buffer, passed first as `sret`.
+A `CType::Structure` parameter or result passes by value as the target's
+C calling convention passes a C struct (ADR-0052), which
+`structure_abi::passing` gives for the class and `Shared::target`. Each
+`Piece` has its offset and size and is loaded without reading past the
+structure: a `float`, a `double`, or its bytes widened to a word.
+
+| Target | `Passing` | Parameter | Result |
+| --- | --- | --- | --- |
+| Both | `Nothing`, for no bytes | none | none |
+| x86-64 | `Registers`: one piece for each eight bytes, a vector piece when each scalar in it is a `float` or a `double` | each piece, while `Registers` has the six general and eight vector registers they need; otherwise a `byval` pointer to the buffer | one piece, or a pair of two |
+| x86-64 | `Memory`, above 16 bytes | a `byval` pointer to the buffer | the buffer of a new object, passed first as `sret` |
+| AArch64 | `Array`: one to four `float`s or `double`s of one kind, one piece each; or 9 to 16 bytes of anything else, two words | one array `[n x float]`, `[n x double]` or `[2 x i64]` | the same array |
+| AArch64 | `Registers`: up to 8 bytes of anything else, one word | the word | the word |
+| AArch64 | `Reference`, above 16 bytes | the address of a copy in a stack slot of the function's entry block, since the callee may change it | the buffer of a new object, passed first as `sret`, which AArch64 passes in `x8` |
+
+A result in registers is stored into a new object of the class. AArch64
+counts no registers: its back end puts an array the registers left cannot
+hold on the stack whole.
 
 ### 10.7 Library objects
 

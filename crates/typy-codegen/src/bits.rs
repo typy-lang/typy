@@ -111,7 +111,7 @@ impl<'ctx> FunctionEmitter<'_, '_, 'ctx> {
 
     /// Returns a stack slot of type `ty` made at the start of the function, so a slot used in a
     /// loop is made once.
-    fn entry_alloca(
+    pub(crate) fn entry_alloca(
         &self,
         ty: inkwell::types::BasicTypeEnum<'ctx>,
     ) -> Result<inkwell::values::PointerValue<'ctx>, CodegenError> {
