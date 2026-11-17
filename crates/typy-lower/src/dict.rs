@@ -130,7 +130,7 @@ impl FunctionLowerer<'_> {
 
     /// Returns a borrowed value with a reference of its own, so it outlives what it was read
     /// from.
-    fn owned_copy(&mut self, value: ValueId, ty: TyirType, span: Span) -> Lowered {
+    pub(crate) fn owned_copy(&mut self, value: ValueId, ty: TyirType, span: Span) -> Lowered {
         if !self.counted(ty) {
             return Self::borrowed(value, ty);
         }

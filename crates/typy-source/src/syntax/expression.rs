@@ -24,6 +24,9 @@ pub enum Constant {
     },
     /// A string literal, after escapes and concatenation.
     Str(String),
+    /// A string literal that holds a surrogate, U+D800 to U+DFFF, as its code points, since
+    /// Rust's text cannot hold one (LEX-10).
+    StrPoints(Vec<u32>),
     /// A bytes literal.
     Bytes(Vec<u8>),
     /// `...`.
@@ -84,6 +87,12 @@ pub enum Expr {
         test: Box<Expr>,
         body: Box<Expr>,
         orelse: Box<Expr>,
+        span: Span,
+    },
+    /// `target := value`, an assignment expression (EXP-13).
+    Named {
+        target: Identifier,
+        value: Box<Expr>,
         span: Span,
     },
     Compare {
@@ -188,6 +197,7 @@ impl Expr {
             | Self::BinOp { span, .. }
             | Self::UnaryOp { span, .. }
             | Self::IfExp { span, .. }
+            | Self::Named { span, .. }
             | Self::Compare { span, .. }
             | Self::Call { span, .. }
             | Self::Constant { span, .. }

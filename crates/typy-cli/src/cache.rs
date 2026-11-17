@@ -149,6 +149,7 @@ mod tests {
                 &program,
                 SettingOverrides {
                     python_floor: Some(PythonFloor::V3_15),
+                    ..SettingOverrides::default()
                 },
                 false,
                 b"build",

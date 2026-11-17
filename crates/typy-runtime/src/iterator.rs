@@ -147,7 +147,7 @@ pub(crate) unsafe fn type_of(iterator: *const IteratorObject) -> &'static TypeOb
 /// Writes an iterator as CPython's `object.__repr__` does, and a file's as the file.
 #[allow(
     clippy::cast_ptr_alignment,
-    reason = "every object comes from malloc, aligned for every type, and starts with its header"
+    reason = "every object comes from malloc, a frame block or a static, aligned for every type, and starts with its header"
 )]
 unsafe extern "C" fn iterator_repr(object: *mut ObjectHeader) -> Raising<*mut StrObject> {
     // SAFETY: the type of the object says it is an iterator.
@@ -176,7 +176,7 @@ unsafe extern "C" fn iterator_repr(object: *mut ObjectHeader) -> Raising<*mut St
 /// set, a dict or a range, and `kind` is an `int` word of an `IteratorKind`.
 #[allow(
     clippy::cast_ptr_alignment,
-    reason = "every object comes from malloc, aligned for every type, and starts with its header"
+    reason = "every object comes from malloc, a frame block or a static, aligned for every type, and starts with its header"
 )]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn typy_rt_iterator_new(
@@ -252,7 +252,7 @@ pub unsafe extern "C" fn typy_rt_iterator_new(
 #[unsafe(no_mangle)]
 #[allow(
     clippy::cast_ptr_alignment,
-    reason = "every object comes from malloc, aligned for every type, and starts with its header"
+    reason = "every object comes from malloc, a frame block or a static, aligned for every type, and starts with its header"
 )]
 pub unsafe extern "C" fn typy_rt_iterable_iterator(
     source: *mut ObjectHeader,
@@ -345,7 +345,7 @@ pub unsafe extern "C" fn typy_rt_iterator_item(iterator: *const IteratorObject) 
 /// The iterator is live, and its source is null or live.
 #[allow(
     clippy::cast_ptr_alignment,
-    reason = "every object comes from malloc, aligned for every type, and starts with its header"
+    reason = "every object comes from malloc, a frame block or a static, aligned for every type, and starts with its header"
 )]
 unsafe fn step(iterator: &mut IteratorObject) -> Result<bool, *mut crate::ExceptionObject> {
     let source = iterator.source;

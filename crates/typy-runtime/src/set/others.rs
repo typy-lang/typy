@@ -32,7 +32,7 @@ pub(super) enum Other<'a> {
 /// `address` is the address of a live set, dict, view, list or `tuple[T, ...]`.
 #[allow(
     clippy::cast_ptr_alignment,
-    reason = "every object comes from malloc, aligned for every type, and starts with its header"
+    reason = "every object comes from malloc, a frame block or a static, aligned for every type, and starts with its header"
 )]
 pub(super) unsafe fn other<'a>(address: u64) -> Other<'a> {
     let header = core::ptr::with_exposed_provenance::<crate::header::ObjectHeader>(

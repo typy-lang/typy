@@ -23,6 +23,10 @@ const MODULE_DUNDERS: &[&str] = &[
 impl BodyChecker<'_> {
     /// Resolves a name that is read as a value (LR 4.2.2).
     pub(super) fn name(&mut self, id: &str, span: Span) -> TypedExpr {
+        // A structure class statement binds its name to this hidden name (ADR-0049).
+        if let Some(class) = self.program.foreign.structure_named(id) {
+            return Self::cdata_class(class, span);
+        }
         if self.in_function()
             && !self.global_names.contains(id)
             && !self.locals.contains_key(id)
@@ -99,8 +103,14 @@ impl BodyChecker<'_> {
             }
             return read;
         }
+        if id == "NotImplemented" {
+            return Self::typed(TypedExprKind::NotImplemented, Type::NotImplemented, span);
+        }
         if id == "__name__" {
             return Self::typed(TypedExprKind::ModuleName, Type::Str, span);
+        }
+        if let Some(read) = self.rebound_read(id, span) {
+            return read;
         }
         if let Some(refused) = self.annotation_only(id, span) {
             return refused;
@@ -108,11 +118,25 @@ impl BodyChecker<'_> {
         if let Some(type_object) = self.type_object_named(id, span) {
             return self.through_lazy(id, type_object);
         }
-        if self.program.function_ids.contains_key(id)
-            || self.program.module_functions.contains_key(id)
-            || Builtin::named(id).is_some()
+        if let Some(refused) = self.function_as_value(id, span) {
+            return refused;
+        }
+        self.unknown_name(id, span)
+    }
+
+    /// Returns a scalar class of `ctypes` read as a value (FFI-03), or the error for any
+    /// other function read as one, which is planned for 1.0 (FUN-05).
+    fn function_as_value(&mut self, id: &str, span: Span) -> Option<TypedExpr> {
+        if let Some(super::builtin_module::ModuleFunction::CtypesType(ty)) =
+            self.program.module_functions.get(id)
         {
-            return self.error(
+            return Some(Self::cdata_class(crate::ctypes::CData::Scalar(*ty), span));
+        }
+        let function = self.program.function_ids.contains_key(id)
+            || self.program.module_functions.contains_key(id)
+            || Builtin::named(id).is_some();
+        function.then(|| {
+            self.error(
                 Diagnostic::new(
                     DiagnosticCode::error(201),
                     span,
@@ -120,9 +144,8 @@ impl BodyChecker<'_> {
                 )
                 .with_rule(RuleId::FUN_05),
                 span,
-            );
-        }
-        self.unknown_name(id, span)
+            )
+        })
     }
 
     /// Reads a module variable from a function: its value as it is now, which may be unbound
@@ -186,7 +209,7 @@ impl BodyChecker<'_> {
             .splitting
             .iter()
             .rev()
-            .find(|(each, _)| *each == symbol)
+            .find(|(each, _)| *each == super::each_member::Split::variable(symbol))
         {
             return Some(member.clone());
         }
@@ -232,19 +255,8 @@ impl BodyChecker<'_> {
     /// Reports a name that only annotations read: a type alias of the module, or a name of
     /// `typing`, `collections.abc` or `types`.
     fn annotation_only(&mut self, id: &str, span: Span) -> Option<TypedExpr> {
-        if self.program.type_aliases.contains(id) {
-            return Some(self.error(
-                Diagnostic::new(
-                    DiagnosticCode::error(201),
-                    span,
-                    format!(
-                        "using the type alias `{id}` as a value is planned for TyPy 0.5 (SMT-12)"
-                    ),
-                )
-                .with_rule(RuleId::SMT_12)
-                .with_help("TyPy reads a type alias in annotations"),
-                span,
-            ));
+        if let Some(alias) = self.type_alias_value(id, span) {
+            return Some(alias);
         }
         if self.program.annotation_names.contains_key(id)
             || self.program.annotation_modules.contains_key(id)
@@ -254,10 +266,10 @@ impl BodyChecker<'_> {
                     Diagnostic::new(
                         DiagnosticCode::error(201),
                         span,
-                        format!("using `{id}` as a value is planned for TyPy 0.5 (TYP-17)"),
+                        format!("using `{id}` as a value is planned for TyPy 1.0 (TYP-18)"),
                     )
-                    .with_rule(RuleId::TYP_17)
-                    .with_help("TyPy reads it in annotations"),
+                    .with_rule(RuleId::TYP_18)
+                    .with_help("TyPy reads it in annotations, `isinstance` and class patterns"),
                     span,
                 ),
             );

@@ -6,6 +6,364 @@ All notable changes to TyPy are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-11-17
+
+### Added
+
+- An instance of a class of the program that never outlives the function
+  that makes it is made in the function's frame, with no allocator call:
+  one the function reads, assigns attributes of, calls methods on, or
+  passes to functions that do no more. `--emit=tyir` ends the line of each
+  such instance with `in frame` (MEM-03, ADR-0042).
+- The table `[allocator]` in `typy.toml` names the C functions a program
+  allocates with, in place of `malloc`, `realloc` and `free`, and the
+  library that defines them, such as mimalloc's `mi_malloc`, `mi_realloc`
+  and `mi_free` from `mimalloc`. A wrong table is E0107 (MEM-08,
+  ADR-0043).
+- `typy build --lib static` and `--lib shared` build a module as a C
+  library, `libNAME.a` or `libNAME.so`, with the C header `NAME.h`. The
+  functions `__all__` lists are exported under their own names, with
+  `int`, `float` and `bool` as `int64_t`, `double` and `bool`. The module
+  runs when the library is loaded, and is named after its file. An
+  exception that would leave an export ends the process: a `SystemExit`
+  with its status, any other with its report and an abort. E0429 names a
+  module or an export a library cannot have; `typy check --lib` reports it
+  too (CLI-09, FFI-05, EXC-05, ADR-0044).
+- A library's files carry the release of its version, from the module's
+  `__version__` or else `version` in `typy.toml`, as Linux names
+  libraries: `libNAME.so.5.0` with the soname `libNAME.so.5` and links
+  `libNAME.so.5` and `libNAME.so`, and `libNAME.5.0.a` with a link
+  `libNAME.a` (CLI-13, ADR-0045).
+- A library build also writes `NAME_binding.py`, a module that loads the
+  library with `ctypes` by its soname and defines a typed function for
+  each export, and its stub `NAME_binding.pyi`, so a Python program
+  imports the binding and calls the library (FFI-08, ADR-0046).
+- `ctypes`: a library a module declares with `ctypes.CDLL("name")` or
+  `ctypes.cdll.LoadLibrary("name")` is linked when the program is built,
+  and a C function whose `argtypes` and `restype` are assigned at module
+  level is called directly, with every integer type from `c_int8` to
+  `c_uint64`, `c_float`, `c_double`, `c_bool`, `c_char_p` and `c_void_p`
+  converted as `ctypes` converts them, also `ctypes.ArgumentError` for an
+  `int` too large for a `float`. E0430 names a declaration TyPy cannot
+  compile (FFI-01 to FFI-03, ADR-0047).
+- `ctypes` objects, pointers and arrays: `c_int(5)` and every scalar type
+  of `ctypes` make an object whose `value` a program reads and assigns and
+  a C function writes through `byref(x)` or a `POINTER(T)` parameter;
+  `pointer(x)`, `POINTER(T)()`, `contents` and indexes read and write
+  through a pointer, which a C function may also return; `(T * n)(...)`
+  makes an array with `len`, checked indexes, iteration and `in`; and
+  `sizeof` gives a class's size, each as in CPython. `argtypes` and
+  `restype` take `POINTER(T)` and names bound to a type (FFI-03,
+  ADR-0048).
+- `ctypes.Structure` subclasses with a literal `_fields_` list, laid out as
+  C lays out a struct: fields read and assign as in CPython, a structure,
+  array or pointer field reads as an object over its memory, structures
+  nest, fill arrays and sit behind pointers, and a C function takes and
+  returns a structure by value as the x86-64 System V calling convention
+  passes it, in registers or in memory (FFI-03, ADR-0049).
+- `library-paths` and `[libraries."NAME"]` with `link = "static"` or
+  `"dynamic"` in `typy.toml` say where the linker looks for C libraries and
+  how each is linked (FFI-04).
+- A benchmark report, `docs/testing/benchmark-report.md`, which compares
+  TyPy's programs with CPython 3.12 to 3.15, PyPy, mypyc, Cython, Nuitka,
+  Codon, C, C++, Rust, Go, Java and JavaScript on twelve workloads: time,
+  peak memory, startup, build time and size. `make bench-peers` installs the
+  peers at pinned versions and `make bench-compare` runs it.
+- Assignment expressions, `name := value`, with CPython's scoping in
+  comprehensions and its syntax errors; a test of `(name := value) is not
+  None` narrows `name` (EXP-13).
+- `match` statements with literal, value, capture, wildcard, `as`, `|`,
+  sequence, mapping and class patterns and guards, with CPython's syntax
+  errors for patterns. A class pattern reads `__match_args__` from the
+  class body or a base, and a class pattern that CPython would answer
+  with `TypeError` is refused with E0401. A case narrows the subject as
+  the test it stands for does, so after `case None:` an optional subject
+  is no longer `None`, and `case [x, *rest]` narrows a
+  `list[int] | None` to the list (CST-06).
+- The warning W0401 for a `match` whose cases leave members of the
+  subject's union, optional or `bool` type unmatched, naming them. A
+  `match` whose cases cover every member is complete, so a function that
+  returns from each case needs no `return` after it (CST-07, ADR-0033).
+- `@dataclass` writes `__match_args__`, the names of the fields, and
+  takes `match_args=False` to leave it out (CLS-05, CST-06).
+- The names `Optional`, `Union`, `List`, `Dict`, `Set`, `Tuple` and `Type`
+  of `typing` in annotations, as the types they spell (LIB-17).
+- `Iterable` and `Iterator` of `typing` and `collections.abc`, and
+  `List`, `Dict`, `Set`, `Tuple`, `Type`, `Optional[...]` and
+  `Union[...]` of `typing`, as the class of `isinstance` and of a class
+  pattern, with CPython's answers (TYP-17).
+- A loop, a comprehension, `list`, `sorted`, `sum` and the other builtins
+  that read an iterable go over a variable that holds a union of fixed
+  tuples, such as `tuple[str] | tuple[str, int]` (TYP-14, ADR-0034).
+- `args` of an exception and `code` of a `SystemExit` are values of
+  their own: stored, passed, indexed, unpacked and looped over. The type
+  of `args` comes from every creation of the class and of the classes
+  derived from it, in the program and in TyPy's own raises, such as
+  `tuple[str, int] | tuple[str]`; `code` is `None`, the one argument, or
+  the tuple. The five items of a Unicode error join only in a program
+  that encodes, decodes or opens a file (EXC-15, ADR-0034).
+- A class may define the in-place methods, such as `__iadd__`, which
+  `x += y` calls, falling back to `__add__`; an augmented assignment that
+  calls an operator method takes an item or an attribute of any
+  expression as its target, evaluated once (CLS-20, CLS-32).
+- Assigning a class variable through a subclass that inherits it gives
+  the subclass a variable of its own, which it, its subclasses and their
+  instances read from then on, as CPython does; through a variable such
+  as `cls` it is planned for 1.0 (CLS-25, CLS-31, ADR-0037).
+- A class method may be called through an instance, which passes the
+  instance's class as `cls`, and through a subclass defined in another
+  module than the class that defines it, which gets a copy of its own.
+  Through an instance of a generic class it is planned for 1.0 (CLS-25,
+  CLS-30, ADR-0037).
+- A static method may be called through any expression that gives an
+  instance, such as `make().helper()`, which is evaluated first, as
+  CPython does (CLS-25).
+- `super(Base, self)` takes any class of the enclosing class's chain of
+  bases, and finds the method of the nearest base of `Base`, as CPython
+  does; with another instance it is planned for 1.0 (CLS-26, CLS-29).
+- Dataclasses take `field(default_factory=f)`, called for each instance
+  that is not given the field, hash as the tuple of their fields when
+  frozen or given `unsafe_hash=True`, and take the options `init`,
+  `repr`, `unsafe_hash` and `slots`, as CPython's `dataclasses` does.
+  Other options of `field` and `@dataclass` are planned for 1.0
+  (CLS-15, CLS-16, CLS-17, CLS-28).
+- `math.fsum`, `dist`, `prod` and `sumprod` take items of a union of
+  number types, such as a `list[int | float]`, and `prod` a `bool` start,
+  with CPython's results. `prod` of items that are not numbers is planned
+  for 1.0 (LIB-15, LIB-21).
+- A function may import a module that imports its own module at module
+  level, the usual way to break an import cycle, as CPython allows; the
+  function is checked once that module is. Inside `__init__` it is
+  planned for 1.0 (MOD-13, MOD-15).
+- `OSError` takes arguments of any type, more than five of them, and two
+  or more through `super().__init__` or to a subclass with an `__init__`
+  of its own, as CPython does: `OSError("a", "b")` is `[Errno a] b`.
+  `errno`, `strerror`, `filename` and `filename2` take their types from
+  every creation of the class, and an error about a file opened from a
+  descriptor has the descriptor as `filename`. A number as the third
+  argument of `OSError` or `BlockingIOError` is planned for 1.0 (EXC-16,
+  EXC-18, ADR-0035).
+- A literal index into a variable that holds a union of fixed tuples
+  raises `IndexError` when the tuple it holds is too short, as CPython
+  does, in place of E0307; a position outside every member is still E0307
+  (DAT-08).
+- `sys.version_info` as a value of its own: stored, put in containers,
+  imported with `from sys import version_info` and printed as CPython
+  writes it, and read as the tuple of its items by indexing, slicing,
+  comparing, `len`, loops and unpacking (LIB-16).
+- Type aliases of another module, by name or through the module, `type`
+  statements inside functions, classes and blocks, and bounds and
+  constraints on an alias's type parameters, and an alias read as a
+  value, a `typing.TypeAliasType` with `__name__` and `__module__`
+  (SMT-12).
+- One value assigned to several targets, as in `a = items[0] = value`, or
+  unpacked into targets, is held by each target as its own type, a union
+  or an optional among them (TYP-16).
+- A `\u` or `\U` escape of a surrogate in a `str` literal or an
+  f-string gives that code point, as CPython keeps it (LEX-10).
+- `NotImplemented`. An operator or comparison method that returns it
+  gives way to the other operand's reflected method, and an in-place
+  method to the binary methods; when every method gives way, `==` and
+  `!=` compare identities and other operators raise CPython's
+  `TypeError`. Lists, sets and dicts compare through an `__eq__` that
+  gives way, and so do ordering methods (CLS-22); a method that also
+  returns `None` is planned for 1.0 (CLS-33). `return NotImplemented`
+  elsewhere is E0405 (CLS-21, ADR-0038).
+- Comparison, hash and truth methods that may raise, or that print, inside
+  lists, sets, dicts, `sorted`, `min`, `max`, `any` and `all`: the first
+  exception leaves the operation, no later method runs, and a set or a
+  dict keeps its items. An ordering method that returns `NotImplemented`
+  works in a sort too (CLS-21, CLS-22, ADR-0039).
+- A chain of comparisons of instances, such as `low < value < high`,
+  calls each comparison's method and evaluates each operand once
+  (CLS-22).
+- An operator whose method and reflected method return different types;
+  the operator's type joins them when the reflected method may run
+  (CLS-22).
+- `in` on an instance whose class has `__iter__` and no `__contains__`
+  goes over its items until one is the value or equal to it, as CPython
+  does; over a class with `__getitem__` alone it is planned for 1.0
+  (CLS-23, CST-11).
+- `slice` objects: `x[a:b:c]` on an instance passes one to `__getitem__`,
+  `__setitem__` and `__delitem__`, also in an augmented assignment;
+  `slice(a, b, c)` makes one; `start`, `stop`, `step` and `indices` read
+  it; and `seq[s]` slices a list, `str`, `bytes`, `tuple[T, ...]` or
+  `range`, also as an assignment or `del` target of a list. A slice is
+  compared, hashed and written as CPython does (CLS-23).
+- A slice bound may be `None` or an `int | None`, which stands for a
+  missing bound, as in `items[start:]` with `start = None` (DAT-12).
+- An operation on a variable of a union with an iterator, a file, a module
+  or a traceback member, such as `Iterator[int] | list[int]`, tests the
+  object's kind; members TyPy cannot tell apart, such as two iterators,
+  are planned for 1.0 (TYP-14, TYP-19).
+- The truth of an instance comes from the `__bool__`, or else the
+  `__len__`, of the object's own class, also where the variable's type is
+  a base with neither or a union, and in `any` and `all` (CLS-24).
+- A static or class method of a generic class called through the class
+  takes the type arguments from its arguments, as in `Box.wrap("a")`, or
+  from the class, as in `Box[int].make(3)`, and runs that copy's method
+  (GEN-01).
+- A protocol as the type of a variable, an attribute, a result or a
+  container item, such as `shapes: list[Shape]`, and of a parameter of
+  `__init__` or another special method. The value holds an instance of
+  any class that satisfies the protocol; a method call, an attribute
+  read, `==`, `len` and `print` reach the object's class. A class derived
+  from a protocol, a protocol's properties, static and class methods and
+  class variables, assigning an attribute through a protocol value, and a
+  built-in value held as a protocol are planned for 1.0 (GEN-10, GEN-17,
+  ADR-0041).
+- A generic method that overrides one with as many type parameters: a
+  call through the base runs the copy of the object's class's method for
+  the same type arguments. Other overrides of or by a generic method are
+  planned for 1.0 (GEN-09, GEN-16).
+- A class method with type parameters of its own, or with a parameter
+  that names a protocol, called through its class. Through an instance,
+  and type parameters of a special method or a property, are planned for
+  1.0 (GEN-09, GEN-16).
+- A method of a generic class with type parameters of its own,
+  `def paired[U](self, other: U) -> tuple[T, U]`, takes the class's type
+  arguments from the instance and solves its own from the arguments
+  (GEN-09).
+- A class derived from a copy of a generic class, `class IntBox(Box[int]):`,
+  and a generic class derived from one for its own type parameters,
+  `class Pair[T](Box[T]):`, whose copies derive from the matching copy.
+  Class methods and dataclass fields inherited through a copy are
+  planned for 1.0 (GEN-08, GEN-15, ADR-0040).
+- A generic class with a base of the program, `class Box[T](Base):`:
+  every copy derives from `Base`, takes its methods and may stand where a
+  `Base` is expected. `isinstance` with a generic class does not narrow a
+  variable of a base's type, and the comparison methods of a generic
+  dataclass derived from a dataclass, which need that, are planned for
+  1.0, with generic exception classes and generic protocols (GEN-08,
+  GEN-12 to GEN-14, ADR-0040).
+- Class variables and defaults in the body of a generic class. Every
+  copy, such as `Counter[int]` and `Counter[str]`, shares them, as every
+  instance shares them in CPython, and a generic dataclass gets
+  `__match_args__`. One whose annotation names a type parameter of the
+  class, such as `last: T | None = None`, is planned for 1.0 (GEN-08,
+  GEN-11).
+- A method called through a class with the instance first, such as
+  `Shape.describe(square)`, runs the method that class holds or inherits,
+  as in CPython. In `__init__`, `Base.__init__(self, ...)` does what
+  `super().__init__(...)` does and counts the base's attributes as
+  assigned (CLS-06).
+- A generic function or class of another module, imported by name or
+  used through its module as `tools.first(items)` or `tools.Box[int]`.
+  Its copies read the names of the module that defines it (GEN-07).
+
+### Changed
+
+- Lists, dicts, sets, strings and exceptions that do not outlive their
+  function are made in its frame from 1.0, as MEM-10; in 0.5 MEM-03 covers
+  instances of the program's classes.
+- `list.sort` and `sorted` compare the items CPython 3.15 compares, in its
+  order, so a `__lt__` that prints or raises shows the same calls, and a
+  sort a comparison ends leaves the list as CPython leaves it. TyPy's own
+  merge sort compared other pairs (OI-27).
+
+### Fixed
+
+- `==` and `!=` take optional values, as CPython does: `None` equals only
+  `None`, and two values compare as their type does. A dataclass with an
+  optional field, whose `__eq__` compares its fields, was refused with
+  E0407 (EXP-06, CLS-05).
+- A frozen dataclass whose field holds a `list`, `dict` or `set` inside a
+  tuple, or through a `type` alias, compares as CPython does and has no
+  hash; it was refused with E0413 (CLS-16).
+- `slice.indices` takes a length of any size, as CPython does; a length
+  past 64 bits raised `OverflowError` (CLS-23).
+- Printing a string with a surrogate writes it as CPython does in UTF-8
+  mode: standard output writes U+DC80 to U+DCFF as bytes, so a stray
+  byte of `sys.argv` or of standard input is written back, and raises
+  `UnicodeEncodeError` for any other surrogate; standard error and the
+  report of an uncaught exception write `\ud800`. TyPy wrote `?` for
+  each (LEX-10).
+- `encode` with `surrogateescape` starts its `UnicodeEncodeError` at the
+  first character it cannot escape, as CPython does, not at the start of
+  the run (LIB-03).
+- A function that returns before a later loop over `dict.items()`,
+  `keys()` or `values()`, or a later comprehension over one, no longer
+  leaks a view object of 24 bytes (CST-03).
+- A module-level statement that can call a function or a class before
+  the import that binds it has run is E0306, as one before its `def` is.
+  TyPy called it anyway, where CPython raises `NameError` (TYP-12).
+- A function or a class that imports bind more than once, such as
+  `from first import run` and later `from second import run`, one in
+  each branch of an `if`, or two lazy imports, is called as the import
+  that ran last bound it, and a name an import inside a block binds
+  raises `NameError` when that import has not run. TyPy called the last
+  one in the source wherever the name was used, even before any import
+  ran (MOD-12, ADR-0036).
+- A name an import binds to a function or a class that the module also
+  defines with `def` or `class` or assigns as a variable is E0202, as a
+  second `def` is (STD-04).
+- An `OSError` subclass with an `__init__` of its own starts with no
+  arguments, as CPython's `OSError.__new__` leaves them to
+  `OSError.__init__`: `Quiet("q")` is `Quiet()` with `args` `()` unless its
+  `__init__` calls `super().__init__`, where TyPy kept `("q",)` (EXC-14).
+- `args` of a `KeyError` the runtime raises holds the missing key itself,
+  as CPython's does: `(1,)` for `d[1]` and `(('a', 1),)` for a tuple key,
+  where TyPy held the text of its `repr`, `('1',)`. The empty-set and
+  empty-dict errors hold their message without quotes (EXC-11).
+- A sort, `min`, `max`, `in`, `index` and `count` of objects of a class
+  and of classes derived from it compare as `a < b` and `a == b` do,
+  calling the right object's reflected method first when its class
+  derives from the left one's, as CPython does; TyPy called the left
+  object's method alone (CLS-07, CLS-22).
+- A comparison whose right operand's class derives from the left
+  operand's calls the right operand's reflected method first, also when
+  the subclass inherits it, as CPython does: `A() < B()` calls `__gt__`
+  of `B`, where TyPy called `__lt__` of `A` (CLS-07).
+- An arithmetic operator on two instances of one class that defines only
+  the reflected method, such as `__radd__`, raises CPython's `TypeError`;
+  TyPy called the reflected method (CLS-07).
+- `items[f()] %= values` and `make().text %= values` with a format that
+  takes its values when the program runs evaluate the target's parts
+  once, where TyPy refused them (SMT-01).
+- An operator whose right operand's class has no reflected method, such
+  as `__radd__`, calls the one a class derived from it defines when the
+  right object is of that class, also first when that class derives from
+  the left operand's, as CPython does; TyPy refused it (CLS-07).
+- A static method of a generic class that names none of its type
+  parameters, such as `Box.count()`, is compiled once and called through
+  the class or an instance; TyPy stopped with an internal error (GEN-01).
+- `issubclass`, `super()` held as a value, and `property`, `staticmethod`
+  and `classmethod` called as functions are refused as planned for 1.0
+  (CLS-19, CLS-36, FUN-05); TyPy named 0.4 and 0.5 for them. `import
+  collections` is E0206, as for any module TyPy does not provide, and the
+  help lists `dataclasses` among the modules it provides (LIB-08).
+- A dataclass derived from a dataclass of another module named through
+  the module, such as `class Labeled(shapes.Point)`, takes the base's
+  fields, as with `from shapes import Point`; TyPy left them out of its
+  `__init__` (CLS-05).
+- A method of a generic class that assigns an attribute, such as
+  `self.item = item` in `put`, compiles when a signature names a copy of
+  the class, such as `Box[int]`; TyPy refused it with E0310, as if the
+  type of the attribute were not known yet (GEN-03).
+- Calling a generic class of another module, such as `Box(3)` after
+  `from tools import Box`, compiles; TyPy stopped with an internal error
+  (GEN-07).
+- A subclass may redefine a static method, or a method as a static one;
+  a call through an instance runs the one of the object's class, as
+  CPython does (CLS-06, CLS-35).
+- An override may take or return a type held otherwise than its base's,
+  such as `int | None` where the base takes `int`; a call through the base
+  reaches it through an adapter. With a default of its own for such a
+  parameter it is planned for 1.0 (CLS-04, CLS-34).
+- An override may give a parameter another default than its base's; a
+  call through the base that leaves the argument out takes the default of
+  the object's class, as CPython does (CLS-04).
+- An exception class may give its attributes defaults in its body, such
+  as `code: int = 1`, which each exception holds until `__init__` or the
+  program assigns them (CLS-11).
+- `obj.prop += v` of a property calls the getter, then the setter with
+  the result; TyPy left the statement out. A property is assigned through
+  any expression, as `make().prop = value` (CLS-06).
+- `x[k] += v` on an instance whose class has `__getitem__` and
+  `__setitem__` calls them, with `x` and `k` evaluated once; TyPy left
+  the statement out, and now refuses it with E0401 when the class has no
+  `__setitem__` (CLS-07).
+
 ## [0.4.0] - 2026-11-15
 
 ### Added
@@ -748,7 +1106,8 @@ compiler needs glibc 2.39 or later and a C toolchain.
   non-ASCII text, checks that every requirement has a row in the test plan,
   and checks that every diagram is rendered from its source.
 
-[Unreleased]: https://github.com/typy-lang/typy/compare/v0.4.0...HEAD
+[Unreleased]: https://github.com/typy-lang/typy/compare/v0.5.0...HEAD
+[0.5.0]: https://github.com/typy-lang/typy/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/typy-lang/typy/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/typy-lang/typy/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/typy-lang/typy/compare/v0.1.0...v0.2.0

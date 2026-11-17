@@ -34,6 +34,16 @@ pub const RANGE_TYPE_ID: u32 = 14;
 pub const MODULE_TYPE_ID: u32 = 15;
 /// The type ID of a text file, `_io.TextIOWrapper` (LIB-04).
 pub const TEXT_FILE_TYPE_ID: u32 = 17;
+/// The type ID of a type alias object, `typing.TypeAliasType`, which is immortal (SMT-12).
+pub const TYPE_ALIAS_TYPE_ID: u32 = 19;
+/// The type ID of `sys.version_info`, one immortal object (LIB-16).
+pub const VERSION_INFO_TYPE_ID: u32 = 20;
+/// The type ID of `NotImplemented`, one immortal object (CLS-21).
+pub const NOT_IMPLEMENTED_TYPE_ID: u32 = 21;
+/// The type ID of a `slice` (CLS-23).
+pub const SLICE_TYPE_ID: u32 = 22;
+/// The type ID of a `ctypes` object: a scalar, a pointer or an array (FFI-03, ADR-0048).
+pub const CDATA_TYPE_ID: u32 = 23;
 
 /// The first 8 bytes of every heap object.
 #[repr(C)]

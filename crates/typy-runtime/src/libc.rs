@@ -3,13 +3,19 @@
 use core::ffi::c_void;
 
 unsafe extern "C" {
+    // The unit tests allocate with these; a program allocates through its own hooks
+    // (ADR-0043).
+    #[cfg(test)]
     fn malloc(size: usize) -> *mut c_void;
+    #[cfg(test)]
     fn realloc(pointer: *mut c_void, size: usize) -> *mut c_void;
+    #[cfg(test)]
     fn free(pointer: *mut c_void);
     fn write(descriptor: i32, buffer: *const c_void, count: usize) -> isize;
     #[link_name = "read"]
     fn read_bytes(descriptor: i32, buffer: *mut c_void, count: usize) -> isize;
     fn abort() -> !;
+    fn exit(status: i32) -> !;
     fn getrlimit(resource: i32, limit: *mut [u64; 2]) -> i32;
     #[link_name = "open"]
     fn open_path(path: *const core::ffi::c_char, flags: i32, ...) -> i32;
@@ -173,18 +179,21 @@ pub(crate) const STDOUT: i32 = 1;
 pub(crate) const STDERR: i32 = 2;
 
 /// Allocates `size` bytes; null when the memory is not available.
+#[cfg(test)]
 pub(crate) fn allocate(size: usize) -> *mut u8 {
     // SAFETY: `malloc` has no preconditions; a null result is handled by the caller.
     unsafe { malloc(size).cast() }
 }
 
 /// Resizes an allocation; null when the memory is not available, and the old block is then unchanged.
+#[cfg(test)]
 pub(crate) fn reallocate(pointer: *mut u8, size: usize) -> *mut u8 {
     // SAFETY: `pointer` is null or came from `malloc` or `realloc`, which callers keep to.
     unsafe { realloc(pointer.cast(), size).cast() }
 }
 
 /// Frees an allocation made by `allocate` or `reallocate`.
+#[cfg(test)]
 pub(crate) fn release(pointer: *mut u8) {
     // SAFETY: callers pass a pointer from `allocate` or `reallocate` that is freed once.
     unsafe { free(pointer.cast()) }
@@ -210,6 +219,19 @@ pub(crate) fn abort_with(message: &[u8]) -> ! {
     write_all(STDERR, message);
     // SAFETY: `abort` has no preconditions and does not return.
     unsafe { abort() }
+}
+
+/// Ends the process at once, as an uncaught signal does.
+pub(crate) fn abort_process() -> ! {
+    // SAFETY: `abort` has no preconditions and does not return.
+    unsafe { abort() }
+}
+
+/// Ends the process with `status`, after the C library runs its exit handlers and the
+/// destructors of the loaded objects.
+pub(crate) fn exit_process(status: i32) -> ! {
+    // SAFETY: `exit` has no preconditions and does not return.
+    unsafe { exit(status) }
 }
 
 /// Returns the soft limit of the stack size in bytes, or `None` when there is no limit.

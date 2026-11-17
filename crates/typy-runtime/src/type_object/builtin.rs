@@ -16,7 +16,7 @@ fn equal_code() -> i64 {
 
 #[allow(
     clippy::cast_ptr_alignment,
-    reason = "every object comes from malloc, aligned for every type, and starts with its header"
+    reason = "every object comes from malloc, a frame block or a static, aligned for every type, and starts with its header"
 )]
 unsafe extern "C" fn text_is_true(object: *mut ObjectHeader) -> bool {
     // SAFETY: the type of the object says it is a `str` or a `bytes`.
@@ -25,7 +25,7 @@ unsafe extern "C" fn text_is_true(object: *mut ObjectHeader) -> bool {
 
 #[allow(
     clippy::cast_ptr_alignment,
-    reason = "every object comes from malloc, aligned for every type, and starts with its header"
+    reason = "every object comes from malloc, a frame block or a static, aligned for every type, and starts with its header"
 )]
 unsafe extern "C" fn text_hash(object: *mut ObjectHeader) -> i64 {
     // SAFETY: the type of the object says it is a `str` or a `bytes`.
@@ -34,7 +34,7 @@ unsafe extern "C" fn text_hash(object: *mut ObjectHeader) -> i64 {
 
 #[allow(
     clippy::cast_ptr_alignment,
-    reason = "every object comes from malloc, aligned for every type, and starts with its header"
+    reason = "every object comes from malloc, a frame block or a static, aligned for every type, and starts with its header"
 )]
 unsafe extern "C" fn text_equal(left: *mut ObjectHeader, right: *mut ObjectHeader) -> bool {
     // SAFETY: the types of the objects say they are both `str` or both `bytes`.
@@ -43,7 +43,7 @@ unsafe extern "C" fn text_equal(left: *mut ObjectHeader, right: *mut ObjectHeade
 
 #[allow(
     clippy::cast_ptr_alignment,
-    reason = "every object comes from malloc, aligned for every type, and starts with its header"
+    reason = "every object comes from malloc, a frame block or a static, aligned for every type, and starts with its header"
 )]
 unsafe extern "C" fn text_order(
     left: *mut ObjectHeader,
@@ -56,7 +56,7 @@ unsafe extern "C" fn text_order(
 
 #[allow(
     clippy::cast_ptr_alignment,
-    reason = "every object comes from malloc, aligned for every type, and starts with its header"
+    reason = "every object comes from malloc, a frame block or a static, aligned for every type, and starts with its header"
 )]
 unsafe extern "C" fn str_repr(object: *mut ObjectHeader) -> Raising<*mut StrObject> {
     // SAFETY: the type of the object says it is a `str`.
@@ -66,7 +66,7 @@ unsafe extern "C" fn str_repr(object: *mut ObjectHeader) -> Raising<*mut StrObje
 /// Returns a `str` as `str` gives it: the object itself, with a reference for the caller.
 #[allow(
     clippy::cast_ptr_alignment,
-    reason = "every object comes from malloc, aligned for every type, and starts with its header"
+    reason = "every object comes from malloc, a frame block or a static, aligned for every type, and starts with its header"
 )]
 unsafe extern "C" fn str_itself(object: *mut ObjectHeader) -> Raising<*mut StrObject> {
     // SAFETY: the caller's object is live, and the type of the object says it is a `str`.
@@ -76,7 +76,7 @@ unsafe extern "C" fn str_itself(object: *mut ObjectHeader) -> Raising<*mut StrOb
 
 #[allow(
     clippy::cast_ptr_alignment,
-    reason = "every object comes from malloc, aligned for every type, and starts with its header"
+    reason = "every object comes from malloc, a frame block or a static, aligned for every type, and starts with its header"
 )]
 unsafe extern "C" fn bytes_repr(object: *mut ObjectHeader) -> Raising<*mut StrObject> {
     // SAFETY: the type of the object says it is a `bytes`.
@@ -85,7 +85,7 @@ unsafe extern "C" fn bytes_repr(object: *mut ObjectHeader) -> Raising<*mut StrOb
 
 #[allow(
     clippy::cast_ptr_alignment,
-    reason = "every object comes from malloc, aligned for every type, and starts with its header"
+    reason = "every object comes from malloc, a frame block or a static, aligned for every type, and starts with its header"
 )]
 unsafe extern "C" fn list_is_true(object: *mut ObjectHeader) -> bool {
     // SAFETY: the type of the object says it is a list or a tuple.
@@ -94,7 +94,7 @@ unsafe extern "C" fn list_is_true(object: *mut ObjectHeader) -> bool {
 
 #[allow(
     clippy::cast_ptr_alignment,
-    reason = "every object comes from malloc, aligned for every type, and starts with its header"
+    reason = "every object comes from malloc, a frame block or a static, aligned for every type, and starts with its header"
 )]
 unsafe extern "C" fn tuple_hash(object: *mut ObjectHeader) -> i64 {
     // SAFETY: the type of the object says it is a sealed tuple; every index is below its length.
@@ -108,7 +108,7 @@ unsafe extern "C" fn tuple_hash(object: *mut ObjectHeader) -> i64 {
 
 #[allow(
     clippy::cast_ptr_alignment,
-    reason = "every object comes from malloc, aligned for every type, and starts with its header"
+    reason = "every object comes from malloc, a frame block or a static, aligned for every type, and starts with its header"
 )]
 unsafe extern "C" fn list_equal(left: *mut ObjectHeader, right: *mut ObjectHeader) -> bool {
     // SAFETY: the types of the objects say they are lists, or tuples, of one item type.
@@ -117,7 +117,7 @@ unsafe extern "C" fn list_equal(left: *mut ObjectHeader, right: *mut ObjectHeade
 
 #[allow(
     clippy::cast_ptr_alignment,
-    reason = "every object comes from malloc, aligned for every type, and starts with its header"
+    reason = "every object comes from malloc, a frame block or a static, aligned for every type, and starts with its header"
 )]
 unsafe extern "C" fn list_order(
     left: *mut ObjectHeader,
@@ -130,7 +130,7 @@ unsafe extern "C" fn list_order(
 
 #[allow(
     clippy::cast_ptr_alignment,
-    reason = "every object comes from malloc, aligned for every type, and starts with its header"
+    reason = "every object comes from malloc, a frame block or a static, aligned for every type, and starts with its header"
 )]
 unsafe extern "C" fn list_repr(object: *mut ObjectHeader) -> Raising<*mut StrObject> {
     // SAFETY: the type of the object says it is a list or a tuple.
@@ -139,7 +139,7 @@ unsafe extern "C" fn list_repr(object: *mut ObjectHeader) -> Raising<*mut StrObj
 
 #[allow(
     clippy::cast_ptr_alignment,
-    reason = "every object comes from malloc, aligned for every type, and starts with its header"
+    reason = "every object comes from malloc, a frame block or a static, aligned for every type, and starts with its header"
 )]
 unsafe extern "C" fn set_is_true(object: *mut ObjectHeader) -> bool {
     // SAFETY: the type of the object says it is a set.
@@ -148,7 +148,7 @@ unsafe extern "C" fn set_is_true(object: *mut ObjectHeader) -> bool {
 
 #[allow(
     clippy::cast_ptr_alignment,
-    reason = "every object comes from malloc, aligned for every type, and starts with its header"
+    reason = "every object comes from malloc, a frame block or a static, aligned for every type, and starts with its header"
 )]
 unsafe extern "C" fn set_equal(left: *mut ObjectHeader, right: *mut ObjectHeader) -> bool {
     // SAFETY: the types of the objects say they are sets of one item type.
@@ -157,7 +157,7 @@ unsafe extern "C" fn set_equal(left: *mut ObjectHeader, right: *mut ObjectHeader
 
 #[allow(
     clippy::cast_ptr_alignment,
-    reason = "every object comes from malloc, aligned for every type, and starts with its header"
+    reason = "every object comes from malloc, a frame block or a static, aligned for every type, and starts with its header"
 )]
 unsafe extern "C" fn set_order(
     left: *mut ObjectHeader,
@@ -170,7 +170,7 @@ unsafe extern "C" fn set_order(
 
 #[allow(
     clippy::cast_ptr_alignment,
-    reason = "every object comes from malloc, aligned for every type, and starts with its header"
+    reason = "every object comes from malloc, a frame block or a static, aligned for every type, and starts with its header"
 )]
 unsafe extern "C" fn set_repr(object: *mut ObjectHeader) -> Raising<*mut StrObject> {
     // SAFETY: the type of the object says it is a set.
@@ -179,7 +179,7 @@ unsafe extern "C" fn set_repr(object: *mut ObjectHeader) -> Raising<*mut StrObje
 
 #[allow(
     clippy::cast_ptr_alignment,
-    reason = "every object comes from malloc, aligned for every type, and starts with its header"
+    reason = "every object comes from malloc, a frame block or a static, aligned for every type, and starts with its header"
 )]
 unsafe extern "C" fn dict_is_true(object: *mut ObjectHeader) -> bool {
     // SAFETY: the type of the object says it is a dict.
@@ -188,7 +188,7 @@ unsafe extern "C" fn dict_is_true(object: *mut ObjectHeader) -> bool {
 
 #[allow(
     clippy::cast_ptr_alignment,
-    reason = "every object comes from malloc, aligned for every type, and starts with its header"
+    reason = "every object comes from malloc, a frame block or a static, aligned for every type, and starts with its header"
 )]
 unsafe extern "C" fn dict_equal(left: *mut ObjectHeader, right: *mut ObjectHeader) -> bool {
     // SAFETY: the types of the objects say they are dicts of one key and one value type.
@@ -197,7 +197,7 @@ unsafe extern "C" fn dict_equal(left: *mut ObjectHeader, right: *mut ObjectHeade
 
 #[allow(
     clippy::cast_ptr_alignment,
-    reason = "every object comes from malloc, aligned for every type, and starts with its header"
+    reason = "every object comes from malloc, a frame block or a static, aligned for every type, and starts with its header"
 )]
 unsafe extern "C" fn dict_repr(object: *mut ObjectHeader) -> Raising<*mut StrObject> {
     // SAFETY: the type of the object says it is a dict.
@@ -206,7 +206,7 @@ unsafe extern "C" fn dict_repr(object: *mut ObjectHeader) -> Raising<*mut StrObj
 
 #[allow(
     clippy::cast_ptr_alignment,
-    reason = "every object comes from malloc, aligned for every type, and starts with its header"
+    reason = "every object comes from malloc, a frame block or a static, aligned for every type, and starts with its header"
 )]
 unsafe extern "C" fn view_is_true(object: *mut ObjectHeader) -> bool {
     // SAFETY: the type of the object says it is a view of a dict.
@@ -215,7 +215,7 @@ unsafe extern "C" fn view_is_true(object: *mut ObjectHeader) -> bool {
 
 #[allow(
     clippy::cast_ptr_alignment,
-    reason = "every object comes from malloc, aligned for every type, and starts with its header"
+    reason = "every object comes from malloc, a frame block or a static, aligned for every type, and starts with its header"
 )]
 unsafe extern "C" fn view_repr(object: *mut ObjectHeader) -> Raising<*mut StrObject> {
     // SAFETY: the type of the object says it is a view of a dict.

@@ -25,6 +25,13 @@ pub(super) fn module_variables(statements: &[Stmt], names: &mut BTreeMap<String,
         }
     }
     for statement in statements {
+        // An assignment expression binds its name in the module, also inside a comprehension
+        // (EXP-13).
+        super::visit::visit_statement(statement, &mut |expression| {
+            if let Expr::Named { target, .. } = expression {
+                names.entry(target.name.clone()).or_insert(target.span);
+            }
+        });
         match statement {
             Stmt::Assign { targets, .. } => targets.iter().for_each(|target| bind(names, target)),
             Stmt::AugAssign { target, .. } | Stmt::AnnAssign { target, .. } => bind(names, target),
@@ -53,6 +60,15 @@ pub(super) fn module_variables(statements: &[Stmt], names: &mut BTreeMap<String,
                 }
                 module_variables(body, names);
             }
+            // The names a pattern binds are module variables, as an assignment's are (CST-06).
+            Stmt::Match { cases, .. } => {
+                for case in cases {
+                    for name in case.pattern.bound_names() {
+                        names.entry(name.name.clone()).or_insert(name.span);
+                    }
+                    module_variables(&case.body, names);
+                }
+            }
             _ => {}
         }
     }
@@ -73,6 +89,11 @@ pub(crate) fn declared_globals(statements: &[Stmt]) -> Vec<&Identifier> {
                 names.extend(declared_globals(orelse));
             }
             Stmt::With { body, .. } => names.extend(declared_globals(body)),
+            Stmt::Match { cases, .. } => {
+                for case in cases {
+                    names.extend(declared_globals(&case.body));
+                }
+            }
             Stmt::Try { .. } => {
                 for block in statement.try_blocks() {
                     names.extend(declared_globals(block));

@@ -230,9 +230,6 @@ fn constructs_beyond_the_release_keep_their_kind_and_span() {
     let source = "\
 async def a():
     pass
-match v:
-    case _:
-        pass
 nonlocal g
 ";
     let kinds: Vec<NodeKind> = body(source)
@@ -242,14 +239,51 @@ nonlocal g
             other => panic!("converted in detail: {other:?}"),
         })
         .collect();
+    assert_eq!(kinds, [NodeKind::AsyncFunctionDef, NodeKind::Nonlocal,]);
+}
+
+#[test]
+fn a_match_statement_keeps_its_cases_patterns_and_guards() {
+    let source = "\
+match v:
+    case 1 | None as found if found:
+        pass
+    case [first, *rest]:
+        pass
+    case {\"k\": value, **others}:
+        pass
+    case Point(0, y=height):
+        pass
+    case _:
+        pass
+";
+    let statements = body(source);
+    let [Stmt::Match { cases, .. }] = statements.as_slice() else {
+        panic!("one match statement");
+    };
+    assert_eq!(cases.len(), 5);
+    assert!(cases[0].guard.is_some());
+    let names: Vec<Vec<&str>> = cases
+        .iter()
+        .map(|case| {
+            case.pattern
+                .bound_names()
+                .into_iter()
+                .map(|name| name.name.as_str())
+                .collect()
+        })
+        .collect();
     assert_eq!(
-        kinds,
+        names,
         [
-            NodeKind::AsyncFunctionDef,
-            NodeKind::Match,
-            NodeKind::Nonlocal,
+            vec!["found"],
+            vec!["first", "rest"],
+            vec!["value", "others"],
+            vec!["height"],
+            vec![]
         ]
     );
+    assert_eq!(cases[3].pattern.expressions().len(), 2);
 }
 
 #[test]
@@ -257,7 +291,6 @@ fn expressions_beyond_the_release_keep_their_kind() {
     let cases = [
         ("(x for x in y)\n", NodeKind::GeneratorExp),
         ("lambda: 1\n", NodeKind::Lambda),
-        ("(y := 1)\n", NodeKind::NamedExpr),
     ];
     for (source, expected) in cases {
         assert!(
@@ -265,6 +298,15 @@ fn expressions_beyond_the_release_keep_their_kind() {
             "{source}"
         );
     }
+}
+
+#[test]
+fn an_assignment_expression_keeps_its_name_and_value() {
+    let Expr::Named { target, value, .. } = only_expression("(y := x + 1)\n") else {
+        panic!("an assignment expression");
+    };
+    assert_eq!(target.name, "y");
+    assert!(matches!(value.as_ref(), Expr::BinOp { .. }));
 }
 
 #[test]
@@ -841,33 +883,66 @@ fn an_invalid_escape_is_w0101_at_the_escape_with_its_fix() {
 }
 
 #[test]
-fn a_surrogate_escape_in_a_str_is_refused_and_any_other_is_not() {
-    let refused = [
-        (r#"x = "\ud800""#, r"`\ud800`", 5, 11),
-        (r#"x = "a\uDFFF""#, r"`\uDFFF`", 6, 12),
-        (r#"x = "\U0000dc80""#, r"`\U0000dc80`", 5, 15),
-        (r#"x = f"{1}\udc80""#, r"`\udc80`", 9, 15),
+fn a_surrogate_escape_keeps_its_code_point_and_no_other_text_changes() {
+    let kept: &[(&str, &[u32])] = &[
+        (r#""\ud800""#, &[0xd800]),
+        (r#""a\uDFFF""#, &[0x61, 0xdfff]),
+        (r#""\U0000dc80" "b""#, &[0xdc80, 0x62]),
+        // A U+FFFD of the source, or of another escape, stays U+FFFD.
+        (
+            "\"\\ufffd\\ud800\\N{REPLACEMENT CHARACTER}\u{fffd}\"",
+            &[0xfffd, 0xd800, 0xfffd, 0xfffd],
+        ),
+        // A raw part keeps its backslash; the escape after it is still read.
+        (r#"r"\u" "\udbff""#, &[0x5c, 0x75, 0xdbff]),
     ];
-    for (source, escape, start, end) in refused {
-        let errors = parse(&file(source), PythonFloor::V3_12).unwrap_err();
-        assert_eq!(errors.len(), 1, "{source}");
-        let span = errors[0].span().unwrap();
-        assert_eq!((span.start().0, span.end().0), (start, end), "{source}");
-        assert_eq!(errors[0].code().to_string(), "E0201", "{source}");
-        assert!(
-            errors[0].message().contains(escape),
-            "{}",
-            errors[0].message()
-        );
+    for (source, points) in kept {
+        let Expr::Constant {
+            value: Constant::StrPoints(found),
+            ..
+        } = only_expression(&format!("{source}\n"))
+        else {
+            panic!("{source} holds a surrogate");
+        };
+        assert_eq!(found, *points, "{source}");
     }
     for source in [
-        r#"x = r"\ud800""#,
-        r#"x = "\\ud800""#,
-        r#"x = b"\\ud800""#,
-        r#"x = "\ud7ff\ue000\U0010ffff""#,
+        r#"r"\ud800""#,
+        r#""\\ud800""#,
+        r#""\ud7ff\ue000\U0010ffff""#,
     ] {
-        assert!(parse(&file(source), PythonFloor::V3_12).is_ok(), "{source}");
+        assert!(
+            matches!(
+                only_expression(&format!("{source}\n")),
+                Expr::Constant {
+                    value: Constant::Str(_),
+                    ..
+                }
+            ),
+            "{source}"
+        );
     }
+}
+
+#[test]
+fn a_surrogate_in_an_f_string_becomes_a_field_of_its_string() {
+    let Expr::FString { parts, .. } = only_expression("f\"{1}\\udc80\" \"\\ud800\"\n") else {
+        panic!("an f-string");
+    };
+    assert_eq!(parts.len(), 3);
+    for (part, point) in parts[1..].iter().zip([0xdc80, 0xd800]) {
+        let FStringPart::Field(field) = part else {
+            panic!("a field");
+        };
+        assert!(matches!(
+            &field.value,
+            Expr::Constant { value: Constant::StrPoints(points), .. } if *points == [point]
+        ));
+    }
+    let Expr::FString { parts, .. } = only_expression("rf\"\\ud800\"\n") else {
+        panic!("an f-string");
+    };
+    assert_eq!(parts, [FStringPart::Literal("\\ud800".to_owned())]);
 }
 
 /// Runs `work` on a stack as large as the one `typy` gives the compiler, which converting a
@@ -969,6 +1044,23 @@ fn a_type_statement_keeps_its_name_parameters_and_value() {
         "default",
         "TypeAlias Name @2:1",
         "Quoted",
+    ] {
+        assert!(dumped.contains(line), "{line} in\n{dumped}");
+    }
+}
+
+#[test]
+fn dump_writes_a_match_with_its_guards_and_capture_patterns() {
+    let source = "match x:\n    case [1, *rest] as whole if rest:\n        pass\n    case _:\n        pass\n";
+    let tree = parse(&file(source), PythonFloor::V3_12).unwrap();
+    let dumped = dump(&tree, &file(source));
+    for line in [
+        "Match @1:1",
+        "MatchAs whole @2:10",
+        "MatchSequence @2:10",
+        "MatchStar rest",
+        "guard\n",
+        "MatchAs _ @4:10",
     ] {
         assert!(dumped.contains(line), "{line} in\n{dumped}");
     }

@@ -14,6 +14,17 @@ use crate::types::Type;
 pub enum AssignTarget {
     /// A variable.
     Name(SymbolId),
+    /// A target that takes the value converted to the union it holds (TYP-16): the value is
+    /// stored in the hidden variable `holder`, and `value`, which reads it, is what `target`
+    /// is assigned.
+    Converted {
+        /// The hidden variable that holds the value.
+        holder: SymbolId,
+        /// The value converted, read from `holder`.
+        value: Box<TypedExpr>,
+        /// The item or entry assigned.
+        target: Box<AssignTarget>,
+    },
     /// One target for each item of a tuple value.
     Tuple(Vec<AssignTarget>),
     /// An item of a list, `list[index] = value`; the list and the index are evaluated after the
@@ -59,6 +70,25 @@ pub enum AssignTarget {
         dict: Box<TypedExpr>,
         /// The key.
         key: Box<TypedExpr>,
+    },
+    /// The value or an item of a `ctypes` object, `object.value = value` or
+    /// `object[index] = value`; the object and the index are evaluated after the value, as
+    /// CPython does (FFI-03).
+    CData {
+        /// The scalar, pointer or array.
+        object: Box<TypedExpr>,
+        /// What is written.
+        place: super::cdata::CDataPlace,
+    },
+    /// A property, `object.name = value`, through its setter; the object is evaluated after
+    /// the value, as CPython does (CLS-06).
+    Property {
+        /// The instance.
+        object: Box<TypedExpr>,
+        /// The setter, which takes the instance and the value.
+        setter: super::function::FunctionId,
+        /// The type of the value assigned, converted to the setter's parameter.
+        value: crate::types::Type,
     },
 }
 
@@ -177,6 +207,8 @@ impl LoopSource {
                 | Type::Iterator(item)
                 | Type::Iterable(item) => item.as_ref().clone(),
                 Type::DictView(view, key, value) => view.item(key, value),
+                // A `ctypes` array gives the value of each item (FFI-03).
+                Type::CData(crate::ctypes::CData::Array(item, _)) => item.result_type(),
                 other => other
                     .sequence_item()
                     .cloned()
@@ -310,6 +342,13 @@ pub enum TypedStmt {
         orelse: Vec<TypedStmt>,
         span: Span,
     },
+    /// `match subject:` (CST-06): the hidden variable a subject other than a local is stored
+    /// in first, with the subject, and each case, tried in order until one matches.
+    Match {
+        subject: Option<(SymbolId, TypedExpr)>,
+        cases: Vec<TypedCase>,
+        span: Span,
+    },
     /// `for target in source`, over a sequence or a builtin that goes over sequences (CST-03).
     ForEach {
         target: AssignTarget,
@@ -379,4 +418,65 @@ pub struct TypedHandler {
     pub body: Vec<TypedStmt>,
     /// The whole clause.
     pub span: Span,
+}
+
+/// One case of a `match`: its pattern, its guard, read once the pattern matched and bound
+/// its names, and its body (CST-06).
+#[derive(Clone, Debug, PartialEq)]
+pub struct TypedCase {
+    /// What the pattern tests and binds.
+    pub pattern: TypedPattern,
+    /// The `if` condition, read once the pattern matched.
+    pub guard: Option<TypedExpr>,
+    /// The statements that run when the case matches.
+    pub body: Vec<TypedStmt>,
+}
+
+/// What a pattern does, as tests of the subject and assignments of what it binds.
+#[derive(Clone, Debug, PartialEq)]
+pub enum TypedPattern {
+    /// Matches when the test, a `bool`, is true.
+    Test(TypedExpr),
+    /// Always matches, and assigns the value to the variable.
+    Bind(SymbolId, TypedExpr),
+    /// Matches when each pattern matches, tried in order; none matches anything.
+    All(Vec<TypedPattern>),
+    /// Matches when one of the alternatives matches, the first that does.
+    Any(Vec<TypedPattern>),
+}
+
+impl TypedPattern {
+    /// Returns every expression the pattern reads, tests and bound values, in order.
+    #[must_use]
+    pub fn expressions(&self) -> Vec<&TypedExpr> {
+        match self {
+            Self::Test(value) | Self::Bind(_, value) => vec![value],
+            Self::All(patterns) | Self::Any(patterns) => {
+                patterns.iter().flat_map(Self::expressions).collect()
+            }
+        }
+    }
+
+    /// Returns the variables the pattern assigns.
+    #[must_use]
+    pub fn bound(&self) -> Vec<SymbolId> {
+        match self {
+            Self::Test(_) => Vec::new(),
+            Self::Bind(symbol, _) => vec![*symbol],
+            Self::All(patterns) | Self::Any(patterns) => {
+                patterns.iter().flat_map(Self::bound).collect()
+            }
+        }
+    }
+
+    /// Returns whether the pattern matches every subject.
+    #[must_use]
+    pub fn always_matches(&self) -> bool {
+        match self {
+            Self::Test(_) => false,
+            Self::Bind(..) => true,
+            Self::All(patterns) => patterns.iter().all(Self::always_matches),
+            Self::Any(patterns) => patterns.iter().any(Self::always_matches),
+        }
+    }
 }

@@ -7,8 +7,9 @@
 
 use super::super::gamma::{typy_rt_math_gamma, typy_rt_math_lgamma};
 use super::super::sums::{
-    typy_rt_math_dist, typy_rt_math_fsum, typy_rt_math_prod_float, typy_rt_math_prod_int,
-    typy_rt_math_sumprod_float, typy_rt_math_sumprod_int,
+    typy_rt_math_dist, typy_rt_math_fsum, typy_rt_math_has_float, typy_rt_math_prod_float,
+    typy_rt_math_prod_int, typy_rt_math_prod_mixed, typy_rt_math_sumprod_float,
+    typy_rt_math_sumprod_int,
 };
 use super::{check, check_int, int_word};
 use crate::Raising;
@@ -148,7 +149,16 @@ fn gamma_and_lgamma_refuse_poles_and_overflow() {
     check(typy_rt_math_lgamma(1e308), &overflow, "lgamma(1e308)");
 }
 
-const FSUM: [(&[u64], u64); 10] = [
+const FSUM: [(&[u64], u64); 11] = [
+    // The partials of `[1.0, 0.1, -1.0]` add up exactly, so the sum goes on to the next.
+    (
+        &[
+            0x3ff0_0000_0000_0000,
+            0x3fb9_9999_9999_999a,
+            0xbff0_0000_0000_0000,
+        ],
+        0x3fb9_9999_9999_999a,
+    ),
     (&[0x3fb9_9999_9999_999a; 10], 0x3ff0_0000_0000_0000),
     (
         &[
@@ -440,6 +450,75 @@ fn sumprod_of_floats_keeps_the_rounding_errors_of_its_products() {
         "sumprod of different lengths",
     );
     for list in [p, q, short] {
+        release(list);
+    }
+}
+
+#[test]
+fn has_float_finds_a_float_item_only_in_a_list_that_holds_one() {
+    let (none, some, empty) = (ints(&["1", "2"]), floats(&[1.5_f64.to_bits()]), ints(&[]));
+    // SAFETY: the lists are live.
+    unsafe {
+        assert!(!typy_rt_math_has_float(none));
+        assert!(typy_rt_math_has_float(some));
+        assert!(!typy_rt_math_has_float(empty));
+    }
+    for list in [none, some, empty] {
+        release(list);
+    }
+}
+
+#[test]
+fn prod_of_an_int_start_and_floats_converts_the_exact_product_once() {
+    let list = floats(&[1.0_f64.to_bits(), 0.5_f64.to_bits()]);
+    let start = int_word(&(3_i128 * ((1 << 60) + 1)).to_string());
+    // SAFETY: the list is live and the start is an `int` word.
+    check(
+        unsafe { typy_rt_math_prod_mixed(list, start) },
+        &Ok(1_729_382_256_910_270_465.5_f64.to_bits()),
+        "prod of a large start and floats",
+    );
+    let huge = int_word(&"9".repeat(400));
+    // SAFETY: as above.
+    check(
+        unsafe { typy_rt_math_prod_mixed(list, huge) },
+        &Err(("OverflowError", "int too large to convert to float")),
+        "prod of a huge start and a float",
+    );
+    // SAFETY: the test owns both words.
+    unsafe {
+        crate::refcount::typy_rt_int_decrement(start);
+        crate::refcount::typy_rt_int_decrement(huge);
+    }
+    release(list);
+}
+
+#[test]
+fn sumprod_adds_exact_int_pairs_before_a_float_joins_the_total() {
+    // `sumprod([2**62, 2**62], [4, 4])` overflows a machine integer, so its exact sum is an
+    // `int`, which the `float` of the last pair then joins.
+    let (p, q) = (
+        ints(&["4611686018427387904", "4611686018427387904"]),
+        ints(&["4", "4"]),
+    );
+    let (x, y) = (floats(&[1.5_f64.to_bits()]), bools(&[true]));
+    // SAFETY: the lists are live.
+    unsafe {
+        let whole = typy_rt_math_sumprod_float(p, q);
+        assert!(whole.exception.is_null());
+        assert_eq!(whole.value, 36_893_488_147_419_103_232.0);
+        let mixed = typy_rt_math_sumprod_float(x, y);
+        assert!(mixed.exception.is_null());
+        assert_eq!(mixed.value, 1.5);
+    }
+    let (small, other) = (ints(&["2", "3"]), ints(&["4", "5"]));
+    // SAFETY: the lists are live.
+    check(
+        unsafe { typy_rt_math_sumprod_float(small, other) },
+        &Ok(23.0_f64.to_bits()),
+        "sumprod of small ints",
+    );
+    for list in [p, q, x, y, small, other] {
         release(list);
     }
 }

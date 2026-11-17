@@ -1,12 +1,14 @@
 //! Runs the stages of one build in order and stops after the stage `--emit` names.
 
 use camino::{Utf8Path, Utf8PathBuf};
-use typy_build::{Artifact, BuildRequest, EmitStage, Linker, RuntimeArchive};
+use typy_build::{
+    Artifact, BuildRequest, EmitStage, LibraryKind, LibraryLayout, Linker, RuntimeArchive,
+};
 use typy_check::{TypeChecker, TypedProgram};
 use typy_codegen::{assembly, llvm_ir, object};
 use typy_diagnostics::Diagnostics;
 use typy_source::{Project, ProjectSettings, SETTINGS_FILE, SettingOverrides};
-use typy_tyir::TyirModule;
+use typy_tyir::{TyirAllocator, TyirModule};
 
 use crate::emission::Emission;
 use crate::failure::Failure;
@@ -53,7 +55,7 @@ impl Pipeline {
 
     /// Loads and checks the program whose main file is `main`, without generating code (CLI-03).
     pub fn check(&self, main: &Utf8Path) -> Result<Success, Failure> {
-        let project = self.load(main)?;
+        let project = self.load(main, false)?;
         let (_, warnings) = self.check_program(&project)?;
         Ok(Success {
             outcome: Outcome::Checked(Sources::Project(Box::new(project))),
@@ -67,7 +69,7 @@ impl Pipeline {
     #[must_use]
     pub fn sources(&self, main: &Utf8Path) -> Option<Vec<(String, String)>> {
         use typy_diagnostics::SourceLookup as _;
-        let project = self.load(main).ok()?;
+        let project = self.load(main, false).ok()?;
         let mut files: Vec<(String, String)> = Vec::new();
         let modules = std::iter::once(project.main_module()).chain(project.modules());
         for (module, file) in
@@ -103,7 +105,7 @@ impl Pipeline {
         stage: EmitStage,
         request: &BuildRequest,
     ) -> Result<(Emission, Warnings), Failure> {
-        let project = self.load(request.main())?;
+        let project = self.load(request.main(), request.library().is_some())?;
         if stage == EmitStage::Ast {
             let warnings = self.warnings(project.warnings().clone(), &project)?;
             return Ok((syntax_text(&project), warnings));
@@ -140,10 +142,11 @@ impl Pipeline {
     /// Builds and links the executable. The runtime archive is opened first, so a broken
     /// installation fails before any work.
     fn build(&self, request: &BuildRequest) -> Result<(Artifact, Warnings), Failure> {
-        let linker = self.linker(request)?;
-        let project = self.load(request.main())?;
+        let archive = self.runtime_archive(request)?;
+        let project = self.load(request.main(), request.library().is_some())?;
         let (program, warnings) = self.check_program(&project)?;
         let module = lower(&program, &project)?;
+        let linker = linker(request, archive, &project, &module);
         let failed = |diagnostics| with_project(diagnostics, &project);
         let object = object(
             &module,
@@ -152,9 +155,46 @@ impl Pipeline {
             &project,
         )
         .map_err(failed)?;
-        let artifact = linker
-            .link(&object, &request.executable_path())
-            .map_err(failed)?;
+        let artifact = match (request.library(), &module.library) {
+            (Some(kind), Some(library)) => {
+                let layout = match request.output() {
+                    Some(path) => LibraryLayout::at(path, kind),
+                    None => LibraryLayout::beside(
+                        request.main().parent().unwrap_or(Utf8Path::new("")),
+                        kind,
+                        &library.name,
+                        library.version.as_deref(),
+                    ),
+                };
+                let exports: Vec<String> = library
+                    .exports
+                    .iter()
+                    .map(|export| export.name.clone())
+                    .collect();
+                let artifact = linker
+                    .link_library(&object, &layout, kind, &exports)
+                    .map_err(failed)?;
+                write_header(&module, &layout.path, &library.name).map_err(failed)?;
+                // CPython loads the shared library of the build's release, also for a static
+                // build, whose binding serves CPython and TyPy alike (ADR-0046).
+                let soname = match (kind, &layout.soname) {
+                    (LibraryKind::Shared, Some(soname)) => soname.clone(),
+                    _ => LibraryLayout::beside(
+                        Utf8Path::new(""),
+                        LibraryKind::Shared,
+                        &library.name,
+                        library.version.as_deref(),
+                    )
+                    .soname
+                    .unwrap_or_default(),
+                };
+                write_binding(&module, &layout.path, &library.name, &soname).map_err(failed)?;
+                artifact
+            }
+            _ => linker
+                .link(&object, &request.output_path())
+                .map_err(failed)?,
+        };
         Ok((artifact, warnings))
     }
 
@@ -183,23 +223,22 @@ impl Pipeline {
         })
     }
 
-    fn linker(&self, request: &BuildRequest) -> Result<Linker, Failure> {
-        let triple = request.target().triple;
-        let archive =
-            RuntimeArchive::beside(&self.compiler, triple).map_err(Failure::without_sources)?;
-        // A release build leaves out the debug information, which a debug build keeps for a
-        // debugger (CLI-05).
-        let release = request.mode() != typy_build::BuildMode::Debug;
-        Ok(Linker::new(triple, archive).with_strip_debug(release))
+    /// Returns the runtime archive installed beside the compiler for the request's target.
+    fn runtime_archive(&self, request: &BuildRequest) -> Result<RuntimeArchive, Failure> {
+        RuntimeArchive::beside(&self.compiler, request.target().triple)
+            .map_err(Failure::without_sources)
     }
 
-    /// Loads the program with the settings of its root and of the command line.
-    fn load(&self, main: &Utf8Path) -> Result<Project, Failure> {
+    /// Loads the program with the settings of its root and of the command line, as a library
+    /// when `library` is true or the command line asks for one (CLI-09).
+    fn load(&self, main: &Utf8Path, library: bool) -> Result<Project, Failure> {
         let unloaded = |failure: typy_source::LoadFailure| Failure {
             diagnostics: failure.diagnostics.clone(),
             sources: Sources::Unloaded(Box::new(failure)),
         };
-        let settings = ProjectSettings::read(&root_of(main), self.overrides).map_err(unloaded)?;
+        let mut overrides = self.overrides;
+        overrides.library |= library;
+        let settings = ProjectSettings::read(&root_of(main), overrides).map_err(unloaded)?;
         Project::load(main, settings).map_err(unloaded)
     }
 }
@@ -228,6 +267,102 @@ fn root_of(main: &Utf8Path) -> Utf8PathBuf {
     }
 }
 
+/// Writes the C header of the library `module` is built as beside the library `output`:
+/// `NAME.h` for the module `NAME` (FFI-05).
+fn write_header(module: &TyirModule, output: &Utf8Path, name: &str) -> Result<(), Diagnostics> {
+    let Some(text) = typy_codegen::c_header(module) else {
+        return Ok(());
+    };
+    let path = output.with_file_name(format!("{name}.h"));
+    std::fs::write(&path, text).map_err(|error| cannot_write(&path, &error))
+}
+
+/// Writes the binding module `NAME_binding.py`, which loads the shared library `soname`, and
+/// its stub `NAME_binding.pyi`, beside the library `output` (FFI-08, ADR-0046).
+fn write_binding(
+    module: &TyirModule,
+    output: &Utf8Path,
+    name: &str,
+    soname: &str,
+) -> Result<(), Diagnostics> {
+    let files = [
+        (
+            format!("{name}_binding.py"),
+            typy_codegen::python_binding(module, soname),
+        ),
+        (
+            format!("{name}_binding.pyi"),
+            typy_codegen::python_stub(module),
+        ),
+    ];
+    for (file_name, text) in files {
+        let Some(text) = text else {
+            continue;
+        };
+        let path = output.with_file_name(file_name);
+        std::fs::write(&path, text).map_err(|error| cannot_write(&path, &error))?;
+    }
+    Ok(())
+}
+
+/// Returns the E0106 of a file the build writes beside the library.
+fn cannot_write(path: &Utf8Path, error: &std::io::Error) -> Diagnostics {
+    Diagnostics::from(
+        typy_diagnostics::Diagnostic::without_location(
+            typy_diagnostics::DiagnosticCode::error(106),
+            format!("cannot write {path}: {error}"),
+        )
+        .with_help("check that the directory exists and is writable"),
+    )
+}
+
+/// Returns the linker of the request's target, with the allocator's library, each library
+/// the program's `ctypes` declarations name, linked as `typy.toml` says, and the
+/// directories it names (MEM-08, FFI-01, FFI-04).
+fn linker(
+    request: &BuildRequest,
+    archive: RuntimeArchive,
+    project: &Project,
+    module: &TyirModule,
+) -> Linker {
+    // A release build leaves out the debug information, which a debug build keeps for a
+    // debugger (CLI-05).
+    let release = request.mode() != typy_build::BuildMode::Debug;
+    let settings = project.settings();
+    let mut libraries: Vec<String> = settings
+        .allocator
+        .iter()
+        .filter_map(|allocator| allocator.library.clone())
+        .collect();
+    for library in &module.foreign_libraries {
+        let link = settings
+            .libraries
+            .get(library)
+            .copied()
+            .unwrap_or(typy_source::LibraryLink::Dynamic);
+        libraries.push(link.linker_name(library));
+    }
+    let paths = settings
+        .library_paths
+        .iter()
+        .map(|path| settings.root.join(path))
+        .collect();
+    Linker::new(request.target().triple, archive)
+        .with_strip_debug(release)
+        .with_libraries(libraries)
+        .with_library_paths(paths)
+}
+
+/// Returns the program in TyIR, allocating with the functions the project names (MEM-08).
 fn lower(program: &TypedProgram, project: &Project) -> Result<TyirModule, Failure> {
-    typy_lower::lower(program).map_err(|diagnostics| with_project(diagnostics, project))
+    let mut module =
+        typy_lower::lower(program).map_err(|diagnostics| with_project(diagnostics, project))?;
+    if let Some(allocator) = &project.settings().allocator {
+        module.allocator = TyirAllocator {
+            allocate: allocator.allocate.clone(),
+            reallocate: allocator.reallocate.clone(),
+            free: allocator.free.clone(),
+        };
+    }
+    Ok(module)
 }

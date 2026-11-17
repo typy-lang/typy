@@ -5,7 +5,7 @@ use std::cell::RefCell;
 use std::collections::BTreeMap;
 
 use typy_diagnostics::{Diagnostic, DiagnosticCode, Diagnostics, RuleId, Span};
-use typy_source::syntax::Expr;
+use typy_source::syntax::{Expr, Stmt};
 
 use super::annotation::{AnnotationScope, annotation_type};
 use super::class::ClassStatement;
@@ -168,47 +168,103 @@ pub(super) fn parameters_in_scope(
 }
 
 /// Makes the methods of a generic class generic over its type parameters, so each is checked
-/// once with them opaque and copied for each copy of the class, and reports what a generic
-/// class does not have yet: class variables and defaults (GEN-08).
+/// once with them opaque and copied for each copy of the class. A static method that names
+/// none of them, in its signature or its body, is the same for every copy, so it is compiled
+/// once and called as it is.
 pub(super) fn finish_generic_class(
     info: &super::ClassInfo,
     methods: &mut [super::Definition<'_>],
     copies: &RefCell<ClassCopies>,
-    span: Span,
-    diagnostics: &mut Diagnostics,
 ) {
     let Some(generic) = copies.borrow().roots.get(&info.id).cloned() else {
         return;
     };
+    let names: Vec<&str> = generic
+        .parameters
+        .iter()
+        .map(|parameter| parameter.name.as_str())
+        .collect();
     for method in methods {
-        if !method.type_parameters.is_empty() {
-            diagnostics.push(
-                Diagnostic::new(
-                    DiagnosticCode::error(201),
-                    method.span,
-                    format!(
-                        "type parameters of `{}`, a method of a generic class, are planned for \
-                         TyPy 0.5 (GEN-09)",
-                        method.qualified_name
-                    ),
-                )
-                .with_rule(RuleId::GEN_09),
-            );
+        // A static method that names none of the class's type parameters is the same for every
+        // copy: generic over its own, if it has some, and otherwise not generic at all.
+        let is_static = !method.takes_instance && info.static_methods.contains(&method.name);
+        if is_static && !names_type_parameter(method, &names) {
+            continue;
         }
+        // A method with type parameters of its own is generic over the class's first, whose
+        // arguments a call takes from the copy that holds it (GEN-09).
+        let own = std::mem::take(&mut method.type_parameters);
         method.type_parameters.clone_from(&generic.parameters);
+        method.type_parameters.extend(own);
     }
-    if !info.class_variables.is_empty() || !info.defaults.is_empty() {
-        diagnostics.push(
-            Diagnostic::new(
-                DiagnosticCode::error(201),
-                span,
-                format!(
-                    "class variables and defaults of a generic class, such as those of `{}`, \
-                     are planned for TyPy 0.5 (GEN-08)",
-                    info.name
-                ),
-            )
-            .with_rule(RuleId::GEN_08),
-        );
+}
+
+/// Returns true when a method names one of `names`: its signature holds a type parameter, or
+/// an expression or a variable's annotation in its body names one.
+fn names_type_parameter(method: &super::Definition<'_>, names: &[&str]) -> bool {
+    let signature = &method.signature;
+    // A parameter of the method's own is not one of the class's.
+    let own: Vec<Span> = method
+        .type_parameters
+        .iter()
+        .map(|parameter| parameter.owner)
+        .collect();
+    let mut in_signature = false;
+    for ty in signature
+        .parameters
+        .iter()
+        .map(|parameter| &parameter.ty)
+        .chain(std::iter::once(&signature.returns))
+    {
+        ty.visit(&mut |each| {
+            in_signature |=
+                matches!(each, Type::Parameter(parameter) if !own.contains(&parameter.owner));
+        });
+    }
+    if in_signature {
+        return true;
+    }
+    let mut found = false;
+    let mut visit = |expression: &Expr| {
+        if let Expr::Name { id, .. } = expression {
+            found |= names.contains(&id.as_str());
+        }
+    };
+    for statement in method.body {
+        super::visit_statement(statement, &mut visit);
+    }
+    let mut pending: Vec<&Stmt> = method.body.iter().collect();
+    while let Some(statement) = pending.pop() {
+        if let Stmt::AnnAssign { annotation, .. } = statement {
+            found |= annotation_names(annotation, names);
+        }
+        pending.extend(nested_blocks(statement).into_iter().flatten());
+    }
+    found
+}
+
+/// Returns true when an annotation names one of `names`, also inside a string.
+pub(super) fn annotation_names(annotation: &Expr, names: &[&str]) -> bool {
+    let mut found = false;
+    let mut visit = |expression: &Expr| match expression {
+        Expr::Name { id, .. } => found |= names.contains(&id.as_str()),
+        Expr::Quoted { annotation, .. } => found |= annotation_names(annotation, names),
+        _ => {}
+    };
+    super::visit::visit_expression(annotation, &mut visit);
+    found
+}
+
+/// Returns the blocks a statement holds, whose statements `visit_statement` reads but whose
+/// annotations it does not.
+fn nested_blocks(statement: &Stmt) -> Vec<&[Stmt]> {
+    match statement {
+        Stmt::If { body, orelse, .. }
+        | Stmt::While { body, orelse, .. }
+        | Stmt::For { body, orelse, .. } => vec![body, orelse],
+        Stmt::With { body, .. } => vec![body],
+        Stmt::Match { cases, .. } => cases.iter().map(|case| case.body.as_slice()).collect(),
+        Stmt::Try { .. } => statement.try_blocks(),
+        _ => Vec::new(),
     }
 }

@@ -102,11 +102,14 @@ impl InstanceClass {
         }
     }
 
-    /// Returns true when an instance of this class is an instance of `base`: the class itself
-    /// or one it derives from.
+    /// Returns true when an instance of this class is an instance of `base`: the class itself,
+    /// one it derives from, or a protocol it satisfies in the open table of fits.
     #[must_use]
     pub fn derives_from(&self, base: &Self) -> bool {
-        self.id == base.id || self.ancestors.iter().any(|(id, _)| *id == base.id)
+        self.id == base.id
+            || self.ancestors.iter().any(|(id, _)| *id == base.id)
+            // A class that satisfies a protocol takes its place as a base's (ADR-0041).
+            || (base.protocol && !self.protocol && crate::protocol_fits::fits(self.id, base.id))
     }
 
     /// Returns the class's base, when it is a class of the program.

@@ -22,11 +22,18 @@ fn module(function: TyirFunction) -> TyirModule {
     TyirModule {
         globals: Vec::new(),
         modules: Vec::new(),
+        type_aliases: Vec::new(),
         functions: vec![function],
         tuple_types: crate::TupleTypes::default(),
         strings: vec!["hi\n".to_owned()],
+        str_points: Vec::new(),
         classes: Vec::new(),
         entry: FunctionId(0),
+        allocator: crate::module::TyirAllocator::default(),
+        foreign_libraries: Vec::new(),
+        foreign_functions: Vec::new(),
+        cdata_classes: Vec::new(),
+        library: None,
     }
 }
 
@@ -486,11 +493,18 @@ fn every_operation() -> TyirModule {
     TyirModule {
         globals: Vec::new(),
         modules: Vec::new(),
+        type_aliases: Vec::new(),
         functions: vec![builder.finish(), callee.finish()],
         tuple_types: crate::TupleTypes::default(),
         strings: vec!["a".to_owned()],
+        str_points: Vec::new(),
         classes: Vec::new(),
         entry: FunctionId(0),
+        allocator: crate::module::TyirAllocator::default(),
+        foreign_libraries: Vec::new(),
+        foreign_functions: Vec::new(),
+        cdata_classes: Vec::new(),
+        library: None,
     }
 }
 
@@ -635,6 +649,56 @@ fn type_errors_in_operations_are_reported() {
     ];
     for (break_rule, expected) in cases {
         let mut module = every_operation();
+        break_rule(&mut module);
+        let found = message(&module);
+        assert!(
+            found.contains(expected),
+            "expected {expected:?}, found {found:?}"
+        );
+    }
+}
+
+#[test]
+fn a_call_of_a_c_function_the_module_lacks_or_with_wrong_arguments_fails() {
+    let cases: Vec<(Breaker, &str)> = vec![
+        (
+            Box::new(|module| {
+                first_block_instruction(module, 1).operation = Operation::CallForeign {
+                    function: 9,
+                    arguments: vec![],
+                };
+            }),
+            "foreign#9 is not a C function of the module",
+        ),
+        (
+            Box::new(|module| {
+                first_block_instruction(module, 1).operation = Operation::CallForeign {
+                    function: 0,
+                    arguments: vec![],
+                };
+            }),
+            "labs takes 1 arguments, not 0",
+        ),
+        (
+            Box::new(|module| {
+                first_block_instruction(module, 2).operation = Operation::CallForeign {
+                    function: 0,
+                    arguments: vec![ValueId(1)],
+                };
+            }),
+            "an argument of labs v1 is float, which does not pass as",
+        ),
+    ];
+    for (break_rule, expected) in cases {
+        let mut module = every_operation();
+        module
+            .foreign_functions
+            .push(crate::library::TyirForeignFunction {
+                name: "labs".to_owned(),
+                library: 0,
+                parameters: vec![crate::library::CType::Int64],
+                result: Some(crate::library::CType::Int64),
+            });
         break_rule(&mut module);
         let found = message(&module);
         assert!(

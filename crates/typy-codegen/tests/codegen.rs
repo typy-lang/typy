@@ -113,7 +113,7 @@ fn raising_calls_add_a_traceback_entry_with_the_line() {
 fn constants_are_immortal_static_objects() {
     let (project, module) = compile("print(\"hi\", 123456789012345678901234567890)\n");
     let ir = llvm_ir(&module, Target::host(), Optimization::None, &project).unwrap();
-    assert!(ir.contains("private unnamed_addr constant { i32, i32, i64, i32, i32, [2 x i8] } { i32 -1, i32 1, i64 2, i32 1, i32 0, [2 x i8] c\"hi\" }"), "{ir}");
+    assert!(ir.contains("private unnamed_addr constant { i32, i32, i64, i32, i32, [3 x i8] } { i32 -1, i32 1, i64 2, i32 1, i32 0, [3 x i8] c\"hi\\00\" }"), "{ir}");
     assert!(
         ir.contains("{ i32 -1, i32 3, i32 2, i32 0, [2 x i64]"),
         "{ir}"
@@ -209,4 +209,121 @@ fn counting_attributes_placeholders_and_descriptors_reach_the_ir() {
     assert_eq!(defined("@typy.class0"), 1, "{ir}");
     assert!(!ir.contains("@typy.tuple0.1"), "{ir}");
     assert!(!ir.contains("@typy.class0.1 "), "{ir}");
+}
+
+#[test]
+fn an_instance_held_in_the_frame_is_made_in_a_block_released_before_each_return() {
+    let source = "class P:\n    def __init__(self, x: int) -> None:\n        self.x = x\n\n\ndef f(n: int) -> int:\n    p = P(n)\n    if n > 0:\n        return p.x\n    return 0\n\n\nprint(f(1))\n";
+    let (project, module) = compile(source);
+    let ir = llvm_ir(&module, Target::host(), Optimization::None, &project).unwrap();
+    let start = ir.find("@_TY8__main__1f(").expect("f is defined");
+    let body = &ir[start..start + ir[start..].find("\n}\n").expect("f ends")];
+    // The header and the class take two words and the one `int` attribute a third.
+    assert!(body.contains("alloca [3 x i64], align 16"), "{body}");
+    assert!(body.contains("store i64 0, ptr"), "{body}");
+    assert_eq!(
+        body.matches("call ptr @typy_rt_instance_on_stack(").count(),
+        1,
+        "{body}"
+    );
+    let returns = body.matches("\n  ret ").count();
+    assert!(returns > 0, "{body}");
+    assert_eq!(
+        body.matches("call void @typy_rt_instance_off_stack(")
+            .count(),
+        returns,
+        "{body}"
+    );
+    assert!(!body.contains("@typy_rt_instance_new("), "{body}");
+}
+
+#[test]
+fn every_object_defines_hidden_heap_hooks_over_the_c_library() {
+    let (project, module) = compile("print([1] * 3)\n");
+    let ir = llvm_ir(&module, Target::host(), Optimization::None, &project).unwrap();
+    for (hook, call) in [
+        (
+            "define hidden ptr @typy_rt_heap_allocate(i64 %0)",
+            "tail call ptr @malloc(i64 %0)",
+        ),
+        (
+            "define hidden ptr @typy_rt_heap_reallocate(ptr %0, i64 %1)",
+            "tail call ptr @realloc(ptr %0, i64 %1)",
+        ),
+        (
+            "define hidden void @typy_rt_heap_free(ptr %0)",
+            "tail call void @free(ptr %0)",
+        ),
+    ] {
+        assert!(ir.contains(hook), "{ir}");
+        assert!(ir.contains(call), "{ir}");
+    }
+}
+
+#[test]
+fn the_heap_hooks_call_the_functions_the_project_names() {
+    let (project, mut module) = compile("print(2.0 ** 0.5)\n");
+    module.allocator = typy_tyir::TyirAllocator {
+        allocate: "mi_malloc".to_owned(),
+        reallocate: "mi_realloc".to_owned(),
+        // A function the module defines with another type, which `typy.toml` refuses, still
+        // leaves a module LLVM accepts.
+        free: "__typy_main".to_owned(),
+    };
+    let ir = llvm_ir(&module, Target::host(), Optimization::None, &project).unwrap();
+    assert!(ir.contains("tail call ptr @mi_malloc(i64 %0)"), "{ir}");
+    assert!(
+        ir.contains("tail call ptr @mi_realloc(ptr %0, i64 %1)"),
+        "{ir}"
+    );
+    assert!(ir.contains("tail call void @__typy_main(ptr %0)"), "{ir}");
+    assert!(!ir.contains("@malloc("), "{ir}");
+}
+
+#[test]
+fn a_library_runs_its_module_when_it_loads_and_wraps_each_export() {
+    let (project, mut module) =
+        compile("def test(count: int, ratio: float, flag: bool) -> bool:\n    return flag\n");
+    let function = module
+        .functions
+        .iter()
+        .find(|function| function.name == "test")
+        .unwrap()
+        .id;
+    module.library = Some(typy_tyir::TyirLibrary {
+        name: "app".to_owned(),
+        version: None,
+        exports: vec![typy_tyir::TyirExport {
+            name: "test".to_owned(),
+            function,
+            parameters: vec![
+                typy_tyir::CType::Int64,
+                typy_tyir::CType::Double,
+                typy_tyir::CType::Bool,
+            ],
+            parameter_names: vec!["count".to_owned(), "ratio".to_owned(), "flag".to_owned()],
+            result: Some(typy_tyir::CType::Bool),
+        }],
+    });
+    let ir = llvm_ir(&module, Target::host(), Optimization::None, &project).unwrap();
+    for line in [
+        "@llvm.global_ctors = appending global [1 x { i32, ptr, ptr }] [{ i32, ptr, ptr } { i32 65535, ptr @typy.library.load, ptr null }]",
+        "@llvm.global_dtors = appending global [1 x { i32, ptr, ptr }] [{ i32, ptr, ptr } { i32 65535, ptr @typy.library.unload, ptr null }]",
+        "define zeroext i8 @test(i64 %0, double %1, i8 zeroext %2) {",
+        "  call void @typy_rt_library_load(ptr @__typy_main)",
+        "  call void @typy_rt_library_enter()",
+        "  call void @typy_rt_library_leave()",
+    ] {
+        assert!(ir.lines().any(|each| each == line), "{line}\n{ir}");
+    }
+    assert!(
+        ir.contains("call i64 @typy_rt_int_from_int64(i64 %0)"),
+        "{ir}"
+    );
+    assert!(ir.contains("call void @typy_rt_int_decrement("), "{ir}");
+    let header = typy_codegen::c_header(&module).unwrap();
+    assert!(
+        header.contains("bool test(int64_t count, double ratio, bool flag);"),
+        "{header}"
+    );
 }

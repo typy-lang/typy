@@ -48,8 +48,10 @@ fn on_point(body: impl FnOnce(ValueId, ValueId) -> Body) -> TyirModule {
     TyirModule {
         globals: Vec::new(),
         modules: Vec::new(),
+        type_aliases: Vec::new(),
         functions: vec![builder.finish()],
         strings: Vec::new(),
+        str_points: Vec::new(),
         tuple_types,
         classes: vec![TyirClass {
             name: "Point".to_owned(),
@@ -64,9 +66,15 @@ fn on_point(body: impl FnOnce(ValueId, ValueId) -> Body) -> TyirModule {
             truth: None,
             base: None,
             exception_base: None,
+            os_error: false,
             public: None,
         }],
         entry: FunctionId(0),
+        allocator: typy_tyir::TyirAllocator::default(),
+        foreign_libraries: Vec::new(),
+        foreign_functions: Vec::new(),
+        cdata_classes: Vec::new(),
+        library: None,
     }
 }
 
@@ -215,8 +223,10 @@ fn on_exception(parameter: TyirType, operation: Operation) -> TyirModule {
     TyirModule {
         globals: Vec::new(),
         modules: Vec::new(),
+        type_aliases: Vec::new(),
         functions: vec![builder.finish()],
         strings: Vec::new(),
+        str_points: Vec::new(),
         tuple_types,
         classes: vec![TyirClass {
             name: "AppError".to_owned(),
@@ -231,9 +241,15 @@ fn on_exception(parameter: TyirType, operation: Operation) -> TyirModule {
             truth: None,
             base: None,
             exception_base: Some(typy_tyir::TypeObjectRef::Exception("ValueError")),
+            os_error: false,
             public: None,
         }],
         entry: FunctionId(0),
+        allocator: typy_tyir::TyirAllocator::default(),
+        foreign_libraries: Vec::new(),
+        foreign_functions: Vec::new(),
+        cdata_classes: Vec::new(),
+        library: None,
     }
 }
 
@@ -287,13 +303,16 @@ fn on_circle(make: impl FnOnce(ValueId, ValueId) -> (Operation, TyirType)) -> Ty
         truth: None,
         base,
         exception_base: None,
+        os_error: false,
         public: None,
     };
     TyirModule {
         globals: Vec::new(),
         modules: Vec::new(),
+        type_aliases: Vec::new(),
         functions: vec![builder.finish()],
         strings: Vec::new(),
+        str_points: Vec::new(),
         tuple_types,
         classes: vec![
             class("Shape", None),
@@ -301,6 +320,11 @@ fn on_circle(make: impl FnOnce(ValueId, ValueId) -> (Operation, TyirType)) -> Ty
             class("Other", None),
         ],
         entry: FunctionId(0),
+        allocator: typy_tyir::TyirAllocator::default(),
+        foreign_libraries: Vec::new(),
+        foreign_functions: Vec::new(),
+        cdata_classes: Vec::new(),
+        library: None,
     }
 }
 
@@ -426,23 +450,31 @@ fn dispatching(slot: u32, circle: Vec<FunctionId>, circle_area: TyirType) -> Tyi
         truth: None,
         base,
         exception_base: None,
+        os_error: false,
         public: None,
     };
     TyirModule {
         globals: Vec::new(),
         modules: Vec::new(),
+        type_aliases: Vec::new(),
         functions: vec![
             builder.finish(),
             method(1, 0, TyirType::Int),
             method(2, 1, circle_area),
         ],
         strings: Vec::new(),
+        str_points: Vec::new(),
         tuple_types,
         classes: vec![
             class("Shape", None, vec![FunctionId(1)]),
             class("Circle", Some(0), circle),
         ],
         entry: FunctionId(0),
+        allocator: typy_tyir::TyirAllocator::default(),
+        foreign_libraries: Vec::new(),
+        foreign_functions: Vec::new(),
+        cdata_classes: Vec::new(),
+        library: None,
     }
 }
 
@@ -482,7 +514,15 @@ fn a_method_call_goes_through_a_table_that_extends_its_base_s() {
                 module.classes[0].base = Some(1);
                 module
             },
-            "the base class#1 is not a class before it",
+            "the bases of class#0 come back to it",
+        ),
+        (
+            {
+                let mut module = dispatching(0, vec![FunctionId(2)], TyirType::Int);
+                module.classes[0].base = Some(9);
+                module
+            },
+            "the base class#9 does not exist",
         ),
         (
             {

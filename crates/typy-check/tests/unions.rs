@@ -71,7 +71,7 @@ fn operations_not_every_member_has_are_refused() {
 }
 
 #[test]
-fn a_truth_test_the_object_types_cannot_answer_is_planned() {
+fn a_truth_test_of_a_union_asks_each_object_s_class() {
     let classes = concat!(
         "class Base:\n    pass\n",
         "class Full(Base):\n    def __len__(self) -> int:\n        return 1\n",
@@ -80,21 +80,13 @@ fn a_truth_test_the_object_types_cannot_answer_is_planned() {
         "class Alone:\n    pass\n",
         "class Sized(Alone):\n    def __len__(self) -> int:\n        return 0\n",
     );
-    let planned = [
+    // Each object's class decides, through its type object, also by `__len__` (CLS-24).
+    let accepted = [
         "def f(v: Full | Flag) -> bool:\n    return not v\n",
         "def f(v: Sized | str) -> bool:\n    return bool(v)\n",
         "def f(v: Plain | Flag | None) -> bool:\n    return bool(v)\n",
         "def f(v: Alone | str) -> bool:\n    return bool(v)\n",
         "def f(v: list[Full | str]) -> bool:\n    return any(v)\n",
-    ];
-    for body in planned {
-        assert_eq!(
-            app(&format!("{classes}{body}")),
-            vec!["E0201".to_string()],
-            "{body}"
-        );
-    }
-    let accepted = [
         "def f(v: Flag | str) -> bool:\n    return bool(v)\n",
         "def f(v: list[Plain | str]) -> bool:\n    return any(v)\n",
         "class Tested:\n    def __bool__(self) -> bool:\n        return False\nclass Left(Tested):\n    pass\nclass Right(Tested):\n    pass\ndef f(v: Left | Right) -> bool:\n    return bool(v)\n",
@@ -144,9 +136,14 @@ fn an_operation_on_a_union_variable_is_checked_for_each_member() {
         assert_eq!(with_shapes(body), Vec::<String>::new(), "{body}");
     }
     let refused: &[(&str, &str)] = &[
-        // An iterator has no class to test the object against.
+        // An iterator member is told apart by its kind, and has no length (TYP-14).
         (
             "from collections.abc import Iterator\ndef f(v: Iterator[int] | str) -> int:\n    return len(v)\n",
+            "E0404",
+        ),
+        // Two iterators cannot be told apart (TYP-19).
+        (
+            "from collections.abc import Iterator\ndef f(v: Iterator[int] | Iterator[str]) -> str:\n    return str(next(v))\n",
             "E0201",
         ),
         // A variable a function declares `global` is not narrowed, so it is not split.

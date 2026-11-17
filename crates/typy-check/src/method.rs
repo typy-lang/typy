@@ -180,6 +180,9 @@ pub enum Method {
     BytesDecode,
     /// `bytes.hex()`.
     BytesHex,
+    /// `slice.indices(length)`: the start, stop and step adjusted to a sequence of `length`
+    /// items (CLS-23).
+    SliceIndices,
     /// `file.write(text)`: writes the text and returns the number of code points (LIB-04).
     TextWrite,
     /// `file.flush()`: writes out what the file holds.
@@ -339,6 +342,9 @@ impl Method {
     /// Returns the method `name` of a value of type `receiver`, if the release provides it.
     #[must_use]
     pub fn of(receiver: &Type, name: &str) -> Option<Self> {
+        if *receiver == Type::Slice {
+            return (name == "indices").then_some(Self::SliceIndices);
+        }
         if *receiver == Type::Str {
             return STR_METHODS
                 .iter()
@@ -490,6 +496,7 @@ impl Method {
             Self::StrEncode => "encode",
             Self::BytesDecode => "decode",
             Self::BytesHex => "hex",
+            Self::SliceIndices => "indices",
             Self::TextWrite => "write",
             Self::TextFlush => "flush",
             Self::TextRead => "read",

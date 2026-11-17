@@ -197,8 +197,42 @@ except SystemExit as stop:
         print(f"exit code {stop.code!r}")
 ```
 
-Any other use, such as `error.args[0]` or `saved = error.args`, is
-planned for 0.5 (E0201, EXC-15).
+Each is also a value of its own, which you store, pass, index, unpack
+and loop over (EXC-15). Its type comes from every place the program and
+TyPy itself create an exception of the class or of a class derived from
+it: `ValueError("bad", 3)` gives `tuple[str, int]`, and the message of a
+`ValueError` TyPy raises, such as the one of `int("x")`, gives
+`tuple[str]`. So `args` of a `ValueError` here is
+`tuple[str, int] | tuple[str]`, and `error.args[1]` raises `IndexError`
+when the exception holds one argument, as CPython does. The five items of
+a `UnicodeEncodeError` or `UnicodeDecodeError`, both `ValueError`
+classes, join only when the program encodes, decodes or opens a file:
+
+<!-- typy-expect: accepted -->
+```python
+def parse(text: str) -> int:
+    if not text:
+        raise ValueError("empty input", 0)
+    return int(text)
+
+
+for text in ["", "x"]:
+    try:
+        parse(text)
+    except ValueError as error:
+        message = error.args[0]
+        print(message.upper(), len(error.args))
+        for item in error.args:
+            print(item)
+```
+
+`code` of a `SystemExit` is `None` for `sys.exit()`, the argument for
+one, and the tuple for several. A `KeyError` TyPy raises holds the
+missing key, so `args` of a `KeyError` includes `tuple[K]` for the key
+type `K` of each dict the program looks up. An exception whose arguments
+hold `args` of an exception of a related class, such as
+`raise ValueError(error.args)` in an `except ValueError` clause, has a
+type without end; it is planned for 1.0 (E0201, EXC-17).
 
 ## OS errors
 
@@ -218,11 +252,33 @@ except FileNotFoundError as error:
     print(error.errno, error.strerror, error.filename)
 ```
 
-To keep their types known, `errno` is an `int`, `strerror` a `str`, the
-file names a `str` or `None` and `winerror` an `int` or `None`; other
-arguments, more than five, two or more through `super().__init__`, and
-two or more to a subclass with an `__init__` of its own are planned for
-0.5 (E0201, EXC-16).
+The arguments may be of any type, as in CPython (EXC-16):
+`OSError("a", "b")` is written `[Errno a] b`, an `OSError` of more than
+five arguments reads none of them, and a subclass with an `__init__` of its
+own starts with no arguments, which `super().__init__(...)` gives it. The
+type of each attribute comes from every place the program and TyPy create
+an exception of the class, as the type of `args` does, so `errno` is
+`int | None` unless the program builds an `OSError` with another `errno`:
+
+<!-- typy-expect: accepted -->
+```python
+class ConfigError(OSError):
+    def __init__(self, path: str) -> None:
+        super().__init__(2, "missing setting", path)
+
+
+try:
+    raise ConfigError("app.toml")
+except OSError as error:
+    print(error, error.args)
+    code = error.errno
+    if code is not None:
+        print(code + 100, error.filename)
+```
+
+A number as the third argument of `OSError` or `BlockingIOError` is
+planned for 1.0 (E0201, EXC-18): a `BlockingIOError` reads it as
+`characters_written`, and `OSError` becomes one for `errno` 11.
 
 ## Planned
 

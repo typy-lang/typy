@@ -62,6 +62,7 @@ impl Walker {
                     }
                     match &parameter.default {
                         None | Some(Expr::Constant { .. }) => {}
+                        Some(default) if crate::check::factory_call(default).is_some() => {}
                         Some(default) => self.report(
                             default.span(),
                             planned("default values other than constants", "1.0", RuleId::EXP_16),
@@ -197,6 +198,7 @@ impl Walker {
                 self.loop_body(body, place);
                 self.block(orelse, place);
             }
+            Stmt::Match { subject, cases, .. } => self.match_statement(subject, cases, place),
             Stmt::If {
                 test, body, orelse, ..
             } => {
@@ -252,36 +254,15 @@ impl Walker {
                 self.syntax_error(*span, "`continue` outside a loop");
             }
             Stmt::Global { names, .. } => self.global_statement(names),
+            // An alias anywhere is expanded before types are known; its parameters' bounds
+            // and constraints are read as CPython reads them, which checks no argument
+            // against them (SMT-12).
             Stmt::TypeAlias {
                 type_parameters,
                 value,
-                span,
                 ..
             } => {
-                // The checker expands the aliases of the module's top level only.
-                if place != Place::ModuleTop {
-                    self.report(
-                        *span,
-                        planned(
-                            "`type` statements inside functions, classes and blocks",
-                            "0.5",
-                            RuleId::SMT_12,
-                        ),
-                    );
-                }
                 self.type_parameters(type_parameters);
-                // An alias is expanded before types are known, so nothing could check a
-                // bound.
-                for parameter in type_parameters.iter().filter(|each| each.bound.is_some()) {
-                    self.report(
-                        parameter.span,
-                        planned(
-                            "bounds and constraints of a type alias's parameters",
-                            "0.5",
-                            RuleId::SMT_12,
-                        ),
-                    );
-                }
                 self.annotation(value);
             }
             // The checker resolves each import against the modules of the program.

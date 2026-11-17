@@ -1,5 +1,5 @@
 //! A module-level statement may only reach functions and classes whose `def` or `class`
-//! statement has already run (TYP-12).
+//! statement, or the import that binds them, has already run (TYP-12).
 
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -32,8 +32,8 @@ fn referenced_functions(
 /// every name its methods name.
 pub(super) fn check_calls_follow_definitions(
     statements: &[Stmt],
-    functions: &[Definition<'_>],
-    methods: &[Definition<'_>],
+    (functions, methods): (&[Definition<'_>], &[Definition<'_>]),
+    imported: &BTreeSet<String>,
     diagnostics: &mut Diagnostics,
 ) {
     let classes: BTreeSet<String> = statements
@@ -47,6 +47,7 @@ pub(super) fn check_calls_follow_definitions(
         .iter()
         .map(|definition| definition.name.clone())
         .chain(classes.iter().cloned())
+        .chain(imported.iter().cloned())
         .collect();
     let mut calls: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();
     for definition in functions {
@@ -70,6 +71,13 @@ pub(super) fn check_calls_follow_definitions(
                 defined.insert(name.name.as_str());
                 continue;
             }
+            Stmt::ImportFrom { names, .. } => {
+                for alias in names {
+                    let bound = alias.as_name.as_ref().unwrap_or(&alias.name);
+                    defined.insert(bound.name.as_str());
+                }
+                continue;
+            }
             _ => {}
         }
         let mut reached = BTreeSet::new();
@@ -86,16 +94,19 @@ pub(super) fn check_calls_follow_definitions(
             .iter()
             .filter(|name| !defined.contains(name.as_str()))
         {
+            let (binding, help) = if imported.contains(name) {
+                ("the import that binds it runs", "the import")
+            } else {
+                ("its `def` statement runs", "the definition")
+            };
             diagnostics.push(
                 Diagnostic::new(
                     DiagnosticCode::error(306),
                     statement.span(),
-                    format!("this statement can reach `{name}` before its `def` statement runs"),
+                    format!("this statement can reach `{name}` before {binding}"),
                 )
                 .with_rule(RuleId::TYP_12)
-                .with_help(format!(
-                    "move the definition of `{name}` above this statement"
-                )),
+                .with_help(format!("move {help} of `{name}` above this statement")),
             );
         }
     }

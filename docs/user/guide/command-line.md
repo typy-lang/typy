@@ -10,6 +10,7 @@ The `typy` command checks, builds and runs a program from its main file.
 | `typy build FILE` | Writes a native executable beside the file, or at `-o PATH` | CLI-01 |
 | `typy run FILE [-- ARGS]` | Builds the program and runs it with `ARGS` | CLI-02 |
 | `typy explain CODE` | Prints what a diagnostic code means, a program that gives it and the corrected program | CLI-10 |
+| `typy build --lib KIND FILE` | Writes a `static` or `shared` C library of the functions the module's `__all__` lists, and its C header; see [C interoperability](c-interop.md) | CLI-09 |
 | `typy build --emit=STAGE FILE` | Writes one stage as text: `ast`, `typed-ast`, `tyir`, `tyir-mem`, `llvm-ir` or `asm`, or `obj` | CLI-04 |
 | `--release`, `--release-small` | Optimise for speed or for size, without debug information; the default is a debug build, which keeps it | CLI-05 |
 | `--deny-warnings` | Fails with status 1 when there are warnings | DIA-07 |
@@ -33,6 +34,10 @@ defaults apply.
 | --- | --- | --- | --- |
 | `python-floor` | The oldest CPython version the program supports: `"3.12"`, `"3.13"`, `"3.14"` or `"3.15"`, written as a string | `"3.12"` | CLI-12 |
 | `module-paths` | Directories under the project root, named relative to it, where imports look for modules after the main file's directory, in order, as CPython looks in `PYTHONPATH` | `[]` | MOD-01 |
+| `library-paths` | Directories under the project root where the linker looks for C libraries first, as `-L`; see [C interoperability](c-interop.md#linking-a-library) | `[]` | FFI-04 |
+| `[libraries."NAME"]` | `link = "static"` or `"dynamic"` for the C library a `ctypes` declaration names `NAME` | dynamic | FFI-04 |
+| `version` | The version of a library whose module has no `__version__`, such as `"5.0"`, whose release names its files; see [C interoperability](c-interop.md#naming-a-library-by-its-version) | none | CLI-13 |
+| `[allocator]` | The C functions the program allocates its memory with, and their library; see [Memory](memory.md#choosing-the-allocator) | `malloc`, `realloc` and `free` | MEM-08 |
 
 The floor decides which syntax the program may use and which CPython
 versions it promises to match (ADR-0008); `lazy import` needs `"3.15"`.
@@ -46,8 +51,9 @@ module-paths = ["lib"]
 
 and CPython runs it the same way with `PYTHONPATH=lib`. A setting TyPy
 does not know, a value of the wrong type, a module path outside the
-project, and a file that is not valid TOML are E0107: TyPy names the line
-and exits with status 2 before it reads any module.
+project, a wrong `[allocator]` table, and a file that is not valid TOML are
+E0107: TyPy names the line and exits with status 2 before it reads any
+module.
 
 ## Example
 

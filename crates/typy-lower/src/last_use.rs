@@ -143,6 +143,21 @@ impl Analysis<'_> {
                 live.extend(self.block(orelse, &after));
                 self.with_expression(live, test)
             }
+            // Any case may run, after the tests of those before it, or none, so what each
+            // reads is live before the statement, as is what is live after it.
+            TypedStmt::Match { subject, cases, .. } => {
+                let mut live = after.clone();
+                for case in cases {
+                    live.extend(self.block(&case.body, &after));
+                    for expression in case.pattern.expressions().into_iter().chain(&case.guard) {
+                        live = self.with_expression(live, expression);
+                    }
+                }
+                match subject {
+                    Some((_, value)) => self.with_expression(live, value),
+                    None => live,
+                }
+            }
             TypedStmt::While {
                 test, body, orelse, ..
             } => {
@@ -349,6 +364,10 @@ fn target_reads(target: &AssignTarget, reads: &mut Vec<SymbolId>) {
     match target {
         AssignTarget::Name(_) => {}
         AssignTarget::Lazy { target, .. } => target_reads(target, reads),
+        AssignTarget::Converted { value, target, .. } => {
+            expression_reads(value, reads);
+            target_reads(target, reads);
+        }
         AssignTarget::Tuple(targets) => {
             for each in targets {
                 target_reads(each, reads);
@@ -369,10 +388,18 @@ fn target_reads(target: &AssignTarget, reads: &mut Vec<SymbolId>) {
                 expression_reads(bound, reads);
             }
         }
-        AssignTarget::Attribute { object, .. } => expression_reads(object, reads),
+        AssignTarget::Attribute { object, .. } | AssignTarget::Property { object, .. } => {
+            expression_reads(object, reads);
+        }
         AssignTarget::Entry { dict, key } => {
             expression_reads(dict, reads);
             expression_reads(key, reads);
+        }
+        AssignTarget::CData { object, place } => {
+            expression_reads(object, reads);
+            if let typy_check::CDataPlace::Item(index) = place {
+                expression_reads(index, reads);
+            }
         }
     }
 }
@@ -467,6 +494,9 @@ pub(crate) fn handler_names(body: &[TypedStmt]) -> BTreeSet<SymbolId> {
                     pending.extend([body.as_slice(), orelse]);
                 }
                 TypedStmt::With { body, .. } => pending.push(body),
+                TypedStmt::Match { cases, .. } => {
+                    pending.extend(cases.iter().map(|case| case.body.as_slice()));
+                }
                 _ => {}
             }
         }

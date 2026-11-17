@@ -1,7 +1,9 @@
 //! Tests of instances: making, freeing, typing, writing and hashing them.
 
 use super::{
-    typy_rt_identity_hash, typy_rt_instance_new, typy_rt_instance_repr, typy_rt_instance_text,
+    FRAME_BIAS, InstanceObject, typy_rt_identity_hash, typy_rt_instance_new,
+    typy_rt_instance_off_stack, typy_rt_instance_on_stack, typy_rt_instance_repr,
+    typy_rt_instance_text,
 };
 use crate::list::ItemKind;
 use crate::tuple::{Field, TupleType};
@@ -95,5 +97,65 @@ fn an_identity_hash_rotates_the_address_and_is_never_minus_one() {
             (0xf_u64 << 60).cast_signed()
         );
         assert_eq!(typy_rt_identity_hash(at(usize::MAX)), -2);
+    }
+}
+
+/// A frame block the size of an instance of `class()`, with its header cleared.
+#[repr(C, align(16))]
+struct Block([u64; 4]);
+
+#[test]
+fn a_frame_block_holds_an_instance_and_releases_it_when_its_function_returns() {
+    let class = class();
+    let mut block = Block([0; 4]);
+    let address = (&raw mut block).cast::<InstanceObject>();
+    // SAFETY: the block is the instance's size and aligned for it, and its header is clear.
+    unsafe {
+        let instance = typy_rt_instance_on_stack(address, class);
+        assert!(core::ptr::eq(instance, address));
+        assert_eq!((*instance).header.reference_count, FRAME_BIAS + 1);
+        // The program's references come and go; the last decrement leaves the bias.
+        crate::refcount::typy_rt_increment(instance.cast());
+        crate::refcount::typy_rt_decrement(instance.cast());
+        crate::refcount::typy_rt_decrement(instance.cast());
+        let held = crate::string::from_str("held");
+        crate::refcount::typy_rt_increment(held.cast());
+        instance
+            .add(1)
+            .cast::<u64>()
+            .write(held.expose_provenance() as u64);
+        typy_rt_instance_off_stack(address);
+        // The block let its attribute go, and holds nothing now.
+        assert_eq!((*held).header.reference_count, 1);
+        assert_eq!((*address).header.type_id, 0);
+        typy_rt_instance_off_stack(address);
+        crate::refcount::typy_rt_decrement(held.cast());
+    }
+}
+
+#[test]
+fn a_frame_block_is_used_again_once_its_instance_is_dead() {
+    let class = class();
+    let mut block = Block([0; 4]);
+    let address = (&raw mut block).cast::<InstanceObject>();
+    // SAFETY: as above; the heap instance is freed by its last decrement.
+    unsafe {
+        let first = typy_rt_instance_on_stack(address, class);
+        // While the first is held, the next comes from the heap.
+        let second = typy_rt_instance_on_stack(address, class);
+        assert!(!core::ptr::eq(second, address));
+        crate::refcount::typy_rt_decrement(second.cast());
+        crate::refcount::typy_rt_decrement(first.cast());
+        let held = crate::string::from_str("held");
+        first
+            .add(1)
+            .cast::<u64>()
+            .write(held.expose_provenance() as u64);
+        // Once it is not, the block makes the next, after releasing what the first held.
+        let third = typy_rt_instance_on_stack(address, class);
+        assert!(core::ptr::eq(third, address));
+        assert_eq!(third.add(1).cast::<u64>().read(), 0);
+        crate::refcount::typy_rt_decrement(third.cast());
+        typy_rt_instance_off_stack(address);
     }
 }

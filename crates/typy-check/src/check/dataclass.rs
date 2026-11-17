@@ -1,6 +1,8 @@
-//! `@dataclass` (CLS-05): a class with the decorator gets the methods CPython's `dataclasses`
-//! module writes for it, `__init__`, `__repr__`, `__eq__` and, with `order=True`, the ordering
-//! methods, as source the checker reads as if the program had written it, at the decorator.
+//! `@dataclass` (CLS-05, CLS-15 to CLS-17): a class with the decorator gets the methods
+//! CPython's `dataclasses` module writes for it, `__init__`, `__repr__`, `__eq__`, `__hash__`
+//! and, with `order=True`, the ordering methods, as source the checker reads as if the program
+//! had written it, at the decorator. A field's `default_factory` becomes a module-level
+//! function that `__init__` calls for the field each time it is left out.
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Write as _;
@@ -16,15 +18,20 @@ use typy_source::{Module, PythonFloor, SourceFile, parse};
 pub(crate) struct Field {
     name: String,
     annotation: Expr,
+    /// The default: a value, or for a `default_factory` the call of the function that makes
+    /// one (CLS-15).
     default: Option<Expr>,
 }
 
 /// What the expansion of a dataclass tells the checker: whether its instances are frozen, and
 /// whether it wrote the `__init__` that alone may assign a frozen instance's fields.
-#[derive(Clone, Copy, Debug, Default)]
+#[derive(Clone, Debug, Default)]
 pub(crate) struct DataclassInfo {
     pub(crate) frozen: bool,
     pub(crate) generated_init: bool,
+    /// The fields class patterns take positionally, unless `match_args=False` is given or the
+    /// class writes its own `__match_args__` (CST-06).
+    pub(crate) match_args: Option<Vec<String>>,
 }
 
 /// The dataclasses of the modules expanded so far: each one's fields, by module and class.
@@ -39,6 +46,12 @@ pub(crate) struct Dataclasses {
     pending: BTreeMap<(String, String), bool>,
     /// For each module, its dataclasses by name.
     pub(crate) info: BTreeMap<String, BTreeMap<String, DataclassInfo>>,
+    /// The dataclasses whose instances cannot be hashed, by module and class: those with
+    /// `eq=True` that are neither frozen nor given `unsafe_hash=True` (CLS-16).
+    unhashable: BTreeSet<(String, String)>,
+    /// The functions of the `default_factory` fields of the module being expanded, each put
+    /// before its class (CLS-15).
+    factories: Vec<(String, Stmt)>,
 }
 
 /// The names a module binds to the `dataclasses` module and its `dataclass` and `field`.
@@ -49,14 +62,30 @@ struct Names {
     field: BTreeSet<String>,
     /// Each name a `from module import Class` binds, with the module and the class.
     imported: BTreeMap<String, (String, String)>,
+    /// Each name an `import module` binds to a module other than `dataclasses`, with the
+    /// module, through which a base may name a class.
+    program_modules: BTreeMap<String, String>,
+    /// The value of each `type` alias the module defines without type parameters, which a
+    /// field's annotation may name.
+    aliases: BTreeMap<String, Expr>,
 }
 
 /// The options of `@dataclass(...)` CLS-05 covers.
 #[derive(Clone, Copy)]
+#[expect(
+    clippy::struct_excessive_bools,
+    reason = "each flag is the `@dataclass` keyword of the same name"
+)]
 struct Options {
     eq: bool,
     order: bool,
     frozen: bool,
+    /// Whether the class gets `__match_args__`, the fields in order (CST-06).
+    match_args: bool,
+    init: bool,
+    repr: bool,
+    unsafe_hash: bool,
+    slots: bool,
 }
 
 impl Dataclasses {
@@ -69,13 +98,17 @@ impl Dataclasses {
         let mut expanded = module.clone();
         let module_name = module.name.as_str().to_owned();
         let mut info = BTreeMap::new();
-        for statement in &mut expanded.syntax.body {
+        let mut body = Vec::with_capacity(expanded.syntax.body.len());
+        for mut statement in std::mem::take(&mut expanded.syntax.body) {
             if let Some((class, class_info)) =
-                self.expand_class(statement, &module_name, &names, diagnostics)
+                self.expand_class(&mut statement, &module_name, &names, diagnostics)
             {
                 info.insert(class, class_info);
             }
+            body.extend(self.factories.drain(..).map(|(_, function)| function));
+            body.push(statement);
         }
+        expanded.syntax.body = body;
         self.info.insert(module_name, info);
         expanded
     }
@@ -94,6 +127,7 @@ impl Dataclasses {
             bases,
             body,
             decorators,
+            type_parameters,
             ..
         } = statement
         else {
@@ -105,6 +139,10 @@ impl Dataclasses {
         let decorator = decorators.remove(position);
         let options = options(&decorator, diagnostics)?;
         let at = decorator.span();
+        if self.derives_from_copy(bases.first(), module_name, names) {
+            diagnostics.push(fields_through_copy(&name.name, at));
+            return None;
+        }
         let inherited = bases
             .first()
             .and_then(|base| self.base_fields(base, module_name, names));
@@ -112,37 +150,27 @@ impl Dataclasses {
             (Some(base), Some(_)) => self.compared_class(base, module_name, names),
             _ => name.name.clone(),
         };
-        if inherited.is_some()
-            && let Some(base_frozen) = bases
-                .first()
-                .and_then(|base| self.base_frozen(base, module_name, names))
-            && base_frozen != options.frozen
+        // `options` refuses `order=True` without `eq=True`, so `eq` alone says whether the
+        // class gets comparison methods.
+        if !type_parameters.is_empty() && compared != name.name && options.eq {
+            diagnostics.push(generic_comparisons(&name.name, &compared, at));
+            return None;
+        }
+        if let Some(base) = bases.first()
+            && inherited.is_some()
+            && !self.frozen_as_base(base, module_name, names, (options, at), diagnostics)
         {
-            let (this, that) = if options.frozen {
-                ("frozen", "non-frozen")
-            } else {
-                ("non-frozen", "frozen")
-            };
-            diagnostics.push(
-                Diagnostic::new(
-                    DiagnosticCode::error(404),
-                    at,
-                    format!(
-                        "a {this} dataclass cannot derive from a {that} one, as CPython \
-                         refuses"
-                    ),
-                )
-                .with_rule(RuleId::CLS_05),
-            );
             return None;
         }
         let inherited = inherited.unwrap_or_default();
-        let reported = diagnostics.iter().count();
-        let own = own_fields(body, names, diagnostics);
-        // A refused field would give the written methods errors of their own.
-        if diagnostics.iter().count() > reported {
-            return None;
-        }
+        let own = self.class_fields(
+            body,
+            names,
+            (options, module_name, &name.name),
+            !type_parameters.is_empty(),
+            at,
+            diagnostics,
+        )?;
         let mut fields = inherited;
         for field in own {
             match fields.iter_mut().find(|each| each.name == field.name) {
@@ -157,24 +185,37 @@ impl Dataclasses {
             .iter()
             .filter_map(|statement| match statement {
                 Stmt::FunctionDef { name, .. } => Some(name.name.clone()),
+                Stmt::Assign { targets, .. } => match targets.as_slice() {
+                    [Expr::Name { id, .. }] => Some(id.clone()),
+                    _ => None,
+                },
                 _ => None,
             })
             .collect();
+        let hashable = fields
+            .iter()
+            .all(|field| !self.unhashable_annotation(&field.annotation, module_name, names));
         let generated = methods(
             [&name.name, &compared],
             &fields,
-            options,
+            (options, hashable),
             &defined,
             at,
             diagnostics,
         );
+        self.note_hash(module_name, &name.name, options, &defined, &generated);
         let generated_init = generated.iter().any(
             |method| matches!(method, Stmt::FunctionDef { name, .. } if name.name == "__init__"),
         );
         body.extend(generated);
+        let match_args = match_args(options, &defined, &fields);
+        if match_args.is_some() {
+            body.extend(match_args_statement(&fields, at));
+        }
         let class_info = DataclassInfo {
             frozen: options.frozen,
             generated_init,
+            match_args,
         };
         self.fields
             .insert((module_name.to_owned(), name.name.clone()), fields);
@@ -185,17 +226,102 @@ impl Dataclasses {
         Some((name.name.clone(), class_info))
     }
 
+    /// Returns the fields the class body declares, each `default_factory` kept to be written
+    /// before the class, or `None` after a reported problem, which would give the written
+    /// methods errors of their own.
+    fn class_fields(
+        &mut self,
+        body: &mut [Stmt],
+        names: &Names,
+        (options, module_name, class): (Options, &str, &str),
+        generic: bool,
+        at: Span,
+        diagnostics: &mut Diagnostics,
+    ) -> Option<Vec<Field>> {
+        let reported = diagnostics.iter().count();
+        let own = own_fields(
+            body,
+            names,
+            (options, &format!("{module_name}:{class}")),
+            diagnostics,
+        );
+        if own.iter().any(|field| field.factory.is_some()) && generic {
+            diagnostics.push(planned(at, "a `default_factory` in a generic dataclass"));
+            return None;
+        }
+        if diagnostics.iter().count() > reported {
+            return None;
+        }
+        Some(
+            own.into_iter()
+                .map(|field| {
+                    if let Some(function) = field.factory {
+                        self.factories.push((field.field.name.clone(), function));
+                    }
+                    field.field
+                })
+                .collect(),
+        )
+    }
+
+    /// Notes a dataclass with `eq=True` that neither writes nor gets `__hash__`, whose
+    /// instances cannot be hashed (CLS-16).
+    fn note_hash(
+        &mut self,
+        module_name: &str,
+        class: &str,
+        options: Options,
+        defined: &BTreeSet<String>,
+        generated: &[Stmt],
+    ) {
+        let hashed = defined.contains("__hash__")
+            || generated.iter().any(
+                |method| matches!(method, Stmt::FunctionDef { name, .. } if name.name == "__hash__"),
+            );
+        if options.eq && !hashed {
+            self.unhashable
+                .insert((module_name.to_owned(), class.to_owned()));
+        }
+    }
+
+    /// Returns whether the dataclass is frozen as its dataclass base is, reporting it when
+    /// not, as CPython refuses the class.
+    fn frozen_as_base(
+        &self,
+        base: &Expr,
+        module_name: &str,
+        names: &Names,
+        (options, at): (Options, Span),
+        diagnostics: &mut Diagnostics,
+    ) -> bool {
+        if self
+            .base_frozen(base, module_name, names)
+            .is_none_or(|frozen| frozen == options.frozen)
+        {
+            return true;
+        }
+        let (this, that) = if options.frozen {
+            ("frozen", "non-frozen")
+        } else {
+            ("non-frozen", "frozen")
+        };
+        diagnostics.push(
+            Diagnostic::new(
+                DiagnosticCode::error(404),
+                at,
+                format!(
+                    "a {this} dataclass cannot derive from a {that} one, as CPython \
+                     refuses"
+                ),
+            )
+            .with_rule(RuleId::CLS_05),
+        );
+        false
+    }
+
     /// Returns whether a dataclass base is frozen.
     fn base_frozen(&self, base: &Expr, module: &str, names: &Names) -> Option<bool> {
-        let Expr::Name { id, .. } = base else {
-            return None;
-        };
-        let (module, class) = names
-            .imported
-            .get(id)
-            .cloned()
-            .unwrap_or_else(|| (module.to_owned(), id.clone()));
-        let key = (module, class);
+        let key = names.class_key(base, module)?;
         self.pending.get(&key).copied().or_else(|| {
             self.info
                 .get(&key.0)
@@ -207,8 +333,18 @@ impl Dataclasses {
     /// Returns the class a dataclass base's comparison methods take, by a name this module
     /// binds: the base's own for a base of another module.
     fn compared_class(&self, base: &Expr, module: &str, names: &Names) -> String {
-        let Expr::Name { id, .. } = base else {
-            return String::new();
+        let id = match base {
+            Expr::Name { id, .. } => id,
+            // A base named through its module is named so in the methods' annotations too.
+            Expr::Attribute {
+                value, attribute, ..
+            } => {
+                return match value.as_ref() {
+                    Expr::Name { id, .. } => format!("{id}.{}", attribute.name),
+                    _ => String::new(),
+                };
+            }
+            _ => return String::new(),
         };
         if names.imported.contains_key(id) {
             return id.clone();
@@ -219,34 +355,121 @@ impl Dataclasses {
             .unwrap_or_else(|| id.clone())
     }
 
-    /// Returns the fields of a base that is a dataclass of this module or one a
-    /// `from module import Class` names.
+    /// Returns true when a field's annotation names a type whose values cannot be hashed: a
+    /// `list`, `dict` or `set`, or a dataclass with `eq=True` and no `__hash__`, also as a
+    /// member of a union, an item of a tuple, or the value of a `type` alias of the module, so
+    /// `__hash__` is not written for the class (CLS-16).
+    fn unhashable_annotation(&self, annotation: &Expr, module: &str, names: &Names) -> bool {
+        self.unhashable_within(annotation, module, names, &mut BTreeSet::new())
+    }
+
+    /// Returns what `unhashable_annotation` does, where `seen` holds the aliases being read,
+    /// so an alias that names itself ends the reading.
+    fn unhashable_within(
+        &self,
+        annotation: &Expr,
+        module: &str,
+        names: &Names,
+        seen: &mut BTreeSet<String>,
+    ) -> bool {
+        match annotation {
+            Expr::BinOp { left, right, .. } => {
+                self.unhashable_within(left, module, names, seen)
+                    || self.unhashable_within(right, module, names, seen)
+            }
+            Expr::Subscript { value, index, .. } => match value.as_ref() {
+                Expr::Name { id, .. }
+                    if matches!(
+                        id.as_str(),
+                        "list" | "dict" | "set" | "List" | "Dict" | "Set"
+                    ) =>
+                {
+                    true
+                }
+                Expr::Name { id, .. } if matches!(id.as_str(), "tuple" | "Tuple" | "Optional") => {
+                    let items = match index.as_ref() {
+                        Expr::Tuple { elements, .. } => elements.iter().collect(),
+                        item => vec![item],
+                    };
+                    items
+                        .into_iter()
+                        .any(|item| self.unhashable_within(item, module, names, seen))
+                }
+                _ => false,
+            },
+            Expr::Name { id, .. } if let Some(value) = names.aliases.get(id) => {
+                seen.insert(id.clone()) && self.unhashable_within(value, module, names, seen)
+            }
+            Expr::Name { .. } | Expr::Attribute { .. } => names
+                .class_key(annotation, module)
+                .is_some_and(|key| self.unhashable.contains(&key)),
+            _ => false,
+        }
+    }
+
+    /// Returns true when a base is a copy of a generic dataclass, such as `Pair[str, int]`.
+    fn derives_from_copy(&self, base: Option<&Expr>, module: &str, names: &Names) -> bool {
+        matches!(base, Some(Expr::Subscript { value, .. })
+            if self.base_fields(value, module, names).is_some())
+    }
+
+    /// Returns the fields of a base that is a dataclass of this module, or of another module
+    /// named by `from module import Class` or through the module.
     fn base_fields(&self, base: &Expr, module: &str, names: &Names) -> Option<Vec<Field>> {
-        let Expr::Name { id, .. } = base else {
-            return None;
-        };
-        let key = names
-            .imported
-            .get(id)
-            .cloned()
-            .unwrap_or_else(|| (module.to_owned(), id.clone()));
+        let key = names.class_key(base, module)?;
         self.fields.get(&key).cloned()
     }
 }
 
 impl Names {
-    /// Returns the names the module's imports bind to `dataclasses`, `dataclass` and `field`.
+    /// Returns the module and the name of the class an expression names: by a name of the
+    /// module or one `from module import Class` binds, or through a module it imports.
+    fn class_key(&self, expression: &Expr, module: &str) -> Option<(String, String)> {
+        match expression {
+            Expr::Name { id, .. } => Some(
+                self.imported
+                    .get(id)
+                    .cloned()
+                    .unwrap_or_else(|| (module.to_owned(), id.clone())),
+            ),
+            Expr::Attribute {
+                value, attribute, ..
+            } => match value.as_ref() {
+                Expr::Name { id, .. } => {
+                    let imported = self.program_modules.get(id)?;
+                    Some((imported.clone(), attribute.name.clone()))
+                }
+                _ => None,
+            },
+            _ => None,
+        }
+    }
+
+    /// Returns the names the module's imports bind to `dataclasses`, `dataclass` and `field`,
+    /// with the module's `type` aliases.
     fn of(statements: &[Stmt]) -> Self {
         let mut names = Self::default();
         for statement in statements {
             match statement {
+                Stmt::TypeAlias {
+                    name,
+                    type_parameters,
+                    value,
+                    ..
+                } if type_parameters.is_empty() => {
+                    names.aliases.insert(name.name.clone(), value.clone());
+                }
                 Stmt::Import { names: aliases, .. } => {
-                    for alias in aliases
-                        .iter()
-                        .filter(|alias| alias.name.name == "dataclasses")
-                    {
+                    for alias in aliases {
                         let bound = alias.as_name.as_ref().unwrap_or(&alias.name);
-                        names.modules.insert(bound.name.clone());
+                        if alias.name.name == "dataclasses" {
+                            names.modules.insert(bound.name.clone());
+                        } else if alias.as_name.is_some() || !alias.name.name.contains('.') {
+                            // `import a.b` binds `a`, whose classes `a.Class` names.
+                            names
+                                .program_modules
+                                .insert(bound.name.clone(), alias.name.name.clone());
+                        }
                     }
                 }
                 Stmt::ImportFrom {
@@ -320,13 +543,18 @@ impl Names {
     }
 }
 
-/// Returns the options of a `@dataclass` decorator, or `None` after reporting one CLS-05 does
-/// not cover.
+/// Returns the options of a `@dataclass` decorator, or `None` after reporting one TyPy does
+/// not take yet.
 fn options(decorator: &Expr, diagnostics: &mut Diagnostics) -> Option<Options> {
     let mut options = Options {
         eq: true,
         order: false,
         frozen: false,
+        match_args: true,
+        init: true,
+        repr: true,
+        unsafe_hash: false,
+        slots: false,
     };
     let Expr::Call {
         arguments,
@@ -337,10 +565,14 @@ fn options(decorator: &Expr, diagnostics: &mut Diagnostics) -> Option<Options> {
         return Some(options);
     };
     if let Some(argument) = arguments.first() {
-        diagnostics.push(planned(
-            argument.span(),
-            "`@dataclass` with positional arguments",
-        ));
+        diagnostics.push(
+            Diagnostic::new(
+                DiagnosticCode::error(404),
+                argument.span(),
+                "`dataclass` takes its options as keyword arguments",
+            )
+            .with_rule(RuleId::CLS_05),
+        );
         return None;
     }
     for Keyword { name, value, span } in keywords {
@@ -355,6 +587,11 @@ fn options(decorator: &Expr, diagnostics: &mut Diagnostics) -> Option<Options> {
             (Some("eq"), Some(flag)) => options.eq = flag,
             (Some("order"), Some(flag)) => options.order = flag,
             (Some("frozen"), Some(flag)) => options.frozen = flag,
+            (Some("match_args"), Some(flag)) => options.match_args = flag,
+            (Some("init"), Some(flag)) => options.init = flag,
+            (Some("repr"), Some(flag)) => options.repr = flag,
+            (Some("unsafe_hash"), Some(flag)) => options.unsafe_hash = flag,
+            (Some("slots"), Some(flag)) => options.slots = flag,
             (Some(option), _) => {
                 diagnostics.push(planned(
                     *span,
@@ -382,9 +619,22 @@ fn options(decorator: &Expr, diagnostics: &mut Diagnostics) -> Option<Options> {
     Some(options)
 }
 
+/// A field the class body declares, with the function its `default_factory` becomes.
+struct OwnField {
+    field: Field,
+    factory: Option<Stmt>,
+}
+
 /// Returns the fields the class body declares, and gives each `name: T = field(default=v)` the
-/// value `v`, as CPython's class attribute is.
-fn own_fields(body: &mut [Stmt], names: &Names, diagnostics: &mut Diagnostics) -> Vec<Field> {
+/// value `v`, as CPython's class attribute is; a field with a `default_factory`, or any
+/// default of a class with `slots=True`, has no class attribute. `class` is the module and
+/// the class, which name the functions of the factories.
+fn own_fields(
+    body: &mut [Stmt],
+    names: &Names,
+    (options, class): (Options, &str),
+    diagnostics: &mut Diagnostics,
+) -> Vec<OwnField> {
     let mut fields = Vec::new();
     for statement in body {
         let Stmt::AnnAssign {
@@ -399,8 +649,20 @@ fn own_fields(body: &mut [Stmt], names: &Names, diagnostics: &mut Diagnostics) -
         if is_class_var(annotation) {
             continue;
         }
-        if let Some(call) = value.as_ref().and_then(|value| names.field_call(value)) {
-            *value = field_default(&call, diagnostics);
+        let mut factory = None;
+        let given = value.as_ref().and_then(|value| {
+            let call = names.field_call(value)?;
+            Some((field_default(&call, diagnostics), call.span))
+        });
+        if let Some(((default, made), span)) = given {
+            *value = default;
+            factory = made.map(|made| {
+                let function = format!("<default {class}.{id}>");
+                (
+                    factory_function(&function, annotation, made, span),
+                    function,
+                )
+            });
         }
         if let Some(default) = value.as_ref()
             && let Some(kind) = mutable(default)
@@ -417,13 +679,68 @@ fn own_fields(body: &mut [Stmt], names: &Names, diagnostics: &mut Diagnostics) -
                 .with_rule(RuleId::CLS_05),
             );
         }
-        fields.push(Field {
-            name: id.clone(),
-            annotation: annotation.clone(),
-            default: value.clone(),
+        let default = match &factory {
+            Some((_, function)) => Some(factory_default(function, annotation.span())),
+            None => value.clone(),
+        };
+        if options.slots {
+            // A class with `__slots__` keeps no class attribute of a field's default.
+            *value = None;
+        }
+        fields.push(OwnField {
+            field: Field {
+                name: id.clone(),
+                annotation: annotation.clone(),
+                default,
+            },
+            factory: factory.map(|(function, _)| function),
         });
     }
     fields
+}
+
+/// Returns `name()`, the call of a factory's function, as a default of `__init__`.
+fn factory_default(name: &str, span: Span) -> Expr {
+    Expr::Call {
+        function: Box::new(Expr::Name {
+            id: name.to_owned(),
+            span,
+        }),
+        arguments: Vec::new(),
+        keywords: Vec::new(),
+        span,
+    }
+}
+
+/// Returns `def name() -> T: return factory()`, the function that makes a field's default.
+fn factory_function(name: &str, annotation: &Expr, factory: Expr, at: Span) -> Stmt {
+    let mut function = parsed("def made() -> int:\n    return 0\n", &[], at)
+        .pop()
+        .unwrap_or_else(|| unreachable!("the source is one function"));
+    match &mut function {
+        Stmt::FunctionDef {
+            name: function_name,
+            returns,
+            body,
+            ..
+        } => {
+            name.clone_into(&mut function_name.name);
+            *returns = Some(annotation.clone());
+            match body.first_mut() {
+                Some(Stmt::Return { value, .. }) => {
+                    *value = Some(Expr::Call {
+                        function: Box::new(factory),
+                        arguments: Vec::new(),
+                        keywords: Vec::new(),
+                        span: at,
+                    });
+                }
+                _ => unreachable!("the function returns a value"),
+            }
+        }
+        _ => unreachable!("the source is one function"),
+    }
+    function
 }
 
 /// The arguments of a call of `field`.
@@ -433,23 +750,46 @@ struct FieldCall<'call> {
     span: Span,
 }
 
-/// Returns the default `field(default=v)` gives, `v`, or none for `field()`.
-fn field_default(call: &FieldCall<'_>, diagnostics: &mut Diagnostics) -> Option<Expr> {
+/// Returns the default `field(default=v)` gives, `v`, and the factory
+/// `field(default_factory=f)` gives, `f`, either none for `field()`.
+fn field_default(
+    call: &FieldCall<'_>,
+    diagnostics: &mut Diagnostics,
+) -> (Option<Expr>, Option<Expr>) {
     if !call.arguments.is_empty() {
-        diagnostics.push(planned(call.span, "`field` with positional arguments"));
-        return None;
+        diagnostics.push(
+            Diagnostic::new(
+                DiagnosticCode::error(404),
+                call.span,
+                "`field` takes its options as keyword arguments",
+            )
+            .with_rule(RuleId::CLS_05),
+        );
+        return (None, None);
     }
-    let mut default = None;
+    let (mut default, mut factory) = (None, None);
     for keyword in call.keywords {
         match keyword.name.as_ref().map(|name| name.name.as_str()) {
             Some("default") => default = Some(keyword.value.clone()),
+            Some("default_factory") => factory = Some(keyword.value.clone()),
             Some(option) => {
                 diagnostics.push(planned(keyword.span, &format!("`field({option}=...)`")));
             }
             None => diagnostics.push(planned(keyword.span, "`field(**options)`")),
         }
     }
-    default
+    if default.is_some() && factory.is_some() {
+        diagnostics.push(
+            Diagnostic::new(
+                DiagnosticCode::error(404),
+                call.span,
+                "cannot specify both default and default_factory",
+            )
+            .with_rule(RuleId::CLS_15),
+        );
+        return (None, None);
+    }
+    (default, factory)
 }
 
 /// Returns the class of a display that makes a mutable value: `list`, `dict` or `set`.
@@ -509,18 +849,40 @@ fn fields_are_ordered(fields: &[Field], at: Span, diagnostics: &mut Diagnostics)
 fn methods(
     [class, compared]: [&str; 2],
     fields: &[Field],
-    options: Options,
+    (options, hashable): (Options, bool),
     defined: &BTreeSet<String>,
     at: Span,
     diagnostics: &mut Diagnostics,
 ) -> Vec<Stmt> {
     let mut source = String::new();
     let own = |name: &str| defined.contains(name);
-    if !own("__init__") {
+    if options.init && !own("__init__") {
         write_init(&mut source, fields);
     }
-    if !own("__repr__") {
+    if options.repr && !own("__repr__") {
         write_repr(&mut source, fields);
+    }
+    // CPython's table of `__hash__` actions: `unsafe_hash=True` adds one, and refuses a class
+    // that writes its own; a frozen class with `eq=True` adds one unless it writes its own;
+    // and a class with `eq=True` that is neither has none (CLS-16).
+    if options.unsafe_hash && own("__hash__") {
+        diagnostics.push(
+            Diagnostic::new(
+                DiagnosticCode::error(404),
+                at,
+                format!("Cannot overwrite attribute __hash__ in class {class}"),
+            )
+            .with_rule(RuleId::CLS_16),
+        );
+    } else if hashable
+        && !own("__hash__")
+        && (options.unsafe_hash || (options.eq && options.frozen))
+    {
+        let mine = tuple(fields, "self");
+        let _ = write!(
+            source,
+            "def __hash__(self) -> int:\n    return HASH({mine})\n"
+        );
     }
     let (mine, theirs) = (tuple(fields, "self"), tuple(fields, "other"));
     // The methods take what a base's take, and compare only an object of the class itself,
@@ -594,6 +956,27 @@ fn write_repr(source: &mut String, fields: &[Field]) {
     let _ = writeln!(source, " + \")\"");
 }
 
+/// Returns the fields class patterns take positionally: all of them, in order, unless
+/// `match_args=False` is given or the class assigns its own `__match_args__` (CST-06).
+fn match_args(
+    options: Options,
+    defined: &BTreeSet<String>,
+    fields: &[Field],
+) -> Option<Vec<String>> {
+    (options.match_args && !defined.contains("__match_args__"))
+        .then(|| fields.iter().map(|field| field.name.clone()).collect())
+}
+
+/// Returns `__match_args__ = ('a', 'b', )`, the names of the fields, at the decorator.
+fn match_args_statement(fields: &[Field], at: Span) -> Vec<Stmt> {
+    let mut source = String::from("__match_args__ = (");
+    for field in fields {
+        let _ = write!(source, "'{}', ", field.name);
+    }
+    source.push_str(")\n");
+    parsed(&source, &[], at)
+}
+
 /// Returns the methods `source` holds, each moved to the decorator, `__init__` with the
 /// fields' own annotations and defaults.
 fn parsed(source: &str, fields: &[Field], at: Span) -> Vec<Stmt> {
@@ -604,8 +987,24 @@ fn parsed(source: &str, fields: &[Field], at: Span) -> Vec<Stmt> {
         .unwrap_or_default();
     for method in &mut methods {
         method.relocate(at);
-        // Each statement written is a `def`.
+        // Each statement written is a `def`, or the assignment of `__match_args__`.
         match method {
+            Stmt::FunctionDef { name, body, .. } if name.name == "__hash__" => {
+                // The tuple of the fields is hashed as a set hashes it; no program can name
+                // the function, since `hash` is not provided.
+                match body.as_mut_slice() {
+                    [
+                        Stmt::Return {
+                            value: Some(Expr::Call { function, .. }),
+                            ..
+                        },
+                    ] => match function.as_mut() {
+                        Expr::Name { id, .. } => "<hash>".clone_into(id),
+                        _ => unreachable!("`__hash__` calls `HASH`"),
+                    },
+                    _ => unreachable!("`__hash__` returns a call"),
+                }
+            }
             Stmt::FunctionDef {
                 name, parameters, ..
             } if name.name == "__init__" => {
@@ -630,12 +1029,42 @@ fn tuple(fields: &[Field], name: &str) -> String {
     items
 }
 
-/// Returns the error for a form of `dataclasses` CLS-05 does not cover yet.
+/// Returns the error for a form of `dataclasses` TyPy does not take yet.
 fn planned(span: Span, what: &str) -> Diagnostic {
     Diagnostic::new(
         DiagnosticCode::error(201),
         span,
-        format!("{what} is planned for TyPy 0.5 (CLS-05)"),
+        format!("{what} is planned for TyPy 1.0 (CLS-28)"),
     )
-    .with_rule(RuleId::CLS_05)
+    .with_rule(RuleId::CLS_28)
+}
+
+/// Returns the error for the comparison methods of a generic dataclass derived from the
+/// dataclass `compared`: they take its instances and read the fields after `isinstance`, which
+/// narrows to a copy of a generic class only with GEN-14.
+fn generic_comparisons(class: &str, compared: &str, at: Span) -> Diagnostic {
+    Diagnostic::new(
+        DiagnosticCode::error(201),
+        at,
+        format!(
+            "the comparison methods of `{class}`, a generic dataclass derived from the dataclass \
+             `{compared}`, are planned for TyPy 1.0 (GEN-14)"
+        ),
+    )
+    .with_rule(RuleId::GEN_14)
+    .with_help("pass `eq=False` to `@dataclass`, or derive from a class that is not a dataclass")
+}
+
+/// Returns the error for a dataclass derived from a copy of a generic dataclass, whose fields
+/// it would take with the copy's type arguments (GEN-15).
+fn fields_through_copy(class: &str, at: Span) -> Diagnostic {
+    Diagnostic::new(
+        DiagnosticCode::error(201),
+        at,
+        format!(
+            "`{class}` is a dataclass derived from a copy of a generic dataclass, whose fields \
+             it takes from TyPy 1.0 (GEN-15)"
+        ),
+    )
+    .with_rule(RuleId::GEN_15)
 }

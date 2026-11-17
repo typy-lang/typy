@@ -119,10 +119,11 @@ fn a_protocol_is_refused_where_typy_does_not_hold_one() {
         ("print(isinstance(Square(), Shape))\n", "E0401"),
         ("Shape()\n", "E0401"),
         ("x: Protocol = Square()\n", "E0408"),
-        // GEN-10: a result, a variable, an attribute, a base, and members.
-        ("def f() -> Shape:\n    return Square()\n", "E0201"),
-        ("x: list[Shape] = []\n", "E0201"),
-        ("class C:\n    shape: Shape\n", "E0201"),
+        // GEN-10: a value of a class that does not satisfy the protocol.
+        ("def f() -> Shape:\n    return Base()\n", "E0405"),
+        ("x: list[Shape] = [Square(), Base()]\n", "E0409"),
+        ("x: Shape = Square()\nx.sides = 3\n", "E0201"),
+        // GEN-17: a base, members, and the protocol in its own signatures.
         ("class C(Shape):\n    pass\n", "E0201"),
         (
             "class P(Protocol):\n    @property\n    def size(self) -> int: ...\n",
@@ -130,17 +131,11 @@ fn a_protocol_is_refused_where_typy_does_not_hold_one() {
         ),
         ("class P(Protocol):\n    size: int = 0\n", "E0201"),
         ("class P(Protocol):\n    size = 0\n", "E0201"),
-        ("x: dict[Shape, Shape] = {}\n", "E0201"),
         (
             "class P(Protocol):\n    def merge(self, other: Shape) -> None: ...\n",
             "E0201",
         ),
-        // GEN-09: a protocol parameter makes a method generic.
-        (
-            "class C:\n    def __eq__(self, other: Shape) -> bool:\n        return True\n",
-            "E0201",
-        ),
-        // GEN-08: a generic class with a base.
+        // GEN-13: a generic protocol.
         (
             "class P[T](Protocol):\n    def get(self) -> T: ...\n",
             "E0201",
@@ -153,6 +148,45 @@ fn a_protocol_is_refused_where_typy_does_not_hold_one() {
             Some(*code),
             "{program}\n{found:?}"
         );
+    }
+}
+
+#[test]
+fn a_protocol_types_values_of_the_classes_that_satisfy_it() {
+    let cases = [
+        "def f() -> Shape:\n    return Square()\nprint(f().area() + f().scaled(2.0))\n",
+        "x: list[Shape] = [Square(), Square()]\nprint(x[0].sides + len(x))\n",
+        "class C:\n    def __init__(self, shape: Shape) -> None:\n        self.shape = shape\nprint(C(Square()).shape.area())\n",
+        "x: dict[str, Shape] = {'a': Square()}\ny: Shape | None = None\nprint(x['a'] == x['a'], y is None)\n",
+        "x: Shape = Square()\nif isinstance(x, Square):\n    print(x.name())\n",
+    ];
+    for program in cases {
+        assert_eq!(
+            app(&format!("{SHAPES}{program}")),
+            Vec::<String>::new(),
+            "{program}"
+        );
+    }
+}
+
+#[test]
+fn a_protocol_value_meets_what_it_does_not_hold() {
+    let cases: &[(&str, &[&str])] = &[
+        // An exception class is never a protocol value.
+        (
+            "class Failure(Exception):\n    pass\nx: Shape = Square()\n",
+            &[],
+        ),
+        ("x: Shape = Square()\nprint(x.missing)\n", &["E0414"]),
+        (
+            "def f(s: Square | None) -> Shape:\n    return s\n",
+            &["E0405"],
+        ),
+        ("def f(s: Named) -> Shape:\n    return s\n", &["E0405"]),
+        ("x: Shape = 'text'\n", &["E0402"]),
+    ];
+    for (program, expected) in cases {
+        assert_eq!(app(&format!("{SHAPES}{program}")), *expected, "{program}");
     }
 }
 

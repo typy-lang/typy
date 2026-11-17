@@ -1,19 +1,21 @@
-//! `typy build FILE` (CLI-01, CLI-04, CLI-05, UC-02, UC-05).
+//! `typy build FILE` (CLI-01, CLI-04, CLI-05, CLI-09, UC-02, UC-05).
 
 use camino::{Utf8Path, Utf8PathBuf};
-use typy_build::{BuildMode, BuildRequest, EmitStage};
+use typy_build::{BuildMode, BuildRequest, EmitStage, LibraryKind};
 use typy_driver::{Outcome, Pipeline};
 
 use crate::exit_status::ExitStatus;
 use crate::output::Reporter;
 
-/// Builds the executable, or writes the output of the stage `emit` names.
+/// Builds the executable, or the library of `library`'s kind, or writes the output of the
+/// stage `emit` names.
 pub(super) fn build(
     pipeline: &Pipeline,
     file: Utf8PathBuf,
     emit: Option<EmitStage>,
     output: Option<&Utf8Path>,
     mode: BuildMode,
+    library: Option<LibraryKind>,
     reporter: Reporter,
 ) -> ExitStatus {
     let mut request = match BuildRequest::new(file) {
@@ -22,6 +24,9 @@ pub(super) fn build(
     };
     if let Some(stage) = emit {
         request = request.with_emit(stage);
+    }
+    if let Some(kind) = library {
+        request = request.with_library(kind);
     }
     if let Some(path) = output {
         request = request.with_output(path);

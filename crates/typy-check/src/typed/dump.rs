@@ -95,6 +95,32 @@ impl Dump<'_> {
         self.block(1, "body", &function.body);
     }
 
+    fn pattern(&mut self, depth: usize, pattern: &crate::typed::TypedPattern) {
+        use crate::typed::TypedPattern;
+        match pattern {
+            TypedPattern::Test(test) => {
+                self.line(depth, "Test", test.span);
+                self.expression(depth + 1, test);
+            }
+            TypedPattern::Bind(symbol, value) => {
+                let name = self.program.symbol(*symbol).name.clone();
+                self.line(depth, &format!("Bind {name}"), value.span);
+                self.expression(depth + 1, value);
+            }
+            TypedPattern::All(patterns) | TypedPattern::Any(patterns) => {
+                let label = if matches!(pattern, TypedPattern::All(_)) {
+                    "All"
+                } else {
+                    "Any"
+                };
+                let _ = writeln!(self.text, "{}{label}", "  ".repeat(depth));
+                for inner in patterns {
+                    self.pattern(depth + 1, inner);
+                }
+            }
+        }
+    }
+
     fn block(&mut self, depth: usize, label: &str, statements: &[TypedStmt]) {
         if statements.is_empty() {
             return;
@@ -117,7 +143,16 @@ impl Dump<'_> {
             AssignTarget::Slice { list, .. } => format!("slice of {}", list.ty),
             AssignTarget::Entry { dict, .. } => format!("entry of {}", dict.ty),
             AssignTarget::Attribute { object, index } => self.attribute(&object.ty, *index),
+            AssignTarget::Property { object, .. } => format!("property of {}", object.ty),
+            AssignTarget::CData { object, place } => match place {
+                crate::typed::CDataPlace::Value => format!("value of {}", object.ty),
+                crate::typed::CDataPlace::Item(_) => format!("item of {}", object.ty),
+                crate::typed::CDataPlace::Field(field) => format!("field {field} of {}", object.ty),
+            },
             AssignTarget::Lazy { target, .. } => format!("lazy {}", self.target(target)),
+            AssignTarget::Converted { value, target, .. } => {
+                format!("{} as {}", self.target(target), value.ty)
+            }
         }
     }
 
@@ -174,6 +209,27 @@ impl Dump<'_> {
                 self.expression(depth + 1, test);
                 self.block(depth + 1, "body", body);
                 self.block(depth + 1, "orelse", orelse);
+            }
+            TypedStmt::Match {
+                subject,
+                cases,
+                span,
+            } => {
+                self.line(depth, "Match", *span);
+                if let Some((symbol, value)) = subject {
+                    let name = self.program.symbol(*symbol).name.clone();
+                    self.line(depth + 1, &format!("subject {name}"), value.span);
+                    self.expression(depth + 2, value);
+                }
+                for case in cases {
+                    self.line(depth + 1, "case", *span);
+                    self.pattern(depth + 2, &case.pattern);
+                    if let Some(guard) = &case.guard {
+                        self.line(depth + 2, "guard", guard.span);
+                        self.expression(depth + 3, guard);
+                    }
+                    self.block(depth + 2, "body", &case.body);
+                }
             }
             TypedStmt::ForEach {
                 target,
@@ -384,13 +440,46 @@ impl Dump<'_> {
                 )
             }
             TypedExprKind::Submodule(module) => format!("Submodule {module}"),
+            TypedExprKind::TypeAliasObject(index) => format!("TypeAliasObject {index}"),
+            TypedExprKind::VersionRead { .. } => "VersionRead".to_owned(),
+            TypedExprKind::TypeAliasPart { module, .. } => if *module {
+                "TypeAliasModule"
+            } else {
+                "TypeAliasName"
+            }
+            .to_owned(),
             TypedExprKind::AsIterable(_) => "AsIterable".to_owned(),
             TypedExprKind::MathCall { function, .. } => format!("MathCall {}", function.name()),
             TypedExprKind::SysValue(value) => format!("SysValue {value:?}"),
+            TypedExprKind::ForeignLibrary(index) => {
+                format!(
+                    "ForeignLibrary {}",
+                    self.program.foreign_libraries[*index as usize].name
+                )
+            }
+            TypedExprKind::ForeignCall {
+                function,
+                arguments,
+            } => {
+                let name = &self.program.foreign_functions[*function as usize].name;
+                self.line(depth, &format!("ForeignCall {name}: {ty}"), expression.span);
+                for argument in arguments {
+                    self.expression(depth + 1, argument);
+                }
+                return;
+            }
+            TypedExprKind::CData(cdata) => {
+                let name = format!("{cdata:?}");
+                let name = name.split(['(', ' ']).next().unwrap_or_default();
+                self.line(depth, &format!("CData {name}: {ty}"), expression.span);
+                for part in cdata.expressions() {
+                    self.expression(depth + 1, part);
+                }
+                return;
+            }
             TypedExprKind::SysExit(_) => "SysExit".to_owned(),
             TypedExprKind::RecursionLimit(_) => "RecursionLimit".to_owned(),
             TypedExprKind::ExceptionPart { part, .. } => format!("ExceptionPart({part:?})"),
-            TypedExprKind::OsErrorField { field, .. } => format!("OsErrorField({field:?})"),
             TypedExprKind::FileAttribute { attribute, .. } => {
                 format!("FileAttribute({attribute:?})")
             }
@@ -446,10 +535,14 @@ impl Dump<'_> {
             TypedExprKind::Tuple(_) => "Tuple".to_owned(),
             TypedExprKind::List(_) => "List".to_owned(),
             TypedExprKind::ListOf(_) => "ListOf".to_owned(),
+            TypedExprKind::IterContains { .. } => "IterContains".to_owned(),
             TypedExprKind::SetOf(_) => "SetOf".to_owned(),
             TypedExprKind::Set(_) => "Set".to_owned(),
             TypedExprKind::Dict { .. } => "Dict".to_owned(),
             TypedExprKind::Wrap(_) => "Wrap".to_owned(),
+            TypedExprKind::Named { target, .. } => {
+                format!("Named {}", self.program.symbol(*target).name)
+            }
             TypedExprKind::Upcast(_) => "Upcast".to_owned(),
             TypedExprKind::Downcast(_) => "Downcast".to_owned(),
             TypedExprKind::IsInstance(_) => "IsInstance".to_owned(),
@@ -470,6 +563,15 @@ impl Dump<'_> {
             TypedExprKind::Slice { .. } => "Slice".to_owned(),
             TypedExprKind::Method { method, .. } => format!("Method {}", method.name()),
             TypedExprKind::TupleItem { index, .. } => format!("TupleItem {index}"),
+            TypedExprKind::Raise(_) => "Raise".to_owned(),
+            TypedExprKind::Hash(_) => "Hash".to_owned(),
+            TypedExprKind::Sequence { .. } => "Sequence".to_owned(),
+            TypedExprKind::NotImplemented => "NotImplemented".to_owned(),
+            TypedExprKind::SliceBound { part, .. } => format!("SliceBound {part}"),
+            TypedExprKind::ClassVariable(holders) => format!("ClassVariable {}", holders.len()),
+            TypedExprKind::ExceptionArguments { raw, .. } => {
+                format!("ExceptionArguments{}", if *raw { " raw" } else { "" })
+            }
             TypedExprKind::TupleSlice { positions, .. } => format!("TupleSlice {positions:?}"),
         };
         self.line(depth, &format!("{label} : {ty}"), expression.span);

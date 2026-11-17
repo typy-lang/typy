@@ -3,10 +3,10 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy software requirements specification |
-| Version | 1.43 |
+| Version | 1.80 |
 | Status | Approved |
 | Owner | typy-lang contributors |
-| Last updated | 2026-11-12 |
+| Last updated | 2026-11-17 |
 
 ## 1. Introduction
 
@@ -90,7 +90,7 @@ supported standard library modules. Nothing is installed into CPython.
 | Release | Host and target platforms |
 | --- | --- |
 | 0.1 | Linux x86_64 with glibc or musl |
-| 0.5 | Adds Linux AArch64 and macOS AArch64 |
+| 0.6 | Adds Linux AArch64 and macOS AArch64 |
 | 1.0 | Adds Windows x86_64 |
 
 Building needs a system C linker driver (`cc`), or `lld`. Running the
@@ -140,11 +140,12 @@ oracle needs CPython 3.12 or later.
 | CLI-05 | `typy build` shall offer the modes `debug` (default), `--release` and `--release-small`: LLVM's `O0` pipeline, its `O2` pipeline, and its `O2` pipeline with every function marked `minsize`, because LLVM 23 has no `Oz` pipeline. | M | 0.1 |
 | CLI-06 | The exit status of `typy` shall be 0 on success, 1 when the program has errors, 2 on wrong command usage, and 101 on an internal compiler error. | M | 0.1 |
 | CLI-07 | Project settings shall be read from `typy.toml`, and a command line flag shall override the same setting in the file. | S | 0.3 |
-| CLI-08 | `typy build --target TRIPLE` shall cross-compile for every supported target. | S | 0.5 |
+| CLI-08 | `typy build --target TRIPLE` shall cross-compile for every supported target. | S | 0.6 |
 | CLI-09 | `typy build --lib static` shall produce a static library and `--lib shared` a shared library. | M | 0.5 |
 | CLI-10 | `typy explain CODE` shall print an explanation of the diagnostic with a wrong and a corrected example. | S | 0.3 |
 | CLI-11 | `typy` shall read no environment variable that changes the output, except `TYPY_HOME`. | M | 0.1 |
 | CLI-12 | The setting `python-floor` in `typy.toml` shall set the program's Python floor to one of `3.12`, `3.13`, `3.14` or `3.15`, and any other value shall be rejected. | S | 0.3 |
+| CLI-13 | A library build shall carry the release of the version that its module's `__version__`, or else `version` in `typy.toml`, gives in its file names, as Linux names libraries: `libNAME.so.X.Y` with the soname `libNAME.so.X`, and `libNAME.X.Y.a`, each with links of the names a linker finds. | S | 0.5 |
 
 TyPy has no formatter of its own. TyPy source is Python, so a standard
 formatter applies; Ruff's formatter is the project's recommendation.
@@ -185,7 +186,9 @@ formatter applies; Ruff's formatter is the project's recommendation.
 | TYP-14 | Annotations that join two or more types other than `None` with `\|`, such as `int \| str`, shall be accepted, with narrowing by `isinstance` (TYP-07). | M | 0.4 | 3.3.5 |
 | TYP-15 | The annotations `Iterator[T]` and `Iterable[T]`, imported from `collections.abc` or `typing`, shall be accepted for iterators and for the built-in iterables of items of type `T` (ADR-0014, ADR-0015). | S | 0.3 | |
 | TYP-16 | One value assigned to several targets, as in `a = b[0] = value`, shall be converted to each target's type, such as the union an item holds. | S | 0.5 | 7.2 |
-| TYP-17 | The names of `typing` and `collections.abc` given for annotations, such as `Iterator` and `Iterable`, shall also be values, as in `isinstance(x, Iterable)`. | S | 0.5 | |
+| TYP-17 | The names `Iterable` and `Iterator` of `typing` and `collections.abc`, and `List`, `Dict`, `Set`, `Tuple`, `Type`, `Optional[...]` and `Union[...]` of `typing`, shall be accepted as the classes of `isinstance` and of a class pattern, with CPython's answers. | S | 0.5 | |
+| TYP-18 | The names of `typing` and `collections.abc` shall be values of their own: stored, passed, compared and written as CPython writes them; so shall a type alias that a function or a class defines, an alias given its type arguments, and an alias's `__value__` and `__type_params__`. | C | 1.0 | |
+| TYP-19 | An operation on a union whose members the runtime cannot tell apart by class or kind, such as two iterators, two file kinds or an iterable, shall be accepted. | C | 1.0 | |
 
 ### 3.5 Built-in types and values (DAT)
 
@@ -202,7 +205,7 @@ formatter applies; Ruff's formatter is the project's recommendation.
 | DAT-09 | `dict[K, V]` shall be a mutable mapping that iterates in insertion order. | M | 0.2 | 3.2.7 |
 | DAT-10 | `set[T]` shall be a mutable set. | M | 0.2 | 3.2.6 |
 | DAT-11 | Indexing a sequence with a negative index shall count from the end, and an index outside the sequence shall raise `IndexError`. | M | 0.2 | 6.3.2 |
-| DAT-12 | Slicing shall return a new object with the items selected by start, stop and step, as in Python. | M | 0.2 | 6.3.3 |
+| DAT-12 | Slicing shall return a new object with the items selected by start, stop and step, each an `int` or `None`, as in Python. | M | 0.2 | 6.3.3 |
 | DAT-13 | Assigning to a slice of a list shall replace the selected items with the items of a list, as in Python. | S | 0.3 | 7.2 |
 | DAT-14 | `tuple[T, ...]` shall be an immutable sequence of any number of items of type `T`, and a tuple of a fixed number of items of type `T` shall be accepted where one is expected. | M | 0.2 | 3.2.5 |
 | DAT-15 | The methods of `set` that combine a set with others, `union`, `intersection`, `difference`, `symmetric_difference`, `update`, `intersection_update`, `difference_update`, `symmetric_difference_update`, `issubset`, `issuperset` and `isdisjoint`, shall accept any iterable of the set's item type, and as many arguments as CPython accepts, with CPython's results and order. | M | 0.2 | 3.2.6 |
@@ -258,10 +261,11 @@ formatter applies; Ruff's formatter is the project's recommendation.
 | CST-04 | `try` with `except`, `else` and `finally` clauses shall be accepted, and `finally` shall run on `return`, `break`, `continue` and exceptions. | M | 0.3 | 8.4 |
 | CST-05 | `with` shall call `__enter__` and `__exit__` as the Language Reference defines, also when the block exits early. | M | 0.3 | 8.5 |
 | CST-06 | `match` shall be accepted with literal, capture, wildcard, value, sequence, mapping and class patterns, guards and `\|` alternatives. | M | 0.5 | 8.6 |
-| CST-07 | A `match` on an enumeration-like union of classes shall report a warning when cases are missing. | S | 0.5 | 8.6 |
+| CST-07 | A `match` whose cases without a guard leave a member of the subject's union, optional or `bool` type unmatched shall report a warning that names the members (ADR-0033). | S | 0.5 | 8.6 |
 | CST-08 | `for` shall iterate over any class with `__iter__` and `__next__`, and end when `__next__` raises `StopIteration` (OI-17). | M | 0.3 | 8.3 |
 | CST-09 | `iter` and `next`, with and without a default, shall be available for the built-in iterables. | S | 0.3 | 8.3 |
 | CST-10 | The parameters of `__exit__` after `self` may be left without annotations, and shall then have the types `type[BaseException] \| None`, `BaseException \| None` and `TracebackType \| None`; the traceback shall be one object of type `traceback`, written as CPython writes one, which holds no frames. | S | 0.3 | |
+| CST-11 | A class with `__getitem__` and no `__iter__` shall be iterable through `__getitem__` with the positions 0, 1, 2 and so on until it raises `IndexError`, in `for`, `in` and every builtin that iterates, as CPython's sequence protocol does. | C | 1.0 | |
 
 ### 3.9 Functions (FUN)
 
@@ -292,6 +296,28 @@ formatter applies; Ruff's formatter is the project's recommendation.
 | CLS-11 | Class variables, given a value in the class body, shall be accepted. | S | 0.4 | |
 | CLS-12 | `type(x)` shall give the type object of the value `x`, and a class name or the name of a built-in type shall be its type object as a value; a type object shall print as `<class 'name'>`, give its name as `__name__`, and compare with `is`, `is not`, `==` and `!=`. | M | 0.2 | |
 | CLS-13 | A class derived from an exception class shall be accepted with new methods and attributes and with its own `__init__`, `__str__` and `__repr__`; redefining another method of a base shall be rejected until CLS-04. | M | 0.3 | 8.8 |
+| CLS-15 | `field(default_factory=f)` in a dataclass shall call `f`, a class or a function that takes no arguments, for each instance whose `__init__` is given no value for the field. | S | 0.5 | |
+| CLS-16 | A dataclass that is frozen with `eq=True`, or given `unsafe_hash=True`, shall hash as the tuple of its fields, and one with `eq=True` that is neither shall be unhashable, as CPython's `dataclasses` writes `__hash__`. | S | 0.5 | |
+| CLS-17 | `@dataclass` shall accept the options `init`, `repr`, `unsafe_hash` and `slots`. | S | 0.5 | |
+| CLS-18 | `isinstance` and a class pattern shall accept a class held in a variable or computed. | S | 1.0 | |
+| CLS-19 | `issubclass` shall be accepted with a class or a tuple of classes. | S | 1.0 | |
+| CLS-20 | An augmented assignment to an instance shall call the class's in-place method, such as `__iadd__`, and the binary method when the class has none, as CPython does. | S | 0.5 | |
+| CLS-21 | An operator or comparison method that returns `NotImplemented` shall give way to the reflected method, and then to CPython's default or its `TypeError`. | S | 0.5 | |
+| CLS-22 | Comparison and hash methods that may raise, a chain such as `a < b < c` of instances, and an operator whose method and reflected method return different types shall be accepted. | S | 0.5 | |
+| CLS-23 | `in` on an instance whose class has no `__contains__` shall iterate it, and an instance shall be sliced through its `__getitem__`, as CPython does. | S | 0.5 | |
+| CLS-24 | The truth of an instance shall come from the `__bool__` or `__len__` of its own class, also where its static type is a base or a union that tests truth otherwise, and in `any` and `all`. | S | 0.5 | |
+| CLS-25 | A class method shall be callable through an instance and through a subclass defined in another module, a class variable shall be assignable through a subclass, and a static method shall be callable through any expression that gives its class or an instance. | S | 0.5 | |
+| CLS-26 | `super(Class, instance)` shall be accepted with any class of the instance's chain of bases. | S | 0.5 | |
+| CLS-27 | A class derived from `typing.NamedTuple` shall be accepted, its fields read by name and by position. | S | 1.0 | |
+| CLS-28 | `@dataclass` shall accept the options `kw_only` and `weakref_slot` and options given other than as `True` or `False`, `field` its options `init`, `repr`, `hash`, `compare`, `kw_only` and `metadata`, and a generic dataclass a field with a `default_factory`. | C | 1.0 | |
+| CLS-29 | `super(Class, instance)` shall be accepted with an instance other than the method's own, and outside a method. | C | 1.0 | |
+| CLS-30 | A class method of a generic class shall be callable through an instance. | C | 1.0 | |
+| CLS-31 | A class variable shall be assignable through a variable that holds a class derived from the class that gives it, such as `cls` in a class method, giving that class one of its own. | C | 1.0 | |
+| CLS-32 | An augmented assignment shall call the in-place method that only a class derived from its target's class defines, when the target holds an instance of that class. | C | 1.0 | |
+| CLS-33 | An operator or comparison method that may return both `None` and `NotImplemented` shall be accepted. | C | 1.0 | |
+| CLS-34 | An override whose parameter is held otherwise than its base method's, such as `int \| None` for `int`, shall be accepted with a default of its own for that parameter. | C | 1.0 | |
+| CLS-35 | A static method that overrides a method, or a method that overrides a static method, shall be accepted with a parameter or result held otherwise than the one it overrides. | C | 1.0 | |
+| CLS-36 | `super()` shall be usable as a value: held in a variable, passed and returned. | C | 1.0 | |
 | CLS-14 | `super().__init__(...)` shall be accepted in the `__init__` of an exception class and shall set the exception's arguments; any other use of `super()` shall be rejected until 0.4. | M | 0.3 | |
 
 ### 3.11 Generics and protocols (GEN)
@@ -307,7 +333,14 @@ formatter applies; Ruff's formatter is the project's recommendation.
 | GEN-07 | A generic function or class of another module shall be usable, made from its source as ADR-0016's interfaces carry it. | S | 0.5 | |
 | GEN-08 | A generic class shall be accepted with a base other than `object`, as the base of another class, and with class variables and defaults. | S | 0.5 | 8.10 |
 | GEN-09 | Type parameters shall be accepted on a method of a generic class, a special method, a property, a class method, and a method that overrides or is overridden. | S | 0.5 | 8.10 |
-| GEN-10 | A protocol shall be usable as the type of a variable, an attribute, a result and a container item outside a parameter, as the base of a class, and with properties, static methods, class methods and class variables. | S | 0.5 | 8.10 |
+| GEN-10 | A protocol shall be usable as the type of a variable, an attribute, a result and a container item outside a parameter, and of a parameter of a special method or a property. | S | 0.5 | 8.10 |
+| GEN-11 | A class variable or an attribute default of a generic class whose annotation names a type parameter of the class shall be accepted. | C | 1.0 | 8.10 |
+| GEN-12 | A generic class shall be accepted with an exception class as its base. | C | 1.0 | 8.10 |
+| GEN-13 | A generic protocol shall be accepted, satisfied by the classes whose members fit it for its type arguments. | C | 1.0 | 8.10 |
+| GEN-14 | `isinstance` and a class pattern with a generic class shall narrow a variable of a base's type to the copies of the class the program makes. | C | 1.0 | 8.10 |
+| GEN-15 | A class derived from a copy of a generic class shall inherit the generic class's class methods, and a dataclass derived from a copy of a generic dataclass its fields. | C | 1.0 | 8.10 |
+| GEN-16 | Type parameters shall be accepted on a special method, on a property, and on a method that overrides or is overridden by one with other type parameters or in a generic class, and a class method with type parameters shall be callable through an instance. | C | 1.0 | 8.10 |
+| GEN-17 | A protocol shall be usable as the base of a class, with properties, static methods, class methods, class variables and defaults, and in the signatures of its own methods; an attribute shall be assignable through a protocol value, and a value of a built-in type shall be held as a protocol. | C | 1.0 | 8.10 |
 
 ### 3.12 Exceptions (EXC)
 
@@ -317,7 +350,7 @@ formatter applies; Ruff's formatter is the project's recommendation.
 | EXC-02 | The built-in exception classes the runtime raises shall exist with their Python names: `ArithmeticError`, `AssertionError`, `EOFError`, `IndexError`, `KeyError`, `OverflowError`, `RecursionError`, `RuntimeError`, `StopIteration`, `SystemExit`, `TypeError`, `UnicodeDecodeError`, `UnicodeEncodeError`, `ValueError`, `ZeroDivisionError`, `OSError` with each of its subclasses, and their bases. | M | 0.3 | 4.3 |
 | EXC-03 | An exception that is not raised shall cost no more than a compare and branch at each call that may raise. | M | 0.3 | |
 | EXC-04 | Exception chaining with `from` and the implicit context shall be kept, and shown in the uncaught exception output. | S | 0.3 | 7.8 |
-| EXC-05 | An exception shall not cross a function exported to C (FFI-05); the program shall abort with the exception printed. | M | 0.5 | |
+| EXC-05 | An exception shall not cross a function exported to C (FFI-05): a `SystemExit` shall end the process with its status, and any other exception shall abort it with the exception printed. | M | 0.5 | |
 | EXC-06 | A `return`, `break` or `continue` that leaves a `finally` block shall be rejected, as PEP 765 makes CPython 3.14 warn about it (ADR-0013). | M | 0.3 | 8.4 |
 | EXC-07 | A `raise` without an expression shall re-raise the exception being handled, and shall be rejected outside an `except` clause. | M | 0.3 | 7.8 |
 | EXC-08 | `str()`, `repr()`, `print()` and f-strings of an exception shall give CPython's text, computed from the arguments it was built with. | M | 0.3 | |
@@ -329,6 +362,8 @@ formatter applies; Ruff's formatter is the project's recommendation.
 | EXC-14 | `OSError` and its subclasses built with two to five arguments shall give the subclass for the `errno`, and the attributes `errno`, `strerror` and `filename`, as CPython does. | S | 0.4 | |
 | EXC-15 | `args` of an exception and `code` of a `SystemExit` shall be values of their own: stored, passed, indexed and iterated. | S | 0.5 | |
 | EXC-16 | An `OSError` shall take arguments of any type, more than five of them, and two or more through `super().__init__`, as CPython does. | C | 0.5 | |
+| EXC-17 | `args` of an exception shall hold the `args` of an exception of a related class, a type that nests without end, as CPython allows. | C | 1.0 | |
+| EXC-18 | `characters_written` of a `BlockingIOError`, and a number as the third argument of `OSError` or `BlockingIOError`, shall behave as CPython's do. | C | 1.0 | |
 
 ### 3.13 Modules and imports (MOD)
 
@@ -345,7 +380,9 @@ formatter applies; Ruff's formatter is the project's recommendation.
 | MOD-09 | `sys.set_lazy_imports`, `sys.set_lazy_imports_filter`, `sys.get_lazy_imports`, `sys.get_lazy_imports_filter` and `sys.lazy_modules` shall be rejected, because they change or depend on import behaviour set from outside the importing module. | S | 0.3 | |
 | MOD-10 | An imported module shall be an object of type `module` whose attributes are its module-level names: `m.x` shall read and `m.x = v` assign them, the object may be bound to other names and compared with `is`, and its text shall name its path from the project root (OI-20, ADR-0015). | M | 0.3 | 5.3 |
 | MOD-11 | A name a module binds by a lazy import shall be usable from another module, a module variable shall be assignable as `m.x = v` through a lazily imported module `m`, and a name shall be bindable by more than one lazy import of the module. | S | 0.4 | |
-| MOD-12 | A function or a class shall be bindable by more than one lazy import of a module, a call running the one bound last. | C | 0.5 | |
+| MOD-12 | A function or a class shall be bindable by more than one import of a module, eager or lazy, and by an import inside a block, a call running the one the import that ran last bound, and raising `NameError` when none has run. | C | 0.5 | |
+| MOD-14 | A name that imports bind to more than one function or class shall be usable as a value, in an annotation and from another module. | C | 1.0 | |
+| MOD-15 | An `__init__` shall be able to import a module that imports its own module at module level. | C | 1.0 | |
 | MOD-13 | A module shall be importable inside a function of a module that it imports at module level. | S | 0.5 | |
 
 ### 3.14 Built-in functions and standard library (LIB)
@@ -366,11 +403,13 @@ formatter applies; Ruff's formatter is the project's recommendation.
 | LIB-12 | `math.fsum`, `math.prod`, `math.sumprod`, `math.dist`, `math.gamma` and `math.lgamma` shall be available. | S | 0.4 |
 | LIB-13 | `sys.maxsize`, `sys.byteorder`, `sys.platform`, `sys.version`, `sys.version_info`, `sys.hexversion`, `sys.maxunicode`, `sys.getrecursionlimit`, `sys.setrecursionlimit` and `sys.stdin` shall be available. | S | 0.4 |
 | LIB-14 | `open` shall accept binary modes, `+` modes, a mode that is not a literal, a file descriptor as the file, the encodings `ascii` and `latin-1`, and the arguments `buffering`, `errors`, `newline` and `closefd`; a text file shall have `seek`, `tell`, `truncate`, `fileno`, `isatty`, `readable`, `writable` and `seekable`, and the attributes `name`, `mode` and `closed`; closing `sys.stdout` or `sys.stderr` shall close it. | S | 0.4 |
-| LIB-15 | `math.fsum`, `math.dist`, `math.prod` and `math.sumprod` shall take items of a union of number types, and `math.prod` a `bool` start and items other than numbers. | C | 0.5 |
+| LIB-15 | `math.fsum`, `math.dist`, `math.prod` and `math.sumprod` shall take items of a union of number types, and `math.prod` a `bool` start. | C | 0.5 |
 | LIB-16 | `sys.version_info` shall be a value as CPython's: printed, stored, passed and imported with `from sys import version_info`. | C | 0.5 |
-| LIB-17 | The other names of `typing` and `collections.abc` that describe types, such as `Optional`, `Union`, `List`, `Dict`, `Callable`, `NamedTuple` and `Sequence`, shall be available. | S | 0.5 |
+| LIB-17 | The names `Optional`, `Union`, `List`, `Dict`, `Set`, `Tuple` and `Type` of `typing` shall be accepted in annotations as the types they spell; `Callable` follows function values (FUN-05). | S | 0.5 |
 | LIB-18 | `open` shall accept a callable `opener`, which opens the file and returns its descriptor. | C | 1.0 |
 | LIB-19 | `open` with a binary mode shall accept a `buffering` that is not a literal, giving a `typing.BinaryIO`. | C | 1.0 |
+| LIB-20 | The abstract collections of `collections.abc` and `typing`, such as `Sequence`, `Mapping`, `MutableSequence` and `Collection`, shall be accepted as types, and a value of type `Iterable[T]` shall be testable against `Iterator`. | S | 1.0 |
+| LIB-21 | `math.prod` shall take items and a start other than numbers, multiplying them in turn as CPython does. | C | 1.0 |
 
 ### 3.15 Memory management (MEM)
 
@@ -378,13 +417,14 @@ formatter applies; Ruff's formatter is the project's recommendation.
 | --- | --- | --- | --- |
 | MEM-01 | An object shall be freed when its last reference goes, with no tracing garbage collector and no pause. | M | 0.1 |
 | MEM-02 | `float`, `bool` and inline `int` values shall be held without a heap allocation in variables, fields and containers, so a `list[float]` stores 8 bytes per item. | M | 0.2 |
-| MEM-03 | An object the compiler proves does not outlive its function shall be allocated without a heap call. | S | 0.5 |
+| MEM-03 | An instance of a class of the program, other than an exception, that the compiler proves does not outlive its function shall be allocated without a heap call. | S | 0.5 |
 | MEM-04 | Passing a variable or a constant as an argument shall cost no reference count operation, and returning a variable shall move its value to the caller. | M | 0.2 |
 | MEM-05 | Freed memory of one object shall be reused for a new object of the same size in the same function when the compiler can prove it safe. | C | 1.0 |
 | MEM-06 | Reference cycles shall be collected, without a background thread, and only objects whose class can be part of a cycle shall pay for cycle tracking (ADR-0001). | S | 1.0 |
 | MEM-07 | `weakref.ref` shall be available. | S | 1.0 |
-| MEM-08 | The allocator shall be replaceable per project through three functions: allocate, reallocate and free. | S | 0.5 |
+| MEM-08 | The allocator shall be replaceable per project through three C functions, allocate, reallocate and free, that `typy.toml` names. | S | 0.5 |
 | MEM-09 | The last use of a variable in an assignment, or as an item a collection stores, shall move its value instead of counting it. | S | 0.3 |
+| MEM-10 | A list, dict, set, string or exception object that the compiler proves does not outlive its function shall be allocated without a heap call. | C | 1.0 |
 
 ### 3.16 C interoperability (FFI)
 
@@ -398,9 +438,13 @@ direct calls and links the library when the program is built.
 | FFI-02 | A C function shall be callable when its `argtypes` and `restype` are assigned at module level, with ctypes types, before its first call. A call to a function without both shall be rejected. | M | 0.5 |
 | FFI-03 | The ctypes types `c_int8` to `c_uint64`, `c_int`, `c_long`, `c_size_t`, `c_ssize_t`, `c_float`, `c_double`, `c_bool`, `c_char_p`, `c_void_p`, `POINTER(T)` and `Structure` subclasses with a literal `_fields_` list shall be accepted, with the conversions and the wrap-around that ctypes defines. | M | 0.5 |
 | FFI-04 | Whether a library is linked statically or dynamically shall be set in `typy.toml`, not in the source. | M | 0.5 |
-| FFI-05 | A function listed under `[export]` in `typy.toml` shall be exported with an unmangled C symbol and the C types given there, and the build shall write a matching C header. | M | 0.5 |
+| FFI-05 | A function that `__all__` of a module built with `--lib` lists shall be exported with an unmangled C symbol and the C types its annotations give, and the build shall write a matching C header (ADR-0032). | M | 0.5 |
 | FFI-06 | `ctypes.CFUNCTYPE` callbacks shall be accepted. | C | 1.0 |
 | FFI-07 | A C header shall be convertible into a module of ctypes declarations. | C | 1.0 |
+| FFI-08 | A library build shall write, beside the library and its C header, a `.pyi` stub of its exported functions and a `ctypes` module that loads the library and declares them, so CPython and TyPy programs call it with the same source (ADR-0032). | S | 0.5 |
+| FFI-09 | A library a `ctypes` declaration loads, and its functions, shall be values a program stores, passes and prints. | C | 1.0 |
+| FFI-10 | The ctypes names `c_char`, `c_wchar`, `c_wchar_p`, `create_string_buffer`, `cast` and `addressof`, pointers to and arrays of pointers and arrays, arrays whose length is not an integer literal, array slices, `byref` other than as a C function's argument, assigning a pointer's `contents`, and ctypes classes as values, in annotations, `isinstance` and `type` shall be accepted. | C | 1.0 |
+| FFI-11 | Methods and class attributes other than one `_fields_` list in a `Structure` subclass, `_fields_` assigned after the class statement, bit fields, a subclass of a `Structure` subclass, and `ctypes.Union` shall be accepted. | C | 1.0 |
 
 ### 3.17 Diagnostics (DIA)
 
@@ -463,8 +507,9 @@ cache, unless a row says otherwise.
 | 0.2 | `list`, `tuple`, `dict`, `set`, `bytes`, classes without inheritance, f-strings, comprehensions, slicing | Unboxed values, reference count elision; user documentation |
 | 0.3 | `try`, `raise`, user exceptions, `with`, `assert`, `del`, `global`, modules and packages, lazy imports | `sys`, `math`, `open`; `typy.toml` with `python-floor`; JSON diagnostics; the first warnings and `--deny-warnings` |
 | 0.4 | Dataclasses, inheritance, protocols, PEP 695 generics, narrowing, `Final`, `type` aliases | Binary files and the rest of `open` |
-| 0.5 | `match`, `:=`, C interoperability through `ctypes` | Stack allocation; libraries and exports; Linux and macOS AArch64; cross-compilation |
-| 1.0 | Closures, `lambda`, `nonlocal`, generators, `*args`, keyword-only parameters | Cycle collection, `weakref`; Windows; performance budgets |
+| 0.5 | `match`, `:=`, dataclass `default_factory`, hashing and options, the rest of the class protocols (CLS-20 to CLS-26), C interoperability through `ctypes` | Stack allocation; libraries and exports described by their annotations (ADR-0032) |
+| 0.6 | | Linux and macOS AArch64; cross-compilation |
+| 1.0 | Closures, `lambda`, `nonlocal`, generators, `*args`, keyword-only parameters, `isinstance` with a class held in a variable, `issubclass`, `typing` names as values, `NamedTuple`, `Sequence` and the other abstract collections | Cycle collection, `weakref`; Windows; performance budgets |
 
 ## 6. Out of scope
 
@@ -507,6 +552,7 @@ resolved issues below.
 | ID | Question | Raised |
 | --- | --- | --- |
 | OI-23 | Which ABI lets TyPy modules link dynamically: the layouts of objects, the exception state, the identity of type objects across shared libraries, and one runtime shared by every library (ADR-0016)? It is settled after 1.0, once those layouts are fixed. | 2026-11-11 |
+| OI-25 | Should the modules of the standard library TyPy provides ship prebuilt, one static library and interface per module and target, so a development build links them without compiling them? It depends on separate compilation (ADR-0016). | 2026-11-15 |
 
 ## 8. Resolved issues
 
@@ -535,6 +581,8 @@ resolved issues below.
 | OI-21 | Which imports form the cycle MOD-05 rejects, when an import inside a function runs only once the function is called? | The imports at module level. An import inside a function adds no edge and may find a module still initialising, as in CPython, whose names not yet bound raise CPython's `NameError`, `AttributeError` or `ImportError` (ADR-0015). | 2026-11-11 |
 | OI-22 | How is a module checked whose function imports a module that imports it at module level, when each module is checked after the modules it imports? | Such an import is E0426, planned for 0.4: TyPy checks the modules in the order their imports give, an import inside a function counting when it closes no cycle, so the importing function's module comes first and cannot see the other's names yet (ADR-0015). | 2026-11-11 |
 | OI-24 | What is `sys.argv[0]`, when CPython gives the path of the script it runs and a TyPy program has no script? | The path of the executable as the operating system passes it to `main`, which is what a C program receives and what a shell user typed. The other items are the arguments, decoded as CPython decodes them. A conformance test does not print `sys.argv[0]`, because the oracle's differs (LIB-04, STD-03). | 2026-11-12 |
+| OI-26 | Do the AArch64 targets and cross-compilation (CLI-08) stay in 0.5? They need a cross toolchain and an emulator or arm64 runners for their tests. | They move to 0.6, so 0.5 holds the language, stack allocation, libraries and `ctypes`. | 2026-11-15 |
+| OI-27 | In which order should `list.sort` and `sorted` call `__lt__`? The order shows when the method prints or raises, and CPython 3.12, CPython 3.13 and 3.14, and CPython 3.15 each compare in another order. | The order of the newest oracle, CPython 3.15, as OI-14 decides for messages: the runtime's sort is a port of CPython 3.15.2's `listsort`, which compares the same items in the same order, and a comparison that raises leaves the list in the order CPython leaves it. A conformance test that prints from `__lt__` while sorting is invalid unless every oracle prints alike (CLS-22, ADR-0039). | 2026-11-16 |
 
 ## Appendix A. Disposition of the specification pack
 

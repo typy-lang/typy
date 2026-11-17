@@ -29,15 +29,14 @@ pub(super) fn check(module: &TyirModule) -> Result<(), VerifyError> {
         let Some(base) = class.base else {
             continue;
         };
-        let Some(inherited) = module
-            .classes
-            .get(base as usize)
-            .filter(|_| (base as usize) < index)
-        else {
-            return Err(error(format!(
-                "the base class#{base} is not a class before it"
-            )));
+        let Some(inherited) = module.classes.get(base as usize) else {
+            return Err(error(format!("the base class#{base} does not exist")));
         };
+        // A base may come after the class, as a copy of a generic class does (ADR-0040), but
+        // the chain of bases ends.
+        if comes_back(module, index) {
+            return Err(error(format!("the bases of class#{index} come back to it")));
+        }
         if class.methods.len() < inherited.methods.len() {
             return Err(error(format!(
                 "the table has {} methods, fewer than the {} of its base",
@@ -56,6 +55,24 @@ pub(super) fn check(module: &TyirModule) -> Result<(), VerifyError> {
         }
     }
     Ok(())
+}
+
+/// Returns true when the chain of bases from the class `index` reaches the class again.
+fn comes_back(module: &TyirModule, index: usize) -> bool {
+    let mut current = module.classes[index].base;
+    for _ in 0..module.classes.len() {
+        match current {
+            Some(each) if each as usize == index => return true,
+            Some(each) => {
+                current = module
+                    .classes
+                    .get(each as usize)
+                    .and_then(|class| class.base);
+            }
+            None => return false,
+        }
+    }
+    true
 }
 
 /// Returns true when two functions take the same arguments and give the same result in the

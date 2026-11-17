@@ -53,7 +53,14 @@ pub(crate) struct Program {
     /// module, which annotations such as `shapes.Point` name.
     pub(super) module_classes: BTreeMap<String, BTreeMap<String, ClassId>>,
     /// For each name bound to a module of the program, that module's type aliases (SMT-10).
-    pub(super) module_aliases: BTreeMap<String, BTreeSet<String>>,
+    pub(super) module_aliases: BTreeMap<String, crate::check::AliasTable>,
+    /// The type aliases of other modules the module, or the function being checked, imports
+    /// by name (SMT-12).
+    pub(super) imported_aliases: crate::check::AliasTable,
+    /// The module's own type aliases as other modules read them, kept when the module ends.
+    pub(super) exported_aliases: crate::check::AliasTable,
+    /// The type aliases read as values, by module and name (SMT-12).
+    type_alias_objects: Vec<crate::typed::TypedTypeAlias>,
     /// The type aliases of the module being checked, which only its annotations read
     /// (SMT-10).
     pub(super) type_aliases: BTreeSet<String>,
@@ -62,6 +69,9 @@ pub(crate) struct Program {
     pub(crate) type_arguments: BTreeMap<String, Type>,
     /// The generic functions of the program and the copies made of them (GEN-03).
     pub(crate) generics: super::generic_copy::Generics,
+    /// The classes that satisfy each protocol, and the dispatchers of protocol values
+    /// (GEN-10, ADR-0041).
+    pub(crate) protocol_values: super::protocol_value::ProtocolValues,
     /// The generic classes of the program and the copies made of them, which annotations,
     /// read where only a shared reference is at hand, may add to (ADR-0028).
     pub(crate) class_copies: std::cell::RefCell<super::class_copy::ClassCopies>,
@@ -76,6 +86,9 @@ pub(crate) struct Program {
     pub(super) builtin_modules: BTreeSet<String>,
     /// Whether the program closes a text file, by `close()` or a `with` block (LIB-14).
     pub(super) closes_text_files: bool,
+    /// Whether the program can make a `str` with a surrogate standard output cannot write
+    /// (LEX-10).
+    pub(super) makes_surrogates: bool,
     /// The minor version of the program's Python floor, such as 12 for 3.12.
     pub(super) floor: u8,
     /// The modules the module's `__lazy_modules__` lists, whose imports are lazy (MOD-07).
@@ -90,6 +103,28 @@ pub(crate) struct Program {
     /// The module variables some other module assigns through its module object, such as
     /// `settings.debug = True`, which a test cannot narrow either.
     pub(super) assigned_elsewhere: BTreeSet<(String, String)>,
+    /// The creations of exceptions this check records (EXC-15, ADR-0034).
+    pub(super) creations: crate::exception_arguments::Creations,
+    /// The creations the checks before this one recorded, which type `args`; none in a first
+    /// check.
+    pub(super) known_creations: Option<std::rc::Rc<crate::exception_arguments::Creations>>,
+    /// Where a body first reads `args` as a value, if one does.
+    pub(super) arguments_read: Option<Span>,
+    /// The names of the module being checked that imports bind to several functions or
+    /// classes, or inside a block, with their binding variables (MOD-12, ADR-0036).
+    pub(super) rebound: BTreeMap<String, super::rebound::Rebound>,
+    /// The function of each lazy import that binds such a name, by where it names it.
+    pub(super) rebound_reify: BTreeMap<Span, FunctionId>,
+    /// The names each module checked so far reads, kept for bodies of that module checked
+    /// later (MOD-13, ADR-0037).
+    pub(super) contexts: BTreeMap<String, super::ModuleContext>,
+    /// The `ctypes` declarations, libraries and functions (FFI-01 to FFI-03).
+    pub(crate) foreign: super::foreign_call::Foreign,
+    /// The class variables the program assigns through a subclass that inherits them
+    /// (ADR-0037).
+    pub(super) subclass_variables: crate::check::subclass_variables::SubclassVariables,
+    /// The operator and comparison methods that return `T | NotImplementedType` (CLS-21).
+    pub(crate) giving_way: crate::check::not_implemented::GivingWay,
 }
 
 /// What a first look at a module body may change, which `keep_module_types` undoes.
@@ -102,6 +137,8 @@ pub(crate) struct Snapshot {
     /// The generic copies made before the first look, whose IDs the look's copies follow.
     generics: super::generic_copy::Generics,
     class_copies: super::class_copy::ClassCopies,
+    /// The fits of protocols before the look, whose copies' IDs another copy may take next.
+    protocol_values: super::protocol_value::ProtocolValues,
 }
 
 /// The names one module defines, which other modules import.
@@ -111,6 +148,11 @@ pub(crate) struct ModuleScope {
     pub(super) class_ids: BTreeMap<String, ClassId>,
     pub(super) module_symbols: BTreeMap<String, SymbolId>,
     pub(super) type_aliases: BTreeSet<String>,
+    /// The module's type aliases as other modules read them (SMT-12).
+    pub(super) alias_values: crate::check::AliasTable,
+    /// The names imports bind to more than one function or class, which another module
+    /// cannot read yet (MOD-14).
+    pub(super) rebound: BTreeSet<String>,
 }
 
 impl Program {
@@ -139,21 +181,40 @@ impl Program {
             path: String::new(),
             module_classes: BTreeMap::new(),
             module_aliases: BTreeMap::new(),
+            imported_aliases: BTreeMap::new(),
+            exported_aliases: BTreeMap::new(),
+            type_alias_objects: Vec::new(),
             type_aliases: BTreeSet::new(),
             type_arguments: BTreeMap::new(),
             generics: super::generic_copy::Generics::default(),
+            protocol_values: super::protocol_value::ProtocolValues::default(),
             class_copies: std::cell::RefCell::default(),
             annotation_names: BTreeMap::new(),
             annotation_modules: BTreeMap::new(),
             module_functions: BTreeMap::new(),
             builtin_modules: BTreeSet::new(),
             closes_text_files: false,
+            makes_surrogates: false,
             floor: 12,
             lazy_modules: BTreeSet::new(),
             lazy_imports: BTreeMap::new(),
             lazy_names: BTreeMap::new(),
             assigned_elsewhere: BTreeSet::new(),
+            creations: crate::exception_arguments::Creations::default(),
+            known_creations: None,
+            arguments_read: None,
+            rebound: BTreeMap::new(),
+            rebound_reify: BTreeMap::new(),
+            contexts: BTreeMap::new(),
+            foreign: super::foreign_call::Foreign::default(),
+            subclass_variables: crate::check::subclass_variables::SubclassVariables::default(),
+            giving_way: crate::check::not_implemented::GivingWay::new(),
         }
+    }
+
+    /// Returns the modules the module's `__lazy_modules__` lists, whose imports are lazy.
+    pub(crate) const fn lazy_modules(&self) -> &BTreeSet<String> {
+        &self.lazy_modules
     }
 
     /// Notes the modules of the program and the standard library modules it imports, and
@@ -167,6 +228,16 @@ impl Program {
         self.loaded = loaded;
         self.standard = standard;
         self.assigned_elsewhere = assigned_elsewhere;
+    }
+
+    /// Returns the name of the module being checked.
+    pub(crate) fn module_name(&self) -> &str {
+        &self.module
+    }
+
+    /// Returns the names the module `module` read when it was checked.
+    pub(crate) fn context_of(&self, module: &str) -> Option<super::ModuleContext> {
+        self.contexts.get(module).cloned()
     }
 
     /// Returns how many classes the modules checked so far define, the first ID of the next.
@@ -224,11 +295,30 @@ impl Program {
             .collect();
         self.module_classes = BTreeMap::new();
         self.module_aliases = BTreeMap::new();
+        self.imported_aliases = BTreeMap::new();
         self.class_modules
             .extend(std::iter::repeat_n(self.module.clone(), classes.len()));
+        let first_class = self.classes.len();
         self.classes.extend(classes);
         self.class_ids = class_ids;
         self.instances.extend(instances);
+        // A generic class's copies are made from its definitions, which have no bridges
+        // (CLS-30); a protocol has no instances, and a value of it reaches the methods of the
+        // object's class (ADR-0041).
+        for index in first_class..self.classes.len() {
+            let class = ClassId(id(index));
+            if self.is_protocol(class) {
+                self.make_protocol_dispatchers(class);
+                continue;
+            }
+            if !self.class_copies.borrow().roots.contains_key(&class) {
+                self.add_class_method_bridges(class);
+                self.add_comparison_bridges(class);
+                self.add_truth_bridge(class);
+                self.add_override_adapters(class);
+                self.add_static_bridges(class);
+            }
+        }
     }
 
     /// Notes the module about to be checked, whose imports resolve against its package.
@@ -297,6 +387,7 @@ impl Program {
             body: vec![import],
             span,
             generic: false,
+            named_targets: Vec::new(),
         }));
         self.lazy_imports.insert(id, target);
         // A name a later lazy import binds again keeps its first function, which lowering
@@ -325,14 +416,57 @@ impl Program {
     pub(crate) fn module_aliases_of(
         &self,
         modules: &BTreeMap<String, String>,
-    ) -> BTreeMap<String, BTreeSet<String>> {
+    ) -> BTreeMap<String, crate::check::AliasTable> {
         modules
             .iter()
             .filter_map(|(name, module)| {
                 let scope = self.scopes.get(module)?;
-                Some((name.clone(), scope.type_aliases.clone()))
+                Some((name.clone(), scope.alias_values.clone()))
             })
             .collect()
+    }
+
+    /// Returns the index of the object of the type alias `name` of `module`, adding it on
+    /// first use (SMT-12).
+    pub(super) fn type_alias_object(&mut self, module: &str, name: &str) -> u32 {
+        let found = self
+            .type_alias_objects
+            .iter()
+            .position(|alias| alias.module == module && alias.name == name)
+            .unwrap_or_else(|| {
+                self.type_alias_objects.push(crate::typed::TypedTypeAlias {
+                    name: name.to_owned(),
+                    module: module.to_owned(),
+                });
+                self.type_alias_objects.len() - 1
+            });
+        id(found)
+    }
+
+    /// Keeps the module's type aliases, with what its annotations see, for the modules that
+    /// import them (SMT-12).
+    pub(crate) fn export_aliases(
+        &mut self,
+        aliases: &BTreeMap<String, crate::check::type_alias::Alias>,
+        classes: &BTreeMap<String, ClassId>,
+        names: &crate::check::ImportedNames,
+    ) {
+        self.exported_aliases = aliases
+            .iter()
+            .map(|(name, alias)| {
+                (
+                    name.clone(),
+                    std::rc::Rc::new(crate::check::ExportedAlias {
+                        module: self.module.clone(),
+                        name: name.clone(),
+                        parameters: alias.parameters.clone(),
+                        value: alias.value.clone(),
+                        classes: classes.clone(),
+                        names: names.clone(),
+                    }),
+                )
+            })
+            .collect();
     }
 
     /// Returns the exception classes of the modules checked so far.
@@ -369,6 +503,7 @@ impl Program {
             .extend(functions.iter().map(|(name, id)| (name.clone(), *id)));
         self.module_classes = annotations.modules;
         self.module_aliases = annotations.module_aliases;
+        self.imported_aliases = annotations.aliases;
         self.annotation_names = annotations.names;
         self.annotation_modules = annotations.standard;
     }
@@ -376,6 +511,8 @@ impl Program {
     /// Ends checking a module whose body is the function `body`, and keeps its names for
     /// the modules that import it.
     pub(crate) fn end_module(&mut self, body: FunctionId) {
+        let context = self.module_context();
+        self.contexts.insert(self.module.clone(), context);
         self.modules.push(TypedModule {
             name: self.module.clone(),
             path: self.path.clone(),
@@ -388,8 +525,29 @@ impl Program {
                 class_ids: self.class_ids.clone(),
                 module_symbols: self.module_symbols.clone(),
                 type_aliases: std::mem::take(&mut self.type_aliases),
+                alias_values: std::mem::take(&mut self.exported_aliases),
+                rebound: self
+                    .rebound
+                    .iter()
+                    .filter(|(_, rebound)| rebound.several())
+                    .map(|(name, _)| name.clone())
+                    .collect(),
             },
         );
+    }
+
+    /// Returns the error for `module.name` read from another module, when imports bind the
+    /// name to more than one function or class there.
+    pub(super) fn rebound_elsewhere(
+        &self,
+        module: &str,
+        name: &str,
+        span: Span,
+    ) -> Option<typy_diagnostics::Diagnostic> {
+        self.scopes
+            .get(module)
+            .is_some_and(|scope| scope.rebound.contains(name))
+            .then(|| super::rebound::rebound_planned(name, "used from another module", span))
     }
 
     /// Returns the type of the instances of a class: an exception for an exception class.
@@ -409,6 +567,10 @@ impl Program {
 
     /// Returns the method `name` of a class, its own or the nearest base's.
     pub(super) fn method(&self, class: ClassId, name: &str) -> Option<FunctionId> {
+        // A method of a protocol is reached through its dispatcher (ADR-0041).
+        if self.is_protocol(class) && self.classes[class.0 as usize].method(name).is_some() {
+            return self.dispatcher(class, name);
+        }
         let mut current = Some(class);
         while let Some(class) = current {
             let info = &self.classes[class.0 as usize];
@@ -504,6 +666,7 @@ impl Program {
             first_class,
             generics: self.generics.clone(),
             class_copies: self.class_copies.borrow().clone(),
+            protocol_values: self.protocol_values.clone(),
         }
     }
 
@@ -526,11 +689,15 @@ impl Program {
         // The copies the look made took IDs it gives back; the module body makes them again.
         self.generics = snapshot.generics;
         self.class_copies.replace(snapshot.class_copies);
+        self.protocol_values = snapshot.protocol_values;
+        crate::protocol_fits::reset(&self.protocol_values.fits);
         let symbols: Vec<SymbolId> = self.module_symbols.values().copied().collect();
         for (symbol, ty) in symbols.into_iter().zip(found) {
             self.symbols[symbol.0 as usize].ty = ty;
         }
         self.provisional = true;
+        // The variables now have their types, which the getters of class variables give.
+        self.add_class_variable_getters();
     }
 
     /// Ends the first look: the module body is checked next, and gives the final types.
@@ -607,6 +774,16 @@ impl Program {
                         self.method(class.id, "__init__")
                     },
                     defaults: self.default_variables(class.id),
+                    adapters: if opaque {
+                        Vec::new()
+                    } else {
+                        class.adapters.clone()
+                    },
+                    static_bridges: if opaque {
+                        Vec::new()
+                    } else {
+                        class.static_bridges.clone()
+                    },
                     span: class.span,
                     generic,
                     opaque,
@@ -620,8 +797,22 @@ impl Program {
             modules: self.modules,
             lazy_imports: self.lazy_imports,
             builtin_modules: self.builtin_modules.into_iter().collect(),
+            type_aliases: self.type_alias_objects,
             closes_text_files: self.closes_text_files,
+            makes_surrogates: self.makes_surrogates
+                || self.signatures.iter().any(|signature| {
+                    signature.parameters.iter().any(|parameter| {
+                        parameter
+                            .default
+                            .as_ref()
+                            .is_some_and(crate::typed::TypedConstant::holds_unescapable_surrogate)
+                    })
+                }),
             entry,
+            foreign_libraries: self.foreign.libraries,
+            foreign_functions: self.foreign.functions,
+            exports: None,
+            library_version: None,
             warnings: typy_diagnostics::Diagnostics::new(),
         }
     }

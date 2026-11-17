@@ -140,13 +140,13 @@ fn imports_that_cannot_resolve_give_their_codes() {
         ("import shapes\nshapes.NAME()\n", &["E0401"]),
         ("import shapes\nshapes.missing()\n", &["E0425"]),
         ("import shapes\nshapes.NAME += 1\n", &["E0401"]),
-        ("import ctypes\n", &["E0201"]),
+        ("import time\n", &["E0201"]),
         ("import json\n", &["E0206"]),
+        ("import collections\n", &["E0206"]),
         ("from collections.abc import Sized\n", &["E0201"]),
         ("from types import FrameType\n", &["E0425"]),
         ("from typing import Iterator\nprint(Iterator)\n", &["E0201"]),
         ("import typing\nprint(typing)\n", &["E0201"]),
-        ("import collections\n", &["E0201"]),
         (
             "from typing import Iterator\nx: Iterator = iter([1])\n",
             &["E0408"],
@@ -163,7 +163,7 @@ fn imports_that_cannot_resolve_give_their_codes() {
             "from typing import Iterable\ndef f(xs: Iterable[int]) -> bool:\n    return bool(xs)\n",
             &["E0304"],
         ),
-        ("import ctypes\n", &["E0201"]),
+        ("import random\n", &["E0201"]),
         ("import shapes\nshapes.Point = 1\n", &["E0402"]),
         (
             "def f() -> None:\n    from shapes import missing\n",
@@ -179,16 +179,31 @@ fn imports_that_cannot_resolve_give_their_codes() {
 }
 
 #[test]
-fn a_function_importing_a_module_that_imports_its_own_gives_e0426() {
-    let codes = rejected(&[
+fn a_function_importing_a_module_that_imports_its_own_waits_for_it() {
+    accepted(&[
         ("app.py", "import first\n"),
-        ("first.py", "import second\n"),
+        (
+            "first.py",
+            "import second\nVALUE = 1\n\n\ndef go() -> None:\n    pass\n",
+        ),
         (
             "second.py",
             "def later() -> None:\n    import first\n    print(first.VALUE)\n    first.go()\n    from first import VALUE\n",
         ),
     ]);
-    assert_eq!(codes, ["E0426", "E0426", "E0426"]);
+}
+
+#[test]
+fn an_init_importing_a_module_that_imports_its_own_gives_e0426() {
+    let codes = rejected(&[
+        ("app.py", "import first\n"),
+        ("first.py", "import second\nVALUE = 1\n"),
+        (
+            "second.py",
+            "class Counter:\n    def __init__(self) -> None:\n        import first\n        self.count = first.VALUE\n",
+        ),
+    ]);
+    assert_eq!(codes, ["E0426"]);
 }
 
 #[test]
@@ -279,19 +294,36 @@ fn class_values_of_another_module_are_read_and_assigned_there() {
 }
 
 #[test]
-fn a_class_method_inherited_from_another_module_is_planned() {
-    let shapes =
-        "class Shape:\n    @classmethod\n    def make(cls) -> 'Shape':\n        return cls()\n";
-    assert_eq!(
-        rejected(&[
-            ("shapes.py", shapes),
-            (
-                "app.py",
-                "from shapes import Shape\nclass Square(Shape):\n    pass\nprint(Shape.make(), Square.make())\n",
-            ),
-        ]),
-        ["E0201"]
-    );
+fn a_class_method_inherited_from_another_module_gets_its_copy() {
+    let shapes = "import math\nclass Shape:\n    @classmethod\n    def make(cls) -> 'Shape':\n        print(math.pi)\n        return cls()\n";
+    let dump = accepted(&[
+        ("shapes.py", shapes),
+        (
+            "app.py",
+            "from shapes import Shape\nclass Square(Shape):\n    pass\nprint(Shape.make(), Square.make())\n",
+        ),
+    ]);
+    assert!(dump.contains("Square.make"), "{dump}");
+}
+
+#[test]
+fn a_dataclass_derives_from_one_named_through_its_module() {
+    let shapes = "from dataclasses import dataclass\n@dataclass\nclass Point:\n    x: int\n";
+    accepted(&[
+        (
+            "app.py",
+            "from dataclasses import dataclass\nimport shapes as s\n@dataclass\nclass Labeled(s.Point):\n    label: str = 'p'\nprint(Labeled(1).x)\n",
+        ),
+        ("shapes.py", shapes),
+    ]);
+    let frozen = rejected(&[
+        (
+            "app.py",
+            "from dataclasses import dataclass\nimport shapes\n@dataclass(frozen=True)\nclass Labeled(shapes.Point):\n    label: str = 'p'\n",
+        ),
+        ("shapes.py", shapes),
+    ]);
+    assert_eq!(frozen, vec!["E0404".to_string()]);
 }
 
 #[test]
@@ -326,4 +358,48 @@ fn version_info_of_another_module_is_its_own_variable() {
         ("util.py", "version_info = (1, 2)\n"),
     ]);
     assert!(dump.contains("version_info"), "{dump}");
+}
+
+#[test]
+fn a_module_of_the_program_hides_a_standard_module_of_its_name() {
+    // CPython finds `typing.py` beside the program before its own `typing`.
+    accepted(&[
+        ("app.py", "from typing import helper\nprint(helper())\n"),
+        ("typing.py", "def helper() -> int:\n    return 1\n"),
+    ]);
+}
+
+/// A module that defines a class `Shape`.
+const SHAPES_A: &str =
+    "class Shape:\n    def __init__(self, n: int) -> None:\n        self.n = n\n";
+/// Another module that defines a class `Shape`.
+const SHAPES_B: &str =
+    "class Shape:\n    def __init__(self, n: int) -> None:\n        self.n = n * 10\n";
+
+#[test]
+fn a_class_an_import_in_a_block_binds_is_read_as_a_value_unless_a_local_hides_it() {
+    let dump = accepted(&[
+        (
+            "app.py",
+            "import sys\nif len(sys.argv) < 5:\n    from shapes_a import Shape\n\
+             made = Shape\nprint(made(2).n)\n\
+             def shadow() -> int:\n    Shape = 3\n    return Shape\nprint(shadow())\n",
+        ),
+        ("shapes_a.py", SHAPES_A),
+    ]);
+    assert!(dump.contains("Local Shape : int"), "{dump}");
+}
+
+#[test]
+fn a_class_two_imports_bind_read_as_a_value_is_planned() {
+    let found = rejected(&[
+        (
+            "app.py",
+            "import sys\nif len(sys.argv) > 5:\n    from shapes_a import Shape\n\
+             else:\n    from shapes_b import Shape\nmade = Shape\n",
+        ),
+        ("shapes_a.py", SHAPES_A),
+        ("shapes_b.py", SHAPES_B),
+    ]);
+    assert_eq!(found, ["E0201"]);
 }

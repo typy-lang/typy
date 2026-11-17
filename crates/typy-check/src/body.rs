@@ -4,24 +4,39 @@ mod accessor;
 mod builtin_call;
 mod builtin_module;
 mod call;
+mod cdata;
 mod class;
+mod class_bridge;
 mod class_copy;
 mod class_value;
+mod class_variable_chain;
+mod comparison_bridge;
+mod comparison_chain;
 mod comprehension;
 mod container_method;
 mod delete;
 mod dict;
 mod dict_call;
 mod each_member;
+mod foreign_call;
 mod generic_call;
 mod generic_copy;
-pub use each_member::member_class;
+mod override_adapter;
+mod override_copy;
+mod protocol_value;
+mod static_bridge;
+mod truth_bridge;
+pub use comparison_bridge::{COMPARISON_BRIDGES, EQUAL_BRIDGE};
+pub use each_member::{member_class, member_test};
+pub use truth_bridge::TRUTH_BRIDGE;
 mod exception;
+mod exception_creation;
 mod exception_part;
 mod expression;
 mod flow;
 mod fstring;
 mod import;
+mod in_place;
 mod isinstance;
 mod iterable_call;
 mod iterator;
@@ -29,33 +44,48 @@ mod list;
 mod list_call;
 mod locals;
 mod loop_source;
+mod matching;
 mod math_call;
 mod math_iterable;
 mod method_call;
+mod module_context;
 mod name;
+mod named;
 mod open_call;
 mod open_options;
 mod operator;
 mod operator_method;
 mod os_error;
+mod pattern_class;
+mod pattern_coverage;
+mod pattern_mapping;
+mod pattern_sequence;
 mod percent;
 mod program;
 mod protocol;
+mod rebound;
 mod round_call;
 mod set;
 mod slice;
+mod slice_object;
 mod statement;
 mod super_call;
 mod sys_call;
+mod type_alias_value;
 mod type_object;
+mod typing_class;
 mod union;
+mod union_loop;
 mod version_info;
 mod view_operator;
 
 pub(crate) use builtin_module::ModuleFunction;
 pub(crate) use class_copy::{ClassCopies, GenericClass};
+pub(crate) use generic_copy::{Generic, GenericCopy};
 pub(crate) use import::Imported;
+pub(crate) use module_context::ModuleContext;
 pub(crate) use program::Program;
+pub(crate) use rebound::{Binding, Bound, binding_variable, rebound_planned};
 
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -77,6 +107,8 @@ pub(crate) struct BodyChecker<'program> {
     diagnostics: &'program mut Diagnostics,
     locals: BTreeMap<String, SymbolId>,
     local_order: Vec<SymbolId>,
+    /// The variables an assignment expression in the body assigns (EXP-13).
+    named_targets: Vec<SymbolId>,
     declared: BTreeMap<SymbolId, Type>,
     types: BTreeMap<SymbolId, Type>,
     assigned: Assigned,
@@ -88,9 +120,16 @@ pub(crate) struct BodyChecker<'program> {
     /// The types `isinstance` tests narrow variables to, which `Fact::Narrowed` names by
     /// position (TYP-07).
     narrowings: Vec<Type>,
-    /// The variables an operation is being checked for each member of, innermost last, each
-    /// with the member it is checked for now (TYP-14).
-    splitting: Vec<(SymbolId, Type)>,
+    /// Statements that follow the statement being checked, such as the one that stores a
+    /// lazy import's number in its binding variables (ADR-0036).
+    following: Vec<crate::typed::TypedStmt>,
+    /// The statements that assign the hidden variables an augmented assignment holds its
+    /// target's object and key in, made while it is checked (CLS-20).
+    pins: Vec<crate::typed::TypedStmt>,
+    /// The variables, or `args` of the exceptions variables hold, an operation is being
+    /// checked for each member of, innermost last, each with the member it is checked for now
+    /// (TYP-14).
+    splitting: Vec<(each_member::Split, Type)>,
     /// The class and instance of the method being checked, which `super()` reads.
     method: Option<class::Initializing>,
     /// Whether a use of the incomplete instance has been reported, so one cause gives one error.
@@ -101,6 +140,12 @@ pub(crate) struct BodyChecker<'program> {
     finally_loops: Vec<usize>,
     /// The module variables the function declares `global`, which it assigns (SMT-08).
     global_names: BTreeSet<String>,
+    /// The type aliases the body's `type` statements define, which annotations read
+    /// (SMT-12).
+    local_aliases: BTreeSet<String>,
+    /// Whether the next expression checked may be a `ctypes` class, as the value of an
+    /// assignment to a name is; checking it clears this (FFI-03).
+    class_allowed: bool,
 }
 
 impl<'program> BodyChecker<'program> {
@@ -114,6 +159,7 @@ impl<'program> BodyChecker<'program> {
             diagnostics,
             locals: BTreeMap::new(),
             local_order: Vec::new(),
+            named_targets: Vec::new(),
             declared: BTreeMap::new(),
             types: BTreeMap::new(),
             assigned: Some(BTreeSet::new()),
@@ -124,10 +170,14 @@ impl<'program> BodyChecker<'program> {
             method: None,
             narrowings: Vec::new(),
             splitting: Vec::new(),
+            following: Vec::new(),
+            pins: Vec::new(),
             reported_incomplete: false,
             handling: 0,
             finally_loops: Vec::new(),
             global_names: BTreeSet::new(),
+            local_aliases: BTreeSet::new(),
+            class_allowed: false,
         }
     }
 
@@ -216,6 +266,7 @@ impl<'program> BodyChecker<'program> {
                 .with_rule(RuleId::TYP_01),
             );
         }
+        let named_targets = std::mem::take(&mut checker.named_targets);
         let locals = checker.finish_locals();
         // A generic function is checked, never run: its copies run in its place, so it keeps
         // no body (ADR-0023). A protocol's method only says what a class that satisfies the
@@ -233,6 +284,7 @@ impl<'program> BodyChecker<'program> {
             body: if generic { Vec::new() } else { body },
             span: definition.span,
             generic,
+            named_targets,
         });
     }
 
@@ -244,7 +296,10 @@ impl<'program> BodyChecker<'program> {
     ) -> FunctionId {
         let mut checker = BodyChecker::new(program, diagnostics, None);
         checker.collect_locals(statements);
-        let body = checker.statements(statements);
+        let first = statements.first().map(|statement| statement.span());
+        let mut body = first.map_or_else(Vec::new, |span| checker.program.rebound_starts(span));
+        body.extend(checker.statements(statements));
+        let named_targets = std::mem::take(&mut checker.named_targets);
         let locals = checker.finish_locals();
         // A lazy import adds the function that runs it, so the body's ID comes after those.
         let entry = FunctionId(id(program.functions.len()));
@@ -271,6 +326,7 @@ impl<'program> BodyChecker<'program> {
             body,
             span,
             generic: false,
+            named_targets,
         }));
         entry
     }

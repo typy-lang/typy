@@ -93,8 +93,36 @@ Another module may use a name a module imports lazily, as
 first, as in CPython. Assigning `m.x = v` through a lazily imported `m`
 runs `m`'s import before the assignment. A variable may be bound by more
 than one lazy import, and its first use runs the one that ran last
-(MOD-11). A function or a class bound by two lazy imports is planned for
-0.5 (MOD-12).
+(MOD-11). So may a function or a class, as the next section describes.
+
+## A name bound by more than one import
+
+A function or a class may be bound by several imports, eager or lazy, such
+as one in each branch of an `if`, and a call runs the one the import that
+ran last bound, as in CPython (MOD-12). A name an import inside a block
+binds raises `NameError` when that import has not run:
+
+<!-- typy-expect: accepted -->
+```python
+import sys
+
+if len(sys.argv) > 9:
+    from math import sqrt as root
+else:
+    from math import isqrt as root
+print(root(17))
+if len(sys.argv) > 9:
+    from math import floor
+try:
+    print(floor(2.5))
+except NameError as error:
+    print(error)
+```
+
+The arguments of such a call are checked against each function it may
+run. A name bound to more than one function or class read as a value,
+named in an annotation or used from another module is planned for 1.0
+(E0201, MOD-14).
 
 The switches of `sys` that change lazy imports from outside the module,
 `sys.set_lazy_imports`, `sys.set_lazy_imports_filter`, their `get_`
@@ -105,21 +133,38 @@ is lazy is decided where it is written.
 
 Two modules that import each other at module level are a circular import,
 E0422, shown with each import of the cycle (MOD-05). Moving one of the
-imports into the function that uses the module breaks the cycle. A name a
-module does not define is E0425, at compile time.
+imports into the function that uses the module breaks the cycle, as in
+CPython (MOD-13); inside `__init__` it is planned for 1.0 (E0426,
+MOD-15). A name a module does not define is E0425, at compile time.
+
+A module keeps one definition per name, as for `def` (STD-04). A name
+that an import binds to a function or a class and that the module also
+defines or assigns is E0202. Import it under another name:
+
+<!-- typy-expect: rejected E0202 at 1:18 -->
+```python
+from math import sqrt
+
+
+def sqrt(value: float) -> float:
+    return value / 2
+```
 
 `from m import *` is planned for after 1.0. Standard library modules come
 with their releases: `math` and `sys` in 0.3, `dataclasses` in 0.4, and
-`ctypes` in 0.5 (LIB-04 to LIB-07, FFI-01). `typing` and
+`ctypes` in 0.5 (LIB-04 to LIB-07, FFI-01); `os`, `time` and `random`
+are planned for 1.0. `typing` and
 `collections.abc` give `Iterator` and `Iterable`, `typing` gives
 `ClassVar`, `Final` and `Protocol`, and `types` gives `TracebackType`
 and `ModuleType`, for annotations (TYP-15, LIB-06). `dataclasses` gives
 `dataclass` and `field`, as [Classes](classes.md#dataclasses) describes
 (CLS-05). The library page
 describes [`math`](library.md#the-math-module) and
-[`sys`](library.md#the-sys-module):
+[`sys`](library.md#the-sys-module), and
+[C interoperability](c-interop.md) describes `ctypes`. A module planned for
+a later release is refused:
 
 <!-- typy-expect: rejected E0201 at 1:1 -->
 ```python
-import ctypes
+import time
 ```

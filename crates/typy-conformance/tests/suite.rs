@@ -9,11 +9,13 @@ use typy_conformance::{Report, Suite};
 /// Requirements whose rejected case cannot be a file in the corpus. A file that is not UTF-8
 /// breaks the repository's ASCII rule, and a file over 16 MiB is too large to commit, so unit
 /// tests in `typy-source` cover LEX-01 and LEX-09. Memory management asks nothing of a
-/// program, so MEM-01, MEM-02, MEM-04 and MEM-09 have no rule a program can break; nor have
-/// the order modules initialise in (MOD-03) and the report of an exception nothing caught
-/// (STD-05), which describe what an accepted program does.
-const NO_REJECTED_FILE: [&str; 8] = [
-    "LEX-01", "LEX-09", "MEM-01", "MEM-02", "MEM-04", "MEM-09", "MOD-03", "STD-05",
+/// program, so MEM-01, MEM-02, MEM-03, MEM-04 and MEM-09 have no rule a program can break;
+/// nor have the order expressions evaluate in (EXP-01), the order modules initialise in
+/// (MOD-03) and the report of an exception nothing caught (STD-05), which describe what an
+/// accepted program does.
+const NO_REJECTED_FILE: [&str; 12] = [
+    "LEX-01", "LEX-09", "LEX-10", "EXP-01", "CST-07", "MEM-01", "MEM-02", "MEM-03", "MEM-04",
+    "MEM-09", "MOD-03", "STD-05",
 ];
 
 fn workspace() -> Utf8PathBuf {
@@ -30,7 +32,7 @@ fn run() -> Report {
 
 /// The releases whose requirements the suite must cover: every one up to the version being
 /// built.
-const RELEASES: [&str; 4] = ["0.1", "0.2", "0.3", "0.4"];
+const RELEASES: [&str; 5] = ["0.1", "0.2", "0.3", "0.4", "0.5"];
 
 /// Returns the requirements the test plan's matrix gives to the conformance suite for the
 /// releases up to this one.

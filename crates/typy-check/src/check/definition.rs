@@ -24,6 +24,9 @@ pub(crate) struct Definition<'tree> {
     /// For a copy of a class method a class inherits, the copy of the class that defines it,
     /// whose diagnostics this copy does not repeat (ADR-0025).
     pub(crate) copy_of: Option<FunctionId>,
+    /// For a copy of a class method of another module, that module, whose names its body
+    /// reads once every module is checked (ADR-0037).
+    pub(crate) home: Option<String>,
     pub(crate) signature: FunctionSignature,
     /// The type parameters of a generic function, whose copies run in its place (GEN-01).
     pub(crate) type_parameters: Vec<crate::generic::TypeParameter>,
@@ -162,6 +165,7 @@ pub(super) fn collect_functions<'tree>(
             instances,
             modules: &names.modules,
             module_aliases: &names.module_aliases,
+            imported_aliases: &names.aliases,
             names: &names.names,
             standard: &names.standard,
             parameters: &super::annotation::NO_PARAMETERS,
@@ -180,7 +184,7 @@ pub(super) fn collect_functions<'tree>(
         scope.parameters = &in_scope;
         let mut made = definition(&parts, None, &scope, diagnostics);
         made.type_parameters = type_parameters;
-        super::protocol::protocol_parameters(&mut made, diagnostics);
+        super::protocol::protocol_parameters(&mut made, false, diagnostics);
         functions.push(made);
     }
     functions
@@ -307,14 +311,17 @@ pub(super) fn definition<'tree>(
                 Type::Error
             }
         };
+        let default_call = parameter.default.as_ref().and_then(factory_call);
         let default = parameter
             .default
             .as_ref()
+            .filter(|_| default_call.is_none())
             .and_then(|default| default_value(default, &ty, diagnostics));
         signature_parameters.push(SignatureParameter {
             name: parameter.name.name.clone(),
             ty,
             default,
+            default_call,
         });
         parameter_names.push((parameter.name.name.clone(), parameter.name.span));
     }
@@ -359,6 +366,7 @@ pub(super) fn definition<'tree>(
                 Some(Type::TypeObject(_))
             ),
         copy_of: None,
+        home: None,
         type_parameters: Vec::new(),
         signature: FunctionSignature {
             parameters: signature_parameters,
@@ -367,6 +375,29 @@ pub(super) fn definition<'tree>(
         parameters: parameter_names,
         body: parts.body,
         span: parts.span,
+    }
+}
+
+/// Returns the name of the function a dataclass's `__init__` calls for a field with a
+/// `default_factory`, when `default` is its call (CLS-15). Its name holds `<`, so no
+/// program can write it.
+pub(crate) fn factory_call(default: &Expr) -> Option<String> {
+    let Expr::Call {
+        function,
+        arguments,
+        keywords,
+        ..
+    } = default
+    else {
+        return None;
+    };
+    match function.as_ref() {
+        Expr::Name { id, .. }
+            if id.starts_with("<default ") && arguments.is_empty() && keywords.is_empty() =>
+        {
+            Some(id.clone())
+        }
+        _ => None,
     }
 }
 
@@ -385,6 +416,7 @@ fn default_value(
         Constant::Int(digits) => TypedConstant::Int(digits.clone()),
         Constant::Float(value) => TypedConstant::Float(*value),
         Constant::Str(value) => TypedConstant::Str(value.clone()),
+        Constant::StrPoints(points) => TypedConstant::StrPoints(points.clone()),
         Constant::Complex { .. } | Constant::Bytes(_) | Constant::Ellipsis => return None,
     };
     if !constant.ty().is_assignable_to(ty) {

@@ -15,10 +15,17 @@ impl BodyChecker<'_> {
     pub(super) fn statements(&mut self, statements: &[&Stmt]) -> Vec<TypedStmt> {
         let mut typed = Vec::new();
         for statement in statements {
-            if let Stmt::ClassDef { name, body, .. } = statement {
-                typed.extend(self.class_body_values(&name.name, body));
+            if let Stmt::ClassDef {
+                name,
+                body,
+                type_parameters,
+                ..
+            } = statement
+            {
+                typed.extend(self.class_body_values((&name.name, type_parameters), body));
             } else {
                 typed.extend(self.statement(statement));
+                typed.append(&mut self.following);
             }
         }
         typed
@@ -26,7 +33,11 @@ impl BodyChecker<'_> {
 
     /// Checks the values a class body gives, as assignments to the module variables that hold
     /// them, where the `class` statement runs (CLS-11, ADR-0024).
-    fn class_body_values(&mut self, class: &str, body: &[Stmt]) -> Vec<TypedStmt> {
+    fn class_body_values(
+        &mut self,
+        class: (&str, &[typy_source::syntax::TypeParameter]),
+        body: &[Stmt],
+    ) -> Vec<TypedStmt> {
         let values = crate::check::class_values(
             class,
             body,
@@ -78,7 +89,29 @@ impl BodyChecker<'_> {
                     [single] => self.known_type(single),
                     _ => None,
                 };
+                // A name may be bound to a `ctypes` class, which the program then calls or
+                // names in a declaration (FFI-03).
+                self.class_allowed = targets
+                    .iter()
+                    .all(|target| matches!(target, Expr::Name { .. }))
+                    && matches!(
+                        value,
+                        Expr::Name { .. }
+                            | Expr::Attribute { .. }
+                            | Expr::Call { .. }
+                            | Expr::BinOp { .. }
+                    );
                 let value = self.expression_expecting(value, expected.as_ref());
+                self.class_allowed = false;
+                // Unpacking reads `sys.version_info` as the tuple of its items (LIB-16).
+                let value = if targets
+                    .iter()
+                    .any(|target| matches!(target, Expr::Tuple { .. } | Expr::List { .. }))
+                {
+                    Self::version_tuple(value)
+                } else {
+                    value
+                };
                 let targets = targets
                     .iter()
                     .filter_map(|target| self.assign_target(target, value.ty.clone(), &value))
@@ -158,10 +191,57 @@ impl BodyChecker<'_> {
                 value,
                 span,
             } => {
+                let checked_value = self.expression(value);
                 let current = self.expression(target);
-                let value = self.expression(value);
-                // Without `__iadd__`, which is planned, `x += y` on an instance is `x = x + y`
-                // (CLS-07).
+                let instance_item = self.is_instance_item(&current);
+                let property = self.is_property_read(target, &current);
+                // A `ctypes` object's value, item or field is read, combined and written back, as an
+                // assignment of the result (FFI-03).
+                let cdata = matches!(
+                    current.kind,
+                    TypedExprKind::CData(
+                        crate::typed::CDataExpr::Value(_)
+                            | crate::typed::CDataExpr::Item { .. }
+                            | crate::typed::CDataExpr::Field { .. }
+                    )
+                );
+                // An operator that calls a method of an instance reads and assigns an item or
+                // an attribute of an expression through hidden variables (CLS-20), and so does
+                // an item of an instance, which `__setitem__` is given (CLS-07).
+                if matches!(current.ty, Type::Instance(_))
+                    || matches!(checked_value.ty, Type::Instance(_))
+                    || instance_item
+                    || property
+                    || cdata
+                {
+                    if let super::in_place::Pinned::Checked(pinned) =
+                        self.pinned_augmented(target, *operator, value, *span)
+                    {
+                        return *pinned;
+                    }
+                    if instance_item {
+                        return self.instance_item_augmented(
+                            target,
+                            *operator,
+                            (current, checked_value),
+                            *span,
+                        );
+                    }
+                    // The getter's value, combined with the value, goes to the setter (CLS-06).
+                    if property || cdata {
+                        let result =
+                            self.augmented_result(*operator, current, checked_value, *span);
+                        return self.rebound(target, result, *span);
+                    }
+                    if let Some(call) =
+                        self.in_place_call(*operator, &current, &checked_value, *span)
+                    {
+                        return self.rebound(target, call, *span);
+                    }
+                }
+                let written = value;
+                let value = checked_value;
+                // Without an in-place method, `x += y` on an instance is `x = x + y` (CLS-20).
                 let (current, value) = match self.operator_binary(*operator, current, value, *span)
                 {
                     super::operator_method::Comparison::Called(call) => {
@@ -170,7 +250,14 @@ impl BodyChecker<'_> {
                     super::operator_method::Comparison::Builtin(current, value) => (current, value),
                 };
                 let (current, value) = Self::tuple_operands(*operator, current, value);
-                if let Some(formatted) = Self::percent_dynamic(*operator, &current, &value, *span) {
+                if let Some(formatted) = self.percent_dynamic(*operator, &current, &value, *span) {
+                    // The item or attribute of an expression is read and assigned through
+                    // hidden variables, as an operator method's result is (CLS-20).
+                    if let super::in_place::Pinned::Checked(pinned) =
+                        self.pinned_augmented(target, *operator, written, *span)
+                    {
+                        return *pinned;
+                    }
                     return self.rebound(target, formatted, *span);
                 }
                 let result = self.binary_type(*operator, &current, &value, *span);
@@ -255,6 +342,11 @@ impl BodyChecker<'_> {
                     span: *span,
                 }
             }
+            Stmt::Match {
+                subject,
+                cases,
+                span,
+            } => self.match_statement(subject, cases, *span),
             Stmt::While {
                 test,
                 body,
@@ -319,19 +411,28 @@ impl BodyChecker<'_> {
     fn rebound(&mut self, target: &Expr, value: TypedExpr, span: Span) -> Option<TypedStmt> {
         let simple = match target {
             Expr::Name { .. } => true,
-            Expr::Attribute { value: object, .. } => matches!(object.as_ref(), Expr::Name { .. }),
+            Expr::Attribute { value: object, .. } => super::in_place::is_name(object),
+            Expr::Subscript {
+                value: object,
+                index,
+                ..
+            } => super::in_place::is_name(object) && super::in_place::is_name(index),
             _ => false,
         };
+        // Each caller holds the parts of another target in hidden variables first, so the
+        // target is evaluated once; one that does not is a defect of the checker.
         if !simple {
             self.diagnostics.push(
                 Diagnostic::new(
-                    DiagnosticCode::error(201),
+                    DiagnosticCode::error(9001),
                     span,
-                    "an augmented assignment to an item that calls an operator method is planned \
-                     for TyPy 0.5 (CLS-07)",
+                    "internal compiler error: the target of an augmented assignment would be \
+                     evaluated twice",
                 )
-                .with_rule(RuleId::CLS_07)
-                .with_help("write `item = item + value`"),
+                .with_rule(RuleId::NFR_09)
+                .with_help(
+                    "this is a defect in TyPy; please report it with the program that caused it",
+                ),
             );
             return None;
         }
@@ -533,6 +634,15 @@ impl BodyChecker<'_> {
             } else {
                 RuleId::TYP_01
             });
+            if let Some(help) = self.protocol_help(&actual, &expected) {
+                diagnostic = diagnostic.with_help(help);
+            }
+            if actual == Type::NotImplemented {
+                diagnostic = diagnostic.with_help(
+                    "only an operator or comparison method returns `NotImplemented`, to give way \
+                     to the other operand's method (CLS-21)",
+                );
+            }
             if let Some(TypedExpr {
                 kind: TypedExprKind::Constant(TypedConstant::Int(digits)),
                 span,
@@ -574,6 +684,17 @@ fn assigned_names<'tree>(statements: &'tree [Stmt], names: &mut BTreeSet<&'tree 
             Stmt::While { body, orelse, .. } | Stmt::If { body, orelse, .. } => {
                 assigned_names(body, names);
                 assigned_names(orelse, names);
+            }
+            Stmt::Match { cases, .. } => {
+                for case in cases {
+                    names.extend(
+                        case.pattern
+                            .bound_names()
+                            .into_iter()
+                            .map(|name| name.name.as_str()),
+                    );
+                    assigned_names(&case.body, names);
+                }
             }
             Stmt::Try { .. } => {
                 for block in statement.try_blocks() {

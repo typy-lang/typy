@@ -71,8 +71,10 @@ directory exists and can be written, or give another path with `-o`.
 
 The project's `typy.toml` cannot be used: it is not valid TOML, it has a
 setting TyPy does not know, a value has the wrong type, such as
-`python-floor = 3.15` where the string `"3.15"` is meant, or a module path
-is not a directory under the project root (CLI-07, CLI-12). The diagnostic
+`python-floor = 3.15` where the string `"3.15"` is meant, a module path
+is not a directory under the project root, `version` does not start with
+a number, or the `[allocator]` table leaves out one of its three functions
+or names one that is not a C function (CLI-07, CLI-12, CLI-13, MEM-08). The diagnostic
 points at the line. TyPy exits with status 2 before it reads any module.
 Correct the line; the settings are listed in the
 [command line](guide/command-line.md) page.
@@ -92,34 +94,27 @@ python-floor = "3.15"
 ## E0201: feature planned for a later TyPy release
 
 The program uses valid Python that a later TyPy release accepts, such as
-a `match` statement or class decorators. The message names the release
-and the rule. Write the code without the feature, for example with `if`
-and `elif`, or wait for that release.
+a `lambda` expression or class decorators. The message names the release
+and the rule. Write the code without the feature, for example with a
+function defined by `def`, or wait for that release.
 
 This program gives E0201:
 
-<!-- typy-expect: rejected E0201 at 2:5 -->
+<!-- typy-expect: rejected E0201 at 1:11 -->
 ```python
-def show(value: int) -> None:
-    match value:
-        case 0:
-            print("zero")
-        case _:
-            print(value)
+largest = lambda a, b: a if a > b else b
+print(largest(2, 3))
 ```
 
 This one is correct:
 
 <!-- typy-expect: accepted -->
 ```python
-def show(value: int) -> None:
-    if value == 0:
-        print("zero")
-    else:
-        print(value)
+def largest(a: int, b: int) -> int:
+    return a if a > b else b
 
 
-show(0)
+print(largest(2, 3))
 ```
 
 ## E0202: feature TyPy cannot compile with CPython's meaning
@@ -372,9 +367,9 @@ print("many" if count > 1 else str(count))
 
 A variable, a function or a class is read where it may not be assigned
 yet, which CPython would report as `UnboundLocalError` or `NameError`
-(TYP-12). Assign the variable on every path, move a definition above the
-statement that uses it, or quote a class name in an annotation, such as
-`"Node"`.
+(TYP-12). Assign the variable on every path, move a definition or the
+import of a function or a class above the statement that uses it, or
+quote a class name in an annotation, such as `"Node"`.
 
 This program gives E0306:
 
@@ -400,7 +395,9 @@ print(last)
 ## E0307: tuple indexed other than by an integer literal inside it
 
 Each item of a fixed tuple has its own type, so its position must be a
-literal inside the tuple (DAT-08). Use a literal index, unpack the tuple,
+literal inside the tuple (DAT-08). A variable that holds a union of fixed
+tuples takes a literal inside at least one member, and raises `IndexError`
+when the tuple it holds is shorter. Use a literal index, unpack the tuple,
 or use `tuple[T, ...]` when every item has one type.
 
 This program gives E0307:
@@ -1155,37 +1152,39 @@ Importing a name the module defines is correct:
 from shapes import area
 ```
 
-## E0426: import inside a function of a module that imports this one
+## E0426: import inside `__init__` of a module that imports this one
 
-TyPy checks each module after the modules it imports at module level.
-When module `a` imports `b` at module level and a function of `b` imports
-`a`, `b` is checked before `a`, so its function cannot see `a`'s names
-yet; this is planned for 0.4 (MOD-05). Move the code both modules share
-into a third module that each imports at module level.
+TyPy checks each module after the modules it imports at module level, and
+checks a function that imports a module checked later once that module is
+(MOD-13). An `__init__` is checked first, since it gives the attributes
+their types, so when module `a` imports `b` at module level, an `__init__`
+of `b` that imports `a` cannot see `a`'s names yet; this is planned for
+1.0 (MOD-15). Import `a` in a method other than `__init__`, or move the
+code both modules share into a third module that each imports at module
+level.
 
-These two modules give E0426, since `main` imports `shapes` at module
-level and a function of `shapes` imports `main`:
+These two modules give E0426, since `shapes` imports `config` at module
+level and the `__init__` of a class of `config` imports `shapes`:
 
 ```text
-# main.py
-import shapes
-
 # shapes.py
-def draw() -> None:
-    import main
-    main.show()
+import config
+
+# config.py
+class Settings:
+    def __init__(self) -> None:
+        import shapes
+        self.size = shapes.DEFAULT
 ```
 
-Moving the shared function into a third module that both import is
-correct:
+Reading the value in a method of its own is correct:
 
 ```text
-# main.py
-import shapes
-import display
-
-# shapes.py
-import display
+# config.py
+class Settings:
+    def size(self) -> int:
+        import shapes
+        return shapes.DEFAULT
 ```
 
 ## E0427: `%` format that does not fit its values
@@ -1246,6 +1245,96 @@ def depth[T](value: list[T], levels: int) -> int:
 print(depth([1], 3))
 ```
 
+## E0429: module or export that a C library cannot have
+
+A module built with `typy build --lib` exports the functions its `__all__`
+lists, each as a C function (FFI-05). This error names what cannot be one:
+
+- the module has no `__all__`, binds it more than once, or binds it to
+  something other than a list or tuple of string literals;
+- a name is not a function the module defines with `def` at its top level,
+  or is generic;
+- a parameter or the result has a type other than `int`, `float` or
+  `bool`, or `None` for the result;
+- the name is not ASCII, starts with `__`, `_` and a capital letter, or
+  `typy_`, is listed twice, or is a C function the library itself calls,
+  such as `read`, `free`, `sqrt` or `main`, or one of the project's
+  allocator functions;
+- the file's name is not an ASCII identifier, which the library and its
+  header are named after (CLI-09);
+- `__version__` is not one string literal that starts with a number, or
+  differs from `version` in `typy.toml` (CLI-13).
+
+Rename the function, or export one of C types that calls it. This module
+is a correct program, but built with `--lib` it gives E0429 for `label`,
+whose result is a `str`:
+
+<!-- typy-expect: accepted -->
+```python
+__all__ = ["label"]
+
+
+def label(number: int) -> str:
+    return "item " + str(number)
+```
+
+This one exports a function of C types instead:
+
+<!-- typy-expect: accepted -->
+```python
+__all__ = ["label_length"]
+
+
+def label(number: int) -> str:
+    return "item " + str(number)
+
+
+def label_length(number: int) -> int:
+    return len(label(number))
+```
+
+## E0430: `ctypes` declaration TyPy cannot compile
+
+TyPy compiles a program's `ctypes` declarations into direct calls when it
+builds the program, so it reads them from the module's statements
+(FFI-01 to FFI-03, ADR-0047). This error names a declaration it cannot
+read that way:
+
+- a library named other than by one string literal, or loaded other than
+  at module level and bound to a name;
+- `argtypes` assigned something other than a list or tuple of `ctypes`
+  types, `restype` something other than a `ctypes` type or `None`, or
+  either assigned twice;
+- a `ctypes` type TyPy does not compile, such as `c_char`;
+- a function called without both its `argtypes` and its `restype`, or
+  called at module level before them.
+
+Declare each library and function once, at module level, before the
+first call at module level. This program gives E0430, since the function
+is called before its `restype` is assigned:
+
+<!-- typy-expect: rejected E0430 at 5:7 -->
+```python
+import ctypes
+
+libc = ctypes.CDLL("libc.so.6")
+libc.abs.argtypes = [ctypes.c_int]
+print(libc.abs(-3))
+libc.abs.restype = ctypes.c_int
+```
+
+This one is correct:
+
+<!-- typy-expect: accepted -->
+```python
+import ctypes
+
+libc = ctypes.CDLL("libc.so.6")
+libc.abs.argtypes = [ctypes.c_int]
+libc.abs.restype = ctypes.c_int
+print(libc.abs(-3))
+```
+
 ## E0701: C toolchain program not found
 
 TyPy links programs with the system C toolchain, which is not installed
@@ -1255,6 +1344,15 @@ TyPy links programs with the system C toolchain, which is not installed
 
 The C toolchain could not link the program (A-01). The message shows the
 linker's output; check that the toolchain works with `cc --version`.
+
+When the output says `cannot find -lNAME`, the linker did not find the
+library that `library` in the `[allocator]` table of `typy.toml` names
+(MEM-08). Install the library, or tell the linker where it is with
+`LIBRARY_PATH`:
+
+```sh
+LIBRARY_PATH=$PWD/lib typy build app.py
+```
 
 ## E0703: runtime archive missing, or from another TyPy version
 
@@ -1288,6 +1386,48 @@ This one is correct:
 ```python
 print("\\d+ digits")
 ```
+
+## W0401: `match` leaves members of its subject's type unmatched
+
+The subject's type is a union, an optional or a `bool`, and no case
+without a guard matches every value of some of its members, which the
+warning names (CST-07, ADR-0033). The program builds and runs; a subject
+no case matches skips the `match`. Add a case for each member, or end
+with `case _:` when the rest need nothing. Here the warning names `None`.
+
+This program gives W0401 and still runs:
+
+<!-- typy-expect: accepted -->
+```python
+def describe(code: int | None) -> str:
+    match code:
+        case int(number):
+            return f"code {number}"
+    return "no code"
+
+
+print(describe(None))
+```
+
+This one is correct:
+
+<!-- typy-expect: accepted -->
+```python
+def describe(code: int | None) -> str:
+    match code:
+        case int(number):
+            return f"code {number}"
+        case None:
+            return "no code"
+
+
+print(describe(None))
+```
+
+Its cases cover every value, so the function needs no `return` after the
+`match`. A case with a guard covers nothing, since the guard may be false,
+and a set of cases that covers a member only together, such as `case []:`
+and `case [first, *rest]:` for a list, needs `case _:` as well.
 
 ## W0301: assertion that is always true
 

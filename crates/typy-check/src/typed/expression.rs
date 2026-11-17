@@ -50,6 +50,24 @@ pub enum TypedExprKind {
     /// `package.module`, the module object of a submodule, which raises `AttributeError`
     /// until the submodule is initialised.
     Submodule(String),
+    /// The type alias object at this index of `TypedProgram::type_aliases` (SMT-12).
+    TypeAliasObject(u32),
+    /// A read of `sys.version_info` held as a value: `value` is evaluated, then `result`,
+    /// a constant: the tuple of its items, which a tuple's operations read, or a comparison
+    /// of them already made (LIB-16).
+    VersionRead {
+        /// The `sys.version_info` value.
+        value: Box<TypedExpr>,
+        /// What the read gives.
+        result: Box<TypedExpr>,
+    },
+    /// `alias.__name__`, or `alias.__module__` when `module` is set, of a type alias (SMT-12).
+    TypeAliasPart {
+        /// The type alias.
+        alias: Box<TypedExpr>,
+        /// Whether the part is `__module__`.
+        module: bool,
+    },
     /// `value`, a call or a class read through a lazy import, which first runs the import
     /// when its statement ran and its names were not used yet (MOD-06).
     Lazy {
@@ -139,6 +157,18 @@ pub enum TypedExprKind {
     FString(Vec<FStringPart>),
     /// A value of `sys`: `argv`, `stdout` or `stderr` (LIB-04).
     SysValue(crate::sys::SysValue),
+    /// The C library a `ctypes.CDLL` or `ctypes.cdll.LoadLibrary` call declares, by its index
+    /// in `TypedProgram::foreign_libraries`; the build links it, and it holds no value when
+    /// the program runs (FFI-01).
+    ForeignLibrary(u32),
+    /// A call of a C function, by its index in `TypedProgram::foreign_functions`, with its
+    /// arguments in order (FFI-02, FFI-03).
+    ForeignCall {
+        function: u32,
+        arguments: Vec<TypedExpr>,
+    },
+    /// What a program does with a `ctypes` object or class (FFI-03, ADR-0048).
+    CData(super::cdata::CDataExpr),
     /// `sys.exit(code)`, which raises `SystemExit` with `code` (LIB-04).
     SysExit(Option<Box<TypedExpr>>),
     /// `sys.getrecursionlimit()`, without a value, or `sys.setrecursionlimit(limit)`
@@ -157,11 +187,13 @@ pub enum TypedExprKind {
         part: ExceptionPart,
         operation: PartOperation,
     },
-    /// `errno`, `strerror`, `filename` or `filename2` of an `OSError`, `None` when it was not
-    /// given (EXC-14).
-    OsErrorField {
+    /// `args` of an exception as a value of its own, read from the exception's arguments by
+    /// their layout; `code` of a `SystemExit` is read through it (EXC-15, ADR-0034). When
+    /// `raw`, the arguments as the exception holds them, file names included, which the
+    /// attributes of an `OSError` read (ADR-0035).
+    ExceptionArguments {
         exception: Box<TypedExpr>,
-        field: OsErrorField,
+        raw: bool,
     },
     /// `name`, `mode` or `closed` of a text file (LIB-14).
     FileAttribute {
@@ -204,6 +236,23 @@ pub enum TypedExprKind {
     TupleOf(Box<TypedExpr>),
     /// `list(source)`: a new list of every value the source gives, in order (LIB-02).
     ListOf(Box<super::statement::LoopSource>),
+    /// `value in instance` of a class without `__contains__`: the value is held in `held`,
+    /// then the instance is iterated as `for` does, each item held in `each`, until `test`,
+    /// which reads the two, holds (CLS-23).
+    IterContains {
+        /// The value looked for, evaluated first.
+        value: Box<TypedExpr>,
+        /// The hidden variable that holds it.
+        held: SymbolId,
+        /// The instance's items.
+        source: Box<super::statement::LoopSource>,
+        /// The hidden variable that holds each item.
+        each: SymbolId,
+        /// `each is held or each == held`, as CPython compares an item with the value.
+        test: Box<TypedExpr>,
+        /// Whether the result is negated, for `not in`.
+        negated: bool,
+    },
     /// `set(source)`: a new set of every value the source gives, added in order, or a copy of
     /// the source when it is a set (DAT-10).
     SetOf(Box<super::statement::LoopSource>),
@@ -218,6 +267,11 @@ pub enum TypedExprKind {
     },
     /// A value of `T`, or `None`, held as a `T | None` (TYP-06, ADR-0011).
     Wrap(Box<TypedExpr>),
+    /// `target := value`: the value, stored in the variable and given (EXP-13).
+    Named {
+        target: SymbolId,
+        value: Box<TypedExpr>,
+    },
     /// An instance, or an optional one, held as an instance of a class it derives from: the
     /// same object, whose type is the expression's (CLS-04).
     Upcast(Box<TypedExpr>),
@@ -302,6 +356,34 @@ pub enum TypedExprKind {
         tuple: Box<TypedExpr>,
         index: usize,
     },
+    /// `NotImplemented`, the runtime's one object of its type (CLS-21).
+    NotImplemented,
+    /// `start`, `stop` or `step` of a slice, by its position 0, 1 or 2: an `int` or `None`
+    /// (CLS-23).
+    SliceBound {
+        /// The slice.
+        slice: Box<TypedExpr>,
+        /// The position of the bound.
+        part: u8,
+    },
+    /// A class variable some subclass holds one of its own of: the first of these module
+    /// variables that is bound, from the class read through up to the class whose body gives
+    /// it (CLS-25, ADR-0037).
+    ClassVariable(Vec<SymbolId>),
+    /// `first`, evaluated for its effects and dropped, then `then`, which gives the value: a
+    /// static method called through an instance that is not a variable (CLS-25).
+    Sequence {
+        first: Box<TypedExpr>,
+        then: Box<TypedExpr>,
+    },
+    /// The hash of a value as a set or a dict hashes it, which the `__hash__` a dataclass gets
+    /// returns for the tuple of its fields (CLS-16). No program names it; `hash` itself is
+    /// not provided, since CPython draws the key of a `str` hash at random.
+    Hash(Box<TypedExpr>),
+    /// Raises the exception its operand makes, in place of a value of the expression's type,
+    /// which no path receives: the item of a union's tuple member that is too short for the
+    /// position (DAT-08, ADR-0034).
+    Raise(Box<TypedExpr>),
 }
 
 /// `print(values, sep=sep, end=end, file=file, flush=flush)`; each keyword is present only
@@ -364,10 +446,11 @@ pub struct InitCall {
     pub positional: usize,
 }
 
-/// `left op right` that calls a comparison method: `forward` of the left operand's class, or
-/// `reflected` of the right operand's. With both, the reflected method runs first when the
-/// right operand's class derives from the left's and defines it otherwise, as in CPython;
-/// with one, that one runs (CLS-07, ADR-0026).
+/// `left op right` that calls an operator or comparison method: `forward` of the left
+/// operand's class, or `reflected` of the right operand's. With both, the reflected method runs
+/// first when the right operand's class derives from the left's, as `kind` says; with one,
+/// that one runs. A method that returns `NotImplemented` gives way to the next one, and the
+/// last to what `kind` says (CLS-07, CLS-21, ADR-0026, ADR-0038).
 #[derive(Clone, Debug, PartialEq)]
 pub struct OperatorCall {
     /// The left operand, evaluated first.
@@ -383,6 +466,33 @@ pub struct OperatorCall {
     pub left_reflected: Option<FunctionId>,
     /// Whether the result is negated: `!=` without `__ne__` is `not` of `__eq__`.
     pub negated: bool,
+    /// The in-place method of an augmented assignment, which runs first, when it may give way
+    /// to the operator's methods.
+    pub in_place: Option<FunctionId>,
+    /// When the right operand's class has no reflected method, the classes derived from it
+    /// that define one, each with it: the one of the right object's class runs where the
+    /// reflected method would (CLS-07).
+    pub reflected_below: Vec<(super::ClassId, FunctionId)>,
+    /// The operator, which decides the order of the methods and what follows the last.
+    pub kind: OperatorKind,
+}
+
+/// The kind of operator an [`OperatorCall`] calls the methods of, as CPython orders the
+/// methods and treats operands that every method gives way for (CLS-21, ADR-0038).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum OperatorKind {
+    /// An arithmetic operator, or an augmented assignment, by the symbol its `TypeError`
+    /// names: the reflected method runs only for operands of different classes, and first only
+    /// when the right operand's class derives from the left's and defines the method again.
+    Arithmetic(&'static str),
+    /// `<`, `<=`, `>` or `>=`, by its symbol: the reflected method runs first when the right
+    /// operand's class derives from the left's; operands no method orders raise `TypeError`.
+    Ordering(&'static str),
+    /// `==`, or `!=` when `different`: ordered as an ordering, then `is`, or `is not`.
+    Equality {
+        /// Whether the operands no method compares are `is not` rather than `is`.
+        different: bool,
+    },
 }
 
 /// `isinstance(value, classes)`, with what the checker could decide when the program is
@@ -417,9 +527,38 @@ pub struct IsInstanceTest {
 pub struct EachMember {
     /// The read of the variable, whose object decides which member it is.
     pub value: TypedExpr,
-    /// Each member's class with the operation checked for it; the last runs when no class
-    /// before it is the object's.
-    pub arms: Vec<(crate::types::TypeObjectOf, TypedExpr)>,
+    /// Each member's test with the operation checked for it; the last runs when no test
+    /// before it holds.
+    pub arms: Vec<(MemberTest, TypedExpr)>,
+}
+
+/// How the runtime finds that the object a union holds is of one member (TYP-14).
+#[derive(Clone, Debug, PartialEq)]
+pub enum MemberTest {
+    /// The object is an instance of this class.
+    Class(crate::types::TypeObjectOf),
+    /// The object's header says it is of this kind of the runtime's own objects, which have
+    /// no type object to test against.
+    Kind(RuntimeKind),
+}
+
+/// A kind of the runtime's own objects, told apart by the type ID in their header.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub enum RuntimeKind {
+    /// An iterator.
+    Iterator,
+    /// A traceback.
+    Traceback,
+    /// A module object.
+    Module,
+    /// A file, text or binary.
+    File,
+    /// A type alias.
+    TypeAlias,
+    /// `sys.version_info`.
+    VersionInfo,
+    /// `NotImplemented`.
+    NotImplemented,
 }
 
 impl TypedExpr {
@@ -435,6 +574,10 @@ impl TypedExpr {
             | TypedExprKind::Submodule(_)
             | TypedExprKind::ModuleName
             | TypedExprKind::TypeObject(_)
+            | TypedExprKind::TypeAliasObject(_)
+            | TypedExprKind::ClassVariable(_)
+            | TypedExprKind::NotImplemented
+            | TypedExprKind::ForeignLibrary(_)
             | TypedExprKind::SysValue(_) => Vec::new(),
             TypedExprKind::Binary { left, right, .. }
             | TypedExprKind::Index {
@@ -445,13 +588,19 @@ impl TypedExpr {
             }
             TypedExprKind::Unary { operand, .. }
             | TypedExprKind::TupleOf(operand)
+            | TypedExprKind::Raise(operand)
+            | TypedExprKind::Hash(operand)
             | TypedExprKind::TupleItem { tuple: operand, .. }
-            | TypedExprKind::TupleSlice { tuple: operand, .. } => {
+            | TypedExprKind::TupleSlice { tuple: operand, .. }
+            | TypedExprKind::SliceBound { slice: operand, .. } => {
                 vec![operand]
             }
             TypedExprKind::Tuple(items)
             | TypedExprKind::List(items)
-            | TypedExprKind::Set(items) => items.iter().collect(),
+            | TypedExprKind::Set(items)
+            | TypedExprKind::ForeignCall {
+                arguments: items, ..
+            } => items.iter().collect(),
             TypedExprKind::ListItem { list, index } => vec![list, index],
             TypedExprKind::ListOf(source)
             | TypedExprKind::SetOf(source)
@@ -477,13 +626,23 @@ impl TypedExpr {
                 .chain(each.arms.iter().map(|(_, body)| body))
                 .collect(),
             TypedExprKind::OperatorCall(call) => vec![&call.left, &call.right],
+            TypedExprKind::IterContains {
+                value,
+                source,
+                test,
+                ..
+            } => std::iter::once(value.as_ref())
+                .chain(source.expressions())
+                .chain(std::iter::once(test.as_ref()))
+                .collect(),
             TypedExprKind::Wrap(inner)
             | TypedExprKind::CheckedLength(inner)
             | TypedExprKind::Upcast(inner)
             | TypedExprKind::Downcast(inner)
             | TypedExprKind::Unwrap(inner)
             | TypedExprKind::AsIterable(inner)
-            | TypedExprKind::Lazy { value: inner, .. } => vec![inner],
+            | TypedExprKind::Lazy { value: inner, .. }
+            | TypedExprKind::Named { value: inner, .. } => vec![inner],
             TypedExprKind::PercentFormat { values, .. } => vec![values],
             TypedExprKind::MathCall { arguments, .. } => arguments.iter().collect(),
             TypedExprKind::Open { path, options, .. } => [
@@ -500,7 +659,9 @@ impl TypedExpr {
             TypedExprKind::SysExit(value)
             | TypedExprKind::Input(value)
             | TypedExprKind::RecursionLimit(value) => value.iter().map(Box::as_ref).collect(),
-            TypedExprKind::OsErrorField { exception, .. } => vec![exception],
+            TypedExprKind::ExceptionArguments { exception, .. } => vec![exception],
+            TypedExprKind::Sequence { first, then } => vec![first, then],
+            TypedExprKind::CData(cdata) => cdata.expressions(),
             TypedExprKind::FileAttribute { file, .. } => vec![file],
             TypedExprKind::PercentDynamic { format, values } => vec![format, values],
             TypedExprKind::ExceptionPart {
@@ -560,7 +721,9 @@ impl TypedExpr {
             }
             TypedExprKind::Attribute { object, .. }
             | TypedExprKind::TypeOf(object)
-            | TypedExprKind::TypeName(object) => vec![object],
+            | TypedExprKind::TypeName(object)
+            | TypedExprKind::TypeAliasPart { alias: object, .. } => vec![object],
+            TypedExprKind::VersionRead { value, result } => vec![value, result],
             TypedExprKind::NewException {
                 arguments, init, ..
             } => arguments
@@ -618,19 +781,6 @@ pub enum PartOperation {
     Truth,
     /// Whether it equals the value.
     Equal(Box<TypedExpr>),
-}
-
-/// An attribute of an `OSError` that its arguments give (EXC-14).
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum OsErrorField {
-    /// `errno`, the first argument.
-    Errno,
-    /// `strerror`, the second.
-    Strerror,
-    /// `filename`, the third.
-    Filename,
-    /// `filename2`, the fifth.
-    Filename2,
 }
 
 /// An attribute of a text file (LIB-14).

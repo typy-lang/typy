@@ -4,7 +4,9 @@
 //! runtime reads each field where the generated code stores it.
 
 use inkwell::AddressSpace;
+use inkwell::module::Module;
 use inkwell::targets::TargetData;
+use inkwell::types::StructType;
 use inkwell::values::{BasicValue, PointerValue};
 use typy_tyir::{TupleTypeId, TyirType};
 
@@ -35,6 +37,18 @@ fn kind_code(item: TyirType, tuples: &typy_tyir::TupleTypes) -> Result<u64, Code
     })
 }
 
+/// Returns the target's data layout, which places each field.
+pub(crate) fn target_data(module: &Module<'_>) -> TargetData {
+    let layout = module.get_data_layout();
+    TargetData::create(&layout.as_str().to_string_lossy())
+}
+
+/// Returns the bytes a descriptor gives an item of `struct_type`: its size, at least one word
+/// and a whole number of words.
+pub(crate) fn item_size(data: &TargetData, struct_type: StructType<'_>) -> u64 {
+    data.get_abi_size(&struct_type).max(8).next_multiple_of(8)
+}
+
 /// Returns the address of the descriptor of tuple type `id`, emitting it, and the descriptors
 /// of the tuples nested in it, on first use.
 pub(crate) fn tuple_descriptor<'ctx>(
@@ -53,9 +67,8 @@ pub(crate) fn tuple_descriptor<'ctx>(
     let struct_type = value_type(context, tuples, TyirType::Tuple(id))
         .ok_or_else(|| CodegenError("a tuple has a type".to_owned()))?
         .into_struct_type();
-    let layout = shared.module.get_data_layout();
-    let data = TargetData::create(&layout.as_str().to_string_lossy());
-    let size = data.get_abi_size(&struct_type).max(8).next_multiple_of(8);
+    let data = target_data(shared.module);
+    let size = item_size(&data, struct_type);
     let (word, half) = (context.i64_type(), context.i32_type());
     let pointer = context.ptr_type(AddressSpace::default());
     let field_type = context.struct_type(&[half.into(), half.into(), pointer.into()], false);

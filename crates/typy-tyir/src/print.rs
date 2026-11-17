@@ -7,7 +7,7 @@ use crate::function::TyirFunction;
 use crate::module::TyirModule;
 use crate::operation::{IntUnaryOperator, Operation};
 use crate::terminator::{Callee, Terminator};
-use crate::value::ValueId;
+use crate::value::{ValueId, ValueRepresentation};
 
 /// Returns the module as text, the string pool and then each function in order, with every
 /// reference count operation, for `--emit=tyir-mem`.
@@ -27,10 +27,39 @@ fn print_with(module: &TyirModule, counting: bool) -> String {
     for (index, string) in module.strings.iter().enumerate() {
         let _ = writeln!(text, "string s{index} = {string:?}");
     }
+    for (index, points) in module.str_points.iter().enumerate() {
+        let written: Vec<String> = points.iter().map(|point| format!("{point:#x}")).collect();
+        let _ = writeln!(text, "points p{index} = [{}]", written.join(", "));
+    }
     for (index, global) in module.globals.iter().enumerate() {
         let _ = writeln!(text, "global g{index}: {} = {:?}", global.ty, global.name);
     }
     let _ = writeln!(text, "entry fn{}", module.entry.0);
+    if let Some(library) = &module.library {
+        match &library.version {
+            Some(version) => {
+                let _ = writeln!(text, "library {} version {version}", library.name);
+            }
+            None => {
+                let _ = writeln!(text, "library {}", library.name);
+            }
+        }
+        for export in &library.exports {
+            let parameters: Vec<&str> = export
+                .parameters
+                .iter()
+                .map(|parameter| parameter.c_name())
+                .collect();
+            let result = export.result.map_or("void", |result| result.c_name());
+            let _ = writeln!(
+                text,
+                "export {}({}) -> {result} = fn{}",
+                export.name,
+                parameters.join(", "),
+                export.function.0
+            );
+        }
+    }
     for function in &module.functions {
         text.push('\n');
         print_function(module, function, counting, &mut text);
@@ -107,6 +136,9 @@ fn print_block(
         }
         let operation = operation(module, &instruction.operation);
         match instruction.result {
+            Some(value) if function.value(value).representation == ValueRepresentation::Stack => {
+                let _ = writeln!(text, "  v{} = {operation} in frame", value.0);
+            }
             Some(value) => {
                 let _ = writeln!(text, "  v{} = {operation}", value.0);
             }
@@ -191,6 +223,17 @@ fn operation(module: &TyirModule, operation: &Operation) -> String {
             function,
             arguments,
         } => format!("call rt.{}({})", function.name(), names(arguments)),
+        Operation::CallForeign {
+            function,
+            arguments,
+        } => format!(
+            "call_foreign {}({})",
+            module
+                .foreign_functions
+                .get(*function as usize)
+                .map_or("?", |foreign| foreign.name.as_str()),
+            names(arguments)
+        ),
         Operation::Call {
             function,
             arguments,

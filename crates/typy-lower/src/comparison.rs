@@ -146,7 +146,13 @@ impl FunctionLowerer<'_> {
     }
 
     /// Returns `left is right`, or `left is not right` when `is` is false.
-    fn identity(&mut self, is: bool, left: Lowered, right: Lowered, span: Span) -> ValueId {
+    pub(crate) fn identity(
+        &mut self,
+        is: bool,
+        left: Lowered,
+        right: Lowered,
+        span: Span,
+    ) -> ValueId {
         // Two objects are compared by address, and `None` of an optional object is
         // the null address. Otherwise an optional value is `None` when its spare
         // value says so; any other value is `None` only when its type is (ADR-0011).
@@ -160,6 +166,13 @@ impl FunctionLowerer<'_> {
                 TyirType::Object(_) | TyirType::Optional(OptionalBase::Object(_)),
                 TyirType::Object(_) | TyirType::Optional(OptionalBase::Object(_)),
             ) => self.identical(left, right, span),
+            // A tagged union holds `NotImplemented` when its tag says so (CLS-21).
+            (union, TyirType::NOT_IMPLEMENTED) if self.is_tagged(union) => {
+                self.holds_not_implemented(left, span)
+            }
+            (TyirType::NOT_IMPLEMENTED, union) if self.is_tagged(union) => {
+                self.holds_not_implemented(right, span)
+            }
             (TyirType::Optional(_), _) => self.is_none(left, span),
             (_, TyirType::Optional(_)) => self.is_none(right, span),
             (left, right) => self.constant(
@@ -172,6 +185,30 @@ impl FunctionLowerer<'_> {
         }
         self.builder
             .push_value(Operation::BoolNot(holds), TyirType::Bool, span)
+    }
+
+    /// Returns whether a tagged union holds `NotImplemented`, the one object of its type.
+    fn holds_not_implemented(&mut self, union: Lowered, span: Span) -> ValueId {
+        let (_, items) = self.item_types(union.ty);
+        let Some(position) = items
+            .iter()
+            .skip(1)
+            .position(|item| *item == TyirType::NOT_IMPLEMENTED)
+        else {
+            return self.constant(Constant::Bool(false), span);
+        };
+        let tag = self.borrowed_item(union, 0, TyirType::Int, span).value;
+        let expected = self.constant(Constant::Int(position.to_string()), span);
+        self.builder.push_value(
+            Operation::Compare {
+                kind: typy_tyir::ScalarKind::Int,
+                comparison: Comparison::Equal,
+                left: tag,
+                right: expected,
+            },
+            TyirType::Bool,
+            span,
+        )
     }
 
     /// Returns whether two `bool` or `bool | None` values are the same object: both `None`,
@@ -233,6 +270,27 @@ impl FunctionLowerer<'_> {
     }
 
     /// Compares two values whose types the checker accepted; the operands are not released.
+    /// Returns `left == right`, or `left != right` when not `equal`, for two objects of any
+    /// classes.
+    fn objects_equality(
+        &mut self,
+        equal: bool,
+        left: Lowered,
+        right: Lowered,
+        span: Span,
+    ) -> ValueId {
+        let left = self.bits(Self::borrowed(left.value, left.ty), span);
+        let right = self.bits(Self::borrowed(right.value, right.ty), span);
+        let found = self
+            .call_runtime(RuntimeFunction::ObjectsEqual, vec![left, right], span)
+            .value;
+        if equal {
+            return found;
+        }
+        self.builder
+            .push_value(Operation::BoolNot(found), TyirType::Bool, span)
+    }
+
     pub(crate) fn compare(
         &mut self,
         operator: CompareOperator,
@@ -260,8 +318,23 @@ impl FunctionLowerer<'_> {
                     .push_value(Operation::BoolNot(found), TyirType::Bool, span);
             }
         };
+        // An optional value equals `None` only when it holds none (EXP-06).
+        if matches!(comparison, Comparison::Equal | Comparison::NotEqual)
+            && (matches!(left.ty, TyirType::Optional(_))
+                || matches!(right.ty, TyirType::Optional(_)))
+        {
+            return self.optional_equality(operator, left, right, span);
+        }
         let kind = match (left.ty, right.ty) {
             (TyirType::Tuple(_), _) => return self.compare_tuples(operator, left, right, span),
+            // A protocol value is an object of any class that satisfies the protocol, compared
+            // through the `equal` slot of the class that decides (ADR-0041).
+            // A `ctypes` object is equal only to itself (FFI-03).
+            (TyirType::UNION | TyirType::CDATA, _) | (_, TyirType::UNION | TyirType::CDATA)
+                if matches!(comparison, Comparison::Equal | Comparison::NotEqual) =>
+            {
+                return self.objects_equality(comparison == Comparison::Equal, left, right, span);
+            }
             // An instance of a class without `__eq__` is equal only to itself (CLS-07).
             (TyirType::Object(id), _)
                 if id.class_index().is_some() || id == typy_tyir::TypeId::TYPE =>
@@ -284,12 +357,14 @@ impl FunctionLowerer<'_> {
             (TyirType::DICT | TyirType::SET, _) => {
                 return self.compare_collections(comparison, left, right, span);
             }
-            (TyirType::RANGE, _) => return self.compare_ranges(comparison, left, right, span),
+            (TyirType::RANGE | TyirType::SLICE, _) => {
+                return self.compare_ranges(comparison, left, right, span);
+            }
             (TyirType::Bits, _) => {
                 unreachable!("list items are converted before they are compared")
             }
             (TyirType::Optional(_), _) => {
-                unreachable!("the checker compares an optional value only with `is`")
+                unreachable!("the checker refuses ordering an optional value")
             }
             (TyirType::Unit, TyirType::Unit) => {
                 return self.constant(Constant::Bool(comparison == Comparison::Equal), span);
@@ -338,12 +413,13 @@ impl FunctionLowerer<'_> {
         right: Lowered,
         span: Span,
     ) -> ValueId {
+        let function = if left.ty == TyirType::SLICE {
+            RuntimeFunction::SliceEqual
+        } else {
+            RuntimeFunction::RangeEqual
+        };
         let equal = self
-            .call_runtime(
-                RuntimeFunction::RangeEqual,
-                vec![left.value, right.value],
-                span,
-            )
+            .call_runtime(function, vec![left.value, right.value], span)
             .value;
         if comparison == Comparison::Equal {
             equal

@@ -157,6 +157,55 @@ impl FunctionLowerer<'_> {
         Self::borrowed(value, ty)
     }
 
+    /// Reads a class variable some subclass holds one of its own of: the first of `holders`
+    /// that is bound, the last read as a module variable is, with a reference of its own
+    /// (ADR-0037).
+    pub(crate) fn class_variable(
+        &mut self,
+        holders: &[SymbolId],
+        ty: TyirType,
+        span: Span,
+    ) -> Lowered {
+        let join = self.builder.create_block();
+        let result = self.builder.add_block_parameter(join, ty);
+        let (last, rest) = holders.split_last().unwrap_or_else(|| {
+            unreachable!("a class variable has the holder of the class that gives it")
+        });
+        for holder in rest {
+            let global = self.module_globals.of[holder];
+            let bound =
+                self.builder
+                    .push_value(Operation::LoadGlobal(global.bound), TyirType::Bool, span);
+            let read = self.builder.create_block();
+            let next = self.builder.create_block();
+            self.builder.terminate(Terminator::Branch {
+                condition: bound,
+                then: read,
+                otherwise: next,
+            });
+            self.builder.switch_to(read);
+            let value = self
+                .builder
+                .push_value(Operation::LoadGlobal(global.value), ty, span);
+            let kept = self.owned_copy(value, ty, span);
+            let given = self.take_reference(kept, span);
+            self.builder.terminate(Terminator::Jump {
+                target: join,
+                arguments: vec![given],
+            });
+            self.builder.switch_to(next);
+        }
+        let value = self.read_name(*last, span);
+        let kept = self.owned_copy(value.value, ty, span);
+        let given = self.take_reference(kept, span);
+        self.builder.terminate(Terminator::Jump {
+            target: join,
+            arguments: vec![given],
+        });
+        self.builder.switch_to(join);
+        self.produced(result, ty)
+    }
+
     /// Raises `NameError` when the module variable is not bound yet.
     fn check_bound(&mut self, symbol: SymbolId, global: ModuleGlobal, span: Span) {
         let bound =

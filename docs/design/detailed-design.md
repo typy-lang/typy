@@ -3,10 +3,10 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy detailed design |
-| Version | 1.75 |
+| Version | 2.21 |
 | Status | Approved |
 | Owner | typy-lang contributors |
-| Last updated | 2026-11-13 |
+| Last updated | 2026-11-17 |
 
 ## 1. Purpose and scope
 
@@ -316,14 +316,18 @@ it enforces and its status. `typy explain` reads the same table.
 | E0423 | `global` of a name the module does not bind | SMT-08 |
 | E0424 | Module variable an `__init__` reads before the module's code gives it a type | SMT-08 |
 | E0425 | Import of a name its module does not define | SMT-07 |
-| E0426 | Import inside a function of a module that the imported module imports | MOD-05 |
+| E0426 | Import inside `__init__` of a module that the imported module imports | MOD-15 |
 | E0427 | `%` format that does not fit its values | LIB-10 |
+| E0428 | Copies of a generic function without end | GEN-03 |
+| E0429 | Module or export that a C library cannot have | FFI-05, CLI-09 |
+| E0430 | `ctypes` declaration TyPy cannot compile | FFI-01, FFI-02, FFI-03 |
 | E0701 | C toolchain program not found | A-01 |
 | E0702 | Link failed | A-01 |
 | E0703 | Runtime archive missing, or from another TyPy version | None |
 | E9001 | Internal compiler error | NFR-09 |
 | W0101 | Invalid escape sequence | DIA-08 |
 | W0301 | Assertion that is always true, of a tuple with items | DIA-08 |
+| W0401 | `match` that leaves members of the subject's type unmatched | CST-07 |
 
 ## 5. typy-source
 
@@ -337,6 +341,11 @@ it enforces and its status. `typy explain` reads the same table.
 | `release` | `Release` | `Release::V0_1` | The release whose feature table the subset checker uses |
 | `python_floor` | `PythonFloor` | `PythonFloor::V3_12` | One of 3.12 to 3.15; the parser's target version and the lowest oracle version (ADR-0008). Read from `python-floor` in `typy.toml` (CLI-12) |
 | `module_paths` | `Vec<Utf8PathBuf>` | empty | Directories relative to `root`, each made only of normal components and existing; the loader looks for a module in `root`, then in each, in order (MOD-01) |
+| `library` | `bool` | `false` | Set by `--lib` through `SettingOverrides::library`: the main file is a module named after its file, and the checker reads its exports from `__all__` (CLI-09, ADR-0044) |
+| `version` | `Option<String>` | `None` | `version` in `typy.toml`, a string whose release `version_release` finds; the version of a library whose module has no `__version__` (CLI-13) |
+| `library_paths` | `Vec<Utf8PathBuf>` | empty | `library-paths`: directories under `root`, checked as `module_paths` are, where the linker looks for C libraries first (FFI-04) |
+| `libraries` | `BTreeMap<String, LibraryLink>` | empty | `[libraries."NAME"]`, each a table of one `link`, `"static"` or `"dynamic"`, for a name of letters, digits and `_.+-` that does not start with `-`; `LibraryLink::linker_name` gives `:NAME` or `:BASE.a` (FFI-04) |
+| `allocator` | `Option<Allocator>` | `None` | The table `[allocator]`: the C functions `allocate`, `reallocate` and `free`, each an identifier of at most 255 characters outside the prefixes `typy_`, `__typy` and `_TY`, all three different, and an optional `library`, a name the linker takes as `-lname` that starts with a letter, a digit or `_` (MEM-08, ADR-0043) |
 
 `ProjectSettings::read(root, overrides)` builds the settings once, when a
 command starts: the defaults, then `root/typy.toml` when it exists, then
@@ -344,8 +353,14 @@ command starts: the defaults, then `root/typy.toml` when it exists, then
 parsed with `toml_edit`, whose spans place each E0107 on its line; every
 wrong setting is reported, and the command stops with exit status 2 before
 any module is read (UC-11). The file becomes `SourceFile` 0 of the
-`LoadFailure`, so the diagnostics render with its text. Links and exports
-from `typy.toml` are planned for 0.5 (FFI-04, FFI-05).
+`LoadFailure`, so the diagnostics render with its text. The table
+`[allocator]` is read by `settings_file::allocator`, whose problems name
+MEM-08. Library links from `typy.toml` are planned for 0.5 (FFI-04).
+
+`Project::load` names the main module `__main__`, or for a library build
+after its file without `.py`, so `tools.py` is the module `tools`. The name
+also names the library and its C header, so a file name that is not an
+ASCII identifier is E0429 under CLI-09, before any file is read.
 
 `SourceFile`
 
@@ -464,6 +479,22 @@ and stops past `MAX_DEPTH`, 25000, with E0103; so every later pass
 recurses at most that deep, and the `typy` command runs the compiler on
 a thread with a 512 MiB stack, which holds it.
 
+The parser gives a literal's value as UTF-8 text, which writes U+FFFD
+for each escape of a surrogate. `parse/surrogate.rs` reads the literal's
+source in order: the n-th U+FFFD of the value comes from the n-th item
+that gives one, U+FFFD itself, `\ufffd`, `\U0000fffd`,
+`\N{REPLACEMENT CHARACTER}` or a surrogate escape, so each surrogate goes
+back in its place whatever newlines the parser normalised (LEX-10). A
+literal that holds one becomes `Constant::StrPoints`, its code points, and
+so does its implicit concatenation; literal text of an f-string that
+holds one becomes a replacement field of that constant, which formats as
+the string itself. A raw literal has no escapes. The constant goes on as
+`TypedConstant::StrPoints` and as TyIR's `Constant::StrPoints`, an index
+into `TyirModule::str_points`, and codegen emits it as any string
+constant, at the width of its widest code point. Compile-time readers of
+literal text, such as `open` modes and `%` formats, take it as a value
+that is not a literal.
+
 ## 6. typy-stdlib
 
 `typy-stdlib` holds the Python sources of the standard library modules
@@ -486,20 +517,33 @@ lowered by `lower/math.rs`, which converts each argument as CPython does,
 an `int` to a `float` for a real-number parameter, and calls the runtime
 function (section 14). `fsum`, `dist`, `prod` and `sumprod` (LIB-12) are
 checked by `body/math_iterable.rs`, which turns each iterable into a list
-with `TypedExprKind::ListOf` and takes `int`, `bool` or `float` items;
-`lower/math_iterable.rs` gives `prod` and `sumprod` whose type is
-`int | float` the `int` start or 0 when the first list is empty, after the
-runtime has checked the lengths.
+with `TypedExprKind::ListOf` and takes `int`, `bool` or `float` items, or a
+union of them (LIB-15); `prod` of other items, or with another start, is
+E0201, planned for 1.0 (LIB-21). `lower/math_iterable.rs` gives `prod` and
+`sumprod` whose type is `int | float` an `int` when
+`typy_rt_math_has_float` finds no `float` item, and otherwise the `float`
+the runtime computes; `prod` with a `bool` start gives the start for no
+items, and otherwise the product of the start as an `int`, so its type is
+`bool | int` or `bool | int | float`.
 
 `sys` is built the same way. `crates/typy-check/src/sys.rs` sorts every
 public name of CPython 3.12 to 3.15's `sys` into a `SysName`: a
-`SysValue` (`argv`, `stdout`, `stderr`, `stdin`), `exit`, a switch of lazy imports
-(E0202, MOD-09), a `SysConstant` folded into the program, `getrecursionlimit`
-and `setrecursionlimit`, which `TypedExprKind::RecursionLimit` reads and sets
-in the runtime, `version_info`, which `body/version_info.rs` folds into
-constants where it is compared with a tuple of `int`s, indexed or read by
-field, and refuses elsewhere (E0201, LIB-16, ADR-0029), or a name TyPy
-does not provide (E0202). `body/builtin_module.rs` holds what the two
+`SysValue` (`argv`, `stdout`, `stderr`, `stdin`, `version_info`), `exit`, a
+switch of lazy imports (E0202, MOD-09), a `SysConstant` folded into the
+program, `getrecursionlimit` and `setrecursionlimit`, which
+`TypedExprKind::RecursionLimit` reads and sets in the runtime, or a name TyPy
+does not provide (E0202). `body/version_info.rs` folds `sys.version_info`
+written out into constants where it is compared with a tuple of `int`s,
+indexed or read by field (ADR-0029). Held as a value it is
+`Type::VersionInfo`, the runtime's one immortal object of type
+`sys.version_info`, type ID 20, which `typy_rt_sys_version_info` gives and
+writes as CPython 3.15.0 writes it (LIB-16). An index, a slice, a
+comparison other than `is`, `len`, a loop, `+` and unpacking read it through
+`version_tuple`, which makes `TypedExprKind::VersionRead`: the value is
+evaluated, then the constant tuple `(3, 15, 0, 'final', 0)` is what the
+operation reads, so the tuple's own checks apply; a comparison with a tuple
+of `int` literals is made when compiling, its result the read's constant,
+and a field is item `i` of the tuple. `body/builtin_module.rs` holds what the two
 modules share: `BUILTIN_MODULES`, the `ModuleFunction` and
 `BuiltinValue` a name gives, and `Program::builtin_lookup`, whose
 refusals point at the name. A value of `sys` is `TypedExprKind::SysValue`,
@@ -557,8 +601,9 @@ gives `str`, a `for` loop and `iter()` make a runtime iterator over it,
 and `next(file)` is `next(iter(file))`. `TypedStmt::With` carries a
 `WithProtocol`: `Methods { enter, exit }` for a class, or `TextFile`,
 which enters with `typy_rt_text_enter` and leaves with
-`typy_rt_text_close`. An `OSError`, or a class derived from it, built with
-two or more arguments is E0201 (EXC-14).
+`typy_rt_text_close`. An `OSError` the runtime raises for a file opened from
+a descriptor holds the descriptor as its third argument, CPython's
+`filename` for it (ADR-0035).
 
 The builtins (LIB-01, LIB-02) are not written in Python. `print`, `min`
 and `max` take any number of arguments, which the 0.1 subset cannot declare
@@ -869,12 +914,16 @@ compiles to an empty stub. `body::generic_call` types the arguments once with
 what that look reports dropped, solves the parameters with `generic::infer`,
 joining two solutions into a union, checks bounds and constraints, and asks
 `Program::request_copy` for the copy of the arguments, which
-`check::check_copies` checks at the end of the module as an ordinary function
-with `Program::type_arguments` naming the arguments. A copy made inside 64
-others is E0428, and a call of another module's generic is E0201 until GEN-07.
-The module body's first look gives back the copies it made, with the function
-IDs they took. Generic classes (ADR-0028) are noted before any signature is
-read, by `check::generic_class::note_generic_classes`, in `body::ClassCopies`
+`check::generic_copies::check` checks at the end of the module as an ordinary
+function with `Program::type_arguments` naming the arguments. A copy made inside
+64 others is E0428. A copy of another module's generic, a function or a method
+of a generic class, is checked in that module's names, which
+`Program::context_of` kept when the module ended, from the definitions
+`ModuleDefinitions` holds for it, so its body reads its own module's functions,
+classes and variables (GEN-07). The module body's first look gives back the
+copies it made, with the function IDs they took. Generic classes (ADR-0028) are
+noted before any signature is read, by
+`check::generic_class::note_generic_classes`, in `body::ClassCopies`
 behind a `RefCell` the annotation scope shares, so `Box[int]` in a signature
 asks for a copy, which takes a class ID after the module's classes.
 `ClassCopies::applied` gives the generic class's own instances for its own
@@ -886,7 +935,49 @@ the generic class while the copy's are unknown, and a copy of each method,
 checked as function copies are. `Program::substitute` maps a copy to the copy
 for the substituted arguments, so a recursive class such as `Node[T]` refers to
 its own copies. A call of a generic class solves its type arguments from
-`__init__` in `BodyChecker::class_to_call`. A copy whose arguments hold a
+`__init__` in `BodyChecker::class_to_call`. A static method that names no type
+parameter of its class, in its signature or in its body, is left out of
+`finish_generic_class`'s copies, so it is compiled once; any other static or
+class method called through the generic class takes the type arguments its
+arguments give, solved by `BodyChecker::solved_arguments`, and a class method
+then runs the copy's method with the copy as `cls`. `Class[arguments].name(...)`
+calls the method of the copy `BodyChecker::applied_class` names. A class
+variable or a default of a generic class is one module variable, `Class.name`,
+which a copy's `ClassInfo`, cloned from the generic class's, names as the
+generic class does, so every copy shares it as every instance shares it in
+CPython. One whose annotation names a type parameter of the class, which
+`check::class::refuse_shared_parameter` finds, is E0201, planned for 1.0
+(GEN-11), and `class_values` makes no module variable for it. A generic class
+may derive from a class of the program (GEN-08, ADR-0040): its
+`GenericClass::instance` holds the chain `class_types` gives it, and
+`ClassCopies::applied` gives each copy that chain through `copy_ancestors`,
+each copy in it made again for the copy's arguments by
+`ClassCopies::substitute`, which `Program::substitute` now calls. A copy's
+`ClassInfo` keeps the generic class's base, so its layout and method table
+extend the base's. `isinstance` with a generic class does not narrow a
+variable, since `Program::is_opaque_class` holds for the generic class
+(GEN-14); for the same reason `@dataclass` refuses the comparison methods of
+a generic dataclass derived from a dataclass, and a generic exception class or
+protocol is E0201 from `refuse_generic_kind` (GEN-12, GEN-13). A base that
+names a copy, `Box[int]` or `Box[T]`, is read after the module's generic classes
+are noted, by `check::generic_base::derive_from_copies`, which goes over the
+classes in source order, gives each class whose base is a copy, and each class
+derived from one, the chain of the copy, and gives a generic class its new
+`GenericClass::instance`; `class_types` passes over such a base, and a bare
+generic class as a base is E0408. Collecting the members reads a copy base
+through `Classes::get`, which gives the generic class's `ClassInfo`, its
+attributes taking the copy's arguments through `Classes::as_member_of`, and an
+override is checked against the base method's signature with the arguments of
+each copy `inherited_method` passed through. `make_class_copy` gives a copy of
+a generic class derived from a copy the copy of that base for its own
+arguments, and `make_class_copies` adds the bridges of the copies it made once
+all are, since a base copy may be made after the copy that names it. A class
+derived from a copy whose generic class has class methods, and a dataclass
+derived from a copy of a generic dataclass, are E0201, planned for 1.0
+(GEN-15). Since a class may derive from a copy with a higher ID,
+`lower::methods::MethodTables::new` lays out the tables with each base first,
+and the TyIR verifier walks a chain of bases as far as there are classes,
+refusing one that comes back to its class. A copy whose arguments hold a
 parameter, and the generic class itself, are opaque: lowering lays them out
 empty and their methods are stubs. A copy's `TyirClass::public` names the
 generic class, which codegen writes as the type object's base and as its
@@ -899,12 +990,32 @@ scope that adds them to the class's, and notes its name in
 a method, through an instance, its class or `super()`, to
 `BodyChecker::call_target`, which solves the parameters from the arguments
 after the first `skip` and returns the copy and its signature; the call does not
-dispatch, so a generic method neither overrides nor is overridden, and a method
-of a generic class, a special method, a property and a class method take no
-type parameters, each E0201 until GEN-09. A generic type alias (SMT-10) is
-expanded by `check::type_alias` before any annotation is read: `Pair[int]`
-becomes the alias's value with `int` in place of `T`, and a type parameter of an
-enclosing function or class hides an alias of its name.
+dispatch. A generic method may override one with as many type parameters, in
+classes that are not generic: `check_override` compares it with its own
+parameters named as the base's, `as_parameters_of`, and when the copies of a
+module are checked, `Program::make_override_copies` gives each copy of an
+overridden generic method, and the copy of each override for the same type
+arguments, a place in their classes' methods under the key `name[arguments]`,
+which no Python name can be, so lowering's method tables dispatch a call through
+the base to the object's class's copy; the generic stand-ins themselves stay out
+of the tables. Other overrides of or by a generic method are E0201, planned for
+1.0 (GEN-16). A class method's own type parameters are resolved for each class's
+copy in `ClassMethodCopies::make`, which also lets a protocol parameter make it
+generic; a call through a class goes to `call_target_with` with the arguments of
+a copy of a generic class first, `copy_arguments_of`. Such a class method has no
+bridge, so a call through an instance is E0201, and so are type parameters of a
+special method or a property, from `later_generic_method`, all planned for 1.0
+(GEN-16). A method of a generic class with type parameters of its own is generic
+over the class's first and its own after them, two lists with two owners that
+`Program::substitute_each` replaces in turn; `finish_generic_class` keeps it out
+of the copies' methods, and a call takes the class's arguments from the copy
+that holds the method, `holder_arguments`, solves the method's own by
+`solve_each`, and runs the copy `call_target_with` makes for the copy of the
+class. A static method that names none of the class's type parameters is generic
+over its own alone. A generic type alias (SMT-10) is expanded by
+`check::type_alias` before any annotation is read: `Pair[int]` becomes the
+alias's value with `int` in place of `T`, and a type parameter of an enclosing
+function or class hides an alias of its name.
 
 A protocol (GEN-04, ADR-0023) is a class whose base names `typing.Protocol`;
 `check::class::class_types` marks its `InstanceClass::protocol`. It has no
@@ -919,10 +1030,36 @@ members: each method, not static, taking the protocol method's parameters by
 name with types that accept the protocol's and a default where it has one, then
 only parameters with defaults, and returning a type the protocol's accepts; and
 each attribute with the same type. A union satisfies a protocol when each member
-does. `isinstance` with a protocol is E0401 (GEN-05). A protocol as any other
-type, through `check::outside_signature`, as a class's base, and a protocol's
-properties, static and class methods and class variables are E0201 until
-GEN-10.
+does. `isinstance` with a protocol is E0401 (GEN-05).
+
+A protocol as the type of a variable, an attribute, a result or a container
+item, and of a parameter of a special method or a property, which
+`protocol_parameters` leaves as it is for such a method, is a protocol value
+(GEN-10, ADR-0041), which lowering holds as `TyirType::UNION`. When a module's
+classes are collected, and again after its `__init__` methods are checked,
+`Program::note_protocol_fits` notes in `ProtocolValues::fits` each class that
+satisfies each protocol, by `Program::class_unsatisfied`, which skips a pair
+whose attribute types are not all known yet; it does so for each copy of a
+generic class `make_class_copies` makes too. It notes each pair in the table of
+`protocol_fits`, which a `FitsScope` opens for the check and clears when it
+ends, and `InstanceClass::derives_from` holds for a class and a protocol it
+satisfies, so every conversion that takes an instance of a base takes one of a
+satisfying class as an `Upcast`. `begin_module` gives a protocol no bridges and
+makes its dispatchers, `<protocol Protocol.name>`, one for each method, with
+the method's signature, and a getter for each attribute; `Program::method` of a
+protocol gives the dispatcher, so a call through a protocol value, by a method
+call, an operator or a builtin such as `len`, reaches it, and an attribute read
+calls the getter through `protocol_attribute`. Once every module is checked,
+`write_protocol_dispatchers` gives each its body: an `EachMember` over the
+satisfying classes, the most derived first, each arm calling the class's method
+through its table with the arguments and the result converted, or reading its
+attribute. `==` and `!=` of protocol values call `typy_rt_objects_equal`, which
+the `equal` slot of the class that decides answers. A mismatch where a protocol
+is wanted takes the reason as its help, from `protocol_help`. Assigning an
+attribute through a protocol value, a class derived from a protocol, a
+protocol's properties, static and class methods, class variables and defaults,
+a protocol in its own methods' signatures, and a value of a built-in type held
+as a protocol are E0201, planned for 1.0 (GEN-17).
 
 Unions (TYP-14, ADR-0027) add `Type::Union(members)`, which `Type::union` builds
 in normal form in `union_type`: nested unions flatten, `None` makes the union
@@ -949,13 +1086,28 @@ comparison other than `is`, or a builtin call other than `print`, `str`, `repr`,
 `type`, `isinstance` and `bool`, whose operand is a variable that holds a union
 of members with no shared class, once for each member with `Fact::Narrowed` set
 to it, and joins the results with `Type::union`. `TypedExprKind::EachMember`
-keeps the variable's read and each member's class with its checked expression,
-and lowering tests the object with `typy_rt_is_instance` against each class but
-the last, whose branch runs when none holds; the branches pass their result to
-one block. Equality and order refuse a union that is not a variable, which no
-split reaches. A container of a union of objects stores each as an object item,
-and the runtime compares two objects of different types as CPython does: a
-built-in type is equal only to its own objects, and a class's slot, which tests
+keeps the variable's read and, for each member, a `MemberTest` with its checked
+expression. The test is the member's class, or for an iterator, a traceback, a
+module, a file, a type alias, `sys.version_info` and `NotImplemented` the
+`RuntimeKind` of the runtime's object. Lowering tests the object with
+`typy_rt_is_instance` against a class, or with `typy_rt_object_has_type_id`
+against the type ID of a kind, for each member but the last, whose branch runs
+when none holds; the branches pass their result to one block. Two members that
+share a kind, such as two iterators, cannot be told apart at run time, so
+`member_test` refuses the operation with `E0201`, planned for 1.0 (TYP-19).
+A loop, a comprehension or a builtin that reads an iterable over a
+variable that holds a union of fixed tuples goes over
+`body::union_loop::union_tuple_items`: an `EachMember` whose arm for each
+member is a list display of that member's items, each converted to the union
+of every member's item types, so the loop reads one list (ADR-0034). A
+literal index outside some of the tuple members gives those members'
+arms `TypedExprKind::Raise` of `IndexError("tuple index out of range")`,
+which lowering throws in place of a value; an index outside every member is
+E0307. Equality
+and order refuse a union that is not a variable, which no split reaches. A
+container of a union of objects stores each as an object item, and the runtime
+compares two objects of different types as CPython does: a built-in type is
+equal only to its own objects, and a class's slot, which tests
 the other object's class, decides for its instances. A union with a member that
 is not an object (`Type::is_object`) is held as `TupleTypes::intern_union`, a
 tuple of an `int` tag and a slot for each member, which the descriptor marks
@@ -969,8 +1121,14 @@ operation checked for each member. The runtime's `ItemKind::Union` holds a union
 item as the member its tag names, and `values_equal` compares two members as
 CPython does: numbers by value, exactly, tuples item by item, and other types
 never equal. An expected union converts the value given for a method's argument,
-an item, an entry and a needle of `in`; one value assigned to several targets,
-one an item that holds a union, is E0201, planned for 0.5 (TYP-16).
+an item, an entry and a needle of `in`. A single target's value is checked as
+the target's type already; one value assigned to several targets, or a tuple
+unpacked into targets, may reach a target of another form, a union or an
+optional of the value's type. `converted_target` then gives the target
+`AssignTarget::Converted`: lowering stores the value in a hidden variable,
+`<converted N>`, and assigns the target that variable's read converted to the
+target's type, as `converted` builds it for a single value (TYP-16). A
+variable, an instance attribute, a list item and a dict entry take it.
 
 Optional values (TYP-06, TYP-13, ADR-0011) add `Type::Optional(T)`, written `T |
 None` or `None | T`, which `Type::optional` builds so that `T` is never `None`
@@ -985,8 +1143,11 @@ or an optional one, that meets the type of a class it derives from becomes
 `TypedExprKind::Upcast(value)`, and so does the receiver of an inherited method
 (CLS-04). A display, and a conditional expression with a `None` branch, join
 their items' types, so `[1, None]` is `list[int | None]`. An optional value is
-compared with `None` by `is`, tested for truth and written as text; `==`,
-ordering, operators and methods on it are E0407, E0401 and E0412, with a help
+compared with `None` by `is`, tested for truth and written as text. `==` and
+`!=` take it with `None`, with another optional value or with a value of its
+base: `None` equals only `None`, and two values compare as their base does,
+which lowering's `optional_equality` tests one side at a time (EXP-06).
+Ordering, operators and methods on it are E0407, E0401 and E0412, with a help
 that says how to narrow it. `True`, `False` and `None` are each the only object
 of its value, so two `bool` or `bool | None` values also compare by `is`:
 lowering compiles it as `==` of two `bool` values, after testing an optional one
@@ -1021,6 +1182,81 @@ its element's type, a set comprehension `set[T]`, whose item needs a hash,
 E0413, and a dict comprehension `dict[K, V]`; an expected type gives the
 element, as it gives a display's items, so `[[] for _ in xs]` takes an
 annotation. An `async for` clause is E0201, as `async` is.
+
+An assignment expression (EXP-13) is `Expr::Named { target, value }` in
+the syntax tree and `TypedExprKind::Named { target, value }` after
+checking. `collect_locals` and `module_variables` bind its name through
+`visit_statement`, which reaches every expression of a statement, so a
+`:=` inside a comprehension assigns the variable of the function or module
+around it, as CPython scopes it. `body/named.rs` checks the value against
+the variable's declared type as an assignment does, and the expression
+gives the value itself: a value wrapped into a `T | None` is unwrapped, and
+`assign_name` wraps it again as it stores it. `narrowable_variable` sees
+through it, so `(m := f()) is not None` narrows `m`. Each function lists
+its targets in `TypedFunction::named_targets`, which lowering adds to the
+assigned symbols, since no statement shows them, so a parameter assigned
+by `:=` is not borrowed. The subset walker keeps the names enclosing
+comprehensions bind and whether a comprehension's source is being walked,
+and reports CPython's `SyntaxError`s as E0103: rebinding a comprehension
+variable, `:=` in a source, and `__debug__` as the target.
+
+A `match` statement (CST-06) is `Stmt::Match { subject, cases }`, each
+`MatchCase` holding a `Pattern`, a guard and a body, as CPython's `ast`
+module has them. `body/matching.rs` writes each pattern as the test it
+stands for and checks that test as an expression: a value pattern is
+`subject == value`, a singleton `subject is None`, a capture or an `as`
+name an assignment of the subject, and `p | q` the alternatives, whose
+assigned variables meet. The facts a test gives hold in its guard and
+body, and the facts of its failure hold in the later cases when a case is
+one test without a guard, so `case None:` narrows an optional subject in
+the cases after it. A local subject is tested as it is; any other subject
+is first stored in a hidden local named `<match N>`, which no program can
+write. The result is `TypedStmt::Match` with a `TypedCase` per case, whose
+`TypedPattern` is `Test`, `Bind`, `All` or `Any`. A sequence or mapping
+pattern (`body/pattern_sequence.rs`, `body/pattern_mapping.rs`) first
+tests the subject with `isinstance_test` against `list`, `tuple` and
+`range`, or `dict`, which narrows a union or an optional subject; a type
+no class takes is E0407. A sequence pattern then tests the length, with
+the built-in `len` called directly so a function of that name in the
+program does not change it, or compares a fixed tuple's length when it is
+checked, and matches item `i` as `subject[i]`, counting from the end after
+a starred name. The starred name binds a list: a slice, `list()` of a
+slice, or for a fixed tuple a list display whose type is the union of the
+items it takes. A mapping pattern tests `key in subject` and matches
+`subject[key]`; `**rest` binds a dict comprehension over the items whose
+key is not one of the pattern's. A class pattern (`body/pattern_class.rs`)
+resolves its class as `isinstance` does, tests the subject the same way,
+then matches each sub-pattern against `subject.attribute`. A positional
+sub-pattern takes its attribute from `ClassInfo::match_args`, which class
+collection reads from a `__match_args__ = (...)` of `str` literals in the
+class body, the nearest base's applying when a class has none; for the
+nine built-in classes CPython names, one positional sub-pattern matches
+the subject itself. More positional sub-patterns than the class takes,
+and two for one attribute, are E0401, since CPython raises `TypeError`
+for them on every instance. `@dataclass` writes `__match_args__` from the
+fields unless `match_args=False` is given or the class assigns its own,
+and `DataclassInfo::match_args` carries the names to the class's
+information. A part that a nested pattern tests is stored
+first in its own hidden local, so it is read once and narrows as a
+variable does. Lowering gives each case a block its pattern jumps to when
+it fails, so the cases are tried in order and a subject no case matches
+goes on after the statement. `body/pattern_coverage.rs` splits the
+subject's type into members, each member of a union, `None` of an
+optional and `True` and `False` of a `bool`, and finds the members no
+case without a guard covers, reading the patterns without their values
+and resolving a class pattern's class with `type_object_named`, which
+reports nothing. When none is left, the `match` cannot end without
+running a case, so no assigned state falls through it and a function
+returning from each case does not reach its end; otherwise a subject of
+two or more members gives W0401 naming the members left, unless checking
+the `match` reported an error (CST-07, ADR-0033). The subset walker
+reports CPython's compile-time `SyntaxError`s for patterns as E0103: a
+capture or wildcard before the last case or alternative, alternatives that
+bind different names, a name bound twice, `__debug__`
+as a target, an f-string as a value, two starred names in one sequence
+pattern, a keyword repeated in a class pattern, and a literal key repeated
+in a mapping pattern, where `1`,
+`1.0` and `True` are one key (`subset/pattern_key.rs`).
 
 Classes (CLS-01, CLS-02, CLS-08, ADR-0012) are collected before any
 signature: `collect_classes` gives each `class` statement at the top of the
@@ -1115,20 +1351,32 @@ that a base defines too is checked against it by `check::overriding::Override`,
 except `__init__`: the same number of parameters with the same names, each of a
 type that accepts the base's and with a default where the base has one, and a
 result the base's result type accepts, E0404 otherwise (CLS-04, CLS-13). A
-default other than the base's, and a parameter or result held differently from
-the base's, such as `int | None` for `int`, are E0201, planned for 0.5: a call
-through the base fills the base's default, and the entry would need an
-adapter. A call of a method on an instance is `TypedExprKind::Call` with
-`dispatch` set, and a call through `super()` has it clear. Calling an
+call through the method table that leaves out a parameter whose default an
+override changes takes the default of the object's class: lowering tests the
+instance against each override's class, the nearest first
+(`MethodTables::overrides`, `dispatched_default`). An override whose parameter
+or result is held otherwise than the base's, such as `int | None` for `int`
+(`overriding::Fit::Adapted`), gets `<adapter name>`, which
+`Program::add_override_adapters` writes with the base's signature: it widens
+each argument, calls the override through the table, and widens the result.
+`MethodTables` puts the adapter in the base method's place and gives the
+override a place of its own, under which calls typed at its class find it; such
+a parameter with a default of its own is E0201, planned for 1.0 (CLS-34). A
+call of a method on an instance is `TypedExprKind::Call` with `dispatch` set,
+and a call through `super()` has it clear. Calling an
 exception class without
 an `__init__` of the program's takes positional arguments of any type; with one,
 its arguments are bound as for a call and `TypedExprKind::NewException` carries
 an `InitCall` with them and the count of those written by position, which become
-the exception's arguments. `body::super_call` checks `super().name(...)`, and
-`super(Class, self)` naming the enclosing class and its instance, in any method
-(CLS-14): a `Call` of the nearest base's method on the instance with
-`dispatch` clear, E0414 when no base of the program's has the method or outside
-a method, and E0201, planned for 0.5, for other arguments. In `__init__`,
+the exception's arguments; an `OSError` starts with none, as `OSError.__new__`
+leaves them to `OSError.__init__` for a class with an `__init__` of its own.
+`body::super_call` checks `super().name(...)`, and
+`super(Class, self)` naming the enclosing class or one of its bases and the
+method's instance, in any method (CLS-14, CLS-26): a `Call` of the method of
+the nearest base of that class on the instance with `dispatch` clear, E0414
+when no base of the program's has the method or outside a method, E0404 for
+a class outside the chain, and E0201, planned for 1.0, for another instance
+(CLS-29). In `__init__`,
 `super().__init__(...)` calls the nearest base's `__init__`; with none, an
 exception class gets `TypedExprKind::SetArguments` and any other class nothing,
 as `object.__init__()` does, E0404 with arguments. After it the inherited
@@ -1154,26 +1402,59 @@ variable where the fact holds gives `TypedExprKind::Downcast`, which lowers to
 program runs; assigning the variable ends the narrowing (TYP-07). `is`
 compares two exceptions. `FunctionParts::method_kind` reads a method's
 decorator (CLS-06). A static method's definition takes no instance, is recorded
-in `ClassInfo::static_methods`, has no entry in the method tables, and is called
-directly as `Class.name(...)` or through a variable that holds an instance; a
-subclass redefining it, and a static method over a base's method, are E0201,
-planned for 0.5. A property's getter is a method of its name, recorded in
-`ClassInfo::properties`, and its setter the method `name.setter`, so both
-override and dispatch as methods do. `body::accessor` reads `instance.name` of a
+in `ClassInfo::static_methods`, and is called directly as `Class.name(...)` or
+through an instance; an instance that is not a variable is evaluated first, in a
+`TypedExprKind::Sequence` (CLS-25). Any other method called as
+`Class.name(instance, ...)` is `BodyChecker::unbound_call`: a direct call of the
+method `Class` holds or inherits, its first parameter taking the instance; for
+a generic class, the method of the copy the instance belongs to. In `__init__`,
+`Base.__init__(self, ...)` on the instance being built goes to `base_init`, which
+`super().__init__(...)` also reaches, and counts `Base`'s attributes as
+assigned. `Program::add_static_bridges` gives each
+static method `<static name>`, which takes the instance first and calls it; the
+method tables hold the bridge in the static method's place, so when a class
+derived from the instance's static class defines the name again, as a static
+method or not, a call through the instance calls the bridge through the table
+(`through_static_bridge`). An override compares a static method as one that
+takes the instance; one held otherwise is E0201, planned for 1.0 (CLS-35). A
+property's getter is a method of its name, recorded in `ClassInfo::properties`,
+and its setter the method `name.setter`, so both override and dispatch as
+methods do. `body::accessor` reads `instance.name` of a
 property as a call of the getter with `dispatch` set, and checks
-`variable.name = value` as a statement that calls the setter; a property without
-a setter is E0414, and calling a property E0201. A class method follows
-ADR-0025: `ClassMethodCopies` makes, for each class, a copy of each class
-method it defines or inherits from a class of the same module, whose `cls` has
-the type of that class's type object, recorded in `ClassInfo::class_methods`;
-a class method inherited from another module's class is noted in
-`ClassInfo::remote_class_methods`. An inherited copy's `Definition::copy_of`
+`object.name = value` as the target `AssignTarget::Property`, which lowering
+gives the setter after it evaluates the value and the object; `object.name op=
+value` gives the setter the getter's value combined with the value, the
+object held in a hidden variable. A property without a setter is E0414, and
+calling a property E0201. A class method follows
+ADR-0025: `ClassMethodCopies`, kept across modules, makes, for each class, a
+copy of each class method it defines or inherits, whose `cls` has the type of
+that class's type object, recorded in `ClassInfo::class_methods`. A copy of a
+class method of another module reads its signature in that module's names,
+which `ClassMethodCopies` keeps, and its `Definition::home` names the module, so
+`check_bodies` gives it to a `Deferred` checked once every module is, in the
+`ModuleContext` `Program::end_module` kept for that module (ADR-0037).
+`Program::add_class_method_bridges` gives each copy of a class that is not
+generic a bridge, a function of the class method's name in
+`ClassInfo::methods` that takes the instance and the copy's other parameters
+and calls the copy with the class's type object, so a call through an
+instance dispatches to the bridge of the instance's class; a generic class's
+copies have none, and such a call is E0201, planned for 1.0 (CLS-30). An
+inherited copy's `Definition::copy_of`
 names the copy it repeats, and the checker drops the diagnostics of an
 inherited copy that the original reported. `Class.name(...)` calls the class's
 copy with the class's type object first; calling a variable of `type[C]`, such
-as `cls`, makes an instance of `C`. A class method called through an instance
-or a class of another module, and a class variable assigned through a subclass
-that inherits it, are E0201, planned for 0.5. Comparison methods follow
+as `cls`, makes an instance of `C`. Before any module is checked,
+`check::subclass_variables` reads every module for `Class.name = value` of a
+class that only inherits `name`, following the bases by name, and notes the
+class in `SubclassVariables::own` and the class whose body gives `name` in
+`shared` (ADR-0037). Each such class holds a module variable `Class.name` of its
+own; a read through a class is `TypedExprKind::ClassVariable` of the holders
+from that class up, which lowering reads as the first one bound, and a read
+through an instance of a `shared` class's chain calls the getter
+`name.class`, which `Program::add_class_variable_getters` gives each class of
+the chain once the first look has typed the variables, through the method
+table. An assignment through a variable that holds a class, such as `cls`, of
+a variable a base gives is E0201, planned for 1.0 (CLS-31). Comparison methods follow
 ADR-0026: `class_types` records in `InstanceClass::operators` which of `__eq__`,
 the ordering methods and `__hash__` a class defines or inherits, so
 `Type::can_order` and `Type::is_hashable` answer for instances, and a class
@@ -1181,47 +1462,148 @@ with `__eq__` and no `__hash__` has no hash. A comparison method takes `self`
 and a value of a type that accepts its class, E0404 otherwise.
 `body::operator_method` makes a single comparison of instances whose class
 defines the method `TypedExprKind::OperatorCall`, with the left class's method,
-the right class's reflected one, and the left class's reflected one; `!=`
-without `__ne__` negates `__eq__`. Lowering calls the one method, or, with
-both, the reflected one when the right object's class derives from the left
-object's, is another class and has another method at the reflected method's
-table slot, which `Operation::SameMethod` compares. `TyirClass` holds
-`equal`, `order` and `hash`, and codegen fills the type object's slots with
-functions that call them; the `equal` slot compares by identity an object its
-`__eq__` does not take. A slot method that may raise is E0201 when lowering
-ends, planned for 0.5. Arithmetic methods reuse the same call:
-`operator_binary` makes `a op b` an `OperatorCall` with `__add__` and its
-reflected `__radd__`, typed by the method's result, E0201 when the two methods
-return different types; `operator_unary` calls `__neg__`, `__pos__`,
-`__invert__` and, for `abs`, `__abs__`. An augmented assignment whose operator
-calls a method assigns its result to the variable or the variable's
-attribute, E0201 for any other target. `body::container_method` calls
+the right class's reflected one, the left class's reflected one, and its
+`OperatorKind`: `Arithmetic`, `Ordering` or `Equality`, with the symbol a
+`TypeError` names; `!=` without `__ne__` negates `__eq__`. Lowering
+(`operator_call`) builds the steps CPython takes (ADR-0038). A comparison
+calls the right object's reflected method first when its class derives from
+the left object's and is another class, and the other method after it. An
+arithmetic operator does so only when the right object's class also has
+another method at the reflected method's table slot, which
+`Operation::SameMethod` compares, and calls a reflected method of two
+instances only when their classes differ. A method whose result may be
+`NotImplemented` is followed by a test of the result; when every method gave
+way, equality compares identities, and `operands_unsupported` or
+`ordering_unsupported` raises CPython's `TypeError` with the operands'
+classes. `check::not_implemented` reads every module, through
+`check::class_index`, before any is checked, and each method of an
+arithmetic, reflected, in-place or comparison name in a chain of bases where
+one says `return NotImplemented` returns `T | NotImplementedType`
+(`Type::may_give_way`); the call's type is the methods' result without it
+(`Type::implemented`). Such a method that also returns `None` is E0201,
+planned for 1.0 (CLS-33). `TypedExprKind::NotImplemented` reads the
+runtime's one object of the type, and `is` tests a result that may hold it.
+`TyirClass` holds `equal`, `order` and `hash`, and codegen fills the type
+object's slots with functions that call them; the `equal` slot compares by
+identity an object its `__eq__` does not take. `Program::add_comparison_bridges`
+writes, for each comparison method of a class's own, a bridge such as
+`<equal>` or `<less>` that returns `self op other`, and the slot calls the
+bridge in the method's place when the method may give way or the class is one of
+a chain of bases, whose objects a container may hold side by side. A slot method
+that may raise follows ADR-0039: codegen's slot function gives the exception to
+`typy_rt_slot_failed` and returns its default, every slot of the program first
+asks `typy_rt_slot_pending`, and lowering follows each runtime call whose
+`RuntimeFunction::may_call_slots` holds with `slot_raised`, when
+`Calls::raising_slots` says a slot method may raise. `body::comparison_chain`
+checks a chain such as `a < b < c` of such instances as its comparisons
+joined with `and`, each middle operand held in a hidden `<chained N>`
+variable through `TypedExprKind::Named` (CLS-22). Arithmetic methods
+reuse the same call, and when the right operand's class has no reflected
+method, `OperatorCall::reflected_below` lists the classes derived from it that
+define one, which lowering tests the right object against in the reflected
+method's place. Arithmetic methods: `operator_binary` makes `a op b` an
+`OperatorCall` with `__add__` and its reflected `__radd__`, typed by the
+method's result, joined
+with the reflected method's when it may run first or after the method gives
+way (CLS-22); `operator_unary` calls
+`__neg__`, `__pos__`, `__invert__` and, for `abs`, `__abs__`. An augmented
+assignment on an instance calls the class's in-place method, such as
+`__iadd__`, with `dispatch` set, and the binary method when the class has
+none, and assigns the result to the target (CLS-20); an in-place method that
+may give way is the first step of an `OperatorCall` whose symbol is `+=`.
+`body::in_place::pinned_augmented` first holds the object and the key of an
+item or an attribute of an expression in hidden variables, so the target is
+evaluated once; an in-place method that only a class derived from the
+target's defines is E0201, planned for 1.0 (CLS-32). `body::container_method` calls
 `__len__` for `len`, wrapped in `TypedExprKind::CheckedLength`, which lowers to
 `int_length` and raises CPython's `ValueError` or `OverflowError`;
 `__getitem__` for a subscript; `__setitem__` for `variable[key] = value`, as a
 statement that evaluates the value first; `__delitem__` for `del`; and
-`__contains__` for `in` and `not in`. Lowering tests an instance's truth with
+`__contains__` for `in` and `not in`. Without `__contains__`, `in` on an
+instance whose class has `__iter__` is `TypedExprKind::IterContains`: the
+value and each item are held in hidden variables, and lowering iterates the
+instance as `for` does until `item is value or item == value` holds
+(CLS-23); a class with `__getitem__` alone is E0201, planned for 1.0
+(CST-11). `body::slice_object` gives `Type::Slice`, a runtime object of type ID
+22 that owns its three bounds, each an `int` word or 0 for `None`:
+`x[a:b:c]` on an instance passes `Builtin::Slice` of the bounds to the
+container method (`index_value`), a slice's attributes are
+`TypedExprKind::SliceBound`, `indices` is `Method::SliceIndices`, three
+calls of `slice_index`, which computes with integers of any size when the
+length is past an inline `int`, as CPython does, and `seq[s]` of a built-in
+sequence is `TypedExprKind::Slice` of the bounds, the slice held in a hidden
+variable (`object_bounds`), also as an assignment target. A slice bound
+may be `int | None`: lowering passes its word, and the runtime's
+`slice::select` takes the word 0 as a missing bound (DAT-12). An
+augmented assignment to an item of an instance (`is_instance_item`)
+pins the container and the index, then gives `__setitem__` the item
+`__getitem__` gave, combined with the value (`instance_item_augmented`).
+Lowering tests an instance's truth with
 `__bool__`, or with its checked `__len__` against zero, and `TyirClass::truth`
-puts `__bool__` in the type object's `truth` slot for `any` and `all`; `any`
-and `all` of instances whose truth comes from `__len__`, and a truth test of a
-class with neither method whose subclass defines one, are E0201. A class body's
-values follow ADR-0024. `check::dataclass` expands each `@dataclass` before the
+puts `__bool__`, or `<truth>`, which `Program::add_truth_bridge` writes as
+`len(self) != 0` for a class whose truth comes from `__len__`, in the type
+object's `truth` slot for `any` and `all`. When a class derived from the
+static class may decide otherwise, lowering asks the object's type object
+through `object_is_true` (CLS-24). A class body's values follow ADR-0024.
+`check::dataclass` expands each `@dataclass` before the
 subset check reads the module: it finds the fields, its own after a dataclass
 base's, writes `__init__`, `__repr__`, `__eq__` and, with `order=True`, the
 ordering methods as Python source, parses it, moves every node to the
 decorator with `Stmt::relocate`, and gives `__init__` the fields' own
 annotations and defaults; the methods take the first dataclass of the chain,
-and test the other object's class, as CPython does. A frozen dataclass's
+and test the other object's class, as CPython does. `init=False` and
+`repr=False` leave out those methods, and `slots=True` keeps no class
+attribute of a default. `__hash__` follows CPython's table of actions
+(CLS-16): `unsafe_hash=True`, or `eq=True` with `frozen=True`, writes one
+that returns `TypedExprKind::Hash` of the tuple of the fields, the hash a
+set takes through `typy_rt_hash_value`, unless a field's annotation names a
+`list`, `dict` or `set` or a dataclass that has none, and `unsafe_hash=True`
+with the class's own `__hash__` is E0404. A field with
+`field(default_factory=f)` becomes a module-level function
+`<default module:Class.field>` that returns `f()`, written before the class,
+and `__init__` takes its call as the field's default, which
+`SignatureParameter::default_call` holds, so a call that leaves the field out
+calls it each time (CLS-15). Other options of `field` and `@dataclass`, and
+a `default_factory` in a generic dataclass, are E0201, planned for 1.0
+(CLS-28). A frozen dataclass's
 `ClassInfo::frozen` makes assigning a field E0414 outside the `__init__` the
 expansion wrote. `check::type_alias` expands the module's `type` statements
 after the dataclass expansion and before the subset check: it expands each
 alias's value through the aliases it names, reports an alias that reaches
 itself and one defined twice, and replaces each alias name in an annotation,
 except before a subscript, with its value as an `Expr::Quoted`, which is read
-late, so an alias may name a class defined below it (SMT-10).
-`Program::type_aliases` keeps the module's alias names, and `ModuleScope`
-those of each module checked, so a read of an alias as a value, and an alias
-of another module, are E0201 (SMT-12). `Final` follows TYP-08:
+late, so an alias may name a class defined below it (SMT-10). A `type`
+statement inside a function, a class or a block adds its alias to the
+scope of that block, which `Expansion::scopes` keeps innermost last, so the
+alias stands for its value in the statements after it and the blocks inside
+them (SMT-12). A bound or constraints on an alias's parameter are read as
+CPython reads them, which checks no argument against them; the expanded
+alias is checked as the type it stands for. `expand` returns the module's
+aliases, and `Program::export_aliases` keeps each as an `ExportedAlias`:
+its parameters, its value, and the module's class names and
+`ImportedNames`, which `ModuleScope::alias_values` holds when the module
+ends. An import of an alias binds `Imported::TypeAlias`, which
+`ImportedNames::aliases` and `Program::imported_aliases` keep, and a module
+bound by name carries its aliases in `module_aliases`; `annotation_type`
+reads `Pair[int]`, `shapes.Pair[int]` or a plain alias of another module by
+reading the alias's value in a scope made from its own module's names, with
+each type argument, read where it is written, bound to its parameter. The
+subset walker lets a subscript of a name the module imports, or of a name
+read through an imported module, reach the checker. An alias read as a value
+is `TypedExprKind::TypeAliasObject`, an index into `TypedProgram::type_aliases`
+that `Program::type_alias_object` fills with the alias's name and module the
+first time it is read; its type is `Type::TypeAlias`, held as
+`TyirType::TYPE_ALIAS`, type ID 19. Lowering gives `Constant::TypeAlias`, and
+codegen emits one immortal static object per alias, a header then the name
+and the module's name as `str` objects, as it emits module objects, so `is`
+compares two reads. The runtime's `typing.TypeAliasType` writes an alias as
+its name and hashes it by identity, and `typy_rt_type_alias_name` and
+`typy_rt_type_alias_module` give `__name__` and `__module__`
+(`TypedExprKind::TypeAliasPart`). Calling an alias and `isinstance` with
+one are E0401, as CPython raises `TypeError`; an alias a function or a
+class defines, an alias given its type arguments, and `__value__` and
+`__type_params__` read as values are E0201, planned for 1.0 (TYP-18)
+(SMT-12). `Final` follows TYP-08:
 `body::locals::declare` records each `Final` variable in
 `Program::final_variables` with the name its declaration assigns, and `assign`
 and `module_attribute_target` refuse any other with E0414; a class body's
@@ -1241,7 +1623,8 @@ and `ClassInfo::defaults` record them, and `body::class_value` reads
 through `module_attribute` for a class of another module, and checks
 `Class.name = value` and `Class.name op= value` as its assignment. Assigning a
 class variable through an instance, and a default through the class, are
-E0414; a default of an exception class's attribute is E0201, planned for 0.5.
+E0414. An exception class's defaults are stored once the runtime makes the
+exception, before its `__init__` runs (`store_defaults`).
 `TypedClass::defaults` gives, for each attribute with a default, the variable
 of the nearest class that gives one; `__init__` starts with those attributes
 assigned, and lowering stores each default into a new instance after
@@ -1264,17 +1647,59 @@ needs no `return`.
 of a `SystemExit` where `print`, `str`, `repr`, `bool`, `len` of `args`, an
 f-string field, a condition, `not`, `==` or `!=` reads them, before the operand
 is checked, and gives `TypedExprKind::ExceptionPart { exception, part, operation
-}` with a `PartOperation`; any other use is E0201 (EXC-11, EXC-13, EXC-15,
-ADR-0030).
+}` with a `PartOperation` (EXC-11, EXC-13, ADR-0030). Any other use reads them
+as values (EXC-15, ADR-0034). `exception_arguments::Creations` records each
+creation of an exception: `exception_with_arguments` and a call of a class with
+its own `__init__` record the class with the tuple of the arguments given by
+position, `super().__init__` records the initializing class with its
+arguments, `sys.exit` records `SystemExit`, and a dict lookup, `dict.pop`,
+`set.remove`, an entry target and a `%` format of a dict record the key type.
+`Creations::arguments_of(class)` gives the type of `args`: the tuples of every
+creation of the class and of the classes derived from it, of every
+initialization of a related class, and of the runtime's own raises (a message,
+`tuple[str]`; the key of a `KeyError`; `(int, str)` of an `OSError`; `()` of
+`StopIteration`; and the five items of a `UnicodeEncodeError` or a
+`UnicodeDecodeError` only when the program encodes, decodes, opens a file or
+makes a `str` with a surrogate standard output cannot write, so `args` of a
+`ValueError` stays narrow in most programs). A call of `OSError` itself with two
+to five arguments becomes the subclass for its `errno`, so it counts for every
+related class, as an initialization does. Tuples of one layout, as
+many items with one type or two object types at each position, merge into one
+member, so the layout of an exception's arguments names its member; the
+members are not given to `Type::union`, which would drop `tuple[int]` for
+`tuple[float]`. `name.args` becomes `TypedExprKind::ExceptionArguments`, and
+`name.code` reads it and takes, for each member, `None`, its one item, or the
+tuple. `each_member::Split` lets an operation be checked for each member of a
+union of tuples that `name.args` is, as for a variable. `TypeChecker::check`
+checks the program once; when a body read `args` or `code` as a value, the
+first check typed them as errors, so it checks again with the creations found,
+and again while a check finds a creation the ones before did not, up to eight
+checks, after which the read is E0201 (EXC-17). Only the errors of the check
+whose creations settled are reported, since an earlier check may type `args`
+without a creation it later finds. Lowering reads the arguments
+with `typy_rt_exception_arguments_address` and, for a union, tests each member
+but the last with `typy_rt_exception_arguments_match`, which compares the
+layouts field by field, the runtime's text standing for one `str`.
 
-`body/os_error.rs` accepts an `OSError` of two to five arguments when `errno` is
-an `int`, `strerror` a `str`, the file names a `str` or `None` and `winerror` an
-`int` or `None`, and gives `TypedExprKind::OsErrorField` for `errno`,
-`strerror`, `filename` and `filename2`, typed `int | None` or `str | None`,
-unless the class declares an attribute of that name; other arguments, two or
-more through `super().__init__`, and two or more to a class with an `__init__`
-of its own are E0201 (EXC-14, EXC-16). Lowering calls `os_error_new` in place of
-`exception_new` for such an `OSError`.
+`body/os_error.rs` accepts an `OSError` of arguments of any type, as CPython
+does (EXC-14, EXC-16, ADR-0035), except a number as the third of three to five
+arguments of `OSError` or `BlockingIOError`, which a `BlockingIOError` reads as
+`characters_written`: E0201, planned for 1.0 (EXC-18). `errno`, `strerror`,
+`filename` and `filename2` of an `OSError` whose class declares no attribute of
+that name are read from the arguments the exception holds, file names
+included: `Creations::raw_arguments_of` gives their type, a union of tuples,
+and for each member the attribute is the item its position names (the first
+two of two to five, the third of three to five, the fifth of five when the
+third is not `None`, through a `TypedExprKind::IfExp` when it may be), or
+`None`. The read is a `TypedExprKind::EachMember` over
+`TypedExprKind::ExceptionArguments { raw: true }`, whose arms read the
+exception again, held first in a hidden variable unless it is one; like `args`,
+it makes the program checked again. `Creations` keeps each creation's raw
+tuple and gives `args` from it by CPython's rule, a file name that is not
+`None` leaving `errno` and `strerror` alone. Lowering calls `os_error_new` in
+place of `exception_new` for an `OSError` of two to five arguments, and gives a
+class derived from `OSError` the `str` of `typy_rt_os_error_str` through
+`TyirClass::os_error`.
 
 `assert test, message` gives `TypedStmt::Assert { test, exception }`, whose
 exception is an `AssertionError` of the message, and the facts the test gives
@@ -1301,7 +1726,7 @@ gives `TracebackType` and `ModuleType`, as `AnnotationName`s that
 `resolve_import` binds for annotations only (TYP-15): a name imported from
 them, or a name bound to one of the modules, such as `typing.Iterable`,
 enters `AnnotationScope::names` or `standard`, and its use as a value is
-E0201, planned for 0.4. `Iterator[T]` is `Type::Iterator(T)`,
+E0201, planned for 1.0 (TYP-18). `Iterator[T]` is `Type::Iterator(T)`,
 `TracebackType` is `Type::Traceback` and `ModuleType` is `Type::AnyModule`,
 a module whose attributes are unknown, E0412. `Iterable[T]` is
 `Type::Iterable(T)`: any built-in iterable or iterator whose items have
@@ -1316,6 +1741,29 @@ object of any of those types under the type ID 16, and a loop or `iter()`
 over it calls `typy_rt_iterable_iterator`, which makes the iterator its
 header calls for, reading a view through its dict, or gives an iterator
 itself.
+
+`typing` also gives `Optional`, `Union`, and `List`, `Dict`, `Set`,
+`Tuple` and `Type` as `AnnotationName::Builtin` (LIB-17). In an annotation
+`Optional[T]` is `Type::union` of `T` and `None`, `Union[A, B]` the union
+of its members, and `List[int]` is read as `list[int]` by rewriting the
+name; the subset walker lets these subscripts through by name, as it does
+`Iterator[T]`. As the class of `isinstance` or of a class pattern,
+`body/typing_class.rs` reads these names before the class is checked as a
+value (TYP-17): `List` and the others give the built-in class,
+`Optional[T]` and `Union[A, B]` the classes of their members, and
+`Iterable` and `Iterator` give `TypeObjectOf::Abstract`, which lists the
+classes of the program that have `__iter__`, and `__next__` for
+`Iterator`, each with its bases. `abstract_outcome` answers each member of
+the value's type: the built-in collections are `Iterable`, their iterators
+and files are both, and a class of the program is one when it or a base is
+listed, may be one when a listed class derives from it, and is not
+otherwise. `isinstance_test` replaces the abstract class in the checks it
+leaves for the program's run with the listed classes, so lowering never
+meets it. A bare `Optional`, `ClassVar` or `Final`, and a subscripted
+generic, are E0401, as CPython raises `TypeError`; a bare `Union` is
+E0202, since the oracle versions differ; and an `Iterable[T]` value tested
+against `Iterator` is E0201, planned for 1.0 (LIB-20), since a built-in
+iterator it may hold has no class of the program.
 
 A class may define `__enter__`, taking only the instance, and `__exit__`,
 taking the instance and three parameters that may be left without
@@ -1377,6 +1825,27 @@ imports with `Program::resolve_import`: a function or a class imported by
 name enters the module's tables, so calls and annotations find it, and a
 name bound to a module or to a module variable's value becomes a module
 variable of the importer, typed `Type::Module` or with the source's type.
+A call or an annotation reads such a name when compiling.
+`ModuleImports::report_clashes` gives E0202 for a name an import binds that
+the module also defines with `def` or `class` or assigns as a variable
+(STD-04). A name imports bind to more than one function, class or function
+of a built-in module, or that an import inside a block binds, is a
+`body::rebound::Rebound` (MOD-12, ADR-0036): `add_binding_variables` adds
+the module variable `<bound name>`, an `int` whose symbol is named `name` so
+its `NameError` names it, and takes a name with several targets out of the
+tables of functions and classes and into the annotation names as
+`AnnotationName::Rebound`, which an annotation reports as E0201 (MOD-14).
+The module body starts by storing 0 in each, and each import statement that
+binds the name stores its number, from 1 in source order, as an
+`ImportBinding::Expression`; a lazy import does it in an `Import` with no
+modules that follows its `LazyImport`, and notes its function in
+`Program::rebound_reify`. `rebound_call` checks a call once for each
+binding and chains `TypedExprKind::IfExp`s on the number, each arm the call
+of that import's target, wrapped in `Lazy` for a lazy one, and a last arm
+of `Raise` of a `NameError`; `rebound_read` guards a class read as a value
+the same way. A function's own import of the name hides it. Another module
+that reads a name with several targets gets E0201 through
+`Program::rebound_elsewhere`.
 A function's own imports enter the tables while it is checked. An import
 statement is `TypedStmt::Import { modules, bindings }`: the modules to
 initialise, each package before its submodules, and each `ImportBinding`,
@@ -1384,8 +1853,14 @@ a module object or a copied value. `module_of` sees through a name of type
 `Type::Module`, so `m.x` is `ModuleAttribute`, `m.f()` a call of `m`'s
 function, `m.C()` an instance, `m.x = v` an assignment of `m`'s variable,
 `pkg.sub` a `Submodule`, and `m.C` an annotation. A name a module does not
-define is E0425, and an import of a module not checked yet, which only an
-import inside a function that closes a cycle can make, is E0426 (OI-22).
+define is E0425. A function whose body imports a module not checked yet,
+which only an import that closes a cycle can make, waits: `check_module`
+gives it to a `Deferred` with a copy of the module's `ModuleContext`, and
+once every module is checked `Deferred::check` swaps that context in,
+checks the body and the copies of generics it needs, and swaps back
+(MOD-13, OI-22). An `__init__` is checked before the rest of its module,
+since it gives the attributes their types, so such an import there is
+E0426, planned for 1.0 (MOD-15).
 A standard library module gives E0201 when a later release provides it,
 and E0206 otherwise (LIB-08). For each module it runs:
 
@@ -1422,9 +1897,10 @@ and E0206 otherwise (LIB-08). For each module it runs:
    A variable bound by several lazy imports keeps its first function in
    `lazy_names`; lowering reads every function that binds the variable,
    and each `LazyImport` arms its own and disarms the others, so at most
-   one waits. A function or a class bound by two is E0201 (MOD-11,
-   MOD-12). The subset walker reports CPython's `SyntaxError`s for `lazy`
-   inside a function or a `try`, and with `*` or `__future__`, as E0103;
+   one waits. A function or a class bound by two is called through its
+   binding variable (MOD-11, MOD-12, ADR-0036). The subset walker reports
+   CPython's `SyntaxError`s for `lazy` inside a function or a `try`, and
+   with `*` or `__future__`, as E0103;
    a class body holds only methods, so one there is E0202.
    `format % values` with a string literal on the left is checked by
    `body/percent.rs` (LIB-10). `percent_format::parse` reads the format
@@ -1453,8 +1929,10 @@ and E0206 otherwise (LIB-08). For each module it runs:
 Two checks look at the module as a whole. A name may be a function or a
 module variable, not both, because CPython would rebind it. And a
 module-level statement may only reach, through any chain of calls,
-functions whose `def` has already run; otherwise CPython raises
-`NameError`, so TyPy refuses it with E0306.
+functions whose `def` has already run, and functions and classes that an
+import outside any block binds only once that import has run
+(`ModuleImports::bound_at_top`); otherwise CPython raises `NameError`, so
+TyPy refuses it with E0306.
 
 The subset walker also reports `return` outside a function and `break` or
 `continue` outside a loop as E0103, because CPython's compiler rejects them
@@ -1495,6 +1973,120 @@ Function fn0 __main__.twice(n: int) -> int @1:1
     Assign total: int @2:5
       Local n : int @2:13
 ```
+
+### 7.3 Exports of a library
+
+When `ProjectSettings::library` is set, `TypeChecker::check` gives
+`TypedProgram::exports` the `Export` of each name the main module's
+`__all__` lists, in order: the name and the `FunctionId` (FFI-05,
+ADR-0032). `exports::listed_names` reads `__all__` from the syntax, the
+one module-level assignment, annotated or not, of a list or tuple of string
+literals. Each name is checked in turn, and each problem is E0429 under
+FFI-05:
+
+| Check | Refused |
+| --- | --- |
+| The name | Listed twice; not ASCII; starting with `__`, `_` and a capital letter, or `typy_`; one of `RUNTIME_C_FUNCTIONS`, the C library functions the runtime calls, and `main`; one of the allocator's functions (MEM-08) |
+| The function | No function of the module defined at its top level has the name; it is generic |
+| Its types | A parameter or the result other than `int`, `float` or `bool`; a result of `None` is accepted |
+
+An executable has no exports, and `exports` is `None`.
+
+`library_version::library_version` gives `TypedProgram::library_version`,
+the release its files carry (CLI-13, ADR-0045): of `__version__` when the
+module binds it once to a string literal, else of
+`ProjectSettings::version`, else `None`. `typy_source::version_release`
+finds the release, the numbers and dots a version starts with after an
+optional `v`. A `__version__` bound otherwise, one without a release, and
+one that differs from `version` are E0429 under CLI-13, reported with the
+problems of the exports.
+
+### 7.4 ctypes declarations
+
+`check::ctypes_declarations::read` runs on each module after its type
+aliases, before checking (ADR-0047). It finds the names the module's
+imports give `ctypes` and its members, then reads its statements at
+module level: `NAME = ctypes.CDLL("library")` or
+`ctypes.cdll.LoadLibrary("library")` declares a `DeclaredLibrary`, kept
+by the span of its call, and `NAME.function.argtypes = [...]` and
+`NAME.function.restype = ...` declare a `DeclaredFunction`, whose
+`declared` is the end of the later of the two. The assignments to
+`argtypes` and `restype` then leave the module. Each type is a `CData`
+(section 7.5): `CType::from_name` maps each scalar name of `ctypes` to a
+`CType`, with the sizes of 64-bit Linux, so `c_long` is `Int64`;
+`POINTER(T)` of a scalar is `CData::Pointer`; and a name an earlier
+module-level assignment binds to either stands for it, while the
+assignment stays in the module. A library named other than by one
+literal, a value that is not a list or tuple of types or a type or
+`None`, a type `ctypes` has but TyPy does not compile, and a declaration
+made twice are E0430; a pointer to a pointer is E0201 under FFI-10.
+
+A class statement whose one base is `ctypes.Structure` is read by
+`structure::fields` (ADR-0049): a docstring, `pass` and one `_fields_`
+list of `(name, type)` pairs, whose types `Types::declared` reads with
+arrays allowed and with the structures of this module and of the modules
+it imports, by `from` or by `import`. `StructureClass::new` places each
+field at the next offset its alignment allows and rounds the size up to
+the largest alignment. The structure joins the program's table, and the
+statement becomes `NAME = <structure N>`, a hidden name the body checker
+reads as the class. Any other statement in the body, a bit field, a
+decorator, a `Union` base, other bases, and a subclass of a structure are
+E0201 under FFI-11; a field listed twice, `_fields_` other than a literal
+list, and an item other than a pair of a string literal and a type are
+E0430.
+
+The body checker's `Foreign` holds the declarations and the
+`ForeignLibrary` and `ForeignFunction` tables `TypedProgram` carries. A
+call whose span a declaration names is `TypedExprKind::ForeignLibrary` of
+type `Type::ForeignLibrary`, before its callee is checked. A method call
+whose receiver is a module variable a library is bound to, which no local
+name hides, is `TypedExprKind::ForeignCall`: E0430 without both
+declarations, or at module level before them; E0404 for a keyword, a wrong
+count, or an argument `CData::accepts` refuses, and a truth test for a
+`c_bool`. An argument `ctypes.byref(x)` is checked where the call is, as
+`CDataExpr::Reference` of `x` with `x`'s type. The call's type is
+`CData::result_type`. A library read as a value is E0201 under FFI-09.
+
+### 7.5 ctypes objects
+
+`CData` is a `ctypes` class (ADR-0048): `Scalar(CType)`, `Pointer` of a
+class, or `Array` of a class and a length. `class_name` gives CPython's
+name, `size` the bytes of an object's buffer on 64-bit Linux, and
+`accepts` what a C function's argument of the class takes. A class read as
+a value, such as `ctypes.c_int`, `POINTER(T)` or `T * 3`, is
+`CDataExpr::Class` of type `Type::CDataClass`, which lowers to nothing.
+`BodyChecker::expression` refuses such a value with E0201 under FFI-10,
+unless `class_allowed` is set, which an assignment to names sets for its
+value; a call's callee, the operands of `*`, and the argument of
+`POINTER` and `sizeof` are checked with `expression_or_class`, which takes
+one.
+
+An object has type `Type::CData`, which lowers to the runtime's `CDATA`
+objects; it has identity, no hash and a truth. `TypedExprKind::CData`
+holds each `CDataExpr`:
+
+| `CDataExpr` | Source | Checks |
+| --- | --- | --- |
+| `New(arguments)` | `T(...)` | A scalar takes 0 or 1 value it stores, an array its items, a pointer class 0 or 1 object of its target; E0404 for a keyword, a count or a type |
+| `Pointer(target)` | `pointer(x)`, `POINTER(T)(x)` | A scalar object; a pointer or an array is E0201 under FFI-10 |
+| `Value(object)` | `x.value` | A scalar; its type is `CType::result_type` |
+| `Contents(pointer)` | `p.contents` | A pointer; E0412 for any other attribute |
+| `Item { object, index }` | `p[i]`, `a[i]` | A pointer or an array of scalars and an `int` index; a slice is E0201 under FFI-10 |
+| `Length(array)` | `len(a)` | An array |
+| `Size(object)` | `sizeof(x)` | An object; `sizeof(T)` is a constant |
+| `NewStructure(fields)` | `S(...)` | Positional values in field order, keywords by name, each field once; E0404 otherwise |
+| `Field { object, field }` | `s.name` | A field of the structure: a scalar's value, or a new object over the field |
+| `Reference(object)` | `byref(x)` | Only as a C function's argument; elsewhere E0201 under FFI-10 |
+
+`AssignTarget::CData` writes `CDataPlace::Value`, `Item(index)` or
+`Field(position)` of an object, after `check_value` accepts the value's
+type, E0402 otherwise: a scalar takes what `CType::stores` accepts and a
+`c_bool` any value with a truth, a structure or an array an object of its
+class, and a pointer one of its class or `None`. An augmented assignment to a value
+or an item is checked as the assignment of the combined value, with the
+object held in a hidden variable as for a property. A `for` loop, a
+comprehension, `in` and the iterable built-ins read an array's items as
+`LoopSource::Items`, each of its item's value type.
 
 ## 8. typy-tyir
 
@@ -1581,7 +2173,8 @@ is a pointer to a `BigInt` (ADR-0001, DAT-01). `Str` values are
 `ValueInfo` holds a value's `ty: TyirType` and its
 `representation: ValueRepresentation`: `Inline`, `Stack` or `Heap`. In 0.1
 `Int`, `Float`, `Bool` and `Unit` are `Inline` and objects are `Heap`;
-`Stack` is chosen by escape analysis from 0.5 (MEM-03).
+from 0.5 escape analysis marks `Stack` each new instance its function holds
+in its frame (section 8.3, MEM-03).
 
 A function's locals are `Slot`s, stack variables read with `load` and
 written with `store`, as LLVM's `alloca` is. LLVM's `mem2reg` pass turns
@@ -1645,8 +2238,12 @@ by dominance; that operands, stored values, arguments and results have the
 types their operations take; that a call of a function that may raise is
 an `invoke` and every other call is not; that an `invoke`'s blocks take
 the result and the exception; that branch targets take no parameters; that
-only a function marked `may_raise` returns an exception; and that only
-counted values are counted. A `VerifyError` names the function and the
+only a function marked `may_raise` returns an exception; that only
+counted values are counted; that only a new instance of a class that is
+not an exception is held in the frame; that each argument of a
+`CallForeign` has a type its `CType::takes`; and that each export of a library
+calls a function whose parameters and result are the TyPy types of its C
+types. A `VerifyError` names the function and the
 block, and the caller reports it as E9001 with the pass that ran last. The
 verifier runs after every pass in every build of the compiler. Dominance comes
 from the immediate dominators, found with Cooper, Harvey and Kennedy's
@@ -1657,7 +2254,11 @@ many blocks verifies in time and memory in proportion to them
 
 `print(module) -> String` writes the deterministic text form used by
 `--emit=tyir-mem`, and `print_without_counting(module)` the same text without
-its `inc` and `dec` instructions, for `--emit=tyir`:
+its `inc` and `dec` instructions, for `--emit=tyir`. An instance held in the
+frame ends its line with `in frame`, as in `v6 = new class#0 in frame`. A
+library adds a line `library NAME`, or `library NAME version X.Y`, after
+the entry, and a line
+`export add(int64_t, int64_t) -> int64_t = fn3` for each export:
 
 ```text
 string s0 = "hi\n"
@@ -1681,6 +2282,34 @@ b4(v5: exception):
   return_error v5
 }
 ```
+
+### 8.3 Escape analysis
+
+`place_instances(module)` runs once the whole program is lowered, before
+the verifier, in every build mode, so a debug and a release build hold the
+same instances in frames (NFR-15, ADR-0042). It marks `Stack` the result of
+each `NewInstance` of a class that is not an exception when no value that
+may hold the instance escapes.
+
+Within a function the analysis puts values and slots in sets with a
+union-find forest, without regard to order: a `store` joins the value and
+its slot, a `load` the slot and its result, `Downcast`, `Upcast`, `Wrap`,
+`Unwrap`, `ToBits` and `FromBits` their operand and result, and a `jump`
+each argument and its target's parameter. A set escapes when one of its
+values is returned or raised, stored in a module variable or in an
+attribute, put in a tuple, passed to a runtime function, or passed to a
+parameter that escapes. The runtime functions `IsInstance`,
+`ObjectHasTypeId` and `ObjectType` read only the object's type, so their
+arguments do not escape. An attribute read, a tuple item and a call's
+result start sets of their own: an object stored in an attribute or a tuple
+has already escaped, and a callee that returns its parameter lets it escape.
+
+| Rule | Reason |
+| --- | --- |
+| Parameters start as not escaping, and each round adds those whose set escapes, until a round adds none | Every function is analysed against the others, also when they call each other |
+| A call through a method table counts the function each table of the class and of every class derived from it holds at that position | Any of them may run, as for `may_raise` (ADR-0021) |
+| A position past a callee's parameters escapes | An unknown argument is kept |
+| An exception class never qualifies | An exception's layout is the runtime's, and it outlives the function as the error it returns |
 
 ## 9. typy-lower
 
@@ -1706,7 +2335,7 @@ graph, symbol names and the string pool.
 | Tuples | A display evaluates every item first, so an exception from a later item still releases the earlier ones, then takes over their references. An item read from a tuple the function owns gets its own reference before the tuple is released. A tuple target stores each item into its target from left to right after the whole value is evaluated, so `a, b = b, a` swaps. `str` and `repr` join the `repr` of each item, with a comma after a single item, as `(1,)`. Two tuples compare item by item: the first pair that is not equal decides, and tuples whose items are all equal are equal. A counted tuple slot starts as a tuple of zeros, empty strings and `None` |
 | Lists | Every list operation is a runtime call that borrows its arguments; a list adds its own reference to an item it stores. A display creates the list with room for its items, then appends each in order. `list[index]` borrows the item, which gets its own reference when the list is a temporary. `list[index] = value` evaluates the value, then the list and the index, as CPython does. `for` follows CPython's iterators: each sequence is evaluated once and kept in a hidden slot with its position, and taking the next value reads the length again, checks the position, fetches the item and moves the position on before the body runs, so items appended in the body are visited and a list that shrinks ends the loop. `reversed` starts at the length less one and also stops below zero. `enumerate` keeps its count in a slot. `zip` asks its sources in order and stops at the first that runs out; with `strict` true, a later source that runs out is shorter, and when the first runs out each other source is asked once more and is longer if it gives a value, both raising `ValueError` through `typy_rt_zip_unequal`. The branch taken when a source runs out is lowered with the temporaries tracked before that source was asked, so an error raised there releases only values that exist on it. A list slot starts as the placeholder list. A slice passes each bound as an `int` word, 0 when it is missing, and a mask of the bounds written, 1 for the start, 2 for the stop and 4 for the step, so the runtime applies Python's defaults. `xs += ys` and `xs *= n` change the list in place, as `list.__iadd__` and `list.__imul__` do, so every name that shares it sees the change, while a `tuple[T, ...]`, a list object too, gets a new tuple and leaves the one other names hold unchanged; `*=` builds the repetition first, so a count that raises leaves the list as it was. `xs[i] op= value` evaluates the list and the index once and reads the item before the value, as CPython does; the item keeps its own reference while the value is evaluated, because the value may change the list. `sorted` copies the list and sorts the copy. `max(xs, default=d)` tests the length first: an empty list gives `d` with a reference of its own, and any other list the item the runtime found, so both reach the join with one reference |
 | Sets | Every set operation is a runtime call that borrows its arguments; a set adds its own reference to an item it stores. A display creates the set, then adds each item in order. A display of three to thirty items that are all constants, literals, numbers with signs and tuples of them, is then copied, as CPython 3.15 merges the frozenset its compiler builds into a new set (OI-19). `set(s)` of a set copies it, which merges its table as CPython does; `set(source)` of any other source adds each value in order. Each operator and method takes CPython's steps: `\|` and `union` copy the set and extend the copy with each other collection, skipping the receiver itself; `&` and `intersection` intersect with each in turn, and with none copy; `-` and `difference` subtract the first and remove the items of the rest; `&=` and `intersection_update` replace the set's table with the intersection's. The in-place forms and the updating methods change the set, so every name that shares it sees the change. Another collection is passed as its address, a `Bits` value, since it may be a set or a list. `for` keeps the set, the next slot and its number of items in hidden slots; `typy_rt_set_next` returns the next active slot, or -1 at the end, and raises `RuntimeError` when the number of items changed, as CPython's set iterator does. `pop` gives an owned item. A set slot starts as the placeholder set |
-| Dicts | Every dict operation is a runtime call that borrows its arguments; a dict adds its own references to a key and a value it stores. A display creates the dict presized for its entries, as CPython's `BUILD_MAP` does, then sets each key and value in order. `d[k]` borrows the value, which gets its own reference when the dict is a temporary; `d[k] = v` evaluates the value, then the dict and the key. `get`, `setdefault` and `pop` give a value with a reference of its own, and `popitem` builds its pair from the key and value the dict gives up. `keys()`, `values()` and `items()` make a view object that holds the dict, so a view reads the dict as it changes and keeps its own type ID for `in`, `len` and its text, also inside a list or a tuple. `for` over a dict or a view keeps the source, the next entry, the number of entries when the loop began and the entries visited in hidden slots, and `typy_rt_dict_next` raises CPython's `RuntimeError` when the size or the keys changed. `\|` copies and updates, and `\|=` updates in place. A dict slot starts as the placeholder dict, and a view slot as a view of it |
+| Dicts | Every dict operation is a runtime call that borrows its arguments; a dict adds its own references to a key and a value it stores. A display creates the dict presized for its entries, as CPython's `BUILD_MAP` does, then sets each key and value in order. `d[k]` borrows the value, which gets its own reference when the dict is a temporary; `d[k] = v` evaluates the value, then the dict and the key. `get`, `setdefault` and `pop` give a value with a reference of its own, and `popitem` builds its pair from the key and value the dict gives up. `keys()`, `values()` and `items()` make a view object that holds the dict, so a view reads the dict as it changes and keeps its own type ID for `in`, `len` and its text, also inside a list or a tuple. `for` over a dict or a view keeps the source, the next entry, the number of entries when the loop began and the entries visited in hidden slots, and `typy_rt_dict_next` raises CPython's `RuntimeError` when the size or the keys changed. `\|` copies and updates, and `\|=` updates in place. A dict slot starts as the placeholder dict, and a view slot as null, which counting passes over, so a `return` lowered before a later loop adds its hidden view slot leaves nothing of that slot to release |
 | Comprehensions | A comprehension creates its list, set or dict, then lowers its clauses as loops, each around the next. A clause starts its iterator, binds its target and tests each condition, going back for the next value when one fails; the innermost loop evaluates the element and appends or adds it, or evaluates the key, then the value, and sets the entry, as CPython does. The collection is a temporary throughout, so an exception from an element releases it |
 | Ranges | A `range` source evaluates its arguments once, in order, and raises `ValueError` for a step that is not a nonzero constant and is zero. It keeps a counter, a limit and the step, and gives each value with a reference of its own before the counter moves on. `reversed(range(...))` starts from `typy_rt_range_last` and steps back to `start - step`, as CPython's `range_reverse` does |
 | Classes | `Class(arguments)` evaluates the arguments, makes the instance, then calls `__init__` with the instance first. An attribute is read with `Field`, borrowed from the instance, and gets a reference of its own when the instance is a temporary. Assigning an attribute evaluates the value, then the instance, stores the value with `SetField` and releases the value the attribute held; `object.attribute op= value` reads the attribute once, with a reference of its own, before the value. `str` of an instance calls `__str__`, then `__repr__`, and `repr` calls `__repr__`; a class with neither is written by `typy_rt_instance_text`. `==`, `!=`, `is` and `is not` on instances are `Identical`, and an instance is true. A slot of a class type starts as `NoInstance` |
@@ -1808,7 +2437,7 @@ comparisons, calls and counting, terminators, and emission.
 | Traceback | One immortal object with the type ID 13 and the type `traceback`, exported as `typy_rt_traceback`, written as `<traceback object at 0x...>`; it holds no frames, which the exception keeps for its report (CST-10) |
 | Iterator | Header with the type ID 12, `kind` (0 list, 1 tuple, 2 `str`, 3 `bytes`, 4 set, 5 dict keys, 6 dict values, 7 dict items, 8 an ASCII `str`, 9 a range, 10 a range past a C `long`), `source`, null once exhausted, `position`, `length` and `visited` for the checks of a set or dict, `current`, the borrowed item of the last step, `held`, a `str` iterator's current string, `number`, a range iterator's current `int` word, and `pair_type` and `pair` for a dict's items. Its type object has CPython's name, such as `list_iterator` or `dict_itemiterator`. The compiler gives a range kind 9, and the runtime makes it 10, `longrange_iterator`, when the start, stop, step or length does not fit a C `long`, as CPython does |
 | Range | Header with the type ID 14, then `start`, `stop`, `step` and `length`, four `int` words the range owns, so a range reaches past 64 bits as CPython's does. Its type object `typy_rt_type_range` is true when the range is not empty, hashes and compares as CPython's `range_hash` and `range_richcompare` do, by length, then first value, then step, and is written `range(0, 3)` or `range(0, 9, 3)`. A range slot starts as null (DAT-17) |
-| Instance | Header, `class: ptr` to the class's type object, then the attributes laid out as the class's tuple descriptor says. `typy_rt_instance_new(class)` makes one with every attribute zero; the runtime frees it by releasing each attribute the descriptor counts. A class's type object is a private constant `typy.classN`, whose base is the runtime's `typy_rt_object`, whose hash is `typy_rt_identity_hash` and whose `repr` is `typy_rt_instance_repr`, or `typy.classN.repr`, which calls the class's `__repr__` and adds a null exception when it cannot raise |
+| Instance | Header, `class: ptr` to the class's type object, then the attributes laid out as the class's tuple descriptor says. `typy_rt_instance_new(class)` makes one with every attribute zero; the runtime frees it by releasing each attribute the descriptor counts. `typy_rt_instance_on_stack(block, class)` and `typy_rt_instance_off_stack(block)` make and release an instance in a frame block (section 10.4). A class's type object is a private constant `typy.classN`, whose base is the runtime's `typy_rt_object`, whose hash is `typy_rt_identity_hash` and whose `repr` is `typy_rt_instance_repr`, or `typy.classN.repr`, which calls the class's `__repr__` and adds a null exception when it cannot raise |
 | Type object | Header, `name: ptr` to UTF-8 bytes, `name_length: u64`, `base: ptr` (null only for `object`), then five nullable function pointers with the C calling convention: `truth(object) -> bool`, `hash(object) -> i64`, `equal(left, right) -> bool`, `order(left, right, comparison) -> bool` and `repr(object) -> { str, exception }`, then `module: ptr` to UTF-8 bytes, `module_length: u64`, `fields: ptr` to the tuple descriptor of a class's attributes, null for the runtime's own types, and last `str(object) -> { str, exception }`, null when `str` is `repr`. An absent function means what it means for `object`: true, equal only to itself, and no hash, order or text. A class's `str` is `typy.classN.str`, which calls its `__str__`, or null when it has none. The runtime frees its own objects by type ID, so the type objects stay out of a program that never tests, compares or writes an object of unknown type (ADR-0012) |
 | Exception | Header, `class: ptr` at the offset an instance keeps its class, `message: ptr` to the `str` the runtime gave it or null, `arguments_type: ptr` to the tuple descriptor of the arguments the program built it with or null, `arguments: ptr` to them or null when there are none, the traceback, `cause: ptr`, `context: ptr` and `suppress_context: u64`, then a class's attributes as its descriptor lays them out (ADR-0013). `typy_rt_exception_new(class, arguments_type, arguments)` makes one with a copy of the arguments, whose items it retains |
 | `str` object | Header, `length: u64` in code points, `kind: u32` (1, 2 or 4 bytes per code point), 4 bytes of padding, then the code points |
@@ -1831,6 +2460,125 @@ its module name, then the length and text of the function name:
 `_TY8__main__3fib`. The module body of `__main__` is `__typy_main`. Symbols
 are internal and may change in any release.
 
+### 10.4 Frame blocks
+
+For each instance marked `Stack`, code generation adds an `alloca` of
+16 bytes plus the attributes' size, as the class's descriptor gives it,
+aligned to 16, in the entry block, and stores zero in its header there.
+`NewInstance` then calls `typy_rt_instance_on_stack(block, class)`, and
+each `return` and `return_error` first calls
+`typy_rt_instance_off_stack(block)` for every block of the function.
+
+| Block state | `on_stack` does | `off_stack` does |
+| --- | --- | --- |
+| Header cleared | Makes the instance in the block with a count of 2^30 + 1 | Nothing |
+| Instance at count 2^30 | Releases its attributes and makes the new instance in the block | Releases its attributes and clears the header |
+| Instance above count 2^30 | Returns `typy_rt_instance_new(class)` from the heap | Stops the program: `typy runtime: an instance in a frame is still held when its function returns` |
+
+The bias keeps the count of an instance in a frame from reaching zero, so
+the ordinary decrements never free it, and a count back at 2^30 means no
+reference is left. A site in a loop reuses its block only then, and an
+instance still held, as `previous = current` keeps one, sends the next to
+the heap.
+
+### 10.5 Heap hooks
+
+Every object defines `typy_rt_heap_allocate(size)`,
+`typy_rt_heap_reallocate(pointer, size)` and `typy_rt_heap_free(pointer)`,
+which the runtime's `allocator` calls for all its memory (MEM-08,
+ADR-0043). Each is hidden, so a shared library does not export it, and
+makes a tail call of the function `TyirModule::allocator` names, through
+its address with the hook's own type, so a name the module already has
+with another type still verifies. `TyirAllocator::default()` names
+`malloc`, `realloc` and `free`; the driver sets the module's allocator from
+`ProjectSettings::allocator` after lowering, for every stage that emits
+code.
+
+### 10.6 C calls
+
+`TyirModule::foreign_libraries` names the libraries a program declares,
+and `foreign_functions` holds each `TyirForeignFunction`: its symbol, its
+library and the `CType` of each parameter and of the result, from
+`Int8` to `UInt64`, `Float`, `Double`, `Bool`, `CharPointer`,
+`VoidPointer` and `Pointer` of a class of `cdata_classes`. Lowering gives
+each argument the type its C type takes: a `bool` becomes an `int` for an
+integer type, an `int` becomes a `float` through `CtypesFloatArgument`,
+which raises `ctypes.ArgumentError` for one too large, any value becomes
+its truth for a `c_bool`, and `None` becomes the `None` of an optional
+`bytes`, `int` or `ctypes` object. `Operation::CallForeign` then
+calls the function, which the text form shows as
+`call_foreign name(arguments)`.
+
+Code generation declares the function with the C types, an integer and a
+`bool` as a 64-bit word widened by its sign or by zeros, as `libffi`
+passes it for CPython, and calls it through its address, so a name the
+module already has with another type still verifies. An integer argument
+is `typy_rt_int_low_bits` of its word, wrapped to its width and widened
+again; a `float` narrows for `c_float`; `bytes` passes
+`typy_rt_bytes_data`, its own buffer, which a zero ends; and an `int` for
+`c_void_p` becomes an address. A result of 32 bits or fewer becomes an
+inline `int` word in place; `int64_t`, `uint64_t`, `char *` and `void *`
+results go through `typy_rt_int_from_int64`, `typy_rt_int_from_uint64`,
+`typy_rt_bytes_from_c_string` and `typy_rt_int_from_address`, which give
+`None` for null. A `ctypes` object, or `None` in its place, passes
+`typy_rt_cdata_argument`, and a `Pointer` result becomes a new pointer
+object through `typy_rt_cdata_from_address`.
+
+`TyirModule::cdata_classes` holds each `TyirCDataClass` a program uses,
+which lowering's `CDataClasses` adds the first time it meets one, the
+class of its item first: its name, its `CDataShape` (`Scalar`, `Pointer`
+or `Array` of another entry, or `Structure` with each field's offset and
+class), its size and its alignment. `Constant::CDataClass(index)` is the
+class's address, of type `bits`, which `cdata::cdata_class` emits
+once as the private constant `typy.cdata.N` in the layout of the runtime's
+`CDataClass`. Each `CDataExpr` and `AssignTarget::CData` lowers to calls
+of the `Cdata*` runtime functions: a read of an item takes a short-lived
+object over it from `CdataItem`, reads it with the getter of its type and
+releases it.
+
+A `CType::Structure` parameter or result passes by value as the System V
+calling convention of x86-64 Linux passes a C struct (ADR-0049):
+`structure_abi::passing` gives `Nothing` for no bytes, `Memory` above 16
+bytes, and otherwise one `Piece` for each eight bytes, in a vector
+register when each scalar in it is a `float` or a `double`. `Registers`
+counts the six general and eight vector registers the arguments before
+take; a structure whose pieces do not fit, or one in memory, passes as a
+`byval` pointer to its buffer. Each piece is loaded without reading past
+the structure: a `float`, a `double`, or its bytes widened to a word. A
+result in registers is a piece, or a pair of two, stored into a new
+object; a larger one is written by the callee into a new object's
+buffer, passed first as `sret`.
+
+### 10.7 Library objects
+
+`TyirModule::library` holds the `TyirLibrary` of a library build: its name,
+the release of its version, and a `TyirExport` for each export, with its
+function, the `CType` of each parameter and of the result (`Int64`,
+`Double` or `Bool`, and `None` for `void`), and the parameters' Python
+names. `LibraryEmitter` adds to the object (ADR-0044):
+
+| Item | Form |
+| --- | --- |
+| Constructor | `typy.library.load`, internal, in `llvm.global_ctors` at priority 65535: calls `typy_rt_library_load(__typy_main)` |
+| Destructor | `typy.library.unload` in `llvm.global_dtors`: calls `typy_rt_library_unload()` |
+| Export | A function with the export's name and C types, a `bool` as a `zeroext i8`: calls `typy_rt_library_enter()`, converts each `int64_t` with `typy_rt_int_from_int64` and each `bool` by a test against zero, calls the program's function, drops the converted words, ends the process through the no-return `typy_rt_library_raised` when the call raised, converts an `int` result with `typy_rt_int_into_int64`, which may raise `OverflowError`, calls `typy_rt_library_leave()` and returns |
+
+An export whose name the object already has is an internal error, which
+the checker's rules prevent. `c_header(module)` writes the header: a guard
+of the name in capitals, `stdbool.h` and `stdint.h`, `extern "C"` for C++,
+and a declaration of each export, whose parameters keep their Python
+names, with an underscore after one that C or C++ reads as a keyword, such
+as `default_`, and `argumentN` for one that is not ASCII.
+
+`python_binding(module, soname)` writes the binding module of ADR-0046: it
+imports `ctypes`, lists the exports in `__all__`, loads `soname` with
+`ctypes.CDLL` into `_library`, with underscores added until no export or
+parameter has the name, assigns each export's `argtypes` and `restype`
+from `c_int64`, `c_double`, `c_bool` or `None`, and defines a function of
+each export's name, parameters and Python types that calls it.
+`python_stub(module)` writes the stub of those functions. A string literal
+escapes `"`, the backslash and control characters.
+
 ## 11. typy-build
 
 `BuildMode` is `Debug`, `Release` or `ReleaseSmall`, and
@@ -1846,12 +2594,10 @@ are internal and may change in any release.
 | `mode` | `BuildMode` | `Debug` | `--release` and `--release-small` are exclusive |
 | `target` | `Target` | `Target::host()` | Supported (section 10.1) |
 | `emit` | `Option<EmitStage>` | `None` | When set, no executable is written |
-| `output` | `Option<Utf8PathBuf>` | `None` | `executable_path()` defaults it to the main file without `.py`, next to it |
+| `output` | `Option<Utf8PathBuf>` | `None` | `output_path()` defaults an executable's to the main file without `.py`, next to it; a library's files are named by `LibraryLayout` |
+| `library` | `Option<LibraryKind>` | `None` | `Static` or `Shared` builds a C library instead of an executable (CLI-09) |
 
-Each field has a `with_` method that returns the changed request. The
-libraries to link and the functions to export join the request with CLI-09
-in 0.5, and `deny_warnings` with DIA-07 in 0.3, when the first warnings are
-defined.
+Each field has a `with_` method that returns the changed request.
 
 `RuntimeArchive::beside(executable, triple)` opens
 `<prefix>/lib/typy/<triple>/libtypy_runtime.a` for a compiler at
@@ -1870,9 +2616,33 @@ as a subprocess with an argument list and no shell:
 
 | Target | Program | Arguments |
 | --- | --- | --- |
-| `x86_64-unknown-linux-gnu` | `cc` | `-o TEMP OBJECT -Wl,--push-state,--no-as-needed -lm -Wl,--pop-state RUNTIME_ARCHIVE -lm -Wl,--gc-sections` |
+| `x86_64-unknown-linux-gnu` | `cc` | `-o TEMP OBJECT -Wl,--push-state,--no-as-needed -lm -Wl,--pop-state RUNTIME_ARCHIVE [-lLIBRARY] -lm -Wl,--gc-sections` |
 | `x86_64-unknown-linux-musl` | `musl-gcc` | `-static`, then the same |
 
+`Linker::with_libraries(libraries)` adds `-l` and each library after the
+runtime archive, and `with_library_paths(paths)` adds `-L` and each path
+before the object. The driver passes the allocator's library (MEM-08),
+and for each library a `ctypes` declaration names its
+`LibraryLink::linker_name`, `-l:NAME` or `-l:BASE.a` as `typy.toml` says,
+with the directories of `library-paths` (FFI-01, FFI-04).
+`LibraryLayout::beside(directory, kind, name, release)` names a library's
+files as ADR-0045 decides: `libNAME.so.X.Y` with the soname `libNAME.so.X`
+and links of that name and `libNAME.so`, or `libNAME.X.Y.a` with a link
+`libNAME.a`, and without a release `libNAME.so`, whose soname is its name,
+or `libNAME.a`. `LibraryLayout::at(path, kind)` is the layout of `-o
+PATH`: the file alone, a shared library's soname its file name.
+`Linker::link_library(object, layout, kind, exports)` builds the library in
+a temporary directory beside it, renames it into place when every step
+succeeded, then makes each link in the temporary directory and renames it
+over the name it replaces (ADR-0044):
+
+| Kind | Steps |
+| --- | --- |
+| `Static` | `cc -r -nostdlib -o library.o program.o RUNTIME_ARCHIVE`; `objcopy --keep-global-symbols=exports.txt library.o`, with `--strip-debug` for a release; `ar rcsD library.a library.o`, whose `D` writes no times or owners |
+| `Shared` | `cc -shared -o library.so -Wl,-soname,SONAME` with the arguments an executable's link has after its output, and `-Wl,--version-script=exports.map`, which makes the exports global and every other symbol local |
+
+`tool::run_tool` runs each program, with E0701 when it is missing and
+E0702 when it fails, as for an executable.
 A `--release` or `--release-small` build adds `-Wl,--strip-debug`, so the
 executable holds no debug information, which the runtime archive brings
 from `core` and `compiler_builtins` with LTO; the symbol table stays. A
@@ -1893,8 +2663,8 @@ files are removed on every path. A missing program gives E0701 with its
 name; a failed run gives E0702 with the command line and the linker's
 standard error in its help; an output directory that cannot be written
 gives E0702 with the directory. None of them has a source location. An
-`Artifact` holds its `path` and its `kind`: `Executable`, `Object` or
-`Text`.
+`Artifact` holds its `path` and its `kind`: `Executable`, `StaticLibrary`,
+`SharedLibrary`, `Object` or `Text`.
 
 ## 12. typy-driver
 
@@ -1911,6 +2681,7 @@ process. Each method returns a `Success`, the `Outcome` with the
 | `check(main)` | Loads and checks the program, and returns `Outcome::Checked` with its `Sources` (CLI-03) |
 | `run(request)` with `emit` set | Runs the stages up to that stage and returns `Outcome::Emitted` with an `Emission`: `Text` for every stage but `obj`, `Bytes` for `obj` (CLI-04). `ast` needs only a program that parses; every later stage needs one that checks |
 | `run(request)` without `emit` | Opens the runtime archive, then loads, checks, lowers, generates the object and links it, and returns `Outcome::Executable` with the `Artifact` |
+| `run(request)` with `library` set | Loads the main file as a library, so its module is named after its file, then links with `link_library` into the layout of `-o`, or `LibraryLayout::beside` the main file with the module's name and release, and writes beside the library the C header `NAME.h`, and the binding `NAME_binding.py` and its stub `NAME_binding.pyi`, which load the soname of the shared library of the build's release, also for a static build (CLI-09, CLI-13, FFI-05, FFI-08) |
 
 The root of the project is the main file's directory. A `Failure` holds
 the `Diagnostics` and the `Sources` they are rendered against:
@@ -1919,11 +2690,12 @@ files of a program that did not, and `Sources::None` when the build stopped
 before reading any file, as a missing runtime archive does. Each stage runs
 only when the stages before it found no errors.
 
-Warnings come from two places (ADR-0017). `parse_with_warnings` scans the
-parser's tokens for invalid escapes, W0101, and `Project::warnings` keeps
-them; the subset walker gives W0301, and `TypedProgram::warnings` keeps
-the checker's. After checking, the pipeline joins them. With
-`deny_warnings` set, any warning makes a `Failure` before lowering, so no
+Warnings come from two places (ADR-0017, ADR-0033). `parse_with_warnings`
+scans the parser's tokens for invalid escapes, W0101, and
+`Project::warnings` keeps them; the subset walker gives W0301, the body
+checker W0401, and `TypedProgram::warnings` keeps the checker's. After
+checking, the pipeline joins them. With `deny_warnings` set, any warning
+makes a `Failure` before lowering, so no
 code is generated; otherwise `Warnings` holds them with the project's
 `Sources`, and with `Sources::None` when there are none, so a clean build
 copies nothing.
@@ -1932,9 +2704,9 @@ copies nothing.
 
 | Item | Design |
 | --- | --- |
-| Arguments | Parsed with `clap`; the commands `check FILE`, `build FILE` and `run FILE [-- ARGS]` in 0.1, `explain` in 0.3. Each of the three takes `--python-floor VERSION`, which becomes `SettingOverrides` for `Pipeline::with_overrides`. `build` takes `--emit=STAGE` and `-o PATH`; `build` and `run` take `--release` or `--release-small`, never both. A main file that is not a `.py` file is wrong usage |
+| Arguments | Parsed with `clap`; the commands `check FILE`, `build FILE` and `run FILE [-- ARGS]` in 0.1, `explain` in 0.3. Each of the three takes `--python-floor VERSION`, which becomes `SettingOverrides` for `Pipeline::with_overrides`. `build` takes `--emit=STAGE` and `-o PATH`; `build` and `run` take `--release` or `--release-small`, never both. `build` and `check` take `--lib static` or `--lib shared`, which sets `SettingOverrides::library` and the request's `library` (CLI-09). A main file that is not a `.py` file is wrong usage |
 | Output | `Reporter` writes diagnostics in the `--error-format` the command line chose, a global flag: sorted, rendered with `render_text` and written to standard error with a blank line between two of them, or with `render_json` one per line. The panic guard and internal errors use the same reporter, so a tool reading JSON also gets E9001 as JSON (UC-10). `--emit` output goes to `-o`, or to standard output without it. A file that cannot be written gives E0106 |
-| `typy explain CODE` | Prints the section of `docs/user/troubleshooting.md` for the code, embedded in the binary with `include_str!`, so the page and the command never disagree: its heading and prose, its samples indented by four spaces without their fences and `typy-expect` comments, links as their text, then the rule from the registry (CLI-10, UC-04). A retired code says so and names its replacement. A text that is not a code, or a code the registry lacks, is wrong usage, status 2. Every section of a code whose cause is one program file holds a program that gives it and the corrected program, which the documentation test runs; the codes about files, settings, the C toolchain and imports between modules show their files as text |
+| `typy explain CODE` | Prints the section of `docs/user/troubleshooting.md` for the code, embedded in the binary with `include_str!`, so the page and the command never disagree: its heading and prose, its samples indented by four spaces without their fences and `typy-expect` comments, links as their text, then the rule from the registry (CLI-10, UC-04). A retired code says so and names its replacement. A text that is not a code, or a code the registry lacks, is wrong usage, status 2. Every section of a code whose cause is one program file holds a program that gives it and the corrected program, which the documentation test runs; the codes about files, settings, the C toolchain and imports between modules show their files as text, and E0429, which only a library build gives, shows modules that are correct as programs |
 | Exit status | `ExitStatus` is `Success = 0`, `ProgramErrors = 1`, `Usage = 2` and `Internal = 101` (CLI-06); a failure with any `E9xxx` diagnostic is `Internal`. `typy run` exits with the program's status, or 128 plus the signal that ended it |
 | Panic guard | The command runs on a thread of its own with a 512 MiB stack (ADR-0020), inside `std::panic::catch_unwind`, with a panic hook that records the location in a thread-local; a panic becomes E9001 with the location and message, and exit status 101 |
 | Warnings | `Reporter::warnings` writes the warnings of a `Success` before the command's output. `--deny-warnings` is a global flag. `typy run` checks a program whose build it takes from the cache, so its warnings show on every run, and the cache key includes `--deny-warnings` |
@@ -1964,6 +2736,8 @@ installed `typy` finds `<prefix>/lib/typy/` and a `typy` in
 | `SetObject` | Header, `fill: usize`, `used: usize`, `mask: usize`, `finger: usize`, `kind: u32`, `words: u32`, `tuple: *const TupleType`, `table: *mut u64`, `states: *mut u8` | A table of `mask + 1` slots, a power of two and at least eight, in one allocation with a state byte per slot after it: empty, active or dummy. A slot is a hash word followed by the item's words. `fill` counts the active and dummy slots, `used` the active ones, and `finger` is where `pop` starts, as in CPython's `PySetObject` |
 | `DictObject` | Header, `used: usize`, `filled: usize`, `usable: usize`, `log2: u32`, `key_kind: u32`, `value_kind: u32`, `key_words: u32`, `key_tuple`, `value_tuple`, `indices: *mut i64`, `entries: *mut u64`, `live: *mut u8` | CPython's combined table: the entries in insertion order, each a hash word, the key's words and the value's words, with a byte that says whether it holds an item, and `2**log2` index slots that hold an entry's position, -1 when empty or -2 when its entry was removed. `used` counts the items, `filled` the entries written, holes included, and `usable` the entries left before a resize. A new dict has no table, `log2` 0 |
 | `ViewObject` | Header, `kind: u32`, padding, `dict: *mut DictObject` | A view of a dict under the type ID 9: 0 shows the keys, 1 the values, 2 the items. It holds a reference to its dict, so the dict lives as long as the view |
+| `CDataClass` | `name: *const u8`, `name_length: u64`, `kind: u32`, `ctype: u32`, `size: u64`, `item: *const CDataClass`, `length: u64` | A `ctypes` class the compiler emits once: `kind` 0 for a scalar of C type `ctype`, numbered as `CType`, 1 for a pointer, 2 for an array of `length` items of `item`, and 3 for a structure, whose name holds its module (ADR-0048, ADR-0049) |
+| `CDataObject` | Header, `class: *const CDataClass`, `address: *mut u8`, `owner: *mut ObjectHeader`, `kept: *mut Kept` | A `ctypes` object under the type ID 23: a scalar or an array owns a buffer after this part; an object over another's memory counts `owner`, the object whose buffer it is or, for C's memory, the pointer it was read through; `kept` is the table of the objects the values in its buffer refer to, by address: a pointer's target and the `bytes` of each `c_char_p` written into it or through an object over it |
 
 ![Design classes of the runtime](../diagrams/class-design-runtime.svg)
 
@@ -1972,31 +2746,34 @@ installed `typy` finds `<prefix>/lib/typy/` and a `typy` in
 | Module | Behaviour |
 | --- | --- |
 | `entry` | `main` keeps its arguments for `sys.argv`, records the stack limit, calls `__typy_main`, reports an uncaught exception, flushes standard output and returns the exit status `sys::exit_status` gives |
-| `allocator` | `typy_rt_allocate`, `typy_rt_reallocate` and `typy_rt_free` over `malloc`, `realloc` and `free`. Running out of memory prints `MemoryError` and aborts |
+| `cdata` | `typy_rt_cdata_new(class)` makes an object, every byte zero; the getters and setters read and write a scalar of each C type, wrapping an `int` to its width; `typy_rt_cdata_pointer(class, target)` points to an object and keeps it; `typy_rt_cdata_from_address` makes a pointer of a C result; `typy_rt_cdata_contents` and `typy_rt_cdata_item` give an object over the target or an item, `ValueError: NULL pointer access` for a null pointer and `IndexError: invalid index` outside an array, which counts from its end when negative; `typy_rt_cdata_argument` gives the address a C function takes; `typy_rt_cdata_field` gives an object over a structure's field, `typy_rt_cdata_copy` copies an object's bytes into another of its class and keeps the source, and `typy_rt_cdata_set_pointer` writes a pointer field or item. The type object's slots give CPython's truth and `repr` (FFI-03, ADR-0048) |
+| `foreign` | `typy_rt_int_low_bits(word)` gives the low 64 bits of an `int` word in two's complement, and 0 for the word 0; `typy_rt_int_from_uint64`, `typy_rt_int_from_address` and `typy_rt_bytes_from_c_string` make a C result a TyPy value, null giving `None`; `typy_rt_ctypes_float_argument(word, position)` converts an `int` for a `c_double`, raising `ctypes.ArgumentError`, a class whose module is `ctypes`, with CPython's text for one too large (FFI-03, ADR-0047) |
+| `library` | `typy_rt_library_load(module)` records the stack limit, keeps `['']` for `sys.argv`, runs the module bodies and flushes standard output; `_unload` flushes it and closes the files; `_enter` records the stack limit for the calling thread, `_leave` flushes standard output; `_raised(exception)` exits with a `SystemExit`'s status, or reports any other exception as uncaught and aborts (ADR-0044). `stack::record_limit` reads `getrlimit` once and measures from the current stack pointer |
+| `allocator` | `allocate`, `reallocate` and `free` over the program object's hooks `typy_rt_heap_allocate`, `typy_rt_heap_reallocate` and `typy_rt_heap_free` (section 10.5), asking for at least one byte. Running out of memory prints `MemoryError` and aborts. The unit tests define the hooks over `malloc`, `realloc` and `free`, since they link no program object |
 | `refcount` | `typy_rt_increment` and `typy_rt_decrement`, not atomic (A-03). A decrement to zero calls the type's `drop`, then frees the memory |
-| `int` | Addition, subtraction, multiplication, floor division, modulo, power, negation, comparison, conversion to and from `str` and `float`, all with Python's results (EXP-02, EXP-05) |
+| `int` | Addition, subtraction, multiplication, floor division, modulo, power, negation, comparison, conversion to and from `str` and `float`, all with Python's results (EXP-02, EXP-05). `typy_rt_int_from_int64` and `typy_rt_int_into_int64` convert a C `int64_t` for an export, the second dropping the word and raising `OverflowError: Python int too large to convert to C int64_t` outside its range (FFI-05) |
 | `float` | Division, floor division, modulo and power with the special cases of CPython's `float_divmod` and `float_pow`. `int / int`, `float(int)` and `float(str)` round once to the nearest double, ties to even, by CPython's `long_true_divide` method on exact integers. `int(float)` and `int` against `float` comparisons are exact. `round` rounds half to even on the exact value: `round(x)` to an integer, `round(x, n)` by rounding `x * 10**n` exactly and reading the result back with one correct rounding, as CPython's `_Py_dg_dtoa` and `_Py_dg_strtod` do, so `round(2.675, 2)` is `2.67`. Beyond 323 digits a `float` rounds to itself and below -308 to zero; a result too large raises `OverflowError: rounded value too large to represent`. `round` of an `int` with negative `ndigits` gives the even multiple of `10**-ndigits`, as `long_round` does. `repr` writes the shortest digits that read back as the same double, found exactly with large integers, and breaks an exact tie toward the even digit as CPython does; the layout is positional when the decimal exponent is from -4 to 15, otherwise scientific with a sign and at least two exponent digits, and `inf`, `-inf`, `nan` and `-0.0` are written as CPython writes them (DAT-02) |
 | `libm` | `floor`, `fmod`, `pow` and `ldexp` from the C maths library, which is why every link passes `-lm` |
-| `math` | The functions behind the `math` module (LIB-05, ADR-0018), one `typy_rt_math_*` symbol each. A function of the C library runs inside CPython 3.15's `math_1` or `math_2` checks: a NaN from a number is `ValueError`, with the function's 3.15 message such as `expected a nonnegative input, got -1.0`, or `math domain error`, and an infinity from a finite number `OverflowError: math range error` where the function can overflow. `pow`, `fmod`, `remainder`, `ldexp`, `ulp`, `nextafter`, `fma`, `isclose`, `hypot` and `dist`, with CPython's `vector_norm`, `gamma` and `lgamma`, with its Lanczos sum, `fsum`, with Shewchuk's partials, and `sumprod`, with its triple-length sum, are ported from `mathmodule.c`, and `fmax` and `fmin` keep `x` when the two are equal, as the oracle's Clang build does. A logarithm of an `int` too large for a `float` is that of its top 55 bits, rounded once, plus its bit count times the logarithm of 2, by `fma`, as 3.15 does. `factorial` multiplies by halves, `isqrt` runs Newton's method from a power of two, `comb` and `perm` take exact running quotients, and `gcd` is Euclid's; each refuses what CPython refuses, with its message and its limit of a C `long`. The C functions are named with `#[link(name = "m")]`, so a Rust test binary of the runtime also calls the C library before `compiler_builtins` |
-| `string` | Creation, concatenation, repetition, indexing with negative indexes (DAT-11), slicing into a string as narrow as the code points it selects (DAT-12), length, the methods of LIB-03 that need no Unicode tables, with CPython's index adjustment for `start` and `end` and its rules for an empty substring, whitespace as `str.isspace` defines it, and the line breaks of `str.splitlines`, built through a `StrBuilder` that makes the new string as narrow as its widest code point, and the case methods and `is` tests. Their tables in `string/unicode/case_tables.rs` are read off CPython 3.15 itself, code point by code point, by `scripts/generate-unicode-tables.py`: for each property the code points where it changes, and for each case mapping runs of a constant difference over a stride of one or two, about 200 for each, with the few mappings to more than one code point listed apart. A program links only the tables its methods use. `lower` makes a capital sigma final sigma, when a cased code point comes before it and none after it, skipping case-ignorable ones, as CPython does; both properties are read from CPython by lowering a sigma beside each code point. `title` lowercases a code point after a cased one, comparison, `repr`, `chr` and `ord`. `repr` escapes the code points `str.isprintable` rejects, and `int()` and `float()` read the decimal digits of every script, from tables that `scripts/generate-unicode-tables.py` writes from CPython 3.15's Unicode 17.0 data (OI-15). The tables hold 676 boundaries up to U+FFFF as `u16`, 806 above it as `u32`, and 77 digit zeros, about 4.9 KB |
-| `list` | `typy_rt_list_new(kind, capacity, descriptor)`, `_append`, `_length`, `_get`, `_set`, `_equal`, `_contains`, `_repr`, `_slice`, `_pop`, `_insert`, `_extend`, `_remove`, `_index`, `_count`, `_clear`, `_copy`, `_reverse`, `_concat`, `_repeat`, `_compare`, `_sort`, `_extreme`, `_sum_int`, `_sum_float`, `_any` and `_all`. A list grows to `n + n/8 + 4` items while small and to `n + n/32 + 4` from 65,536 items, so a list of a million `int` values built one `append` at a time takes at most 8.5 MB (NFR-13). A position counts from the end when negative; one outside the list raises `IndexError: list index out of range`, or `list assignment index out of range`, and a large integer `cannot fit 'int' into an index-sized integer`. An `Object` item is compared and written by the type ID in its header, so a list of lists needs nothing from the compiler. `repr` joins the `repr` of each item once, in a string as wide as its widest piece. `pop` takes its index with an `int` flag, 1 when an index is given, so no `bool` crosses into the runtime as an argument, and returns the item with the reference the list held. `insert` clamps its position to the list, as CPython does. `extend` reads the other list's length first, so `xs.extend(xs)` doubles the list once. `clear` sets the length to zero before releasing the items, so an item's `drop` never sees a half-cleared list. `remove` and `index` raise `ValueError` with CPython 3.14's messages, `list.remove(x): x not in list` and `list.index(x): x not in list` (OI-14). `repeat` raises `OverflowError` for a count that does not fit an index. `compare` decides by the first unequal pair, then by length. `sort` is stable and compares only with `<`, as CPython's does: runs of 32 items by binary insertion, then merged bottom up through one buffer of the list's length. With `reverse` it reverses, sorts and reverses again, as CPython does, so equal items keep their order; a `nan` makes the order of a list depend on the algorithm, and CPython's own versions differ on it. `extreme` keeps the first item until a later one is less, for `min`, or greater, for `max`, so the first of equal items wins, and an empty list raises `ValueError: min() iterable argument is empty`. `sum_float` is CPython 3.12's compensated sum, Neumaier's improvement of Kahan's: each rounding error is collected and added once at the end unless it is not finite. A `tuple[T, ...]` is a list object whose header has the tuple type ID, 5, set by `typy_rt_tuple_seal` once its items are in: `repr` writes it between parentheses, `(1,)` for one item, its index error is `tuple index out of range` and `index` raises `tuple.index(x): x not in tuple`, and a slice, `+` or `*` of a tuple is a tuple. `typy_rt_placeholder_list` is an immortal empty list. Freeing a list releases each item |
+| `math` | The functions behind the `math` module (LIB-05, ADR-0018), one `typy_rt_math_*` symbol each. A function of the C library runs inside CPython 3.15's `math_1` or `math_2` checks: a NaN from a number is `ValueError`, with the function's 3.15 message such as `expected a nonnegative input, got -1.0`, or `math domain error`, and an infinity from a finite number `OverflowError: math range error` where the function can overflow. `pow`, `fmod`, `remainder`, `ldexp`, `ulp`, `nextafter`, `fma`, `isclose`, `hypot` and `dist`, with CPython's `vector_norm`, `gamma` and `lgamma`, with its Lanczos sum, `fsum`, with Shewchuk's partials, and `sumprod`, with its machine-integer path, its triple-length path and the exact total it falls back to, are ported from `mathmodule.c`; `prod` of an `int` start keeps the exact product until its first `float` item, and each reads the member a union item holds (LIB-15), and `fmax` and `fmin` keep `x` when the two are equal, as the oracle's Clang build does. A logarithm of an `int` too large for a `float` is that of its top 55 bits, rounded once, plus its bit count times the logarithm of 2, by `fma`, as 3.15 does. `factorial` multiplies by halves, `isqrt` runs Newton's method from a power of two, `comb` and `perm` take exact running quotients, and `gcd` is Euclid's; each refuses what CPython refuses, with its message and its limit of a C `long`. The C functions are named with `#[link(name = "m")]`, so a Rust test binary of the runtime also calls the C library before `compiler_builtins` |
+| `string` | Every `str` and `bytes` object, and every constant one, keeps a zero unit after its data, so `typy_rt_bytes_data` gives C the object's own buffer as a string (ADR-0047). Creation, concatenation, repetition, indexing with negative indexes (DAT-11), slicing into a string as narrow as the code points it selects (DAT-12), length, the methods of LIB-03 that need no Unicode tables, with CPython's index adjustment for `start` and `end` and its rules for an empty substring, whitespace as `str.isspace` defines it, and the line breaks of `str.splitlines`, built through a `StrBuilder` that makes the new string as narrow as its widest code point, and the case methods and `is` tests. Their tables in `string/unicode/case_tables.rs` are read off CPython 3.15 itself, code point by code point, by `scripts/generate-unicode-tables.py`: for each property the code points where it changes, and for each case mapping runs of a constant difference over a stride of one or two, about 200 for each, with the few mappings to more than one code point listed apart. A program links only the tables its methods use. `lower` makes a capital sigma final sigma, when a cased code point comes before it and none after it, skipping case-ignorable ones, as CPython does; both properties are read from CPython by lowering a sigma beside each code point. `title` lowercases a code point after a cased one, comparison, `repr`, `chr` and `ord`. `repr` escapes the code points `str.isprintable` rejects, and `int()` and `float()` read the decimal digits of every script, from tables that `scripts/generate-unicode-tables.py` writes from CPython 3.15's Unicode 17.0 data (OI-15). The tables hold 676 boundaries up to U+FFFF as `u16`, 806 above it as `u32`, and 77 digit zeros, about 4.9 KB |
+| `list` | `typy_rt_list_new(kind, capacity, descriptor)`, `_append`, `_length`, `_get`, `_set`, `_equal`, `_contains`, `_repr`, `_slice`, `_pop`, `_insert`, `_extend`, `_remove`, `_index`, `_count`, `_clear`, `_copy`, `_reverse`, `_concat`, `_repeat`, `_compare`, `_sort`, `_extreme`, `_sum_int`, `_sum_float`, `_any` and `_all`. A list grows to `n + n/8 + 4` items while small and to `n + n/32 + 4` from 65,536 items, so a list of a million `int` values built one `append` at a time takes at most 8.5 MB (NFR-13). A position counts from the end when negative; one outside the list raises `IndexError: list index out of range`, or `list assignment index out of range`, and a large integer `cannot fit 'int' into an index-sized integer`. An `Object` item is compared and written by the type ID in its header, so a list of lists needs nothing from the compiler. `repr` joins the `repr` of each item once, in a string as wide as its widest piece. `pop` takes its index with an `int` flag, 1 when an index is given, so no `bool` crosses into the runtime as an argument, and returns the item with the reference the list held. `insert` clamps its position to the list, as CPython does. `extend` reads the other list's length first, so `xs.extend(xs)` doubles the list once. `clear` sets the length to zero before releasing the items, so an item's `drop` never sees a half-cleared list. `remove` and `index` raise `ValueError` with CPython 3.14's messages, `list.remove(x): x not in list` and `list.index(x): x not in list` (OI-14). `repeat` raises `OverflowError` for a count that does not fit an index. `compare` decides by the first unequal pair, then by length. `sort` is `list::listsort`, a port of CPython 3.15.2's `listsort` that calls `<` on the same items in the same order: natural runs that `count_run` finds, extended by binary insertion to the `minrun` that `minrun_next` spreads over the list, merged by the powersort strategy with galloping through a buffer of half the list; a comparison whose slot method raised ends it, the items a permutation of the input as CPython leaves them (OI-27). With `reverse` it reverses, sorts and reverses again, as CPython does, so equal items keep their order; a `nan` makes the order of a list depend on the algorithm, and CPython's own versions differ on it. `extreme` keeps the first item until a later one is less, for `min`, or greater, for `max`, so the first of equal items wins, and an empty list raises `ValueError: min() iterable argument is empty`. `sum_float` is CPython 3.12's compensated sum, Neumaier's improvement of Kahan's: each rounding error is collected and added once at the end unless it is not finite. A `tuple[T, ...]` is a list object whose header has the tuple type ID, 5, set by `typy_rt_tuple_seal` once its items are in: `repr` writes it between parentheses, `(1,)` for one item, its index error is `tuple index out of range` and `index` raises `tuple.index(x): x not in tuple`, and a slice, `+` or `*` of a tuple is a tuple. `typy_rt_placeholder_list` is an immortal empty list. Freeing a list releases each item |
 | `format` | `typy_rt_format_int`, `_bool`, `_float`, `_str` and `_other` give `format(value, spec)` as f-strings call it (LEX-07), a port of CPython's `formatter_unicode.c`: the specification `[[fill]align][sign][z][#][0][width][grouping][.precision][type]` is read with CPython's checks and `ValueError` messages, the digits of a number are grouped by `,` or `_` with zeros added inside the groups when `0` pads it after its sign, and the number or text is padded and aligned. A `float` is written as `PyOS_double_to_string` writes it for `e`, `f`, `g` and `repr`, from digits rounded half to even on the exact value with large integers, as `_Py_dg_dtoa` rounds them, then laid out as `format_float_short` lays them out. A `bool` comes as an `int` word, and any other type as its `str` and its type's name, which an empty specification gives back and any other raises `TypeError`. `typy_rt_ascii` escapes every code point outside ASCII for `!a`. `scripts/generate-format-cases.py` writes the test table, 4,628 results that CPython 3.12 to 3.15 all give |
 | `message` | Builds an exception message of up to 1024 code points from text, numbers and `repr` of a string, so an error about a long input stays short |
-| `io` | Standard output is buffered in 8 KiB and flushed when full, at exit, and before anything is written to standard error |
+| `io` | Standard output is buffered in 8 KiB and flushed when full, at exit, and before anything is written to standard error. `string::write_utf8` writes a surrogate as each standard stream's handler in CPython's UTF-8 mode does: `Surrogates::Escape` writes U+DC80 to U+DCFF to standard output as the bytes 0x80 to 0xFF, and `Surrogates::Backslash` writes `\ud800` to standard error and in reports. `string::unescapable` finds the first surrogate outside U+DC80 to U+DCFF and the end of its run, where `typy_rt_write_stdout_checked` and a `write` to `sys.stdout` raise CPython's `UnicodeEncodeError` before writing any of the string (LEX-10) |
 | `text_file` | `TextFile` objects under the type ID 17: a header, a descriptor, flags (readable, writable, closed, standard), the name of a standard file, the path and mode of a file `open` made, its `Reader` or `Writer`, and its place on the list of open files. `sys.stdout` and `sys.stderr` are immortal statics that print as `<_io.TextIOWrapper name='<stdout>' mode='w' encoding='utf-8'>`, and `sys.stdin` one with mode `r`, read through a static `Reader` that escapes a byte outside UTF-8 as U+DC80 to U+DCFF, as CPython 3.15's UTF-8 mode does, and that `input()` shares; writing to it raises `io.UnsupportedOperation: not writable`; standard output is written through its buffer and standard error at once, and closing either only writes it out. `typy_rt_open` installs the functions that free a file and close every open file, which `destroy` and `main` call through a hook, so a program that never opens a file links none of this code (NFR-01) |
 | `text_file::disk` | `typy_rt_open(path, mode, how, buffering, encoding, newline)` encodes the path as `os.fsencode` does (U+DC80 to U+DCFF as bytes, `ValueError: embedded null byte` for U+0000), opens it with `O_CLOEXEC` and the flags of the access, retrying `EINTR`, and refuses a directory opened for reading with `EISDIR`, as CPython's `fstat` check does. Every operation on a closed file raises `ValueError: I/O operation on closed file.`; reading a file opened for writing, or the other way round, raises `io.UnsupportedOperation`. A mode with `+` opens the descriptor `O_RDWR` and gives the file a `Reader` and a `Writer`: a read writes out the writer first, and a write drops what the reader holds, so it lands where the reader stopped reading the descriptor, as CPython's text layer over `BufferedRandom` writes. `close` writes out the buffer, closes the descriptor even when that fails, frees the buffers and takes the file off the list; a file whose last reference goes is closed with its error dropped |
 | `text_file::state` | `typy_rt_text_name` and `typy_rt_text_mode` give the path and mode a file was opened with, or the name of a standard file and `r` or `w`. `typy_rt_text_fileno` gives the descriptor, and `typy_rt_text_state(file, question)` answers `isatty`, `readable`, `writable`, `seekable` (`lseek` to the current position succeeds) and `closed`. On a closed file these raise `ValueError: I/O operation on closed file` without the full stop, as CPython's raw file does, except `closed`, and `readable` or `writable` for the direction the file lacks, which answer `False` as CPython's buffered layer does |
 | `text_file::position` | `tell`, `seek` and `truncate` (LIB-14). A position is a byte offset: CPython's cookie for UTF-8 when no decoding is pending, which holds at every character a read gives out. `tell` writes out what the file holds and gives the descriptor's position less the bytes its `Reader` holds. `seek` checks as CPython's `TextIOWrapper.seek` does, in its order: `whence` a C `int`, the file open and seekable, `whence` 0, 1 or 2, a move from 1 or 2 only by zero, then no negative position; it writes out the buffer, resets the `Reader` and moves the descriptor. A position from 2^63 is `EINVAL`, as `lseek` gives it. `truncate` writes out the buffer, refuses a file not opened for writing with `io.UnsupportedOperation: truncate`, reads `pos` as a C `long`, and calls `ftruncate` without moving the file. A `for` loop reads through `loop_line`, which marks the `Reader` so that `tell` raises `OSError: telling position disabled by next() call` until the loop ends or a `seek` resets it. `typy_rt_open` moves a file opened with `a` to its end, as CPython's `FileIO` does |
 | `text_file::reader` | A `Reader` holds one chunk of 8192 bytes, `TextIOWrapper._CHUNK_SIZE`, the up to three bytes of a character cut off at its end, and a `\r` that waits for the next byte, and decodes as its `Decoding` says: a `Codec`, a `Handler` and a `Newline`. Each chunk is checked by the codec when it is read, as CPython's incremental decoder checks it, so with `strict` an invalid byte raises `UnicodeDecodeError` with the chunk as its object and its position in the chunk, at the read that reaches the chunk, and with `xmlcharrefreplace` CPython's `TypeError`. Another handler decodes every byte: `ignore` and `replace` take a whole error, and `backslashreplace` and `surrogateescape` one byte at a time; the rest of a `backslashreplace` escape that a size cuts waits in the reader for the next read. `read()` without a size decodes the rest at once. With universal newlines `\r\n` and `\r` read as `\n`; otherwise lines end where the `Newline` says and nothing is translated |
 | `text_file::writer` | A `Writer` translates `\n` as its `Newline` says, encodes the whole text with its codec and handler through `codec::encode` first, so an error raises `UnicodeEncodeError` with the translated text before anything is written, then holds the bytes in a buffer of 8192 that is written out when full, on `flush`, on `close`, and after a write of a `\n` or `\r` when the file is line-buffered |
-| `text_file` (standard files) | `io::STANDARD_CLOSED` holds a bit for each of standard input, output and error the program closed; `flags_of` adds `CLOSED` for one, so every method checks a standard file as it checks one `open` made, and the descriptor stays open, as CPython's `closefd=False` leaves it. `input()` checks standard output before its prompt and standard input before reading. With standard error closed, `report_uncaught` writes `lost sys.stderr` and `sys.exit` with a message writes only the line ending. `print()` without `file` calls `typy_rt_write_stdout_checked`, which may raise, only when `TypedProgram::closes_text_files` is set, as the checker sets it for a `close()` of a text file or a `with` block over one; any other program keeps `typy_rt_write_stdout`, which cannot raise, so its code and runtime do not grow (NFR-02) |
+| `text_file` (standard files) | `io::STANDARD_CLOSED` holds a bit for each of standard input, output and error the program closed; `flags_of` adds `CLOSED` for one, so every method checks a standard file as it checks one `open` made, and the descriptor stays open, as CPython's `closefd=False` leaves it. `input()` checks standard output before its prompt and standard input before reading. With standard error closed, `report_uncaught` writes `lost sys.stderr` and `sys.exit` with a message writes only the line ending. `print()` without `file` calls `typy_rt_write_stdout_checked`, which may raise, only when `TypedProgram::closes_text_files` is set, as the checker sets it for a `close()` of a text file or a `with` block over one, or `TypedProgram::makes_surrogates`, which it sets for a call of `chr` and for a literal or a default with a surrogate outside U+DC80 to U+DCFF; any other program keeps `typy_rt_write_stdout`, which cannot raise, so its code and runtime do not grow (NFR-02). `sys.argv`, standard input and `surrogateescape` decoding make only U+DC80 to U+DCFF, which standard output writes as bytes |
 | `text_file::disk` (descriptors) | `typy_rt_open_descriptor` checks a descriptor as CPython's `FileIO` does: past a C `int` is `TypeError: expected str, bytes or os.PathLike object, not int`, negative is `ValueError: negative file descriptor`, `fstat` failing is its `OSError`, and a directory is `IsADirectoryError` naming the number. The file is flagged `DESCRIPTOR`, so its `repr` shows `name=3`, and `KEEP_OPEN` for `closefd=False`, so `close` leaves the descriptor open; `typy_rt_open` refuses `closefd=False` with `ValueError: Cannot use closefd=False with file name` before it opens the path |
 | `text_file::binary` | Binary files, flagged `BINARY`, and `RAW` for a `FileIO` (ADR-0031). A buffered file reads through a `Reader` of `latin-1` with `read_bytes`, and writes through its `Writer` with `add`; a `BufferedRandom` moves the descriptor back by what the reader holds before a write, so it writes where `tell` says, and `tell` counts what the writer holds without writing it out, as CPython's buffered layer does. A `FileIO` calls the descriptor for each operation and reads a line a byte at a time. Each operation refuses in CPython's order and words: a buffered file checks that it can read or write before it checks that it is open, and names the operation (`read of closed file`, `seek of closed file`); a `FileIO` checks that it is open first. `seek` of a buffered file allows `whence` 0 to 4 and refuses an offset past an `i64` with `ValueError`; a `FileIO` gives `whence` to `lseek` and refuses such an offset with `OverflowError` |
 | `text_file::newline` | `Newline::of` reads `newline`: `None` is `Universal`, `""` `Untranslated`, and `"\n"`, `"\r"` and `"\r\n"` end lines there; any other value raises `ValueError: illegal newline value: x`. `typy_rt_open` checks `buffering` as a C `int` before opening and checks `buffering=0` and `newline` after, closing the descriptor, as CPython opens the file before it checks them |
 | `text_file::os_error` | `os_error(errno, filename)` gives the `OSError` subclass CPython's errno table names, written as `[Errno 2] No such file or directory: 'name'` with the `repr` of the file name, and with the arguments `(errno, strerror)` for its `repr`. The texts are glibc's, in a table `make errno-texts` writes, so both targets print the oracle's words |
-| `text_file::os_error` (programs) | `typy_rt_os_error_new` makes an `OSError` the program built with two to five arguments: `OSError` itself becomes the subclass for `errno`, and the text is `[Errno N] strerror`, then a colon and the `repr` of `filename`, and an arrow and the `repr` of `filename2`, when given. `typy_rt_os_error_errno` and `typy_rt_os_error_text` read `errno`, `strerror`, `filename` and `filename2`, checking each argument's type, since a class's `__init__` may have given others. `args`, `str` and `repr` show only `errno` and `strerror` when a `filename` other than `None` was given, as CPython does; `exit_code` reads arguments without that rule, so a program links no `OSError` code for its exit status (EXC-14, NFR-02) |
+| `text_file::os_error` (programs) | `typy_rt_os_error_new` makes an `OSError` the program built with two to five arguments of any type: `OSError` itself becomes the subclass for `errno` when it is an `int` that fits a word or a `bool`. `typy_rt_os_error_str`, the `str` of every `OSError` class, writes the runtime's text, or for arguments of two to five `[Errno N] strerror` with `str` of each, then a colon and the `repr` of `filename`, and an arrow and the `repr` of `filename2`, when they are not `None`, raising what a `str` raises, as CPython's `OSError_str` does; other arguments are written as `BaseException` writes them (ADR-0035). `args`, `str` and `repr` show only `errno` and `strerror` when a `filename` other than `None` was given, as CPython does; `exit_code` reads arguments without that rule, so a program links no `OSError` code for its exit status (EXC-14, NFR-02) |
 | `format::percent::dynamic` | `typy_rt_percent_dynamic` formats `format % values` when the format is not a literal or the values are a `tuple[T, ...]` (LIB-11): it reads the format with the grammar of CPython's `unicode_format_arg_parse`, takes the values from a tuple of their layout, from one value, or from the list that holds a `tuple[T, ...]`, reads a key from a dict, converts each value by its kind with the code of the literal path, and raises CPython 3.15's errors |
-| `exception::part` | `typy_rt_exception_part_text`, `typy_rt_exception_args_length`, `typy_rt_exception_part_truth` and `typy_rt_exception_part_equal` read `args` or `code` from an exception: `args` is the tuple of its arguments, or of the runtime's text, and `code` `None`, the one argument as the value it holds, or the tuple of several. `==` takes the other value as a tuple of one, and `values_equal` compares an optional or a union with a value of another type as the value it holds (ADR-0030) |
+| `exception::part` | `typy_rt_exception_part_text`, `typy_rt_exception_args_length`, `typy_rt_exception_part_truth` and `typy_rt_exception_part_equal` read `args` or `code` from an exception: `args` is the tuple of its arguments, or of the runtime's text, and `code` `None`, the one argument as the value it holds, or the tuple of several. `==` takes the other value as a tuple of one, and `values_equal` compares an optional or a union with a value of another type as the value it holds (ADR-0030). `typy_rt_exception_arguments_match(exception, layout)` says whether `args` is laid out as a member of the union of tuples `args` has, and `typy_rt_exception_arguments_address` gives the address of its items: the arguments, or the field that holds the runtime's text (EXC-15, ADR-0034) |
 | `sys` | `typy_rt_sys_argv` builds the list once from the arguments of `main`, decoded as UTF-8 with each stray byte as U+DC80 to U+DCFF, as CPython's `surrogateescape` does. `typy_rt_input` writes the prompt, flushes standard output, then reads a line through `sys.stdin`'s reader without its `\n`, and raises `EOFError: EOF when reading a line` when nothing is left. `typy_rt_sys_getrecursionlimit` and `typy_rt_sys_setrecursionlimit` keep the limit, checked as a C `int` of at least 1. `exit_status` gives the status of an uncaught exception: for a `SystemExit` or a subclass, 0 for no code or `None`, the low byte of an `int`, 255 for one outside `i128` as CPython 3.15 gives, and 1 after writing any other value to standard error, all without a traceback; 1 with the report for any other exception |
 | `exception` | Defines the built-in exception classes with CPython's bases: `BaseException`, with `SystemExit` and `Exception`; under `Exception` `ArithmeticError` with `OverflowError` and `ZeroDivisionError`, `LookupError` with `IndexError` and `KeyError`, `RuntimeError` with `NotImplementedError` and `RecursionError`, `ValueError` with `UnicodeError` and its `UnicodeDecodeError` and `UnicodeEncodeError`, `OSError` with its fifteen subclasses and `io.UnsupportedOperation`, which `derives_from` also counts as a `ValueError`, its second base in CPython, and `AssertionError`, `AttributeError`, `EOFError`, `StopIteration` and `TypeError` (EXC-02, EXC-10). Each hashes by identity and writes its objects with `typy_rt_exception_repr` and `typy_rt_exception_str`. `str` is the runtime's message, or from the arguments: empty for none, the `str` of one, its `repr` for a `KeyError`, and the `repr` of the tuple of several; `repr` is the class name and the arguments between parentheses, with no comma after one, and a runtime message stands for the one argument (EXC-08). `typy_rt_exception_matches` walks the chain of bases (EXC-01). The exception being handled is one value, which `typy_rt_exception_enter` sets and returns the one before and `typy_rt_exception_leave` restores; every exception raised meanwhile, by the runtime or through `typy_rt_exception_raise`, takes it as its context, unless it is that exception, and a link back to the raised exception in the context's chain is cut first, as CPython's `_PyErr_SetObject` does. `typy_rt_exception_set_cause` sets the cause, or none, and suppresses the context (EXC-04). The runtime creates its exceptions with CPython's message for each operation. Where the oracle versions word a message differently, the runtime uses the wording of the newest, CPython 3.15 (OI-14): `division by zero` for every division and modulo of `int` and `float`, and `zero to a negative power` for `0.0 ** -1.0`. A conformance test cannot check such a message, because the oracles disagree on it, so the runtime's unit tests check it. It adds `TracebackEntry` values, and it prints an uncaught exception as CPython does: the oldest exception of its chain first, each followed by `The above exception was the direct cause of the following exception:` for a cause or `During handling of the above exception, another exception occurred:` for a context that `from` did not suppress, each exception shown once; for each, `Traceback (most recent call last):` when it was raised, one line per entry, an entry repeated in a row shown at most three times and the rest counted as `[Previous line repeated N more times]`, as CPython's `TB_RECURSIVE_CUTOFF` does, then `Type: message`, or `Type` alone when the message is empty, with the module before the class name unless it is `__main__`, and `<exception str() failed>` when `str` raises (STD-05). The report calls `str` through the class, so a program that raises nothing links none of the code that writes arguments (NFR-01) |
 | `bytes` | A `bytes` is a `str` object of one byte per code point under the type ID 6, so it shares the string algorithms; `typy_rt_bytes_concat`, `_repeat`, `_slice`, `_length`, `_compare` and `_contains` call them and keep the result a `bytes`. `_get` gives an item as an `int`, with `IndexError: index out of range` outside; `_contains_byte` raises `ValueError: byte must be in range(0, 256)` for an `int` outside; `_zeros` and `_from_list` build one, `bytes must be in range(0, 256)` and `negative count` as CPython words them; `_repr` writes `b'...'` in double quotes when the bytes hold a single quote and no double quote, and escapes every byte outside 0x20 to 0x7e as `\xhh` |
@@ -2004,8 +2781,8 @@ installed `typy` finds `<prefix>/lib/typy/` and a `typy` in
 | `codec` | `typy_rt_str_encode` and `typy_rt_bytes_decode` with the codecs and handlers above. A run of code points the codec cannot encode, surrogates for `utf-8` or those past its range for `ascii` and `latin-1`, is one error, and UTF-8 is decoded as CPython's decoder does: a lead byte outside `C2` to `F4` is an invalid start byte, a byte outside the range its lead allows ends an invalid continuation, and data that runs out is an unexpected end of data; `replace` gives one U+FFFD for each error range. The messages of `UnicodeEncodeError` and `UnicodeDecodeError` are CPython's, such as `'utf-8' codec can't decode byte 0xff in position 0: invalid start byte` |
 | `tuple` | A list of tuples stores each tuple inline, in the words its descriptor gives, and the list's header keeps the descriptor. A `TupleType` holds the item size, a multiple of eight bytes and at least eight, the number of items, and a `Field` for each: its `ItemKind` code, its byte offset, and a nested tuple's descriptor. A `bool` field is one byte and `None` takes none. `retain`, `release`, `equal`, `order` and `repr` walk the fields, so the compiler emits data and no code: tuples order as CPython orders them, by the first pair of items that are not equal, and `repr` writes `(1,)` for one item |
 | `hash` | The hashes CPython gives (ADR-0010): an `int` is its magnitude modulo 2^61 - 1 with its sign, a large one reduced limb by limb since 2^64 is 8 modulo that prime; a `float` follows `_Py_HashDouble` on its mantissa and exponent, so it hashes as an equal `int`, an infinity as 314159 with its sign, and a NaN as 0 (OI-18); `None` is 4238894112 and a `bool` 0 or 1; a tuple combines its items' hashes with xxHash's rounds, its length and CPython's constants. A `str` or `bytes` is SipHash-1-3 under a key of zeros of its code points one, two or four bytes each, as CPython stores them, so its hash is the one CPython gives with `PYTHONHASHSEED=0`, and an empty one hashes to 0. A hash of -1 becomes -2, as in CPython |
-| `set` | `typy_rt_set_new(kind, descriptor)`, `_add`, `_contains`, `_discard`, `_remove`, `_pop`, `_clear`, `_length`, `_next`, `_item`, `_repr`, `_copy` and `_compare`, a port of CPython's `setobject.c` (ADR-0010). A probe visits a run of ten slots, or one near the end of the table, then jumps to `(slot * 5 + 1 + perturb) & mask` with `perturb` shifted right by 5 from the hash. An item goes to the first empty slot of its probe, or to the last dummy slot before it; when `fill * 5 >= mask * 3` the table is rebuilt for four times the items, or twice above 50000, at the smallest power of two above that, which drops the dummies. A merge into an empty set copies the slots when the tables have one size and no dummies, and otherwise places each item in its first empty slot. `_extend(set, other, skip)`, `_intersect`, `_subtract`, `_remove_all`, `_symmetric`, `_toggle`, `_replace` and `_relation` take another collection by its address and read its type ID, as CPython's `PyAnySet_Check` and `PyDict_CheckExact` do: a set is combined table by table, a dict key by key with the hashes it stored, and a list or `tuple[T, ...]` item by item, in order (DAT-15). With a dict, `_extend` first resizes for every key, `_subtract` tests each item of a set at most four times larger than the dict and otherwise copies and removes, and `_toggle` removes or adds each key directly. They follow CPython's choices: an intersection tests the items of the smaller set, a difference copies and removes when the set is four times larger than the other, a difference update first intersects a set eight times larger and then rebuilds a table more than a quarter dummy, and `^` merges the right operand and updates with the left. With a list, an intersection adds each item the set holds until it is as large as the set, a difference copies the set and removes each item then rebuilds a table more than a quarter dummy, a symmetric difference update first makes a set of the list, and `issubset` intersects and compares sizes. `_remove` raises `KeyError` with the `repr` of the item, and `_pop` raises `KeyError: 'pop from an empty set'`. `_next(set, slot, length)` returns the next active slot or -1, and raises `RuntimeError: Set changed size during iteration` when the set no longer has `length` items |
-| `dict` | `typy_rt_dict_new(key_kind, key_descriptor, value_kind, value_descriptor, capacity)`, `_set`, `_find`, `_contains`, `_get`, `_get_or`, `_key`, `_value`, `_pop`, `_pop_or`, `_popitem`, `_setdefault`, `_length`, `_clear`, `_next`, `_copy`, `_update`, `_equal`, `_has_value`, `_has_item`, `_repr` and `_view_repr`, a port of CPython's `dictobject.c` for a combined table (ADR-0010). A probe starts at `hash & mask` and jumps to `(slot * 5 + perturb + 1) & mask`, `perturb` shifted right by 5 each time. Setting a key that is there keeps its key and position and replaces the value; a new key is written after the last entry, and when no entry is usable the table is rebuilt for `used * 3` slots, at least eight, at the next power of two, which drops the holes; a table holds two thirds of its slots in entries. `capacity` presizes a display's table, as CPython's `BUILD_MAP` does. Removing a key leaves a hole; `popitem` takes the last item and drops the entries after it. `_copy` clones a table at most a third holes and otherwise merges into a new dict; a merge into an empty dict clones a source without holes that is at the minimum size or more than half full, and otherwise resizes the target for both first when it has too few usable entries. `_update` takes a dict or a list of `(key, value)` tuples by its address. `_next(dict, position, length, visited)` returns the next entry that holds an item, or -1, and raises `RuntimeError: dictionary changed size during iteration` when the dict no longer has `length` items, and `dictionary keys changed during iteration` when it finds an item after `visited` reached `length`. `_get` and `_pop` raise `KeyError` with the `repr` of the key, and `_popitem` raises `KeyError: 'popitem(): dictionary is empty'`. `_view_repr` writes `dict_keys([...])`, `dict_values([...])` or `dict_items([(key, value), ...])`. `typy_rt_dict_view(dict, kind)` makes a view, and `_view_dict`, `_view_length`, `_view_contains(view, item, pair)` and `_view_text` read one; a pair looked for among the items is read through its tuple descriptor. `typy_rt_dict_view_combine(left, right, operator, result)` fills an empty set with `\|`, `&`, `-` or `^` of two operands, one a view, as CPython's `dictviews_or`, `_PyDictView_Intersect`, `dictviews_sub` and `dictviews_xor` do: the left operand becomes a set, a keys view from its dict, and is updated with the right one, read item by item; `&` intersects a set at least as large as the view with the view, puts the larger of two views first, and otherwise adds each item of the other operand that the view holds; `^` of two items views copies the left dict, takes out each key the right maps to an equal value, adds the right's other pairs, then the copy's pairs. `typy_rt_dict_view_compare(left, right, comparison, kind, descriptor)` compares by sizes, then by whether each item of the smaller side is in the other, as `dictview_richcompare` does; a pair tested against a view is looked up by its key, so its value needs no hash. The set functions read a view operand by its type ID, like a list |
+| `set` | `typy_rt_set_new(kind, descriptor)`, `_add`, `_contains`, `_discard`, `_remove`, `_pop`, `_clear`, `_length`, `_next`, `_item`, `_repr`, `_copy` and `_compare`, a port of CPython's `setobject.c` (ADR-0010). A probe visits a run of ten slots, or one near the end of the table, then jumps to `(slot * 5 + 1 + perturb) & mask` with `perturb` shifted right by 5 from the hash. An item goes to the first empty slot of its probe, or to the last dummy slot before it; when `fill * 5 >= mask * 3` the table is rebuilt for four times the items, or twice above 50000, at the smallest power of two above that, which drops the dummies. A merge into an empty set copies the slots when the tables have one size and no dummies, and otherwise places each item in its first empty slot. `_extend(set, other, skip)`, `_intersect`, `_subtract`, `_remove_all`, `_symmetric`, `_toggle`, `_replace` and `_relation` take another collection by its address and read its type ID, as CPython's `PyAnySet_Check` and `PyDict_CheckExact` do: a set is combined table by table, a dict key by key with the hashes it stored, and a list or `tuple[T, ...]` item by item, in order (DAT-15). With a dict, `_extend` first resizes for every key, `_subtract` tests each item of a set at most four times larger than the dict and otherwise copies and removes, and `_toggle` removes or adds each key directly. They follow CPython's choices: an intersection tests the items of the smaller set, a difference copies and removes when the set is four times larger than the other, a difference update first intersects a set eight times larger and then rebuilds a table more than a quarter dummy, and `^` merges the right operand and updates with the left. With a list, an intersection adds each item the set holds until it is as large as the set, a difference copies the set and removes each item then rebuilds a table more than a quarter dummy, a symmetric difference update first makes a set of the list, and `issubset` intersects and compares sizes. `_remove` raises `KeyError` with the item as its argument and the `repr` of the item as its text, and `_pop` raises `KeyError: 'pop from an empty set'`; `exception::key_error` keeps the key in the exception's argument block with a layout of one field after it, so a tuple key needs no descriptor of the compiler's. `_next(set, slot, length)` returns the next active slot or -1, and raises `RuntimeError: Set changed size during iteration` when the set no longer has `length` items |
+| `dict` | `typy_rt_dict_new(key_kind, key_descriptor, value_kind, value_descriptor, capacity)`, `_set`, `_find`, `_contains`, `_get`, `_get_or`, `_key`, `_value`, `_pop`, `_pop_or`, `_popitem`, `_setdefault`, `_length`, `_clear`, `_next`, `_copy`, `_update`, `_equal`, `_has_value`, `_has_item`, `_repr` and `_view_repr`, a port of CPython's `dictobject.c` for a combined table (ADR-0010). A probe starts at `hash & mask` and jumps to `(slot * 5 + perturb + 1) & mask`, `perturb` shifted right by 5 each time. Setting a key that is there keeps its key and position and replaces the value; a new key is written after the last entry, and when no entry is usable the table is rebuilt for `used * 3` slots, at least eight, at the next power of two, which drops the holes; a table holds two thirds of its slots in entries. `capacity` presizes a display's table, as CPython's `BUILD_MAP` does. Removing a key leaves a hole; `popitem` takes the last item and drops the entries after it. `_copy` clones a table at most a third holes and otherwise merges into a new dict; a merge into an empty dict clones a source without holes that is at the minimum size or more than half full, and otherwise resizes the target for both first when it has too few usable entries. `_update` takes a dict or a list of `(key, value)` tuples by its address. `_next(dict, position, length, visited)` returns the next entry that holds an item, or -1, and raises `RuntimeError: dictionary changed size during iteration` when the dict no longer has `length` items, and `dictionary keys changed during iteration` when it finds an item after `visited` reached `length`. `_get` and `_pop` raise `KeyError` with the key as its argument and its `repr` as its text, and `_popitem` raises `KeyError: 'popitem(): dictionary is empty'`. `_view_repr` writes `dict_keys([...])`, `dict_values([...])` or `dict_items([(key, value), ...])`. `typy_rt_dict_view(dict, kind)` makes a view, and `_view_dict`, `_view_length`, `_view_contains(view, item, pair)` and `_view_text` read one; a pair looked for among the items is read through its tuple descriptor. `typy_rt_dict_view_combine(left, right, operator, result)` fills an empty set with `\|`, `&`, `-` or `^` of two operands, one a view, as CPython's `dictviews_or`, `_PyDictView_Intersect`, `dictviews_sub` and `dictviews_xor` do: the left operand becomes a set, a keys view from its dict, and is updated with the right one, read item by item; `&` intersects a set at least as large as the view with the view, puts the larger of two views first, and otherwise adds each item of the other operand that the view holds; `^` of two items views copies the left dict, takes out each key the right maps to an equal value, adds the right's other pairs, then the copy's pairs. `typy_rt_dict_view_compare(left, right, comparison, kind, descriptor)` compares by sizes, then by whether each item of the smaller side is in the other, as `dictview_richcompare` does; a pair tested against a view is looked up by its key, so its value needs no hash. The set functions read a view operand by its type ID, like a list |
 | `module` | A module object is an immortal static object codegen emits for each module: header with the type ID 15, then its name and its path from the project root as `str` objects. The type `typy_rt_type_module` writes it `<module 'm' from 'm.py'>` (OI-20). `typy_rt_module_attribute_error` and `typy_rt_module_import_error` raise CPython's `module 'm' has no attribute 'x'` and `cannot import name 'x' from 'm' (m.py)`; while the module initialises they add CPython 3.13 to 3.15's note `(consider renaming 'm.py' if it has the same name as a library you intended to import)`, the newest oracle's wording (OI-14). `typy_rt_name_error` raises `name 'x' is not defined` |
 | `range` | `typy_rt_range_check_step` raises `ValueError: range() arg 3 must not be zero`, and `typy_rt_range_last(start, stop, step)` returns `start + (n - 1) * step` for the `n` values of the range, by CPython's `compute_range_length`, on `int` words of any size: the last value, or `start - step` for an empty range. `typy_rt_range_new` makes a range value, with the same `ValueError` for a zero step; `_length` raises `OverflowError: Python int too large to convert to C ssize_t` for a length that is not inline, as `len()` does; `_bound` gives the start, stop or step; `_get` raises `IndexError: range object index out of range`; `_slice` builds a range from the slice's indices, as CPython's `compute_slice` does; `_contains` tests an `int` by arithmetic without stepping; `_equal` compares as `==` does. A slice of a range whose length passes `sys.maxsize` raises `OverflowError`, where CPython computes it with large integers |
 | `zip` | `typy_rt_zip_unequal(index, longer)` raises CPython's `ValueError` for a strict `zip`: `zip() argument 2 is shorter than argument 1`, or `zip() argument 3 is longer than arguments 1-2` |

@@ -1,0 +1,21 @@
+# The Python compilers the cross-language benchmark measures, with every
+# dependency, each pinned to a version and the sha256 of its CPython 3.14 file
+# on PyPI, so `uv pip install --require-hashes` installs these bytes alone.
+mypy==2.4.1 \
+    --hash=sha256:beb254fec368c4e7f7f82a5f310c6470b893ec88a90b66426da971c6826b0453
+mypy-extensions==1.2.0 \
+    --hash=sha256:993e7a20aa5671eb41a7132cf555af30062da99729601601b9a8382b11cae768
+typing-extensions==4.16.0 \
+    --hash=sha256:481caa481374e813c1b176ada14e97f1f67a4539ce9cfeb3f350d78d6370c2e8
+pathspec==1.1.1 \
+    --hash=sha256:a00ce642f577bf7f473932318056212bc4f8bfdf53128c78bbd5af0b9b20b189
+librt==0.16.0 \
+    --hash=sha256:ca8052401c55d7511dda6760719fda7618067e83535d7d0010096d216c34b667
+ast-serialize==0.13.1 \
+    --hash=sha256:9f99786e0d62082a5b121b3437f3167562133711df22128de1e9886f57f0b226
+cython==3.3.1 \
+    --hash=sha256:7a6c191617853f2e0d5936c73f5d5cd096548f4d9e0fa37612ef721591c42cb3
+nuitka==4.3.5 \
+    --hash=sha256:ca1dabc274b95efa7a46597f464ec27484b30f32cb89872d14d66541284d4f01
+setuptools==84.2.1 \
+    --hash=sha256:ca140b45d5325a9478f880e351484f62fef15f336462e449ca0c03c873d589c2

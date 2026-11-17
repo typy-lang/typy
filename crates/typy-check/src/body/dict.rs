@@ -201,6 +201,8 @@ impl BodyChecker<'_> {
     ) -> TypedExpr {
         let key = self.expression_expecting(key, Some(key_type));
         self.expect(&key, key_type.clone(), "a key");
+        // A missing key raises a `KeyError` that holds it (ADR-0034).
+        self.program.record_key(key_type);
         Self::typed(
             TypedExprKind::DictItem {
                 dict: Box::new(dict),
@@ -223,10 +225,10 @@ impl BodyChecker<'_> {
             return None;
         };
         self.expect(&key, key_type.as_ref().clone(), "a key");
-        if self.union_item_needs_its_type(ty, value_type, span) {
-            return None;
-        }
-        if !ty.is_assignable_to(value_type) {
+        // An augmented assignment reads the entry first, and raises for a missing key.
+        self.program.record_key(key_type);
+        let value_type = value_type.as_ref().clone();
+        if !ty.is_assignable_to(&value_type) {
             self.diagnostics.push(
                 Diagnostic::new(
                     DiagnosticCode::error(402),
@@ -236,10 +238,11 @@ impl BodyChecker<'_> {
                 .with_rule(RuleId::TYP_03),
             );
         }
-        Some(AssignTarget::Entry {
+        let target = AssignTarget::Entry {
             dict: Box::new(dict),
             key: Box::new(key),
-        })
+        };
+        Some(self.converted_target(ty, &value_type, target, span))
     }
 
     fn invalid_dict(span: Span) -> TypedExpr {

@@ -13,7 +13,7 @@ use crate::typed::{TypedConstant, TypedExpr, TypedExprKind};
 use crate::types::Type;
 
 /// The standard library modules TyPy provides as built-in modules.
-const BUILTIN_MODULES: [&str; 2] = ["math", "sys"];
+const BUILTIN_MODULES: [&str; 3] = ["math", "sys", "ctypes"];
 
 /// Returns whether `module` is a built-in module of TyPy.
 pub(crate) fn is_builtin_module(module: &str) -> bool {
@@ -31,6 +31,12 @@ pub(crate) enum ModuleFunction {
     GetRecursionLimit,
     /// `sys.setrecursionlimit`.
     SetRecursionLimit,
+    /// `ctypes.CDLL` and `ctypes.cdll`, whose calls declare a library (FFI-01).
+    LoadLibrary,
+    /// A scalar class of `ctypes`, which a program calls and a declaration names (FFI-03).
+    CtypesType(crate::ctypes::CType),
+    /// `ctypes.POINTER`, `ctypes.pointer`, `ctypes.byref` and `ctypes.sizeof` (FFI-03).
+    Ctypes(crate::ctypes::CtypesFunction),
 }
 
 /// A value of a built-in module.
@@ -57,6 +63,7 @@ impl BuiltinValue {
                 match value {
                     SysValue::Argv => Type::List(Box::new(Type::Str)),
                     SysValue::Stdout | SysValue::Stderr | SysValue::Stdin => Type::TextFile,
+                    SysValue::VersionInfo => Type::VersionInfo,
                 },
             ),
             Self::SysConstant(SysConstant::Int(digits)) => (
@@ -95,6 +102,9 @@ impl Program {
         if module == "sys" {
             return Self::sys_lookup(name, span);
         }
+        if module == "ctypes" {
+            return Self::ctypes_lookup(name, span);
+        }
         match math_name(name) {
             None => Err(error(
                 425,
@@ -126,6 +136,41 @@ impl Program {
         }
     }
 
+    /// Returns what `name` of `ctypes` is: `CDLL` and `cdll` load a library, a scalar class
+    /// and `POINTER`, `pointer`, `byref` and `sizeof` work on objects (FFI-03), and the rest
+    /// is planned.
+    fn ctypes_lookup(name: &str, span: Span) -> Result<BuiltinName, Box<Diagnostic>> {
+        if matches!(name, "CDLL" | "cdll") {
+            return Ok(BuiltinName::Function(ModuleFunction::LoadLibrary));
+        }
+        if let Some(ty) = crate::ctypes::CType::from_name(name) {
+            return Ok(BuiltinName::Function(ModuleFunction::CtypesType(ty)));
+        }
+        if let Some(function) = crate::ctypes::CtypesFunction::from_name(name) {
+            return Ok(BuiltinName::Function(ModuleFunction::Ctypes(function)));
+        }
+        let (what, rule) = match name {
+            "Structure" => (
+                "`ctypes.Structure` other than as the one base of a class at module level",
+                RuleId::FFI_11,
+            ),
+            "Union" => ("`ctypes.Union`", RuleId::FFI_11),
+            "CFUNCTYPE" => ("`ctypes.CFUNCTYPE`", RuleId::FFI_06),
+            _ => ("", RuleId::FFI_10),
+        };
+        let what = if what.is_empty() {
+            format!("`ctypes.{name}`")
+        } else {
+            what.to_owned()
+        };
+        Err(error(
+            201,
+            span,
+            format!("{what} is planned for TyPy 1.0 ({})", rule.as_str()),
+            rule,
+        ))
+    }
+
     fn sys_lookup(name: &str, span: Span) -> Result<BuiltinName, Box<Diagnostic>> {
         match sys_name(name) {
             Some(SysName::Value(value)) => Ok(BuiltinName::Value(BuiltinValue::Sys(value))),
@@ -150,14 +195,6 @@ impl Program {
                 )
                 .with_rule(RuleId::MOD_09)
                 .with_help("make an import lazy in its own module, with `lazy import` or `__lazy_modules__`"),
-            )),
-            Some(SysName::VersionInfo) => Err(error(
-                201,
-                span,
-                "using `sys.version_info` as a value is planned for TyPy 0.5 (LIB-16); compare \
-                 it with a tuple of `int`s, or read an item or a field"
-                    .to_owned(),
-                RuleId::LIB_16,
             )),
             Some(SysName::Unprovided) => Err(error(
                 202,

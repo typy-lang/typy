@@ -60,7 +60,27 @@ impl BodyChecker<'_> {
         let values: Vec<TypedExpr> = arguments
             .iter()
             .map(|argument| self.expression(argument))
+            .map(|value| {
+                if builtin == Builtin::Len {
+                    Self::version_tuple(value)
+                } else {
+                    value
+                }
+            })
             .collect();
+        // `len` of a `ctypes` array is its number of items (FFI-03).
+        if builtin == Builtin::Len
+            && keywords.is_empty()
+            && let [value] = values.as_slice()
+            && let Type::CData(crate::ctypes::CData::Array(..)) = value.ty
+        {
+            let value = values.into_iter().next().unwrap_or_else(|| unreachable!());
+            return Self::typed(
+                TypedExprKind::CData(crate::typed::CDataExpr::Length(Box::new(value))),
+                Type::Int,
+                span,
+            );
+        }
         // `len` of an instance calls its class's `__len__` (CLS-07).
         if builtin == Builtin::Len
             && keywords.is_empty()
@@ -158,6 +178,20 @@ impl BodyChecker<'_> {
                     self.expect(value, Type::Int, "an argument of `range`");
                 }
                 Type::Range
+            }
+            Builtin::Slice => {
+                if !self.arity(builtin, values.len(), 1..=3, span) {
+                    return Self::typed(
+                        TypedExprKind::Constant(TypedConstant::None),
+                        Type::Error,
+                        span,
+                    );
+                }
+                // TyPy holds a slice's bounds as `int | None`, which every sequence takes.
+                for value in &values {
+                    self.expect(value, Type::optional(Type::Int), "an argument of `slice`");
+                }
+                Type::Slice
             }
             Builtin::Len => {
                 if !self.arity(builtin, values.len(), 1..=1, span) {
@@ -315,6 +349,8 @@ impl BodyChecker<'_> {
                     );
                 }
                 self.expect(&values[0], Type::Int, "the argument of `chr`");
+                // `chr` gives any code point, a surrogate among them (LEX-10).
+                self.program.makes_surrogates = true;
                 Type::Str
             }
         };

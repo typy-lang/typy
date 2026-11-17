@@ -18,6 +18,8 @@ pub const BIG_INT_TYPE_ID: u32 = 3;
 pub(crate) const TYPE_TYPE_ID: u32 = 10;
 /// The type ID of a module object (MOD-10).
 pub(crate) const MODULE_TYPE_ID: u32 = 15;
+/// The type ID of a type alias object (SMT-12).
+pub(crate) const TYPE_ALIAS_TYPE_ID: u32 = 19;
 /// The smallest integer held inline: -2^62.
 pub const INLINE_MIN: i128 = -(1 << 62);
 /// The largest integer held inline: 2^62 - 1.
@@ -81,15 +83,20 @@ pub enum StrKind {
 #[must_use]
 pub fn encode_str(text: &str) -> (StrKind, Vec<u32>) {
     let points: Vec<u32> = text.chars().map(u32::from).collect();
+    (str_kind(&points), points)
+}
+
+/// Returns the narrowest kind that holds every code point of `points`.
+#[must_use]
+pub(crate) fn str_kind(points: &[u32]) -> StrKind {
     let largest = points.iter().copied().max().unwrap_or(0);
-    let kind = if largest <= 0xFF {
+    if largest <= 0xFF {
         StrKind::Latin1
     } else if largest <= 0xFFFF {
         StrKind::Ucs2
     } else {
         StrKind::Ucs4
-    };
-    (kind, points)
+    }
 }
 
 #[cfg(test)]

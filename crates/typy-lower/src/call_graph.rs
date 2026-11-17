@@ -168,6 +168,17 @@ fn statements(body: &[TypedStmt], callees: &mut BTreeSet<FunctionId>) {
                 statements(body, callees);
                 statements(orelse, callees);
             }
+            TypedStmt::Match { subject, cases, .. } => {
+                if let Some((_, value)) = subject {
+                    expression(value, callees);
+                }
+                for case in cases {
+                    for each in case.pattern.expressions().into_iter().chain(&case.guard) {
+                        expression(each, callees);
+                    }
+                    statements(&case.body, callees);
+                }
+            }
             TypedStmt::ForRange {
                 start,
                 stop,
@@ -227,6 +238,20 @@ fn assign_target(target: &AssignTarget, callees: &mut BTreeSet<FunctionId>) {
             expression(key, callees);
         }
         AssignTarget::Attribute { object, .. } => expression(object, callees),
+        AssignTarget::Property { object, setter, .. } => {
+            callees.insert(*setter);
+            expression(object, callees);
+        }
+        AssignTarget::Converted { value, target, .. } => {
+            expression(value, callees);
+            assign_target(target, callees);
+        }
+        AssignTarget::CData { object, place } => {
+            expression(object, callees);
+            if let typy_check::CDataPlace::Item(index) = place {
+                expression(index, callees);
+            }
+        }
     }
 }
 
@@ -257,6 +282,8 @@ fn expression(expression_value: &TypedExpr, callees: &mut BTreeSet<FunctionId>) 
         TypedExprKind::OperatorCall(call) => {
             callees.extend(call.forward);
             callees.extend(call.reflected);
+            callees.extend(call.in_place);
+            callees.extend(call.reflected_below.iter().map(|(_, method)| *method));
             expression(&call.left, callees);
             expression(&call.right, callees);
         }
@@ -267,8 +294,11 @@ fn expression(expression_value: &TypedExpr, callees: &mut BTreeSet<FunctionId>) 
         | TypedExprKind::Unwrap(operand)
         | TypedExprKind::Unary { operand, .. }
         | TypedExprKind::TupleOf(operand)
+        | TypedExprKind::Raise(operand)
+        | TypedExprKind::Hash(operand)
         | TypedExprKind::TupleItem { tuple: operand, .. }
-        | TypedExprKind::TupleSlice { tuple: operand, .. } => {
+        | TypedExprKind::TupleSlice { tuple: operand, .. }
+        | TypedExprKind::SliceBound { slice: operand, .. } => {
             expression(operand, callees);
         }
         TypedExprKind::ListItem { list, index }
@@ -310,6 +340,16 @@ fn expression(expression_value: &TypedExpr, callees: &mut BTreeSet<FunctionId>) 
         | TypedExprKind::SetOf(source)
         | TypedExprKind::DictOf(source) => {
             loop_source(source, callees);
+        }
+        TypedExprKind::IterContains {
+            value,
+            source,
+            test,
+            ..
+        } => {
+            expression(value, callees);
+            loop_source(source, callees);
+            expression(test, callees);
         }
         TypedExprKind::DictWith { source, entries } => {
             if let Some(source) = source {
@@ -438,7 +478,12 @@ fn expression(expression_value: &TypedExpr, callees: &mut BTreeSet<FunctionId>) 
         }
         TypedExprKind::Attribute { object, .. }
         | TypedExprKind::TypeOf(object)
-        | TypedExprKind::TypeName(object) => expression(object, callees),
+        | TypedExprKind::TypeName(object)
+        | TypedExprKind::TypeAliasPart { alias: object, .. } => expression(object, callees),
+        TypedExprKind::VersionRead { value, result } => {
+            expression(value, callees);
+            expression(result, callees);
+        }
         TypedExprKind::FString(parts) => fstring(parts, callees),
         TypedExprKind::TypeObject(_)
         | TypedExprKind::Constant(_)
@@ -447,19 +492,29 @@ fn expression(expression_value: &TypedExpr, callees: &mut BTreeSet<FunctionId>) 
         | TypedExprKind::ModuleAttribute { .. }
         | TypedExprKind::Submodule(_)
         | TypedExprKind::ModuleName
+        | TypedExprKind::NotImplemented
+        | TypedExprKind::ClassVariable(_)
+        | TypedExprKind::TypeAliasObject(_)
+        | TypedExprKind::ForeignLibrary(_)
         | TypedExprKind::SysValue(_) => {}
-        TypedExprKind::AsIterable(inner) => expression(inner, callees),
+        TypedExprKind::AsIterable(inner) | TypedExprKind::Named { value: inner, .. } => {
+            expression(inner, callees);
+        }
         TypedExprKind::PercentFormat { values, .. } => expression(values, callees),
         TypedExprKind::Open { .. } => {
             for part in expression_value.operands() {
                 expression(part, callees);
             }
         }
-        TypedExprKind::OsErrorField { exception, .. }
+        TypedExprKind::ExceptionArguments { exception, .. }
         | TypedExprKind::FileAttribute {
             file: exception, ..
         } => expression(exception, callees),
-        TypedExprKind::PercentDynamic { format, values } => {
+        TypedExprKind::PercentDynamic { format, values }
+        | TypedExprKind::Sequence {
+            first: format,
+            then: values,
+        } => {
             expression(format, callees);
             expression(values, callees);
         }
@@ -480,9 +535,15 @@ fn expression(expression_value: &TypedExpr, callees: &mut BTreeSet<FunctionId>) 
                 expression(value, callees);
             }
         }
-        TypedExprKind::MathCall { arguments, .. } => {
+        TypedExprKind::MathCall { arguments, .. }
+        | TypedExprKind::ForeignCall { arguments, .. } => {
             for argument in arguments {
                 expression(argument, callees);
+            }
+        }
+        TypedExprKind::CData(cdata) => {
+            for part in cdata.expressions() {
+                expression(part, callees);
             }
         }
         TypedExprKind::Lazy { reify, value } => {

@@ -312,6 +312,10 @@ impl Method {
             | Self::StrCapitalize
             | Self::StrTitle => (Vec::new(), text.clone()),
             Self::BytesHex => (Vec::new(), Type::Str),
+            Self::SliceIndices => (
+                vec![positional("len", Type::Int, true)],
+                Type::Tuple(vec![Type::Int, Type::Int, Type::Int]),
+            ),
             _ => (Vec::new(), Type::Bool),
         };
         MethodSignature { parameters, result }

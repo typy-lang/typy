@@ -34,26 +34,7 @@ impl FunctionLowerer<'_> {
             .builder
             .push_value(Operation::NewInstance { class: class.0 }, ty, span);
         let instance = self.produced(value, ty);
-        // Each attribute with a default holds it before `__init__` runs (ADR-0024).
-        let program = self.program;
-        for (index, symbol) in &program.class(class).defaults {
-            let read = TypedExpr {
-                kind: typy_check::TypedExprKind::ModuleVariable(*symbol),
-                ty: program.symbols[symbol.0 as usize].ty.clone(),
-                span,
-            };
-            let default = self.expression(&read);
-            let stored = self.take_reference(default, span);
-            self.builder.push(
-                Operation::SetField {
-                    object: instance.value,
-                    class: None,
-                    index: field_index(*index),
-                    value: stored,
-                },
-                span,
-            );
-        }
+        self.store_defaults(instance, class, span);
         if let Some(init) = init {
             let mut values = values;
             values.insert(0, (0, Self::borrowed(instance.value, ty)));
@@ -65,6 +46,36 @@ impl FunctionLowerer<'_> {
             }
         }
         instance
+    }
+
+    /// Stores each default of the class body in a new instance or exception, which holds it
+    /// before `__init__` runs (ADR-0024).
+    pub(crate) fn store_defaults(
+        &mut self,
+        object: Lowered,
+        class: typy_check::ClassId,
+        span: Span,
+    ) {
+        let program = self.program;
+        let exception = program.class(class).exception.is_some().then_some(class.0);
+        for (index, symbol) in &program.class(class).defaults {
+            let read = TypedExpr {
+                kind: typy_check::TypedExprKind::ModuleVariable(*symbol),
+                ty: program.symbols[symbol.0 as usize].ty.clone(),
+                span,
+            };
+            let default = self.expression(&read);
+            let stored = self.take_reference(default, span);
+            self.builder.push(
+                Operation::SetField {
+                    object: object.value,
+                    class: exception,
+                    index: field_index(*index),
+                    value: stored,
+                },
+                span,
+            );
+        }
     }
 
     /// Reads the attribute at `index` of an instance, borrowed from it; an attribute of an

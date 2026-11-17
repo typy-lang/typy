@@ -305,6 +305,15 @@ pub enum Operation {
     Increment(ValueId),
     /// Takes one from the count of a counted value, and frees it at zero.
     Decrement(ValueId),
+    /// Calls the C function at `function` of `TyirModule::foreign_functions` with
+    /// `arguments`, each converted to its C type, and gives its result as its TyPy type
+    /// (FFI-02, FFI-03).
+    CallForeign {
+        /// The function, by its index in `TyirModule::foreign_functions`.
+        function: u32,
+        /// The arguments, each of a type its C type takes.
+        arguments: Vec<ValueId>,
+    },
 }
 
 impl fmt::Display for IntOperator {

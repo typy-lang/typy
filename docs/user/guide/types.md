@@ -53,13 +53,48 @@ print(total([1, 2]), total(range(3)), total({4: "x"}), list(countdown(3)))
 An iterable may be read by `for`, `iter`, a comprehension and the
 builtins that read an iterable, such as `sum` and `sorted`. Its length and
 its truth depend on which collection it is, so `len`, `bool`, `not` and a
-condition on it are refused. These names, and `typing`,
-`collections.abc` and `types` themselves, are for annotations only; their
-use as values, as in `isinstance(x, Iterable)`, is planned for 0.5
-(TYP-17). The older names of `typing` that describe types, such as
-`Optional[int]` and `List[int]`, are planned for 0.5 too (LIB-17); write
-`int | None` and `list[int]`. `typing.Any` and `typing.cast` are refused,
-since every value in TyPy has one type (TYP-10).
+condition on it are refused.
+
+The older names of `typing` spell the types above: `Optional[int]` is
+`int | None`, `Union[int, str]` is `int | str`, and `List`, `Dict`, `Set`,
+`Tuple` and `Type` are `list`, `dict`, `set`, `tuple` and `type` (LIB-17).
+`Iterable` and `Iterator`, of either module, and `List`, `Dict`, `Set`,
+`Tuple`, `Type`, `Optional[...]` and `Union[...]` of `typing` may also be
+the class of `isinstance` and of a class pattern, answered as CPython
+answers them: a list is `Iterable` and not an `Iterator`, its iterator is
+both, and a class is `Iterable` when it, or a base, defines `__iter__`
+(TYP-17).
+
+<!-- typy-expect: accepted -->
+```python
+from typing import Optional, Union, List
+from collections.abc import Iterable, Iterator
+
+
+class Bag:
+    def __iter__(self) -> Iterator[int]:
+        return iter([1, 2])
+
+
+def describe(value: Optional[Union[int, List[int], Bag]]) -> str:
+    if isinstance(value, Optional[int]):
+        return "a number or nothing"
+    if isinstance(value, Iterable):
+        return "something to loop over"
+    return "other"
+
+
+print(describe(None), describe(3), describe([1]), describe(Bag()))
+```
+
+As in CPython, a bare `Optional` and a subscripted name such as
+`List[int]` in `isinstance` are E0401, and a bare `Union` is E0202, since
+CPython 3.12 and 3.13 raise `TypeError` where 3.14 and 3.15 answer
+`False`. The names held in a variable, passed or printed are planned for
+1.0 (TYP-18), and so are `Sequence`, `Mapping` and the other abstract
+collections (LIB-20), `NamedTuple` (CLS-27) and `Callable`, with function
+values (FUN-05). `typing.Any` and `typing.cast` are refused, since every
+value in TyPy has one type (TYP-10).
 
 ## Unions
 
@@ -74,6 +109,13 @@ holds, so storing an `int` in an `int | str` allocates nothing
 
 A union can be passed, returned, stored in a container, printed, written
 with `str`, `repr` and f-strings, given to `type()` and tested for truth.
+A variable that holds a union of fixed tuples, such as
+`tuple[str] | tuple[str, int]`, is gone over item by item by a loop, a
+comprehension, `list`, `sorted`, `sum` and the other builtins that read an
+iterable, each item of the union of the members' item types. Indexed with
+a literal, such as `value[1]`, it raises `IndexError` when the tuple it
+holds is too short, as CPython does; a position outside every member is
+E0307.
 `isinstance` narrows it, in the branch where the test holds and in the
 branch where it fails. A union of classes that share a base has that
 base's attributes and methods:
@@ -135,10 +177,11 @@ The results join into one type: `value.upper()` above is a
 such as `value * 2`, is used member by member once it is assigned to a
 variable. Lists, sets and dicts of a union compare, hash and write each
 item as the member it holds, so `1` and `1.0` are one key, as in CPython.
-One value assigned to several targets, one of which holds a union, as in
-`a = items[0] = 1`, is planned for 0.5 (TYP-16). A truth test
+One value assigned to several targets, as in `a = items[0] = 1`, or
+unpacked into targets, is held by each target as its own type, a union
+or an optional among them (TYP-16). A truth test
 whose member classes test themselves with `__len__`, or differently from
-their base, is planned for 0.5.
+their base, is planned for 0.5 (CLS-24).
 
 ## Names that keep their value
 
@@ -238,10 +281,32 @@ print(swap((1, 2)), swap(("x", "y")), counts)
 ```
 
 A generic alias named without one type argument for each parameter, such
-as `Pair` or `Pair[int, int]`, is E0408. An alias of another module, an
-alias read as a value, which CPython gives as a `TypeAliasType`, `type`
-inside a function, a class or a block, and a bound or constraints on an
-alias's type parameter are planned for 0.5 (SMT-12).
+as `Pair` or `Pair[int, int]`, is E0408. An alias of another module is
+read as its own module wrote it, imported by name, as in
+`from shapes import Pair`, or read through its module, as `shapes.Pair[int]`.
+A `type` statement inside a function, a class or a block makes its alias
+for the statements after it there. A bound or constraints on an alias's
+type parameter, as in `type Ordered[T: float] = tuple[T, T]`, are taken as
+CPython takes them, which checks no argument against them; each use is
+checked as the type the alias stands for (SMT-12).
+
+Read as a value, an alias of the module's top level, or one imported, is
+a `typing.TypeAliasType`, as in CPython: it is written as its name, has
+`__name__` and `__module__`, and is the same object wherever it is read.
+
+<!-- typy-expect: accepted -->
+```python
+type Score = int
+kinds = [Score]
+print(Score, Score.__name__, Score.__module__, type(Score), kinds[0] is Score)
+```
+
+As in CPython, calling an alias, or giving it to `isinstance`, is E0401.
+An alias a function or a class defines read as a value, whose text
+CPython 3.14 changed, an alias given its type arguments as a value, and
+an alias's `__value__` and `__type_params__` are planned for 1.0
+(TYP-18). Two aliases compare with `is`; `==` between them is E0407, as
+for module objects.
 
 ## Example
 

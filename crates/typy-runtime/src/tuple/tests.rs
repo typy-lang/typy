@@ -235,3 +235,47 @@ fn removing_and_moving_tuples_keeps_their_references() {
         assert_eq!(count(a), 1);
     }
 }
+
+#[test]
+fn layouts_are_the_same_when_every_item_is_held_alike() {
+    let nested = |inner: &'static TupleType| Field {
+        kind: ItemKind::Tuple as u32,
+        offset: 0,
+        tuple: inner,
+    };
+    let pair = int_and_str();
+    let other_pair = int_and_str();
+    let short = descriptor(8, vec![field(ItemKind::Int, 0)]);
+    let swapped = descriptor(
+        16,
+        vec![field(ItemKind::Object, 0), field(ItemKind::Int, 8)],
+    );
+    let moved = descriptor(
+        16,
+        vec![field(ItemKind::Int, 8), field(ItemKind::Object, 0)],
+    );
+    let holds_pair = descriptor(16, vec![nested(pair)]);
+    let holds_other_pair = descriptor(16, vec![nested(other_pair)]);
+    let holds_short = descriptor(16, vec![nested(short)]);
+    let holds_int = descriptor(16, vec![field(ItemKind::Tuple, 0)]);
+    let cases: [(&TupleType, &TupleType, bool); 8] = [
+        (pair, pair, true),
+        (pair, other_pair, true),
+        (pair, short, false),
+        (pair, swapped, false),
+        (pair, moved, false),
+        (holds_pair, holds_other_pair, true),
+        (holds_pair, holds_short, false),
+        (holds_pair, holds_int, false),
+    ];
+    for (index, (left, right, same)) in cases.into_iter().enumerate() {
+        // SAFETY: every descriptor is leaked, so live for the test.
+        let (found, reversed) = unsafe {
+            (
+                super::same_layout(left, right),
+                super::same_layout(right, left),
+            )
+        };
+        assert_eq!((found, reversed), (same, same), "case {index}");
+    }
+}

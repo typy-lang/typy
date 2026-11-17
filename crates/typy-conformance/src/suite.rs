@@ -132,6 +132,7 @@ impl Suite {
         // The test's floor is what `python-floor` in its typy.toml would set (CLI-12).
         let pipeline = self.pipeline.clone().with_overrides(SettingOverrides {
             python_floor: Some(case.floor),
+            ..SettingOverrides::default()
         });
         match case.expectation {
             Expectation::Rejected { code, line, column } => {

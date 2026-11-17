@@ -11,8 +11,12 @@ impl RuleId {
     pub const A_01: Self = Self("A-01");
     /// Project settings shall be read from `typy.toml`, and a command line flag shall override the same setting in the file.
     pub const CLI_07: Self = Self("CLI-07");
+    /// `typy build --lib static` shall produce a static library and `--lib shared` a shared library.
+    pub const CLI_09: Self = Self("CLI-09");
     /// The setting `python-floor` in `typy.toml` shall set the program's Python floor to one of `3.12`, `3.13`, `3.14` or `3.15`, and any other value shall be rejected.
     pub const CLI_12: Self = Self("CLI-12");
+    /// A library build shall carry the release of the version that its module's `__version__`, or else `version` in `typy.toml`, gives in its file names, as Linux names libraries: `libNAME.so.X.Y` with the soname `libNAME.so.X`, and `libNAME.X.Y.a`, each with links of the names a linker finds.
+    pub const CLI_13: Self = Self("CLI-13");
     /// Classes with methods and an `__init__` shall be accepted, with each instance attribute assigned in `__init__` or declared in the class body.
     pub const CLS_01: Self = Self("CLS-01");
     /// Adding an attribute that the class does not declare shall be rejected.
@@ -37,6 +41,48 @@ impl RuleId {
     pub const CLS_13: Self = Self("CLS-13");
     /// `super().__init__(...)` shall be accepted in the `__init__` of an exception class and shall set the exception's arguments; any other use of `super()` shall be rejected until 0.4.
     pub const CLS_14: Self = Self("CLS-14");
+    /// `field(default_factory=f)` in a dataclass shall call `f`, a class or a function that takes no arguments, for each instance whose `__init__` is given no value for the field.
+    pub const CLS_15: Self = Self("CLS-15");
+    /// A dataclass that is frozen with `eq=True`, or given `unsafe_hash=True`, shall hash as the tuple of its fields, and one with `eq=True` that is neither shall be unhashable, as CPython's `dataclasses` writes `__hash__`.
+    pub const CLS_16: Self = Self("CLS-16");
+    /// `isinstance` and a class pattern shall accept a class held in a variable or computed.
+    pub const CLS_18: Self = Self("CLS-18");
+    /// `issubclass` shall be accepted with a class or a tuple of classes.
+    pub const CLS_19: Self = Self("CLS-19");
+    /// An augmented assignment to an instance shall call the class's in-place method, such as `__iadd__`, and the binary method when the class has none, as CPython does.
+    pub const CLS_20: Self = Self("CLS-20");
+    /// An operator or comparison method that returns `NotImplemented` shall give way to the reflected method, and then to CPython's default or its `TypeError`.
+    pub const CLS_21: Self = Self("CLS-21");
+    /// Comparison and hash methods that may raise, a chain such as `a < b < c` of instances, and an operator whose method and reflected method return different types shall be accepted.
+    pub const CLS_22: Self = Self("CLS-22");
+    /// `in` on an instance whose class has no `__contains__` shall iterate it, and an instance shall be sliced through its `__getitem__`, as CPython does.
+    pub const CLS_23: Self = Self("CLS-23");
+    /// The truth of an instance shall come from the `__bool__` or `__len__` of its own class, also where its static type is a base or a union that tests truth otherwise, and in `any` and `all`.
+    pub const CLS_24: Self = Self("CLS-24");
+    /// A class method shall be callable through an instance and through a subclass defined in another module, a class variable shall be assignable through a subclass, and a static method shall be callable through any expression that gives its class or an instance.
+    pub const CLS_25: Self = Self("CLS-25");
+    /// `super(Class, instance)` shall be accepted with any class of the instance's chain of bases.
+    pub const CLS_26: Self = Self("CLS-26");
+    /// A class derived from `typing.NamedTuple` shall be accepted, its fields read by name and by position.
+    pub const CLS_27: Self = Self("CLS-27");
+    /// `@dataclass` shall accept the options `kw_only` and `weakref_slot` and options given other than as `True` or `False`, `field` its options `init`, `repr`, `hash`, `compare`, `kw_only` and `metadata`, and a generic dataclass a field with a `default_factory`.
+    pub const CLS_28: Self = Self("CLS-28");
+    /// `super(Class, instance)` shall be accepted with an instance other than the method's own, and outside a method.
+    pub const CLS_29: Self = Self("CLS-29");
+    /// A class method of a generic class shall be callable through an instance.
+    pub const CLS_30: Self = Self("CLS-30");
+    /// A class variable shall be assignable through a variable that holds a class derived from the class that gives it, such as `cls` in a class method, giving that class one of its own.
+    pub const CLS_31: Self = Self("CLS-31");
+    /// An augmented assignment shall call the in-place method that only a class derived from its target's class defines, when the target holds an instance of that class.
+    pub const CLS_32: Self = Self("CLS-32");
+    /// An operator or comparison method that may return both `None` and `NotImplemented` shall be accepted.
+    pub const CLS_33: Self = Self("CLS-33");
+    /// An override whose parameter is held otherwise than its base method's, such as `int | None` for `int`, shall be accepted with a default of its own for that parameter.
+    pub const CLS_34: Self = Self("CLS-34");
+    /// A static method that overrides a method, or a method that overrides a static method, shall be accepted with a parameter or result held otherwise than the one it overrides.
+    pub const CLS_35: Self = Self("CLS-35");
+    /// `super()` shall be usable as a value: held in a variable, passed and returned.
+    pub const CLS_36: Self = Self("CLS-36");
     /// `for` shall iterate over `range`, `str`, `bytes`, `list`, `tuple`, `dict`, `set` and any class with `__iter__` and `__next__`.
     pub const CST_03: Self = Self("CST-03");
     /// `try` with `except`, `else` and `finally` clauses shall be accepted, and `finally` shall run on `return`, `break`, `continue` and exceptions.
@@ -45,12 +91,16 @@ impl RuleId {
     pub const CST_05: Self = Self("CST-05");
     /// `match` shall be accepted with literal, capture, wildcard, value, sequence, mapping and class patterns, guards and `\\|` alternatives.
     pub const CST_06: Self = Self("CST-06");
+    /// A `match` whose cases without a guard leave a member of the subject's union, optional or `bool` type unmatched shall report a warning that names the members (ADR-0033).
+    pub const CST_07: Self = Self("CST-07");
     /// `for` shall iterate over any class with `__iter__` and `__next__`, and end when `__next__` raises `StopIteration` (OI-17).
     pub const CST_08: Self = Self("CST-08");
     /// `iter` and `next`, with and without a default, shall be available for the built-in iterables.
     pub const CST_09: Self = Self("CST-09");
     /// The parameters of `__exit__` after `self` may be left without annotations, and shall then have the types `type[BaseException] \| None`, `BaseException \| None` and `TracebackType \| None`; the traceback shall be one object of type `traceback`, written as CPython writes one, which holds no frames.
     pub const CST_10: Self = Self("CST-10");
+    /// A class with `__getitem__` and no `__iter__` shall be iterable through `__getitem__` with the positions 0, 1, 2 and so on until it raises `IndexError`, in `for`, `in` and every builtin that iterates, as CPython's sequence protocol does.
+    pub const CST_11: Self = Self("CST-11");
     /// `bool` shall have the values `True` and `False`.
     pub const DAT_03: Self = Self("DAT-03");
     /// `str` shall be an immutable sequence of Unicode code points. `len()` and indexing shall count code points, and indexing shall return a `str` of length 1.
@@ -81,6 +131,8 @@ impl RuleId {
     pub const DIA_08: Self = Self("DIA-08");
     /// Raising and catching exceptions shall follow the Language Reference, including matching on base classes.
     pub const EXC_01: Self = Self("EXC-01");
+    /// An exception shall not cross a function exported to C (FFI-05): a `SystemExit` shall end the process with its status, and any other exception shall abort it with the exception printed.
+    pub const EXC_05: Self = Self("EXC-05");
     /// A `return`, `break` or `continue` that leaves a `finally` block shall be rejected, as PEP 765 makes CPython 3.14 warn about it (ADR-0013).
     pub const EXC_06: Self = Self("EXC-06");
     /// A `raise` without an expression shall re-raise the exception being handled, and shall be rejected outside an `except` clause.
@@ -95,6 +147,10 @@ impl RuleId {
     pub const EXC_15: Self = Self("EXC-15");
     /// An `OSError` shall take arguments of any type, more than five of them, and two or more through `super().__init__`, as CPython does.
     pub const EXC_16: Self = Self("EXC-16");
+    /// `args` of an exception shall hold the `args` of an exception of a related class, a type that nests without end, as CPython allows.
+    pub const EXC_17: Self = Self("EXC-17");
+    /// `characters_written` of a `BlockingIOError`, and a number as the third argument of `OSError` or `BlockingIOError`, shall behave as CPython's do.
+    pub const EXC_18: Self = Self("EXC-18");
     /// `+`, `-`, `*`, `/`, `//`, `%` and `**` shall give Python's results for `int` and `float`, including `/` on two `int` values returning `float` and `%` taking the sign of the divisor.
     pub const EXP_02: Self = Self("EXP-02");
     /// `int ** int` shall be accepted only when the exponent is a non-negative integer literal, because CPython returns `float` for a negative exponent.
@@ -125,6 +181,22 @@ impl RuleId {
     pub const EXP_17: Self = Self("EXP-17");
     /// A module-level `ctypes.CDLL` or `ctypes.cdll.LoadLibrary` call with a string literal shall link the named library.
     pub const FFI_01: Self = Self("FFI-01");
+    /// A C function shall be callable when its `argtypes` and `restype` are assigned at module level, with ctypes types, before its first call. A call to a function without both shall be rejected.
+    pub const FFI_02: Self = Self("FFI-02");
+    /// The ctypes types `c_int8` to `c_uint64`, `c_int`, `c_long`, `c_size_t`, `c_ssize_t`, `c_float`, `c_double`, `c_bool`, `c_char_p`, `c_void_p`, `POINTER(T)` and `Structure` subclasses with a literal `_fields_` list shall be accepted, with the conversions and the wrap-around that ctypes defines.
+    pub const FFI_03: Self = Self("FFI-03");
+    /// Whether a library is linked statically or dynamically shall be set in `typy.toml`, not in the source.
+    pub const FFI_04: Self = Self("FFI-04");
+    /// A function that `__all__` of a module built with `--lib` lists shall be exported with an unmangled C symbol and the C types its annotations give, and the build shall write a matching C header (ADR-0032).
+    pub const FFI_05: Self = Self("FFI-05");
+    /// `ctypes.CFUNCTYPE` callbacks shall be accepted.
+    pub const FFI_06: Self = Self("FFI-06");
+    /// A library a `ctypes` declaration loads, and its functions, shall be values a program stores, passes and prints.
+    pub const FFI_09: Self = Self("FFI-09");
+    /// The ctypes names `c_char`, `c_wchar`, `c_wchar_p`, `create_string_buffer`, `cast` and `addressof`, pointers to and arrays of pointers and arrays, arrays whose length is not an integer literal, array slices, `byref` other than as a C function's argument, assigning a pointer's `contents`, and ctypes classes as values, in annotations, `isinstance` and `type` shall be accepted.
+    pub const FFI_10: Self = Self("FFI-10");
+    /// Methods and class attributes other than one `_fields_` list in a `Structure` subclass, `_fields_` assigned after the class statement, bit fields, a subclass of a `Structure` subclass, and `ctypes.Union` shall be accepted.
+    pub const FFI_11: Self = Self("FFI-11");
     /// Module-level function definitions shall be accepted.
     pub const FUN_01: Self = Self("FUN-01");
     /// Keyword-only and positional-only parameters shall be accepted.
@@ -153,8 +225,22 @@ impl RuleId {
     pub const GEN_08: Self = Self("GEN-08");
     /// Type parameters shall be accepted on a method of a generic class, a special method, a property, a class method, and a method that overrides or is overridden.
     pub const GEN_09: Self = Self("GEN-09");
-    /// A protocol shall be usable as the type of a variable, an attribute, a result and a container item outside a parameter, as the base of a class, and with properties, static methods, class methods and class variables.
+    /// A protocol shall be usable as the type of a variable, an attribute, a result and a container item outside a parameter, and of a parameter of a special method or a property.
     pub const GEN_10: Self = Self("GEN-10");
+    /// A class variable or an attribute default of a generic class whose annotation names a type parameter of the class shall be accepted.
+    pub const GEN_11: Self = Self("GEN-11");
+    /// A generic class shall be accepted with an exception class as its base.
+    pub const GEN_12: Self = Self("GEN-12");
+    /// A generic protocol shall be accepted, satisfied by the classes whose members fit it for its type arguments.
+    pub const GEN_13: Self = Self("GEN-13");
+    /// `isinstance` and a class pattern with a generic class shall narrow a variable of a base's type to the copies of the class the program makes.
+    pub const GEN_14: Self = Self("GEN-14");
+    /// A class derived from a copy of a generic class shall inherit the generic class's class methods, and a dataclass derived from a copy of a generic dataclass its fields.
+    pub const GEN_15: Self = Self("GEN-15");
+    /// Type parameters shall be accepted on a special method, on a property, and on a method that overrides or is overridden by one with other type parameters or in a generic class, and a class method with type parameters shall be callable through an instance.
+    pub const GEN_16: Self = Self("GEN-16");
+    /// A protocol shall be usable as the base of a class, with properties, static methods, class methods, class variables and defaults, and in the signatures of its own methods; an attribute shall be assignable through a protocol value, and a value of a built-in type shall be held as a protocol.
+    pub const GEN_17: Self = Self("GEN-17");
     /// Source files shall be UTF-8 with the `.py` extension.
     pub const LEX_01: Self = Self("LEX-01");
     /// Bytes literals shall be accepted.
@@ -195,16 +281,22 @@ impl RuleId {
     pub const LIB_13: Self = Self("LIB-13");
     /// `open` shall accept binary modes, `+` modes, a mode that is not a literal, encodings other than UTF-8 and the arguments `buffering`, `errors`, `newline`, `closefd` and `opener`; a text file shall have `seek`, `tell`, `truncate`, `fileno`, `isatty`, `readable`, `writable` and `seekable`, and the attributes `name`, `mode` and `closed`; closing `sys.stdout` or `sys.stderr` shall close it.
     pub const LIB_14: Self = Self("LIB-14");
-    /// `math.fsum`, `math.dist`, `math.prod` and `math.sumprod` shall take items of a union of number types, and `math.prod` a `bool` start and items other than numbers.
+    /// `math.fsum`, `math.dist`, `math.prod` and `math.sumprod` shall take items of a union of number types, and `math.prod` a `bool` start.
     pub const LIB_15: Self = Self("LIB-15");
     /// `sys.version_info` shall be a value as CPython's: printed, stored, passed and imported with `from sys import version_info`.
     pub const LIB_16: Self = Self("LIB-16");
-    /// The other names of `typing` and `collections.abc` that describe types, such as `Optional`, `Union`, `List`, `Dict`, `Callable`, `NamedTuple` and `Sequence`, shall be available.
+    /// The names `Optional`, `Union`, `List`, `Dict`, `Set`, `Tuple` and `Type` of `typing` shall be accepted in annotations as the types they spell; `Callable` follows function values (FUN-05).
     pub const LIB_17: Self = Self("LIB-17");
     /// The `opener` argument of `open` shall be accepted.
     pub const LIB_18: Self = Self("LIB-18");
     /// `open` with a binary mode shall accept a `buffering` that is not a literal, as `typing.BinaryIO`.
     pub const LIB_19: Self = Self("LIB-19");
+    /// The abstract collections of `collections.abc` and `typing`, such as `Sequence`, `Mapping`, `MutableSequence` and `Collection`, shall be accepted as types, and a value of type `Iterable[T]` shall be testable against `Iterator`.
+    pub const LIB_20: Self = Self("LIB-20");
+    /// `math.prod` shall take items and a start other than numbers, multiplying them in turn as CPython does.
+    pub const LIB_21: Self = Self("LIB-21");
+    /// The allocator shall be replaceable per project through three C functions, allocate, reallocate and free, that `typy.toml` names.
+    pub const MEM_08: Self = Self("MEM-08");
     /// A program shall be built from several `.py` files, found from the main file's directory and from paths set in `typy.toml`.
     pub const MOD_01: Self = Self("MOD-01");
     /// Packages with `__init__.py` and relative imports shall be accepted.
@@ -217,12 +309,18 @@ impl RuleId {
     pub const MOD_09: Self = Self("MOD-09");
     /// A name bound by a lazy import shall be usable from another module, assignable through a lazily imported module, and bindable by more than one lazy import.
     pub const MOD_11: Self = Self("MOD-11");
-    /// A function or a class shall be bindable by more than one lazy import of a module, a call running the one bound last.
+    /// A function or a class shall be bindable by more than one import of a module, eager or lazy, and by an import inside a block, a call running the one the import that ran last bound, and raising `NameError` when none has run.
     pub const MOD_12: Self = Self("MOD-12");
     /// A module shall be importable inside a function of a module that it imports at module level.
     pub const MOD_13: Self = Self("MOD-13");
+    /// A name that imports bind to more than one function or class shall be usable as a value, in an annotation and from another module.
+    pub const MOD_14: Self = Self("MOD-14");
+    /// An `__init__` shall be able to import a module that imports its own module at module level.
+    pub const MOD_15: Self = Self("MOD-15");
     /// The compiler shall not crash on any input; an internal error shall be reported as `E9xxx` with a hint to report it.
     pub const NFR_09: Self = Self("NFR-09");
+    /// Assignment, annotated assignment and augmented assignment shall be accepted.
+    pub const SMT_01: Self = Self("SMT-01");
     /// Unpacking assignment to several targets shall be accepted for tuples and lists.
     pub const SMT_02: Self = Self("SMT-02");
     /// `assert` shall raise `AssertionError` when its test is false, in every build mode.
@@ -273,14 +371,20 @@ impl RuleId {
     pub const TYP_15: Self = Self("TYP-15");
     /// One value assigned to several targets, as in `a = b[0] = value`, shall be converted to each target's type, such as the union an item holds.
     pub const TYP_16: Self = Self("TYP-16");
-    /// The names of `typing` and `collections.abc` given for annotations, such as `Iterator` and `Iterable`, shall also be values, as in `isinstance(x, Iterable)`.
+    /// The names `Iterable` and `Iterator` of `typing` and `collections.abc`, and `List`, `Dict`, `Set`, `Tuple`, `Type`, `Optional[...]` and `Union[...]` of `typing`, shall be accepted as the classes of `isinstance` and of a class pattern, with CPython's answers.
     pub const TYP_17: Self = Self("TYP-17");
+    /// The names of `typing` and `collections.abc` shall be values of their own: stored, passed, compared and written as CPython writes them; so shall a type alias that a function or a class defines, an alias given its type arguments, and an alias's `__value__` and `__type_params__`.
+    pub const TYP_18: Self = Self("TYP-18");
+    /// An operation on a union whose members the runtime cannot tell apart by class or kind, such as two iterators, two file kinds or an iterable, shall be accepted.
+    pub const TYP_19: Self = Self("TYP-19");
 
     /// Every rule a diagnostic can name, in ID order.
     pub const ALL: &'static [Self] = &[
         Self::A_01,
         Self::CLI_07,
+        Self::CLI_09,
         Self::CLI_12,
+        Self::CLI_13,
         Self::CLS_01,
         Self::CLS_02,
         Self::CLS_04,
@@ -293,13 +397,36 @@ impl RuleId {
         Self::CLS_12,
         Self::CLS_13,
         Self::CLS_14,
+        Self::CLS_15,
+        Self::CLS_16,
+        Self::CLS_18,
+        Self::CLS_19,
+        Self::CLS_20,
+        Self::CLS_21,
+        Self::CLS_22,
+        Self::CLS_23,
+        Self::CLS_24,
+        Self::CLS_25,
+        Self::CLS_26,
+        Self::CLS_27,
+        Self::CLS_28,
+        Self::CLS_29,
+        Self::CLS_30,
+        Self::CLS_31,
+        Self::CLS_32,
+        Self::CLS_33,
+        Self::CLS_34,
+        Self::CLS_35,
+        Self::CLS_36,
         Self::CST_03,
         Self::CST_04,
         Self::CST_05,
         Self::CST_06,
+        Self::CST_07,
         Self::CST_08,
         Self::CST_09,
         Self::CST_10,
+        Self::CST_11,
         Self::DAT_03,
         Self::DAT_05,
         Self::DAT_06,
@@ -315,6 +442,7 @@ impl RuleId {
         Self::DAT_17,
         Self::DIA_08,
         Self::EXC_01,
+        Self::EXC_05,
         Self::EXC_06,
         Self::EXC_07,
         Self::EXC_09,
@@ -322,6 +450,8 @@ impl RuleId {
         Self::EXC_14,
         Self::EXC_15,
         Self::EXC_16,
+        Self::EXC_17,
+        Self::EXC_18,
         Self::EXP_02,
         Self::EXP_04,
         Self::EXP_06,
@@ -337,6 +467,14 @@ impl RuleId {
         Self::EXP_16,
         Self::EXP_17,
         Self::FFI_01,
+        Self::FFI_02,
+        Self::FFI_03,
+        Self::FFI_04,
+        Self::FFI_05,
+        Self::FFI_06,
+        Self::FFI_09,
+        Self::FFI_10,
+        Self::FFI_11,
         Self::FUN_01,
         Self::FUN_03,
         Self::FUN_04,
@@ -352,6 +490,13 @@ impl RuleId {
         Self::GEN_08,
         Self::GEN_09,
         Self::GEN_10,
+        Self::GEN_11,
+        Self::GEN_12,
+        Self::GEN_13,
+        Self::GEN_14,
+        Self::GEN_15,
+        Self::GEN_16,
+        Self::GEN_17,
         Self::LEX_01,
         Self::LEX_06,
         Self::LEX_07,
@@ -377,6 +522,9 @@ impl RuleId {
         Self::LIB_17,
         Self::LIB_18,
         Self::LIB_19,
+        Self::LIB_20,
+        Self::LIB_21,
+        Self::MEM_08,
         Self::MOD_01,
         Self::MOD_02,
         Self::MOD_05,
@@ -385,7 +533,10 @@ impl RuleId {
         Self::MOD_11,
         Self::MOD_12,
         Self::MOD_13,
+        Self::MOD_14,
+        Self::MOD_15,
         Self::NFR_09,
+        Self::SMT_01,
         Self::SMT_02,
         Self::SMT_04,
         Self::SMT_05,
@@ -412,6 +563,8 @@ impl RuleId {
         Self::TYP_15,
         Self::TYP_16,
         Self::TYP_17,
+        Self::TYP_18,
+        Self::TYP_19,
     ];
 
     /// Returns the ID as text, such as `TYP-03`.

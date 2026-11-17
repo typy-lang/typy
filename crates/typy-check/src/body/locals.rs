@@ -10,15 +10,52 @@ use crate::typed::{AssignTarget, SymbolId, SymbolKind, TypedConstant, TypedExpr,
 use crate::types::Type;
 
 impl BodyChecker<'_> {
+    /// Returns a new hidden variable of type `ty`, named `<kind N>`, which no program can
+    /// name; an expression of the checker's own assigns and reads it by its symbol.
+    pub(super) fn hidden_variable(&mut self, kind: &str, ty: Type, span: Span) -> SymbolId {
+        let name = format!("<{kind} {}>", self.local_order.len());
+        let symbol = self
+            .program
+            .add_symbol(&name, SymbolKind::Local, ty.clone(), span);
+        self.locals.insert(name, symbol);
+        self.local_order.push(symbol);
+        self.types.insert(symbol, ty);
+        symbol
+    }
+
     /// Every name assigned anywhere in the body is a local of the body (LR 4.2.2).
     pub(super) fn collect_locals(&mut self, statements: &[&Stmt]) {
         for statement in statements {
+            // An assignment expression binds its name in the body, also inside a
+            // comprehension (EXP-13).
+            let mut named = Vec::new();
+            crate::check::visit_statement(statement, &mut |expression| {
+                if let Expr::Named { target, .. } = expression {
+                    named.push(Expr::Name {
+                        id: target.name.clone(),
+                        span: target.span,
+                    });
+                }
+            });
+            for target in &named {
+                self.bind_local(target);
+            }
             match statement {
+                // An alias a function's `type` statement defines is read in annotations only
+                // (SMT-12).
+                Stmt::TypeAlias { name, .. } if self.in_function() => {
+                    self.local_aliases.insert(name.name.clone());
+                }
                 // A class body's values are module variables, assigned where the class
                 // statement runs (ADR-0024).
-                Stmt::ClassDef { name, body, .. } => {
+                Stmt::ClassDef {
+                    name,
+                    body,
+                    type_parameters,
+                    ..
+                } => {
                     let values = crate::check::class_values(
-                        &name.name,
+                        (&name.name, type_parameters),
                         body,
                         &self.program.annotation_names,
                         &self.program.annotation_modules,
@@ -53,6 +90,18 @@ impl BodyChecker<'_> {
                 }
                 Stmt::While { body, orelse, .. } | Stmt::If { body, orelse, .. } => {
                     self.collect_locals(&body.iter().chain(orelse).collect::<Vec<_>>());
+                }
+                // The names a pattern binds are locals, as an assignment's are (CST-06).
+                Stmt::Match { cases, .. } => {
+                    for case in cases {
+                        for name in case.pattern.bound_names() {
+                            self.bind_local(&Expr::Name {
+                                id: name.name.clone(),
+                                span: name.span,
+                            });
+                        }
+                        self.collect_locals(&case.body.iter().collect::<Vec<_>>());
+                    }
                 }
                 Stmt::With { items, body, .. } => {
                     for target in items.iter().filter_map(|item| item.target.as_ref()) {
@@ -134,6 +183,7 @@ impl BodyChecker<'_> {
             instances: &self.program.instances,
             modules: &self.program.module_classes,
             module_aliases: &self.program.module_aliases,
+            imported_aliases: &self.program.imported_aliases,
             parameters: &self.program.type_arguments,
             copies: &self.program.class_copies,
             names: &self.program.annotation_names,
@@ -143,7 +193,7 @@ impl BodyChecker<'_> {
         let ty = annotation_type(annotation, &scope, self.diagnostics);
         // An annotation may name a copy of a generic class, which the program then holds.
         self.program.make_class_copies();
-        crate::check::outside_signature(ty, annotation.span(), self.diagnostics)
+        ty
     }
 
     pub(super) fn declare(&mut self, target: &Expr, annotation: &Expr, given: bool) {
@@ -212,9 +262,13 @@ impl BodyChecker<'_> {
         {
             return self.attribute_type(value, attribute);
         }
-        // A slice of a list takes a list of the same type, which an empty `[]` gets.
+        // A slice of a list takes a list of the same type, which an empty `[]` gets; so does
+        // an item whose index is a slice object (CLS-23).
         if let Expr::Subscript { value, index, .. } = target
-            && let Expr::Slice { .. } = index.as_ref()
+            && (matches!(index.as_ref(), Expr::Slice { .. })
+                || self.peek_type(index) == Some(Type::Slice)
+                || matches!(index.as_ref(), Expr::Call { function, .. }
+                    if matches!(function.as_ref(), Expr::Name { id, .. } if id == "slice")))
         {
             return self
                 .known_type(value)
@@ -278,9 +332,27 @@ impl BodyChecker<'_> {
                     super::class_value::ClassValueAssignment::Refused => None,
                 };
             }
+            if let Some(declared) = self.conversion_for(target, &ty) {
+                let inner = self.attribute_target(object, attribute, &declared, None, *span)?;
+                let (holder, converted) = self.conversion(&ty, &declared, *span);
+                return Some(AssignTarget::Converted {
+                    holder,
+                    value: Box::new(converted),
+                    target: Box::new(inner),
+                });
+            }
             return self.attribute_target(object, attribute, &ty, None, *span);
         }
         let (Expr::Tuple { elements, span } | Expr::List { elements, span }) = target else {
+            if let Some(declared) = self.conversion_for(target, &ty) {
+                let (holder, converted) = self.conversion(&ty, &declared, target.span());
+                let symbol = self.assign(target, declared, &converted)?;
+                return Some(AssignTarget::Converted {
+                    holder,
+                    value: Box::new(converted),
+                    target: Box::new(AssignTarget::Name(symbol)),
+                });
+            }
             return self.assign(target, ty, value).map(AssignTarget::Name);
         };
         let items = match ty {
@@ -321,6 +393,14 @@ impl BodyChecker<'_> {
         span: Span,
     ) -> Option<AssignTarget> {
         let list = self.expression(list);
+        if let Type::CData(class) = list.ty.clone() {
+            if matches!(index, Expr::Slice { .. }) {
+                self.cdata_item((list, &class), index, span);
+                return None;
+            }
+            let index = self.expression(index);
+            return self.cdata_item_target((list, &class), index, ty, span);
+        }
         if let Type::Dict(key, _) = &list.ty {
             let key = key.as_ref().clone();
             let key = self.expression_expecting(index, Some(&key));
@@ -333,6 +413,11 @@ impl BodyChecker<'_> {
             return self.slice_target(list, [lower, upper, step], ty, span);
         }
         let index = self.expression(index);
+        // A slice object assigns the slice of its bounds (CLS-23).
+        if index.ty == Type::Slice {
+            let bounds = self.object_bounds(index, span);
+            return self.slice_target_of(list, bounds, ty, span);
+        }
         self.checked_item_target(list, index, ty, span)
     }
 
@@ -405,7 +490,23 @@ impl BodyChecker<'_> {
                 self.slice_assignment(span);
                 None
             }
-            _ => None,
+            // A target whose read failed was reported there; any other is reported here, so no
+            // statement is left out without a diagnostic.
+            _ if current.ty.has_error() => None,
+            _ => {
+                self.diagnostics.push(
+                    Diagnostic::new(
+                        DiagnosticCode::error(401),
+                        span,
+                        format!(
+                            "an augmented assignment cannot assign {} read this way",
+                            current.ty.with_article()
+                        ),
+                    )
+                    .with_rule(RuleId::SMT_01),
+                );
+                None
+            }
         }
     }
 
@@ -426,9 +527,6 @@ impl BodyChecker<'_> {
             }
         };
         self.expect(&index, Type::Int, "an index");
-        if self.union_item_needs_its_type(ty, &item, span) {
-            return None;
-        }
         if !ty.is_assignable_to(&item) {
             self.diagnostics.push(
                 Diagnostic::new(
@@ -439,13 +537,14 @@ impl BodyChecker<'_> {
                 .with_rule(RuleId::TYP_03),
             );
         }
-        Some(AssignTarget::Item {
+        let target = AssignTarget::Item {
             list: Box::new(list),
             index: Box::new(index),
-        })
+        };
+        Some(self.converted_target(ty, &item, target, span))
     }
 
-    fn unassignable_item(&mut self, container: &Type, span: Span) {
+    pub(super) fn unassignable_item(&mut self, container: &Type, span: Span) {
         let rule = match container {
             Type::Str => RuleId::DAT_05,
             Type::Tuple(_) => RuleId::DAT_08,
@@ -481,13 +580,24 @@ impl BodyChecker<'_> {
         ty: &Type,
         span: Span,
     ) -> Option<AssignTarget> {
-        let [lower, upper, step] = bounds.map(|bound| {
+        let bounds = bounds.map(|bound| {
             bound.as_deref().map(|bound| {
                 let value = self.expression(bound);
-                self.expect(&value, Type::Int, "a slice bound");
+                self.expect(&value, Type::optional(Type::Int), "a slice bound");
                 Box::new(value)
             })
         });
+        self.slice_target_of(list, bounds, ty, span)
+    }
+
+    /// Checks `list[lower:upper:step] = items` of checked bounds.
+    fn slice_target_of(
+        &mut self,
+        list: TypedExpr,
+        [lower, upper, step]: [Option<Box<TypedExpr>>; 3],
+        ty: &Type,
+        span: Span,
+    ) -> Option<AssignTarget> {
         match &list.ty {
             Type::List(_) => {}
             Type::Error => return None,
@@ -557,10 +667,10 @@ impl BodyChecker<'_> {
                 {
                     diagnostic = diagnostic.with_fix(value.span, format!("{digits}.0"));
                 } else {
-                    diagnostic = diagnostic.with_help(format!(
-                        "assign {}, or use a new variable",
-                        existing.with_article()
-                    ));
+                    let help = self.protocol_help(&ty, &existing).unwrap_or_else(|| {
+                        format!("assign {}, or use a new variable", existing.with_article())
+                    });
+                    diagnostic = diagnostic.with_help(help);
                 }
                 self.diagnostics.push(diagnostic);
             }
@@ -607,30 +717,60 @@ impl BodyChecker<'_> {
         true
     }
 
-    /// Reports a value assigned to an item or an entry that holds a union, when the value is
-    /// not yet of the union's type: only `a = b[0] = value`, whose one value serves several
-    /// targets, gives one, and a union item needs a value of its own type (TYP-14).
-    pub(super) fn union_item_needs_its_type(&mut self, ty: &Type, item: &Type, span: Span) -> bool {
-        let union = match item {
-            Type::Optional(inner) => inner.as_ref(),
-            other => other,
-        };
-        if !matches!(union, Type::Union(_)) || ty.matches(item) || !ty.is_assignable_to(item) {
+    /// Returns `target`, which holds values of type `declared`, taking a value of type `ty`
+    /// converted to `declared` when the two differ, as a member of a union or the base of an
+    /// optional does. Only one value assigned to several targets, or a tuple unpacked into
+    /// targets, gives such a value, since a single target's value is checked as the target's
+    /// type already (TYP-16).
+    pub(super) fn converted_target(
+        &mut self,
+        ty: &Type,
+        declared: &Type,
+        target: AssignTarget,
+        span: Span,
+    ) -> AssignTarget {
+        if !Self::needs_conversion(ty, declared, span) {
+            return target;
+        }
+        let (holder, value) = self.conversion(ty, declared, span);
+        AssignTarget::Converted {
+            holder,
+            value: Box::new(value),
+            target: Box::new(target),
+        }
+    }
+
+    /// Returns a hidden variable for a value of type `ty`, and its read converted to
+    /// `declared`.
+    fn conversion(&mut self, ty: &Type, declared: &Type, span: Span) -> (SymbolId, TypedExpr) {
+        let name = format!("<converted {}>", self.local_order.len());
+        let holder = self
+            .program
+            .add_symbol(&name, SymbolKind::Local, ty.clone(), span);
+        self.locals.insert(name, holder);
+        self.local_order.push(holder);
+        self.types.insert(holder, ty.clone());
+        let stored = Self::typed(TypedExprKind::Local(holder), ty.clone(), span);
+        (holder, Self::converted(stored, Some(declared)))
+    }
+
+    /// Returns the declared type of a variable or an attribute target, when a value of type
+    /// `ty` changes its form to be held there.
+    fn conversion_for(&self, target: &Expr, ty: &Type) -> Option<Type> {
+        let declared = self.known_type(target)?;
+        Self::needs_conversion(ty, &declared, target.span()).then_some(declared)
+    }
+
+    /// Returns whether a value of type `ty` changes its form to be held as `declared`.
+    fn needs_conversion(ty: &Type, declared: &Type, span: Span) -> bool {
+        if ty.matches(declared) || !ty.is_assignable_to(declared) {
             return false;
         }
-        self.diagnostics.push(
-            Diagnostic::new(
-                DiagnosticCode::error(201),
-                span,
-                format!(
-                    "one value assigned to several targets, one of which holds {}, is planned \
-                     for TyPy 0.5 (TYP-16)",
-                    item.with_article()
-                ),
-            )
-            .with_rule(RuleId::TYP_16)
-            .with_help("assign each target in a statement of its own"),
+        let probe = Self::typed(
+            TypedExprKind::Constant(TypedConstant::None),
+            ty.clone(),
+            span,
         );
-        true
+        Self::converted(probe, Some(declared)).ty != *ty
     }
 }

@@ -36,6 +36,35 @@ impl FunctionLowerer<'_> {
         self.call_runtime(RuntimeFunction::RangeNew, words, span)
     }
 
+    /// Makes `slice(stop)` or `slice(start, stop[, step])`, each bound not given `None`
+    /// (CLS-23).
+    fn slice_value(&mut self, bounds: &[Lowered], span: Span) -> Lowered {
+        let mut words: Vec<_> = bounds
+            .iter()
+            .map(|bound| self.bound_word(Some(*bound), span))
+            .collect();
+        if words.len() == 1 {
+            words.insert(0, self.bound_word(None, span));
+        }
+        if words.len() == 2 {
+            words.push(self.bound_word(None, span));
+        }
+        self.call_runtime(RuntimeFunction::SliceNew, words, span)
+    }
+
+    /// Returns the word of a bound of `int | None`: its `int` word, or 0 for `None` or a bound
+    /// not given, which no `int` is.
+    pub(crate) fn bound_word(&mut self, bound: Option<Lowered>, span: Span) -> typy_tyir::ValueId {
+        let optional = TyirType::Optional(typy_tyir::OptionalBase::Int);
+        let held = match bound {
+            Some(bound) if bound.ty == TyirType::Int => return bound.value,
+            Some(bound) if bound.ty == optional => bound.value,
+            _ => self.none_of(optional, span),
+        };
+        self.builder
+            .push_value(Operation::Unwrap(held), TyirType::Int, span)
+    }
+
     /// Calls a builtin with arguments already evaluated in order; the arguments are released afterwards.
     pub(crate) fn builtin(
         &mut self,
@@ -84,6 +113,7 @@ impl FunctionLowerer<'_> {
             }
             (Builtin::Len, [list]) if list.ty == TyirType::LIST => self.list_length(*list, span),
             (Builtin::Range, bounds) => self.range_value(bounds, span),
+            (Builtin::Slice, bounds) => self.slice_value(bounds, span),
             (Builtin::Len, [sized]) if let Some(function) = Self::length_function(sized.ty) => {
                 self.call_runtime(function, vec![sized.value], span)
             }
@@ -282,9 +312,10 @@ impl FunctionLowerer<'_> {
                 let written = self.call_runtime(RuntimeFunction::TextWrite, vec![file, text], span);
                 self.release(written, span);
             }
-            // Only a program that closes a text file can close standard output, so only its
-            // `print` checks, and may raise (LIB-14).
-            None if self.program.closes_text_files => {
+            // Only a program that closes a text file can close standard output, and only one
+            // that makes a surrogate can hold one standard output cannot write, so only
+            // their `print` checks, and may raise (LIB-14, LEX-10).
+            None if self.program.closes_text_files || self.program.makes_surrogates => {
                 self.call_runtime(RuntimeFunction::WriteStdoutChecked, vec![text], span);
             }
             None => {

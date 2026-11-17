@@ -68,8 +68,11 @@ impl FunctionLowerer<'_> {
                         ),
                     },
                     typy_check::AssignTarget::Tuple(_)
+                    | typy_check::AssignTarget::CData { .. }
                     | typy_check::AssignTarget::Slice { .. }
-                    | typy_check::AssignTarget::Lazy { .. } => typy_check::Type::Error,
+                    | typy_check::AssignTarget::Lazy { .. }
+                    | typy_check::AssignTarget::Converted { .. }
+                    | typy_check::AssignTarget::Property { .. } => typy_check::Type::Error,
                 };
                 self.augmented_assignment(target, *operator, value, &result, *span);
             }
@@ -152,6 +155,11 @@ impl FunctionLowerer<'_> {
                 self.raise_statement(Some(exception), &typy_check::RaiseCause::Absent, *span);
                 self.builder.switch_to(passed);
             }
+            TypedStmt::Match {
+                subject,
+                cases,
+                span,
+            } => self.match_statement(subject.as_ref(), cases, *span),
             TypedStmt::If {
                 test,
                 body,
@@ -232,7 +240,7 @@ impl FunctionLowerer<'_> {
         }
     }
 
-    fn jump_if_open(&mut self, target: typy_tyir::BlockId, _span: Span) {
+    pub(crate) fn jump_if_open(&mut self, target: typy_tyir::BlockId, _span: Span) {
         if !self.builder.is_terminated() {
             self.builder.terminate(Terminator::Jump {
                 target,
@@ -242,7 +250,7 @@ impl FunctionLowerer<'_> {
     }
 
     /// Evaluates an expression as a condition and returns its truth value.
-    fn condition(&mut self, test: &TypedExpr) -> typy_tyir::ValueId {
+    pub(crate) fn condition(&mut self, test: &TypedExpr) -> typy_tyir::ValueId {
         let lowered = self.expression(test);
         let truth = self.truth(lowered, test.span);
         self.release(lowered, test.span);

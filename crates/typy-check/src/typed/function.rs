@@ -35,4 +35,6 @@ pub struct TypedFunction {
     /// Whether it is a generic function, whose copies run in its place; it holds no body
     /// (GEN-03, ADR-0023).
     pub generic: bool,
+    /// The variables an assignment expression assigns, which no statement shows (EXP-13).
+    pub named_targets: Vec<SymbolId>,
 }

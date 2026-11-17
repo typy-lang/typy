@@ -6,6 +6,30 @@ use typy_tyir::{Callee, Operation, RuntimeFunction, Terminator, TyirType, ValueI
 use crate::function::FunctionLowerer;
 use crate::ownership::Lowered;
 
+/// Whether runtime calls are followed by the test of the exception a slot's method left with
+/// the runtime (CLS-22, ADR-0039).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum SlotTests {
+    /// No method a type object's slot calls may raise.
+    Never,
+    /// A slot's method may raise, so each runtime call that may run a slot is tested.
+    After,
+    /// The lowering is writing a test, whose error path runs no test of its own, since it may
+    /// call the same function.
+    Writing,
+}
+
+impl SlotTests {
+    /// Returns the tests a function gets when a slot's method may raise, or none.
+    pub(crate) const fn of(raising_slots: bool) -> Self {
+        if raising_slots {
+            Self::After
+        } else {
+            Self::Never
+        }
+    }
+}
+
 impl FunctionLowerer<'_> {
     /// Calls a function that may raise, and returns its result. The error path releases the live temporaries and goes on as `propagate` says.
     pub(crate) fn invoke(
@@ -62,6 +86,18 @@ impl FunctionLowerer<'_> {
                 span,
             )
         };
-        self.produced(value, signature.result)
+        let lowered = self.produced(value, signature.result);
+        // A method a slot called may have raised inside the runtime (CLS-22, ADR-0039).
+        if self.slot_tests == SlotTests::After && function.may_call_slots() {
+            self.slot_tests = SlotTests::Writing;
+            self.invoke(
+                Callee::Runtime(RuntimeFunction::SlotRaised),
+                Vec::new(),
+                TyirType::Unit,
+                span,
+            );
+            self.slot_tests = SlotTests::After;
+        }
+        lowered
     }
 }

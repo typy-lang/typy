@@ -8,25 +8,37 @@ use std::collections::BTreeSet;
 
 use typy_check::{AssignTarget, SymbolId, TypedExpr, TypedExprKind, TypedStmt};
 
+/// Adds the variables an assignment target assigns, its hidden ones included.
+fn target(assigned: &AssignTarget, found: &mut BTreeSet<SymbolId>) {
+    match assigned {
+        AssignTarget::Name(symbol) => {
+            found.insert(*symbol);
+        }
+        AssignTarget::Tuple(targets) => {
+            for each in targets {
+                target(each, found);
+            }
+        }
+        AssignTarget::Lazy { target: inner, .. } => target(inner, found),
+        AssignTarget::Converted {
+            holder,
+            target: inner,
+            ..
+        } => {
+            found.insert(*holder);
+            target(inner, found);
+        }
+        AssignTarget::Item { .. }
+        | AssignTarget::Slice { .. }
+        | AssignTarget::Entry { .. }
+        | AssignTarget::Attribute { .. }
+        | AssignTarget::CData { .. }
+        | AssignTarget::Property { .. } => {}
+    }
+}
+
 /// Returns the variables a body assigns, in any statement at any depth.
 pub(crate) fn assigned_symbols(body: &[TypedStmt]) -> BTreeSet<SymbolId> {
-    fn target(assigned: &AssignTarget, found: &mut BTreeSet<SymbolId>) {
-        match assigned {
-            AssignTarget::Name(symbol) => {
-                found.insert(*symbol);
-            }
-            AssignTarget::Tuple(targets) => {
-                for each in targets {
-                    target(each, found);
-                }
-            }
-            AssignTarget::Lazy { target: inner, .. } => target(inner, found),
-            AssignTarget::Item { .. }
-            | AssignTarget::Slice { .. }
-            | AssignTarget::Entry { .. }
-            | AssignTarget::Attribute { .. } => {}
-        }
-    }
     fn statements(body: &[TypedStmt], found: &mut BTreeSet<SymbolId>) {
         for statement in body {
             match statement {
@@ -40,6 +52,13 @@ pub(crate) fn assigned_symbols(body: &[TypedStmt]) -> BTreeSet<SymbolId> {
                     found.extend(bindings.iter().map(typy_check::ImportBinding::target));
                 }
                 TypedStmt::LazyImport { targets, .. } => found.extend(targets.iter().copied()),
+                TypedStmt::Match { subject, cases, .. } => {
+                    found.extend(subject.iter().map(|(symbol, _)| *symbol));
+                    for case in cases {
+                        found.extend(case.pattern.bound());
+                        statements(&case.body, found);
+                    }
+                }
                 TypedStmt::If { body, orelse, .. } | TypedStmt::While { body, orelse, .. } => {
                     statements(body, found);
                     statements(orelse, found);

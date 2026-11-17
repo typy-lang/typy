@@ -572,7 +572,7 @@ fn each_class_has_its_own_copy_of_a_class_method() {
 }
 
 #[test]
-fn comparisons_of_instances_call_their_methods_and_may_swap() {
+fn comparisons_of_instances_call_their_methods_and_swap_for_a_subclass() {
     let printed = text(concat!(
         "class V:\n",
         "    def __init__(self, n: int) -> None:\n",
@@ -586,57 +586,90 @@ fn comparisons_of_instances_call_their_methods_and_may_swap() {
         "b: V = W(2)\n",
         "print(a == b, a != b, b == a)\n",
     ));
-    assert!(printed.contains("same_method"), "{printed}");
+    // A comparison swaps for any subclass operand, without comparing methods (CLS-07).
+    assert!(!printed.contains("same_method"), "{printed}");
     assert!(printed.contains("rt.is_instance"), "{printed}");
 }
 
 #[test]
-fn a_comparison_method_inherited_from_a_base_is_compared_through_the_base_s_table() {
+fn a_reflected_method_inherited_from_a_base_is_compared_through_the_base_s_table() {
     let printed = text(concat!(
         "class B:\n",
-        "    def __eq__(self, other: 'B') -> bool:\n",
-        "        return True\n",
+        "    def __add__(self, other: 'B') -> int:\n",
+        "        return 0\n",
+        "    def __radd__(self, other: 'B') -> int:\n",
+        "        return 1\n",
         "class V(B):\n",
         "    pass\n",
         "class W(V):\n",
-        "    def __eq__(self, other: 'B') -> bool:\n",
-        "        return False\n",
+        "    def __radd__(self, other: 'B') -> int:\n",
+        "        return 2\n",
         "a: V = V()\n",
         "b: V = W()\n",
-        "print(a == b)\n",
+        "print(a + b)\n",
     ));
     assert!(printed.contains("same_method class#0"), "{printed}");
 }
 
 #[test]
-fn a_comparison_method_that_may_raise_is_refused() {
-    let directory = std::env::temp_dir().join(format!(
-        "typy-lower-raising-{}-{}",
-        std::process::id(),
-        next_id()
-    ));
-    std::fs::create_dir_all(&directory).unwrap();
-    let root = Utf8PathBuf::from_path_buf(directory.clone()).unwrap();
-    let source = concat!(
+fn a_runtime_call_that_may_run_a_raising_slot_is_followed_by_its_test() {
+    let printed = text(concat!(
         "class V:\n",
         "    def __init__(self, n: int) -> None:\n",
         "        self.n = n\n",
         "    def __lt__(self, other: 'V') -> bool:\n",
         "        return 1 // other.n > 0\n",
-        "class W(V):\n",
-        "    pass\n",
+        "print(sorted([V(1), V(2)])[0].n, len('ab'))\n",
+    ));
+    let sort = printed.find("rt.list_sort").expect("the list is sorted");
+    assert!(printed[sort..].contains("rt.slot_raised"), "{printed}");
+}
+
+#[test]
+fn a_program_whose_slots_cannot_raise_has_no_slot_test() {
+    let printed = text(concat!(
+        "class V:\n",
+        "    def __init__(self, n: int) -> None:\n",
+        "        self.n = n\n",
+        "    def __lt__(self, other: 'V') -> bool:\n",
+        "        return self.n < other.n\n",
         "print(sorted([V(1), V(2)])[0].n)\n",
-    );
-    std::fs::write(root.join("app.py"), source).unwrap();
-    let project = Project::load(&root.join("app.py"), ProjectSettings::new(root)).unwrap();
-    let program = TypeChecker::check(&project).unwrap();
-    let diagnostics = typy_lower::lower(&program).expect_err("a raising `__lt__` is refused");
-    let _ = std::fs::remove_dir_all(directory);
-    assert!(
-        diagnostics
-            .iter()
-            .any(|diagnostic| diagnostic.message().contains("V.__lt__"))
-    );
+    ));
+    assert!(!printed.contains("rt.slot_raised"), "{printed}");
+}
+
+#[test]
+fn an_ordering_method_that_may_give_way_fills_the_slot_with_its_bridge() {
+    let printed = text(concat!(
+        "class V:\n",
+        "    def __init__(self, n: int) -> None:\n",
+        "        self.n = n\n",
+        "    def __lt__(self, other: 'V') -> bool:\n",
+        "        if other.n < 0:\n",
+        "            return NotImplemented\n",
+        "        return self.n < other.n\n",
+        "print(V(1) < V(2), sorted([V(2), V(1)])[0].n)\n",
+    ));
+    for line in ["V.<less>", "rt.ordering_unsupported", "rt.slot_raised"] {
+        assert!(printed.contains(line), "{line:?} missing from\n{printed}");
+    }
+}
+
+#[test]
+fn an_eq_that_may_give_way_fills_the_slot_with_its_bridge() {
+    let printed = text(concat!(
+        "class V:\n",
+        "    def __init__(self, n: int) -> None:\n",
+        "        self.n = n\n",
+        "    def __eq__(self, other: 'V') -> bool:\n",
+        "        if other.n < 0:\n",
+        "            return NotImplemented\n",
+        "        return self.n == other.n\n",
+        "print(V(1) in [V(1)], V(1) == V(-1))\n",
+    ));
+    for line in ["V.<equal>", "rt.not_implemented"] {
+        assert!(printed.contains(line), "{line:?} missing from\n{printed}");
+    }
 }
 
 #[test]
@@ -669,17 +702,19 @@ fn an_operator_whose_reflected_method_is_overridden_decides_in_a_loop() {
 fn a_right_operand_typed_as_a_base_is_compared_through_the_left_class_s_table() {
     let printed = text(concat!(
         "class B:\n",
-        "    def __eq__(self, other: 'B') -> bool:\n",
-        "        return True\n",
+        "    def __add__(self, other: 'B') -> int:\n",
+        "        return 0\n",
+        "    def __radd__(self, other: 'B') -> int:\n",
+        "        return 1\n",
         "class V(B):\n",
-        "    def __eq__(self, other: 'B') -> bool:\n",
-        "        return False\n",
+        "    def __radd__(self, other: 'B') -> int:\n",
+        "        return 2\n",
         "class W(V):\n",
-        "    def __eq__(self, other: 'B') -> bool:\n",
-        "        return True\n",
+        "    def __radd__(self, other: 'B') -> int:\n",
+        "        return 3\n",
         "left: V = V()\n",
         "right: B = W()\n",
-        "print(left == right)\n",
+        "print(left + right)\n",
     ));
     assert!(printed.contains("downcast"), "{printed}");
 }

@@ -10,8 +10,9 @@ use crate::typed::{Argument, FileAttribute, TypedConstant, TypedExpr, TypedExprK
 use crate::types::Type;
 
 impl BodyChecker<'_> {
-    /// Checks a call through `super()` or a module object, which names a method of a base or
-    /// a function of the module rather than a method of a value.
+    /// Checks a call through `super()`, a copy of a generic class named with its type
+    /// arguments, or a module object, which names a method of a base, of the copy, or a
+    /// function of the module rather than a method of a value.
     fn call_through(
         &mut self,
         receiver: &Expr,
@@ -23,9 +24,49 @@ impl BodyChecker<'_> {
         if is_super(receiver) {
             return Some(self.super_call(receiver, name, arguments, keywords, span));
         }
+        if let Some(call) = self.foreign_call(receiver, name, arguments, keywords, span) {
+            return Some(call);
+        }
+        if let Some(copy) = self.applied_class(receiver) {
+            return Some(self.class_method_call(copy, name, arguments, keywords, span));
+        }
         let module = self.module_of(receiver)?;
         let call = self.module_call(&module, name, arguments, keywords, span);
         Some(self.through_lazy_module(receiver, call))
+    }
+
+    /// Returns the copy `Class[arguments]` names, when the receiver names a generic class of
+    /// the program, by its name or through its module, with its type arguments (ADR-0028).
+    fn applied_class(&mut self, receiver: &Expr) -> Option<crate::typed::ClassId> {
+        let Expr::Subscript { value, .. } = receiver else {
+            return None;
+        };
+        let class = match value.as_ref() {
+            Expr::Name { id, .. } if !self.locals.contains_key(id) => {
+                self.program.class_ids.get(id).copied()?
+            }
+            Expr::Attribute {
+                value: module,
+                attribute,
+                ..
+            } => match module.as_ref() {
+                Expr::Name { id, .. } => {
+                    *self.program.module_classes.get(id)?.get(&attribute.name)?
+                }
+                _ => return None,
+            },
+            _ => return None,
+        };
+        if !self
+            .program
+            .class_copies
+            .borrow()
+            .roots
+            .contains_key(&class)
+        {
+            return None;
+        }
+        Some(self.annotation(receiver).class_id().unwrap_or(class))
     }
 
     /// Checks `receiver.name(arguments)`, a method of a built-in type (LIB-03).
@@ -131,6 +172,7 @@ impl BodyChecker<'_> {
             (Method::DictGet, 1, _) => Type::optional(signature.result),
             _ => signature.result,
         };
+        self.record_runtime_raises(method, &receiver.ty);
         Self::typed(
             TypedExprKind::Method {
                 receiver: Box::new(receiver),
@@ -140,6 +182,19 @@ impl BodyChecker<'_> {
             result,
             span,
         )
+    }
+
+    /// Records what a method may make the runtime raise: a `KeyError` that holds a missing
+    /// key, or the Unicode error of `encode` or `decode` (ADR-0034).
+    fn record_runtime_raises(&mut self, method: Method, receiver: &Type) {
+        match (method, receiver) {
+            (Method::DictPop, Type::Dict(key, _)) | (Method::SetRemove, Type::Set(key)) => {
+                self.program.record_key(key);
+            }
+            (Method::StrEncode, _) => self.program.record_codec(true, false),
+            (Method::BytesDecode, _) => self.program.record_codec(false, true),
+            _ => {}
+        }
     }
 
     pub(super) fn invalid_call(span: Span) -> TypedExpr {

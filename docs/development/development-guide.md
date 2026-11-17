@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy development guide |
-| Version | 0.16 |
+| Version | 0.17 |
 | Status | Draft |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-12 |
@@ -58,7 +58,9 @@ Container". VS Code attaches to the same `dev` service.
 | `make runtime-size` | Links a hello world for each target and fails when the runtime it links is over the size budgets of NFR-02 |
 | `make mutants` | Mutation-tests the Rust lines changed since `MUTANTS_BASE`, by default the work not yet committed, new files included, each mutant against its own crate's tests; a slice takes minutes. It is run on demand, for a change whose tests deserve a closer look, and each survivor is then caught by a new test, removed as dead code, or listed in `.cargo/mutants.toml` with the reason it cannot change a result. It runs in a container limited to 6 GB of memory with no swap, 4 CPUs and no network, made from an image of the dev container that is removed afterwards; the survivors are in `.tmp/mutants/diff/mutants.out/missed.txt` |
 | `make mutants-package MUTANTS_PACKAGE=typy-check` | Mutation-tests every mutant of one crate, which takes hours for a large one; for a review of a crate's tests, not for each change |
+| `make bench-compare` | Builds the release compiler and runs `tests/bench/compare.py`: each workload of `tests/bench/programs/` built by TyPy and by every peer of `make bench-peers`, its output checked against CPython 3.15's, then timed three times pinned to two cores with its peak memory; `tests/bench/report.py` writes the tables of the [benchmark report](../testing/benchmark-report.md). It takes about an hour and is run on demand, on a quiet machine; `BENCH_WORKLOADS="nbody dicts"` runs a subset |
 | `make bench` | Builds the compiler in release mode and times it on generated 10,000-line projects, in one file and in 200 modules, against the budgets of NFR-04, NFR-05 and NFR-14, with a check that checking time grows linearly with the modules |
+| `make bench-peers` | Downloads, once, the languages the cross-language benchmark compares with TyPy that the image lacks, about 0.5 GB: Go 1.27.4, the Temurin JDK 25.0.5, PyPy 3.11 v7.3.23 and Codon 0.20.6 from their release archives, and mypyc, Cython and Nuitka into a CPython 3.14 environment from `tests/bench/peers/requirements.txt`. Each archive is checked against the sha256 its project publishes and each wheel against its hash; everything goes into the `bench-tools` volume, `/var/cache/typy/bench`, and a tool already there is kept |
 | `make stdlib-names` | Writes `crates/typy-source/src/stdlib_names.rs`, the standard library module names of CPython 3.12 to 3.15, which the loader leaves to the checker (LIB-08); `make check` runs `make stdlib-names-check` |
 | `make check` | Runs the whole quality gate: formatting, Clippy, the tests with line and branch coverage, the four documentation checks below, the Unicode table check and the runtime size check |
 | `make fmt` | Formats the Rust code |

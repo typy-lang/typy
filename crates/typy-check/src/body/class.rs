@@ -78,13 +78,6 @@ impl BodyChecker<'_> {
         );
     }
 
-    /// Checks the instance an attribute expression reads or assigns, and returns it with its
-    /// class.
-    fn instance(&mut self, value: &Expr) -> Option<(TypedExpr, ClassId)> {
-        let object = self.instance_object(value);
-        self.as_instance(object)
-    }
-
     /// Checks the value an attribute expression reads or assigns; the instance `__init__` is
     /// building is read without the check that it is complete.
     fn instance_object(&mut self, value: &Expr) -> TypedExpr {
@@ -158,6 +151,9 @@ impl BodyChecker<'_> {
             return self.through_lazy_module(value, read);
         }
         let object = self.instance_object(value);
+        if let Type::CData(class) = object.ty.clone() {
+            return self.cdata_attribute((object, class), attribute, span);
+        }
         if let Type::TypeObject(Some(of)) = &object.ty
             && let Some(class) = Self::program_class(of)
             && let Some(read) = self.class_value_read(class, attribute, span)
@@ -166,6 +162,15 @@ impl BodyChecker<'_> {
         }
         if let Type::TypeObject(_) = object.ty {
             return self.type_object_attribute(object, attribute, span);
+        }
+        if object.ty == Type::TypeAlias {
+            return self.type_alias_attribute(object, attribute, span);
+        }
+        if object.ty == Type::VersionInfo {
+            return self.version_info_attribute(object, attribute, span);
+        }
+        if object.ty == Type::Slice {
+            return self.slice_attribute(object, attribute, span);
         }
         if object.ty.is_file() {
             return self.file_attribute(object, attribute, span);
@@ -176,17 +181,26 @@ impl BodyChecker<'_> {
         let Some((object, class)) = self.as_instance(object) else {
             return Self::invalid_call(span);
         };
+        // A protocol value reads the attribute of the object's class (ADR-0041).
+        if self.program.is_protocol(class) {
+            return self.protocol_attribute(object, class, attribute, span);
+        }
         if let Some(getter) = self.property_getter(class, &attribute.name) {
             return self.property_read(object, getter, span);
         }
         // A class variable is read through an instance; reading it does not evaluate the
-        // instance again, which is a variable or an attribute, so it has no effect.
+        // instance again, which is a variable or an attribute, so it has no effect. One a
+        // subclass may hold of its own is read through the instance's class (ADR-0037).
         if self.program.classes[class.0 as usize]
             .attribute(&attribute.name)
             .is_none()
-            && let Some(read) = self.class_value_read(class, attribute, span)
         {
-            return read;
+            if let Some(read) = self.shared_class_variable(&object, class, attribute, span) {
+                return read;
+            }
+            if let Some(read) = self.class_value_read(class, attribute, span) {
+                return read;
+            }
         }
         let Some(index) = self.attribute_index(class, attribute) else {
             return Self::invalid_call(span);
@@ -249,10 +263,23 @@ impl BodyChecker<'_> {
         self.program.attribute_ty(class, index)
     }
 
+    /// Returns the class that declares the attribute at `index` of `class`, with the attribute's
+    /// type once it is known. An inherited attribute takes its type from the class that declares
+    /// it; a copy of a generic class made before the generic class's `__init__` was checked
+    /// takes it from the generic class's, and keeps it (ADR-0028).
+    fn known_attribute(&mut self, class: ClassId, index: usize) -> (ClassId, Option<Type>) {
+        let owner = self.program.declaring(class, index);
+        let known = self.program.attribute_ty(owner, index);
+        if let Some(known) = &known {
+            self.program.classes[owner.0 as usize].attributes[index]
+                .ty
+                .get_or_insert_with(|| known.clone());
+        }
+        (owner, known)
+    }
+
     /// Checks `value.attribute = ...` with a value of type `ty`, or with the annotation
-    /// `declared`. In `__init__` the first assignment of an attribute the class body does not
-    /// declare gives it its type; anywhere else only an attribute of the class is assigned
-    /// (CLS-02).
+    /// `declared`: the value of a `ctypes` object (FFI-03), or an attribute of an instance.
     pub(super) fn attribute_target(
         &mut self,
         value: &Expr,
@@ -261,12 +288,32 @@ impl BodyChecker<'_> {
         declared: Option<Type>,
         span: Span,
     ) -> Option<AssignTarget> {
-        let (object, class) = self.instance(value)?;
-        if self.class_variable_through_instance(class, attribute, span) {
+        let object = self.instance_object(value);
+        if let Type::CData(class) = object.ty.clone() {
+            return self.cdata_attribute_target((object, class), attribute, ty, span);
+        }
+        self.instance_attribute_target((object, value), attribute, ty, declared, span)
+    }
+
+    /// Checks `value.attribute = ...` of an instance, `object` being `value` checked. In
+    /// `__init__` the first assignment of an attribute the class body does not declare gives
+    /// it its type; anywhere else only an attribute of the class is assigned (CLS-02).
+    fn instance_attribute_target(
+        &mut self,
+        (object, value): (TypedExpr, &Expr),
+        attribute: &Identifier,
+        ty: &Type,
+        declared: Option<Type>,
+        span: Span,
+    ) -> Option<AssignTarget> {
+        let (object, class) = self.as_instance(object)?;
+        if self.refuse_through_protocol(class, attribute)
+            || self.class_variable_through_instance(class, attribute, span)
+        {
             return None;
         }
-        if self.refuse_property_target(class, attribute, span) {
-            return None;
+        if let Some(getter) = self.property_getter(class, &attribute.name) {
+            return self.property_target((&object, class, getter), attribute, ty, span);
         }
         let index = self.attribute_index(class, attribute)?;
         let initializing = self.initialized_instance(value).is_some();
@@ -280,10 +327,9 @@ impl BodyChecker<'_> {
         {
             return None;
         }
-        // An inherited attribute takes its type from the class that declares it.
-        let owner = self.program.declaring(class, index);
+        let (owner, known) = self.known_attribute(class, index);
         let info = &mut self.program.classes[owner.0 as usize];
-        let attribute_type = match (&info.attributes[index].ty, declared) {
+        let attribute_type = match (&known, declared) {
             (None, Some(declared)) if initializing => {
                 info.attributes[index].ty = Some(declared.clone());
                 declared
@@ -438,27 +484,36 @@ impl BodyChecker<'_> {
         if let Type::Exception(exception) = &ty {
             let exception = exception.clone();
             return match init {
-                Some(_)
-                    if let Some(refused) =
-                        self.os_error_with_init(&exception, &name, arguments, span) =>
-                {
-                    refused
-                }
                 Some(function) => {
                     match self.bind_arguments(function, 1, &name, arguments, keywords, span) {
-                        Ok(bound) => Self::typed(
-                            TypedExprKind::NewException {
-                                class: exception,
-                                arguments: Vec::new(),
-                                init: Some(Box::new(InitCall {
-                                    function,
-                                    arguments: bound,
-                                    positional: arguments.len(),
-                                })),
-                            },
-                            ty,
-                            span,
-                        ),
+                        Ok(bound) => {
+                            // `BaseException.__new__` keeps the arguments given by position
+                            // as `args`, before `__init__` runs; `OSError.__new__` keeps none
+                            // (ADR-0034).
+                            let kept = if exception.builtin().is_os_error() {
+                                0
+                            } else {
+                                arguments.len()
+                            };
+                            let given: Vec<Type> = bound[..kept]
+                                .iter()
+                                .map(|argument| argument.value.ty.clone())
+                                .collect();
+                            self.program.record_creation(&exception, &given);
+                            Self::typed(
+                                TypedExprKind::NewException {
+                                    class: exception,
+                                    arguments: Vec::new(),
+                                    init: Some(Box::new(InitCall {
+                                        function,
+                                        arguments: bound,
+                                        positional: arguments.len(),
+                                    })),
+                                },
+                                ty,
+                                span,
+                            )
+                        }
                         Err(error) => error,
                     }
                 }
@@ -519,27 +574,30 @@ impl BodyChecker<'_> {
             return self.uncallable_property(class, name, arguments, span);
         }
         if let Some(method) = found.filter(|_| self.is_static_method(class, &name.name)) {
-            // The instance only names the class, so reading it has no effect to keep.
-            if !matches!(
+            let call = self.static_call(method, class, name, arguments, keywords, span);
+            // A class derived from the instance's may define the name again, so the object's
+            // class decides through the static method's bridge (CLS-06).
+            if let Some(call) = self.through_static_bridge(class, &name.name, &receiver, &call) {
+                return call;
+            }
+            // A variable only names the class; any other instance is evaluated first for its
+            // effects, as CPython evaluates it to find the method (CLS-25).
+            if matches!(
                 receiver.kind,
                 TypedExprKind::Local(_) | TypedExprKind::ModuleVariable(_)
-            ) {
-                for argument in arguments {
-                    self.expression(argument);
-                }
-                return self.error(
-                    Diagnostic::new(
-                        DiagnosticCode::error(201),
-                        name.span,
-                        "calling a static method through an expression other than a variable \
-                         is planned for TyPy 0.5 (CLS-06)",
-                    )
-                    .with_rule(RuleId::CLS_06)
-                    .with_help("call it through its class"),
-                    span,
-                );
+            ) || call.ty.has_error()
+            {
+                return call;
             }
-            return self.static_call(method, class, name, arguments, keywords, span);
+            let ty = call.ty.clone();
+            return Self::typed(
+                TypedExprKind::Sequence {
+                    first: Box::new(receiver),
+                    then: Box::new(call),
+                },
+                ty,
+                span,
+            );
         }
         let info = &self.program.classes[class.0 as usize];
         let Some(method) = found else {
@@ -590,8 +648,9 @@ impl BodyChecker<'_> {
             TypedExprKind::Call {
                 function: target,
                 arguments: bound,
-                // A copy of a generic method is in no method table, and no class overrides it.
-                dispatch: target == method,
+                // A copy of a generic method is in a method table when a class derived from
+                // its class defines the method again, which lowering finds (GEN-09).
+                dispatch: true,
             },
             signature.returns,
             span,

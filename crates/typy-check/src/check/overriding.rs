@@ -15,15 +15,26 @@ pub(super) struct Override<'signatures> {
     pub(super) span: Span,
 }
 
+/// How an override fits its base method.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) enum Fit {
+    /// Each parameter and the result are held as the base's are.
+    Exact,
+    /// A parameter or the result is held otherwise, such as `int | None` for `int`, so a call
+    /// through the base reaches the override through an adapter (CLS-04).
+    Adapted,
+}
+
 impl Override<'_> {
-    /// Returns why the override does not fit its base method, if it does not: it takes the
+    /// Returns how the override fits its base method, or why it does not: it takes the
     /// base's parameters in the same order with the same names, each of a type that accepts
     /// the base's and with a default where the base has one, and returns a type the base's
     /// return type accepts. The instance, the first parameter, is not compared.
-    pub(super) fn check(&self) -> Option<Diagnostic> {
+    pub(super) fn check(&self) -> Result<Fit, Box<Diagnostic>> {
         let (own, base) = (&self.signature.parameters, &self.base.parameters);
+        let mut fit = Fit::Exact;
         if own.len() != base.len() {
-            return Some(self.mismatch(format!(
+            return Err(self.mismatch(format!(
                 "`{}` takes {} parameters, but `{}`, which it overrides, takes {}",
                 self.name,
                 own.len(),
@@ -33,77 +44,64 @@ impl Override<'_> {
         }
         for (own, base) in own.iter().zip(base).skip(1) {
             if own.name != base.name {
-                return Some(self.mismatch(format!(
+                return Err(self.mismatch(format!(
                     "`{}` names a parameter `{}` where `{}`, which it overrides, names it `{}`",
                     self.name, own.name, self.base_name, base.name
                 )));
             }
             if !base.ty.is_assignable_to(&own.ty) {
-                return Some(self.mismatch(format!(
+                return Err(self.mismatch(format!(
                     "`{}` takes {} for `{}`, which does not accept the {} `{}` takes",
                     self.name, own.ty, own.name, base.ty, self.base_name
                 )));
             }
             if base.default.is_some() && own.default.is_none() {
-                return Some(self.mismatch(format!(
+                return Err(self.mismatch(format!(
                     "`{}` has no default for `{}`, but `{}`, which it overrides, has one",
                     self.name, own.name, self.base_name
                 )));
             }
-            // A call through the base fills a missing argument with the base's default, so an
-            // override that gives another would run with the wrong value.
-            if base.default.is_some() && own.default != base.default {
-                return Some(
-                    Diagnostic::new(
-                        DiagnosticCode::error(201),
-                        self.span,
-                        format!(
-                            "an override whose default for `{}` differs from that of `{}` is \
-                             planned for TyPy 0.5 (CLS-04)",
-                            own.name, self.base_name
-                        ),
-                    )
-                    .with_rule(RuleId::CLS_04)
-                    .with_help("give the parameter the base's default"),
-                );
-            }
+            // A call through the base that leaves the argument out takes the default of the
+            // object's class, which the lowering decides (CLS-04).
             if !same_representation(&base.ty, &own.ty) {
-                return Some(self.adapter_planned(&own.ty, &base.ty));
+                // A call through the base that leaves the argument out passes the default the
+                // base's place holds, which another default of the override may not fit.
+                if own.default != base.default {
+                    return Err(Box::new(
+                        Diagnostic::new(
+                            DiagnosticCode::error(201),
+                            self.span,
+                            format!(
+                                "an override that takes {} for `{}` where `{}` takes {}, with a \
+                             default of its own, is planned for TyPy 1.0 (CLS-34)",
+                                own.ty, own.name, self.base_name, base.ty
+                            ),
+                        )
+                        .with_rule(RuleId::CLS_34)
+                        .with_help("give the parameter the base's default"),
+                    ));
+                }
+                fit = Fit::Adapted;
             }
         }
         let (returns, base_returns) = (&self.signature.returns, &self.base.returns);
         if !returns.is_assignable_to(base_returns) {
-            return Some(self.mismatch(format!(
+            return Err(self.mismatch(format!(
                 "`{}` returns {returns}, which the {base_returns} of `{}` does not accept",
                 self.name, self.base_name
             )));
         }
         if !same_representation(returns, base_returns) {
-            return Some(self.adapter_planned(returns, base_returns));
+            fit = Fit::Adapted;
         }
-        None
+        Ok(fit)
     }
 
-    fn mismatch(&self, message: String) -> Diagnostic {
-        Diagnostic::new(DiagnosticCode::error(404), self.span, message).with_rule(RuleId::CLS_04)
-    }
-
-    /// Reports an override whose call would need its arguments or result converted, such as
-    /// `int | None` where the base takes an `int`.
-    fn adapter_planned(&self, own: &Type, base: &Type) -> Diagnostic {
-        Diagnostic::new(
-            DiagnosticCode::error(201),
-            self.span,
-            format!(
-                "an override with {own} where `{}` has {base} is planned for TyPy 0.5 (CLS-04)",
-                self.base_name
-            ),
+    fn mismatch(&self, message: String) -> Box<Diagnostic> {
+        Box::new(
+            Diagnostic::new(DiagnosticCode::error(404), self.span, message)
+                .with_rule(RuleId::CLS_04),
         )
-        .with_rule(RuleId::CLS_04)
-        .with_help(format!(
-            "declare it as {base}, as `{}` does",
-            self.base_name
-        ))
     }
 }
 
@@ -134,6 +132,7 @@ mod tests {
             name: name.to_owned(),
             ty,
             default: None,
+            default_call: None,
         }
     }
 
@@ -155,7 +154,20 @@ mod tests {
             span: Span::empty(FileId(0), TextOffset(0)),
         }
         .check()
+        .err()
         .map(|diagnostic| format!("{} {}", diagnostic.code(), diagnostic.message()))
+    }
+
+    fn fit(own: &FunctionSignature, base: &FunctionSignature) -> Option<super::Fit> {
+        Override {
+            name: "Circle.area",
+            signature: own,
+            base_name: "Shape.area",
+            base,
+            span: Span::empty(FileId(0), TextOffset(0)),
+        }
+        .check()
+        .ok()
     }
 
     #[test]
@@ -205,11 +217,10 @@ mod tests {
         assert!(message(&base, &defaulted).is_some_and(|text| text.contains("has no default")));
         assert_eq!(message(&defaulted, &base), None);
         assert_eq!(message(&defaulted, &defaulted), None);
+        // An override may give the parameter a default of its own (CLS-04).
         let mut other = defaulted.clone();
         other.parameters[1].default = Some(TypedConstant::Int("2".to_owned()));
-        let text = message(&other, &defaulted).unwrap_or_default();
-        assert!(text.starts_with("E0201"), "{text}");
-        assert!(text.contains("default for `scale`"), "{text}");
+        assert_eq!(message(&other, &defaulted), None);
     }
 
     #[test]
@@ -223,17 +234,17 @@ mod tests {
     }
 
     #[test]
-    fn an_override_held_differently_from_its_base_is_planned() {
+    fn an_override_held_differently_from_its_base_needs_an_adapter() {
+        use super::Fit;
         let base = signature(vec![parameter("scale", Type::Int)], Type::Int);
         let optional = signature(
             vec![parameter("scale", Type::optional(Type::Int))],
             Type::Int,
         );
-        let text = message(&optional, &base).unwrap_or_default();
-        assert!(text.starts_with("E0201"), "{text}");
-        assert!(text.contains("TyPy 0.5"), "{text}");
+        assert_eq!(fit(&optional, &base), Some(Fit::Adapted));
         let base_optional = signature(Vec::new(), Type::optional(Type::Int));
         let plain = signature(Vec::new(), Type::Int);
-        assert!(message(&plain, &base_optional).is_some_and(|text| text.starts_with("E0201")));
+        assert_eq!(fit(&plain, &base_optional), Some(Fit::Adapted));
+        assert_eq!(fit(&base, &base), Some(Fit::Exact));
     }
 }

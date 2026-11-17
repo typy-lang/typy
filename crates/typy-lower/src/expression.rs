@@ -56,6 +56,14 @@ impl FunctionLowerer<'_> {
                 self.list_display(items, item, span)
             }
             TypedExprKind::ListOf(source) => self.list_of(source, span),
+            TypedExprKind::IterContains {
+                value,
+                held,
+                source,
+                each,
+                test,
+                negated,
+            } => self.iterated_contains((value, *held), source, (*each, test), *negated, span),
             TypedExprKind::Set(items) => {
                 let item = self.set_item_type(&expression.ty);
                 self.set_display(items, item, span)
@@ -74,7 +82,7 @@ impl FunctionLowerer<'_> {
                 self.release(length, span);
                 checked
             }
-            TypedExprKind::OperatorCall(call) => self.operator_call(call, ty, span),
+            TypedExprKind::OperatorCall(call) => self.operator_call(call, &expression.ty, ty, span),
             TypedExprKind::Unwrap(inner) => self.unwrap(inner, ty, span),
             TypedExprKind::Dict { keys, values } => {
                 self.dict_display(keys, values, &expression.ty, span)
@@ -131,6 +139,37 @@ impl FunctionLowerer<'_> {
             TypedExprKind::TupleSlice { tuple, positions } => {
                 let tuple = self.expression(tuple);
                 self.tuple_slice(tuple, positions, ty, span)
+            }
+            TypedExprKind::Raise(exception) => self.raise_in_place(exception, ty, span),
+            TypedExprKind::ClassVariable(holders) => self.class_variable(holders, ty, span),
+            TypedExprKind::SliceBound { slice, part } => {
+                let slice = self.expression(slice);
+                let part = self.constant(Constant::Int(part.to_string()), span);
+                let bound =
+                    self.call_runtime(RuntimeFunction::SliceBound, vec![slice.value, part], span);
+                self.release(slice, span);
+                bound
+            }
+            TypedExprKind::NotImplemented => {
+                let found = self.call_runtime(RuntimeFunction::NotImplemented, Vec::new(), span);
+                self.borrowed_result(found)
+            }
+            TypedExprKind::Sequence { first, then } => {
+                let first = self.expression(first);
+                self.release(first, span);
+                self.expression(then)
+            }
+            TypedExprKind::Hash(value) => {
+                let value = self.expression(value);
+                let (kind, descriptor) = self.item_layout(value.ty, span);
+                let bits = self.bits(Self::borrowed(value.value, value.ty), span);
+                let hash = self.call_runtime(
+                    RuntimeFunction::HashValue,
+                    vec![kind, descriptor, bits],
+                    span,
+                );
+                self.release(value, span);
+                hash
             }
             TypedExprKind::TupleItem { tuple, index } => {
                 let tuple = self.expression(tuple);
@@ -213,6 +252,28 @@ impl FunctionLowerer<'_> {
             TypedExprKind::TypeOf(value) => self.type_of(value, span),
             TypedExprKind::FString(parts) => self.fstring(parts, span),
             TypedExprKind::TypeObject(of) => self.type_object(of, span),
+            // A type alias object is immortal, so it is borrowed (SMT-12).
+            TypedExprKind::TypeAliasObject(index) => {
+                let value = self.constant(Constant::TypeAlias(*index), span);
+                Self::borrowed(value, TyirType::TYPE_ALIAS)
+            }
+            // The value is evaluated for what it does, then read as its constant items (LIB-16).
+            TypedExprKind::VersionRead { value, result } => {
+                let value = self.expression(value);
+                self.release(value, span);
+                self.expression(result)
+            }
+            TypedExprKind::TypeAliasPart { alias, module } => {
+                let alias = self.expression(alias);
+                let function = if *module {
+                    RuntimeFunction::TypeAliasModule
+                } else {
+                    RuntimeFunction::TypeAliasName
+                };
+                let part = self.call_runtime(function, vec![alias.value], span);
+                self.release(alias, span);
+                part
+            }
             TypedExprKind::TypeName(object) => {
                 let object = self.expression(object);
                 let name = self.call_runtime(RuntimeFunction::TypeName, vec![object.value], span);
@@ -221,6 +282,16 @@ impl FunctionLowerer<'_> {
             }
             TypedExprKind::Print(call) => self.print(call, span),
             TypedExprKind::SysValue(value) => self.sys_value(*value, span),
+            // A library is linked when the program is built and holds no value (FFI-01).
+            TypedExprKind::ForeignLibrary(_) => Self::borrowed(
+                self.constant(typy_tyir::Constant::Unit, span),
+                TyirType::Unit,
+            ),
+            TypedExprKind::ForeignCall {
+                function,
+                arguments,
+            } => self.foreign_call(*function, arguments, span),
+            TypedExprKind::CData(cdata) => self.cdata_expression(cdata, &expression.ty, span),
             TypedExprKind::Open {
                 path,
                 mode,
@@ -232,8 +303,11 @@ impl FunctionLowerer<'_> {
             TypedExprKind::PercentDynamic { format, values } => {
                 self.percent_dynamic(format, values, span)
             }
-            TypedExprKind::OsErrorField { exception, field } => {
-                self.os_error_field(exception, *field, span)
+            TypedExprKind::Named { target, value } => {
+                // The variable takes a reference of its own; the expression gives the value.
+                let lowered = self.expression(value);
+                self.assign_name(*target, Self::borrowed(lowered.value, lowered.ty), span);
+                lowered
             }
             TypedExprKind::FileAttribute { file, attribute } => {
                 self.file_attribute(file, *attribute, span)
@@ -243,6 +317,9 @@ impl FunctionLowerer<'_> {
                 part,
                 operation,
             } => self.exception_part(exception, *part, operation, span),
+            TypedExprKind::ExceptionArguments { exception, raw } => {
+                self.exception_arguments(exception, *raw, &expression.ty, ty, span)
+            }
             TypedExprKind::Input(prompt) => self.input(prompt.as_deref(), span),
             TypedExprKind::IterableBuiltin {
                 builtin,
@@ -288,6 +365,13 @@ impl FunctionLowerer<'_> {
                 TyirType::Float,
             ),
             TypedConstant::Str(text) => (self.string(text, span), TyirType::STR),
+            TypedConstant::StrPoints(points) => {
+                let index = self.strings.intern_points(points);
+                (
+                    self.constant(Constant::StrPoints(index), span),
+                    TyirType::STR,
+                )
+            }
             TypedConstant::Bytes(data) => (self.bytes_constant(data, span), TyirType::BYTES),
         };
         Self::borrowed(value, ty)
@@ -332,11 +416,12 @@ impl FunctionLowerer<'_> {
             TyirType::Object(id) if id.class_index().is_some() => {
                 return self.instance_truth(lowered, id, span);
             }
-            TyirType::Object(typy_tyir::TypeId::TYPE) => {
+            TyirType::Object(typy_tyir::TypeId::TYPE | typy_tyir::TypeId::SLICE) => {
                 return self.constant(Constant::Bool(true), span);
             }
-            // The object's type tests it, as CPython's truth test does (TYP-14).
-            TyirType::UNION => {
+            // The object's type tests it, as CPython's truth test does (TYP-14); a `ctypes`
+            // object's class decides (FFI-03).
+            TyirType::UNION | TyirType::CDATA => {
                 let object = self.bits(Self::borrowed(lowered.value, lowered.ty), span);
                 return self
                     .call_runtime(RuntimeFunction::ObjectIsTrue, vec![object], span)
@@ -397,7 +482,18 @@ impl FunctionLowerer<'_> {
                 .call_method(method, vec![(0, instance)], TyirType::Bool, span)
                 .value;
         }
-        let Some(method) = self.program.method(class, "__len__") else {
+        // A class derived from this one may decide its truth otherwise: `__bool__` comes before
+        // `__len__`, so the object's own class, through its type object, decides (CLS-24).
+        let method = self.program.method(class, "__len__");
+        if self.subclass_defines(class, "__bool__")
+            || (method.is_none() && self.subclass_defines(class, "__len__"))
+        {
+            let object = self.bits(instance, span);
+            return self
+                .call_runtime(RuntimeFunction::ObjectIsTrue, vec![object], span)
+                .value;
+        }
+        let Some(method) = method else {
             return self.constant(Constant::Bool(true), span);
         };
         let length = self.call_method(method, vec![(0, instance)], TyirType::Int, span);
@@ -414,6 +510,16 @@ impl FunctionLowerer<'_> {
         // A large `int` is an object, so the checked length is released once tested.
         self.release(checked, span);
         truth
+    }
+
+    /// Returns true when a class derived from `class`, other than it, defines `name`.
+    fn subclass_defines(&self, class: typy_check::ClassId, name: &str) -> bool {
+        self.program.classes.iter().any(|other| {
+            other.id != class
+                && other.methods.iter().any(|(each, _)| each == name)
+                && std::iter::successors(other.base, |base| self.program.class(*base).base)
+                    .any(|base| base == class)
+        })
     }
 
     /// `a or b` and `a and b` return one of their operands, evaluating each only while the result is undecided (EXP-09).
@@ -507,6 +613,100 @@ impl FunctionLowerer<'_> {
         self.call(function, None, arguments, ty, span)
     }
 
+    /// Returns the value of the default `default` of `parameter`, held as the parameter is.
+    fn default_value(
+        &mut self,
+        parameter: &SignatureParameter,
+        default: Option<&TypedConstant>,
+        span: Span,
+    ) -> ValueId {
+        let default = default.cloned().unwrap_or(TypedConstant::None);
+        let constant = self.typed_constant(&default, span).value;
+        match self.lowered_type(&parameter.ty) {
+            // A default of an optional parameter is `None` or a value of its base.
+            optional @ TyirType::Optional(_) if default == TypedConstant::None => {
+                self.none_of(optional, span)
+            }
+            optional @ TyirType::Optional(_) => self.builder.push_value(
+                Operation::Wrap {
+                    value: constant,
+                    ty: optional,
+                },
+                optional,
+                span,
+            ),
+            _ => constant,
+        }
+    }
+
+    /// Returns the default of parameter `index` of a call through the method table of the
+    /// instance `instance`: that of the method of the instance's class, the nearest override
+    /// of `function` whose class the instance is of, or `function`'s own.
+    fn dispatched_default(
+        &mut self,
+        function: FunctionId,
+        index: usize,
+        instance: Lowered,
+        span: Span,
+    ) -> ValueId {
+        let parameter = self.program.function(function).signature.parameters[index].clone();
+        let overrides: Vec<(typy_check::ClassId, Option<TypedConstant>)> = self
+            .methods
+            .overrides(function)
+            .into_iter()
+            .map(|(class, method)| {
+                let parameters = &self.program.function(method).signature.parameters;
+                (
+                    class,
+                    parameters.get(index).and_then(|each| each.default.clone()),
+                )
+            })
+            .collect();
+        if overrides
+            .iter()
+            .all(|(_, default)| *default == parameter.default)
+        {
+            return self.default_value(&parameter, parameter.default.as_ref(), span);
+        }
+        let ty = self.lowered_type(&parameter.ty);
+        self.default_of_class((&parameter, &overrides), instance, ty, span)
+            .value
+    }
+
+    /// Returns the default of the first of `overrides` whose class the instance is of, or the
+    /// parameter's own.
+    fn default_of_class(
+        &mut self,
+        (parameter, overrides): (
+            &SignatureParameter,
+            &[(typy_check::ClassId, Option<TypedConstant>)],
+        ),
+        instance: Lowered,
+        ty: TyirType,
+        span: Span,
+    ) -> Lowered {
+        let Some(((class, default), rest)) = overrides.split_first() else {
+            let value = self.default_value(parameter, parameter.default.as_ref(), span);
+            return Self::borrowed(value, ty);
+        };
+        let object = self.bits(instance, span);
+        let name = self.program.class(*class).name.clone();
+        let of = self.type_object(&typy_check::TypeObjectOf::Instance(*class, name), span);
+        let found = self
+            .call_runtime(RuntimeFunction::IsInstance, vec![object, of.value], span)
+            .value;
+        self.either(
+            found,
+            ty,
+            span,
+            |this| {
+                let value = this.default_value(parameter, default.as_ref(), span);
+                Self::borrowed(value, ty)
+            },
+            |this| this.default_of_class((parameter, rest), instance, ty, span),
+        )
+    }
+
     /// Calls a method on the instance that is its first argument: through the method table
     /// when a class derived from the method's class defines it again, so the instance's
     /// class decides which runs, and directly otherwise (ADR-0021).
@@ -553,24 +753,13 @@ impl FunctionLowerer<'_> {
                         span,
                     )
                 }
+            } else if dispatch.is_some() && index > 0 {
+                // A method a class derived from this one defines again may give the parameter
+                // another default, which the object's class decides (CLS-04).
+                let held = self.lowered_type(&parameters[0].ty);
+                self.dispatched_default(function, index, Self::borrowed(ordered[0], held), span)
             } else {
-                let default = parameter.default.clone().unwrap_or(TypedConstant::None);
-                let constant = self.typed_constant(&default, span).value;
-                match self.lowered_type(&parameter.ty) {
-                    // A default of an optional parameter is `None` or a value of its base.
-                    optional @ TyirType::Optional(_) if default == TypedConstant::None => {
-                        self.none_of(optional, span)
-                    }
-                    optional @ TyirType::Optional(_) => self.builder.push_value(
-                        Operation::Wrap {
-                            value: constant,
-                            ty: optional,
-                        },
-                        optional,
-                        span,
-                    ),
-                    _ => constant,
-                }
+                self.default_value(parameter, parameter.default.as_ref(), span)
             };
             ordered.push(value);
         }

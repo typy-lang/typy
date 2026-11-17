@@ -8,7 +8,7 @@ use inkwell::values::{BasicValueEnum, IntValue, PointerValue};
 
 use crate::layout::{
     BIG_INT_TYPE_ID, BYTES_TYPE_ID, IMMORTAL, IntEncoding, STR_TYPE_ID, StrKind, encode_int,
-    encode_str,
+    encode_str, str_kind,
 };
 
 /// Creates each static object once per module.
@@ -18,9 +18,11 @@ pub(crate) struct Statics<'ctx> {
     c_strings: BTreeMap<String, PointerValue<'ctx>>,
     big_ints: BTreeMap<String, PointerValue<'ctx>>,
     bytes: BTreeMap<String, PointerValue<'ctx>>,
+    point_strings: BTreeMap<u32, PointerValue<'ctx>>,
     descriptors: BTreeMap<u32, PointerValue<'ctx>>,
     type_objects: BTreeMap<u32, PointerValue<'ctx>>,
     modules: BTreeMap<u32, PointerValue<'ctx>>,
+    type_aliases: BTreeMap<u32, PointerValue<'ctx>>,
 }
 
 impl<'ctx> Statics<'ctx> {
@@ -31,9 +33,11 @@ impl<'ctx> Statics<'ctx> {
             c_strings: BTreeMap::new(),
             big_ints: BTreeMap::new(),
             bytes: BTreeMap::new(),
+            point_strings: BTreeMap::new(),
             descriptors: BTreeMap::new(),
             type_objects: BTreeMap::new(),
             modules: BTreeMap::new(),
+            type_aliases: BTreeMap::new(),
         }
     }
 
@@ -76,13 +80,35 @@ impl<'ctx> Statics<'ctx> {
         if let Some(pointer) = self.strings.get(text) {
             return *pointer;
         }
+        let (_, points) = encode_str(text);
         let pointer = self.text_object(
             module,
-            text,
+            &points,
             STR_TYPE_ID,
             &format!("typy.str.{}", self.strings.len()),
         );
         self.strings.insert(text.to_owned(), pointer);
+        pointer
+    }
+
+    /// Returns the `str` object of the string at `index` of the module's strings that hold a
+    /// surrogate, given as its code points (LEX-10).
+    pub(crate) fn str_points(
+        &mut self,
+        module: &Module<'ctx>,
+        index: u32,
+        points: &[u32],
+    ) -> PointerValue<'ctx> {
+        if let Some(pointer) = self.point_strings.get(&index) {
+            return *pointer;
+        }
+        let pointer = self.text_object(
+            module,
+            points,
+            STR_TYPE_ID,
+            &format!("typy.str.points.{index}"),
+        );
+        self.point_strings.insert(index, pointer);
         pointer
     }
 
@@ -92,9 +118,10 @@ impl<'ctx> Statics<'ctx> {
         if let Some(pointer) = self.bytes.get(text) {
             return *pointer;
         }
+        let (_, points) = encode_str(text);
         let pointer = self.text_object(
             module,
-            text,
+            &points,
             BYTES_TYPE_ID,
             &format!("typy.bytes.{}", self.bytes.len()),
         );
@@ -105,20 +132,23 @@ impl<'ctx> Statics<'ctx> {
     fn text_object(
         &mut self,
         module: &Module<'ctx>,
-        text: &str,
+        points: &[u32],
         type_id: u32,
         name: &str,
     ) -> PointerValue<'ctx> {
         let context = self.context;
-        let (kind, points) = encode_str(text);
+        let kind = str_kind(points);
         let unit = match kind {
             StrKind::Latin1 => context.i8_type(),
             StrKind::Ucs2 => context.i16_type(),
             StrKind::Ucs4 => context.i32_type(),
         };
+        // A zero unit follows the data, as it follows every string the runtime makes, so a
+        // `bytes` constant is a string C reads (ADR-0047).
         let data: Vec<IntValue<'ctx>> = points
             .iter()
             .map(|point| unit.const_int(u64::from(*point), false))
+            .chain([unit.const_zero()])
             .collect();
         let value = context.const_struct(
             &[
@@ -155,8 +185,48 @@ impl<'ctx> Statics<'ctx> {
         if let Some(pointer) = self.modules.get(&index) {
             return *pointer;
         }
-        let name = self.string(module, name);
-        let path = self.string(module, path);
+        let pointer = self.two_strings(
+            module,
+            crate::layout::MODULE_TYPE_ID,
+            [name, path],
+            &format!("typy.module.{index}"),
+        );
+        self.modules.insert(index, pointer);
+        pointer
+    }
+
+    /// Returns the type alias object at `index`: an immortal header, then the alias's name and
+    /// its module's name as `str` objects (SMT-12). Each alias has one, so `is` compares them.
+    pub(crate) fn type_alias_object(
+        &mut self,
+        module: &Module<'ctx>,
+        index: u32,
+        name: &str,
+        module_name: &str,
+    ) -> PointerValue<'ctx> {
+        if let Some(pointer) = self.type_aliases.get(&index) {
+            return *pointer;
+        }
+        let pointer = self.two_strings(
+            module,
+            crate::layout::TYPE_ALIAS_TYPE_ID,
+            [name, module_name],
+            &format!("typy.type_alias.{index}"),
+        );
+        self.type_aliases.insert(index, pointer);
+        pointer
+    }
+
+    /// Returns a new immortal static object of type `type_id` that holds two `str` objects.
+    fn two_strings(
+        &mut self,
+        module: &Module<'ctx>,
+        type_id: u32,
+        [first, second]: [&str; 2],
+        symbol: &str,
+    ) -> PointerValue<'ctx> {
+        let first = self.string(module, first);
+        let second = self.string(module, second);
         let context = self.context;
         let value = context.const_struct(
             &[
@@ -166,20 +236,18 @@ impl<'ctx> Statics<'ctx> {
                     .into(),
                 context
                     .i32_type()
-                    .const_int(u64::from(crate::layout::MODULE_TYPE_ID), false)
+                    .const_int(u64::from(type_id), false)
                     .into(),
-                name.into(),
-                path.into(),
+                first.into(),
+                second.into(),
             ],
             false,
         );
-        let global = module.add_global(value.get_type(), None, &format!("typy.module.{index}"));
+        let global = module.add_global(value.get_type(), None, symbol);
         global.set_initializer(&value);
         global.set_constant(true);
         global.set_linkage(Linkage::Private);
-        let pointer = global.as_pointer_value();
-        self.modules.insert(index, pointer);
-        pointer
+        global.as_pointer_value()
     }
 
     /// Returns a null-terminated byte string, for the names in traceback entries.

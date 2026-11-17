@@ -189,7 +189,11 @@ pub(crate) unsafe fn exit_status(exception: *mut ExceptionObject) -> (i32, bool)
                     if text.exception.is_null() {
                         // CPython writes only the line ending when `sys.stderr` is closed.
                         if !crate::io::standard_closed(crate::libc::STDERR) {
-                            crate::string::write_utf8(text.value, crate::io::write_stderr);
+                            crate::string::write_utf8(
+                                text.value,
+                                crate::string::Surrogates::Backslash,
+                                crate::io::write_stderr,
+                            );
                         }
                         crate::io::write_stderr(b"\n");
                         crate::refcount::typy_rt_decrement(text.value.cast());
@@ -206,7 +210,7 @@ pub(crate) unsafe fn exit_status(exception: *mut ExceptionObject) -> (i32, bool)
 /// Returns whether `class` is `SystemExit` or derives from it. `SystemExit` is found by its
 /// name among the built-in classes, whose module is empty, and not by its address, so `main`
 /// does not link the exception classes and their text into a program that never raises one.
-fn is_system_exit(class: &crate::type_object::TypeObject) -> bool {
+pub(crate) fn is_system_exit(class: &crate::type_object::TypeObject) -> bool {
     let mut current: *const crate::type_object::TypeObject = class;
     while !current.is_null() {
         // SAFETY: a base is null or a live, immortal type object.
@@ -218,6 +222,10 @@ fn is_system_exit(class: &crate::type_object::TypeObject) -> bool {
     }
     false
 }
+
+mod version_info;
+
+pub(crate) use version_info::VERSION_INFO_TYPE;
 
 #[cfg(test)]
 mod tests;

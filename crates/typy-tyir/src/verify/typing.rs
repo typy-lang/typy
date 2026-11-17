@@ -60,6 +60,40 @@ impl Checker<'_> {
         }
     }
 
+    /// Checks a call of a C function: each argument has a type its C type takes, and the
+    /// result is the TyPy type of the C result, or none for `void` (FFI-03).
+    fn foreign_call(
+        &self,
+        function: u32,
+        arguments: &[ValueId],
+    ) -> Result<Option<TyirType>, VerifyError> {
+        let Some(foreign) = self.module.foreign_functions.get(function as usize) else {
+            return Err(self.error(format!(
+                "foreign#{function} is not a C function of the module"
+            )));
+        };
+        if arguments.len() != foreign.parameters.len() {
+            return Err(self.error(format!(
+                "{} takes {} arguments, not {}",
+                foreign.name,
+                foreign.parameters.len(),
+                arguments.len()
+            )));
+        }
+        for (argument, parameter) in arguments.iter().zip(&foreign.parameters) {
+            let ty = self.ty(*argument)?;
+            if !parameter.takes(ty) {
+                return Err(self.error(format!(
+                    "an argument of {} v{} is {ty}, which does not pass as {}",
+                    foreign.name,
+                    argument.0,
+                    parameter.c_name()
+                )));
+            }
+        }
+        Ok(foreign.result.map(crate::library::CType::result_type))
+    }
+
     fn ty(&self, value: ValueId) -> Result<TyirType, VerifyError> {
         self.function
             .values
@@ -231,6 +265,10 @@ impl Checker<'_> {
                 function,
                 arguments,
             } => self.call(Callee::Function(*function), arguments)?,
+            Operation::CallForeign {
+                function,
+                arguments,
+            } => self.foreign_call(*function, arguments)?,
             Operation::SameMethod {
                 class,
                 slot,
@@ -389,8 +427,10 @@ impl Checker<'_> {
         let Some((mut current, base)) = classes else {
             return false;
         };
-        // Each base has a lower index than the classes derived from it, so the walk ends.
-        loop {
+        // A chain of bases visits each class once at most, so a walk of as many steps as
+        // there are classes ends; a class may derive from one with a higher index, such as a
+        // copy of a generic class (ADR-0040).
+        for _ in 0..=self.module.classes.len() {
             if current == base {
                 return true;
             }
@@ -400,10 +440,11 @@ impl Checker<'_> {
                 .get(current as usize)
                 .and_then(|class| class.base)
             {
-                Some(next) if next < current => current = next,
-                _ => return false,
+                Some(next) => current = next,
+                None => return false,
             }
         }
+        false
     }
 
     /// Returns the type an optional value holds, after checking it is optional.

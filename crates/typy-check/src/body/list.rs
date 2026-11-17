@@ -243,17 +243,19 @@ impl BodyChecker<'_> {
         let items = converted_all(items, &item_type);
         for item in &items {
             if !item.ty.is_assignable_to(&item_type) {
-                self.diagnostics.push(
-                    Diagnostic::new(
-                        DiagnosticCode::error(409),
-                        item.span,
-                        format!(
-                            "the items of a list have one type; this is {}, and the list holds {item_type}",
-                            item.ty.with_article()
-                        ),
-                    )
-                    .with_rule(RuleId::DAT_07),
-                );
+                let mut diagnostic = Diagnostic::new(
+                    DiagnosticCode::error(409),
+                    item.span,
+                    format!(
+                        "the items of a list have one type; this is {}, and the list holds {item_type}",
+                        item.ty.with_article()
+                    ),
+                )
+                .with_rule(RuleId::DAT_07);
+                if let Some(help) = self.protocol_help(&item.ty, &item_type) {
+                    diagnostic = diagnostic.with_help(help);
+                }
+                self.diagnostics.push(diagnostic);
             }
         }
         Self::typed(
@@ -290,7 +292,21 @@ impl BodyChecker<'_> {
             typed[position] =
                 Some(self.expression_expecting(operands[position], expected.as_ref()));
         }
-        let mut typed: Vec<TypedExpr> = typed.into_iter().flatten().collect();
+        // `sys.version_info` compares as the tuple of its items, and by identity with `is`.
+        let identity = operators
+            .iter()
+            .any(|operator| matches!(operator, CompareOperator::Is | CompareOperator::IsNot));
+        let mut typed: Vec<TypedExpr> = typed
+            .into_iter()
+            .flatten()
+            .map(|operand| {
+                if identity {
+                    operand
+                } else {
+                    Self::version_tuple(operand)
+                }
+            })
+            .collect();
         // A fixed tuple compared with a `tuple[T, ...]`, or looked for among them, becomes one
         // (DAT-14).
         for (position, operator) in operators.iter().enumerate() {
@@ -388,15 +404,14 @@ impl BodyChecker<'_> {
         items.into_iter().flatten().collect()
     }
 
-    /// Checks `list[index]`: the index is an `int`, and the item has the list's item type.
-    pub(super) fn list_item(
+    /// Returns `list[index]` of a checked index, an `int`.
+    pub(super) fn list_item_of(
         &mut self,
         list: TypedExpr,
         item: Type,
-        index: &Expr,
+        index: TypedExpr,
         span: Span,
     ) -> TypedExpr {
-        let index = self.expression(index);
         self.expect(&index, Type::Int, "an index");
         Self::typed(
             TypedExprKind::ListItem {

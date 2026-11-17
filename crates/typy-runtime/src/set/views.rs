@@ -54,7 +54,7 @@ const SYMMETRIC_DIFFERENCE: i64 = 3;
 /// `address` is the address of a live object.
 #[allow(
     clippy::cast_ptr_alignment,
-    reason = "every object comes from malloc, aligned for every type, and starts with its header"
+    reason = "every object comes from malloc, a frame block or a static, aligned for every type, and starts with its header"
 )]
 unsafe fn view_at(address: u64) -> Option<*const ViewObject> {
     let header = core::ptr::with_exposed_provenance::<crate::header::ObjectHeader>(

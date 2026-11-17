@@ -30,31 +30,33 @@ These are the goals of TyPy 1.0, as the
 
 ## Status
 
-TyPy 0.4.0 checks, builds and runs programs made of modules, functions,
+TyPy 0.5.0 checks, builds and runs programs made of modules, functions,
 classes with inheritance, dataclasses and statements over `int`, `float`,
 `str`, `bytes`, `bool`, `None`, lists, tuples, dicts, sets, optional values
-and unions, with comprehensions, f-strings, `%` formatting, slices and
-unpacking; `if`, `while`, `for`, `try`, `with`, `raise` and `assert`;
-PEP 695 generic functions and classes, protocols, `Final` and `type`
-aliases; exceptions with CPython's classes and messages, including
-classes of the program's own; imports of the program's modules, packages
-and PEP 810 lazy imports; and the `math` and `sys` modules, `input`, and
-text and binary files through `open`. Programs print what CPython prints,
-including the traceback of an uncaught exception. `match`, `ctypes`,
-closures and generators come in later releases; the
-[language guide](docs/user/guide/index.md) lists what each release
-accepts.
+and unions, with comprehensions, assignment expressions, f-strings, `%`
+formatting, slices and unpacking; `if`, `while`, `for`, `match`, `try`,
+`with`, `raise` and `assert`; PEP 695 generic functions, classes and
+methods, protocols, `Final` and `type` aliases; exceptions with CPython's
+classes and messages, including classes of the program's own; imports of
+the program's modules, packages and PEP 810 lazy imports; the `math` and
+`sys` modules, `input`, and text and binary files through `open`; and C
+libraries through `ctypes`, with objects, pointers, arrays and structures.
+`typy build --lib` builds a module as a static or shared C library with a
+C header and a Python binding. Programs print what CPython prints,
+including the traceback of an uncaught exception. Closures and generators
+come in later releases; the [language guide](docs/user/guide/index.md)
+lists what each release accepts.
 
 ## Quick start
 
 TyPy runs on x86_64 Linux with glibc 2.39 or later, such as Ubuntu 24.04
 or Debian 13, and needs a C toolchain (`cc`). Download the archive from the
-[0.4.0 release](https://github.com/typy-lang/typy/releases/tag/v0.4.0),
+[0.5.0 release](https://github.com/typy-lang/typy/releases/tag/v0.5.0),
 unpack it, and run a program:
 
 ```sh
-tar -xzf typy-0.4.0-x86_64-unknown-linux-gnu.tar.gz
-export PATH="$PWD/typy-0.4.0-x86_64-unknown-linux-gnu/bin:$PATH"
+tar -xzf typy-0.5.0-x86_64-unknown-linux-gnu.tar.gz
+export PATH="$PWD/typy-0.5.0-x86_64-unknown-linux-gnu/bin:$PATH"
 printf 'print("hello", 1 + 2)\n' > hello.py
 typy run hello.py
 ```

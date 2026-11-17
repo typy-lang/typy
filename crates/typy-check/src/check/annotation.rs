@@ -20,8 +20,10 @@ pub(crate) struct AnnotationScope<'classes> {
     /// For each name bound to a module at module level, that module's classes, which an
     /// annotation such as `shapes.Point` names (MOD-10).
     pub(crate) modules: &'classes BTreeMap<String, BTreeMap<String, ClassId>>,
-    /// For each of those names, that module's type aliases (SMT-10).
-    pub(crate) module_aliases: &'classes BTreeMap<String, std::collections::BTreeSet<String>>,
+    /// For each of those names, that module's type aliases (SMT-10, SMT-12).
+    pub(crate) module_aliases: &'classes BTreeMap<String, AliasTable>,
+    /// The type aliases of other modules imported by name (SMT-12).
+    pub(crate) imported_aliases: &'classes AliasTable,
     /// The names imported from `typing`, `collections.abc` and `types` (TYP-15).
     pub(crate) names: &'classes BTreeMap<String, AnnotationName>,
     /// For each name bound to one of those modules, the module.
@@ -34,6 +36,23 @@ pub(crate) struct AnnotationScope<'classes> {
     pub(crate) copies: &'classes std::cell::RefCell<crate::body::ClassCopies>,
     pub(crate) bound: u32,
 }
+
+/// A type alias of a module as another module reads it: its type parameters, its value with
+/// its module's own aliases expanded, and what its module's annotations see, so the value is
+/// read where it was written (SMT-12).
+#[derive(Debug, PartialEq)]
+pub(crate) struct ExportedAlias {
+    /// The module that defines the alias, and the alias's own name there.
+    pub(crate) module: String,
+    pub(crate) name: String,
+    pub(crate) parameters: Vec<String>,
+    pub(crate) value: Expr,
+    pub(crate) classes: BTreeMap<String, ClassId>,
+    pub(crate) names: crate::check::ImportedNames,
+}
+
+/// Type aliases by the name a module reads them under.
+pub(crate) type AliasTable = BTreeMap<String, std::rc::Rc<ExportedAlias>>;
 
 /// The type parameters of a scope that has none.
 pub(crate) static NO_PARAMETERS: BTreeMap<String, Type> = BTreeMap::new();
@@ -55,6 +74,16 @@ pub(crate) enum AnnotationName {
     Dataclasses,
     /// `typing.Protocol`, the base of a protocol class (GEN-04).
     Protocol,
+    /// A name that imports bind to more than one class, whose type depends on the import
+    /// that ran last (MOD-14).
+    Rebound,
+    /// `typing.Optional`, `Optional[T]` being `T | None` (LIB-17).
+    Optional,
+    /// `typing.Union`, `Union[A, B]` being `A | B` (LIB-17).
+    Union,
+    /// `typing.List`, `Dict`, `Set`, `Tuple` and `Type`, the built-in type of the same name
+    /// in lower case (LIB-17).
+    Builtin(&'static str),
 }
 
 /// The modules that give names for annotations only in 0.3.
@@ -71,6 +100,13 @@ pub(crate) fn annotation_name(module: &str, name: &str) -> Option<AnnotationName
         ("typing", "ClassVar") => Some(AnnotationName::ClassVar),
         ("typing", "Final") => Some(AnnotationName::Final),
         ("typing", "Protocol") => Some(AnnotationName::Protocol),
+        ("typing", "Optional") => Some(AnnotationName::Optional),
+        ("typing", "Union") => Some(AnnotationName::Union),
+        ("typing", "List") => Some(AnnotationName::Builtin("list")),
+        ("typing", "Dict") => Some(AnnotationName::Builtin("dict")),
+        ("typing", "Set") => Some(AnnotationName::Builtin("set")),
+        ("typing", "Tuple") => Some(AnnotationName::Builtin("tuple")),
+        ("typing", "Type") => Some(AnnotationName::Builtin("type")),
         ("dataclasses", "dataclass" | "field") => Some(AnnotationName::Dataclasses),
         _ => None,
     }
@@ -130,6 +166,26 @@ fn standard_annotation(
                 Type::Iterable(item)
             }
         }
+        // `List[int]` is `list[int]`, read as the built-in type is (LIB-17).
+        Expr::Subscript { value, index, span }
+            if let Some(AnnotationName::Builtin(builtin)) = standard_name(value, scope) =>
+        {
+            let spelled = Expr::Subscript {
+                value: Box::new(Expr::Name {
+                    id: builtin.to_owned(),
+                    span: value.span(),
+                }),
+                index: index.clone(),
+                span: *span,
+            };
+            annotation_type(&spelled, scope, diagnostics)
+        }
+        Expr::Subscript { value, index, .. }
+            if let Some(name @ (AnnotationName::Optional | AnnotationName::Union)) =
+                standard_name(value, scope) =>
+        {
+            union_annotation(name, index, scope, diagnostics)
+        }
         Expr::Subscript { value, .. }
             if standard_name(value, scope) == Some(AnnotationName::ClassVar) =>
         {
@@ -140,47 +196,123 @@ fn standard_annotation(
         {
             final_elsewhere(annotation, diagnostics)
         }
-        _ if let Some(name) = standard_name(annotation, scope) => match name {
-            AnnotationName::ClassVar => class_var_elsewhere(annotation, diagnostics),
-            AnnotationName::Final => final_elsewhere(annotation, diagnostics),
-            AnnotationName::Dataclasses => {
-                diagnostics.push(
-                    Diagnostic::new(
-                        DiagnosticCode::error(408),
-                        annotation.span(),
-                        "`dataclass` and `field` are not types",
-                    )
-                    .with_rule(RuleId::CLS_05),
-                );
-                Type::Error
-            }
-            AnnotationName::Protocol => {
-                diagnostics.push(
-                    Diagnostic::new(
-                        DiagnosticCode::error(408),
-                        annotation.span(),
-                        "`Protocol` is not a type; a protocol class derives from it",
-                    )
-                    .with_rule(RuleId::GEN_04),
-                );
-                Type::Error
-            }
-            AnnotationName::TracebackType => Type::Traceback,
-            AnnotationName::ModuleType => Type::AnyModule,
-            AnnotationName::Iterator | AnnotationName::Iterable => {
-                diagnostics.push(
-                    Diagnostic::new(
-                        DiagnosticCode::error(408),
-                        annotation.span(),
-                        "an `Iterator` or `Iterable` annotation names the type of its items, such as `Iterator[int]`",
-                    )
-                    .with_rule(RuleId::TYP_15),
-                );
-                Type::Error
-            }
-        },
+        _ if let Some(name) = standard_name(annotation, scope) => {
+            bare_standard(name, annotation, scope, diagnostics)
+        }
         _ => return None,
     })
+}
+
+/// Returns the type a bare name of `typing`, `collections.abc` or `types` names, or the error
+/// for one that names no type without its arguments.
+fn bare_standard(
+    name: AnnotationName,
+    annotation: &Expr,
+    scope: &AnnotationScope<'_>,
+    diagnostics: &mut Diagnostics,
+) -> Type {
+    match name {
+        AnnotationName::ClassVar => class_var_elsewhere(annotation, diagnostics),
+        AnnotationName::Final => final_elsewhere(annotation, diagnostics),
+        AnnotationName::Dataclasses => {
+            diagnostics.push(
+                Diagnostic::new(
+                    DiagnosticCode::error(408),
+                    annotation.span(),
+                    "`dataclass` and `field` are not types",
+                )
+                .with_rule(RuleId::CLS_05),
+            );
+            Type::Error
+        }
+        AnnotationName::Protocol => {
+            diagnostics.push(
+                Diagnostic::new(
+                    DiagnosticCode::error(408),
+                    annotation.span(),
+                    "`Protocol` is not a type; a protocol class derives from it",
+                )
+                .with_rule(RuleId::GEN_04),
+            );
+            Type::Error
+        }
+        AnnotationName::Rebound => {
+            let Expr::Name { id, .. } = annotation else {
+                return Type::Error;
+            };
+            diagnostics.push(crate::body::rebound_planned(
+                id,
+                "named in an annotation",
+                annotation.span(),
+            ));
+            Type::Error
+        }
+        AnnotationName::Builtin(builtin) => {
+            let spelled = Expr::Name {
+                id: builtin.to_owned(),
+                span: annotation.span(),
+            };
+            annotation_type(&spelled, scope, diagnostics)
+        }
+        AnnotationName::Optional | AnnotationName::Union => {
+            let written = if name == AnnotationName::Optional {
+                "an `Optional` annotation names its type, such as `Optional[int]`"
+            } else {
+                "a `Union` annotation names its types, such as `Union[int, str]`"
+            };
+            diagnostics.push(
+                Diagnostic::new(DiagnosticCode::error(408), annotation.span(), written)
+                    .with_rule(RuleId::LIB_17),
+            );
+            Type::Error
+        }
+        AnnotationName::TracebackType => Type::Traceback,
+        AnnotationName::ModuleType => Type::AnyModule,
+        AnnotationName::Iterator | AnnotationName::Iterable => {
+            diagnostics.push(
+                Diagnostic::new(
+                    DiagnosticCode::error(408),
+                    annotation.span(),
+                    "an `Iterator` or `Iterable` annotation names the type of its items, such as `Iterator[int]`",
+                )
+                .with_rule(RuleId::TYP_15),
+            );
+            Type::Error
+        }
+    }
+}
+
+/// Returns the type `Optional[T]`, which is `T | None`, or `Union[A, B, ...]`, which is
+/// `A | B | ...`, names (LIB-17).
+fn union_annotation(
+    name: AnnotationName,
+    index: &Expr,
+    scope: &AnnotationScope<'_>,
+    diagnostics: &mut Diagnostics,
+) -> Type {
+    let members: Vec<&Expr> = match index {
+        Expr::Tuple { elements, .. } => elements.iter().collect(),
+        other => vec![other],
+    };
+    if name == AnnotationName::Optional && members.len() != 1 {
+        diagnostics.push(
+            Diagnostic::new(
+                DiagnosticCode::error(408),
+                index.span(),
+                "`Optional` takes one type, as CPython requires",
+            )
+            .with_rule(RuleId::LIB_17),
+        );
+        return Type::Error;
+    }
+    let mut types: Vec<Type> = members
+        .into_iter()
+        .map(|member| annotation_type(member, scope, diagnostics))
+        .collect();
+    if name == AnnotationName::Optional {
+        types.push(Type::NoneType);
+    }
+    Type::union(types)
 }
 
 /// Reports `Final` outside the declaration of a variable, a class variable or an attribute
@@ -295,14 +427,6 @@ fn module_class_type(
         };
         return named_type(&attribute.name, span, &inner, diagnostics);
     }
-    if scope
-        .module_aliases
-        .get(id)
-        .is_some_and(|aliases| aliases.contains(&attribute.name))
-    {
-        diagnostics.push(other_module_alias(id, &attribute.name, span));
-        return Type::Error;
-    }
     diagnostics.push(
         Diagnostic::new(
             DiagnosticCode::error(425),
@@ -314,20 +438,89 @@ fn module_class_type(
     Type::Error
 }
 
-/// Reports a type alias of another module, whose expansion in this module is planned
-/// (SMT-12).
-pub(crate) fn other_module_alias(
-    module: &str,
-    name: &str,
-    span: typy_diagnostics::Span,
-) -> Diagnostic {
-    Diagnostic::new(
-        DiagnosticCode::error(201),
-        span,
-        format!("using the type alias `{module}.{name}` of another module is planned for TyPy 0.5 (SMT-12)"),
-    )
-    .with_rule(RuleId::SMT_12)
-    .with_help(format!("define the alias in this module, or annotate with what `{name}` stands for"))
+/// Returns the alias of another module an annotation names, by an imported name or through
+/// its module, alone or given its type arguments.
+fn imported_alias<'scope>(
+    expression: &Expr,
+    scope: &AnnotationScope<'scope>,
+) -> Option<(String, &'scope ExportedAlias)> {
+    match expression {
+        Expr::Name { id, .. } => scope
+            .imported_aliases
+            .get(id)
+            .map(|alias| (id.clone(), alias.as_ref())),
+        Expr::Attribute {
+            value, attribute, ..
+        } => {
+            let Expr::Name { id, .. } = value.as_ref() else {
+                return None;
+            };
+            let alias = scope.module_aliases.get(id)?.get(&attribute.name)?;
+            Some((format!("{id}.{}", attribute.name), alias.as_ref()))
+        }
+        _ => None,
+    }
+}
+
+/// Returns the type an alias of another module stands for, its value read in its own module
+/// with each type argument, read here, in place of its parameter (SMT-12).
+fn imported_alias_type(
+    annotation: &Expr,
+    scope: &AnnotationScope<'_>,
+    diagnostics: &mut Diagnostics,
+) -> Option<Type> {
+    let (named, arguments) = match annotation {
+        Expr::Subscript { value, index, .. } => {
+            let found = imported_alias(value, scope)?;
+            let arguments = match index.as_ref() {
+                Expr::Tuple { elements, .. } => elements.iter().collect(),
+                one => vec![one],
+            };
+            (found, arguments)
+        }
+        other => (imported_alias(other, scope)?, Vec::new()),
+    };
+    let (name, alias) = named;
+    if arguments.len() != alias.parameters.len() {
+        let count = alias.parameters.len();
+        diagnostics.push(
+            Diagnostic::new(
+                DiagnosticCode::error(408),
+                annotation.span(),
+                format!(
+                    "the type alias `{name}` takes {count} type {}, such as `{name}[{}]`",
+                    if count == 1 { "argument" } else { "arguments" },
+                    vec!["int"; count].join(", ")
+                ),
+            )
+            .with_rule(RuleId::SMT_10),
+        );
+        return Some(Type::Error);
+    }
+    let parameters: BTreeMap<String, Type> = alias
+        .parameters
+        .iter()
+        .cloned()
+        .zip(
+            arguments
+                .into_iter()
+                .map(|argument| annotation_type(argument, scope, diagnostics)),
+        )
+        .collect();
+    let written = &alias.names;
+    let own = AnnotationScope {
+        classes: &alias.classes,
+        instances: scope.instances,
+        modules: &written.modules,
+        module_aliases: &written.module_aliases,
+        imported_aliases: &written.aliases,
+        names: &written.names,
+        standard: &written.standard,
+        parameters: &parameters,
+        copies: scope.copies,
+        bound: u32::MAX,
+    };
+    Some(annotation_type(&alias.value, &own, diagnostics))
 }
 
 /// Returns the standard module a name, or a dotted name through one, stands for.
@@ -354,6 +547,12 @@ pub(crate) fn annotation_type(
     if let Some(ty) = standard_annotation(annotation, scope, diagnostics) {
         return ty;
     }
+    if let Some(ty) = imported_alias_type(annotation, scope, diagnostics) {
+        return ty;
+    }
+    if let Some(ty) = generic_class_annotation(annotation, scope, diagnostics) {
+        return ty;
+    }
     match annotation {
         Expr::Constant {
             value: Constant::None,
@@ -376,14 +575,6 @@ pub(crate) fn annotation_type(
                 ..*scope
             };
             annotation_type(annotation, &deferred, diagnostics)
-        }
-        // A generic class given its type arguments (GEN-01, ADR-0028).
-        Expr::Subscript { value, index, .. }
-            if let Expr::Name { id, .. } = value.as_ref()
-                && let Some(class) = scope.classes.get(id)
-                && scope.copies.borrow().roots.contains_key(class) =>
-        {
-            super::generic_class::applied_annotation(*class, id, index, scope, diagnostics)
         }
         Expr::Subscript { value, index, .. } if matches!(value.as_ref(), Expr::Name { id, .. } if id == "tuple") => {
             tuple_annotation(index, scope, diagnostics)
@@ -432,6 +623,44 @@ pub(crate) fn annotation_type(
     }
 }
 
+/// Returns the copy of a generic class an annotation names with its type arguments, the
+/// class written by its name or through its module, or `None` when the annotation names
+/// none (GEN-01, GEN-07, ADR-0028).
+fn generic_class_annotation(
+    annotation: &Expr,
+    scope: &AnnotationScope<'_>,
+    diagnostics: &mut Diagnostics,
+) -> Option<Type> {
+    let Expr::Subscript { value, index, .. } = annotation else {
+        return None;
+    };
+    let (name, class) = match value.as_ref() {
+        Expr::Name { id, .. } => (id, scope.classes.get(id)?),
+        Expr::Attribute {
+            value: module,
+            attribute,
+            ..
+        } => {
+            let Expr::Name { id, .. } = module.as_ref() else {
+                return None;
+            };
+            let class = scope.modules.get(id)?.get(&attribute.name)?;
+            (&attribute.name, class)
+        }
+        _ => return None,
+    };
+    if !scope.copies.borrow().roots.contains_key(class) {
+        return None;
+    }
+    Some(super::generic_class::applied_annotation(
+        *class,
+        name,
+        index,
+        scope,
+        diagnostics,
+    ))
+}
+
 /// Returns the type a bare name names: a scalar, or an error for a name that is not a type or
 /// needs its item types.
 fn named_type(
@@ -474,6 +703,7 @@ fn named_type(
         "str" => Type::Str,
         "bytes" => Type::Bytes,
         "range" => Type::Range,
+        "slice" => Type::Slice,
         "Any" | "object" => {
             diagnostics.push(
                 Diagnostic::new(

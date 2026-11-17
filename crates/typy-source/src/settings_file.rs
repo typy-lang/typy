@@ -1,6 +1,9 @@
 //! Reads `typy.toml`, the project's settings, once when a command starts; a flag on the
 //! command line wins over the file (CLI-07, CLI-12, UC-11).
 
+mod allocator;
+mod libraries;
+
 use camino::{Utf8Component, Utf8Path, Utf8PathBuf};
 use toml_edit::{Document, Item};
 use typy_diagnostics::{Diagnostic, DiagnosticCode, Diagnostics, FileId, RuleId, Span, TextOffset};
@@ -13,13 +16,22 @@ use crate::source_file::SourceFile;
 pub const SETTINGS_FILE: &str = "typy.toml";
 
 /// The keys `typy.toml` may hold.
-const KEYS: [&str; 2] = ["python-floor", "module-paths"];
+const KEYS: [&str; 6] = [
+    "python-floor",
+    "module-paths",
+    "allocator",
+    "version",
+    "library-paths",
+    "libraries",
+];
 
 /// The settings flags on the command line give, which win over `typy.toml` (CLI-07).
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct SettingOverrides {
     /// `--python-floor`.
     pub python_floor: Option<PythonFloor>,
+    /// `--lib`: the main file is built as a library (CLI-09).
+    pub library: bool,
 }
 
 impl ProjectSettings {
@@ -50,6 +62,7 @@ impl ProjectSettings {
         if let Some(floor) = overrides.python_floor {
             settings.python_floor = floor;
         }
+        settings.library = overrides.library;
         Ok(settings)
     }
 
@@ -76,6 +89,16 @@ impl ProjectSettings {
             let found = match key {
                 "python-floor" => self.python_floor(item),
                 "module-paths" => self.module_paths(item),
+                "allocator" => allocator::allocator(item).map(|allocator| {
+                    self.allocator = Some(allocator);
+                }),
+                "version" => self.version(item),
+                "library-paths" => self.directories(item, "library-paths").map(|paths| {
+                    self.library_paths = paths;
+                }),
+                "libraries" => libraries::libraries(item).map(|libraries| {
+                    self.libraries = libraries;
+                }),
                 _ => Err(Problem {
                     range: document
                         .as_table()
@@ -83,7 +106,7 @@ impl ProjectSettings {
                         .and_then(toml_edit::Key::span)
                         .unwrap_or(0..0),
                     message: format!("`typy.toml` has no setting `{key}`"),
-                    help: Some(format!("the settings are {}", KEYS.join(" and "))),
+                    help: Some(format!("the settings are {}", listed(&KEYS))),
                     rule: RuleId::CLI_07,
                 }),
             };
@@ -116,19 +139,51 @@ impl ProjectSettings {
         Ok(())
     }
 
+    /// Reads `version`, a string that starts with a release such as `5.0` (CLI-13).
+    fn version(&mut self, item: &Item) -> Result<(), Problem> {
+        let text = item
+            .as_str()
+            .filter(|text| crate::version_release(text).is_some());
+        let Some(text) = text else {
+            return Err(Problem {
+                range: item.span().unwrap_or(0..0),
+                message: format!(
+                    "`version` is {}, not a string that starts with a release such as `5.0`",
+                    shown(item)
+                ),
+                help: Some("write it as a string, such as `version = \"5.0\"`".to_owned()),
+                rule: RuleId::CLI_13,
+            });
+        };
+        self.version = Some(text.to_owned());
+        Ok(())
+    }
+
     /// Reads `module-paths`, an array of directories under the root (MOD-01).
     fn module_paths(&mut self, item: &Item) -> Result<(), Problem> {
+        self.module_paths = self.directories(item, "module-paths")?;
+        Ok(())
+    }
+
+    /// Reads an array of directories under the root, the setting `key`: `module-paths`
+    /// (MOD-01) or `library-paths` (FFI-04).
+    fn directories(&self, item: &Item, key: &str) -> Result<Vec<Utf8PathBuf>, Problem> {
+        let rule = if key == "library-paths" {
+            RuleId::FFI_04
+        } else {
+            RuleId::CLI_07
+        };
         let problem = |range, message, help| Problem {
             range,
             message,
             help,
-            rule: RuleId::CLI_07,
+            rule,
         };
         let Some(array) = item.as_array() else {
             return Err(problem(
                 item.span().unwrap_or(0..0),
-                format!("`module-paths` is {}, not an array of strings", shown(item)),
-                Some("write it as an array, such as `module-paths = [\"lib\"]`".to_owned()),
+                format!("`{key}` is {}, not an array of strings", shown(item)),
+                Some(format!("write it as an array, such as `{key} = [\"lib\"]`")),
             ));
         };
         let mut paths = Vec::new();
@@ -136,7 +191,10 @@ impl ProjectSettings {
             let range = value.span().unwrap_or(0..0);
             let Some(text) = value.as_str() else {
                 let name = value.type_name();
-                let message = format!("a module path is {} {name}, not a string", article(name));
+                let message = format!(
+                    "a path of `{key}` is {} {name}, not a string",
+                    article(name)
+                );
                 return Err(problem(range, message, None));
             };
             match self.module_path(text) {
@@ -144,12 +202,11 @@ impl ProjectSettings {
                 Err(message) => return Err(problem(range, message, None)),
             }
         }
-        self.module_paths = paths;
-        Ok(())
+        Ok(paths)
     }
 
-    /// Checks one module path: a directory under the root, named relative to it, so the
-    /// build never reads outside the project.
+    /// Checks one path of `module-paths` or `library-paths`: a directory under the root,
+    /// named relative to it, so the build never reads outside the project.
     fn module_path(&self, text: &str) -> Result<Utf8PathBuf, String> {
         let path = Utf8Path::new(text);
         let inside = !text.is_empty()
@@ -158,12 +215,12 @@ impl ProjectSettings {
                 .all(|component| matches!(component, Utf8Component::Normal(_)));
         if !inside {
             return Err(format!(
-                "the module path `{text}` is not a directory under the project root, named \
-                 relative to it"
+                "the path `{text}` is not a directory under the project root, named relative \
+                 to it"
             ));
         }
         if !self.root.join(path).is_dir() {
-            return Err(format!("the module path `{text}` is not a directory"));
+            return Err(format!("the path `{text}` is not a directory"));
         }
         Ok(path.to_owned())
     }
@@ -203,6 +260,15 @@ fn shown(item: &Item) -> String {
         || format!("{} {}", article(item.type_name()), item.type_name()),
         |text| format!("the string \"{text}\""),
     )
+}
+
+/// Returns names as a sentence lists them: `a, b and c`.
+fn listed(names: &[&str]) -> String {
+    match names {
+        [] => String::new(),
+        [only] => (*only).to_owned(),
+        [rest @ .., last] => format!("{} and {last}", rest.join(", ")),
+    }
 }
 
 /// Returns `an` before a TOML type name that starts with a vowel, and `a` otherwise.
@@ -247,6 +313,7 @@ mod tests {
         assert_eq!(settings.module_paths, [Utf8PathBuf::from("lib")]);
         let overrides = SettingOverrides {
             python_floor: Some(PythonFloor::V3_15),
+            ..SettingOverrides::default()
         };
         let settings = ProjectSettings::read(&root, overrides).unwrap();
         assert_eq!(settings.python_floor, PythonFloor::V3_15);
@@ -278,11 +345,11 @@ mod tests {
                 "module-paths = \"lib\"\n",
                 "`module-paths` is the string \"lib\"",
             ),
-            ("module-paths = [true]\n", "a module path is a boolean"),
             (
-                "module-paths = [\"lib\", \"\"]\n",
-                "the module path `` is not",
+                "module-paths = [true]\n",
+                "a path of `module-paths` is a boolean",
             ),
+            ("module-paths = [\"lib\", \"\"]\n", "the path `` is not"),
             (
                 "module-paths = [\"missing\"]\n",
                 "`missing` is not a directory",
@@ -299,6 +366,36 @@ mod tests {
                 .message()
                 .to_owned();
             assert!(found.contains(message), "{text}: {found}");
+        }
+    }
+
+    #[test]
+    fn version_names_a_librarys_release() {
+        let (_guard, project) = root(Some("version = \"5.0rc1\"\n"));
+        let settings = ProjectSettings::read(&project, SettingOverrides::default()).unwrap();
+        assert_eq!(settings.version.as_deref(), Some("5.0rc1"));
+        for (text, message) in [
+            (
+                "version = 5.0\n",
+                "`version` is a float, not a string that starts with a release",
+            ),
+            (
+                "version = \"latest\"\n",
+                "`version` is the string \"latest\", not a string",
+            ),
+        ] {
+            let (_wrong_guard, wrong) = root(Some(text));
+            let failure = ProjectSettings::read(&wrong, SettingOverrides::default()).unwrap_err();
+            let diagnostic = failure.diagnostics.iter().next().unwrap();
+            assert!(
+                diagnostic.message().starts_with(message),
+                "{}",
+                diagnostic.message()
+            );
+            assert_eq!(
+                diagnostic.rule().map(typy_diagnostics::RuleId::as_str),
+                Some("CLI-13")
+            );
         }
     }
 

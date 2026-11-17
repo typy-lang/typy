@@ -124,8 +124,11 @@ print(math.prod(range(1, 6)), math.prod(prices, start=1.0))
 print(math.sumprod(prices, counts), math.gamma(0.5), math.lgamma(10.0))
 ```
 
-Items of a union, such as a `list[int | float]`, a `bool` start and
-`prod` of items that are not numbers are planned for 0.5 (LIB-15).
+Items of a union of number types, such as a `list[int | float]`, and a
+`bool` start of `prod` give CPython's results too (LIB-15): `prod` keeps
+the exact `int` product until its first `float` item, and `prod([],
+start=True)` is `True`. `prod` of items that are not numbers, such as
+strings, is planned for 1.0 (LIB-21).
 
 ## The sys module
 
@@ -141,10 +144,11 @@ LIB-13):
 | `sys.maxsize`, `sys.maxunicode` | `2**63 - 1` and `1114111` |
 | `sys.byteorder`, `sys.platform` | `"little"` and `"linux"`, those of the platforms TyPy builds for |
 | `sys.getrecursionlimit()`, `sys.setrecursionlimit(n)` | Read and set the recursion limit, 1000 at first |
-| `sys.version`, `sys.hexversion`, `sys.version_info` | CPython 3.15.0, whose behaviour TyPy follows: `'3.15.0 (TyPy 0.4.0)'`, `0x030F00F0` and `(3, 15, 0, 'final', 0)` |
+| `sys.version`, `sys.hexversion`, `sys.version_info` | CPython 3.15.0, whose behaviour TyPy follows: `'3.15.0 (TyPy 0.5.0)'`, `0x030F00F0` and `(3, 15, 0, 'final', 0)` |
 
 An argument that is not valid UTF-8 keeps each stray byte as a
-surrogate, as CPython decodes it, so `b"a\xffb"` becomes `'a\udcffb'`.
+surrogate, as CPython decodes it, so `b"a\xffb"` becomes `'a\udcffb'`,
+and printing it writes the byte back.
 `sys.argv[0]` is the path of the executable, where CPython gives the
 path of the script. The names of `sys` and `math` cannot be assigned:
 `sys.argv = ["x"]` is E0402, so change the list in place, with
@@ -202,8 +206,26 @@ if sys.version_info >= (3, 12):
 print(sys.version.startswith("3."), sys.hexversion >= 0x030C0000)
 ```
 
-`sys.version_info` as a value of its own, printed, stored or imported
-with `from sys import version_info`, is planned for 0.5 (E0201, LIB-16).
+`sys.version_info` is also a value of its own, as in CPython: it may be
+stored, put in a container, imported with `from sys import version_info`
+and printed, as
+`sys.version_info(major=3, minor=15, micro=0, releaselevel='final', serial=0)`,
+and indexing, slicing, comparing, `len`, a loop and unpacking read it as
+the tuple of its items (LIB-16).
+
+<!-- typy-expect: accepted -->
+```python
+import sys
+from sys import version_info
+
+kept = [version_info]
+major, minor, micro, level, serial = kept[0]
+print(major, level, kept[0] >= (3, 12), kept[0] is sys.version_info)
+```
+
+A function parameter cannot name its type, so pass `version_info[:]`,
+a plain tuple, where a function takes the items; `tuple(version_info)`
+and `in` are refused, as for any tuple whose items differ in type.
 The rest
 of CPython's `sys`, such as `sys.modules` or `sys.getrefcount`, depends
 on the interpreter and is E0202. The switches of lazy imports,

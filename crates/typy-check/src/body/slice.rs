@@ -25,7 +25,8 @@ impl BodyChecker<'_> {
         let bound = |checker: &mut Self, bound: Option<&Expr>| {
             bound.map(|bound| {
                 let bound = checker.expression(bound);
-                checker.expect(&bound, Type::Int, "a slice bound");
+                // A bound of `None` is a missing one (DAT-12).
+                checker.expect(&bound, Type::optional(Type::Int), "a slice bound");
                 Box::new(bound)
             })
         };
@@ -76,8 +77,13 @@ impl BodyChecker<'_> {
         bounds: &Bounds<'_>,
         span: Span,
     ) -> TypedExpr {
-        let literal = |bound: Option<&Expr>| {
-            bound.map_or(Some(None), |bound| literal_position(bound).map(Some))
+        let literal = |bound: Option<&Expr>| match bound {
+            None
+            | Some(Expr::Constant {
+                value: typy_source::syntax::Constant::None,
+                ..
+            }) => Some(None),
+            Some(bound) => literal_position(bound).map(Some),
         };
         let (Some(lower), Some(upper), Some(step)) = (
             literal(bounds.lower),

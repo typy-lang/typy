@@ -33,6 +33,8 @@ pub(crate) enum Imported {
     ModuleFunction(super::builtin_module::ModuleFunction),
     /// A value of a built-in module, which the name takes.
     ModuleValue(super::builtin_module::BuiltinValue),
+    /// A type alias of another module, which annotations read (SMT-12).
+    TypeAlias(std::rc::Rc<crate::check::ExportedAlias>),
 }
 
 /// What a name is in a module's tables.
@@ -41,7 +43,8 @@ pub(crate) enum Named {
     Function(FunctionId),
     Class(ClassId),
     Variable(SymbolId),
-    /// A type alias, which only the annotations of its own module read (SMT-10).
+    /// A type alias, which annotations read, its own module's and those importing it
+    /// (SMT-10, SMT-12).
     TypeAlias,
     Nothing,
 }
@@ -167,6 +170,20 @@ impl Program {
         Ok(resolved)
     }
 
+    /// Returns the type alias `name` of a module, as an importing module reads it.
+    fn alias_value(
+        &self,
+        module: &str,
+        name: &str,
+    ) -> Option<std::rc::Rc<crate::check::ExportedAlias>> {
+        let aliases = if module == self.module {
+            &self.exported_aliases
+        } else {
+            &self.scopes.get(module)?.alias_values
+        };
+        aliases.get(name).cloned()
+    }
+
     /// Returns what `name` is in a module checked before, or in the module being checked,
     /// which its own functions may import by name; `None` when the module is not checked
     /// yet. The tables are read in place, so a lookup costs the same in any module.
@@ -267,16 +284,17 @@ impl Program {
                 });
             }
             Some(Named::TypeAlias) => {
-                return Err(Box::new(crate::check::other_module_alias(
-                    base.as_str(),
-                    name,
-                    alias.name.span,
-                )));
+                if let Some(found) = self.alias_value(base.as_str(), name) {
+                    return Ok(Imported::TypeAlias(found));
+                }
             }
             Some(Named::Nothing) => {}
         }
         if self.loaded.contains(child.as_str()) {
             return Ok(Imported::Module(child));
+        }
+        if let Some(planned) = self.rebound_elsewhere(base.as_str(), name, alias.name.span) {
+            return Err(Box::new(planned));
         }
         Err(Box::new(
             Diagnostic::new(
@@ -308,9 +326,6 @@ impl Program {
             return Ok(());
         }
         let planned = match top {
-            "sys" => Some(("0.3", RuleId::LIB_04)),
-            "dataclasses" | "typing" | "collections" => Some(("0.4", RuleId::LIB_06)),
-            "ctypes" => Some(("0.5", RuleId::FFI_01)),
             "os" | "time" | "random" => Some(("1.0", RuleId::LIB_07)),
             _ => None,
         };
@@ -327,7 +342,10 @@ impl Program {
                 format!("TyPy does not provide the standard library module `{module}`"),
             )
             .with_rule(RuleId::LIB_08)
-            .with_help("TyPy 0.3 provides `math`, `sys`, `typing`, `collections.abc` and `types`"),
+            .with_help(
+                "TyPy provides `math`, `sys`, `dataclasses`, `typing`, `collections.abc` and \
+                 `types`",
+            ),
         }))
     }
 }
@@ -344,8 +362,8 @@ fn not_a_package(module: &ModuleName, span: Span) -> Diagnostic {
 }
 
 /// Returns the error for a name of `typing`, `collections.abc` or `types` that TyPy does not
-/// give: `Any` and `cast` are refused (TYP-10), and the rest of `typing` and
-/// `collections.abc` is planned (LIB-17).
+/// give: `Any` and `cast` are refused (TYP-10), `Callable`, `NamedTuple` and the abstract
+/// collections are planned for 1.0, and any other name is not given (LIB-17).
 fn not_given(module: &ModuleName, alias: &Alias) -> Diagnostic {
     let name = &alias.name.name;
     if module.as_str() == "types" {
@@ -380,21 +398,32 @@ fn not_given(module: &ModuleName, alias: &Alias) -> Diagnostic {
         .with_rule(RuleId::TYP_10)
         .with_help("annotate the value with its type, or a union of its types");
     }
-    let help = match name.as_str() {
-        "Optional" => "write `T | None`",
-        "Union" => "write `A | B`",
-        "List" | "Dict" | "Set" | "Tuple" | "Type" | "FrozenSet" => {
-            "write the built-in type, such as `list[int]` or `dict[str, int]`"
-        }
-        _ => "TyPy gives `Iterator`, `Iterable`, `Final`, `ClassVar` and `Protocol`",
+    // The names a later release gives, with the requirement that plans each.
+    let planned = match name.as_str() {
+        "Callable" => Some(RuleId::FUN_05),
+        "NamedTuple" => Some(RuleId::CLS_27),
+        "Sequence" | "MutableSequence" | "Mapping" | "MutableMapping" | "Collection"
+        | "Container" | "Sized" | "Set" | "MutableSet" | "Reversible" | "KeysView"
+        | "ValuesView" | "ItemsView" => Some(RuleId::LIB_20),
+        _ => None,
     };
+    if let Some(rule) = planned {
+        return Diagnostic::new(
+            DiagnosticCode::error(201),
+            alias.name.span,
+            format!("`{module}.{name}` is planned for TyPy 1.0 ({rule})"),
+        )
+        .with_rule(rule);
+    }
     Diagnostic::new(
-        DiagnosticCode::error(201),
+        DiagnosticCode::error(425),
         alias.name.span,
-        format!("`{module}.{name}` is planned for TyPy 0.5 (LIB-17)"),
+        format!(
+            "TyPy's `{module}` gives `Iterator`, `Iterable`, `Optional`, `Union`, `List`, \
+             `Dict`, `Set`, `Tuple`, `Type`, `Final`, `ClassVar` and `Protocol`, not `{name}`"
+        ),
     )
     .with_rule(RuleId::LIB_17)
-    .with_help(help)
 }
 
 /// Returns the error for a relative import that names no module, with CPython's message.
@@ -402,18 +431,19 @@ fn imports_nothing(span: Span, message: &str) -> Diagnostic {
     Diagnostic::new(DiagnosticCode::error(206), span, message).with_rule(RuleId::MOD_02)
 }
 
-/// Returns E0426 for an import of a module that is checked after this one: an import inside
-/// a function of a module that the imported module imports at module level.
+/// Returns E0426 for an import of a module that is checked after this one inside an
+/// `__init__`, which is checked before the rest of its module since it gives the attributes
+/// their types; any other function waits for the module (MOD-13).
 fn checked_later(span: Span, module: &ModuleName) -> Diagnostic {
     Diagnostic::new(
         DiagnosticCode::error(426),
         span,
         format!(
-            "`{module}` imports this module at module level, so importing it inside this \
-             function is planned for TyPy 0.5 (MOD-13)"
+            "`{module}` imports this module at module level, so importing it inside \
+             `__init__` is planned for TyPy 1.0 (MOD-15)"
         ),
     )
-    .with_rule(RuleId::MOD_13)
+    .with_rule(RuleId::MOD_15)
     .with_help("import it at module level in the other direction, or move the shared code to a third module")
 }
 
@@ -430,14 +460,18 @@ impl BodyChecker<'_> {
         };
         let mut bindings = Vec::new();
         let mut lazy_callables = Vec::new();
+        let mut numbers = Vec::new();
         for (name, imported, name_span) in resolved.names {
             let ty = match &imported {
                 Imported::Function(_) | Imported::Class(_) | Imported::ModuleFunction(_) => {
-                    lazy_callables.push(name);
+                    numbers.extend(self.rebound_binding(&name, name_span));
+                    lazy_callables.push((name, name_span));
                     continue;
                 }
                 Imported::ModuleValue(value) => value.expression(name_span).ty,
-                Imported::Annotation(_) | Imported::Standard(_) => continue,
+                Imported::Annotation(_) | Imported::Standard(_) | Imported::TypeAlias(_) => {
+                    continue;
+                }
                 Imported::Variable { source, .. } => {
                     self.program.symbols[source.0 as usize].ty.clone()
                 }
@@ -477,9 +511,16 @@ impl BodyChecker<'_> {
                 | Imported::Class(_)
                 | Imported::Annotation(_)
                 | Imported::Standard(_)
+                | Imported::TypeAlias(_)
                 | Imported::ModuleFunction(_) => None,
             };
             bindings.extend(self.assign(&target, ty, &value).and_then(binding));
+        }
+        let lazy =
+            !self.in_function() && typy_source::is_lazy(statement, &self.program.lazy_modules);
+        if !lazy {
+            // The import stores its number in each binding variable once its names are bound.
+            bindings.append(&mut numbers);
         }
         let import = TypedStmt::Import {
             modules: resolved.modules,
@@ -487,20 +528,29 @@ impl BodyChecker<'_> {
             bindings,
             span,
         };
-        if self.in_function() || !typy_source::is_lazy(statement, &self.program.lazy_modules) {
+        if !lazy {
             return Some(import);
+        }
+        // A lazy import stores its number when its statement runs, as it binds its names then.
+        if !numbers.is_empty() {
+            self.following.push(TypedStmt::Import {
+                modules: Vec::new(),
+                pending: Vec::new(),
+                bindings: numbers,
+                span,
+            });
         }
         self.lazy_import(import, lazy_callables, span)
     }
 
     /// Makes a lazy import of an import statement. Each name it binds gets its own function,
     /// which runs the import for that name alone, so rebinding one name cancels only its own
-    /// import, as in CPython. A name bound by two lazy imports is refused, since its first
-    /// use would have to know which of them ran last.
+    /// import, as in CPython. A function or a class several imports bind is called through
+    /// its binding variable (ADR-0036).
     fn lazy_import(
         &mut self,
         import: TypedStmt,
-        callables: Vec<String>,
+        callables: Vec<(String, Span)>,
         span: Span,
     ) -> Option<TypedStmt> {
         let TypedStmt::Import {
@@ -512,54 +562,25 @@ impl BodyChecker<'_> {
         else {
             return None;
         };
-        let mut names: Vec<(String, Option<ImportBinding>)> = bindings
+        let mut names: Vec<(String, Option<ImportBinding>, Option<Span>)> = bindings
             .into_iter()
             .map(|binding| {
                 let target = binding.target();
                 (
                     self.program.symbols[target.0 as usize].name.clone(),
                     Some(binding),
+                    None,
                 )
             })
             .collect();
-        names.extend(callables.into_iter().map(|name| (name, None)));
-        let first = self.program.next_function().0;
-        let module = self.program.module.clone();
-        // A variable may be bound by several lazy imports, the last one run giving its value;
-        // a function or a class would need the call to choose its target when it runs.
-        let twice = names.iter().zip(first..).find(|((name, binding), id)| {
-            self.program
-                .lazy_names
-                .get(&(module.clone(), name.clone()))
-                .is_some_and(|known| {
-                    known.0 != *id
-                        && (binding.is_none()
-                            || self
-                                .program
-                                .lazy_imports
-                                .get(known)
-                                .copied()
-                                .flatten()
-                                .is_none())
-                })
-        });
-        if let Some(((name, _), _)) = twice {
-            self.diagnostics.push(
-                Diagnostic::new(
-                    DiagnosticCode::error(201),
-                    span,
-                    format!(
-                        "binding the function or class `{name}` by a second lazy import is \
-                         planned for TyPy 0.5 (MOD-12)"
-                    ),
-                )
-                .with_rule(RuleId::MOD_12),
-            );
-            return None;
-        }
+        names.extend(
+            callables
+                .into_iter()
+                .map(|(name, name_span)| (name, None, Some(name_span))),
+        );
         let mut reifies = Vec::new();
         let mut targets = Vec::new();
-        for (name, binding) in names {
+        for (name, binding, name_span) in names {
             let target = binding.as_ref().map(ImportBinding::target);
             targets.extend(target);
             let import = TypedStmt::Import {
@@ -568,7 +589,13 @@ impl BodyChecker<'_> {
                 bindings: binding.into_iter().collect(),
                 span,
             };
-            reifies.push(self.program.add_lazy_import(name, import, target, span));
+            let reify = self
+                .program
+                .add_lazy_import(name.clone(), import, target, span);
+            if let Some(name_span) = name_span {
+                self.note_rebound_reify(&name, name_span, reify);
+            }
+            reifies.push(reify);
         }
         Some(TypedStmt::LazyImport {
             reifies,
@@ -685,6 +712,9 @@ impl BodyChecker<'_> {
         if let Named::Class(class) = found {
             return self.class_object(class, name, span);
         }
+        if let Named::TypeAlias = found {
+            return self.type_alias_object(module, name, span);
+        }
         let child = format!("{module}.{name}");
         if self.program.loaded.contains(&child) {
             return Self::typed(
@@ -693,20 +723,14 @@ impl BodyChecker<'_> {
                 span,
             );
         }
+        if let Some(planned) = self.program.rebound_elsewhere(module, name, span) {
+            return self.error(planned, span);
+        }
         let (code, rule, message) = if let Named::Function(_) = found {
             (
                 201,
                 RuleId::FUN_05,
                 format!("using `{module}.{name}` as a value is planned for TyPy 1.0 (FUN-05)"),
-            )
-        } else if let Named::TypeAlias = found {
-            (
-                201,
-                RuleId::SMT_12,
-                format!(
-                    "using the type alias `{module}.{name}` as a value is planned for TyPy 0.5 \
-                     (SMT-12)"
-                ),
             )
         } else {
             (
@@ -733,6 +757,9 @@ impl BodyChecker<'_> {
         let name = attribute.name.as_str();
         match self.program.builtin_lookup(module, name, attribute.span) {
             Ok(BuiltinName::Value(value)) => value.expression(span),
+            Ok(BuiltinName::Function(super::builtin_module::ModuleFunction::CtypesType(ty))) => {
+                Self::cdata_class(crate::ctypes::CData::Scalar(ty), span)
+            }
             Ok(BuiltinName::Function(_)) => self.error(
                 Diagnostic::new(
                     DiagnosticCode::error(201),
@@ -847,10 +874,14 @@ impl BodyChecker<'_> {
             }
             Some(Named::Variable(_) | Named::TypeAlias | Named::Nothing) => {}
         }
+        let read = self.module_attribute(module, &name.name, name.span);
+        // A module variable bound to a `ctypes` class makes an object of it (FFI-03).
+        if let Type::CDataClass(class) = &read.ty {
+            return self.cdata_new(class, arguments, keywords, span);
+        }
         for argument in arguments {
             self.expression(argument);
         }
-        let read = self.module_attribute(module, &name.name, name.span);
         if read.ty == Type::Error {
             return TypedExpr { span, ..read };
         }
@@ -925,10 +956,14 @@ impl BodyChecker<'_> {
                 continue;
             };
             for (name, imported, _) in resolved.names {
-                // A function's own import of a name hides the module's lazy import of it.
+                // A function's own import of a name hides the module's lazy import of it, and
+                // the module's binding variable for it.
                 let key = (self.program.module.clone(), name.clone());
                 if let Some(lazy) = self.program.lazy_names.remove(&key) {
                     saved.lazy.push((name.clone(), lazy));
+                }
+                if let Some(rebound) = self.program.rebound.remove(&name) {
+                    saved.rebound.push((name.clone(), rebound));
                 }
                 match imported {
                     Imported::Function(function) => saved.functions.push((
@@ -950,6 +985,10 @@ impl BodyChecker<'_> {
                         name.clone(),
                         self.program.module_functions.insert(name, function),
                     )),
+                    Imported::TypeAlias(alias) => saved.aliases.push((
+                        name.clone(),
+                        self.program.imported_aliases.insert(name, alias),
+                    )),
                     Imported::Variable { .. } | Imported::Module(_) | Imported::ModuleValue(_) => {}
                 }
             }
@@ -959,6 +998,12 @@ impl BodyChecker<'_> {
 
     /// Puts back the names `import_names_of` replaced, newest first.
     pub(super) fn restore_names(&mut self, saved: SavedNames) {
+        for (name, previous) in saved.aliases.into_iter().rev() {
+            match previous {
+                Some(alias) => self.program.imported_aliases.insert(name, alias),
+                None => self.program.imported_aliases.remove(&name),
+            };
+        }
         for (name, previous) in saved.math.into_iter().rev() {
             match previous {
                 Some(function) => self.program.module_functions.insert(name, function),
@@ -968,6 +1013,9 @@ impl BodyChecker<'_> {
         for (name, lazy) in saved.lazy {
             let key = (self.program.module.clone(), name);
             self.program.lazy_names.insert(key, lazy);
+        }
+        for (name, rebound) in saved.rebound {
+            self.program.rebound.insert(name, rebound);
         }
         for (name, previous) in saved.functions.into_iter().rev() {
             match previous {
@@ -1005,6 +1053,20 @@ pub(super) struct SavedNames {
     standard: Vec<(String, Option<String>)>,
     lazy: Vec<(String, FunctionId)>,
     math: Vec<(String, Option<ModuleFunction>)>,
+    aliases: Vec<(String, Option<std::rc::Rc<crate::check::ExportedAlias>>)>,
+    rebound: Vec<(String, super::rebound::Rebound)>,
+}
+
+impl Program {
+    /// Returns true when a function body imports a module of the program that is not
+    /// checked yet, so the body waits until it is (MOD-13).
+    pub(crate) fn imports_later_modules(&self, body: &[Stmt]) -> bool {
+        let mut statements = Vec::new();
+        imports_in(body, &mut statements);
+        statements
+            .iter()
+            .any(|statement| self.imports_later_module(statement))
+    }
 }
 
 /// Collects the import statements of a block, at any depth outside nested definitions.
@@ -1019,6 +1081,11 @@ fn imports_in<'tree>(statements: &'tree [Stmt], found: &mut Vec<&'tree Stmt>) {
                 imports_in(orelse, found);
             }
             Stmt::With { body, .. } => imports_in(body, found),
+            Stmt::Match { cases, .. } => {
+                for case in cases {
+                    imports_in(&case.body, found);
+                }
+            }
             Stmt::Try { .. } => {
                 for block in statement.try_blocks() {
                     imports_in(block, found);

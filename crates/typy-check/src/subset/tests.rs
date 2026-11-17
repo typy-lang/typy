@@ -73,20 +73,8 @@ fn later_features_name_their_release_and_rule() {
             "class decorators are planned for TyPy 1.0 (FUN-06)",
         ),
         (
-            "class B:\n    pass\nclass C[T](B):\n    pass\n",
-            "generic classes with a base or a decorator are planned for TyPy 0.5 (GEN-08)",
-        ),
-        (
-            "class C[T]:\n    pass\nclass D(C[int]):\n    pass\n",
-            "classes derived from a generic class are planned for TyPy 0.5 (GEN-08)",
-        ),
-        (
-            "class C[T]:\n    pass\nclass D(C):\n    pass\n",
-            "classes derived from a generic class are planned for TyPy 0.5 (GEN-08)",
-        ),
-        (
             "@decorated\nclass C[T]:\n    pass\n",
-            "generic classes with a base or a decorator are planned for TyPy 0.5 (GEN-08)",
+            "class decorators are planned for TyPy 1.0 (FUN-06)",
         ),
         (
             "x = {**y}\n",
@@ -101,21 +89,8 @@ fn later_features_name_their_release_and_rule() {
             "generator expressions are planned for TyPy 1.0 (EXP-15)",
         ),
         (
-            "def f() -> None:\n    type X = int\n",
-            "`type` statements inside functions, classes and blocks are planned for TyPy 0.5 \
-             (SMT-12)",
-        ),
-        (
             "def f[*Ts](x: int) -> int:\n    return x\n",
             "`*Ts` and `**P` type parameters are planned for TyPy 1.0 (GEN-06)",
-        ),
-        (
-            "match x:\n    case _:\n        pass\n",
-            "`match` statements are planned for TyPy 0.5 (CST-06)",
-        ),
-        (
-            "print(y := 1)\n",
-            "assignment expressions are planned for TyPy 0.5 (EXP-13)",
         ),
         (
             "f = lambda: 1\n",
@@ -162,7 +137,7 @@ fn later_features_name_their_release_and_rule() {
             "`nonlocal` statements are planned for TyPy 1.0 (SMT-09)",
         ),
         (
-            "f()()\n",
+            "x[0]()\n",
             "calls of values that are not names are planned for TyPy 1.0 (FUN-05)",
         ),
         (
@@ -233,7 +208,7 @@ fn excluded_features_say_they_cannot_be_compiled() {
         ),
         (
             "def f(x: frozenset[int]) -> None:\n    pass\n",
-            "generic annotations other than `list`, `dict`, `set`, `tuple`, `type`, `Iterator` and `Iterable`, such as `frozenset[int]`, cannot be compiled by TyPy with CPython's meaning",
+            "generic annotations other than `list`, `dict`, `set`, `tuple`, `type`, `Iterator`, `Iterable` and their `typing` names, such as `frozenset[int]`, cannot be compiled by TyPy with CPython's meaning",
         ),
         (
             "x = ...\n",

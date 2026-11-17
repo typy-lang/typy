@@ -108,12 +108,54 @@ impl BodyChecker<'_> {
         span: Span,
     ) -> Option<TypedExpr> {
         let holder = self.holder(class, &attribute.name)?;
+        // A subclass may hold the variable of its own, which a read tests first (ADR-0037).
+        if !holder.default {
+            let chain = self
+                .program
+                .variable_chain(class, holder.class, &attribute.name);
+            if chain.len() > 1 {
+                return Some(self.program.chain_read(chain, span));
+            }
+        }
         let (variable, module) = self.holder_variable(holder, &attribute.name);
         Some(if module == self.program.module {
             self.expression(&Expr::Name { id: variable, span })
         } else {
             self.module_attribute(&module, &variable, span)
         })
+    }
+
+    /// Returns `instance.name` of a class variable some class derived from its class holds
+    /// one of its own of: a call of the getter of the instance's class, through the method
+    /// table (ADR-0037).
+    pub(super) fn shared_class_variable(
+        &mut self,
+        object: &TypedExpr,
+        class: ClassId,
+        attribute: &Identifier,
+        span: Span,
+    ) -> Option<TypedExpr> {
+        let holder = self
+            .holder(class, &attribute.name)
+            .filter(|holder| !holder.default)?;
+        if !self.program.shares(holder.class, &attribute.name) {
+            return None;
+        }
+        let getter_name = super::class_variable_chain::getter_name(&attribute.name);
+        let getter = self.program.method(class, &getter_name)?;
+        let returns = self.program.signatures[getter.0 as usize].returns.clone();
+        Some(Self::typed(
+            crate::typed::TypedExprKind::Call {
+                function: getter,
+                arguments: vec![crate::typed::Argument {
+                    parameter: 0,
+                    value: object.clone(),
+                }],
+                dispatch: true,
+            },
+            returns,
+            span,
+        ))
     }
 
     /// Checks `Class.name = value` for a class variable, which assigns the module variable
@@ -145,6 +187,17 @@ impl BodyChecker<'_> {
             );
             return Some(ClassValueAssignment::Refused);
         }
+        // A subclass the program assigns the variable through holds one of its own.
+        let holder = if self.program.holds_own(class, &attribute.name) {
+            self.program
+                .variable_chain(class, holder.class, &attribute.name);
+            Holder {
+                class,
+                default: false,
+            }
+        } else {
+            holder
+        };
         if let Some(refused) = self.inherited_class_variable(class, holder, attribute, span) {
             return Some(refused);
         }
@@ -222,13 +275,15 @@ impl BodyChecker<'_> {
         ty: &Type,
         span: Span,
     ) -> Option<ClassValueAssignment> {
-        let symbol = match current.kind {
+        let symbol = match &current.kind {
             crate::typed::TypedExprKind::ModuleVariable(symbol)
             | crate::typed::TypedExprKind::ModuleAttribute { symbol, .. }
                 if self.program.symbols[symbol.0 as usize].name.contains('.') =>
             {
-                symbol
+                *symbol
             }
+            // A read down the chain of a subclass's own holder assigns that holder.
+            crate::typed::TypedExprKind::ClassVariable(holders) => *holders.first()?,
             _ => return None,
         };
         let Some(class) = self.class_named_by(object) else {
@@ -251,7 +306,9 @@ impl BodyChecker<'_> {
         if holder.default {
             return self.class_value_target(class, attribute, ty, current, span);
         }
-        if let Some(refused) = self.inherited_class_variable(class, holder, attribute, span) {
+        if !self.program.holds_own(class, &attribute.name)
+            && let Some(refused) = self.inherited_class_variable(class, holder, attribute, span)
+        {
             return Some(refused);
         }
         let name = self.program.symbols[symbol.0 as usize].name.clone();
@@ -275,8 +332,9 @@ impl BodyChecker<'_> {
         Some(ClassValueAssignment::Assigned(AssignTarget::Name(symbol)))
     }
 
-    /// Reports `Subclass.name = value` for a class variable a base gives, which in CPython
-    /// gives the subclass a variable of its own and leaves the base's alone.
+    /// Reports `cls.name = value` for a class variable a base gives, through a variable that
+    /// holds a class derived from it, which the scan of the program cannot see; through a
+    /// class's name it gives the class a holder of its own (ADR-0037).
     fn inherited_class_variable(
         &mut self,
         class: ClassId,
@@ -294,16 +352,16 @@ impl BodyChecker<'_> {
                 DiagnosticCode::error(201),
                 span,
                 format!(
-                    "assigning `{class_name}.{}`, a class variable of its base `{owner}`, which \
-                     gives `{class_name}` one of its own in CPython, is planned for TyPy 0.5 \
-                     (CLS-11)",
+                    "assigning `{}`, a class variable of `{owner}`, through a variable that \
+                     holds a class derived from it, which gives that class one of its own in \
+                     CPython, is planned for TyPy 1.0 (CLS-31)",
                     attribute.name
                 ),
             )
-            .with_rule(RuleId::CLS_11)
+            .with_rule(RuleId::CLS_31)
             .with_help(format!(
-                "give `{class_name}` its own `{} = ...`, or assign `{owner}.{}`",
-                attribute.name, attribute.name
+                "assign it through the class by its name, such as `{class_name}.{} = ...`",
+                attribute.name
             )),
         );
         Some(ClassValueAssignment::Refused)

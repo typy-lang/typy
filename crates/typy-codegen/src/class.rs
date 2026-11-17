@@ -17,7 +17,7 @@ use crate::layout::{IMMORTAL, TYPE_TYPE_ID};
 use crate::statics::Statics;
 
 /// Returns a function the runtime defines, declared on first use.
-fn runtime_symbol<'ctx>(
+pub(crate) fn runtime_symbol<'ctx>(
     shared: &Shared<'_, 'ctx>,
     name: &str,
     ty: inkwell::types::FunctionType<'ctx>,
@@ -97,12 +97,18 @@ fn str_function<'ctx>(
         (Some(method), _) => Ok(method_writer(shared, index, method, "str")?
             .as_global_value()
             .as_pointer_value()),
-        // An exception's `str` comes from its arguments (EXC-08).
-        (None, Some(_)) => Ok(
-            runtime_symbol(shared, "typy_rt_exception_str", repr_type(shared))
+        // An exception's `str` comes from its arguments (EXC-08), as `OSError` writes them
+        // for a class derived from it (EXC-14).
+        (None, Some(_)) => {
+            let writer = if class.os_error {
+                "typy_rt_os_error_str"
+            } else {
+                "typy_rt_exception_str"
+            };
+            Ok(runtime_symbol(shared, writer, repr_type(shared))
                 .as_global_value()
-                .as_pointer_value(),
-        ),
+                .as_pointer_value())
+        }
         (None, None) => Ok(shared
             .context
             .ptr_type(AddressSpace::default())
@@ -173,11 +179,16 @@ fn hash_slot<'ctx>(
     let builder = context.create_builder();
     builder.position_at_end(context.append_basic_block(function, ""));
     let instance = slot_parameter(function, 0)?;
-    let value = builder
-        .build_call(shared.functions[method.0 as usize], &[instance.into()], "")?
-        .try_as_basic_value()
-        .basic()
-        .ok_or_else(|| CodegenError("`__hash__` returns an int".to_owned()))?;
+    let default = word.const_zero().into();
+    give_way_to_pending(shared, &builder, function, default)?;
+    let value = slot_call(
+        shared,
+        &builder,
+        function,
+        method,
+        &[instance.into()],
+        default,
+    )?;
     let reduce = runtime_symbol(
         shared,
         "typy_rt_int_hash",
@@ -208,12 +219,17 @@ fn truth_slot<'ctx>(
     let builder = context.create_builder();
     builder.position_at_end(context.append_basic_block(function, ""));
     let instance = slot_parameter(function, 0)?;
-    let truth = builder
-        .build_call(shared.functions[method.0 as usize], &[instance.into()], "")?
-        .try_as_basic_value()
-        .basic()
-        .ok_or_else(|| CodegenError("`__bool__` returns a bool".to_owned()))?
-        .into_int_value();
+    let default = byte.const_zero().into();
+    give_way_to_pending(shared, &builder, function, default)?;
+    let truth = slot_call(
+        shared,
+        &builder,
+        function,
+        method,
+        &[instance.into()],
+        default,
+    )?
+    .into_int_value();
     let truth = builder.build_int_z_extend(truth, byte, "")?;
     builder.build_return(Some(&truth))?;
     Ok(function)
@@ -242,6 +258,7 @@ fn equal_slot<'ctx>(
     let identity = context.append_basic_block(function, "");
     builder.position_at_end(entry);
     let (left, right) = (slot_parameter(function, 0)?, slot_parameter(function, 1)?);
+    give_way_to_pending(shared, &builder, function, byte.const_zero().into())?;
     let is_instance = crate::runtime::runtime_function(
         context,
         shared.module,
@@ -258,7 +275,7 @@ fn equal_slot<'ctx>(
     let accepted = builder.build_int_compare(IntPredicate::NE, accepted, byte.const_zero(), "")?;
     builder.build_conditional_branch(accepted, call, identity)?;
     builder.position_at_end(call);
-    let equal = call_comparison(shared, &builder, method, left, right)?;
+    let equal = call_comparison(shared, (&builder, function), method, left, right)?;
     builder.build_return(Some(&equal))?;
     builder.position_at_end(identity);
     let same = builder.build_int_compare(
@@ -292,6 +309,11 @@ fn order_slot<'ctx>(
     let entry = context.append_basic_block(function, "");
     let otherwise = context.append_basic_block(function, "");
     let (left, right) = (slot_parameter(function, 0)?, slot_parameter(function, 1)?);
+    builder.position_at_end(entry);
+    give_way_to_pending(shared, &builder, function, byte.const_zero().into())?;
+    let dispatch = builder
+        .get_insert_block()
+        .ok_or_else(|| CodegenError("the slot has a block".to_owned()))?;
     let code = function
         .get_nth_param(2)
         .ok_or_else(|| CodegenError("the slot takes a comparison".to_owned()))?
@@ -308,38 +330,123 @@ fn order_slot<'ctx>(
         };
         let block = context.append_basic_block(function, "");
         builder.position_at_end(block);
-        let result = call_comparison(shared, &builder, callee, first, second)?;
+        let result = call_comparison(shared, (&builder, function), callee, first, second)?;
         builder.build_return(Some(&result))?;
         cases.push((word.const_int((position << 1) | 1, false), block));
     }
     builder.position_at_end(otherwise);
     builder.build_return(Some(&byte.const_zero()))?;
-    builder.position_at_end(entry);
+    builder.position_at_end(dispatch);
     builder.build_switch(code, otherwise, &cases)?;
     Ok(function)
 }
 
-/// Calls a comparison method, which cannot raise, and returns its `bool` as a byte.
+/// Calls a comparison method and returns its `bool` as a byte, false when it raised.
 fn call_comparison<'ctx>(
     shared: &Shared<'_, 'ctx>,
-    builder: &inkwell::builder::Builder<'ctx>,
+    (builder, function): (&inkwell::builder::Builder<'ctx>, FunctionValue<'ctx>),
     method: typy_tyir::FunctionId,
     left: PointerValue<'ctx>,
     right: PointerValue<'ctx>,
 ) -> Result<BasicValueEnum<'ctx>, CodegenError> {
+    let byte = shared.context.i8_type();
+    let arguments = [left.into(), right.into()];
+    let default = byte.const_zero().into();
+    let result = slot_call(shared, builder, function, method, &arguments, default)?;
+    Ok(builder
+        .build_int_z_extend(result.into_int_value(), byte, "")?
+        .into())
+}
+
+/// Calls `method` from the slot `function` and returns its result. A method that may raise
+/// leaves the exception it raised with the runtime, and the slot returns `default`, since a
+/// slot cannot pass an exception on (CLS-22, ADR-0039).
+fn slot_call<'ctx>(
+    shared: &Shared<'_, 'ctx>,
+    builder: &inkwell::builder::Builder<'ctx>,
+    function: FunctionValue<'ctx>,
+    method: typy_tyir::FunctionId,
+    arguments: &[inkwell::values::BasicMetadataValueEnum<'ctx>],
+    default: BasicValueEnum<'ctx>,
+) -> Result<BasicValueEnum<'ctx>, CodegenError> {
     let result = builder
-        .build_call(
-            shared.functions[method.0 as usize],
-            &[left.into(), right.into()],
-            "",
-        )?
+        .build_call(shared.functions[method.0 as usize], arguments, "")?
         .try_as_basic_value()
         .basic()
-        .ok_or_else(|| CodegenError("a comparison method returns a bool".to_owned()))?
+        .ok_or_else(|| CodegenError("a slot's method returns a value".to_owned()))?;
+    if !shared.raising[method.0 as usize] {
+        return Ok(result);
+    }
+    let context = shared.context;
+    let pair = result.into_struct_value();
+    let value = builder.build_extract_value(pair, 0, "")?;
+    let exception = builder
+        .build_extract_value(pair, 1, "")?
+        .into_pointer_value();
+    let failed = builder.build_is_not_null(exception, "")?;
+    let (raised, returned) = (
+        context.append_basic_block(function, ""),
+        context.append_basic_block(function, ""),
+    );
+    builder.build_conditional_branch(failed, raised, returned)?;
+    builder.position_at_end(raised);
+    let pointer = context.ptr_type(AddressSpace::default());
+    let keep = runtime_symbol(
+        shared,
+        "typy_rt_slot_failed",
+        context.void_type().fn_type(&[pointer.into()], false),
+    );
+    builder.build_call(keep, &[exception.into()], "")?;
+    builder.build_return(Some(&default))?;
+    builder.position_at_end(returned);
+    Ok(value)
+}
+
+/// Returns from the slot `function` with `default` when a slot's method raised an exception
+/// the program has not raised yet, so no method of the program runs after it, as none would
+/// in CPython; only a program with a slot method that may raise tests it (CLS-22, ADR-0039).
+fn give_way_to_pending<'ctx>(
+    shared: &Shared<'_, 'ctx>,
+    builder: &inkwell::builder::Builder<'ctx>,
+    function: FunctionValue<'ctx>,
+    default: BasicValueEnum<'ctx>,
+) -> Result<(), CodegenError> {
+    if !raising_slots(shared) {
+        return Ok(());
+    }
+    let context = shared.context;
+    let byte = context.i8_type();
+    let pending = runtime_symbol(shared, "typy_rt_slot_pending", byte.fn_type(&[], false));
+    let pending = builder
+        .build_call(pending, &[], "")?
+        .try_as_basic_value()
+        .basic()
+        .ok_or_else(|| CodegenError("the runtime answers with a bool".to_owned()))?
         .into_int_value();
-    Ok(builder
-        .build_int_z_extend(result, shared.context.i8_type(), "")?
-        .into())
+    let pending = builder.build_int_compare(IntPredicate::NE, pending, byte.const_zero(), "")?;
+    let (stop, run) = (
+        context.append_basic_block(function, ""),
+        context.append_basic_block(function, ""),
+    );
+    builder.build_conditional_branch(pending, stop, run)?;
+    builder.position_at_end(stop);
+    builder.build_return(Some(&default))?;
+    builder.position_at_end(run);
+    Ok(())
+}
+
+/// Returns true when a method a slot of a class of the program calls may raise.
+fn raising_slots(shared: &Shared<'_, '_>) -> bool {
+    shared.tyir.classes.iter().any(|class| {
+        class
+            .equal
+            .map(|(method, _)| method)
+            .into_iter()
+            .chain(class.order.iter().flatten().copied())
+            .chain(class.hash)
+            .chain(class.truth)
+            .any(|method| shared.raising[method.0 as usize])
+    })
 }
 
 /// Returns a pointer parameter of a slot function.

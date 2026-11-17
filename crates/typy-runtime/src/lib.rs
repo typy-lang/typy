@@ -1,7 +1,8 @@
 //! The library linked into every TyPy program (ADR-0006): memory, integers, floats, strings, exceptions and output.
 //!
-//! The library has no standard library and no `alloc` crate; it calls only `malloc`, `realloc`, `free`, `open`, `read`,
-//! `write`, `close`, `fstat`, `__errno_location`, `abort`, `getrlimit` and `floor`, `fmod`, `pow` and `ldexp` from `libm`. Unit tests build it with the standard library, so its logic is tested like any other crate.
+//! The library has no standard library and no `alloc` crate. It allocates through the three hooks the program object
+//! defines (ADR-0043), and calls only `open`, `read`, `write`, `close`, `fstat`, `__errno_location`, `abort`, `getrlimit`
+//! and `floor`, `fmod`, `pow` and `ldexp` from `libm`. Unit tests build it with the standard library, so its logic is tested like any other crate.
 #![cfg_attr(not(test), no_std)]
 #![warn(clippy::undocumented_unsafe_blocks)]
 #![allow(
@@ -12,6 +13,7 @@
 mod allocator;
 mod byte_buffer;
 mod bytes;
+mod cdata;
 mod cell;
 mod codec;
 mod compare;
@@ -19,6 +21,7 @@ mod dict;
 mod entry;
 mod exception;
 mod float;
+mod foreign;
 mod format;
 mod hash;
 mod header;
@@ -28,21 +31,25 @@ mod io;
 mod iterator;
 mod libc;
 mod libm;
+mod library;
 mod list;
 mod math;
 mod message;
 mod module;
 #[cfg(test)]
 mod moved_tests;
+mod not_implemented;
 mod range;
 mod refcount;
 mod set;
 mod slice;
+mod slot;
 mod stack;
 mod string;
 mod sys;
 mod text_file;
 mod tuple;
+mod type_alias;
 mod type_object;
 mod version;
 mod word;

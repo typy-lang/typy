@@ -3,22 +3,30 @@
 
 mod abi;
 mod arithmetic;
+mod binding;
 mod bits;
 mod call;
+mod cdata;
 mod class;
 mod comparison;
 mod constant;
 mod descriptor;
 mod emit;
 mod error;
+mod foreign;
+mod frame;
 mod function;
+mod header;
+mod heap;
 mod layout;
+mod library;
 mod object;
 mod operation;
 mod optimization;
 mod optional;
 mod runtime;
 mod statics;
+mod structure_abi;
 mod target;
 mod terminator;
 mod tuple;
@@ -26,6 +34,8 @@ mod tuple;
 use typy_diagnostics::{Diagnostic, DiagnosticCode, Diagnostics, RuleId, SourceLookup};
 use typy_tyir::TyirModule;
 
+pub use binding::{python_binding, python_stub};
+pub use header::c_header;
 pub use layout::{
     BIG_INT_TYPE_ID, BYTES_TYPE_ID, EXCEPTION_TYPE_ID, IMMORTAL, INLINE_MAX, INLINE_MIN,
     IntEncoding, STR_TYPE_ID, StrKind, encode_int, encode_str,

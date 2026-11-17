@@ -3,6 +3,7 @@
 
 pub(crate) mod classes;
 mod handled;
+mod key;
 mod kind;
 mod part;
 mod report;
@@ -16,6 +17,7 @@ use crate::string::{StrObject, from_str};
 use crate::tuple::TupleType;
 use crate::type_object::TypeObject;
 
+pub(crate) use key::{key_error, key_error_text};
 pub use kind::ExceptionKind;
 #[cfg_attr(
     test,
@@ -25,7 +27,7 @@ pub use kind::ExceptionKind;
     )
 )]
 pub(crate) use report::report_uncaught;
-pub(crate) use text::{ExitCode, exit_code};
+pub(crate) use text::{ExitCode, exit_code, typy_rt_exception_str};
 use traceback::Traceback;
 
 /// An exception: a heap object with the exception type ID. A class's own attributes follow

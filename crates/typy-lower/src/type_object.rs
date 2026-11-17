@@ -27,8 +27,12 @@ fn reference(of: &TypeObjectOf) -> TypeObjectRef {
         TypeObjectOf::Object => RuntimeType::Object,
         TypeObjectOf::Type => RuntimeType::Type,
         TypeObjectOf::Range => RuntimeType::Range,
+        TypeObjectOf::Slice => RuntimeType::Slice,
         TypeObjectOf::Instance(class, _) => return TypeObjectRef::Class(class.0),
         TypeObjectOf::Exception(class) => return crate::exception::exception_class(class),
+        TypeObjectOf::Abstract { .. } => {
+            unreachable!("the checker tests `Iterable` and `Iterator` through concrete classes")
+        }
     })
 }
 
@@ -71,6 +75,9 @@ impl FunctionLowerer<'_> {
                 Type::Iterator(_)
                 | Type::Iterable(_)
                 | Type::Module(_)
+                | Type::TypeAlias
+                | Type::VersionInfo
+                | Type::NotImplemented
                 | Type::AnyModule
                 | Type::TextFile
                 | Type::BinaryFile(_)

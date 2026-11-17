@@ -592,6 +592,24 @@ const ENCODINGS: &[Encoding] = &[
             "'latin-1' codec can't encode character '\u{5c}u0100' in position 2: ordinal not in range(256)",
         ),
     ),
+    // `surrogateescape` writes the escapable characters of a run, and the error starts at the
+    // first it cannot.
+    (
+        &[0xdc80, 0xd800, 0x78],
+        0,
+        5,
+        Err(
+            "'utf-8' codec can't encode character '\u{5c}ud800' in position 1: surrogates not allowed",
+        ),
+    ),
+    (
+        &[0xdc80, 0xe9, 0x78],
+        1,
+        5,
+        Err(
+            "'ascii' codec can't encode character '\u{5c}xe9' in position 1: ordinal not in range(128)",
+        ),
+    ),
 ];
 
 /// The bytes, the codec, the handler, and the text or the message of the error.

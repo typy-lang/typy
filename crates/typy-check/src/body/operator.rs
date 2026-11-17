@@ -187,9 +187,13 @@ impl BodyChecker<'_> {
                 let singleton =
                     |ty: &Type| *ty == Type::Bool || *ty == Type::Optional(Box::new(Type::Bool));
                 let booleans = singleton(&l) && singleton(&r);
+                // A method's result may be `NotImplemented`, which `is` finds (CLS-21).
+                let giving_way = (l == Type::NotImplemented && r.may_give_way())
+                    || (r == Type::NotImplemented && l.may_give_way());
                 if l != Type::NoneType
                     && r != Type::NoneType
                     && !booleans
+                    && !giving_way
                     && !(instance(&l) && instance(&r))
                 {
                     self.diagnostics.push(
@@ -342,10 +346,14 @@ fn has_identity(ty: &Type) -> bool {
                 | Type::Iterator(_)
                 | Type::Traceback
                 | Type::Module(_)
+                | Type::TypeAlias
+                | Type::VersionInfo
+                | Type::NotImplemented
                 | Type::AnyModule
                 | Type::TextFile
                 | Type::BinaryFile(_)
                 | Type::DescriptorFile(_)
+                | Type::CData(_)
                 | Type::TypeObject(_)
         ),
     }

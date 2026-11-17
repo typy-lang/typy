@@ -402,7 +402,13 @@ pub(crate) unsafe fn encode(
                     Handler::SurrogateEscape if (0xdc80..=0xdcff).contains(&bad) => {
                         out.push(bad - 0xdc00);
                     }
-                    Handler::SurrogateEscape | Handler::Strict => {
+                    // The error starts at the first character the handler cannot escape and
+                    // ends with the run, as CPython's encoders report it.
+                    Handler::SurrogateEscape => {
+                        out.discard();
+                        return Err(encode_error(codec, text, index, at, reason));
+                    }
+                    Handler::Strict => {
                         out.discard();
                         return Err(encode_error(codec, text, start, at, reason));
                     }

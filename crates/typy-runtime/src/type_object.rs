@@ -268,6 +268,35 @@ pub unsafe extern "C" fn typy_rt_object_type(object: *const ObjectHeader) -> *co
     }
 }
 
+/// Returns whether the header of the heap object at `object` holds the type ID `id`, an `int`
+/// word: the kind of the runtime's own objects that have no type object to test against, such
+/// as an iterator or a file (TYP-14).
+///
+/// # Safety
+///
+/// `object` points to a live object with a valid header.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn typy_rt_object_has_type_id(object: *const ObjectHeader, id: i64) -> bool {
+    // SAFETY: the caller's guarantee.
+    i64::from(unsafe { (*object).type_id }) == crate::word::inline_value(id)
+}
+
+/// Returns `left == right` for two objects of any types, as a union of objects compares them:
+/// the `equal` slot of the class that decides, the left one first, or their identity
+/// (GEN-10, ADR-0041).
+///
+/// # Safety
+///
+/// Each points to a live object with a valid header.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn typy_rt_objects_equal(
+    left: *mut ObjectHeader,
+    right: *mut ObjectHeader,
+) -> bool {
+    // SAFETY: the caller's guarantee.
+    unsafe { crate::list::objects_equal(left, right) }
+}
+
 /// Returns whether the heap object at `object` is an instance of `class`: its type is
 /// `class` or derives from it, as `isinstance` tests (CLS-09).
 ///
@@ -290,7 +319,7 @@ pub unsafe extern "C" fn typy_rt_is_instance(
 /// `object` points to a live object with a valid header.
 #[allow(
     clippy::cast_ptr_alignment,
-    reason = "every object comes from malloc, aligned for every type, and starts with its header"
+    reason = "every object comes from malloc, a frame block or a static, aligned for every type, and starts with its header"
 )]
 pub(crate) unsafe fn type_of(object: *const ObjectHeader) -> &'static TypeObject {
     // SAFETY: the caller passes a live object; the type ID says which it is.
@@ -315,7 +344,12 @@ pub(crate) unsafe fn type_of(object: *const ObjectHeader) -> &'static TypeObject
             TRACEBACK_TYPE_ID => &TRACEBACK_TYPE,
             RANGE_TYPE_ID => &crate::range::RANGE,
             MODULE_TYPE_ID => &crate::module::MODULE,
+            crate::header::TYPE_ALIAS_TYPE_ID => &crate::type_alias::TYPE_ALIAS,
+            crate::header::VERSION_INFO_TYPE_ID => &crate::sys::VERSION_INFO_TYPE,
+            crate::header::NOT_IMPLEMENTED_TYPE_ID => &crate::not_implemented::NOT_IMPLEMENTED_TYPE,
+            crate::header::SLICE_TYPE_ID => &crate::slice::object::SLICE,
             crate::header::TEXT_FILE_TYPE_ID => &crate::text_file::TEXT_FILE,
+            crate::header::CDATA_TYPE_ID => &crate::cdata::CDATA,
             _ => crate::libc::abort_with(b"typy runtime: an object has an unknown type\n"),
         }
     }

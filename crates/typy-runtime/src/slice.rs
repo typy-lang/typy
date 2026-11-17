@@ -1,6 +1,8 @@
 //! Slice positions, worked out as CPython's `PySlice_Unpack` and `PySlice_AdjustIndices` do,
 //! for every sequence that can be sliced (DAT-12).
 
+pub(crate) mod object;
+
 use crate::exception::{ExceptionKind, ExceptionObject, raise};
 use crate::word::{inline_value, is_inline};
 
@@ -54,7 +56,8 @@ pub(crate) fn clamped(word: i64) -> i64 {
 
 /// Returns the positions `[start:stop:stride]` selects in a sequence of `length` items. Each bound
 /// is an `int` word, given when its bit of `present`, an `int` word of `START`, `STOP` and
-/// `STEP`, is set; a step of zero raises `ValueError`.
+/// `STEP`, is set and the word is not 0, which no `int` is and which stands for `None`; a step
+/// of zero raises `ValueError`.
 pub(crate) fn select(
     start: i64,
     stop: i64,
@@ -62,7 +65,11 @@ pub(crate) fn select(
     present: i64,
     length: usize,
 ) -> Result<Selection, *mut ExceptionObject> {
-    let present = inline_value(present);
+    let present = inline_value(present)
+        & [(START, start), (STOP, stop), (STEP, stride)]
+            .iter()
+            .filter(|(_, word)| *word != 0)
+            .fold(0, |bits, (bit, _)| bits | bit);
     let stride = if present & STEP == 0 {
         1
     } else {

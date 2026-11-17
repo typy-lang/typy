@@ -670,6 +670,39 @@ __typy_main:
 	.size	__typy_main, .Lfunc_end3-__typy_main
 	.cfi_endproc
 
+	.hidden	typy_rt_heap_allocate
+	.globl	typy_rt_heap_allocate
+	.prefalign	4, .Lfunc_end4, nop
+	.type	typy_rt_heap_allocate,@function
+typy_rt_heap_allocate:
+	.cfi_startproc
+	jmp	malloc@PLT
+.Lfunc_end4:
+	.size	typy_rt_heap_allocate, .Lfunc_end4-typy_rt_heap_allocate
+	.cfi_endproc
+
+	.hidden	typy_rt_heap_reallocate
+	.globl	typy_rt_heap_reallocate
+	.prefalign	4, .Lfunc_end5, nop
+	.type	typy_rt_heap_reallocate,@function
+typy_rt_heap_reallocate:
+	.cfi_startproc
+	jmp	realloc@PLT
+.Lfunc_end5:
+	.size	typy_rt_heap_reallocate, .Lfunc_end5-typy_rt_heap_reallocate
+	.cfi_endproc
+
+	.hidden	typy_rt_heap_free
+	.globl	typy_rt_heap_free
+	.prefalign	4, .Lfunc_end6, nop
+	.type	typy_rt_heap_free,@function
+typy_rt_heap_free:
+	.cfi_startproc
+	jmp	free@PLT
+.Lfunc_end6:
+	.size	typy_rt_heap_free, .Lfunc_end6-typy_rt_heap_free
+	.cfi_endproc
+
 	.type	typy.global.0,@object
 	.local	typy.global.0
 	.comm	typy.global.0,8,8
@@ -691,7 +724,7 @@ __typy_main:
 	.size	.Ltypy.cstr.1, 13
 
 	.type	.Ltypy.str.0,@object
-	.section	.rodata.cst32,"aM",@progbits,32
+	.section	.rodata,"a",@progbits
 	.p2align	4, 0x0
 .Ltypy.str.0:
 	.long	4294967295
@@ -699,11 +732,11 @@ __typy_main:
 	.quad	8
 	.long	1
 	.long	0
-	.ascii	"negative"
-	.size	.Ltypy.str.0, 32
+	.asciz	"negative"
+	.zero	7
+	.size	.Ltypy.str.0, 40
 
 	.type	.Ltypy.str.1,@object
-	.section	.rodata,"a",@progbits
 	.p2align	4, 0x0
 .Ltypy.str.1:
 	.long	4294967295
@@ -711,8 +744,8 @@ __typy_main:
 	.quad	9
 	.long	1
 	.long	0
-	.ascii	"positive "
-	.zero	7
+	.asciz	"positive "
+	.zero	6
 	.size	.Ltypy.str.1, 40
 
 	.type	.Ltypy.cstr.2,@object
@@ -730,8 +763,8 @@ __typy_main:
 	.quad	4
 	.long	1
 	.long	0
-	.ascii	"zero"
-	.zero	4
+	.asciz	"zero"
+	.zero	3
 	.size	.Ltypy.str.2, 32
 
 	.type	.Ltypy.str.3,@object
@@ -742,8 +775,8 @@ __typy_main:
 	.quad	5
 	.long	1
 	.long	0
-	.ascii	"small"
-	.zero	3
+	.asciz	"small"
+	.zero	2
 	.size	.Ltypy.str.3, 32
 
 	.type	.Ltypy.str.4,@object
@@ -754,8 +787,8 @@ __typy_main:
 	.quad	1
 	.long	1
 	.long	0
-	.byte	32
-	.zero	7
+	.asciz	" "
+	.zero	6
 	.size	.Ltypy.str.4, 32
 
 	.type	.Ltypy.cstr.3,@object
@@ -773,8 +806,8 @@ __typy_main:
 	.quad	1
 	.long	1
 	.long	0
-	.byte	10
-	.zero	7
+	.asciz	"\n"
+	.zero	6
 	.size	.Ltypy.str.5, 32
 
 	.type	.Ltypy.cstr.4,@object
@@ -792,8 +825,8 @@ __typy_main:
 	.quad	2
 	.long	1
 	.long	0
-	.ascii	": "
-	.zero	6
+	.asciz	": "
+	.zero	5
 	.size	.Ltypy.str.6, 32
 
 	.section	".note.GNU-stack","",@progbits

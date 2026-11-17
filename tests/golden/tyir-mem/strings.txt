@@ -22,22 +22,22 @@ fn __typy_main() -> unit raises {  # <module>
   slot s1 $limit: int
   slot s2 $stride: int
 b0():
-  v112 = const int 0
-  store s0, v112
-  v113 = const int 0
-  store s1, v113
-  v114 = const int 0
-  store s2, v114
-  v115 = const int 0
-  store_global g8, v115
-  v116 = const int 0
-  store_global g0, v116
-  v117 = const str s7
-  store_global g2, v117
-  v118 = const str s7
-  store_global g4, v118
-  v119 = const int 0
-  store_global g6, v119
+  v144 = const int 0
+  store s0, v144
+  v145 = const int 0
+  store s1, v145
+  v146 = const int 0
+  store s2, v146
+  v147 = const int 0
+  store_global g8, v147
+  v148 = const int 0
+  store_global g0, v148
+  v149 = const str s7
+  store_global g2, v149
+  v150 = const str s7
+  store_global g4, v150
+  v151 = const int 0
+  store_global g6, v151
   jump b1()
 b1():
   v0 = const str s0
@@ -161,110 +161,187 @@ b16(v47: str):
   v58 = call rt.str_length(v57)
   v59 = const str s3
   v60 = const str s4
-  call rt.write_stdout(v54)
-  v61 = const unit
-  call rt.write_stdout(v60)
-  v62 = const unit
-  call rt.write_stdout(v56)
-  v63 = const unit
-  call rt.write_stdout(v60)
-  v64 = const unit
-  invoke rt.int_to_str(v58) to b17 unwind b18
-b17(v65: str):
-  call rt.write_stdout(v65)
-  v70 = const unit
+  invoke rt.write_stdout_checked(v54) to b17 unwind b18
+b17(v61: unit):
+  invoke rt.write_stdout_checked(v60) to b19 unwind b20
+b18(v62: exception):
+  dec v56
+  dec v58
+  v63 = load s0
+  dec v63
+  v64 = load s1
+  dec v64
+  v65 = load s2
   dec v65
-  call rt.write_stdout(v59)
-  v71 = const unit
-  dec v58
-  dec v56
-  v72 = const unit
-  v75 = load_global g4
-  v76 = const int 1
-  v77 = int.neg v76
-  invoke rt.str_index(v75, v77) to b21 unwind b22
-b18(v66: exception):
+  return_error v62
+b19(v66: unit):
+  invoke rt.write_stdout_checked(v56) to b21 unwind b22
+b20(v67: exception):
   dec v56
   dec v58
-  v67 = load s0
-  dec v67
-  v68 = load s1
+  v68 = load s0
   dec v68
-  v69 = load s2
+  v69 = load s1
   dec v69
-  return_error v66
-b19(v73: bool):
-  v100 = const str s4
-  v101 = const str s5
-  v102 = const str s6
-  branch v73, b30, b31
-b20(v74: bool):
-  branch v74, b26, b25
-b21(v78: str):
-  dec v77
-  invoke rt.ord(v78) to b23 unwind b24
-b22(v79: exception):
-  dec v77
-  v80 = load s0
+  v70 = load s2
+  dec v70
+  return_error v67
+b21(v71: unit):
+  invoke rt.write_stdout_checked(v60) to b23 unwind b24
+b22(v72: exception):
+  dec v56
+  dec v58
+  v73 = load s0
+  dec v73
+  v74 = load s1
+  dec v74
+  v75 = load s2
+  dec v75
+  return_error v72
+b23(v76: unit):
+  invoke rt.int_to_str(v58) to b25 unwind b26
+b24(v77: exception):
+  dec v56
+  dec v58
+  v78 = load s0
+  dec v78
+  v79 = load s1
+  dec v79
+  v80 = load s2
   dec v80
-  v81 = load s1
-  dec v81
-  v82 = load s2
-  dec v82
-  return_error v79
-b23(v83: int):
-  dec v78
-  v88 = const int 233
-  v89 = cmp.int.eq v83, v88
+  return_error v77
+b25(v81: str):
+  invoke rt.write_stdout_checked(v81) to b27 unwind b28
+b26(v82: exception):
+  dec v56
+  dec v58
+  v83 = load s0
   dec v83
-  jump b20(v89)
-b24(v84: exception):
-  dec v78
-  v85 = load s0
+  v84 = load s1
+  dec v84
+  v85 = load s2
   dec v85
-  v86 = load s1
-  dec v86
-  v87 = load s2
-  dec v87
-  return_error v84
-b25():
-  jump b19(v74)
-b26():
-  v91 = load_global g6
-  v92 = const int 2
-  invoke rt.int_modulo(v91, v92) to b28 unwind b29
-b27(v90: bool):
-  jump b19(v90)
-b28(v93: int):
-  v98 = const int 0
-  v99 = cmp.int.eq v93, v98
+  return_error v82
+b27(v86: unit):
+  dec v81
+  invoke rt.write_stdout_checked(v59) to b29 unwind b30
+b28(v87: exception):
+  dec v56
+  dec v58
+  dec v81
+  v88 = load s0
+  dec v88
+  v89 = load s1
+  dec v89
+  v90 = load s2
+  dec v90
+  return_error v87
+b29(v91: unit):
+  dec v58
+  dec v56
+  v96 = const unit
+  v99 = load_global g4
+  v100 = const int 1
+  v101 = int.neg v100
+  invoke rt.str_index(v99, v101) to b33 unwind b34
+b30(v92: exception):
+  dec v56
+  dec v58
+  v93 = load s0
   dec v93
-  jump b27(v99)
-b29(v94: exception):
-  v95 = load s0
+  v94 = load s1
+  dec v94
+  v95 = load s2
   dec v95
-  v96 = load s1
-  dec v96
-  v97 = load s2
-  dec v97
-  return_error v94
-b30():
-  jump b32(v101)
-b31():
-  jump b32(v102)
-b32(v103: str):
-  call rt.write_stdout(v103)
-  v104 = const unit
-  v105 = const str s3
-  call rt.write_stdout(v105)
-  v106 = const unit
-  v107 = const unit
-  v108 = const unit
+  return_error v92
+b31(v97: bool):
+  v124 = const str s4
+  v125 = const str s5
+  v126 = const str s6
+  branch v97, b42, b43
+b32(v98: bool):
+  branch v98, b38, b37
+b33(v102: str):
+  dec v101
+  invoke rt.ord(v102) to b35 unwind b36
+b34(v103: exception):
+  dec v101
+  v104 = load s0
+  dec v104
+  v105 = load s1
+  dec v105
+  v106 = load s2
+  dec v106
+  return_error v103
+b35(v107: int):
+  dec v102
+  v112 = const int 233
+  v113 = cmp.int.eq v107, v112
+  dec v107
+  jump b32(v113)
+b36(v108: exception):
+  dec v102
   v109 = load s0
   dec v109
   v110 = load s1
   dec v110
   v111 = load s2
   dec v111
-  return v108
+  return_error v108
+b37():
+  jump b31(v98)
+b38():
+  v115 = load_global g6
+  v116 = const int 2
+  invoke rt.int_modulo(v115, v116) to b40 unwind b41
+b39(v114: bool):
+  jump b31(v114)
+b40(v117: int):
+  v122 = const int 0
+  v123 = cmp.int.eq v117, v122
+  dec v117
+  jump b39(v123)
+b41(v118: exception):
+  v119 = load s0
+  dec v119
+  v120 = load s1
+  dec v120
+  v121 = load s2
+  dec v121
+  return_error v118
+b42():
+  jump b44(v125)
+b43():
+  jump b44(v126)
+b44(v127: str):
+  invoke rt.write_stdout_checked(v127) to b45 unwind b46
+b45(v128: unit):
+  v133 = const str s3
+  invoke rt.write_stdout_checked(v133) to b47 unwind b48
+b46(v129: exception):
+  v130 = load s0
+  dec v130
+  v131 = load s1
+  dec v131
+  v132 = load s2
+  dec v132
+  return_error v129
+b47(v134: unit):
+  v139 = const unit
+  v140 = const unit
+  v141 = load s0
+  dec v141
+  v142 = load s1
+  dec v142
+  v143 = load s2
+  dec v143
+  return v140
+b48(v135: exception):
+  v136 = load s0
+  dec v136
+  v137 = load s1
+  dec v137
+  v138 = load s2
+  dec v138
+  return_error v135
 }

@@ -74,6 +74,15 @@ impl FunctionLowerer<'_> {
             AssignTarget::Slice { .. } => {
                 unreachable!("the checker refuses an augmented assignment to a slice")
             }
+            AssignTarget::Converted { .. } => {
+                unreachable!("an augmented assignment computes the item's own type")
+            }
+            AssignTarget::Property { .. } => {
+                unreachable!("the checker gives an augmented property to its setter")
+            }
+            AssignTarget::CData { .. } => {
+                unreachable!("the checker writes a `ctypes` value back as an assignment")
+            }
         }
     }
 

@@ -268,11 +268,16 @@ impl FunctionLowerer<'_> {
 
     /// Returns whether the object `value` holds is of `member`, as its class says.
     fn is_member(&mut self, value: Lowered, member: &Type, span: Span) -> ValueId {
-        let class = typy_check::member_class(member).unwrap_or(typy_check::TypeObjectOf::Object);
-        let object = self.bits(Self::borrowed(value.value, value.ty), span);
-        let class = self.type_object(&class, span).value;
-        self.call_runtime(RuntimeFunction::IsInstance, vec![object, class], span)
-            .value
+        // `NotImplemented` is the one object of its type (CLS-21).
+        if *member == Type::NotImplemented {
+            let found = self.call_runtime(RuntimeFunction::NotImplemented, Vec::new(), span);
+            let found = self.borrowed_result(found);
+            return self.identical(value, found, span);
+        }
+        let test = typy_check::member_test(member).unwrap_or(typy_check::MemberTest::Class(
+            typy_check::TypeObjectOf::Object,
+        ));
+        self.member_found(value, &test, span)
     }
 
     /// Returns the object of a union of objects as a value of `ty`, borrowed.
@@ -318,7 +323,7 @@ impl FunctionLowerer<'_> {
     }
 
     /// Returns true when values of `ty` are tagged unions, or optional ones.
-    fn involves_tag(&self, ty: TyirType) -> bool {
+    pub(crate) fn involves_tag(&self, ty: TyirType) -> bool {
         match ty {
             TyirType::Optional(typy_tyir::OptionalBase::Tuple(pair)) => self.is_tagged(
                 self.tuple_types
@@ -330,7 +335,7 @@ impl FunctionLowerer<'_> {
 
     /// Converts `value`, of the checked type `source`, to `target`, held as `ty`; the result
     /// takes over the value's reference.
-    fn union_converted(
+    pub(crate) fn union_converted(
         &mut self,
         value: Lowered,
         source: &Type,

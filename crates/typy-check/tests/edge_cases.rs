@@ -43,7 +43,6 @@ fn refused_forms_give_their_codes() {
             "E0411",
         ),
         ("print(open('x', opener=len))\n", "E0201"),
-        ("v: dict[int, int | str] = {}\na = v[1] = 2\n", "E0201"),
         (
             "class B:\n    def __init__(self, n: int) -> None:\n        self.n: int = n\n        self.n: str = 'a'\n",
             "E0402",
@@ -77,10 +76,13 @@ fn refused_forms_give_their_codes() {
         ("print(round())\n", "E0404"),
         ("s: set[Missing] = {1}\n", "E0205"),
         ("print(type(1, a=2))\n", "E0404"),
-        ("import typing\nx: typing.Optional[int] = None\n", "E0202"),
         ("class A:\n    pass\nx: A[int] = A()\n", "E0202"),
         ("x: Missing[int] = 1\n", "E0202"),
         ("def f(x: int = 1 + 1) -> int:\n    return x\n", "E0201"),
+        ("from typing import Optional\nx: Optional = None\n", "E0408"),
+        ("from typing import Union\ny: Union = 1\n", "E0408"),
+        // Only `typing` gives `Protocol`.
+        ("import math\nclass P(math.Protocol):\n    pass\n", "E0201"),
     ];
     for (source, code) in cases {
         let found = app(source);

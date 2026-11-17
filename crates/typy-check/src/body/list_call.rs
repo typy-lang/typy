@@ -208,6 +208,7 @@ impl BodyChecker<'_> {
                 value: self.codec_argument(&kind, errors, "the errors of `bytes`"),
             });
         }
+        self.program.record_codec(true, false);
         Self::typed(
             TypedExprKind::Method {
                 receiver: Box::new(text),

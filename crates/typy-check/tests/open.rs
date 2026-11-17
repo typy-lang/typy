@@ -416,20 +416,29 @@ fn an_os_error_of_two_to_five_arguments_of_known_types_is_accepted() {
 }
 
 #[test]
-fn an_os_error_of_other_arguments_is_planned() {
+fn an_os_error_of_arguments_of_any_type_is_accepted() {
     for source in [
         "raise OSError(2, 3)\n",
         "raise OSError(\"2\", \"x\")\n",
-        "raise OSError(2, \"x\", 3)\n",
         "raise OSError(2, \"x\", None, \"w\")\n",
         "raise OSError(1, \"a\", \"b\", None, \"c\", 6)\n",
         "class Missing(OSError):\n    pass\n\n\nraise Missing(1, 2)\n",
         "class Missing(OSError):\n    def __init__(self, path: str) -> None:\n        super().__init__(2, path)\n\n\nraise Missing(\"a\")\n",
         "class Missing(OSError):\n    def __init__(self, code: int, path: str) -> None:\n        self.path = path\n\n\nraise Missing(2, \"a\")\n",
     ] {
+        assert_eq!(diagnostics(source), Vec::new(), "{source}");
+    }
+}
+
+#[test]
+fn a_number_as_the_third_argument_of_os_error_is_planned() {
+    for source in [
+        "raise OSError(2, \"x\", 3)\n",
+        "raise BlockingIOError(11, \"x\", 2.5)\n",
+    ] {
         let (code, message) = one_error(source);
         assert_eq!(code, "E0201", "{source}");
-        assert!(message.ends_with("(EXC-16)"), "{source}: {message}");
+        assert!(message.ends_with("(EXC-18)"), "{source}: {message}");
     }
 }
 

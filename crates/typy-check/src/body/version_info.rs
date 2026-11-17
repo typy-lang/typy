@@ -1,6 +1,7 @@
-//! `sys.version_info` where a program reads it (LIB-13, ADR-0029): a comparison with a tuple of
-//! `int`s, an item at a constant index and its named fields give constants, those of CPython
-//! 3.15.0, whose behaviour TyPy follows. Any other use of it as a value is planned (LIB-16).
+//! `sys.version_info` (LIB-13, LIB-16, ADR-0029): a comparison of `sys.version_info` with a
+//! tuple of `int`s, an item at a constant index and its named fields give constants, those of
+//! CPython 3.15.0, whose behaviour TyPy follows. Held as a value, it is one object, which a
+//! tuple's operations read as the tuple of its items.
 
 use std::cmp::Ordering;
 
@@ -33,6 +34,129 @@ const ITEMS: [Item; 5] = [
 const FIELDS: [&str; 5] = ["major", "minor", "micro", "releaselevel", "serial"];
 
 impl BodyChecker<'_> {
+    /// Returns `value` as the tuple of its items when it is `sys.version_info`, which an index,
+    /// a slice, a comparison, `len`, a loop and unpacking read; any other value as it is
+    /// (LIB-16).
+    pub(super) fn version_tuple(value: TypedExpr) -> TypedExpr {
+        if value.ty != Type::VersionInfo {
+            return value;
+        }
+        let span = value.span;
+        let items: Vec<TypedExpr> = ITEMS
+            .iter()
+            .map(|item| {
+                let (constant, ty) = match item {
+                    Item::Int(number) => (TypedConstant::Int(number.to_string()), Type::Int),
+                    Item::Str(text) => (TypedConstant::Str((*text).to_owned()), Type::Str),
+                };
+                Self::typed(TypedExprKind::Constant(constant), ty, span)
+            })
+            .collect();
+        let ty = Type::Tuple(items.iter().map(|item| item.ty.clone()).collect());
+        let tuple = Self::typed(TypedExprKind::Tuple(items), ty, span);
+        Self::version_read(value, tuple)
+    }
+
+    /// Returns the read of `sys.version_info` held in `value` that gives `result`.
+    fn version_read(value: TypedExpr, result: TypedExpr) -> TypedExpr {
+        let (ty, span) = (result.ty.clone(), value.span);
+        Self::typed(
+            TypedExprKind::VersionRead {
+                value: Box::new(value),
+                result: Box::new(result),
+            },
+            ty,
+            span,
+        )
+    }
+
+    /// Returns `left <operator> right` made when compiling, when one operand is
+    /// `sys.version_info` held as a value and the other a tuple of `int` literals; the value
+    /// is still evaluated (LIB-16).
+    pub(super) fn version_comparison(
+        operator: CompareOperator,
+        left: &TypedExpr,
+        right: &TypedExpr,
+        span: typy_diagnostics::Span,
+    ) -> Option<TypedExpr> {
+        let held = |operand: &TypedExpr| match &operand.kind {
+            TypedExprKind::VersionRead { value, .. } => Some(value.as_ref().clone()),
+            _ => None,
+        };
+        let ints = |operand: &TypedExpr| match &operand.kind {
+            TypedExprKind::Tuple(items) => items
+                .iter()
+                .map(|item| match &item.kind {
+                    TypedExprKind::Constant(TypedConstant::Int(digits)) => digits.parse().ok(),
+                    _ => None,
+                })
+                .collect::<Option<Vec<i64>>>(),
+            _ => None,
+        };
+        let (value, truth) = if let (Some(value), Some(other)) = (held(left), ints(right)) {
+            (value, compare(operator, &other, false)?)
+        } else if let (Some(other), Some(value)) = (ints(left), held(right)) {
+            (value, compare(operator, &other, true)?)
+        } else {
+            return None;
+        };
+        let answer = Self::typed(
+            TypedExprKind::Constant(TypedConstant::Bool(truth)),
+            Type::Bool,
+            span,
+        );
+        Some(Self::version_read(value, answer))
+    }
+
+    /// Checks `value.attribute` of `sys.version_info` held as a value: one of its named
+    /// fields.
+    pub(super) fn version_info_attribute(
+        &mut self,
+        value: TypedExpr,
+        attribute: &typy_source::syntax::Identifier,
+        span: typy_diagnostics::Span,
+    ) -> TypedExpr {
+        let name = attribute.name.clone();
+        if let Some(field) = Self::version_info_field(value, &name, span) {
+            return field;
+        }
+        self.error(
+            typy_diagnostics::Diagnostic::new(
+                typy_diagnostics::DiagnosticCode::error(412),
+                attribute.span,
+                format!(
+                    "`sys.version_info` has no attribute `{name}`; it has `major`, `minor`, \
+                     `micro`, `releaselevel` and `serial`"
+                ),
+            )
+            .with_rule(typy_diagnostics::RuleId::LIB_16),
+            span,
+        )
+    }
+
+    /// Returns `value.attribute` of `sys.version_info` held as a value: one of its named
+    /// fields, or `None` for another attribute.
+    fn version_info_field(
+        value: TypedExpr,
+        attribute: &str,
+        span: typy_diagnostics::Span,
+    ) -> Option<TypedExpr> {
+        let index = FIELDS.iter().position(|field| *field == attribute)?;
+        let tuple = Self::version_tuple(value);
+        let ty = match ITEMS[index] {
+            Item::Int(_) => Type::Int,
+            Item::Str(_) => Type::Str,
+        };
+        Some(Self::typed(
+            TypedExprKind::TupleItem {
+                tuple: Box::new(tuple),
+                index,
+            },
+            ty,
+            span,
+        ))
+    }
+
     /// Returns the constant a use of `sys.version_info` gives, when the expression is one TyPy
     /// folds.
     pub(super) fn version_info_use(&mut self, expression: &Expr) -> Option<TypedExpr> {

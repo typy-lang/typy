@@ -69,9 +69,28 @@ pub enum Type {
     DescriptorFile(Option<BinaryKind>),
     /// `range` held as a value: a sequence of `int` (DAT-17).
     Range,
+    /// A `slice`, of bounds that are each an `int` or `None` (CLS-23).
+    Slice,
+    /// A `typing.TypeAliasType`, the value a `type` statement binds (SMT-12).
+    TypeAlias,
+    /// `sys.version_info` held as a value, whose items are those of CPython 3.15.0 (LIB-16).
+    VersionInfo,
+    /// The type of `NotImplemented`, which an operator or comparison method returns to give
+    /// way to the other operand's reflected method (CLS-21).
+    NotImplemented,
     /// The module object of the module of this qualified name, whose attributes are known
     /// when the program is checked (MOD-10, ADR-0015).
     Module(String),
+    /// A C library a `ctypes` declaration loads, by its index in the program's libraries; a
+    /// program calls its declared functions and uses it no other way (FFI-01, ADR-0047).
+    ForeignLibrary(u32),
+    /// A `ctypes` object: a scalar, a pointer or an array over a C buffer (FFI-03,
+    /// ADR-0048).
+    CData(crate::ctypes::CData),
+    /// A `ctypes` class as a value, such as `ctypes.c_int` or `ctypes.c_int * 3`, which a
+    /// program calls, multiplies or names in a declaration; it holds nothing when the program
+    /// runs, since its type says which class it is (FFI-03).
+    CDataClass(crate::ctypes::CData),
     /// A type object, of the type it stands for, or of any type when that is known only
     /// when the program runs, as for `type(x)` of an optional `x` (CLS-12).
     TypeObject(Option<Box<TypeObjectOf>>),
@@ -109,12 +128,33 @@ pub enum TypeObjectOf {
     Object,
     /// `type`, the type of every type object.
     Type,
+    /// `slice` (CLS-23).
+    Slice,
     /// `range`.
     Range,
     /// A class of the program, with its name.
     Instance(crate::typed::ClassId, String),
     /// An exception class.
     Exception(ExceptionClass),
+    /// `collections.abc.Iterable` or `Iterator`, as the class of an `isinstance` test, with
+    /// the classes of the program that define the methods it asks for (TYP-17).
+    Abstract {
+        /// Which abstract class.
+        kind: AbstractClass,
+        /// The classes that define the methods themselves, each with its bases; their
+        /// subclasses inherit the methods.
+        implementers: Vec<(crate::typed::ClassId, Vec<crate::typed::ClassId>)>,
+    },
+}
+
+/// An abstract class of `collections.abc` that `isinstance` tests by the methods a class
+/// defines, as CPython's `__subclasshook__` does (TYP-17).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum AbstractClass {
+    /// `Iterable`: a class with `__iter__`.
+    Iterable,
+    /// `Iterator`: a class with `__iter__` and `__next__`.
+    Iterator,
 }
 
 impl TypeObjectOf {
@@ -150,6 +190,7 @@ impl TypeObjectOf {
             },
             Type::TypeObject(_) => Self::Type,
             Type::Range => Self::Range,
+            Type::Slice => Self::Slice,
             // An exception's class may derive from its static class, so it is read from the
             // exception when the program runs.
             Type::Exception(_)
@@ -161,6 +202,12 @@ impl TypeObjectOf {
             | Type::DescriptorFile(_)
             | Type::Traceback
             | Type::Module(_)
+            | Type::ForeignLibrary(_)
+            | Type::CData(_)
+            | Type::CDataClass(_)
+            | Type::TypeAlias
+            | Type::VersionInfo
+            | Type::NotImplemented
             | Type::Optional(_)
             | Type::Union(_)
             | Type::Parameter(_)
@@ -186,6 +233,7 @@ impl TypeObjectOf {
             "object" => Self::Object,
             "type" => Self::Type,
             "range" => Self::Range,
+            "slice" => Self::Slice,
             _ => Self::Exception(ExceptionClass::Builtin(BuiltinException::named(name)?)),
         })
     }
@@ -208,8 +256,17 @@ impl TypeObjectOf {
             Self::Object => "object",
             Self::Type => "type",
             Self::Range => "range",
+            Self::Slice => "slice",
             Self::Instance(_, name) => name,
             Self::Exception(class) => class.name(),
+            Self::Abstract {
+                kind: AbstractClass::Iterable,
+                ..
+            } => "Iterable",
+            Self::Abstract {
+                kind: AbstractClass::Iterator,
+                ..
+            } => "Iterator",
         }
     }
 }
@@ -436,16 +493,23 @@ impl Type {
             (Self::Instance(left), Self::Instance(right)) => {
                 left.derives_from(right) || right.derives_from(left)
             }
-            // Views compare by the rules of `body/view_operator.rs` (DAT-16), an optional value
-            // is compared with `None` by `is`, and iterators by `is`. A union in a variable is
-            // compared member by member, and one computed in place is not compared (TYP-14).
+            // An optional value equals `None` only when it holds none, and any other value as
+            // the value it holds does (EXP-06).
+            (Self::Optional(left), Self::Optional(right)) => left.can_test_equality(right),
+            (Self::Optional(base), other) | (other, Self::Optional(base)) => {
+                *other == Self::NoneType || base.can_test_equality(other)
+            }
+            // Views compare by the rules of `body/view_operator.rs` (DAT-16), and iterators by
+            // `is`. A union in a variable is compared member by member, and one computed in
+            // place is not compared (TYP-14).
             (
                 Self::Union(_)
                 | Self::DictView(..)
-                | Self::Optional(_)
                 | Self::Iterator(_)
                 | Self::Iterable(_)
                 | Self::Module(_)
+                | Self::TypeAlias
+                | Self::VersionInfo
                 | Self::AnyModule
                 | Self::Traceback,
                 _,
@@ -454,10 +518,11 @@ impl Type {
                 _,
                 Self::Union(_)
                 | Self::DictView(..)
-                | Self::Optional(_)
                 | Self::Iterator(_)
                 | Self::Iterable(_)
                 | Self::Module(_)
+                | Self::TypeAlias
+                | Self::VersionInfo
                 | Self::AnyModule
                 | Self::Traceback,
             ) => false,
@@ -512,9 +577,14 @@ impl Type {
                 | Self::Iterator(_)
                 | Self::Iterable(_)
                 | Self::Module(_)
+                | Self::TypeAlias
+                | Self::VersionInfo
                 | Self::AnyModule
                 | Self::Traceback
                 | Self::Range
+                | Self::Slice
+                | Self::CData(_)
+                | Self::CDataClass(_)
                 | Self::TypeObject(_),
                 _,
             )
@@ -531,9 +601,14 @@ impl Type {
                 | Self::Iterator(_)
                 | Self::Iterable(_)
                 | Self::Module(_)
+                | Self::TypeAlias
+                | Self::VersionInfo
                 | Self::AnyModule
                 | Self::Traceback
                 | Self::Range
+                | Self::Slice
+                | Self::CData(_)
+                | Self::CDataClass(_)
                 | Self::TypeObject(_),
             ) => false,
             _ => self == other || (self.is_numeric() && other.is_numeric()),
@@ -564,11 +639,14 @@ impl Type {
     pub fn is_hashable(&self) -> bool {
         match self {
             // An iterable may be a list, which has no hash.
+            // A `ctypes` object has no hash in CPython, and a class holds no object to hash.
             Self::List(_)
             | Self::Set(_)
             | Self::Dict(..)
             | Self::DictView(..)
-            | Self::Iterable(_) => false,
+            | Self::Iterable(_)
+            | Self::CData(_)
+            | Self::CDataClass(_) => false,
             Self::Tuple(items) => items.iter().all(Self::is_hashable),
             Self::TupleOf(item) | Self::Optional(item) => item.is_hashable(),
             // A class that defines `__eq__` and not `__hash__` has no hash (CLS-07).
@@ -586,8 +664,9 @@ impl Type {
     /// Returns true when a value of this type may be used in a truth test (EXP-10).
     #[must_use]
     pub fn is_truth_testable(&self) -> bool {
-        // An iterable's truth depends on which collection it is, which it does not say.
-        !matches!(self, Self::Iterable(_))
+        // An iterable's truth depends on which collection it is, which it does not say, and a
+        // `ctypes` class holds nothing to test.
+        !matches!(self, Self::Iterable(_) | Self::CDataClass(_))
     }
 
     /// Returns the type of the items a loop over a value of this type reads, when it is one
@@ -745,6 +824,9 @@ impl fmt::Display for Type {
             Self::Iterator(item) => write!(formatter, "Iterator[{item}]"),
             Self::Iterable(item) => write!(formatter, "Iterable[{item}]"),
             Self::AnyModule => formatter.write_str("ModuleType"),
+            Self::TypeAlias => formatter.write_str("TypeAliasType"),
+            Self::VersionInfo => formatter.write_str("sys.version_info"),
+            Self::NotImplemented => formatter.write_str("NotImplementedType"),
             Self::TextFile => formatter.write_str("TextIOWrapper"),
             Self::BinaryFile(kind) => formatter.write_str(kind.class_name()),
             Self::DescriptorFile(kind) => write!(
@@ -754,7 +836,11 @@ impl fmt::Display for Type {
             ),
             Self::Traceback => formatter.write_str("TracebackType"),
             Self::Range => formatter.write_str("range"),
+            Self::Slice => formatter.write_str("slice"),
             Self::Module(name) => write!(formatter, "module `{name}`"),
+            Self::ForeignLibrary(_) => formatter.write_str("CDLL"),
+            Self::CData(data) => formatter.write_str(&data.class_name()),
+            Self::CDataClass(data) => write!(formatter, "type[{}]", data.class_name()),
             Self::TypeObject(Some(of)) => write!(formatter, "type[{}]", of.name()),
             Self::TypeObject(None) => formatter.write_str("type"),
             Self::Error => formatter.write_str("<error>"),
@@ -963,7 +1049,11 @@ mod tests {
         assert!(Type::Optional(Box::new(Type::Error)).has_error());
         assert!(int.is_hashable());
         assert!(!int.can_order(&int));
-        assert!(!int.can_test_equality(&int));
-        assert!(!Type::Int.can_test_equality(&int));
+        // `None` equals only `None`, and two values compare as their base does (EXP-06).
+        assert!(int.can_test_equality(&int));
+        assert!(Type::Int.can_test_equality(&int));
+        assert!(int.can_test_equality(&Type::NoneType));
+        assert!(!int.can_test_equality(&Type::Str));
+        assert!(!int.can_test_equality(&optional(Type::Str)));
     }
 }

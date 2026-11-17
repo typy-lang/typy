@@ -6,7 +6,9 @@ mod escape;
 mod expression;
 mod limits;
 mod operator;
+mod pattern;
 mod statement;
+mod surrogate;
 
 use ruff_python_ast::{self as ast, PythonVersion};
 use ruff_python_parser::{Mode, ParseOptions, parse_unchecked};
@@ -68,10 +70,7 @@ pub fn parse_with_warnings(
     if !errors.is_empty() {
         return Err(errors);
     }
-    let (warnings, errors) = converter.escape_diagnostics(parsed.tokens());
-    if !errors.is_empty() {
-        return Err(errors);
-    }
+    let warnings = converter.escape_warnings(parsed.tokens());
     let body = match parsed.into_syntax() {
         ast::Mod::Module(module) => converter.statements(&module.body),
         ast::Mod::Expression(_) => unreachable!("Mode::Module always produces a module"),

@@ -176,14 +176,16 @@ pub enum RuntimeFunction {
     InstanceText,
     TypeText,
     TypeName,
+    TypeAliasName,
+    TypeAliasModule,
     ExceptionNew,
     ExceptionPartText,
     ExceptionArgsLength,
     ExceptionPartTruth,
     ExceptionPartEqual,
+    ExceptionArgumentsMatch,
+    ExceptionArgumentsAddress,
     OsErrorNew,
-    OsErrorErrno,
-    OsErrorText,
     PercentDynamic,
     ExceptionSetCause,
     ExceptionThrow,
@@ -228,6 +230,30 @@ pub enum RuntimeFunction {
     SysArgv,
     SysStdout,
     SysStdin,
+    SysVersionInfo,
+    NotImplemented,
+    /// Raises the `TypeError` of an arithmetic operator whose methods all gave way (CLS-21).
+    OperandsUnsupported,
+    /// Raises the `TypeError` of an ordering whose methods all gave way (CLS-21).
+    OrderingUnsupported,
+    /// Raises the exception a method a type object's slot called raised (CLS-22).
+    SlotRaised,
+    /// `slice(start, stop, step)`, each an `int` word or 0 for `None` (CLS-23).
+    SliceNew,
+    /// `start`, `stop` or `step` of a slice, by its position (CLS-23).
+    SliceBound,
+    /// One value of `slice.indices(length)`, by its position (CLS-23).
+    SliceIndex,
+    /// Whether two slices are equal (CLS-23).
+    SliceEqual,
+    /// Whether an object's header holds a type ID (TYP-14).
+    ObjectHasTypeId,
+    /// Whether two objects of any types are equal, through the `equal` slot of the class
+    /// that decides, as a union of objects compares them (GEN-10).
+    ObjectsEqual,
+    /// An `int` as a `double` for a `c_float` or `c_double` argument at the position the
+    /// second argument gives, or `ctypes.ArgumentError` for one too large (FFI-03).
+    CtypesFloatArgument,
     SysGetRecursionLimit,
     SysSetRecursionLimit,
     SysStderr,
@@ -327,9 +353,50 @@ pub enum RuntimeFunction {
     MathDist,
     MathProdInt,
     MathProdFloat,
+    MathProdMixed,
+    MathHasFloat,
+    HashValue,
     MathSumprodInt,
     MathSumprodFloat,
     Ascii,
+    /// `T()`: a new `ctypes` object of a class, every byte zero (FFI-03).
+    CdataNew,
+    /// The `value` of an integer scalar.
+    CdataGetInt,
+    /// Sets an integer scalar, wrapped to its width.
+    CdataSetInt,
+    /// The `value` of a `c_float` or `c_double`.
+    CdataGetFloat,
+    /// Sets a `c_float` or `c_double`.
+    CdataSetFloat,
+    /// The `value` of a `c_bool`.
+    CdataGetBool,
+    /// Sets a `c_bool`.
+    CdataSetBool,
+    /// The `value` of a `c_char_p`: `bytes`, or `None` for null.
+    CdataGetBytes,
+    /// Sets a `c_char_p`, which keeps the `bytes` alive.
+    CdataSetBytes,
+    /// The `value` of a `c_void_p`: an `int`, or `None` for null.
+    CdataGetAddress,
+    /// Sets a `c_void_p`.
+    CdataSetAddress,
+    /// `pointer(x)`: a new pointer of a class that keeps its target alive.
+    CdataPointer,
+    /// `p.contents`; `ValueError` for a null pointer.
+    CdataContents,
+    /// An object over an item of a pointer or an array; an array checks the index.
+    CdataItem,
+    /// `len` of an array.
+    CdataLength,
+    /// `ctypes.sizeof` of an object.
+    CdataSize,
+    /// An object over a structure's field, of a class, at an offset.
+    CdataField,
+    /// Copies an object's bytes into another of its class, which keeps the source alive.
+    CdataCopy,
+    /// Writes a pointer's address, or null for `None`, into a pointer field or item.
+    CdataSetPointer,
 }
 
 /// The parameter types, result type and raising behaviour of a runtime function.
@@ -355,12 +422,38 @@ const fn signature(
     }
 }
 
+/// Returns true when a value of `ty` may hold an object whose type object has slots a method
+/// of the program fills: anything but a scalar and the runtime's own text, type, exception and
+/// file objects.
+fn holds_items(ty: TyirType) -> bool {
+    use crate::types::{OptionalBase, TypeId};
+    const OWN: [TypeId; 12] = [
+        TypeId::STR,
+        TypeId::BYTES,
+        TypeId::EXCEPTION,
+        TypeId::TYPE,
+        TypeId::TRACEBACK,
+        TypeId::RANGE,
+        TypeId::MODULE,
+        TypeId::TEXT_FILE,
+        TypeId::TYPE_ALIAS,
+        TypeId::VERSION_INFO,
+        TypeId::NOT_IMPLEMENTED,
+        TypeId::CDATA,
+    ];
+    match ty {
+        TyirType::Bits | TyirType::Tuple(_) | TyirType::Optional(OptionalBase::Tuple(_)) => true,
+        TyirType::Object(id) | TyirType::Optional(OptionalBase::Object(id)) => !OWN.contains(&id),
+        _ => false,
+    }
+}
+
 const INT_INT: &[TyirType] = &[TyirType::Int, TyirType::Int];
 const FLOAT_FLOAT: &[TyirType] = &[TyirType::Float, TyirType::Float];
 
 impl RuntimeFunction {
     /// Every runtime function.
-    pub const ALL: [Self; 321] = [
+    pub const ALL: [Self; 357] = [
         Self::IntFloorDivide,
         Self::IntModulo,
         Self::IntPower,
@@ -528,14 +621,16 @@ impl RuntimeFunction {
         Self::InstanceText,
         Self::TypeText,
         Self::TypeName,
+        Self::TypeAliasName,
+        Self::TypeAliasModule,
         Self::ExceptionNew,
         Self::ExceptionPartText,
         Self::ExceptionArgsLength,
         Self::ExceptionPartTruth,
         Self::ExceptionPartEqual,
+        Self::ExceptionArgumentsMatch,
+        Self::ExceptionArgumentsAddress,
         Self::OsErrorNew,
-        Self::OsErrorErrno,
-        Self::OsErrorText,
         Self::PercentDynamic,
         Self::ExceptionSetCause,
         Self::ExceptionThrow,
@@ -580,6 +675,18 @@ impl RuntimeFunction {
         Self::SysArgv,
         Self::SysStdout,
         Self::SysStdin,
+        Self::SysVersionInfo,
+        Self::NotImplemented,
+        Self::OperandsUnsupported,
+        Self::OrderingUnsupported,
+        Self::SlotRaised,
+        Self::SliceNew,
+        Self::SliceBound,
+        Self::SliceIndex,
+        Self::SliceEqual,
+        Self::ObjectHasTypeId,
+        Self::ObjectsEqual,
+        Self::CtypesFloatArgument,
         Self::SysGetRecursionLimit,
         Self::SysSetRecursionLimit,
         Self::SysStderr,
@@ -679,10 +786,43 @@ impl RuntimeFunction {
         Self::MathDist,
         Self::MathProdInt,
         Self::MathProdFloat,
+        Self::MathProdMixed,
+        Self::MathHasFloat,
+        Self::HashValue,
         Self::MathSumprodInt,
         Self::MathSumprodFloat,
         Self::Ascii,
+        Self::CdataNew,
+        Self::CdataGetInt,
+        Self::CdataSetInt,
+        Self::CdataGetFloat,
+        Self::CdataSetFloat,
+        Self::CdataGetBool,
+        Self::CdataSetBool,
+        Self::CdataGetBytes,
+        Self::CdataSetBytes,
+        Self::CdataGetAddress,
+        Self::CdataSetAddress,
+        Self::CdataPointer,
+        Self::CdataContents,
+        Self::CdataItem,
+        Self::CdataLength,
+        Self::CdataSize,
+        Self::CdataField,
+        Self::CdataCopy,
+        Self::CdataSetPointer,
     ];
+
+    /// Returns true when the function may call a type object's `equal`, `order`, `hash` or
+    /// `truth` slot, which may run a method of the program that raises (CLS-22, ADR-0039): it
+    /// takes an item word, a tuple, a container, an iterator or an instance.
+    #[must_use]
+    pub fn may_call_slots(self) -> bool {
+        self.signature()
+            .parameters
+            .iter()
+            .any(|parameter| holds_items(*parameter))
+    }
 
     #[allow(
         clippy::too_many_lines,
@@ -704,6 +844,14 @@ impl RuntimeFunction {
         const TYPE: TyirType = TyirType::TYPE;
         const EXCEPTION: TyirType = TyirType::EXCEPTION;
         const ITERATOR: TyirType = TyirType::ITERATOR;
+        const CDATA: TyirType = TyirType::CDATA;
+        const OPTIONAL_BYTES: TyirType = TyirType::Optional(crate::types::OptionalBase::Object(
+            crate::types::TypeId::BYTES,
+        ));
+        const OPTIONAL_INT: TyirType = TyirType::Optional(crate::types::OptionalBase::Int);
+        const OPTIONAL_CDATA: TyirType = TyirType::Optional(crate::types::OptionalBase::Object(
+            crate::types::TypeId::CDATA,
+        ));
         match self {
             Self::IntFloorDivide
             | Self::IntModulo
@@ -741,9 +889,39 @@ impl RuntimeFunction {
             Self::StrLength => signature(&[STR], Int, false),
             Self::StrCompare => signature(&[STR, STR, Int], Bool, false),
             Self::StrRepr | Self::Ascii => signature(&[STR], STR, false),
+            Self::CdataNew => signature(&[Bits], CDATA, false),
+            Self::CdataGetInt | Self::CdataLength | Self::CdataSize => {
+                signature(&[CDATA], Int, false)
+            }
+            Self::CdataSetInt => signature(&[CDATA, Int], Unit, false),
+            Self::CdataGetFloat => signature(&[CDATA], Float, false),
+            Self::CdataSetFloat => signature(&[CDATA, Float], Unit, false),
+            Self::CdataGetBool => signature(&[CDATA], Bool, false),
+            Self::CdataSetBool => signature(&[CDATA, Bool], Unit, false),
+            Self::CdataGetBytes => signature(&[CDATA], OPTIONAL_BYTES, false),
+            Self::CdataSetBytes => signature(&[CDATA, OPTIONAL_BYTES], Unit, false),
+            Self::CdataGetAddress => signature(&[CDATA], OPTIONAL_INT, false),
+            Self::CdataSetAddress => signature(&[CDATA, OPTIONAL_INT], Unit, false),
+            Self::CdataPointer => signature(&[Bits, CDATA], CDATA, false),
+            Self::CdataField => signature(&[CDATA, Bits, Int], CDATA, false),
+            Self::CdataCopy => signature(&[CDATA, CDATA], Unit, false),
+            Self::CdataSetPointer => signature(&[CDATA, OPTIONAL_CDATA], Unit, false),
+            Self::CdataContents => signature(&[CDATA], CDATA, true),
+            Self::CdataItem => signature(&[CDATA, Int], CDATA, true),
             Self::Ord => signature(&[STR], Int, true),
             Self::WriteStdout => signature(&[STR], Unit, false),
-            Self::CheckStack => signature(&[], Unit, true),
+            Self::CheckStack | Self::SlotRaised => signature(&[], Unit, true),
+            Self::SliceNew => signature(&[Int, Int, Int], TyirType::SLICE, false),
+            Self::SliceBound => signature(
+                &[TyirType::SLICE, Int],
+                TyirType::Optional(crate::types::OptionalBase::Int),
+                false,
+            ),
+            Self::SliceIndex => signature(&[TyirType::SLICE, Int, Int], Int, true),
+            Self::SliceEqual => signature(&[TyirType::SLICE, TyirType::SLICE], Bool, false),
+            Self::ObjectHasTypeId => signature(&[Bits, Int], Bool, false),
+            Self::ObjectsEqual => signature(&[Bits, Bits], Bool, false),
+            Self::CtypesFloatArgument => signature(&[Int, Int], Float, true),
             Self::RangeCheckStep | Self::SysSetRecursionLimit => signature(&[Int], Unit, true),
             Self::NameError | Self::WriteStdoutChecked => signature(&[STR], Unit, true),
             Self::ModuleAttributeError | Self::ModuleImportError => {
@@ -775,7 +953,7 @@ impl RuntimeFunction {
             Self::ListSort => signature(&[LIST, Int], Unit, false),
             Self::ListSumInt | Self::MathProdInt => signature(&[LIST, Int], Int, false),
             Self::ListSumFloat => signature(&[LIST, Float], Float, false),
-            Self::ListAny | Self::ListAll => signature(&[LIST], Bool, false),
+            Self::ListAny | Self::ListAll | Self::MathHasFloat => signature(&[LIST], Bool, false),
             Self::ZipUnequal => signature(INT_INT, Unit, true),
             Self::FloatRoundDigits | Self::MathLdexp => signature(&[Float, Int], Float, true),
             Self::IntRoundDigits | Self::MathGcd | Self::MathLcm => signature(INT_INT, Int, false),
@@ -856,24 +1034,18 @@ impl RuntimeFunction {
             Self::RangeLast => signature(&[Int, Int, Int], Int, false),
             Self::InstanceText => signature(&[Bits], STR, false),
             Self::TypeText | Self::TypeName => signature(&[TYPE], STR, false),
+            Self::TypeAliasName | Self::TypeAliasModule => {
+                signature(&[TyirType::TYPE_ALIAS], STR, false)
+            }
             Self::ExceptionNew | Self::OsErrorNew => {
                 signature(&[TYPE, Bits, Bits], EXCEPTION, false)
             }
             Self::PercentDynamic => signature(&[STR, Bits, Bits, Int], STR, true),
-            Self::OsErrorErrno => signature(
-                &[EXCEPTION],
-                TyirType::Optional(crate::OptionalBase::Int),
-                false,
-            ),
-            Self::OsErrorText => signature(
-                &[EXCEPTION, Int],
-                TyirType::Optional(crate::OptionalBase::Object(crate::TypeId::STR)),
-                false,
-            ),
             Self::ExceptionPartText => signature(&[EXCEPTION, Int, Int], STR, true),
             Self::ExceptionArgsLength => signature(&[EXCEPTION], Int, false),
             Self::ExceptionPartTruth => signature(&[EXCEPTION, Int], Bool, false),
             Self::ExceptionPartEqual => signature(&[EXCEPTION, Int, Bits, Bits], Bool, false),
+            Self::ExceptionArgumentsMatch => signature(&[EXCEPTION, Bits, Int], Bool, false),
             Self::ExceptionSetCause => signature(&[EXCEPTION, Bits], Unit, false),
             Self::ExceptionThrow => signature(&[EXCEPTION], Unit, true),
             Self::ExceptionHandled => signature(&[], EXCEPTION, false),
@@ -882,7 +1054,9 @@ impl RuntimeFunction {
             Self::ExceptionMatches => signature(&[EXCEPTION, TYPE], Bool, false),
             // The exception handled before is null or borrowed, so it travels as bits and is
             // never counted.
-            Self::ExceptionEnter => signature(&[EXCEPTION], Bits, false),
+            Self::ExceptionEnter | Self::ExceptionArgumentsAddress => {
+                signature(&[EXCEPTION], Bits, false)
+            }
             Self::ExceptionLeave => signature(&[Bits], Unit, false),
             Self::ExceptionSetArguments => signature(&[EXCEPTION, Bits, Bits], Unit, false),
             Self::IteratorNew => signature(&[Bits, Int, Bits], ITERATOR, false),
@@ -916,6 +1090,11 @@ impl RuntimeFunction {
             Self::FormatOther | Self::PercentCharStr => signature(&[STR, STR, STR], STR, true),
             Self::PercentInt => signature(&[Int, STR, Int], STR, true),
             Self::SysArgv => signature(&[], LIST, false),
+            Self::SysVersionInfo => signature(&[], TyirType::VERSION_INFO, false),
+            Self::NotImplemented => signature(&[], TyirType::NOT_IMPLEMENTED, false),
+            Self::OperandsUnsupported | Self::OrderingUnsupported => {
+                signature(&[STR, TYPE, TYPE], Unit, true)
+            }
             Self::SysStdout | Self::SysStderr | Self::SysStdin => {
                 signature(&[], TyirType::TEXT_FILE, false)
             }
@@ -999,6 +1178,8 @@ impl RuntimeFunction {
             Self::MathFsum => signature(&[LIST], Float, true),
             Self::MathDist | Self::MathSumprodFloat => signature(&[LIST, LIST], Float, true),
             Self::MathProdFloat => signature(&[LIST, Float], Float, true),
+            Self::MathProdMixed => signature(&[LIST, Int], Float, true),
+            Self::HashValue => signature(&[Int, Bits, Bits], Int, false),
             Self::MathSumprodInt => signature(&[LIST, LIST], Int, true),
             Self::MathLogInt | Self::MathLog2Int | Self::MathLog10Int => {
                 signature(&[Int], Float, true)
@@ -1204,14 +1385,16 @@ impl RuntimeFunction {
             Self::InstanceText => "instance_text",
             Self::TypeText => "type_text",
             Self::TypeName => "type_name",
+            Self::TypeAliasName => "type_alias_name",
+            Self::TypeAliasModule => "type_alias_module",
             Self::ExceptionNew => "exception_new",
             Self::ExceptionPartText => "exception_part_text",
             Self::ExceptionArgsLength => "exception_args_length",
             Self::ExceptionPartTruth => "exception_part_truth",
             Self::ExceptionPartEqual => "exception_part_equal",
+            Self::ExceptionArgumentsMatch => "exception_arguments_match",
+            Self::ExceptionArgumentsAddress => "exception_arguments_address",
             Self::OsErrorNew => "os_error_new",
-            Self::OsErrorErrno => "os_error_errno",
-            Self::OsErrorText => "os_error_text",
             Self::PercentDynamic => "percent_dynamic",
             Self::ExceptionSetCause => "exception_set_cause",
             Self::ExceptionThrow => "exception_throw",
@@ -1256,6 +1439,18 @@ impl RuntimeFunction {
             Self::SysArgv => "sys_argv",
             Self::SysStdout => "sys_stdout",
             Self::SysStdin => "sys_stdin",
+            Self::SysVersionInfo => "sys_version_info",
+            Self::NotImplemented => "not_implemented",
+            Self::OperandsUnsupported => "operands_unsupported",
+            Self::OrderingUnsupported => "ordering_unsupported",
+            Self::SlotRaised => "slot_raised",
+            Self::SliceNew => "slice_new",
+            Self::SliceBound => "slice_bound",
+            Self::SliceIndex => "slice_index",
+            Self::SliceEqual => "slice_equal",
+            Self::ObjectHasTypeId => "object_has_type_id",
+            Self::ObjectsEqual => "objects_equal",
+            Self::CtypesFloatArgument => "ctypes_float_argument",
             Self::SysGetRecursionLimit => "sys_getrecursionlimit",
             Self::SysSetRecursionLimit => "sys_setrecursionlimit",
             Self::SysStderr => "sys_stderr",
@@ -1354,10 +1549,32 @@ impl RuntimeFunction {
             Self::MathDist => "math_dist",
             Self::MathProdInt => "math_prod_int",
             Self::MathProdFloat => "math_prod_float",
+            Self::MathProdMixed => "math_prod_mixed",
+            Self::MathHasFloat => "math_has_float",
+            Self::HashValue => "hash_value",
             Self::MathSumprodInt => "math_sumprod_int",
             Self::MathSumprodFloat => "math_sumprod_float",
             Self::MathLcm => "math_lcm",
             Self::Ascii => "ascii",
+            Self::CdataNew => "cdata_new",
+            Self::CdataGetInt => "cdata_get_int",
+            Self::CdataSetInt => "cdata_set_int",
+            Self::CdataGetFloat => "cdata_get_float",
+            Self::CdataSetFloat => "cdata_set_float",
+            Self::CdataGetBool => "cdata_get_bool",
+            Self::CdataSetBool => "cdata_set_bool",
+            Self::CdataGetBytes => "cdata_get_bytes",
+            Self::CdataSetBytes => "cdata_set_bytes",
+            Self::CdataGetAddress => "cdata_get_address",
+            Self::CdataSetAddress => "cdata_set_address",
+            Self::CdataPointer => "cdata_pointer",
+            Self::CdataContents => "cdata_contents",
+            Self::CdataItem => "cdata_item",
+            Self::CdataLength => "cdata_length",
+            Self::CdataSize => "cdata_size",
+            Self::CdataField => "cdata_field",
+            Self::CdataCopy => "cdata_copy",
+            Self::CdataSetPointer => "cdata_set_pointer",
         }
     }
 }

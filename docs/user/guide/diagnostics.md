@@ -13,6 +13,7 @@ TyPy reports every problem it finds in one run, each as a diagnostic.
 | `--error-format=json` writes each diagnostic as one JSON object per line | DIA-05 |
 | Warnings never fail a build unless `--deny-warnings` is given | DIA-07 |
 | A warning where CPython warns while compiling: W0101, W0301 | DIA-08 |
+| A warning for a `match` that leaves members of its subject's type unmatched: W0401 | CST-07 |
 | A code is never reused | DIA-06 |
 
 [Troubleshooting](../troubleshooting.md) explains every code.
@@ -21,8 +22,10 @@ TyPy reports every problem it finds in one run, each as a diagnostic.
 
 A warning reports a program TyPy accepts, with CPython's meaning, that is
 probably not what you meant. TyPy warns where CPython 3.12 to 3.15 give a
-`SyntaxWarning` while compiling (ADR-0017): an invalid escape sequence,
-W0101, and an assertion that is always true, W0301. This program builds,
+`SyntaxWarning` while compiling: an invalid escape sequence, W0101, and an
+assertion that is always true, W0301. It also warns, as type checkers do,
+about a `match` that leaves members of its subject's type unmatched,
+W0401 (ADR-0033). This program builds,
 runs and prints `\d`, with a warning that shows `"\\d"` as the fix:
 
 <!-- typy-expect: accepted -->

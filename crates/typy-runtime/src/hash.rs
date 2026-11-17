@@ -16,6 +16,23 @@ const INFINITY: i64 = 314_159;
 /// `hash(None)` in CPython 3.12 and later.
 pub(crate) const NONE: i64 = 4_238_894_112;
 
+/// Returns the hash of `item`, of the item kind whose code is the `int` word `kind` and, for a
+/// tuple, the descriptor at the address `tuple`, as an `int` word: what a set or a dict hashes
+/// it by, which the `__hash__` of a dataclass returns (CLS-16).
+///
+/// # Safety
+///
+/// `item` is a live item of that kind.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn typy_rt_hash_value(kind: i64, tuple: u64, item: u64) -> i64 {
+    let kind = u32::try_from(inline_value(kind)).unwrap_or(u32::MAX);
+    let tuple = core::ptr::with_exposed_provenance(usize::try_from(tuple).unwrap_or(0));
+    // SAFETY: the caller's guarantee.
+    let hash = unsafe { crate::list::ItemType::of(kind, tuple).hash(item) };
+    // A hash is below `2**61` in size, so it fits a word.
+    crate::word::inline(hash).unwrap_or(1)
+}
+
 /// Returns a hash that is never -1, which CPython keeps to mean an error.
 const fn not_minus_one(hash: i64) -> i64 {
     if hash == -1 { -2 } else { hash }

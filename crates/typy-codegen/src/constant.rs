@@ -37,6 +37,15 @@ impl<'ctx> FunctionEmitter<'_, '_, 'ctx> {
             Constant::TypeObject(typy_tyir::TypeObjectRef::Class(index)) => {
                 Some(crate::class::type_object(self.shared, *index)?.into())
             }
+            Constant::TypeAlias(index) => {
+                let alias = &self.shared.tyir.type_aliases[*index as usize];
+                Some(
+                    self.shared
+                        .statics
+                        .type_alias_object(self.shared.module, *index, &alias.name, &alias.module)
+                        .into(),
+                )
+            }
             Constant::Module(index) => {
                 let object = &self.shared.tyir.modules[*index as usize];
                 Some(
@@ -64,6 +73,15 @@ impl<'ctx> FunctionEmitter<'_, '_, 'ctx> {
                 let text = self.shared.tyir.string(*id);
                 Some(self.shared.statics.string(self.shared.module, text).into())
             }
+            Constant::StrPoints(index) => {
+                let points = &self.shared.tyir.str_points[*index as usize];
+                Some(
+                    self.shared
+                        .statics
+                        .str_points(self.shared.module, *index, points)
+                        .into(),
+                )
+            }
             Constant::Bytes(id) => {
                 let text = self.shared.tyir.string(*id);
                 Some(self.shared.statics.bytes(self.shared.module, text).into())
@@ -81,15 +99,25 @@ impl<'ctx> FunctionEmitter<'_, '_, 'ctx> {
                 });
                 Some(global.as_pointer_value().into())
             }
+            // A descriptor and a class are addresses the runtime takes as a word.
             Constant::TupleDescriptor(id) => {
                 let descriptor = crate::descriptor::tuple_descriptor(self.shared, *id)?;
-                Some(
-                    self.builder
-                        .build_ptr_to_int(descriptor, context.i64_type(), "")?
-                        .into(),
-                )
+                Some(self.address_word(descriptor)?)
+            }
+            Constant::CDataClass(index) => {
+                let class = crate::cdata::cdata_class(self.shared, *index)?;
+                Some(self.address_word(class)?)
             }
         })
+    }
+
+    /// Returns the address of a static as a word.
+    fn address_word(
+        &self,
+        address: inkwell::values::PointerValue<'ctx>,
+    ) -> Result<BasicValueEnum<'ctx>, CodegenError> {
+        let word = self.shared.context.i64_type();
+        Ok(self.builder.build_ptr_to_int(address, word, "")?.into())
     }
 
     pub(super) fn tagged(&self, value: i64) -> IntValue<'ctx> {

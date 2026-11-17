@@ -14,8 +14,9 @@ class body or assigned in `__init__`, and has one type.
 | `@staticmethod`, `@classmethod`, and `@property` with its setter | CLS-06 |
 | `__eq__`, `__ne__`, `__lt__`, `__le__`, `__gt__`, `__ge__` and `__hash__` | CLS-07 |
 | `__add__`, `__radd__` and the other arithmetic, bitwise and unary methods | CLS-07 |
+| `NotImplemented`, returned by an operator or comparison method to give way | CLS-21 |
 | `__len__`, `__getitem__`, `__setitem__`, `__delitem__`, `__contains__` and `__bool__` | CLS-07 |
-| `@dataclass`, with `eq`, `order`, `frozen` and `field(default=...)` | CLS-05 |
+| `@dataclass`, with `eq`, `order`, `frozen`, `match_args` and `field(default=...)` | CLS-05, CST-06 |
 | `__str__` and `__repr__`, used by `print`, `str`, `repr`, f-strings and containers | CLS-08 |
 | A type object for every type, with `object` as the root | CLS-10 |
 | `type(x)`, class and built-in type names as values, `__name__` | CLS-12 |
@@ -127,11 +128,13 @@ print([shape.describe() for shape in shapes])
 An override takes the base method's parameters in the same order and
 with the same names. Each parameter accepts the type the base's takes,
 and the result is one the base's result type accepts, as type checkers
-require; a mismatch is E0404. A parameter keeps the base's default, and
-an override that takes or returns a type held differently from the
-base's, such as `int | None` where the base has `int`, is planned for
-0.5; both are E0201. `__init__` is not compared, since it runs only on
-the class being made.
+require; a mismatch is E0404. A parameter with a default in the base
+has one in the override, which may differ: a call that leaves it out
+takes the default of the object's class, as in CPython. An override may
+take or return a type held differently from the base's, such as
+`int | None` where the base has `int`; with a default of its own for
+such a parameter it is planned for 1.0 (CLS-34).
+`__init__` is not compared, since it runs only on the class being made.
 
 <!-- typy-expect: rejected E0404 at 7:9 -->
 ```python
@@ -184,8 +187,19 @@ attributes, as by calling a method, it may run an override that reads
 an attribute of the subclass. Such a call of `super().__init__(...)`
 comes after the subclass assigns its own attributes, E0309 otherwise,
 so no attribute is read before it holds a value. `super()` outside a
-method is E0414, and `super(Base, self)` naming another class is
-planned for 0.5.
+method is E0414. `super(Base, self)` names the enclosing class or one of
+its bases, and the method found is that of the nearest base of `Base`, as
+in CPython (CLS-26); with an instance other than `self` it is planned for
+1.0 (CLS-29).
+
+A method may also be called through a class with the instance first,
+`Shape.describe(square)`, which runs the method that class holds or
+inherits, not an override, as in CPython. In `__init__`,
+`Shape.__init__(self, "square")` on the instance being built does what
+`super().__init__("square")` does, for any base the class derives from,
+and its attributes count as assigned. A property called through its
+class is E0401, since CPython's property object cannot be called
+(CLS-06).
 
 An instance never holds an attribute without a value: calling a class
 whose body declares an attribute that no `__init__` that runs assigns,
@@ -233,7 +247,7 @@ as `if not isinstance(shape, Circle): return`, and in the right operand
 of `and`. When the checker can tell the answer, as for
 `isinstance(3, int)`, nothing is tested when the program runs; `bool`
 counts as `int`, as in CPython. A class held in a variable, and
-`issubclass`, are planned for 0.5.
+`issubclass`, are planned for 1.0 (CLS-18, CLS-19).
 
 ## Class variables and defaults
 
@@ -317,9 +331,12 @@ instance's class's getter. A getter takes only `self`; a setter takes
 `self` and a value of the getter's type and returns `None`. Assigning a
 property without a setter is E0414, as CPython raises `AttributeError`
 for it. A method without `self` is E0404; decorate it with
-`@staticmethod`. Redefining a static method in a subclass, and
-assigning a property other than as `variable.name = value`, are planned
-for 0.5.
+`@staticmethod`. A property is assigned through any expression, such
+as `make().name = value` or `item.name += 1`, the value evaluated
+first, as in CPython. A subclass may redefine a static method, or a
+method as a static one, and a call through an instance runs the one of
+the object's class, as in CPython; a call through a class runs that
+class's (CLS-06).
 
 ## Class methods
 
@@ -347,11 +364,18 @@ class Square(Shape):
 print(Shape.unit().name, Square.unit().name, type(Square.unit()).__name__)
 ```
 
-A class method is called through its class. Calling it through an
-instance, and through a subclass defined in another module than the
-class that defines the method, are planned for 0.5, and so is
-assigning a class variable through a subclass that inherits it, which
-in CPython gives the subclass a variable of its own.
+A static method is called through its class, or through any expression
+that gives the class or one of its instances, which is evaluated first,
+as in CPython. A class method is called through its class, also a
+subclass defined in another module, which gets a copy of its own, and
+through an instance, which passes the instance's class as `cls`
+(CLS-25). Through an instance of a generic class it is planned for 1.0
+(CLS-30). Assigning a class variable through a subclass that inherits
+it gives the subclass a variable of its own, as in CPython: the
+subclass, its subclasses and their instances read it from then on, and
+the base keeps its own (CLS-25). Assigning it through a variable that
+holds such a subclass, such as `cls` in a class method, is planned for
+1.0 (CLS-31).
 
 ## Comparison methods
 
@@ -386,12 +410,18 @@ A comparison method takes `self` and one value its class's instances
 are, and returns a `bool`; `__hash__` returns an `int`. As in CPython,
 `a > b` falls back to `b.__lt__(a)`, `a != b` to `not a == b`, the
 right operand's method comes first when its class derives from the
-left's and defines it again, and a class that defines `__eq__` without
-`__hash__` has no hash, so a set or a dict key of it is E0413. A
-container compares an instance with an object its `__eq__` does not
-take as unequal. A comparison or hash method that may raise, a chain
-such as `a < b < c` of such instances, and a method returning
-`NotImplemented` are planned for 0.5.
+left's, and a class that defines `__eq__` without `__hash__` has no
+hash, so a set or a dict key of it is E0413. A container compares an
+instance with an object its `__eq__` does not take as unequal.
+
+A comparison or hash method may raise, also when a list, a set, a dict,
+`sorted`, `min` or `max` calls it: the exception leaves the operation at
+once, no later method runs, and a set or a dict keeps the items it had,
+as in CPython. A chain such as `low < value < high` calls each
+comparison's method and evaluates `value` once (CLS-22). `sort` and
+`sorted` call `__lt__` with the same items in the same order as CPython
+3.15 does; CPython 3.12, 3.13 and 3.14 each call it in another order
+(OI-27).
 
 ## Arithmetic methods
 
@@ -422,9 +452,65 @@ print(total.cents, (3 * total).cents)
 
 As in CPython, `3 * total` falls back to the right operand's
 `__rmul__`, and the right operand's reflected method comes first when
-its class derives from the left's and defines it again. `x += y` is
-`x = x + y` for a variable or an attribute of one; the in-place methods
-such as `__iadd__` are planned for 0.5.
+its class derives from the left's and defines it again. When the
+reflected method may run, the operator's type joins the two methods'
+results, such as `int | str` (CLS-22). `x += y` calls
+the class's in-place method, such as `__iadd__`, when it defines one,
+and `x = x + y` otherwise, for any target: an item or an attribute of an
+expression is evaluated once, as in CPython (CLS-20). An in-place method
+that only a subclass of the target's class defines is planned for 1.0
+(CLS-32).
+
+## Giving way with `NotImplemented`
+
+An operator or comparison method returns `NotImplemented` when it does
+not handle the other operand, and the operator then tries the other
+operand's method, as CPython does (CLS-21):
+
+<!-- typy-expect: accepted -->
+```python
+class Meters:
+    def __init__(self, value: float) -> None:
+        self.value = value
+
+    def __add__(self, other: "Meters | Feet") -> "Meters":
+        if isinstance(other, Meters):
+            return Meters(self.value + other.value)
+        return NotImplemented
+
+    def __eq__(self, other: "Meters | Feet") -> bool:
+        if isinstance(other, Meters):
+            return self.value == other.value
+        return NotImplemented
+
+
+class Feet:
+    def __init__(self, value: float) -> None:
+        self.value = value
+
+    def __radd__(self, other: "Meters | Feet") -> Meters:
+        if isinstance(other, Meters):
+            return Meters(other.value + self.value * 0.3048)
+        return NotImplemented
+
+
+print((Meters(1.0) + Feet(10.0)).value, Meters(1.0) == Feet(1.0))
+print(Meters(2.0) in [Meters(1.0), Meters(2.0)])
+try:
+    print(Feet(1.0) + Feet(2.0))
+except TypeError as error:
+    print(error)
+```
+
+When every method gives way, `==` and `!=` compare identities, and any
+other operator raises CPython's `TypeError`. `x += y` tries the in-place
+method first, then the methods of `x + y`. A method that returns
+`NotImplemented` gives every method of its name in the classes derived
+from the same base the return type `T | NotImplementedType`, so a direct
+call such as `a.__eq__(b)` may give `NotImplemented`, which
+`result is NotImplemented` tests. A method that may return both `None`
+and `NotImplemented` is planned for 1.0 (CLS-33), and `return
+NotImplemented` in any other function is E0405.
 
 ## Container methods
 
@@ -458,19 +544,56 @@ shelf["Dune"] = 412
 print(len(shelf), shelf["Dune"], "Dune" in shelf, bool(Shelf()))
 ```
 
-As in CPython, a negative `__len__` raises `ValueError`. A slice such
-as `x[1:2]`, `any` and `all` of instances whose truth comes from
-`__len__`, and a truth test whose static class has neither method while
-a subclass defines one, are planned for 0.5, and so is `in` without
-`__contains__`, which CPython answers by iterating.
+As in CPython, a negative `__len__` raises `ValueError`, and `in` on an
+instance whose class has `__iter__` and no `__contains__` goes over its
+items until one is the value or equal to it (CLS-23). A slice such as
+`x[1:2]` passes a `slice` object to `__getitem__`, `__setitem__` or
+`__delitem__`, which a parameter annotated `slice` or `int | slice`
+takes, and `x[k] += v` calls `__getitem__`, then `__setitem__`, with
+`x` and `k` evaluated once:
+
+<!-- typy-expect: accepted -->
+```python
+class Row:
+    def __init__(self, cells: list[int]) -> None:
+        self.cells = cells
+
+    def __getitem__(self, part: slice) -> "Row":
+        return Row(self.cells[part])
+
+
+class Tally:
+    def __init__(self) -> None:
+        self.counts = [0, 0]
+
+    def __getitem__(self, index: int) -> int:
+        return self.counts[index]
+
+    def __setitem__(self, index: int, value: int) -> None:
+        self.counts[index] = value
+
+
+print(Row([1, 2, 3, 4])[1:3].cells)
+tally = Tally()
+tally[1] += 5
+print(tally.counts)
+```
+
+An instance's truth comes from the `__bool__` of its own class, or its
+`__len__` when it has no `__bool__`, also where the variable's type is
+a base that has neither, or a union, and in `any` and `all` (CLS-24).
+`in` and `for` over a class with `__getitem__` alone, which CPython
+reads by position until `IndexError`, are planned for 1.0 (CST-11).
 
 ## Dataclasses
 
 `@dataclass` from `dataclasses` writes the methods CPython writes for a
 class: `__init__` taking the fields in order, `__repr__`, and `__eq__`;
 with `order=True` also `__lt__`, `__le__`, `__gt__` and `__ge__`, which
-compare the fields as a tuple; and with `frozen=True` the fields cannot
-be assigned after `__init__` (CLS-05, LIB-06):
+compare the fields as a tuple; with `frozen=True` the fields cannot be
+assigned after `__init__`; and unless `match_args=False`,
+`__match_args__`, the names of the fields, which class patterns in
+`match` read (CLS-05, CST-06, LIB-06):
 
 <!-- typy-expect: accepted -->
 ```python
@@ -498,9 +621,40 @@ dataclass base, `ClassVar` ones excepted. As in CPython, a field
 without a default after one with a default, a mutable default such as
 `[]`, `order=True` without `eq`, a frozen dataclass deriving from a
 non-frozen one or the reverse, and assigning a field of a frozen
-instance are errors. A method the class defines itself is kept. The
-hash of a frozen dataclass, `field(default_factory=...)` and the other
-options such as `slots=True` are planned for 0.5.
+instance are errors. A method the class defines itself is kept.
+
+`field(default_factory=f)` calls `f`, a class or a function that takes
+no arguments, for each instance whose `__init__` is not given the field
+(CLS-15). A frozen dataclass, or one given `unsafe_hash=True`, hashes as
+the tuple of its fields, so it can be an item of a set or a key of a
+dict, and one with `eq=True` that is neither cannot (CLS-16). The
+options `init=False`, `repr=False`, `unsafe_hash` and `slots` are taken
+too (CLS-17):
+
+<!-- typy-expect: accepted -->
+```python
+from dataclasses import dataclass, field
+
+
+@dataclass(frozen=True)
+class Point:
+    x: int
+    y: int = 0
+
+
+@dataclass
+class Path:
+    name: str
+    points: list[Point] = field(default_factory=list)
+
+
+first = Path("a")
+first.points.append(Point(1))
+print(first, Path("b"), {Point(1, 2), Point(1, 2)})
+```
+
+The other options of `field`, such as `repr` or `compare`, `kw_only` and
+`weakref_slot` are planned for 1.0 (CLS-28).
 
 ## Attributes are declared
 

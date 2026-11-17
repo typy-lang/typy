@@ -22,7 +22,7 @@ supersedes it.
 | [ADR-0014](0014-iterate-with-runtime-iterator-objects-and-the-iterator-protocol.md) | Iterate with runtime iterator objects and the iterator protocol | Accepted | 2026-11-11 |
 | [ADR-0015](0015-compile-modules-into-one-program-with-module-objects.md) | Compile modules into one program, with module objects | Accepted | 2026-11-11 |
 | [ADR-0016](0016-compile-each-module-separately-and-verify-interfaces-at-link-time.md) | Compile each module separately and verify interfaces at link time | Proposed | 2026-11-11 |
-| [ADR-0017](0017-warn-where-cpython-warns-while-compiling.md) | Warn where CPython warns while compiling | Accepted | 2026-11-12 |
+| [ADR-0017](0017-warn-where-cpython-warns-while-compiling.md) | Warn where CPython warns while compiling | Superseded by ADR-0033 | 2026-11-12 |
 | [ADR-0018](0018-provide-math-and-sys-as-checker-tables-over-runtime-functions.md) | Provide math and sys as checker tables over runtime functions | Accepted | 2026-11-12 |
 | [ADR-0019](0019-open-text-files-over-buffered-descriptors-with-cpythons-errors.md) | Open text files over buffered descriptors with CPython's errors | Accepted | 2026-11-12 |
 | [ADR-0020](0020-bound-nesting-as-cpython-does-and-compile-on-a-large-stack.md) | Bound nesting as CPython does and compile on a large stack | Accepted | 2026-11-13 |
@@ -37,3 +37,21 @@ supersedes it.
 | [ADR-0029](0029-report-cpython-3-15-as-the-python-version-of-a-built-program.md) | Report CPython 3.15 as the Python version of a built program | Accepted | 2026-11-14 |
 | [ADR-0030](0030-read-exception-args-and-exit-codes-where-a-program-uses-them.md) | Read exception args and exit codes where a program uses them | Accepted | 2026-11-14 |
 | [ADR-0031](0031-type-a-file-by-its-literal-mode-and-a-mode-value-as-text.md) | Type a file by its literal mode, and a mode value as text | Accepted | 2026-11-14 |
+| [ADR-0032](0032-export-a-module-as-a-c-library-described-by-its-own-annotations.md) | Export a module as a C library described by its own annotations | Accepted | 2026-11-15 |
+| [ADR-0033](0033-warn-about-a-match-that-leaves-members-of-its-subject-unmatched.md) | Warn about a match that leaves members of its subject unmatched | Accepted | 2026-11-15 |
+| [ADR-0034](0034-type-exception-args-by-the-raises-that-create-them.md) | Type exception args by the raises that create them | Accepted | 2026-11-15 |
+| [ADR-0035](0035-type-os-error-attributes-by-the-raises-that-create-them.md) | Type OSError attributes by the raises that create them | Accepted | 2026-11-15 |
+| [ADR-0036](0036-call-the-function-the-last-run-import-bound.md) | Call the function the last-run import bound | Accepted | 2026-11-15 |
+| [ADR-0037](0037-reach-class-methods-and-class-variables-through-the-instances-class.md) | Reach class methods and class variables through the instance's class | Accepted | 2026-11-15 |
+| [ADR-0038](0038-give-way-to-the-next-operator-method-on-not-implemented.md) | Give way to the next operator method on NotImplemented | Accepted | 2026-11-16 |
+| [ADR-0039](0039-keep-a-slot-methods-exception-until-the-runtime-call-returns.md) | Keep a slot method's exception until the runtime call returns | Accepted | 2026-11-16 |
+| [ADR-0040](0040-derive-each-copy-of-a-generic-class-from-the-copy-of-its-base.md) | Derive each copy of a generic class from the copy of its base | Accepted | 2026-11-16 |
+| [ADR-0041](0041-hold-a-protocol-value-as-an-object-and-call-it-through-a-dispatcher.md) | Hold a protocol value as an object and call it through a dispatcher | Accepted | 2026-11-16 |
+| [ADR-0042](0042-allocate-an-instance-that-does-not-escape-in-its-functions-frame.md) | Allocate an instance that does not escape in its function's frame | Accepted | 2026-11-17 |
+| [ADR-0043](0043-name-the-allocator-in-typy-toml-and-call-it-through-program-hooks.md) | Name the allocator in typy.toml and call it through program hooks | Accepted | 2026-11-17 |
+| [ADR-0044](0044-run-a-librarys-module-when-it-loads-and-guard-each-export.md) | Run a library's module when it loads and guard each export | Accepted | 2026-11-17 |
+| [ADR-0045](0045-name-a-librarys-files-by-its-release-as-linux-names-libraries.md) | Name a library's files by its release as Linux names libraries | Accepted | 2026-11-17 |
+| [ADR-0046](0046-write-a-librarys-binding-as-a-typed-function-for-each-export.md) | Write a library's binding as a typed function for each export | Accepted | 2026-11-17 |
+| [ADR-0047](0047-compile-ctypes-declarations-into-direct-calls-linked-at-build-time.md) | Compile ctypes declarations into direct calls linked at build time | Accepted | 2026-11-17 |
+| [ADR-0048](0048-hold-a-ctypes-object-as-a-counted-object-over-a-c-buffer.md) | Hold a ctypes object as a counted object over a C buffer | Accepted | 2026-11-17 |
+| [ADR-0049](0049-lay-out-a-ctypes-structure-as-c-and-pass-it-as-system-v-does.md) | Lay out a ctypes structure as C and pass it as System V does | Accepted | 2026-11-17 |

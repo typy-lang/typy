@@ -5,6 +5,7 @@
 mod aggregate;
 mod delete;
 mod item;
+mod listsort;
 mod methods;
 mod operations;
 #[cfg(test)]
@@ -21,7 +22,7 @@ mod tests;
 
 #[cfg(test)]
 pub(crate) use aggregate::{typy_rt_list_any, typy_rt_list_extreme, typy_rt_list_sort};
-pub(crate) use item::{ItemKind, ItemType, values_equal};
+pub(crate) use item::{ItemKind, ItemType, objects_equal, values_equal};
 pub(crate) use methods::typy_rt_list_reverse;
 #[cfg(test)]
 pub(crate) use methods::{

@@ -4,8 +4,10 @@
 mod block;
 mod builder;
 mod constant;
+mod escape;
 mod function;
 mod instruction;
+mod library;
 mod module;
 mod operation;
 mod print;
@@ -20,9 +22,15 @@ mod verify;
 pub use block::{BasicBlock, BlockId};
 pub use builder::FunctionBuilder;
 pub use constant::{Constant, StringId};
+pub use escape::place_instances;
 pub use function::{FunctionId, TyirFunction};
 pub use instruction::Instruction;
-pub use module::{GlobalId, TyirClass, TyirGlobal, TyirModule, TyirModuleObject};
+pub use library::{
+    CDataShape, CType, TyirCDataClass, TyirExport, TyirField, TyirForeignFunction, TyirLibrary,
+};
+pub use module::{
+    GlobalId, TyirAllocator, TyirClass, TyirGlobal, TyirModule, TyirModuleObject, TyirTypeAlias,
+};
 pub use operation::{
     BoolOperator, Comparison, FloatOperator, IntOperator, IntUnaryOperator, Operation, ScalarKind,
 };

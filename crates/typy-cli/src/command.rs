@@ -23,8 +23,12 @@ pub(crate) fn run(command: Command, deny_warnings: bool, reporter: Reporter) -> 
     };
     match command {
         Command::Explain { code } => explain::explain(&code),
-        Command::Check { file, settings } => check::check(
-            &pipeline.with_overrides(settings.overrides()),
+        Command::Check {
+            file,
+            settings,
+            library,
+        } => check::check(
+            &pipeline.with_overrides(settings.overrides_for(library)),
             &file,
             reporter,
         ),
@@ -34,12 +38,14 @@ pub(crate) fn run(command: Command, deny_warnings: bool, reporter: Reporter) -> 
             output,
             mode,
             settings,
+            library,
         } => build::build(
-            &pipeline.with_overrides(settings.overrides()),
+            &pipeline.with_overrides(settings.overrides_for(library)),
             file,
             emit,
             output.as_deref(),
             mode.build_mode(),
+            library.kind,
             reporter,
         ),
         Command::Run {

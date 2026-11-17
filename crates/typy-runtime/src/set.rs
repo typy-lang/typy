@@ -9,11 +9,11 @@ pub(crate) use operations::typy_rt_set_add_moved;
 mod others;
 mod views;
 
-pub(crate) use operations::{
-    key_error, typy_rt_set_compare, typy_rt_set_item, typy_rt_set_next, typy_rt_set_repr,
-};
 #[cfg(test)]
 pub(crate) use operations::{typy_rt_set_add, typy_rt_set_new};
+pub(crate) use operations::{
+    typy_rt_set_compare, typy_rt_set_item, typy_rt_set_next, typy_rt_set_repr,
+};
 #[cfg(test)]
 mod tests;
 
@@ -292,7 +292,8 @@ pub(crate) unsafe fn add_item(set: *mut SetObject, item: u64, hash: i64, retain:
                 _ => None,
             })
         };
-        if found.is_some() {
+        // An item whose hash or comparison raised is not added (CLS-22).
+        if found.is_some() || crate::slot::pending() {
             if !retain {
                 item_type.release(item);
             }

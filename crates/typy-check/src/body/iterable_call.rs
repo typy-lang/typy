@@ -193,27 +193,6 @@ impl BodyChecker<'_> {
             Builtin::Any | Builtin::All => {
                 // The runtime tests each item with its type object's slot, which calls
                 // `__bool__`; a length cannot raise from there (CLS-07).
-                let by_length = item.members().iter().any(|member| {
-                    matches!(member, Type::Instance(class)
-                        if self.program.method(class.id, "__bool__").is_none()
-                            && self.program.method(class.id, "__len__").is_some())
-                });
-                if by_length {
-                    self.diagnostics.push(
-                        Diagnostic::new(
-                            DiagnosticCode::error(201),
-                            span,
-                            format!(
-                                "`{}` of instances whose truth comes from `__len__` is planned for \
-                                 TyPy 0.5 (CLS-07)",
-                                builtin.name()
-                            ),
-                        )
-                        .with_rule(RuleId::CLS_07)
-                        .with_help("define `__bool__`, or test `len(item) > 0` in a loop"),
-                    );
-                    return None;
-                }
                 Some(Type::Bool)
             }
             Builtin::Sorted | Builtin::Min | Builtin::Max => {
@@ -288,6 +267,8 @@ impl BodyChecker<'_> {
             file if file.is_file() => file.file_line().unwrap_or(Type::Error),
             Type::Bytes | Type::Range => Type::Int,
             Type::Iterator(item) | Type::Iterable(item) => item.as_ref().clone(),
+            // A `ctypes` array gives the value of each item (FFI-03).
+            Type::CData(crate::ctypes::CData::Array(item, _)) => item.result_type(),
             Type::Error => Type::Error,
             // A tuple whose items have one type is read as a `tuple[T, ...]` before it gets
             // here; the items of this one differ, or there are none.

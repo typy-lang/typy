@@ -46,9 +46,14 @@ impl FunctionLowerer<'_> {
             TyirType::TRACEBACK
             | TyirType::ITERATOR
             | TyirType::RANGE
+            | TyirType::SLICE
             | TyirType::MODULE
+            | TyirType::TYPE_ALIAS
+            | TyirType::VERSION_INFO
+            | TyirType::NOT_IMPLEMENTED
             | TyirType::ITERABLE
-            | TyirType::TEXT_FILE => {
+            | TyirType::TEXT_FILE
+            | TyirType::CDATA => {
                 let object = self.bits(Self::borrowed(lowered.value, lowered.ty), span);
                 self.call_runtime(RuntimeFunction::ObjectRepr, vec![object], span)
             }

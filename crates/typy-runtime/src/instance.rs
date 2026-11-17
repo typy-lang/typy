@@ -55,6 +55,71 @@ pub unsafe extern "C" fn typy_rt_instance_new(class: *const TypeObject) -> *mut 
     instance
 }
 
+/// The count an instance made in its function's frame starts above, so the program's
+/// decrements never bring it to zero and free it; at this count no reference is left
+/// (ADR-0042).
+pub(crate) const FRAME_BIAS: u32 = 1 << 30;
+
+/// Returns a new instance of `class` in `block`, a frame block of the instance's size whose
+/// header the function cleared when it started, with every attribute zero. A block that holds
+/// an instance no reference is left to is used again after its attributes are released; one
+/// whose instance is still held gives way to a new instance from the heap (MEM-03, ADR-0042).
+///
+/// # Safety
+///
+/// `block` points to memory of the instance's size, aligned for it, holding a cleared header
+/// or an instance this function made; `class` is as for `typy_rt_instance_new`.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn typy_rt_instance_on_stack(
+    block: *mut InstanceObject,
+    class: *const TypeObject,
+) -> *mut InstanceObject {
+    // SAFETY: the caller's guarantee.
+    unsafe {
+        if (*block).header.type_id != 0 {
+            if (*block).header.reference_count != FRAME_BIAS {
+                return typy_rt_instance_new(class);
+            }
+            crate::tuple::release((*(*block).class).fields, attributes(block));
+        }
+        let size = (*(*class).fields).size;
+        let length = PREFIX + usize::try_from(size).unwrap_or(0);
+        core::ptr::write_bytes(block.cast::<u8>(), 0, length);
+        block.write(InstanceObject {
+            header: ObjectHeader {
+                reference_count: FRAME_BIAS + 1,
+                type_id: INSTANCE_TYPE_ID,
+            },
+            class,
+        });
+    }
+    block
+}
+
+/// Releases the attributes of the instance a frame block holds, as its function returns, and
+/// clears its header; a block that holds none is left alone. A reference still held would
+/// read freed memory, so the program stops with a message instead (ADR-0042).
+///
+/// # Safety
+///
+/// `block` holds a cleared header or an instance `typy_rt_instance_on_stack` made.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn typy_rt_instance_off_stack(block: *mut InstanceObject) {
+    // SAFETY: the caller's guarantee.
+    unsafe {
+        if (*block).header.type_id == 0 {
+            return;
+        }
+        if (*block).header.reference_count != FRAME_BIAS {
+            crate::libc::abort_with(
+                b"typy runtime: an instance in a frame is still held when its function returns\n",
+            );
+        }
+        crate::tuple::release((*(*block).class).fields, attributes(block));
+        (*block).header.type_id = 0;
+    }
+}
+
 /// Frees an instance whose last reference is gone, after releasing its attributes.
 ///
 /// # Safety

@@ -12,20 +12,31 @@ pub(crate) fn tyir_type(ty: &Type, tuples: &mut TupleTypes) -> TyirType {
         Type::Bool => TyirType::Bool,
         Type::Str => TyirType::STR,
         Type::Bytes => TyirType::BYTES,
-        Type::NoneType | Type::Error => TyirType::Unit,
+        // A library is linked when the program is built and holds no value (FFI-01), and a
+        // `ctypes` class is known from its type (FFI-03).
+        Type::NoneType | Type::Error | Type::ForeignLibrary(_) | Type::CDataClass(_) => {
+            TyirType::Unit
+        }
+        Type::CData(_) => TyirType::CDATA,
         // A `tuple[T, ...]` is a list object with the tuple type ID, so every list function
         // of the runtime reads it (DAT-14).
         Type::List(_) | Type::TupleOf(_) => TyirType::LIST,
         Type::Set(_) => TyirType::SET,
         Type::Dict(..) => TyirType::DICT,
         Type::DictView(..) => TyirType::VIEW,
+        // A protocol value is an instance of any class that satisfies it (ADR-0041).
+        Type::Instance(class) if class.protocol => TyirType::UNION,
         Type::Instance(class) => TyirType::Object(TypeId::class(class.id.0)),
         Type::TypeObject(_) => TyirType::TYPE,
         Type::Exception(_) => TyirType::EXCEPTION,
         Type::Iterator(_) => TyirType::ITERATOR,
         Type::Traceback => TyirType::TRACEBACK,
         Type::Range => TyirType::RANGE,
+        Type::Slice => TyirType::SLICE,
         Type::Module(_) | Type::AnyModule => TyirType::MODULE,
+        Type::TypeAlias => TyirType::TYPE_ALIAS,
+        Type::VersionInfo => TyirType::VERSION_INFO,
+        Type::NotImplemented => TyirType::NOT_IMPLEMENTED,
         // A binary file is the same runtime object as a text file, with flags of its own.
         Type::TextFile | Type::BinaryFile(_) | Type::DescriptorFile(_) => TyirType::TEXT_FILE,
         Type::Iterable(_) => TyirType::ITERABLE,

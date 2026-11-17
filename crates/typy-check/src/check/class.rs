@@ -4,7 +4,7 @@
 use std::collections::BTreeMap;
 
 use typy_diagnostics::{Diagnostic, DiagnosticCode, Diagnostics, RuleId, Span};
-use typy_source::syntax::{Expr, Identifier, Stmt};
+use typy_source::syntax::{Constant, Expr, Identifier, Stmt};
 
 use super::annotation::{AnnotationName, AnnotationScope, annotation_type, is_protocol};
 use super::definition::{
@@ -15,7 +15,7 @@ use super::generic_class::finish_generic_class;
 use super::overriding::Override;
 use crate::class_type::{InstanceClass, Operators};
 use crate::exception::{BuiltinException, ExceptionClass};
-use crate::typed::{ClassId, FunctionId, FunctionSignature};
+use crate::typed::{ClassId, FunctionId, FunctionSignature, SignatureParameter};
 use crate::types::{Type, TypeObjectOf};
 
 /// An attribute of a class: declared in the class body, or assigned in `__init__`, whose
@@ -46,9 +46,6 @@ pub(crate) struct ClassInfo {
     pub(crate) class_variables: Vec<String>,
     /// The copies of the class methods the class has, each by its name (ADR-0025).
     pub(crate) class_methods: Vec<(String, FunctionId)>,
-    /// The class methods the class inherits from a base of another module, whose copies are
-    /// planned (ADR-0025).
-    pub(crate) remote_class_methods: Vec<String>,
     /// The static methods the class defines (CLS-06).
     pub(crate) static_methods: Vec<String>,
     /// The methods with type parameters the class defines, each called through its copies
@@ -59,12 +56,24 @@ pub(crate) struct ClassInfo {
     pub(crate) properties: Vec<String>,
     /// The positions of the class's own attributes the class body gives a default, each held
     /// as the module variable `Class.name`.
+    /// Each method that overrides one held otherwise in a base, by its name, with the base
+    /// method and itself, which a call through the base reaches through an adapter (CLS-04).
+    pub(crate) adapted: Vec<(String, FunctionId, FunctionId)>,
+    /// The adapter of each such method, by its name.
+    pub(crate) adapters: Vec<(String, FunctionId)>,
+    /// The bridge of each static method of the class's own, by its name: a method that takes
+    /// the instance first, which the method table holds in the static method's place (CLS-06).
+    pub(crate) static_bridges: Vec<(String, FunctionId)>,
     pub(crate) defaults: Vec<usize>,
     /// Whether the class is a frozen dataclass, whose fields only the `__init__` `@dataclass`
     /// writes assigns (CLS-05).
     pub(crate) frozen: bool,
     /// Whether `@dataclass` wrote the class's `__init__`.
     pub(crate) generated_init: bool,
+    /// What the class body assigns to `__match_args__`, which a class pattern's positional
+    /// sub-patterns name: the names of a tuple of `str` literals, or where a value of another
+    /// form is assigned; `None` when the body assigns none, so the base's apply (CST-06).
+    pub(crate) match_args: Option<Result<Vec<String>, Span>>,
     /// Whether the class's `__init__` uses the instance other than through its attributes,
     /// once checked.
     pub(crate) init_uses_instance: bool,
@@ -176,9 +185,31 @@ pub(super) fn class_types(
                     ..InstanceClass::root(class.id, name)
                 })
             });
+        if !class.type_parameters.is_empty() {
+            refuse_generic_kind(class, &ty, diagnostics);
+        }
         found.insert(class.id, ty);
     }
     found
+}
+
+/// Reports a generic class that is an exception class or a protocol, whose copies would need
+/// exception objects or protocol checks of their own (GEN-12, GEN-13).
+fn refuse_generic_kind(class: &ClassStatement<'_>, ty: &Type, diagnostics: &mut Diagnostics) {
+    let name = &class.name.name;
+    let (what, rule) = match ty {
+        Type::Exception(_) => ("a generic exception class", RuleId::GEN_12),
+        Type::Instance(instance) if instance.protocol => ("a generic protocol", RuleId::GEN_13),
+        _ => return,
+    };
+    diagnostics.push(
+        Diagnostic::new(
+            DiagnosticCode::error(201),
+            class.name.span,
+            format!("`{name}` is {what}, which is planned for TyPy 1.0 ({rule})"),
+        )
+        .with_rule(rule),
+    );
 }
 
 /// Returns the type of the instances of a class with a base other than `object`, or `None`
@@ -230,6 +261,8 @@ fn derived_type(
             ),
             _ => (String::new(), None),
         },
+        // A copy of a generic class is read once the generic classes are noted (ADR-0040).
+        Expr::Subscript { .. } => return None,
         _ => (String::new(), None),
     };
     let Some(base_id) = base_id else {
@@ -259,18 +292,18 @@ fn derived_type(
             )))
         }
         // A class satisfies a protocol by its members; naming the protocol as its base
-        // would also inherit the protocol's methods (GEN-10).
+        // would also inherit the protocol's methods (GEN-17).
         Type::Instance(parent) if parent.protocol => {
             diagnostics.push(
                 Diagnostic::new(
                     DiagnosticCode::error(201),
                     span,
                     format!(
-                        "a class derived from the protocol `{written}` is planned for TyPy 0.5 \
-                         (GEN-10)"
+                        "a class derived from the protocol `{written}` is planned for TyPy 1.0 \
+                         (GEN-17)"
                     ),
                 )
-                .with_rule(RuleId::GEN_10)
+                .with_rule(RuleId::GEN_17)
                 .with_help("leave the protocol out: a class with its members satisfies it"),
             );
             None
@@ -292,7 +325,7 @@ fn derived_type(
 }
 
 /// Returns the names of the methods a class body defines.
-fn method_names(body: &[Stmt]) -> impl Iterator<Item = &str> {
+pub(super) fn method_names(body: &[Stmt]) -> impl Iterator<Item = &str> {
     body.iter().filter_map(|statement| match statement {
         Stmt::FunctionDef { name, .. } => Some(name.name.as_str()),
         _ => None,
@@ -301,7 +334,7 @@ fn method_names(body: &[Stmt]) -> impl Iterator<Item = &str> {
 
 /// Returns the error for a base other than `object`, an exception class or a class of the
 /// program: a built-in type such as `list`, or an expression that names no class.
-fn unsupported_base(span: Span) -> Diagnostic {
+pub(super) fn unsupported_base(span: Span) -> Diagnostic {
     Diagnostic::new(
         DiagnosticCode::error(201),
         span,
@@ -315,7 +348,7 @@ fn unsupported_base(span: Span) -> Diagnostic {
 /// `__iter__` and `__next__` (CST-08) and `__enter__` and `__exit__` (CST-05). Any other name that starts and ends with two
 /// underscores changes how Python treats the instances, and waits for the operator methods of
 /// 0.4 (CLS-07).
-const SPECIAL_METHODS: [&str; 50] = [
+const SPECIAL_METHODS: [&str; 63] = [
     "__init__",
     "__str__",
     "__repr__",
@@ -366,6 +399,19 @@ const SPECIAL_METHODS: [&str; 50] = [
     "__delitem__",
     "__contains__",
     "__bool__",
+    "__iadd__",
+    "__isub__",
+    "__imul__",
+    "__imatmul__",
+    "__itruediv__",
+    "__ifloordiv__",
+    "__imod__",
+    "__ipow__",
+    "__ilshift__",
+    "__irshift__",
+    "__iand__",
+    "__ior__",
+    "__ixor__",
 ];
 
 /// The classes a module's class bodies may name: each by its name, the type of each one's
@@ -378,21 +424,24 @@ pub(super) struct KnownClasses<'known> {
     pub(super) signatures: &'known [FunctionSignature],
     /// The generic classes and their copies (ADR-0028).
     pub(super) copies: &'known std::cell::RefCell<crate::body::ClassCopies>,
+    /// The methods that return `T | NotImplementedType` (CLS-21).
+    pub(super) giving_way: &'known super::not_implemented::GivingWay,
+    /// The generic functions of the modules checked before, with their type parameters.
+    pub(super) generics: &'known BTreeMap<FunctionId, crate::body::Generic>,
 }
 
 /// Collects each class's attributes and methods; the methods become definitions whose IDs
 /// follow `first_function`.
 pub(super) fn collect_members<'tree>(
-    classes: &[ClassStatement<'tree>],
     known: &KnownClasses<'_>,
+    classes: &[ClassStatement<'tree>],
     names: &crate::check::ImportedNames,
     floor_defers: bool,
-    first_function: usize,
+    (first_function, copies): (usize, &mut ClassMethodCopies<'tree>),
     diagnostics: &mut Diagnostics,
 ) -> (Vec<ClassInfo>, Vec<Definition<'tree>>) {
     let mut infos = Vec::new();
     let mut methods: Vec<Definition<'tree>> = Vec::new();
-    let mut copies = ClassMethodCopies::default();
     for class in classes {
         let mut own_class_methods: Vec<&'tree Stmt> = Vec::new();
         let in_scope = super::generic_class::parameters_in_scope(known.copies, class.id);
@@ -402,6 +451,7 @@ pub(super) fn collect_members<'tree>(
         let classes = Classes {
             earlier: known.earlier,
             local: &infos,
+            copies: known.copies,
         };
         let mut info = new_info(class, &instance, classes);
         let owner = Owner {
@@ -418,10 +468,8 @@ pub(super) fn collect_members<'tree>(
                     let name = &parts.name.name;
                     let kind = parts.method_kind();
                     let registered = registered_name(&kind, name);
-                    if let Some(refused) =
-                        refused_method(&parts, &kind, &registered, &info, classes).or_else(|| {
-                            super::protocol::refused_member(&owner.instance, &kind, &parts)
-                        })
+                    if let Some(refused) = refused_method(&parts, &kind, &registered, &info)
+                        .or_else(|| super::protocol::refused_member(&owner.instance, &kind, &parts))
                     {
                         diagnostics.push(refused);
                         continue;
@@ -437,7 +485,7 @@ pub(super) fn collect_members<'tree>(
                     if name == "__init__" {
                         note_init(&parts, id, &mut info, names);
                     }
-                    let method = method_definition(
+                    let mut method = method_definition(
                         &parts,
                         &kind,
                         id,
@@ -446,6 +494,7 @@ pub(super) fn collect_members<'tree>(
                         &scope,
                         diagnostics,
                     );
+                    give_way(&mut method, (known, class.span), parts.name, diagnostics);
                     check_accessor(
                         &kind,
                         &method,
@@ -459,11 +508,14 @@ pub(super) fn collect_members<'tree>(
                         earlier: known.signatures,
                         local: &methods,
                         first_function,
+                        generics: known.generics,
                     };
-                    if let Some(diagnostic) =
-                        check_override(&info, classes, signatures, &method, parts.name)
-                    {
-                        diagnostics.push(diagnostic);
+                    let override_of = (&method, kind == MethodKind::Static);
+                    match check_override(&info, classes, signatures, override_of, parts.name) {
+                        Err(diagnostic) => diagnostics.push(*diagnostic),
+                        // A call through the base reaches the override through an adapter.
+                        Ok(Some(base)) => info.adapted.push((name.clone(), base, id)),
+                        Ok(None) => {}
                     }
                     check_special_method(&method, parts.name, diagnostics);
                     methods.push(method);
@@ -478,17 +530,17 @@ pub(super) fn collect_members<'tree>(
         copies.make(
             &own_class_methods,
             &mut info,
-            classes,
-            &scope,
+            (known, &scope),
             &mut collected,
             diagnostics,
         );
         report_name_conflicts(&info, class.name.span, diagnostics);
         super::protocol::check_values(&owner.instance, &info, class.name.span, diagnostics);
         let own_methods = &mut methods[first_method..];
-        finish_generic_class(&info, own_methods, known.copies, class.span, diagnostics);
+        finish_generic_class(&info, own_methods, known.copies);
         infos.push(info);
     }
+    copies.end_module(known.ids, names);
     (infos, methods)
 }
 
@@ -502,19 +554,59 @@ fn class_instance(known: &KnownClasses<'_>, class: &ClassStatement<'_>) -> Type 
 }
 
 /// The classes collected so far: those of the modules checked before, indexed by ID, and the
-/// module's own classes before the one being collected.
+/// module's own classes before the one being collected; and the copies of generic classes, which
+/// are read through their generic class (ADR-0040).
 #[derive(Clone, Copy)]
 struct Classes<'infos> {
     earlier: &'infos [ClassInfo],
     local: &'infos [ClassInfo],
+    copies: &'infos std::cell::RefCell<crate::body::ClassCopies>,
 }
 
 impl<'infos> Classes<'infos> {
-    /// Returns a class collected before; a base is defined before the class, so it is one.
+    /// Returns a class collected before, or for a copy of a generic class the generic class,
+    /// whose members the copy has; a base is defined before the class, so it is one.
     fn get(self, class: ClassId) -> Option<&'infos ClassInfo> {
+        let class = self
+            .copies
+            .borrow()
+            .copy(class)
+            .map_or(class, |copy| copy.root);
         self.earlier
             .get(class.0 as usize)
             .or_else(|| self.local.iter().find(|info| info.id == class))
+    }
+
+    /// Returns true when a type parameter is one of a generic class's.
+    fn is_class_parameter(self, parameter: &crate::generic::TypeParameter) -> bool {
+        self.copies
+            .borrow()
+            .roots
+            .values()
+            .any(|generic| generic.parameters.contains(parameter))
+    }
+
+    /// Returns true when a class is a generic class, collected or before.
+    fn is_generic(self, class: ClassId) -> bool {
+        self.copies.borrow().roots.contains_key(&class)
+    }
+
+    /// Returns the type parameters' owner and the type arguments of a copy of a generic class,
+    /// or `None` for any other class.
+    fn arguments(self, class: ClassId) -> Option<(Span, Vec<Type>)> {
+        let copies = self.copies.borrow();
+        let copy = copies.copy(class)?;
+        let owner = copies.roots.get(&copy.root)?.parameters.first()?.owner;
+        Some((owner, copy.arguments.clone()))
+    }
+
+    /// Returns `ty` as a member of the copy `class` has it, with its type arguments in place of
+    /// the generic class's parameters; `ty` itself for any other class.
+    fn as_member_of(self, class: ClassId, ty: &Type) -> Type {
+        match self.arguments(class) {
+            Some((owner, arguments)) => self.copies.borrow_mut().substitute(ty, owner, &arguments),
+            None => ty.clone(),
+        }
     }
 }
 
@@ -533,8 +625,19 @@ fn new_info(class: &ClassStatement<'_>, instance: &Type, classes: Classes<'_>) -
         _ => (None, None),
     };
     let attributes: Vec<AttributeInfo> = base
-        .and_then(|base| classes.get(base))
-        .map_or_else(Vec::new, |info| info.attributes.clone());
+        .and_then(|base| Some((base, classes.get(base)?)))
+        .map_or_else(Vec::new, |(base, info)| {
+            info.attributes
+                .iter()
+                .map(|attribute| AttributeInfo {
+                    name: attribute.name.clone(),
+                    ty: attribute
+                        .ty
+                        .as_ref()
+                        .map(|ty| classes.as_member_of(base, ty)),
+                })
+                .collect()
+        });
     ClassInfo {
         id: class.id,
         name: class.name.name.clone(),
@@ -546,13 +649,16 @@ fn new_info(class: &ClassStatement<'_>, instance: &Type, classes: Classes<'_>) -
         init: None,
         class_variables: Vec::new(),
         class_methods: Vec::new(),
-        remote_class_methods: Vec::new(),
         static_methods: Vec::new(),
         generic_methods: Vec::new(),
         properties: Vec::new(),
         defaults: Vec::new(),
+        adapted: Vec::new(),
+        adapters: Vec::new(),
+        static_bridges: Vec::new(),
         frozen: false,
         generated_init: false,
+        match_args: None,
         init_uses_instance: false,
         final_attributes: Vec::new(),
         span: class.span,
@@ -573,6 +679,7 @@ fn class_scope<'known>(
         instances: known.instances,
         modules: &names.modules,
         module_aliases: &names.module_aliases,
+        imported_aliases: &names.aliases,
         parameters,
         copies: known.copies,
         names: &names.names,
@@ -630,23 +737,43 @@ struct Collected<'methods, 'tree> {
     first_function: usize,
 }
 
-/// The class methods each class of the module has, its own and those it inherits from a
-/// class of the module, each with the copy of the class that defines it (ADR-0025).
+/// The class methods each class of the program has, its own and those it inherits, each with
+/// the copy of the class that defines it and that class's module; and the names each module
+/// checked so far gives its annotations, which a copy made in another module reads
+/// (ADR-0025, ADR-0037).
 #[derive(Default)]
-struct ClassMethodCopies<'tree> {
-    by_class: BTreeMap<ClassId, Vec<(&'tree Stmt, FunctionId)>>,
+pub(crate) struct ClassMethodCopies<'tree> {
+    by_class: BTreeMap<ClassId, Vec<(&'tree Stmt, FunctionId, String)>>,
+    names: BTreeMap<String, (BTreeMap<String, ClassId>, crate::check::ImportedNames)>,
+    module: String,
 }
 
 impl<'tree> ClassMethodCopies<'tree> {
+    /// Starts the copies of the module `module`.
+    pub(crate) fn begin_module(&mut self, module: &str) {
+        module.clone_into(&mut self.module);
+    }
+
+    /// Keeps the names of the module just collected, for copies its class methods get in
+    /// modules checked after it.
+    fn end_module(
+        &mut self,
+        classes: &BTreeMap<String, ClassId>,
+        names: &crate::check::ImportedNames,
+    ) {
+        self.names
+            .insert(self.module.clone(), (classes.clone(), names.clone()));
+    }
+
     /// Makes a copy, for the class `info` describes, of each class method it has: its own, and
-    /// each one a base of the module defines that it does not define again. A class method a
-    /// base of another module defines is noted, since its copy is planned (ADR-0025).
+    /// each one a base defines that it does not define again. A copy of a class method of
+    /// another module reads its signature in that module's names, and notes the module, whose
+    /// names its body is checked in (ADR-0037).
     fn make(
         &mut self,
         own: &[&'tree Stmt],
         info: &mut ClassInfo,
-        classes: Classes<'_>,
-        scope: &AnnotationScope<'_>,
+        (known, scope): (&KnownClasses<'_>, &AnnotationScope<'_>),
         collected: &mut Collected<'_, 'tree>,
         diagnostics: &mut Diagnostics,
     ) {
@@ -655,27 +782,18 @@ impl<'tree> ClassMethodCopies<'tree> {
             _ => String::new(),
         };
         let own_names: Vec<String> = own.iter().map(|statement| name_of(statement)).collect();
-        let mut visible: Vec<(&'tree Stmt, Option<FunctionId>)> =
-            own.iter().map(|statement| (*statement, None)).collect();
-        if let Some(base) = info.base {
-            if let Some(inherited) = self.by_class.get(&base) {
-                visible.extend(
-                    inherited
-                        .iter()
-                        .filter(|(statement, _)| !own_names.contains(&name_of(statement)))
-                        .map(|(statement, origin)| (*statement, Some(*origin))),
-                );
-            } else if let Some(base_info) = classes.get(base) {
-                let remote = base_info
-                    .class_methods
+        let mut visible: Vec<(&'tree Stmt, Option<FunctionId>, String)> = own
+            .iter()
+            .map(|statement| (*statement, None, self.module.clone()))
+            .collect();
+        self.refuse_through_copy(info, known, diagnostics);
+        if let Some(inherited) = info.base.and_then(|base| self.by_class.get(&base)) {
+            visible.extend(
+                inherited
                     .iter()
-                    .map(|(name, _)| name)
-                    .chain(&base_info.remote_class_methods)
-                    .filter(|name| !own_names.contains(name))
-                    .cloned()
-                    .collect::<Vec<_>>();
-                info.remote_class_methods.extend(remote);
-            }
+                    .filter(|(statement, _, _)| !own_names.contains(&name_of(statement)))
+                    .map(|(statement, origin, module)| (*statement, Some(*origin), module.clone())),
+            );
         }
         let class_object = match &info.exception {
             Some(exception) => TypeObjectOf::Exception(exception.clone()),
@@ -688,9 +806,13 @@ impl<'tree> ClassMethodCopies<'tree> {
         };
         let mut made = Vec::new();
         // Each statement is a `def`, since only methods are copied.
-        for (statement, parts, origin) in visible.into_iter().filter_map(|(statement, origin)| {
-            Some((statement, FunctionParts::of(statement)?, origin))
-        }) {
+        for (statement, parts, origin, module) in
+            visible
+                .into_iter()
+                .filter_map(|(statement, origin, module)| {
+                    Some((statement, FunctionParts::of(statement)?, origin, module))
+                })
+        {
             let id = FunctionId(
                 u32::try_from(collected.first_function + collected.methods.len())
                     .unwrap_or(u32::MAX),
@@ -703,24 +825,125 @@ impl<'tree> ClassMethodCopies<'tree> {
             } else {
                 &mut *diagnostics
             };
-            let mut method = definition(&parts, Some(&owner), scope, sink);
-            // A parameter that names a protocol would make the copy generic (GEN-09).
-            let written = method.type_parameters.len();
-            super::protocol::protocol_parameters(&mut method, sink);
-            if method.type_parameters.len() > written {
-                sink.push(planned_generic_method(
-                    parts.name,
-                    "a protocol parameter of a special method, a property or a class method is",
-                ));
+            let home = (module != self.module).then(|| module.clone());
+            // A copy of another module's class method reads its annotations there.
+            let remote = home.as_ref().and_then(|home| self.names.get(home));
+            let read_in = match remote {
+                Some((classes, names)) => AnnotationScope {
+                    classes,
+                    modules: &names.modules,
+                    module_aliases: &names.module_aliases,
+                    imported_aliases: &names.aliases,
+                    names: &names.names,
+                    standard: &names.standard,
+                    bound: u32::MAX,
+                    ..class_scope(known, names, true, info.id, scope.parameters)
+                },
+                None => *scope,
+            };
+            let mut method = class_method_definition(&parts, &owner, &read_in, sink);
+            if !method.type_parameters.is_empty() {
+                info.generic_methods.push(parts.name.name.clone());
             }
+            method.home = home;
+            // A parameter that names a protocol makes the copy generic, as its own type
+            // parameters do (GEN-09).
+            super::protocol::protocol_parameters(&mut method, false, sink);
             method.qualified_name = format!("{}.{}", info.name, parts.name.name);
             method.copy_of = origin;
             info.class_methods.push((parts.name.name.clone(), id));
-            made.push((statement, origin.unwrap_or(id)));
+            made.push((statement, origin.unwrap_or(id), module));
             collected.methods.push(method);
         }
         self.by_class.insert(info.id, made);
     }
+}
+
+impl ClassMethodCopies<'_> {
+    /// Reports a class derived from a copy of a generic class with class methods: the copy
+    /// has no class methods of its own here, and the generic class's would need its type
+    /// arguments (GEN-15).
+    fn refuse_through_copy(
+        &self,
+        info: &ClassInfo,
+        known: &KnownClasses<'_>,
+        diagnostics: &mut Diagnostics,
+    ) {
+        let through_copy = info
+            .base
+            .and_then(|base| Some(known.copies.borrow().copy(base)?.root));
+        let has_class_methods = through_copy
+            .and_then(|root| self.by_class.get(&root))
+            .is_some_and(|made| !made.is_empty());
+        if has_class_methods {
+            diagnostics.push(
+                Diagnostic::new(
+                    DiagnosticCode::error(201),
+                    info.span,
+                    format!(
+                        "`{}` derives from a copy of a generic class with class methods, which it \
+                         inherits from TyPy 1.0 (GEN-15)",
+                        info.name
+                    ),
+                )
+                .with_rule(RuleId::GEN_15),
+            );
+        }
+    }
+}
+
+/// Returns the definition of a class method for one class, read in `scope` with its own type
+/// parameters in scope too (GEN-09).
+fn class_method_definition<'tree>(
+    parts: &FunctionParts<'tree>,
+    owner: &Owner,
+    scope: &AnnotationScope<'_>,
+    diagnostics: &mut Diagnostics,
+) -> Definition<'tree> {
+    let type_parameters =
+        resolve_type_parameters(parts.type_parameters, parts.span, scope, diagnostics);
+    let mut in_scope = scope.parameters.clone();
+    in_scope.extend(
+        type_parameters
+            .iter()
+            .map(|parameter| (parameter.name.clone(), Type::parameter(parameter.clone()))),
+    );
+    let method_scope = AnnotationScope {
+        parameters: &in_scope,
+        ..*scope
+    };
+    let mut method = definition(parts, Some(owner), &method_scope, diagnostics);
+    method.type_parameters = type_parameters;
+    method
+}
+
+/// Widens the return type of a method that may return `NotImplemented`, as the scan of the
+/// program found, to take it (CLS-21).
+fn give_way(
+    method: &mut Definition<'_>,
+    (known, class): (&KnownClasses<'_>, Span),
+    name: &Identifier,
+    diagnostics: &mut Diagnostics,
+) {
+    if !known.giving_way.contains(&(class, name.name.clone())) {
+        return;
+    }
+    let declared = std::mem::replace(&mut method.signature.returns, Type::Error);
+    if matches!(declared, Type::Optional(_) | Type::NoneType) {
+        diagnostics.push(
+            Diagnostic::new(
+                DiagnosticCode::error(201),
+                name.span,
+                format!(
+                    "`{}` returns `None` and `NotImplemented`, and an operator method that may \
+                     return both is planned for TyPy 1.0 (CLS-33)",
+                    name.name
+                ),
+            )
+            .with_rule(RuleId::CLS_33),
+        );
+    }
+    method.signature.returns = Type::union(vec![declared, Type::NotImplemented]);
 }
 
 /// Returns the name a method is held under: its own, or `name.setter` for the setter of the
@@ -771,19 +994,14 @@ fn method_definition<'tree>(
     };
     let mut method = definition(parts, Some(&method_owner), &method_scope, diagnostics);
     method.type_parameters = type_parameters;
-    let written = method.type_parameters.len();
-    super::protocol::protocol_parameters(&mut method, diagnostics);
-    // A parameter that names a protocol makes the method generic, which only an instance or
-    // a static method may be yet (GEN-09).
+    // A parameter that names a protocol makes the method generic; a special method or a
+    // property has one body, so its parameter takes protocol values (ADR-0041).
     let special = name.starts_with("__") && name.ends_with("__");
-    if method.type_parameters.len() > written
-        && (special || !matches!(kind, MethodKind::Instance | MethodKind::Static))
-    {
-        diagnostics.push(planned_generic_method(
-            parts.name,
-            "a protocol parameter of a special method, a property or a class method is",
-        ));
-    }
+    let plain = matches!(
+        kind,
+        MethodKind::Instance | MethodKind::Static | MethodKind::Class
+    );
+    super::protocol::protocol_parameters(&mut method, special || !plain, diagnostics);
     if !method.type_parameters.is_empty() {
         info.generic_methods.push(registered.clone());
     }
@@ -801,7 +1019,6 @@ fn refused_method(
     kind: &MethodKind,
     registered: &str,
     info: &ClassInfo,
-    classes: Classes<'_>,
 ) -> Option<Diagnostic> {
     let name = &parts.name.name;
     let refuse = |code: u16, message: String| {
@@ -818,10 +1035,14 @@ fn refused_method(
         return Some(planned_method(parts.name));
     }
     let generic = !parts.type_parameters.is_empty();
-    if generic && (special || !matches!(kind, MethodKind::Instance | MethodKind::Static)) {
-        return Some(planned_generic_method(
+    let plain = matches!(
+        kind,
+        MethodKind::Instance | MethodKind::Static | MethodKind::Class
+    );
+    if generic && (special || !plain) {
+        return Some(later_generic_method(
             parts.name,
-            "type parameters of a special method, a property or a class method are",
+            "type parameters of a special method or a property are",
         ));
     }
     if special && *kind != MethodKind::Instance {
@@ -830,26 +1051,10 @@ fn refused_method(
             format!("the special method `{name}` takes no decorator"),
         );
     }
-    let static_in_bases = static_method_in_bases(classes, info.base, name);
     match kind {
         MethodKind::Class if parts.parameters.is_empty() => refuse(
             404,
             format!("the class method `{name}` takes the class, `cls`, first"),
-        ),
-        // A static method has no entry in the method tables, so a subclass's own would not run
-        // through an instance of it.
-        MethodKind::Static if inherited_method(classes, info.base, name).is_some() => refuse(
-            201,
-            format!(
-                "redefining the method `{name}` of a base as a static method is planned for TyPy 0.5 (CLS-06)"
-            ),
-        ),
-        // A static method of a base is also its method, so the arm above takes a static one.
-        _ if static_in_bases => refuse(
-            201,
-            format!(
-                "redefining the static method `{name}` of a base is planned for TyPy 0.5 (CLS-06)"
-            ),
         ),
         MethodKind::Static => None,
         MethodKind::Setter(property) if property != name => refuse(
@@ -873,18 +1078,6 @@ fn refused_method(
         ),
         _ => None,
     }
-}
-
-/// Returns true when `base`, or a class it derives from, defines `name` as a static method.
-fn static_method_in_bases(classes: Classes<'_>, base: Option<ClassId>, name: &str) -> bool {
-    let mut current = base;
-    while let Some(info) = current.and_then(|class| classes.get(class)) {
-        if info.static_methods.iter().any(|each| each == name) {
-            return true;
-        }
-        current = info.base;
-    }
-    false
 }
 
 /// Checks the signature of a property's getter, which takes only the instance, and of its
@@ -936,6 +1129,7 @@ struct Signatures<'definitions, 'tree> {
     earlier: &'definitions [FunctionSignature],
     local: &'definitions [Definition<'tree>],
     first_function: usize,
+    generics: &'definitions BTreeMap<FunctionId, crate::body::Generic>,
 }
 
 impl<'definitions> Signatures<'definitions, '_> {
@@ -947,71 +1141,205 @@ impl<'definitions> Signatures<'definitions, '_> {
                 |local| self.local.get(local).map(|base| &base.signature),
             )
     }
+
+    /// Returns the type parameters of a function: none for one that is not generic.
+    fn type_parameters(self, id: FunctionId) -> &'definitions [crate::generic::TypeParameter] {
+        (id.0 as usize)
+            .checked_sub(self.first_function)
+            .map_or_else(
+                || {
+                    self.generics
+                        .get(&id)
+                        .map_or(&[][..], |generic| generic.parameters.as_slice())
+                },
+                |local| {
+                    self.local
+                        .get(local)
+                        .map_or(&[][..], |base| base.type_parameters.as_slice())
+                },
+            )
+    }
 }
 
 /// Returns why a method does not fit the base method it overrides, if it overrides one and
 /// does not fit; a constructor runs on its own class only, so `__init__` is not compared.
+/// Checks a method against the base method it overrides, if it overrides one, and returns
+/// the base method when a call through it needs an adapter to reach the override (CLS-04).
 fn check_override(
     info: &ClassInfo,
     classes: Classes<'_>,
     signatures: Signatures<'_, '_>,
-    method: &Definition<'_>,
+    (method, static_own): (&Definition<'_>, bool),
     name: &Identifier,
-) -> Option<Diagnostic> {
+) -> Result<Option<FunctionId>, Box<Diagnostic>> {
     if name.name == "__init__" {
-        return None;
+        return Ok(None);
     }
-    let (base_id, base_class) = inherited_method(classes, info.base, &name.name)?;
-    // A copy of a generic method is called directly, so neither side of an override may be
-    // generic.
-    if !method.type_parameters.is_empty() || generic_method_in_bases(classes, info.base, name) {
-        return Some(planned_generic_method(
-            name,
-            "a method with type parameters that overrides or is overridden is",
-        ));
+    let Some((base_id, base_class, through)) = inherited_method(classes, info.base, &name.name)
+    else {
+        return Ok(None);
+    };
+    let Some(base) = signatures.get(base_id) else {
+        return Ok(None);
+    };
+    // A generic method overrides one with as many type parameters, each copy of the one taking
+    // the place of the other's copy for the same arguments; it is compared with its own
+    // parameters named as the base's (GEN-09).
+    // A method of a generic class is generic over the class's parameters too, which a copy
+    // gives; only a method's own count.
+    let base_parameters: Vec<crate::generic::TypeParameter> = signatures
+        .type_parameters(base_id)
+        .iter()
+        .filter(|parameter| !classes.is_class_parameter(parameter))
+        .cloned()
+        .collect();
+    let own_signature = if method.type_parameters.is_empty() && base_parameters.is_empty() {
+        method.signature.clone()
+    } else {
+        let fits = method.type_parameters.len() == base_parameters.len()
+            && through.is_empty()
+            && !classes.is_generic(info.id);
+        if !fits {
+            return Err(Box::new(later_generic_method(
+                name,
+                "a generic method that overrides or is overridden by one with other type \
+                 parameters, or in a generic class, is",
+            )));
+        }
+        as_parameters_of(&method.signature, &method.type_parameters, &base_parameters)
+    };
+    // A method a copy of a generic class has takes the copy's type arguments, the copy nearest
+    // the method first (ADR-0040).
+    let mut base = base.clone();
+    for copy in through.iter().rev() {
+        base = FunctionSignature {
+            parameters: base
+                .parameters
+                .iter()
+                .map(|parameter| SignatureParameter {
+                    ty: classes.as_member_of(*copy, &parameter.ty),
+                    ..parameter.clone()
+                })
+                .collect(),
+            returns: classes.as_member_of(*copy, &base.returns),
+        };
     }
-    let base = signatures.get(base_id)?;
-    Override {
+    let base = &base;
+    // A static method is reached through an instance by its bridge, which takes the instance
+    // first, so it is compared as a method that takes one (CLS-06).
+    let static_base = nearest_is_static(classes, info.base, &name.name);
+    let as_method = |signature: &FunctionSignature, is_static: bool| {
+        let mut signature = signature.clone();
+        if is_static {
+            signature.parameters.insert(
+                0,
+                SignatureParameter {
+                    name: "self".to_owned(),
+                    ty: Type::Error,
+                    default: None,
+                    default_call: None,
+                },
+            );
+        }
+        signature
+    };
+    let (own, base) = (
+        as_method(&own_signature, static_own),
+        as_method(base, static_base),
+    );
+    let fit = Override {
         name: &format!("{}.{}", info.name, name.name),
-        signature: &method.signature,
+        signature: &own,
         base_name: &format!("{base_class}.{}", name.name),
-        base,
+        base: &base,
         span: name.span,
     }
-    .check()
+    .check()?;
+    // An adapter is one function, which cannot stand for each copy of a generic method.
+    if fit == super::overriding::Fit::Adapted && !base_parameters.is_empty() {
+        return Err(Box::new(later_generic_method(
+            name,
+            "a generic method that overrides one with a parameter or result held otherwise is",
+        )));
+    }
+    if fit == super::overriding::Fit::Adapted && (static_own || static_base) {
+        return Err(Box::new(
+            Diagnostic::new(
+                DiagnosticCode::error(201),
+                name.span,
+                format!(
+                    "a static method that overrides `{base_class}.{}`, or is overridden, with a \
+                     parameter or result held otherwise is planned for TyPy 1.0 (CLS-35)",
+                    name.name
+                ),
+            )
+            .with_rule(RuleId::CLS_35),
+        ));
+    }
+    Ok((fit == super::overriding::Fit::Adapted).then_some(base_id))
 }
 
-/// Returns true when the nearest class from `base` up that defines the method `name` gives
-/// it type parameters (GEN-01).
-fn generic_method_in_bases(classes: Classes<'_>, base: Option<ClassId>, name: &Identifier) -> bool {
+/// Returns `signature` with each of the method's own type parameters, `own`, named as the
+/// parameter at its position in `base`, so it compares with the method it overrides (GEN-09).
+fn as_parameters_of(
+    signature: &FunctionSignature,
+    own: &[crate::generic::TypeParameter],
+    base: &[crate::generic::TypeParameter],
+) -> FunctionSignature {
+    let Some(owner) = own.first().map(|parameter| parameter.owner) else {
+        return signature.clone();
+    };
+    let named: Vec<Type> = base.iter().cloned().map(Type::parameter).collect();
+    FunctionSignature {
+        parameters: signature
+            .parameters
+            .iter()
+            .map(|parameter| SignatureParameter {
+                ty: parameter.ty.substituted(owner, &named),
+                ..parameter.clone()
+            })
+            .collect(),
+        returns: signature.returns.substituted(owner, &named),
+    }
+}
+
+/// Returns true when the nearest class from `base` up that defines `name` defines it as a
+/// static method.
+fn nearest_is_static(classes: Classes<'_>, base: Option<ClassId>, name: &str) -> bool {
     std::iter::successors(base.and_then(|class| classes.get(class)), |info| {
         info.base.and_then(|class| classes.get(class))
     })
-    .find(|info| info.method(&name.name).is_some())
-    .is_some_and(|info| info.generic_methods.contains(&name.name))
+    .find(|info| info.method(name).is_some())
+    .is_some_and(|info| info.static_methods.iter().any(|each| each == name))
 }
 
-/// Reports a method with type parameters that TyPy 0.5 accepts (GEN-09).
-fn planned_generic_method(name: &Identifier, what: &str) -> Diagnostic {
+/// Reports a method with type parameters that TyPy 1.0 accepts (GEN-16).
+fn later_generic_method(name: &Identifier, what: &str) -> Diagnostic {
     Diagnostic::new(
         DiagnosticCode::error(201),
         name.span,
-        format!("{what} planned for TyPy 0.5 (GEN-09)"),
+        format!("{what} planned for TyPy 1.0 (GEN-16)"),
     )
-    .with_rule(RuleId::GEN_09)
+    .with_rule(RuleId::GEN_16)
 }
 
 /// Returns the method `name` of `base` or of the nearest class it derives from that defines
-/// it, with that class's name.
+/// it, with that class's name and the copies of generic classes the search went through,
+/// nearest first.
 fn inherited_method<'infos>(
     classes: Classes<'infos>,
     base: Option<ClassId>,
     name: &str,
-) -> Option<(FunctionId, &'infos str)> {
+) -> Option<(FunctionId, &'infos str, Vec<ClassId>)> {
     let mut current = base;
-    while let Some(info) = current.and_then(|class| classes.get(class)) {
+    let mut through = Vec::new();
+    while let Some(class) = current {
+        let info = classes.get(class)?;
+        if classes.arguments(class).is_some() {
+            through.push(class);
+        }
         if let Some(method) = info.method(name) {
-            return Some((method, &info.name));
+            return Some((method, &info.name, through));
         }
         current = info.base;
     }
@@ -1066,6 +1394,10 @@ fn class_body_name(
             value,
             ..
         } => {
+            // A refused value leaves the attribute declared with its default, so its uses are
+            // still checked; the program is not compiled.
+            let refused = value.is_some()
+                && refuse_shared_parameter(id, annotation, info, scope, diagnostics);
             // A `Final` the class body gives a value is a class variable, as PEP 591 has it.
             let class_var =
                 super::annotation::class_var_type(annotation, &names.names, &names.standard)
@@ -1073,18 +1405,22 @@ fn class_body_name(
                     || super::annotation::final_type(annotation, &names.names, &names.standard)
                         .is_some();
             if class_var && value.is_some() {
-                info.class_variables.push(id.clone());
+                if !refused {
+                    info.class_variables.push(id.clone());
+                }
                 return;
             }
             let ty = annotation_type(annotation, scope, diagnostics);
-            let ty = super::protocol::outside_signature(ty, annotation.span(), diagnostics);
             declare(info, id, Some(ty), *span, diagnostics);
             if value.is_some() {
-                default_value(info, id, *span, diagnostics);
+                default_value(info, id);
             }
         }
-        Stmt::Assign { targets, .. } => {
+        Stmt::Assign { targets, value, .. } => {
             if let [Expr::Name { id, .. }] = targets.as_slice() {
+                if id == "__match_args__" {
+                    info.match_args = Some(match_arg_names(value));
+                }
                 info.class_variables.push(id.clone());
             }
         }
@@ -1092,23 +1428,62 @@ fn class_body_name(
     }
 }
 
-/// Notes that the class body gives the attribute `name` a default. An exception is made by
-/// the runtime's exception path, which copies no defaults, so an exception class's are
-/// planned (ADR-0024).
-fn default_value(info: &mut ClassInfo, name: &str, span: Span, diagnostics: &mut Diagnostics) {
-    if info.exception.is_some() {
-        diagnostics.push(
-            Diagnostic::new(
-                DiagnosticCode::error(201),
-                span,
-                "a default for an attribute of an exception class is planned for TyPy 0.5 \
-                 (CLS-11)",
-            )
-            .with_rule(RuleId::CLS_11)
-            .with_help("assign the attribute in `__init__`"),
-        );
-        return;
-    }
+/// Reports a value a generic class's body gives whose annotation names a type parameter of
+/// the class: the module variable that holds it is shared by every copy, so it cannot take
+/// each copy's type (GEN-11). Returns true when it reports one.
+fn refuse_shared_parameter(
+    id: &str,
+    annotation: &Expr,
+    info: &ClassInfo,
+    scope: &AnnotationScope<'_>,
+    diagnostics: &mut Diagnostics,
+) -> bool {
+    let Some(parameter) = scope
+        .parameters
+        .keys()
+        .find(|name| super::generic_class::annotation_names(annotation, &[name]))
+    else {
+        return false;
+    };
+    diagnostics.push(
+        Diagnostic::new(
+            DiagnosticCode::error(201),
+            annotation.span(),
+            format!(
+                "a value of the generic class `{}` whose type names its type parameter \
+                 `{parameter}` is planned for TyPy 1.0 (GEN-11)",
+                info.name
+            ),
+        )
+        .with_rule(RuleId::GEN_11)
+        .with_help(format!(
+            "declare `{id}` without a value and assign it in `__init__`"
+        )),
+    );
+    true
+}
+
+/// Returns the names a `__match_args__` tuple of `str` literals holds, or where a value of
+/// another form is.
+fn match_arg_names(value: &Expr) -> Result<Vec<String>, Span> {
+    let Expr::Tuple { elements, .. } = value else {
+        return Err(value.span());
+    };
+    elements
+        .iter()
+        .map(|element| match element {
+            Expr::Constant {
+                value: Constant::Str(name),
+                ..
+            } => Ok(name.clone()),
+            other => Err(other.span()),
+        })
+        .collect()
+}
+
+/// Notes that the class body gives the attribute `name` a default, which an instance, and
+/// an exception once the runtime makes it, holds before `__init__` runs (ADR-0024).
+fn default_value(info: &mut ClassInfo, name: &str) {
     // A subclass may give an inherited attribute a default of its own, which its instances
     // hold in place of the base's.
     if let Some(index) = info.attribute(name) {
@@ -1231,15 +1606,17 @@ fn check_special_method(method: &Definition<'_>, name: &Identifier, diagnostics:
 
 /// Returns true for the methods of the binary arithmetic and bitwise operators and their
 /// reflected forms, such as `__add__` and `__radd__` (CLS-07).
-fn is_binary_method(name: &str) -> bool {
+pub(super) fn is_binary_method(name: &str) -> bool {
     let Some(bare) = name
         .strip_prefix("__")
         .and_then(|rest| rest.strip_suffix("__"))
     else {
         return false;
     };
+    // A reflected method and an in-place one take the operands a binary one does (CLS-20).
     let bare = bare
         .strip_prefix('r')
+        .or_else(|| bare.strip_prefix('i'))
         .filter(|rest| BINARY.contains(rest))
         .unwrap_or(bare);
     BINARY.contains(&bare)
@@ -1303,7 +1680,7 @@ fn check_comparison(method: &Definition<'_>, name: &Identifier, diagnostics: &mu
         && signature.parameters[0]
             .ty
             .is_assignable_to(&signature.parameters[1].ty)
-        && signature.returns.matches(&Type::Bool);
+        && signature.returns.implemented().matches(&Type::Bool);
     if !fits {
         let class = signature
             .parameters
@@ -1374,26 +1751,12 @@ fn check_exit(method: &Definition<'_>, name: &Identifier, diagnostics: &mut Diag
 
 /// Reports a special method a class may not define yet.
 fn planned_method(name: &Identifier) -> Diagnostic {
-    let bare = name
-        .name
-        .strip_prefix("__")
-        .and_then(|rest| rest.strip_suffix("__"))
-        .unwrap_or_default();
-    // The in-place operators come after the container methods of 0.4, and the other special
-    // methods, such as `__call__`, after 1.0.
-    let release = if bare
-        .strip_prefix('i')
-        .is_some_and(|rest| BINARY.contains(&rest))
-    {
-        "TyPy 0.5"
-    } else {
-        "a release after TyPy 1.0"
-    };
+    // The special methods TyPy does not take, such as `__call__`, come after 1.0.
     Diagnostic::new(
         DiagnosticCode::error(201),
         name.span,
         format!(
-            "the special method `{}` is planned for {release} (CLS-07)",
+            "the special method `{}` is planned for a release after TyPy 1.0 (CLS-07)",
             name.name
         ),
     )
@@ -1448,6 +1811,11 @@ fn initialized_attributes(parts: &FunctionParts<'_>) -> Vec<String> {
                     statements(body, instance, found);
                     statements(orelse, instance, found);
                 }
+                Stmt::Match { cases, .. } => {
+                    for case in cases {
+                        statements(&case.body, instance, found);
+                    }
+                }
                 Stmt::Try { .. } => {
                     for block in statement.try_blocks() {
                         statements(block, instance, found);
@@ -1482,7 +1850,7 @@ pub(crate) fn class_value_variable(class: &str, name: &str) -> String {
 /// `name: ClassVar[T] = value`, for a class variable, and `name: T = value` for the default
 /// of an instance attribute.
 pub(crate) fn class_values(
-    class: &str,
+    (class, parameters): (&str, &[typy_source::syntax::TypeParameter]),
     body: &[Stmt],
     names: &BTreeMap<String, super::annotation::AnnotationName>,
     standard: &BTreeMap<String, String>,
@@ -1491,8 +1859,18 @@ pub(crate) fn class_values(
         id: class_value_variable(class, id),
         span,
     };
+    let parameters: Vec<&str> = parameters
+        .iter()
+        .map(|parameter| parameter.name.name.as_str())
+        .collect();
     body.iter()
         .filter_map(|statement| match statement {
+            // A value whose type names a type parameter of the class is refused (GEN-11).
+            Stmt::AnnAssign { annotation, .. }
+                if super::generic_class::annotation_names(annotation, &parameters) =>
+            {
+                None
+            }
             Stmt::AnnAssign {
                 target: Expr::Name { id, span },
                 annotation,

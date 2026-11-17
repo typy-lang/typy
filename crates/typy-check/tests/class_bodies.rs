@@ -51,6 +51,25 @@ fn a_dataclass_without_eq_and_an_exit_without_annotations_are_accepted() {
 }
 
 #[test]
+fn a_dataclass_takes_union_fields_its_own_hash_and_eq_and_a_copy_of_a_generic_base() {
+    accepted(&[
+        // Fields of unions, one with a list among its members.
+        "from dataclasses import dataclass\n@dataclass(eq=False)\nclass P:\n    x: int | None\n\
+         \x20   y: list[int] | None\nprint(P(1, None).x, P(None, [2]).y)\n",
+        // The methods the class writes take the place of those the decorator would write.
+        "from dataclasses import dataclass\n@dataclass(frozen=True)\nclass Key:\n    name: str\n\
+         \x20   def __hash__(self) -> int:\n        return len(self.name)\n\
+         \x20   def __eq__(self, other: 'Key') -> bool:\n\
+         \x20       return self.name.lower() == other.name.lower()\n\
+         print(Key('Ab') == Key('aB'), {Key('Ab'): 1}[Key('aB')])\n",
+        // A copy of a generic class that is not a dataclass gives no fields.
+        "from dataclasses import dataclass\nclass Echo[T]:\n    def echo(self, item: T) -> T:\n\
+         \x20       return item\n@dataclass\nclass Labelled(Echo[int]):\n    label: str\n\
+         print(Labelled('a'), Labelled('a').echo(3))\n",
+    ]);
+}
+
+#[test]
 fn super_reaches_the_methods_of_the_bases() {
     accepted(&[
         // Another method of the base, from `__init__`.
@@ -130,11 +149,6 @@ fn class_bodies_and_methods_out_of_reach_give_their_codes() {
             "E0408",
         ),
         (
-            "class A:\n    @staticmethod\n    def f() -> int:\n        return 1\n\
-             class B(A):\n    @staticmethod\n    def f() -> int:\n        return 2\n",
-            "E0201",
-        ),
-        (
             "class A:\n    def f(self) -> int:\n        return 1\n\
              class B(A):\n    def f(self) -> int:\n        return super(x=1).f()\n",
             "E0201",
@@ -196,5 +210,19 @@ fn class_statements_typy_cannot_compile_are_refused() {
              class A:\n    def __init__(self, b: B) -> None:\n        b.v: Final[int] = 1\n",
             "E0408",
         ),
+    ]);
+}
+
+#[test]
+fn a_frozen_dataclass_holding_a_list_in_a_tuple_or_an_alias_has_no_hash() {
+    let classes = "from dataclasses import dataclass\ntype Numbers = list[int]\n\
+                   @dataclass(frozen=True)\nclass Bag:\n    numbers: Numbers\n\
+                   @dataclass(frozen=True)\nclass Pair:\n    items: tuple[int, list[int]] | None\n";
+    accepted(&[&format!(
+        "{classes}print(Bag([1]) == Bag([1]), Pair(None), Pair((1, [2])) == Pair(None))\n"
+    )]);
+    refused(&[
+        (&format!("{classes}print({{Bag([1])}})\n"), "E0413"),
+        (&format!("{classes}print({{Pair(None)}})\n"), "E0413"),
     ]);
 }

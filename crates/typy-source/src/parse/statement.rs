@@ -169,7 +169,15 @@ impl Converter<'_> {
                 body: self.statements(&node.body),
                 span,
             },
-            ast::Stmt::Match(node) => self.other_statement(NodeKind::Match, node.range),
+            ast::Stmt::Match(node) => Stmt::Match {
+                subject: self.expression(&node.subject),
+                cases: node
+                    .cases
+                    .iter()
+                    .map(|case| self.match_case(case))
+                    .collect(),
+                span,
+            },
             ast::Stmt::Raise(node) => Stmt::Raise {
                 exception: node.exc.as_deref().map(|value| self.expression(value)),
                 cause: node.cause.as_deref().map(|value| self.expression(value)),

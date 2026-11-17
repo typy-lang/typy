@@ -39,6 +39,7 @@ impl FunctionLowerer<'_> {
             return self.new_exception_with_init(class, init, span);
         }
         let built_in = class.builtin();
+        let program_class = class.class_id();
         let class = self.constant(Constant::TypeObject(exception_class(class)), span);
         let types: Vec<Type> = arguments.iter().map(|value| value.ty.clone()).collect();
         let id = self.tuple_type_id(&types);
@@ -47,29 +48,38 @@ impl FunctionLowerer<'_> {
         if arguments.is_empty() {
             let unit = self.constant(Constant::Unit, span);
             let nothing = self.bits(Self::borrowed(unit, TyirType::Unit), span);
-            return self.call_runtime(
+            let exception = self.call_runtime(
                 RuntimeFunction::ExceptionNew,
                 vec![class, descriptor, nothing],
                 span,
             );
+            if let Some(program_class) = program_class {
+                self.store_defaults(exception, program_class, span);
+            }
+            return exception;
         }
         let tuple = self.tuple_display(arguments, layout, span);
         let address = self.bits(Self::borrowed(tuple.value, tuple.ty), span);
-        // An `OSError` of two or more arguments reads them as `errno` and the rest (EXC-14).
-        let constructor = if built_in.is_os_error() && arguments.len() >= 2 {
+        // An `OSError` of two to five arguments reads them as `errno` and the rest, and one of
+        // more reads none (EXC-14, EXC-16).
+        let constructor = if built_in.is_os_error() && (2..=5).contains(&arguments.len()) {
             RuntimeFunction::OsErrorNew
         } else {
             RuntimeFunction::ExceptionNew
         };
         let exception = self.call_runtime(constructor, vec![class, descriptor, address], span);
         self.release(tuple, span);
+        if let Some(program_class) = program_class {
+            self.store_defaults(exception, program_class, span);
+        }
         exception
     }
 
     /// Lowers a call of an exception class with an `__init__` of the program's: the arguments
     /// are evaluated in order, the exception is made with those written by position as its
-    /// arguments, then `__init__` runs on it, as CPython's `BaseException.__new__` and the
-    /// class's `__init__` do (CLS-03).
+    /// arguments, or with none for an `OSError`, then `__init__` runs on it, as CPython's
+    /// `BaseException.__new__`, `OSError.__new__` and the class's `__init__` do (CLS-03,
+    /// EXC-14).
     fn new_exception_with_init(
         &mut self,
         class: &ExceptionClass,
@@ -87,14 +97,22 @@ impl FunctionLowerer<'_> {
                 )
             })
             .collect();
-        let positional = &init.arguments[..init.positional];
+        let program_class = class.class_id();
+        // `OSError.__new__` leaves the arguments of a class with an `__init__` of its own to
+        // `OSError.__init__`, so the exception starts with none.
+        let kept = if class.builtin().is_os_error() {
+            0
+        } else {
+            init.positional
+        };
+        let positional = &init.arguments[..kept];
         let types: Vec<Type> = positional
             .iter()
             .map(|argument| argument.value.ty.clone())
             .collect();
         let id = self.tuple_type_id(&types);
         let layout = TyirType::Tuple(id);
-        let items: Vec<ValueId> = values[..init.positional]
+        let items: Vec<ValueId> = values[..kept]
             .iter()
             .map(|(_, lowered)| {
                 if self.counted(lowered.ty) {
@@ -109,7 +127,7 @@ impl FunctionLowerer<'_> {
         let tuple = self.produced(tuple, layout);
         let class = self.constant(Constant::TypeObject(exception_class(class)), span);
         let descriptor = self.constant(Constant::TupleDescriptor(id), span);
-        let address = if init.positional == 0 {
+        let address = if kept == 0 {
             let unit = self.constant(Constant::Unit, span);
             self.bits(Self::borrowed(unit, TyirType::Unit), span)
         } else {
@@ -121,6 +139,9 @@ impl FunctionLowerer<'_> {
             span,
         );
         self.release(tuple, span);
+        if let Some(program_class) = program_class {
+            self.store_defaults(exception, program_class, span);
+        }
         let mut values = values;
         values.insert(0, (0, Self::borrowed(exception.value, TyirType::EXCEPTION)));
         let done = self.call_function(init.function, values, TyirType::Unit, span);
@@ -198,6 +219,23 @@ impl FunctionLowerer<'_> {
         // follows, so no later path may release it again.
         self.untrack(exception.value);
         self.builder.terminate(Terminator::Unreachable);
+    }
+
+    /// Raises the exception `exception` makes where a value of `ty` stands. No path goes on
+    /// from the throw, so the value given after it is a zero value no code reads.
+    pub(crate) fn raise_in_place(
+        &mut self,
+        exception: &TypedExpr,
+        ty: TyirType,
+        span: Span,
+    ) -> Lowered {
+        let exception = self.expression(exception);
+        self.call_runtime(RuntimeFunction::ExceptionThrow, vec![exception.value], span);
+        self.untrack(exception.value);
+        self.builder.terminate(Terminator::Unreachable);
+        let after = self.builder.create_block();
+        self.builder.switch_to(after);
+        Self::borrowed(self.zero_value(ty, span), ty)
     }
 
     /// Returns `str(exception)`, or `repr(exception)` when `repr` is set, through the

@@ -144,6 +144,17 @@ impl FunctionLowerer<'_> {
     pub(crate) fn assign_target(&mut self, target: &AssignTarget, value: Lowered, span: Span) {
         match target {
             AssignTarget::Name(symbol) => self.assign_name(*symbol, value, span),
+            // The value is kept in its hidden variable, whose converted read the target takes
+            // (TYP-16).
+            AssignTarget::Converted {
+                holder,
+                value: converted,
+                target,
+            } => {
+                self.assign_name(*holder, value, span);
+                let lowered = self.expression(converted);
+                self.assign_target(target, lowered, span);
+            }
             // A module bound lazily is imported before the assignment (MOD-11).
             AssignTarget::Lazy { reify, target } => {
                 self.run_lazy_import(*reify, span);
@@ -168,8 +179,30 @@ impl FunctionLowerer<'_> {
                 self.release(value, span);
             }
             AssignTarget::Entry { dict, key } => self.assign_entry(dict, key, value, span),
+            AssignTarget::CData { object, place } => self.assign_cdata(object, place, value, span),
             AssignTarget::Attribute { object, index } => {
                 self.assign_attribute(object, *index, value, span);
+            }
+            // The object is evaluated after the value, then given it through the setter.
+            AssignTarget::Property {
+                object,
+                setter,
+                value: from,
+            } => {
+                let object = self.expression(object);
+                let parameters = self.program.function(*setter).signature.parameters.clone();
+                let given = self.operand_for((value, from), parameters.get(1), span);
+                let borrowed = |value: Lowered| Self::borrowed(value.value, value.ty);
+                let done = self.call_method(
+                    *setter,
+                    vec![(0, borrowed(object)), (1, borrowed(given))],
+                    TyirType::Unit,
+                    span,
+                );
+                self.release(done, span);
+                self.release(given, span);
+                self.release(value, span);
+                self.release(object, span);
             }
             AssignTarget::Tuple(targets) => {
                 let (_, items) = self.item_types(value.ty);
@@ -326,26 +359,25 @@ impl FunctionLowerer<'_> {
             TyirType::Object(typy_tyir::TypeId::DICT) => {
                 self.constant(Constant::PlaceholderDict, span)
             }
-            // A view slot starts as a view of the placeholder dict, which holds no reference
-            // to an immortal object that matters, and is freed like any other view.
-            TyirType::Object(typy_tyir::TypeId::DICT_VIEW) => {
-                let dict = self.constant(Constant::PlaceholderDict, span);
-                let kind = self.constant(Constant::Int("0".to_owned()), span);
-                self.call_runtime(RuntimeFunction::DictView, vec![dict, kind], span)
-                    .value
-            }
             TyirType::Object(typy_tyir::TypeId::BYTES) => self.bytes_constant(&[], span),
-            // An instance, exception, iterator or range slot starts as null, which counting
-            // passes over.
+            // An instance, exception, iterator, range or view slot starts as null, which
+            // counting passes over. Nothing is allocated, so a `return` lowered before a later
+            // loop adds its hidden slot has nothing of that slot to release.
             TyirType::Object(id)
                 if id.class_index().is_some()
+                    || id == typy_tyir::TypeId::DICT_VIEW
                     || id == typy_tyir::TypeId::EXCEPTION
                     || id == typy_tyir::TypeId::ITERATOR
                     || id == typy_tyir::TypeId::TRACEBACK
                     || id == typy_tyir::TypeId::RANGE
+                    || id == typy_tyir::TypeId::SLICE
                     || id == typy_tyir::TypeId::MODULE
+                    || id == typy_tyir::TypeId::TYPE_ALIAS
+                    || id == typy_tyir::TypeId::VERSION_INFO
+                    || id == typy_tyir::TypeId::NOT_IMPLEMENTED
                     || id == typy_tyir::TypeId::ITERABLE
                     || id == typy_tyir::TypeId::TEXT_FILE
+                    || id == typy_tyir::TypeId::CDATA
                     || id == typy_tyir::TypeId::UNION =>
             {
                 self.constant(Constant::NoInstance(id), span)

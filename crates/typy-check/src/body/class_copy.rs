@@ -66,11 +66,14 @@ impl ClassCopies {
         let id = ClassId(u32::try_from(self.next).unwrap_or(u32::MAX));
         self.next += 1;
         let given: Vec<String> = arguments.iter().map(ToString::to_string).collect();
+        let name = format!("{}[{}]", generic.instance.name, given.join(", "));
+        let operators = generic.instance.operators;
+        let ancestors = self.copy_ancestors(root, &arguments);
         let instance = Type::instance(InstanceClass {
             id,
-            name: format!("{}[{}]", generic.instance.name, given.join(", ")),
-            ancestors: Vec::new(),
-            operators: generic.instance.operators,
+            name,
+            ancestors,
+            operators,
             generic: Some((root, arguments.clone())),
             protocol: false,
         });
@@ -88,18 +91,46 @@ impl ClassCopies {
     pub(crate) fn copy(&self, id: ClassId) -> Option<&ClassCopy> {
         self.copies.iter().find(|copy| copy.id == id)
     }
-}
 
-impl Program {
+    /// Returns the classes a copy of `root` for `arguments` derives from: the generic class's,
+    /// each copy among them made for the arguments in place of the generic class's own
+    /// parameters (GEN-08).
+    fn copy_ancestors(&mut self, root: ClassId, arguments: &[Type]) -> Vec<(ClassId, String)> {
+        let Some(generic) = self.roots.get(&root) else {
+            return Vec::new();
+        };
+        let ancestors = generic.instance.ancestors.clone();
+        let Some(owner) = generic.parameters.first().map(|parameter| parameter.owner) else {
+            return ancestors;
+        };
+        ancestors
+            .into_iter()
+            .map(|(id, name)| {
+                let Some(copy) = self.copy(id).cloned() else {
+                    return (id, name);
+                };
+                let replaced = copy
+                    .arguments
+                    .iter()
+                    .map(|each| self.substitute(each, owner, arguments))
+                    .collect();
+                match self.applied(copy.root, replaced) {
+                    Type::Instance(made) => (made.id, made.name.clone()),
+                    _ => (id, name),
+                }
+            })
+            .collect()
+    }
+
     /// Returns `ty` with each type parameter of `owner` replaced by its argument, a generic
     /// class's own instances and each copy becoming the copy for the replaced arguments.
-    pub(crate) fn substitute(&self, ty: &Type, owner: Span, arguments: &[Type]) -> Type {
+    pub(crate) fn substitute(&mut self, ty: &Type, owner: Span, arguments: &[Type]) -> Type {
         ty.substituted_with(owner, arguments, &mut |class: &InstanceClass| {
             let (root, given) = if let Some((root, given)) = &class.generic {
                 (*root, given.clone())
             } else {
-                let roots = &self.class_copies.borrow().roots;
-                let own = roots
+                let own = self
+                    .roots
                     .get(&class.id)?
                     .parameters
                     .iter()
@@ -111,14 +142,27 @@ impl Program {
                 .iter()
                 .map(|each| self.substitute(each, owner, arguments))
                 .collect();
-            Some(self.class_copies.borrow_mut().applied(root, replaced))
+            Some(self.applied(root, replaced))
         })
+    }
+}
+
+impl Program {
+    /// Returns `ty` with each type parameter of `owner` replaced by its argument, a generic
+    /// class's own instances and each copy becoming the copy for the replaced arguments.
+    pub(crate) fn substitute(&self, ty: &Type, owner: Span, arguments: &[Type]) -> Type {
+        self.class_copies
+            .borrow_mut()
+            .substitute(ty, owner, arguments)
     }
 
     /// Adds to the program each copy of a generic class asked for and not yet added: the
     /// generic class's information with the type parameters replaced, and a copy of each of
     /// its methods, checked when the module's other copies are.
     pub(crate) fn make_class_copies(&mut self) {
+        // A copy's base may be a copy made for it, after it, so the bridges, which read the
+        // bases, are added once every copy is.
+        let mut made = Vec::new();
         loop {
             let pending = {
                 let copies = self.class_copies.borrow();
@@ -132,12 +176,20 @@ impl Program {
                 pending
             };
             if pending.is_empty() {
-                return;
+                break;
             }
             for copy in pending {
                 self.make_class_copy(&copy);
+                made.push(copy.id);
             }
         }
+        for class in &made {
+            self.add_comparison_bridges(*class);
+            self.add_truth_bridge(*class);
+            self.add_override_adapters(*class);
+            self.add_static_bridges(*class);
+        }
+        self.note_protocol_fits(Some(&made));
     }
 
     fn make_class_copy(&mut self, copy: &ClassCopy) {
@@ -155,6 +207,17 @@ impl Program {
         info.id = copy.id;
         // A generic class has a parameter, so its owner is known.
         let owner = owner.unwrap_or(root.span);
+        // A generic class derived from a copy derives each copy from the copy of that base
+        // for the copy's arguments (ADR-0040).
+        let base_copy = root
+            .base
+            .and_then(|base| Some(self.class_copies.borrow().copy(base)?.instance.clone()));
+        if let Some(base) = base_copy {
+            info.base = self
+                .substitute(&base, owner, &copy.arguments)
+                .class_id()
+                .or(info.base);
+        }
         for attribute in &mut info.attributes {
             attribute.ty = attribute
                 .ty
@@ -162,9 +225,14 @@ impl Program {
                 .map(|ty| self.substitute(ty, owner, &copy.arguments));
         }
         let mut renamed: BTreeMap<FunctionId, FunctionId> = BTreeMap::new();
-        for (_, method) in root.methods.iter().chain(&root.class_methods) {
-            let made = self.made_copy(*method, copy.arguments.clone(), Some(copy.id));
-            renamed.insert(*method, made);
+        // A static method that names no type parameter is not generic, and every copy calls
+        // it as it is; a method with type parameters of its own is copied for each call, with
+        // the copy's type arguments first (GEN-09).
+        for (name, method) in root.methods.iter().chain(&root.class_methods) {
+            if self.generic(*method).is_some() && !root.generic_methods.contains(name) {
+                let made = self.made_copy(*method, copy.arguments.clone(), Some(copy.id));
+                renamed.insert(*method, made);
+            }
         }
         let rename = |id: &FunctionId| renamed.get(id).copied().unwrap_or(*id);
         info.methods = root
@@ -178,6 +246,13 @@ impl Program {
             .map(|(name, id)| (name.clone(), rename(id)))
             .collect();
         info.init = root.init.as_ref().map(rename);
+        info.adapted = root
+            .adapted
+            .iter()
+            .map(|(name, base, own)| (name.clone(), rename(base), rename(own)))
+            .collect();
+        info.adapters = Vec::new();
+        info.static_bridges = Vec::new();
         let module = self.class_modules[copy.root.0 as usize].clone();
         self.classes.push(info);
         self.class_modules.push(module);
@@ -227,6 +302,14 @@ impl Program {
             .ty
             .clone()?;
         Some(self.substitute(&ty, owner, &arguments))
+    }
+
+    /// Returns how many type arguments a copy of a generic class has; none for another class.
+    pub(crate) fn type_argument_count(&self, class: ClassId) -> usize {
+        self.class_copies
+            .borrow()
+            .copy(class)
+            .map_or(0, |copy| copy.arguments.len())
     }
 
     /// Returns the name of a class, as its `class` statement writes it.

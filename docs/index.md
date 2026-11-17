@@ -18,6 +18,10 @@ TyPy and what each release accepts.
 | 8 | [Test plan](testing/test-plan.md) | Draft |
 | 9 | [Development guide](development/development-guide.md) | Draft |
 
+The [benchmark report](testing/benchmark-report.md) measures TyPy's programs
+against CPython, the other compilers of Python, and C, C++, Rust, Go, Java
+and JavaScript.
+
 ## Diagrams
 
 | Diagram | UML type | Used by |

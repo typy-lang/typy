@@ -51,6 +51,34 @@ impl Type {
         }
     }
 
+    /// Returns true when a value of the type may be `NotImplemented`, which an operator or
+    /// comparison method returns to give way to the other operand's method (CLS-21).
+    #[must_use]
+    pub fn may_give_way(&self) -> bool {
+        match self {
+            Self::Optional(inner) => inner.may_give_way(),
+            other => other.members().contains(&Self::NotImplemented),
+        }
+    }
+
+    /// Returns the type without `NotImplementedType`: what an operator gives once the methods
+    /// that gave way are passed over (CLS-21).
+    #[must_use]
+    pub fn implemented(&self) -> Self {
+        match self {
+            _ if !self.may_give_way() => self.clone(),
+            Self::Optional(inner) => Self::union(vec![Self::NoneType, inner.implemented()]),
+            other => Self::union(
+                other
+                    .members()
+                    .iter()
+                    .filter(|member| **member != Self::NotImplemented)
+                    .cloned()
+                    .collect(),
+            ),
+        }
+    }
+
     /// Returns the members of a union, or the type itself as its only member.
     #[must_use]
     pub fn members(&self) -> &[Self] {
@@ -83,7 +111,12 @@ impl Type {
                 | Self::BinaryFile(_)
                 | Self::DescriptorFile(_)
                 | Self::Range
+                | Self::Slice
                 | Self::Module(_)
+                | Self::TypeAlias
+                | Self::VersionInfo
+                | Self::NotImplemented
+                | Self::CData(_)
                 | Self::TypeObject(_)
                 | Self::Union(_)
         )

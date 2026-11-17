@@ -249,6 +249,16 @@ pub const CODES: &[CodeInfo] = &[
         "copies of a generic function without end",
         RuleId::GEN_03,
     ),
+    active(
+        429,
+        "module or export that a C library cannot have",
+        RuleId::FFI_05,
+    ),
+    active(
+        430,
+        "`ctypes` declaration TyPy cannot compile",
+        RuleId::FFI_02,
+    ),
     active(701, "C toolchain program not found", RuleId::A_01),
     active(702, "link failed", RuleId::A_01),
     CodeInfo {
@@ -263,6 +273,11 @@ pub const CODES: &[CodeInfo] = &[
         301,
         "assertion that is always true, of a tuple with items",
         RuleId::DIA_08,
+    ),
+    warning(
+        401,
+        "`match` that leaves members of the subject's type unmatched",
+        RuleId::CST_07,
     ),
 ];
 

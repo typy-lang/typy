@@ -5,6 +5,7 @@ use std::fmt::Write as _;
 use typy_diagnostics::Span;
 
 use super::expression::{Comprehension, Expr, FStringPart};
+use super::pattern::Pattern;
 use super::statement::{Stmt, TypeParameter, TypeParameterKind};
 use super::tree::SyntaxTree;
 use crate::source_file::SourceFile;
@@ -38,6 +39,73 @@ impl Dump<'_> {
             }
             None => {
                 let _ = writeln!(self.text, "{indent}{label}");
+            }
+        }
+    }
+
+    fn pattern(&mut self, depth: usize, pattern: &Pattern) {
+        let span = Some(pattern.span());
+        let named = |name: Option<&super::tree::Identifier>| {
+            name.map_or_else(|| "_".to_owned(), |name| name.name.clone())
+        };
+        match pattern {
+            Pattern::Value { value, .. } => {
+                self.line(depth, "MatchValue", span);
+                self.expression(depth + 1, value);
+            }
+            Pattern::Singleton { value, .. } => {
+                self.line(depth, &format!("MatchSingleton {value:?}"), span);
+            }
+            Pattern::Sequence { patterns, .. } | Pattern::Or { patterns, .. } => {
+                let label = if matches!(pattern, Pattern::Or { .. }) {
+                    "MatchOr"
+                } else {
+                    "MatchSequence"
+                };
+                self.line(depth, label, span);
+                for inner in patterns {
+                    self.pattern(depth + 1, inner);
+                }
+            }
+            Pattern::Mapping {
+                keys,
+                patterns,
+                rest,
+                ..
+            } => {
+                let rest = rest
+                    .as_ref()
+                    .map_or_else(String::new, |rest| format!(" **{}", rest.name));
+                self.line(depth, &format!("MatchMapping{rest}"), span);
+                for (key, inner) in keys.iter().zip(patterns) {
+                    self.expression(depth + 1, key);
+                    self.pattern(depth + 2, inner);
+                }
+            }
+            Pattern::Class {
+                class,
+                patterns,
+                keywords,
+                ..
+            } => {
+                self.line(depth, "MatchClass", span);
+                self.expression(depth + 1, class);
+                for inner in patterns {
+                    self.pattern(depth + 1, inner);
+                }
+                for (name, inner) in keywords {
+                    self.line(depth + 1, &format!("{}=", name.name), None);
+                    self.pattern(depth + 2, inner);
+                }
+            }
+            Pattern::Star { name, .. } => {
+                self.line(depth, &format!("MatchStar {}", named(name.as_ref())), span);
+            }
+            Pattern::As { pattern, name, .. } => {
+                self.line(depth, &format!("MatchAs {}", named(name.as_ref())), span);
+                if let Some(inner) = pattern {
+                    self.pattern(depth + 1, inner);
+                }
             }
         }
     }
@@ -176,6 +244,19 @@ impl Dump<'_> {
                 self.expression(depth + 1, test);
                 self.block(depth + 1, "body", body);
                 self.block(depth + 1, "orelse", orelse);
+            }
+            Stmt::Match { subject, cases, .. } => {
+                self.line(depth, "Match", span);
+                self.expression(depth + 1, subject);
+                for case in cases {
+                    self.line(depth + 1, "case", Some(case.span));
+                    self.pattern(depth + 2, &case.pattern);
+                    if let Some(guard) = &case.guard {
+                        self.line(depth + 2, "guard", None);
+                        self.expression(depth + 3, guard);
+                    }
+                    self.block(depth + 2, "body", &case.body);
+                }
             }
             Stmt::Import { names, is_lazy, .. } => {
                 let names: Vec<&str> = names.iter().map(|alias| alias.name.name.as_str()).collect();
@@ -440,6 +521,10 @@ impl Dump<'_> {
                 for bound in [lower, upper, step].into_iter().flatten() {
                     self.expression(depth + 1, bound);
                 }
+            }
+            Expr::Named { target, value, .. } => {
+                self.line(depth, &format!("Named {}", target.name), span);
+                self.expression(depth + 1, value);
             }
             Expr::IfExp {
                 test, body, orelse, ..

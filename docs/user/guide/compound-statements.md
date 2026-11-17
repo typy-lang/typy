@@ -11,8 +11,7 @@
 | `for` over an instance of a class with `__iter__`, whose result has `__next__` | CST-08 |
 | `iter` and `next`, with or without a default, and `for` over an iterator | CST-09 |
 | `with`, with one or more context managers and `as` targets | CST-05, CST-10 |
-
-`match` comes in 0.5 (CST-06).
+| `match` with literal, value, capture, wildcard, `as`, `\|`, sequence, mapping and class patterns and guards | CST-06 |
 
 ## Example
 
@@ -43,6 +42,166 @@ refused:
 for item in (1, "a"):
     print(item)
 ```
+
+## Matching values
+
+`match` tries its cases in order and runs the first whose pattern matches
+the subject and whose guard, the `if` after the pattern, is true. A
+literal or a dotted name such as `Color.RED` matches a subject equal to
+it, and `None`, `True` and `False` match the subject that is them. A name
+captures the subject, `_` matches anything and binds nothing, `p as name`
+binds what `p` matched, and `p | q` tries each alternative. When no case
+matches, the statement does nothing.
+
+<!-- typy-expect: accepted -->
+```python
+def describe(code: int | None) -> str:
+    match code:
+        case None:
+            return "no code"
+        case 200 | 201:
+            return "ok"
+        case 404 as missing:
+            return f"missing {missing}"
+        case other if other >= 500:
+            return f"server {other}"
+        case other:
+            return f"code {other}"
+
+
+for code in [200, None, 404, 503, 302]:
+    print(describe(code))
+```
+
+A case narrows the subject as the test it stands for does: after
+`case None:`, a later case sees an `int | None` subject as `int`. A
+pattern that matches anything, a capture or `_`, must come last, as
+CPython requires:
+
+<!-- typy-expect: rejected E0103 at 3:10 -->
+```python
+code = 1
+match code:
+    case other:
+        print(other)
+    case 1:
+        print("one")
+```
+
+### Sequence and mapping patterns
+
+`[p, q]` or `(p, q)` matches a list, tuple or `range` of two items whose
+items match `p` and `q`; the brackets do not decide the type. `*rest`
+takes the items between the others as a new list, and `*_` skips them. A
+`str` or `bytes` subject is not a sequence to a pattern, as in CPython.
+`{"key": p}` matches a dict that holds the key with a value matching `p`,
+and `**rest` takes the other items as a new dict.
+
+<!-- typy-expect: accepted -->
+```python
+def describe(command: list[str]) -> str:
+    match command:
+        case []:
+            return "nothing"
+        case ["go", direction]:
+            return f"going {direction}"
+        case ["say", *words]:
+            return " ".join(words)
+        case [verb, *_]:
+            return f"unknown {verb}"
+        case _:
+            return "not a command"
+
+
+def size(settings: dict[str, int]) -> str:
+    match settings:
+        case {"width": width, "height": height, **others}:
+            return f"{width}x{height} and {len(others)} more"
+        case _:
+            return "no size"
+
+
+print(describe(["go", "north"]), describe(["say", "hi", "there"]))
+print(size({"width": 3, "height": 4, "depth": 1}), size({}))
+```
+
+A pattern that no value of the subject's type can match is refused with
+E0407, as a sequence pattern on a `str` or a tuple pattern of the wrong
+length is. A sequence pattern on a union of several sequence types, such
+as `list[int] | tuple[int, int]`, is planned for 1.0.
+
+### Class patterns
+
+`Point(x, y=0)` matches an instance of `Point`, or of a class derived from
+it, whose attributes match: a keyword names the attribute, and a
+positional sub-pattern takes the name at its position in the class's
+`__match_args__`. A dataclass has its fields as `__match_args__`, unless
+it is declared with `match_args=False`; any other class writes the tuple
+in its body, or takes its base's. For `bool`, `bytes`, `dict`, `float`,
+`int`, `list`, `set`, `str` and `tuple`, one positional sub-pattern
+matches the subject itself, so `case int(n):` binds the number.
+
+<!-- typy-expect: accepted -->
+```python
+from dataclasses import dataclass
+
+
+@dataclass
+class Point:
+    x: int
+    y: int
+
+
+def where(point: Point | int) -> str:
+    match point:
+        case Point(0, 0):
+            return "origin"
+        case Point(x, 0) | Point(0, x):
+            return f"on an axis at {x}"
+        case Point(x=x, y=y):
+            return f"at {x},{y}"
+        case int(n):
+            return f"number {n}"
+
+
+print(where(Point(0, 0)), where(Point(3, 0)), where(Point(1, 2)))
+print(where(7))
+```
+
+Where CPython raises `TypeError` for a class pattern whenever the
+subject is an instance, TyPy refuses the pattern with E0401: more
+positional sub-patterns than `__match_args__` names, and two sub-patterns
+for one attribute. A keyword naming an attribute the class does not have
+is refused as reading that attribute is. A `__match_args__` other than a
+tuple of `str` literals is planned for 1.0.
+
+### Missing cases
+
+When the subject's type is a union, an optional or a `bool`, TyPy checks
+that the cases without a guard match every member of it: each class of
+the union, `None`, and `True` and `False`. A `match` that does is
+complete, so `where` above returns from every case and needs no `return`
+after the `match`. A `match` that leaves members unmatched gets the
+warning W0401, which names them (CST-07, ADR-0033):
+
+<!-- typy-expect: accepted -->
+```python
+def switch(state: bool | None) -> str:
+    match state:
+        case True:
+            return "on"
+        case None:
+            return "unknown"
+    return "off"
+
+
+print(switch(False))
+```
+
+Here W0401 names `False`. A case covers a member when its pattern matches
+every value of it: a capture or `_`, `None`, `True` or `False`, a class
+pattern whose sub-patterns are captures or `_`, `[*rest]` for a list or a
+tuple, and `{}` or `{**rest}` for a dict.
 
 ## Context managers
 

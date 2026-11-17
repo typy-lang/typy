@@ -146,6 +146,32 @@ fn assert_builds_an_assertion_error_and_narrows_after_it() {
 }
 
 #[test]
+fn the_typed_dump_shows_matches_alias_parts_and_exception_arguments() {
+    let source = "type Pair = tuple[int, int]\n\
+                  def f(x: int | None) -> int:\n    match x:\n        case None:\n            return 0\n\
+                  \x20       case n if n > 1:\n            return n\n        case _:\n            pass\n\
+                  \x20   match x is None:\n        case True:\n            return 2\n\
+                  \x20       case False:\n            return 3\n\
+                  try:\n    open('missing.txt')\nexcept OSError as e:\n    print(e.args, e.filename)\n\
+                  try:\n    raise SystemExit(3)\nexcept SystemExit as s:\n    code = s.code\n\
+                  print(Pair.__name__, Pair.__module__, f(None), code)\n";
+    let (_directory, project) = load(source);
+    let program = TypeChecker::check(&project).expect("the program is accepted");
+    let dump = typy_check::dump(&program, &project);
+    for expected in [
+        "Match @3:5",
+        "guard @6:19",
+        "subject <match 1> @10:11",
+        "ExceptionArguments raw : tuple[int, str, str] @18:19",
+        "ExceptionArguments : tuple[int] @22:12",
+        "TypeAliasName : str @23:7",
+        "TypeAliasModule : str @23:22",
+    ] {
+        assert!(dump.contains(expected), "{expected} in\n{dump}");
+    }
+}
+
+#[test]
 fn iterators_type_their_items_and_next_its_default() {
     let source = "class C:\n    def __iter__(self) -> 'C':\n        return self\n    def __next__(self) -> int:\n        raise StopIteration\n\
                   items = iter({'a': 1}.items())\n\
@@ -222,6 +248,14 @@ fn raise_ends_the_path_it_is_on() {
     ] {
         assert!(dump.contains(expected), "{expected} in\n{dump}");
     }
+}
+
+/// Returns the typed dump of an accepted program.
+fn dumped(source: &str) -> String {
+    let (_directory, project) = load(source);
+    let program = TypeChecker::check(&project)
+        .unwrap_or_else(|diagnostics| panic!("rejected: {diagnostics:?}\n{source}"));
+    typy_check::dump(&program, &project)
 }
 
 fn accepted(source: &str) -> TypedProgram {
@@ -1670,10 +1704,6 @@ fn optional_rules_give_their_codes() {
             &["E0407"],
         ),
         (
-            "def f(x: int | None) -> bool:\n    return x == 5\n",
-            &["E0407"],
-        ),
-        (
             "def g(x: str | None) -> str:\n    return x.upper()\n",
             &["E0412"],
         ),
@@ -1894,16 +1924,12 @@ fn a_base_must_be_a_class_before_it_and_an_override_must_fit() {
             &["E0404"],
         ),
         (
-            "class A:\n    def f(self, n: int = 1) -> int:\n        return n\nclass B(A):\n    def f(self, n: int | None = 1) -> int:\n        return 1\n",
+            "class A:\n    def f(self, n: int = 1) -> int:\n        return n\nclass B(A):\n    def f(self, n: int | None = None) -> int:\n        return 1\n",
             &["E0201"],
         ),
         (
             "class A(Exception):\n    def f(self) -> None:\n        pass\nclass B(A):\n    def f(self) -> int:\n        return 1\n",
             &["E0404"],
-        ),
-        (
-            "class A:\n    def f(self, x: int = 1) -> None:\n        pass\nclass B(A):\n    def f(self, x: int = 2) -> None:\n        pass\n",
-            &["E0201"],
         ),
     ];
     for (source, expected) in cases {
@@ -2123,7 +2149,6 @@ fn a_floor_that_defers_annotations_lets_a_signature_name_a_later_class() {
 fn class_statements_outside_the_subset_give_their_codes() {
     let cases: &[(&str, &[&str])] = &[
         ("@d\nclass C:\n    pass\n", &["E0201"]),
-        ("class B:\n    pass\nclass C[T](B):\n    pass\n", &["E0201"]),
         ("class C(metaclass=M):\n    pass\n", &["E0202"]),
         ("def f() -> None:\n    class C:\n        pass\n", &["E0202"]),
         ("class C:\n    if True:\n        pass\n", &["E0202"]),
@@ -2136,7 +2161,6 @@ fn class_statements_outside_the_subset_give_their_codes() {
             "from typing import ClassVar\nv: ClassVar[int] = 1\n",
             &["E0408"],
         ),
-        ("class E(Exception):\n    code: int = 1\n", &["E0201"]),
         (
             "class C:\n    x = 1\n    def x(self) -> None:\n        pass\n",
             &["E0202"],
@@ -2220,7 +2244,7 @@ fn super_calls_the_nearest_base_s_method_in_any_method() {
         ),
         (
             "class A:\n    pass\nclass B(A):\n    def f(self) -> int:\n        return super(A, self).f()\n",
-            &["E0201"],
+            &["E0414"],
         ),
         (
             "class A:\n    pass\nclass B(A):\n    def f(self, other: 'B') -> None:\n        super(B, other).f()\n",
@@ -2312,6 +2336,81 @@ fn class_bodies_give_class_variables_and_defaults() {
 }
 
 #[test]
+fn a_subclass_gets_a_class_variable_of_its_own_when_assigned_through_it() {
+    accepted(
+        "class A:\n    count = 0\nclass B(A):\n    pass\nB.count = 1\nB.count += 1\nprint(A.count, B.count, B().count)\n",
+    );
+    assert_eq!(
+        rejected(
+            "class A:\n    count = 0\n    @classmethod\n    def bump(cls) -> None:\n        cls.count = 1\nclass B(A):\n    pass\n"
+        ),
+        ["E0201"]
+    );
+}
+
+#[test]
+fn a_class_method_is_called_through_an_instance() {
+    accepted("class A:\n    @classmethod\n    def f(cls) -> None:\n        pass\na = A()\na.f()\n");
+}
+
+#[test]
+fn a_static_method_is_called_through_any_instance() {
+    accepted(
+        "class A:\n    @staticmethod\n    def f() -> int:\n        return 1\ndef g() -> A:\n    return A()\nprint(g().f())\n",
+    );
+}
+
+#[test]
+fn a_method_is_called_through_its_class_with_the_instance_first() {
+    let classes = concat!(
+        "class Shape:\n",
+        "    def __init__(self, name: str) -> None:\n",
+        "        self.name = name\n",
+        "    def area(self) -> float:\n",
+        "        return 0.0\n",
+        "    @property\n",
+        "    def label(self) -> str:\n",
+        "        return self.name\n",
+        "class Square(Shape):\n",
+        "    def __init__(self, side: float) -> None:\n",
+        "        Shape.__init__(self, 'square')\n",
+        "        self.side = side\n",
+        "    def area(self) -> float:\n",
+        "        return self.side * Shape.area(self)\n",
+    );
+    let cases: &[(&str, &[&str])] = &[
+        ("print(Shape.area(Square(2.0)) + 1.0)\n", &[]),
+        ("Square.__init__(Square(1.0), 2.0)\n", &[]),
+        ("print(Shape.area(5))\n", &["E0404"]),
+        ("print(Square.area(Shape('s')))\n", &["E0404"]),
+        ("print(Shape.label(Shape('s')))\n", &["E0401"]),
+        ("print(Shape.volume(Shape('s')))\n", &["E0414"]),
+        (
+            "class Cube(Square):\n    def __init__(self) -> None:\n        Shape.__init__(self, 'cube')\n",
+            &["E0309"],
+        ),
+        // Only the instance being built, given first, makes the call the base's `__init__`.
+        (
+            "class Cube(Square):\n    def __init__(self) -> None:\n        Shape.__init__(Shape('a'), 'b')\n        Square.__init__(self, 1.0)\n        Shape.area(self)\n",
+            &[],
+        ),
+        (
+            "class Cube(Square):\n    def __init__(self) -> None:\n        Square.__init__(self, 1.0)\n        Shape.__init__()\n",
+            &["E0404"],
+        ),
+        // A class the instance does not derive from takes it as any argument.
+        (
+            "class Other:\n    def __init__(self) -> None:\n        self.x = 1\nclass Cube(Square):\n    def __init__(self) -> None:\n        Square.__init__(self, 1.0)\n        Other.__init__(self)\n",
+            &["E0404"],
+        ),
+    ];
+    for (body, expected) in cases {
+        let found = check(&format!("{classes}{body}")).err().unwrap_or_default();
+        assert_eq!(found, *expected, "{body}");
+    }
+}
+
+#[test]
 fn static_methods_and_properties_are_checked() {
     accepted(concat!(
         "class A:\n",
@@ -2350,11 +2449,7 @@ fn static_methods_and_properties_are_checked() {
             &["E0404"],
         ),
         (
-            "class A:\n    def f(self) -> None:\n        pass\nclass B(A):\n    @staticmethod\n    def f() -> None:\n        pass\n",
-            &["E0201"],
-        ),
-        (
-            "class A:\n    @staticmethod\n    def f() -> None:\n        pass\nclass B(A):\n    def f(self) -> None:\n        pass\n",
+            "class A:\n    def f(self, n: int) -> None:\n        pass\nclass B(A):\n    @staticmethod\n    def f(n: int | None) -> None:\n        pass\n",
             &["E0201"],
         ),
         (
@@ -2382,12 +2477,12 @@ fn static_methods_and_properties_are_checked() {
             &["E0402"],
         ),
         (
-            "class A:\n    @property\n    def x(self) -> int:\n        return 1\n    @x.setter\n    def x(self, v: int) -> None:\n        pass\nl = [A()]\nl[0].x = 2\n",
-            &["E0201"],
+            "class A:\n    @property\n    def x(self) -> int:\n        return 1\n    @x.setter\n    def x(self, v: int) -> None:\n        pass\nl = [A()]\nl[0].x = 'two'\n",
+            &["E0402"],
         ),
         (
             "class A:\n    def f(self) -> None:\n        pass\nA.f()\n",
-            &["E0201"],
+            &["E0404"],
         ),
         ("class A:\n    pass\nA.g()\n", &["E0414"]),
         ("from math import *\n", &["E0201"]),
@@ -2395,10 +2490,6 @@ fn static_methods_and_properties_are_checked() {
         (
             "class C:\n    def __iter__(self, n: int) -> 'C':\n        return self\n",
             &["E0404"],
-        ),
-        (
-            "class A:\n    @staticmethod\n    def f() -> int:\n        return 1\ndef g() -> A:\n    return A()\nprint(g().f())\n",
-            &["E0201"],
         ),
     ];
     for (source, expected) in cases {
@@ -2414,20 +2505,8 @@ fn class_methods_are_called_through_their_class() {
             &["E0404"],
         ),
         (
-            "class A:\n    @classmethod\n    def f(cls) -> None:\n        pass\na = A()\na.f()\n",
-            &["E0201"],
-        ),
-        (
-            "class A:\n    count = 0\nclass B(A):\n    pass\nB.count = 1\n",
-            &["E0201"],
-        ),
-        (
             "class A:\n    def __init__(self, n: int) -> None:\n        self.n = n\n    @classmethod\n    def make(cls) -> 'A':\n        return cls(1)\nclass B(A):\n    def __init__(self) -> None:\n        self.n = 2\n",
             &["E0404"],
-        ),
-        (
-            "class A:\n    count = 0\nclass B(A):\n    pass\nB.count += 1\n",
-            &["E0201"],
         ),
         (
             "class A:\n    @classmethod\n    def f(cls) -> int:\n        return 'x'\nclass B(A):\n    pass\n",
@@ -2473,10 +2552,6 @@ fn comparison_methods_are_checked() {
         ("x = missing\ndef f() -> None:\n    x()\n", &["E0205"]),
         ("x = 1\ndef f() -> None:\n    x()\n", &["E0401"]),
         (
-            "class V:\n    def __eq__(self, other: 'V') -> bool:\n        return True\na = V()\nprint(a == a == a)\n",
-            &["E0201"],
-        ),
-        (
             "class V:\n    def __eq__(self, a: 'V', b: 'V') -> bool:\n        return True\n",
             &["E0404"],
         ),
@@ -2510,16 +2585,12 @@ fn comparison_methods_are_checked() {
             &["E0413"],
         ),
         (
-            "class V:\n    def __lt__(self, other: 'V') -> bool:\n        return True\na = V()\nprint(a < a < a)\n",
-            &["E0201"],
-        ),
-        (
             "class V:\n    def __eq__(self, other: 'V') -> bool:\n        return True\nprint(V() == 1)\n",
             &["E0407"],
         ),
         (
-            "class B:\n    pass\nclass V(B):\n    pass\nclass W(V):\n    def __gt__(self, other: B) -> bool:\n        return True\nclass X(B):\n    def __lt__(self, other: B) -> bool:\n        return True\nv: V = W()\nprint(X() < v)\n",
-            &["E0201"],
+            "class B:\n    pass\nclass V(B):\n    pass\nclass W(V):\n    def __gt__(self, other: V) -> bool:\n        return True\nclass X(B):\n    def __lt__(self, other: B) -> bool:\n        return True\nv: V = W()\nprint(X() < v)\n",
+            &["E0404"],
         ),
     ];
     for (source, expected) in cases {
@@ -2572,18 +2643,47 @@ fn arithmetic_methods_are_checked() {
             "class V:\n    def __getattr__(self, name: str) -> int:\n        return 1\n",
             &["E0201"],
         ),
-        (
-            "class V:\n    def __add__(self, other: 'V') -> 'V':\n        return self\nitems = [V()]\nitems[0] += V()\n",
-            &["E0201"],
-        ),
-        (
-            "class V:\n    def __add__(self, other: 'V') -> int:\n        return 1\n    def __radd__(self, other: 'V') -> str:\n        return ''\nprint(V() + V())\n",
-            &["E0201"],
-        ),
     ];
     for (source, expected) in cases {
         assert_eq!(&rejected(source), expected, "\n{source}");
     }
+}
+
+#[test]
+fn chains_of_instance_comparisons_join_their_comparisons_with_and() {
+    let dump = dumped(
+        "class V:\n    def __eq__(self, other: 'V') -> bool:\n        return True\n    def __lt__(self, other: 'V') -> bool:\n        return False\na = V()\nprint(a == a == a, a < V() <= a if False else a < a == a)\n",
+    );
+    for node in ["BoolOp And", "Named", "<chained"] {
+        assert!(dump.contains(node), "{node} missing from\n{dump}");
+    }
+}
+
+#[test]
+fn an_operator_whose_reflected_method_may_run_gives_either_result() {
+    // The reflected method of a subclass operand runs first, so the result is either type.
+    let dump = dumped(
+        "class V:\n    def __add__(self, other: 'V') -> int:\n        return 1\n    def __radd__(self, other: 'V') -> str:\n        return ''\nclass W(V):\n    def __radd__(self, other: 'V') -> str:\n        return 'w'\nprint(V() + V())\n",
+    );
+    assert!(dump.contains("OperatorCall : int | str"), "{dump}");
+    // Without a class that could go first, the method's result is the operator's.
+    let dump = dumped(
+        "class V:\n    def __add__(self, other: 'V') -> int:\n        return 1\n    def __radd__(self, other: 'V') -> str:\n        return ''\nprint(V() + V())\n",
+    );
+    assert!(dump.contains("OperatorCall : int"), "{dump}");
+}
+
+#[test]
+fn in_place_methods_and_items_of_instances_are_assigned() {
+    accepted(
+        "class V:\n    def __add__(self, other: 'V') -> 'V':\n        return self\n    def __imul__(self, other: int) -> 'V':\n        return self\nitems = [V()]\nitems[0] += V()\nitems[0] *= 2\n",
+    );
+    assert_eq!(
+        rejected(
+            "class V:\n    def __add__(self, other: 'V') -> 'V':\n        return self\nclass W(V):\n    def __iadd__(self, other: V) -> V:\n        return self\nv = V()\nv += V()\n"
+        ),
+        ["E0201"]
+    );
 }
 
 #[test]
@@ -2639,23 +2739,15 @@ fn container_methods_are_checked() {
         ),
         (
             "class G:\n    def __getitem__(self, key: int) -> int:\n        return key\nprint(G()[1:2])\n",
-            &["E0201"],
+            &["E0404"],
         ),
         (
             "class G:\n    def __setitem__(self, key: int, value: int) -> None:\n        pass\ng = G()\ng[1:2] = 3\n",
-            &["E0201"],
+            &["E0404"],
         ),
         (
             "class G:\n    def __delitem__(self, key: int) -> None:\n        pass\ng = G()\ndel g[1:2]\n",
-            &["E0201"],
-        ),
-        (
-            "class G:\n    def __len__(self) -> int:\n        return 1\nprint(any([G()]))\n",
-            &["E0201"],
-        ),
-        (
-            "class G:\n    pass\nclass H(G):\n    def __bool__(self) -> bool:\n        return False\ng: G = H()\nprint(not g)\n",
-            &["E0201"],
+            &["E0404"],
         ),
     ];
     for (source, expected) in cases {
@@ -2731,7 +2823,7 @@ fn dataclass_forms_cpython_refuses_are_refused() {
         ),
         (
             "from dataclasses import dataclass\n@dataclass(True)\nclass P:\n    x: int\n",
-            &["E0201"],
+            &["E0404"],
         ),
         (
             "from dataclasses import dataclass\nflags = {}\n@dataclass(**flags)\nclass P:\n    x: int\n",
@@ -2743,7 +2835,7 @@ fn dataclass_forms_cpython_refuses_are_refused() {
         ),
         (
             "from dataclasses import dataclass, field\n@dataclass\nclass P:\n    x: int = field(1)\n",
-            &["E0201"],
+            &["E0404"],
         ),
         (
             "from dataclasses import dataclass, field\nd = {}\n@dataclass\nclass P:\n    x: int = field(**d)\n",
@@ -2772,6 +2864,22 @@ fn dataclass_forms_cpython_refuses_are_refused() {
         (
             "from dataclasses import dataclass\n@dataclass\nclass P:\n    x: int\n@dataclass(frozen=True)\nclass Q(P):\n    y: int = 0\n",
             &["E0404"],
+        ),
+        (
+            "from dataclasses import dataclass\n@dataclass(unsafe_hash=True)\nclass P:\n    x: int\n    def __hash__(self) -> int:\n        return 1\n",
+            &["E0404"],
+        ),
+        (
+            "from dataclasses import dataclass, field\n@dataclass\nclass P:\n    x: list[int] = field(default=[1], default_factory=list)\n",
+            &["E0404"],
+        ),
+        (
+            "from dataclasses import dataclass\n@dataclass(kw_only=True)\nclass P:\n    x: int\n",
+            &["E0201"],
+        ),
+        (
+            "from dataclasses import dataclass, field\n@dataclass\nclass P[T]:\n    x: list[T] = field(default_factory=list)\n",
+            &["E0201"],
         ),
     ];
     for (source, expected) in cases {

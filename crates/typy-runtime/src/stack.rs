@@ -11,6 +11,9 @@ const DEFAULT_STACK: u64 = 8 * 1024 * 1024;
 
 static LIMIT: ProgramCell<usize> = ProgramCell::new(0);
 
+/// The stack size the limit allows, read from `getrlimit` once; zero until then.
+static SIZE: ProgramCell<usize> = ProgramCell::new(0);
+
 /// Returns the stack pointer. The register is read, not the address of a local, because a
 /// sanitizer may keep locals on a separate fake stack, where the check would never fire.
 #[inline]
@@ -27,11 +30,18 @@ fn stack_pointer() -> usize {
     pointer
 }
 
-/// Records the lowest address the stack may reach; `main` calls it first.
+/// Records the lowest address the stack may reach below the current stack pointer: `main`
+/// calls it first, and a library each time an export is called, which may be from another
+/// thread (ADR-0044).
 pub(crate) fn record_limit() {
     let base = stack_pointer();
-    let size =
-        usize::try_from(crate::libc::stack_limit().unwrap_or(DEFAULT_STACK)).unwrap_or(usize::MAX);
+    let size = SIZE.with(|size| {
+        if *size == 0 {
+            *size = usize::try_from(crate::libc::stack_limit().unwrap_or(DEFAULT_STACK))
+                .unwrap_or(usize::MAX);
+        }
+        *size
+    });
     LIMIT.with(|limit| *limit = base.saturating_sub(size.saturating_sub(MARGIN)));
 }
 

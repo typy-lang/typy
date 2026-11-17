@@ -23,6 +23,9 @@ pub enum Constant {
     Str(StringId),
     /// A `bytes` from the pool, each byte the code point of its value; never freed.
     Bytes(StringId),
+    /// A string that holds a surrogate, at this index of `TyirModule::str_points`, which
+    /// Rust's text cannot hold; never freed (LEX-10).
+    StrPoints(u32),
     /// The runtime's immortal empty list, the first value of a list slot. Definite assignment
     /// guarantees it is never read, so it is never changed.
     PlaceholderList,
@@ -40,9 +43,14 @@ pub enum Constant {
     TypeObject(crate::types::TypeObjectRef),
     /// The module object of the module at this index of `TyirModule::modules` (MOD-10).
     Module(u32),
+    /// The type alias object at this index of `TyirModule::type_aliases` (SMT-12).
+    TypeAlias(u32),
     /// The address of the descriptor of a tuple type that a list holds, which the runtime
     /// reads to store, count, compare and write its items (ADR-0009).
     TupleDescriptor(TupleTypeId),
+    /// The address of the `ctypes` class at this index of `TyirModule::cdata_classes`, which
+    /// the runtime reads to make and read its objects (FFI-03).
+    CDataClass(u32),
 }
 
 impl Constant {
@@ -54,7 +62,7 @@ impl Constant {
             Self::Float(_) => TyirType::Float,
             Self::Bool(_) => TyirType::Bool,
             Self::Unit => TyirType::Unit,
-            Self::Str(_) => TyirType::STR,
+            Self::Str(_) | Self::StrPoints(_) => TyirType::STR,
             Self::Bytes(_) => TyirType::BYTES,
             Self::PlaceholderList => TyirType::LIST,
             Self::PlaceholderSet => TyirType::SET,
@@ -63,7 +71,8 @@ impl Constant {
             Self::NoInstance(id) => TyirType::Object(*id),
             Self::TypeObject(_) => TyirType::TYPE,
             Self::Module(_) => TyirType::MODULE,
-            Self::TupleDescriptor(_) => TyirType::Bits,
+            Self::TypeAlias(_) => TyirType::TYPE_ALIAS,
+            Self::TupleDescriptor(_) | Self::CDataClass(_) => TyirType::Bits,
         }
     }
 }
@@ -77,6 +86,7 @@ impl fmt::Display for Constant {
             Self::Unit => formatter.write_str("unit"),
             Self::Str(StringId(id)) => write!(formatter, "str s{id}"),
             Self::Bytes(StringId(id)) => write!(formatter, "bytes s{id}"),
+            Self::StrPoints(index) => write!(formatter, "str p{index}"),
             Self::PlaceholderList => formatter.write_str("placeholder list"),
             Self::PlaceholderSet => formatter.write_str("placeholder set"),
             Self::PlaceholderDict => formatter.write_str("placeholder dict"),
@@ -84,7 +94,9 @@ impl fmt::Display for Constant {
             Self::NoInstance(id) => write!(formatter, "null {}", TyirType::Object(*id)),
             Self::TypeObject(ty) => write!(formatter, "type {ty}"),
             Self::Module(index) => write!(formatter, "module m{index}"),
+            Self::TypeAlias(index) => write!(formatter, "type_alias a{index}"),
             Self::TupleDescriptor(TupleTypeId(id)) => write!(formatter, "descriptor tuple#{id}"),
+            Self::CDataClass(id) => write!(formatter, "cdata_class#{id}"),
         }
     }
 }
@@ -103,6 +115,7 @@ mod tests {
             (Constant::Unit, TyirType::Unit, "unit"),
             (Constant::Str(StringId(3)), TyirType::STR, "str s3"),
             (Constant::Bytes(StringId(4)), TyirType::BYTES, "bytes s4"),
+            (Constant::StrPoints(2), TyirType::STR, "str p2"),
             (
                 Constant::PlaceholderList,
                 TyirType::LIST,

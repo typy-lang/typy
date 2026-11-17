@@ -40,6 +40,16 @@ impl TypeId {
     /// An object of any type, held as a union of objects; its header says which (TYP-14,
     /// ADR-0027).
     pub const UNION: Self = Self(18);
+    /// A type alias object, `typing.TypeAliasType`, immortal (SMT-12).
+    pub const TYPE_ALIAS: Self = Self(19);
+    /// `sys.version_info`, one immortal object (LIB-16).
+    pub const VERSION_INFO: Self = Self(20);
+    /// `NotImplemented`, one immortal object (CLS-21).
+    pub const NOT_IMPLEMENTED: Self = Self(21);
+    /// A `slice` (CLS-23).
+    pub const SLICE: Self = Self(22);
+    /// A `ctypes` object: a scalar, a pointer or an array over a C buffer (FFI-03, ADR-0048).
+    pub const CDATA: Self = Self(23);
     /// The first ID of the program's classes; class `n` of the module is this plus `n`.
     const FIRST_CLASS: u32 = 1 << 16;
 
@@ -128,6 +138,16 @@ impl TyirType {
     pub const TEXT_FILE: Self = Self::Object(TypeId::TEXT_FILE);
     /// A union of objects (TYP-14).
     pub const UNION: Self = Self::Object(TypeId::UNION);
+    /// A type alias object (SMT-12).
+    pub const TYPE_ALIAS: Self = Self::Object(TypeId::TYPE_ALIAS);
+    /// `sys.version_info` (LIB-16).
+    pub const VERSION_INFO: Self = Self::Object(TypeId::VERSION_INFO);
+    /// `NotImplemented` (CLS-21).
+    pub const NOT_IMPLEMENTED: Self = Self::Object(TypeId::NOT_IMPLEMENTED);
+    /// A `slice` (CLS-23).
+    pub const SLICE: Self = Self::Object(TypeId::SLICE);
+    /// A `ctypes` object (FFI-03).
+    pub const CDATA: Self = Self::Object(TypeId::CDATA);
 }
 
 impl fmt::Display for TyirType {
@@ -151,6 +171,11 @@ impl fmt::Display for TyirType {
             Self::Object(TypeId::ITERABLE) => formatter.write_str("iterable"),
             Self::Object(TypeId::TEXT_FILE) => formatter.write_str("text_file"),
             Self::Object(TypeId::UNION) => formatter.write_str("union"),
+            Self::Object(TypeId::TYPE_ALIAS) => formatter.write_str("type_alias"),
+            Self::Object(TypeId::VERSION_INFO) => formatter.write_str("version_info"),
+            Self::Object(TypeId::NOT_IMPLEMENTED) => formatter.write_str("not_implemented"),
+            Self::Object(TypeId::SLICE) => formatter.write_str("slice"),
+            Self::Object(TypeId::CDATA) => formatter.write_str("cdata"),
             Self::Bits => formatter.write_str("bits"),
             Self::Object(id) if id.class_index().is_some() => {
                 write!(formatter, "class#{}", id.class_index().unwrap_or(0))
@@ -262,6 +287,7 @@ pub enum RuntimeType {
     Object,
     Type,
     Range,
+    Slice,
 }
 
 impl RuntimeType {
@@ -285,6 +311,7 @@ impl RuntimeType {
             Self::Object => "typy_rt_object",
             Self::Type => "typy_rt_type_type",
             Self::Range => "typy_rt_type_range",
+            Self::Slice => "typy_rt_type_slice",
         }
     }
 }

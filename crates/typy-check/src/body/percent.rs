@@ -81,6 +81,7 @@ impl BodyChecker<'_> {
             );
             return Self::dynamic(format, values, span);
         }
+        self.mapping_keys(&values.ty);
         match percent_parts(&pieces, &values.ty, values.span) {
             Ok(parts) => Self::typed(
                 TypedExprKind::PercentFormat {
@@ -99,6 +100,7 @@ impl BodyChecker<'_> {
     /// Returns `format % values` read when the program runs, when `format` is a `str` that is
     /// not a literal (LIB-11).
     pub(super) fn percent_dynamic(
+        &mut self,
         operator: typy_source::syntax::BinaryOperator,
         format: &TypedExpr,
         values: &TypedExpr,
@@ -110,7 +112,16 @@ impl BodyChecker<'_> {
         {
             return None;
         }
+        self.mapping_keys(&values.ty);
         Some(Self::dynamic(format.clone(), values.clone(), span))
+    }
+
+    /// Records the keys of a dict a format reads by name, whose `KeyError` holds a missing
+    /// one (ADR-0034).
+    fn mapping_keys(&mut self, values: &Type) {
+        if let Type::Dict(key, _) = values {
+            self.program.record_key(key);
+        }
     }
 
     fn dynamic(format: TypedExpr, values: TypedExpr, span: Span) -> TypedExpr {

@@ -1,12 +1,16 @@
 //! Operations on a variable that holds a union of objects, checked once for each member with
 //! the variable narrowed to it; the member the object is runs (TYP-14, ADR-0027).
 
-use typy_diagnostics::{Diagnostic, DiagnosticCode, RuleId};
+use typy_diagnostics::{Diagnostic, DiagnosticCode, RuleId, Span};
 use typy_source::syntax::{CompareOperator, Constant, Expr, UnaryOperator};
 
 use super::BodyChecker;
+use super::expression::literal_position;
 use crate::builtin::Builtin;
-use crate::typed::{EachMember, SymbolId, TypedConstant, TypedExpr, TypedExprKind};
+use crate::exception::{BuiltinException, ExceptionClass};
+use crate::typed::{
+    EachMember, MemberTest, RuntimeKind, SymbolId, TypedConstant, TypedExpr, TypedExprKind,
+};
 use crate::types::{Type, TypeObjectOf};
 
 impl BodyChecker<'_> {
@@ -15,30 +19,70 @@ impl BodyChecker<'_> {
     /// other than those that take any object. `None` leaves the expression to its own check.
     pub(super) fn each_member(&mut self, expression: &Expr) -> Option<TypedExpr> {
         let operand = self.member_operand(expression)?;
-        let (symbol, members) = self.union_operand(operand)?;
+        let (split, members) = self.union_operand(operand)?;
         let span = expression.span();
-        let Some(tests) = members.iter().map(member_class).collect::<Option<Vec<_>>>() else {
+        // The runtime tells the members apart by their classes, or by the kind of the
+        // runtime's own objects; members it cannot tell apart are planned (TYP-19).
+        let tests: Option<Vec<MemberTest>> = members.iter().map(member_test).collect();
+        let Some(tests) = tests.filter(|tests| {
+            let kinds: Vec<RuntimeKind> = tests
+                .iter()
+                .filter_map(|test| match test {
+                    MemberTest::Kind(kind) => Some(*kind),
+                    MemberTest::Class(_) => None,
+                })
+                .collect();
+            kinds
+                .iter()
+                .enumerate()
+                .all(|(position, kind)| !kinds[position + 1..].contains(kind))
+        }) else {
             return Some(
                 self.error(
                     Diagnostic::new(
                         DiagnosticCode::error(201),
                         span,
                         format!(
-                            "an operation on {} whose member has no class to test, such as an \
-                         iterator, is planned for TyPy 0.5 (TYP-14)",
+                            "an operation on {} whose members the program cannot tell apart, \
+                             such as two iterators or an iterable, is planned for TyPy 1.0 \
+                             (TYP-19)",
                             Type::Union(members).with_article()
                         ),
                     )
-                    .with_rule(RuleId::TYP_14),
+                    .with_rule(RuleId::TYP_19),
                     span,
                 ),
             );
         };
         let unequal = self.unequal_answer(expression, operand, &members);
+        let short = short_members(expression, &members);
+        if let Expr::Subscript { index, .. } = expression
+            && short.iter().all(|short| *short)
+        {
+            return Some(
+                self.error(
+                    Diagnostic::new(
+                        DiagnosticCode::error(307),
+                        index.span(),
+                        format!(
+                            "position {} is outside each member of {}",
+                            literal_position(index).unwrap_or_default(),
+                            Type::Union(members)
+                        ),
+                    )
+                    .with_rule(RuleId::DAT_08),
+                    span,
+                ),
+            );
+        }
         let value = self.expression(operand);
         let before = self.assigned.clone();
         let mut arms = Vec::new();
-        for (member, test) in members.into_iter().zip(tests) {
+        for ((member, test), short) in members.into_iter().zip(tests).zip(short) {
+            if short {
+                arms.push((test, Self::index_error(span)));
+                continue;
+            }
             if let Some((other, answer)) = &unequal
                 && !member.can_test_equality(other)
             {
@@ -48,7 +92,7 @@ impl BodyChecker<'_> {
             }
             // The variable reads as the member while the operation is checked for it, also in
             // code no path reaches, whose flow state holds nothing.
-            self.splitting.push((symbol, member));
+            self.splitting.push((split, member));
             let body = self.expression(expression);
             self.splitting.pop();
             self.assigned.clone_from(&before);
@@ -57,7 +101,14 @@ impl BodyChecker<'_> {
         let ty = Self::each_member_type(&arms);
         let arms = arms
             .into_iter()
-            .map(|(test, body)| (test, Self::converted(body, Some(&ty))))
+            .map(|(test, mut body)| {
+                if matches!(body.kind, TypedExprKind::Raise(_)) {
+                    body.ty = ty.clone();
+                    (test, body)
+                } else {
+                    (test, Self::converted(body, Some(&ty)))
+                }
+            })
             .collect();
         Some(Self::typed(
             TypedExprKind::EachMember(Box::new(EachMember { value, arms })),
@@ -116,9 +167,40 @@ impl BodyChecker<'_> {
             .then_some((ty, answer))
     }
 
-    /// Returns the type of the result: the members' results joined into one type.
-    fn each_member_type(arms: &[(TypeObjectOf, TypedExpr)]) -> Type {
-        let results: Vec<Type> = arms.iter().map(|(_, body)| body.ty.clone()).collect();
+    /// Returns `IndexError: tuple index out of range`, raised by the item of a tuple member
+    /// too short for the position, as CPython raises it only for that member.
+    fn index_error(span: Span) -> TypedExpr {
+        let class = ExceptionClass::Builtin(BuiltinException::IndexError);
+        let message = TypedConstant::Str("tuple index out of range".to_owned());
+        let exception = Self::typed(
+            TypedExprKind::NewException {
+                class: class.clone(),
+                arguments: vec![Self::typed(
+                    TypedExprKind::Constant(message),
+                    Type::Str,
+                    span,
+                )],
+                init: None,
+            },
+            Type::Exception(class),
+            span,
+        );
+        // The type is the result's, which `each_member` gives once the other arms are known.
+        Self::typed(
+            TypedExprKind::Raise(Box::new(exception)),
+            Type::NoneType,
+            span,
+        )
+    }
+
+    /// Returns the type of the result: the members' results joined into one type. An arm
+    /// that raises gives no result.
+    fn each_member_type(arms: &[(MemberTest, TypedExpr)]) -> Type {
+        let results: Vec<Type> = arms
+            .iter()
+            .filter(|(_, body)| !matches!(body.kind, TypedExprKind::Raise(_)))
+            .map(|(_, body)| body.ty.clone())
+            .collect();
         if results.iter().any(Type::has_error) {
             return Type::Error;
         }
@@ -146,7 +228,13 @@ impl BodyChecker<'_> {
                     if takes_any_object(builtin) {
                         return None;
                     }
-                    arguments.iter().find(|each| is_union(each))
+                    let found = arguments.iter().find(|each| is_union(each))?;
+                    // A builtin that reads an iterable goes over a union of fixed tuples as the
+                    // list of its member's items (ADR-0034).
+                    if reads_iterable(builtin) && self.holds_fixed_tuples(found) {
+                        return None;
+                    }
+                    Some(found)
                 }
                 _ => None,
             },
@@ -171,11 +259,22 @@ impl BodyChecker<'_> {
         }
     }
 
-    /// Returns the variable an operand reads, with the members of the union it holds, when it
-    /// is a variable that `union_variable` splits on.
-    fn union_operand(&self, operand: &Expr) -> Option<(SymbolId, Vec<Type>)> {
+    /// Returns true when the operand is a variable that holds a union of fixed tuples.
+    fn holds_fixed_tuples(&self, operand: &Expr) -> bool {
+        self.union_operand(operand).is_some_and(|(_, members)| {
+            members
+                .iter()
+                .all(|member| matches!(member, Type::Tuple(_)))
+        })
+    }
+
+    /// Returns what an operand reads, with the members of the union it holds, when it is a
+    /// variable that `union_variable` splits on, or `args` of the exception a variable holds,
+    /// which `union_arguments` splits on.
+    pub(super) fn union_operand(&self, operand: &Expr) -> Option<(Split, Vec<Type>)> {
         match operand {
             Expr::Name { id, .. } => self.union_variable(id),
+            Expr::Attribute { .. } => self.union_arguments(operand),
             _ => None,
         }
     }
@@ -183,9 +282,12 @@ impl BodyChecker<'_> {
     /// Returns the variable `id` with the members of the union it holds here, when it holds
     /// one whose members share no class, and no operation is already split on it. A variable
     /// a function declares `global` is not narrowed, so it is not split either.
-    fn union_variable(&self, id: &str) -> Option<(SymbolId, Vec<Type>)> {
+    fn union_variable(&self, id: &str) -> Option<(Split, Vec<Type>)> {
         let symbol = *self.locals.get(id)?;
-        let split = self.splitting.iter().any(|(each, _)| *each == symbol);
+        let split = self
+            .splitting
+            .iter()
+            .any(|(each, _)| *each == Split::variable(symbol));
         if split || self.program.assigned_in_functions.contains(id) {
             return None;
         }
@@ -201,7 +303,44 @@ impl BodyChecker<'_> {
         if ty.union_base().is_some() || exceptions {
             return None;
         }
-        Some((symbol, members.clone()))
+        Some((Split::variable(symbol), members.clone()))
+    }
+}
+
+/// Returns, for each member, whether `expression` is `variable[position]` with a literal
+/// position outside the member, a tuple too short for it.
+fn short_members(expression: &Expr, members: &[Type]) -> Vec<bool> {
+    let position = match expression {
+        Expr::Subscript { index, .. } => literal_position(index),
+        _ => None,
+    };
+    members
+        .iter()
+        .map(|member| match (member, position) {
+            (Type::Tuple(items), Some(position)) => {
+                let length = i128::try_from(items.len()).unwrap_or(i128::MAX);
+                !(-length..length).contains(&position)
+            }
+            _ => false,
+        })
+        .collect()
+}
+
+/// What an operation checked for each member splits on: a variable, or `args` of the
+/// exception a variable holds.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) struct Split {
+    pub(super) symbol: SymbolId,
+    pub(super) arguments: bool,
+}
+
+impl Split {
+    /// Returns the split on a variable.
+    pub(super) const fn variable(symbol: SymbolId) -> Self {
+        Self {
+            symbol,
+            arguments: false,
+        }
     }
 }
 
@@ -218,6 +357,24 @@ const fn takes_any_object(builtin: Builtin) -> bool {
     )
 }
 
+/// Returns how the runtime finds an object is of `member`: by its class, or by the kind of
+/// the runtime's own objects; `None` for an iterable, which any object may be (TYP-14).
+#[must_use]
+pub fn member_test(member: &Type) -> Option<MemberTest> {
+    Some(match member {
+        Type::Iterator(_) => MemberTest::Kind(RuntimeKind::Iterator),
+        Type::Traceback => MemberTest::Kind(RuntimeKind::Traceback),
+        Type::Module(_) | Type::AnyModule => MemberTest::Kind(RuntimeKind::Module),
+        Type::TextFile | Type::BinaryFile(_) | Type::DescriptorFile(_) => {
+            MemberTest::Kind(RuntimeKind::File)
+        }
+        Type::TypeAlias => MemberTest::Kind(RuntimeKind::TypeAlias),
+        Type::VersionInfo => MemberTest::Kind(RuntimeKind::VersionInfo),
+        Type::NotImplemented => MemberTest::Kind(RuntimeKind::NotImplemented),
+        other => MemberTest::Class(member_class(other)?),
+    })
+}
+
 /// Returns the class the runtime tests an object against to find it is of `member`, when
 /// the member has one (TYP-14).
 #[must_use]
@@ -227,6 +384,9 @@ pub fn member_class(member: &Type) -> Option<TypeObjectOf> {
         Type::Iterator(_)
         | Type::Iterable(_)
         | Type::Module(_)
+        | Type::TypeAlias
+        | Type::VersionInfo
+        | Type::NotImplemented
         | Type::AnyModule
         | Type::TextFile
         | Type::BinaryFile(_)
@@ -243,8 +403,26 @@ fn constant_type(value: &Constant) -> Option<Type> {
         Constant::Bool(_) => Type::Bool,
         Constant::Int(_) => Type::Int,
         Constant::Float(_) => Type::Float,
-        Constant::Str(_) => Type::Str,
+        Constant::Str(_) | Constant::StrPoints(_) => Type::Str,
         Constant::Bytes(_) => Type::Bytes,
         Constant::Complex { .. } | Constant::Ellipsis => return None,
     })
+}
+
+/// Returns true for a builtin that reads its argument as an iterable.
+const fn reads_iterable(builtin: Builtin) -> bool {
+    matches!(
+        builtin,
+        Builtin::List
+            | Builtin::Tuple
+            | Builtin::Set
+            | Builtin::Sorted
+            | Builtin::Sum
+            | Builtin::Any
+            | Builtin::All
+            | Builtin::Min
+            | Builtin::Max
+            | Builtin::Enumerate
+            | Builtin::Zip
+    )
 }

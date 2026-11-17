@@ -44,9 +44,20 @@ impl BodyChecker<'_> {
             )
         });
         let Some((builtin, arguments, keywords)) = call else {
+            // A union of fixed tuples is gone over as the list of its member's items.
+            if let Some(items) = self.union_tuple_items(iter) {
+                let item = self.iterated_item(&items, user);
+                return (LoopSource::Items(items), item);
+            }
             let sequence = self.sequence(iter);
             if sequence.ty.class_id().is_some() {
                 return self.protocol_source(sequence, user);
+            }
+            // A `ctypes` array gives the value of each item, or an object over a structure
+            // item (FFI-03).
+            if let Type::CData(crate::ctypes::CData::Array(item, _)) = &sequence.ty {
+                let item = item.result_type();
+                return (LoopSource::Items(sequence), item);
             }
             let item = self.iterated_item(&sequence, user);
             return (LoopSource::Items(sequence), item);
@@ -64,7 +75,11 @@ impl BodyChecker<'_> {
 
     /// Checks iterating over an instance: its class's `__iter__` gives an instance of a class
     /// with `__next__`, whose result is each value (CST-08).
-    fn protocol_source(&mut self, iterable: TypedExpr, user: &str) -> (LoopSource, Type) {
+    pub(super) fn protocol_source(
+        &mut self,
+        iterable: TypedExpr,
+        user: &str,
+    ) -> (LoopSource, Type) {
         let class = iterable.ty.class_id().unwrap_or(crate::typed::ClassId(0));
         let not_iterable = |reason: String| {
             Diagnostic::new(
@@ -249,7 +264,7 @@ impl BodyChecker<'_> {
     /// Checks a sequence a loop reads. A fixed tuple whose items have one type is read as a
     /// `tuple[T, ...]` (DAT-14).
     pub(super) fn sequence(&mut self, expression: &Expr) -> TypedExpr {
-        let value = self.expression(expression);
+        let value = Self::version_tuple(self.expression(expression));
         let Type::Tuple(items) = &value.ty else {
             return value;
         };

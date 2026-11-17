@@ -530,7 +530,7 @@ unsafe fn lookup(
                     .held_value(value)
                     .unwrap_or((ItemType::from(ItemKind::NoneValue), 0)))
             }
-            None => Err(crate::set::key_error(text, bits)),
+            None => Err(crate::exception::key_error(text, bits)),
         }
     }
 }

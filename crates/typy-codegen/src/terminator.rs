@@ -191,6 +191,7 @@ impl<'ctx> FunctionEmitter<'_, '_, 'ctx> {
         value: Option<ValueId>,
         exception: Option<ValueId>,
     ) -> Result<(), CodegenError> {
+        self.release_frames()?;
         let context = self.shared.context;
         let result_type = crate::abi::value_type(
             context,

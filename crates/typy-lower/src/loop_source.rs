@@ -25,6 +25,9 @@ enum Kind {
     Bytes,
     /// A set, read slot by slot in its table's order.
     Set,
+    /// A `ctypes` array, whose items are of the class at this index of the module's classes
+    /// (FFI-03).
+    CData(u32),
 }
 
 /// The state of one iterator of a loop, kept in hidden slots.
@@ -174,6 +177,50 @@ impl FunctionLowerer<'_> {
         self.generate(rest, span, innermost);
         self.jump_to(header);
         self.builder.switch_to(exit);
+    }
+
+    /// Returns `value in source` for an instance without `__contains__`: the value, held in
+    /// `held`, then each item of the source, held in `each`, until `test` holds (CLS-23).
+    pub(crate) fn iterated_contains(
+        &mut self,
+        (value, held): (&TypedExpr, typy_check::SymbolId),
+        source: &LoopSource,
+        (each, test): (typy_check::SymbolId, &TypedExpr),
+        negated: bool,
+        span: Span,
+    ) -> Lowered {
+        let sought = self.expression(value);
+        self.assign_name(held, sought, span);
+        let iterator = self.start_iterator(source, span);
+        let header = self.builder.create_block();
+        let (found, missing, join) = (
+            self.builder.create_block(),
+            self.builder.create_block(),
+            self.builder.create_block(),
+        );
+        let result = self.builder.add_block_parameter(join, TyirType::Bool);
+        self.jump_to(header);
+        self.builder.switch_to(header);
+        let item = self.next_value(&iterator, missing, span);
+        self.assign_name(each, item, span);
+        let tested = self.expression(test);
+        let holds = self.truth(tested, span);
+        self.release(tested, span);
+        self.builder.terminate(Terminator::Branch {
+            condition: holds,
+            then: found,
+            otherwise: header,
+        });
+        for (block, answer) in [(found, !negated), (missing, negated)] {
+            self.builder.switch_to(block);
+            let answer = self.constant(Constant::Bool(answer), span);
+            self.builder.terminate(Terminator::Jump {
+                target: join,
+                arguments: vec![answer],
+            });
+        }
+        self.builder.switch_to(join);
+        Self::borrowed(result, TyirType::Bool)
     }
 
     /// Reads `source` as a `for` loop reads it and calls `visit` with each value, which is
@@ -363,6 +410,11 @@ impl FunctionLowerer<'_> {
             return self.start_set(sequence, item, span);
         }
         let (kind, item) = match (&sequence.ty, sequence.ty.sequence_item()) {
+            (typy_check::Type::CData(_), _) => {
+                let item = crate::cdata::item_class(&sequence.ty);
+                let index = self.cdata_classes.intern(item);
+                (Kind::CData(index), self.lowered_type(&item.result_type()))
+            }
             (_, Some(item)) => (Kind::List, self.lowered_type(item)),
             (typy_check::Type::Bytes, None) => (Kind::Bytes, TyirType::Int),
             _ => (Kind::Str, TyirType::STR),
@@ -713,6 +765,7 @@ impl FunctionLowerer<'_> {
             Kind::Str => RuntimeFunction::StrLength,
             Kind::Bytes => RuntimeFunction::BytesLength,
             Kind::Set => RuntimeFunction::SetLength,
+            Kind::CData(_) => RuntimeFunction::CdataLength,
         };
         self.call_runtime(function, vec![value.value], span)
     }
@@ -869,6 +922,10 @@ impl FunctionLowerer<'_> {
                 span,
             ),
             Kind::List => self.list_item(value, index, item, span),
+            Kind::CData(class) => {
+                let item = self.cdata_classes.class(class).clone();
+                self.cdata_item_value(value.value, index.value, &item, span)
+            }
             Kind::Set => unreachable!("a set is read by its own iterator"),
         };
         let current = self.load(position, span);
