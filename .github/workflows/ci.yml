@@ -37,7 +37,9 @@ jobs:
         run: |
           git fetch --no-tags --depth=1 origin "${BASE}"
           scripts/ci-changes.sh "${BASE}" >> "${GITHUB_OUTPUT}"
-      - uses: astral-sh/setup-uv@v10
+      # setup-uv publishes no tag of its major version, so its release is
+      # pinned; Dependabot raises it.
+      - uses: astral-sh/setup-uv@v10.3.3
         if: steps.changes.outputs.light == 'true'
         with:
           version: "0.13.7"
