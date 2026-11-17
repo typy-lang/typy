@@ -255,6 +255,13 @@ impl Walker {
                     {
                         self.annotation(index);
                     }
+                    // A `ctypes` class made where it is called, such as `POINTER(T)()` or
+                    // `(T * 3)(1, 2, 3)`: the checker decides whether it is a class.
+                    Expr::Call { .. }
+                    | Expr::BinOp {
+                        operator: typy_source::syntax::BinaryOperator::Mult,
+                        ..
+                    } => self.expression(function),
                     other => self.report(
                         other.span(),
                         planned("calls of values that are not names", "1.0", RuleId::FUN_05),

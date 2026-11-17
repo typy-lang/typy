@@ -18,8 +18,15 @@ impl FunctionLowerer<'_> {
         span: Span,
     ) -> Lowered {
         let declared = &self.program.foreign_functions[function as usize];
-        let parameters: Vec<CType> = declared.parameters.iter().map(|ty| c_type(*ty)).collect();
-        let result = declared.result.map(c_type);
+        let parameters: Vec<CType> = declared
+            .parameters
+            .iter()
+            .map(|ty| foreign_type(ty, self.cdata_classes))
+            .collect();
+        let result = declared
+            .result
+            .as_ref()
+            .map(|ty| foreign_type(ty, self.cdata_classes));
         let mut held = Vec::new();
         let mut values = Vec::new();
         for (position, (argument, parameter)) in arguments.iter().zip(parameters).enumerate() {
@@ -77,11 +84,13 @@ impl FunctionLowerer<'_> {
                 let truth = self.truth(lowered, span);
                 Self::borrowed(truth, TyirType::Bool)
             }
-            CType::CharPointer | CType::VoidPointer if lowered.ty == TyirType::Unit => {
-                let base = if parameter == CType::CharPointer {
-                    OptionalBase::Object(TypeId::BYTES)
-                } else {
-                    OptionalBase::Int
+            CType::CharPointer | CType::VoidPointer | CType::Pointer(_)
+                if lowered.ty == TyirType::Unit =>
+            {
+                let base = match parameter {
+                    CType::CharPointer => OptionalBase::Object(TypeId::BYTES),
+                    CType::Pointer(_) => OptionalBase::Object(TypeId::CDATA),
+                    _ => OptionalBase::Int,
                 };
                 let none = self.constant(Constant::NoneOf(base), span);
                 Self::borrowed(none, TyirType::Optional(base))
@@ -89,6 +98,21 @@ impl FunctionLowerer<'_> {
             CType::CharPointer => lowered,
             _ if lowered.ty == TyirType::Bool => self.int_of(lowered, span),
             _ => lowered,
+        }
+    }
+}
+
+/// Returns the TyIR C type of a `ctypes` type a C function takes or gives: a pointer is of
+/// its class, which `classes` holds.
+pub(crate) fn foreign_type(
+    ty: &typy_check::CData,
+    classes: &mut crate::cdata::CDataClasses,
+) -> CType {
+    match ty {
+        typy_check::CData::Scalar(scalar) => c_type(*scalar),
+        pointer @ typy_check::CData::Pointer(_) => CType::Pointer(classes.intern(pointer)),
+        typy_check::CData::Array(..) => {
+            unreachable!("the checker refuses an array as a C function's parameter or result")
         }
     }
 }

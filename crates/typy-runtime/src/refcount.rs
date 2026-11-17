@@ -108,6 +108,8 @@ unsafe fn destroy(object: *mut ObjectHeader, type_id: u32) {
         crate::header::SLICE_TYPE_ID => unsafe { crate::slice::object::destroy(object.cast()) },
         // SAFETY: the type ID says the object is a text file; a standard one is immortal.
         TEXT_FILE_TYPE_ID => unsafe { crate::text_file::destroy(object) },
+        // SAFETY: the type ID says the object is a `ctypes` object.
+        crate::header::CDATA_TYPE_ID => unsafe { crate::cdata::destroy(object.cast()) },
         _ => crate::libc::abort_with(b"typy runtime: an object has an unknown type\n"),
     }
 }

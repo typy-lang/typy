@@ -1,5 +1,6 @@
 //! The typed program that checking produces and lowering consumes.
 
+mod cdata;
 mod class;
 mod constant;
 mod dump;
@@ -11,6 +12,7 @@ mod signature;
 mod statement;
 mod symbol;
 
+pub use cdata::{CDataExpr, CDataPlace};
 pub use class::{Attribute, ClassId, TypedClass};
 pub use constant::TypedConstant;
 pub use dump::dump;

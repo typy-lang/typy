@@ -71,6 +71,15 @@ pub enum AssignTarget {
         /// The key.
         key: Box<TypedExpr>,
     },
+    /// The value or an item of a `ctypes` object, `object.value = value` or
+    /// `object[index] = value`; the object and the index are evaluated after the value, as
+    /// CPython does (FFI-03).
+    CData {
+        /// The scalar, pointer or array.
+        object: Box<TypedExpr>,
+        /// What is written.
+        place: super::cdata::CDataPlace,
+    },
     /// A property, `object.name = value`, through its setter; the object is evaluated after
     /// the value, as CPython does (CLS-06).
     Property {
@@ -198,6 +207,8 @@ impl LoopSource {
                 | Type::Iterator(item)
                 | Type::Iterable(item) => item.as_ref().clone(),
                 Type::DictView(view, key, value) => view.item(key, value),
+                // A `ctypes` array gives the value of each item (FFI-03).
+                Type::CData(crate::ctypes::CData::Array(item, _)) => item.result_type(),
                 other => other
                     .sequence_item()
                     .cloned()

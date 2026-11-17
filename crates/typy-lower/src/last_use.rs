@@ -395,6 +395,12 @@ fn target_reads(target: &AssignTarget, reads: &mut Vec<SymbolId>) {
             expression_reads(dict, reads);
             expression_reads(key, reads);
         }
+        AssignTarget::CData { object, place } => {
+            expression_reads(object, reads);
+            if let typy_check::CDataPlace::Item(index) = place {
+                expression_reads(index, reads);
+            }
+        }
     }
 }
 

@@ -22,7 +22,9 @@ pub(crate) fn c_type(context: &Context, ty: CType) -> BasicTypeEnum<'_> {
         CType::Int64 | CType::UInt64 => context.i64_type().into(),
         CType::Float => context.f32_type().into(),
         CType::Double => context.f64_type().into(),
-        CType::CharPointer | CType::VoidPointer => context.ptr_type(AddressSpace::default()).into(),
+        CType::CharPointer | CType::VoidPointer | CType::Pointer(_) => {
+            context.ptr_type(AddressSpace::default()).into()
+        }
     }
 }
 
@@ -117,6 +119,14 @@ impl<'ctx> FunctionEmitter<'_, '_, 'ctx> {
         );
         let lowered = self.value(value)?;
         let held = self.function.value(value).ty;
+        // A `ctypes` object, or `None` in its place, passes the address it gives (ADR-0048).
+        if is_cdata(held) {
+            return self.runtime_value(
+                "typy_rt_cdata_argument",
+                pointer.fn_type(&[pointer.into()], false),
+                &[lowered.into()],
+            );
+        }
         if let Some((bits, signed)) = ty.integer() {
             let low = self.runtime_value(
                 "typy_rt_int_low_bits",
@@ -238,9 +248,23 @@ impl<'ctx> FunctionEmitter<'_, '_, 'ctx> {
                 word.fn_type(&[pointer.into()], false),
                 &[result.into()],
             )?,
+            CType::Pointer(class) => {
+                let class = crate::cdata::cdata_class(self.shared, class)?;
+                self.runtime_value(
+                    "typy_rt_cdata_from_address",
+                    pointer.fn_type(&[pointer.into(), pointer.into()], false),
+                    &[class.into(), result.into()],
+                )?
+            }
             _ => result,
         })
     }
+}
+
+/// Returns whether a value of type `ty` is a `ctypes` object, or an optional one.
+fn is_cdata(ty: TyirType) -> bool {
+    use typy_tyir::{OptionalBase, TypeId};
+    ty == TyirType::CDATA || ty == TyirType::Optional(OptionalBase::Object(TypeId::CDATA))
 }
 
 /// Returns whether a value of type `ty` is `bytes`, or an optional `bytes`.

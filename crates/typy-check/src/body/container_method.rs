@@ -163,9 +163,9 @@ impl BodyChecker<'_> {
     }
 
     /// Returns `item in container` for an instance whose class has `__iter__` and no
-    /// `__contains__`: each item the instance gives is compared with the value, the item on the
-    /// left, until one is the value or equal to it, as CPython's `PySequence_Contains` does
-    /// (CLS-23).
+    /// `__contains__`, or for a `ctypes` array: each item the container gives is compared with
+    /// the value, the item on the left, until one is the value or equal to it, as CPython's
+    /// `PySequence_Contains` does (CLS-23, FFI-03).
     fn iterated_contains(
         &mut self,
         item: &TypedExpr,
@@ -173,6 +173,12 @@ impl BodyChecker<'_> {
         negated: bool,
         span: Span,
     ) -> Option<TypedExpr> {
+        if let Type::CData(crate::ctypes::CData::Array(each, _)) = &container.ty
+            && let Some(scalar) = each.scalar()
+        {
+            let source = crate::typed::LoopSource::Items(container.clone());
+            return self.contains_by_equality(item, (source, scalar.result_type()), negated, span);
+        }
         let Type::Instance(class) = &container.ty else {
             return None;
         };
@@ -200,7 +206,19 @@ impl BodyChecker<'_> {
             }
             return None;
         }
-        let (source, each_type) = self.protocol_source(container.clone(), "`in`");
+        let source = self.protocol_source(container.clone(), "`in`");
+        self.contains_by_equality(item, source, negated, span)
+    }
+
+    /// Returns `item in` the items `source` gives, each of type `each_type`, compared with the
+    /// value for equality; `None` when they cannot be compared with it.
+    fn contains_by_equality(
+        &mut self,
+        item: &TypedExpr,
+        (source, each_type): (crate::typed::LoopSource, Type),
+        negated: bool,
+        span: Span,
+    ) -> Option<TypedExpr> {
         if !each_type.can_test_equality(&item.ty) {
             return None;
         }

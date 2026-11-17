@@ -393,6 +393,14 @@ impl BodyChecker<'_> {
         span: Span,
     ) -> Option<AssignTarget> {
         let list = self.expression(list);
+        if let Type::CData(class) = list.ty.clone() {
+            if matches!(index, Expr::Slice { .. }) {
+                self.cdata_item((list, &class), index, span);
+                return None;
+            }
+            let index = self.expression(index);
+            return self.cdata_item_target((list, &class), index, ty, span);
+        }
         if let Type::Dict(key, _) = &list.ty {
             let key = key.as_ref().clone();
             let key = self.expression_expecting(index, Some(&key));

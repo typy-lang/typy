@@ -17,6 +17,7 @@ C library (FFI-01 to FFI-05, CLI-09).
 | An exception never reaches C: a `SystemExit` ends the process with its status, and any other exception is printed and the process aborts | EXC-05 |
 | `NAME = ctypes.CDLL("library")` or `ctypes.cdll.LoadLibrary("library")` at module level declares a library, which the build links | FFI-01 |
 | A C function whose `argtypes` and `restype` are assigned at module level is called directly, with the conversions `ctypes` defines | FFI-02, FFI-03 |
+| `ctypes` objects, pointers and arrays hold C memory as in CPython, and a C function writes them through `byref` and `POINTER` parameters | FFI-03 |
 | `typy.toml` says whether each library is linked statically or dynamically, and where the linker looks | FFI-04 |
 
 ## Building a library
@@ -174,6 +175,50 @@ CPython. A library or a function the linker cannot find stops the build
 with E0702, where CPython raises `OSError` or `AttributeError` when the
 program runs.
 
+## Objects, pointers and arrays
+
+A `ctypes` object holds a C value in memory a C function can write. A
+parameter declared as `ctypes.POINTER(T)` takes the object's address,
+whether the program passes `ctypes.byref(x)`, the object itself, an array
+of `T`, a pointer from `ctypes.pointer(x)`, or `None` for null (ADR-0048):
+
+<!-- typy-expect: accepted -->
+```python
+import ctypes
+
+libm = ctypes.CDLL("libm.so.6")
+libm.frexp.argtypes = [ctypes.c_double, ctypes.POINTER(ctypes.c_int)]
+libm.frexp.restype = ctypes.c_double
+
+exponent = ctypes.c_int()
+mantissa = libm.frexp(48.0, ctypes.byref(exponent))
+print(mantissa, exponent.value, exponent)
+
+Numbers = ctypes.c_int * 4
+numbers = Numbers(1, 2, 3)
+numbers[3] = numbers[0] + len(numbers)
+print(list(numbers), sum(numbers), ctypes.sizeof(numbers))
+
+pointer = ctypes.pointer(exponent)
+pointer[0] += 1
+print(exponent.value, pointer.contents)
+```
+
+| Operation | Gives |
+| --- | --- |
+| `T(value)`, `T()` | An object of a scalar type holding the value converted as an argument is, or zero, `None` or `False` |
+| `x.value`, `x.value = v` | The value as a result of type `T` is, and a new value converted and wrapped to the type's width |
+| `ctypes.pointer(x)`, `POINTER(T)(x)`, `POINTER(T)()` | A pointer that keeps `x` alive, or a null pointer |
+| `p.contents`, `p[i]`, `p[i] = v` | The object pointed to, and the value of an item; a null pointer raises `ValueError` |
+| `T * n`, `(T * n)(items)` | An array class of `n` items, `n` an integer literal, and an array, the rest zero |
+| `a[i]`, `a[i] = v`, `len(a)`, `for v in a`, `v in a` | Items counted from the end when negative; one outside raises `IndexError` |
+| `ctypes.sizeof(T)`, `ctypes.sizeof(x)` | The bytes of the class on 64-bit Linux |
+| `repr(x)`, `bool(x)`, `x == y` | As in CPython: `c_long(7)` for a `c_int64`, the value's truth, and identity |
+
+A `POINTER(T)` result is a new pointer over memory the C library owns.
+A class is bound to a name, called, multiplied into an array class or
+named in a declaration; using it any other way is E0201 under FFI-10.
+
 ## Linking a library
 
 A library is linked dynamically unless `typy.toml` says otherwise, and the
@@ -196,9 +241,15 @@ says, and CPython runs the same program through `ctypes`.
 
 ## Planned
 
-Pointers, `byref`, arrays and `Structure` subclasses are planned for 0.5
-(FFI-03), and a library or a C function used as a value, stored, passed or
-printed, for 1.0 (FFI-09):
+`Structure` subclasses are planned for 0.5 (FFI-03). Planned for 1.0 are
+`c_char`, `c_wchar`, `c_wchar_p`, `create_string_buffer`, `cast` and
+`addressof`, pointers to and arrays of pointers and arrays, arrays whose
+length is not an integer literal, array slices, `byref` other than as a C
+function's argument, assigning a pointer's `contents`, and `ctypes`
+classes as values, in annotations, `isinstance` and `type` (FFI-10), so a
+function takes and returns the values of an object rather than the object.
+A library or a C function used as a value, stored, passed or printed, is
+planned for 1.0 too (FFI-09):
 
 <!-- typy-expect: rejected E0201 at 4:7 -->
 ```python

@@ -53,3 +53,4 @@ supersedes it.
 | [ADR-0045](0045-name-a-librarys-files-by-its-release-as-linux-names-libraries.md) | Name a library's files by its release as Linux names libraries | Accepted | 2026-11-17 |
 | [ADR-0046](0046-write-a-librarys-binding-as-a-typed-function-for-each-export.md) | Write a library's binding as a typed function for each export | Accepted | 2026-11-17 |
 | [ADR-0047](0047-compile-ctypes-declarations-into-direct-calls-linked-at-build-time.md) | Compile ctypes declarations into direct calls linked at build time | Accepted | 2026-11-17 |
+| [ADR-0048](0048-hold-a-ctypes-object-as-a-counted-object-over-a-c-buffer.md) | Hold a ctypes object as a counted object over a C buffer | Accepted | 2026-11-17 |

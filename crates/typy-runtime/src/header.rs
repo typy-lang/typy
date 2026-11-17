@@ -42,6 +42,8 @@ pub const VERSION_INFO_TYPE_ID: u32 = 20;
 pub const NOT_IMPLEMENTED_TYPE_ID: u32 = 21;
 /// The type ID of a `slice` (CLS-23).
 pub const SLICE_TYPE_ID: u32 = 22;
+/// The type ID of a `ctypes` object: a scalar, a pointer or an array (FFI-03, ADR-0048).
+pub const CDATA_TYPE_ID: u32 = 23;
 
 /// The first 8 bytes of every heap object.
 #[repr(C)]

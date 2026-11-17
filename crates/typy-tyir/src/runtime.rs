@@ -359,6 +359,38 @@ pub enum RuntimeFunction {
     MathSumprodInt,
     MathSumprodFloat,
     Ascii,
+    /// `T()`: a new `ctypes` object of a class, every byte zero (FFI-03).
+    CdataNew,
+    /// The `value` of an integer scalar.
+    CdataGetInt,
+    /// Sets an integer scalar, wrapped to its width.
+    CdataSetInt,
+    /// The `value` of a `c_float` or `c_double`.
+    CdataGetFloat,
+    /// Sets a `c_float` or `c_double`.
+    CdataSetFloat,
+    /// The `value` of a `c_bool`.
+    CdataGetBool,
+    /// Sets a `c_bool`.
+    CdataSetBool,
+    /// The `value` of a `c_char_p`: `bytes`, or `None` for null.
+    CdataGetBytes,
+    /// Sets a `c_char_p`, which keeps the `bytes` alive.
+    CdataSetBytes,
+    /// The `value` of a `c_void_p`: an `int`, or `None` for null.
+    CdataGetAddress,
+    /// Sets a `c_void_p`.
+    CdataSetAddress,
+    /// `pointer(x)`: a new pointer of a class that keeps its target alive.
+    CdataPointer,
+    /// `p.contents`; `ValueError` for a null pointer.
+    CdataContents,
+    /// An object over an item of a pointer or an array; an array checks the index.
+    CdataItem,
+    /// `len` of an array.
+    CdataLength,
+    /// `ctypes.sizeof` of an object.
+    CdataSize,
 }
 
 /// The parameter types, result type and raising behaviour of a runtime function.
@@ -389,7 +421,7 @@ const fn signature(
 /// file objects.
 fn holds_items(ty: TyirType) -> bool {
     use crate::types::{OptionalBase, TypeId};
-    const OWN: [TypeId; 11] = [
+    const OWN: [TypeId; 12] = [
         TypeId::STR,
         TypeId::BYTES,
         TypeId::EXCEPTION,
@@ -401,6 +433,7 @@ fn holds_items(ty: TyirType) -> bool {
         TypeId::TYPE_ALIAS,
         TypeId::VERSION_INFO,
         TypeId::NOT_IMPLEMENTED,
+        TypeId::CDATA,
     ];
     match ty {
         TyirType::Bits | TyirType::Tuple(_) | TyirType::Optional(OptionalBase::Tuple(_)) => true,
@@ -414,7 +447,7 @@ const FLOAT_FLOAT: &[TyirType] = &[TyirType::Float, TyirType::Float];
 
 impl RuntimeFunction {
     /// Every runtime function.
-    pub const ALL: [Self; 338] = [
+    pub const ALL: [Self; 354] = [
         Self::IntFloorDivide,
         Self::IntModulo,
         Self::IntPower,
@@ -753,6 +786,22 @@ impl RuntimeFunction {
         Self::MathSumprodInt,
         Self::MathSumprodFloat,
         Self::Ascii,
+        Self::CdataNew,
+        Self::CdataGetInt,
+        Self::CdataSetInt,
+        Self::CdataGetFloat,
+        Self::CdataSetFloat,
+        Self::CdataGetBool,
+        Self::CdataSetBool,
+        Self::CdataGetBytes,
+        Self::CdataSetBytes,
+        Self::CdataGetAddress,
+        Self::CdataSetAddress,
+        Self::CdataPointer,
+        Self::CdataContents,
+        Self::CdataItem,
+        Self::CdataLength,
+        Self::CdataSize,
     ];
 
     /// Returns true when the function may call a type object's `equal`, `order`, `hash` or
@@ -786,6 +835,11 @@ impl RuntimeFunction {
         const TYPE: TyirType = TyirType::TYPE;
         const EXCEPTION: TyirType = TyirType::EXCEPTION;
         const ITERATOR: TyirType = TyirType::ITERATOR;
+        const CDATA: TyirType = TyirType::CDATA;
+        const OPTIONAL_BYTES: TyirType = TyirType::Optional(crate::types::OptionalBase::Object(
+            crate::types::TypeId::BYTES,
+        ));
+        const OPTIONAL_INT: TyirType = TyirType::Optional(crate::types::OptionalBase::Int);
         match self {
             Self::IntFloorDivide
             | Self::IntModulo
@@ -823,6 +877,22 @@ impl RuntimeFunction {
             Self::StrLength => signature(&[STR], Int, false),
             Self::StrCompare => signature(&[STR, STR, Int], Bool, false),
             Self::StrRepr | Self::Ascii => signature(&[STR], STR, false),
+            Self::CdataNew => signature(&[Bits], CDATA, false),
+            Self::CdataGetInt | Self::CdataLength | Self::CdataSize => {
+                signature(&[CDATA], Int, false)
+            }
+            Self::CdataSetInt => signature(&[CDATA, Int], Unit, false),
+            Self::CdataGetFloat => signature(&[CDATA], Float, false),
+            Self::CdataSetFloat => signature(&[CDATA, Float], Unit, false),
+            Self::CdataGetBool => signature(&[CDATA], Bool, false),
+            Self::CdataSetBool => signature(&[CDATA, Bool], Unit, false),
+            Self::CdataGetBytes => signature(&[CDATA], OPTIONAL_BYTES, false),
+            Self::CdataSetBytes => signature(&[CDATA, OPTIONAL_BYTES], Unit, false),
+            Self::CdataGetAddress => signature(&[CDATA], OPTIONAL_INT, false),
+            Self::CdataSetAddress => signature(&[CDATA, OPTIONAL_INT], Unit, false),
+            Self::CdataPointer => signature(&[Bits, CDATA], CDATA, false),
+            Self::CdataContents => signature(&[CDATA], CDATA, true),
+            Self::CdataItem => signature(&[CDATA, Int], CDATA, true),
             Self::Ord => signature(&[STR], Int, true),
             Self::WriteStdout => signature(&[STR], Unit, false),
             Self::CheckStack | Self::SlotRaised => signature(&[], Unit, true),
@@ -1471,6 +1541,22 @@ impl RuntimeFunction {
             Self::MathSumprodFloat => "math_sumprod_float",
             Self::MathLcm => "math_lcm",
             Self::Ascii => "ascii",
+            Self::CdataNew => "cdata_new",
+            Self::CdataGetInt => "cdata_get_int",
+            Self::CdataSetInt => "cdata_set_int",
+            Self::CdataGetFloat => "cdata_get_float",
+            Self::CdataSetFloat => "cdata_set_float",
+            Self::CdataGetBool => "cdata_get_bool",
+            Self::CdataSetBool => "cdata_set_bool",
+            Self::CdataGetBytes => "cdata_get_bytes",
+            Self::CdataSetBytes => "cdata_set_bytes",
+            Self::CdataGetAddress => "cdata_get_address",
+            Self::CdataSetAddress => "cdata_set_address",
+            Self::CdataPointer => "cdata_pointer",
+            Self::CdataContents => "cdata_contents",
+            Self::CdataItem => "cdata_item",
+            Self::CdataLength => "cdata_length",
+            Self::CdataSize => "cdata_size",
         }
     }
 }

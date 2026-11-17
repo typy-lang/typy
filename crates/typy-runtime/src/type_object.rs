@@ -349,6 +349,7 @@ pub(crate) unsafe fn type_of(object: *const ObjectHeader) -> &'static TypeObject
             crate::header::NOT_IMPLEMENTED_TYPE_ID => &crate::not_implemented::NOT_IMPLEMENTED_TYPE,
             crate::header::SLICE_TYPE_ID => &crate::slice::object::SLICE,
             crate::header::TEXT_FILE_TYPE_ID => &crate::text_file::TEXT_FILE,
+            crate::header::CDATA_TYPE_ID => &crate::cdata::CDATA,
             _ => crate::libc::abort_with(b"typy runtime: an object has an unknown type\n"),
         }
     }

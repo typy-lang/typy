@@ -246,6 +246,12 @@ fn assign_target(target: &AssignTarget, callees: &mut BTreeSet<FunctionId>) {
             expression(value, callees);
             assign_target(target, callees);
         }
+        AssignTarget::CData { object, place } => {
+            expression(object, callees);
+            if let typy_check::CDataPlace::Item(index) = place {
+                expression(index, callees);
+            }
+        }
     }
 }
 
@@ -533,6 +539,11 @@ fn expression(expression_value: &TypedExpr, callees: &mut BTreeSet<FunctionId>) 
         | TypedExprKind::ForeignCall { arguments, .. } => {
             for argument in arguments {
                 expression(argument, callees);
+            }
+        }
+        TypedExprKind::CData(cdata) => {
+            for part in cdata.expressions() {
+                expression(part, callees);
             }
         }
         TypedExprKind::Lazy { reify, value } => {

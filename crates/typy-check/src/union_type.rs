@@ -116,6 +116,7 @@ impl Type {
                 | Self::TypeAlias
                 | Self::VersionInfo
                 | Self::NotImplemented
+                | Self::CData(_)
                 | Self::TypeObject(_)
                 | Self::Union(_)
         )

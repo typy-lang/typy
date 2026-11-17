@@ -1,6 +1,6 @@
 //! The `ctypes` module as TyPy compiles it: the C types of the declarations, which values
-//! each takes as an argument and gives as a result, and the libraries and functions a
-//! program declares (FFI-01 to FFI-03, ADR-0047).
+//! each takes as an argument and gives as a result, the classes of its objects, and the
+//! libraries and functions a program declares (FFI-01 to FFI-03, ADR-0047, ADR-0048).
 
 use crate::types::Type;
 
@@ -58,6 +58,60 @@ impl CType {
         })
     }
 
+    /// Returns CPython's name for the class on 64-bit Linux, where `c_int64` is `c_long`.
+    #[must_use]
+    pub const fn class_name(self) -> &'static str {
+        match self {
+            Self::Int8 => "c_byte",
+            Self::UInt8 => "c_ubyte",
+            Self::Int16 => "c_short",
+            Self::UInt16 => "c_ushort",
+            Self::Int32 => "c_int",
+            Self::UInt32 => "c_uint",
+            Self::Int64 => "c_long",
+            Self::UInt64 => "c_ulong",
+            Self::Float => "c_float",
+            Self::Double => "c_double",
+            Self::Bool => "c_bool",
+            Self::CharPointer => "c_char_p",
+            Self::VoidPointer => "c_void_p",
+        }
+    }
+
+    /// Returns the bytes a value of this C type takes on 64-bit Linux.
+    #[must_use]
+    pub const fn size(self) -> u64 {
+        match self {
+            Self::Int8 | Self::UInt8 | Self::Bool => 1,
+            Self::Int16 | Self::UInt16 => 2,
+            Self::Int32 | Self::UInt32 | Self::Float => 4,
+            _ => 8,
+        }
+    }
+
+    /// Returns whether an object's `value`, or an item, takes a value of type `ty` as
+    /// `ctypes` converts it: as an argument does, but for `c_void_p`, which takes an `int`
+    /// or `None` and refuses `bytes`.
+    #[must_use]
+    pub fn stores(self, ty: &Type) -> bool {
+        match self {
+            Self::VoidPointer => {
+                matches!(ty, Type::Int | Type::Bool | Type::NoneType)
+                    || *ty == Type::Optional(Box::new(Type::Int))
+            }
+            _ => self.accepts(ty),
+        }
+    }
+
+    /// Returns the type a message names for a value this C type stores.
+    #[must_use]
+    pub const fn stored_types(self) -> &'static str {
+        match self {
+            Self::VoidPointer => "an `int` or `None`",
+            _ => self.argument_types(),
+        }
+    }
+
     /// Returns the type of a call's result of this C type: `ctypes` gives an `int` of the
     /// integer types, a `float`, a `bool`, `bytes` or `None` of `c_char_p`, and an `int` or
     /// `None` of `c_void_p`.
@@ -106,6 +160,151 @@ impl CType {
     }
 }
 
+/// A `ctypes` type, whose objects are counted objects over a C buffer: a scalar of a C
+/// type, a pointer to an object of a type, or an array of a number of items of a type
+/// (FFI-03, ADR-0048). Two of one shape are one class, as `c_int32` and `c_int` are in
+/// CPython.
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub enum CData {
+    /// A scalar: `c_int`, `c_double`, `c_char_p` and the others of `CType`.
+    Scalar(CType),
+    /// `POINTER(T)`.
+    Pointer(Box<CData>),
+    /// `T * length`.
+    Array(Box<CData>, u32),
+}
+
+impl CData {
+    /// Returns CPython's name for the class: `c_long`, `LP_c_int` or `c_int_Array_3`.
+    #[must_use]
+    pub fn class_name(&self) -> String {
+        match self {
+            Self::Scalar(ty) => ty.class_name().to_owned(),
+            Self::Pointer(target) => format!("LP_{}", target.class_name()),
+            Self::Array(item, length) => format!("{}_Array_{length}", item.class_name()),
+        }
+    }
+
+    /// Returns the bytes of an object's buffer, as `ctypes.sizeof` gives them.
+    #[must_use]
+    pub fn size(&self) -> u64 {
+        match self {
+            Self::Scalar(ty) => ty.size(),
+            Self::Pointer(_) => 8,
+            Self::Array(item, length) => item.size() * u64::from(*length),
+        }
+    }
+
+    /// Returns the type of a pointer's target or an array's item, or `None` for a scalar.
+    #[must_use]
+    pub fn item(&self) -> Option<&Self> {
+        match self {
+            Self::Scalar(_) => None,
+            Self::Pointer(item) | Self::Array(item, _) => Some(item),
+        }
+    }
+
+    /// Returns the C type of a scalar, or `None` for a pointer or an array.
+    #[must_use]
+    pub const fn scalar(&self) -> Option<CType> {
+        match self {
+            Self::Scalar(ty) => Some(*ty),
+            _ => None,
+        }
+    }
+
+    /// Returns the type a C function's argument of this type takes, as `ctypes` checks it:
+    /// a scalar's own values; for `POINTER(T)`, a pointer to `T`, an object of `T` passed by
+    /// reference, an array of `T`, `byref` of an object of `T`, or `None`. `by_reference` is
+    /// true for an argument `ctypes.byref(object)`, whose type is the object's.
+    #[must_use]
+    pub fn accepts(&self, ty: &Type, by_reference: bool) -> bool {
+        match self {
+            Self::Scalar(CType::VoidPointer) => {
+                by_reference
+                    || matches!(ty, Type::CData(Self::Pointer(_) | Self::Array(..)))
+                    || CType::VoidPointer.accepts(ty)
+            }
+            Self::Scalar(scalar) => !by_reference && scalar.accepts(ty),
+            Self::Pointer(target) => match ty {
+                Type::CData(Self::Pointer(other)) if !by_reference => other == target,
+                Type::CData(Self::Array(item, _)) => item == target,
+                Type::CData(other) => other == target.as_ref(),
+                Type::NoneType => !by_reference,
+                _ => false,
+            },
+            Self::Array(..) => false,
+        }
+    }
+
+    /// Returns the type a message names for an argument of this type.
+    #[must_use]
+    pub fn argument_types(&self) -> String {
+        match self {
+            Self::Scalar(CType::VoidPointer) => {
+                "an `int`, `bytes`, `None`, a pointer, an array or `byref` of an object".to_owned()
+            }
+            Self::Scalar(scalar) => scalar.argument_types().to_owned(),
+            Self::Pointer(target) => {
+                let name = target.class_name();
+                format!(
+                    "a pointer to `{name}`, a `{name}` or an array of them, `byref` of a \
+                     `{name}`, or `None`"
+                )
+            }
+            Self::Array(..) => "an array".to_owned(),
+        }
+    }
+
+    /// Returns the type of a call's result of this type: a scalar's value, or a new pointer
+    /// object.
+    #[must_use]
+    pub fn result_type(&self) -> Type {
+        match self {
+            Self::Scalar(scalar) => scalar.result_type(),
+            other => Type::CData(other.clone()),
+        }
+    }
+}
+
+/// A function of `ctypes` that makes or measures its classes and objects (FFI-03).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum CtypesFunction {
+    /// `POINTER(T)`: the class of pointers to `T`.
+    PointerType,
+    /// `pointer(object)`: a new pointer to the object.
+    Pointer,
+    /// `byref(object)`: the object passed by reference to a C function.
+    Reference,
+    /// `sizeof(class_or_object)`.
+    Size,
+}
+
+impl CtypesFunction {
+    /// Returns the function of `ctypes` named `name`.
+    #[must_use]
+    pub(crate) fn from_name(name: &str) -> Option<Self> {
+        Some(match name {
+            "POINTER" => Self::PointerType,
+            "pointer" => Self::Pointer,
+            "byref" => Self::Reference,
+            "sizeof" => Self::Size,
+            _ => return None,
+        })
+    }
+
+    /// Returns the function's name in `ctypes`.
+    #[must_use]
+    pub(crate) const fn name(self) -> &'static str {
+        match self {
+            Self::PointerType => "POINTER",
+            Self::Pointer => "pointer",
+            Self::Reference => "byref",
+            Self::Size => "sizeof",
+        }
+    }
+}
+
 /// A library a module declares with `ctypes.CDLL` or `ctypes.cdll.LoadLibrary`.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ForeignLibrary {
@@ -120,16 +319,134 @@ pub struct ForeignFunction {
     pub library: u32,
     /// Its C symbol.
     pub name: String,
-    /// The C type of each parameter.
-    pub parameters: Vec<CType>,
-    /// The C type of the result, or `None` for `void`.
-    pub result: Option<CType>,
+    /// The `ctypes` type of each parameter.
+    pub parameters: Vec<CData>,
+    /// The `ctypes` type of the result, or `None` for `void`.
+    pub result: Option<CData>,
 }
 
 #[cfg(test)]
 mod tests {
-    use super::CType;
+    use super::{CData, CType, CtypesFunction};
     use crate::types::Type;
+
+    fn pointer(target: CData) -> CData {
+        CData::Pointer(Box::new(target))
+    }
+
+    fn array(item: CData, length: u32) -> CData {
+        CData::Array(Box::new(item), length)
+    }
+
+    #[test]
+    fn each_class_has_cpythons_name_and_size_on_64_bit_linux() {
+        let int = CData::Scalar(CType::Int32);
+        for (class, name, size) in [
+            (CData::Scalar(CType::Int8), "c_byte", 1),
+            (CData::Scalar(CType::UInt8), "c_ubyte", 1),
+            (CData::Scalar(CType::Int16), "c_short", 2),
+            (CData::Scalar(CType::UInt16), "c_ushort", 2),
+            (int.clone(), "c_int", 4),
+            (CData::Scalar(CType::UInt32), "c_uint", 4),
+            (CData::Scalar(CType::Int64), "c_long", 8),
+            (CData::Scalar(CType::UInt64), "c_ulong", 8),
+            (CData::Scalar(CType::Float), "c_float", 4),
+            (CData::Scalar(CType::Double), "c_double", 8),
+            (CData::Scalar(CType::Bool), "c_bool", 1),
+            (CData::Scalar(CType::CharPointer), "c_char_p", 8),
+            (CData::Scalar(CType::VoidPointer), "c_void_p", 8),
+            (pointer(int.clone()), "LP_c_int", 8),
+            (array(int.clone(), 3), "c_int_Array_3", 12),
+            (array(CData::Scalar(CType::Int64), 0), "c_long_Array_0", 0),
+        ] {
+            assert_eq!(class.class_name(), name);
+            assert_eq!(class.size(), size, "{name}");
+        }
+        assert_eq!(pointer(int.clone()).item(), Some(&int));
+        assert_eq!(array(int.clone(), 2).item(), Some(&int));
+        assert_eq!(int.item(), None);
+        assert_eq!(int.scalar(), Some(CType::Int32));
+        assert_eq!(pointer(int).scalar(), None);
+    }
+
+    #[test]
+    fn a_pointer_argument_takes_what_ctypes_passes_by_reference() {
+        let int = CData::Scalar(CType::Int32);
+        let long = CData::Scalar(CType::Int64);
+        let to_int = pointer(int.clone());
+        for (ty, by_reference, accepted) in [
+            (Type::CData(to_int.clone()), false, true),
+            (Type::CData(int.clone()), false, true),
+            (Type::CData(int.clone()), true, true),
+            (Type::CData(array(int.clone(), 2)), false, true),
+            (Type::CData(array(int.clone(), 2)), true, true),
+            (Type::NoneType, false, true),
+            (Type::CData(to_int.clone()), true, false),
+            (Type::CData(long.clone()), false, false),
+            (Type::CData(pointer(long.clone())), false, false),
+            (Type::CData(array(long, 2)), false, false),
+            (Type::Int, false, false),
+        ] {
+            assert_eq!(
+                to_int.accepts(&ty, by_reference),
+                accepted,
+                "{ty} {by_reference}"
+            );
+        }
+        let address = CData::Scalar(CType::VoidPointer);
+        assert!(address.accepts(&Type::CData(to_int.clone()), false));
+        assert!(address.accepts(&Type::CData(array(int.clone(), 1)), false));
+        assert!(address.accepts(&Type::CData(int.clone()), true));
+        assert!(address.accepts(&Type::Bytes, false));
+        assert!(!address.accepts(&Type::CData(int.clone()), false));
+        assert!(!int.accepts(&Type::CData(int.clone()), true));
+        assert!(int.accepts(&Type::Int, false));
+        assert!(!array(int.clone(), 1).accepts(&Type::CData(array(int, 1)), false));
+    }
+
+    #[test]
+    fn each_class_names_the_arguments_it_takes_and_gives_its_result() {
+        let int = CData::Scalar(CType::Int32);
+        assert_eq!(int.argument_types(), "an `int`");
+        assert!(
+            pointer(int.clone())
+                .argument_types()
+                .starts_with("a pointer to `c_int`, a `c_int` or an array of them")
+        );
+        assert!(
+            CData::Scalar(CType::VoidPointer)
+                .argument_types()
+                .contains("a pointer, an array or `byref` of an object")
+        );
+        assert_eq!(array(int.clone(), 2).argument_types(), "an array");
+        assert_eq!(int.result_type(), Type::Int);
+        assert_eq!(
+            pointer(int.clone()).result_type(),
+            Type::CData(pointer(int))
+        );
+    }
+
+    #[test]
+    fn a_c_void_p_stores_an_int_or_none_and_refuses_bytes() {
+        assert!(CType::VoidPointer.stores(&Type::Int));
+        assert!(CType::VoidPointer.stores(&Type::Bool));
+        assert!(CType::VoidPointer.stores(&Type::NoneType));
+        assert!(CType::VoidPointer.stores(&Type::Optional(Box::new(Type::Int))));
+        assert!(!CType::VoidPointer.stores(&Type::Bytes));
+        assert_eq!(CType::VoidPointer.stored_types(), "an `int` or `None`");
+        assert!(CType::Double.stores(&Type::Int));
+        assert!(!CType::Int8.stores(&Type::Float));
+        assert_eq!(CType::Int8.stored_types(), "an `int`");
+    }
+
+    #[test]
+    fn each_function_of_ctypes_on_objects_is_named_as_ctypes_names_it() {
+        for name in ["POINTER", "pointer", "byref", "sizeof"] {
+            let function = CtypesFunction::from_name(name).unwrap();
+            assert_eq!(function.name(), name);
+        }
+        assert_eq!(CtypesFunction::from_name("cast"), None);
+    }
 
     #[test]
     fn each_ctypes_name_stands_for_its_c_type_on_64_bit_linux() {

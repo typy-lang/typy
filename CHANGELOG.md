@@ -44,6 +44,15 @@ All notable changes to TyPy are recorded here. The format follows
   converted as `ctypes` converts them, also `ctypes.ArgumentError` for an
   `int` too large for a `float`. E0430 names a declaration TyPy cannot
   compile (FFI-01 to FFI-03, ADR-0047).
+- `ctypes` objects, pointers and arrays: `c_int(5)` and every scalar type
+  of `ctypes` make an object whose `value` a program reads and assigns and
+  a C function writes through `byref(x)` or a `POINTER(T)` parameter;
+  `pointer(x)`, `POINTER(T)()`, `contents` and indexes read and write
+  through a pointer, which a C function may also return; `(T * n)(...)`
+  makes an array with `len`, checked indexes, iteration and `in`; and
+  `sizeof` gives a class's size, each as in CPython. `argtypes` and
+  `restype` take `POINTER(T)` and names bound to a type (FFI-03,
+  ADR-0048).
 - `library-paths` and `[libraries."NAME"]` with `link = "static"` or
   `"dynamic"` in `typy.toml` say where the linker looks for C libraries and
   how each is linked (FFI-04).

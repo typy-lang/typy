@@ -4,6 +4,7 @@ mod accessor;
 mod builtin_call;
 mod builtin_module;
 mod call;
+mod cdata;
 mod class;
 mod class_bridge;
 mod class_copy;
@@ -142,6 +143,9 @@ pub(crate) struct BodyChecker<'program> {
     /// The type aliases the body's `type` statements define, which annotations read
     /// (SMT-12).
     local_aliases: BTreeSet<String>,
+    /// Whether the next expression checked may be a `ctypes` class, as the value of an
+    /// assignment to a name is; checking it clears this (FFI-03).
+    class_allowed: bool,
 }
 
 impl<'program> BodyChecker<'program> {
@@ -173,6 +177,7 @@ impl<'program> BodyChecker<'program> {
             finally_loops: Vec::new(),
             global_names: BTreeSet::new(),
             local_aliases: BTreeSet::new(),
+            class_allowed: false,
         }
     }
 

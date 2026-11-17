@@ -28,6 +28,10 @@ pub enum CType {
     CharPointer,
     /// An address, or null: `void *`.
     VoidPointer,
+    /// A pointer to a `ctypes` type, of the pointer class at this index of
+    /// `TyirModule::cdata_classes`: an argument passes the address a `ctypes` object gives,
+    /// and a result is a new pointer object of the class (FFI-03, ADR-0048).
+    Pointer(u32),
 }
 
 impl CType {
@@ -47,7 +51,7 @@ impl CType {
             Self::Double => "double",
             Self::Bool => "bool",
             Self::CharPointer => "char *",
-            Self::VoidPointer => "void *",
+            Self::VoidPointer | Self::Pointer(_) => "void *",
         }
     }
 
@@ -78,18 +82,22 @@ impl CType {
             Self::Bool => TyirType::Bool,
             Self::CharPointer => TyirType::Optional(OptionalBase::Object(TypeId::BYTES)),
             Self::VoidPointer => TyirType::Optional(OptionalBase::Int),
+            Self::Pointer(_) => TyirType::CDATA,
             _ => TyirType::Int,
         }
     }
 
     /// Returns whether an argument of TyPy type `ty` passes as this C type: the conversion
     /// of an integer and a `float` takes the TyPy type of its result, a `char *` takes
-    /// `bytes`, and a `void *` an `int` or `bytes`, each also optional.
+    /// `bytes`, a `void *` an `int`, `bytes` or a `ctypes` object, and a pointer a `ctypes`
+    /// object, each also optional.
     #[must_use]
     pub fn takes(self, ty: crate::types::TyirType) -> bool {
         use crate::types::{OptionalBase, TyirType, TypeId};
         let bytes = TyirType::Object(TypeId::BYTES);
         let optional_bytes = TyirType::Optional(OptionalBase::Object(TypeId::BYTES));
+        let cdata =
+            ty == TyirType::CDATA || ty == TyirType::Optional(OptionalBase::Object(TypeId::CDATA));
         match self {
             Self::Float | Self::Double => ty == TyirType::Float,
             Self::Bool => ty == TyirType::Bool,
@@ -99,7 +107,9 @@ impl CType {
                     || ty == TyirType::Optional(OptionalBase::Int)
                     || ty == bytes
                     || ty == optional_bytes
+                    || cdata
             }
+            Self::Pointer(_) => cdata,
             _ => ty == TyirType::Int,
         }
     }
@@ -124,6 +134,29 @@ pub struct TyirExport {
     pub parameter_names: Vec<String>,
     /// The C type of the result, or `None` for `void`.
     pub result: Option<CType>,
+}
+
+/// A `ctypes` class a program uses, which code generation emits once and each of its
+/// objects points to (FFI-03, ADR-0048).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct TyirCDataClass {
+    /// CPython's name for it, such as `c_long`, `LP_c_int` or `c_int_Array_3`.
+    pub name: String,
+    /// What its objects hold.
+    pub shape: CDataShape,
+    /// The bytes of an object's buffer.
+    pub size: u64,
+}
+
+/// What the objects of a `ctypes` class hold.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum CDataShape {
+    /// One value of a C type other than a pointer to a class.
+    Scalar(CType),
+    /// The address of an object of the class at this index.
+    Pointer(u32),
+    /// This many items of the class at this index.
+    Array(u32, u64),
 }
 
 /// A C function a program calls through a `ctypes` declaration.
@@ -216,5 +249,27 @@ mod tests {
             assert!(CType::VoidPointer.takes(taken), "{taken}");
         }
         assert!(!CType::VoidPointer.takes(TyirType::Float));
+    }
+
+    #[test]
+    fn a_pointer_to_a_class_passes_a_ctypes_object_and_gives_a_new_one() {
+        let optional_cdata = TyirType::Optional(OptionalBase::Object(TypeId::CDATA));
+        let pointer = CType::Pointer(0);
+        assert_eq!(pointer.result_type(), TyirType::CDATA);
+        assert_eq!(pointer.c_name(), "void *");
+        assert_eq!(pointer.integer(), None);
+        assert!(pointer.takes(TyirType::CDATA) && pointer.takes(optional_cdata));
+        assert!(!pointer.takes(TyirType::Int));
+        assert!(CType::VoidPointer.takes(TyirType::CDATA));
+        assert!(CType::VoidPointer.takes(optional_cdata));
+        assert_eq!(TyirType::CDATA.to_string(), "cdata");
+        assert_eq!(
+            crate::constant::Constant::CDataClass(2).to_string(),
+            "cdata_class#2"
+        );
+        assert_eq!(
+            crate::constant::Constant::CDataClass(2).ty(),
+            TyirType::Bits
+        );
     }
 }

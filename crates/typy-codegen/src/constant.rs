@@ -99,15 +99,25 @@ impl<'ctx> FunctionEmitter<'_, '_, 'ctx> {
                 });
                 Some(global.as_pointer_value().into())
             }
+            // A descriptor and a class are addresses the runtime takes as a word.
             Constant::TupleDescriptor(id) => {
                 let descriptor = crate::descriptor::tuple_descriptor(self.shared, *id)?;
-                Some(
-                    self.builder
-                        .build_ptr_to_int(descriptor, context.i64_type(), "")?
-                        .into(),
-                )
+                Some(self.address_word(descriptor)?)
+            }
+            Constant::CDataClass(index) => {
+                let class = crate::cdata::cdata_class(self.shared, *index)?;
+                Some(self.address_word(class)?)
             }
         })
+    }
+
+    /// Returns the address of a static as a word.
+    fn address_word(
+        &self,
+        address: inkwell::values::PointerValue<'ctx>,
+    ) -> Result<BasicValueEnum<'ctx>, CodegenError> {
+        let word = self.shared.context.i64_type();
+        Ok(self.builder.build_ptr_to_int(address, word, "")?.into())
     }
 
     pub(super) fn tagged(&self, value: i64) -> IntValue<'ctx> {

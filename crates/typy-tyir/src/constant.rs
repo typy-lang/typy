@@ -48,6 +48,9 @@ pub enum Constant {
     /// The address of the descriptor of a tuple type that a list holds, which the runtime
     /// reads to store, count, compare and write its items (ADR-0009).
     TupleDescriptor(TupleTypeId),
+    /// The address of the `ctypes` class at this index of `TyirModule::cdata_classes`, which
+    /// the runtime reads to make and read its objects (FFI-03).
+    CDataClass(u32),
 }
 
 impl Constant {
@@ -69,7 +72,7 @@ impl Constant {
             Self::TypeObject(_) => TyirType::TYPE,
             Self::Module(_) => TyirType::MODULE,
             Self::TypeAlias(_) => TyirType::TYPE_ALIAS,
-            Self::TupleDescriptor(_) => TyirType::Bits,
+            Self::TupleDescriptor(_) | Self::CDataClass(_) => TyirType::Bits,
         }
     }
 }
@@ -93,6 +96,7 @@ impl fmt::Display for Constant {
             Self::Module(index) => write!(formatter, "module m{index}"),
             Self::TypeAlias(index) => write!(formatter, "type_alias a{index}"),
             Self::TupleDescriptor(TupleTypeId(id)) => write!(formatter, "descriptor tuple#{id}"),
+            Self::CDataClass(id) => write!(formatter, "cdata_class#{id}"),
         }
     }
 }

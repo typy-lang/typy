@@ -28,7 +28,7 @@ pub use body::{COMPARISON_BRIDGES, EQUAL_BRIDGE, TRUTH_BRIDGE, member_class, mem
 pub use builtin::Builtin;
 pub use check::TypeChecker;
 pub use class_type::{InstanceClass, Operators};
-pub use ctypes::{CType, ForeignFunction, ForeignLibrary};
+pub use ctypes::{CData, CType, ForeignFunction, ForeignLibrary};
 pub use exception::{BuiltinException, ExceptionClass, ProgramException};
 pub use exports::{Export, RUNTIME_C_FUNCTIONS};
 pub use generic::TypeParameter;
@@ -37,12 +37,13 @@ pub use method::Method;
 pub use open::OpenAccess;
 pub use sys::SysValue;
 pub use typed::{
-    Argument, AssignTarget, Attribute, ClassId, Conversion, EachMember, ExceptionPart, FStringPart,
-    FileAttribute, FormattedValue, FunctionId, FunctionSignature, Generator, ImportBinding,
-    InitCall, IsInstanceTest, LoopSource, MemberTest, OpenOptions, OperatorCall, OperatorKind,
-    PartOperation, PercentConversion, PercentField, PercentNumber, PercentPart, PercentValue,
-    PrintCall, RaiseCause, RuntimeKind, SignatureParameter, Symbol, SymbolId, SymbolKind,
-    TypedCase, TypedClass, TypedConstant, TypedExpr, TypedExprKind, TypedFunction, TypedHandler,
-    TypedModule, TypedPattern, TypedProgram, TypedStmt, TypedTypeAlias, WithProtocol, dump,
+    Argument, AssignTarget, Attribute, CDataExpr, CDataPlace, ClassId, Conversion, EachMember,
+    ExceptionPart, FStringPart, FileAttribute, FormattedValue, FunctionId, FunctionSignature,
+    Generator, ImportBinding, InitCall, IsInstanceTest, LoopSource, MemberTest, OpenOptions,
+    OperatorCall, OperatorKind, PartOperation, PercentConversion, PercentField, PercentNumber,
+    PercentPart, PercentValue, PrintCall, RaiseCause, RuntimeKind, SignatureParameter, Symbol,
+    SymbolId, SymbolKind, TypedCase, TypedClass, TypedConstant, TypedExpr, TypedExprKind,
+    TypedFunction, TypedHandler, TypedModule, TypedPattern, TypedProgram, TypedStmt,
+    TypedTypeAlias, WithProtocol, dump,
 };
 pub use types::{BinaryKind, Type, TypeObjectOf, View};

@@ -291,6 +291,7 @@ impl FunctionLowerer<'_> {
                 function,
                 arguments,
             } => self.foreign_call(*function, arguments, span),
+            TypedExprKind::CData(cdata) => self.cdata_expression(cdata, &expression.ty, span),
             TypedExprKind::Open {
                 path,
                 mode,
@@ -418,8 +419,9 @@ impl FunctionLowerer<'_> {
             TyirType::Object(typy_tyir::TypeId::TYPE | typy_tyir::TypeId::SLICE) => {
                 return self.constant(Constant::Bool(true), span);
             }
-            // The object's type tests it, as CPython's truth test does (TYP-14).
-            TyirType::UNION => {
+            // The object's type tests it, as CPython's truth test does (TYP-14); a `ctypes`
+            // object's class decides (FFI-03).
+            TyirType::UNION | TyirType::CDATA => {
                 let object = self.bits(Self::borrowed(lowered.value, lowered.ty), span);
                 return self
                     .call_runtime(RuntimeFunction::ObjectIsTrue, vec![object], span)

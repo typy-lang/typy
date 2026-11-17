@@ -144,6 +144,10 @@ impl Dump<'_> {
             AssignTarget::Entry { dict, .. } => format!("entry of {}", dict.ty),
             AssignTarget::Attribute { object, index } => self.attribute(&object.ty, *index),
             AssignTarget::Property { object, .. } => format!("property of {}", object.ty),
+            AssignTarget::CData { object, place } => match place {
+                crate::typed::CDataPlace::Value => format!("value of {}", object.ty),
+                crate::typed::CDataPlace::Item(_) => format!("item of {}", object.ty),
+            },
             AssignTarget::Lazy { target, .. } => format!("lazy {}", self.target(target)),
             AssignTarget::Converted { value, target, .. } => {
                 format!("{} as {}", self.target(target), value.ty)
@@ -460,6 +464,15 @@ impl Dump<'_> {
                 self.line(depth, &format!("ForeignCall {name}: {ty}"), expression.span);
                 for argument in arguments {
                     self.expression(depth + 1, argument);
+                }
+                return;
+            }
+            TypedExprKind::CData(cdata) => {
+                let name = format!("{cdata:?}");
+                let name = name.split(['(', ' ']).next().unwrap_or_default();
+                self.line(depth, &format!("CData {name}: {ty}"), expression.span);
+                for part in cdata.expressions() {
+                    self.expression(depth + 1, part);
                 }
                 return;
             }

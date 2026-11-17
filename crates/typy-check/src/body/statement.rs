@@ -89,7 +89,20 @@ impl BodyChecker<'_> {
                     [single] => self.known_type(single),
                     _ => None,
                 };
+                // A name may be bound to a `ctypes` class, which the program then calls or
+                // names in a declaration (FFI-03).
+                self.class_allowed = targets
+                    .iter()
+                    .all(|target| matches!(target, Expr::Name { .. }))
+                    && matches!(
+                        value,
+                        Expr::Name { .. }
+                            | Expr::Attribute { .. }
+                            | Expr::Call { .. }
+                            | Expr::BinOp { .. }
+                    );
                 let value = self.expression_expecting(value, expected.as_ref());
+                self.class_allowed = false;
                 // Unpacking reads `sys.version_info` as the tuple of its items (LIB-16).
                 let value = if targets
                     .iter()
@@ -182,6 +195,14 @@ impl BodyChecker<'_> {
                 let current = self.expression(target);
                 let instance_item = self.is_instance_item(&current);
                 let property = self.is_property_read(target, &current);
+                // A `ctypes` object's value or item is read, combined and written back, as an
+                // assignment of the result (FFI-03).
+                let cdata = matches!(
+                    current.kind,
+                    TypedExprKind::CData(
+                        crate::typed::CDataExpr::Value(_) | crate::typed::CDataExpr::Item { .. }
+                    )
+                );
                 // An operator that calls a method of an instance reads and assigns an item or
                 // an attribute of an expression through hidden variables (CLS-20), and so does
                 // an item of an instance, which `__setitem__` is given (CLS-07).
@@ -189,6 +210,7 @@ impl BodyChecker<'_> {
                     || matches!(checked_value.ty, Type::Instance(_))
                     || instance_item
                     || property
+                    || cdata
                 {
                     if let super::in_place::Pinned::Checked(pinned) =
                         self.pinned_augmented(target, *operator, value, *span)
@@ -204,7 +226,7 @@ impl BodyChecker<'_> {
                         );
                     }
                     // The getter's value, combined with the value, goes to the setter (CLS-06).
-                    if property {
+                    if property || cdata {
                         let result =
                             self.augmented_result(*operator, current, checked_value, *span);
                         return self.rebound(target, result, *span);

@@ -757,6 +757,9 @@ impl BodyChecker<'_> {
         let name = attribute.name.as_str();
         match self.program.builtin_lookup(module, name, attribute.span) {
             Ok(BuiltinName::Value(value)) => value.expression(span),
+            Ok(BuiltinName::Function(super::builtin_module::ModuleFunction::CtypesType(ty))) => {
+                Self::cdata_class(crate::ctypes::CData::Scalar(ty), span)
+            }
             Ok(BuiltinName::Function(_)) => self.error(
                 Diagnostic::new(
                     DiagnosticCode::error(201),

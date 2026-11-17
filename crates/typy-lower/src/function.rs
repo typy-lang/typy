@@ -71,6 +71,13 @@ pub(crate) enum Handled {
 }
 
 /// Lowers one function. Its slots own their values; owned temporaries are tracked so an error path can release them.
+/// The tables of the module that every function's lowering adds to.
+pub(crate) struct Tables<'context> {
+    pub(crate) strings: &'context mut StringPool,
+    pub(crate) tuple_types: &'context mut TupleTypes,
+    pub(crate) cdata_classes: &'context mut crate::cdata::CDataClasses,
+}
+
 pub(crate) struct FunctionLowerer<'context> {
     pub(crate) builder: FunctionBuilder,
     pub(crate) program: &'context TypedProgram,
@@ -80,6 +87,8 @@ pub(crate) struct FunctionLowerer<'context> {
     pub(crate) slot_tests: crate::invoke::SlotTests,
     pub(crate) strings: &'context mut StringPool,
     pub(crate) tuple_types: &'context mut TupleTypes,
+    /// The `ctypes` classes of the module (FFI-03).
+    pub(crate) cdata_classes: &'context mut crate::cdata::CDataClasses,
     pub(crate) slots: BTreeMap<SymbolId, SlotId>,
     pub(crate) temporaries: Vec<ValueId>,
     pub(crate) loops: Vec<LoopTargets>,
@@ -133,11 +142,15 @@ impl<'context> FunctionLowerer<'context> {
         program: &'context TypedProgram,
         function: &TypedFunction,
         calls: &crate::methods::Calls<'context>,
-        strings: &'context mut StringPool,
-        tuple_types: &'context mut TupleTypes,
+        tables: Tables<'context>,
         module_globals: &'context crate::module_variable::ModuleGlobals,
         recursive: bool,
     ) -> TyirFunction {
+        let Tables {
+            strings,
+            tuple_types,
+            cdata_classes,
+        } = tables;
         if function.generic {
             return generic_stub(function);
         }
@@ -179,19 +192,7 @@ impl<'context> FunctionLowerer<'context> {
             let slot = builder.add_slot(symbol.name.clone(), tyir_type(&symbol.ty, tuple_types));
             slots.insert(*symbol_id, slot);
         }
-        let excluded = crate::last_use::handler_names(&function.body);
-        let mut candidates = BTreeSet::new();
-        for (symbol, slot) in &slots {
-            let ty = &program.symbol(*symbol).ty;
-            let lowered = tyir_type(ty, tuple_types);
-            if !borrowed.contains(slot)
-                && !excluded.contains(symbol)
-                && crate::last_use::movable_type(ty)
-                && tuple_types.is_counted(lowered)
-            {
-                candidates.insert(*symbol);
-            }
-        }
+        let candidates = move_candidates(program, function, (&slots, &borrowed), tuple_types);
         let moves = crate::last_use::last_uses(&function.body, &candidates);
         let body_start = builder.create_block();
         builder.switch_to(body_start);
@@ -203,6 +204,7 @@ impl<'context> FunctionLowerer<'context> {
             slot_tests: crate::invoke::SlotTests::of(calls.raising_slots),
             strings,
             tuple_types,
+            cdata_classes,
             slots,
             temporaries: Vec::new(),
             loops: Vec::new(),
@@ -308,6 +310,31 @@ impl<'context> FunctionLowerer<'context> {
             arguments: Vec::new(),
         });
     }
+}
+
+/// Returns the variables whose last read may move the value out of their slot: those of a
+/// counted type held in a slot of their own, other than a parameter the function borrows and
+/// a name an exception handler binds (MEM-09).
+fn move_candidates(
+    program: &TypedProgram,
+    function: &TypedFunction,
+    (slots, borrowed): (&BTreeMap<SymbolId, SlotId>, &BTreeSet<SlotId>),
+    tuple_types: &mut TupleTypes,
+) -> BTreeSet<SymbolId> {
+    let excluded = crate::last_use::handler_names(&function.body);
+    let mut candidates = BTreeSet::new();
+    for (symbol, slot) in slots {
+        let ty = &program.symbol(*symbol).ty;
+        let lowered = tyir_type(ty, tuple_types);
+        if !borrowed.contains(slot)
+            && !excluded.contains(symbol)
+            && crate::last_use::movable_type(ty)
+            && tuple_types.is_counted(lowered)
+        {
+            candidates.insert(*symbol);
+        }
+    }
+    candidates
 }
 
 /// Returns the stand-in for a generic function, whose copies are called in its place: it

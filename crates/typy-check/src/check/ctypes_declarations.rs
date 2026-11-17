@@ -1,15 +1,16 @@
 //! Reads the `ctypes` declarations of a module from its statements at module level: each
 //! library a `CDLL` or `cdll.LoadLibrary` call with a string literal names, and each
-//! function's `argtypes` and `restype`. The assignments to `argtypes` and `restype` then
-//! leave the module, since the declarations do their work when the program is compiled
-//! (FFI-01 to FFI-03, ADR-0047).
+//! function's `argtypes` and `restype`, whose types are `ctypes` scalars, `POINTER(T)`, or
+//! names an earlier module-level assignment binds to one. The assignments to `argtypes` and
+//! `restype` then leave the module, since the declarations do their work when the program is
+//! compiled (FFI-01 to FFI-03, ADR-0047, ADR-0048).
 
 use std::collections::BTreeMap;
 
 use typy_diagnostics::{Diagnostic, DiagnosticCode, Diagnostics, RuleId, Span, TextOffset};
 use typy_source::syntax::{Constant, Expr, Stmt};
 
-use crate::ctypes::CType;
+use crate::ctypes::{CData, CType};
 
 /// A library a module declares.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -29,8 +30,8 @@ pub(crate) struct DeclaredFunction {
     pub(crate) variable: String,
     /// Its C symbol.
     pub(crate) function: String,
-    /// The C type of each parameter, once `argtypes` is assigned.
-    pub(crate) parameters: Option<Vec<CType>>,
+    /// The `ctypes` type of each parameter, once `argtypes` is assigned.
+    pub(crate) parameters: Option<Vec<CData>>,
     /// The result `restype` declares, once it is assigned.
     pub(crate) result: Option<Restype>,
     /// Where the later of the two assignments ends: a call at module level before it is too
@@ -39,17 +40,17 @@ pub(crate) struct DeclaredFunction {
 }
 
 /// What a function's `restype` declares.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) enum Restype {
     /// `None`: the function returns nothing.
     Void,
-    /// A C type.
-    Of(CType),
+    /// A `ctypes` type.
+    Of(CData),
 }
 
 impl Restype {
-    /// Returns the C type of the result, or `None` for `void`.
-    pub(crate) const fn c_type(self) -> Option<CType> {
+    /// Returns the type of the result, or `None` for `void`.
+    pub(crate) fn c_type(self) -> Option<CData> {
         match self {
             Self::Void => None,
             Self::Of(ty) => Some(ty),
@@ -141,6 +142,53 @@ impl CtypesNames {
         }
     }
 
+    /// Returns the `ctypes` type `expression` names in a declaration: a scalar type, a
+    /// `POINTER` of a scalar type, or a name `aliases` binds; or the error to report.
+    fn declared_type(
+        &self,
+        expression: &Expr,
+        aliases: &BTreeMap<String, CData>,
+    ) -> Result<CData, Box<Diagnostic>> {
+        if let Expr::Name { id, .. } = expression
+            && let Some(alias) = aliases.get(id)
+        {
+            return Ok(alias.clone());
+        }
+        if let Expr::Call {
+            function,
+            arguments,
+            keywords,
+            span,
+        } = expression
+            && self.member(function) == Some("POINTER")
+        {
+            let ([target], []) = (arguments.as_slice(), keywords.as_slice()) else {
+                return Err(Box::new(refused(
+                    *span,
+                    "`POINTER` takes one `ctypes` type".to_owned(),
+                    RuleId::FFI_03,
+                    "name the type pointed to, as `ctypes.POINTER(ctypes.c_int)`",
+                )));
+            };
+            return match self.declared_type(target, aliases)? {
+                scalar @ CData::Scalar(_) => Ok(CData::Pointer(Box::new(scalar))),
+                _ => Err(Box::new(pointer_of_pointer(*span))),
+            };
+        }
+        self.member(expression)
+            .and_then(CType::from_name)
+            .map(CData::Scalar)
+            .ok_or_else(|| {
+                Box::new(refused(
+                    expression.span(),
+                    "this is not one of the `ctypes` types TyPy compiles".to_owned(),
+                    RuleId::FFI_03,
+                    "name a type of `ctypes`, such as `ctypes.c_int`, `ctypes.c_double`, \
+                     `ctypes.c_char_p` or `ctypes.POINTER(ctypes.c_int)`",
+                ))
+            })
+    }
+
     /// Returns whether `function` loads a library: `CDLL` or `cdll.LoadLibrary`.
     fn loads_library(&self, function: &Expr) -> bool {
         if self.member(function) == Some("CDLL") {
@@ -151,6 +199,16 @@ impl CtypesNames {
     }
 }
 
+/// Returns the error for a pointer to a pointer or an array, which is planned for 1.0.
+pub(crate) fn pointer_of_pointer(span: Span) -> Diagnostic {
+    Diagnostic::new(
+        DiagnosticCode::error(201),
+        span,
+        "a pointer to a pointer or to an array is planned for TyPy 1.0 (FFI-10)",
+    )
+    .with_rule(RuleId::FFI_10)
+}
+
 /// Returns the declarations of a module, and removes its assignments to `argtypes` and
 /// `restype` from `body`.
 pub(crate) fn read(body: &mut Vec<Stmt>, diagnostics: &mut Diagnostics) -> ModuleDeclarations {
@@ -159,8 +217,18 @@ pub(crate) fn read(body: &mut Vec<Stmt>, diagnostics: &mut Diagnostics) -> Modul
     if names.modules.is_empty() && names.members.is_empty() {
         return declarations;
     }
+    let mut aliases = BTreeMap::new();
     body.retain(|statement| match statement {
         Stmt::Assign { targets, value, .. } => {
+            // A name bound to a scalar type or a pointer type stands for it in a later
+            // declaration; the assignment stays, since the name is also a class the program
+            // calls.
+            if let [Expr::Name { id, .. }] = targets.as_slice()
+                && let Ok(ty) = names.declared_type(value, &BTreeMap::new())
+            {
+                aliases.insert(id.clone(), ty);
+                return true;
+            }
             if let [Expr::Name { id, .. }] = targets.as_slice()
                 && let Expr::Call {
                     function,
@@ -187,7 +255,13 @@ pub(crate) fn read(body: &mut Vec<Stmt>, diagnostics: &mut Diagnostics) -> Modul
                     .iter()
                     .any(|library| library.variable == variable)
             {
-                let declared = declaration(&names, value, declares, statement.span(), diagnostics);
+                let declared = declaration(
+                    (&names, &aliases),
+                    value,
+                    declares,
+                    statement.span(),
+                    diagnostics,
+                );
                 record(
                     &mut declarations,
                     (variable, function),
@@ -276,30 +350,27 @@ fn declaration_target(target: &Expr) -> Option<(&str, &str, Declares)> {
 
 /// What one assignment declares: the parameters' types, or the result's.
 enum Declared {
-    Parameters(Vec<CType>),
+    Parameters(Vec<CData>),
     Result(Restype),
 }
 
-/// Reads the value of an assignment to `argtypes` or `restype`.
+/// Reads the value of an assignment to `argtypes` or `restype`, where `aliases` holds the
+/// names bound to a type before it.
 fn declaration(
-    names: &CtypesNames,
+    (names, aliases): (&CtypesNames, &BTreeMap<String, CData>),
     value: &Expr,
     declares: Declares,
     span: Span,
     diagnostics: &mut Diagnostics,
 ) -> Option<Declared> {
-    let c_type = |expression: &Expr, diagnostics: &mut Diagnostics| {
-        let found = names.member(expression).and_then(CType::from_name);
-        if found.is_none() {
-            diagnostics.push(refused(
-                expression.span(),
-                "this is not one of the `ctypes` types TyPy compiles".to_owned(),
-                RuleId::FFI_03,
-                "name a type of `ctypes`, such as `ctypes.c_int`, `ctypes.c_double` or \
-                 `ctypes.c_char_p`",
-            ));
+    let c_type = |expression: &Expr, diagnostics: &mut Diagnostics| match names
+        .declared_type(expression, aliases)
+    {
+        Ok(found) => Some(found),
+        Err(diagnostic) => {
+            diagnostics.push(*diagnostic);
+            None
         }
-        found
     };
     match declares {
         Declares::Argtypes => {
@@ -312,7 +383,7 @@ fn declaration(
                 ));
                 return None;
             };
-            let types: Vec<Option<CType>> = elements
+            let types: Vec<Option<CData>> = elements
                 .iter()
                 .map(|element| c_type(element, diagnostics))
                 .collect();

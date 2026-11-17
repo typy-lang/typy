@@ -120,13 +120,13 @@ impl BodyChecker<'_> {
         self.unknown_name(id, span)
     }
 
-    /// Returns the error for a function read as a value: a `ctypes` type is planned for 0.5
-    /// (FFI-03), and any other function for 1.0 (FUN-05).
+    /// Returns a scalar class of `ctypes` read as a value (FFI-03), or the error for any
+    /// other function read as one, which is planned for 1.0 (FUN-05).
     fn function_as_value(&mut self, id: &str, span: Span) -> Option<TypedExpr> {
-        if let Some(super::builtin_module::ModuleFunction::CtypesType(_)) =
+        if let Some(super::builtin_module::ModuleFunction::CtypesType(ty)) =
             self.program.module_functions.get(id)
         {
-            return Some(self.ctypes_value(&[], span));
+            return Some(Self::cdata_class(crate::ctypes::CData::Scalar(*ty), span));
         }
         let function = self.program.function_ids.contains_key(id)
             || self.program.module_functions.contains_key(id)

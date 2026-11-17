@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy test plan |
-| Version | 0.83 |
+| Version | 0.84 |
 | Status | Draft |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-17 |
@@ -478,11 +478,12 @@ that the specification does not define.
 | MEM-09 | 0.3 | UT, IT | `crates/typy-lower/tests/moves.rs` for each store that moves and each read that must not; `crates/typy-runtime/src/moved_tests.rs` for the counts of each moved store; `tests/conformance/mem/MEM-09_*.py` under sanitizers |
 | FFI-01 | 0.5 | UT, IT | `crates/typy-check/src/check/ctypes_declarations/tests.rs` for each way of naming `ctypes` and loading a library; `tests/conformance/ffi/FFI-01_*.py` against CPython 3.12 to 3.15 |
 | FFI-02 | 0.5 | UT, IT | `crates/typy-check/src/check/ctypes_declarations/tests.rs` for each E0430 of a declaration; `tests/conformance/ffi/FFI-02_*.py` for calls declared in time, too early, without a `restype`, and with an argument of the wrong type |
-| FFI-03 | 0.5 | UT, IT | `crates/typy-check/src/ctypes.rs` for the types and their conversions; `crates/typy-runtime/src/foreign.rs` for the runtime's conversions and `ctypes.ArgumentError`; `tests/conformance/ffi/FFI-03_*.py` for every scalar type's wrap-around, widening, rounding and null, against CPython 3.12 to 3.15, also under the sanitizers |
+| FFI-03 | 0.5 | UT, IT | `crates/typy-check/src/ctypes.rs` for the types, their classes, names, sizes and conversions; `crates/typy-check/src/check/ctypes_declarations/tests.rs` for `POINTER` and names bound to a type; `crates/typy-check/tests/ctypes.rs` for each E0404, E0402, E0412 and E0401 of an object and each argument a pointer takes; `crates/typy-tyir/src/library.rs` and `crates/typy-lower/tests/foreign.rs` for the class table and pointer parameters; `crates/typy-runtime/src/foreign.rs` for the runtime's conversions and `ctypes.ArgumentError`; `crates/typy-runtime/src/cdata/tests.rs` for scalars, pointers that keep their target, null pointers, checked array indexes and the `bytes` an object keeps for its memory; `tests/conformance/ffi/FFI-03_*.py` for every scalar type's wrap-around, widening, rounding and null, and for objects passed by reference, pointers and arrays, against CPython 3.12 to 3.15, also under the sanitizers |
 | FFI-04 | 0.5 | UT, E2E | `crates/typy-source/src/settings_file/libraries.rs` and `settings.rs` for `library-paths`, `[libraries]` and the linker's names; `crates/typy-cli/tests/library.rs`, tests named for FFI-04: a program that imports a TyPy library's binding, linked dynamically and statically, and a library the linker cannot find |
 | FFI-05 | 0.5 | UT, IT, E2E | `crates/typy-check/tests/exports.rs` for each name `__all__` lists and each E0429; `crates/typy-tyir/tests/library.rs` for the verifier and the text form; `crates/typy-codegen/tests/codegen.rs` and `src/header.rs` for the wrappers and the header; `crates/typy-runtime/src/int/fixed.rs` for the conversions; `crates/typy-cli/tests/library.rs`, tests named for FFI-05, also comparing the refused names with what the runtime archive calls |
 | FFI-08 | 0.5 | UT, E2E | `crates/typy-codegen/src/binding.rs` for the binding and the stub; `crates/typy-cli/tests/library.rs`, tests named for FFI-08 and FFI-04: CPython and a TyPy program call a library through its binding, and CPython 3.12 to 3.15 parse the binding and the stub |
 | FFI-09 | 1.0 | IT | `tests/conformance/ffi/FFI-09_*.py` |
+| FFI-10 | 1.0 | UT, IT | `crates/typy-check/tests/ctypes.rs` for each E0201 of a `ctypes` use planned for 1.0; `tests/conformance/ffi/FFI-10_*.py` |
 | FFI-06 | 1.0 | IT | `tests/conformance/ffi/FFI-06_*.py` |
 | FFI-07 | 1.0 | IT | `tests/conformance/ffi/FFI-07_*.py` |
 | DIA-01 | 0.1 | UT, IT | `typy-diagnostics` unit tests; `tests/golden/diagnostics/DIA-01_*` |

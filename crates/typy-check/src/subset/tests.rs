@@ -137,7 +137,7 @@ fn later_features_name_their_release_and_rule() {
             "`nonlocal` statements are planned for TyPy 1.0 (SMT-09)",
         ),
         (
-            "f()()\n",
+            "x[0]()\n",
             "calls of values that are not names are planned for TyPy 1.0 (FUN-05)",
         ),
         (

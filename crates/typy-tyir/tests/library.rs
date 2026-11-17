@@ -40,6 +40,7 @@ fn module(export: TyirExport) -> TyirModule {
         allocator: TyirAllocator::default(),
         foreign_libraries: Vec::new(),
         foreign_functions: Vec::new(),
+        cdata_classes: Vec::new(),
         library: Some(TyirLibrary {
             name: "tools".to_owned(),
             version: None,

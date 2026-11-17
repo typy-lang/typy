@@ -78,13 +78,6 @@ impl BodyChecker<'_> {
         );
     }
 
-    /// Checks the instance an attribute expression reads or assigns, and returns it with its
-    /// class.
-    fn instance(&mut self, value: &Expr) -> Option<(TypedExpr, ClassId)> {
-        let object = self.instance_object(value);
-        self.as_instance(object)
-    }
-
     /// Checks the value an attribute expression reads or assigns; the instance `__init__` is
     /// building is read without the check that it is complete.
     fn instance_object(&mut self, value: &Expr) -> TypedExpr {
@@ -158,6 +151,9 @@ impl BodyChecker<'_> {
             return self.through_lazy_module(value, read);
         }
         let object = self.instance_object(value);
+        if let Type::CData(class) = object.ty.clone() {
+            return self.cdata_attribute((object, class), attribute, span);
+        }
         if let Type::TypeObject(Some(of)) = &object.ty
             && let Some(class) = Self::program_class(of)
             && let Some(read) = self.class_value_read(class, attribute, span)
@@ -283,9 +279,7 @@ impl BodyChecker<'_> {
     }
 
     /// Checks `value.attribute = ...` with a value of type `ty`, or with the annotation
-    /// `declared`. In `__init__` the first assignment of an attribute the class body does not
-    /// declare gives it its type; anywhere else only an attribute of the class is assigned
-    /// (CLS-02).
+    /// `declared`: the value of a `ctypes` object (FFI-03), or an attribute of an instance.
     pub(super) fn attribute_target(
         &mut self,
         value: &Expr,
@@ -294,7 +288,25 @@ impl BodyChecker<'_> {
         declared: Option<Type>,
         span: Span,
     ) -> Option<AssignTarget> {
-        let (object, class) = self.instance(value)?;
+        let object = self.instance_object(value);
+        if let Type::CData(class) = object.ty.clone() {
+            return self.cdata_attribute_target((object, class), attribute, ty, span);
+        }
+        self.instance_attribute_target((object, value), attribute, ty, declared, span)
+    }
+
+    /// Checks `value.attribute = ...` of an instance, `object` being `value` checked. In
+    /// `__init__` the first assignment of an attribute the class body does not declare gives
+    /// it its type; anywhere else only an attribute of the class is assigned (CLS-02).
+    fn instance_attribute_target(
+        &mut self,
+        (object, value): (TypedExpr, &Expr),
+        attribute: &Identifier,
+        ty: &Type,
+        declared: Option<Type>,
+        span: Span,
+    ) -> Option<AssignTarget> {
+        let (object, class) = self.as_instance(object)?;
         if self.refuse_through_protocol(class, attribute)
             || self.class_variable_through_instance(class, attribute, span)
         {

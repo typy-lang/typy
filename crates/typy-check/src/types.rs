@@ -84,6 +84,13 @@ pub enum Type {
     /// A C library a `ctypes` declaration loads, by its index in the program's libraries; a
     /// program calls its declared functions and uses it no other way (FFI-01, ADR-0047).
     ForeignLibrary(u32),
+    /// A `ctypes` object: a scalar, a pointer or an array over a C buffer (FFI-03,
+    /// ADR-0048).
+    CData(crate::ctypes::CData),
+    /// A `ctypes` class as a value, such as `ctypes.c_int` or `ctypes.c_int * 3`, which a
+    /// program calls, multiplies or names in a declaration; it holds nothing when the program
+    /// runs, since its type says which class it is (FFI-03).
+    CDataClass(crate::ctypes::CData),
     /// A type object, of the type it stands for, or of any type when that is known only
     /// when the program runs, as for `type(x)` of an optional `x` (CLS-12).
     TypeObject(Option<Box<TypeObjectOf>>),
@@ -196,6 +203,8 @@ impl TypeObjectOf {
             | Type::Traceback
             | Type::Module(_)
             | Type::ForeignLibrary(_)
+            | Type::CData(_)
+            | Type::CDataClass(_)
             | Type::TypeAlias
             | Type::VersionInfo
             | Type::NotImplemented
@@ -570,6 +579,8 @@ impl Type {
                 | Self::Traceback
                 | Self::Range
                 | Self::Slice
+                | Self::CData(_)
+                | Self::CDataClass(_)
                 | Self::TypeObject(_),
                 _,
             )
@@ -592,6 +603,8 @@ impl Type {
                 | Self::Traceback
                 | Self::Range
                 | Self::Slice
+                | Self::CData(_)
+                | Self::CDataClass(_)
                 | Self::TypeObject(_),
             ) => false,
             _ => self == other || (self.is_numeric() && other.is_numeric()),
@@ -622,11 +635,14 @@ impl Type {
     pub fn is_hashable(&self) -> bool {
         match self {
             // An iterable may be a list, which has no hash.
+            // A `ctypes` object has no hash in CPython, and a class holds no object to hash.
             Self::List(_)
             | Self::Set(_)
             | Self::Dict(..)
             | Self::DictView(..)
-            | Self::Iterable(_) => false,
+            | Self::Iterable(_)
+            | Self::CData(_)
+            | Self::CDataClass(_) => false,
             Self::Tuple(items) => items.iter().all(Self::is_hashable),
             Self::TupleOf(item) | Self::Optional(item) => item.is_hashable(),
             // A class that defines `__eq__` and not `__hash__` has no hash (CLS-07).
@@ -644,8 +660,9 @@ impl Type {
     /// Returns true when a value of this type may be used in a truth test (EXP-10).
     #[must_use]
     pub fn is_truth_testable(&self) -> bool {
-        // An iterable's truth depends on which collection it is, which it does not say.
-        !matches!(self, Self::Iterable(_))
+        // An iterable's truth depends on which collection it is, which it does not say, and a
+        // `ctypes` class holds nothing to test.
+        !matches!(self, Self::Iterable(_) | Self::CDataClass(_))
     }
 
     /// Returns the type of the items a loop over a value of this type reads, when it is one
@@ -818,6 +835,8 @@ impl fmt::Display for Type {
             Self::Slice => formatter.write_str("slice"),
             Self::Module(name) => write!(formatter, "module `{name}`"),
             Self::ForeignLibrary(_) => formatter.write_str("CDLL"),
+            Self::CData(data) => formatter.write_str(&data.class_name()),
+            Self::CDataClass(data) => write!(formatter, "type[{}]", data.class_name()),
             Self::TypeObject(Some(of)) => write!(formatter, "type[{}]", of.name()),
             Self::TypeObject(None) => formatter.write_str("type"),
             Self::Error => formatter.write_str("<error>"),

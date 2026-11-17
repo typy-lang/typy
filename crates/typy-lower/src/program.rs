@@ -36,6 +36,7 @@ pub fn lower(program: &TypedProgram) -> Result<TyirModule, Diagnostics> {
             .any(|method| may_raise[method.0 as usize]);
         let mut strings = StringPool::default();
         let mut tuple_types = TupleTypes::default();
+        let mut cdata_classes = crate::cdata::CDataClasses::default();
         let module_globals = ModuleGlobals::new(program, &mut tuple_types);
         let functions: Vec<_> = program
             .functions
@@ -49,26 +50,17 @@ pub fn lower(program: &TypedProgram) -> Result<TyirModule, Diagnostics> {
                         methods: &methods,
                         raising_slots,
                     },
-                    &mut strings,
-                    &mut tuple_types,
+                    crate::function::Tables {
+                        strings: &mut strings,
+                        tuple_types: &mut tuple_types,
+                        cdata_classes: &mut cdata_classes,
+                    },
                     &module_globals,
                     recursive.contains(&function.id),
                 )
             })
             .collect();
-        let mut found: Vec<bool> = functions
-            .iter()
-            .map(|function| function.may_raise)
-            .collect();
-        // A call through a table may run any method of the entry, so if one may raise, each
-        // is called as one that may (ADR-0021).
-        for family in &families {
-            if family.iter().any(|id| found[id.0 as usize]) {
-                for id in family {
-                    found[id.0 as usize] = true;
-                }
-            }
-        }
+        let found = raising_functions(&functions, &families);
         if found != may_raise {
             may_raise = found;
             continue;
@@ -98,7 +90,8 @@ pub fn lower(program: &TypedProgram) -> Result<TyirModule, Diagnostics> {
             entry: FunctionId(program.entry.0),
             allocator: typy_tyir::TyirAllocator::default(),
             foreign_libraries: foreign_libraries(program),
-            foreign_functions: foreign_functions(program),
+            foreign_functions: foreign_functions(program, &mut cdata_classes),
+            cdata_classes: cdata_classes.into_table(),
             library: program
                 .exports
                 .as_ref()
@@ -123,6 +116,27 @@ pub fn lower(program: &TypedProgram) -> Result<TyirModule, Diagnostics> {
     }
 }
 
+/// Returns whether each function may raise: one whose lowered code does, and each method of
+/// a table entry where one may, since a call through the table may run any of them
+/// (ADR-0021).
+fn raising_functions(
+    functions: &[typy_tyir::TyirFunction],
+    families: &[Vec<typy_check::FunctionId>],
+) -> Vec<bool> {
+    let mut found: Vec<bool> = functions
+        .iter()
+        .map(|function| function.may_raise)
+        .collect();
+    for family in families {
+        if family.iter().any(|id| found[id.0 as usize]) {
+            for id in family {
+                found[id.0 as usize] = true;
+            }
+        }
+    }
+    found
+}
+
 /// Returns the names of the C libraries the program declares, which the build links
 /// (FFI-01).
 fn foreign_libraries(program: &TypedProgram) -> Vec<String> {
@@ -133,8 +147,12 @@ fn foreign_libraries(program: &TypedProgram) -> Vec<String> {
         .collect()
 }
 
-/// Returns the C functions the program calls, with their C types (FFI-02).
-fn foreign_functions(program: &TypedProgram) -> Vec<typy_tyir::TyirForeignFunction> {
+/// Returns the C functions the program calls, with their C types, adding the class of each
+/// pointer they take or give to `classes` (FFI-02, FFI-03).
+fn foreign_functions(
+    program: &TypedProgram,
+    classes: &mut crate::cdata::CDataClasses,
+) -> Vec<typy_tyir::TyirForeignFunction> {
     program
         .foreign_functions
         .iter()
@@ -144,9 +162,12 @@ fn foreign_functions(program: &TypedProgram) -> Vec<typy_tyir::TyirForeignFuncti
             parameters: function
                 .parameters
                 .iter()
-                .map(|ty| crate::foreign_call::c_type(*ty))
+                .map(|ty| crate::foreign_call::foreign_type(ty, classes))
                 .collect(),
-            result: function.result.map(crate::foreign_call::c_type),
+            result: function
+                .result
+                .as_ref()
+                .map(|ty| crate::foreign_call::foreign_type(ty, classes)),
         })
         .collect()
 }

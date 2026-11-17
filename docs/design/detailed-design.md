@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy detailed design |
-| Version | 2.18 |
+| Version | 2.19 |
 | Status | Approved |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-17 |
@@ -2007,12 +2007,15 @@ module level: `NAME = ctypes.CDLL("library")` or
 by the span of its call, and `NAME.function.argtypes = [...]` and
 `NAME.function.restype = ...` declare a `DeclaredFunction`, whose
 `declared` is the end of the later of the two. The assignments to
-`argtypes` and `restype` then leave the module. `CType::from_name` maps
-each name of `ctypes` the declarations take to a `CType`, with the sizes
-of 64-bit Linux, so `c_long` is `Int64`. A library named other than by one
+`argtypes` and `restype` then leave the module. Each type is a `CData`
+(section 7.5): `CType::from_name` maps each scalar name of `ctypes` to a
+`CType`, with the sizes of 64-bit Linux, so `c_long` is `Int64`;
+`POINTER(T)` of a scalar is `CData::Pointer`; and a name an earlier
+module-level assignment binds to either stands for it, while the
+assignment stays in the module. A library named other than by one
 literal, a value that is not a list or tuple of types or a type or
 `None`, a type `ctypes` has but TyPy does not compile, and a declaration
-made twice are E0430.
+made twice are E0430; a pointer to a pointer is E0201 under FFI-10.
 
 The body checker's `Foreign` holds the declarations and the
 `ForeignLibrary` and `ForeignFunction` tables `TypedProgram` carries. A
@@ -2021,10 +2024,47 @@ type `Type::ForeignLibrary`, before its callee is checked. A method call
 whose receiver is a module variable a library is bound to, which no local
 name hides, is `TypedExprKind::ForeignCall`: E0430 without both
 declarations, or at module level before them; E0404 for a keyword, a wrong
-count, or an argument `CType::accepts` refuses, and a truth test for a
-`c_bool`. Its type is `CType::result_type`. A library read as a value is
-E0201 under FFI-09, and a `ctypes` type outside a declaration E0201 under
-FFI-03 until its objects arrive.
+count, or an argument `CData::accepts` refuses, and a truth test for a
+`c_bool`. An argument `ctypes.byref(x)` is checked where the call is, as
+`CDataExpr::Reference` of `x` with `x`'s type. The call's type is
+`CData::result_type`. A library read as a value is E0201 under FFI-09.
+
+### 7.5 ctypes objects
+
+`CData` is a `ctypes` class (ADR-0048): `Scalar(CType)`, `Pointer` of a
+class, or `Array` of a class and a length. `class_name` gives CPython's
+name, `size` the bytes of an object's buffer on 64-bit Linux, and
+`accepts` what a C function's argument of the class takes. A class read as
+a value, such as `ctypes.c_int`, `POINTER(T)` or `T * 3`, is
+`CDataExpr::Class` of type `Type::CDataClass`, which lowers to nothing.
+`BodyChecker::expression` refuses such a value with E0201 under FFI-10,
+unless `class_allowed` is set, which an assignment to names sets for its
+value; a call's callee, the operands of `*`, and the argument of
+`POINTER` and `sizeof` are checked with `expression_or_class`, which takes
+one.
+
+An object has type `Type::CData`, which lowers to the runtime's `CDATA`
+objects; it has identity, no hash and a truth. `TypedExprKind::CData`
+holds each `CDataExpr`:
+
+| `CDataExpr` | Source | Checks |
+| --- | --- | --- |
+| `New(arguments)` | `T(...)` | A scalar takes 0 or 1 value it stores, an array its items, a pointer class 0 or 1 object of its target; E0404 for a keyword, a count or a type |
+| `Pointer(target)` | `pointer(x)`, `POINTER(T)(x)` | A scalar object; a pointer or an array is E0201 under FFI-10 |
+| `Value(object)` | `x.value` | A scalar; its type is `CType::result_type` |
+| `Contents(pointer)` | `p.contents` | A pointer; E0412 for any other attribute |
+| `Item { object, index }` | `p[i]`, `a[i]` | A pointer or an array of scalars and an `int` index; a slice is E0201 under FFI-10 |
+| `Length(array)` | `len(a)` | An array |
+| `Size(object)` | `sizeof(x)` | An object; `sizeof(T)` is a constant |
+| `Reference(object)` | `byref(x)` | Only as a C function's argument; elsewhere E0201 under FFI-10 |
+
+`AssignTarget::CData` writes `CDataPlace::Value` or `Item(index)` of an
+object, after `CType::stores` accepts the value's type, E0402 otherwise; a
+`c_bool` stores any value with a truth. An augmented assignment to a value
+or an item is checked as the assignment of the combined value, with the
+object held in a hidden variable as for a property. A `for` loop, a
+comprehension, `in` and the iterable built-ins read an array's items as
+`LoopSource::Items`, each of its item's value type.
 
 ## 8. typy-tyir
 
@@ -2437,12 +2477,13 @@ code.
 `TyirModule::foreign_libraries` names the libraries a program declares,
 and `foreign_functions` holds each `TyirForeignFunction`: its symbol, its
 library and the `CType` of each parameter and of the result, from
-`Int8` to `UInt64`, `Float`, `Double`, `Bool`, `CharPointer` and
-`VoidPointer`. Lowering gives each argument the type its C type takes: a
-`bool` becomes an `int` for an integer type, an `int` becomes a `float`
-through `CtypesFloatArgument`, which raises `ctypes.ArgumentError` for one
-too large, any value becomes its truth for a `c_bool`, and `None` becomes
-the `None` of an optional `bytes` or `int`. `Operation::CallForeign` then
+`Int8` to `UInt64`, `Float`, `Double`, `Bool`, `CharPointer`,
+`VoidPointer` and `Pointer` of a class of `cdata_classes`. Lowering gives
+each argument the type its C type takes: a `bool` becomes an `int` for an
+integer type, an `int` becomes a `float` through `CtypesFloatArgument`,
+which raises `ctypes.ArgumentError` for one too large, any value becomes
+its truth for a `c_bool`, and `None` becomes the `None` of an optional
+`bytes`, `int` or `ctypes` object. `Operation::CallForeign` then
 calls the function, which the text form shows as
 `call_foreign name(arguments)`.
 
@@ -2457,7 +2498,20 @@ again; a `float` narrows for `c_float`; `bytes` passes
 inline `int` word in place; `int64_t`, `uint64_t`, `char *` and `void *`
 results go through `typy_rt_int_from_int64`, `typy_rt_int_from_uint64`,
 `typy_rt_bytes_from_c_string` and `typy_rt_int_from_address`, which give
-`None` for null.
+`None` for null. A `ctypes` object, or `None` in its place, passes
+`typy_rt_cdata_argument`, and a `Pointer` result becomes a new pointer
+object through `typy_rt_cdata_from_address`.
+
+`TyirModule::cdata_classes` holds each `TyirCDataClass` a program uses,
+which lowering's `CDataClasses` adds the first time it meets one, the
+class of its item first: its name, its `CDataShape` (`Scalar`, `Pointer`
+or `Array` of another entry) and its size. `Constant::CDataClass(index)`
+is the class's address, of type `bits`, which `cdata::cdata_class` emits
+once as the private constant `typy.cdata.N` in the layout of the runtime's
+`CDataClass`. Each `CDataExpr` and `AssignTarget::CData` lowers to calls
+of the `Cdata*` runtime functions: a read of an item takes a short-lived
+object over it from `CdataItem`, reads it with the getter of its type and
+releases it.
 
 ### 10.7 Library objects
 
@@ -2646,6 +2700,8 @@ installed `typy` finds `<prefix>/lib/typy/` and a `typy` in
 | `SetObject` | Header, `fill: usize`, `used: usize`, `mask: usize`, `finger: usize`, `kind: u32`, `words: u32`, `tuple: *const TupleType`, `table: *mut u64`, `states: *mut u8` | A table of `mask + 1` slots, a power of two and at least eight, in one allocation with a state byte per slot after it: empty, active or dummy. A slot is a hash word followed by the item's words. `fill` counts the active and dummy slots, `used` the active ones, and `finger` is where `pop` starts, as in CPython's `PySetObject` |
 | `DictObject` | Header, `used: usize`, `filled: usize`, `usable: usize`, `log2: u32`, `key_kind: u32`, `value_kind: u32`, `key_words: u32`, `key_tuple`, `value_tuple`, `indices: *mut i64`, `entries: *mut u64`, `live: *mut u8` | CPython's combined table: the entries in insertion order, each a hash word, the key's words and the value's words, with a byte that says whether it holds an item, and `2**log2` index slots that hold an entry's position, -1 when empty or -2 when its entry was removed. `used` counts the items, `filled` the entries written, holes included, and `usable` the entries left before a resize. A new dict has no table, `log2` 0 |
 | `ViewObject` | Header, `kind: u32`, padding, `dict: *mut DictObject` | A view of a dict under the type ID 9: 0 shows the keys, 1 the values, 2 the items. It holds a reference to its dict, so the dict lives as long as the view |
+| `CDataClass` | `name: *const u8`, `name_length: u64`, `kind: u32`, `ctype: u32`, `size: u64`, `item: *const CDataClass`, `length: u64` | A `ctypes` class the compiler emits once: `kind` 0 for a scalar of C type `ctype`, numbered as `CType`, 1 for a pointer and 2 for an array of `length` items of `item` (ADR-0048) |
+| `CDataObject` | Header, `class: *const CDataClass`, `address: *mut u8`, `owner: *mut ObjectHeader`, `kept: *mut Kept` | A `ctypes` object under the type ID 23: a scalar or an array owns a buffer after this part; an object over another's memory counts `owner`, the object whose buffer it is or, for C's memory, the pointer it was read through; `kept` is the table of the objects the values in its buffer refer to, by address: a pointer's target and the `bytes` of each `c_char_p` written into it or through an object over it |
 
 ![Design classes of the runtime](../diagrams/class-design-runtime.svg)
 
@@ -2654,6 +2710,7 @@ installed `typy` finds `<prefix>/lib/typy/` and a `typy` in
 | Module | Behaviour |
 | --- | --- |
 | `entry` | `main` keeps its arguments for `sys.argv`, records the stack limit, calls `__typy_main`, reports an uncaught exception, flushes standard output and returns the exit status `sys::exit_status` gives |
+| `cdata` | `typy_rt_cdata_new(class)` makes an object, every byte zero; the getters and setters read and write a scalar of each C type, wrapping an `int` to its width; `typy_rt_cdata_pointer(class, target)` points to an object and keeps it; `typy_rt_cdata_from_address` makes a pointer of a C result; `typy_rt_cdata_contents` and `typy_rt_cdata_item` give an object over the target or an item, `ValueError: NULL pointer access` for a null pointer and `IndexError: invalid index` outside an array, which counts from its end when negative; `typy_rt_cdata_argument` gives the address a C function takes. The type object's slots give CPython's truth and `repr` (FFI-03, ADR-0048) |
 | `foreign` | `typy_rt_int_low_bits(word)` gives the low 64 bits of an `int` word in two's complement, and 0 for the word 0; `typy_rt_int_from_uint64`, `typy_rt_int_from_address` and `typy_rt_bytes_from_c_string` make a C result a TyPy value, null giving `None`; `typy_rt_ctypes_float_argument(word, position)` converts an `int` for a `c_double`, raising `ctypes.ArgumentError`, a class whose module is `ctypes`, with CPython's text for one too large (FFI-03, ADR-0047) |
 | `library` | `typy_rt_library_load(module)` records the stack limit, keeps `['']` for `sys.argv`, runs the module bodies and flushes standard output; `_unload` flushes it and closes the files; `_enter` records the stack limit for the calling thread, `_leave` flushes standard output; `_raised(exception)` exits with a `SystemExit`'s status, or reports any other exception as uncaught and aborts (ADR-0044). `stack::record_limit` reads `getrlimit` once and measures from the current stack pointer |
 | `allocator` | `allocate`, `reallocate` and `free` over the program object's hooks `typy_rt_heap_allocate`, `typy_rt_heap_reallocate` and `typy_rt_heap_free` (section 10.5), asking for at least one byte. Running out of memory prints `MemoryError` and aborts. The unit tests define the hooks over `malloc`, `realloc` and `free`, since they link no program object |

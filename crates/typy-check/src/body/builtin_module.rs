@@ -33,8 +33,10 @@ pub(crate) enum ModuleFunction {
     SetRecursionLimit,
     /// `ctypes.CDLL` and `ctypes.cdll`, whose calls declare a library (FFI-01).
     LoadLibrary,
-    /// A type of `ctypes`, which a declaration names (FFI-03).
+    /// A scalar class of `ctypes`, which a program calls and a declaration names (FFI-03).
     CtypesType(crate::ctypes::CType),
+    /// `ctypes.POINTER`, `ctypes.pointer`, `ctypes.byref` and `ctypes.sizeof` (FFI-03).
+    Ctypes(crate::ctypes::CtypesFunction),
 }
 
 /// A value of a built-in module.
@@ -134,8 +136,9 @@ impl Program {
         }
     }
 
-    /// Returns what `name` of `ctypes` is outside a declaration: `CDLL` and `cdll` load a
-    /// library, and every other name is planned for 0.5 (FFI-03).
+    /// Returns what `name` of `ctypes` is: `CDLL` and `cdll` load a library, a scalar class
+    /// and `POINTER`, `pointer`, `byref` and `sizeof` work on objects (FFI-03), and the rest
+    /// is planned.
     fn ctypes_lookup(name: &str, span: Span) -> Result<BuiltinName, Box<Diagnostic>> {
         if matches!(name, "CDLL" | "cdll") {
             return Ok(BuiltinName::Function(ModuleFunction::LoadLibrary));
@@ -143,14 +146,22 @@ impl Program {
         if let Some(ty) = crate::ctypes::CType::from_name(name) {
             return Ok(BuiltinName::Function(ModuleFunction::CtypesType(ty)));
         }
+        if let Some(function) = crate::ctypes::CtypesFunction::from_name(name) {
+            return Ok(BuiltinName::Function(ModuleFunction::Ctypes(function)));
+        }
+        let (release, rule) = match name {
+            "Structure" => ("0.5", RuleId::FFI_03),
+            "CFUNCTYPE" => ("1.0", RuleId::FFI_06),
+            _ => ("1.0", RuleId::FFI_10),
+        };
         Err(error(
             201,
             span,
             format!(
-                "`ctypes.{name}` other than in a function's `argtypes` or `restype` is planned \
-                 for TyPy 0.5 (FFI-03)"
+                "`ctypes.{name}` is planned for TyPy {release} ({})",
+                rule.as_str()
             ),
-            RuleId::FFI_03,
+            rule,
         ))
     }
 

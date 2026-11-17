@@ -11,6 +11,27 @@ use crate::typed::{Argument, FunctionId, TypedConstant, TypedExpr, TypedExprKind
 use crate::types::Type;
 
 impl BodyChecker<'_> {
+    /// Returns the call of a variable that holds a class: a variable of `type[C]` holds the
+    /// type object of `C` itself, such as `cls` in a copy of a class method, so calling it
+    /// makes an instance of `C` (ADR-0025); one bound to a `ctypes` class makes an object of
+    /// it (FFI-03). Returns `None` for a variable of any other type.
+    fn call_class_value(
+        &mut self,
+        ty: &Type,
+        arguments: &[Expr],
+        keywords: &[Keyword],
+        span: Span,
+    ) -> Option<TypedExpr> {
+        match ty {
+            Type::TypeObject(Some(of)) => {
+                let class = Self::program_class(of)?;
+                Some(self.new_instance(class, arguments, keywords, span))
+            }
+            Type::CDataClass(class) => Some(self.cdata_new(class, arguments, keywords, span)),
+            _ => None,
+        }
+    }
+
     pub(super) fn call(
         &mut self,
         name: &str,
@@ -21,12 +42,8 @@ impl BodyChecker<'_> {
     ) -> TypedExpr {
         if let Some(symbol) = self.locals.get(name) {
             let ty = self.types.get(symbol).cloned().unwrap_or(Type::Error);
-            // A variable of `type[C]` holds the type object of `C` itself, such as `cls` in a
-            // copy of a class method, so calling it makes an instance of `C` (ADR-0025).
-            if let Type::TypeObject(Some(of)) = &ty
-                && let Some(class) = Self::program_class(of)
-            {
-                return self.new_instance(class, arguments, keywords, span);
+            if let Some(made) = self.call_class_value(&ty, arguments, keywords, span) {
+                return made;
             }
             // A variable whose type is an error was reported where the error arose.
             if ty.has_error() {
@@ -95,10 +112,8 @@ impl BodyChecker<'_> {
         // a class's type object; CPython raises `TypeError` for an `int` or a `str`.
         if self.in_function() && self.program.module_variables.contains(name) {
             let read = self.name(name, name_span);
-            if let Type::TypeObject(Some(of)) = &read.ty
-                && let Some(class) = Self::program_class(of)
-            {
-                return self.new_instance(class, arguments, keywords, span);
+            if let Some(made) = self.call_class_value(&read.ty, arguments, keywords, span) {
+                return made;
             }
             for argument in arguments {
                 self.expression(argument);

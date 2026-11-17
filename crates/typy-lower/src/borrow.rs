@@ -32,6 +32,7 @@ fn target(assigned: &AssignTarget, found: &mut BTreeSet<SymbolId>) {
         | AssignTarget::Slice { .. }
         | AssignTarget::Entry { .. }
         | AssignTarget::Attribute { .. }
+        | AssignTarget::CData { .. }
         | AssignTarget::Property { .. } => {}
     }
 }

@@ -322,7 +322,8 @@ impl FunctionLowerer<'_> {
             (TyirType::Tuple(_), _) => return self.compare_tuples(operator, left, right, span),
             // A protocol value is an object of any class that satisfies the protocol, compared
             // through the `equal` slot of the class that decides (ADR-0041).
-            (TyirType::UNION, _) | (_, TyirType::UNION)
+            // A `ctypes` object is equal only to itself (FFI-03).
+            (TyirType::UNION | TyirType::CDATA, _) | (_, TyirType::UNION | TyirType::CDATA)
                 if matches!(comparison, Comparison::Equal | Comparison::NotEqual) =>
             {
                 return self.objects_equality(comparison == Comparison::Equal, left, right, span);

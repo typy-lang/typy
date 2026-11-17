@@ -179,6 +179,7 @@ impl FunctionLowerer<'_> {
                 self.release(value, span);
             }
             AssignTarget::Entry { dict, key } => self.assign_entry(dict, key, value, span),
+            AssignTarget::CData { object, place } => self.assign_cdata(object, place, value, span),
             AssignTarget::Attribute { object, index } => {
                 self.assign_attribute(object, *index, value, span);
             }
@@ -376,6 +377,7 @@ impl FunctionLowerer<'_> {
                     || id == typy_tyir::TypeId::NOT_IMPLEMENTED
                     || id == typy_tyir::TypeId::ITERABLE
                     || id == typy_tyir::TypeId::TEXT_FILE
+                    || id == typy_tyir::TypeId::CDATA
                     || id == typy_tyir::TypeId::UNION =>
             {
                 self.constant(Constant::NoInstance(id), span)

@@ -13,6 +13,7 @@
 mod allocator;
 mod byte_buffer;
 mod bytes;
+mod cdata;
 mod cell;
 mod codec;
 mod compare;

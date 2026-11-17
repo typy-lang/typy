@@ -353,6 +353,7 @@ fn has_identity(ty: &Type) -> bool {
                 | Type::TextFile
                 | Type::BinaryFile(_)
                 | Type::DescriptorFile(_)
+                | Type::CData(_)
                 | Type::TypeObject(_)
         ),
     }

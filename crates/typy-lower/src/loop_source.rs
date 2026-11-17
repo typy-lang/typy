@@ -25,6 +25,8 @@ enum Kind {
     Bytes,
     /// A set, read slot by slot in its table's order.
     Set,
+    /// A `ctypes` array, whose items are of this scalar type (FFI-03).
+    CData(typy_check::CType),
 }
 
 /// The state of one iterator of a loop, kept in hidden slots.
@@ -407,6 +409,13 @@ impl FunctionLowerer<'_> {
             return self.start_set(sequence, item, span);
         }
         let (kind, item) = match (&sequence.ty, sequence.ty.sequence_item()) {
+            (typy_check::Type::CData(_), _) => {
+                let scalar = crate::cdata::item_scalar(&sequence.ty);
+                (
+                    Kind::CData(scalar),
+                    self.lowered_type(&scalar.result_type()),
+                )
+            }
             (_, Some(item)) => (Kind::List, self.lowered_type(item)),
             (typy_check::Type::Bytes, None) => (Kind::Bytes, TyirType::Int),
             _ => (Kind::Str, TyirType::STR),
@@ -757,6 +766,7 @@ impl FunctionLowerer<'_> {
             Kind::Str => RuntimeFunction::StrLength,
             Kind::Bytes => RuntimeFunction::BytesLength,
             Kind::Set => RuntimeFunction::SetLength,
+            Kind::CData(_) => RuntimeFunction::CdataLength,
         };
         self.call_runtime(function, vec![value.value], span)
     }
@@ -913,6 +923,7 @@ impl FunctionLowerer<'_> {
                 span,
             ),
             Kind::List => self.list_item(value, index, item, span),
+            Kind::CData(scalar) => self.cdata_item_value(value.value, index.value, scalar, span),
             Kind::Set => unreachable!("a set is read by its own iterator"),
         };
         let current = self.load(position, span);

@@ -76,6 +76,7 @@ fn module(mut functions: Vec<TyirFunction>) -> TyirModule {
         allocator: crate::module::TyirAllocator::default(),
         foreign_libraries: Vec::new(),
         foreign_functions: Vec::new(),
+        cdata_classes: Vec::new(),
         library: None,
     }
 }

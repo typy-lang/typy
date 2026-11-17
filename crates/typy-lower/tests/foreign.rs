@@ -69,3 +69,56 @@ print(lib.h(False, 3, None, b'y'))
     assert_eq!(text.matches("call_foreign ").count(), 3, "{text}");
     assert!(text.contains("rt.ctypes_float_argument"), "{text}");
 }
+
+#[test]
+fn each_ctypes_class_is_one_entry_of_the_module_and_a_pointer_is_of_its_class() {
+    use typy_tyir::{CDataShape, TyirCDataClass};
+    let source = "\
+import ctypes
+
+lib = ctypes.CDLL(\"libm.so.6\")
+lib.frexp.argtypes = [ctypes.c_double, ctypes.POINTER(ctypes.c_int)]
+lib.frexp.restype = ctypes.c_double
+lib.find.argtypes = [ctypes.c_void_p]
+lib.find.restype = ctypes.POINTER(ctypes.c_int32)
+found = ctypes.c_int()
+numbers = (ctypes.c_int * 3)(1, 2, 3)
+print(lib.frexp(2.0, ctypes.byref(found)), lib.frexp(1.0, numbers), lib.frexp(1.0, None))
+print(lib.find(numbers)[0], numbers[1], len(numbers))
+numbers[0] += 1
+";
+    let module = lower(source);
+    let int = TyirCDataClass {
+        name: "c_int".to_owned(),
+        shape: CDataShape::Scalar(CType::Int32),
+        size: 4,
+    };
+    let pointer = TyirCDataClass {
+        name: "LP_c_int".to_owned(),
+        shape: CDataShape::Pointer(0),
+        size: 8,
+    };
+    let array = TyirCDataClass {
+        name: "c_int_Array_3".to_owned(),
+        shape: CDataShape::Array(0, 3),
+        size: 12,
+    };
+    assert_eq!(module.cdata_classes, [int, array, pointer]);
+    assert_eq!(
+        module.foreign_functions[0].parameters,
+        [CType::Double, CType::Pointer(2)]
+    );
+    assert_eq!(module.foreign_functions[1].result, Some(CType::Pointer(2)));
+    let text = print(&module);
+    for shown in [
+        "cdata_class#0",
+        "rt.cdata_new",
+        "rt.cdata_item",
+        "rt.cdata_set_int",
+        "rt.cdata_get_int",
+        "rt.cdata_length",
+        "call_foreign frexp",
+    ] {
+        assert!(text.contains(shown), "{shown} missing from\n{text}");
+    }
+}

@@ -267,6 +267,8 @@ impl BodyChecker<'_> {
             file if file.is_file() => file.file_line().unwrap_or(Type::Error),
             Type::Bytes | Type::Range => Type::Int,
             Type::Iterator(item) | Type::Iterable(item) => item.as_ref().clone(),
+            // A `ctypes` array gives the value of each item (FFI-03).
+            Type::CData(crate::ctypes::CData::Array(item, _)) => item.result_type(),
             Type::Error => Type::Error,
             // A tuple whose items have one type is read as a `tuple[T, ...]` before it gets
             // here; the items of this one differ, or there are none.

@@ -10,8 +10,20 @@ use crate::typed::{TypedConstant, TypedExpr, TypedExprKind};
 use crate::types::Type;
 
 impl BodyChecker<'_> {
-    #[allow(clippy::too_many_lines, reason = "one arm per expression kind")]
+    /// Checks an expression; a `ctypes` class is refused unless the caller allowed it.
     pub(super) fn expression(&mut self, expression: &Expr) -> TypedExpr {
+        let allowed = std::mem::take(&mut self.class_allowed);
+        let typed = self.expression_or_class(expression);
+        if allowed {
+            return typed;
+        }
+        self.refuse_class(typed)
+    }
+
+    /// Checks an expression that may be a `ctypes` class, which a call, a `*`, `POINTER`
+    /// and `sizeof` take (FFI-03).
+    #[allow(clippy::too_many_lines, reason = "one arm per expression kind")]
+    pub(super) fn expression_or_class(&mut self, expression: &Expr) -> TypedExpr {
         let span = expression.span();
         if let Some(each) = self.each_member(expression) {
             return each;
@@ -69,8 +81,21 @@ impl BodyChecker<'_> {
                 right,
                 ..
             } => {
-                let left = Self::version_tuple(self.expression(left));
-                let right = Self::version_tuple(self.expression(right));
+                let left = self.expression_or_class(left);
+                let right = self.expression_or_class(right);
+                // `T * length` and `length * T` make an array class (FFI-03).
+                if *operator == typy_source::syntax::BinaryOperator::Mult {
+                    if let Type::CDataClass(class) = left.ty.clone() {
+                        return self.cdata_array_class(class, right, span);
+                    }
+                    if let Type::CDataClass(class) = right.ty.clone() {
+                        return self.cdata_array_class(class, left, span);
+                    }
+                }
+                let left = self.refuse_class(left);
+                let right = self.refuse_class(right);
+                let left = Self::version_tuple(left);
+                let right = Self::version_tuple(right);
                 // An instance's class may define the operator's method (CLS-07).
                 let (left, right) = match self.operator_binary(*operator, left, right, span) {
                     super::operator_method::Comparison::Called(call) => return call,
@@ -278,6 +303,9 @@ impl BodyChecker<'_> {
             }
             Expr::Subscript { value, index, .. } => {
                 let value = Self::version_tuple(self.expression(value));
+                if let Type::CData(class) = value.ty.clone() {
+                    return self.cdata_item((value, &class), index, span);
+                }
                 // An instance's class may define `__getitem__` (CLS-07).
                 let value = match self.item_call(value, index, span) {
                     Ok(call) => return call,
@@ -391,6 +419,32 @@ impl BodyChecker<'_> {
                 // The subset check lets only a generic class given its arguments through.
                 Expr::Subscript { .. } => {
                     self.applied_class_call(function, arguments, keywords, span)
+                }
+                // A class `POINTER(T)` or `T * length` called where it is made (FFI-03).
+                Expr::Call { .. } | Expr::BinOp { .. } => {
+                    let class = self.expression_or_class(function);
+                    match class.ty {
+                        Type::CDataClass(class) => {
+                            self.cdata_new(&class, arguments, keywords, span)
+                        }
+                        Type::Error => class,
+                        // Any other value called is a callable value, planned for 1.0.
+                        _ => {
+                            for argument in arguments {
+                                self.expression(argument);
+                            }
+                            self.error(
+                                Diagnostic::new(
+                                    DiagnosticCode::error(201),
+                                    function.span(),
+                                    "calls of values that are not names are planned for TyPy \
+                                     1.0 (FUN-05)",
+                                )
+                                .with_rule(RuleId::FUN_05),
+                                span,
+                            )
+                        }
+                    }
                 }
                 _ => Self::typed(
                     TypedExprKind::Constant(TypedConstant::None),

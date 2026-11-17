@@ -6,6 +6,7 @@ mod augmented;
 mod borrow;
 mod builtin;
 mod call_graph;
+mod cdata;
 mod class;
 mod comparison;
 mod comprehension;

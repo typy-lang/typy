@@ -5,7 +5,7 @@ mod arithmetic;
 pub(crate) mod convert;
 mod parse;
 mod ratio;
-mod repr;
+pub(crate) mod repr;
 mod round;
 
 pub(crate) use convert::{integer_to_float, typy_rt_float_to_int, typy_rt_int_to_float};

@@ -1,6 +1,6 @@
 //! Checks what a program does with `ctypes`: the library a declaration loads, and each call
 //! of a function its `argtypes` and `restype` declare, with the arguments `ctypes` converts
-//! (FFI-01 to FFI-03, ADR-0047).
+//! and the objects it passes by reference (FFI-01 to FFI-03, ADR-0047, ADR-0048).
 
 use std::collections::BTreeMap;
 
@@ -9,7 +9,8 @@ use typy_source::syntax::{Expr, Identifier, Keyword};
 
 use super::BodyChecker;
 use crate::check::ctypes_declarations::ModuleDeclarations;
-use crate::ctypes::{CType, ForeignFunction, ForeignLibrary};
+use crate::ctypes::{CData, CType, ForeignFunction, ForeignLibrary};
+use crate::typed::CDataExpr;
 use crate::typed::{TypedExpr, TypedExprKind};
 use crate::types::Type;
 
@@ -66,8 +67,8 @@ impl Foreign {
         &mut self,
         library: u32,
         name: &str,
-        parameters: &[CType],
-        result: Option<CType>,
+        parameters: &[CData],
+        result: Option<CData>,
     ) -> u32 {
         let index = self
             .functions
@@ -140,7 +141,7 @@ impl BodyChecker<'_> {
             .cloned();
         let typed_arguments: Vec<TypedExpr> = arguments
             .iter()
-            .map(|argument| self.expression(argument))
+            .map(|argument| self.foreign_argument(argument))
             .collect();
         let name = format!("{variable}.{}", function.name);
         let Some((parameters, result, declared_at)) = declared.and_then(|declared| {
@@ -209,11 +210,11 @@ impl BodyChecker<'_> {
             );
         }
         self.foreign_arguments(&name, &typed_arguments, &parameters);
+        let ty = result.as_ref().map_or(Type::NoneType, CData::result_type);
         let index = self
             .program
             .foreign
             .function(library, &function.name, &parameters, result);
-        let ty = result.map_or(Type::NoneType, CType::result_type);
         Some(Self::typed(
             TypedExprKind::ForeignCall {
                 function: index,
@@ -224,26 +225,32 @@ impl BodyChecker<'_> {
         ))
     }
 
-    /// Reports each argument of `name` whose type its C type does not take; a `c_bool`
-    /// argument takes any value with a truth.
-    fn foreign_arguments(&mut self, name: &str, arguments: &[TypedExpr], parameters: &[CType]) {
+    /// Reports each argument of `name` whose type its `ctypes` type does not take; a
+    /// `c_bool` argument takes any value with a truth.
+    fn foreign_arguments(&mut self, name: &str, arguments: &[TypedExpr], parameters: &[CData]) {
         for (position, (argument, parameter)) in arguments.iter().zip(parameters).enumerate() {
             if argument.ty.has_error() {
                 continue;
             }
-            if *parameter == CType::Bool {
+            let by_reference =
+                matches!(argument.kind, TypedExprKind::CData(CDataExpr::Reference(_)));
+            if *parameter == CData::Scalar(CType::Bool) && !by_reference {
                 self.check_truth(argument);
                 continue;
             }
-            if !parameter.accepts(&argument.ty) {
+            if !parameter.accepts(&argument.ty, by_reference) {
+                let given = if by_reference {
+                    format!("`byref` of {}", argument.ty.with_article())
+                } else {
+                    argument.ty.with_article()
+                };
                 self.diagnostics.push(
                     Diagnostic::new(
                         DiagnosticCode::error(404),
                         argument.span,
                         format!(
-                            "argument {} of `{name}` is {}, where its `argtypes` take {}",
+                            "argument {} of `{name}` is {given}, where its `argtypes` take {}",
                             position + 1,
-                            argument.ty.with_article(),
                             parameter.argument_types()
                         ),
                     )
@@ -267,24 +274,6 @@ impl BodyChecker<'_> {
             )
             .with_rule(RuleId::FFI_09)
             .with_help(format!("call its functions, as `{name}.function(...)`")),
-            span,
-        )
-    }
-
-    /// Returns the error for a type of `ctypes` used other than in a declaration: its objects
-    /// are planned for 0.5 (FFI-03).
-    pub(super) fn ctypes_value(&mut self, arguments: &[Expr], span: Span) -> TypedExpr {
-        for argument in arguments {
-            self.expression(argument);
-        }
-        self.error(
-            Diagnostic::new(
-                DiagnosticCode::error(201),
-                span,
-                "a `ctypes` type other than in a function's `argtypes` or `restype` is planned \
-                 for TyPy 0.5 (FFI-03)",
-            )
-            .with_rule(RuleId::FFI_03),
             span,
         )
     }

@@ -167,6 +167,8 @@ pub enum TypedExprKind {
         function: u32,
         arguments: Vec<TypedExpr>,
     },
+    /// What a program does with a `ctypes` object or class (FFI-03, ADR-0048).
+    CData(super::cdata::CDataExpr),
     /// `sys.exit(code)`, which raises `SystemExit` with `code` (LIB-04).
     SysExit(Option<Box<TypedExpr>>),
     /// `sys.getrecursionlimit()`, without a value, or `sys.setrecursionlimit(limit)`
@@ -659,6 +661,7 @@ impl TypedExpr {
             | TypedExprKind::RecursionLimit(value) => value.iter().map(Box::as_ref).collect(),
             TypedExprKind::ExceptionArguments { exception, .. } => vec![exception],
             TypedExprKind::Sequence { first, then } => vec![first, then],
+            TypedExprKind::CData(cdata) => cdata.expressions(),
             TypedExprKind::FileAttribute { file, .. } => vec![file],
             TypedExprKind::PercentDynamic { format, values } => vec![format, values],
             TypedExprKind::ExceptionPart {

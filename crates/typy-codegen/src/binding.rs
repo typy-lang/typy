@@ -114,7 +114,7 @@ const fn python_name(ty: CType) -> &'static str {
         CType::Float | CType::Double => "float",
         CType::Bool => "bool",
         CType::CharPointer => "bytes | None",
-        CType::VoidPointer => "int | None",
+        CType::VoidPointer | CType::Pointer(_) => "int | None",
         _ => "int",
     }
 }
@@ -133,7 +133,7 @@ const fn ctypes_name(ty: CType) -> &'static str {
         CType::Double => "ctypes.c_double",
         CType::Bool => "ctypes.c_bool",
         CType::CharPointer => "ctypes.c_char_p",
-        CType::VoidPointer => "ctypes.c_void_p",
+        CType::VoidPointer | CType::Pointer(_) => "ctypes.c_void_p",
     }
 }
 

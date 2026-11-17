@@ -80,6 +80,9 @@ impl FunctionLowerer<'_> {
             AssignTarget::Property { .. } => {
                 unreachable!("the checker gives an augmented property to its setter")
             }
+            AssignTarget::CData { .. } => {
+                unreachable!("the checker writes a `ctypes` value back as an assignment")
+            }
         }
     }
 

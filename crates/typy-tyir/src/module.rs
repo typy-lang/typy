@@ -71,6 +71,9 @@ pub struct TyirModule {
     pub foreign_libraries: Vec<String>,
     /// The C functions the program calls, indexed by `Operation::CallForeign` (FFI-02).
     pub foreign_functions: Vec<crate::library::TyirForeignFunction>,
+    /// The `ctypes` classes the program uses, indexed by `Constant::CDataClass` and
+    /// `CType::Pointer` (FFI-03).
+    pub cdata_classes: Vec<crate::library::TyirCDataClass>,
 }
 
 /// The C functions through which the runtime allocates, frees and resizes memory: by

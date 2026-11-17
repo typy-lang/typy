@@ -29,7 +29,12 @@ impl BodyChecker<'_> {
                 self.recursion_limit(true, arguments, keywords, span)
             }
             ModuleFunction::LoadLibrary => self.misplaced_library(arguments, span),
-            ModuleFunction::CtypesType(_) => self.ctypes_value(arguments, span),
+            ModuleFunction::CtypesType(ty) => {
+                self.cdata_new(&crate::ctypes::CData::Scalar(ty), arguments, keywords, span)
+            }
+            ModuleFunction::Ctypes(function) => {
+                self.ctypes_call(function, arguments, keywords, span)
+            }
         }
     }
 
