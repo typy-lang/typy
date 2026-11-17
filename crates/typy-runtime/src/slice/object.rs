@@ -76,8 +76,8 @@ pub unsafe extern "C" fn typy_rt_slice_bound(slice: *const SliceObject, part: i6
 
 /// Returns the value at position `part`, 0, 1 or 2 as an `int` word, of
 /// `slice.indices(length)`: the start and stop adjusted to a sequence of `length` items, and the
-/// step, as CPython's `slice.indices` gives them. A negative length, a step of zero and a
-/// length past 64 bits raise CPython's errors.
+/// step, as CPython's `slice.indices` gives them, for a length of any size. A negative length
+/// and a step of zero raise CPython's errors.
 ///
 /// # Safety
 ///
@@ -95,13 +95,7 @@ pub unsafe extern "C" fn typy_rt_slice_index(
             if crate::int::is_negative(length) {
                 return Raising::error(1, negative_length());
             }
-            return Raising::error(
-                1,
-                raise(
-                    ExceptionKind::OverflowError,
-                    "Python int too large to convert to C ssize_t",
-                ),
-            );
+            return large_index([first, last, stride], length, part);
         }
         let Ok(count) = usize::try_from(inline_value(length)) else {
             return Raising::error(1, negative_length());
@@ -123,6 +117,75 @@ pub unsafe extern "C" fn typy_rt_slice_index(
         };
         Raising::ok(value)
     }
+}
+
+/// Returns what `typy_rt_slice_index` does for a length past an inline `int`, with integers of
+/// any size, as CPython's `_PySlice_GetLongIndices` computes them: a bound counts from the end
+/// when negative, then is held between the first and the last position a step can reach.
+///
+/// # Safety
+///
+/// Each bound is 0 or an `int` word whose large integer is live, and `length` is a positive
+/// large integer.
+unsafe fn large_index(bounds: [i64; 3], length: i64, part: i64) -> Raising<i64> {
+    use crate::int::value::Integer;
+    let [first, last, stride] = bounds;
+    // SAFETY: the caller's guarantee.
+    let (step, length) = unsafe {
+        let step = if stride == 0 {
+            Integer::from_i128(1)
+        } else {
+            Integer::from_word(stride)
+        };
+        (step, Integer::from_word(length))
+    };
+    if step.is_zero() {
+        return Raising::error(
+            1,
+            raise(ExceptionKind::ValueError, "slice step cannot be zero"),
+        );
+    }
+    let backwards = step.negative;
+    // The lowest and the highest position a bound is held to.
+    let lower = || Integer::from_i128(if backwards { -1 } else { 0 });
+    let upper = || {
+        if backwards {
+            length.subtract(&Integer::from_i128(1))
+        } else {
+            // `Integer` is not `Clone`; adding zero gives a copy of the length.
+            length.add(&Integer::from_i128(0))
+        }
+    };
+    let adjust = |word: i64, missing: Integer| {
+        if word == 0 {
+            return missing;
+        }
+        // SAFETY: the caller's guarantee.
+        let bound = unsafe { Integer::from_word(word) };
+        if bound.negative {
+            let from_end = bound.add(&length);
+            if from_end.compare(&lower()).is_lt() {
+                lower()
+            } else {
+                from_end
+            }
+        } else if bound.compare(&upper()).is_gt() {
+            upper()
+        } else {
+            bound
+        }
+    };
+    let value = match inline_value(part) {
+        0 => adjust(first, if backwards { upper() } else { lower() }).into_word(),
+        1 => adjust(last, if backwards { lower() } else { upper() }).into_word(),
+        _ if stride == 0 => word(1),
+        _ => {
+            // SAFETY: the caller's guarantee.
+            unsafe { typy_rt_int_increment(stride) };
+            stride
+        }
+    };
+    Raising::ok(value)
 }
 
 /// Returns the `ValueError` of `slice.indices` given a negative length.
@@ -332,6 +395,81 @@ mod tests {
             crate::refcount::typy_rt_decrement(error.cast());
             crate::refcount::typy_rt_int_decrement(negative);
             crate::refcount::typy_rt_decrement(forwards.cast());
+        }
+    }
+
+    /// Returns the decimal text of an `int` word, which is released.
+    fn decimal(value: i64) -> String {
+        // SAFETY: the word is live; it and the text are released here.
+        unsafe {
+            let text = crate::int::typy_rt_int_to_str(value).value;
+            crate::refcount::typy_rt_int_decrement(value);
+            let shown = (0..crate::string::length(text))
+                .map(|index| char::from_u32(crate::string::code_point(text, index)).unwrap())
+                .collect();
+            crate::refcount::typy_rt_decrement(text.cast());
+            shown
+        }
+    }
+
+    /// Returns the `int` word of the decimal `text`, which the caller releases.
+    fn number(text: &str) -> i64 {
+        let string = crate::string::from_str(text);
+        // SAFETY: the text is live and released here; the base is the `int` word of 10.
+        unsafe {
+            let value = crate::int::typy_rt_int_from_str(string, word(10)).value;
+            crate::refcount::typy_rt_decrement(string.cast());
+            value
+        }
+    }
+
+    #[test]
+    fn indices_hold_each_bound_inside_a_length_past_an_inline_int() {
+        let length = "9".repeat(30);
+        let below = format!("-{}", "9".repeat(31));
+        // The bounds of each slice, with the start and the stop CPython gives for `length`.
+        let cases = [
+            ((Some("1"), Some("3"), None), ("1", "3")),
+            (
+                (None, None, Some("-1")),
+                ("999999999999999999999999999998", "-1"),
+            ),
+            (
+                (Some("-5"), None, None),
+                (
+                    "999999999999999999999999999994",
+                    "999999999999999999999999999999",
+                ),
+            ),
+            (
+                (Some(length.as_str()), Some(below.as_str()), Some("-2")),
+                ("999999999999999999999999999998", "-1"),
+            ),
+        ];
+        for ((start, stop, step), (from, to)) in cases {
+            let bound = |text: Option<&str>| text.map_or(0, number);
+            let given = number(&length);
+            // SAFETY: every word is live, and every object made here is released here.
+            unsafe {
+                let slice = typy_rt_slice_new(bound(start), bound(stop), bound(step));
+                let found = (
+                    decimal(typy_rt_slice_index(slice, given, word(0)).value),
+                    decimal(typy_rt_slice_index(slice, given, word(1)).value),
+                );
+                assert_eq!(found, (from.to_owned(), to.to_owned()));
+                crate::refcount::typy_rt_int_decrement(given);
+                crate::refcount::typy_rt_decrement(slice.cast());
+            }
+        }
+        let given = number(&length);
+        // SAFETY: as above.
+        unsafe {
+            let still = typy_rt_slice_new(0, 0, word(0));
+            let error = typy_rt_slice_index(still, given, word(0)).exception;
+            assert_eq!((*error).class().name(), "ValueError");
+            crate::refcount::typy_rt_decrement(error.cast());
+            crate::refcount::typy_rt_int_decrement(given);
+            crate::refcount::typy_rt_decrement(still.cast());
         }
     }
 }

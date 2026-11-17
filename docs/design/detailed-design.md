@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy detailed design |
-| Version | 2.20 |
+| Version | 2.21 |
 | Status | Approved |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-17 |
@@ -1143,8 +1143,11 @@ or an optional one, that meets the type of a class it derives from becomes
 `TypedExprKind::Upcast(value)`, and so does the receiver of an inherited method
 (CLS-04). A display, and a conditional expression with a `None` branch, join
 their items' types, so `[1, None]` is `list[int | None]`. An optional value is
-compared with `None` by `is`, tested for truth and written as text; `==`,
-ordering, operators and methods on it are E0407, E0401 and E0412, with a help
+compared with `None` by `is`, tested for truth and written as text. `==` and
+`!=` take it with `None`, with another optional value or with a value of its
+base: `None` equals only `None`, and two values compare as their base does,
+which lowering's `optional_equality` tests one side at a time (EXP-06).
+Ordering, operators and methods on it are E0407, E0401 and E0412, with a help
 that says how to narrow it. `True`, `False` and `None` are each the only object
 of its value, so two `bool` or `bool | None` values also compare by `is`:
 lowering compiles it as `==` of two `bool` values, after testing an optional one
@@ -1526,8 +1529,9 @@ instance as `for` does until `item is value or item == value` holds
 `x[a:b:c]` on an instance passes `Builtin::Slice` of the bounds to the
 container method (`index_value`), a slice's attributes are
 `TypedExprKind::SliceBound`, `indices` is `Method::SliceIndices`, three
-calls of `slice_index`, and `seq[s]` of a built-in sequence is
-`TypedExprKind::Slice` of the bounds, the slice held in a hidden
+calls of `slice_index`, which computes with integers of any size when the
+length is past an inline `int`, as CPython does, and `seq[s]` of a built-in
+sequence is `TypedExprKind::Slice` of the bounds, the slice held in a hidden
 variable (`object_bounds`), also as an assignment target. A slice bound
 may be `int | None`: lowering passes its word, and the runtime's
 `slice::select` takes the word 0 as a missing bound (DAT-12). An

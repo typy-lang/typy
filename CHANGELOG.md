@@ -261,6 +261,15 @@ All notable changes to TyPy are recorded here. The format follows
 
 ### Fixed
 
+- `==` and `!=` take optional values, as CPython does: `None` equals only
+  `None`, and two values compare as their type does. A dataclass with an
+  optional field, whose `__eq__` compares its fields, was refused with
+  E0407 (EXP-06, CLS-05).
+- A frozen dataclass whose field holds a `list`, `dict` or `set` inside a
+  tuple, or through a `type` alias, compares as CPython does and has no
+  hash; it was refused with E0413 (CLS-16).
+- `slice.indices` takes a length of any size, as CPython does; a length
+  past 64 bits raised `OverflowError` (CLS-23).
 - Printing a string with a surrogate writes it as CPython does in UTF-8
   mode: standard output writes U+DC80 to U+DCFF as bytes, so a stray
   byte of `sys.argv` or of standard input is written back, and raises

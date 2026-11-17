@@ -493,13 +493,18 @@ impl Type {
             (Self::Instance(left), Self::Instance(right)) => {
                 left.derives_from(right) || right.derives_from(left)
             }
-            // Views compare by the rules of `body/view_operator.rs` (DAT-16), an optional value
-            // is compared with `None` by `is`, and iterators by `is`. A union in a variable is
-            // compared member by member, and one computed in place is not compared (TYP-14).
+            // An optional value equals `None` only when it holds none, and any other value as
+            // the value it holds does (EXP-06).
+            (Self::Optional(left), Self::Optional(right)) => left.can_test_equality(right),
+            (Self::Optional(base), other) | (other, Self::Optional(base)) => {
+                *other == Self::NoneType || base.can_test_equality(other)
+            }
+            // Views compare by the rules of `body/view_operator.rs` (DAT-16), and iterators by
+            // `is`. A union in a variable is compared member by member, and one computed in
+            // place is not compared (TYP-14).
             (
                 Self::Union(_)
                 | Self::DictView(..)
-                | Self::Optional(_)
                 | Self::Iterator(_)
                 | Self::Iterable(_)
                 | Self::Module(_)
@@ -513,7 +518,6 @@ impl Type {
                 _,
                 Self::Union(_)
                 | Self::DictView(..)
-                | Self::Optional(_)
                 | Self::Iterator(_)
                 | Self::Iterable(_)
                 | Self::Module(_)
@@ -1045,7 +1049,11 @@ mod tests {
         assert!(Type::Optional(Box::new(Type::Error)).has_error());
         assert!(int.is_hashable());
         assert!(!int.can_order(&int));
-        assert!(!int.can_test_equality(&int));
-        assert!(!Type::Int.can_test_equality(&int));
+        // `None` equals only `None`, and two values compare as their base does (EXP-06).
+        assert!(int.can_test_equality(&int));
+        assert!(Type::Int.can_test_equality(&int));
+        assert!(int.can_test_equality(&Type::NoneType));
+        assert!(!int.can_test_equality(&Type::Str));
+        assert!(!int.can_test_equality(&optional(Type::Str)));
     }
 }

@@ -212,3 +212,17 @@ fn class_statements_typy_cannot_compile_are_refused() {
         ),
     ]);
 }
+
+#[test]
+fn a_frozen_dataclass_holding_a_list_in_a_tuple_or_an_alias_has_no_hash() {
+    let classes = "from dataclasses import dataclass\ntype Numbers = list[int]\n\
+                   @dataclass(frozen=True)\nclass Bag:\n    numbers: Numbers\n\
+                   @dataclass(frozen=True)\nclass Pair:\n    items: tuple[int, list[int]] | None\n";
+    accepted(&[&format!(
+        "{classes}print(Bag([1]) == Bag([1]), Pair(None), Pair((1, [2])) == Pair(None))\n"
+    )]);
+    refused(&[
+        (&format!("{classes}print({{Bag([1])}})\n"), "E0413"),
+        (&format!("{classes}print({{Pair(None)}})\n"), "E0413"),
+    ]);
+}

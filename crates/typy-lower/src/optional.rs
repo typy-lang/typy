@@ -3,6 +3,7 @@
 
 use typy_check::{Type, TypedExpr};
 use typy_diagnostics::Span;
+use typy_source::syntax::CompareOperator;
 use typy_tyir::{Constant, Operation, Terminator, TyirType, ValueId};
 
 use crate::function::FunctionLowerer;
@@ -130,6 +131,94 @@ impl FunctionLowerer<'_> {
         });
         self.builder.switch_to(join);
         self.produced(result, ty)
+    }
+
+    /// Returns `left == right`, or `left != right`, where either is optional: `None` equals
+    /// only `None`, and two values compare as their types do (EXP-06). The operands are not
+    /// released.
+    pub(crate) fn optional_equality(
+        &mut self,
+        operator: CompareOperator,
+        left: Lowered,
+        right: Lowered,
+        span: Span,
+    ) -> ValueId {
+        let equal = operator == CompareOperator::Eq;
+        let (held, other, reversed) = if matches!(left.ty, TyirType::Optional(_)) {
+            (left, right, false)
+        } else {
+            (right, left, true)
+        };
+        let result = self.optional_branch(
+            held,
+            TyirType::Bool,
+            span,
+            |this| {
+                // `None` on this side: equal exactly when the other side is `None` too.
+                let other_none = this.none_test(other, span);
+                Self::borrowed(this.equal_or_not(equal, other_none, span), TyirType::Bool)
+            },
+            |this, value| {
+                let compared = if matches!(other.ty, TyirType::Optional(_)) {
+                    this.optional_branch(
+                        other,
+                        TyirType::Bool,
+                        span,
+                        |this| {
+                            let never = this.constant(Constant::Bool(!equal), span);
+                            Self::borrowed(never, TyirType::Bool)
+                        },
+                        |this, other| {
+                            let compared =
+                                this.ordered_compare(operator, (value, other), reversed, span);
+                            Self::borrowed(compared, TyirType::Bool)
+                        },
+                    )
+                    .value
+                } else if other.ty == TyirType::Unit {
+                    this.constant(Constant::Bool(!equal), span)
+                } else {
+                    this.ordered_compare(operator, (value, other), reversed, span)
+                };
+                Self::borrowed(compared, TyirType::Bool)
+            },
+        );
+        result.value
+    }
+
+    /// Returns whether a value is `None`: an optional's test, true for `None` itself, and
+    /// false for a value of any other type.
+    fn none_test(&mut self, value: Lowered, span: Span) -> ValueId {
+        match value.ty {
+            TyirType::Optional(_) => self.is_none(value, span),
+            TyirType::Unit => self.constant(Constant::Bool(true), span),
+            _ => self.constant(Constant::Bool(false), span),
+        }
+    }
+
+    /// Returns `truth` for `==`, and its negation for `!=`.
+    fn equal_or_not(&mut self, equal: bool, truth: ValueId, span: Span) -> ValueId {
+        if equal {
+            return truth;
+        }
+        self.builder
+            .push_value(Operation::BoolNot(truth), TyirType::Bool, span)
+    }
+
+    /// Compares two values with `operator`, keeping their order in the source: `reversed`
+    /// when `first` was written on the right.
+    fn ordered_compare(
+        &mut self,
+        operator: CompareOperator,
+        (first, second): (Lowered, Lowered),
+        reversed: bool,
+        span: Span,
+    ) -> ValueId {
+        if reversed {
+            self.compare(operator, second, first, span)
+        } else {
+            self.compare(operator, first, second, span)
+        }
     }
 
     /// Returns the type an optional value of type `ty` holds when it is not `None`.

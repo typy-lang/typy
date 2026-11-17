@@ -1704,10 +1704,6 @@ fn optional_rules_give_their_codes() {
             &["E0407"],
         ),
         (
-            "def f(x: int | None) -> bool:\n    return x == 5\n",
-            &["E0407"],
-        ),
-        (
             "def g(x: str | None) -> str:\n    return x.upper()\n",
             &["E0412"],
         ),

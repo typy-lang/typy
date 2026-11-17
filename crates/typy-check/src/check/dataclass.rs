@@ -65,6 +65,9 @@ struct Names {
     /// Each name an `import module` binds to a module other than `dataclasses`, with the
     /// module, through which a base may name a class.
     program_modules: BTreeMap<String, String>,
+    /// The value of each `type` alias the module defines without type parameters, which a
+    /// field's annotation may name.
+    aliases: BTreeMap<String, Expr>,
 }
 
 /// The options of `@dataclass(...)` CLS-05 covers.
@@ -354,17 +357,49 @@ impl Dataclasses {
 
     /// Returns true when a field's annotation names a type whose values cannot be hashed: a
     /// `list`, `dict` or `set`, or a dataclass with `eq=True` and no `__hash__`, also as a
-    /// member of a union, so `__hash__` is not written for the class (CLS-16).
+    /// member of a union, an item of a tuple, or the value of a `type` alias of the module, so
+    /// `__hash__` is not written for the class (CLS-16).
     fn unhashable_annotation(&self, annotation: &Expr, module: &str, names: &Names) -> bool {
+        self.unhashable_within(annotation, module, names, &mut BTreeSet::new())
+    }
+
+    /// Returns what `unhashable_annotation` does, where `seen` holds the aliases being read,
+    /// so an alias that names itself ends the reading.
+    fn unhashable_within(
+        &self,
+        annotation: &Expr,
+        module: &str,
+        names: &Names,
+        seen: &mut BTreeSet<String>,
+    ) -> bool {
         match annotation {
             Expr::BinOp { left, right, .. } => {
-                self.unhashable_annotation(left, module, names)
-                    || self.unhashable_annotation(right, module, names)
+                self.unhashable_within(left, module, names, seen)
+                    || self.unhashable_within(right, module, names, seen)
             }
-            Expr::Subscript { value, .. } => matches!(
-                value.as_ref(),
-                Expr::Name { id, .. } if matches!(id.as_str(), "list" | "dict" | "set" | "List" | "Dict" | "Set")
-            ),
+            Expr::Subscript { value, index, .. } => match value.as_ref() {
+                Expr::Name { id, .. }
+                    if matches!(
+                        id.as_str(),
+                        "list" | "dict" | "set" | "List" | "Dict" | "Set"
+                    ) =>
+                {
+                    true
+                }
+                Expr::Name { id, .. } if matches!(id.as_str(), "tuple" | "Tuple" | "Optional") => {
+                    let items = match index.as_ref() {
+                        Expr::Tuple { elements, .. } => elements.iter().collect(),
+                        item => vec![item],
+                    };
+                    items
+                        .into_iter()
+                        .any(|item| self.unhashable_within(item, module, names, seen))
+                }
+                _ => false,
+            },
+            Expr::Name { id, .. } if let Some(value) = names.aliases.get(id) => {
+                seen.insert(id.clone()) && self.unhashable_within(value, module, names, seen)
+            }
             Expr::Name { .. } | Expr::Attribute { .. } => names
                 .class_key(annotation, module)
                 .is_some_and(|key| self.unhashable.contains(&key)),
@@ -410,11 +445,20 @@ impl Names {
         }
     }
 
-    /// Returns the names the module's imports bind to `dataclasses`, `dataclass` and `field`.
+    /// Returns the names the module's imports bind to `dataclasses`, `dataclass` and `field`,
+    /// with the module's `type` aliases.
     fn of(statements: &[Stmt]) -> Self {
         let mut names = Self::default();
         for statement in statements {
             match statement {
+                Stmt::TypeAlias {
+                    name,
+                    type_parameters,
+                    value,
+                    ..
+                } if type_parameters.is_empty() => {
+                    names.aliases.insert(name.name.clone(), value.clone());
+                }
                 Stmt::Import { names: aliases, .. } => {
                     for alias in aliases {
                         let bound = alias.as_name.as_ref().unwrap_or(&alias.name);

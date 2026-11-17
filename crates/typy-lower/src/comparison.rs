@@ -318,6 +318,13 @@ impl FunctionLowerer<'_> {
                     .push_value(Operation::BoolNot(found), TyirType::Bool, span);
             }
         };
+        // An optional value equals `None` only when it holds none (EXP-06).
+        if matches!(comparison, Comparison::Equal | Comparison::NotEqual)
+            && (matches!(left.ty, TyirType::Optional(_))
+                || matches!(right.ty, TyirType::Optional(_)))
+        {
+            return self.optional_equality(operator, left, right, span);
+        }
         let kind = match (left.ty, right.ty) {
             (TyirType::Tuple(_), _) => return self.compare_tuples(operator, left, right, span),
             // A protocol value is an object of any class that satisfies the protocol, compared
@@ -357,7 +364,7 @@ impl FunctionLowerer<'_> {
                 unreachable!("list items are converted before they are compared")
             }
             (TyirType::Optional(_), _) => {
-                unreachable!("the checker compares an optional value only with `is`")
+                unreachable!("the checker refuses ordering an optional value")
             }
             (TyirType::Unit, TyirType::Unit) => {
                 return self.constant(Constant::Bool(comparison == Comparison::Equal), span);
