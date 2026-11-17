@@ -1,6 +1,6 @@
 # Language guide
 
-Each page covers one area of the TyPy specification: what TyPy 0.4 accepts,
+Each page covers one area of the TyPy specification: what TyPy 0.5 accepts,
 with the rule ID of each item, what it refuses, and what later releases
 add. The rule IDs are the ones diagnostics name, such as `TYP-03`.
 
@@ -21,5 +21,5 @@ add. The rule IDs are the ones diagnostics name, such as `TYP-03`.
 | [Modules](modules.md) | Imports, packages and lazy imports | MOD |
 | [Built-in functions and library](library.md) | Builtins and methods of the built-in types | LIB |
 | [Memory](memory.md) | Reference counting and value layout | MEM |
-| [C interoperability](c-interop.md) | `ctypes`, planned for 0.5 | FFI |
+| [C interoperability](c-interop.md) | `ctypes`, and modules built as C libraries | FFI |
 | [Diagnostics](diagnostics.md) | How TyPy reports a problem | DIA |
