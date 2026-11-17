@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy software requirements specification |
-| Version | 1.74 |
+| Version | 1.75 |
 | Status | Approved |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-17 |
@@ -421,7 +421,7 @@ formatter applies; Ruff's formatter is the project's recommendation.
 | MEM-05 | Freed memory of one object shall be reused for a new object of the same size in the same function when the compiler can prove it safe. | C | 1.0 |
 | MEM-06 | Reference cycles shall be collected, without a background thread, and only objects whose class can be part of a cycle shall pay for cycle tracking (ADR-0001). | S | 1.0 |
 | MEM-07 | `weakref.ref` shall be available. | S | 1.0 |
-| MEM-08 | The allocator shall be replaceable per project through three functions: allocate, reallocate and free. | S | 0.5 |
+| MEM-08 | The allocator shall be replaceable per project through three C functions, allocate, reallocate and free, that `typy.toml` names. | S | 0.5 |
 | MEM-09 | The last use of a variable in an assignment, or as an item a collection stores, shall move its value instead of counting it. | S | 0.3 |
 | MEM-10 | A list, dict, set, string or exception object that the compiler proves does not outlive its function shall be allocated without a heap call. | C | 1.0 |
 

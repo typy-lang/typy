@@ -61,6 +61,31 @@ pub struct TyirModule {
     pub classes: Vec<TyirClass>,
     /// The module body of `__main__`.
     pub entry: FunctionId,
+    /// The C functions the runtime allocates with (MEM-08).
+    pub allocator: TyirAllocator,
+}
+
+/// The C functions through which the runtime allocates, frees and resizes memory: by
+/// default the C library's, or those the project names (MEM-08, ADR-0043).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct TyirAllocator {
+    /// The function that allocates, as `malloc` does.
+    pub allocate: String,
+    /// The function that resizes an allocation, as `realloc` does.
+    pub reallocate: String,
+    /// The function that frees an allocation, as `free` does.
+    pub free: String,
+}
+
+impl Default for TyirAllocator {
+    /// Returns the C library's `malloc`, `realloc` and `free`.
+    fn default() -> Self {
+        Self {
+            allocate: "malloc".to_owned(),
+            reallocate: "realloc".to_owned(),
+            free: "free".to_owned(),
+        }
+    }
 }
 
 /// A class of the program: its names, the layout of its attributes, and the methods that

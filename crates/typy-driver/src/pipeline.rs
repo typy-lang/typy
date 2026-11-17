@@ -6,7 +6,7 @@ use typy_check::{TypeChecker, TypedProgram};
 use typy_codegen::{assembly, llvm_ir, object};
 use typy_diagnostics::Diagnostics;
 use typy_source::{Project, ProjectSettings, SETTINGS_FILE, SettingOverrides};
-use typy_tyir::TyirModule;
+use typy_tyir::{TyirAllocator, TyirModule};
 
 use crate::emission::Emission;
 use crate::failure::Failure;
@@ -140,8 +140,9 @@ impl Pipeline {
     /// Builds and links the executable. The runtime archive is opened first, so a broken
     /// installation fails before any work.
     fn build(&self, request: &BuildRequest) -> Result<(Artifact, Warnings), Failure> {
-        let linker = self.linker(request)?;
+        let archive = self.runtime_archive(request)?;
         let project = self.load(request.main())?;
+        let linker = linker(request, archive, &project);
         let (program, warnings) = self.check_program(&project)?;
         let module = lower(&program, &project)?;
         let failed = |diagnostics| with_project(diagnostics, &project);
@@ -183,14 +184,10 @@ impl Pipeline {
         })
     }
 
-    fn linker(&self, request: &BuildRequest) -> Result<Linker, Failure> {
-        let triple = request.target().triple;
-        let archive =
-            RuntimeArchive::beside(&self.compiler, triple).map_err(Failure::without_sources)?;
-        // A release build leaves out the debug information, which a debug build keeps for a
-        // debugger (CLI-05).
-        let release = request.mode() != typy_build::BuildMode::Debug;
-        Ok(Linker::new(triple, archive).with_strip_debug(release))
+    /// Returns the runtime archive installed beside the compiler for the request's target.
+    fn runtime_archive(&self, request: &BuildRequest) -> Result<RuntimeArchive, Failure> {
+        RuntimeArchive::beside(&self.compiler, request.target().triple)
+            .map_err(Failure::without_sources)
     }
 
     /// Loads the program with the settings of its root and of the command line.
@@ -228,6 +225,32 @@ fn root_of(main: &Utf8Path) -> Utf8PathBuf {
     }
 }
 
+/// Returns the linker of the request's target, with the libraries the project names.
+fn linker(request: &BuildRequest, archive: RuntimeArchive, project: &Project) -> Linker {
+    // A release build leaves out the debug information, which a debug build keeps for a
+    // debugger (CLI-05).
+    let release = request.mode() != typy_build::BuildMode::Debug;
+    let libraries = project
+        .settings()
+        .allocator
+        .iter()
+        .filter_map(|allocator| allocator.library.clone())
+        .collect();
+    Linker::new(request.target().triple, archive)
+        .with_strip_debug(release)
+        .with_libraries(libraries)
+}
+
+/// Returns the program in TyIR, allocating with the functions the project names (MEM-08).
 fn lower(program: &TypedProgram, project: &Project) -> Result<TyirModule, Failure> {
-    typy_lower::lower(program).map_err(|diagnostics| with_project(diagnostics, project))
+    let mut module =
+        typy_lower::lower(program).map_err(|diagnostics| with_project(diagnostics, project))?;
+    if let Some(allocator) = &project.settings().allocator {
+        module.allocator = TyirAllocator {
+            allocate: allocator.allocate.clone(),
+            reallocate: allocator.reallocate.clone(),
+            free: allocator.free.clone(),
+        };
+    }
+    Ok(module)
 }

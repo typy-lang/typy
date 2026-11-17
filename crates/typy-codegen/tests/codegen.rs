@@ -236,3 +236,46 @@ fn an_instance_held_in_the_frame_is_made_in_a_block_released_before_each_return(
     );
     assert!(!body.contains("@typy_rt_instance_new("), "{body}");
 }
+
+#[test]
+fn every_object_defines_hidden_heap_hooks_over_the_c_library() {
+    let (project, module) = compile("print([1] * 3)\n");
+    let ir = llvm_ir(&module, Target::host(), Optimization::None, &project).unwrap();
+    for (hook, call) in [
+        (
+            "define hidden ptr @typy_rt_heap_allocate(i64 %0)",
+            "tail call ptr @malloc(i64 %0)",
+        ),
+        (
+            "define hidden ptr @typy_rt_heap_reallocate(ptr %0, i64 %1)",
+            "tail call ptr @realloc(ptr %0, i64 %1)",
+        ),
+        (
+            "define hidden void @typy_rt_heap_free(ptr %0)",
+            "tail call void @free(ptr %0)",
+        ),
+    ] {
+        assert!(ir.contains(hook), "{ir}");
+        assert!(ir.contains(call), "{ir}");
+    }
+}
+
+#[test]
+fn the_heap_hooks_call_the_functions_the_project_names() {
+    let (project, mut module) = compile("print(2.0 ** 0.5)\n");
+    module.allocator = typy_tyir::TyirAllocator {
+        allocate: "mi_malloc".to_owned(),
+        reallocate: "mi_realloc".to_owned(),
+        // A function the module defines with another type, which `typy.toml` refuses, still
+        // leaves a module LLVM accepts.
+        free: "__typy_main".to_owned(),
+    };
+    let ir = llvm_ir(&module, Target::host(), Optimization::None, &project).unwrap();
+    assert!(ir.contains("tail call ptr @mi_malloc(i64 %0)"), "{ir}");
+    assert!(
+        ir.contains("tail call ptr @mi_realloc(ptr %0, i64 %1)"),
+        "{ir}"
+    );
+    assert!(ir.contains("tail call void @__typy_main(ptr %0)"), "{ir}");
+    assert!(!ir.contains("@malloc("), "{ir}");
+}

@@ -48,3 +48,4 @@ supersedes it.
 | [ADR-0040](0040-derive-each-copy-of-a-generic-class-from-the-copy-of-its-base.md) | Derive each copy of a generic class from the copy of its base | Accepted | 2026-11-16 |
 | [ADR-0041](0041-hold-a-protocol-value-as-an-object-and-call-it-through-a-dispatcher.md) | Hold a protocol value as an object and call it through a dispatcher | Accepted | 2026-11-16 |
 | [ADR-0042](0042-allocate-an-instance-that-does-not-escape-in-its-functions-frame.md) | Allocate an instance that does not escape in its function's frame | Accepted | 2026-11-17 |
+| [ADR-0043](0043-name-the-allocator-in-typy-toml-and-call-it-through-program-hooks.md) | Name the allocator in typy.toml and call it through program hooks | Accepted | 2026-11-17 |

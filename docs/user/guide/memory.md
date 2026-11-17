@@ -12,6 +12,7 @@ reference goes, with no garbage collector and no pauses.
 | Passing a variable or a constant as an argument counts nothing, and `return name` moves the value to the caller | MEM-04 |
 | The last use of a variable moves its value into an assignment or a collection, and a new value, such as a call's result, goes into a collection without being counted | MEM-09 |
 | An instance of a class of the program that never outlives the function that makes it is made in the function's frame, with no allocator call | MEM-03 |
+| A project names the C functions its program allocates with in `typy.toml` | MEM-08 |
 | An object header takes 8 bytes, and a million small `int` items fit in 8.5 MB | NFR-12, NFR-13 |
 
 A move changes no result: the value goes where CPython would put it, and
@@ -68,6 +69,35 @@ print(total(4))
 until 1.0 (MEM-10), and the collection of reference cycles comes in 1.0
 (MEM-06). Until then, objects that refer to each other in a cycle stay
 allocated until the program ends.
+
+## Choosing the allocator
+
+A program allocates its memory with the C library's `malloc`, `realloc`
+and `free`. A project can name three other C functions in `typy.toml`, and
+the library that defines them, with no change to its source (MEM-08). To
+use [mimalloc](https://github.com/microsoft/mimalloc):
+
+```toml
+[allocator]
+allocate = "mi_malloc"
+reallocate = "mi_realloc"
+free = "mi_free"
+library = "mimalloc"
+```
+
+| Key | Value |
+| --- | --- |
+| `allocate` | A function `void *allocate(size_t size)`, as `malloc` |
+| `reallocate` | A function `void *reallocate(void *pointer, size_t size)`, as `realloc` |
+| `free` | A function `void free(void *pointer)`, as `free` |
+| `library` | The library the linker finds as it finds `-lmimalloc`, in its usual directories or in `LIBRARY_PATH`; leave it out when a library the program links anyway defines the functions |
+
+TyPy never asks for zero bytes, and needs memory aligned as `malloc`
+aligns it. When `allocate` or `reallocate` returns null, the program
+prints `MemoryError` and stops. The three keys come together, each a C
+function's name that does not start with `typy_`, `__typy` or `_TY`, which
+belong to TyPy; a table that leaves one out, or names one function twice,
+is E0107.
 
 ## Example
 

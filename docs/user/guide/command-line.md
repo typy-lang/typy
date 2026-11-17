@@ -33,6 +33,7 @@ defaults apply.
 | --- | --- | --- | --- |
 | `python-floor` | The oldest CPython version the program supports: `"3.12"`, `"3.13"`, `"3.14"` or `"3.15"`, written as a string | `"3.12"` | CLI-12 |
 | `module-paths` | Directories under the project root, named relative to it, where imports look for modules after the main file's directory, in order, as CPython looks in `PYTHONPATH` | `[]` | MOD-01 |
+| `[allocator]` | The C functions the program allocates its memory with, and their library; see [Memory](memory.md#choosing-the-allocator) | `malloc`, `realloc` and `free` | MEM-08 |
 
 The floor decides which syntax the program may use and which CPython
 versions it promises to match (ADR-0008); `lazy import` needs `"3.15"`.
@@ -46,8 +47,9 @@ module-paths = ["lib"]
 
 and CPython runs it the same way with `PYTHONPATH=lib`. A setting TyPy
 does not know, a value of the wrong type, a module path outside the
-project, and a file that is not valid TOML are E0107: TyPy names the line
-and exits with status 2 before it reads any module.
+project, a wrong `[allocator]` table, and a file that is not valid TOML are
+E0107: TyPy names the line and exits with status 2 before it reads any
+module.
 
 ## Example
 

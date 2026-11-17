@@ -29,6 +29,7 @@ fn module(function: TyirFunction) -> TyirModule {
         str_points: Vec::new(),
         classes: Vec::new(),
         entry: FunctionId(0),
+        allocator: crate::module::TyirAllocator::default(),
     }
 }
 
@@ -495,6 +496,7 @@ fn every_operation() -> TyirModule {
         str_points: Vec::new(),
         classes: Vec::new(),
         entry: FunctionId(0),
+        allocator: crate::module::TyirAllocator::default(),
     }
 }
 

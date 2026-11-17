@@ -17,6 +17,8 @@ pub struct Linker {
     static_link: bool,
     strip_debug: bool,
     archive: RuntimeArchive,
+    /// Libraries linked as `-lname`, such as the allocator's (MEM-08).
+    libraries: Vec<String>,
 }
 
 fn link_failed(message: String, help: String) -> Diagnostics {
@@ -40,6 +42,7 @@ impl Linker {
             static_link,
             strip_debug: false,
             archive,
+            libraries: Vec::new(),
         }
     }
 
@@ -48,6 +51,15 @@ impl Linker {
     #[must_use]
     pub const fn with_strip_debug(mut self, strip: bool) -> Self {
         self.strip_debug = strip;
+        self
+    }
+
+    /// Returns the linker with each of `libraries` linked as `-lname` after the runtime
+    /// archive; each is a name `typy.toml` has checked, passed as one argument and never to a
+    /// shell.
+    #[must_use]
+    pub fn with_libraries(mut self, libraries: Vec<String>) -> Self {
+        self.libraries = libraries;
         self
     }
 
@@ -70,9 +82,9 @@ impl Linker {
             "-lm".to_owned(),
             "-Wl,--pop-state".to_owned(),
             self.archive.path().to_string(),
-            "-lm".to_owned(),
-            "-Wl,--gc-sections".to_owned(),
         ]);
+        arguments.extend(self.libraries.iter().map(|library| format!("-l{library}")));
+        arguments.extend(["-lm".to_owned(), "-Wl,--gc-sections".to_owned()]);
         if self.strip_debug {
             arguments.push("-Wl,--strip-debug".to_owned());
         }
@@ -219,6 +231,18 @@ mod tests {
         assert_eq!(
             arguments.last().map(String::as_str),
             Some("-Wl,--strip-debug")
+        );
+        let pooled = Linker::new(TargetTriple::X86_64LinuxGnu, archive(&root))
+            .with_libraries(vec!["mimalloc".to_owned()]);
+        let arguments = pooled.arguments(Utf8Path::new("a.o"), Utf8Path::new("out"));
+        assert_eq!(
+            arguments[6..],
+            [
+                expected_archive.as_str(),
+                "-lmimalloc",
+                "-lm",
+                "-Wl,--gc-sections"
+            ]
         );
         let musl = Linker::new(TargetTriple::X86_64LinuxMusl, archive(&root));
         assert_eq!(musl.program, "musl-gcc");

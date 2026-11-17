@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy detailed design |
-| Version | 2.13 |
+| Version | 2.14 |
 | Status | Approved |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-17 |
@@ -338,6 +338,7 @@ it enforces and its status. `typy explain` reads the same table.
 | `release` | `Release` | `Release::V0_1` | The release whose feature table the subset checker uses |
 | `python_floor` | `PythonFloor` | `PythonFloor::V3_12` | One of 3.12 to 3.15; the parser's target version and the lowest oracle version (ADR-0008). Read from `python-floor` in `typy.toml` (CLI-12) |
 | `module_paths` | `Vec<Utf8PathBuf>` | empty | Directories relative to `root`, each made only of normal components and existing; the loader looks for a module in `root`, then in each, in order (MOD-01) |
+| `allocator` | `Option<Allocator>` | `None` | The table `[allocator]`: the C functions `allocate`, `reallocate` and `free`, each an identifier of at most 255 characters outside the prefixes `typy_`, `__typy` and `_TY`, all three different, and an optional `library`, a name the linker takes as `-lname` that starts with a letter, a digit or `_` (MEM-08, ADR-0043) |
 
 `ProjectSettings::read(root, overrides)` builds the settings once, when a
 command starts: the defaults, then `root/typy.toml` when it exists, then
@@ -345,8 +346,9 @@ command starts: the defaults, then `root/typy.toml` when it exists, then
 parsed with `toml_edit`, whose spans place each E0107 on its line; every
 wrong setting is reported, and the command stops with exit status 2 before
 any module is read (UC-11). The file becomes `SourceFile` 0 of the
-`LoadFailure`, so the diagnostics render with its text. Links and exports
-from `typy.toml` are planned for 0.5 (FFI-04, FFI-05).
+`LoadFailure`, so the diagnostics render with its text. The table
+`[allocator]` is read by `settings_file::allocator`, whose problems name
+MEM-08. Library links from `typy.toml` are planned for 0.5 (FFI-04).
 
 `SourceFile`
 
@@ -2343,6 +2345,19 @@ reference is left. A site in a loop reuses its block only then, and an
 instance still held, as `previous = current` keeps one, sends the next to
 the heap.
 
+### 10.5 Heap hooks
+
+Every object defines `typy_rt_heap_allocate(size)`,
+`typy_rt_heap_reallocate(pointer, size)` and `typy_rt_heap_free(pointer)`,
+which the runtime's `allocator` calls for all its memory (MEM-08,
+ADR-0043). Each is hidden, so a shared library does not export it, and
+makes a tail call of the function `TyirModule::allocator` names, through
+its address with the hook's own type, so a name the module already has
+with another type still verifies. `TyirAllocator::default()` names
+`malloc`, `realloc` and `free`; the driver sets the module's allocator from
+`ProjectSettings::allocator` after lowering, for every stage that emits
+code.
+
 ## 11. typy-build
 
 `BuildMode` is `Debug`, `Release` or `ReleaseSmall`, and
@@ -2382,9 +2397,11 @@ as a subprocess with an argument list and no shell:
 
 | Target | Program | Arguments |
 | --- | --- | --- |
-| `x86_64-unknown-linux-gnu` | `cc` | `-o TEMP OBJECT -Wl,--push-state,--no-as-needed -lm -Wl,--pop-state RUNTIME_ARCHIVE -lm -Wl,--gc-sections` |
+| `x86_64-unknown-linux-gnu` | `cc` | `-o TEMP OBJECT -Wl,--push-state,--no-as-needed -lm -Wl,--pop-state RUNTIME_ARCHIVE [-lLIBRARY] -lm -Wl,--gc-sections` |
 | `x86_64-unknown-linux-musl` | `musl-gcc` | `-static`, then the same |
 
+`Linker::with_libraries(libraries)` adds `-lLIBRARY` for each library after
+the runtime archive; the driver passes the allocator's library (MEM-08).
 A `--release` or `--release-small` build adds `-Wl,--strip-debug`, so the
 executable holds no debug information, which the runtime archive brings
 from `core` and `compiler_builtins` with LTO; the symbol table stays. A
@@ -2485,7 +2502,7 @@ installed `typy` finds `<prefix>/lib/typy/` and a `typy` in
 | Module | Behaviour |
 | --- | --- |
 | `entry` | `main` keeps its arguments for `sys.argv`, records the stack limit, calls `__typy_main`, reports an uncaught exception, flushes standard output and returns the exit status `sys::exit_status` gives |
-| `allocator` | `typy_rt_allocate`, `typy_rt_reallocate` and `typy_rt_free` over `malloc`, `realloc` and `free`. Running out of memory prints `MemoryError` and aborts |
+| `allocator` | `allocate`, `reallocate` and `free` over the program object's hooks `typy_rt_heap_allocate`, `typy_rt_heap_reallocate` and `typy_rt_heap_free` (section 10.5), asking for at least one byte. Running out of memory prints `MemoryError` and aborts. The unit tests define the hooks over `malloc`, `realloc` and `free`, since they link no program object |
 | `refcount` | `typy_rt_increment` and `typy_rt_decrement`, not atomic (A-03). A decrement to zero calls the type's `drop`, then frees the memory |
 | `int` | Addition, subtraction, multiplication, floor division, modulo, power, negation, comparison, conversion to and from `str` and `float`, all with Python's results (EXP-02, EXP-05) |
 | `float` | Division, floor division, modulo and power with the special cases of CPython's `float_divmod` and `float_pow`. `int / int`, `float(int)` and `float(str)` round once to the nearest double, ties to even, by CPython's `long_true_divide` method on exact integers. `int(float)` and `int` against `float` comparisons are exact. `round` rounds half to even on the exact value: `round(x)` to an integer, `round(x, n)` by rounding `x * 10**n` exactly and reading the result back with one correct rounding, as CPython's `_Py_dg_dtoa` and `_Py_dg_strtod` do, so `round(2.675, 2)` is `2.67`. Beyond 323 digits a `float` rounds to itself and below -308 to zero; a result too large raises `OverflowError: rounded value too large to represent`. `round` of an `int` with negative `ndigits` gives the even multiple of `10**-ndigits`, as `long_round` does. `repr` writes the shortest digits that read back as the same double, found exactly with large integers, and breaks an exact tie toward the even digit as CPython does; the layout is positional when the decimal exponent is from -4 to 15, otherwise scientific with a sign and at least two exponent digits, and `inf`, `-inf`, `nan` and `-0.0` are written as CPython writes them (DAT-02) |

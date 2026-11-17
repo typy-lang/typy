@@ -13,6 +13,11 @@ All notable changes to TyPy are recorded here. The format follows
   one the function reads, assigns attributes of, calls methods on, or
   passes to functions that do no more. `--emit=tyir` ends the line of each
   such instance with `in frame` (MEM-03, ADR-0042).
+- The table `[allocator]` in `typy.toml` names the C functions a program
+  allocates with, in place of `malloc`, `realloc` and `free`, and the
+  library that defines them, such as mimalloc's `mi_malloc`, `mi_realloc`
+  and `mi_free` from `mimalloc`. A wrong table is E0107 (MEM-08,
+  ADR-0043).
 - A benchmark report, `docs/testing/benchmark-report.md`, which compares
   TyPy's programs with CPython 3.12 to 3.15, PyPy, mypyc, Cython, Nuitka,
   Codon, C, C++, Rust, Go, Java and JavaScript on twelve workloads: time,

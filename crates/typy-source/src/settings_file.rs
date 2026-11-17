@@ -1,6 +1,8 @@
 //! Reads `typy.toml`, the project's settings, once when a command starts; a flag on the
 //! command line wins over the file (CLI-07, CLI-12, UC-11).
 
+mod allocator;
+
 use camino::{Utf8Component, Utf8Path, Utf8PathBuf};
 use toml_edit::{Document, Item};
 use typy_diagnostics::{Diagnostic, DiagnosticCode, Diagnostics, FileId, RuleId, Span, TextOffset};
@@ -13,7 +15,7 @@ use crate::source_file::SourceFile;
 pub const SETTINGS_FILE: &str = "typy.toml";
 
 /// The keys `typy.toml` may hold.
-const KEYS: [&str; 2] = ["python-floor", "module-paths"];
+const KEYS: [&str; 3] = ["python-floor", "module-paths", "allocator"];
 
 /// The settings flags on the command line give, which win over `typy.toml` (CLI-07).
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -76,6 +78,9 @@ impl ProjectSettings {
             let found = match key {
                 "python-floor" => self.python_floor(item),
                 "module-paths" => self.module_paths(item),
+                "allocator" => allocator::allocator(item).map(|allocator| {
+                    self.allocator = Some(allocator);
+                }),
                 _ => Err(Problem {
                     range: document
                         .as_table()
@@ -83,7 +88,7 @@ impl ProjectSettings {
                         .and_then(toml_edit::Key::span)
                         .unwrap_or(0..0),
                     message: format!("`typy.toml` has no setting `{key}`"),
-                    help: Some(format!("the settings are {}", KEYS.join(" and "))),
+                    help: Some(format!("the settings are {}", listed(&KEYS))),
                     rule: RuleId::CLI_07,
                 }),
             };
@@ -203,6 +208,15 @@ fn shown(item: &Item) -> String {
         || format!("{} {}", article(item.type_name()), item.type_name()),
         |text| format!("the string \"{text}\""),
     )
+}
+
+/// Returns names as a sentence lists them: `a, b and c`.
+fn listed(names: &[&str]) -> String {
+    match names {
+        [] => String::new(),
+        [only] => (*only).to_owned(),
+        [rest @ .., last] => format!("{} and {last}", rest.join(", ")),
+    }
 }
 
 /// Returns `an` before a TOML type name that starts with a vowel, and `a` otherwise.

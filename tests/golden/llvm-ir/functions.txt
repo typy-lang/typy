@@ -518,3 +518,24 @@ declare { i64, ptr } @typy_rt_int_floor_divide(i64, i64)
 declare { double, ptr } @typy_rt_int_true_divide(i64, i64)
 
 declare ptr @typy_rt_float_to_str(double)
+
+define hidden ptr @typy_rt_heap_allocate(i64 %0) {
+  %2 = tail call ptr @malloc(i64 %0)
+  ret ptr %2
+}
+
+declare ptr @malloc(i64)
+
+define hidden ptr @typy_rt_heap_reallocate(ptr %0, i64 %1) {
+  %3 = tail call ptr @realloc(ptr %0, i64 %1)
+  ret ptr %3
+}
+
+declare ptr @realloc(ptr, i64)
+
+define hidden void @typy_rt_heap_free(ptr %0) {
+  tail call void @free(ptr %0)
+  ret void
+}
+
+declare void @free(ptr)

@@ -1,10 +1,21 @@
-//! Allocates the runtime's objects; running out of memory ends the program (detailed design section 14.2).
+//! Allocates the runtime's objects through the program's allocator; running out of memory
+//! ends the program (detailed design section 14.2).
 
 use crate::libc;
 
+unsafe extern "C" {
+    // The program object defines these hooks; each calls the function its project names in
+    // `typy.toml`, or `malloc`, `realloc` or `free` (MEM-08, ADR-0043).
+    fn typy_rt_heap_allocate(size: usize) -> *mut u8;
+    fn typy_rt_heap_reallocate(pointer: *mut u8, size: usize) -> *mut u8;
+    fn typy_rt_heap_free(pointer: *mut u8);
+}
+
 /// Returns `size` bytes, or ends the program with `MemoryError` when they are not available.
 pub(crate) fn allocate(size: usize) -> *mut u8 {
-    let pointer = libc::allocate(size.max(1));
+    // SAFETY: the hook takes any size; the runtime never asks for zero bytes, which an
+    // allocator may answer with null.
+    let pointer = unsafe { typy_rt_heap_allocate(size.max(1)) };
     if pointer.is_null() {
         out_of_memory();
     }
@@ -13,7 +24,8 @@ pub(crate) fn allocate(size: usize) -> *mut u8 {
 
 /// Resizes an allocation, or ends the program with `MemoryError`.
 pub(crate) fn reallocate(pointer: *mut u8, size: usize) -> *mut u8 {
-    let resized = libc::reallocate(pointer, size.max(1));
+    // SAFETY: `pointer` came from `allocate` or `reallocate`, which callers keep to.
+    let resized = unsafe { typy_rt_heap_reallocate(pointer, size.max(1)) };
     if resized.is_null() {
         out_of_memory();
     }
@@ -22,7 +34,30 @@ pub(crate) fn reallocate(pointer: *mut u8, size: usize) -> *mut u8 {
 
 /// Frees an allocation.
 pub(crate) fn free(pointer: *mut u8) {
-    libc::release(pointer);
+    // SAFETY: callers pass a pointer from `allocate` or `reallocate` that is freed once.
+    unsafe { typy_rt_heap_free(pointer) }
+}
+
+/// The hooks a program object defines, over the C library, for the unit tests, which link
+/// no program object.
+#[cfg(test)]
+mod hooks {
+    use crate::libc;
+
+    #[unsafe(no_mangle)]
+    extern "C" fn typy_rt_heap_allocate(size: usize) -> *mut u8 {
+        libc::allocate(size)
+    }
+
+    #[unsafe(no_mangle)]
+    extern "C" fn typy_rt_heap_reallocate(pointer: *mut u8, size: usize) -> *mut u8 {
+        libc::reallocate(pointer, size)
+    }
+
+    #[unsafe(no_mangle)]
+    extern "C" fn typy_rt_heap_free(pointer: *mut u8) {
+        libc::release(pointer);
+    }
 }
 
 /// Returns `count * size` bytes for an array, or ends the program when the size overflows.

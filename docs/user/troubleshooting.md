@@ -71,8 +71,10 @@ directory exists and can be written, or give another path with `-o`.
 
 The project's `typy.toml` cannot be used: it is not valid TOML, it has a
 setting TyPy does not know, a value has the wrong type, such as
-`python-floor = 3.15` where the string `"3.15"` is meant, or a module path
-is not a directory under the project root (CLI-07, CLI-12). The diagnostic
+`python-floor = 3.15` where the string `"3.15"` is meant, a module path
+is not a directory under the project root, or the `[allocator]` table
+leaves out one of its three functions or names one that is not a C
+function (CLI-07, CLI-12, MEM-08). The diagnostic
 points at the line. TyPy exits with status 2 before it reads any module.
 Correct the line; the settings are listed in the
 [command line](guide/command-line.md) page.
@@ -1252,6 +1254,15 @@ TyPy links programs with the system C toolchain, which is not installed
 
 The C toolchain could not link the program (A-01). The message shows the
 linker's output; check that the toolchain works with `cc --version`.
+
+When the output says `cannot find -lNAME`, the linker did not find the
+library that `library` in the `[allocator]` table of `typy.toml` names
+(MEM-08). Install the library, or tell the linker where it is with
+`LIBRARY_PATH`:
+
+```sh
+LIBRARY_PATH=$PWD/lib typy build app.py
+```
 
 ## E0703: runtime archive missing, or from another TyPy version
 

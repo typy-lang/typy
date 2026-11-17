@@ -66,6 +66,21 @@ impl PythonFloor {
     }
 }
 
+/// The C functions a program allocates its memory with, in place of `malloc`, `realloc` and
+/// `free`, and the library that defines them (MEM-08, ADR-0043).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Allocator {
+    /// The function that allocates, as `malloc` does.
+    pub allocate: String,
+    /// The function that resizes an allocation, as `realloc` does.
+    pub reallocate: String,
+    /// The function that frees an allocation, as `free` does.
+    pub free: String,
+    /// The library the linker finds as it finds `-lname`, or `None` when a library the
+    /// program links anyway defines the functions.
+    pub library: Option<String>,
+}
+
 /// The settings of one command; immutable once the project is loaded.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ProjectSettings {
@@ -78,6 +93,9 @@ pub struct ProjectSettings {
     /// The directories, relative to the root, searched for modules after the root itself,
     /// in order (MOD-01).
     pub module_paths: Vec<Utf8PathBuf>,
+    /// The allocator the project names, or `None` for `malloc`, `realloc` and `free`
+    /// (MEM-08).
+    pub allocator: Option<Allocator>,
 }
 
 impl ProjectSettings {
@@ -89,6 +107,7 @@ impl ProjectSettings {
             release: Release::V0_1,
             python_floor: PythonFloor::default(),
             module_paths: Vec::new(),
+            allocator: None,
         }
     }
 }

@@ -70,6 +70,7 @@ fn on_point(body: impl FnOnce(ValueId, ValueId) -> Body) -> TyirModule {
             public: None,
         }],
         entry: FunctionId(0),
+        allocator: typy_tyir::TyirAllocator::default(),
     }
 }
 
@@ -240,6 +241,7 @@ fn on_exception(parameter: TyirType, operation: Operation) -> TyirModule {
             public: None,
         }],
         entry: FunctionId(0),
+        allocator: typy_tyir::TyirAllocator::default(),
     }
 }
 
@@ -310,6 +312,7 @@ fn on_circle(make: impl FnOnce(ValueId, ValueId) -> (Operation, TyirType)) -> Ty
             class("Other", None),
         ],
         entry: FunctionId(0),
+        allocator: typy_tyir::TyirAllocator::default(),
     }
 }
 
@@ -455,6 +458,7 @@ fn dispatching(slot: u32, circle: Vec<FunctionId>, circle_area: TyirType) -> Tyi
             class("Circle", Some(0), circle),
         ],
         entry: FunctionId(0),
+        allocator: typy_tyir::TyirAllocator::default(),
     }
 }
 

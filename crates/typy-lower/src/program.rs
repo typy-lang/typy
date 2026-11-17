@@ -93,6 +93,7 @@ pub fn lower(program: &TypedProgram) -> Result<TyirModule, Diagnostics> {
             tuple_types,
             classes,
             entry: FunctionId(program.entry.0),
+            allocator: typy_tyir::TyirAllocator::default(),
         };
         place_instances(&mut module);
         return match verify(&module) {

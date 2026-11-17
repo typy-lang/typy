@@ -13,6 +13,7 @@ mod emit;
 mod error;
 mod frame;
 mod function;
+mod heap;
 mod layout;
 mod object;
 mod operation;

@@ -273,6 +273,8 @@ impl RuleId {
     pub const LIB_20: Self = Self("LIB-20");
     /// `math.prod` shall take items and a start other than numbers, multiplying them in turn as CPython does.
     pub const LIB_21: Self = Self("LIB-21");
+    /// The allocator shall be replaceable per project through three C functions, allocate, reallocate and free, that `typy.toml` names.
+    pub const MEM_08: Self = Self("MEM-08");
     /// A program shall be built from several `.py` files, found from the main file's directory and from paths set in `typy.toml`.
     pub const MOD_01: Self = Self("MOD-01");
     /// Packages with `__init__.py` and relative imports shall be accepted.
@@ -489,6 +491,7 @@ impl RuleId {
         Self::LIB_19,
         Self::LIB_20,
         Self::LIB_21,
+        Self::MEM_08,
         Self::MOD_01,
         Self::MOD_02,
         Self::MOD_05,
