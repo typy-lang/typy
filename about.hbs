@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Licences of the crates linked into typy</title>
+<style>
+body { font-family: sans-serif; line-height: 1.5; max-width: 60rem;
+       margin: 0 auto; padding: 1rem; }
+pre { white-space: pre-wrap; background: #f4f4f4; padding: 1rem; }
+</style>
+</head>
+<body>
+<main>
+<h1>Licences of the crates linked into typy</h1>
+<p>The <code>typy</code> executable links the Rust crates below. Each
+licence is followed by the crates it covers. Where a crate offers a choice
+of licences, the one shown is the one TyPy uses it under.</p>
+<h2>Overview</h2>
+<ul>
+{{#each overview}}
+<li>{{name}}: {{count}} crates</li>
+{{/each}}
+</ul>
+<h2>Licences</h2>
+{{#each licenses}}
+<section>
+<h3>{{name}}</h3>
+<ul>
+{{#each used_by}}
+<li><a href="https://crates.io/crates/{{crate.name}}/{{crate.version}}">{{crate.name}} {{crate.version}}</a></li>
+{{/each}}
+</ul>
+<pre>{{text}}</pre>
+</section>
+{{/each}}
+</main>
+</body>
+</html>

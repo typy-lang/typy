@@ -229,10 +229,14 @@ each release's branch stays on origin and an issue can be traced to it.
 `make dist` builds `dist/typy-X.Y.Z-x86_64-unknown-linux-gnu.tar.gz`: the
 `typy` executable in `bin/` and a runtime archive for each target in
 `lib/typy/<triple>/`, which is the layout of an installation prefix, with
-the licences, the third-party notices, README and changelog. The tarball is
-reproducible, so two builds of one commit have the same SHA-256. The
-executable links LLVM statically and needs glibc 2.39 or later, `libffi`,
-`zlib`, `zstd` and `libstdc++`, and a C toolchain to link programs.
+the licences, the third-party notices, README and changelog. Its
+`licenses/` directory holds the licences of the crates `typy` links, which
+cargo-about lists with `about.toml` and `about.hbs`, of LLVM and of Rust's
+standard library; a crate under a licence `about.toml` does not accept fails
+the build. The tarball is reproducible, so two builds of one commit have the
+same SHA-256. The executable links LLVM statically and needs glibc 2.39 or
+later, `libffi`, `zlib`, `zstd` and `libstdc++`, and a C toolchain to link
+programs.
 
 A release that breaks compatibility goes out as a release candidate first,
 with a version such as `1.0.0-rc.1`, which the workflow marks as a

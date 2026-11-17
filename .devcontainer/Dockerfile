@@ -165,6 +165,12 @@ RUN rustup toolchain install "${NIGHTLY}" --profile minimal \
     && rm -rf "${CARGO_HOME}/registry" "${CARGO_HOME}/git" \
     && mkdir -p "${CARGO_HOME}/registry" "${CARGO_HOME}/git"
 
+# cargo-about writes the licences of the crates `typy` links into the release
+# archive (make dist). A layer of its own leaves the cached layers above it
+# unchanged.
+ARG CARGO_ABOUT_VERSION=0.9.3
+RUN cargo binstall --no-confirm --locked "cargo-about@${CARGO_ABOUT_VERSION}"
+
 ENV CARGO_TARGET_DIR=/var/cache/typy/target
 
 WORKDIR /workspaces/typy-lang

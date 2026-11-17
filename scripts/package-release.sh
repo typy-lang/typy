@@ -2,7 +2,7 @@
 # Builds the release archive of the compiler for x86_64 Linux in dist/: the
 # `typy` executable and a runtime archive for each target, in the layout of an
 # installation prefix (architecture section 9), with the licences, the
-# third-party notices, README and changelog. The tarball is reproducible: its entries are sorted, owned by
+# third-party notices and licences, README and changelog. The tarball is reproducible: its entries are sorted, owned by
 # root and dated from the last commit. The unpacked archive must then build
 # and run a program, which proves it works away from the build tree.
 set -euo pipefail
@@ -23,6 +23,18 @@ for triple in x86_64-unknown-linux-gnu x86_64-unknown-linux-musl; do
 done
 install -m 644 LICENSE-APACHE LICENSE-MIT THIRD-PARTY-NOTICES.md README.md CHANGELOG.md \
     "${stage}/"
+
+# The licences of the code the archive holds that is not TyPy's: the crates
+# and the LLVM that `typy` links, and Rust's standard library, which `typy`
+# links and whose core every program gets through the runtime archive.
+licenses="${stage}/licenses"
+install -d "${licenses}"
+cargo about generate --frozen -c about.toml -m crates/typy-cli/Cargo.toml about.hbs \
+    -o "${licenses}/crates.html"
+llvm_major="$("${LLVM_SYS_231_PREFIX}/bin/llvm-config" --version | cut -d. -f1)"
+install -m 644 "/usr/share/doc/llvm-${llvm_major}-dev/copyright" "${licenses}/llvm.txt"
+install -m 644 "$(rustc --print sysroot)/share/doc/rust/COPYRIGHT-library.html" \
+    "${licenses}/rust-library.html"
 
 epoch="$(git log -1 --format=%ct)"
 tar --sort=name --owner=0 --group=0 --numeric-owner --mtime="@${epoch}" \

@@ -7,6 +7,19 @@ other projects and keep their own licences, listed below. The runtime is
 linked into every program TyPy builds, so those programs contain these parts
 too, and the notices below go with them.
 
+## Libraries linked into TyPy
+
+The release archive holds the licences of the libraries its files contain,
+in its `licenses/` directory:
+
+| File | Covers |
+| --- | --- |
+| `licenses/crates.html` | The Rust crates linked into `typy`, listed from `Cargo.lock` by cargo-about with `about.toml` |
+| `licenses/llvm.txt` | LLVM, which `typy` links statically |
+| `licenses/rust-library.html` | Rust's standard library, which `typy` links and whose `core` every program gets through the runtime |
+
+The runtime uses no crates besides Rust's own libraries.
+
 ## CPython
 
 Four files of the runtime are derived from the source code of CPython 3.15.
