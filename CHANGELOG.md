@@ -25,7 +25,8 @@ All notable changes to TyPy are recorded here. The format follows
   x86_64 host links with the cross toolchain named after the target's GNU
   triple, such as `aarch64-linux-gnu-gcc`. `typy check` takes `--target`
   too, and an unsupported triple is a usage error that lists the supported
-  ones (CLI-08, CLI-14, ADR-0051).
+  ones. A table `[target."TRIPLE"]` in `typy.toml` names other tools for a
+  target: `linker`, `ar` and `objcopy` (CLI-08, CLI-14, ADR-0051).
 
 ### Changed
 

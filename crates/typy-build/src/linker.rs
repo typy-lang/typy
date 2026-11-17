@@ -8,7 +8,7 @@ use typy_diagnostics::Diagnostics;
 
 use crate::artifact::{Artifact, ArtifactKind};
 use crate::runtime_archive::RuntimeArchive;
-use crate::tool::{cannot_write, output_directory, run_tool, utf8};
+use crate::tool::{cannot_write, output_directory, utf8};
 use crate::toolchain::Toolchain;
 
 /// Links object files for one target with that target's runtime archive.
@@ -35,6 +35,19 @@ impl Linker {
             libraries: Vec::new(),
             library_paths: Vec::new(),
         }
+    }
+
+    /// Returns the linker with each tool `typy.toml` names for its target in place of the one
+    /// TyPy would run (CLI-14).
+    #[must_use]
+    pub fn with_tools(
+        mut self,
+        linker: Option<&str>,
+        archiver: Option<&str>,
+        object_copier: Option<&str>,
+    ) -> Self {
+        self.tools = self.tools.with_overrides(linker, archiver, object_copier);
+        self
     }
 
     /// Returns the linker with the debug information left out of the executable, as a
@@ -124,7 +137,7 @@ impl Linker {
         let object_path = utf8(object_file.path());
         let temporary_path = utf8(&temporary);
         let arguments = self.arguments(&object_path, &temporary_path);
-        run_tool(&self.tools.linker, &arguments)?;
+        self.tools.run(&self.tools.linker, &arguments)?;
         temporary
             .persist(output)
             .map_err(|error| cannot_write(error.error))?;

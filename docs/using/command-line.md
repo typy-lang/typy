@@ -45,8 +45,19 @@ C library:
 sudo apt install gcc-aarch64-linux-gnu libc6-dev-arm64-cross
 ```
 
-A missing tool is E0701, which names the program TyPy looked for. The
-program runs on the target's machines, or on this one under an emulator
+A missing tool is E0701, which names the program TyPy looked for and the
+target. A table `[target."TRIPLE"]` in `typy.toml` names other tools for a
+target, each by its name, which is looked up on `PATH`, or its absolute
+path:
+
+```toml
+[target."aarch64-unknown-linux-gnu"]
+linker = "/opt/cross/bin/aarch64-linux-gnu-gcc"
+ar = "/opt/cross/bin/aarch64-linux-gnu-ar"
+objcopy = "/opt/cross/bin/aarch64-linux-gnu-objcopy"
+```
+
+The program runs on the target's machines, or on this one under an emulator
 such as `qemu-aarch64` from the `qemu-user` package:
 
 ```console
@@ -73,6 +84,7 @@ defaults apply.
 | `[libraries."NAME"]` | `link = "static"` or `"dynamic"` for the C library a `ctypes` declaration names `NAME` | dynamic | FFI-04 |
 | `version` | The version of a library whose module has no `__version__`, such as `"5.0"`, whose release names its files; see [C interoperability](../extending/c-interop.md#naming-a-library-by-its-version) | none | CLI-13 |
 | `[allocator]` | The C functions the program allocates its memory with, and their library; see [Memory](../reference/memory.md#choosing-the-allocator) | `malloc`, `realloc` and `free` | MEM-08 |
+| `[target."TRIPLE"]` | The C tools that build for a target, in place of those TyPy runs: `linker`, the C compiler driver, `ar` and `objcopy`, each a program's name or absolute path; see [Building for another target](#building-for-another-target) | the host's `cc`, `ar` and `objcopy`, or those named after the target's GNU triple | CLI-14 |
 
 The floor decides which syntax the program may use and which CPython
 versions it promises to match (ADR-0008); `lazy import` needs `"3.15"`.

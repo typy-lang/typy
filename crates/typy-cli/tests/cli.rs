@@ -726,3 +726,43 @@ fn cli_08_a_program_built_for_the_other_architecture_runs_under_its_emulator() {
         );
     }
 }
+
+#[test]
+fn cli_14_a_tool_typy_toml_names_for_a_target_that_is_missing_is_e0701_naming_both() {
+    let workspace = Workspace::new(HELLO);
+    let (triple, _, _) = other_architecture();
+    std::fs::write(
+        workspace.root.join("typy.toml"),
+        format!("[target.\"{triple}\"]\nlinker = \"typy-no-such-cc\"\n"),
+    )
+    .unwrap();
+    let output = workspace.typy(&["build", "app.py", "--target", triple]);
+    let message = stderr(&output);
+    assert_eq!(status(&output), 1, "{message}");
+    assert!(message.contains("error[E0701]"), "{message}");
+    assert!(message.contains("`typy-no-such-cc`"), "{message}");
+    assert!(
+        message.contains(&format!("[target.\"{triple}\"]")),
+        "{message}"
+    );
+    assert!(!workspace.root.join("app").exists());
+}
+
+#[test]
+fn cli_14_the_linker_typy_toml_names_for_a_target_links_its_programs() {
+    let workspace = Workspace::new(HELLO);
+    let (triple, gnu, emulator) = other_architecture();
+    std::fs::write(
+        workspace.root.join("typy.toml"),
+        format!("[target.\"{triple}\"]\nlinker = \"/usr/bin/{gnu}-gcc\"\n"),
+    )
+    .unwrap();
+    let output = workspace.typy(&["build", "app.py", "--target", triple]);
+    assert_eq!((status(&output), stderr(&output).as_str()), (0, ""));
+    let run = Command::new(emulator)
+        .args(["-L", &format!("/usr/{gnu}")])
+        .arg(workspace.root.join("app"))
+        .output()
+        .unwrap();
+    assert_eq!(stdout(&run), "hello 3\n");
+}

@@ -5,6 +5,7 @@ use std::io;
 use std::process::Command;
 
 use camino::{Utf8Path, Utf8PathBuf};
+use typy_codegen::TargetTriple;
 use typy_diagnostics::{Diagnostic, DiagnosticCode, Diagnostics, RuleId};
 
 fn link_failed(message: String, help: String) -> Diagnostics {
@@ -15,9 +16,13 @@ fn link_failed(message: String, help: String) -> Diagnostics {
     )
 }
 
-/// Runs `program` with `arguments`: E0701 when it is not installed, and E0702 with what it
-/// wrote when it fails.
-pub(crate) fn run_tool(program: &str, arguments: &[String]) -> Result<(), Diagnostics> {
+/// Runs `program`, a tool that builds for `target`, with `arguments`: E0701 when it is not
+/// installed, and E0702 with what it wrote when it fails.
+pub(crate) fn run_tool(
+    program: &str,
+    arguments: &[String],
+    target: TargetTriple,
+) -> Result<(), Diagnostics> {
     let run = match Command::new(program).args(arguments).output() {
         Ok(run) => run,
         Err(error) if error.kind() == io::ErrorKind::NotFound => {
@@ -28,7 +33,8 @@ pub(crate) fn run_tool(program: &str, arguments: &[String]) -> Result<(), Diagno
                 )
                 .with_rule(RuleId::A_01)
                 .with_help(format!(
-                    "install `{program}`, which TyPy runs to link the program"
+                    "install `{program}`, which TyPy runs to link for {target}, or name \
+                     another in the `[target.\"{target}\"]` table of typy.toml"
                 )),
             ));
         }

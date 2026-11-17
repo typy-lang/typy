@@ -171,6 +171,20 @@ RUN rustup toolchain install "${NIGHTLY}" --profile minimal \
 ARG CARGO_ABOUT_VERSION=0.9.3
 RUN cargo binstall --no-confirm --locked "cargo-about@${CARGO_ABOUT_VERSION}"
 
+# The C toolchain and C library of the other architecture, and qemu-user to
+# run its programs, so either host builds and runs programs for the other
+# (ADR-0051). A layer of its own leaves the cached layers above it unchanged.
+USER root
+RUN case "$(dpkg --print-architecture)" in \
+        amd64) cross="gcc-aarch64-linux-gnu libc6-dev-arm64-cross" ;; \
+        arm64) cross="gcc-x86-64-linux-gnu libc6-dev-amd64-cross" ;; \
+        *) echo "no cross toolchain for $(dpkg --print-architecture)" >&2; exit 1 ;; \
+    esac \
+    && apt-get update \
+    && apt-get install -y --no-install-recommends ${cross} qemu-user \
+    && rm -rf /var/lib/apt/lists/*
+USER ${USERNAME}
+
 ENV CARGO_TARGET_DIR=/var/cache/typy/target
 
 WORKDIR /workspaces/typy-lang

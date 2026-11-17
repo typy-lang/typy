@@ -151,7 +151,7 @@ fn the_help_names_what_the_table_takes() {
     assert_eq!(
         help.as_deref(),
         Some(
-            "the settings are python-floor, module-paths, allocator, version, library-paths and libraries"
+            "the settings are python-floor, module-paths, allocator, version, library-paths, libraries and target"
         )
     );
 }

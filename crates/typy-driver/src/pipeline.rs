@@ -347,10 +347,18 @@ fn linker(
         .iter()
         .map(|path| settings.root.join(path))
         .collect();
-    Linker::new(request.target().triple, archive)
+    let mut linker = Linker::new(request.target().triple, archive)
         .with_strip_debug(release)
         .with_libraries(libraries)
-        .with_library_paths(paths)
+        .with_library_paths(paths);
+    if let Some(tools) = settings.targets.get(request.target().triple.as_str()) {
+        linker = linker.with_tools(
+            tools.linker.as_deref(),
+            tools.archiver.as_deref(),
+            tools.object_copier.as_deref(),
+        );
+    }
+    linker
 }
 
 /// Returns the program in TyIR, allocating with the functions the project names (MEM-08).
