@@ -1,0 +1,182 @@
+# The documentation site, https://typy-lang.org, which Zensical builds from
+# the Markdown under docs/ (DOC-05, ADR-0050). Every setting here is one that
+# Material for MkDocs 9.8 also reads, so either tool builds the site from
+# this file. scripts/build-docs.sh builds it in strict mode into site/.
+site_name: TyPy 0.5 documentation
+site_url: https://typy-lang.org/
+site_description: >-
+  TyPy compiles a strict, typed subset of standard Python ahead of time to
+  native executables and C libraries.
+repo_url: https://github.com/typy-lang/typy
+repo_name: typy-lang/typy
+edit_uri: blob/main/docs/
+copyright: Copyright 2026 typy-lang contributors
+
+docs_dir: docs
+site_dir: site
+
+# The PlantUML sources stay in the repository; the site shows the SVG
+# rendered from each.
+exclude_docs: |
+  diagrams/*.puml
+
+# A broken link or anchor fails the strict build.
+validation:
+  nav:
+    omitted_files: warn
+    not_found: warn
+    absolute_links: warn
+  links:
+    not_found: warn
+    anchors: warn
+    absolute_links: warn
+    unrecognized_links: warn
+
+theme:
+  name: material
+  language: en
+  # The system fonts, so a page loads nothing from another host.
+  font: false
+  features:
+    - content.code.copy
+    - navigation.footer
+    - navigation.indexes
+    - navigation.top
+    - navigation.tracking
+    - search.highlight
+    - toc.follow
+  palette:
+    - media: "(prefers-color-scheme)"
+      toggle:
+        icon: material/brightness-auto
+        name: Switch to light mode
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: deep purple
+      accent: custom
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: deep purple
+      accent: custom
+      toggle:
+        icon: material/brightness-4
+        name: Switch to the system's mode
+
+# The accent colours of both schemes, chosen for contrast.
+extra_css:
+  - stylesheets/extra.css
+
+markdown_extensions:
+  - attr_list
+  - tables
+  - toc:
+      permalink: true
+  - pymdownx.highlight:
+      pygments_lang_class: true
+  - pymdownx.superfences
+  - pymdownx.snippets:
+      base_path: ["."]
+      check_paths: true
+
+nav:
+  - Home: index.md
+  - What's new:
+      - whatsnew/index.md
+      - What's new in TyPy 0.5: whatsnew/0.5.md
+      - Changelog: whatsnew/changelog.md
+  - Tutorial: tutorial/index.md
+  - Library reference:
+      - library/index.md
+      - Built-in types: library/built-in-types.md
+      - Exceptions: library/exceptions.md
+      - Built-in functions and modules: library/functions-and-modules.md
+  - Language reference:
+      - reference/index.md
+      - Standard Python: reference/standard-python.md
+      - Lexical structure: reference/lexical-structure.md
+      - Types and annotations: reference/types.md
+      - Expressions: reference/expressions.md
+      - Simple statements: reference/simple-statements.md
+      - Compound statements: reference/compound-statements.md
+      - Functions: reference/functions.md
+      - Classes: reference/classes.md
+      - Generics: reference/generics.md
+      - Modules: reference/modules.md
+      - Memory: reference/memory.md
+  - Setup and usage:
+      - Command line: using/command-line.md
+  - Extending and embedding:
+      - C interoperability: extending/c-interop.md
+  - Diagnostics:
+      - diagnostics/index.md
+      - Troubleshooting: diagnostics/troubleshooting.md
+  - Engineering documents:
+      - Overview: engineering.md
+      - Research: research/research.md
+      - Requirements specification: requirements/srs.md
+      - Use case model: modeling/use-case-model.md
+      - Domain model: modeling/domain-model.md
+      - Software architecture: architecture/architecture.md
+      - Decision records:
+          - adr/index.md
+          - adr/0001-use-optimised-reference-counting-with-cycle-collection.md
+          - adr/0002-accept-only-standard-python-with-cpython-meaning.md
+          - adr/0003-implement-python-independently-with-no-names-of-its-own.md
+          - adr/0004-compile-exceptions-as-error-values-returned-to-the-caller.md
+          - adr/0005-write-the-compiler-in-rust-with-ruff-parser-and-llvm-23.md
+          - adr/0006-write-the-runtime-in-rust-without-the-standard-library.md
+          - adr/0007-write-standard-library-modules-in-python-compiled-by-typy.md
+          - adr/0008-judge-each-program-from-its-own-python-floor.md
+          - adr/0009-hold-collections-in-the-runtime-and-measure-what-programs-link.md
+          - adr/0010-hash-and-order-sets-and-dicts-as-cpython-does.md
+          - adr/0011-hold-none-in-a-value-each-type-never-takes.md
+          - adr/0012-root-every-type-at-object-with-a-type-object-for-each.md
+          - adr/0013-make-exceptions-objects-of-exception-classes.md
+          - adr/0014-iterate-with-runtime-iterator-objects-and-the-iterator-protocol.md
+          - adr/0015-compile-modules-into-one-program-with-module-objects.md
+          - adr/0016-compile-each-module-separately-and-verify-interfaces-at-link-time.md
+          - adr/0017-warn-where-cpython-warns-while-compiling.md
+          - adr/0018-provide-math-and-sys-as-checker-tables-over-runtime-functions.md
+          - adr/0019-open-text-files-over-buffered-descriptors-with-cpythons-errors.md
+          - adr/0020-bound-nesting-as-cpython-does-and-compile-on-a-large-stack.md
+          - adr/0021-extend-the-base-layout-and-call-overrides-through-a-method-table.md
+          - adr/0022-hold-a-union-of-objects-as-a-pointer-and-others-as-a-tag-and-value.md
+          - adr/0023-compile-generics-and-protocol-parameters-to-one-copy-per-concrete-type.md
+          - adr/0024-keep-class-variables-in-globals-and-defaults-in-each-instance.md
+          - adr/0025-compile-a-class-method-once-for-each-class-that-has-it.md
+          - adr/0026-call-operator-methods-directly-and-from-the-type-object-slots.md
+          - adr/0027-hold-a-union-as-its-object-or-as-a-tuple-of-a-tag-and-a-slot-per-member.md
+          - adr/0028-make-each-copy-of-a-generic-class-answer-as-the-generic-class.md
+          - adr/0029-report-cpython-3-15-as-the-python-version-of-a-built-program.md
+          - adr/0030-read-exception-args-and-exit-codes-where-a-program-uses-them.md
+          - adr/0031-type-a-file-by-its-literal-mode-and-a-mode-value-as-text.md
+          - adr/0032-export-a-module-as-a-c-library-described-by-its-own-annotations.md
+          - adr/0033-warn-about-a-match-that-leaves-members-of-its-subject-unmatched.md
+          - adr/0034-type-exception-args-by-the-raises-that-create-them.md
+          - adr/0035-type-os-error-attributes-by-the-raises-that-create-them.md
+          - adr/0036-call-the-function-the-last-run-import-bound.md
+          - adr/0037-reach-class-methods-and-class-variables-through-the-instances-class.md
+          - adr/0038-give-way-to-the-next-operator-method-on-not-implemented.md
+          - adr/0039-keep-a-slot-methods-exception-until-the-runtime-call-returns.md
+          - adr/0040-derive-each-copy-of-a-generic-class-from-the-copy-of-its-base.md
+          - adr/0041-hold-a-protocol-value-as-an-object-and-call-it-through-a-dispatcher.md
+          - adr/0042-allocate-an-instance-that-does-not-escape-in-its-functions-frame.md
+          - adr/0043-name-the-allocator-in-typy-toml-and-call-it-through-program-hooks.md
+          - adr/0044-run-a-librarys-module-when-it-loads-and-guard-each-export.md
+          - adr/0045-name-a-librarys-files-by-its-release-as-linux-names-libraries.md
+          - adr/0046-write-a-librarys-binding-as-a-typed-function-for-each-export.md
+          - adr/0047-compile-ctypes-declarations-into-direct-calls-linked-at-build-time.md
+          - adr/0048-hold-a-ctypes-object-as-a-counted-object-over-a-c-buffer.md
+          - adr/0049-lay-out-a-ctypes-structure-as-c-and-pass-it-as-system-v-does.md
+          - adr/0050-build-the-documentation-with-zensical-and-publish-it-on-github-pages.md
+      - Detailed design: design/detailed-design.md
+      - Test plan: testing/test-plan.md
+      - Benchmark report: testing/benchmark-report.md
+      - Development guide: development/development-guide.md
+  - About:
+      - about/index.md
+      - Copyright: about/copyright.md
+      - Licence: about/licence.md

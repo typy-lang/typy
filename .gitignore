@@ -9,4 +9,7 @@
 
 # Release archives that `make dist` builds.
 /dist/
+
+# The documentation site that `make docs` builds.
+/site/
 __pycache__/

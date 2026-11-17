@@ -1,4 +1,4 @@
-# Built-in functions and library
+# Built-in functions and modules
 
 ## What TyPy accepts
 
@@ -23,7 +23,7 @@ has the same with `decode` and `hex`. Lists have `append`, `pop`,
 
 `iter` and `next` are
 described in
-[Compound statements](compound-statements.md#iterators).
+[Compound statements](../reference/compound-statements.md#iterators).
 
 ## Example
 
@@ -231,7 +231,7 @@ of CPython's `sys`, such as `sys.modules` or `sys.getrefcount`, depends
 on the interpreter and is E0202. The switches of lazy imports,
 `sys.set_lazy_imports` and its companions, are E0202 as well (MOD-09):
 make an import lazy in its own module, as
-[Modules](modules.md) describes.
+[Modules](../reference/modules.md) describes.
 
 ## Text files
 

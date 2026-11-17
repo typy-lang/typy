@@ -1,6 +1,8 @@
-//! Tests of the user documentation in `docs/user`: every Python sample is judged as a
-//! conformance test, with the outcome the page states (DOC-04), and the troubleshooting page
-//! has a section for every active diagnostic code (DOC-03).
+//! Tests of the user documentation, every page under `docs/` outside the engineering
+//! documents: every Python sample is judged as a conformance test, with the outcome the page
+//! states (DOC-04), and the troubleshooting page has a section for every active diagnostic
+//! code (DOC-03). `scripts/check-docs-nav.py`, which the site build runs, checks that the
+//! site's navigation names every page (DOC-05).
 //!
 //! A sample is a `python` code block directly after a comment that states its outcome:
 //! `<!-- typy-expect: accepted -->`, or `<!-- typy-expect: rejected E0401 at 2:7 -->` with
@@ -9,6 +11,21 @@
 use camino::{Utf8Path, Utf8PathBuf};
 use typy_conformance::Suite;
 use typy_diagnostics::{CODES, CodeStatus};
+
+/// The directories of `docs/` that hold the engineering documents. Their Python blocks are
+/// design sketches, not samples of what TyPy accepts, so every other page is user
+/// documentation and a new section of it is checked without being listed here.
+const ENGINEERING: [&str; 9] = [
+    "adr",
+    "architecture",
+    "design",
+    "development",
+    "diagrams",
+    "modeling",
+    "requirements",
+    "research",
+    "testing",
+];
 
 fn workspace() -> Utf8PathBuf {
     Utf8PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..")
@@ -25,6 +42,18 @@ fn pages(directory: &Utf8Path, found: &mut Vec<Utf8PathBuf>) {
         }
     }
     found.sort();
+}
+
+/// Returns every page of the user documentation, sorted.
+fn user_pages() -> Vec<Utf8PathBuf> {
+    let docs = workspace().join("docs");
+    let mut found = Vec::new();
+    pages(&docs, &mut found);
+    found.retain(|page| {
+        let section = page.strip_prefix(&docs).unwrap().components().next();
+        !section.is_some_and(|section| ENGINEERING.contains(&section.as_str()))
+    });
+    found
 }
 
 /// A sample of a page: where it is, the outcome its comment states, and its code.
@@ -91,9 +120,8 @@ fn conformance_test(sample: &Sample) -> String {
 
 #[test]
 fn every_sample_in_the_user_documentation_has_the_outcome_its_page_states() {
-    let mut found = Vec::new();
-    pages(&workspace().join("docs/user"), &mut found);
-    assert_ne!(found.len(), 0, "docs/user has pages");
+    let found = user_pages();
+    assert_ne!(found.len(), 0, "docs/ has user pages");
     let corpus = tempfile::tempdir().unwrap();
     let root = Utf8PathBuf::from_path_buf(corpus.path().to_path_buf()).unwrap();
     let mut places = Vec::new();
@@ -135,7 +163,8 @@ fn every_sample_in_the_user_documentation_has_the_outcome_its_page_states() {
 
 #[test]
 fn the_troubleshooting_page_has_a_section_for_every_active_code() {
-    let page = std::fs::read_to_string(workspace().join("docs/user/troubleshooting.md")).unwrap();
+    let page =
+        std::fs::read_to_string(workspace().join("docs/diagnostics/troubleshooting.md")).unwrap();
     let missing: Vec<String> = CODES
         .iter()
         .filter(|info| info.status == CodeStatus::Active)

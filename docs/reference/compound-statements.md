@@ -7,7 +7,7 @@
 | `if`, `elif` and `else` | CST-01 |
 | `while` and `for`, each with an optional `else` | CST-02 |
 | `for` over `range`, `str`, `bytes`, `list`, `tuple`, `dict`, `set`, the views of a dict, and `enumerate`, `zip` and `reversed` of them | CST-03 |
-| `try` with `except` clauses, `else` and `finally`, described in [Exceptions](exceptions.md) | CST-04 |
+| `try` with `except` clauses, `else` and `finally`, described in [Exceptions](../library/exceptions.md) | CST-04 |
 | `for` over an instance of a class with `__iter__`, whose result has `__next__` | CST-08 |
 | `iter` and `next`, with or without a default, and `for` over an iterator | CST-09 |
 | `with`, with one or more context managers and `as` targets | CST-05, CST-10 |

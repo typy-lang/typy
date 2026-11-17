@@ -55,3 +55,4 @@ supersedes it.
 | [ADR-0047](0047-compile-ctypes-declarations-into-direct-calls-linked-at-build-time.md) | Compile ctypes declarations into direct calls linked at build time | Accepted | 2026-11-17 |
 | [ADR-0048](0048-hold-a-ctypes-object-as-a-counted-object-over-a-c-buffer.md) | Hold a ctypes object as a counted object over a C buffer | Accepted | 2026-11-17 |
 | [ADR-0049](0049-lay-out-a-ctypes-structure-as-c-and-pass-it-as-system-v-does.md) | Lay out a ctypes structure as C and pass it as System V does | Accepted | 2026-11-17 |
+| [ADR-0050](0050-build-the-documentation-with-zensical-and-publish-it-on-github-pages.md) | Build the documentation with Zensical and publish it on GitHub Pages | Accepted | 2026-11-17 |

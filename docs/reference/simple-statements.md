@@ -7,7 +7,7 @@
 | Assignment, annotated assignment and augmented assignment | SMT-01 |
 | Unpacking into several targets from a tuple or a list, nested as in Python | SMT-02 |
 | `pass`, `return`, `break` and `continue` | SMT-03 |
-| `raise` and `assert`, described in [Exceptions](exceptions.md) | SMT-04, SMT-06 |
+| `raise` and `assert`, described in [Exceptions](../library/exceptions.md) | SMT-04, SMT-06 |
 | `del` of list items, list slices and dict keys | SMT-05 |
 | `global` in a function, for the module's variables | SMT-08 |
 | `type` at module level, described in [Types](types.md#type-aliases) | SMT-10 |

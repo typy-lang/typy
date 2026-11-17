@@ -16,7 +16,7 @@ TyPy reports every problem it finds in one run, each as a diagnostic.
 | A warning for a `match` that leaves members of its subject's type unmatched: W0401 | CST-07 |
 | A code is never reused | DIA-06 |
 
-[Troubleshooting](../troubleshooting.md) explains every code.
+[Troubleshooting](troubleshooting.md) explains every code.
 
 ## Warnings
 

@@ -3,10 +3,10 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy development guide |
-| Version | 0.17 |
+| Version | 0.20 |
 | Status | Draft |
 | Owner | typy-lang contributors |
-| Last updated | 2026-11-12 |
+| Last updated | 2026-11-17 |
 
 ## 1. Purpose
 
@@ -62,7 +62,7 @@ Container". VS Code attaches to the same `dev` service.
 | `make bench` | Builds the compiler in release mode and times it on generated 10,000-line projects, in one file and in 200 modules, against the budgets of NFR-04, NFR-05 and NFR-14, with a check that checking time grows linearly with the modules |
 | `make bench-peers` | Downloads, once, the languages the cross-language benchmark compares with TyPy that the image lacks, about 0.5 GB: Go 1.27.4, the Temurin JDK 25.0.5, PyPy 3.11 v7.3.23 and Codon 0.20.6 from their release archives, and mypyc, Cython and Nuitka into a CPython 3.14 environment from `tests/bench/peers/requirements.txt`. Each archive is checked against the sha256 its project publishes and each wheel against its hash; everything goes into the `bench-tools` volume, `/var/cache/typy/bench`, and a tool already there is kept |
 | `make stdlib-names` | Writes `crates/typy-source/src/stdlib_names.rs`, the standard library module names of CPython 3.12 to 3.15, which the loader leaves to the checker (LIB-08); `make check` runs `make stdlib-names-check` |
-| `make check` | Runs the whole quality gate: formatting, Clippy, the tests with line and branch coverage, the four documentation checks below, the Unicode table check and the runtime size check |
+| `make check` | Runs the whole quality gate: formatting, Clippy, the tests with line and branch coverage, the five documentation checks below, the Unicode table check and the runtime size check |
 | `make fmt` | Formats the Rust code |
 | `make lint` | Runs Clippy on every crate and test, with warnings as errors |
 | `make type` | Type checks every crate and test |
@@ -73,6 +73,7 @@ Container". VS Code attaches to the same `dev` service.
 | `make test-e2e` | Runs the end-to-end tests of the `typy` executable |
 | `make test-all` | Runs `make test` and `make miri` |
 | `make docs-lint` | Lints every Markdown file with markdownlint-cli2 |
+| `make docs` | Builds the documentation site into `site/` with `scripts/build-docs.sh`: Zensical in strict mode, which fails on a link to a page or an anchor that does not exist (DOC-05). The first run installs Zensical 0.1.1 and its dependencies from `scripts/docs-requirements.txt`, each checked against its sha256, into a CPython 3.14 environment at `/var/cache/typy/docs` in the dev container, about 20 MB to download, which a container built anew installs again. Open `site/index.html`, or serve the directory, to read the result |
 | `make ascii-check` | Fails on any non-ASCII byte in tracked text files, except rendered SVG |
 | `make traceability` | Fails when a requirement has no row in the test plan's matrix, or a document cites an ID that is not defined |
 | `make diagrams` | Renders every PlantUML source to the SVG beside it |
@@ -82,7 +83,7 @@ Container". VS Code attaches to the same `dev` service.
 | `make format-cases` | Writes `crates/typy-runtime/src/format/tests/cases.rs`, the results `format(value, spec)` gives under CPython 3.12 to 3.15 for a table of cases, keeping those all four agree on; never edit that file by hand |
 | `make format-cases-check` | Fails when the committed table of `format()` results differs from the one CPython 3.12 to 3.15 give |
 | `make image` | Rebuilds the dev image after a change under `.devcontainer/` |
-| `make clean` | Stops the containers and removes `.tmp/preview` |
+| `make clean` | Stops the containers and removes `.tmp/preview`, `dist/`, `site/` and Zensical's cache, `.cache/` |
 
 The dev image holds one pinned nightly toolchain, `nightly-2026-11-05`, for
 `make miri`, `make fuzz` and the runtime archive built with
@@ -98,8 +99,9 @@ compiler and the runtime. The runtime's branches are measured by its unit tests,
 because the programs the other tests build link the runtime archive without
 instrumentation. `make bench` builds the compiler in release mode and times it
 on generated 10,000-line projects against the budgets of NFR-04, NFR-05 and
-NFR-14; CI runs it after the release archive. The user documentation in
-`docs/user` is Markdown that `make docs-lint` checks, and
+NFR-14; CI runs it after the release archive. The user documentation, every
+page under `docs/` outside the engineering documents' directories, is
+Markdown that `make docs-lint` checks, and
 `crates/typy-conformance/tests/documentation.rs` judges its samples (DOC-04).
 
 ## 4. Repository layout
@@ -109,13 +111,15 @@ NFR-14; CI runs it after the release archive. The user documentation in
 | `.devcontainer/` | The dev image, and the compose file with the `dev` and `diagrams` services |
 | `.github/` | The CI, release and code scanning workflows, Dependabot's settings and the pull request template |
 | `.githooks/` | The pre-commit hook, which runs `make check` |
-| `docs/` | The engineering documents, listed with their status in `docs/index.md` |
+| `docs/` | The user documentation, whose sections `docs/index.md` lists: `tutorial/`, `reference/`, `library/`, `using/`, `extending/` and `diagnostics/`; and the engineering documents, listed with their status in `docs/engineering.md` |
 | `docs/diagrams/` | PlantUML sources, the shared `style.puml`, and the rendered SVG of each |
 | `fuzz/` | The fuzz targets, a Cargo workspace of their own that builds with the pinned nightly |
 | `scripts/` | The checks and builds that `make` runs, the release scripts, and the generator of the Unicode tables |
 | `tests/conformance/` | The conformance programs, by requirement area |
 | `tests/golden/` | The golden programs and the expected text of each stage and diagnostic |
 | `dist/` | Release archives that `make dist` builds. Ignored by Git |
+| `mkdocs.yml` | The settings and the navigation of the documentation site |
+| `site/` | The documentation site that `make docs` builds. Ignored by Git |
 | `rust-toolchain.toml` | The Rust version and components every build uses |
 | `.tmp/` | Scratch files. Ignored by Git and never committed |
 
@@ -146,8 +150,15 @@ to change as it grows:
   the test plan's matrix; `make traceability` fails until it has one. An ID
   is never reused or renumbered.
 - A decision gets a new record in `docs/adr/`, named
-  `NNNN-the-decision-in-words.md`, and a row in `docs/adr/index.md`. An
-  accepted record is not rewritten; a later record supersedes it.
+  `NNNN-the-decision-in-words.md`, a row in `docs/adr/index.md`, and a
+  line in the `nav` of `mkdocs.yml`. An accepted record is not rewritten;
+  a later record supersedes it.
+- A new page gets a line in the `nav` of `mkdocs.yml`, where the site
+  shows it; `make docs` fails on a page the navigation leaves out, through
+  `scripts/check-docs-nav.py` (DOC-05). A link to a file outside `docs/`,
+  such as a source file, is a link to it on GitHub,
+  `https://github.com/typy-lang/typy/blob/main/` and its path, since the
+  site holds only `docs/`.
 - A document's header carries its version, status and date. A change
   raises the version and the date.
 
@@ -157,7 +168,7 @@ to change as it grows:
    `!include style.puml` and a `title`.
 2. Run `make diagrams` and open the SVG. Check that nothing overlaps and
    that it reads at the width of the site; split a diagram that does not.
-3. Add a row for it to the diagram table in `docs/index.md`.
+3. Add a row for it to the diagram table in `docs/engineering.md`.
 4. Stage the source and the SVG together.
 
 ## 6. Adding a tool
@@ -184,15 +195,29 @@ installed on the host.
 
 CI runs the same `make` targets as a working copy, in the same containers,
 so a change that passes `make check` locally passes CI. Every workflow holds
-read-only permissions, and only the job that creates a release may write.
+read-only permissions; only the job that creates a release may write to the
+repository, and only the job that deploys the documentation site may write
+to GitHub Pages.
 
 | Workflow | Job | Runs on | Does |
 | --- | --- | --- | --- |
-| `ci.yml` | Quality gate and package | Every pull request | `make check`, then `make dist` |
+| `ci.yml` | Quality gate and package | Every pull request | `make check`, then `make dist`; for a pull request of documents alone, the light run below |
 | `ci.yml` | Miri and fuzzing | On demand, before a release | `make miri`, then `FUZZ_SECONDS=1800 make fuzz`; the inputs that crashed are kept as an artifact |
 | `ci.yml` | Dependency review | Every pull request | Fails on a new dependency with a known vulnerability |
 | `codeql.yml` | Analyze | Every push to `main`, and weekly | Code scanning of the Rust sources and the workflows, leaving out the test files that `.github/codeql/codeql-config.yml` lists |
-| `release.yml` | Check and build, then Publish | A tag `vX.Y.Z` | Section 9 |
+| `release.yml` | Check and build, Publish, then Documentation | A tag `vX.Y.Z` | Section 9 |
+| `pages.yml` | Build the site, then Deploy | Called by `release.yml` once a release is created; a release published by hand; on demand, on a release tag | Builds the site with `scripts/build-docs.sh` on the runner after `astral-sh/setup-uv`, without the dev image, and deploys it to GitHub Pages at <https://typy-lang.org> (DOC-05) |
+
+A pull request whose every file is a document that no compiled test reads
+gets a light run of the same job, which builds no dev image and takes a
+minute or two: markdownlint, the strict site build with its navigation
+check, the diagrams, the ASCII check and traceability. `scripts/ci-changes.sh`
+decides from the files the pull request changes. The engineering documents,
+the diagrams, the site's settings and style, and the Markdown files at the
+root and in `.github/` qualify; so does a page of the user documentation
+while it holds no Python block, which the documentation test compiles
+(DOC-04). The troubleshooting page, which `typy explain` embeds, and every
+other file give the full run.
 
 CI minutes are spent on whole changes. `main` changes only through a pull
 request that is up to date and passes the quality gate, so CI does not run
@@ -202,7 +227,10 @@ the actions and one for the Cargo dependencies of the workspace and of
 `fuzz/`. The repository's settings protect
 `main`: pull requests only, the quality gate job required, linear history,
 squash merges and no force pushes; and the `release` environment requires a
-maintainer's approval. A merged branch is deleted, except a release branch:
+maintainer's approval. GitHub Pages is built by GitHub Actions, with the
+custom domain `typy-lang.org` and HTTPS enforced, and the `github-pages`
+environment lets the tags `v*` deploy, since the site is built from a
+release's tag. A merged branch is deleted, except a release branch:
 the ruleset "release branches" forbids deleting any `release-*` branch, so
 each release's branch stays on origin and an issue can be traced to it.
 
@@ -215,7 +243,11 @@ each release's branch stays on origin and an issue can be traced to it.
    opens a new empty "Unreleased" section above it. For a new minor
    release it adds the release to `RELEASES` in
    `crates/typy-conformance/tests/suite.rs`, so the suite requires an
-   accepted and a rejected test of every requirement up to it.
+   accepted and a rejected test of every requirement up to it. It also
+   sets the version of the documentation, in `site_name` in `mkdocs.yml`
+   and the title of `docs/index.md`, and adds `docs/whatsnew/X.Y.md`, the
+   release's What's new page, which `docs/whatsnew/index.md`, the start
+   page and the `nav` of `mkdocs.yml` link.
 3. A tag `vX.Y.Z` on that commit starts `release.yml`.
 4. `scripts/check-release.sh` checks that the tag names the version and that
    the changelog has a dated section for it, whose text becomes the release
@@ -225,6 +257,10 @@ each release's branch stays on origin and an issue can be traced to it.
    SHA-256, using the workflow's short-lived token and no long-lived one.
    It then downloads the archive back, checks its SHA-256, unpacks it and
    runs a program with it.
+7. Publishing the release deploys its documentation: the documentation job
+   calls `pages.yml`, which builds the site from the tag in strict mode and
+   deploys it to <https://typy-lang.org> (DOC-05). A run of `pages.yml`
+   started by hand on the tag deploys it again.
 
 `make dist` builds `dist/typy-X.Y.Z-x86_64-unknown-linux-gnu.tar.gz`: the
 `typy` executable in `bin/` and a runtime archive for each target in

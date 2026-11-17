@@ -1,53 +1,48 @@
-# TyPy documentation
+# TyPy 0.5 documentation
 
-TyPy is an independent implementation of Python that compiles a strict
-subset of standard Python ahead of time to native code through LLVM. The
-engineering documents below are written in order, and each builds on the one
-before. The [user documentation](user/index.md) explains how to install
-TyPy and what each release accepts.
+TyPy is an independent implementation of Python that compiles a strict,
+typed subset of standard Python ahead of time to native executables and C
+libraries.
 
-| Order | Document | Status |
-| --- | --- | --- |
-| 1 | [Research](research/research.md) | Approved |
-| 2 | [Software requirements specification](requirements/srs.md) | Approved |
-| 3 | [Use case model](modeling/use-case-model.md) | Approved |
-| 4 | [Domain model](modeling/domain-model.md) | Approved |
-| 5 | [Software architecture](architecture/architecture.md) | Approved |
-| 6 | [Architecture decision records](adr/index.md) | Twelve records, Accepted |
-| 7 | [Detailed design](design/detailed-design.md) | Approved |
-| 8 | [Test plan](testing/test-plan.md) | Draft |
-| 9 | [Development guide](development/development-guide.md) | Draft |
+## Documentation sections
 
-The [benchmark report](testing/benchmark-report.md) measures TyPy's programs
-against CPython, the other compilers of Python, and C, C++, Rust, Go, Java
-and JavaScript.
+- [What's new in TyPy 0.5](whatsnew/0.5.md): what this release changes,
+  and the [changelog](whatsnew/changelog.md) of every release.
+- [Tutorial](tutorial/index.md): install TyPy, then check, build and run a
+  first program.
+- [Library reference](library/index.md): the built-in types, functions and
+  exceptions, and the modules of the standard library TyPy provides.
+- [Language reference](reference/index.md): what TyPy accepts and what it
+  refuses, one page per area of the language, with the rule ID of each
+  item.
+- [Setup and usage](using/command-line.md): the `typy` command, its options
+  and the project settings in `typy.toml`.
+- [Extending and embedding](extending/c-interop.md): calling C libraries
+  through `ctypes`, and building a module as a C library.
+- [Diagnostics](diagnostics/index.md): how TyPy reports a problem, and
+  [troubleshooting](diagnostics/troubleshooting.md) for every diagnostic
+  code.
+- [Engineering documents](engineering.md): the research, requirements,
+  models, architecture, decision records, design, test plan and
+  development guide behind TyPy, with the status of each.
 
-## Diagrams
+A program TyPy accepts is ordinary Python: it runs under CPython 3.12 and
+later with the same output and exit status. A program TyPy cannot compile
+with CPython's meaning is refused with a diagnostic that names the rule it
+falls outside. Every Python sample in this documentation is checked by the
+test suite against the current compiler, and an accepted sample is also run
+under CPython and must print the same output.
 
-| Diagram | UML type | Used by |
-| --- | --- | --- |
-| [TyPy use cases and their actors](diagrams/use-case-typy.svg) | Use case diagram | Use case model |
-| [How TyPy use cases build on each other](diagrams/use-case-relationships.svg) | Use case diagram | Use case model |
-| [TyPy bounded contexts](diagrams/package-context-map.svg) | Package diagram | Domain model |
-| [Source and checking concepts](diagrams/class-domain-source-and-checking.svg) | Class diagram, conceptual | Domain model |
-| [Lowering, code generation and build concepts](diagrams/class-domain-lowering-and-build.svg) | Class diagram, conceptual | Domain model |
-| [Runtime and conformance concepts](diagrams/class-domain-runtime.svg) | Class diagram, conceptual | Domain model |
-| [Lifecycle of a heap object](diagrams/state-heap-object.svg) | State machine diagram | Domain model |
-| [Lifecycle of an exception](diagrams/state-exception.svg) | State machine diagram | Domain model |
-| [Lifecycle of a module in the compiler](diagrams/state-module.svg) | State machine diagram | Domain model |
-| [TyPy in its environment](diagrams/component-system-context.svg) | Component diagram, system context | Software architecture |
-| [TyPy building blocks](diagrams/component-building-blocks.svg) | Component diagram | Software architecture |
-| [Building an executable](diagrams/sequence-build-executable.svg) | Sequence diagram | Software architecture |
-| [An exception returned through two frames](diagrams/sequence-raise-exception.svg) | Sequence diagram | Software architecture |
-| [Running one conformance test](diagrams/sequence-conformance-test.svg) | Sequence diagram | Software architecture |
-| [Collecting reference cycles](diagrams/activity-cycle-collection.svg) | Activity diagram | Software architecture |
-| [Where TyPy and its output run](diagrams/deployment-typy.svg) | Deployment diagram | Software architecture |
-| [Design classes of typy_diagnostics and typy_source](diagrams/class-design-source.svg) | Class diagram, design | Detailed design |
-| [Design classes of typy_check](diagrams/class-design-check.svg) | Class diagram, design | Detailed design |
-| [Design classes of typy_tyir and typy_lower](diagrams/class-design-tyir-and-lowering.svg) | Class diagram, design | Detailed design |
-| [Design classes of typy_codegen and typy_build](diagrams/class-design-codegen-and-build.svg) | Class diagram, design | Detailed design |
-| [Design classes of the runtime](diagrams/class-design-runtime.svg) | Class diagram, design | Detailed design |
+## Project information
 
-Each diagram is a PlantUML source in `docs/diagrams/`, rendered to the SVG
-beside it by `make diagrams`, which runs PlantUML in the `diagrams`
-container.
+- [Reporting issues](https://github.com/typy-lang/typy/issues): report a
+  problem with TyPy or with this documentation.
+- [Contributing](https://github.com/typy-lang/typy/blob/main/CONTRIBUTING.md):
+  how a change gets into TyPy.
+- [Security policy](https://github.com/typy-lang/typy/blob/main/SECURITY.md):
+  the supported versions, and how to report a vulnerability privately.
+- [Licence](about/licence.md): the terms TyPy and these documents are
+  distributed under.
+- [Copyright](about/copyright.md): who holds the copyright of TyPy.
+- [About these documents](about/index.md): how this site is built and its
+  samples are checked.

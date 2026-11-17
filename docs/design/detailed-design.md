@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy detailed design |
-| Version | 2.21 |
+| Version | 2.23 |
 | Status | Approved |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-17 |
@@ -2706,7 +2706,7 @@ copies nothing.
 | --- | --- |
 | Arguments | Parsed with `clap`; the commands `check FILE`, `build FILE` and `run FILE [-- ARGS]` in 0.1, `explain` in 0.3. Each of the three takes `--python-floor VERSION`, which becomes `SettingOverrides` for `Pipeline::with_overrides`. `build` takes `--emit=STAGE` and `-o PATH`; `build` and `run` take `--release` or `--release-small`, never both. `build` and `check` take `--lib static` or `--lib shared`, which sets `SettingOverrides::library` and the request's `library` (CLI-09). A main file that is not a `.py` file is wrong usage |
 | Output | `Reporter` writes diagnostics in the `--error-format` the command line chose, a global flag: sorted, rendered with `render_text` and written to standard error with a blank line between two of them, or with `render_json` one per line. The panic guard and internal errors use the same reporter, so a tool reading JSON also gets E9001 as JSON (UC-10). `--emit` output goes to `-o`, or to standard output without it. A file that cannot be written gives E0106 |
-| `typy explain CODE` | Prints the section of `docs/user/troubleshooting.md` for the code, embedded in the binary with `include_str!`, so the page and the command never disagree: its heading and prose, its samples indented by four spaces without their fences and `typy-expect` comments, links as their text, then the rule from the registry (CLI-10, UC-04). A retired code says so and names its replacement. A text that is not a code, or a code the registry lacks, is wrong usage, status 2. Every section of a code whose cause is one program file holds a program that gives it and the corrected program, which the documentation test runs; the codes about files, settings, the C toolchain and imports between modules show their files as text, and E0429, which only a library build gives, shows modules that are correct as programs |
+| `typy explain CODE` | Prints the section of `docs/diagnostics/troubleshooting.md` for the code, embedded in the binary with `include_str!`, so the page and the command never disagree: its heading and prose, its samples indented by four spaces without their fences and `typy-expect` comments, links as their text, then the rule from the registry (CLI-10, UC-04). A retired code says so and names its replacement. A text that is not a code, or a code the registry lacks, is wrong usage, status 2. Every section of a code whose cause is one program file holds a program that gives it and the corrected program, which the documentation test runs; the codes about files, settings, the C toolchain and imports between modules show their files as text, and E0429, which only a library build gives, shows modules that are correct as programs |
 | Exit status | `ExitStatus` is `Success = 0`, `ProgramErrors = 1`, `Usage = 2` and `Internal = 101` (CLI-06); a failure with any `E9xxx` diagnostic is `Internal`. `typy run` exits with the program's status, or 128 plus the signal that ended it |
 | Panic guard | The command runs on a thread of its own with a 512 MiB stack (ADR-0020), inside `std::panic::catch_unwind`, with a panic hook that records the location in a thread-local; a panic becomes E9001 with the location and message, and exit status 101 |
 | Warnings | `Reporter::warnings` writes the warnings of a `Success` before the command's output. `--deny-warnings` is a global flag. `typy run` checks a program whose build it takes from the cache, so its warnings show on every run, and the cache key includes `--deny-warnings` |
@@ -2739,7 +2739,7 @@ installed `typy` finds `<prefix>/lib/typy/` and a `typy` in
 | `CDataClass` | `name: *const u8`, `name_length: u64`, `kind: u32`, `ctype: u32`, `size: u64`, `item: *const CDataClass`, `length: u64` | A `ctypes` class the compiler emits once: `kind` 0 for a scalar of C type `ctype`, numbered as `CType`, 1 for a pointer, 2 for an array of `length` items of `item`, and 3 for a structure, whose name holds its module (ADR-0048, ADR-0049) |
 | `CDataObject` | Header, `class: *const CDataClass`, `address: *mut u8`, `owner: *mut ObjectHeader`, `kept: *mut Kept` | A `ctypes` object under the type ID 23: a scalar or an array owns a buffer after this part; an object over another's memory counts `owner`, the object whose buffer it is or, for C's memory, the pointer it was read through; `kept` is the table of the objects the values in its buffer refer to, by address: a pointer's target and the `bytes` of each `c_char_p` written into it or through an object over it |
 
-![Design classes of the runtime](../diagrams/class-design-runtime.svg)
+[![Design classes of the runtime](../diagrams/class-design-runtime.svg)](../diagrams/class-design-runtime.svg)
 
 ### 14.2 Behaviour
 
@@ -2869,13 +2869,13 @@ its `typy.toml` would set it (CLI-12).
 
 ## 16. Design class diagrams
 
-![Design classes of typy_diagnostics and typy_source](../diagrams/class-design-source.svg)
+[![Design classes of typy_diagnostics and typy_source](../diagrams/class-design-source.svg)](../diagrams/class-design-source.svg)
 
-![Design classes of typy_check](../diagrams/class-design-check.svg)
+[![Design classes of typy_check](../diagrams/class-design-check.svg)](../diagrams/class-design-check.svg)
 
-![Design classes of typy_tyir and typy_lower](../diagrams/class-design-tyir-and-lowering.svg)
+[![Design classes of typy_tyir and typy_lower](../diagrams/class-design-tyir-and-lowering.svg)](../diagrams/class-design-tyir-and-lowering.svg)
 
-![Design classes of typy_codegen and typy_build](../diagrams/class-design-codegen-and-build.svg)
+[![Design classes of typy_codegen and typy_build](../diagrams/class-design-codegen-and-build.svg)](../diagrams/class-design-codegen-and-build.svg)
 
 The dependencies between these crates are shown in the building blocks
 diagram of architecture section 4.1.

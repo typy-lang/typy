@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy software requirements specification |
-| Version | 1.80 |
+| Version | 1.82 |
 | Status | Approved |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-17 |
@@ -466,15 +466,17 @@ internal errors, and `Wxxxx` warnings in the same ranges.
 
 ### 3.18 User documentation (DOC)
 
-The user documentation is written as Markdown under `docs/user/`, beside
-the engineering documents, and describes the release it ships with.
+The user documentation is written as Markdown under `docs/`, in the
+sections of `docs/index.md`, beside the engineering documents, and
+describes the release it ships with.
 
 | ID | Requirement | Priority | Release |
 | --- | --- | --- | --- |
 | DOC-01 | A getting-started page shall show how to install TyPy from a release archive, and how to check, build and run a first program. | M | 0.2 |
-| DOC-02 | A language guide shall have one page per area of the specification, listing what the release accepts with the rule ID of each item, and an accepted and a rejected example. | M | 0.2 |
+| DOC-02 | The language and library references shall have one page per area of the specification, listing what the release accepts with the rule ID of each item, and an accepted and a rejected example. | M | 0.2 |
 | DOC-03 | A troubleshooting page shall list each active diagnostic code with its cause and how to change the program. | M | 0.2 |
 | DOC-04 | Every Python sample in the user documentation shall be checked by the test suite against the current compiler, with the outcome the page states. | M | 0.2 |
+| DOC-05 | The documentation shall be published at <https://typy-lang.org>, built in strict mode from the sources of each release, with every page in the site's navigation. | M | 0.6 |
 
 ## 4. Non-functional requirements
 
@@ -508,7 +510,7 @@ cache, unless a row says otherwise.
 | 0.3 | `try`, `raise`, user exceptions, `with`, `assert`, `del`, `global`, modules and packages, lazy imports | `sys`, `math`, `open`; `typy.toml` with `python-floor`; JSON diagnostics; the first warnings and `--deny-warnings` |
 | 0.4 | Dataclasses, inheritance, protocols, PEP 695 generics, narrowing, `Final`, `type` aliases | Binary files and the rest of `open` |
 | 0.5 | `match`, `:=`, dataclass `default_factory`, hashing and options, the rest of the class protocols (CLS-20 to CLS-26), C interoperability through `ctypes` | Stack allocation; libraries and exports described by their annotations (ADR-0032) |
-| 0.6 | | Linux and macOS AArch64; cross-compilation |
+| 0.6 | | Linux and macOS AArch64; cross-compilation; the documentation site |
 | 1.0 | Closures, `lambda`, `nonlocal`, generators, `*args`, keyword-only parameters, `isinstance` with a class held in a variable, `issubclass`, `typing` names as values, `NamedTuple`, `Sequence` and the other abstract collections | Cycle collection, `weakref`; Windows; performance budgets |
 
 ## 6. Out of scope

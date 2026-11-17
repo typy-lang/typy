@@ -3,8 +3,8 @@
 Each section is one diagnostic code: what causes it, how to change the
 program, and a program that gives the code with its corrected form. A
 diagnostic names the rule it enforces, such as `TYP-03`; the
-[language guide](guide/index.md) explains each rule. `typy explain E0402`
-prints the section of a code in the terminal.
+[language reference](../reference/index.md) explains each rule.
+`typy explain E0402` prints the section of a code in the terminal.
 
 ## E0101: source file larger than 16 MiB
 
@@ -77,7 +77,7 @@ a number, or the `[allocator]` table leaves out one of its three functions
 or names one that is not a C function (CLI-07, CLI-12, CLI-13, MEM-08). The diagnostic
 points at the line. TyPy exits with status 2 before it reads any module.
 Correct the line; the settings are listed in the
-[command line](guide/command-line.md) page.
+[command line](../using/command-line.md) page.
 
 This `typy.toml` gives E0107, since the floor is a number:
 

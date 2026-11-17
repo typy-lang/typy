@@ -6,10 +6,10 @@ COMPOSE := USER_UID=$(shell id -u) USER_GID=$(shell id -g) \
 	docker compose -f .devcontainer/compose.yaml
 EXEC := $(COMPOSE) exec -T dev
 DIAGRAMS := $(filter-out docs/diagrams/style.puml,$(wildcard docs/diagrams/*.puml))
-MARKDOWN := "**/*.md" "\#.tmp/**" "\#target/**" "\#dist/**"
+MARKDOWN := "**/*.md" "\#.tmp/**" "\#target/**" "\#dist/**" "\#site/**"
 
 
-.PHONY: dev image shell runtime fmt fmt-check lint type test coverage docs-lint ascii-check traceability test-int test-e2e test-all \
+.PHONY: dev image shell runtime fmt fmt-check lint type test coverage docs docs-lint ascii-check traceability test-int test-e2e test-all \
 	build dist bless bench-peers bench-compare coverage-branches miri fuzz runtime-size diagrams diagrams-check unicode-tables unicode-tables-check format-cases format-cases-check stdlib-names stdlib-names-check errno-texts errno-texts-check mutants mutants-package bench check hooks clean
 
 dev: ## Start the dev service, building its image the first time
@@ -61,6 +61,9 @@ coverage-branches: build ## Measure line and branch coverage with nightly; fail 
 
 docs-lint: dev ## Lint every Markdown file with markdownlint-cli2
 	@$(EXEC) markdownlint-cli2 $(MARKDOWN)
+
+docs: dev ## Build the documentation site into site/ with Zensical in strict mode, installing it the first time (DOC-05)
+	@$(EXEC) scripts/build-docs.sh
 
 ascii-check: dev ## Fail on non-ASCII text in sources, documents and scripts
 	@$(EXEC) scripts/check-ascii.sh
@@ -139,11 +142,11 @@ errno-texts: dev ## Write the runtime's table of glibc's error texts, which OSEr
 errno-texts-check: dev ## Fail when the committed table of error texts differs from glibc's
 	@$(EXEC) python3.15 scripts/generate-errno-texts.py --check
 
-check: fmt-check lint coverage-branches docs-lint ascii-check traceability diagrams-check unicode-tables-check format-cases-check stdlib-names-check errno-texts-check runtime-size ## Run the whole quality gate
+check: fmt-check lint coverage-branches docs-lint docs ascii-check traceability diagrams-check unicode-tables-check format-cases-check stdlib-names-check errno-texts-check runtime-size ## Run the whole quality gate
 
 hooks: ## Use the hooks in .githooks for this clone
 	git config core.hooksPath .githooks
 
-clean: ## Stop the containers and remove scratch previews and release archives
+clean: ## Stop the containers and remove scratch previews, release archives and the documentation site
 	$(COMPOSE) down
-	rm -rf .tmp/preview dist
+	rm -rf .tmp/preview dist site .cache
