@@ -7,6 +7,7 @@ use camino::{Utf8Path, Utf8PathBuf};
 use typy_codegen::Target;
 
 use crate::emit_stage::EmitStage;
+use crate::library_kind::LibraryKind;
 use crate::mode::BuildMode;
 
 /// Why a build request cannot be made.
@@ -34,6 +35,7 @@ pub struct BuildRequest {
     target: Target,
     emit: Option<EmitStage>,
     output: Option<Utf8PathBuf>,
+    library: Option<LibraryKind>,
 }
 
 impl BuildRequest {
@@ -49,6 +51,7 @@ impl BuildRequest {
             target: Target::host(),
             emit: None,
             output: None,
+            library: None,
         })
     }
 
@@ -78,6 +81,19 @@ impl BuildRequest {
     pub fn with_output(mut self, output: impl Into<Utf8PathBuf>) -> Self {
         self.output = Some(output.into());
         self
+    }
+
+    /// Builds the main file as a C library of `kind` instead of an executable (CLI-09).
+    #[must_use]
+    pub const fn with_library(mut self, kind: LibraryKind) -> Self {
+        self.library = Some(kind);
+        self
+    }
+
+    /// Returns the kind of C library the build writes, or `None` for an executable.
+    #[must_use]
+    pub const fn library(&self) -> Option<LibraryKind> {
+        self.library
     }
 
     /// Returns the main file.
@@ -110,19 +126,27 @@ impl BuildRequest {
         self.output.as_deref()
     }
 
-    /// Returns where the executable goes: the output path, or the main file without `.py`.
+    /// Returns where the executable or the library goes: the output path, or beside the main
+    /// file, the main file without `.py` for an executable and `libNAME.a` or `libNAME.so`
+    /// for a library of the module `NAME`.
     #[must_use]
-    pub fn executable_path(&self) -> Utf8PathBuf {
-        self.output
-            .clone()
-            .unwrap_or_else(|| self.main.with_extension(""))
+    pub fn output_path(&self) -> Utf8PathBuf {
+        if let Some(output) = &self.output {
+            return output.clone();
+        }
+        match self.library {
+            Some(kind) => self
+                .main
+                .with_file_name(kind.file_name(self.main.file_stem().unwrap_or_default())),
+            None => self.main.with_extension(""),
+        }
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::{BuildRequest, RequestError};
-    use crate::{BuildMode, EmitStage};
+    use crate::{BuildMode, EmitStage, LibraryKind};
     use typy_codegen::{Target, TargetTriple};
 
     #[test]
@@ -132,7 +156,7 @@ mod tests {
         assert_eq!(request.mode(), BuildMode::Debug);
         assert_eq!(request.target(), Target::host());
         assert_eq!((request.emit(), request.output()), (None, None));
-        assert_eq!(request.executable_path(), "src/app");
+        assert_eq!(request.output_path(), "src/app");
     }
 
     #[test]
@@ -149,7 +173,21 @@ mod tests {
         assert_eq!(request.mode(), BuildMode::ReleaseSmall);
         assert_eq!(request.target(), musl);
         assert_eq!(request.emit(), Some(EmitStage::Tyir));
-        assert_eq!(request.executable_path(), "out/app");
+        assert_eq!(request.output_path(), "out/app");
+    }
+
+    #[test]
+    fn a_library_goes_beside_its_main_file_unless_an_output_is_given() {
+        let request = BuildRequest::new("src/tools.py").unwrap();
+        assert_eq!(request.library(), None);
+        let request = request.with_library(LibraryKind::Static);
+        assert_eq!(request.library(), Some(LibraryKind::Static));
+        assert_eq!(request.output_path(), "src/libtools.a");
+        let shared = BuildRequest::new("tools.py")
+            .unwrap()
+            .with_library(LibraryKind::Shared);
+        assert_eq!(shared.output_path(), "libtools.so");
+        assert_eq!(shared.with_output("out/t.so").output_path(), "out/t.so");
     }
 
     #[test]

@@ -96,6 +96,9 @@ pub struct ProjectSettings {
     /// The allocator the project names, or `None` for `malloc`, `realloc` and `free`
     /// (MEM-08).
     pub allocator: Option<Allocator>,
+    /// The main file is built as a C library: its module is named after its file, and its
+    /// `__all__` names the functions it exports (CLI-09, FFI-05, ADR-0044).
+    pub library: bool,
 }
 
 impl ProjectSettings {
@@ -108,6 +111,7 @@ impl ProjectSettings {
             python_floor: PythonFloor::default(),
             module_paths: Vec::new(),
             allocator: None,
+            library: false,
         }
     }
 }

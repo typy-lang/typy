@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy test plan |
-| Version | 0.79 |
+| Version | 0.80 |
 | Status | Draft |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-17 |
@@ -260,7 +260,7 @@ that the specification does not define.
 | CLI-06 | 0.1 | E2E | `crates/typy-cli/tests/cli.rs`, tests named for CLI-06 |
 | CLI-07 | 0.3 | E2E | `crates/typy-cli/tests/cli.rs`, tests named for CLI-07 |
 | CLI-08 | 0.6 | E2E | `crates/typy-cli/tests/cli.rs`, tests named for CLI-08 |
-| CLI-09 | 0.5 | E2E | `crates/typy-cli/tests/cli.rs`, tests named for CLI-09 |
+| CLI-09 | 0.5 | UT, E2E | `crates/typy-build/src/request.rs` and `library_kind.rs` for the output's name; `crates/typy-cli/tests/library.rs`, tests named for CLI-09: a static library in a C program, its only global symbols, a shared library from CPython through `ctypes`, two libraries in one program with a call from another thread, and a file name that is not a module name |
 | CLI-10 | 0.3 | E2E | `crates/typy-cli/tests/cli.rs`, tests named for CLI-10 |
 | CLI-11 | 0.1 | E2E | `crates/typy-cli/tests/cli.rs`, tests named for CLI-11 |
 | CLI-12 | 0.3 | E2E | `crates/typy-cli/tests/cli.rs`, tests named for CLI-12 |
@@ -415,7 +415,7 @@ that the specification does not define.
 | EXC-02 | 0.3 | IT | `tests/conformance/exc/EXC-02_*.py` |
 | EXC-03 | 0.3 | Golden | `tests/golden/llvm-ir/`, where each call that may raise is followed by one compare of the exception against null and a branch |
 | EXC-04 | 0.3 | IT | `tests/conformance/exc/EXC-04_*.py` |
-| EXC-05 | 0.5 | IT | `tests/conformance/exc/EXC-05_*.py` |
+| EXC-05 | 0.5 | E2E | `crates/typy-cli/tests/library.rs`, tests named for EXC-05: an exception, an `int` result outside `int64_t` and a `SystemExit` that leave an export |
 | EXC-06 | 0.3 | IT | `tests/conformance/exc/EXC-06_*.py` |
 | EXC-07 | 0.3 | IT | `tests/conformance/exc/EXC-07_*.py` |
 | EXC-08 | 0.3 | IT | `tests/conformance/exc/EXC-08_*.py` |
@@ -479,7 +479,7 @@ that the specification does not define.
 | FFI-02 | 0.5 | IT | `tests/conformance/ffi/FFI-02_*.py` |
 | FFI-03 | 0.5 | IT | `tests/conformance/ffi/FFI-03_*.py` |
 | FFI-04 | 0.5 | IT | `tests/conformance/ffi/FFI-04_*.py` |
-| FFI-05 | 0.5 | IT | `tests/conformance/ffi/FFI-05_*.py` |
+| FFI-05 | 0.5 | UT, IT, E2E | `crates/typy-check/tests/exports.rs` for each name `__all__` lists and each E0429; `crates/typy-tyir/tests/library.rs` for the verifier and the text form; `crates/typy-codegen/tests/codegen.rs` and `src/header.rs` for the wrappers and the header; `crates/typy-runtime/src/int/fixed.rs` for the conversions; `crates/typy-cli/tests/library.rs`, tests named for FFI-05, also comparing the refused names with what the runtime archive calls |
 | FFI-08 | 0.5 | E2E | `crates/typy-cli/tests/`, building a library and calling it through its binding from CPython and from a TyPy program |
 | FFI-06 | 1.0 | IT | `tests/conformance/ffi/FFI-06_*.py` |
 | FFI-07 | 1.0 | IT | `tests/conformance/ffi/FFI-07_*.py` |

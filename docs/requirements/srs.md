@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy software requirements specification |
-| Version | 1.75 |
+| Version | 1.76 |
 | Status | Approved |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-17 |
@@ -349,7 +349,7 @@ formatter applies; Ruff's formatter is the project's recommendation.
 | EXC-02 | The built-in exception classes the runtime raises shall exist with their Python names: `ArithmeticError`, `AssertionError`, `EOFError`, `IndexError`, `KeyError`, `OverflowError`, `RecursionError`, `RuntimeError`, `StopIteration`, `SystemExit`, `TypeError`, `UnicodeDecodeError`, `UnicodeEncodeError`, `ValueError`, `ZeroDivisionError`, `OSError` with each of its subclasses, and their bases. | M | 0.3 | 4.3 |
 | EXC-03 | An exception that is not raised shall cost no more than a compare and branch at each call that may raise. | M | 0.3 | |
 | EXC-04 | Exception chaining with `from` and the implicit context shall be kept, and shown in the uncaught exception output. | S | 0.3 | 7.8 |
-| EXC-05 | An exception shall not cross a function exported to C (FFI-05); the program shall abort with the exception printed. | M | 0.5 | |
+| EXC-05 | An exception shall not cross a function exported to C (FFI-05): a `SystemExit` shall end the process with its status, and any other exception shall abort it with the exception printed. | M | 0.5 | |
 | EXC-06 | A `return`, `break` or `continue` that leaves a `finally` block shall be rejected, as PEP 765 makes CPython 3.14 warn about it (ADR-0013). | M | 0.3 | 8.4 |
 | EXC-07 | A `raise` without an expression shall re-raise the exception being handled, and shall be rejected outside an `except` clause. | M | 0.3 | 7.8 |
 | EXC-08 | `str()`, `repr()`, `print()` and f-strings of an exception shall give CPython's text, computed from the arguments it was built with. | M | 0.3 | |

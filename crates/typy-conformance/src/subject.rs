@@ -53,7 +53,7 @@ pub(crate) fn judge_accepted(
                 .with_output(directory_path.join(mode.name())),
             Err(error) => return Verdict::Invalid(error.to_string()),
         };
-        let executable = request.executable_path();
+        let executable = request.output_path();
         if let Err(failure) = pipeline.run(&request) {
             return Verdict::Fail(format!(
                 "TyPy rejected the program in {} mode: {}",

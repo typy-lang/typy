@@ -16,6 +16,7 @@ use crate::abi::function_type;
 use crate::error::CodegenError;
 use crate::function::{FunctionEmitter, Shared};
 use crate::heap::emit_heap_hooks;
+use crate::library::LibraryEmitter;
 use crate::optimization::Optimization;
 use crate::statics::Statics;
 use crate::target::Target;
@@ -106,6 +107,16 @@ pub(crate) fn generate(
     };
     for function in &module.functions {
         FunctionEmitter::emit(&mut shared, function)?;
+    }
+    if let Some(library) = &module.library {
+        LibraryEmitter {
+            context: &context,
+            module: &llvm_module,
+            tyir: module,
+            functions: &functions,
+            raising: &raising,
+        }
+        .emit(library)?;
     }
     emit_heap_hooks(&context, &llvm_module, &module.allocator)?;
     llvm_module

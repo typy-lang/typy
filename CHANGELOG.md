@@ -18,6 +18,15 @@ All notable changes to TyPy are recorded here. The format follows
   library that defines them, such as mimalloc's `mi_malloc`, `mi_realloc`
   and `mi_free` from `mimalloc`. A wrong table is E0107 (MEM-08,
   ADR-0043).
+- `typy build --lib static` and `--lib shared` build a module as a C
+  library, `libNAME.a` or `libNAME.so`, with the C header `NAME.h`. The
+  functions `__all__` lists are exported under their own names, with
+  `int`, `float` and `bool` as `int64_t`, `double` and `bool`. The module
+  runs when the library is loaded, and is named after its file. An
+  exception that would leave an export ends the process: a `SystemExit`
+  with its status, any other with its report and an abort. E0429 names a
+  module or an export a library cannot have; `typy check --lib` reports it
+  too (CLI-09, FFI-05, EXC-05, ADR-0044).
 - A benchmark report, `docs/testing/benchmark-report.md`, which compares
   TyPy's programs with CPython 3.12 to 3.15, PyPy, mypyc, Cython, Nuitka,
   Codon, C, C++, Rust, Go, Java and JavaScript on twelve workloads: time,

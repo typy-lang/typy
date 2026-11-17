@@ -210,7 +210,7 @@ pub(crate) unsafe fn exit_status(exception: *mut ExceptionObject) -> (i32, bool)
 /// Returns whether `class` is `SystemExit` or derives from it. `SystemExit` is found by its
 /// name among the built-in classes, whose module is empty, and not by its address, so `main`
 /// does not link the exception classes and their text into a program that never raises one.
-fn is_system_exit(class: &crate::type_object::TypeObject) -> bool {
+pub(crate) fn is_system_exit(class: &crate::type_object::TypeObject) -> bool {
     let mut current: *const crate::type_object::TypeObject = class;
     while !current.is_null() {
         // SAFETY: a base is null or a live, immortal type object.

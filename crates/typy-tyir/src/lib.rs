@@ -7,6 +7,7 @@ mod constant;
 mod escape;
 mod function;
 mod instruction;
+mod library;
 mod module;
 mod operation;
 mod print;
@@ -24,6 +25,7 @@ pub use constant::{Constant, StringId};
 pub use escape::place_instances;
 pub use function::{FunctionId, TyirFunction};
 pub use instruction::Instruction;
+pub use library::{CType, TyirExport, TyirLibrary};
 pub use module::{
     GlobalId, TyirAllocator, TyirClass, TyirGlobal, TyirModule, TyirModuleObject, TyirTypeAlias,
 };

@@ -63,6 +63,9 @@ pub struct TyirModule {
     pub entry: FunctionId,
     /// The C functions the runtime allocates with (MEM-08).
     pub allocator: TyirAllocator,
+    /// What the module exports when it is built as a C library, or `None` for an executable
+    /// (CLI-09).
+    pub library: Option<crate::library::TyirLibrary>,
 }
 
 /// The C functions through which the runtime allocates, frees and resizes memory: by

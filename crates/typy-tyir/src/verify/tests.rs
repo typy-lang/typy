@@ -30,6 +30,7 @@ fn module(function: TyirFunction) -> TyirModule {
         classes: Vec::new(),
         entry: FunctionId(0),
         allocator: crate::module::TyirAllocator::default(),
+        library: None,
     }
 }
 
@@ -497,6 +498,7 @@ fn every_operation() -> TyirModule {
         classes: Vec::new(),
         entry: FunctionId(0),
         allocator: crate::module::TyirAllocator::default(),
+        library: None,
     }
 }
 

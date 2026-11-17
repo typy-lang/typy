@@ -3,7 +3,7 @@
 
 use camino::Utf8PathBuf;
 use clap::{Args, Parser, Subcommand};
-use typy_build::{BuildMode, EmitStage};
+use typy_build::{BuildMode, EmitStage, LibraryKind};
 use typy_source::{PythonFloor, SettingOverrides};
 
 use crate::output::ErrorFormat;
@@ -37,6 +37,8 @@ pub(crate) enum Command {
         file: Utf8PathBuf,
         #[command(flatten)]
         settings: Settings,
+        #[command(flatten)]
+        library: Library,
     },
     /// Build an executable, or write the output of one compiler stage.
     Build {
@@ -53,6 +55,8 @@ pub(crate) enum Command {
         mode: Mode,
         #[command(flatten)]
         settings: Settings,
+        #[command(flatten)]
+        library: Library,
     },
     /// Explain a diagnostic code, with a program that causes it and the corrected program.
     Explain {
@@ -95,6 +99,15 @@ impl Mode {
     }
 }
 
+/// The flag that builds or checks the main file as a C library (CLI-09).
+#[derive(Clone, Copy, Debug, Args)]
+pub(crate) struct Library {
+    /// Build a C library instead of an executable, static or shared: the module's `__all__`
+    /// names the functions it exports.
+    #[arg(long = "lib", value_name = "KIND", value_parser = parse_library)]
+    pub(crate) kind: Option<LibraryKind>,
+}
+
 /// The flags that override a setting of `typy.toml` (CLI-07).
 #[derive(Clone, Copy, Debug, Args)]
 pub(crate) struct Settings {
@@ -109,7 +122,15 @@ impl Settings {
     pub(crate) const fn overrides(self) -> SettingOverrides {
         SettingOverrides {
             python_floor: self.python_floor,
+            library: false,
         }
+    }
+
+    /// Returns the settings the flags give for a build or a check of a library of `kind`.
+    pub(crate) const fn overrides_for(self, library: Library) -> SettingOverrides {
+        let mut overrides = self.overrides();
+        overrides.library = library.kind.is_some();
+        overrides
     }
 }
 
@@ -120,6 +141,13 @@ fn parse_floor(text: &str) -> Result<PythonFloor, String> {
             .map(|floor| floor.as_str())
             .collect();
         format!("expected one of {}", floors.join(", "))
+    })
+}
+
+fn parse_library(text: &str) -> Result<LibraryKind, String> {
+    LibraryKind::parse(text).ok_or_else(|| {
+        let kinds: Vec<&str> = LibraryKind::ALL.iter().map(|kind| kind.name()).collect();
+        format!("expected one of {}", kinds.join(", "))
     })
 }
 

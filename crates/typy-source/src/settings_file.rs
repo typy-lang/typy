@@ -22,6 +22,8 @@ const KEYS: [&str; 3] = ["python-floor", "module-paths", "allocator"];
 pub struct SettingOverrides {
     /// `--python-floor`.
     pub python_floor: Option<PythonFloor>,
+    /// `--lib`: the main file is built as a library (CLI-09).
+    pub library: bool,
 }
 
 impl ProjectSettings {
@@ -52,6 +54,7 @@ impl ProjectSettings {
         if let Some(floor) = overrides.python_floor {
             settings.python_floor = floor;
         }
+        settings.library = overrides.library;
         Ok(settings)
     }
 
@@ -261,6 +264,7 @@ mod tests {
         assert_eq!(settings.module_paths, [Utf8PathBuf::from("lib")]);
         let overrides = SettingOverrides {
             python_floor: Some(PythonFloor::V3_15),
+            ..SettingOverrides::default()
         };
         let settings = ProjectSettings::read(&root, overrides).unwrap();
         assert_eq!(settings.python_floor, PythonFloor::V3_15);

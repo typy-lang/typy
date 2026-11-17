@@ -49,3 +49,4 @@ supersedes it.
 | [ADR-0041](0041-hold-a-protocol-value-as-an-object-and-call-it-through-a-dispatcher.md) | Hold a protocol value as an object and call it through a dispatcher | Accepted | 2026-11-16 |
 | [ADR-0042](0042-allocate-an-instance-that-does-not-escape-in-its-functions-frame.md) | Allocate an instance that does not escape in its function's frame | Accepted | 2026-11-17 |
 | [ADR-0043](0043-name-the-allocator-in-typy-toml-and-call-it-through-program-hooks.md) | Name the allocator in typy.toml and call it through program hooks | Accepted | 2026-11-17 |
+| [ADR-0044](0044-run-a-librarys-module-when-it-loads-and-guard-each-export.md) | Run a library's module when it loads and guard each export | Accepted | 2026-11-17 |

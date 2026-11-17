@@ -74,6 +74,7 @@ fn module(mut functions: Vec<TyirFunction>) -> TyirModule {
         classes: vec![class("Point", fields), error, shape, square],
         entry: FunctionId(0),
         allocator: crate::module::TyirAllocator::default(),
+        library: None,
     }
 }
 

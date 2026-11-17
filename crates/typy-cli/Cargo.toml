@@ -28,3 +28,4 @@ typy-source.workspace = true
 
 [dev-dependencies]
 tempfile.workspace = true
+typy-check.workspace = true

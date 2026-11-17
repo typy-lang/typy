@@ -95,11 +95,12 @@ mod tests {
     use super::{PAGE, explanation, without_links};
     use typy_diagnostics::{CODES, CodeStatus, DiagnosticCode};
 
-    /// The codes whose cause is not one program file: the files, the settings, the C
-    /// toolchain, and imports between modules, whose sections show their files as text.
-    const WITHOUT_PROGRAM: [&str; 12] = [
-        "E0101", "E0102", "E0105", "E0106", "E0107", "E0422", "E0425", "E0426", "E0701", "E0702",
-        "E0703", "E9001",
+    /// The codes whose cause is not one program file: the files, the settings, a library
+    /// build, the C toolchain, and imports between modules, whose sections show their files
+    /// as text or as programs that are correct as programs.
+    const WITHOUT_PROGRAM: [&str; 13] = [
+        "E0101", "E0102", "E0105", "E0106", "E0107", "E0422", "E0425", "E0426", "E0429", "E0701",
+        "E0702", "E0703", "E9001",
     ];
 
     #[test]

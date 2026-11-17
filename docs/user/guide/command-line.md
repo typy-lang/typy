@@ -10,6 +10,7 @@ The `typy` command checks, builds and runs a program from its main file.
 | `typy build FILE` | Writes a native executable beside the file, or at `-o PATH` | CLI-01 |
 | `typy run FILE [-- ARGS]` | Builds the program and runs it with `ARGS` | CLI-02 |
 | `typy explain CODE` | Prints what a diagnostic code means, a program that gives it and the corrected program | CLI-10 |
+| `typy build --lib KIND FILE` | Writes a `static` or `shared` C library of the functions the module's `__all__` lists, and its C header; see [C interoperability](c-interop.md) | CLI-09 |
 | `typy build --emit=STAGE FILE` | Writes one stage as text: `ast`, `typed-ast`, `tyir`, `tyir-mem`, `llvm-ir` or `asm`, or `obj` | CLI-04 |
 | `--release`, `--release-small` | Optimise for speed or for size, without debug information; the default is a debug build, which keeps it | CLI-05 |
 | `--deny-warnings` | Fails with status 1 when there are warnings | DIA-07 |

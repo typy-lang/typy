@@ -1,32 +1,24 @@
 //! Links an object file with the runtime archive by running the C toolchain (A-01).
 
 use std::io;
-use std::process::Command;
 
-use camino::{Utf8Path, Utf8PathBuf};
+use camino::Utf8Path;
 use typy_codegen::{ObjectFile, TargetTriple};
-use typy_diagnostics::{Diagnostic, DiagnosticCode, Diagnostics, RuleId};
+use typy_diagnostics::Diagnostics;
 
 use crate::artifact::{Artifact, ArtifactKind};
 use crate::runtime_archive::RuntimeArchive;
+use crate::tool::{cannot_write, output_directory, run_tool, utf8};
 
 /// Links object files for one target with that target's runtime archive.
 #[derive(Clone, Debug)]
 pub struct Linker {
-    program: String,
+    pub(crate) program: String,
     static_link: bool,
-    strip_debug: bool,
-    archive: RuntimeArchive,
+    pub(crate) strip_debug: bool,
+    pub(crate) archive: RuntimeArchive,
     /// Libraries linked as `-lname`, such as the allocator's (MEM-08).
-    libraries: Vec<String>,
-}
-
-fn link_failed(message: String, help: String) -> Diagnostics {
-    Diagnostics::from(
-        Diagnostic::without_location(DiagnosticCode::error(702), message)
-            .with_rule(RuleId::A_01)
-            .with_help(help),
-    )
+    pub(crate) libraries: Vec<String>,
 }
 
 impl Linker {
@@ -69,20 +61,27 @@ impl Linker {
         if self.static_link {
             arguments.push("-static".to_owned());
         }
+        arguments.extend(["-o".to_owned(), output.to_string()]);
+        arguments.extend(self.link_arguments(object));
+        arguments
+    }
+
+    /// Returns the arguments after the output that an executable and a shared library share:
+    /// the object, the C maths library, the runtime archive, the project's libraries, the
+    /// collection of unused sections, and for a release no debug information.
+    pub(crate) fn link_arguments(&self, object: &Utf8Path) -> Vec<String> {
         // The C maths library comes before the runtime archive, whose `compiler_builtins`
         // has weak copies of some of its functions that differ in the last bit; a member of
         // an archive is taken only for a symbol still undefined. `--no-as-needed` keeps it
         // although nothing refers to it yet. The second `-lm` serves a static link, where the
         // order of archives matters the other way.
-        arguments.extend([
-            "-o".to_owned(),
-            output.to_string(),
+        let mut arguments = vec![
             object.to_string(),
             "-Wl,--push-state,--no-as-needed".to_owned(),
             "-lm".to_owned(),
             "-Wl,--pop-state".to_owned(),
             self.archive.path().to_string(),
-        ]);
+        ];
         arguments.extend(self.libraries.iter().map(|library| format!("-l{library}")));
         arguments.extend(["-lm".to_owned(), "-Wl,--gc-sections".to_owned()]);
         if self.strip_debug {
@@ -95,70 +94,26 @@ impl Linker {
     /// name in the same directory and renamed when the link succeeds, so a failed link leaves no
     /// file and an existing file is replaced whole (UC-02, flow 5a).
     pub fn link(&self, object: &ObjectFile, output: &Utf8Path) -> Result<Artifact, Diagnostics> {
-        let directory = match output.parent() {
-            Some(parent) if !parent.as_str().is_empty() => parent.to_owned(),
-            _ => Utf8PathBuf::from("."),
-        };
-        let cannot_write = |error: io::Error| {
-            Diagnostics::from(
-                Diagnostic::without_location(
-                    DiagnosticCode::error(106),
-                    format!("cannot write the executable in {directory}: {error}"),
-                )
-                .with_help("check that the directory exists and is writable"),
-            )
-        };
+        let directory = output_directory(output);
+        let cannot_write = cannot_write(&directory, "the executable");
         let mut object_file = tempfile::Builder::new()
             .prefix(".typy-")
             .suffix(".o")
             .tempfile_in(&directory)
-            .map_err(cannot_write)?;
-        io::Write::write_all(&mut object_file, &object.bytes).map_err(cannot_write)?;
+            .map_err(&cannot_write)?;
+        io::Write::write_all(&mut object_file, &object.bytes).map_err(&cannot_write)?;
         // Created with mode 0755 less the umask, the mode of any new executable, which the
         // linker keeps when it writes the file again.
         let temporary = tempfile::Builder::new()
             .prefix(".typy-")
             .permissions(std::os::unix::fs::PermissionsExt::from_mode(0o755))
             .tempfile_in(&directory)
-            .map_err(cannot_write)?
+            .map_err(&cannot_write)?
             .into_temp_path();
         let object_path = utf8(object_file.path());
         let temporary_path = utf8(&temporary);
         let arguments = self.arguments(&object_path, &temporary_path);
-        let result = Command::new(&self.program).args(&arguments).output();
-        let run = match result {
-            Ok(run) => run,
-            Err(error) if error.kind() == io::ErrorKind::NotFound => {
-                return Err(Diagnostics::from(
-                    Diagnostic::without_location(
-                        DiagnosticCode::error(701),
-                        format!("the C toolchain program `{}` was not found", self.program),
-                    )
-                    .with_rule(RuleId::A_01)
-                    .with_help(format!(
-                        "install `{}`, which TyPy runs to link the program",
-                        self.program
-                    )),
-                ));
-            }
-            Err(error) => {
-                return Err(link_failed(
-                    format!("cannot run `{}`: {error}", self.program),
-                    format!("the command was `{} {}`", self.program, arguments.join(" ")),
-                ));
-            }
-        };
-        if !run.status.success() {
-            return Err(link_failed(
-                format!("`{}` failed with {}", self.program, run.status),
-                format!(
-                    "the command was `{} {}`; it wrote:\n{}",
-                    self.program,
-                    arguments.join(" "),
-                    String::from_utf8_lossy(&run.stderr).trim_end()
-                ),
-            ));
-        }
+        run_tool(&self.program, &arguments)?;
         temporary
             .persist(output)
             .map_err(|error| cannot_write(error.error))?;
@@ -167,11 +122,6 @@ impl Linker {
             kind: ArtifactKind::Executable,
         })
     }
-}
-
-/// Temporary paths are made from a UTF-8 directory and an ASCII name, so they are UTF-8.
-fn utf8(path: &std::path::Path) -> Utf8PathBuf {
-    Utf8PathBuf::from(path.to_string_lossy().into_owned())
 }
 
 #[cfg(test)]

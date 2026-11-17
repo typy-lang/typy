@@ -28,7 +28,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use typy_diagnostics::{Diagnostics, SourceLookup};
 use typy_source::syntax::Stmt;
-use typy_source::{Module, ModuleName, Project};
+use typy_source::{Module, Project};
 
 pub(crate) use annotation::{
     ANNOTATION_MODULES, AnnotationName, AnnotationScope, annotation_name, annotation_type,
@@ -145,7 +145,10 @@ impl TypeChecker {
         if diagnostics.has_errors() {
             return Err(diagnostics);
         }
-        let mut program = program.finish(ModuleName::main().as_str());
+        let mut program = program.finish(project.main_module().name.as_str());
+        if project.settings().library {
+            program.exports = Some(crate::exports::exports(project, &program)?);
+        }
         program.warnings = diagnostics;
         Ok(program)
     }

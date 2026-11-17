@@ -2,7 +2,10 @@
 
 use typy_check::TypedProgram;
 use typy_diagnostics::{Diagnostic, DiagnosticCode, Diagnostics, RuleId};
-use typy_tyir::{FunctionId, TupleTypes, TyirClass, TyirModule, place_instances, verify};
+use typy_tyir::{
+    CType, FunctionId, TupleTypes, TyirClass, TyirExport, TyirLibrary, TyirModule, place_instances,
+    verify,
+};
 
 use crate::types::tyir_type;
 
@@ -94,6 +97,10 @@ pub fn lower(program: &TypedProgram) -> Result<TyirModule, Diagnostics> {
             classes,
             entry: FunctionId(program.entry.0),
             allocator: typy_tyir::TyirAllocator::default(),
+            library: program
+                .exports
+                .as_ref()
+                .map(|exports| library(program, exports)),
         };
         place_instances(&mut module);
         return match verify(&module) {
@@ -111,6 +118,48 @@ pub fn lower(program: &TypedProgram) -> Result<TyirModule, Diagnostics> {
                 Err(Diagnostics::from(diagnostic))
             }
         };
+    }
+}
+
+/// Returns what a library exports, each function with the C types of its parameters and
+/// result, which the checker has found to be `int`, `float`, `bool` or, for a result,
+/// `None` (FFI-05, ADR-0032).
+fn library(program: &TypedProgram, exports: &[typy_check::Export]) -> TyirLibrary {
+    let c_type = |ty: &typy_check::Type| match ty {
+        typy_check::Type::Int => Some(CType::Int64),
+        typy_check::Type::Float => Some(CType::Double),
+        typy_check::Type::Bool => Some(CType::Bool),
+        _ => None,
+    };
+    let name = program
+        .modules
+        .iter()
+        .find(|module| module.body == program.entry)
+        .map(|module| module.name.clone())
+        .unwrap_or_default();
+    TyirLibrary {
+        name,
+        exports: exports
+            .iter()
+            .map(|export| {
+                let signature = &program.function(export.function).signature;
+                TyirExport {
+                    name: export.name.clone(),
+                    function: FunctionId(export.function.0),
+                    parameters: signature
+                        .parameters
+                        .iter()
+                        .filter_map(|parameter| c_type(&parameter.ty))
+                        .collect(),
+                    parameter_names: signature
+                        .parameters
+                        .iter()
+                        .map(|parameter| parameter.name.clone())
+                        .collect(),
+                    result: c_type(&signature.returns),
+                }
+            })
+            .collect(),
     }
 }
 

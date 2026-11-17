@@ -41,8 +41,11 @@ pub struct TypedProgram {
     /// to U+DCFF; `print` then checks what it writes and may raise `UnicodeEncodeError`
     /// (LEX-10).
     pub makes_surrogates: bool,
-    /// The module body of `__main__`.
+    /// The module body of the main module.
     pub entry: FunctionId,
+    /// The functions a library exports, or `None` when the program is an executable
+    /// (FFI-05).
+    pub exports: Option<Vec<crate::exports::Export>>,
     /// The warnings of checking the program, such as W0301 (DIA-08).
     pub warnings: typy_diagnostics::Diagnostics,
 }

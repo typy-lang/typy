@@ -35,6 +35,24 @@ fn print_with(module: &TyirModule, counting: bool) -> String {
         let _ = writeln!(text, "global g{index}: {} = {:?}", global.ty, global.name);
     }
     let _ = writeln!(text, "entry fn{}", module.entry.0);
+    if let Some(library) = &module.library {
+        let _ = writeln!(text, "library {}", library.name);
+        for export in &library.exports {
+            let parameters: Vec<&str> = export
+                .parameters
+                .iter()
+                .map(|parameter| parameter.c_name())
+                .collect();
+            let result = export.result.map_or("void", |result| result.c_name());
+            let _ = writeln!(
+                text,
+                "export {}({}) -> {result} = fn{}",
+                export.name,
+                parameters.join(", "),
+                export.function.0
+            );
+        }
+    }
     for function in &module.functions {
         text.push('\n');
         print_function(module, function, counting, &mut text);

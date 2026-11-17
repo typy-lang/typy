@@ -1,27 +1,102 @@
 # C interoperability
 
-Calling C libraries through the standard `ctypes` module, and exporting
-functions to C, come in 0.5 (FFI-01 to FFI-05). TyPy 0.4 programs run on
-their own, and a built executable needs no Python installation.
+`typy build --lib` builds a module as a C library that C, C++, Rust and
+Python programs call as they call any C library (CLI-09, FFI-05). Calling C
+libraries from a TyPy program through the standard `ctypes` module comes
+later in 0.5 (FFI-01 to FFI-03).
 
 ## What TyPy accepts
 
-A program built by `typy build` is a native executable linked against the
-C library, with no interpreter:
+| Item | Rule |
+| --- | --- |
+| `typy build --lib static FILE` writes `libNAME.a`, and `--lib shared` writes `libNAME.so`, beside the file or at `-o PATH`, for the module `NAME` | CLI-09 |
+| The functions the module's `__all__` lists are exported under their own names, and the build writes the C header `NAME.h` beside the library | FFI-05 |
+| `int`, `float` and `bool` are `int64_t`, `double` and `bool` in C, and a result of `None` is `void` | FFI-05 |
+| An exception never reaches C: a `SystemExit` ends the process with its status, and any other exception is printed and the process aborts | EXC-05 |
+
+## Building a library
+
+A library is a module whose `__all__` lists the functions it exports.
+Save this as `geometry.py`:
 
 <!-- typy-expect: accepted -->
 ```python
-print("a native executable says hello")
+__all__ = ["area", "is_square"]
+
+calls = 0
+
+
+def area(width: float, height: float) -> float:
+    global calls
+    calls += 1
+    return width * height
+
+
+def is_square(width: int, height: int) -> bool:
+    return width == height
 ```
+
+`typy build --lib static geometry.py` writes `libgeometry.a` and
+`geometry.h`, which declares:
+
+```text
+double area(double width, double height);
+bool is_square(int64_t width, int64_t height);
+```
+
+A C program includes the header and links the library and the C maths
+library, which the runtime in the library calls:
+
+```sh
+cc -o shapes shapes.c -L. -lgeometry -lm -Wl,--gc-sections
+```
+
+`--gc-sections` leaves out the parts of the runtime that no export
+reaches. `typy build --lib shared geometry.py` writes `libgeometry.so`,
+which CPython loads with `ctypes`:
+
+```text
+>>> import ctypes
+>>> geometry = ctypes.CDLL("./libgeometry.so")
+>>> geometry.area.argtypes = [ctypes.c_double, ctypes.c_double]
+>>> geometry.area.restype = ctypes.c_double
+>>> geometry.area(2.0, 3.5)
+7.0
+```
+
+## How a library runs
+
+The module runs once, when the library is loaded: when the program starts,
+for a library it links, or when `ctypes.CDLL` loads it. That is when CPython
+runs a module's body, on import, so the module's variables hold their
+values before the first call. The module's `__name__` is its own name, so
+code under `if __name__ == "__main__":` does not run, and `sys.argv` is
+`['']`. What the module and the exports print is written before each call
+returns, so it keeps its order with what the program prints, as long as the
+program writes its own output before it calls the library, as
+`fflush(stdout)` or `python3 -u` does.
+
+An export's name is its C symbol. Its parameters and result are `int`,
+`float` and `bool`, and it may return `None`. A function that takes or
+returns other values needs an export of these types that calls it. An
+`int` result outside `int64_t` raises `OverflowError`, which ends the
+process as any exception does. The runtime is not safe to call from two
+threads at once, so a program calls a library's exports from one thread at
+a time; each call may come from a different thread. Each library holds its
+own copy of the runtime, so a program may link several TyPy libraries.
+
+An export may not take a name the runtime calls in the C library, such as
+`read`, `free` or `sqrt`, or one C keeps for itself, such as `__init`; the
+build reports E0429 and names the function. Building with `--lib` checks
+the names: `typy check --lib static geometry.py` reports the same
+diagnostics without writing a library.
 
 ## Planned
 
-`ctypes` is refused until 0.5. In 0.5, `typy build --lib` also builds a
-module as a static or shared C library: the functions its `__all__` lists
-are exported under their own names, with the C types their annotations
-give, and the build writes a C header, a `.pyi` stub and a `ctypes`
-module that loads the library, so C programs and Python programs call it
-alike (ADR-0032, FFI-05, FFI-08):
+`ctypes` is refused until later in 0.5, together with the `.pyi` stub and
+the `ctypes` module a library build will write, so CPython and TyPy
+programs call a library with the same source (FFI-01 to FFI-03, FFI-08,
+ADR-0032):
 
 <!-- typy-expect: rejected E0201 at 1:1 -->
 ```python

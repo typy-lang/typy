@@ -279,3 +279,50 @@ fn the_heap_hooks_call_the_functions_the_project_names() {
     assert!(ir.contains("tail call void @__typy_main(ptr %0)"), "{ir}");
     assert!(!ir.contains("@malloc("), "{ir}");
 }
+
+#[test]
+fn a_library_runs_its_module_when_it_loads_and_wraps_each_export() {
+    let (project, mut module) =
+        compile("def test(count: int, ratio: float, flag: bool) -> bool:\n    return flag\n");
+    let function = module
+        .functions
+        .iter()
+        .find(|function| function.name == "test")
+        .unwrap()
+        .id;
+    module.library = Some(typy_tyir::TyirLibrary {
+        name: "app".to_owned(),
+        exports: vec![typy_tyir::TyirExport {
+            name: "test".to_owned(),
+            function,
+            parameters: vec![
+                typy_tyir::CType::Int64,
+                typy_tyir::CType::Double,
+                typy_tyir::CType::Bool,
+            ],
+            parameter_names: vec!["count".to_owned(), "ratio".to_owned(), "flag".to_owned()],
+            result: Some(typy_tyir::CType::Bool),
+        }],
+    });
+    let ir = llvm_ir(&module, Target::host(), Optimization::None, &project).unwrap();
+    for line in [
+        "@llvm.global_ctors = appending global [1 x { i32, ptr, ptr }] [{ i32, ptr, ptr } { i32 65535, ptr @typy.library.load, ptr null }]",
+        "@llvm.global_dtors = appending global [1 x { i32, ptr, ptr }] [{ i32, ptr, ptr } { i32 65535, ptr @typy.library.unload, ptr null }]",
+        "define zeroext i8 @test(i64 %0, double %1, i8 zeroext %2) {",
+        "  call void @typy_rt_library_load(ptr @__typy_main)",
+        "  call void @typy_rt_library_enter()",
+        "  call void @typy_rt_library_leave()",
+    ] {
+        assert!(ir.lines().any(|each| each == line), "{line}\n{ir}");
+    }
+    assert!(
+        ir.contains("call i64 @typy_rt_int_from_int64(i64 %0)"),
+        "{ir}"
+    );
+    assert!(ir.contains("call void @typy_rt_int_decrement("), "{ir}");
+    let header = typy_codegen::c_header(&module).unwrap();
+    assert!(
+        header.contains("bool test(int64_t count, double ratio, bool flag);"),
+        "{header}"
+    );
+}

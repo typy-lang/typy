@@ -1245,6 +1245,52 @@ def depth[T](value: list[T], levels: int) -> int:
 print(depth([1], 3))
 ```
 
+## E0429: module or export that a C library cannot have
+
+A module built with `typy build --lib` exports the functions its `__all__`
+lists, each as a C function (FFI-05). This error names what cannot be one:
+
+- the module has no `__all__`, binds it more than once, or binds it to
+  something other than a list or tuple of string literals;
+- a name is not a function the module defines with `def` at its top level,
+  or is generic;
+- a parameter or the result has a type other than `int`, `float` or
+  `bool`, or `None` for the result;
+- the name is not ASCII, starts with `__`, `_` and a capital letter, or
+  `typy_`, is listed twice, or is a C function the library itself calls,
+  such as `read`, `free`, `sqrt` or `main`, or one of the project's
+  allocator functions;
+- the file's name is not an ASCII identifier, which the library and its
+  header are named after (CLI-09).
+
+Rename the function, or export one of C types that calls it. This module
+is a correct program, but built with `--lib` it gives E0429 for `label`,
+whose result is a `str`:
+
+<!-- typy-expect: accepted -->
+```python
+__all__ = ["label"]
+
+
+def label(number: int) -> str:
+    return "item " + str(number)
+```
+
+This one exports a function of C types instead:
+
+<!-- typy-expect: accepted -->
+```python
+__all__ = ["label_length"]
+
+
+def label(number: int) -> str:
+    return "item " + str(number)
+
+
+def label_length(number: int) -> int:
+    return len(label(number))
+```
+
 ## E0701: C toolchain program not found
 
 TyPy links programs with the system C toolchain, which is not installed

@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy detailed design |
-| Version | 2.14 |
+| Version | 2.15 |
 | Status | Approved |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-17 |
@@ -318,6 +318,8 @@ it enforces and its status. `typy explain` reads the same table.
 | E0425 | Import of a name its module does not define | SMT-07 |
 | E0426 | Import inside `__init__` of a module that the imported module imports | MOD-15 |
 | E0427 | `%` format that does not fit its values | LIB-10 |
+| E0428 | Copies of a generic function without end | GEN-03 |
+| E0429 | Module or export that a C library cannot have | FFI-05, CLI-09 |
 | E0701 | C toolchain program not found | A-01 |
 | E0702 | Link failed | A-01 |
 | E0703 | Runtime archive missing, or from another TyPy version | None |
@@ -338,6 +340,7 @@ it enforces and its status. `typy explain` reads the same table.
 | `release` | `Release` | `Release::V0_1` | The release whose feature table the subset checker uses |
 | `python_floor` | `PythonFloor` | `PythonFloor::V3_12` | One of 3.12 to 3.15; the parser's target version and the lowest oracle version (ADR-0008). Read from `python-floor` in `typy.toml` (CLI-12) |
 | `module_paths` | `Vec<Utf8PathBuf>` | empty | Directories relative to `root`, each made only of normal components and existing; the loader looks for a module in `root`, then in each, in order (MOD-01) |
+| `library` | `bool` | `false` | Set by `--lib` through `SettingOverrides::library`: the main file is a module named after its file, and the checker reads its exports from `__all__` (CLI-09, ADR-0044) |
 | `allocator` | `Option<Allocator>` | `None` | The table `[allocator]`: the C functions `allocate`, `reallocate` and `free`, each an identifier of at most 255 characters outside the prefixes `typy_`, `__typy` and `_TY`, all three different, and an optional `library`, a name the linker takes as `-lname` that starts with a letter, a digit or `_` (MEM-08, ADR-0043) |
 
 `ProjectSettings::read(root, overrides)` builds the settings once, when a
@@ -349,6 +352,11 @@ any module is read (UC-11). The file becomes `SourceFile` 0 of the
 `LoadFailure`, so the diagnostics render with its text. The table
 `[allocator]` is read by `settings_file::allocator`, whose problems name
 MEM-08. Library links from `typy.toml` are planned for 0.5 (FFI-04).
+
+`Project::load` names the main module `__main__`, or for a library build
+after its file without `.py`, so `tools.py` is the module `tools`. The name
+also names the library and its C header, so a file name that is not an
+ASCII identifier is E0429 under CLI-09, before any file is read.
 
 `SourceFile`
 
@@ -1958,6 +1966,24 @@ Function fn0 __main__.twice(n: int) -> int @1:1
       Local n : int @2:13
 ```
 
+### 7.3 Exports of a library
+
+When `ProjectSettings::library` is set, `TypeChecker::check` gives
+`TypedProgram::exports` the `Export` of each name the main module's
+`__all__` lists, in order: the name and the `FunctionId` (FFI-05,
+ADR-0032). `exports::listed_names` reads `__all__` from the syntax, the
+one module-level assignment, annotated or not, of a list or tuple of string
+literals. Each name is checked in turn, and each problem is E0429 under
+FFI-05:
+
+| Check | Refused |
+| --- | --- |
+| The name | Listed twice; not ASCII; starting with `__`, `_` and a capital letter, or `typy_`; one of `RUNTIME_C_FUNCTIONS`, the C library functions the runtime calls, and `main`; one of the allocator's functions (MEM-08) |
+| The function | No function of the module defined at its top level has the name; it is generic |
+| Its types | A parameter or the result other than `int`, `float` or `bool`; a result of `None` is accepted |
+
+An executable has no exports, and `exports` is `None`.
+
 ## 8. typy-tyir
 
 ### 8.1 Types
@@ -2109,8 +2135,10 @@ types their operations take; that a call of a function that may raise is
 an `invoke` and every other call is not; that an `invoke`'s blocks take
 the result and the exception; that branch targets take no parameters; that
 only a function marked `may_raise` returns an exception; that only
-counted values are counted; and that only a new instance of a class that is
-not an exception is held in the frame. A `VerifyError` names the function and the
+counted values are counted; that only a new instance of a class that is
+not an exception is held in the frame; and that each export of a library
+calls a function whose parameters and result are the TyPy types of its C
+types. A `VerifyError` names the function and the
 block, and the caller reports it as E9001 with the pass that ran last. The
 verifier runs after every pass in every build of the compiler. Dominance comes
 from the immediate dominators, found with Cooper, Harvey and Kennedy's
@@ -2122,7 +2150,9 @@ many blocks verifies in time and memory in proportion to them
 `print(module) -> String` writes the deterministic text form used by
 `--emit=tyir-mem`, and `print_without_counting(module)` the same text without
 its `inc` and `dec` instructions, for `--emit=tyir`. An instance held in the
-frame ends its line with `in frame`, as in `v6 = new class#0 in frame`:
+frame ends its line with `in frame`, as in `v6 = new class#0 in frame`. A
+library adds a line `library NAME` after the entry, and a line
+`export add(int64_t, int64_t) -> int64_t = fn3` for each export:
 
 ```text
 string s0 = "hi\n"
@@ -2358,6 +2388,27 @@ with another type still verifies. `TyirAllocator::default()` names
 `ProjectSettings::allocator` after lowering, for every stage that emits
 code.
 
+### 10.6 Library objects
+
+`TyirModule::library` holds the `TyirLibrary` of a library build: its name
+and a `TyirExport` for each export, with its function, the `CType` of each
+parameter and of the result (`Int64`, `Double` or `Bool`, and `None` for
+`void`), and the parameters' Python names. `LibraryEmitter` adds to the
+object (ADR-0044):
+
+| Item | Form |
+| --- | --- |
+| Constructor | `typy.library.load`, internal, in `llvm.global_ctors` at priority 65535: calls `typy_rt_library_load(__typy_main)` |
+| Destructor | `typy.library.unload` in `llvm.global_dtors`: calls `typy_rt_library_unload()` |
+| Export | A function with the export's name and C types, a `bool` as a `zeroext i8`: calls `typy_rt_library_enter()`, converts each `int64_t` with `typy_rt_int_from_int64` and each `bool` by a test against zero, calls the program's function, drops the converted words, ends the process through the no-return `typy_rt_library_raised` when the call raised, converts an `int` result with `typy_rt_int_into_int64`, which may raise `OverflowError`, calls `typy_rt_library_leave()` and returns |
+
+An export whose name the object already has is an internal error, which
+the checker's rules prevent. `c_header(module)` writes the header: a guard
+of the name in capitals, `stdbool.h` and `stdint.h`, `extern "C"` for C++,
+and a declaration of each export, whose parameters keep their Python
+names, with an underscore after one that C or C++ reads as a keyword, such
+as `default_`, and `argumentN` for one that is not ASCII.
+
 ## 11. typy-build
 
 `BuildMode` is `Debug`, `Release` or `ReleaseSmall`, and
@@ -2373,12 +2424,10 @@ code.
 | `mode` | `BuildMode` | `Debug` | `--release` and `--release-small` are exclusive |
 | `target` | `Target` | `Target::host()` | Supported (section 10.1) |
 | `emit` | `Option<EmitStage>` | `None` | When set, no executable is written |
-| `output` | `Option<Utf8PathBuf>` | `None` | `executable_path()` defaults it to the main file without `.py`, next to it |
+| `output` | `Option<Utf8PathBuf>` | `None` | `output_path()` defaults it, next to the main file, to the main file without `.py`, or for a library to `LibraryKind::file_name`, `libNAME.a` or `libNAME.so` |
+| `library` | `Option<LibraryKind>` | `None` | `Static` or `Shared` builds a C library instead of an executable (CLI-09) |
 
-Each field has a `with_` method that returns the changed request. The
-libraries to link and the functions to export join the request with CLI-09
-in 0.5, and `deny_warnings` with DIA-07 in 0.3, when the first warnings are
-defined.
+Each field has a `with_` method that returns the changed request.
 
 `RuntimeArchive::beside(executable, triple)` opens
 `<prefix>/lib/typy/<triple>/libtypy_runtime.a` for a compiler at
@@ -2402,6 +2451,17 @@ as a subprocess with an argument list and no shell:
 
 `Linker::with_libraries(libraries)` adds `-lLIBRARY` for each library after
 the runtime archive; the driver passes the allocator's library (MEM-08).
+`Linker::link_library(object, output, kind, exports)` builds a library in
+a temporary directory beside the output and renames it into place when
+every step succeeded (ADR-0044):
+
+| Kind | Steps |
+| --- | --- |
+| `Static` | `cc -r -nostdlib -o library.o program.o RUNTIME_ARCHIVE`; `objcopy --keep-global-symbols=exports.txt library.o`, with `--strip-debug` for a release; `ar rcsD library.a library.o`, whose `D` writes no times or owners |
+| `Shared` | `cc -shared -o library.so` with the arguments an executable's link has after its output, and `-Wl,--version-script=exports.map`, which makes the exports global and every other symbol local |
+
+`tool::run_tool` runs each program, with E0701 when it is missing and
+E0702 when it fails, as for an executable.
 A `--release` or `--release-small` build adds `-Wl,--strip-debug`, so the
 executable holds no debug information, which the runtime archive brings
 from `core` and `compiler_builtins` with LTO; the symbol table stays. A
@@ -2422,8 +2482,8 @@ files are removed on every path. A missing program gives E0701 with its
 name; a failed run gives E0702 with the command line and the linker's
 standard error in its help; an output directory that cannot be written
 gives E0702 with the directory. None of them has a source location. An
-`Artifact` holds its `path` and its `kind`: `Executable`, `Object` or
-`Text`.
+`Artifact` holds its `path` and its `kind`: `Executable`, `StaticLibrary`,
+`SharedLibrary`, `Object` or `Text`.
 
 ## 12. typy-driver
 
@@ -2440,6 +2500,7 @@ process. Each method returns a `Success`, the `Outcome` with the
 | `check(main)` | Loads and checks the program, and returns `Outcome::Checked` with its `Sources` (CLI-03) |
 | `run(request)` with `emit` set | Runs the stages up to that stage and returns `Outcome::Emitted` with an `Emission`: `Text` for every stage but `obj`, `Bytes` for `obj` (CLI-04). `ast` needs only a program that parses; every later stage needs one that checks |
 | `run(request)` without `emit` | Opens the runtime archive, then loads, checks, lowers, generates the object and links it, and returns `Outcome::Executable` with the `Artifact` |
+| `run(request)` with `library` set | Loads the main file as a library, so its module is named after its file, then links with `link_library` and writes the C header `NAME.h` beside the library (CLI-09, FFI-05) |
 
 The root of the project is the main file's directory. A `Failure` holds
 the `Diagnostics` and the `Sources` they are rendered against:
@@ -2462,9 +2523,9 @@ copies nothing.
 
 | Item | Design |
 | --- | --- |
-| Arguments | Parsed with `clap`; the commands `check FILE`, `build FILE` and `run FILE [-- ARGS]` in 0.1, `explain` in 0.3. Each of the three takes `--python-floor VERSION`, which becomes `SettingOverrides` for `Pipeline::with_overrides`. `build` takes `--emit=STAGE` and `-o PATH`; `build` and `run` take `--release` or `--release-small`, never both. A main file that is not a `.py` file is wrong usage |
+| Arguments | Parsed with `clap`; the commands `check FILE`, `build FILE` and `run FILE [-- ARGS]` in 0.1, `explain` in 0.3. Each of the three takes `--python-floor VERSION`, which becomes `SettingOverrides` for `Pipeline::with_overrides`. `build` takes `--emit=STAGE` and `-o PATH`; `build` and `run` take `--release` or `--release-small`, never both. `build` and `check` take `--lib static` or `--lib shared`, which sets `SettingOverrides::library` and the request's `library` (CLI-09). A main file that is not a `.py` file is wrong usage |
 | Output | `Reporter` writes diagnostics in the `--error-format` the command line chose, a global flag: sorted, rendered with `render_text` and written to standard error with a blank line between two of them, or with `render_json` one per line. The panic guard and internal errors use the same reporter, so a tool reading JSON also gets E9001 as JSON (UC-10). `--emit` output goes to `-o`, or to standard output without it. A file that cannot be written gives E0106 |
-| `typy explain CODE` | Prints the section of `docs/user/troubleshooting.md` for the code, embedded in the binary with `include_str!`, so the page and the command never disagree: its heading and prose, its samples indented by four spaces without their fences and `typy-expect` comments, links as their text, then the rule from the registry (CLI-10, UC-04). A retired code says so and names its replacement. A text that is not a code, or a code the registry lacks, is wrong usage, status 2. Every section of a code whose cause is one program file holds a program that gives it and the corrected program, which the documentation test runs; the codes about files, settings, the C toolchain and imports between modules show their files as text |
+| `typy explain CODE` | Prints the section of `docs/user/troubleshooting.md` for the code, embedded in the binary with `include_str!`, so the page and the command never disagree: its heading and prose, its samples indented by four spaces without their fences and `typy-expect` comments, links as their text, then the rule from the registry (CLI-10, UC-04). A retired code says so and names its replacement. A text that is not a code, or a code the registry lacks, is wrong usage, status 2. Every section of a code whose cause is one program file holds a program that gives it and the corrected program, which the documentation test runs; the codes about files, settings, the C toolchain and imports between modules show their files as text, and E0429, which only a library build gives, shows modules that are correct as programs |
 | Exit status | `ExitStatus` is `Success = 0`, `ProgramErrors = 1`, `Usage = 2` and `Internal = 101` (CLI-06); a failure with any `E9xxx` diagnostic is `Internal`. `typy run` exits with the program's status, or 128 plus the signal that ended it |
 | Panic guard | The command runs on a thread of its own with a 512 MiB stack (ADR-0020), inside `std::panic::catch_unwind`, with a panic hook that records the location in a thread-local; a panic becomes E9001 with the location and message, and exit status 101 |
 | Warnings | `Reporter::warnings` writes the warnings of a `Success` before the command's output. `--deny-warnings` is a global flag. `typy run` checks a program whose build it takes from the cache, so its warnings show on every run, and the cache key includes `--deny-warnings` |
@@ -2502,9 +2563,10 @@ installed `typy` finds `<prefix>/lib/typy/` and a `typy` in
 | Module | Behaviour |
 | --- | --- |
 | `entry` | `main` keeps its arguments for `sys.argv`, records the stack limit, calls `__typy_main`, reports an uncaught exception, flushes standard output and returns the exit status `sys::exit_status` gives |
+| `library` | `typy_rt_library_load(module)` records the stack limit, keeps `['']` for `sys.argv`, runs the module bodies and flushes standard output; `_unload` flushes it and closes the files; `_enter` records the stack limit for the calling thread, `_leave` flushes standard output; `_raised(exception)` exits with a `SystemExit`'s status, or reports any other exception as uncaught and aborts (ADR-0044). `stack::record_limit` reads `getrlimit` once and measures from the current stack pointer |
 | `allocator` | `allocate`, `reallocate` and `free` over the program object's hooks `typy_rt_heap_allocate`, `typy_rt_heap_reallocate` and `typy_rt_heap_free` (section 10.5), asking for at least one byte. Running out of memory prints `MemoryError` and aborts. The unit tests define the hooks over `malloc`, `realloc` and `free`, since they link no program object |
 | `refcount` | `typy_rt_increment` and `typy_rt_decrement`, not atomic (A-03). A decrement to zero calls the type's `drop`, then frees the memory |
-| `int` | Addition, subtraction, multiplication, floor division, modulo, power, negation, comparison, conversion to and from `str` and `float`, all with Python's results (EXP-02, EXP-05) |
+| `int` | Addition, subtraction, multiplication, floor division, modulo, power, negation, comparison, conversion to and from `str` and `float`, all with Python's results (EXP-02, EXP-05). `typy_rt_int_from_int64` and `typy_rt_int_into_int64` convert a C `int64_t` for an export, the second dropping the word and raising `OverflowError: Python int too large to convert to C int64_t` outside its range (FFI-05) |
 | `float` | Division, floor division, modulo and power with the special cases of CPython's `float_divmod` and `float_pow`. `int / int`, `float(int)` and `float(str)` round once to the nearest double, ties to even, by CPython's `long_true_divide` method on exact integers. `int(float)` and `int` against `float` comparisons are exact. `round` rounds half to even on the exact value: `round(x)` to an integer, `round(x, n)` by rounding `x * 10**n` exactly and reading the result back with one correct rounding, as CPython's `_Py_dg_dtoa` and `_Py_dg_strtod` do, so `round(2.675, 2)` is `2.67`. Beyond 323 digits a `float` rounds to itself and below -308 to zero; a result too large raises `OverflowError: rounded value too large to represent`. `round` of an `int` with negative `ndigits` gives the even multiple of `10**-ndigits`, as `long_round` does. `repr` writes the shortest digits that read back as the same double, found exactly with large integers, and breaks an exact tie toward the even digit as CPython does; the layout is positional when the decimal exponent is from -4 to 15, otherwise scientific with a sign and at least two exponent digits, and `inf`, `-inf`, `nan` and `-0.0` are written as CPython writes them (DAT-02) |
 | `libm` | `floor`, `fmod`, `pow` and `ldexp` from the C maths library, which is why every link passes `-lm` |
 | `math` | The functions behind the `math` module (LIB-05, ADR-0018), one `typy_rt_math_*` symbol each. A function of the C library runs inside CPython 3.15's `math_1` or `math_2` checks: a NaN from a number is `ValueError`, with the function's 3.15 message such as `expected a nonnegative input, got -1.0`, or `math domain error`, and an infinity from a finite number `OverflowError: math range error` where the function can overflow. `pow`, `fmod`, `remainder`, `ldexp`, `ulp`, `nextafter`, `fma`, `isclose`, `hypot` and `dist`, with CPython's `vector_norm`, `gamma` and `lgamma`, with its Lanczos sum, `fsum`, with Shewchuk's partials, and `sumprod`, with its machine-integer path, its triple-length path and the exact total it falls back to, are ported from `mathmodule.c`; `prod` of an `int` start keeps the exact product until its first `float` item, and each reads the member a union item holds (LIB-15), and `fmax` and `fmin` keep `x` when the two are equal, as the oracle's Clang build does. A logarithm of an `int` too large for a `float` is that of its top 55 bits, rounded once, plus its bit count times the logarithm of 2, by `fma`, as 3.15 does. `factorial` multiplies by halves, `isqrt` runs Newton's method from a power of two, `comb` and `perm` take exact running quotients, and `gcd` is Euclid's; each refuses what CPython refuses, with its message and its limit of a C `long`. The C functions are named with `#[link(name = "m")]`, so a Rust test binary of the runtime also calls the C library before `compiler_builtins` |

@@ -7,6 +7,10 @@ use camino::Utf8PathBuf;
 pub enum ArtifactKind {
     /// A native executable.
     Executable,
+    /// A static C library, `libNAME.a` (CLI-09).
+    StaticLibrary,
+    /// A shared C library, `libNAME.so` (CLI-09).
+    SharedLibrary,
     /// An object file, from `--emit=obj`.
     Object,
     /// The text of a stage, from `--emit`.

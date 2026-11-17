@@ -1179,6 +1179,7 @@ dependencies = [
  "sha2",
  "tempfile",
  "typy-build",
+ "typy-check",
  "typy-codegen",
  "typy-diagnostics",
  "typy-driver",

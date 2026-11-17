@@ -29,6 +29,7 @@ mod io;
 mod iterator;
 mod libc;
 mod libm;
+mod library;
 mod list;
 mod math;
 mod message;

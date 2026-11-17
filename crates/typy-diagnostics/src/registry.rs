@@ -249,6 +249,11 @@ pub const CODES: &[CodeInfo] = &[
         "copies of a generic function without end",
         RuleId::GEN_03,
     ),
+    active(
+        429,
+        "module or export that a C library cannot have",
+        RuleId::FFI_05,
+    ),
     active(701, "C toolchain program not found", RuleId::A_01),
     active(702, "link failed", RuleId::A_01),
     CodeInfo {

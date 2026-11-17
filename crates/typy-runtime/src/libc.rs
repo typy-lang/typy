@@ -15,6 +15,7 @@ unsafe extern "C" {
     #[link_name = "read"]
     fn read_bytes(descriptor: i32, buffer: *mut c_void, count: usize) -> isize;
     fn abort() -> !;
+    fn exit(status: i32) -> !;
     fn getrlimit(resource: i32, limit: *mut [u64; 2]) -> i32;
     #[link_name = "open"]
     fn open_path(path: *const core::ffi::c_char, flags: i32, ...) -> i32;
@@ -218,6 +219,19 @@ pub(crate) fn abort_with(message: &[u8]) -> ! {
     write_all(STDERR, message);
     // SAFETY: `abort` has no preconditions and does not return.
     unsafe { abort() }
+}
+
+/// Ends the process at once, as an uncaught signal does.
+pub(crate) fn abort_process() -> ! {
+    // SAFETY: `abort` has no preconditions and does not return.
+    unsafe { abort() }
+}
+
+/// Ends the process with `status`, after the C library runs its exit handlers and the
+/// destructors of the loaded objects.
+pub(crate) fn exit_process(status: i32) -> ! {
+    // SAFETY: `exit` has no preconditions and does not return.
+    unsafe { exit(status) }
 }
 
 /// Returns the soft limit of the stack size in bytes, or `None` when there is no limit.

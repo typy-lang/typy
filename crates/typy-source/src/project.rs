@@ -3,7 +3,10 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use camino::Utf8Path;
-use typy_diagnostics::{Diagnostics, FileId, Position, SourceLookup, Span, TextOffset};
+use typy_diagnostics::{
+    Diagnostic, DiagnosticCode, Diagnostics, FileId, Position, RuleId, SourceLookup, Span,
+    TextOffset,
+};
 
 use crate::loader::{
     Import, Location, imports, initialisation_order, is_standard, locate, not_found,
@@ -52,7 +55,13 @@ impl Project {
             diagnostics: Diagnostics::new(),
             pending: Vec::new(),
         };
-        let main = ModuleName::main();
+        let main = if settings.library {
+            library_module(&relative).map_err(|diagnostic| {
+                LoadFailure::new(Diagnostics::from(*diagnostic), Vec::new())
+            })?
+        } else {
+            ModuleName::main()
+        };
         let location = Location {
             path: relative,
             is_package: false,
@@ -263,6 +272,32 @@ impl Loader<'_> {
     fn failure(self) -> LoadFailure {
         LoadFailure::new(self.diagnostics, self.files)
     }
+}
+
+/// Returns the name of a library's module: its file's name without `.py`, which also names
+/// the library and its C header, so it is an ASCII identifier (CLI-09, ADR-0044).
+fn library_module(path: &Utf8Path) -> Result<ModuleName, Box<Diagnostic>> {
+    let stem = path.file_stem().unwrap_or_default();
+    let mut characters = stem.chars();
+    let identifier = characters
+        .next()
+        .is_some_and(|first| first.is_ascii_alphabetic() || first == '_')
+        && characters.all(|each| each.is_ascii_alphanumeric() || each == '_');
+    let refused = || {
+        Box::new(Diagnostic::without_location(
+            DiagnosticCode::error(429),
+            format!(
+                "a library's module is named after its file, and `{stem}` is not an ASCII \
+                 identifier"
+            ),
+        )
+        .with_rule(RuleId::CLI_09)
+        .with_help("rename the file to a name of letters, digits and underscores, such as `my_tools.py`"))
+    };
+    if !identifier {
+        return Err(refused());
+    }
+    ModuleName::new(stem).map_err(|_| refused())
 }
 
 impl LoadFailure {

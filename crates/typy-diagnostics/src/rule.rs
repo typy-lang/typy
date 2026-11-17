@@ -11,6 +11,8 @@ impl RuleId {
     pub const A_01: Self = Self("A-01");
     /// Project settings shall be read from `typy.toml`, and a command line flag shall override the same setting in the file.
     pub const CLI_07: Self = Self("CLI-07");
+    /// `typy build --lib static` shall produce a static library and `--lib shared` a shared library.
+    pub const CLI_09: Self = Self("CLI-09");
     /// The setting `python-floor` in `typy.toml` shall set the program's Python floor to one of `3.12`, `3.13`, `3.14` or `3.15`, and any other value shall be rejected.
     pub const CLI_12: Self = Self("CLI-12");
     /// Classes with methods and an `__init__` shall be accepted, with each instance attribute assigned in `__init__` or declared in the class body.
@@ -127,6 +129,8 @@ impl RuleId {
     pub const DIA_08: Self = Self("DIA-08");
     /// Raising and catching exceptions shall follow the Language Reference, including matching on base classes.
     pub const EXC_01: Self = Self("EXC-01");
+    /// An exception shall not cross a function exported to C (FFI-05): a `SystemExit` shall end the process with its status, and any other exception shall abort it with the exception printed.
+    pub const EXC_05: Self = Self("EXC-05");
     /// A `return`, `break` or `continue` that leaves a `finally` block shall be rejected, as PEP 765 makes CPython 3.14 warn about it (ADR-0013).
     pub const EXC_06: Self = Self("EXC-06");
     /// A `raise` without an expression shall re-raise the exception being handled, and shall be rejected outside an `except` clause.
@@ -175,6 +179,8 @@ impl RuleId {
     pub const EXP_17: Self = Self("EXP-17");
     /// A module-level `ctypes.CDLL` or `ctypes.cdll.LoadLibrary` call with a string literal shall link the named library.
     pub const FFI_01: Self = Self("FFI-01");
+    /// A function that `__all__` of a module built with `--lib` lists shall be exported with an unmangled C symbol and the C types its annotations give, and the build shall write a matching C header (ADR-0032).
+    pub const FFI_05: Self = Self("FFI-05");
     /// Module-level function definitions shall be accepted.
     pub const FUN_01: Self = Self("FUN-01");
     /// Keyword-only and positional-only parameters shall be accepted.
@@ -360,6 +366,7 @@ impl RuleId {
     pub const ALL: &'static [Self] = &[
         Self::A_01,
         Self::CLI_07,
+        Self::CLI_09,
         Self::CLI_12,
         Self::CLS_01,
         Self::CLS_02,
@@ -418,6 +425,7 @@ impl RuleId {
         Self::DAT_17,
         Self::DIA_08,
         Self::EXC_01,
+        Self::EXC_05,
         Self::EXC_06,
         Self::EXC_07,
         Self::EXC_09,
@@ -442,6 +450,7 @@ impl RuleId {
         Self::EXP_16,
         Self::EXP_17,
         Self::FFI_01,
+        Self::FFI_05,
         Self::FUN_01,
         Self::FUN_03,
         Self::FUN_04,

@@ -806,6 +806,7 @@ impl Program {
                     })
                 }),
             entry,
+            exports: None,
             warnings: typy_diagnostics::Diagnostics::new(),
         }
     }
