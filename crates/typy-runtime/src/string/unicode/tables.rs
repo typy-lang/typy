@@ -1,6 +1,7 @@
 //! Unicode tables for `repr`, `int()` and `float()`, written by
 //! scripts/generate-unicode-tables.py from the unicodedata of CPython 3.15,
 //! Unicode 17.0.0 (OI-15). Do not edit; run `make unicode-tables`.
+//! The data is under the Unicode License V3, which THIRD-PARTY-NOTICES.md holds.
 
 /// Code points up to U+FFFF where `str.isprintable` changes; U+0000 is not printable.
 pub(super) const PRINTABLE_BASIC: [u16; 676] = [

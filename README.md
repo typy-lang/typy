@@ -92,3 +92,7 @@ TyPy is licensed under either of the
 [MIT license](LICENSE-MIT), at your option. Unless you state otherwise, any
 contribution you submit for inclusion in TyPy is licensed in the same way,
 without any additional terms or conditions.
+
+Parts of the runtime are derived from CPython and the Unicode Character
+Database and keep their own licences, which
+[THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md) holds.

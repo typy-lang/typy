@@ -5,6 +5,9 @@
 //! calls `__lt__`, so a method that prints or raises shows the same calls. A comparison that
 //! raises ends the sort at once and leaves the items a permutation of what they were, as
 //! CPython leaves them.
+//!
+//! Derived from CPython's `Objects/listobject.c` under the PSF License Agreement, which
+//! THIRD-PARTY-NOTICES.md holds with a summary of the changes.
 
 /// The number of wins in a row that starts galloping.
 const MIN_GALLOP: usize = 7;

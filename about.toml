@@ -1,0 +1,22 @@
+# Configuration of cargo-about, which `make dist` runs to write the licences
+# of the crates linked into `typy` into the release archive. A crate under a
+# licence missing from this list fails the archive build, so a new licence is
+# reviewed before it ships. Where a crate offers a choice, the first licence
+# listed here that it offers is the one shown.
+accepted = [
+    "MIT",
+    "Apache-2.0",
+    "Apache-2.0 WITH LLVM-exception",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "ISC",
+    "Zlib",
+    "Unicode-3.0",
+    "Unicode-DFS-2016",
+    "Unlicense",
+]
+targets = ["x86_64-unknown-linux-gnu"]
+ignore-build-dependencies = true
+ignore-dev-dependencies = true
+# The workspace's own crates are TyPy, whose licences ship beside this file.
+private = { ignore = true }

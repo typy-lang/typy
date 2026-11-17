@@ -2,6 +2,9 @@
 //! library's `tgamma` and `lgamma`: a Lanczos approximation for positive numbers and the
 //! reflection formula for negative ones, over the C library's `exp`, `pow`, `log`, `sin` and
 //! `cos`, so the results agree with CPython's to the last bit (LIB-12).
+//!
+//! Derived from CPython's `Modules/mathmodule.c` under the PSF License Agreement, which
+//! THIRD-PARTY-NOTICES.md holds with a summary of the changes.
 #![allow(
     clippy::float_cmp,
     reason = "CPython's algorithms compare doubles exactly, as IEEE 754 defines"

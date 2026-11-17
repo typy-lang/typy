@@ -1,6 +1,9 @@
 //! The functions of `math` over iterables of numbers: `fsum`, `dist`, `prod` and `sumprod`,
 //! each given lists of `int`, `bool` or `float` items and computed as CPython computes them
 //! (LIB-12).
+//!
+//! Derived from CPython's `Modules/mathmodule.c` under the PSF License Agreement, which
+//! THIRD-PARTY-NOTICES.md holds with a summary of the changes.
 #![allow(
     clippy::float_cmp,
     reason = "CPython's algorithms compare doubles exactly, as IEEE 754 defines"
