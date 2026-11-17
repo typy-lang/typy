@@ -618,7 +618,7 @@ fn convert(
                 )
             }),
             b'e' | b'E' | b'f' | b'F' | b'g' | b'G' if integer => {
-                let real = crate::float::typy_rt_int_to_float(as_int());
+                let real = crate::float::int_to_float(as_int());
                 if !real.exception.is_null() {
                     return Err(real.exception);
                 }

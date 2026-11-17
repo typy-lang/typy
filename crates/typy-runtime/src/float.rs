@@ -8,6 +8,6 @@ mod ratio;
 pub(crate) mod repr;
 mod round;
 
-pub(crate) use convert::{integer_to_float, typy_rt_float_to_int, typy_rt_int_to_float};
+pub(crate) use convert::{int_to_float, integer_to_float, typy_rt_float_to_int};
 pub(crate) use repr::{shortest, typy_rt_float_to_str};
 pub(crate) use round::{power_of_ten, round_quotient};

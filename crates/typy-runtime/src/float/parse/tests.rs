@@ -1,12 +1,12 @@
 //! Tests of `float(text)` against CPython's results and against Rust's correctly rounded parser.
 
-use super::typy_rt_float_from_str;
+use super::float_from_str;
 use crate::string::{code_point, from_str, length};
 
 fn parse(text: &str) -> Result<f64, String> {
     // SAFETY: the string is live, and so is any exception and its message.
     unsafe {
-        let result = typy_rt_float_from_str(from_str(text));
+        let result = float_from_str(from_str(text));
         if result.exception.is_null() {
             return Ok(result.value);
         }

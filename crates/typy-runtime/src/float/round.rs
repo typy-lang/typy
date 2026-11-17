@@ -80,6 +80,8 @@ pub(crate) fn round_quotient(numerator: &[u64], denominator: &[u64]) -> Limbs {
     }
 }
 
+crate::export_float!(unsafe typy_rt_float_round_digits = float_round_digits(value: f64, digits: i64));
+
 /// Returns `round(value, digits)` for a `float`: the value rounded half to even at `digits`
 /// places after the point, or before it when `digits` is negative, as CPython rounds the exact
 /// value with `_Py_dg_dtoa` and reads the result back. A result too large for a double raises
@@ -88,8 +90,7 @@ pub(crate) fn round_quotient(numerator: &[u64], denominator: &[u64]) -> Limbs {
 /// # Safety
 ///
 /// `digits` is an `int` word whose large integer is live.
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn typy_rt_float_round_digits(value: f64, digits: i64) -> Raising<f64> {
+pub(crate) unsafe fn float_round_digits(value: f64, digits: i64) -> Raising<f64> {
     if !value.is_finite() {
         return Raising::ok(value);
     }

@@ -10,6 +10,32 @@
     reason = "the exported functions form the C interface and are reached by symbol, not by path"
 )]
 
+/// Exports a runtime function that may raise and gives a `float` under its C symbol, with the
+/// `float` returned as its bits, so that every target returns the pair in two integer registers
+/// as generated code reads it (ADR-0053).
+macro_rules! export_float {
+    ($name:ident = $inner:ident($($argument:ident: $ty:ty),*)) => {
+        #[doc = concat!("`", stringify!($inner), "` for generated code, with the `float` as its bits (ADR-0053).")]
+        #[unsafe(no_mangle)]
+        pub extern "C" fn $name($($argument: $ty),*) -> $crate::RaisingFloat {
+            $inner($($argument),*).into()
+        }
+    };
+    (unsafe $name:ident = $inner:ident($($argument:ident: $ty:ty),*)) => {
+        #[doc = concat!("`", stringify!($inner), "` for generated code, with the `float` as its bits (ADR-0053).")]
+        ///
+        /// # Safety
+        ///
+        #[doc = concat!("As for `", stringify!($inner), "`.")]
+        #[unsafe(no_mangle)]
+        pub unsafe extern "C" fn $name($($argument: $ty),*) -> $crate::RaisingFloat {
+            // SAFETY: the caller's guarantee, which the wrapped function states.
+            unsafe { $inner($($argument),*) }.into()
+        }
+    };
+}
+pub(crate) use export_float;
+
 mod allocator;
 mod byte_buffer;
 mod bytes;
@@ -88,6 +114,28 @@ impl<T> Raising<T> {
         Self {
             value: placeholder,
             exception,
+        }
+    }
+}
+
+/// The result of a runtime function that may raise and gives a `float`, as generated code reads
+/// it: the bits of the `float`, then the exception (ADR-0053). A C structure of a `double` and a
+/// pointer returns in other registers on AArch64 than the pair LLVM returns for `{double, ptr}`,
+/// while two 64-bit words return alike on every target.
+#[repr(C)]
+#[derive(Clone, Copy, Debug)]
+pub struct RaisingFloat {
+    /// The bits of the result, meaningful only when `exception` is null.
+    pub bits: u64,
+    /// The exception, or null.
+    pub exception: *mut ExceptionObject,
+}
+
+impl From<Raising<f64>> for RaisingFloat {
+    fn from(result: Raising<f64>) -> Self {
+        Self {
+            bits: result.value.to_bits(),
+            exception: result.exception,
         }
     }
 }

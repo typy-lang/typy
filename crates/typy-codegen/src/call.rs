@@ -28,6 +28,24 @@ impl<'ctx> FunctionEmitter<'_, '_, 'ctx> {
         }
     }
 
+    /// Returns a value a runtime function gives as generated code holds it: a `bool` from the
+    /// byte C's `_Bool` is, and a `float` the function may raise beside from its bits
+    /// (ADR-0053).
+    pub(crate) fn runtime_result(
+        &self,
+        result_type: TyirType,
+        value: BasicValueEnum<'ctx>,
+    ) -> Result<BasicValueEnum<'ctx>, CodegenError> {
+        Ok(match result_type {
+            TyirType::Bool => self.byte_to_bool(value.into_int_value())?.into(),
+            TyirType::Float if value.is_int_value() => {
+                self.builder
+                    .build_bit_cast(value, self.shared.context.f64_type(), "")?
+            }
+            _ => value,
+        })
+    }
+
     /// Turns the byte the runtime returns for a `bool` into an `i1`.
     pub(crate) fn byte_to_bool(
         &self,

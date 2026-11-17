@@ -16,10 +16,11 @@ use crate::Raising;
 use crate::exception::{ExceptionKind, raise};
 use crate::libm::{absolute, copy_sign};
 
+crate::export_float!(typy_rt_math_pow = math_pow(x: f64, y: f64));
+
 /// `math.pow(x, y)`: IEEE special values directly, the C library for finite values, and a
 /// domain error for a NaN or for zero to a negative power.
-#[unsafe(no_mangle)]
-pub extern "C" fn typy_rt_math_pow(x: f64, y: f64) -> Raising<f64> {
+pub(crate) fn math_pow(x: f64, y: f64) -> Raising<f64> {
     if !x.is_finite() || !y.is_finite() {
         return ok(if x.is_nan() {
             if y == 0.0 { 1.0 } else { x }
@@ -54,9 +55,10 @@ pub extern "C" fn typy_rt_math_pow(x: f64, y: f64) -> Raising<f64> {
     ok(result)
 }
 
+crate::export_float!(typy_rt_math_fmod = math_fmod(x: f64, y: f64));
+
 /// `math.fmod(x, y)`: `x` itself for an infinite `y`, else the C library's `fmod`.
-#[unsafe(no_mangle)]
-pub extern "C" fn typy_rt_math_fmod(x: f64, y: f64) -> Raising<f64> {
+pub(crate) fn math_fmod(x: f64, y: f64) -> Raising<f64> {
     if y.is_infinite() && x.is_finite() {
         return ok(x);
     }
@@ -67,10 +69,11 @@ pub extern "C" fn typy_rt_math_fmod(x: f64, y: f64) -> Raising<f64> {
     ok(result)
 }
 
+crate::export_float!(typy_rt_math_remainder = math_remainder(x: f64, y: f64));
+
 /// `math.remainder(x, y)`: `x` minus the nearest multiple of `y`, an even one on a tie,
 /// computed exactly.
-#[unsafe(no_mangle)]
-pub extern "C" fn typy_rt_math_remainder(x: f64, y: f64) -> Raising<f64> {
+pub(crate) fn math_remainder(x: f64, y: f64) -> Raising<f64> {
     math_2(x, y, remainder(x, y))
 }
 
@@ -104,14 +107,15 @@ fn remainder(x: f64, y: f64) -> f64 {
     x
 }
 
+crate::export_float!(unsafe typy_rt_math_ldexp = math_ldexp(x: f64, exponent: i64));
+
 /// `math.ldexp(x, i)`, with `i` given as an `int` word: an exponent beyond an `int` of C
 /// overflows or underflows as CPython clamps it.
 ///
 /// # Safety
 ///
 /// `exponent` is an `int` word whose large integer is live.
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn typy_rt_math_ldexp(x: f64, exponent: i64) -> Raising<f64> {
+pub(crate) unsafe fn math_ldexp(x: f64, exponent: i64) -> Raising<f64> {
     // SAFETY: the caller's guarantee.
     let integer = unsafe { super::integer(exponent) };
     let clamped = if integer.negative {
@@ -153,14 +157,15 @@ pub extern "C" fn typy_rt_math_ulp(x: f64) -> f64 {
     next - x
 }
 
+crate::export_float!(unsafe typy_rt_math_nextafter = math_nextafter(x: f64, y: f64, steps: i64));
+
 /// `math.nextafter(x, y, steps=steps)`, with `steps` an `int` word; a negative number of
 /// steps is a `ValueError`, and more than fit in 64 bits count as the most.
 ///
 /// # Safety
 ///
 /// `steps` is an `int` word whose large integer is live.
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn typy_rt_math_nextafter(x: f64, y: f64, steps: i64) -> Raising<f64> {
+pub(crate) unsafe fn math_nextafter(x: f64, y: f64, steps: i64) -> Raising<f64> {
     // SAFETY: the caller's guarantee.
     let integer = unsafe { super::integer(steps) };
     if integer.negative {
@@ -217,9 +222,10 @@ fn step(x: f64, y: f64, steps: u64) -> f64 {
     y
 }
 
+crate::export_float!(typy_rt_math_fma = math_fma(x: f64, y: f64, z: f64));
+
 /// `math.fma(x, y, z)`: `x * y + z` rounded once.
-#[unsafe(no_mangle)]
-pub extern "C" fn typy_rt_math_fma(x: f64, y: f64, z: f64) -> Raising<f64> {
+pub(crate) fn math_fma(x: f64, y: f64, z: f64) -> Raising<f64> {
     // SAFETY: `fma` has no preconditions.
     let result = unsafe { c::fma(x, y, z) };
     if result.is_finite() {

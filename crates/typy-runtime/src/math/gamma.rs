@@ -90,9 +90,10 @@ const INTEGRAL: [f64; 23] = [
     1_124_000_727_777_607_680_000.0,
 ];
 
+crate::export_float!(typy_rt_math_gamma = math_gamma(x: f64));
+
 /// `math.gamma(x)`.
-#[unsafe(no_mangle)]
-pub extern "C" fn typy_rt_math_gamma(x: f64) -> Raising<f64> {
+pub(crate) fn math_gamma(x: f64) -> Raising<f64> {
     if !x.is_finite() {
         // gamma(nan) is nan, gamma(inf) is inf, and gamma(-inf) is a domain error.
         return if x.is_nan() || x > 0.0 {
@@ -119,9 +120,10 @@ pub extern "C" fn typy_rt_math_gamma(x: f64) -> Raising<f64> {
     ok(result)
 }
 
+crate::export_float!(typy_rt_math_lgamma = math_lgamma(x: f64));
+
 /// `math.lgamma(x)`.
-#[unsafe(no_mangle)]
-pub extern "C" fn typy_rt_math_lgamma(x: f64) -> Raising<f64> {
+pub(crate) fn math_lgamma(x: f64) -> Raising<f64> {
     if !x.is_finite() {
         // lgamma(nan) is nan, and lgamma of either infinity is inf.
         return ok(if x.is_nan() { x } else { f64::INFINITY });
