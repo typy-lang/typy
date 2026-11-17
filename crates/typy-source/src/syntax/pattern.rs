@@ -236,3 +236,6 @@ impl Pattern {
         }
     }
 }
+
+#[cfg(test)]
+mod tests;

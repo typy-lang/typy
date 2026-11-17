@@ -67,23 +67,79 @@ pub extern "C" fn typy_rt_library_leave() {
 pub unsafe extern "C" fn typy_rt_library_raised(exception: *mut ExceptionObject) -> ! {
     crate::io::flush_stdout();
     // SAFETY: the caller's guarantee.
-    unsafe {
-        if crate::sys::is_system_exit((*exception).class()) {
-            let (status, reported) = crate::sys::exit_status(exception);
-            if reported {
-                crate::exception::report_uncaught(exception);
-            }
-            // The destructor writes the rest of the output and closes the files.
-            crate::libc::exit_process(status)
-        }
-        crate::exception::report_uncaught(exception);
+    let ending = unsafe { ending(exception) };
+    if ending.reported {
+        // SAFETY: the caller's guarantee.
+        unsafe { crate::exception::report_uncaught(exception) };
     }
-    crate::libc::abort_process()
+    match ending.status {
+        // The destructor writes the rest of the output and closes the files.
+        Some(status) => crate::libc::exit_process(status),
+        None => crate::libc::abort_process(),
+    }
+}
+
+/// How the process ends for an exception that leaves a library.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct Ending {
+    /// The status it exits with, or `None` to abort.
+    status: Option<i32>,
+    /// Whether the exception is reported first.
+    reported: bool,
+}
+
+/// Returns how the process ends for `exception`: a `SystemExit` exits with its status,
+/// reported only when its code is not an `int` or `None`, and any other exception is
+/// reported and aborts.
+///
+/// # Safety
+///
+/// `exception` points to a live exception.
+unsafe fn ending(exception: *mut ExceptionObject) -> Ending {
+    // SAFETY: the caller's guarantee.
+    if unsafe { crate::sys::is_system_exit((*exception).class()) } {
+        // SAFETY: the caller's guarantee.
+        let (status, reported) = unsafe { crate::sys::exit_status(exception) };
+        return Ending {
+            status: Some(status),
+            reported,
+        };
+    }
+    Ending {
+        status: None,
+        reported: true,
+    }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{typy_rt_library_enter, typy_rt_library_leave};
+    use super::{
+        Ending, ending, typy_rt_library_enter, typy_rt_library_leave, typy_rt_library_load,
+        typy_rt_library_unload,
+    };
+    use crate::exception::ExceptionObject;
+
+    unsafe extern "C" fn module_that_runs() -> *mut ExceptionObject {
+        core::ptr::null_mut()
+    }
+
+    #[test]
+    #[cfg_attr(
+        miri,
+        ignore = "Miri cannot run the inline assembly that reads the stack pointer"
+    )]
+    fn a_library_runs_its_module_when_it_loads_and_sys_argv_is_one_empty_string() {
+        // SAFETY: the module takes nothing and returns no exception.
+        unsafe { typy_rt_library_load(module_that_runs) };
+        let argv = crate::sys::typy_rt_sys_argv();
+        // SAFETY: `sys.argv` is a live list of strings.
+        unsafe {
+            assert_eq!((*argv).length, 1);
+            let first = (*argv).item(0) as *const crate::string::StrObject;
+            assert_eq!(crate::string::length(first), 0);
+        }
+        typy_rt_library_unload();
+    }
 
     #[test]
     #[cfg_attr(
@@ -94,5 +150,35 @@ mod tests {
         typy_rt_library_enter();
         assert!(crate::stack::typy_rt_check_stack().is_null());
         typy_rt_library_leave();
+    }
+
+    #[test]
+    fn an_exception_aborts_and_system_exit_exits_with_its_status() {
+        let error = crate::exception::raise(crate::ExceptionKind::ValueError, "refused");
+        let exit = crate::exception::raise_class(
+            &crate::exception::classes::SYSTEM_EXIT,
+            crate::string::from_str("stopped"),
+        );
+        // SAFETY: the exceptions are live and dropped once.
+        unsafe {
+            assert_eq!(
+                ending(error),
+                Ending {
+                    status: None,
+                    reported: true
+                }
+            );
+            // An exception the runtime raises keeps its message apart from `args`, so this
+            // `SystemExit` has none and exits with status 0, as `sys.exit()` does.
+            assert_eq!(
+                ending(exit),
+                Ending {
+                    status: Some(0),
+                    reported: false
+                }
+            );
+            crate::refcount::typy_rt_decrement(error.cast());
+            crate::refcount::typy_rt_decrement(exit.cast());
+        }
     }
 }

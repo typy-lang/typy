@@ -58,23 +58,6 @@ impl CType {
         })
     }
 
-    /// Returns whether the type is one of the integer types, whose arguments wrap to its
-    /// width.
-    #[must_use]
-    pub const fn is_integer(self) -> bool {
-        matches!(
-            self,
-            Self::Int8
-                | Self::UInt8
-                | Self::Int16
-                | Self::UInt16
-                | Self::Int32
-                | Self::UInt32
-                | Self::Int64
-                | Self::UInt64
-        )
-    }
-
     /// Returns the type of a call's result of this C type: `ctypes` gives an `int` of the
     /// integer types, a `float`, a `bool`, `bytes` or `None` of `c_char_p`, and an `int` or
     /// `None` of `c_void_p`.
@@ -169,6 +152,34 @@ mod tests {
         }
         for name in ["c_char", "c_wchar_p", "c_longdouble", "POINTER", "int"] {
             assert_eq!(CType::from_name(name), None, "{name}");
+        }
+        for (name, ty) in [
+            ("c_uint8", CType::UInt8),
+            ("c_ubyte", CType::UInt8),
+            ("c_short", CType::Int16),
+            ("c_uint16", CType::UInt16),
+            ("c_ushort", CType::UInt16),
+            ("c_uint", CType::UInt32),
+            ("c_uint32", CType::UInt32),
+            ("c_float", CType::Float),
+            ("c_double", CType::Double),
+            ("c_bool", CType::Bool),
+            ("c_void_p", CType::VoidPointer),
+        ] {
+            assert_eq!(CType::from_name(name), Some(ty), "{name}");
+        }
+    }
+
+    #[test]
+    fn each_c_type_names_the_arguments_it_takes() {
+        for (ty, text) in [
+            (CType::Int16, "an `int`"),
+            (CType::Float, "an `int` or a `float`"),
+            (CType::Bool, "a value with a truth"),
+            (CType::CharPointer, "`bytes` or `None`"),
+            (CType::VoidPointer, "an `int`, `bytes` or `None`"),
+        ] {
+            assert_eq!(ty.argument_types(), text);
         }
     }
 

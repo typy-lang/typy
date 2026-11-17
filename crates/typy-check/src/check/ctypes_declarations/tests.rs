@@ -115,3 +115,37 @@ fn a_module_without_ctypes_is_left_alone() {
     assert_eq!(messages, Vec::<String>::new());
     assert_eq!(left, 2);
 }
+
+#[test]
+fn statements_that_are_not_declarations_stay_in_the_module() {
+    let (found, messages, left) = declarations(
+        "import ctypes\n\
+         import ctypes.util as helpers\n\
+         from .ctypes import CDLL as Relative\n\
+         lib = ctypes.CDLL(\"libc.so.6\")\n\
+         other.f.argtypes = [ctypes.c_int]\n\
+         lib.f.g.argtypes = [ctypes.c_int]\n\
+         lib.f.signature = [ctypes.c_int]\n\
+         lib.argtypes = [ctypes.c_int]\n\
+         first = second = ctypes.CDLL(\"libm.so.6\")\n\
+         name = ctypes.c_int\n",
+    );
+    assert_eq!(messages, Vec::<String>::new());
+    assert_eq!(found.libraries.len(), 1);
+    assert_eq!(found.functions, Vec::new());
+    assert_eq!(left, 10);
+}
+
+#[test]
+fn a_declaration_whose_value_is_refused_still_counts_as_made() {
+    let (found, messages, _) = declarations(
+        "import ctypes\n\
+         lib = ctypes.CDLL(\"libc.so.6\")\n\
+         lib.f.argtypes = [ctypes.c_wchar_p]\n\
+         lib.f.restype = ctypes.c_longdouble\n",
+    );
+    assert_eq!(messages.len(), 2, "{messages:?}");
+    let f = found.function("lib", "f").unwrap();
+    assert_eq!(f.parameters.as_deref(), Some(&[][..]));
+    assert_eq!(f.result, Some(Restype::Void));
+}
