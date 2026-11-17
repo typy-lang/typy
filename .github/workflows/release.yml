@@ -3,7 +3,8 @@
 # the quality gate and builds the release archive. The publish job waits for a
 # maintainer to approve the `release` environment, creates the GitHub release
 # from the changelog section with the short-lived workflow token, then
-# downloads the archive back and runs a program with it.
+# downloads the archive back and runs a program with it. The pages job then
+# publishes the release's documentation through pages.yml (DOC-05).
 name: Release
 
 on:
@@ -73,3 +74,14 @@ jobs:
           tar -xzf ./*.tar.gz
           printf 'print("hello", 1 + 2)\n' > hello.py
           test "$(TYPY_HOME="$PWD/home" ./typy-*/bin/typy run hello.py)" = "hello 3"
+
+  # A release created with the workflow token starts no `release` event, so
+  # pages.yml is called here, for the same tag.
+  pages:
+    name: Documentation
+    needs: publish
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    uses: ./.github/workflows/pages.yml

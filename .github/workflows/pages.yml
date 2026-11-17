@@ -1,0 +1,67 @@
+# Publishes the documentation site, https://typy-lang.org, built from the
+# sources of a release (DOC-05, ADR-0050). release.yml calls this workflow
+# once it has created the release, because a release created with the
+# workflow token starts no `release` event. A release published by hand
+# starts it, and a run by hand publishes the ref it is started from, which
+# is the tag of the latest release. The build job runs scripts/build-docs.sh
+# on the runner, without the dev image, and the deploy job alone may write
+# to Pages. The custom domain is a setting of the repository, so the site
+# holds no CNAME file.
+name: Pages
+
+on:
+  release:
+    types: [published]
+  workflow_call:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build the site
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      # configure-pages reads the repository's Pages settings.
+      pages: read
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/configure-pages@v6
+      # The site is built once per release, and a tag shares no cache with
+      # another, so uv's cache would only be written.
+      - uses: astral-sh/setup-uv@v10
+        with:
+          version: "0.13.7"
+          enable-cache: false
+      - name: Build the site in strict mode
+        env:
+          DOCS_TOOLS: ${{ runner.temp }}/docs-tools
+        run: scripts/build-docs.sh
+      - uses: actions/upload-pages-artifact@v5
+        with:
+          path: site/
+
+  deploy:
+    name: Deploy
+    needs: build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    # One deployment at a time; a later one waits, so a release's site is
+    # never cut off halfway.
+    concurrency:
+      group: pages
+      cancel-in-progress: false
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v5

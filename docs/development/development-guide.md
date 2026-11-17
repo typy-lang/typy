@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy development guide |
-| Version | 0.19 |
+| Version | 0.20 |
 | Status | Draft |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-17 |
@@ -194,7 +194,9 @@ installed on the host.
 
 CI runs the same `make` targets as a working copy, in the same containers,
 so a change that passes `make check` locally passes CI. Every workflow holds
-read-only permissions, and only the job that creates a release may write.
+read-only permissions; only the job that creates a release may write to the
+repository, and only the job that deploys the documentation site may write
+to GitHub Pages.
 
 | Workflow | Job | Runs on | Does |
 | --- | --- | --- | --- |
@@ -202,7 +204,8 @@ read-only permissions, and only the job that creates a release may write.
 | `ci.yml` | Miri and fuzzing | On demand, before a release | `make miri`, then `FUZZ_SECONDS=1800 make fuzz`; the inputs that crashed are kept as an artifact |
 | `ci.yml` | Dependency review | Every pull request | Fails on a new dependency with a known vulnerability |
 | `codeql.yml` | Analyze | Every push to `main`, and weekly | Code scanning of the Rust sources and the workflows, leaving out the test files that `.github/codeql/codeql-config.yml` lists |
-| `release.yml` | Check and build, then Publish | A tag `vX.Y.Z` | Section 9 |
+| `release.yml` | Check and build, Publish, then Documentation | A tag `vX.Y.Z` | Section 9 |
+| `pages.yml` | Build the site, then Deploy | Called by `release.yml` once a release is created; a release published by hand; on demand, on a release tag | Builds the site with `scripts/build-docs.sh` on the runner after `astral-sh/setup-uv`, without the dev image, and deploys it to GitHub Pages at <https://typy-lang.org> (DOC-05) |
 
 CI minutes are spent on whole changes. `main` changes only through a pull
 request that is up to date and passes the quality gate, so CI does not run
@@ -212,7 +215,10 @@ the actions and one for the Cargo dependencies of the workspace and of
 `fuzz/`. The repository's settings protect
 `main`: pull requests only, the quality gate job required, linear history,
 squash merges and no force pushes; and the `release` environment requires a
-maintainer's approval. A merged branch is deleted, except a release branch:
+maintainer's approval. GitHub Pages is built by GitHub Actions, with the
+custom domain `typy-lang.org` and HTTPS enforced, and the `github-pages`
+environment lets the tags `v*` deploy, since the site is built from a
+release's tag. A merged branch is deleted, except a release branch:
 the ruleset "release branches" forbids deleting any `release-*` branch, so
 each release's branch stays on origin and an issue can be traced to it.
 
@@ -225,7 +231,11 @@ each release's branch stays on origin and an issue can be traced to it.
    opens a new empty "Unreleased" section above it. For a new minor
    release it adds the release to `RELEASES` in
    `crates/typy-conformance/tests/suite.rs`, so the suite requires an
-   accepted and a rejected test of every requirement up to it.
+   accepted and a rejected test of every requirement up to it. It also
+   sets the version of the documentation, in `site_name` in `mkdocs.yml`
+   and the title of `docs/index.md`, and adds `docs/whatsnew/X.Y.md`, the
+   release's What's new page, which `docs/whatsnew/index.md`, the start
+   page and the `nav` of `mkdocs.yml` link.
 3. A tag `vX.Y.Z` on that commit starts `release.yml`.
 4. `scripts/check-release.sh` checks that the tag names the version and that
    the changelog has a dated section for it, whose text becomes the release
@@ -235,6 +245,10 @@ each release's branch stays on origin and an issue can be traced to it.
    SHA-256, using the workflow's short-lived token and no long-lived one.
    It then downloads the archive back, checks its SHA-256, unpacks it and
    runs a program with it.
+7. Publishing the release deploys its documentation: the documentation job
+   calls `pages.yml`, which builds the site from the tag in strict mode and
+   deploys it to <https://typy-lang.org> (DOC-05). A run of `pages.yml`
+   started by hand on the tag deploys it again.
 
 `make dist` builds `dist/typy-X.Y.Z-x86_64-unknown-linux-gnu.tar.gz`: the
 `typy` executable in `bin/` and a runtime archive for each target in

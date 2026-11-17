@@ -8,14 +8,16 @@ All notable changes to TyPy are recorded here. The format follows
 
 ### Added
 
-- The documentation is a site with navigation, search, and light and dark
-  modes, laid out in the sections of Python's documentation: What's new,
-  the tutorial, the library and language references, setup and usage,
-  extending and embedding, and diagnostics, with the engineering
-  documents and pages about the site, its copyright and its licence.
-  `make docs` builds it into `site/` with Zensical in strict mode, and
-  `make check` runs it, so a broken link or anchor, or a page missing from
-  the navigation, fails the quality gate (DOC-05, ADR-0050).
+- The documentation is published at <https://typy-lang.org>, built from
+  the sources of each release when the release is published. It is a site
+  with navigation, search, and light and dark modes, laid out in the
+  sections of Python's documentation: What's new, the tutorial, the
+  library and language references, setup and usage, extending and
+  embedding, and diagnostics, with the engineering documents and pages
+  about the site, its copyright and its licence. `make docs` builds it
+  into `site/` with Zensical in strict mode, and `make check` runs it, so
+  a broken link or anchor, or a page missing from the navigation, fails
+  the quality gate (DOC-05, ADR-0050).
 - A What's new page for each release, starting with TyPy 0.5, and the
   changelog as a page of the site.
 
