@@ -3,10 +3,10 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy software architecture |
-| Version | 1.6 |
+| Version | 1.7 |
 | Status | Approved |
 | Owner | typy-lang contributors |
-| Last updated | 2026-11-12 |
+| Last updated | 2026-11-17 |
 
 ## 1. Purpose
 
@@ -60,7 +60,7 @@ follows these decision records:
 
 ## 3. System context
 
-![TyPy in its environment](../diagrams/component-system-context.svg)
+[![TyPy in its environment](../diagrams/component-system-context.svg)](../diagrams/component-system-context.svg)
 
 | Interface | Direction | Form |
 | --- | --- | --- |
@@ -84,7 +84,7 @@ The compiler is one Cargo workspace. Each bounded context of the domain
 model is one crate, plus a shared kernel, the command line, the pipeline
 driver, the runtime, the standard library and the conformance suite.
 
-![TyPy building blocks and their allowed dependencies](../diagrams/component-building-blocks.svg)
+[![TyPy building blocks and their allowed dependencies](../diagrams/component-building-blocks.svg)](../diagrams/component-building-blocks.svg)
 
 | Crate | Context | Responsibility | Concepts it owns |
 | --- | --- | --- | --- |
@@ -124,7 +124,7 @@ the shared kernel, and `typy-source` uses them from there.
 
 ### 5.1 Building an executable
 
-![Building an executable](../diagrams/sequence-build-executable.svg)
+[![Building an executable](../diagrams/sequence-build-executable.svg)](../diagrams/sequence-build-executable.svg)
 
 `typy-cli` turns the flags into a `BuildRequest` and the settings that
 override `typy.toml`, which `typy-source` reads once, before any module.
@@ -140,7 +140,7 @@ form instead (UC-05).
 
 ### 5.2 An exception crossing two frames
 
-![An exception returned through two frames](../diagrams/sequence-raise-exception.svg)
+[![An exception returned through two frames](../diagrams/sequence-raise-exception.svg)](../diagrams/sequence-raise-exception.svg)
 
 `parse()` raises `ValueError`. It releases the references it owns, adds its
 `TracebackEntry`, and returns with the error set. `load()` checks the error
@@ -152,7 +152,7 @@ branch after each call that may raise (ADR-0004, EXC-03).
 
 ### 5.3 A conformance test
 
-![Running one accepted-program conformance test](../diagrams/sequence-conformance-test.svg)
+[![Running one accepted-program conformance test](../diagrams/sequence-conformance-test.svg)](../diagrams/sequence-conformance-test.svg)
 
 The suite first runs the test under each oracle version from the test's
 Python floor up (ADR-0008). If they disagree, the test depends on
@@ -163,7 +163,7 @@ other (NFR-10, NFR-15).
 
 ### 5.4 Collecting reference cycles
 
-![Collecting reference cycles by trial deletion](../diagrams/activity-cycle-collection.svg)
+[![Collecting reference cycles by trial deletion](../diagrams/activity-cycle-collection.svg)](../diagrams/activity-cycle-collection.svg)
 
 The collector runs only at an allocation, when the count of allocations
 since the last run reaches a threshold, so it runs at the same points on
@@ -174,7 +174,7 @@ form a cycle are ever buffered.
 
 ## 6. Deployment
 
-![Where TyPy and its output run](../diagrams/deployment-typy.svg)
+[![Where TyPy and its output run](../diagrams/deployment-typy.svg)](../diagrams/deployment-typy.svg)
 
 | Item | Location | Notes |
 | --- | --- | --- |

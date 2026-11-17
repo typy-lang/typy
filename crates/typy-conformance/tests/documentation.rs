@@ -1,7 +1,8 @@
 //! Tests of the user documentation, every page under `docs/` outside the engineering
 //! documents: every Python sample is judged as a conformance test, with the outcome the page
 //! states (DOC-04), and the troubleshooting page has a section for every active diagnostic
-//! code (DOC-03).
+//! code (DOC-03). The site's navigation in `mkdocs.yml` names every page under `docs/`, and
+//! only those, so no page is left where no reader finds it (DOC-05).
 //!
 //! A sample is a `python` code block directly after a comment that states its outcome:
 //! `<!-- typy-expect: accepted -->`, or `<!-- typy-expect: rejected E0401 at 2:7 -->` with
@@ -52,6 +53,40 @@ fn user_pages() -> Vec<Utf8PathBuf> {
         let section = page.strip_prefix(&docs).unwrap().components().next();
         !section.is_some_and(|section| ENGINEERING.contains(&section.as_str()))
     });
+    found
+}
+
+/// Returns every page under `docs/`, as a path relative to it, sorted.
+fn site_pages() -> Vec<String> {
+    let docs = workspace().join("docs");
+    let mut found = Vec::new();
+    pages(&docs, &mut found);
+    found
+        .iter()
+        .map(|page| page.strip_prefix(&docs).unwrap().to_string())
+        .collect()
+}
+
+/// Returns the pages the `nav` of `mkdocs.yml` names, in its order: the last word of each
+/// item, `- Title: page.md` or `- page.md`, that ends in `.md`.
+fn navigation() -> Vec<String> {
+    let config = std::fs::read_to_string(workspace().join("mkdocs.yml")).unwrap();
+    let mut in_nav = false;
+    let mut found = Vec::new();
+    for line in config.lines() {
+        if !line.is_empty() && !line.starts_with([' ', '-']) {
+            in_nav = line == "nav:";
+            continue;
+        }
+        let page = line
+            .trim()
+            .strip_prefix("- ")
+            .and_then(|item| item.rsplit(' ').next())
+            .filter(|word| Utf8Path::new(word).extension() == Some("md"));
+        if let (true, Some(page)) = (in_nav, page) {
+            found.push(page.to_owned());
+        }
+    }
     found
 }
 
@@ -177,6 +212,36 @@ fn the_troubleshooting_page_has_a_section_for_every_active_code() {
     assert!(
         missing.is_empty(),
         "codes without a section: {}",
+        missing.join(", ")
+    );
+}
+
+#[test]
+fn every_page_of_the_documentation_is_in_the_site_navigation() {
+    let navigation = navigation();
+    let missing: Vec<String> = site_pages()
+        .into_iter()
+        .filter(|page| !navigation.contains(page))
+        .collect();
+    assert!(
+        missing.is_empty(),
+        "pages that the nav of mkdocs.yml does not name: {}",
+        missing.join(", ")
+    );
+}
+
+#[test]
+fn every_page_the_site_navigation_names_exists() {
+    let pages = site_pages();
+    let navigation = navigation();
+    assert_ne!(navigation.len(), 0, "mkdocs.yml has a nav");
+    let missing: Vec<String> = navigation
+        .into_iter()
+        .filter(|page| !pages.contains(page))
+        .collect();
+    assert!(
+        missing.is_empty(),
+        "pages the nav of mkdocs.yml names that docs/ does not have: {}",
         missing.join(", ")
     );
 }

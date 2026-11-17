@@ -3,10 +3,10 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy use case model |
-| Version | 1.3 |
+| Version | 1.4 |
 | Status | Approved |
 | Owner | typy-lang contributors |
-| Last updated | 2026-11-07 |
+| Last updated | 2026-11-17 |
 
 ## 1. Purpose
 
@@ -37,13 +37,13 @@ which is UC-01, UC-02, UC-03 and UC-09.
 
 The first diagram shows which actor takes part in each use case.
 
-![TyPy use cases and their actors](../diagrams/use-case-typy.svg)
+[![TyPy use cases and their actors](../diagrams/use-case-typy.svg)](../diagrams/use-case-typy.svg)
 
 The second shows how the use cases build on each other. UC-02 always runs
 the checks of UC-01, and UC-03 and UC-09 always build. The use cases that
 extend UC-02 add one option to a build.
 
-![How TyPy use cases build on each other](../diagrams/use-case-relationships.svg)
+[![How TyPy use cases build on each other](../diagrams/use-case-relationships.svg)](../diagrams/use-case-relationships.svg)
 
 | ID | Use case | Primary actor | Release |
 | --- | --- | --- | --- |

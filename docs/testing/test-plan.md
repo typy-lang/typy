@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy test plan |
-| Version | 0.86 |
+| Version | 0.87 |
 | Status | Draft |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-17 |
@@ -180,6 +180,7 @@ the test stays, named for the behaviour it checks.
 | Oracle interpreters | CPython 3.12.16, 3.13.18, 3.14.10 and 3.15.2, exact builds installed with uv 0.13.7 in the dev container, as `python3.12` to `python3.15`, with nothing else installed | Conformance |
 | Nightly Rust | One pinned nightly toolchain, for Miri and the sanitizers only | Section 3.5 |
 | Diagrams container | PlantUML 1.2026.8, pinned by digest | Documentation gate |
+| Documentation tools | Zensical 0.1.1 and its dependencies, pinned with their sha256 in `scripts/docs-requirements.txt`, in a CPython 3.14 environment in the `docs-tools` volume of the dev container, and on the runner of the Pages workflow | Documentation gate, DOC-05 |
 
 Each release adds its platforms to the CI matrix as section 2.3 of the
 specification lists them: Linux x86_64 in 0.1, Linux and macOS AArch64 in
@@ -499,6 +500,7 @@ that the specification does not define.
 | DOC-02 | 0.2 | Static, IT | `make docs-lint`; every rule ID on the pages is checked to exist by `make traceability`; samples by DOC-04 |
 | DOC-03 | 0.2 | IT | `crates/typy-conformance/tests/documentation.rs` lists every active code of the registry and fails when `docs/diagnostics/troubleshooting.md` has no section for one |
 | DOC-04 | 0.2 | IT | `crates/typy-conformance/tests/documentation.rs` extracts every `python` sample from the user documentation, every page under `docs/` outside the engineering documents' directories, with the outcome its `typy-expect` comment states, and judges it as a conformance test: a rejected sample by its code and place, an accepted one by running it and comparing with CPython |
+| DOC-05 | 0.6 | Static, IT | `make docs`, which `make check` runs: `scripts/build-docs.sh` builds the site with Zensical in strict mode, which fails on a link to a page or an anchor that does not exist; `crates/typy-conformance/tests/documentation.rs`: `every_page_of_the_documentation_is_in_the_site_navigation` and `every_page_the_site_navigation_names_exists` compare the `nav` of `mkdocs.yml` with the pages under `docs/`; `.github/workflows/pages.yml` publishes the build of each release |
 | NFR-01 | 0.1 | IT | `crates/typy-driver/tests/size.rs`: hello world, `--release-small`, linked statically with musl, run, and under 100 KB (75 KB in 0.1, 17 KB stripped) |
 | NFR-02 | 0.1 | Static | `make runtime-size`, `scripts/check-runtime-size.py`: a hello world built with `--release-small` and linked for each target with a link map; the runtime sections linked are under 48 KB, and under 32 KB less the large-integer sections (10.3 KB and 10.3 KB in 0.2, ADR-0009) |
 | NFR-03 | 1.0 | Benchmark | `tests/bench/` suite against its C versions, geometric mean within 1.5 times |

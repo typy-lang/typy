@@ -1,0 +1,19 @@
+/*
+ * The accent of the TyPy palette, which marks the current page in the
+ * navigation and a link under the pointer. The theme's deep purple accent
+ * gives that text a contrast of about 4.2:1 on its tinted background in the
+ * light scheme and 3.8:1 in the dark one, under the 4.5:1 that WCAG 2.2
+ * level AA asks of text, so the light scheme takes a darker purple and the
+ * dark scheme a lighter one.
+ */
+:root > * {
+  --md-accent-fg-color: #673ab7;
+  --md-accent-fg-color--transparent: #673ab71a;
+  --md-accent-bg-color: #ffffff;
+  --md-accent-bg-color--light: #ffffffb3;
+}
+
+[data-md-color-scheme="slate"] {
+  --md-accent-fg-color: #b39ddb;
+  --md-accent-fg-color--transparent: #b39ddb1a;
+}

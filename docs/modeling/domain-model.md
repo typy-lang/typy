@@ -3,10 +3,10 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy domain model |
-| Version | 1.2 |
+| Version | 1.3 |
 | Status | Approved |
 | Owner | typy-lang contributors |
-| Last updated | 2026-11-10 |
+| Last updated | 2026-11-17 |
 
 ## 1. Purpose
 
@@ -36,7 +36,7 @@ a context depends only on the object it receives and never reaches back
 into an earlier context. The compiler stages follow from this: the pipeline
 in the architecture is the chain from Source to Build.
 
-![TyPy bounded contexts and the objects passed between them](../diagrams/package-context-map.svg)
+[![TyPy bounded contexts and the objects passed between them](../diagrams/package-context-map.svg)](../diagrams/package-context-map.svg)
 
 | Context | Responsibility | Receives | Hands on |
 | --- | --- | --- | --- |
@@ -54,7 +54,7 @@ layout, and the runtime reads them.
 
 ## 3. Source and checking
 
-![Source and checking concepts](../diagrams/class-domain-source-and-checking.svg)
+[![Source and checking concepts](../diagrams/class-domain-source-and-checking.svg)](../diagrams/class-domain-source-and-checking.svg)
 
 ### 3.1 Source context
 
@@ -116,7 +116,7 @@ Rules that always hold:
 
 ## 4. Lowering, code generation and build
 
-![Lowering, code generation and build concepts](../diagrams/class-domain-lowering-and-build.svg)
+[![Lowering, code generation and build concepts](../diagrams/class-domain-lowering-and-build.svg)](../diagrams/class-domain-lowering-and-build.svg)
 
 ### 4.1 Lowering context
 
@@ -181,7 +181,7 @@ Rules that always hold:
 
 ## 5. Runtime and conformance
 
-![Runtime and conformance concepts](../diagrams/class-domain-runtime.svg)
+[![Runtime and conformance concepts](../diagrams/class-domain-runtime.svg)](../diagrams/class-domain-runtime.svg)
 
 ### 5.1 Runtime context
 
@@ -236,7 +236,7 @@ Rules that always hold:
 
 ### 6.1 Heap object
 
-![Lifecycle of a heap object](../diagrams/state-heap-object.svg)
+[![Lifecycle of a heap object](../diagrams/state-heap-object.svg)](../diagrams/state-heap-object.svg)
 
 A `HeapObject` starts live with a count of 1. While live, increments and
 decrements move its count, and it is freed as soon as the count reaches 0.
@@ -261,7 +261,7 @@ count from outside is 0 is part of a garbage cycle, and it is freed.
 
 ### 6.2 Exception
 
-![Lifecycle of an exception](../diagrams/state-exception.svg)
+[![Lifecycle of an exception](../diagrams/state-exception.svg)](../diagrams/state-exception.svg)
 
 An exception is created as an `ExceptionObject` and raised. While it
 propagates, each frame it leaves runs its cleanup and its `finally` blocks,
@@ -285,7 +285,7 @@ a function exported to C and the program aborts (EXC-05).
 
 ### 6.3 Module in the compiler
 
-![Lifecycle of a module in the compiler](../diagrams/state-module.svg)
+[![Lifecycle of a module in the compiler](../diagrams/state-module.svg)](../diagrams/state-module.svg)
 
 A `Module` is discovered when the main file names it or an import reaches
 it. It is then parsed, resolved, checked and lowered. A failure at any step

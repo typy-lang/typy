@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy detailed design |
-| Version | 2.22 |
+| Version | 2.23 |
 | Status | Approved |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-17 |
@@ -2739,7 +2739,7 @@ installed `typy` finds `<prefix>/lib/typy/` and a `typy` in
 | `CDataClass` | `name: *const u8`, `name_length: u64`, `kind: u32`, `ctype: u32`, `size: u64`, `item: *const CDataClass`, `length: u64` | A `ctypes` class the compiler emits once: `kind` 0 for a scalar of C type `ctype`, numbered as `CType`, 1 for a pointer, 2 for an array of `length` items of `item`, and 3 for a structure, whose name holds its module (ADR-0048, ADR-0049) |
 | `CDataObject` | Header, `class: *const CDataClass`, `address: *mut u8`, `owner: *mut ObjectHeader`, `kept: *mut Kept` | A `ctypes` object under the type ID 23: a scalar or an array owns a buffer after this part; an object over another's memory counts `owner`, the object whose buffer it is or, for C's memory, the pointer it was read through; `kept` is the table of the objects the values in its buffer refer to, by address: a pointer's target and the `bytes` of each `c_char_p` written into it or through an object over it |
 
-![Design classes of the runtime](../diagrams/class-design-runtime.svg)
+[![Design classes of the runtime](../diagrams/class-design-runtime.svg)](../diagrams/class-design-runtime.svg)
 
 ### 14.2 Behaviour
 
@@ -2869,13 +2869,13 @@ its `typy.toml` would set it (CLI-12).
 
 ## 16. Design class diagrams
 
-![Design classes of typy_diagnostics and typy_source](../diagrams/class-design-source.svg)
+[![Design classes of typy_diagnostics and typy_source](../diagrams/class-design-source.svg)](../diagrams/class-design-source.svg)
 
-![Design classes of typy_check](../diagrams/class-design-check.svg)
+[![Design classes of typy_check](../diagrams/class-design-check.svg)](../diagrams/class-design-check.svg)
 
-![Design classes of typy_tyir and typy_lower](../diagrams/class-design-tyir-and-lowering.svg)
+[![Design classes of typy_tyir and typy_lower](../diagrams/class-design-tyir-and-lowering.svg)](../diagrams/class-design-tyir-and-lowering.svg)
 
-![Design classes of typy_codegen and typy_build](../diagrams/class-design-codegen-and-build.svg)
+[![Design classes of typy_codegen and typy_build](../diagrams/class-design-codegen-and-build.svg)](../diagrams/class-design-codegen-and-build.svg)
 
 The dependencies between these crates are shown in the building blocks
 diagram of architecture section 4.1.

@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy development guide |
-| Version | 0.18 |
+| Version | 0.19 |
 | Status | Draft |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-17 |
@@ -62,7 +62,7 @@ Container". VS Code attaches to the same `dev` service.
 | `make bench` | Builds the compiler in release mode and times it on generated 10,000-line projects, in one file and in 200 modules, against the budgets of NFR-04, NFR-05 and NFR-14, with a check that checking time grows linearly with the modules |
 | `make bench-peers` | Downloads, once, the languages the cross-language benchmark compares with TyPy that the image lacks, about 0.5 GB: Go 1.27.4, the Temurin JDK 25.0.5, PyPy 3.11 v7.3.23 and Codon 0.20.6 from their release archives, and mypyc, Cython and Nuitka into a CPython 3.14 environment from `tests/bench/peers/requirements.txt`. Each archive is checked against the sha256 its project publishes and each wheel against its hash; everything goes into the `bench-tools` volume, `/var/cache/typy/bench`, and a tool already there is kept |
 | `make stdlib-names` | Writes `crates/typy-source/src/stdlib_names.rs`, the standard library module names of CPython 3.12 to 3.15, which the loader leaves to the checker (LIB-08); `make check` runs `make stdlib-names-check` |
-| `make check` | Runs the whole quality gate: formatting, Clippy, the tests with line and branch coverage, the four documentation checks below, the Unicode table check and the runtime size check |
+| `make check` | Runs the whole quality gate: formatting, Clippy, the tests with line and branch coverage, the five documentation checks below, the Unicode table check and the runtime size check |
 | `make fmt` | Formats the Rust code |
 | `make lint` | Runs Clippy on every crate and test, with warnings as errors |
 | `make type` | Type checks every crate and test |
@@ -73,6 +73,7 @@ Container". VS Code attaches to the same `dev` service.
 | `make test-e2e` | Runs the end-to-end tests of the `typy` executable |
 | `make test-all` | Runs `make test` and `make miri` |
 | `make docs-lint` | Lints every Markdown file with markdownlint-cli2 |
+| `make docs` | Builds the documentation site into `site/` with `scripts/build-docs.sh`: Zensical in strict mode, which fails on a link to a page or an anchor that does not exist (DOC-05). The first run installs Zensical 0.1.1 and its dependencies from `scripts/docs-requirements.txt`, each checked against its sha256, into a CPython 3.14 environment in the `docs-tools` volume, `/var/cache/typy/docs`, about 20 MB to download. Open `site/index.html`, or serve the directory, to read the result |
 | `make ascii-check` | Fails on any non-ASCII byte in tracked text files, except rendered SVG |
 | `make traceability` | Fails when a requirement has no row in the test plan's matrix, or a document cites an ID that is not defined |
 | `make diagrams` | Renders every PlantUML source to the SVG beside it |
@@ -82,7 +83,7 @@ Container". VS Code attaches to the same `dev` service.
 | `make format-cases` | Writes `crates/typy-runtime/src/format/tests/cases.rs`, the results `format(value, spec)` gives under CPython 3.12 to 3.15 for a table of cases, keeping those all four agree on; never edit that file by hand |
 | `make format-cases-check` | Fails when the committed table of `format()` results differs from the one CPython 3.12 to 3.15 give |
 | `make image` | Rebuilds the dev image after a change under `.devcontainer/` |
-| `make clean` | Stops the containers and removes `.tmp/preview` |
+| `make clean` | Stops the containers and removes `.tmp/preview`, `dist/`, `site/` and Zensical's cache, `.cache/` |
 
 The dev image holds one pinned nightly toolchain, `nightly-2026-11-05`, for
 `make miri`, `make fuzz` and the runtime archive built with
@@ -117,6 +118,8 @@ Markdown that `make docs-lint` checks, and
 | `tests/conformance/` | The conformance programs, by requirement area |
 | `tests/golden/` | The golden programs and the expected text of each stage and diagnostic |
 | `dist/` | Release archives that `make dist` builds. Ignored by Git |
+| `mkdocs.yml` | The settings and the navigation of the documentation site |
+| `site/` | The documentation site that `make docs` builds. Ignored by Git |
 | `rust-toolchain.toml` | The Rust version and components every build uses |
 | `.tmp/` | Scratch files. Ignored by Git and never committed |
 
@@ -147,8 +150,14 @@ to change as it grows:
   the test plan's matrix; `make traceability` fails until it has one. An ID
   is never reused or renumbered.
 - A decision gets a new record in `docs/adr/`, named
-  `NNNN-the-decision-in-words.md`, and a row in `docs/adr/index.md`. An
-  accepted record is not rewritten; a later record supersedes it.
+  `NNNN-the-decision-in-words.md`, a row in `docs/adr/index.md`, and a
+  line in the `nav` of `mkdocs.yml`. An accepted record is not rewritten;
+  a later record supersedes it.
+- A new page gets a line in the `nav` of `mkdocs.yml`, where the site
+  shows it; the documentation test fails on a page the navigation leaves
+  out (DOC-05). A link to a file outside `docs/`, such as a source file,
+  is a link to it on GitHub, `https://github.com/typy-lang/typy/blob/main/`
+  and its path, since the site holds only `docs/`.
 - A document's header carries its version, status and date. A change
   raises the version and the date.
 
