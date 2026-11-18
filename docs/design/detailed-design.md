@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy detailed design |
-| Version | 2.32 |
+| Version | 2.33 |
 | Status | Approved |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-18 |
@@ -2658,15 +2658,18 @@ without a release, and `libNAME.a`. `LibraryLayout::at(path, kind)` is the
 layout of `-o PATH`: the file alone, a shared library's soname its file
 name.
 
-On macOS, `mach_o` links each output under its own file name in a work
-directory beside it and renames it into place, because the linker signs a
-binary ad hoc under its file name and records the object's path in the
-debug map; nothing changes a binary after the linker signed it. A debug
-build of an executable then runs `dsymutil --oso-prepend-path=WORK`, which
-copies the debug information of the object, deleted with the work
-directory, into `NAME.dSYM` beside the executable. Every tool runs with
-`ZERO_AR_DATE=1`, so Apple's linker and `libtool` write no times
-(NFR-06).
+On macOS, `mach_o` links each output in a work directory beside it and
+renames it into place, since nothing changes a binary after the linker
+signed it. The linker signs a binary ad hoc under its file name and records
+the object's path and time in the debug map, so none of them may vary
+(NFR-06): an executable is linked as `program`, whatever `-o` names it, and
+a library under its layout's name; the work directory is named by its
+canonical path, which `-oso_prefix` takes off, so the map records
+`program.o`; and the object is dated 1970. A debug build of an executable
+then runs `dsymutil --oso-prepend-path=WORK` on the renamed executable,
+which copies the debug information of the object, deleted with the work
+directory, into `NAME.dSYM` beside it. Every tool runs with
+`ZERO_AR_DATE=1`, so Apple's linker and `libtool` write no times.
 `Linker::link_library(object, layout, kind, exports)` builds the library in
 a temporary directory beside it, renames it into place when every step
 succeeded, then makes each link in the temporary directory and renames it

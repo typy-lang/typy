@@ -2,9 +2,12 @@
 //! with its debug information in a `.dSYM` beside it, a static library whose only global
 //! symbols are its exports, and a shared library with its install name and versions.
 //!
-//! Each output is linked under its own file name in a work directory beside it, then renamed
-//! into place: the linker signs a binary ad hoc under its file name and records the objects'
-//! paths in its debug map, and nothing may change a binary after the linker signed it.
+//! Each output is linked in a work directory beside it, then renamed into place, since nothing
+//! may change a binary after the linker signed it. The linker signs a binary ad hoc under its
+//! file name and records each object's path and time in its debug map, so the bytes depend on
+//! neither (NFR-06): an executable is linked as `program`, whichever name `-o` gives it, a
+//! library under the name its layout gives, the work directory is named by its canonical
+//! path, which `-oso_prefix` takes off, and the object is dated 1970.
 
 use std::fmt::Write as _;
 
@@ -22,6 +25,9 @@ const DEPLOYMENT: [&str; 3] = ["-arch", "arm64", "-mmacosx-version-min=11.0"];
 /// The tool that copies the debug information of the objects into a `.dSYM`.
 const DSYMUTIL: &str = "dsymutil";
 
+/// The name an executable is linked under, and so signed under.
+const EXECUTABLE: &str = "program";
+
 /// A directory beside an output, removed when it is dropped, holding the program's object as
 /// `program.o`.
 struct Work {
@@ -37,8 +43,16 @@ impl Work {
             .prefix(".typy-")
             .tempdir_in(&parent)
             .map_err(&cannot_write)?;
-        let path = utf8(directory.path());
-        std::fs::write(path.join("program.o"), &object.bytes).map_err(&cannot_write)?;
+        // The linker records the object by its real path, without `.` or a link such as
+        // macOS's `/var`, so the prefix it takes off is that path too.
+        let path = utf8(&std::fs::canonicalize(directory.path()).map_err(&cannot_write)?);
+        let object_path = path.join("program.o");
+        std::fs::write(&object_path, &object.bytes).map_err(&cannot_write)?;
+        std::fs::File::options()
+            .write(true)
+            .open(&object_path)
+            .and_then(|file| file.set_modified(std::time::SystemTime::UNIX_EPOCH))
+            .map_err(&cannot_write)?;
         Ok(Self {
             _directory: directory,
             path,
@@ -82,7 +96,9 @@ impl Linker {
     }
 
     /// Links `object` into the executable `output` and, for a debug build, writes its debug
-    /// information into `output.dSYM`, which a debugger finds beside it.
+    /// information into `output.dSYM`, which a debugger finds beside it. `dsymutil` reads the
+    /// executable at its own name, which the `.dSYM` names its debug information after, while
+    /// the object it reads it from is still in the work directory.
     pub(crate) fn link_mach_o(
         &self,
         object: &ObjectFile,
@@ -91,19 +107,20 @@ impl Linker {
         let work = Work::beside(output, object, "the executable")?;
         let parent = output_directory(output);
         let cannot_write = cannot_write(&parent, "the executable");
-        let linked = work.named_as(output);
+        let linked = work.path.join(EXECUTABLE);
         let mut arguments = vec!["-o".to_owned(), linked.to_string()];
         arguments.extend(self.mach_o_arguments(&work.object(), &work.path));
         self.tools.run(&self.tools.linker, &arguments)?;
+        std::fs::rename(&linked, output).map_err(&cannot_write)?;
         if !self.strip_debug {
-            let symbols = Utf8PathBuf::from(format!("{linked}.dSYM"));
+            let symbols = work.path.join(format!("{EXECUTABLE}.dSYM"));
             self.tools.run(
                 DSYMUTIL,
                 &[
                     format!("--oso-prepend-path={}", work.path),
                     "-o".to_owned(),
                     symbols.to_string(),
-                    linked.to_string(),
+                    output.to_string(),
                 ],
             )?;
             let placed = Utf8PathBuf::from(format!("{output}.dSYM"));
@@ -112,7 +129,6 @@ impl Linker {
             }
             std::fs::rename(&symbols, &placed).map_err(&cannot_write)?;
         }
-        std::fs::rename(&linked, output).map_err(&cannot_write)?;
         Ok(Artifact {
             path: output.to_owned(),
             kind: ArtifactKind::Executable,
@@ -212,9 +228,9 @@ fn exports_list(work: &Utf8Path, exports: &[String]) -> std::io::Result<Utf8Path
 #[cfg(test)]
 mod tests {
     use camino::{Utf8Path, Utf8PathBuf};
-    use typy_codegen::TargetTriple;
+    use typy_codegen::{ObjectFile, Target, TargetTriple};
 
-    use super::exports_list;
+    use super::{Work, exports_list};
     use crate::linker::Linker;
     use crate::runtime_archive::RuntimeArchive;
 
@@ -275,6 +291,29 @@ mod tests {
                 .iter()
                 .any(|argument| argument.starts_with("-Wl,--"))
         );
+    }
+
+    #[test]
+    fn the_work_directory_has_its_real_path_and_the_object_a_fixed_time() {
+        let directory = tempfile::tempdir().unwrap();
+        let root = Utf8PathBuf::from_path_buf(directory.path().to_owned()).unwrap();
+        let output = root.join(".").join("app");
+        let object = ObjectFile {
+            target: Target {
+                triple: TargetTriple::Aarch64AppleDarwin,
+            },
+            bytes: vec![1, 2, 3],
+        };
+        let work = Work::beside(&output, &object, "the executable").unwrap();
+        let real = std::fs::canonicalize(&work.path).unwrap();
+        assert_eq!(work.path.as_std_path(), real);
+        assert!(!work.path.as_str().contains("/./"), "{}", work.path);
+        let modified = std::fs::metadata(work.object())
+            .unwrap()
+            .modified()
+            .unwrap();
+        assert_eq!(modified, std::time::SystemTime::UNIX_EPOCH);
+        assert_eq!(std::fs::read(work.object()).unwrap(), [1, 2, 3]);
     }
 
     #[test]
