@@ -21,8 +21,11 @@ pub struct Export {
 /// them would call its own export in its place, so none is an export's name; a test of the
 /// command line compares the list with what the runtime archive leaves undefined on each
 /// host. On AArch64, Rust's `compiler_builtins` in the archive calls `getauxval` to learn
-/// which atomic instructions the processor has.
-pub const RUNTIME_C_FUNCTIONS: [&str; 56] = [
+/// which atomic instructions the processor has; on macOS the runtime reads `errno` through
+/// `__error`, an error's text from `strerror`, and the calling thread's stack from the
+/// `pthread` functions (ADR-0057).
+pub const RUNTIME_C_FUNCTIONS: [&str; 61] = [
+    "__error",
     "abort",
     "acos",
     "acosh",
@@ -68,12 +71,16 @@ pub const RUNTIME_C_FUNCTIONS: [&str; 56] = [
     "nextafter",
     "open",
     "pow",
+    "pthread_get_stackaddr_np",
+    "pthread_get_stacksize_np",
+    "pthread_self",
     "read",
     "realloc",
     "round",
     "sin",
     "sinh",
     "sqrt",
+    "strerror",
     "strlen",
     "tan",
     "tanh",

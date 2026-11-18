@@ -7,11 +7,13 @@ use crate::exception::{ExceptionKind, ExceptionObject, raise};
 /// The stack left unused when the check fires, for the code that reports the error.
 const MARGIN: usize = 64 * 1024;
 /// The stack size assumed when the system sets no limit.
+#[cfg(target_os = "linux")]
 const DEFAULT_STACK: u64 = 8 * 1024 * 1024;
 
 static LIMIT: ProgramCell<usize> = ProgramCell::new(0);
 
 /// The stack size the limit allows, read from `getrlimit` once; zero until then.
+#[cfg(target_os = "linux")]
 static SIZE: ProgramCell<usize> = ProgramCell::new(0);
 
 /// Returns the stack pointer. The register is read, not the address of a local, because a
@@ -43,7 +45,19 @@ fn stack_pointer() -> usize {
 
 /// Records the lowest address the stack may reach below the current stack pointer: `main`
 /// calls it first, and a library each time an export is called, which may be from another
-/// thread (ADR-0044).
+/// thread (ADR-0044). On macOS it is the margin above the bottom of the calling thread's own
+/// stack, whose size depends on the thread.
+#[cfg(target_os = "macos")]
+pub(crate) fn record_limit() {
+    let low = crate::libc::stack_low();
+    LIMIT.with(|limit| *limit = low.saturating_add(MARGIN));
+}
+
+/// Records the lowest address the stack may reach below the current stack pointer: `main`
+/// calls it first, and a library each time an export is called, which may be from another
+/// thread (ADR-0044). On Linux a thread's stack is as large as `RLIMIT_STACK` unless its
+/// creator chose otherwise, so the limit is read once from `getrlimit`.
+#[cfg(target_os = "linux")]
 pub(crate) fn record_limit() {
     let base = stack_pointer();
     let size = SIZE.with(|size| {
@@ -95,5 +109,22 @@ mod tests {
     fn a_shallow_stack_passes_the_check() {
         record_limit();
         assert!(typy_rt_check_stack().is_null());
+    }
+
+    #[test]
+    #[cfg(target_os = "macos")]
+    fn the_limit_lies_within_a_small_threads_own_stack() {
+        const SIZE: usize = 256 * 1024;
+        let (stack, limit) = std::thread::Builder::new()
+            .stack_size(SIZE)
+            .spawn(|| {
+                record_limit();
+                (super::stack_pointer(), super::LIMIT.with(|limit| *limit))
+            })
+            .unwrap()
+            .join()
+            .unwrap();
+        assert!(limit < stack, "{limit:#x} {stack:#x}");
+        assert!(stack - limit < SIZE, "{limit:#x} {stack:#x}");
     }
 }

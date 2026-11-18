@@ -487,7 +487,9 @@ fn a_negative_position_too_long_to_show_raises_the_digit_limit() {
     }
 }
 
+// `/dev/full`, which refuses every write, is Linux's; macOS has no such device.
 #[test]
+#[cfg(target_os = "linux")]
 #[cfg_attr(miri, ignore = "Miri does not open files without disabling isolation")]
 fn a_write_the_device_refuses_fails_the_next_operation_that_writes_it_out() {
     let scratch = Scratch::new("full-text");

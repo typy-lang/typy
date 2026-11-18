@@ -6,6 +6,25 @@ use core::ffi::c_char;
 unsafe extern "C" {
     fn __error() -> *mut i32;
     fn strerror(errno: i32) -> *const c_char;
+    fn pthread_self() -> *mut core::ffi::c_void;
+    fn pthread_get_stackaddr_np(thread: *mut core::ffi::c_void) -> *mut core::ffi::c_void;
+    fn pthread_get_stacksize_np(thread: *mut core::ffi::c_void) -> usize;
+}
+
+/// Returns the lowest address of the calling thread's stack. A thread a C host creates has
+/// 512 KiB by default on macOS, where the main thread has 8 MiB, so the stack check measures
+/// each thread's own stack (FUN-02).
+pub(crate) fn stack_low() -> usize {
+    // SAFETY: `pthread_self` names the calling thread, which is live while it asks about
+    // itself; the address is the top of its stack, which grows down by the size.
+    let (top, size) = unsafe {
+        let thread = pthread_self();
+        (
+            pthread_get_stackaddr_np(thread).expose_provenance(),
+            pthread_get_stacksize_np(thread),
+        )
+    };
+    top.saturating_sub(size)
 }
 
 /// Returns the address of the calling thread's `errno`.
@@ -20,9 +39,6 @@ pub(crate) const O_EXCL: i32 = 0x800;
 pub(crate) const O_TRUNC: i32 = 0x400;
 pub(crate) const O_APPEND: i32 = 0x8;
 pub(crate) const O_CLOEXEC: i32 = 0x0100_0000;
-
-/// The soft limit of a resource that has none.
-pub(crate) const RLIM_INFINITY: u64 = (1 << 63) - 1;
 
 /// Returns `st_mode` of a `struct stat` of 144 bytes: the `u16` at byte 4, after the 32-bit
 /// `st_dev`.
@@ -44,8 +60,6 @@ pub(crate) const ECONNRESET: i32 = 54;
 pub(crate) const ESHUTDOWN: i32 = 58;
 pub(crate) const ETIMEDOUT: i32 = 60;
 pub(crate) const ECONNREFUSED: i32 = 61;
-/// "Capabilities insufficient", which CPython makes a `PermissionError`.
-pub(crate) const ENOTCAPABLE: Option<i32> = Some(107);
 
 /// Returns the bytes of the text the system's `strerror` gives `errno`, as CPython shows it on
 /// macOS: "Unknown error: 500" for a number it does not name.

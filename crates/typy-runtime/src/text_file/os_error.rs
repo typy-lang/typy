@@ -59,8 +59,7 @@ static DESCRIPTOR_FIELDS: [Field; 3] = [
 /// below 35 are the same on every system.
 pub(crate) fn class_of(errno: i32) -> &'static TypeObject {
     use crate::libc::{
-        EAGAIN, EALREADY, ECONNABORTED, ECONNREFUSED, ECONNRESET, EINPROGRESS, ENOTCAPABLE,
-        ESHUTDOWN, ETIMEDOUT,
+        EAGAIN, EALREADY, ECONNABORTED, ECONNREFUSED, ECONNRESET, EINPROGRESS, ESHUTDOWN, ETIMEDOUT,
     };
     match errno {
         1 | 13 => &PERMISSION_ERROR,
@@ -77,7 +76,6 @@ pub(crate) fn class_of(errno: i32) -> &'static TypeObject {
         ECONNRESET => &CONNECTION_RESET_ERROR,
         ETIMEDOUT => &TIMEOUT_ERROR,
         ECONNREFUSED => &CONNECTION_REFUSED_ERROR,
-        _ if ENOTCAPABLE == Some(errno) => &PERMISSION_ERROR,
         _ => &OS_ERROR,
     }
 }

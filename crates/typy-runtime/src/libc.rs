@@ -12,12 +12,12 @@ use linux as system;
 #[cfg(target_os = "macos")]
 use macos as system;
 
-#[cfg(target_os = "macos")]
-pub(crate) use system::error_text;
 pub(crate) use system::{
-    EAGAIN, EALREADY, ECONNABORTED, ECONNREFUSED, ECONNRESET, EINPROGRESS, ENOTCAPABLE, ESHUTDOWN,
-    ETIMEDOUT, O_APPEND, O_CLOEXEC, O_CREAT, O_EXCL, O_TRUNC,
+    EAGAIN, EALREADY, ECONNABORTED, ECONNREFUSED, ECONNRESET, EINPROGRESS, ESHUTDOWN, ETIMEDOUT,
+    O_APPEND, O_CLOEXEC, O_CREAT, O_EXCL, O_TRUNC,
 };
+#[cfg(target_os = "macos")]
+pub(crate) use system::{error_text, stack_low};
 
 unsafe extern "C" {
     // The unit tests allocate with these; a program allocates through its own hooks
@@ -33,6 +33,7 @@ unsafe extern "C" {
     fn read_bytes(descriptor: i32, buffer: *mut c_void, count: usize) -> isize;
     fn abort() -> !;
     fn exit(status: i32) -> !;
+    #[cfg(target_os = "linux")]
     fn getrlimit(resource: i32, limit: *mut [u64; 2]) -> i32;
     #[link_name = "open"]
     fn open_path(path: *const core::ffi::c_char, flags: i32, ...) -> i32;
@@ -236,11 +237,12 @@ pub(crate) fn exit_process(status: i32) -> ! {
 }
 
 /// Returns the soft limit of the stack size in bytes, or `None` when there is no limit.
+#[cfg(target_os = "linux")]
 pub(crate) fn stack_limit() -> Option<u64> {
     const RLIMIT_STACK: i32 = 3;
     let mut limit = [0_u64; 2];
     // SAFETY: `limit` is a writable pair of 64-bit values, the layout of `struct rlimit` on
-    // 64-bit Linux and macOS.
+    // 64-bit Linux.
     let status = unsafe { getrlimit(RLIMIT_STACK, &raw mut limit) };
     (status == 0 && limit[0] != system::RLIM_INFINITY).then_some(limit[0])
 }
@@ -267,9 +269,11 @@ mod tests {
     }
 
     unsafe extern "C" {
+        #[cfg(target_os = "linux")]
         fn setrlimit(resource: i32, limit: *const [u64; 2]) -> i32;
         fn sigaction(signal: i32, action: *const Action, old: *mut Action) -> i32;
         fn pthread_kill(thread: std::os::unix::thread::RawPthread, signal: i32) -> i32;
+        #[cfg(target_os = "linux")]
         fn mkfifo(path: *const core::ffi::c_char, mode: u32) -> i32;
     }
 
@@ -374,7 +378,11 @@ mod tests {
         drop(writing);
     }
 
+    // On macOS 15 the writer's `open` of a FIFO, interrupted by these signals, did not return
+    // once the reader opened, so the test runs where the call returns; `open` retries `EINTR`
+    // with the same code on every system.
     #[test]
+    #[cfg(target_os = "linux")]
     #[cfg_attr(miri, ignore = "Miri does not deliver signals")]
     fn an_open_interrupted_by_a_signal_is_retried() {
         let directory = std::env::temp_dir().join(format!("typy-libc-fifo-{}", std::process::id()));
@@ -396,11 +404,12 @@ mod tests {
     }
 
     #[test]
+    #[cfg(target_os = "linux")]
     #[cfg_attr(miri, ignore = "Miri does not change resource limits")]
     fn a_stack_without_a_limit_gives_none() {
         const RLIMIT_STACK: i32 = 3;
         let mut kept = [0_u64; 2];
-        // SAFETY: `kept` is a writable `struct rlimit` on 64-bit Linux and macOS.
+        // SAFETY: `kept` is a writable `struct rlimit` on 64-bit Linux.
         assert_eq!(unsafe { super::getrlimit(RLIMIT_STACK, &raw mut kept) }, 0);
         // The soft limit rises to the hard one, which is unlimited where the tests run.
         let raised = [kept[1], kept[1]];

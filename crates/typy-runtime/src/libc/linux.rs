@@ -45,5 +45,3 @@ pub(crate) const ETIMEDOUT: i32 = 110;
 pub(crate) const ECONNREFUSED: i32 = 111;
 pub(crate) const EALREADY: i32 = 114;
 pub(crate) const EINPROGRESS: i32 = 115;
-/// Linux has no `ENOTCAPABLE`, which CPython makes a `PermissionError` where it exists.
-pub(crate) const ENOTCAPABLE: Option<i32> = None;

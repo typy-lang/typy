@@ -369,7 +369,7 @@ const SYSTEM_ERRORS: [(i32, &str, &str); 4] = [
 #[cfg(target_os = "linux")]
 const SUBCLASS_ERRORS: [i32; 9] = [11, 103, 104, 108, 110, 111, 114, 115, 3];
 #[cfg(target_os = "macos")]
-const SUBCLASS_ERRORS: [i32; 10] = [35, 36, 37, 53, 54, 58, 60, 61, 107, 3];
+const SUBCLASS_ERRORS: [i32; 9] = [35, 36, 37, 53, 54, 58, 60, 61, 3];
 
 #[test]
 fn an_error_number_gives_cpythons_class_text_and_arguments() {

@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy detailed design |
-| Version | 2.33 |
+| Version | 2.34 |
 | Status | Approved |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-18 |
@@ -2828,7 +2828,7 @@ installed `typy` finds `<prefix>/lib/typy/` and a `typy` in
 | `module` | A module object is an immortal static object codegen emits for each module: header with the type ID 15, then its name and its path from the project root as `str` objects. The type `typy_rt_type_module` writes it `<module 'm' from 'm.py'>` (OI-20). `typy_rt_module_attribute_error` and `typy_rt_module_import_error` raise CPython's `module 'm' has no attribute 'x'` and `cannot import name 'x' from 'm' (m.py)`; while the module initialises they add CPython 3.13 to 3.15's note `(consider renaming 'm.py' if it has the same name as a library you intended to import)`, the newest oracle's wording (OI-14). `typy_rt_name_error` raises `name 'x' is not defined` |
 | `range` | `typy_rt_range_check_step` raises `ValueError: range() arg 3 must not be zero`, and `typy_rt_range_last(start, stop, step)` returns `start + (n - 1) * step` for the `n` values of the range, by CPython's `compute_range_length`, on `int` words of any size: the last value, or `start - step` for an empty range. `typy_rt_range_new` makes a range value, with the same `ValueError` for a zero step; `_length` raises `OverflowError: Python int too large to convert to C ssize_t` for a length that is not inline, as `len()` does; `_bound` gives the start, stop or step; `_get` raises `IndexError: range object index out of range`; `_slice` builds a range from the slice's indices, as CPython's `compute_slice` does; `_contains` tests an `int` by arithmetic without stepping; `_equal` compares as `==` does. A slice of a range whose length passes `sys.maxsize` raises `OverflowError`, where CPython computes it with large integers |
 | `zip` | `typy_rt_zip_unequal(index, longer)` raises CPython's `ValueError` for a strict `zip`: `zip() argument 2 is shorter than argument 1`, or `zip() argument 3 is longer than arguments 1-2` |
-| `stack` | The check at the start of recursive functions reads the stack pointer register and compares it with the recorded limit; the register is read rather than the address of a local, because a sanitizer may keep locals on a separate fake stack. The limit leaves 64 KiB of stack unused; past it the check raises `RecursionError: maximum recursion depth exceeded` |
+| `stack` | The check at the start of recursive functions reads the stack pointer register and compares it with the recorded limit; the register is read rather than the address of a local, because a sanitizer may keep locals on a separate fake stack. The limit leaves 64 KiB of stack unused; past it the check raises `RecursionError: maximum recursion depth exceeded`. On Linux the limit is the stack pointer at the start less `RLIMIT_STACK`, which is the size of a new thread's stack too; on macOS it is the bottom of the calling thread's own stack from `pthread_get_stackaddr_np` and `pthread_get_stacksize_np`, since a thread a C host creates there has 512 KiB where the main thread has 8 MiB (FUN-02) |
 
 An `int` word that is not inline is the address of a large integer. The
 runtime makes it with `expose_provenance` and turns it back into a pointer
