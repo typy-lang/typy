@@ -636,20 +636,55 @@ fn cli_10_explain_prints_a_code_with_a_wrong_and_a_corrected_program() {
     }
 }
 
-const TRIPLES: [&str; 3] = [
-    "x86_64-unknown-linux-gnu",
-    "x86_64-unknown-linux-musl",
-    "aarch64-unknown-linux-gnu",
-];
+/// The triples this host builds for, and one that only another system's host builds for.
+const fn host_triples() -> (&'static [&'static str], &'static str) {
+    if cfg!(target_os = "macos") {
+        (&["aarch64-apple-darwin"], "x86_64-unknown-linux-gnu")
+    } else {
+        (
+            &[
+                "x86_64-unknown-linux-gnu",
+                "x86_64-unknown-linux-musl",
+                "aarch64-unknown-linux-gnu",
+            ],
+            "aarch64-apple-darwin",
+        )
+    }
+}
 
 #[test]
-fn cli_08_an_unsupported_target_is_a_usage_error_that_lists_the_supported_ones() {
+fn cli_08_an_unsupported_target_is_a_usage_error_that_lists_the_hosts_targets() {
     let workspace = Workspace::new(HELLO);
+    let (triples, _) = host_triples();
     for command in ["build", "check"] {
-        let output = workspace.typy(&[command, "app.py", "--target", "aarch64-apple-darwin"]);
+        let output =
+            workspace.typy(&[command, "app.py", "--target", "riscv64gc-unknown-linux-gnu"]);
         assert_eq!(status(&output), 2, "{command}");
         let message = stderr(&output);
-        for triple in TRIPLES {
+        for &triple in triples {
+            assert!(message.contains(triple), "{command}: {message}");
+        }
+    }
+}
+
+#[test]
+fn cli_08_another_systems_target_is_a_usage_error_that_names_its_system() {
+    let workspace = Workspace::new(HELLO);
+    let (triples, other) = host_triples();
+    let system = if other.contains("apple") {
+        "macOS"
+    } else {
+        "Linux"
+    };
+    for command in ["build", "check"] {
+        let output = workspace.typy(&[command, "app.py", "--target", other]);
+        assert_eq!(status(&output), 2, "{command}");
+        let message = stderr(&output);
+        assert!(
+            message.contains(&format!("{other} is built on {system} only")),
+            "{command}: {message}"
+        );
+        for &triple in triples {
             assert!(message.contains(triple), "{command}: {message}");
         }
     }
@@ -658,7 +693,8 @@ fn cli_08_an_unsupported_target_is_a_usage_error_that_lists_the_supported_ones()
 #[test]
 fn cli_08_check_accepts_each_supported_target() {
     let workspace = Workspace::new(HELLO);
-    for triple in TRIPLES {
+    let (triples, _) = host_triples();
+    for &triple in triples {
         let output = workspace.typy(&["check", "app.py", "--target", triple]);
         assert_eq!(
             (status(&output), stderr(&output).as_str()),

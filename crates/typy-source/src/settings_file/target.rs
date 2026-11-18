@@ -11,10 +11,11 @@ use crate::settings::TargetTools;
 
 /// The targets TyPy builds for, as `typy.toml` names them. The code generator's triples are
 /// the same, which a test of the toolchain checks.
-pub const TARGET_TRIPLES: [&str; 3] = [
+pub const TARGET_TRIPLES: [&str; 4] = [
     "x86_64-unknown-linux-gnu",
     "x86_64-unknown-linux-musl",
     "aarch64-unknown-linux-gnu",
+    "aarch64-apple-darwin",
 ];
 
 /// The keys of a target's table.
@@ -189,8 +190,8 @@ mod tests {
         for (text, message) in [
             ("target = 3\n", "`target` is an integer, not a table"),
             (
-                "[target.\"aarch64-apple-darwin\"]\nlinker = \"cc\"\n",
-                "`aarch64-apple-darwin` is not a target TyPy builds for",
+                "[target.\"x86_64-apple-darwin\"]\nlinker = \"cc\"\n",
+                "`x86_64-apple-darwin` is not a target TyPy builds for",
             ),
             (
                 "[target]\n\"aarch64-unknown-linux-gnu\" = \"cc\"\n",

@@ -6,6 +6,12 @@ All notable changes to TyPy are recorded here. The format follows
 
 ## [Unreleased]
 
+### Changed
+
+- `--target aarch64-apple-darwin` on a Linux host is a usage error that
+  says the triple is built on macOS only, and lists the Linux targets
+  (CLI-08).
+
 ### Fixed
 
 - A function a library built with `--lib` exports takes and returns a

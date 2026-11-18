@@ -65,9 +65,9 @@ qemu-aarch64 -L /usr/aarch64-linux-gnu ./app
 ```
 
 `typy run` builds for the host only, since a program for another
-architecture does not run on it. `typy check --target` gives the same
-diagnostics for every target of 0.6, whose `sys.platform` is `linux` and
-whose C types have the same sizes.
+architecture does not run on it. `typy check --target` checks for the
+target: `sys.platform` is the name of its operating system, and the C
+types have the same sizes on every target.
 
 ## Project settings in typy.toml
 

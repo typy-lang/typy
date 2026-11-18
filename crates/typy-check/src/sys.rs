@@ -32,8 +32,10 @@ pub(crate) enum SysName {
     Value(SysValue),
     /// `sys.exit`.
     Exit,
-    /// A constant: `maxsize`, `maxunicode`, `byteorder` or `platform`.
+    /// A constant: `maxsize`, `maxunicode` or `byteorder`.
     Constant(SysConstant),
+    /// `sys.platform`, which names the target's operating system (LIB-22).
+    Platform,
     /// `sys.getrecursionlimit`.
     GetRecursionLimit,
     /// `sys.setrecursionlimit`.
@@ -132,12 +134,11 @@ pub(crate) fn sys_name(name: &str) -> Option<SysName> {
         "stderr" => SysName::Value(SysValue::Stderr),
         "stdin" => SysName::Value(SysValue::Stdin),
         "exit" => SysName::Exit,
-        // Every target of 0.6 is a 64-bit Linux (SRS 2.3), so `platform` and `maxsize` are
-        // the same for each; `platform` follows the target once macOS is one, in 0.7.
+        // Every target is 64-bit and little-endian (SRS 2.3), so these are the same for each.
         "maxsize" => SysName::Constant(SysConstant::Int("9223372036854775807")),
         "maxunicode" => SysName::Constant(SysConstant::Int("1114111")),
         "byteorder" => SysName::Constant(SysConstant::Str("little")),
-        "platform" => SysName::Constant(SysConstant::Str("linux")),
+        "platform" => SysName::Platform,
         // The version of CPython whose behaviour TyPy follows (ADR-0029).
         "version" => SysName::Constant(SysConstant::Str(concat!(
             "3.15.0 (TyPy ",

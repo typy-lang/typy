@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy detailed design |
-| Version | 2.28 |
+| Version | 2.29 |
 | Status | Approved |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-18 |
@@ -345,6 +345,7 @@ it enforces and its status. `typy explain` reads the same table.
 | `version` | `Option<String>` | `None` | `version` in `typy.toml`, a string whose release `version_release` finds; the version of a library whose module has no `__version__` (CLI-13) |
 | `library_paths` | `Vec<Utf8PathBuf>` | empty | `library-paths`: directories under `root`, checked as `module_paths` are, where the linker looks for C libraries first (FFI-04) |
 | `libraries` | `BTreeMap<String, LibraryLink>` | empty | `[libraries."NAME"]`, each a table of one `link`, `"static"` or `"dynamic"`, for a name of letters, digits and `_.+-` that does not start with `-`; `LibraryLink::linker_name` gives `:NAME` or `:BASE.a` (FFI-04) |
+| `platform` | `Platform` | `Platform::host()` | `Linux` or `MacOs`, the operating system of the build's target, which `Pipeline` sets from the target and `sys.platform` names: `linux` or `darwin` (LIB-22) |
 | `allocator` | `Option<Allocator>` | `None` | The table `[allocator]`: the C functions `allocate`, `reallocate` and `free`, each an identifier of at most 255 characters outside the prefixes `typy_`, `__typy` and `_TY`, all three different, and an optional `library`, a name the linker takes as `-lname` that starts with a letter, a digit or `_` (MEM-08, ADR-0043) |
 
 `ProjectSettings::read(root, overrides)` builds the settings once, when a
@@ -2391,9 +2392,16 @@ counted nor released. `EscapeAnalysis` is planned for 0.4 and
 
 ### 10.1 Types and functions
 
-`TargetTriple` is one of the supported triples. In 0.1 they are
-`x86_64-unknown-linux-gnu` and `x86_64-unknown-linux-musl`. `Target` holds a
-triple, and `Target::host()` returns the triple `typy` was built for.
+`TargetTriple` is one of the supported triples: `x86_64-unknown-linux-gnu`
+and `x86_64-unknown-linux-musl` from 0.1, `aarch64-unknown-linux-gnu` from
+0.6 (ADR-0051), and `aarch64-apple-darwin` from 0.7 (ADR-0055), which LLVM
+is given as `arm64-apple-macosx11.0.0` with the CPU `apple-m1`, so a
+program runs on every Apple silicon Mac from macOS 11. `builds_on(host)`
+holds for a Linux triple on a Linux host and for the macOS triple on a
+macOS host, since linking for macOS needs Apple's SDK; the command line
+refuses any other. `is_macos` chooses the Mach-O steps of linking.
+`Target` holds a triple, and `Target::host()` returns the triple `typy` was
+built for.
 
 `Optimization` is `None`, `Speed` or `Size`, for the three build modes.
 LLVM 23 has no `Oz` pipeline, so `Size` runs the `O2` pipeline with every
@@ -2684,7 +2692,7 @@ process. Each method returns a `Success`, the `Outcome` with the
 
 | Method | Behaviour |
 | --- | --- |
-| `check(main)` | Loads and checks the program, and returns `Outcome::Checked` with its `Sources` (CLI-03) |
+| `check(main, target)` | Loads and checks the program for the target, whose operating system `ProjectSettings::platform` takes, and returns `Outcome::Checked` with its `Sources` (CLI-03, LIB-22) |
 | `run(request)` with `emit` set | Runs the stages up to that stage and returns `Outcome::Emitted` with an `Emission`: `Text` for every stage but `obj`, `Bytes` for `obj` (CLI-04). `ast` needs only a program that parses; every later stage needs one that checks |
 | `run(request)` without `emit` | Opens the runtime archive, then loads, checks, lowers, generates the object and links it, and returns `Outcome::Executable` with the `Artifact` |
 | `run(request)` with `library` set | Loads the main file as a library, so its module is named after its file, then links with `link_library` into the layout of `-o`, or `LibraryLayout::beside` the main file with the module's name and release, and writes beside the library the C header `NAME.h`, and the binding `NAME_binding.py` and its stub `NAME_binding.pyi`, which load the soname of the shared library of the build's release, also for a static build (CLI-09, CLI-13, FFI-05, FFI-08) |

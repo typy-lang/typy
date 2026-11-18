@@ -231,6 +231,7 @@ impl Checked<'_> {
             .set_declarations(self.foreign.clone(), self.structures.to_vec());
         crate::protocol_fits::reset(&program.protocol_values.fits);
         program.set_floor(project.settings().python_floor.minor());
+        program.set_platform(project.settings().platform);
         program.set_known_creations(known.cloned());
         let mut assigned = BTreeSet::new();
         for module in self.modules {

@@ -147,9 +147,16 @@ impl Suite {
             ..SettingOverrides::default()
         });
         match case.expectation {
-            Expectation::Rejected { code, line, column } => {
-                judge_rejected(&pipeline, case, code, line, column)
-            }
+            Expectation::Rejected { code, line, column } => judge_rejected(
+                &pipeline,
+                case,
+                Target {
+                    triple: self.target,
+                },
+                code,
+                line,
+                column,
+            ),
             Expectation::Accepted
                 if case.architecture_dependent
                     && self.target.architecture() != Target::host().triple.architecture() =>

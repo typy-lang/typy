@@ -98,7 +98,7 @@ fn every_text_stage_of_every_program_matches_its_golden_file() {
 fn every_diagnostic_program_renders_as_its_golden_file() {
     let mut problems = Vec::new();
     for program in programs(&golden().join("diagnostics")) {
-        let Err(failure) = pipeline().check(&program) else {
+        let Err(failure) = pipeline().check(&program, Target::host()) else {
             panic!("{program} has no diagnostic");
         };
         let sorted = failure.diagnostics.into_sorted(&failure.sources);

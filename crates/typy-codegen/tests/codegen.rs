@@ -90,6 +90,32 @@ fn object_files_are_elf_and_deterministic() {
 }
 
 #[test]
+fn every_program_is_a_deterministic_mach_o_object_for_macos() {
+    let target = Target {
+        triple: TargetTriple::Aarch64AppleDarwin,
+    };
+    for source in PROGRAMS {
+        let (project, module) = compile(source);
+        let first = object(&module, target, Optimization::Speed, &project)
+            .unwrap_or_else(|diagnostics| panic!("{diagnostics:?}\n{source}"));
+        let second = object(&module, target, Optimization::Speed, &project).unwrap();
+        // `MH_MAGIC_64`, then `CPU_TYPE_ARM64`, both little-endian.
+        assert_eq!(
+            &first.bytes[..8],
+            b"\xcf\xfa\xed\xfe\x0c\x00\x00\x01",
+            "{source}"
+        );
+        assert_eq!(first, second, "{source}");
+    }
+    let (project, module) = compile(PROGRAMS[1]);
+    let ir = llvm_ir(&module, target, Optimization::None, &project).unwrap();
+    assert!(
+        ir.contains("target triple = \"arm64-apple-macosx11.0.0\""),
+        "{ir}"
+    );
+}
+
+#[test]
 fn the_entry_is_the_only_external_function() {
     let (project, module) = compile(PROGRAMS[1]);
     let ir = llvm_ir(&module, Target::host(), Optimization::None, &project).unwrap();

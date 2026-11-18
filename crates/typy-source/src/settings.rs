@@ -109,6 +109,36 @@ impl LibraryLink {
     }
 }
 
+/// The operating system a program is built for, which `sys.platform` names (LIB-22).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Platform {
+    /// Linux, whose `sys.platform` is `linux`.
+    Linux,
+    /// macOS, whose `sys.platform` is `darwin`.
+    MacOs,
+}
+
+impl Platform {
+    /// Returns the operating system `typy` itself runs on.
+    #[must_use]
+    pub const fn host() -> Self {
+        if cfg!(target_os = "macos") {
+            Self::MacOs
+        } else {
+            Self::Linux
+        }
+    }
+
+    /// Returns `sys.platform` on the operating system, as CPython gives it.
+    #[must_use]
+    pub const fn sys_platform(self) -> &'static str {
+        match self {
+            Self::Linux => "linux",
+            Self::MacOs => "darwin",
+        }
+    }
+}
+
 /// The settings of one command; immutable once the project is loaded.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ProjectSettings {
@@ -139,6 +169,9 @@ pub struct ProjectSettings {
     /// The C tools `typy.toml` names for a target, by its triple, in place of those TyPy
     /// would run (CLI-14).
     pub targets: std::collections::BTreeMap<String, TargetTools>,
+    /// The operating system of the target, the host's unless a build or a check names
+    /// another target (LIB-22).
+    pub platform: Platform,
 }
 
 /// The C tools `typy.toml` names for one target; each absent one is TyPy's choice (CLI-14).
@@ -167,13 +200,31 @@ impl ProjectSettings {
             library_paths: Vec::new(),
             libraries: std::collections::BTreeMap::new(),
             targets: std::collections::BTreeMap::new(),
+            platform: Platform::host(),
         }
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{ProjectSettings, PythonFloor, Release};
+    use super::{Platform, ProjectSettings, PythonFloor, Release};
+
+    #[test]
+    fn sys_platform_is_linux_on_linux_and_darwin_on_macos() {
+        assert_eq!(Platform::Linux.sys_platform(), "linux");
+        assert_eq!(Platform::MacOs.sys_platform(), "darwin");
+    }
+
+    #[test]
+    fn the_platform_is_the_hosts_until_a_target_names_another() {
+        let expected = if cfg!(target_os = "macos") {
+            Platform::MacOs
+        } else {
+            Platform::Linux
+        };
+        assert_eq!(Platform::host(), expected);
+        assert_eq!(ProjectSettings::new("app".into()).platform, expected);
+    }
 
     #[test]
     fn every_floor_parses_from_its_own_text() {

@@ -185,15 +185,17 @@ fn instrumented_archive(compiler: &Utf8Path) -> Option<Utf8PathBuf> {
         .map(|archive| archive.path().to_owned())
 }
 
-/// Checks the program and passes when TyPy reports exactly `code` at `line:column`.
+/// Checks the program for `target` and passes when TyPy reports exactly `code` at
+/// `line:column`.
 pub(crate) fn judge_rejected(
     pipeline: &Pipeline,
     case: &TestCase,
+    target: Target,
     code: DiagnosticCode,
     line: u32,
     column: u32,
 ) -> Verdict {
-    let Err(failure) = pipeline.check(&case.path) else {
+    let Err(failure) = pipeline.check(&case.path, target) else {
         return Verdict::Fail("TyPy accepted the program".to_owned());
     };
     let mut diagnostics = failure.diagnostics.iter();

@@ -23,16 +23,20 @@ pub(crate) fn run(command: Command, deny_warnings: bool, reporter: Reporter) -> 
     };
     match command {
         Command::Explain { code } => explain::explain(&code),
-        // Checking gives the same diagnostics for every target of 0.6, whose `sys.platform` is
-        // `linux` and whose C types are LP64, so the target is only validated (ADR-0051).
+        // The target's operating system gives `sys.platform` (LIB-22).
         Command::Check {
             file,
             settings,
             library,
-            target: _,
+            target,
         } => check::check(
             &pipeline.with_overrides(settings.overrides_for(library)),
             &file,
+            target
+                .triple
+                .map_or_else(typy_codegen::Target::host, |triple| typy_codegen::Target {
+                    triple,
+                }),
             reporter,
         ),
         Command::Build {

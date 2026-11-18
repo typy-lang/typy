@@ -142,7 +142,7 @@ LIB-13):
 | `sys.stdout`, `sys.stderr` | Text files with `write(text)`, which returns the number of characters, and `flush()` |
 | `sys.stdin` | A text file with `read`, `readline`, `readlines` and iteration, which `input()` reads too |
 | `sys.maxsize`, `sys.maxunicode` | `2**63 - 1` and `1114111` |
-| `sys.byteorder`, `sys.platform` | `"little"` and `"linux"`, those of the platforms TyPy builds for |
+| `sys.byteorder`, `sys.platform` | `"little"` on every target; `"linux"` in a program built for Linux and `"darwin"` in one built for macOS |
 | `sys.getrecursionlimit()`, `sys.setrecursionlimit(n)` | Read and set the recursion limit, 1000 at first |
 | `sys.version`, `sys.hexversion`, `sys.version_info` | CPython 3.15.0, whose behaviour TyPy follows: `'3.15.0 (TyPy 0.6.0)'`, `0x030F00F0` and `(3, 15, 0, 'final', 0)` |
 
