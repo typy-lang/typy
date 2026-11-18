@@ -25,6 +25,7 @@ pub(crate) struct Statics<'ctx> {
     type_aliases: BTreeMap<u32, PointerValue<'ctx>>,
     function_objects: BTreeMap<u32, PointerValue<'ctx>>,
     method_descriptors: BTreeMap<u32, PointerValue<'ctx>>,
+    closure_descriptors: BTreeMap<u32, PointerValue<'ctx>>,
 }
 
 impl<'ctx> Statics<'ctx> {
@@ -42,7 +43,18 @@ impl<'ctx> Statics<'ctx> {
             type_aliases: BTreeMap::new(),
             function_objects: BTreeMap::new(),
             method_descriptors: BTreeMap::new(),
+            closure_descriptors: BTreeMap::new(),
         }
+    }
+
+    /// Returns the descriptor of nested function `id`, if it was emitted already (FUN-04).
+    pub(crate) fn closure_descriptor(&self, id: u32) -> Option<PointerValue<'ctx>> {
+        self.closure_descriptors.get(&id).copied()
+    }
+
+    /// Records the descriptor of nested function `id`.
+    pub(crate) fn add_closure_descriptor(&mut self, id: u32, pointer: PointerValue<'ctx>) {
+        self.closure_descriptors.insert(id, pointer);
     }
 
     /// Returns the bound method descriptor of method `id`, if it was emitted already.

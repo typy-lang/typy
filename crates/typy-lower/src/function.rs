@@ -112,6 +112,9 @@ pub(crate) struct FunctionLowerer<'context> {
     entry: bool,
     /// The function being lowered.
     pub(crate) function_id: typy_check::FunctionId,
+    /// For a nested function, its function object, its first parameter, and the tuple type
+    /// of its captures (FUN-04).
+    pub(crate) closure: Option<(ValueId, typy_tyir::TupleTypeId)>,
     recursive: bool,
     body_start: BlockId,
     span: Span,
@@ -173,6 +176,7 @@ impl<'context> FunctionLowerer<'context> {
         let mut assigned = crate::borrow::assigned_symbols(&function.body);
         assigned.extend(function.named_targets.iter().copied());
         let mut borrowed = BTreeSet::new();
+        let closure = closure_parameter(program, function, &mut builder, tuple_types);
         for symbol_id in &function.parameters {
             let symbol = program.symbol(*symbol_id);
             let ty = tyir_type(&symbol.ty, tuple_types);
@@ -219,6 +223,7 @@ impl<'context> FunctionLowerer<'context> {
             module: function.module.clone(),
             entry,
             function_id: function.id,
+            closure,
             recursive,
             body_start,
             span: function.span,
@@ -336,6 +341,20 @@ fn move_candidates(
         }
     }
     candidates
+}
+
+/// Adds a nested function's first parameter, its function object, which holds its captures,
+/// and returns it with the tuple type of the captures (FUN-04).
+fn closure_parameter(
+    program: &TypedProgram,
+    function: &TypedFunction,
+    builder: &mut FunctionBuilder,
+    tuple_types: &mut typy_tyir::TupleTypes,
+) -> Option<(ValueId, typy_tyir::TupleTypeId)> {
+    let types = program.closures.get(&function.id)?;
+    let value = builder.add_parameter(TyirType::FUNCTION);
+    let items = types.iter().map(|ty| tyir_type(ty, tuple_types)).collect();
+    Some((value, tuple_types.intern_id(items)))
 }
 
 /// Returns the stand-in for a generic function, whose copies are called in its place: it

@@ -1,7 +1,9 @@
 //! Function objects, a function of the program as a value (FUN-05, ADR-0060). The compiler
-//! emits an immortal object for each function that captures nothing, which points to the
-//! function's immortal descriptor. Its `repr` is `<function QUALNAME at 0x...>`, and it hashes
-//! and compares by identity, as CPython's functions do.
+//! emits an immortal object for each function of a module, which points to the function's
+//! immortal descriptor; each `def` of a nested function that runs makes a new one, which
+//! holds its captures after the descriptor, laid out as the descriptor's tuple type says
+//! (FUN-04, ADR-0061). Its `repr` is `<function QUALNAME at 0x...>`, and it hashes and
+//! compares by identity, as CPython's functions do.
 
 use crate::Raising;
 use crate::header::ObjectHeader;
@@ -16,7 +18,7 @@ pub(crate) struct FunctionDescriptor {
     pub(crate) name: *const StrObject,
     pub(crate) qualified_name: *const StrObject,
     pub(crate) code: *const core::ffi::c_void,
-    pub(crate) captures: *const core::ffi::c_void,
+    pub(crate) captures: *const crate::tuple::TupleType,
 }
 
 /// A function object: the header, then its descriptor, where an instance keeps its class.
@@ -25,6 +27,53 @@ pub(crate) struct FunctionDescriptor {
 pub(crate) struct FunctionObject {
     header: ObjectHeader,
     descriptor: *const FunctionDescriptor,
+}
+
+/// The bytes before a function object's captures: its header and its descriptor.
+const PREFIX: usize = core::mem::size_of::<FunctionObject>();
+
+/// Returns a new function object of the nested function whose descriptor is `descriptor`,
+/// with one reference and every capture zero, which the program then stores (FUN-04).
+///
+/// # Safety
+///
+/// `descriptor` is a descriptor the compiler emitted for a nested function, whose captures
+/// it describes.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn typy_rt_closure_new(
+    descriptor: *const FunctionDescriptor,
+) -> *mut FunctionObject {
+    // SAFETY: the caller's guarantee.
+    let size = unsafe { (*(*descriptor).captures).size };
+    let length = PREFIX + usize::try_from(size).unwrap_or(0);
+    #[allow(
+        clippy::cast_ptr_alignment,
+        reason = "malloc returns memory aligned for every type"
+    )]
+    let function = crate::allocator::allocate(length).cast::<FunctionObject>();
+    // SAFETY: the allocation holds `length` bytes, aligned for every type.
+    unsafe {
+        core::ptr::write_bytes(function.cast::<u8>(), 0, length);
+        function.write(FunctionObject {
+            header: ObjectHeader::new(crate::header::FUNCTION_TYPE_ID),
+            descriptor,
+        });
+    }
+    function
+}
+
+/// Frees a nested function's object after releasing each capture its descriptor counts.
+///
+/// # Safety
+///
+/// `function` is a function object a `def` made whose last reference is gone.
+pub(crate) unsafe fn destroy(function: *mut FunctionObject) {
+    // SAFETY: the caller's guarantee; the descriptor lays out the captures after the prefix.
+    unsafe {
+        let captures = (*(*function).descriptor).captures;
+        crate::tuple::release(captures, (function.expose_provenance() + PREFIX) as u64);
+    }
+    crate::allocator::free(function.cast());
 }
 
 /// The type `function`.
@@ -72,6 +121,47 @@ mod tests {
             (0..crate::string::length(string))
                 .map(|index| char::from_u32(crate::string::code_point(string, index)).unwrap())
                 .collect()
+        }
+    }
+
+    #[test]
+    fn fun_04_a_closure_starts_with_its_captures_zero_and_releases_them_when_it_is_freed() {
+        use crate::list::ItemKind;
+        use crate::tuple::{Field, TupleType};
+        let fields = [
+            Field::plain(ItemKind::Object, 0),
+            Field::plain(ItemKind::Int, 8),
+        ];
+        let captures = TupleType {
+            size: 16,
+            length: 2,
+            fields: fields.as_ptr(),
+        };
+        let (name, qualified_name) = (from_str("add"), from_str("outer.<locals>.add"));
+        let descriptor = super::FunctionDescriptor {
+            name,
+            qualified_name,
+            code: core::ptr::null(),
+            captures: &raw const captures,
+        };
+        let held = from_str("captured");
+        // SAFETY: the descriptor, its layout and the strings live for the whole test.
+        unsafe {
+            let closure = super::typy_rt_closure_new(&raw const descriptor);
+            let slots = core::ptr::with_exposed_provenance_mut::<u64>(
+                closure.expose_provenance() + super::PREFIX,
+            );
+            assert_eq!([*slots, *slots.add(1)], [0, 0]);
+            // The closure takes over a reference to what it captures, as `SetCapture` does.
+            crate::refcount::typy_rt_increment(held.cast());
+            *slots = held.expose_provenance() as u64;
+            *slots.add(1) = crate::word::inline(5).unwrap().cast_unsigned();
+            assert_eq!((*held).header.reference_count, 2);
+            crate::refcount::typy_rt_decrement(closure.cast());
+            assert_eq!((*held).header.reference_count, 1);
+            for each in [held, name, qualified_name] {
+                crate::refcount::typy_rt_decrement(each.cast());
+            }
         }
     }
 

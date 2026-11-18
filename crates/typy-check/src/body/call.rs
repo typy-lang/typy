@@ -40,8 +40,33 @@ impl BodyChecker<'_> {
         keywords: &[Keyword],
         span: Span,
     ) -> TypedExpr {
+        // A nested function in reach is called directly by its name (FUN-04).
+        if let Some(call) = self.nested_call(name, name_span, arguments, keywords, span) {
+            return call;
+        }
         if let Some(symbol) = self.locals.get(name).copied() {
             return self.call_local(symbol, (name, name_span), arguments, keywords, span);
+        }
+        // A captured variable that holds a function value is called through it.
+        if let Some(callee) = self.closure_read(name, name_span) {
+            if let Type::Callable { .. } = callee.ty {
+                return self.call_value(callee, arguments, keywords, span);
+            }
+            for argument in arguments {
+                self.expression(argument);
+            }
+            return self.error(
+                Diagnostic::new(
+                    DiagnosticCode::error(401),
+                    name_span,
+                    format!(
+                        "`{name}` is {} and cannot be called",
+                        callee.ty.with_article()
+                    ),
+                )
+                .with_rule(RuleId::EXP_02),
+                span,
+            );
         }
         if let Some(call) = self.rebound_call(name, arguments, keywords, span) {
             return call;
@@ -132,7 +157,15 @@ impl BodyChecker<'_> {
         keywords: &[Keyword],
         span: Span,
     ) -> TypedExpr {
-        let ty = self.types.get(&symbol).cloned().unwrap_or(Type::Error);
+        // A variable called before an assignment gives it a type is read before it is
+        // assigned, which the read reports (TYP-12).
+        let Some(ty) = self.types.get(&symbol).cloned() else {
+            let read = self.name(name, name_span);
+            for argument in arguments {
+                self.expression(argument);
+            }
+            return TypedExpr { span, ..read };
+        };
         if let Some(made) = self.call_class_value(&ty, arguments, keywords, span) {
             return made;
         }

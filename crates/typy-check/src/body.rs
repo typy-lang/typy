@@ -10,6 +10,7 @@ mod class_bridge;
 mod class_copy;
 mod class_value;
 mod class_variable_chain;
+mod closure_scope;
 mod comparison_bridge;
 mod comparison_chain;
 mod comprehension;
@@ -54,6 +55,7 @@ mod method_value;
 mod module_context;
 mod name;
 mod named;
+mod nested_function;
 mod open_call;
 mod open_options;
 mod operator;
@@ -149,6 +151,19 @@ pub(crate) struct BodyChecker<'program> {
     /// Whether the next expression checked may be a `ctypes` class, as the value of an
     /// assignment to a name is; checking it clears this (FFI-03).
     class_allowed: bool,
+    /// The function's `__qualname__`, which a nested function's extends (FUN-04).
+    qualified_name: String,
+    /// What the body's nested functions capture of its variables, from its source (FUN-04).
+    closure_scope: closure_scope::ClosureScope,
+    /// What the body reads of the functions around it, when it is a nested function's.
+    closure: Option<nested_function::Closure>,
+    /// The nested functions the body defines, whose bodies are checked after it.
+    pending: Vec<nested_function::Pending>,
+    /// The variables a nested `def` binds, with their functions, which a call by name runs
+    /// directly.
+    nested_functions: BTreeMap<SymbolId, FunctionId>,
+    /// Whether a name is read to call the nested function it holds, which a value it is not.
+    reading_function: bool,
 }
 
 impl<'program> BodyChecker<'program> {
@@ -181,6 +196,12 @@ impl<'program> BodyChecker<'program> {
             global_names: BTreeSet::new(),
             local_aliases: BTreeSet::new(),
             class_allowed: false,
+            qualified_name: String::new(),
+            closure_scope: closure_scope::ClosureScope::default(),
+            closure: None,
+            pending: Vec::new(),
+            nested_functions: BTreeMap::new(),
+            reading_function: false,
         }
     }
 
@@ -189,6 +210,18 @@ impl<'program> BodyChecker<'program> {
         program: &mut Program,
         function: FunctionId,
         definition: &Definition<'_>,
+        diagnostics: &mut Diagnostics,
+    ) {
+        Self::check_body_of(program, function, definition, None, diagnostics);
+    }
+
+    /// Checks the body of `function`, a nested function's when `closure` says what it
+    /// captures, then the bodies of the functions nested in it (FUN-04).
+    fn check_body_of(
+        program: &mut Program,
+        function: FunctionId,
+        definition: &Definition<'_>,
+        closure: Option<nested_function::Closure>,
         diagnostics: &mut Diagnostics,
     ) {
         let returns = definition.signature.returns.clone();
@@ -244,6 +277,7 @@ impl<'program> BodyChecker<'program> {
             .class
             .is_some_and(|class| checker.program.is_protocol(class));
         let checked_body: &[Stmt] = if protocol { &[] } else { definition.body };
+        checker.enter_closure(definition, checked_body, closure);
         checker.declare_globals(checked_body);
         let saved = checker.import_names_of(checked_body);
         let statements: Vec<&Stmt> = checked_body.iter().collect();
@@ -270,6 +304,7 @@ impl<'program> BodyChecker<'program> {
             );
         }
         let named_targets = std::mem::take(&mut checker.named_targets);
+        let pending = std::mem::take(&mut checker.pending);
         let locals = checker.finish_locals();
         // A generic function is checked, never run: its copies run in its place, so it keeps
         // no body (ADR-0023). A protocol's method only says what a class that satisfies the
@@ -289,6 +324,29 @@ impl<'program> BodyChecker<'program> {
             generic,
             named_targets,
         });
+        Self::check_nested(program, pending, diagnostics);
+    }
+
+    /// Notes the function's `__qualname__`, what its nested functions capture, and, for a
+    /// nested function, what it captures itself (FUN-04).
+    fn enter_closure(
+        &mut self,
+        definition: &Definition<'_>,
+        body: &[Stmt],
+        closure: Option<nested_function::Closure>,
+    ) {
+        self.qualified_name.clone_from(&definition.qualified_name);
+        let enclosing = closure
+            .as_ref()
+            .map(nested_function::Closure::names)
+            .unwrap_or_default();
+        let names: Vec<&str> = definition
+            .parameters
+            .iter()
+            .map(|(name, _)| name.as_str())
+            .collect();
+        self.closure_scope = closure_scope::ClosureScope::of(&names, body, &enclosing);
+        self.closure = closure;
     }
 
     /// Checks the module body and stores it in the program as its entry function.

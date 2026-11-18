@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy detailed design |
-| Version | 2.40 |
+| Version | 2.41 |
 | Status | Approved |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-18 |
@@ -719,6 +719,32 @@ otherwise than its base, which only an adapter reaches, are planned for
 0.9 under FUN-09; a method with type parameters of its own or a
 keyword-only parameter is E0202, as a function is. An assignment to a
 method of an instance is E0414.
+
+`body/closure_scope.rs` finds, from a function's source alone, what each
+of its nested `def`s captures and which captured variables live in a cell
+(ADR-0061), as CPython's symbol table finds free and cell variables: the
+names a nested function reads, directly or through the functions nested in
+it, that the function binds or captures itself, less the nested function's
+own name, which reads the running object. A captured variable is copied
+when one binding gives its value, outside every loop and before each `def`
+that captures it; any other lives in a cell. `body/nested_function.rs`
+checks a `def` in a function: its signature in the annotations around it,
+its `__qualname__` `outer.<locals>.name`, a new function and signature,
+and the variable of its name, of the `Callable` type of its signature,
+which only the `def` binds, so binding it again is E0202. The statement is
+`TypedStmt::FunctionDef { function, target, captures, span }`, the reads
+of each captured variable where the `def` runs, which reports one that may
+be unassigned (TYP-12). The nested body is checked after the body around
+it, with its `Closure`: inside it a captured name reads
+`TypedExprKind::Capture(position)`, its own name
+`TypedExprKind::RunningFunction`, and a call by name of a nested function
+in reach is `TypedExprKind::CallNested { function, closure, arguments }`,
+bound as a call of a function by name is. `TypedProgram::closures` holds
+the types of each nested function's captures. A nested function with type
+parameters, or in a generic function, is planned for 0.9 (FUN-10), and a
+captured variable that lives in a cell for later in 0.8. A call of a local
+variable before an assignment gives it a type is read first, so it is
+E0306.
 
 `body/key_argument.rs` checks the `key` of `sorted`, `min` and `max`, also
 of `min` and `max` of several values, and of `list.sort`: a function value
@@ -2233,6 +2259,13 @@ that the first argument is a function object and that the blocks take one
 result and the exception. Escape analysis lets every argument of a call
 through a value escape, since its code is known only when the program
 runs, so no instance passed through one is held in a frame (MEM-03).
+A nested function's code takes its function object first, a `FUNCTION`
+parameter before its own. `NewClosure { function, captures }` makes its
+object with every capture zero, laid out as the tuple type `captures`,
+`SetCapture { closure, captures, index, value }` stores a capture, taking
+over the value's reference, and `Capture { closure, captures, index }`
+borrows one. Escape analysis lets every stored capture escape, since a
+function object may outlive the function that made it (MEM-03).
 `Constant::MethodDescriptor(id)` is the address of method `id`'s bound
 method descriptor as bits, and `RuntimeFunction::MethodNew` makes a bound
 method of a descriptor and an instance, which escapes into it.
@@ -2437,6 +2470,7 @@ graph, symbol names and the string pool.
 | Optional values | `None` where `T \| None` is expected is the constant `NoneOf`, and a value of `T` is wrapped; wrapping and unwrapping hand the reference on with the value. `is None` and `is not None` on an optional value test `IsNone`, and on any other value are constants. `str`, `repr` and truth tests branch on `IsNone` and read the value only where it is not `None`, so a null object never reaches the runtime. An optional slot starts as `None`, and an optional parameter's default is `None` or its wrapped constant. `dict.get(key)` finds the key and wraps its value with a reference of its own, or gives `None` |
 | Builtins | Each builtin of 0.1 becomes runtime calls. `print` evaluates every argument in source order, then converts and writes each value. `min` and `max` keep the first value on a tie, as CPython does |
 | Stack | A function in a cycle of calls invokes the runtime's stack check on entry (FUN-02). Each function that calls through a function value counts as one, since every cycle through a value passes through such a call |
+| Nested functions | A `def` emits `NewClosure` and a `SetCapture` with a reference of its own for each capture, in order, then stores the object in its variable. `Capture` and `RunningFunction` read the running function's object, its first parameter, borrowed, since its caller holds it for the call. `CallNested` calls the code directly with the object first |
 | Keys | `Keyed` evaluates the list, then the key and the option in the call's order, and holds a reference to the key's function value for the call. `sorted` and `list.sort` copy the list, call the key through its value for each item as a `for` loop reads the copy, appending each key to a list of keys, then call `list_sort_keyed`; `list.sort` then clears its list and extends it with the copy. `min` and `max` call the key for each item of the list and pass it with the item to `list_keep_extreme`, which keeps the best key and its item in two lists of at most one item, and `list_extreme` of the list of the item gives the result or the default. A function with a `Keyed` call checks the stack on entry, as one that calls through a value does |
 | Bound methods | `BoundMethod` evaluates the object, starts from the descriptor of the first method and, for each later entry, tests `is_instance` of its class and selects its descriptor when the test holds, then calls `method_new` with the descriptor and the object |
 | Function values | A function read as a value is its `Constant::Function`, borrowed, since it is immortal. A call through a value evaluates the callee, then the arguments, keeps each for the call as a call by name does, so the call cannot free the object it runs by assigning where it was read, and invokes `Callee::Value`. A function value's slot starts as null, `type()` and `str` of one read its header, `==` calls `objects_equal`, and it is true |
@@ -2541,6 +2575,7 @@ comparisons, calls and counting, terminators, and emission.
 | Instance | Header, `class: ptr` to the class's type object, then the attributes laid out as the class's tuple descriptor says. `typy_rt_instance_new(class)` makes one with every attribute zero; the runtime frees it by releasing each attribute the descriptor counts. `typy_rt_instance_on_stack(block, class)` and `typy_rt_instance_off_stack(block)` make and release an instance in a frame block (section 10.4). A class's type object is a private constant `typy.classN`, whose base is the runtime's `typy_rt_object`, whose hash is `typy_rt_identity_hash` and whose `repr` is `typy_rt_instance_repr`, or `typy.classN.repr`, which calls the class's `__repr__` and adds a null exception when it cannot raise |
 | Type object | Header, `name: ptr` to UTF-8 bytes, `name_length: u64`, `base: ptr` (null only for `object`), then five nullable function pointers with the C calling convention: `truth(object) -> bool`, `hash(object) -> i64`, `equal(left, right) -> bool`, `order(left, right, comparison) -> bool` and `repr(object) -> { str, exception }`, then `module: ptr` to UTF-8 bytes, `module_length: u64`, `fields: ptr` to the tuple descriptor of a class's attributes, null for the runtime's own types, and last `str(object) -> { str, exception }`, null when `str` is `repr`. An absent function means what it means for `object`: true, equal only to itself, and no hash, order or text. A class's `str` is `typy.classN.str`, which calls its `__str__`, or null when it has none. The runtime frees its own objects by type ID, so the type objects stay out of a program that never tests, compares or writes an object of unknown type (ADR-0012) |
 | Function object | Header with the type ID 24, then `descriptor: ptr` at the offset an instance keeps its class. A function that captures nothing has one immortal object, the private constant `typy.function.N`, whose address is its identity. The descriptor is the private constant `typy.function.descriptor.N`: `name` and `qualified_name`, two `str` objects, `code`, the address of the code a call through the value runs, and `captures`, null for none. The runtime's type `function`, `typy_rt_type_function`, hashes by identity, compares equal only to itself and writes `<function QUALNAME at 0x...>` (FUN-05, ADR-0060) |
+| Closure | A nested function's object: header with the type ID 24, `descriptor: ptr`, then its captures, laid out as the tuple descriptor the descriptor's `captures` gives. `typy_rt_closure_new(descriptor)` makes one with every capture zero; freeing it releases each capture the tuple descriptor counts. Its descriptor, `typy.closure.descriptor.N`, has the code `typy.closure_thunk.` and the function's symbol, which passes the object on first (FUN-04) |
 | Bound method | Header with the type ID 25, `descriptor: ptr`, then `instance: ptr`, the one capture, which it holds a reference to. `typy_rt_method_new(descriptor, instance)` makes one, and freeing it releases the instance. The method's descriptor, `typy.method.descriptor.N`, has the code `typy.method_thunk.` and the method's symbol, which reads the instance from the bound method and calls the method with it first. The type `method`, `typy_rt_type_method`, is equal for one descriptor and one instance, hashes the two addresses, and writes `<bound method QUALNAME of REPR>`, the instance through its type's `repr`, whose exception it passes on (FUN-05) |
 | Call through a value | Generated code loads the descriptor from the object, then the code, and calls it with the object first, then the arguments, in the raising form. The code of a function of the program is the thunk `typy.thunk.` and its symbol, which calls the function directly: one that may raise in a tail call, one that cannot with its result paired with a null exception |
 | Exception | Header, `class: ptr` at the offset an instance keeps its class, `message: ptr` to the `str` the runtime gave it or null, `arguments_type: ptr` to the tuple descriptor of the arguments the program built it with or null, `arguments: ptr` to them or null when there are none, the traceback, `cause: ptr`, `context: ptr` and `suppress_context: u64`, then a class's attributes as its descriptor lays them out (ADR-0013). `typy_rt_exception_new(class, arguments_type, arguments)` makes one with a copy of the arguments, whose items it retains |
@@ -2875,9 +2910,9 @@ installed `typy` finds `<prefix>/lib/typy/` and a `typy` in
 | `DictObject` | Header, `used: usize`, `filled: usize`, `usable: usize`, `log2: u32`, `key_kind: u32`, `value_kind: u32`, `key_words: u32`, `key_tuple`, `value_tuple`, `indices: *mut i64`, `entries: *mut u64`, `live: *mut u8` | CPython's combined table: the entries in insertion order, each a hash word, the key's words and the value's words, with a byte that says whether it holds an item, and `2**log2` index slots that hold an entry's position, -1 when empty or -2 when its entry was removed. `used` counts the items, `filled` the entries written, holes included, and `usable` the entries left before a resize. A new dict has no table, `log2` 0 |
 | `ViewObject` | Header, `kind: u32`, padding, `dict: *mut DictObject` | A view of a dict under the type ID 9: 0 shows the keys, 1 the values, 2 the items. It holds a reference to its dict, so the dict lives as long as the view |
 | `CDataClass` | `name: *const u8`, `name_length: u64`, `kind: u32`, `ctype: u32`, `size: u64`, `item: *const CDataClass`, `length: u64` | A `ctypes` class the compiler emits once: `kind` 0 for a scalar of C type `ctype`, numbered as `CType`, 1 for a pointer, 2 for an array of `length` items of `item`, and 3 for a structure, whose name holds its module (ADR-0048, ADR-0049) |
-| `FunctionObject` | Header, `descriptor: *const FunctionDescriptor` | A function object under the type ID 24, which the compiler emits immortal for a function that captures nothing; its type `function` hashes by identity and writes `<function QUALNAME at 0x...>` (FUN-05) |
+| `FunctionObject` | Header, `descriptor: *const FunctionDescriptor`, then a nested function's captures | A function object under the type ID 24, which the compiler emits immortal for a function of a module, and which each `def` of a nested function makes; its type `function` hashes by identity and writes `<function QUALNAME at 0x...>` (FUN-04, FUN-05) |
 | `MethodObject` | Header, `descriptor: *const FunctionDescriptor`, `instance: *mut ObjectHeader` | A bound method under the type ID 25, made at each read of a method through an instance; it owns a reference to the instance (FUN-05) |
-| `FunctionDescriptor` | `name: *const StrObject`, `qualified_name: *const StrObject`, `code: *const c_void`, `captures: *const c_void` | What the compiler emits once for each function used as a value; `captures` is null for a function that captures nothing |
+| `FunctionDescriptor` | `name: *const StrObject`, `qualified_name: *const StrObject`, `code: *const c_void`, `captures: *const TupleType` | What the compiler emits once for each function used as a value; `captures` lays out a nested function's captures, and is null for a function of a module |
 | `CDataObject` | Header, `class: *const CDataClass`, `address: *mut u8`, `owner: *mut ObjectHeader`, `kept: *mut Kept` | A `ctypes` object under the type ID 23: a scalar or an array owns a buffer after this part; an object over another's memory counts `owner`, the object whose buffer it is or, for C's memory, the pointer it was read through; `kept` is the table of the objects the values in its buffer refer to, by address: a pointer's target and the `bytes` of each `c_char_p` written into it or through an object over it |
 
 [![Design classes of the runtime](../diagrams/class-design-runtime.svg)](../diagrams/class-design-runtime.svg)

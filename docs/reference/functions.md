@@ -10,12 +10,58 @@
 | Positional-only parameters before `/` and keyword-only parameters after `*`, bound as CPython binds them; a keyword for a positional-only parameter, or a positional argument past the others, is E0404 | FUN-03 |
 | A function of the program as a value of type `Callable[[A, ...], R]`: stored, passed, returned, called, compared and hashed | FUN-05, NFR-19 |
 | A method read through an instance as a bound method, and through its class as a function | FUN-05 |
+| A function defined inside a function, which reads the variables of the functions around it | FUN-04 |
 
 A function value is the `key` of `sorted`, `list.sort`, `min` and `max`;
 see [Ordering by a key](../library/functions-and-modules.md#ordering-by-a-key).
-Nested functions are planned for 0.8 (FUN-04). Decorators, generators,
-built-in functions as values, and class methods and protocol methods as
-values are planned for 0.9 (FUN-06 to FUN-09).
+Decorators, generators, built-in functions as values, class methods and
+protocol methods as values, and nested functions of generic functions are
+planned for 0.9 (FUN-06 to FUN-10).
+
+## Nested functions
+
+A `def` inside a function defines a nested function, which reads the
+variables of the functions around it. Each time the `def` runs it makes a
+new function object, so two calls of `make_adder` below give two
+functions that are not `==`, as in CPython:
+
+<!-- typy-expect: accepted -->
+```python
+from typing import Callable
+
+
+def make_adder(step: int) -> Callable[[int], int]:
+    def add(value: int) -> int:
+        return value + step
+    return add
+
+
+def countdown(start: int) -> list[int]:
+    def walk(value: int) -> list[int]:
+        return [0] if value == 0 else [value] + walk(value - 1)
+    return walk(start)
+
+
+add3 = make_adder(3)
+print(add3(1), make_adder(5)(1), add3 == make_adder(3), countdown(3))
+```
+
+A variable that one assignment gives its value, outside every loop and
+before the `def`, is copied into the function object when the `def` runs,
+so reading it costs what reading a local costs. The function object holds
+a reference to each value it copies, which lives as long as the function
+does. A nested function's own name reads the running function, so it may
+call itself, and it calls a nested function defined before it in the same
+function directly. Its signature follows the rules of a module's
+functions, keyword-only parameters included, which a call by name passes;
+such a function has no `Callable` type, so reading it as a value is E0202.
+
+A variable that a loop binds, that is assigned again or after the `def`,
+lives in a cell that the function and its nested functions share; it is
+planned for later in 0.8 (FUN-04), with `nonlocal` (SMT-09). Binding the
+name of a nested function again, also with a second `def`, is E0202, and
+a call of it before its `def` runs is E0306, where CPython raises
+`UnboundLocalError`.
 
 ## Functions as values
 

@@ -15,6 +15,7 @@ mod lazy_imports;
 mod matching;
 mod math;
 mod modules;
+mod nested_functions;
 mod open;
 mod operators;
 mod parameters;

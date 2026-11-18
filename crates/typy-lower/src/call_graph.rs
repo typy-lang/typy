@@ -99,6 +99,11 @@ fn statements(body: &[TypedStmt], callees: &mut BTreeSet<FunctionId>) {
             TypedStmt::Expr { value, .. } => {
                 expression(value, callees);
             }
+            TypedStmt::FunctionDef { captures, .. } => {
+                for capture in captures {
+                    expression(capture, callees);
+                }
+            }
             TypedStmt::ForEach {
                 target,
                 source,
@@ -280,6 +285,17 @@ fn expression(expression_value: &TypedExpr, callees: &mut BTreeSet<FunctionId>) 
         TypedExprKind::Binary { left, right, .. } => {
             expression(left, callees);
             expression(right, callees);
+        }
+        TypedExprKind::CallNested {
+            function,
+            closure,
+            arguments,
+        } => {
+            callees.insert(*function);
+            expression(closure, callees);
+            for argument in arguments {
+                expression(&argument.value, callees);
+            }
         }
         TypedExprKind::CallValue { callee, arguments } => {
             callees.insert(THROUGH_VALUE);
@@ -520,6 +536,8 @@ fn expression(expression_value: &TypedExpr, callees: &mut BTreeSet<FunctionId>) 
         | TypedExprKind::ClassVariable(_)
         | TypedExprKind::TypeAliasObject(_)
         | TypedExprKind::FunctionValue(_)
+        | TypedExprKind::Capture(_)
+        | TypedExprKind::RunningFunction
         | TypedExprKind::ForeignLibrary(_)
         | TypedExprKind::SysValue(_) => {}
         TypedExprKind::AsIterable(inner) | TypedExprKind::Named { value: inner, .. } => {

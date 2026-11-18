@@ -482,3 +482,30 @@ fn mem_03_an_instance_passed_through_a_function_value_comes_from_the_heap() {
     };
     assert!(!point_used(through_value, vec![keeps_nothing(1)]));
 }
+
+#[test]
+fn mem_03_an_instance_a_closure_captures_comes_from_the_heap() {
+    // A closure may outlive the function that made it (ADR-0061).
+    let captured = |builder: &mut FunctionBuilder, point: ValueId| {
+        let mut types = TupleTypes::default();
+        let captures = types.intern_id(vec![POINT]);
+        let closure = builder.push_value(
+            Operation::NewClosure {
+                function: FunctionId(1),
+                captures,
+            },
+            TyirType::FUNCTION,
+            span(),
+        );
+        builder.push(
+            Operation::SetCapture {
+                closure,
+                captures,
+                index: 0,
+                value: point,
+            },
+            span(),
+        );
+    };
+    assert!(!point_used(captured, vec![keeps_nothing(1)]));
+}

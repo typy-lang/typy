@@ -5,9 +5,11 @@
 use inkwell::AddressSpace;
 use inkwell::context::Context;
 use inkwell::module::Linkage;
-use inkwell::types::{FunctionType, StructType};
-use inkwell::values::{BasicMetadataValueEnum, BasicValue, PointerValue, ValueKind};
-use typy_tyir::{FunctionId, TyirType, ValueId};
+use inkwell::types::{BasicTypeEnum, FunctionType, StructType};
+use inkwell::values::{
+    BasicMetadataValueEnum, BasicValue, BasicValueEnum, PointerValue, ValueKind,
+};
+use typy_tyir::{FunctionId, TupleTypeId, TyirType, ValueId};
 
 use crate::abi::{function_type, value_type};
 use crate::error::CodegenError;
@@ -22,6 +24,19 @@ const OBJECT_DESCRIPTOR: u32 = 2;
 const DESCRIPTOR_CODE: u32 = 2;
 /// The field of a bound method that holds its instance, after the descriptor.
 const BOUND_INSTANCE: u32 = 3;
+/// The field of a nested function's object that holds its captures, after the descriptor.
+const CLOSURE_CAPTURES: u32 = 2;
+
+/// What a thunk gives the function it calls first.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Receives {
+    /// Nothing: a function of the module or a method used as a function.
+    Nothing,
+    /// The instance a bound method holds.
+    Instance,
+    /// The function object itself, which a nested function reads its captures from.
+    Object,
+}
 
 /// Returns the layout of a function object without captures: the header, then the address of
 /// its descriptor.
@@ -70,8 +85,8 @@ pub(crate) fn function_object<'ctx>(
         return Ok(object);
     }
     let context = shared.context;
-    let code = thunk(shared, id, false)?;
-    let descriptor = descriptor(shared, id, code, "function")?;
+    let code = thunk(shared, id, Receives::Nothing)?;
+    let descriptor = descriptor(shared, id, code, ("function", None))?;
     let object = object_type(context).const_named_struct(&[
         context
             .i32_type()
@@ -105,19 +120,36 @@ pub(crate) fn method_descriptor<'ctx>(
     if let Some(descriptor) = shared.statics.method_descriptor(id.0) {
         return Ok(descriptor);
     }
-    let code = thunk(shared, id, true)?;
-    let descriptor = descriptor(shared, id, code, "method")?;
+    let code = thunk(shared, id, Receives::Instance)?;
+    let descriptor = descriptor(shared, id, code, ("method", None))?;
     shared.statics.add_method_descriptor(id.0, descriptor);
     Ok(descriptor)
 }
 
+/// Returns the descriptor of the nested function `id`, whose captures are laid out as the
+/// tuple type `captures`, emitting it with its thunk the first time it is used (FUN-04).
+pub(crate) fn closure_descriptor<'ctx>(
+    shared: &mut Shared<'_, 'ctx>,
+    id: FunctionId,
+    captures: TupleTypeId,
+) -> Result<PointerValue<'ctx>, CodegenError> {
+    if let Some(descriptor) = shared.statics.closure_descriptor(id.0) {
+        return Ok(descriptor);
+    }
+    let code = thunk(shared, id, Receives::Object)?;
+    let layout = crate::descriptor::tuple_descriptor(shared, captures)?;
+    let descriptor = descriptor(shared, id, code, ("closure", Some(layout)))?;
+    shared.statics.add_closure_descriptor(id.0, descriptor);
+    Ok(descriptor)
+}
+
 /// Emits the descriptor of function `id` whose code is `code`, as the private constant
-/// `typy.KIND.descriptor.N`.
+/// `typy.KIND.descriptor.N`, with the descriptor of its captures, null for none.
 fn descriptor<'ctx>(
     shared: &mut Shared<'_, 'ctx>,
     id: FunctionId,
     code: inkwell::values::FunctionValue<'ctx>,
-    kind: &str,
+    (kind, captures): (&str, Option<PointerValue<'ctx>>),
 ) -> Result<PointerValue<'ctx>, CodegenError> {
     let context = shared.context;
     let function = shared
@@ -129,12 +161,13 @@ fn descriptor<'ctx>(
     let qualified_name = shared
         .statics
         .string(shared.module, &function.qualified_name);
-    let null = context.ptr_type(AddressSpace::default()).const_null();
+    let captures =
+        captures.unwrap_or_else(|| context.ptr_type(AddressSpace::default()).const_null());
     let descriptor = descriptor_type(context).const_named_struct(&[
         name.into(),
         qualified_name.into(),
         code.as_global_value().as_pointer_value().into(),
-        null.into(),
+        captures.into(),
     ]);
     Ok(Statics::global(
         shared.module,
@@ -146,11 +179,12 @@ fn descriptor<'ctx>(
 /// Emits the code a call through a function object of `id` runs: it takes the object, then
 /// the function's arguments, calls the function directly, and returns its result beside an
 /// exception, null when the function cannot raise. For a bound method the object is the
-/// bound method, and the instance it holds is the function's first argument.
+/// bound method, and the instance it holds is the function's first argument; a nested
+/// function takes the object itself first.
 fn thunk<'ctx>(
     shared: &Shared<'_, 'ctx>,
     id: FunctionId,
-    bound: bool,
+    receives: Receives,
 ) -> Result<inkwell::values::FunctionValue<'ctx>, CodegenError> {
     let context = shared.context;
     let function = &shared.tyir.functions[id.0 as usize];
@@ -159,7 +193,7 @@ fn thunk<'ctx>(
             function
                 .parameters
                 .iter()
-                .skip(usize::from(bound))
+                .skip(usize::from(receives != Receives::Nothing))
                 .map(|value| function.value(*value).ty),
         )
         .collect();
@@ -172,7 +206,11 @@ fn thunk<'ctx>(
         true,
         false,
     );
-    let kind = if bound { "method_thunk" } else { "thunk" };
+    let kind = match receives {
+        Receives::Nothing => "thunk",
+        Receives::Instance => "method_thunk",
+        Receives::Object => "closure_thunk",
+    };
     let thunk = shared.module.add_function(
         &format!("typy.{kind}.{}", function.symbol),
         ty,
@@ -180,9 +218,13 @@ fn thunk<'ctx>(
     );
     let builder = context.create_builder();
     builder.position_at_end(context.append_basic_block(thunk, "entry"));
-    let mut arguments: Vec<BasicMetadataValueEnum<'ctx>> =
-        thunk.get_param_iter().skip(1).map(Into::into).collect();
-    if bound {
+    let skipped = usize::from(receives != Receives::Object);
+    let mut arguments: Vec<BasicMetadataValueEnum<'ctx>> = thunk
+        .get_param_iter()
+        .skip(skipped)
+        .map(Into::into)
+        .collect();
+    if receives == Receives::Instance {
         let object = thunk
             .get_first_param()
             .ok_or_else(|| CodegenError("a thunk takes its object".to_owned()))?
@@ -219,6 +261,61 @@ fn thunk<'ctx>(
 }
 
 impl<'ctx> FunctionEmitter<'_, '_, 'ctx> {
+    /// Returns a new function object of the nested function `function`, with every capture
+    /// zero, from the runtime (FUN-04).
+    pub(crate) fn new_closure(
+        &mut self,
+        function: FunctionId,
+        captures: TupleTypeId,
+    ) -> Result<BasicValueEnum<'ctx>, CodegenError> {
+        let descriptor = closure_descriptor(self.shared, function, captures)?;
+        let pointer = self.shared.context.ptr_type(AddressSpace::default());
+        let allocate = crate::class::runtime_symbol(
+            self.shared,
+            "typy_rt_closure_new",
+            pointer.fn_type(&[pointer.into()], false),
+        );
+        self.builder
+            .build_call(allocate, &[descriptor.into()], "")?
+            .try_as_basic_value()
+            .basic()
+            .ok_or_else(|| CodegenError("the runtime returns the function object".to_owned()))
+    }
+
+    /// Returns the address of capture `index` of the function object `closure`, whose
+    /// captures are laid out as `captures`, with its type, or `None` for a capture of type
+    /// `None`, which takes no room.
+    pub(crate) fn capture_address(
+        &mut self,
+        closure: ValueId,
+        captures: TupleTypeId,
+        index: u32,
+    ) -> Result<Option<(PointerValue<'ctx>, BasicTypeEnum<'ctx>)>, CodegenError> {
+        let context = self.shared.context;
+        let tuples = &self.shared.tyir.tuple_types;
+        let items = tuples.items(captures).unwrap_or_default().to_vec();
+        let Some(field) = crate::abi::tuple_field(tuples, &items, index as usize) else {
+            return Ok(None);
+        };
+        let fields = value_type(context, tuples, TyirType::Tuple(captures))
+            .ok_or_else(|| CodegenError("captures have a type".to_owned()))?
+            .into_struct_type();
+        let pointer = context.ptr_type(AddressSpace::default());
+        let layout = context.struct_type(
+            &[context.i64_type().into(), pointer.into(), fields.into()],
+            false,
+        );
+        let field_type = fields
+            .get_field_type_at_index(field)
+            .ok_or_else(|| CodegenError(format!("capture {index} has a type")))?;
+        let object = self.value(closure)?.into_pointer_value();
+        let all = self
+            .builder
+            .build_struct_gep(layout, object, CLOSURE_CAPTURES, "")?;
+        let address = self.builder.build_struct_gep(fields, all, field, "")?;
+        Ok(Some((address, field_type)))
+    }
+
     /// Returns the address of the code of the function object `object` and the type of the
     /// call: the arguments' types, the first the object's, and `result`, in the raising
     /// form. The checker gave the arguments the types of the value's `Callable` type, which

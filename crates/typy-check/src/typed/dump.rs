@@ -399,6 +399,22 @@ impl Dump<'_> {
                     *span,
                 );
             }
+            TypedStmt::FunctionDef {
+                function,
+                target,
+                captures,
+                span,
+            } => {
+                let line = format!(
+                    "FunctionDef {} as {}",
+                    self.program.function(*function).qualified_name,
+                    self.program.symbol(*target).name
+                );
+                self.line(depth, &line, *span);
+                for capture in captures {
+                    self.expression(depth + 1, capture);
+                }
+            }
             TypedStmt::Pass { span } => self.line(depth, "Pass", *span),
             TypedStmt::Break { span } => self.line(depth, "Break", *span),
             TypedStmt::Continue { span } => self.line(depth, "Continue", *span),
@@ -446,6 +462,14 @@ impl Dump<'_> {
                 self.program.function(*function).qualified_name
             ),
             TypedExprKind::CallValue { .. } => "CallValue".to_owned(),
+            TypedExprKind::Capture(index) => format!("Capture {index}"),
+            TypedExprKind::RunningFunction => "RunningFunction".to_owned(),
+            TypedExprKind::CallNested { function, .. } => {
+                format!(
+                    "CallNested {}",
+                    self.program.function(*function).qualified_name
+                )
+            }
             TypedExprKind::BoundMethod { methods, .. } => {
                 let names: Vec<&str> = methods
                     .iter()

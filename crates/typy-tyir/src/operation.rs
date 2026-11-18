@@ -5,6 +5,7 @@ use std::fmt;
 use crate::constant::Constant;
 use crate::runtime::RuntimeFunction;
 use crate::slot::SlotId;
+use crate::types::TupleTypeId;
 use crate::value::ValueId;
 
 /// An arithmetic or bitwise operation on two `int` values that cannot raise.
@@ -290,6 +291,34 @@ pub enum Operation {
         /// The class of an exception, as for `Field`.
         class: Option<u32>,
         /// The attribute's position.
+        index: u32,
+        /// The value.
+        value: ValueId,
+    },
+    /// A new function object of the nested function `function`, with one reference and every
+    /// capture zero, laid out as the tuple type `captures` (FUN-04, ADR-0061).
+    NewClosure {
+        /// The nested function.
+        function: crate::function::FunctionId,
+        /// The tuple type of its captures.
+        captures: TupleTypeId,
+    },
+    /// The capture at a position of a nested function's object, borrowed from it.
+    Capture {
+        /// The function object.
+        closure: ValueId,
+        /// The tuple type of its captures.
+        captures: TupleTypeId,
+        /// The capture's position.
+        index: u32,
+    },
+    /// Stores a value in a capture of a new function object, which takes over its reference.
+    SetCapture {
+        /// The function object.
+        closure: ValueId,
+        /// The tuple type of its captures.
+        captures: TupleTypeId,
+        /// The capture's position.
         index: u32,
         /// The value.
         value: ValueId,

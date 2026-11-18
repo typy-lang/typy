@@ -1,0 +1,381 @@
+//! Nested functions (FUN-04, ADR-0061): a `def` inside a function makes a new function object
+//! each time it runs, which holds a copy of each variable of the functions around it that its
+//! body reads. Its body is checked after the function's own, when each variable it captures
+//! has its type.
+
+use std::collections::{BTreeMap, BTreeSet};
+
+use typy_diagnostics::{Diagnostic, DiagnosticCode, RuleId, Span};
+use typy_source::syntax::{Expr, Keyword, ParameterKind, Stmt};
+
+use super::BodyChecker;
+use crate::check::{Definition, FunctionParts, function_definition};
+use crate::typed::{FunctionId, FunctionSignature, SymbolId, TypedExpr, TypedExprKind, TypedStmt};
+use crate::types::Type;
+
+/// What the names of a nested function's body read of the functions around it.
+#[derive(Clone, Debug, Default)]
+pub(super) struct Closure {
+    /// The function's own name and the function, which its name reads inside it: the
+    /// running function object.
+    own: Option<(String, FunctionId)>,
+    /// Each captured variable, by name.
+    captures: BTreeMap<String, Captured>,
+}
+
+impl Closure {
+    /// Returns the names of the variables the function captures.
+    pub(super) fn names(&self) -> BTreeSet<String> {
+        self.captures.keys().cloned().collect()
+    }
+}
+
+/// One captured variable: its position among the captures, its type, and the nested
+/// function it holds when a `def` alone binds it, which a call by name runs directly.
+#[derive(Clone, Debug)]
+struct Captured {
+    position: u32,
+    ty: Type,
+    function: Option<FunctionId>,
+}
+
+/// A nested `def` whose body is checked after the body around it.
+pub(super) struct Pending {
+    function: FunctionId,
+    statement: Stmt,
+    definition: OwnedDefinition,
+    closure: Closure,
+}
+
+/// The parts of a nested function's definition, kept while its body waits.
+struct OwnedDefinition {
+    name: String,
+    qualified_name: String,
+    signature: FunctionSignature,
+    parameters: Vec<(String, Span)>,
+    span: Span,
+}
+
+impl BodyChecker<'_> {
+    /// Checks a `def` in a function: its signature now, in the annotations of the function
+    /// around it, and its body once that function's is checked. A nested function of a
+    /// generic function, or with type parameters of its own, has a copy for each set of
+    /// types, which is planned for 0.9 (FUN-10).
+    pub(super) fn nested_def(&mut self, statement: &Stmt) -> Option<TypedStmt> {
+        let parts = FunctionParts::of(statement)?;
+        let name = &parts.name.name;
+        let symbol = *self.locals.get(name)?;
+        if !parts.type_parameters.is_empty() || !self.program.type_arguments.is_empty() {
+            self.diagnostics.push(
+                Diagnostic::new(
+                    DiagnosticCode::error(201),
+                    parts.name.span,
+                    "a nested function with type parameters, or inside a generic function, is \
+                     planned for TyPy 0.9 (FUN-10)",
+                )
+                .with_rule(RuleId::FUN_10),
+            );
+            return self.refused_def(symbol);
+        }
+        if self.types.contains_key(&symbol) {
+            self.diagnostics.push(also_assigned(name, parts.name.span));
+            return None;
+        }
+        let Some(names) = self.captured_names(name, parts.span) else {
+            return self.refused_def(symbol);
+        };
+        let mut found = self.definition_of(&parts);
+        found.qualified_name = format!("{}.<locals>.{name}", self.qualified_name);
+        let function = self.program.next_function();
+        self.program.signatures.push(found.signature.clone());
+        self.program.functions.push(None);
+        self.nested_functions.insert(symbol, function);
+        self.types.insert(symbol, callable_of(&found.signature));
+        let (closure, captures) = self.capture_values(name, function, &names, parts.span);
+        if let Some(facts) = &mut self.assigned {
+            facts.insert(super::flow::Fact::Assigned(symbol));
+        }
+        self.pending.push(Pending {
+            function,
+            statement: statement.clone(),
+            definition: OwnedDefinition {
+                name: found.name,
+                qualified_name: found.qualified_name,
+                signature: found.signature,
+                parameters: found.parameters,
+                span: found.span,
+            },
+            closure,
+        });
+        Some(TypedStmt::FunctionDef {
+            function,
+            target: symbol,
+            captures,
+            span: parts.span,
+        })
+    }
+
+    /// Gives the variable of a refused `def` the error type, assigned, so its uses report
+    /// nothing more: one cause gives one error (DIA-04).
+    fn refused_def(&mut self, symbol: SymbolId) -> Option<TypedStmt> {
+        self.types.insert(symbol, Type::Error);
+        if let Some(facts) = &mut self.assigned {
+            facts.insert(super::flow::Fact::Assigned(symbol));
+        }
+        None
+    }
+
+    /// Returns the definition of a nested `def`, its annotations read where it is.
+    fn definition_of<'tree>(&mut self, parts: &FunctionParts<'tree>) -> Definition<'tree> {
+        let scope = super::locals::annotation_scope(self.program);
+        let found = function_definition(parts, &scope, self.diagnostics);
+        // An annotation may name a copy of a generic class, which the program then holds.
+        self.program.make_class_copies();
+        found
+    }
+
+    /// Returns the variables the nested `def` at `span`, named `name`, captures, after
+    /// reporting one that lives in a cell, which is planned for later in 0.8 (FUN-04).
+    fn captured_names(&mut self, name: &str, span: Span) -> Option<BTreeSet<String>> {
+        let captured = self
+            .closure_scope
+            .captures
+            .get(&span)
+            .cloned()
+            .unwrap_or_default();
+        if let Some(cell) = captured
+            .iter()
+            .find(|each| self.closure_scope.cells.contains(*each))
+        {
+            self.diagnostics.push(
+                Diagnostic::new(
+                    DiagnosticCode::error(201),
+                    span,
+                    format!(
+                        "`{name}` captures `{cell}`, which a loop binds or which is assigned \
+                         again or after the `def`, and capturing such a variable is planned \
+                         for later in TyPy 0.8 (FUN-04)"
+                    ),
+                )
+                .with_rule(RuleId::FUN_04),
+            );
+            return None;
+        }
+        Some(captured)
+    }
+
+    /// Returns the closure of the nested function `function`, named `name`, with the reads
+    /// of the variables it captures, `captured`, in order, which the `def` copies.
+    fn capture_values(
+        &mut self,
+        name: &str,
+        function: FunctionId,
+        captured: &BTreeSet<String>,
+        span: Span,
+    ) -> (Closure, Vec<TypedExpr>) {
+        let mut closure = Closure {
+            own: Some((name.to_owned(), function)),
+            captures: BTreeMap::new(),
+        };
+        let mut values = Vec::new();
+        // The function's own name reads the running object inside it, so it is no capture.
+        for (position, each) in captured.iter().filter(|each| *each != name).enumerate() {
+            let read = self.name(each, span);
+            closure.captures.insert(
+                each.clone(),
+                Captured {
+                    position: u32::try_from(position).unwrap_or(u32::MAX),
+                    ty: read.ty.clone(),
+                    function: self.function_held(each),
+                },
+            );
+            values.push(read);
+        }
+        (closure, values)
+    }
+
+    /// Returns the nested function the variable `name` holds when a `def` alone binds it.
+    fn function_held(&self, name: &str) -> Option<FunctionId> {
+        if let Some(symbol) = self.locals.get(name) {
+            return self.nested_functions.get(symbol).copied();
+        }
+        let closure = self.closure.as_ref()?;
+        match &closure.own {
+            Some((own, function)) if own == name => Some(*function),
+            _ => closure.captures.get(name)?.function,
+        }
+    }
+
+    /// Returns the read of `name` in a nested function's body when it names the function
+    /// itself or a variable it captures.
+    pub(super) fn closure_read(&self, name: &str, span: Span) -> Option<TypedExpr> {
+        if self.locals.contains_key(name) || self.global_names.contains(name) {
+            return None;
+        }
+        let closure = self.closure.as_ref()?;
+        if let Some((own, function)) = &closure.own
+            && own == name
+        {
+            let ty = callable_of(&self.program.signatures[function.0 as usize]);
+            return Some(Self::typed(TypedExprKind::RunningFunction, ty, span));
+        }
+        let captured = closure.captures.get(name)?;
+        Some(Self::typed(
+            TypedExprKind::Capture(captured.position),
+            captured.ty.clone(),
+            span,
+        ))
+    }
+
+    /// Returns the call of `name` when it names a nested function in reach: one a `def` of
+    /// this body binds, the running function, or one this function captures; a call by name
+    /// runs its code directly, given its function object.
+    pub(super) fn nested_call(
+        &mut self,
+        name: &str,
+        name_span: Span,
+        arguments: &[Expr],
+        keywords: &[Keyword],
+        span: Span,
+    ) -> Option<TypedExpr> {
+        let function = self.function_held(name)?;
+        let closure = if self.locals.contains_key(name) {
+            self.local_function(name, name_span)
+        } else {
+            self.closure_read(name, name_span)?
+        };
+        Some(
+            match self.bind_arguments(function, 0, name, arguments, keywords, span) {
+                Ok(bound) => Self::typed(
+                    TypedExprKind::CallNested {
+                        function,
+                        closure: Box::new(closure),
+                        arguments: bound,
+                    },
+                    self.program.signatures[function.0 as usize].returns.clone(),
+                    span,
+                ),
+                Err(error) => error,
+            },
+        )
+    }
+
+    /// Returns the read of the variable `symbol`, named `name`, that holds a nested function,
+    /// for a call of it: an error when the call may come before its `def` runs (TYP-12).
+    fn local_function(&mut self, name: &str, span: Span) -> TypedExpr {
+        self.reading_function = true;
+        let read = self.name(name, span);
+        self.reading_function = false;
+        read
+    }
+
+    /// Returns E0202 for a nested function with a keyword-only parameter read as a value,
+    /// since a `Callable` passes every argument by position.
+    pub(super) fn refused_nested_value(
+        &mut self,
+        symbol: SymbolId,
+        name: &str,
+        span: Span,
+    ) -> Option<TypedExpr> {
+        if self.reading_function {
+            return None;
+        }
+        let function = *self.nested_functions.get(&symbol)?;
+        let parameter = self.program.signatures[function.0 as usize]
+            .parameters
+            .iter()
+            .find(|parameter| parameter.kind == ParameterKind::KeywordOnly)?
+            .name
+            .clone();
+        let message = format!(
+            "`{name}` takes `{parameter}` by keyword only, and a `Callable` passes every argument \
+             by position, so `{name}` has no `Callable` type"
+        );
+        Some(self.error(
+            Diagnostic::new(DiagnosticCode::error(202), span, message).with_rule(RuleId::FUN_05),
+            span,
+        ))
+    }
+
+    /// Reports an assignment to the variable of a nested function, which only its `def`
+    /// binds; returns true when it reports one.
+    pub(super) fn assigns_nested_function(
+        &mut self,
+        symbol: SymbolId,
+        name: &str,
+        span: Span,
+    ) -> bool {
+        if !self.nested_functions.contains_key(&symbol) {
+            return false;
+        }
+        self.diagnostics.push(also_assigned(name, span));
+        true
+    }
+
+    /// Checks the body of each nested function this body defined, in order, with what it
+    /// captures, and stores the types of its captures.
+    pub(super) fn check_nested(
+        program: &mut super::Program,
+        pending: Vec<Pending>,
+        diagnostics: &mut typy_diagnostics::Diagnostics,
+    ) {
+        for nested in pending {
+            let Stmt::FunctionDef { body, .. } = &nested.statement else {
+                continue;
+            };
+            let mut types: Vec<(u32, Type)> = nested
+                .closure
+                .captures
+                .values()
+                .map(|captured| (captured.position, captured.ty.clone()))
+                .collect();
+            types.sort_by_key(|(position, _)| *position);
+            program.closures.insert(
+                nested.function,
+                types.into_iter().map(|(_, ty)| ty).collect(),
+            );
+            let definition = Definition {
+                name: nested.definition.name,
+                qualified_name: nested.definition.qualified_name,
+                class: None,
+                takes_instance: false,
+                copy_of: None,
+                home: None,
+                signature: nested.definition.signature,
+                type_parameters: Vec::new(),
+                parameters: nested.definition.parameters,
+                body,
+                span: nested.definition.span,
+            };
+            Self::check_body_of(
+                program,
+                nested.function,
+                &definition,
+                Some(nested.closure),
+                diagnostics,
+            );
+        }
+    }
+}
+
+/// Returns the `Callable` type of a signature: its parameters by position, and its result.
+fn callable_of(signature: &FunctionSignature) -> Type {
+    Type::Callable {
+        parameters: signature
+            .parameters
+            .iter()
+            .map(|parameter| parameter.ty.clone())
+            .collect(),
+        returns: Box::new(signature.returns.clone()),
+    }
+}
+
+/// Returns E0202 for a name both a `def` and another statement bind.
+fn also_assigned(name: &str, span: Span) -> Diagnostic {
+    Diagnostic::new(
+        DiagnosticCode::error(202),
+        span,
+        format!("`{name}` is a function and is also assigned as a variable"),
+    )
+    .with_rule(RuleId::STD_04)
+}

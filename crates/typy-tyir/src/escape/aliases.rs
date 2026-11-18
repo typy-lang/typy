@@ -106,7 +106,11 @@ impl Aliases {
                     self.join_values(result, *value);
                 }
             }
-            Operation::StoreGlobal { value, .. } | Operation::SetField { value, .. } => {
+            // A capture is an escape: the function object may outlive the function that
+            // made it (MEM-03, ADR-0061).
+            Operation::StoreGlobal { value, .. }
+            | Operation::SetField { value, .. }
+            | Operation::SetCapture { value, .. } => {
                 escaping.push(*value);
             }
             // C may keep what it is given; no instance converts to a C type, so this is a
@@ -150,6 +154,8 @@ impl Aliases {
             | Operation::IsNone(_)
             | Operation::NewInstance { .. }
             | Operation::Field { .. }
+            | Operation::NewClosure { .. }
+            | Operation::Capture { .. }
             | Operation::Identical { .. }
             | Operation::Increment(_)
             | Operation::Decrement(_) => {}

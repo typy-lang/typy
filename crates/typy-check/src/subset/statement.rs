@@ -20,16 +20,14 @@ impl Walker {
                 ..
             } => {
                 match place {
-                    Place::Function => {
-                        self.report(*span, planned("nested functions", "0.8", RuleId::FUN_04));
-                    }
+                    // A nested function is checked with the body around it (FUN-04).
+                    Place::Function | Place::ModuleTop | Place::Class => {}
                     Place::ModuleBlock => self.report(
                         *span,
                         Feature::Excluded {
                             what: "functions defined inside `if`, `for` or `while` blocks",
                         },
                     ),
-                    Place::ModuleTop | Place::Class => {}
                 }
                 // A method may carry one of the decorators of CLS-06; the checker reads which.
                 let method_decorator = place == Place::Class

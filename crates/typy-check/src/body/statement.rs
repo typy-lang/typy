@@ -395,13 +395,15 @@ impl BodyChecker<'_> {
             Stmt::Import { span, .. } | Stmt::ImportFrom { span, .. } => {
                 return self.import_statement(statement, *span);
             }
+            Stmt::FunctionDef { .. } if self.in_function() => return self.nested_def(statement),
             // `global` changes where names resolve, which `declare_globals` did.
             // The aliases are expanded in the annotations, and a program reads none as a value.
+            // A module's functions are checked on their own.
             Stmt::AnnAssign { value: None, .. }
             | Stmt::Global { .. }
             | Stmt::TypeAlias { .. }
-            | Stmt::FunctionDef { .. }
             | Stmt::ClassDef { .. }
+            | Stmt::FunctionDef { .. }
             | Stmt::Other { .. } => return None,
         })
     }

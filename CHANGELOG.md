@@ -31,11 +31,23 @@ All notable changes to TyPy are recorded here. The format follows
   through its class, and a static method, is the function itself
   (FUN-05). Class methods, methods read through a protocol value, and a
   few overrides, are planned for 0.9 (FUN-09).
+- Nested functions. A `def` inside a function makes a new function object
+  each time it runs, which holds a copy of each variable of the functions
+  around it that its body reads, when one assignment before the `def`
+  gives that variable its value. A nested function calls itself by name,
+  and calls a nested function defined before it in the same function, as
+  in CPython (FUN-04, ADR-0061).
 - The `key` argument of `sorted`, `list.sort`, `min` and `max`, also of
   `min` and `max` of several values: a function value of one item, whose
   results order the items as CPython orders them. `sorted` and
   `list.sort` call it once for each item and sort stably, and `min` and
   `max` compare each key as it is computed (FUN-05).
+
+### Fixed
+
+- A call of a local variable before its first assignment, such as `x()`
+  before `x = ...`, is E0306, where TyPy 0.7 accepted the program and then
+  failed while compiling it.
 
 ### Changed
 

@@ -101,7 +101,8 @@ pub(super) fn operands(operation: &Operation) -> Vec<ValueId> {
         Operation::Constant(_)
         | Operation::Load(_)
         | Operation::LoadGlobal(_)
-        | Operation::NewInstance { .. } => Vec::new(),
+        | Operation::NewInstance { .. }
+        | Operation::NewClosure { .. } => Vec::new(),
         Operation::Store { value, .. }
         | Operation::StoreGlobal { value, .. }
         | Operation::IntUnary { operand: value, .. }
@@ -118,8 +119,14 @@ pub(super) fn operands(operation: &Operation) -> Vec<ValueId> {
         | Operation::Unwrap(value)
         | Operation::IsNone(value)
         | Operation::FromBits { bits: value, .. }
-        | Operation::Field { object: value, .. } => vec![*value],
-        Operation::SetField { object, value, .. } => vec![*object, *value],
+        | Operation::Field { object: value, .. }
+        | Operation::Capture { closure: value, .. } => vec![*value],
+        Operation::SetField { object, value, .. }
+        | Operation::SetCapture {
+            closure: object,
+            value,
+            ..
+        } => vec![*object, *value],
         Operation::Identical { left, right }
         | Operation::SameMethod { left, right, .. }
         | Operation::IntBinary { left, right, .. }

@@ -214,6 +214,9 @@ impl RuleId {
     /// A class method, a static method a subclass defines again, a protocol value's method and
     /// an override held otherwise than its base shall be values when read through an instance.
     pub const FUN_09: Self = Self("FUN-09");
+    /// A nested function inside a generic function, and one with type parameters of its own,
+    /// shall be accepted.
+    pub const FUN_10: Self = Self("FUN-10");
     /// Generic functions and classes shall be written with PEP 695 type parameter lists; `TypeVar` and `Generic` shall be rejected.
     pub const GEN_01: Self = Self("GEN-01");
     /// Type parameters with a bound or with constraints shall be accepted and checked.
@@ -490,6 +493,7 @@ impl RuleId {
         Self::FUN_06,
         Self::FUN_08,
         Self::FUN_09,
+        Self::FUN_10,
         Self::GEN_01,
         Self::GEN_02,
         Self::GEN_03,

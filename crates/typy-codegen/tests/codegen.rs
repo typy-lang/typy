@@ -374,6 +374,59 @@ fn fun_05_a_bound_method_chooses_its_classs_descriptor_and_its_thunk_reads_the_i
     assert!(ir.contains("call ptr @typy_rt_method_new(i64 %"), "{ir}");
 }
 
+/// A nested function that captures an `int` and a `str`.
+const CLOSURE: &str = "\
+from typing import Callable
+
+
+def make_adder(step: int, label: str) -> Callable[[int], int]:
+    def add(value: int) -> int:
+        print(label)
+        return value + step
+    return add
+
+
+print(make_adder(1, \"x\")(2))
+";
+
+#[test]
+fn fun_04_a_closure_comes_from_the_runtime_with_its_descriptor_and_the_layout_of_its_captures() {
+    let (project, module) = compile(CLOSURE);
+    let ir = llvm_ir(&module, Target::host(), Optimization::None, &project).unwrap();
+    let symbol = "\"_TY8__main__23make_adder.<locals>.add\"";
+    // The captures, `label` then `step`, are laid out by the descriptor the runtime releases
+    // them through: an object at 0, an `int` at 8.
+    assert!(
+        ir.contains(
+            "[{ i32, i32, ptr } { i32 3, i32 0, ptr null }, { i32, i32, ptr } { i32 0, i32 8, ptr null }]"
+        ),
+        "{ir}"
+    );
+    let descriptor = ir
+        .lines()
+        .find(|line| line.starts_with("@typy.closure.descriptor."))
+        .unwrap();
+    assert!(
+        descriptor.ends_with(
+            "ptr @\"typy.closure_thunk._TY8__main__23make_adder.<locals>.add\", ptr @typy.tuple0 }"
+        ),
+        "{descriptor}"
+    );
+    assert!(
+        ir.contains("call ptr @typy_rt_closure_new(ptr @typy.closure.descriptor."),
+        "{ir}"
+    );
+    // The thunk passes the object on, which the nested function reads its captures from.
+    let start = ir
+        .find("@\"typy.closure_thunk._TY8__main__23make_adder.<locals>.add\"(ptr %0, i64 %1) {")
+        .unwrap();
+    let thunk = ir[start..].split("\n}").next().unwrap();
+    assert!(
+        thunk.contains(&format!("call i64 @{symbol}(ptr %0, i64 %1)")),
+        "{thunk}"
+    );
+}
+
 #[test]
 fn the_entry_is_the_only_external_function() {
     let (project, module) = compile(PROGRAMS[1]);

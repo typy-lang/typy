@@ -1023,3 +1023,99 @@ fn fun_05_a_call_through_a_value_needs_its_function_object_and_its_blocks() {
         "{no_exception}"
     );
 }
+
+/// `outer` makes a function object of `inner` that captures the `int` it is given, and
+/// `inner` reads that capture back.
+fn closure_module() -> TyirModule {
+    let mut tuple_types = crate::TupleTypes::default();
+    let captures = tuple_types.intern_id(vec![TyirType::Int]);
+    let mut outer = FunctionBuilder::new(FunctionId(0), "outer", "outer", TyirType::FUNCTION);
+    let value = outer.add_parameter(TyirType::Int);
+    let closure = outer.push_value(
+        Operation::NewClosure {
+            function: FunctionId(1),
+            captures,
+        },
+        TyirType::FUNCTION,
+        span(),
+    );
+    outer.push(
+        Operation::SetCapture {
+            closure,
+            captures,
+            index: 0,
+            value,
+        },
+        span(),
+    );
+    outer.terminate(Terminator::Return(closure));
+    let mut inner = FunctionBuilder::new(FunctionId(1), "inner", "inner", TyirType::Int);
+    let object = inner.add_parameter(TyirType::FUNCTION);
+    let read = inner.push_value(
+        Operation::Capture {
+            closure: object,
+            captures,
+            index: 0,
+        },
+        TyirType::Int,
+        span(),
+    );
+    inner.terminate(Terminator::Return(read));
+    let mut module = module(outer.finish());
+    module.functions.push(inner.finish());
+    module.tuple_types = tuple_types;
+    module
+}
+
+#[test]
+fn fun_04_a_closure_made_and_read_verifies_and_prints() {
+    let module = closure_module();
+    assert_eq!(verify(&module), Ok(()));
+    let text = print(&module);
+    for line in [
+        "= new_closure fn1, tuple#0",
+        "set_capture v1, tuple#0, 0, v0",
+        "= capture v0, tuple#0, 0",
+    ] {
+        assert!(text.contains(line), "{line} missing from {text}");
+    }
+}
+
+#[test]
+fn fun_04_a_capture_of_another_position_type_or_object_fails() {
+    let mut wrong_index = closure_module();
+    if let Operation::Capture { index, .. } =
+        &mut wrong_index.functions[1].blocks[0].instructions[0].operation
+    {
+        *index = 1;
+    }
+    assert!(message(&wrong_index).contains("has no capture 1"));
+    let mut wrong_function = closure_module();
+    if let Operation::NewClosure { function, .. } =
+        &mut wrong_function.functions[0].blocks[0].instructions[0].operation
+    {
+        *function = FunctionId(9);
+    }
+    assert!(message(&wrong_function).contains("fn9 does not exist"));
+    let mut wrong_tuple = closure_module();
+    if let Operation::NewClosure { captures, .. } =
+        &mut wrong_tuple.functions[0].blocks[0].instructions[0].operation
+    {
+        *captures = crate::types::TupleTypeId(7);
+    }
+    assert!(message(&wrong_tuple).contains("tuple#7 does not exist"));
+    let mut wrong_value = closure_module();
+    if let Operation::SetCapture { value, .. } =
+        &mut wrong_value.functions[0].blocks[0].instructions[1].operation
+    {
+        *value = ValueId(1);
+    }
+    assert!(message(&wrong_value).contains("the captured value"));
+    let mut not_a_function = closure_module();
+    if let Operation::SetCapture { closure, .. } =
+        &mut not_a_function.functions[0].blocks[0].instructions[1].operation
+    {
+        *closure = ValueId(0);
+    }
+    assert!(message(&not_a_function).contains("the function object"));
+}

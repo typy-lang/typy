@@ -217,6 +217,12 @@ impl FunctionLowerer<'_> {
                 targets,
                 span,
             } => self.lazy_import_statement(reifies, targets, *span),
+            TypedStmt::FunctionDef {
+                function,
+                target,
+                captures,
+                span,
+            } => self.nested_def(*function, *target, captures, *span),
             TypedStmt::Pass { .. } => {}
             TypedStmt::Break { span } => {
                 if let Some(targets) = self.loops.last().copied() {

@@ -408,6 +408,32 @@ impl Checker<'_> {
                 class,
                 index,
             } => Some(self.field(*object, *class, *index)?),
+            Operation::NewClosure { function, captures } => {
+                if self.module.functions.get(function.0 as usize).is_none() {
+                    return Err(self.error(format!("fn{} does not exist", function.0)));
+                }
+                self.capture_type(*captures, 0, true)?;
+                Some(TyirType::FUNCTION)
+            }
+            Operation::Capture {
+                closure,
+                captures,
+                index,
+            } => {
+                self.expect(*closure, TyirType::FUNCTION, "the function object")?;
+                Some(self.capture_type(*captures, *index, false)?)
+            }
+            Operation::SetCapture {
+                closure,
+                captures,
+                index,
+                value,
+            } => {
+                self.expect(*closure, TyirType::FUNCTION, "the function object")?;
+                let ty = self.capture_type(*captures, *index, false)?;
+                self.expect(*value, ty, "the captured value")?;
+                None
+            }
             Operation::SetField {
                 object,
                 class,
@@ -535,6 +561,28 @@ impl Checker<'_> {
     }
 
     /// An item is read from a tuple that has it.
+    /// Returns the type of capture `index` of the tuple type `captures`, or with `any`, of
+    /// the first, when the tuple type exists.
+    fn capture_type(
+        &self,
+        captures: TupleTypeId,
+        index: u32,
+        any: bool,
+    ) -> Result<TyirType, VerifyError> {
+        let items = self
+            .module
+            .tuple_types
+            .items(captures)
+            .ok_or_else(|| self.error(format!("tuple#{} does not exist", captures.0)))?;
+        if any {
+            return Ok(items.first().copied().unwrap_or(TyirType::Unit));
+        }
+        items
+            .get(index as usize)
+            .copied()
+            .ok_or_else(|| self.error(format!("tuple#{} has no capture {index}", captures.0)))
+    }
+
     fn tuple_item(&self, tuple: ValueId, index: u32) -> Result<TyirType, VerifyError> {
         let TyirType::Tuple(id) = self.ty(tuple)? else {
             return Err(self.error(format!("v{} is not a tuple", tuple.0)));

@@ -138,6 +138,29 @@ impl<'ctx> FunctionEmitter<'_, '_, 'ctx> {
             }
             Operation::IsNone(value) => Some(self.is_none(*value)?),
             Operation::NewInstance { class } => Some(self.new_instance(*class)?),
+            Operation::NewClosure { function, captures } => {
+                Some(self.new_closure(*function, *captures)?)
+            }
+            Operation::Capture {
+                closure,
+                captures,
+                index,
+            } => match self.capture_address(*closure, *captures, *index)? {
+                Some((address, ty)) => Some(self.builder.build_load(ty, address, "")?),
+                None => None,
+            },
+            Operation::SetCapture {
+                closure,
+                captures,
+                index,
+                value,
+            } => {
+                if let Some((address, _)) = self.capture_address(*closure, *captures, *index)? {
+                    let value = self.value(*value)?;
+                    self.builder.build_store(address, value)?;
+                }
+                None
+            }
             Operation::CallForeign {
                 function,
                 arguments,

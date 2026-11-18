@@ -27,6 +27,11 @@ impl BodyChecker<'_> {
         if let Some(class) = self.program.foreign.structure_named(id) {
             return Self::cdata_class(class, span);
         }
+        // A nested function reads its own name and its captures from its function object
+        // (FUN-04).
+        if let Some(read) = self.closure_read(id, span) {
+            return read;
+        }
         if self.in_function()
             && !self.global_names.contains(id)
             && !self.locals.contains_key(id)
@@ -69,6 +74,9 @@ impl BodyChecker<'_> {
             {
                 self.reported_incomplete = true;
                 self.incomplete_instance(initializing, span, false);
+            }
+            if let Some(refused) = self.refused_nested_value(symbol, id, span) {
+                return refused;
             }
             let ty = self.types.get(&symbol).cloned().unwrap_or(Type::Error);
             let kind = if self.program.symbols[symbol.0 as usize].kind == SymbolKind::ModuleVariable

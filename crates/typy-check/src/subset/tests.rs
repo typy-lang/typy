@@ -101,10 +101,6 @@ fn later_features_name_their_release_and_rule() {
             "generator expressions are planned for TyPy 0.9 (EXP-15)",
         ),
         (
-            "def f() -> None:\n    def g() -> None:\n        pass\n",
-            "nested functions are planned for TyPy 0.8 (FUN-04)",
-        ),
-        (
             "@d\ndef f() -> None:\n    pass\n",
             "decorators are planned for TyPy 0.9 (FUN-06)",
         ),

@@ -56,6 +56,9 @@ pub struct TypedProgram {
     pub library_version: Option<String>,
     /// The warnings of checking the program, such as W0301 (DIA-08).
     pub warnings: typy_diagnostics::Diagnostics,
+    /// The types of the captures of each nested function, in order, whose code takes its
+    /// function object first (FUN-04, ADR-0061).
+    pub closures: std::collections::BTreeMap<FunctionId, Vec<crate::types::Type>>,
 }
 
 /// A module of the program after checking.

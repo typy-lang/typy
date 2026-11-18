@@ -113,6 +113,19 @@ pub enum TypedExprKind {
     /// A function of the program read as a value: its function object, of a `Callable`
     /// type (FUN-05, ADR-0060).
     FunctionValue(FunctionId),
+    /// The capture at this position of the nested function that is running: a copy of a
+    /// variable of a function around it, made when its `def` ran (FUN-04, ADR-0061).
+    Capture(u32),
+    /// The function object of the nested function that is running, which its own name reads
+    /// inside it (FUN-04).
+    RunningFunction,
+    /// A call by name of a nested function: its code, given `closure`, its function object,
+    /// first, then the arguments, as a call of a function by name binds them (FUN-04).
+    CallNested {
+        function: FunctionId,
+        closure: Box<TypedExpr>,
+        arguments: Vec<Argument>,
+    },
     /// A method read through an instance: a new bound method of `object` and the method of
     /// its class (FUN-05, ADR-0060). `methods` holds the method of the instance's static class
     /// first, then each override among its subclasses, after the classes it derives from; the
@@ -618,6 +631,8 @@ impl TypedExpr {
             | TypedExprKind::TypeObject(_)
             | TypedExprKind::TypeAliasObject(_)
             | TypedExprKind::FunctionValue(_)
+            | TypedExprKind::Capture(_)
+            | TypedExprKind::RunningFunction
             | TypedExprKind::ClassVariable(_)
             | TypedExprKind::NotImplemented
             | TypedExprKind::ForeignLibrary(_)
@@ -648,6 +663,11 @@ impl TypedExpr {
             TypedExprKind::CallValue { callee, arguments } => {
                 std::iter::once(callee.as_ref()).chain(arguments).collect()
             }
+            TypedExprKind::CallNested {
+                closure, arguments, ..
+            } => std::iter::once(closure.as_ref())
+                .chain(arguments.iter().map(|argument| &argument.value))
+                .collect(),
             TypedExprKind::Keyed {
                 list,
                 key,

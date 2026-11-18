@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy software requirements specification |
-| Version | 1.89 |
+| Version | 1.90 |
 | Status | Approved |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-18 |
@@ -289,6 +289,7 @@ formatter applies; Ruff's formatter is the project's recommendation.
 | FUN-07 | Generator functions shall return `Iterator[T]` or `Generator[T, None, None]`. | M | 0.9 | 8.7 |
 | FUN-08 | A built-in function or a method of a built-in type shall be a value where a `Callable` is expected, such as `sorted(words, key=len)`. | S | 0.9 | 3.2.8 |
 | FUN-09 | A class method read as a value, a static method read through an instance whose subclasses define it again, a method read through a protocol value, and a method read through an instance whose subclass overrides it with parameters or a result held otherwise, shall be values as CPython's are. | S | 0.9 | 3.2.8 |
+| FUN-10 | A nested function inside a generic function, and a nested function with type parameters of its own, shall be accepted, with a copy for each set of types. | C | 0.9 | 8.10 |
 
 ### 3.10 Classes (CLS)
 

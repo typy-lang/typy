@@ -52,6 +52,9 @@ pub(crate) fn assigned_symbols(body: &[TypedStmt]) -> BTreeSet<SymbolId> {
                     found.extend(bindings.iter().map(typy_check::ImportBinding::target));
                 }
                 TypedStmt::LazyImport { targets, .. } => found.extend(targets.iter().copied()),
+                TypedStmt::FunctionDef { target, .. } => {
+                    found.insert(*target);
+                }
                 TypedStmt::Match { subject, cases, .. } => {
                     found.extend(subject.iter().map(|(symbol, _)| *symbol));
                     for case in cases {
@@ -131,7 +134,10 @@ pub(crate) fn outlives_call(expression: &TypedExpr) -> bool {
         | TypedExprKind::Constant(_)
         | TypedExprKind::ModuleName
         | TypedExprKind::TypeObject(_)
-        | TypedExprKind::FunctionValue(_) => true,
+        | TypedExprKind::FunctionValue(_)
+        // The running function and its captures, which never change, live while it runs.
+        | TypedExprKind::RunningFunction
+        | TypedExprKind::Capture(_) => true,
         TypedExprKind::Wrap(inner)
         | TypedExprKind::Unwrap(inner)
         | TypedExprKind::AsIterable(inner) => outlives_call(inner),

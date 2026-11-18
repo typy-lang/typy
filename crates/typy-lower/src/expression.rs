@@ -253,6 +253,29 @@ impl FunctionLowerer<'_> {
             TypedExprKind::FString(parts) => self.fstring(parts, span),
             TypedExprKind::TypeObject(of) => self.type_object(of, span),
             TypedExprKind::FunctionValue(function) => self.function_value(*function, span),
+            TypedExprKind::Capture(index) => self.capture(*index, ty, span),
+            TypedExprKind::RunningFunction => self.running_function(),
+            TypedExprKind::CallNested {
+                function,
+                closure,
+                arguments,
+            } => {
+                let closure_value = self.expression(closure);
+                let closure_value = self.kept_for_call(closure, closure_value, span);
+                let values: Vec<(usize, Lowered)> = arguments
+                    .iter()
+                    .map(|argument| {
+                        let lowered = self.expression(&argument.value);
+                        (
+                            argument.parameter,
+                            self.kept_for_call(&argument.value, lowered, span),
+                        )
+                    })
+                    .collect();
+                let result = self.call_nested(*function, closure_value.value, values, ty, span);
+                self.release(closure_value, span);
+                result
+            }
             TypedExprKind::BoundMethod { object, methods } => {
                 self.bound_method(object, methods, span)
             }
@@ -632,7 +655,20 @@ impl FunctionLowerer<'_> {
         ty: TyirType,
         span: Span,
     ) -> Lowered {
-        self.call(function, None, arguments, ty, span)
+        self.call(function, None, (None, arguments), ty, span)
+    }
+
+    /// Calls the nested function `function` directly, with its function object `closure`
+    /// first (FUN-04).
+    pub(crate) fn call_nested(
+        &mut self,
+        function: FunctionId,
+        closure: ValueId,
+        arguments: Vec<(usize, Lowered)>,
+        ty: TyirType,
+        span: Span,
+    ) -> Lowered {
+        self.call(function, None, (Some(closure), arguments), ty, span)
     }
 
     /// Returns the value of the default `default` of `parameter`, held as the parameter is.
@@ -740,7 +776,7 @@ impl FunctionLowerer<'_> {
         span: Span,
     ) -> Lowered {
         let dispatch = self.methods.dispatch(function);
-        self.call(function, dispatch, arguments, ty, span)
+        self.call(function, dispatch, (None, arguments), ty, span)
     }
 
     /// Calls `function`, or the entry `dispatch` names of the table of the class of the first
@@ -749,13 +785,13 @@ impl FunctionLowerer<'_> {
         &mut self,
         function: FunctionId,
         dispatch: Option<(u32, u32)>,
-        arguments: Vec<(usize, Lowered)>,
+        (closure, arguments): (Option<ValueId>, Vec<(usize, Lowered)>),
         ty: TyirType,
         span: Span,
     ) -> Lowered {
         let parameters: Vec<SignatureParameter> =
             self.program.function(function).signature.parameters.clone();
-        let mut ordered: Vec<ValueId> = Vec::with_capacity(parameters.len());
+        let mut ordered: Vec<ValueId> = Vec::with_capacity(parameters.len() + 1);
         for (index, parameter) in parameters.iter().enumerate() {
             let value = if let Some((_, lowered)) =
                 arguments.iter().find(|(position, _)| *position == index)
@@ -784,6 +820,9 @@ impl FunctionLowerer<'_> {
                 self.default_value(parameter, parameter.default.as_ref(), span)
             };
             ordered.push(value);
+        }
+        if let Some(closure) = closure {
+            ordered.insert(0, closure);
         }
         let function_id = typy_tyir::FunctionId(function.0);
         let (callee, operation) = match dispatch {

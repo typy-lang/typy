@@ -161,6 +161,39 @@ fn fun_02_a_function_that_orders_by_a_key_checks_the_stack() {
 }
 
 #[test]
+fn fun_04_a_def_makes_a_closure_of_its_captures_which_its_code_reads_from_its_object() {
+    let module = lower(
+        "def outer(step: int, label: str) -> int:\n    def add(value: int) -> int:\n        \
+         return value + step + len(label)\n    return add(1)\n",
+    );
+    let text = print(&module);
+    let outer = &text[text.find("# outer").unwrap()..];
+    let outer = &outer[..outer.find("\n}").unwrap()];
+    for line in [
+        "new_closure fn",
+        "set_capture v",
+        "call _TY8__main__18outer.<locals>.add(",
+    ] {
+        assert!(outer.contains(line), "{line} missing from {outer}");
+    }
+    let add = function(&module, "add");
+    // The function object comes first, then the parameter.
+    assert_eq!(
+        add.value(add.parameters[0]).ty,
+        typy_tyir::TyirType::FUNCTION
+    );
+    assert_eq!(add.parameters.len(), 2);
+    assert_eq!(add.qualified_name, "outer.<locals>.add");
+    let reads = add
+        .blocks
+        .iter()
+        .flat_map(|block| &block.instructions)
+        .filter(|instruction| matches!(instruction.operation, Operation::Capture { .. }))
+        .count();
+    assert_eq!(reads, 2);
+}
+
+#[test]
 fn fun_05_a_bound_method_tests_each_overriding_class_after_its_bases() {
     let module = lower(
         "class A:\n    def m(self) -> int:\n        return 1\n\n\nclass B(A):\n    \

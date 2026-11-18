@@ -1,8 +1,8 @@
 //! Lowers function values and the calls through them (FUN-05, ADR-0060).
 
-use typy_check::{ClassId, FunctionId, MemberTest, TypeObjectOf, TypedExpr};
+use typy_check::{ClassId, FunctionId, MemberTest, SymbolId, TypeObjectOf, TypedExpr};
 use typy_diagnostics::Span;
-use typy_tyir::{Callee, Constant, RuntimeFunction, TyirType};
+use typy_tyir::{Callee, Constant, Operation, RuntimeFunction, TyirType};
 
 use crate::function::FunctionLowerer;
 use crate::ownership::Lowered;
@@ -13,6 +13,75 @@ impl FunctionLowerer<'_> {
     pub(crate) fn function_value(&mut self, function: FunctionId, span: Span) -> Lowered {
         let value = self.constant(Constant::Function(typy_tyir::FunctionId(function.0)), span);
         Self::borrowed(value, TyirType::FUNCTION)
+    }
+
+    /// Lowers a nested `def`: a new function object of `function`, which takes over a
+    /// reference to the value of each capture, in order, stored in the variable `target`
+    /// (FUN-04, ADR-0061).
+    pub(crate) fn nested_def(
+        &mut self,
+        function: FunctionId,
+        target: SymbolId,
+        captures: &[TypedExpr],
+        span: Span,
+    ) {
+        let types = self
+            .program
+            .closures
+            .get(&function)
+            .cloned()
+            .unwrap_or_default();
+        let tuple = self.tuple_type_id(&types);
+        let closure = self.builder.push_value(
+            Operation::NewClosure {
+                function: typy_tyir::FunctionId(function.0),
+                captures: tuple,
+            },
+            TyirType::FUNCTION,
+            span,
+        );
+        let closure = self.produced(closure, TyirType::FUNCTION);
+        for (index, capture) in captures.iter().enumerate() {
+            let value = self.expression(capture);
+            let value = self.take_reference(value, span);
+            self.builder.push(
+                Operation::SetCapture {
+                    closure: closure.value,
+                    captures: tuple,
+                    index: u32::try_from(index).unwrap_or(u32::MAX),
+                    value,
+                },
+                span,
+            );
+        }
+        let slot = self.slots[&target];
+        self.store(slot, closure, span);
+    }
+
+    /// Returns the capture at `index` of the running nested function, of type `ty`, borrowed
+    /// from its function object (FUN-04).
+    pub(crate) fn capture(&mut self, index: u32, ty: TyirType, span: Span) -> Lowered {
+        let (closure, captures) = self
+            .closure
+            .unwrap_or_else(|| unreachable!("only a nested function reads a capture"));
+        let value = self.builder.push_value(
+            Operation::Capture {
+                closure,
+                captures,
+                index,
+            },
+            ty,
+            span,
+        );
+        Self::borrowed(value, ty)
+    }
+
+    /// Returns the running nested function's function object, borrowed from its caller.
+    pub(crate) fn running_function(&self) -> Lowered {
+        let (closure, _) = self
+            .closure
+            .unwrap_or_else(|| unreachable!("only a nested function reads its own object"));
+        Self::borrowed(closure, TyirType::FUNCTION)
     }
 
     /// Returns a new bound method of the instance `object` gives, of the method of its

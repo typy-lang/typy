@@ -277,6 +277,23 @@ fn operation(module: &TyirModule, operation: &Operation) -> String {
         Operation::IsNone(value) => format!("is_none v{}", value.0),
         Operation::FromBits { bits, ty } => format!("from_bits v{}, {ty}", bits.0),
         Operation::NewInstance { class } => format!("new class#{class}"),
+        Operation::NewClosure { function, captures } => {
+            format!("new_closure fn{}, tuple#{}", function.0, captures.0)
+        }
+        Operation::Capture {
+            closure,
+            captures,
+            index,
+        } => format!("capture v{}, tuple#{}, {index}", closure.0, captures.0),
+        Operation::SetCapture {
+            closure,
+            captures,
+            index,
+            value,
+        } => format!(
+            "set_capture v{}, tuple#{}, {index}, v{}",
+            closure.0, captures.0, value.0
+        ),
         Operation::Field {
             object,
             class,
