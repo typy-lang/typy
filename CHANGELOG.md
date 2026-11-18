@@ -6,6 +6,15 @@ All notable changes to TyPy are recorded here. The format follows
 
 ## [Unreleased]
 
+### Changed
+
+- An instance and a tuple store their attributes and items by decreasing
+  alignment, so a `bool` beside `int`s no longer takes 8 bytes: a class of
+  two `int`s, a `float`, an object and two `bool`s takes 56 bytes, not 64,
+  and fits a 64-byte allocation (MEM-11, NFR-18, ADR-0062). A program sees
+  its declared order everywhere, in `repr`, comparisons, hashing, `match`
+  and dataclass fields.
+
 ## [0.7.0] - 2026-11-18
 
 ### Added

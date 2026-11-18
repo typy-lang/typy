@@ -162,6 +162,75 @@ fn ffi_13_an_integer_on_apples_stack_takes_its_c_width_and_words_go_in_registers
     }
 }
 
+/// A class whose attributes mix every alignment, declared in an order that pads.
+const MIXED_CLASS: &str = "\
+class Node:
+    def __init__(self, key: int, red: bool, weight: float, seen: bool, size: int, \
+parent: \"Node | None\") -> None:
+        self.key = key
+        self.red = red
+        self.weight = weight
+        self.seen = seen
+        self.size = size
+        self.parent = parent
+
+
+n = Node(1, True, 0.5, False, 3, None)
+print(n.key, n.red, n.weight, n.seen, n.size, n.parent is None)
+";
+
+#[test]
+fn mem_11_an_instance_stores_its_attributes_by_alignment_and_its_descriptor_keeps_their_order() {
+    let (project, module) = compile(MIXED_CLASS);
+    for target in [
+        Target::host(),
+        Target {
+            triple: TargetTriple::Aarch64AppleDarwin,
+        },
+    ] {
+        let ir = llvm_ir(&module, target, Optimization::None, &project).unwrap();
+        assert!(
+            ir.contains("{ i64, ptr, { i64, double, i64, ptr, i1, i1 } }"),
+            "{ir}"
+        );
+        // In the declared order, each with its offset from the ordering rule: `key` 0,
+        // `red` 32, `weight` 8, `seen` 33, `size` 16 and `parent` 24, of kinds int, bool,
+        // float, bool, int and optional object.
+        let fields = "[{ i32, i32, ptr } zeroinitializer, \
+            { i32, i32, ptr } { i32 2, i32 32, ptr null }, \
+            { i32, i32, ptr } { i32 1, i32 8, ptr null }, \
+            { i32, i32, ptr } { i32 2, i32 33, ptr null }, \
+            { i32, i32, ptr } { i32 0, i32 16, ptr null }, \
+            { i32, i32, ptr } { i32 9, i32 24, ptr null }]";
+        assert!(ir.contains(fields), "{ir}");
+        assert!(
+            ir.contains("{ i64 40, i64 6, ptr @typy.tuple0.fields }"),
+            "{ir}"
+        );
+    }
+}
+
+#[test]
+fn nfr_18_an_instance_takes_its_prefix_and_its_attributes_rounded_to_eight_bytes() {
+    let (project, module) = compile(MIXED_CLASS);
+    let ir = llvm_ir(&module, Target::host(), Optimization::None, &project).unwrap();
+    // Eight bytes each for two `int`s, a `float` and an object, one each for two `bool`s.
+    let attributes: u64 = 4 * 8 + 2;
+    let bound = attributes.next_multiple_of(8);
+    let size: u64 = ir
+        .lines()
+        .find_map(|line| {
+            line.strip_prefix(
+                "@typy.tuple0 = private unnamed_addr constant { i64, i64, ptr } { i64 ",
+            )
+        })
+        .and_then(|rest| rest.split(',').next())
+        .and_then(|size| size.parse().ok())
+        .unwrap();
+    assert!(size <= bound, "{size} > {bound}");
+    assert_eq!(16 + size, 56);
+}
+
 #[test]
 fn the_entry_is_the_only_external_function() {
     let (project, module) = compile(PROGRAMS[1]);

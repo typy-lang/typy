@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy detailed design |
-| Version | 2.35 |
+| Version | 2.36 |
 | Status | Approved |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-18 |
@@ -2418,13 +2418,19 @@ function marked `minsize` and `optsize`.
 Each declares every function first, emits each one, verifies the LLVM
 module, runs the pipeline and writes the output. A tuple is an LLVM struct
 of its items that have a value, so an item of type `None` takes no field and
-the empty tuple is `{}`; `MakeTuple` inserts each field and `TupleItem`
-extracts one. Tuples pass to and return from program functions by value. A
-tuple type that a list holds gets a descriptor, emitted once as two private
-constants: the `TupleType` header and its table of `Field` entries, whose
-offsets the target's data layout gives, so the runtime reads each field
-where the generated code stores it. The
-target machine uses the baseline CPU of the triple, so the output runs on
+the empty tuple is `{}`. `abi::storage_order` orders the fields by
+decreasing `alignment`, 8 bytes for an `int`, a `float` and an object, 1 for
+a `bool`, a tuple's largest item's, and by the declared order among items of
+one alignment, so the padding is at the end; `tuple_field` gives the field
+of each declared item, and every access goes through it, an instance's
+attributes and an optional tuple's flag and tuple included (MEM-11,
+ADR-0062). `MakeTuple` inserts each field and `TupleItem` extracts one.
+Tuples pass to and return from program functions by value. A tuple type
+that a list holds gets a descriptor, emitted once as two private
+constants: the `TupleType` header and its table of `Field` entries, in the
+declared order, whose offsets the target's data layout gives, so the
+runtime reads each field where the generated code stores it. The target
+machine uses the baseline CPU of the triple, so the output runs on
 every machine of the target and does not depend on the build host (NFR-06).
 Only the entry function is visible outside the object. `lookup` gives the
 file names and lines of traceback entries. Every error is internal, E9001.

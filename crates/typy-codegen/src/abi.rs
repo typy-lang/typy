@@ -21,11 +21,10 @@ pub(crate) fn value_type<'ctx>(
         TyirType::Optional(OptionalBase::Bool) => Some(context.i8_type().into()),
         TyirType::Optional(base) => value_type(context, tuples, storage(base)),
         TyirType::Tuple(id) => {
-            let fields: Vec<BasicTypeEnum<'ctx>> = tuples
-                .items(id)
-                .unwrap_or_default()
-                .iter()
-                .filter_map(|item| value_type(context, tuples, *item))
+            let items = tuples.items(id).unwrap_or_default();
+            let fields: Vec<BasicTypeEnum<'ctx>> = storage_order(tuples, items)
+                .into_iter()
+                .filter_map(|index| value_type(context, tuples, items[index]))
                 .collect();
             Some(context.struct_type(&fields, false).into())
         }
@@ -44,17 +43,48 @@ pub(crate) const fn storage(base: OptionalBase) -> TyirType {
     }
 }
 
+/// Returns the alignment in bytes of a value of type `ty` in memory: 8 for an `int`, a `float`,
+/// bits and an object, 1 for a `bool` and an optional `bool`, a tuple's most aligned item's,
+/// and 0 for `None`, which takes no room. Every supported target aligns these types alike.
+pub(crate) fn alignment(tuples: &TupleTypes, ty: TyirType) -> u32 {
+    match ty {
+        TyirType::Unit => 0,
+        TyirType::Bool | TyirType::Optional(OptionalBase::Bool) => 1,
+        TyirType::Int | TyirType::Bits | TyirType::Float | TyirType::Object(_) => 8,
+        TyirType::Optional(base) => alignment(tuples, storage(base)),
+        TyirType::Tuple(id) => tuples
+            .items(id)
+            .unwrap_or_default()
+            .iter()
+            .map(|item| alignment(tuples, *item))
+            .max()
+            .unwrap_or(1)
+            .max(1),
+    }
+}
+
+/// Returns the position of each item of a tuple that takes a field, in the order of the
+/// fields: by decreasing alignment, and in the declared order among items of one alignment,
+/// so the padding is at the end and the order follows from the types alone (MEM-11,
+/// ADR-0062). An item of type `None` takes no field.
+pub(crate) fn storage_order(tuples: &TupleTypes, items: &[TyirType]) -> Vec<usize> {
+    let mut order: Vec<usize> = (0..items.len())
+        .filter(|index| items[*index] != TyirType::Unit)
+        .collect();
+    order.sort_by_key(|index| core::cmp::Reverse(alignment(tuples, items[*index])));
+    order
+}
+
 /// Returns the struct field that holds item `index` of a tuple, or `None` for an item of type
 /// `None`, which has no field.
-pub(crate) fn tuple_field(items: &[TyirType], index: usize) -> Option<u32> {
+pub(crate) fn tuple_field(tuples: &TupleTypes, items: &[TyirType], index: usize) -> Option<u32> {
     if items.get(index).is_none_or(|item| *item == TyirType::Unit) {
         return None;
     }
-    let before = items[..index]
+    let position = storage_order(tuples, items)
         .iter()
-        .filter(|item| **item != TyirType::Unit)
-        .count();
-    u32::try_from(before).ok()
+        .position(|each| *each == index)?;
+    u32::try_from(position).ok()
 }
 
 /// Returns the type a function returns. A function that may raise returns `{result, exception}`, or only the exception when its result is `unit`; a null exception means none was raised.
@@ -141,10 +171,43 @@ mod tests {
             "\"{}\""
         );
         let items = [TyirType::Int, TyirType::Unit, TyirType::Float];
-        assert_eq!(super::tuple_field(&items, 0), Some(0));
-        assert_eq!(super::tuple_field(&items, 1), None);
-        assert_eq!(super::tuple_field(&items, 2), Some(1));
-        assert_eq!(super::tuple_field(&items, 3), None);
+        assert_eq!(super::tuple_field(&tuples, &items, 0), Some(0));
+        assert_eq!(super::tuple_field(&tuples, &items, 1), None);
+        assert_eq!(super::tuple_field(&tuples, &items, 2), Some(1));
+        assert_eq!(super::tuple_field(&tuples, &items, 3), None);
+    }
+
+    #[test]
+    fn mem_11_items_are_stored_by_decreasing_alignment_in_their_declared_order() {
+        use typy_tyir::OptionalBase;
+        let context = Context::create();
+        let mut tuples = TupleTypes::default();
+        let flagged = tuples.intern(vec![TyirType::Bool, TyirType::Int]);
+        let items = vec![
+            TyirType::Int,
+            TyirType::Bool,
+            TyirType::Float,
+            TyirType::Optional(OptionalBase::Bool),
+            TyirType::Unit,
+            flagged,
+            TyirType::STR,
+        ];
+        let node = tuples.intern(items.clone());
+        assert_eq!(
+            value_type(&context, &tuples, node).unwrap().to_string(),
+            "\"{ i64, double, { i64, i1 }, ptr, i1, i8 }\""
+        );
+        let fields: Vec<Option<u32>> = (0..items.len())
+            .map(|index| super::tuple_field(&tuples, &items, index))
+            .collect();
+        assert_eq!(
+            fields,
+            [Some(0), Some(4), Some(1), Some(5), None, Some(2), Some(3)]
+        );
+        assert_eq!(super::alignment(&tuples, flagged), 8);
+        assert_eq!(super::alignment(&tuples, TyirType::Unit), 0);
+        let empty = tuples.intern(Vec::new());
+        assert_eq!(super::alignment(&tuples, empty), 1);
     }
 
     #[test]

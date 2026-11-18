@@ -717,7 +717,7 @@ impl<'ctx> FunctionEmitter<'_, '_, 'ctx> {
         index: u32,
     ) -> Result<Option<(PointerValue<'ctx>, BasicTypeEnum<'ctx>)>, CodegenError> {
         let (layout, items, position) = self.instance_layout(object, class)?;
-        let Some(field) = tuple_field(&items, index as usize) else {
+        let Some(field) = tuple_field(&self.shared.tyir.tuple_types, &items, index as usize) else {
             return Ok(None);
         };
         let fields = layout
