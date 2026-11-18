@@ -12,6 +12,7 @@ use inkwell::values::{BasicMetadataValueEnum, BasicValueEnum, FunctionValue, Poi
 use typy_tyir::{CType, TyirExport, TyirLibrary, TyirModule};
 
 use crate::error::CodegenError;
+use crate::target::TargetTriple;
 
 /// The priority of the constructor and the destructor: the lowest, so they run after those
 /// of the C library and the host.
@@ -27,13 +28,14 @@ const FROM_INT64: &str = "typy_rt_int_from_int64";
 const INTO_INT64: &str = "typy_rt_int_into_int64";
 const INT_DECREMENT: &str = "typy_rt_int_decrement";
 
-/// What emitting a library reads: the LLVM module and the program's functions.
+/// What emitting a library reads: the LLVM module, the program's functions and the target.
 pub(crate) struct LibraryEmitter<'module, 'ctx> {
     pub(crate) context: &'ctx Context,
     pub(crate) module: &'module Module<'ctx>,
     pub(crate) tyir: &'module TyirModule,
     pub(crate) functions: &'module [FunctionValue<'ctx>],
     pub(crate) raising: &'module [bool],
+    pub(crate) target: TargetTriple,
 }
 
 impl<'ctx> LibraryEmitter<'_, 'ctx> {
@@ -106,7 +108,12 @@ impl<'ctx> LibraryEmitter<'_, 'ctx> {
         global.set_initializer(&entries);
     }
 
+    /// Returns the LLVM type a C caller passes or takes `ty` as: a `bool` as `i1`, as clang
+    /// lowers `_Bool` (ADR-0058).
     fn c_type(&self, ty: CType) -> BasicTypeEnum<'ctx> {
+        if ty == CType::Bool {
+            return self.context.bool_type().into();
+        }
         crate::foreign::c_type(self.context, ty)
     }
 
@@ -131,17 +138,21 @@ impl<'ctx> LibraryEmitter<'_, 'ctx> {
         let wrapper = self
             .module
             .add_function(&export.name, ty, Some(Linkage::External));
-        let zero_extended = self
-            .context
-            .create_enum_attribute(Attribute::get_named_enum_kind_id("zeroext"), 0);
-        for (index, parameter) in export.parameters.iter().enumerate() {
-            if *parameter == CType::Bool {
-                let index = u32::try_from(index).unwrap_or(u32::MAX);
-                wrapper.add_attribute(AttributeLoc::Param(index), zero_extended);
+        // The checker gives an export no integer narrower than 64 bits, so only a `bool`
+        // carries the extension the target's C callers make and expect.
+        if self.target.extends_narrow_integers() {
+            let zero_extended = self
+                .context
+                .create_enum_attribute(Attribute::get_named_enum_kind_id("zeroext"), 0);
+            for (index, parameter) in export.parameters.iter().enumerate() {
+                if *parameter == CType::Bool {
+                    let index = u32::try_from(index).unwrap_or(u32::MAX);
+                    wrapper.add_attribute(AttributeLoc::Param(index), zero_extended);
+                }
             }
-        }
-        if export.result == Some(CType::Bool) {
-            wrapper.add_attribute(AttributeLoc::Return, zero_extended);
+            if export.result == Some(CType::Bool) {
+                wrapper.add_attribute(AttributeLoc::Return, zero_extended);
+            }
         }
         let builder = self.context.create_builder();
         builder.position_at_end(self.context.append_basic_block(wrapper, ""));
@@ -192,15 +203,6 @@ impl<'ctx> ExportCall<'_, '_, 'ctx> {
                     owned.push(converted);
                     converted
                 }
-                CType::Bool => self
-                    .builder
-                    .build_int_compare(
-                        inkwell::IntPredicate::NE,
-                        parameter.into_int_value(),
-                        context.i8_type().const_zero(),
-                        "",
-                    )?
-                    .into(),
                 _ => parameter,
             };
             arguments.push(argument.into());
@@ -241,11 +243,6 @@ impl<'ctx> ExportCall<'_, '_, 'ctx> {
                 self.leave_on_exception(exception.into_pointer_value())?;
                 Some(self.builder.build_extract_value(pair, 0, "")?)
             }
-            (Some(CType::Bool), Some(value)) => Some(
-                self.builder
-                    .build_int_z_extend(value.into_int_value(), context.i8_type(), "")?
-                    .into(),
-            ),
             (Some(_), Some(value)) => Some(value),
             (None, _) => None,
             (Some(_), None) => {

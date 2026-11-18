@@ -2,7 +2,7 @@
 
 use camino::Utf8PathBuf;
 use typy_check::TypeChecker;
-use typy_codegen::{Optimization, Target, assembly, llvm_ir, object};
+use typy_codegen::{Optimization, Target, TargetTriple, assembly, llvm_ir, object};
 use typy_source::{Project, ProjectSettings};
 use typy_tyir::TyirModule;
 
@@ -280,8 +280,9 @@ fn the_heap_hooks_call_the_functions_the_project_names() {
     assert!(!ir.contains("@malloc("), "{ir}");
 }
 
-#[test]
-fn a_library_runs_its_module_when_it_loads_and_wraps_each_export() {
+/// Returns a module of one function, `test`, exported as a library with an `int`, a `float`
+/// and a `bool` parameter and a `bool` result.
+fn library_module() -> (Project, TyirModule) {
     let (project, mut module) =
         compile("def test(count: int, ratio: float, flag: bool) -> bool:\n    return flag\n");
     let function = module
@@ -305,11 +306,16 @@ fn a_library_runs_its_module_when_it_loads_and_wraps_each_export() {
             result: Some(typy_tyir::CType::Bool),
         }],
     });
+    (project, module)
+}
+
+#[test]
+fn a_library_runs_its_module_when_it_loads_and_wraps_each_export() {
+    let (project, module) = library_module();
     let ir = llvm_ir(&module, Target::host(), Optimization::None, &project).unwrap();
     for line in [
         "@llvm.global_ctors = appending global [1 x { i32, ptr, ptr }] [{ i32, ptr, ptr } { i32 65535, ptr @typy.library.load, ptr null }]",
         "@llvm.global_dtors = appending global [1 x { i32, ptr, ptr }] [{ i32, ptr, ptr } { i32 65535, ptr @typy.library.unload, ptr null }]",
-        "define zeroext i8 @test(i64 %0, double %1, i8 zeroext %2) {",
         "  call void @typy_rt_library_load(ptr @__typy_main)",
         "  call void @typy_rt_library_enter()",
         "  call void @typy_rt_library_leave()",
@@ -326,4 +332,30 @@ fn a_library_runs_its_module_when_it_loads_and_wraps_each_export() {
         header.contains("bool test(int64_t count, double ratio, bool flag);"),
         "{header}"
     );
+}
+
+#[test]
+fn an_export_takes_and_returns_a_bool_as_clang_lowers_it_on_each_target() {
+    let (project, module) = library_module();
+    for (triple, signature) in [
+        (
+            TargetTriple::X86_64LinuxGnu,
+            "define zeroext i1 @test(i64 %0, double %1, i1 zeroext %2) {",
+        ),
+        (
+            TargetTriple::X86_64LinuxMusl,
+            "define zeroext i1 @test(i64 %0, double %1, i1 zeroext %2) {",
+        ),
+        (
+            TargetTriple::Aarch64LinuxGnu,
+            "define i1 @test(i64 %0, double %1, i1 %2) {",
+        ),
+    ] {
+        let target = Target { triple };
+        let ir = llvm_ir(&module, target, Optimization::None, &project).unwrap();
+        assert!(
+            ir.lines().any(|each| each == signature),
+            "{triple}: {signature}\n{ir}"
+        );
+    }
 }

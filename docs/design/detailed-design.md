@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy detailed design |
-| Version | 2.27 |
+| Version | 2.28 |
 | Status | Approved |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-18 |
@@ -2567,7 +2567,7 @@ names. `LibraryEmitter` adds to the object (ADR-0044):
 | --- | --- |
 | Constructor | `typy.library.load`, internal, in `llvm.global_ctors` at priority 65535: calls `typy_rt_library_load(__typy_main)` |
 | Destructor | `typy.library.unload` in `llvm.global_dtors`: calls `typy_rt_library_unload()` |
-| Export | A function with the export's name and C types, a `bool` as a `zeroext i8`: calls `typy_rt_library_enter()`, converts each `int64_t` with `typy_rt_int_from_int64` and each `bool` by a test against zero, calls the program's function, drops the converted words, ends the process through the no-return `typy_rt_library_raised` when the call raised, converts an `int` result with `typy_rt_int_into_int64`, which may raise `OverflowError`, calls `typy_rt_library_leave()` and returns |
+| Export | A function with the export's name and C types, a `bool` as an `i1` that is `zeroext` on x86-64 and not on AArch64 Linux, as clang lowers `_Bool` (ADR-0058): calls `typy_rt_library_enter()`, converts each `int64_t` with `typy_rt_int_from_int64`, calls the program's function, drops the converted words, ends the process through the no-return `typy_rt_library_raised` when the call raised, converts an `int` result with `typy_rt_int_into_int64`, which may raise `OverflowError`, calls `typy_rt_library_leave()` and returns |
 
 An export whose name the object already has is an internal error, which
 the checker's rules prevent. `c_header(module)` writes the header: a guard

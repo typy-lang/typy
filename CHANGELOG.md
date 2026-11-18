@@ -6,6 +6,13 @@ All notable changes to TyPy are recorded here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- A function a library built with `--lib` exports takes and returns a
+  `bool` as clang passes a C `_Bool` on the target. On AArch64 Linux it no
+  longer assumes that the C caller extended the argument, which that
+  calling convention does not ask for (ADR-0058).
+
 ## [0.6.0] - 2026-11-18
 
 ### Added

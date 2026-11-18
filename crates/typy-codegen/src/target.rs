@@ -83,6 +83,14 @@ impl TargetTriple {
             Self::Aarch64LinuxGnu => "generic",
         }
     }
+
+    /// Returns whether a C integer narrower than 32 bits, or a `_Bool`, reaches the code that
+    /// reads it extended to 32 bits, so clang marks it `signext` or `zeroext`: on x86-64, but
+    /// not under AAPCS64 on Linux, where the reader extends it itself (ADR-0058).
+    #[must_use]
+    pub(crate) const fn extends_narrow_integers(self) -> bool {
+        matches!(self, Self::X86_64LinuxGnu | Self::X86_64LinuxMusl)
+    }
 }
 
 impl fmt::Display for TargetTriple {
@@ -136,6 +144,13 @@ mod tests {
         ] {
             assert_eq!(TargetTriple::parse(text), None, "{text:?}");
         }
+    }
+
+    #[test]
+    fn narrow_integers_are_extended_on_x86_64_and_not_under_aapcs64() {
+        assert!(TargetTriple::X86_64LinuxGnu.extends_narrow_integers());
+        assert!(TargetTriple::X86_64LinuxMusl.extends_narrow_integers());
+        assert!(!TargetTriple::Aarch64LinuxGnu.extends_narrow_integers());
     }
 
     #[test]
