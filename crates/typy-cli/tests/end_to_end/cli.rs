@@ -145,7 +145,7 @@ fn cli_04_emit_writes_one_stage_to_standard_output_or_a_file() {
     assert!(
         std::fs::read(workspace.root.join("app.o"))
             .unwrap()
-            .starts_with(b"\x7fELF")
+            .starts_with(OBJECT_MAGIC)
     );
     assert!(
         !workspace.root.join("app").exists(),
@@ -636,20 +636,62 @@ fn cli_10_explain_prints_a_code_with_a_wrong_and_a_corrected_program() {
     }
 }
 
-const TRIPLES: [&str; 3] = [
-    "x86_64-unknown-linux-gnu",
-    "x86_64-unknown-linux-musl",
-    "aarch64-unknown-linux-gnu",
-];
+/// The first bytes of an object file of the host: Mach-O on macOS, ELF on Linux.
+const OBJECT_MAGIC: &[u8] = if cfg!(target_os = "macos") {
+    b"\xcf\xfa\xed\xfe"
+} else {
+    b"\x7fELF"
+};
+
+/// The triples this host builds for, and one that only another system's host builds for.
+const fn host_triples() -> (&'static [&'static str], &'static str) {
+    if cfg!(target_os = "macos") {
+        (&["aarch64-apple-darwin"], "x86_64-unknown-linux-gnu")
+    } else {
+        (
+            &[
+                "x86_64-unknown-linux-gnu",
+                "x86_64-unknown-linux-musl",
+                "aarch64-unknown-linux-gnu",
+            ],
+            "aarch64-apple-darwin",
+        )
+    }
+}
 
 #[test]
-fn cli_08_an_unsupported_target_is_a_usage_error_that_lists_the_supported_ones() {
+fn cli_08_an_unsupported_target_is_a_usage_error_that_lists_the_hosts_targets() {
     let workspace = Workspace::new(HELLO);
+    let (triples, _) = host_triples();
     for command in ["build", "check"] {
-        let output = workspace.typy(&[command, "app.py", "--target", "aarch64-apple-darwin"]);
+        let output =
+            workspace.typy(&[command, "app.py", "--target", "riscv64gc-unknown-linux-gnu"]);
         assert_eq!(status(&output), 2, "{command}");
         let message = stderr(&output);
-        for triple in TRIPLES {
+        for &triple in triples {
+            assert!(message.contains(triple), "{command}: {message}");
+        }
+    }
+}
+
+#[test]
+fn cli_08_another_systems_target_is_a_usage_error_that_names_its_system() {
+    let workspace = Workspace::new(HELLO);
+    let (triples, other) = host_triples();
+    let system = if other.contains("apple") {
+        "macOS"
+    } else {
+        "Linux"
+    };
+    for command in ["build", "check"] {
+        let output = workspace.typy(&[command, "app.py", "--target", other]);
+        assert_eq!(status(&output), 2, "{command}");
+        let message = stderr(&output);
+        assert!(
+            message.contains(&format!("{other} is built on {system} only")),
+            "{command}: {message}"
+        );
+        for &triple in triples {
             assert!(message.contains(triple), "{command}: {message}");
         }
     }
@@ -658,7 +700,8 @@ fn cli_08_an_unsupported_target_is_a_usage_error_that_lists_the_supported_ones()
 #[test]
 fn cli_08_check_accepts_each_supported_target() {
     let workspace = Workspace::new(HELLO);
-    for triple in TRIPLES {
+    let (triples, _) = host_triples();
+    for &triple in triples {
         let output = workspace.typy(&["check", "app.py", "--target", triple]);
         assert_eq!(
             (status(&output), stderr(&output).as_str()),
@@ -671,13 +714,12 @@ fn cli_08_check_accepts_each_supported_target() {
 #[test]
 fn cli_08_emit_asm_for_aarch64_writes_aarch64_code() {
     let workspace = Workspace::new(HELLO);
-    let output = workspace.typy(&[
-        "build",
-        "app.py",
-        "--emit=asm",
-        "--target",
-        "aarch64-unknown-linux-gnu",
-    ]);
+    let (triples, _) = host_triples();
+    let aarch64 = triples
+        .iter()
+        .find(|triple| triple.starts_with("aarch64-"))
+        .unwrap();
+    let output = workspace.typy(&["build", "app.py", "--emit=asm", "--target", aarch64]);
     assert_eq!(status(&output), 0, "{}", stderr(&output));
     let assembly = stdout(&output);
     assert!(assembly.contains("\tbl\t"), "{assembly}");
@@ -686,6 +728,7 @@ fn cli_08_emit_asm_for_aarch64_writes_aarch64_code() {
 
 /// The other architecture's target, its GNU triple and the emulator that runs its programs on
 /// this host.
+#[cfg(target_os = "linux")]
 const fn other_architecture() -> (&'static str, &'static str, &'static str) {
     if cfg!(target_arch = "aarch64") {
         (
@@ -703,6 +746,7 @@ const fn other_architecture() -> (&'static str, &'static str, &'static str) {
 }
 
 #[test]
+#[cfg(target_os = "linux")]
 fn cli_08_a_program_built_for_the_other_architecture_runs_under_its_emulator() {
     let workspace = Workspace::new(HELLO);
     let (triple, gnu, emulator) = other_architecture();
@@ -730,7 +774,8 @@ fn cli_08_a_program_built_for_the_other_architecture_runs_under_its_emulator() {
 #[test]
 fn cli_14_a_tool_typy_toml_names_for_a_target_that_is_missing_is_e0701_naming_both() {
     let workspace = Workspace::new(HELLO);
-    let (triple, _, _) = other_architecture();
+    let (triples, _) = host_triples();
+    let triple = triples[0];
     std::fs::write(
         workspace.root.join("typy.toml"),
         format!("[target.\"{triple}\"]\nlinker = \"typy-no-such-cc\"\n"),
@@ -749,6 +794,7 @@ fn cli_14_a_tool_typy_toml_names_for_a_target_that_is_missing_is_e0701_naming_bo
 }
 
 #[test]
+#[cfg(target_os = "linux")]
 fn cli_14_the_linker_typy_toml_names_for_a_target_links_its_programs() {
     let workspace = Workspace::new(HELLO);
     let (triple, gnu, emulator) = other_architecture();

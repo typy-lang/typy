@@ -47,6 +47,9 @@ pub struct TestCase {
     /// Whether its output depends on the machine's architecture, as CPython's own does, so it
     /// is compared only with CPython on the architecture it runs on (NFR-16).
     pub architecture_dependent: bool,
+    /// The one operating system it runs on, as `# typy-system: linux` or `macos` names it,
+    /// for a test that names a library only that system has (NFR-17).
+    pub system: Option<typy_source::Platform>,
 }
 
 /// Returns whether a directory holds one test of several modules: its name starts with a
@@ -84,6 +87,7 @@ impl TestCase {
         let mut expectation = None;
         let mut floor = PythonFloor::default();
         let mut architecture_dependent = false;
+        let mut system = None;
         for line in text.lines().take_while(|line| line.starts_with('#')) {
             let Some((field, value)) = line
                 .strip_prefix("# ")
@@ -117,6 +121,13 @@ impl TestCase {
                     }
                     architecture_dependent = true;
                 }
+                "typy-system" => {
+                    system = Some(match value {
+                        "linux" => typy_source::Platform::Linux,
+                        "macos" => typy_source::Platform::MacOs,
+                        _ => return Err(CaseError::Malformed("typy-system", value.to_owned())),
+                    });
+                }
                 _ => {}
             }
         }
@@ -132,6 +143,7 @@ impl TestCase {
             expectation,
             floor,
             architecture_dependent,
+            system,
         })
     }
 }
@@ -159,6 +171,32 @@ mod tests {
         let case = TestCase::parse(Utf8Path::new("EXP-04_power.py"), text).unwrap();
         assert_eq!(case.floor, PythonFloor::V3_12);
         assert_eq!(case.expectation.to_string(), "rejected E0302 at 4:7");
+    }
+
+    #[test]
+    fn a_system_header_names_the_one_system_a_test_runs_on() {
+        for (value, system) in [
+            ("linux", typy_source::Platform::Linux),
+            ("macos", typy_source::Platform::MacOs),
+        ] {
+            let text =
+                format!("# typy-test: FFI-01\n# typy-expect: accepted\n# typy-system: {value}\n");
+            let case = TestCase::parse(Utf8Path::new("FFI-01_a.py"), &text).unwrap();
+            assert_eq!(case.system, Some(system), "{value}");
+        }
+        let plain = TestCase::parse(
+            Utf8Path::new("FFI-01_a.py"),
+            "# typy-test: FFI-01\n# typy-expect: accepted\n",
+        )
+        .unwrap();
+        assert_eq!(plain.system, None);
+        assert_eq!(
+            TestCase::parse(
+                Utf8Path::new("FFI-01_a.py"),
+                "# typy-test: FFI-01\n# typy-expect: accepted\n# typy-system: windows\n",
+            ),
+            Err(CaseError::Malformed("typy-system", "windows".into()))
+        );
     }
 
     #[test]

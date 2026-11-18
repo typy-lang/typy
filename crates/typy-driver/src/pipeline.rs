@@ -5,9 +5,9 @@ use typy_build::{
     Artifact, BuildRequest, EmitStage, LibraryKind, LibraryLayout, Linker, RuntimeArchive,
 };
 use typy_check::{TypeChecker, TypedProgram};
-use typy_codegen::{assembly, llvm_ir, object};
+use typy_codegen::{Target, assembly, llvm_ir, object};
 use typy_diagnostics::Diagnostics;
-use typy_source::{Project, ProjectSettings, SETTINGS_FILE, SettingOverrides};
+use typy_source::{Platform, Project, ProjectSettings, SETTINGS_FILE, SettingOverrides};
 use typy_tyir::{TyirAllocator, TyirModule};
 
 use crate::emission::Emission;
@@ -53,9 +53,10 @@ impl Pipeline {
         self
     }
 
-    /// Loads and checks the program whose main file is `main`, without generating code (CLI-03).
-    pub fn check(&self, main: &Utf8Path) -> Result<Success, Failure> {
-        let project = self.load(main, false)?;
+    /// Loads and checks the program whose main file is `main` for `target`, without generating
+    /// code (CLI-03).
+    pub fn check(&self, main: &Utf8Path, target: Target) -> Result<Success, Failure> {
+        let project = self.load(main, false, target)?;
         let (_, warnings) = self.check_program(&project)?;
         Ok(Success {
             outcome: Outcome::Checked(Sources::Project(Box::new(project))),
@@ -69,7 +70,7 @@ impl Pipeline {
     #[must_use]
     pub fn sources(&self, main: &Utf8Path) -> Option<Vec<(String, String)>> {
         use typy_diagnostics::SourceLookup as _;
-        let project = self.load(main, false).ok()?;
+        let project = self.load(main, false, Target::host()).ok()?;
         let mut files: Vec<(String, String)> = Vec::new();
         let modules = std::iter::once(project.main_module()).chain(project.modules());
         for (module, file) in
@@ -105,7 +106,11 @@ impl Pipeline {
         stage: EmitStage,
         request: &BuildRequest,
     ) -> Result<(Emission, Warnings), Failure> {
-        let project = self.load(request.main(), request.library().is_some())?;
+        let project = self.load(
+            request.main(),
+            request.library().is_some(),
+            request.target(),
+        )?;
         if stage == EmitStage::Ast {
             let warnings = self.warnings(project.warnings().clone(), &project)?;
             return Ok((syntax_text(&project), warnings));
@@ -143,7 +148,11 @@ impl Pipeline {
     /// installation fails before any work.
     fn build(&self, request: &BuildRequest) -> Result<(Artifact, Warnings), Failure> {
         let archive = self.runtime_archive(request)?;
-        let project = self.load(request.main(), request.library().is_some())?;
+        let project = self.load(
+            request.main(),
+            request.library().is_some(),
+            request.target(),
+        )?;
         let (program, warnings) = self.check_program(&project)?;
         let module = lower(&program, &project)?;
         let linker = linker(request, archive, &project, &module);
@@ -164,6 +173,7 @@ impl Pipeline {
                         kind,
                         &library.name,
                         library.version.as_deref(),
+                        request.target().triple,
                     ),
                 };
                 let exports: Vec<String> = library
@@ -184,6 +194,7 @@ impl Pipeline {
                         LibraryKind::Shared,
                         &library.name,
                         library.version.as_deref(),
+                        request.target().triple,
                     )
                     .soname
                     .unwrap_or_default(),
@@ -231,14 +242,21 @@ impl Pipeline {
 
     /// Loads the program with the settings of its root and of the command line, as a library
     /// when `library` is true or the command line asks for one (CLI-09).
-    fn load(&self, main: &Utf8Path, library: bool) -> Result<Project, Failure> {
+    /// Loads the program whose main file is `main` for `target`, whose operating system
+    /// `sys.platform` names (LIB-22).
+    fn load(&self, main: &Utf8Path, library: bool, target: Target) -> Result<Project, Failure> {
         let unloaded = |failure: typy_source::LoadFailure| Failure {
             diagnostics: failure.diagnostics.clone(),
             sources: Sources::Unloaded(Box::new(failure)),
         };
         let mut overrides = self.overrides;
         overrides.library |= library;
-        let settings = ProjectSettings::read(&root_of(main), overrides).map_err(unloaded)?;
+        let mut settings = ProjectSettings::read(&root_of(main), overrides).map_err(unloaded)?;
+        settings.platform = if target.triple.is_macos() {
+            Platform::MacOs
+        } else {
+            Platform::Linux
+        };
         Project::load(main, settings).map_err(unloaded)
     }
 }
@@ -329,25 +347,31 @@ fn linker(
     // debugger (CLI-05).
     let release = request.mode() != typy_build::BuildMode::Debug;
     let settings = project.settings();
+    let triple = request.target().triple;
+    let paths: Vec<Utf8PathBuf> = settings
+        .library_paths
+        .iter()
+        .map(|path| settings.root.join(path))
+        .collect();
     let mut libraries: Vec<String> = settings
         .allocator
         .iter()
-        .filter_map(|allocator| allocator.library.clone())
+        .filter_map(|allocator| allocator.library.as_ref())
+        .map(|library| format!("-l{library}"))
         .collect();
-    for library in &module.foreign_libraries {
+    // `CDLL(None)` names the C and maths libraries, which every link has (FFI-14).
+    for library in module.foreign_libraries.iter().flatten() {
         let link = settings
             .libraries
             .get(library)
             .copied()
             .unwrap_or(typy_source::LibraryLink::Dynamic);
-        libraries.push(link.linker_name(library));
+        let statically = link == typy_source::LibraryLink::Static;
+        libraries.push(typy_build::library_argument(
+            triple, library, statically, &paths,
+        ));
     }
-    let paths = settings
-        .library_paths
-        .iter()
-        .map(|path| settings.root.join(path))
-        .collect();
-    let mut linker = Linker::new(request.target().triple, archive)
+    let mut linker = Linker::new(triple, archive)
         .with_strip_debug(release)
         .with_libraries(libraries)
         .with_library_paths(paths);

@@ -4,7 +4,7 @@
 use camino::Utf8PathBuf;
 use clap::{Args, Parser, Subcommand};
 use typy_build::{BuildMode, EmitStage, LibraryKind};
-use typy_codegen::TargetTriple;
+use typy_codegen::{Target, TargetTriple};
 use typy_source::{PythonFloor, SettingOverrides};
 
 use crate::output::ErrorFormat;
@@ -116,8 +116,9 @@ pub(crate) struct Library {
 /// The flag that names the target to build or check for (CLI-08).
 #[derive(Clone, Copy, Debug, Args)]
 pub(crate) struct TargetFlag {
-    /// Build for this target instead of the host: x86_64-unknown-linux-gnu,
-    /// x86_64-unknown-linux-musl or aarch64-unknown-linux-gnu.
+    /// Build for this target instead of the host's own. A Linux host builds for
+    /// x86_64-unknown-linux-gnu, x86_64-unknown-linux-musl and aarch64-unknown-linux-gnu, and
+    /// a macOS host for aarch64-apple-darwin.
     #[arg(long = "target", value_name = "TRIPLE", value_parser = parse_target)]
     pub(crate) triple: Option<TargetTriple>,
 }
@@ -158,14 +159,25 @@ fn parse_floor(text: &str) -> Result<PythonFloor, String> {
     })
 }
 
+/// Parses a triple the host builds for; another is refused with the host's triples (CLI-08).
 fn parse_target(text: &str) -> Result<TargetTriple, String> {
-    TargetTriple::parse(text).ok_or_else(|| {
-        let triples: Vec<&str> = TargetTriple::ALL
-            .iter()
-            .map(|triple| triple.as_str())
-            .collect();
-        format!("expected one of {}", triples.join(", "))
-    })
+    let host = Target::host().triple;
+    let triples: Vec<&str> = TargetTriple::ALL
+        .iter()
+        .filter(|triple| triple.builds_on(host))
+        .map(|triple| triple.as_str())
+        .collect();
+    match TargetTriple::parse(text) {
+        Some(triple) if triple.builds_on(host) => Ok(triple),
+        Some(triple) => {
+            let system = if triple.is_macos() { "macOS" } else { "Linux" };
+            Err(format!(
+                "{triple} is built on {system} only; expected one of {}",
+                triples.join(", ")
+            ))
+        }
+        None => Err(format!("expected one of {}", triples.join(", "))),
+    }
 }
 
 fn parse_library(text: &str) -> Result<LibraryKind, String> {

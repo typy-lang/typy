@@ -25,8 +25,9 @@ use crate::ctypes::{CData, CType, StructureClass};
 pub(crate) struct DeclaredLibrary {
     /// The module variable the library is bound to.
     pub(crate) variable: String,
-    /// The name the declaration gives.
-    pub(crate) name: String,
+    /// The name the declaration gives, or `None` for `CDLL(None)`, the C library and the C
+    /// maths library every program links (FFI-14).
+    pub(crate) name: Option<String>,
     /// The call that declares it, by which the checker finds it.
     pub(crate) call: Span,
 }
@@ -531,27 +532,41 @@ fn library(
     declarations: &mut ModuleDeclarations,
     diagnostics: &mut Diagnostics,
 ) {
-    let (
-        [
-            Expr::Constant {
-                value: Constant::Str(name),
-                ..
-            },
-        ],
-        [],
-    ) = (arguments, keywords)
-    else {
-        diagnostics.push(refused(
-            call,
-            "a library is named by one string literal, which the build links".to_owned(),
-            RuleId::FFI_01,
-            "write the library's file name, such as `ctypes.CDLL(\"libm.so.6\")`",
-        ));
-        return;
+    let name = match (arguments, keywords) {
+        (
+            [
+                Expr::Constant {
+                    value: Constant::Str(name),
+                    ..
+                },
+            ],
+            [],
+        ) => Some(name.clone()),
+        (
+            [
+                Expr::Constant {
+                    value: Constant::None,
+                    ..
+                },
+            ],
+            [],
+        ) => None,
+        _ => {
+            diagnostics.push(refused(
+                call,
+                "a library is named by one string literal, which the build links, or by \
+                 `None`, the C library every program links"
+                    .to_owned(),
+                RuleId::FFI_01,
+                "write the library's file name, such as `ctypes.CDLL(\"libm.so.6\")`, or \
+                 `ctypes.CDLL(None)` for a function of the C or maths library",
+            ));
+            return;
+        }
     };
     declarations.libraries.push(DeclaredLibrary {
         variable: variable.to_owned(),
-        name: name.clone(),
+        name,
         call,
     });
 }

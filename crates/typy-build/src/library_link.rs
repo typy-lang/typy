@@ -29,6 +29,27 @@ impl Linker {
         let output = layout.path.as_path();
         let directory = output_directory(output);
         let cannot_write = cannot_write(&directory, "the library");
+        let artifact = Artifact {
+            path: output.to_owned(),
+            kind: match kind {
+                LibraryKind::Static => ArtifactKind::StaticLibrary,
+                LibraryKind::Shared => ArtifactKind::SharedLibrary,
+            },
+        };
+        if self.tools.target().is_macos() {
+            match kind {
+                LibraryKind::Static => self.mach_o_static_library(object, layout, exports)?,
+                LibraryKind::Shared => self.mach_o_shared_library(object, layout, exports)?,
+            }
+            let work = tempfile::Builder::new()
+                .prefix(".typy-")
+                .tempdir_in(&directory)
+                .map_err(&cannot_write)?;
+            for link in &layout.links {
+                replace_with_link(&utf8(work.path()), link, output).map_err(&cannot_write)?;
+            }
+            return Ok(artifact);
+        }
         let work = tempfile::Builder::new()
             .prefix(".typy-")
             .tempdir_in(&directory)
@@ -50,13 +71,7 @@ impl Linker {
         for link in &layout.links {
             replace_with_link(&work_path, link, output).map_err(&cannot_write)?;
         }
-        Ok(Artifact {
-            path: output.to_owned(),
-            kind: match kind {
-                LibraryKind::Static => ArtifactKind::StaticLibrary,
-                LibraryKind::Shared => ArtifactKind::SharedLibrary,
-            },
-        })
+        Ok(artifact)
     }
 
     /// The program object and the runtime archive linked into one object whose global symbols

@@ -2,7 +2,7 @@
 
 use camino::Utf8PathBuf;
 use typy_check::TypeChecker;
-use typy_codegen::{Optimization, Target, assembly, llvm_ir, object};
+use typy_codegen::{Optimization, Target, TargetTriple, assembly, llvm_ir, object};
 use typy_source::{Project, ProjectSettings};
 use typy_tyir::TyirModule;
 
@@ -80,13 +80,86 @@ fn every_program_generates_valid_llvm_ir_at_every_level() {
 }
 
 #[test]
-fn object_files_are_elf_and_deterministic() {
+fn object_files_have_the_hosts_format_and_are_deterministic() {
     let (project, module) = compile(PROGRAMS[1]);
     let first = object(&module, Target::host(), Optimization::Speed, &project).unwrap();
     let second = object(&module, Target::host(), Optimization::Speed, &project).unwrap();
-    assert_eq!(&first.bytes[..4], b"\x7fELF");
+    let magic: &[u8] = if cfg!(target_os = "macos") {
+        b"\xcf\xfa\xed\xfe"
+    } else {
+        b"\x7fELF"
+    };
+    assert_eq!(&first.bytes[..4], magic);
     assert_eq!(first, second);
     assert_eq!(first.target, Target::host());
+}
+
+#[test]
+fn every_program_is_a_deterministic_mach_o_object_for_macos() {
+    let target = Target {
+        triple: TargetTriple::Aarch64AppleDarwin,
+    };
+    for source in PROGRAMS {
+        let (project, module) = compile(source);
+        let first = object(&module, target, Optimization::Speed, &project)
+            .unwrap_or_else(|diagnostics| panic!("{diagnostics:?}\n{source}"));
+        let second = object(&module, target, Optimization::Speed, &project).unwrap();
+        // `MH_MAGIC_64`, then `CPU_TYPE_ARM64`, both little-endian.
+        assert_eq!(
+            &first.bytes[..8],
+            b"\xcf\xfa\xed\xfe\x0c\x00\x00\x01",
+            "{source}"
+        );
+        assert_eq!(first, second, "{source}");
+    }
+    let (project, module) = compile(PROGRAMS[1]);
+    let ir = llvm_ir(&module, target, Optimization::None, &project).unwrap();
+    assert!(
+        ir.contains("target triple = \"arm64-apple-macosx11.0.0\""),
+        "{ir}"
+    );
+}
+
+/// Returns the type of each argument of the call of `name` in `ir`, without its value.
+fn call_arguments(ir: &str, name: &str) -> Vec<String> {
+    let line = ir
+        .lines()
+        .find(|line| line.contains(&format!(" @{name}(")) && line.contains("call "))
+        .unwrap_or_else(|| panic!("no call of {name}\n{ir}"));
+    let start = line.find(&format!("@{name}(")).unwrap() + name.len() + 2;
+    let end = line.rfind(')').unwrap();
+    line[start..end]
+        .split(", ")
+        .map(|argument| {
+            let words: Vec<&str> = argument.split(' ').collect();
+            words[..words.len() - 1].join(" ")
+        })
+        .collect()
+}
+
+#[test]
+fn ffi_13_an_integer_on_apples_stack_takes_its_c_width_and_words_go_in_registers() {
+    let (project, module) = compile(
+        "import ctypes\n\nlib = ctypes.CDLL(\"libnarrow.so\")\nL = ctypes.c_long\n\
+         lib.f.argtypes = [L, L, L, L, L, L, L, ctypes.c_double, ctypes.c_byte, \
+         ctypes.c_ushort, ctypes.c_bool, ctypes.c_int, L]\nlib.f.restype = L\n\
+         print(lib.f(1, 2, 3, 4, 5, 6, 7, 0.5, -1, 2, True, 3, 4))\n",
+    );
+    let words = ["i64"; 7].map(str::to_owned);
+    for (triple, stack) in [
+        (
+            TargetTriple::Aarch64AppleDarwin,
+            ["i64", "i16 zeroext", "i1 zeroext", "i32", "i64"],
+        ),
+        (TargetTriple::Aarch64LinuxGnu, ["i64"; 5]),
+        (TargetTriple::X86_64LinuxGnu, ["i64"; 5]),
+    ] {
+        let ir = llvm_ir(&module, Target { triple }, Optimization::None, &project).unwrap();
+        let mut expected = words.to_vec();
+        expected.push("double".to_owned());
+        expected.extend(stack.map(str::to_owned));
+        assert_eq!(call_arguments(&ir, "f"), expected, "{triple}");
+    }
 }
 
 #[test]
@@ -280,8 +353,9 @@ fn the_heap_hooks_call_the_functions_the_project_names() {
     assert!(!ir.contains("@malloc("), "{ir}");
 }
 
-#[test]
-fn a_library_runs_its_module_when_it_loads_and_wraps_each_export() {
+/// Returns a module of one function, `test`, exported as a library with an `int`, a `float`
+/// and a `bool` parameter and a `bool` result.
+fn library_module() -> (Project, TyirModule) {
     let (project, mut module) =
         compile("def test(count: int, ratio: float, flag: bool) -> bool:\n    return flag\n");
     let function = module
@@ -305,11 +379,16 @@ fn a_library_runs_its_module_when_it_loads_and_wraps_each_export() {
             result: Some(typy_tyir::CType::Bool),
         }],
     });
+    (project, module)
+}
+
+#[test]
+fn a_library_runs_its_module_when_it_loads_and_wraps_each_export() {
+    let (project, module) = library_module();
     let ir = llvm_ir(&module, Target::host(), Optimization::None, &project).unwrap();
     for line in [
         "@llvm.global_ctors = appending global [1 x { i32, ptr, ptr }] [{ i32, ptr, ptr } { i32 65535, ptr @typy.library.load, ptr null }]",
         "@llvm.global_dtors = appending global [1 x { i32, ptr, ptr }] [{ i32, ptr, ptr } { i32 65535, ptr @typy.library.unload, ptr null }]",
-        "define zeroext i8 @test(i64 %0, double %1, i8 zeroext %2) {",
         "  call void @typy_rt_library_load(ptr @__typy_main)",
         "  call void @typy_rt_library_enter()",
         "  call void @typy_rt_library_leave()",
@@ -326,4 +405,30 @@ fn a_library_runs_its_module_when_it_loads_and_wraps_each_export() {
         header.contains("bool test(int64_t count, double ratio, bool flag);"),
         "{header}"
     );
+}
+
+#[test]
+fn an_export_takes_and_returns_a_bool_as_clang_lowers_it_on_each_target() {
+    let (project, module) = library_module();
+    for (triple, signature) in [
+        (
+            TargetTriple::X86_64LinuxGnu,
+            "define zeroext i1 @test(i64 %0, double %1, i1 zeroext %2) {",
+        ),
+        (
+            TargetTriple::X86_64LinuxMusl,
+            "define zeroext i1 @test(i64 %0, double %1, i1 zeroext %2) {",
+        ),
+        (
+            TargetTriple::Aarch64LinuxGnu,
+            "define i1 @test(i64 %0, double %1, i1 %2) {",
+        ),
+    ] {
+        let target = Target { triple };
+        let ir = llvm_ir(&module, target, Optimization::None, &project).unwrap();
+        assert!(
+            ir.lines().any(|each| each == signature),
+            "{triple}: {signature}\n{ir}"
+        );
+    }
 }

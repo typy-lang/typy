@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy software requirements specification |
-| Version | 1.85 |
+| Version | 1.87 |
 | Status | Approved |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-18 |
@@ -458,6 +458,7 @@ direct calls and links the library when the program is built.
 | FFI-11 | Methods and class attributes other than one `_fields_` list in a `Structure` subclass, `_fields_` assigned after the class statement, bit fields, a subclass of a `Structure` subclass, and `ctypes.Union` shall be accepted. | C | 1.0 |
 | FFI-12 | A `ctypes` structure passed to or returned from a C function by value shall follow the C calling convention of the target: System V on x86_64 Linux and AAPCS64 on AArch64 Linux. | M | 0.6 |
 | FFI-13 | A `ctypes` call shall pass each integer and `c_bool` argument as `libffi` passes it on the target, a 64-bit word widened by its type in a register and, on Apple's arm64, its own size on the stack, so a C function reads the values it reads under CPython. | M | 0.7 |
+| FFI-14 | A module-level `ctypes.CDLL(None)` or `ctypes.cdll.LoadLibrary(None)` shall declare the C library and the C maths library that every program links, whose functions it calls on every target, with no other library linked. | M | 0.7 |
 
 ### 3.17 Diagnostics (DIA)
 
@@ -572,6 +573,7 @@ resolved issues below.
 | OI-23 | Which ABI lets TyPy modules link dynamically: the layouts of objects, the exception state, the identity of type objects across shared libraries, and one runtime shared by every library (ADR-0016)? It is settled after 1.0, once those layouts are fixed. | 2026-11-11 |
 | OI-25 | Should the modules of the standard library TyPy provides ship prebuilt, one static library and interface per module and target, so a development build links them without compiling them? It depends on separate compilation (ADR-0016). | 2026-11-15 |
 | OI-29 | Should the macOS release archive be notarized, so a browser download runs without clearing the quarantine first? Notarizing needs a paid Apple Developer membership and a signing identity in CI. | 2026-11-18 |
+| OI-30 | How should a TyPy library on Linux find the stack of a thread its C host created with a stack smaller than `RLIMIT_STACK`? The stack check measures from the limit, so such a thread can overflow before `RecursionError`; `pthread_getattr_np` gives the thread's own stack but reads `/proc/self/maps` for the main thread on every export call. | 2026-11-18 |
 
 ## 8. Resolved issues
 

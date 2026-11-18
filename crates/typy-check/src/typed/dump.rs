@@ -452,10 +452,10 @@ impl Dump<'_> {
             TypedExprKind::MathCall { function, .. } => format!("MathCall {}", function.name()),
             TypedExprKind::SysValue(value) => format!("SysValue {value:?}"),
             TypedExprKind::ForeignLibrary(index) => {
-                format!(
-                    "ForeignLibrary {}",
-                    self.program.foreign_libraries[*index as usize].name
-                )
+                let name = self.program.foreign_libraries[*index as usize]
+                    .name
+                    .as_deref();
+                format!("ForeignLibrary {}", name.unwrap_or("None"))
             }
             TypedExprKind::ForeignCall {
                 function,

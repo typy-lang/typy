@@ -61,7 +61,10 @@ fn a_declared_function_is_a_typed_c_call() {
     let program = TypeChecker::check(&project).unwrap();
     let _ = std::fs::remove_dir_all(&root);
     assert_eq!(program.foreign_libraries.len(), 1);
-    assert_eq!(program.foreign_libraries[0].name, "libc.so.6");
+    assert_eq!(
+        program.foreign_libraries[0].name.as_deref(),
+        Some("libc.so.6")
+    );
     assert_eq!(program.foreign_functions.len(), 1);
     assert_eq!(program.foreign_functions[0].name, "abs");
     assert_eq!(

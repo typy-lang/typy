@@ -17,11 +17,11 @@ pub struct Linker {
     pub(crate) tools: Toolchain,
     pub(crate) strip_debug: bool,
     pub(crate) archive: RuntimeArchive,
-    /// What follows `-l` for each library, such as `mimalloc`, the allocator's (MEM-08),
-    /// or `:libm.so.6`, a `ctypes` declaration's (FFI-01).
+    /// The argument that links each library, such as `-lmimalloc`, the allocator's (MEM-08),
+    /// or `-l:libm.so.6`, a `ctypes` declaration's, which `library_argument` gives (FFI-01).
     pub(crate) libraries: Vec<String>,
     /// The directories the linker looks in first, as `-L` (FFI-04).
-    library_paths: Vec<camino::Utf8PathBuf>,
+    pub(crate) library_paths: Vec<camino::Utf8PathBuf>,
 }
 
 impl Linker {
@@ -58,9 +58,9 @@ impl Linker {
         self
     }
 
-    /// Returns the linker with each of `libraries` linked as `-l` and the library after the
-    /// runtime archive; each is a name `typy.toml` or a declaration has checked, passed as
-    /// one argument and never to a shell.
+    /// Returns the linker with each of `libraries`, an argument such as `-ltools`, linked
+    /// after the runtime archive; each holds a name `typy.toml` or a declaration has checked,
+    /// passed as one argument and never to a shell.
     #[must_use]
     pub fn with_libraries(mut self, libraries: Vec<String>) -> Self {
         self.libraries = libraries;
@@ -106,7 +106,7 @@ impl Linker {
             "-Wl,--pop-state".to_owned(),
             self.archive.path().to_string(),
         ]);
-        arguments.extend(self.libraries.iter().map(|library| format!("-l{library}")));
+        arguments.extend(self.libraries.iter().cloned());
         arguments.extend(["-lm".to_owned(), "-Wl,--gc-sections".to_owned()]);
         if self.strip_debug {
             arguments.push("-Wl,--strip-debug".to_owned());
@@ -118,6 +118,9 @@ impl Linker {
     /// name in the same directory and renamed when the link succeeds, so a failed link leaves no
     /// file and an existing file is replaced whole (UC-02, flow 5a).
     pub fn link(&self, object: &ObjectFile, output: &Utf8Path) -> Result<Artifact, Diagnostics> {
+        if self.tools.target().is_macos() {
+            return self.link_mach_o(object, output);
+        }
         let directory = output_directory(output);
         let cannot_write = cannot_write(&directory, "the executable");
         let mut object_file = tempfile::Builder::new()
@@ -207,7 +210,8 @@ mod tests {
             arguments.last().map(String::as_str),
             Some("-Wl,--strip-debug")
         );
-        let pooled = Linker::new(host, archive(&root)).with_libraries(vec!["mimalloc".to_owned()]);
+        let pooled =
+            Linker::new(host, archive(&root)).with_libraries(vec!["-lmimalloc".to_owned()]);
         let arguments = pooled.arguments(Utf8Path::new("a.o"), Utf8Path::new("out"));
         assert_eq!(
             arguments[6..],

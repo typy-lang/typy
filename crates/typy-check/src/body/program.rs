@@ -91,6 +91,8 @@ pub(crate) struct Program {
     pub(super) makes_surrogates: bool,
     /// The minor version of the program's Python floor, such as 12 for 3.12.
     pub(super) floor: u8,
+    /// The operating system the program is built for, which `sys.platform` names.
+    pub(super) platform: typy_source::Platform,
     /// The modules the module's `__lazy_modules__` lists, whose imports are lazy (MOD-07).
     pub(super) lazy_modules: BTreeSet<String>,
     /// Each function that runs a lazy import for one name, with the variable it binds; a
@@ -196,6 +198,7 @@ impl Program {
             closes_text_files: false,
             makes_surrogates: false,
             floor: 12,
+            platform: typy_source::Platform::host(),
             lazy_modules: BTreeSet::new(),
             lazy_imports: BTreeMap::new(),
             lazy_names: BTreeMap::new(),
@@ -341,6 +344,11 @@ impl Program {
     /// Sets the minor version of the program's Python floor.
     pub(crate) const fn set_floor(&mut self, minor: u8) {
         self.floor = minor;
+    }
+
+    /// Sets the operating system the program is built for.
+    pub(crate) const fn set_platform(&mut self, platform: typy_source::Platform) {
+        self.platform = platform;
     }
 
     /// Adds the functions of built-in modules the module's imports bind by name.

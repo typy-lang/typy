@@ -1,8 +1,8 @@
-//! End-to-end tests of C functions that take and return `ctypes` structures by value, as
-//! each target's C calling convention passes them: the C library is built as a developer
-//! builds it, and CPython and the TyPy program call it with the same source; the program is
-//! also built for the other architecture and run under its emulator (FFI-03, FFI-12,
-//! ADR-0052).
+//! End-to-end tests of C functions that take and return `ctypes` structures by value, and
+//! take more narrow integers than registers, as each target's C calling convention passes
+//! them: the C library is built as a developer builds it, and CPython and the TyPy program
+//! call it with the same source; the program is also built for the other architecture and run
+//! under its emulator (FFI-03, FFI-12, FFI-13, ADR-0052, ADR-0058).
 
 use std::process::Command;
 
@@ -11,7 +11,9 @@ use camino::{Utf8Path, Utf8PathBuf};
 /// Functions of structures that pass in general registers, vector registers, both, and
 /// memory, of calls whose registers run out before a structure, of four doubles, which
 /// AArch64 passes in registers, and of five floats, which it passes as a copy the callee may
-/// change. `c_byte` is C's `signed char`: plain `char` is unsigned on AArch64.
+/// change; and of narrow integers past the registers, after a structure that no longer fits in
+/// them, which Apple's arm64 places on the stack at their own sizes. `c_byte` is C's
+/// `signed char`: plain `char` is unsigned on AArch64.
 const SHAPES: &str = r"
 typedef struct { int a; double b; } Mixed;
 typedef struct { float x, y, z; } Vec3;
@@ -42,6 +44,12 @@ Five five_add(Five x, Five y) {
     Five r = { x.a + y.a, x.b + y.b, x.c + y.c, x.d + y.d, x.e + y.e };
     x.a = 99;
     return r;
+}
+long narrow(signed char a, unsigned char b, short c, unsigned short d, int e, unsigned int f,
+            _Bool g, Mixed m, signed char h, unsigned char i, short j, unsigned short k,
+            _Bool l) {
+    return a + 2 * b + 3 * c + 4 * d + 5L * e + 6L * f + 7 * g + 8L * m.a + (long) m.b
+        + 9 * h + 10 * i + 11 * j + 12 * k + 13 * l;
 }
 ";
 
@@ -123,6 +131,14 @@ lib.quad_sum.argtypes = [Quad]
 lib.quad_sum.restype = D
 lib.five_add.argtypes = [Five, Five]
 lib.five_add.restype = Five
+B = ctypes.c_byte
+UB = ctypes.c_ubyte
+S = ctypes.c_short
+US = ctypes.c_ushort
+lib.narrow.argtypes = [
+    B, UB, S, US, ctypes.c_int, ctypes.c_uint, ctypes.c_bool, Mixed, B, UB, S, US, ctypes.c_bool
+]
+lib.narrow.restype = ctypes.c_long
 
 m = lib.mixed_scale(Mixed(3, 1.5), 4)
 print(m.a, m.b)
@@ -143,6 +159,8 @@ print(q.a, q.b, q.c, q.d, lib.quad_sum(q))
 f = Five(1, 2, 3, 4, 5)
 g = lib.five_add(f, Five(0.5, 0.5, 0.5, 0.5, 0.5))
 print(g.a, g.b, g.c, g.d, g.e, f.a)
+m = Mixed(5, 2.5)
+print(lib.narrow(-1, 255, -300, 65535, -70000, 4000000000, True, m, -128, 200, 1000, 60000, True))
 "#;
 
 /// What CPython prints for `PROGRAM`.
@@ -157,7 +175,34 @@ const EXPECTED: &str = "12 6.0\n\
 238.0\n\
 0.5 1.0 1.5 2.0 5.0\n\
 1.5 2.5 3.5 4.5 5.5 1.0\n\
+24000643659\n\
 ";
+
+/// The CPython that loads the libraries: the newest oracle, which the dev image and the macOS
+/// job install by its version, as no system's own `python3` is (ADR-0008).
+const PYTHON: &str = "python3.15";
+
+/// How this system builds and finds a shared C library: its file, the C compiler's flags that
+/// make it, and the variable the dynamic loader searches.
+struct SharedLibrary {
+    file: &'static str,
+    flags: &'static [&'static str],
+    search: &'static str,
+}
+
+#[cfg(target_os = "macos")]
+const SHARED: SharedLibrary = SharedLibrary {
+    file: "libshapes.dylib",
+    flags: &["-dynamiclib", "-Wl,-install_name,libshapes.dylib"],
+    search: "DYLD_LIBRARY_PATH",
+};
+
+#[cfg(not(target_os = "macos"))]
+const SHARED: SharedLibrary = SharedLibrary {
+    file: "libshapes.so",
+    flags: &["-shared", "-fPIC"],
+    search: "LD_LIBRARY_PATH",
+};
 
 fn text(bytes: &[u8]) -> String {
     String::from_utf8_lossy(bytes).into_owned()
@@ -169,7 +214,11 @@ fn project() -> (tempfile::TempDir, Utf8PathBuf) {
     let root = Utf8PathBuf::from_path_buf(directory.path().to_owned()).unwrap();
     std::fs::create_dir(root.join("lib")).unwrap();
     std::fs::write(root.join("shapes.c"), SHAPES).unwrap();
-    std::fs::write(root.join("app.py"), PROGRAM).unwrap();
+    std::fs::write(
+        root.join("app.py"),
+        PROGRAM.replace("libshapes.so", SHARED.file),
+    )
+    .unwrap();
     std::fs::write(root.join("typy.toml"), "library-paths = [\"lib\"]\n").unwrap();
     (directory, root)
 }
@@ -178,14 +227,8 @@ fn project() -> (tempfile::TempDir, Utf8PathBuf) {
 /// `arguments`.
 fn build(root: &Utf8Path, cc: &str, arguments: &[&str]) {
     let compiled = Command::new(cc)
-        .args([
-            "-shared",
-            "-fPIC",
-            "-O1",
-            "-o",
-            "lib/libshapes.so",
-            "shapes.c",
-        ])
+        .args(SHARED.flags)
+        .args(["-O1", "-o", &format!("lib/{}", SHARED.file), "shapes.c"])
         .current_dir(root)
         .output()
         .unwrap();
@@ -204,21 +247,22 @@ fn build(root: &Utf8Path, cc: &str, arguments: &[&str]) {
 fn ffi_03_structures_pass_by_value_as_cpython_passes_them() {
     let (_directory, root) = project();
     build(&root, "cc", &[]);
-    let oracle = Command::new("python3")
+    let oracle = Command::new(PYTHON)
         .args(["-I", "app.py"])
         .current_dir(&root)
-        .env("LD_LIBRARY_PATH", root.join("lib"))
+        .env(SHARED.search, root.join("lib"))
         .output()
         .unwrap();
     assert_eq!(text(&oracle.stdout), EXPECTED, "{}", text(&oracle.stderr));
     let run = Command::new(root.join("app"))
-        .env("LD_LIBRARY_PATH", root.join("lib"))
+        .env(SHARED.search, root.join("lib"))
         .output()
         .unwrap();
     assert_eq!(text(&run.stdout), EXPECTED, "{}", text(&run.stderr));
 }
 
 #[test]
+#[cfg(target_os = "linux")]
 fn ffi_12_structures_pass_by_value_on_the_other_architecture() {
     let (triple, gnu, emulator) = if cfg!(target_arch = "aarch64") {
         (
@@ -237,7 +281,7 @@ fn ffi_12_structures_pass_by_value_on_the_other_architecture() {
     build(&root, &format!("{gnu}-gcc"), &["--target", triple]);
     let run = Command::new(emulator)
         .args(["-L", &format!("/usr/{gnu}")])
-        .args(["-E", &format!("LD_LIBRARY_PATH={}", root.join("lib"))])
+        .args(["-E", &format!("{}={}", SHARED.search, root.join("lib"))])
         .arg(root.join("app"))
         .output()
         .unwrap();

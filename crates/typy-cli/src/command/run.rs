@@ -27,7 +27,7 @@ pub(super) fn run(
     };
     let Some(files) = pipeline.sources(request.main()) else {
         // Checking loads the program again and reports why it does not load.
-        return match pipeline.check(request.main()) {
+        return match pipeline.check(request.main(), request.target()) {
             Ok(_) => ExitStatus::ProgramErrors,
             Err(failure) => reporter.report(failure),
         };
@@ -52,7 +52,7 @@ pub(super) fn run(
             Ok(success) => reporter.warnings(success.warnings),
             Err(failure) => return reporter.report(failure),
         }
-    } else if let Ok(success) = pipeline.check(request.main()) {
+    } else if let Ok(success) = pipeline.check(request.main(), request.target()) {
         // A build from the cache shows the warnings its program has, as a new build does.
         reporter.warnings(success.warnings);
     }

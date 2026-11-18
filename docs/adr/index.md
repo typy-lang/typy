@@ -64,3 +64,4 @@ supersedes it.
 | [ADR-0056](0056-link-for-mach-o-with-apples-linker-and-name-libraries-as-macos-does.md) | Link for Mach-O with Apple's linker and name libraries as macOS does | Accepted | 2026-11-18 |
 | [ADR-0057](0057-give-the-runtime-each-systems-c-constants-and-macos-its-own-error-texts.md) | Give the runtime each system's C constants and macOS its own error texts | Accepted | 2026-11-18 |
 | [ADR-0058](0058-pass-c-arguments-as-libffi-passes-them-on-every-target.md) | Pass C arguments as libffi passes them on every target | Accepted | 2026-11-18 |
+| [ADR-0059](0059-link-nothing-more-for-ctypes-cdll-of-none.md) | Link nothing more for `ctypes.CDLL(None)` | Accepted | 2026-11-18 |

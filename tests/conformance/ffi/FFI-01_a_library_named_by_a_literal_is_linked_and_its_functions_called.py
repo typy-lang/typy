@@ -1,5 +1,6 @@
 # typy-test: FFI-01
 # typy-expect: accepted
+# typy-system: linux
 import ctypes
 import ctypes as C
 from ctypes import CDLL, c_double, cdll

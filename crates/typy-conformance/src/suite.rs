@@ -146,10 +146,31 @@ impl Suite {
             python_floor: Some(case.floor),
             ..SettingOverrides::default()
         });
+        let platform = if self.target.is_macos() {
+            typy_source::Platform::MacOs
+        } else {
+            typy_source::Platform::Linux
+        };
+        if let Some(system) = case.system
+            && system != platform
+        {
+            return Verdict::Skipped(format!(
+                "it runs on {} only, and the build is for {}",
+                system.sys_platform(),
+                self.target
+            ));
+        }
         match case.expectation {
-            Expectation::Rejected { code, line, column } => {
-                judge_rejected(&pipeline, case, code, line, column)
-            }
+            Expectation::Rejected { code, line, column } => judge_rejected(
+                &pipeline,
+                case,
+                Target {
+                    triple: self.target,
+                },
+                code,
+                line,
+                column,
+            ),
             Expectation::Accepted
                 if case.architecture_dependent
                     && self.target.architecture() != Target::host().triple.architecture() =>

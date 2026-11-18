@@ -11,18 +11,30 @@ fn workspace() -> Utf8PathBuf {
     Utf8PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..")
 }
 
-/// Returns every accepted conformance program under `directory`.
+/// The header of a test of another system, which names a library this host does not have.
+const OTHER_SYSTEM: &str = if cfg!(target_os = "macos") {
+    "# typy-system: linux"
+} else {
+    "# typy-system: macos"
+};
+
+/// Returns every accepted conformance program under `directory` that builds on this host.
 fn accepted(directory: &Utf8Path, found: &mut Vec<Utf8PathBuf>) {
     for entry in directory.read_dir_utf8().unwrap() {
         let path = entry.unwrap().into_path();
         if path.is_dir() {
             accepted(&path, found);
-        } else if path.extension() == Some("py")
-            && std::fs::read_to_string(&path)
-                .unwrap()
-                .lines()
-                .any(|line| line == "# typy-expect: accepted")
-        {
+            continue;
+        }
+        if path.extension() != Some("py") {
+            continue;
+        }
+        let text = std::fs::read_to_string(&path).unwrap();
+        let header: Vec<&str> = text
+            .lines()
+            .take_while(|line| line.starts_with('#'))
+            .collect();
+        if header.contains(&"# typy-expect: accepted") && !header.contains(&OTHER_SYSTEM) {
             found.push(path);
         }
     }

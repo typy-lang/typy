@@ -116,6 +116,7 @@ pub(crate) fn generate(
             tyir: module,
             functions: &functions,
             raising: &raising,
+            target: target.triple,
         }
         .emit(library)?;
     }

@@ -1,6 +1,8 @@
 # Every task runs inside the containers defined in .devcontainer/compose.yaml:
 # the dev service for checks and builds, the diagrams service for PlantUML.
-# The host needs only Docker, Compose, Make and Git.
+# The host needs only Docker, Compose, Make and Git. On a Mac, which builds
+# for macOS natively (ADR-0055), `make EXEC= TARGET` runs a task on the host
+# and starts no container.
 
 COMPOSE := USER_UID=$(shell id -u) USER_GID=$(shell id -g) \
 	docker compose -f .devcontainer/compose.yaml
@@ -16,7 +18,9 @@ MARKDOWN := "**/*.md" "\#.tmp/**" "\#target/**" "\#dist/**" "\#site/**"
 	build dist bless bench-peers bench-compare coverage-branches miri fuzz runtime-size diagrams diagrams-check unicode-tables unicode-tables-check format-cases format-cases-check stdlib-names stdlib-names-check errno-texts errno-texts-check mutants mutants-package bench check hooks clean
 
 dev: ## Start the dev service, building its image the first time
+ifneq ($(EXEC),)
 	@$(COMPOSE) up -d --quiet-pull dev 2>/dev/null
+endif
 
 image: ## Rebuild the dev image after a change to .devcontainer
 	$(COMPOSE) build dev
@@ -119,10 +123,10 @@ mutants-package: ## Mutation-test every mutant of MUTANTS_PACKAGE; hours for a l
 
 bench: runtime ## Time the release-built compiler on generated 10,000-line projects against the budgets of NFR-04, NFR-05 and NFR-14
 	@$(EXEC) cargo build --release -p typy-cli --locked
-	@$(EXEC) python3 tests/bench/build_time.py
+	@$(EXEC) python3.15 tests/bench/build_time.py
 
 runtime-size: build ## Fail when the runtime a hello world links is over the size budgets of NFR-02
-	@$(EXEC) python3 scripts/check-runtime-size.py
+	@$(EXEC) python3.15 scripts/check-runtime-size.py
 
 unicode-tables: dev ## Write the runtime's Unicode tables from CPython 3.15's unicodedata (OI-15)
 	@$(EXEC) python3.15 scripts/generate-unicode-tables.py

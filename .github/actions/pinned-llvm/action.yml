@@ -1,0 +1,55 @@
+# Installs the LLVM that .devcontainer/llvm.lock pins for a runner that builds
+# outside the dev container, a macOS one (ADR-0054, ADR-0055): the archive of
+# the host from the lock's release, checked against its SHA-256 and kept in
+# GitHub's Actions cache under it, then named by LLVM_SYS_231_PREFIX for
+# llvm-sys.
+name: Pinned LLVM
+description: Install the LLVM that llvm.lock pins
+inputs:
+  host:
+    description: The host triple whose archive to install
+    default: aarch64-apple-darwin
+runs:
+  using: composite
+  steps:
+    - name: Read the archive's name and SHA-256
+      id: pin
+      shell: bash
+      env:
+        HOST: ${{ inputs.host }}
+      run: |
+        lock=.devcontainer/llvm.lock
+        version="$(awk '$1 == "version" { print $2 }' "${lock}")"
+        name="llvm-${version}-${HOST}"
+        sum="$(awk -v host="${HOST}" '$1 == host { print $2 }' "${lock}")"
+        if [[ -z "${version}" || -z "${sum}" ]]; then
+          echo "llvm.lock has no archive for ${HOST}" >&2
+          exit 1
+        fi
+        {
+          echo "name=${name}"
+          echo "url=$(awk '$1 == "release" { print $2 }' "${lock}")/${name}.tar.zst"
+          echo "sha256=${sum}"
+        } >> "${GITHUB_OUTPUT}"
+    - uses: actions/cache@v5
+      id: cache
+      with:
+        path: ~/.cache/typy-llvm
+        key: llvm-${{ steps.pin.outputs.sha256 }}
+    - name: Download the archive
+      if: steps.cache.outputs.cache-hit != 'true'
+      shell: bash
+      env:
+        URL: ${{ steps.pin.outputs.url }}
+        SHA256: ${{ steps.pin.outputs.sha256 }}
+      run: |
+        archive="${RUNNER_TEMP}/llvm.tar.zst"
+        curl -fsSL --retry 5 --retry-all-errors -o "${archive}" "${URL}"
+        echo "${SHA256}  ${archive}" | shasum -a 256 --check --strict
+        mkdir -p ~/.cache/typy-llvm
+        zstd -d -c "${archive}" | tar -xf - -C ~/.cache/typy-llvm
+    - name: Name it for llvm-sys
+      shell: bash
+      env:
+        NAME: ${{ steps.pin.outputs.name }}
+      run: echo "LLVM_SYS_231_PREFIX=${HOME}/.cache/typy-llvm/${NAME}" >> "${GITHUB_ENV}"

@@ -1,6 +1,23 @@
-//! The C library functions the runtime calls.
+//! The C library functions the runtime calls, with the constants of the system it runs on
+//! from a module of its own (ADR-0057).
 
 use core::ffi::c_void;
+
+#[cfg(target_os = "linux")]
+mod linux;
+#[cfg(target_os = "macos")]
+mod macos;
+#[cfg(target_os = "linux")]
+use linux as system;
+#[cfg(target_os = "macos")]
+use macos as system;
+
+pub(crate) use system::{
+    EAGAIN, EALREADY, ECONNABORTED, ECONNREFUSED, ECONNRESET, EINPROGRESS, ESHUTDOWN, ETIMEDOUT,
+    O_APPEND, O_CLOEXEC, O_CREAT, O_EXCL, O_TRUNC,
+};
+#[cfg(target_os = "macos")]
+pub(crate) use system::{error_text, stack_low};
 
 unsafe extern "C" {
     // The unit tests allocate with these; a program allocates through its own hooks
@@ -16,6 +33,7 @@ unsafe extern "C" {
     fn read_bytes(descriptor: i32, buffer: *mut c_void, count: usize) -> isize;
     fn abort() -> !;
     fn exit(status: i32) -> !;
+    #[cfg(target_os = "linux")]
     fn getrlimit(resource: i32, limit: *mut [u64; 2]) -> i32;
     #[link_name = "open"]
     fn open_path(path: *const core::ffi::c_char, flags: i32, ...) -> i32;
@@ -23,7 +41,6 @@ unsafe extern "C" {
     fn close_descriptor(descriptor: i32) -> i32;
     #[link_name = "fstat"]
     fn fstat_descriptor(descriptor: i32, status: *mut [u64; 18]) -> i32;
-    fn __errno_location() -> *mut i32;
     fn lseek(descriptor: i32, offset: i64, whence: i32) -> i64;
     fn ftruncate(descriptor: i32, length: i64) -> i32;
     fn isatty(descriptor: i32) -> i32;
@@ -33,19 +50,15 @@ unsafe extern "C" {
 pub(crate) const EINTR: i32 = 4;
 /// `EISDIR`: the path names a directory.
 pub(crate) const EISDIR: i32 = 21;
-/// The flags of `open`, as Linux numbers them on `x86_64` and `AArch64`.
+/// The flags of `open` that every system numbers alike.
 pub(crate) const O_WRONLY: i32 = 0o1;
 pub(crate) const O_RDWR: i32 = 0o2;
-pub(crate) const O_CREAT: i32 = 0o100;
-pub(crate) const O_EXCL: i32 = 0o200;
-pub(crate) const O_TRUNC: i32 = 0o1000;
-pub(crate) const O_APPEND: i32 = 0o2000;
-pub(crate) const O_CLOEXEC: i32 = 0o2_000_000;
 
 /// Returns the error number the last failed call set.
 pub(crate) fn errno() -> i32 {
-    // SAFETY: the C library gives the address of the calling thread's `errno`.
-    unsafe { *__errno_location() }
+    // SAFETY: the address is that of the calling thread's `errno`, which lives as long as the
+    // thread.
+    unsafe { *system::errno_address() }
 }
 
 /// Opens the path, a string ended by a zero byte, with `flags`, creating a file with the
@@ -122,23 +135,12 @@ pub(crate) fn is_directory(descriptor: i32) -> bool {
 pub(crate) fn directory_status(descriptor: i32) -> Result<bool, i32> {
     const S_IFMT: u32 = 0o170_000;
     const S_IFDIR: u32 = 0o040_000;
-    // `struct stat` is 144 bytes on x86-64 and 128 on AArch64; `st_mode` is the low half of
-    // its fourth word on x86-64 and of its third on AArch64.
-    #[cfg(target_arch = "aarch64")]
-    const MODE_WORD: usize = 2;
-    #[cfg(not(target_arch = "aarch64"))]
-    const MODE_WORD: usize = 3;
     let mut status = [0_u64; 18];
-    // SAFETY: `status` is writable and larger than `struct stat`.
+    // SAFETY: `status` is writable and no smaller than `struct stat` on any system.
     if unsafe { fstat_descriptor(descriptor, &raw mut status) } != 0 {
         return Err(errno());
     }
-    #[allow(
-        clippy::cast_possible_truncation,
-        reason = "st_mode is the low 32 bits of the word"
-    )]
-    let mode = status[MODE_WORD] as u32;
-    Ok(mode & S_IFMT == S_IFDIR)
+    Ok(system::mode_of(&status) & S_IFMT == S_IFDIR)
 }
 
 /// Reads into `buffer`, making an interrupted call again; returns how many bytes it read, 0 at
@@ -235,13 +237,14 @@ pub(crate) fn exit_process(status: i32) -> ! {
 }
 
 /// Returns the soft limit of the stack size in bytes, or `None` when there is no limit.
+#[cfg(target_os = "linux")]
 pub(crate) fn stack_limit() -> Option<u64> {
     const RLIMIT_STACK: i32 = 3;
-    const RLIM_INFINITY: u64 = u64::MAX;
     let mut limit = [0_u64; 2];
-    // SAFETY: `limit` is a writable pair of 64-bit values, the layout of `struct rlimit` on 64-bit Linux.
+    // SAFETY: `limit` is a writable pair of 64-bit values, the layout of `struct rlimit` on
+    // 64-bit Linux.
     let status = unsafe { getrlimit(RLIMIT_STACK, &raw mut limit) };
-    (status == 0 && limit[0] != RLIM_INFINITY).then_some(limit[0])
+    (status == 0 && limit[0] != system::RLIM_INFINITY).then_some(limit[0])
 }
 
 #[cfg(test)]
@@ -266,13 +269,16 @@ mod tests {
     }
 
     unsafe extern "C" {
+        #[cfg(target_os = "linux")]
         fn setrlimit(resource: i32, limit: *const [u64; 2]) -> i32;
         fn sigaction(signal: i32, action: *const Action, old: *mut Action) -> i32;
         fn pthread_kill(thread: std::os::unix::thread::RawPthread, signal: i32) -> i32;
+        #[cfg(target_os = "linux")]
         fn mkfifo(path: *const core::ffi::c_char, mode: u32) -> i32;
     }
 
     /// `struct sigaction` of glibc on 64-bit Linux.
+    #[cfg(target_os = "linux")]
     #[repr(C)]
     struct Action {
         handler: extern "C" fn(i32),
@@ -281,7 +287,39 @@ mod tests {
         restorer: usize,
     }
 
+    /// `struct sigaction` of macOS, whose signal set is 32 bits.
+    #[cfg(target_os = "macos")]
+    #[repr(C)]
+    struct Action {
+        handler: extern "C" fn(i32),
+        mask: u32,
+        flags: i32,
+    }
+
+    #[cfg(target_os = "linux")]
     const SIGUSR1: i32 = 10;
+    #[cfg(target_os = "macos")]
+    const SIGUSR1: i32 = 30;
+
+    /// Returns an action that runs `ignore` and does not restart an interrupted call.
+    #[cfg(target_os = "linux")]
+    const fn ignoring() -> Action {
+        Action {
+            handler: ignore,
+            mask: [0; 16],
+            flags: 0,
+            restorer: 0,
+        }
+    }
+
+    #[cfg(target_os = "macos")]
+    const fn ignoring() -> Action {
+        Action {
+            handler: ignore,
+            mask: 0,
+            flags: 0,
+        }
+    }
 
     extern "C" fn ignore(_: i32) {}
 
@@ -293,12 +331,7 @@ mod tests {
         release: impl FnOnce(),
     ) -> T {
         use std::os::unix::thread::JoinHandleExt;
-        let action = Action {
-            handler: ignore,
-            mask: [0; 16],
-            flags: 0,
-            restorer: 0,
-        };
+        let action = ignoring();
         // SAFETY: `action` is a valid `struct sigaction`, and the handler does nothing.
         let installed = unsafe { sigaction(SIGUSR1, &raw const action, core::ptr::null_mut()) };
         assert_eq!(installed, 0);
@@ -345,7 +378,11 @@ mod tests {
         drop(writing);
     }
 
+    // On macOS 15 the writer's `open` of a FIFO, interrupted by these signals, did not return
+    // once the reader opened, so the test runs where the call returns; `open` retries `EINTR`
+    // with the same code on every system.
     #[test]
+    #[cfg(target_os = "linux")]
     #[cfg_attr(miri, ignore = "Miri does not deliver signals")]
     fn an_open_interrupted_by_a_signal_is_retried() {
         let directory = std::env::temp_dir().join(format!("typy-libc-fifo-{}", std::process::id()));
@@ -367,6 +404,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(target_os = "linux")]
     #[cfg_attr(miri, ignore = "Miri does not change resource limits")]
     fn a_stack_without_a_limit_gives_none() {
         const RLIMIT_STACK: i32 = 3;
@@ -377,7 +415,7 @@ mod tests {
         let raised = [kept[1], kept[1]];
         // SAFETY: `raised` is a readable `struct rlimit`.
         assert_eq!(unsafe { setrlimit(RLIMIT_STACK, &raw const raised) }, 0);
-        let expected = (kept[1] != u64::MAX).then_some(kept[1]);
+        let expected = (kept[1] != super::system::RLIM_INFINITY).then_some(kept[1]);
         assert_eq!(super::stack_limit(), expected);
         // SAFETY: `kept` is a readable `struct rlimit`.
         assert_eq!(unsafe { setrlimit(RLIMIT_STACK, &raw const kept) }, 0);

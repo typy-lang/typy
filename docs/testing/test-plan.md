@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy test plan |
-| Version | 0.92 |
+| Version | 0.98 |
 | Status | Draft |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-18 |
@@ -102,10 +102,17 @@ A test file is named after its first requirement and its behaviour, such as
 directory named so, whose `main.py` holds the header and whose other files
 are its modules, such as `mod/MOD-02_packages_and_relative_imports/`.
 
-Two requirements have no rejected file: LEX-01, because a source that is
-not UTF-8 would break the repository's ASCII rule, and LEX-09, because a
-source over 16 MiB is too large to commit. Unit tests in `typy-source` build
-those inputs when they run and check E0102 and E0101. Where a 0.1 program
+Thirteen requirements have no rejected file, which `NO_REJECTED_FILE` in
+`suite.rs` lists. LEX-01 has none because a source that is not UTF-8 would
+break the repository's ASCII rule, and LEX-09 because a source over 16 MiB
+is too large to commit; unit tests in `typy-source` build those inputs when
+they run and check E0102 and E0101. The others have no rule a program can
+break: memory management (MEM-01, MEM-02, MEM-03, MEM-04, MEM-09), a
+surrogate escape (LEX-10), the order of evaluation and of module
+initialisation (EXP-01, MOD-03), the report of an uncaught exception
+(STD-05) and the class and text of an error the C library reports (EXC-19)
+describe what an accepted program does, and the warning of CST-07 accepts
+the program it warns about. Where a 0.1 program
 cannot show the rejection a requirement describes, its rejected test records
 what 0.1 does instead, such as a function used as a truth value, E0201
 until functions are values in 1.0.
@@ -177,7 +184,7 @@ the test stays, named for the behaviour it checks.
 
 | Environment | Contents | Used by |
 | --- | --- | --- |
-| Dev container | `typy-lang-dev`: Rust 1.99.1, the cargo tools, LLVM 23 from apt.llvm.org, musl, Node and markdownlint | UT, golden, E2E, local runs of everything |
+| Dev container | `typy-lang-dev`: Rust 1.99.1, the cargo tools, LLVM 23.1.6 from the archive `.devcontainer/llvm.lock` pins, musl, Node and markdownlint | UT, golden, E2E, local runs of everything |
 | Oracle interpreters | CPython 3.12.16, 3.13.18, 3.14.10 and 3.15.2, exact builds installed with uv 0.13.7 in the dev container, as `python3.12` to `python3.15`, with nothing else installed | Conformance |
 | Nightly Rust | One pinned nightly toolchain, for Miri and the sanitizers only | Section 3.5 |
 | Diagrams container | PlantUML 1.2026.8, pinned by digest | Documentation gate |
@@ -276,10 +283,10 @@ that the specification does not define.
 | CLI-05 | 0.1 | E2E | `crates/typy-cli/tests/end_to_end/cli.rs`, tests named for CLI-05 |
 | CLI-06 | 0.1 | E2E | `crates/typy-cli/tests/end_to_end/cli.rs`, tests named for CLI-06 |
 | CLI-07 | 0.3 | E2E | `crates/typy-cli/tests/end_to_end/cli.rs`, tests named for CLI-07 |
-| CLI-08 | 0.6 | UT, E2E | `crates/typy-codegen/src/target.rs` for the supported triples and the host; `crates/typy-cli/tests/end_to_end/cli.rs` for `--target` on `build` and `check`, an unsupported triple and an AArch64 executable built on an x86_64 host and run under `qemu-aarch64` |
+| CLI-08 | 0.6 | UT, E2E | `crates/typy-codegen/src/target.rs` for the supported triples, the host and the triples each host builds for; `crates/typy-cli/tests/end_to_end/cli.rs` for `--target` on `build` and `check`, an unsupported triple, another system's triple and an AArch64 executable built on an x86_64 host and run under `qemu-aarch64` |
 | CLI-14 | 0.6 | UT, E2E | `crates/typy-build/src/toolchain.rs` for the tools of each target on each host; `crates/typy-build/src/linker.rs` and `library_link.rs` for the tools they run; `crates/typy-source/src/settings_file/target.rs` for the `typy.toml` table of a target; `crates/typy-build/src/toolchain.rs` for the triples it shares with the code generator; `crates/typy-cli/tests/end_to_end/cli.rs` for E0701 naming a missing cross tool |
-| CLI-15 | 0.7 | UT, E2E | `crates/typy-codegen/src/target.rs` for `aarch64-apple-darwin`, its LLVM triple and CPU; the `macos-15` CI job runs every unit, integration and end-to-end test natively on macOS, and builds and runs a program from the macOS release archive |
-| CLI-16 | 0.7 | UT, E2E | `crates/typy-build/src/library_layout.rs` for the macOS names, install name and versions; `crates/typy-cli/tests/end_to_end/library.rs` on the `macos-15` job, linking a C host with each library |
+| CLI-15 | 0.7 | UT, E2E | `crates/typy-codegen/src/target.rs` for `aarch64-apple-darwin`, its LLVM triple and CPU; `crates/typy-codegen/tests/codegen.rs` for a deterministic Mach-O object of every test program; the `macos-15` CI job runs every unit, integration and end-to-end test natively on macOS, and builds and runs a program from the macOS release archive |
+| CLI-16 | 0.7 | UT, E2E | `crates/typy-build/src/library_layout.rs` for the macOS names, install name and versions; `crates/typy-build/src/mach_o.rs` for the arguments of Apple's linker and the exports list; `crates/typy-cli/tests/end_to_end/library.rs` on the `macos-15` job, linking a C host with each library |
 | CLI-09 | 0.5 | UT, E2E | `crates/typy-build/src/request.rs` and `library_kind.rs` for the output's name; `crates/typy-cli/tests/end_to_end/library.rs`, tests named for CLI-09: a static library in a C program, its only global symbols, a shared library from CPython through `ctypes`, two libraries in one program with a call from another thread, and a file name that is not a module name |
 | CLI-13 | 0.5 | UT, E2E | `crates/typy-source/src/version.rs` for the release of a version; `crates/typy-source/src/settings_file.rs` for `version`; `crates/typy-check/tests/integration/exports.rs` for `__version__` and E0429; `crates/typy-build/src/library_layout.rs` for each layout; `crates/typy-cli/tests/end_to_end/library.rs`, tests named for CLI-13: a shared library's soname and links, a new release that moves them, a static library's link, `-o`, and two versions that differ |
 | CLI-10 | 0.3 | E2E | `crates/typy-cli/tests/end_to_end/cli.rs`, tests named for CLI-10 |
@@ -485,7 +492,7 @@ that the specification does not define.
 | LIB-19 | 1.0 | IT | `tests/conformance/lib/LIB-19_*.py` |
 | LIB-20 | 1.0 | IT | `tests/conformance/lib/LIB-20_*.py` |
 | LIB-21 | 1.0 | IT | `tests/conformance/lib/LIB-21_*.py` |
-| LIB-22 | 0.7 | UT, IT | `crates/typy-check/src/sys.rs` for the platform of each target; `tests/conformance/lib/LIB-22_*.py` on Linux and on the `macos-15` job |
+| LIB-22 | 0.7 | UT, IT | `crates/typy-source/src/settings.rs` for `sys.platform` of each operating system; `crates/typy-driver/tests/integration/pipeline.rs` for the platform each target gives; `tests/conformance/lib/LIB-22_*.py` on Linux and on the `macos-15` job |
 | LIB-13 | 0.4 | IT | `tests/conformance/lib/LIB-13_*.py` |
 | LIB-14 | 0.4 | IT | `tests/conformance/lib/LIB-14_*.py` |
 | MEM-01 | 0.1 | UT, IT | `typy-runtime` unit tests; `tests/conformance/mem/MEM-01_*.py` under sanitizers |
@@ -501,14 +508,15 @@ that the specification does not define.
 | FFI-01 | 0.5 | UT, IT | `crates/typy-check/src/check/ctypes_declarations/tests.rs` for each way of naming `ctypes` and loading a library; `tests/conformance/ffi/FFI-01_*.py` against CPython 3.12 to 3.15 |
 | FFI-02 | 0.5 | UT, IT | `crates/typy-check/src/check/ctypes_declarations/tests.rs` for each E0430 of a declaration; `tests/conformance/ffi/FFI-02_*.py` for calls declared in time, too early, without a `restype`, and with an argument of the wrong type |
 | FFI-03 | 0.5 | UT, IT | `crates/typy-check/src/ctypes.rs` and `ctypes/structure.rs` for the types, their classes, names, sizes, structure layouts and conversions; `crates/typy-check/src/check/ctypes_declarations/tests.rs` for `POINTER`, names bound to a type and structure classes of this module and of others; `crates/typy-check/tests/integration/ctypes.rs` for each E0404, E0402, E0412 and E0401 of an object and each argument a pointer takes; `crates/typy-tyir/src/library.rs` and `crates/typy-lower/tests/integration/foreign.rs` for the class table, pointer parameters and structures by value; `crates/typy-codegen/src/structure_abi.rs` for the register class of each eight bytes of a structure and the registers left; `crates/typy-runtime/src/foreign.rs` for the runtime's conversions and `ctypes.ArgumentError`; `crates/typy-runtime/src/cdata/tests.rs` for scalars, pointers that keep their target, null pointers, checked array indexes and the `bytes` an object keeps for its memory; `tests/conformance/ffi/FFI-03_*.py` for every scalar type's wrap-around, widening, rounding and null, and for objects passed by reference, pointers, arrays and structures, against CPython 3.12 to 3.15, also under the sanitizers; `crates/typy-cli/tests/end_to_end/structures.rs` for structures passed by value in each register class and in memory, against CPython through a C library the test builds |
-| FFI-04 | 0.5 | UT, E2E | `crates/typy-source/src/settings_file/libraries.rs` and `settings.rs` for `library-paths`, `[libraries]` and the linker's names; `crates/typy-cli/tests/end_to_end/library.rs`, tests named for FFI-04: a program that imports a TyPy library's binding, linked dynamically and statically, and a library the linker cannot find |
+| FFI-04 | 0.5 | UT, E2E | `crates/typy-source/src/settings_file/libraries.rs` and `settings.rs` for `library-paths` and `[libraries]`; `crates/typy-build/src/library_argument.rs` for the linker's argument of each library on each target; `crates/typy-cli/tests/end_to_end/library.rs`, tests named for FFI-04: a program that imports a TyPy library's binding, linked dynamically and statically, and a library the linker cannot find |
 | FFI-05 | 0.5 | UT, IT, E2E | `crates/typy-check/tests/integration/exports.rs` for each name `__all__` lists and each E0429; `crates/typy-tyir/tests/integration/library.rs` for the verifier and the text form; `crates/typy-codegen/tests/codegen.rs` and `src/header.rs` for the wrappers and the header; `crates/typy-runtime/src/int/fixed.rs` for the conversions; `crates/typy-cli/tests/end_to_end/library.rs`, tests named for FFI-05, also comparing the refused names with what the runtime archive calls |
 | FFI-08 | 0.5 | UT, E2E | `crates/typy-codegen/src/binding.rs` for the binding and the stub; `crates/typy-cli/tests/end_to_end/library.rs`, tests named for FFI-08 and FFI-04: CPython and a TyPy program call a library through its binding, and CPython 3.12 to 3.15 parse the binding and the stub |
 | FFI-09 | 1.0 | IT | `tests/conformance/ffi/FFI-09_*.py` |
 | FFI-10 | 1.0 | UT, IT | `crates/typy-check/tests/integration/ctypes.rs` for each E0201 of a `ctypes` use planned for 1.0; `tests/conformance/ffi/FFI-10_*.py` |
 | FFI-11 | 1.0 | UT, IT | `crates/typy-check/src/check/ctypes_declarations/tests.rs` and `crates/typy-check/tests/integration/ctypes.rs` for each E0201 of a structure form planned for 1.0; `tests/conformance/ffi/FFI-11_*.py` |
 | FFI-12 | 0.6 | UT, E2E | `crates/typy-codegen/src/structure_abi.rs` for each target's classification against clang 19's lowering of the same C structures; `crates/typy-cli/tests/end_to_end/structures.rs` run for each target, under `qemu-aarch64` for AArch64, against CPython on x86_64 |
-| FFI-13 | 0.7 | UT, E2E | `crates/typy-codegen/src/foreign.rs` for each argument's type and attributes in a register and on the stack on each target; `crates/typy-cli/tests/end_to_end/structures.rs` calling C functions with more narrow arguments than registers, on each architecture and on the `macos-15` job; the FFI-03 conformance test of integer types, whose C functions are wider than their declarations |
+| FFI-13 | 0.7 | UT, E2E | `crates/typy-codegen/src/foreign/stack_argument.rs` for the registers arguments take and each type's width and attribute on the stack; `crates/typy-codegen/tests/codegen.rs` for the arguments of one call on each target; `crates/typy-cli/tests/end_to_end/structures.rs` calling C functions with more narrow arguments than registers, on each architecture and on the `macos-15` job; the FFI-03 conformance test of integer types, whose C functions are wider than their declarations |
+| FFI-14 | 0.7 | UT, IT | `crates/typy-check/src/check/ctypes_declarations/tests.rs` for a library without a name; `tests/conformance/ffi/FFI-14_*.py` on Linux and on the `macos-15` job, and the tests of FFI-02 and FFI-03, which call the C and maths libraries through `CDLL(None)` |
 | FFI-06 | 1.0 | IT | `tests/conformance/ffi/FFI-06_*.py` |
 | FFI-07 | 1.0 | IT | `tests/conformance/ffi/FFI-07_*.py` |
 | DIA-01 | 0.1 | UT, IT | `typy-diagnostics` unit tests; `tests/golden/diagnostics/DIA-01_*` |
@@ -540,7 +548,7 @@ that the specification does not define.
 | NFR-14 | 1.0 | Benchmark | `tests/bench/build_time.py`: peak memory of each build within 1 GB |
 | NFR-15 | 0.1 | IT | Conformance suite: debug and release runs compared |
 | NFR-16 | 0.6 | IT | `crates/typy-conformance/tests/integration/other_architecture.rs`: every accepted conformance test built for the other architecture, in debug and release mode, and run under its user-mode emulator, `qemu-aarch64` on an x86_64 host and `qemu-x86_64` on an arm64 host, each run compared with CPython's output, except a test marked `typy-output: architecture-dependent`, whose output CPython itself gives otherwise on each architecture; on the arm64 CI runner the suite's own test runs the AArch64 builds natively against CPython on AArch64, which checks those too |
-| NFR-17 | 0.7 | IT | The conformance suite on the `macos-15` CI job, each accepted test compared with CPython 3.12 to 3.15 for macOS from python-build-standalone |
+| NFR-17 | 0.7 | IT | The conformance suite on the `macos-15` CI job, each accepted test compared with CPython 3.12 to 3.15 for macOS from python-build-standalone; a test whose header says `# typy-system: linux` or `macos`, because it names a library only that system has, runs on that system alone, which `crates/typy-conformance/tests/integration/verdicts.rs` checks |
 | C-01 | 0.1 | CI gate | Workspace builds with the pinned Rust toolchain only |
 | C-02 | 0.1 | CI gate | `scripts/check-pins.sh`: `ruff_python_parser` pinned with `=` in `Cargo.toml` |
 | C-03 | 0.1 | UT | `typy-codegen` test: the linked LLVM major version is 23 |

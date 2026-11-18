@@ -100,7 +100,7 @@ impl Program {
         span: Span,
     ) -> Result<BuiltinName, Box<Diagnostic>> {
         if module == "sys" {
-            return Self::sys_lookup(name, span);
+            return self.sys_lookup(name, span);
         }
         if module == "ctypes" {
             return Self::ctypes_lookup(name, span);
@@ -171,8 +171,11 @@ impl Program {
         ))
     }
 
-    fn sys_lookup(name: &str, span: Span) -> Result<BuiltinName, Box<Diagnostic>> {
+    fn sys_lookup(&self, name: &str, span: Span) -> Result<BuiltinName, Box<Diagnostic>> {
         match sys_name(name) {
+            Some(SysName::Platform) => Ok(BuiltinName::Value(BuiltinValue::SysConstant(
+                SysConstant::Str(self.platform.sys_platform()),
+            ))),
             Some(SysName::Value(value)) => Ok(BuiltinName::Value(BuiltinValue::Sys(value))),
             Some(SysName::Exit) => Ok(BuiltinName::Function(ModuleFunction::Exit)),
             Some(SysName::Constant(constant)) => {

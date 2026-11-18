@@ -30,8 +30,9 @@ These are the goals of TyPy 1.0, as the
 
 ## Status
 
-TyPy 0.6.0 runs on x86_64 and 64-bit Arm (AArch64) Linux and builds
-programs for either, with `typy build --target`. It checks, builds and
+TyPy 0.7.0 runs on x86_64 and 64-bit Arm (AArch64) Linux, where it builds
+programs for either with `typy build --target`, and on macOS 11 or later
+on Apple silicon, where it builds programs for macOS. It checks, builds and
 runs programs made of modules, functions,
 classes with inheritance, dataclasses and statements over `int`, `float`,
 `str`, `bytes`, `bool`, `None`, lists, tuples, dicts, sets, optional values
@@ -53,15 +54,30 @@ release accepts.
 ## Quick start
 
 TyPy runs on x86_64 and AArch64 Linux with glibc 2.39 or later, such as
-Ubuntu 24.04 or Debian 13, and needs a C toolchain (`cc`). Download the
-archive for your machine, `x86_64` or `aarch64`, which `uname -m` prints,
-from the
-[0.6.0 release](https://github.com/typy-lang/typy/releases/tag/v0.6.0),
-unpack it, and run a program:
+Ubuntu 24.04 or Debian 13, and on macOS 11 or later on Apple silicon, and
+needs a C toolchain: `cc` on Linux, and Xcode's Command Line Tools on a
+Mac. Download the archive for your machine from the
+[0.7.0 release](https://github.com/typy-lang/typy/releases/tag/v0.7.0)
+and unpack it. On Linux, `uname -m` prints the machine, `x86_64` or
+`aarch64`:
 
 ```sh
-tar -xzf "typy-0.6.0-$(uname -m)-unknown-linux-gnu.tar.gz"
-export PATH="$PWD/typy-0.6.0-$(uname -m)-unknown-linux-gnu/bin:$PATH"
+tar -xzf "typy-0.7.0-$(uname -m)-unknown-linux-gnu.tar.gz"
+export PATH="$PWD/typy-0.7.0-$(uname -m)-unknown-linux-gnu/bin:$PATH"
+```
+
+On a Mac, an archive a browser downloaded is quarantined, so clear the
+mark first:
+
+```sh
+xattr -d com.apple.quarantine typy-0.7.0-aarch64-apple-darwin.tar.gz
+tar -xzf typy-0.7.0-aarch64-apple-darwin.tar.gz
+export PATH="$PWD/typy-0.7.0-aarch64-apple-darwin/bin:$PATH"
+```
+
+Then run a program:
+
+```sh
 printf 'print("hello", 1 + 2)\n' > hello.py
 typy run hello.py
 ```

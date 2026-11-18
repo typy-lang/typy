@@ -1,12 +1,14 @@
 # Releases the version a tag `vX.Y.Z` names (development guide section 9).
 # The build job checks the tag against the version and the changelog and
-# builds the release archive for x86-64 hosts, and the AArch64 job builds the
-# one for AArch64 hosts. Neither runs the quality gate again: main changes only
-# through pull requests whose latest commit passed it, so the tag's tree has. The publish job waits for a
-# maintainer to approve the `release` environment, creates the GitHub release
-# from the changelog section with the short-lived workflow token, then
-# downloads the archive back and runs a program with it. The pages job then
-# publishes the release's documentation through pages.yml (DOC-05).
+# builds the release archive for x86-64 hosts, the AArch64 job builds the one
+# for AArch64 Linux hosts, and the macOS job the one for Macs with Apple
+# silicon. None runs the quality gate again: main changes only through pull
+# requests whose latest commit passed it, so the tag's tree has. The publish
+# job waits for a maintainer to approve the `release` environment, creates the
+# GitHub release from the changelog section with the short-lived workflow
+# token, then downloads the archives back and runs a program with the x86-64
+# one. The pages job then publishes the release's documentation through
+# pages.yml (DOC-05).
 name: Release
 
 on:
@@ -63,9 +65,40 @@ jobs:
             dist/*.tar.gz.sha256
           if-no-files-found: error
 
+  # The archive for macOS, built natively with the LLVM llvm.lock pins; it
+  # builds and runs a program itself (ADR-0055).
+  build-macos:
+    name: Build for macOS
+    runs-on: macos-15
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/pinned-llvm
+      - name: Read the pinned tools
+        id: pins
+        run: echo "about=$(sed -n 's/^ARG CARGO_ABOUT_VERSION=//p' .devcontainer/Dockerfile)" >> "${GITHUB_OUTPUT}"
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-about@${{ steps.pins.outputs.about }}
+      - name: Release archive
+        env:
+          HOMEBREW_NO_AUTO_UPDATE: "1"
+        run: |
+          command -v gtar > /dev/null || brew install gnu-tar
+          make EXEC= dist
+      - uses: actions/upload-artifact@v7
+        with:
+          name: release-macos
+          path: |
+            dist/*.tar.gz
+            dist/*.tar.gz.sha256
+          if-no-files-found: error
+
   publish:
     name: Publish
-    needs: [build, build-aarch64]
+    needs: [build, build-aarch64, build-macos]
     runs-on: ubuntu-24.04
     environment: release
     permissions:

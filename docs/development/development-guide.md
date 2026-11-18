@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy development guide |
-| Version | 0.22 |
+| Version | 0.25 |
 | Status | Draft |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-18 |
@@ -38,11 +38,30 @@ make check
 
 `make hooks` points Git at `.githooks`, so every commit runs the quality
 gate. `make dev` builds the dev image the first time, which downloads Rust,
-the cargo tools and Node, and starts the `dev` service. `make check` runs
+TyPy's build of LLVM, the cargo tools and Node, and starts the `dev`
+service. `make check` runs
 the gate once to show the set-up works.
 
 To work in VS Code, open the folder and run "Dev Containers: Reopen in
 Container". VS Code attaches to the same `dev` service.
+
+### 2.1 Working on a Mac
+
+macOS on Apple silicon builds for itself and runs natively, outside the
+container (ADR-0055). The Mac needs Xcode's Command Line Tools, which
+provide `cc`, Apple's linker, `libtool` and `dsymutil`, and rustup, which
+installs the toolchain `rust-toolchain.toml` names. Then:
+
+1. Download `llvm-23.1.6-aarch64-apple-darwin.tar.zst` from the release
+   `.devcontainer/llvm.lock` names, check it with `shasum -a 256` against
+   the lock, unpack it, and set `LLVM_SYS_231_PREFIX` to the unpacked
+   directory.
+2. Install the CPython oracles the Dockerfile lists in `ORACLE_PYTHONS`
+   with `uv python install`, so `python3.12` to `python3.15` are on
+   `PATH`, and `cargo-nextest` at the version of `CARGO_NEXTEST_VERSION`.
+3. Run a target without the container: `make EXEC= test`.
+
+The `macos-15` job of CI does the same on every pull request.
 
 ## 3. Everyday commands
 
@@ -206,10 +225,11 @@ to GitHub Pages.
 | `ci.yml` | Quality gate and package | Every pull request | `make check`, then `make dist`; for a pull request of documents alone, the light run below |
 | `ci.yml` | Miri and fuzzing | On demand, before a release | `make miri`, then `FUZZ_SECONDS=1800 make fuzz`; the inputs that crashed are kept as an artifact |
 | `ci.yml` | AArch64 tests | Every pull request but one of documents alone, on an `ubuntu-24.04-arm` runner | `make test`: every unit, integration and conformance test natively, and the conformance suite built for x86-64 under `qemu-x86_64` (NFR-16), then `make dist`; built with line tables for debug information, since the runner has 14 GB of disk |
+| `ci.yml` | macOS tests | Every pull request but one of documents alone, on a `macos-15` runner | `make EXEC= test` natively, with the LLVM `llvm.lock` pins from the local action `pinned-llvm` and the CPython oracles installed with uv (NFR-17, ADR-0055), then `make EXEC= dist`; the sanitizer run and the other architecture under qemu stay on Linux |
 | `ci.yml` | Dependency review | Every pull request | Fails on a new dependency with a known vulnerability |
 | `image-cache.yml` | Dev image | A push to `main` that changes `.devcontainer/`, `rust-toolchain.toml` or the dev image action, for x86-64 and arm64; on demand | Builds the dev image into GitHub's Actions cache, which the jobs below read |
 | `codeql.yml` | Analyze | Every push to `main` that changes more than documents, and weekly | Code scanning of the Rust sources and the workflows, leaving out the test files that `.github/codeql/codeql-config.yml` lists |
-| `release.yml` | Check and build, Build for AArch64 hosts, Publish, then Documentation | A tag `vX.Y.Z` | Section 9 |
+| `release.yml` | Check and build, Build for AArch64 hosts, Build for macOS, Publish, then Documentation | A tag `vX.Y.Z` | Section 9 |
 | `llvm.yml` | Build for each host, then Publish | On demand, once per LLVM version | Section 10 |
 | `pages.yml` | Build the site, then Deploy | Called by `release.yml` once a release is created; a release published by hand; on demand, on a release tag | Builds the site with `scripts/build-docs.sh` on the runner after `astral-sh/setup-uv`, without the dev image, and deploys it to GitHub Pages at <https://typy-lang.org> (DOC-05) |
 
@@ -270,32 +290,36 @@ each release's branch stays on origin and an issue can be traced to it.
 4. `scripts/check-release.sh` checks that the tag names the version and that
    the changelog has a dated section for it, whose text becomes the release
    notes. The job then runs `make dist` for x86-64 hosts, while a job on an
-   `ubuntu-24.04-arm` runner runs it for AArch64 hosts. Neither runs the
-   quality gate again: `main` changes only through pull requests whose latest
+   `ubuntu-24.04-arm` runner runs it for AArch64 Linux hosts and one on a
+   `macos-15` runner runs `make EXEC= dist` for Macs. None runs the quality
+   gate again: `main` changes only through pull requests whose latest
    commit passed it, so the tag's tree has.
 5. A maintainer approves the `release` environment.
-6. The publish job creates the GitHub release with both archives and their
-   SHA-256, using the workflow's short-lived token and no long-lived one.
-   It then downloads them back, checks each SHA-256, unpacks the x86-64
-   archive and runs a program with it; the AArch64 archive ran one on its
-   own runner when it was built.
+6. The publish job creates the GitHub release with the three archives and
+   their SHA-256, using the workflow's short-lived token and no long-lived
+   one. It then downloads them back, checks each SHA-256, unpacks the
+   x86-64 archive and runs a program with it; the AArch64 and macOS
+   archives ran one on their own runners when they were built.
 7. Publishing the release deploys its documentation: the documentation job
    calls `pages.yml`, which builds the site from the tag in strict mode and
    deploys it to <https://typy-lang.org> (DOC-05). A run of `pages.yml`
    started by hand on the tag deploys it again.
 
 `make dist` builds `dist/typy-X.Y.Z-HOST.tar.gz` for the host's triple,
-`x86_64-unknown-linux-gnu` or `aarch64-unknown-linux-gnu`: the
-`typy` executable in `bin/` and a runtime archive for each target in
-`lib/typy/<triple>/`, which is the layout of an installation prefix, with
+`x86_64-unknown-linux-gnu`, `aarch64-unknown-linux-gnu` or
+`aarch64-apple-darwin`: the `typy` executable in `bin/` and a runtime
+archive in `lib/typy/<triple>/` for each target the host builds for, which
+`scripts/host-targets.sh` lists, in the layout of an installation prefix, with
 the licences, the third-party notices, README and changelog. Its
 `licenses/` directory holds the licences of the crates `typy` links, which
 cargo-about lists with `about.toml` and `about.hbs`, of LLVM and of Rust's
 standard library; a crate under a licence `about.toml` does not accept fails
 the build. The tarball is reproducible, so two builds of one commit have the
-same SHA-256. The executable links LLVM statically and needs glibc 2.39 or
-later, `libffi`, `zlib`, `zstd` and `libstdc++`, and a C toolchain to link
-programs.
+same SHA-256; on a Mac, GNU tar's `gtar` writes it. The executable links
+LLVM statically and, on Linux, needs glibc 2.39 or later and `libstdc++`,
+and on macOS 11 or later only `libSystem`, `libc++` and `libiconv`, which
+`scripts/check-executable-needs.sh` checks before the archive is packed,
+and a C toolchain to link programs. LLVM's licence comes from its archive.
 
 A release that breaks compatibility goes out as a release candidate first,
 with a version such as `1.0.0-rc.1`, which the workflow marks as a
@@ -328,6 +352,12 @@ hours, so it runs once per LLVM version, never in a pull request.
    pre-release is never the repository's latest release. The job runs only
    when every build passed, and refuses to replace a release that exists,
    since the archives' bytes are pinned once they are published.
+5. A pull request writes the new version, the release's download address
+   and each host's SHA-256 from the release notes into
+   `.devcontainer/llvm.lock`. The Dockerfile downloads the archive of its
+   architecture, checks it against the lock and unpacks it into
+   `/opt/llvm`, which `LLVM_SYS_231_PREFIX` names, so every dev image built
+   from that commit, a developer's or CI's, links the same LLVM.
 
 To try the build on a machine of your own, put the source archive in an
 empty directory and run the script from there:

@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy detailed design |
-| Version | 2.27 |
+| Version | 2.35 |
 | Status | Approved |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-18 |
@@ -344,7 +344,8 @@ it enforces and its status. `typy explain` reads the same table.
 | `library` | `bool` | `false` | Set by `--lib` through `SettingOverrides::library`: the main file is a module named after its file, and the checker reads its exports from `__all__` (CLI-09, ADR-0044) |
 | `version` | `Option<String>` | `None` | `version` in `typy.toml`, a string whose release `version_release` finds; the version of a library whose module has no `__version__` (CLI-13) |
 | `library_paths` | `Vec<Utf8PathBuf>` | empty | `library-paths`: directories under `root`, checked as `module_paths` are, where the linker looks for C libraries first (FFI-04) |
-| `libraries` | `BTreeMap<String, LibraryLink>` | empty | `[libraries."NAME"]`, each a table of one `link`, `"static"` or `"dynamic"`, for a name of letters, digits and `_.+-` that does not start with `-`; `LibraryLink::linker_name` gives `:NAME` or `:BASE.a` (FFI-04) |
+| `libraries` | `BTreeMap<String, LibraryLink>` | empty | `[libraries."NAME"]`, each a table of one `link`, `"static"` or `"dynamic"`, for a name of letters, digits and `_.+-` that does not start with `-`; `typy_build::library_argument` gives the linker's argument for each target (FFI-04) |
+| `platform` | `Platform` | `Platform::host()` | `Linux` or `MacOs`, the operating system of the build's target, which `Pipeline` sets from the target and `sys.platform` names: `linux` or `darwin` (LIB-22) |
 | `allocator` | `Option<Allocator>` | `None` | The table `[allocator]`: the C functions `allocate`, `reallocate` and `free`, each an identifier of at most 255 characters outside the prefixes `typy_`, `__typy` and `_TY`, all three different, and an optional `library`, a name the linker takes as `-lname` that starts with a letter, a digit or `_` (MEM-08, ADR-0043) |
 
 `ProjectSettings::read(root, overrides)` builds the settings once, when a
@@ -2008,8 +2009,10 @@ aliases, before checking (ADR-0047). It finds the names the module's
 imports give `ctypes` and its members, then reads its statements at
 module level: `NAME = ctypes.CDLL("library")` or
 `ctypes.cdll.LoadLibrary("library")` declares a `DeclaredLibrary`, kept
-by the span of its call, and `NAME.function.argtypes = [...]` and
-`NAME.function.restype = ...` declare a `DeclaredFunction`, whose
+by the span of its call, whose `name` is `None` for `CDLL(None)`, the C
+and maths libraries every program links (FFI-14, ADR-0059), and
+`NAME.function.argtypes = [...]` and `NAME.function.restype = ...`
+declare a `DeclaredFunction`, whose
 `declared` is the end of the later of the two. The assignments to
 `argtypes` and `restype` then leave the module. Each type is a `CData`
 (section 7.5): `CType::from_name` maps each scalar name of `ctypes` to a
@@ -2391,9 +2394,16 @@ counted nor released. `EscapeAnalysis` is planned for 0.4 and
 
 ### 10.1 Types and functions
 
-`TargetTriple` is one of the supported triples. In 0.1 they are
-`x86_64-unknown-linux-gnu` and `x86_64-unknown-linux-musl`. `Target` holds a
-triple, and `Target::host()` returns the triple `typy` was built for.
+`TargetTriple` is one of the supported triples: `x86_64-unknown-linux-gnu`
+and `x86_64-unknown-linux-musl` from 0.1, `aarch64-unknown-linux-gnu` from
+0.6 (ADR-0051), and `aarch64-apple-darwin` from 0.7 (ADR-0055), which LLVM
+is given as `arm64-apple-macosx11.0.0` with the CPU `apple-m1`, so a
+program runs on every Apple silicon Mac from macOS 11. `builds_on(host)`
+holds for a Linux triple on a Linux host and for the macOS triple on a
+macOS host, since linking for macOS needs Apple's SDK; the command line
+refuses any other. `is_macos` chooses the Mach-O steps of linking.
+`Target` holds a triple, and `Target::host()` returns the triple `typy` was
+built for.
 
 `Optimization` is `None`, `Speed` or `Size`, for the three build modes.
 LLVM 23 has no `Oz` pipeline, so `Size` runs the `O2` pipeline with every
@@ -2497,6 +2507,7 @@ code.
 ### 10.6 C calls
 
 `TyirModule::foreign_libraries` names the libraries a program declares,
+`None` for `CDLL(None)`, for which the driver adds nothing to the link,
 and `foreign_functions` holds each `TyirForeignFunction`: its symbol, its
 library and the `CType` of each parameter and of the result, from
 `Int8` to `UInt64`, `Float`, `Double`, `Bool`, `CharPointer`,
@@ -2512,9 +2523,13 @@ calls the function, which the text form shows as
 Code generation declares the function with the C types, an integer and a
 `bool` as a 64-bit word widened by its sign or by zeros, as `libffi`
 passes it for CPython, and calls it through its address, so a name the
-module already has with another type still verifies. An integer argument
-is `typy_rt_int_low_bits` of its word, wrapped to its width and widened
-again; a `float` narrows for `c_float`; `bytes` passes
+module already has with another type still verifies. On Apple's arm64,
+`GeneralRegisters` counts `x0` to `x7` as the arguments take them, and a
+structure that no longer fits takes the rest; an integer or `bool`
+argument past them passes at its C width, marked `signext` or `zeroext`
+below 32 bits, where `libffi` puts it on that stack (FFI-13, ADR-0058).
+An integer argument is `typy_rt_int_low_bits` of its word, wrapped to its
+width and widened again; a `float` narrows for `c_float`; `bytes` passes
 `typy_rt_bytes_data`, its own buffer, which a zero ends; and an `int` for
 `c_void_p` becomes an address. A result of 32 bits or fewer becomes an
 inline `int` word in place; `int64_t`, `uint64_t`, `char *` and `void *`
@@ -2567,7 +2582,7 @@ names. `LibraryEmitter` adds to the object (ADR-0044):
 | --- | --- |
 | Constructor | `typy.library.load`, internal, in `llvm.global_ctors` at priority 65535: calls `typy_rt_library_load(__typy_main)` |
 | Destructor | `typy.library.unload` in `llvm.global_dtors`: calls `typy_rt_library_unload()` |
-| Export | A function with the export's name and C types, a `bool` as a `zeroext i8`: calls `typy_rt_library_enter()`, converts each `int64_t` with `typy_rt_int_from_int64` and each `bool` by a test against zero, calls the program's function, drops the converted words, ends the process through the no-return `typy_rt_library_raised` when the call raised, converts an `int` result with `typy_rt_int_into_int64`, which may raise `OverflowError`, calls `typy_rt_library_leave()` and returns |
+| Export | A function with the export's name and C types, a `bool` as an `i1` that is `zeroext` on x86-64 and not on AArch64 Linux, as clang lowers `_Bool` (ADR-0058): calls `typy_rt_library_enter()`, converts each `int64_t` with `typy_rt_int_from_int64`, calls the program's function, drops the converted words, ends the process through the no-return `typy_rt_library_raised` when the call raised, converts an `int` result with `typy_rt_int_into_int64`, which may raise `OverflowError`, calls `typy_rt_library_leave()` and returns |
 
 An export whose name the object already has is an internal error, which
 the checker's rules prevent. `c_header(module)` writes the header: a guard
@@ -2622,21 +2637,42 @@ as a subprocess with an argument list and no shell:
 
 | Target | Program | Arguments |
 | --- | --- | --- |
-| `x86_64-unknown-linux-gnu` | `cc` | `-o TEMP OBJECT -Wl,--push-state,--no-as-needed -lm -Wl,--pop-state RUNTIME_ARCHIVE [-lLIBRARY] -lm -Wl,--gc-sections` |
+| `x86_64-unknown-linux-gnu` | `cc` | `-o TEMP OBJECT -Wl,--push-state,--no-as-needed -lm -Wl,--pop-state RUNTIME_ARCHIVE [LIBRARY] -lm -Wl,--gc-sections` |
 | `x86_64-unknown-linux-musl` | `musl-gcc` | `-static`, then the same |
+| `aarch64-apple-darwin` | `cc` | `-o WORK/NAME -arch arm64 -mmacosx-version-min=11.0 WORK/program.o -lm RUNTIME_ARCHIVE [LIBRARY] -Wl,-dead_strip`, then `-Wl,-S` for a release or `-Wl,-oso_prefix,WORK/` for a debug build (ADR-0056) |
 
-`Linker::with_libraries(libraries)` adds `-l` and each library after the
-runtime archive, and `with_library_paths(paths)` adds `-L` and each path
-before the object. The driver passes the allocator's library (MEM-08),
-and for each library a `ctypes` declaration names its
-`LibraryLink::linker_name`, `-l:NAME` or `-l:BASE.a` as `typy.toml` says,
-with the directories of `library-paths` (FFI-01, FFI-04).
-`LibraryLayout::beside(directory, kind, name, release)` names a library's
-files as ADR-0045 decides: `libNAME.so.X.Y` with the soname `libNAME.so.X`
-and links of that name and `libNAME.so`, or `libNAME.X.Y.a` with a link
-`libNAME.a`, and without a release `libNAME.so`, whose soname is its name,
-or `libNAME.a`. `LibraryLayout::at(path, kind)` is the layout of `-o
-PATH`: the file alone, a shared library's soname its file name.
+`Linker::with_libraries(libraries)` adds each argument that links a
+library after the runtime archive, and `with_library_paths(paths)` adds
+`-L` and each path before the object. The driver passes `-l` and the
+allocator's library (MEM-08), and for each library a `ctypes` declaration
+names `library_argument(target, library, statically, paths)`, as
+`typy.toml` says, with the directories of `library-paths` (FFI-01,
+FFI-04): for GNU ld `-l:NAME` or `-l:BASE.a`, and for Apple's linker
+`-lNAME` for `libNAME.dylib`, or the path of `BASE.a` in the first
+library path that holds it, since Apple's linker has no `-l:`.
+`LibraryLayout::beside(directory, kind, name, release, target)` names a
+library's files. For Linux, as ADR-0045 decides: `libNAME.so.X.Y` with the
+soname `libNAME.so.X` and links of that name and `libNAME.so`, or
+`libNAME.X.Y.a` with a link `libNAME.a`, and without a release
+`libNAME.so`, whose soname is its name, or `libNAME.a`. For macOS, as
+ADR-0056 decides: `libNAME.X.dylib`, its own install name, with the
+`versions` `X.0` and `X.Y` and a link `libNAME.dylib`, or `libNAME.dylib`
+without a release, and `libNAME.a`. `LibraryLayout::at(path, kind)` is the
+layout of `-o PATH`: the file alone, a shared library's soname its file
+name.
+
+On macOS, `mach_o` links each output in a work directory beside it and
+renames it into place, since nothing changes a binary after the linker
+signed it. The linker signs a binary ad hoc under its file name and records
+the object's path and time in the debug map, so none of them may vary
+(NFR-06): an executable is linked as `program`, whatever `-o` names it, and
+a library under its layout's name; the work directory is named by its
+canonical path, which `-oso_prefix` takes off, so the map records
+`program.o`; and the object is dated 1970. A debug build of an executable
+then runs `dsymutil --oso-prepend-path=WORK` on the renamed executable,
+which copies the debug information of the object, deleted with the work
+directory, into `NAME.dSYM` beside it. Every tool runs with
+`ZERO_AR_DATE=1`, so Apple's linker and `libtool` write no times.
 `Linker::link_library(object, layout, kind, exports)` builds the library in
 a temporary directory beside it, renames it into place when every step
 succeeded, then makes each link in the temporary directory and renames it
@@ -2646,6 +2682,8 @@ over the name it replaces (ADR-0044):
 | --- | --- |
 | `Static` | `cc -r -nostdlib -o library.o program.o RUNTIME_ARCHIVE`; `objcopy --keep-global-symbols=exports.txt library.o`, with `--strip-debug` for a release; `ar rcsD library.a library.o`, whose `D` writes no times or owners |
 | `Shared` | `cc -shared -o library.so -Wl,-soname,SONAME` with the arguments an executable's link has after its output, and `-Wl,--version-script=exports.map`, which makes the exports global and every other symbol local |
+| `Static`, macOS | `cc -arch arm64 -mmacosx-version-min=11.0 -r -nostdlib -Wl,-exported_symbols_list,exports.txt -o library.o program.o RUNTIME_ARCHIVE`, with `-Wl,-S` for a release, which leaves every symbol but the exports local; `libtool -static -D -o NAME library.o` |
+| `Shared`, macOS | `cc -dynamiclib -o NAME -Wl,-install_name,INSTALL_NAME`, `-Wl,-compatibility_version,X.0 -Wl,-current_version,X.Y` for a release, `-Wl,-exported_symbols_list,exports.txt`, and the arguments an executable's link has after its output; each export is listed with the underscore Mach-O gives a C symbol |
 
 `tool::run_tool` runs each program, with E0701 when it is missing and
 E0702 when it fails, as for an executable.
@@ -2684,7 +2722,7 @@ process. Each method returns a `Success`, the `Outcome` with the
 
 | Method | Behaviour |
 | --- | --- |
-| `check(main)` | Loads and checks the program, and returns `Outcome::Checked` with its `Sources` (CLI-03) |
+| `check(main, target)` | Loads and checks the program for the target, whose operating system `ProjectSettings::platform` takes, and returns `Outcome::Checked` with its `Sources` (CLI-03, LIB-22) |
 | `run(request)` with `emit` set | Runs the stages up to that stage and returns `Outcome::Emitted` with an `Emission`: `Text` for every stage but `obj`, `Bytes` for `obj` (CLI-04). `ast` needs only a program that parses; every later stage needs one that checks |
 | `run(request)` without `emit` | Opens the runtime archive, then loads, checks, lowers, generates the object and links it, and returns `Outcome::Executable` with the `Artifact` |
 | `run(request)` with `library` set | Loads the main file as a library, so its module is named after its file, then links with `link_library` into the layout of `-o`, or `LibraryLayout::beside` the main file with the module's name and release, and writes beside the library the C header `NAME.h`, and the binding `NAME_binding.py` and its stub `NAME_binding.pyi`, which load the soname of the shared library of the build's release, also for a static build (CLI-09, CLI-13, FFI-05, FFI-08) |
@@ -2776,7 +2814,8 @@ installed `typy` finds `<prefix>/lib/typy/` and a `typy` in
 | `text_file::disk` (descriptors) | `typy_rt_open_descriptor` checks a descriptor as CPython's `FileIO` does: past a C `int` is `TypeError: expected str, bytes or os.PathLike object, not int`, negative is `ValueError: negative file descriptor`, `fstat` failing is its `OSError`, and a directory is `IsADirectoryError` naming the number. The file is flagged `DESCRIPTOR`, so its `repr` shows `name=3`, and `KEEP_OPEN` for `closefd=False`, so `close` leaves the descriptor open; `typy_rt_open` refuses `closefd=False` with `ValueError: Cannot use closefd=False with file name` before it opens the path |
 | `text_file::binary` | Binary files, flagged `BINARY`, and `RAW` for a `FileIO` (ADR-0031). A buffered file reads through a `Reader` of `latin-1` with `read_bytes`, and writes through its `Writer` with `add`; a `BufferedRandom` moves the descriptor back by what the reader holds before a write, so it writes where `tell` says, and `tell` counts what the writer holds without writing it out, as CPython's buffered layer does. A `FileIO` calls the descriptor for each operation and reads a line a byte at a time. Each operation refuses in CPython's order and words: a buffered file checks that it can read or write before it checks that it is open, and names the operation (`read of closed file`, `seek of closed file`); a `FileIO` checks that it is open first. `seek` of a buffered file allows `whence` 0 to 4 and refuses an offset past an `i64` with `ValueError`; a `FileIO` gives `whence` to `lseek` and refuses such an offset with `OverflowError` |
 | `text_file::newline` | `Newline::of` reads `newline`: `None` is `Universal`, `""` `Untranslated`, and `"\n"`, `"\r"` and `"\r\n"` end lines there; any other value raises `ValueError: illegal newline value: x`. `typy_rt_open` checks `buffering` as a C `int` before opening and checks `buffering=0` and `newline` after, closing the descriptor, as CPython opens the file before it checks them |
-| `text_file::os_error` | `os_error(errno, filename)` gives the `OSError` subclass CPython's errno table names, written as `[Errno 2] No such file or directory: 'name'` with the `repr` of the file name, and with the arguments `(errno, strerror)` for its `repr`. The texts are glibc's, in a table `make errno-texts` writes, so both targets print the oracle's words |
+| `text_file::os_error` | `os_error(errno, filename)` gives the `OSError` subclass CPython's errno table names for the system's numbers, written as `[Errno 2] No such file or directory: 'name'` with the `repr` of the file name, and with the arguments `(errno, strerror)` for its `repr`. On Linux the texts are glibc's, in a table `make errno-texts` writes, so the glibc and musl targets print the oracle's words; on macOS they are those the system's `strerror` gives, as CPython's (EXC-19, ADR-0057) |
+| `libc` | Declares the C functions the runtime calls, and takes the `errno` accessor and the constants that differ between systems from `libc/linux.rs` or `libc/macos.rs`, chosen by `target_os`: the flags of `open`, the place of `st_mode` in `struct stat`, `RLIM_INFINITY` and the error numbers of the `OSError` subclasses (ADR-0057) |
 | `text_file::os_error` (programs) | `typy_rt_os_error_new` makes an `OSError` the program built with two to five arguments of any type: `OSError` itself becomes the subclass for `errno` when it is an `int` that fits a word or a `bool`. `typy_rt_os_error_str`, the `str` of every `OSError` class, writes the runtime's text, or for arguments of two to five `[Errno N] strerror` with `str` of each, then a colon and the `repr` of `filename`, and an arrow and the `repr` of `filename2`, when they are not `None`, raising what a `str` raises, as CPython's `OSError_str` does; other arguments are written as `BaseException` writes them (ADR-0035). `args`, `str` and `repr` show only `errno` and `strerror` when a `filename` other than `None` was given, as CPython does; `exit_code` reads arguments without that rule, so a program links no `OSError` code for its exit status (EXC-14, NFR-02) |
 | `format::percent::dynamic` | `typy_rt_percent_dynamic` formats `format % values` when the format is not a literal or the values are a `tuple[T, ...]` (LIB-11): it reads the format with the grammar of CPython's `unicode_format_arg_parse`, takes the values from a tuple of their layout, from one value, or from the list that holds a `tuple[T, ...]`, reads a key from a dict, converts each value by its kind with the code of the literal path, and raises CPython 3.15's errors |
 | `exception::part` | `typy_rt_exception_part_text`, `typy_rt_exception_args_length`, `typy_rt_exception_part_truth` and `typy_rt_exception_part_equal` read `args` or `code` from an exception: `args` is the tuple of its arguments, or of the runtime's text, and `code` `None`, the one argument as the value it holds, or the tuple of several. `==` takes the other value as a tuple of one, and `values_equal` compares an optional or a union with a value of another type as the value it holds (ADR-0030). `typy_rt_exception_arguments_match(exception, layout)` says whether `args` is laid out as a member of the union of tuples `args` has, and `typy_rt_exception_arguments_address` gives the address of its items: the arguments, or the field that holds the runtime's text (EXC-15, ADR-0034) |
@@ -2792,7 +2831,7 @@ installed `typy` finds `<prefix>/lib/typy/` and a `typy` in
 | `module` | A module object is an immortal static object codegen emits for each module: header with the type ID 15, then its name and its path from the project root as `str` objects. The type `typy_rt_type_module` writes it `<module 'm' from 'm.py'>` (OI-20). `typy_rt_module_attribute_error` and `typy_rt_module_import_error` raise CPython's `module 'm' has no attribute 'x'` and `cannot import name 'x' from 'm' (m.py)`; while the module initialises they add CPython 3.13 to 3.15's note `(consider renaming 'm.py' if it has the same name as a library you intended to import)`, the newest oracle's wording (OI-14). `typy_rt_name_error` raises `name 'x' is not defined` |
 | `range` | `typy_rt_range_check_step` raises `ValueError: range() arg 3 must not be zero`, and `typy_rt_range_last(start, stop, step)` returns `start + (n - 1) * step` for the `n` values of the range, by CPython's `compute_range_length`, on `int` words of any size: the last value, or `start - step` for an empty range. `typy_rt_range_new` makes a range value, with the same `ValueError` for a zero step; `_length` raises `OverflowError: Python int too large to convert to C ssize_t` for a length that is not inline, as `len()` does; `_bound` gives the start, stop or step; `_get` raises `IndexError: range object index out of range`; `_slice` builds a range from the slice's indices, as CPython's `compute_slice` does; `_contains` tests an `int` by arithmetic without stepping; `_equal` compares as `==` does. A slice of a range whose length passes `sys.maxsize` raises `OverflowError`, where CPython computes it with large integers |
 | `zip` | `typy_rt_zip_unequal(index, longer)` raises CPython's `ValueError` for a strict `zip`: `zip() argument 2 is shorter than argument 1`, or `zip() argument 3 is longer than arguments 1-2` |
-| `stack` | The check at the start of recursive functions reads the stack pointer register and compares it with the recorded limit; the register is read rather than the address of a local, because a sanitizer may keep locals on a separate fake stack. The limit leaves 64 KiB of stack unused; past it the check raises `RecursionError: maximum recursion depth exceeded` |
+| `stack` | The check at the start of recursive functions reads the stack pointer register and compares it with the recorded limit; the register is read rather than the address of a local, because a sanitizer may keep locals on a separate fake stack. The limit leaves 64 KiB of stack unused; past it the check raises `RecursionError: maximum recursion depth exceeded`. On Linux the limit is the stack pointer at the start less `RLIMIT_STACK`, which is the size of a new thread's stack too; on macOS it is the bottom of the calling thread's own stack from `pthread_get_stackaddr_np` and `pthread_get_stacksize_np`, since a thread a C host creates there has 512 KiB where the main thread has 8 MiB (FUN-02) |
 
 An `int` word that is not inline is the address of a large integer. The
 runtime makes it with `expose_provenance` and turns it back into a pointer
@@ -2840,6 +2879,7 @@ print(2 ** n)
 | `typy-expect` | `accepted`, or `rejected CODE at LINE:COLUMN` |
 | `typy-python` | Optional; the test's Python floor, `3.12` when absent |
 | `typy-output` | Optional; `architecture-dependent` for a test whose output CPython gives otherwise on each architecture, which a run built for another architecture than the oracle's skips and reports as skipped (NFR-16) |
+| `typy-system` | Optional; `linux` or `macos` for a test that names a library only that system has, which a run built for the other system skips and reports as skipped (NFR-17) |
 
 The file name starts with the first requirement ID, such as
 `EXP-03_float_division_by_zero_raises.py`. A test of several modules is a
@@ -2863,7 +2903,7 @@ it because the exponent is a variable.
 | `observation` | `Observation::of(command)` runs a program with no standard input, reads both pipes on their own threads, and keeps standard output, the exit status and the last line of standard error; a program that runs longer than 60 seconds is stopped, a limit set far above the run time of any conformance program so that an oracle slowed by a loaded machine is not taken for a hang |
 | `oracle` | Runs `python3.X -E -s -B -X utf8 -W ignore::SyntaxWarning FILE` for each oracle version from the floor up, each in an empty working directory of its own, so a test that writes files writes nothing into the test tree and meets no other run's files; the file's directory still leads the module path. It removes that directory's absolute path from the output |
 | `subject` | Builds an accepted test in debug and release mode into a temporary directory and runs each build in an empty working directory of its own, as the oracle runs, and with `Suite::with_sanitizers` also links its debug object file with `cc -fsanitize=address` and runs it with leak detection, where a report ends the run with status 86; checks a rejected test with `Pipeline::check`, which passes when exactly one diagnostic is reported, with that code at that line and column |
-| `verdict` | `Pass`, `Fail` with the reason, `Invalid` when the oracles disagree, an oracle cannot run the file, or the header is not valid (STD-03), or `Skipped` with the reason when a run built for another architecture than the oracle's meets a test marked `architecture-dependent` (NFR-16) |
+| `verdict` | `Pass`, `Fail` with the reason, `Invalid` when the oracles disagree, an oracle cannot run the file, or the header is not valid (STD-03), or `Skipped` with the reason when a run built for another architecture than the oracle's meets a test marked `architecture-dependent` (NFR-16), or a run for one system meets a test of the other (NFR-17) |
 | `suite` | `Suite::run(root)` judges every `.py` file under `root`, as many at once as the machine has cores, and returns a `Report` with each verdict and, for each requirement ID, how many accepted and rejected tests name it |
 
 The suite runs as the tests

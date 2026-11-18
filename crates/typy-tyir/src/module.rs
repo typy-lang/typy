@@ -67,8 +67,9 @@ pub struct TyirModule {
     /// (CLI-09).
     pub library: Option<crate::library::TyirLibrary>,
     /// The C libraries the program's `ctypes` declarations load, by name, which the build
-    /// links (FFI-01).
-    pub foreign_libraries: Vec<String>,
+    /// links, or `None` for `CDLL(None)`, the C and maths libraries every program links
+    /// (FFI-01, FFI-14).
+    pub foreign_libraries: Vec<Option<String>>,
     /// The C functions the program calls, indexed by `Operation::CallForeign` (FFI-02).
     pub foreign_functions: Vec<crate::library::TyirForeignFunction>,
     /// The `ctypes` classes the program uses, indexed by `Constant::CDataClass` and

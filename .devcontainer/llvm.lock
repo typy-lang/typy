@@ -1,0 +1,8 @@
+# The LLVM that typy-codegen links (ADR-0054): the archive of each host in
+# the release `llvm-23.1.6`, which llvm.yml built from LLVM's signed sources,
+# and its SHA-256. A new LLVM is a new release of llvm.yml and a change here.
+version 23.1.6
+release https://github.com/typy-lang/typy/releases/download/llvm-23.1.6
+x86_64-unknown-linux-gnu 2d483a63b9401068364e55b77720b1f3a729338992d1efc7e20d6f76c5ca154b
+aarch64-unknown-linux-gnu 9f55cb67230b0f4cc296552daa9053a7f3e46d4f0357c67ef532fd80ec5315fc
+aarch64-apple-darwin 4847df8b216a02a50b2c064d7e5fcf4cbf18eb2a6988242f680a5ed4d2d904ac

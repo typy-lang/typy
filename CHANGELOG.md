@@ -6,6 +6,47 @@ All notable changes to TyPy are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-11-18
+
+### Added
+
+- macOS 11 or later on Apple silicon: `typy` runs there and builds
+  programs and libraries for `aarch64-apple-darwin`, which run on every
+  Apple silicon Mac from macOS 11 (CLI-15, ADR-0055). A Mac builds for
+  macOS alone. Programs link with Apple's linker; a debug build writes
+  `NAME.dSYM` beside the program, and a library is named as macOS names
+  libraries, `libNAME.X.dylib` with the link `libNAME.dylib`, and
+  `libNAME.a` (CLI-16, ADR-0056). `sys.platform` is `"darwin"` (LIB-22),
+  an `OSError` takes macOS's numbers and texts (EXC-19, ADR-0057), and a C
+  call passes its arguments as Apple's arm64 convention does (FFI-13,
+  ADR-0058). Each release has a third archive,
+  `typy-X.Y.Z-aarch64-apple-darwin.tar.gz`, signed ad hoc and not
+  notarized; [Using TyPy on macOS](https://typy-lang.org/using/macos/)
+  shows how to clear the quarantine a browser download carries.
+- `ctypes.CDLL(None)` and `ctypes.cdll.LoadLibrary(None)` declare the C
+  library and the C maths library, which every program links, so a
+  program that calls only their functions, such as `abs`, `strlen` or
+  `cbrt`, builds and runs on every system, as under CPython (FFI-14,
+  ADR-0059).
+
+### Changed
+
+- The compiler links LLVM 23.1.6 as TyPy builds it from LLVM's signed
+  sources, the same bytes in every build of one commit, so a release
+  rebuilt from its tag matches the published archive (ADR-0054). It no
+  longer needs `libffi`, `zlib` or `zstd`: glibc 2.39 or later and
+  `libstdc++` are all `typy` needs, which the release build checks.
+- `--target aarch64-apple-darwin` on a Linux host is a usage error that
+  says the triple is built on macOS only, and lists the Linux targets
+  (CLI-08).
+
+### Fixed
+
+- A function a library built with `--lib` exports takes and returns a
+  `bool` as clang passes a C `_Bool` on the target. On AArch64 Linux it no
+  longer assumes that the C caller extended the argument, which that
+  calling convention does not ask for (ADR-0058).
+
 ## [0.6.0] - 2026-11-18
 
 ### Added
@@ -1169,7 +1210,8 @@ compiler needs glibc 2.39 or later and a C toolchain.
   non-ASCII text, checks that every requirement has a row in the test plan,
   and checks that every diagram is rendered from its source.
 
-[Unreleased]: https://github.com/typy-lang/typy/compare/v0.6.0...HEAD
+[Unreleased]: https://github.com/typy-lang/typy/compare/v0.7.0...HEAD
+[0.7.0]: https://github.com/typy-lang/typy/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/typy-lang/typy/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/typy-lang/typy/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/typy-lang/typy/compare/v0.3.0...v0.4.0

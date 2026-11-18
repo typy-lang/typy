@@ -2,6 +2,7 @@
 
 use camino::{Utf8Path, Utf8PathBuf};
 use typy_build::{ArtifactKind, BuildRequest, EmitStage};
+use typy_codegen::{Target, TargetTriple};
 use typy_diagnostics::SourceLookup;
 use typy_driver::{Emission, Failure, Outcome, Pipeline, Sources};
 
@@ -51,7 +52,10 @@ const SOURCE: &str = "s = \"a\"\ns = s + \"b\"\nprint(s, 1 + 2)\n";
 #[test]
 fn a_correct_program_checks() {
     let (_guard, main) = program(SOURCE);
-    match pipeline().check(&main).map(|success| success.outcome) {
+    match pipeline()
+        .check(&main, Target::host())
+        .map(|success| success.outcome)
+    {
         Ok(Outcome::Checked(Sources::Project(project))) => {
             assert_eq!(project.path(typy_diagnostics::FileId(0)), "app.py");
         }
@@ -62,7 +66,7 @@ fn a_correct_program_checks() {
 #[test]
 fn a_wrong_program_fails_with_its_diagnostics_and_files() {
     let (_guard, main) = program("x: int = \"a\"\n");
-    let failure = pipeline().check(&main).unwrap_err();
+    let failure = pipeline().check(&main, Target::host()).unwrap_err();
     assert_eq!(codes(&failure), ["E0402"]);
     assert!(matches!(failure.sources, Sources::Project(_)));
 }
@@ -71,7 +75,7 @@ fn a_wrong_program_fails_with_its_diagnostics_and_files() {
 fn a_missing_main_file_fails_with_the_files_it_tried() {
     let (_guard, main) = program("");
     let failure = pipeline()
-        .check(&main.with_file_name("absent.py"))
+        .check(&main.with_file_name("absent.py"), Target::host())
         .unwrap_err();
     assert_eq!(codes(&failure), ["E0105"]);
     assert!(matches!(failure.sources, Sources::Unloaded(_)));
@@ -103,7 +107,11 @@ fn each_stage_writes_its_own_form() {
     assert!(
         emit(&main, EmitStage::Obj)
             .as_bytes()
-            .starts_with(b"\x7fELF")
+            .starts_with(if cfg!(target_os = "macos") {
+                b"\xcf\xfa\xed\xfe"
+            } else {
+                b"\x7fELF"
+            })
     );
 }
 
@@ -188,4 +196,24 @@ fn a_class_with_bool_fills_its_truth_slot() {
     ));
     let ir = text(emit(&main, EmitStage::LlvmIr));
     assert!(ir.contains("typy.class0.truth"), "{ir}");
+}
+
+#[test]
+fn lib_22_sys_platform_names_the_operating_system_of_each_target() {
+    let (_guard, main) = program("import sys\nprint(sys.platform)\n");
+    for triple in TargetTriple::ALL {
+        let request = BuildRequest::new(&main)
+            .unwrap()
+            .with_emit(EmitStage::Tyir)
+            .with_target(Target { triple });
+        let tyir = match pipeline().run(&request).map(|success| success.outcome) {
+            Ok(Outcome::Emitted(emission)) => text(emission),
+            other => panic!("{triple}: {other:?}"),
+        };
+        let platform = if triple.is_macos() { "darwin" } else { "linux" };
+        assert!(
+            tyir.contains(&format!("= \"{platform}\"")),
+            "{triple}: {tyir}"
+        );
+    }
 }

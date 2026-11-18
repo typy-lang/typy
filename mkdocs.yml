@@ -2,7 +2,7 @@
 # the Markdown under docs/ (DOC-05, ADR-0050). Every setting here is one that
 # Material for MkDocs 9.8 also reads, so either tool builds the site from
 # this file. scripts/build-docs.sh builds it in strict mode into site/.
-site_name: TyPy 0.6 documentation
+site_name: TyPy 0.7 documentation
 site_url: https://typy-lang.org/
 site_description: >-
   TyPy compiles a strict, typed subset of standard Python ahead of time to
@@ -85,6 +85,7 @@ nav:
   - Home: index.md
   - What's new:
       - whatsnew/index.md
+      - What's new in TyPy 0.7: whatsnew/0.7.md
       - What's new in TyPy 0.6: whatsnew/0.6.md
       - What's new in TyPy 0.5: whatsnew/0.5.md
       - Changelog: whatsnew/changelog.md
@@ -109,6 +110,7 @@ nav:
       - Memory: reference/memory.md
   - Setup and usage:
       - Command line: using/command-line.md
+      - Using TyPy on macOS: using/macos.md
   - Extending and embedding:
       - C interoperability: extending/c-interop.md
   - Diagnostics:
@@ -181,6 +183,7 @@ nav:
           - adr/0056-link-for-mach-o-with-apples-linker-and-name-libraries-as-macos-does.md
           - adr/0057-give-the-runtime-each-systems-c-constants-and-macos-its-own-error-texts.md
           - adr/0058-pass-c-arguments-as-libffi-passes-them-on-every-target.md
+          - adr/0059-link-nothing-more-for-ctypes-cdll-of-none.md
       - Detailed design: design/detailed-design.md
       - Test plan: testing/test-plan.md
       - Benchmark report: testing/benchmark-report.md

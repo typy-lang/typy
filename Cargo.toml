@@ -17,7 +17,7 @@ members = [
 ]
 
 [workspace.package]
-version = "0.6.0"
+version = "0.7.0"
 edition = "2024"
 rust-version = "1.99"
 license = "MIT OR Apache-2.0"
@@ -41,8 +41,10 @@ typy-codegen = { path = "crates/typy-codegen" }
 typy-build = { path = "crates/typy-build" }
 typy-driver = { path = "crates/typy-driver" }
 typy-lower = { path = "crates/typy-lower" }
-# One LLVM major version per TyPy release (C-03, ADR-0005).
-inkwell = { version = "=0.11.0", default-features = false, features = ["llvm23-1", "target-x86", "target-aarch64"] }
+# One LLVM major version per TyPy release (C-03, ADR-0005). TyPy never runs
+# LLVM's interpreter, and the LLVM it builds has no libffi (ADR-0054), so
+# inkwell does not link libffi.
+inkwell = { version = "=0.11.0", default-features = false, features = ["llvm23-1", "target-x86", "target-aarch64", "no-libffi-linking"] }
 # The parser has no stability promise, so it is pinned to one exact version
 # and upgraded on purpose (C-02, ADR-0005).
 ruff_python_ast = "=0.0.20"

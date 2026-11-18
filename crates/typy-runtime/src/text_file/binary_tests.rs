@@ -100,7 +100,10 @@ fn a_buffered_writer_writes_bytes_and_seeks_from_anywhere() {
     assert_eq!(tell(file), Ok(11));
     assert_eq!(seek(file, -2, 1), Ok(9));
     assert_eq!(seek(file, -1, 2), Ok(10));
-    assert_eq!(seek(file, 0, 3), Ok(0));
+    // `SEEK_DATA`, the first data at or after the offset, is 3 on Linux and 4 on macOS,
+    // whose 3 is `SEEK_HOLE`; CPython passes either number to `lseek`.
+    let seek_data = if cfg!(target_os = "macos") { 4 } else { 3 };
+    assert_eq!(seek(file, 0, seek_data), Ok(0));
     assert_eq!(
         seek(file, -100, 1),
         error("OSError", "[Errno 22] Invalid argument")
@@ -343,7 +346,9 @@ fn a_seek_past_a_c_int_or_an_offset_raises_as_cpythons_class_does() {
     }
 }
 
+// `/dev/full`, which refuses every write, is Linux's; macOS has no such device.
 #[test]
+#[cfg(target_os = "linux")]
 #[cfg_attr(miri, ignore = "Miri does not open files without disabling isolation")]
 fn a_write_the_device_refuses_fails_the_next_operation_that_writes_it_out() {
     let scratch = Scratch::new("binary-full");
