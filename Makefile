@@ -12,7 +12,7 @@ DIAGRAMS := $(filter-out docs/diagrams/style.puml,$(wildcard docs/diagrams/*.pum
 MARKDOWN := "**/*.md" "\#.tmp/**" "\#target/**" "\#dist/**" "\#site/**"
 
 
-.PHONY: dev image shell runtime fmt fmt-check lint type test coverage docs docs-lint ascii-check traceability test-int test-e2e test-all \
+.PHONY: dev image shell runtime fmt fmt-check lint type test coverage sweep docs docs-lint ascii-check traceability test-int test-e2e test-all \
 	build dist bless bench-peers bench-compare coverage-branches miri fuzz runtime-size diagrams diagrams-check unicode-tables unicode-tables-check format-cases format-cases-check stdlib-names stdlib-names-check errno-texts errno-texts-check mutants mutants-package bench check hooks clean
 
 dev: ## Start the dev service, building its image the first time
@@ -61,6 +61,9 @@ coverage: build ## Run the tests with coverage; fail below 95 percent of lines (
 
 coverage-branches: build ## Measure line and branch coverage with nightly; fail below 95 percent of either (NFR-11)
 	@$(EXEC) scripts/coverage-branches.sh
+
+sweep: dev ## Delete the build outputs Cargo keeps but no build uses: older copies of each crate and test program, and caches, untouched for 12 hours
+	@$(EXEC) python3.15 scripts/sweep.py
 
 docs-lint: dev ## Lint every Markdown file with markdownlint-cli2
 	@$(EXEC) markdownlint-cli2 $(MARKDOWN)
@@ -145,7 +148,7 @@ errno-texts: dev ## Write the runtime's table of glibc's error texts, which OSEr
 errno-texts-check: dev ## Fail when the committed table of error texts differs from glibc's
 	@$(EXEC) python3.15 scripts/generate-errno-texts.py --check
 
-check: fmt-check lint coverage-branches docs-lint docs ascii-check traceability diagrams-check unicode-tables-check format-cases-check stdlib-names-check errno-texts-check runtime-size ## Run the whole quality gate
+check: sweep fmt-check lint coverage-branches docs-lint docs ascii-check traceability diagrams-check unicode-tables-check format-cases-check stdlib-names-check errno-texts-check runtime-size ## Run the whole quality gate
 
 hooks: ## Use the hooks in .githooks for this clone
 	git config core.hooksPath .githooks

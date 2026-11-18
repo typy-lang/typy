@@ -62,7 +62,7 @@ Container". VS Code attaches to the same `dev` service.
 | `make bench` | Builds the compiler in release mode and times it on generated 10,000-line projects, in one file and in 200 modules, against the budgets of NFR-04, NFR-05 and NFR-14, with a check that checking time grows linearly with the modules |
 | `make bench-peers` | Downloads, once, the languages the cross-language benchmark compares with TyPy that the image lacks, about 0.5 GB: Go 1.27.4, the Temurin JDK 25.0.5, PyPy 3.11 v7.3.23 and Codon 0.20.6 from their release archives, and mypyc, Cython and Nuitka into a CPython 3.14 environment from `tests/bench/peers/requirements.txt`. Each archive is checked against the sha256 its project publishes and each wheel against its hash; everything goes into the `bench-tools` volume, `/var/cache/typy/bench`, and a tool already there is kept |
 | `make stdlib-names` | Writes `crates/typy-source/src/stdlib_names.rs`, the standard library module names of CPython 3.12 to 3.15, which the loader leaves to the checker (LIB-08); `make check` runs `make stdlib-names-check` |
-| `make check` | Runs the whole quality gate: formatting, Clippy, the tests with line and branch coverage, the five documentation checks below, the Unicode table check and the runtime size check |
+| `make check` | Runs the sweep below, then the whole quality gate: formatting, Clippy, the tests with line and branch coverage, the five documentation checks below, the Unicode table check and the runtime size check |
 | `make fmt` | Formats the Rust code |
 | `make lint` | Runs Clippy on every crate and test, with warnings as errors |
 | `make type` | Type checks every crate and test |
@@ -72,6 +72,7 @@ Container". VS Code attaches to the same `dev` service.
 | `make test-int` | Runs the integration tests: the conformance suite and its sanitizer run, the golden files and the pipeline |
 | `make test-e2e` | Runs the end-to-end tests of the `typy` executable |
 | `make test-all` | Runs `make test` and `make miri` |
+| `make sweep` | Deletes the build outputs Cargo keeps but no build uses: in each `deps` directory of the build volume, every copy of a crate's library or a test program but the newest and those rebuilt in the last 12 hours, and incremental caches untouched for 12 hours. A test program that links LLVM is about 200 MB, and Cargo keeps a copy for every change of code, version or flags, so without the sweep the volume grows past 30 GB |
 | `make docs-lint` | Lints every Markdown file with markdownlint-cli2 |
 | `make docs` | Builds the documentation site into `site/` with `scripts/build-docs.sh`: Zensical in strict mode, which fails on a link to a page or an anchor that does not exist (DOC-05). The first run installs Zensical 0.1.1 and its dependencies from `scripts/docs-requirements.txt`, each checked against its sha256, into a CPython 3.14 environment at `/var/cache/typy/docs` in the dev container, about 20 MB to download, which a container built anew installs again. Open `site/index.html`, or serve the directory, to read the result |
 | `make ascii-check` | Fails on any non-ASCII byte in tracked text files, except rendered SVG |
