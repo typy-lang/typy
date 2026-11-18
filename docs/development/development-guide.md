@@ -205,7 +205,8 @@ to GitHub Pages.
 | `ci.yml` | Miri and fuzzing | On demand, before a release | `make miri`, then `FUZZ_SECONDS=1800 make fuzz`; the inputs that crashed are kept as an artifact |
 | `ci.yml` | AArch64 tests | Every pull request but one of documents alone, on an `ubuntu-24.04-arm` runner | `make test`: every unit, integration and conformance test natively, and the conformance suite built for x86-64 under `qemu-x86_64` (NFR-16), then `make dist`; built with line tables for debug information, since the runner has 14 GB of disk |
 | `ci.yml` | Dependency review | Every pull request | Fails on a new dependency with a known vulnerability |
-| `codeql.yml` | Analyze | Every push to `main`, and weekly | Code scanning of the Rust sources and the workflows, leaving out the test files that `.github/codeql/codeql-config.yml` lists |
+| `image-cache.yml` | Dev image | A push to `main` that changes `.devcontainer/`, `rust-toolchain.toml` or the dev image action, for x86-64 and arm64; on demand | Builds the dev image into GitHub's Actions cache, which the jobs below read |
+| `codeql.yml` | Analyze | Every push to `main` that changes more than documents, and weekly | Code scanning of the Rust sources and the workflows, leaving out the test files that `.github/codeql/codeql-config.yml` lists |
 | `release.yml` | Check and build, Build for AArch64 hosts, Publish, then Documentation | A tag `vX.Y.Z` | Section 9 |
 | `pages.yml` | Build the site, then Deploy | Called by `release.yml` once a release is created; a release published by hand; on demand, on a release tag | Builds the site with `scripts/build-docs.sh` on the runner after `astral-sh/setup-uv`, without the dev image, and deploys it to GitHub Pages at <https://typy-lang.org> (DOC-05) |
 
@@ -219,6 +220,19 @@ root and in `.github/` qualify; so does a page of the user documentation
 while it holds no Python block, which the documentation test compiles
 (DOC-04). The troubleshooting page, which `typy explain` embeds, and every
 other file give the full run.
+
+Every job that needs the dev container starts with the local action
+`.github/actions/dev-image`. It builds the image with Docker's buildx from
+the layers GitHub's Actions cache holds for the runner's architecture, which
+`image-cache.yml` fills on `main`, and loads it under the name `compose.yaml`
+gives, so `make dev` builds nothing; a job loads it in about a minute, where
+building it took five or more. A pull request reads `main`'s cache and keeps
+the layers it builds for its own later runs. The workflow's short-lived
+token reaches the build as a secret, so cargo-binstall asks GitHub's API for
+its binaries without reaching the limit of a shared runner, and is kept in
+no layer. The x86-64 job deletes unused preinstalled toolchains in the
+background while the image loads, and waits for the room before the quality
+gate.
 
 CI minutes are spent on whole changes. `main` changes only through a pull
 request that is up to date and passes the quality gate, so CI does not run
@@ -252,9 +266,10 @@ each release's branch stays on origin and an issue can be traced to it.
 3. A tag `vX.Y.Z` on that commit starts `release.yml`.
 4. `scripts/check-release.sh` checks that the tag names the version and that
    the changelog has a dated section for it, whose text becomes the release
-   notes. The job then runs `make check` and `make dist` for x86-64 hosts,
-   while a job on an `ubuntu-24.04-arm` runner runs `make dist` for AArch64
-   hosts.
+   notes. The job then runs `make dist` for x86-64 hosts, while a job on an
+   `ubuntu-24.04-arm` runner runs it for AArch64 hosts. Neither runs the
+   quality gate again: `main` changes only through pull requests whose latest
+   commit passed it, so the tag's tree has.
 5. A maintainer approves the `release` environment.
 6. The publish job creates the GitHub release with both archives and their
    SHA-256, using the workflow's short-lived token and no long-lived one.

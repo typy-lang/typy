@@ -1,7 +1,8 @@
 # Releases the version a tag `vX.Y.Z` names (development guide section 9).
-# The build job checks the tag against the version and the changelog, runs
-# the quality gate and builds the release archive for x86-64 hosts, and the
-# AArch64 job builds the one for AArch64 hosts. The publish job waits for a
+# The build job checks the tag against the version and the changelog and
+# builds the release archive for x86-64 hosts, and the AArch64 job builds the
+# one for AArch64 hosts. Neither runs the quality gate again: main changes only
+# through pull requests whose latest commit passed it, so the tag's tree has. The publish job waits for a
 # maintainer to approve the `release` environment, creates the GitHub release
 # from the changelog section with the short-lived workflow token, then
 # downloads the archive back and runs a program with it. The pages job then
@@ -21,17 +22,14 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 120
     steps:
-      - name: Free disk space
-        run: sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
       - uses: actions/checkout@v7
         with:
           persist-credentials: false
       - name: Check the tag and the changelog
         run: scripts/check-release.sh "${GITHUB_REF_NAME}" dist/notes.md
+      - uses: ./.github/actions/dev-image
       - name: Start the dev container
         run: make dev
-      - name: Quality gate
-        run: make check
       - name: Release archive
         run: make dist
       - uses: actions/upload-artifact@v7
@@ -51,6 +49,7 @@ jobs:
       - uses: actions/checkout@v7
         with:
           persist-credentials: false
+      - uses: ./.github/actions/dev-image
       - name: Start the dev container
         run: make dev
       # The archive's own check builds and runs a program on this host.

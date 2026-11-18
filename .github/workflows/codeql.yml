@@ -1,10 +1,16 @@
 # Code scanning of the Rust sources and of the workflows themselves, on each
-# change to main and once a week for newly published queries.
+# change to main that touches more than documents, and once a week for newly
+# published queries.
 name: CodeQL
 
 on:
   push:
     branches: [main]
+    paths-ignore:
+      - "**.md"
+      - "docs/**"
+      - "mkdocs.yml"
+      - "scripts/docs-requirements.txt"
   schedule:
     - cron: "41 4 * * 2"
 
