@@ -80,11 +80,16 @@ fn every_program_generates_valid_llvm_ir_at_every_level() {
 }
 
 #[test]
-fn object_files_are_elf_and_deterministic() {
+fn object_files_have_the_hosts_format_and_are_deterministic() {
     let (project, module) = compile(PROGRAMS[1]);
     let first = object(&module, Target::host(), Optimization::Speed, &project).unwrap();
     let second = object(&module, Target::host(), Optimization::Speed, &project).unwrap();
-    assert_eq!(&first.bytes[..4], b"\x7fELF");
+    let magic: &[u8] = if cfg!(target_os = "macos") {
+        b"\xcf\xfa\xed\xfe"
+    } else {
+        b"\x7fELF"
+    };
+    assert_eq!(&first.bytes[..4], magic);
     assert_eq!(first, second);
     assert_eq!(first.target, Target::host());
 }

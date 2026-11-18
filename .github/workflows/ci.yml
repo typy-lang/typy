@@ -123,6 +123,88 @@ jobs:
         if: steps.changes.outputs.light != 'true'
         run: make dist
 
+  # The tests on macOS for Apple silicon, natively, without the dev container
+  # (NFR-17, ADR-0055): the LLVM that llvm.lock pins, kept in the Actions cache
+  # by its SHA-256, the CPython oracles the dev image holds, installed with uv,
+  # and `make EXEC= test`, which runs the targets on the runner itself.
+  macos:
+    name: macOS tests
+    if: github.event_name == 'pull_request'
+    runs-on: macos-15
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Find what the pull request changes
+        id: changes
+        env:
+          BASE: ${{ github.event.pull_request.base.sha }}
+        run: |
+          git fetch --no-tags --depth=1 origin "${BASE}"
+          scripts/ci-changes.sh "${BASE}" >> "${GITHUB_OUTPUT}"
+      - name: Read the pinned versions
+        id: pins
+        if: steps.changes.outputs.light != 'true'
+        run: |
+          lock=.devcontainer/llvm.lock
+          version="$(awk '$1 == "version" { print $2 }' "${lock}")"
+          name="llvm-${version}-aarch64-apple-darwin"
+          {
+            echo "llvm=${name}"
+            echo "url=$(awk '$1 == "release" { print $2 }' "${lock}")/${name}.tar.zst"
+            echo "sha256=$(awk '$1 == "aarch64-apple-darwin" { print $2 }' "${lock}")"
+            echo "nextest=$(sed -n 's/^ARG CARGO_NEXTEST_VERSION=//p' .devcontainer/Dockerfile)"
+            echo "pythons=$(sed -n 's/^ARG ORACLE_PYTHONS="\(.*\)"$/\1/p' .devcontainer/Dockerfile)"
+          } >> "${GITHUB_OUTPUT}"
+      - uses: actions/cache@v5
+        id: llvm
+        if: steps.changes.outputs.light != 'true'
+        with:
+          path: ~/.cache/typy-llvm
+          key: llvm-${{ steps.pins.outputs.sha256 }}
+      - name: Download the pinned LLVM
+        if: steps.changes.outputs.light != 'true' && steps.llvm.outputs.cache-hit != 'true'
+        env:
+          URL: ${{ steps.pins.outputs.url }}
+          SHA256: ${{ steps.pins.outputs.sha256 }}
+        run: |
+          archive="${RUNNER_TEMP}/llvm.tar.zst"
+          curl -fsSL --retry 5 --retry-all-errors -o "${archive}" "${URL}"
+          echo "${SHA256}  ${archive}" | shasum -a 256 --check --strict
+          mkdir -p ~/.cache/typy-llvm
+          zstd -d -c "${archive}" | tar -xf - -C ~/.cache/typy-llvm
+      - name: Name the pinned LLVM
+        if: steps.changes.outputs.light != 'true'
+        env:
+          LLVM: ${{ steps.pins.outputs.llvm }}
+        run: echo "LLVM_SYS_231_PREFIX=${HOME}/.cache/typy-llvm/${LLVM}" >> "${GITHUB_ENV}"
+      # setup-uv publishes no tag of its major version, so its release is
+      # pinned; Dependabot raises it.
+      - uses: astral-sh/setup-uv@v10.3.3
+        if: steps.changes.outputs.light != 'true'
+        with:
+          version: "0.13.7"
+          enable-cache: false
+      - name: Install the CPython oracles
+        if: steps.changes.outputs.light != 'true'
+        env:
+          PYTHONS: ${{ steps.pins.outputs.pythons }}
+        run: |
+          read -r -a versions <<< "${PYTHONS}"
+          UV_PYTHON_BIN_DIR="${HOME}/.local/bin" uv python install "${versions[@]}"
+          echo "${HOME}/.local/bin" >> "${GITHUB_PATH}"
+      - uses: taiki-e/install-action@v2
+        if: steps.changes.outputs.light != 'true'
+        with:
+          tool: cargo-nextest@${{ steps.pins.outputs.nextest }}
+      - name: Unit, integration and conformance tests
+        if: steps.changes.outputs.light != 'true'
+        env:
+          CARGO_PROFILE_DEV_DEBUG: line-tables-only
+          NEXTEST_PROFILE: ci
+        run: make EXEC= test
+
   weekly:
     name: Miri and fuzzing
     if: github.event_name == 'workflow_dispatch'

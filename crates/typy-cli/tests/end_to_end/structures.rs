@@ -238,6 +238,7 @@ fn ffi_03_structures_pass_by_value_as_cpython_passes_them() {
 }
 
 #[test]
+#[cfg(target_os = "linux")]
 fn ffi_12_structures_pass_by_value_on_the_other_architecture() {
     let (triple, gnu, emulator) = if cfg!(target_arch = "aarch64") {
         (

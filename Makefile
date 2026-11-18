@@ -1,6 +1,8 @@
 # Every task runs inside the containers defined in .devcontainer/compose.yaml:
 # the dev service for checks and builds, the diagrams service for PlantUML.
-# The host needs only Docker, Compose, Make and Git.
+# The host needs only Docker, Compose, Make and Git. On a Mac, which builds
+# for macOS natively (ADR-0055), `make EXEC= TARGET` runs a task on the host
+# and starts no container.
 
 COMPOSE := USER_UID=$(shell id -u) USER_GID=$(shell id -g) \
 	docker compose -f .devcontainer/compose.yaml
@@ -16,7 +18,9 @@ MARKDOWN := "**/*.md" "\#.tmp/**" "\#target/**" "\#dist/**" "\#site/**"
 	build dist bless bench-peers bench-compare coverage-branches miri fuzz runtime-size diagrams diagrams-check unicode-tables unicode-tables-check format-cases format-cases-check stdlib-names stdlib-names-check errno-texts errno-texts-check mutants mutants-package bench check hooks clean
 
 dev: ## Start the dev service, building its image the first time
+ifneq ($(EXEC),)
 	@$(COMPOSE) up -d --quiet-pull dev 2>/dev/null
+endif
 
 image: ## Rebuild the dev image after a change to .devcontainer
 	$(COMPOSE) build dev

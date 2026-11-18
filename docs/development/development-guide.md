@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy development guide |
-| Version | 0.23 |
+| Version | 0.24 |
 | Status | Draft |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-18 |
@@ -44,6 +44,24 @@ the gate once to show the set-up works.
 
 To work in VS Code, open the folder and run "Dev Containers: Reopen in
 Container". VS Code attaches to the same `dev` service.
+
+### 2.1 Working on a Mac
+
+macOS on Apple silicon builds for itself and runs natively, outside the
+container (ADR-0055). The Mac needs Xcode's Command Line Tools, which
+provide `cc`, Apple's linker, `libtool` and `dsymutil`, and rustup, which
+installs the toolchain `rust-toolchain.toml` names. Then:
+
+1. Download `llvm-23.1.6-aarch64-apple-darwin.tar.zst` from the release
+   `.devcontainer/llvm.lock` names, check it with `shasum -a 256` against
+   the lock, unpack it, and set `LLVM_SYS_231_PREFIX` to the unpacked
+   directory.
+2. Install the CPython oracles the Dockerfile lists in `ORACLE_PYTHONS`
+   with `uv python install`, so `python3.12` to `python3.15` are on
+   `PATH`, and `cargo-nextest` at the version of `CARGO_NEXTEST_VERSION`.
+3. Run a target without the container: `make EXEC= test`.
+
+The `macos-15` job of CI does the same on every pull request.
 
 ## 3. Everyday commands
 
@@ -207,6 +225,7 @@ to GitHub Pages.
 | `ci.yml` | Quality gate and package | Every pull request | `make check`, then `make dist`; for a pull request of documents alone, the light run below |
 | `ci.yml` | Miri and fuzzing | On demand, before a release | `make miri`, then `FUZZ_SECONDS=1800 make fuzz`; the inputs that crashed are kept as an artifact |
 | `ci.yml` | AArch64 tests | Every pull request but one of documents alone, on an `ubuntu-24.04-arm` runner | `make test`: every unit, integration and conformance test natively, and the conformance suite built for x86-64 under `qemu-x86_64` (NFR-16), then `make dist`; built with line tables for debug information, since the runner has 14 GB of disk |
+| `ci.yml` | macOS tests | Every pull request but one of documents alone, on a `macos-15` runner | `make EXEC= test` natively, with the LLVM `llvm.lock` pins from GitHub's Actions cache and the CPython oracles installed with uv (NFR-17, ADR-0055); the sanitizer run and the other architecture under qemu stay on Linux |
 | `ci.yml` | Dependency review | Every pull request | Fails on a new dependency with a known vulnerability |
 | `image-cache.yml` | Dev image | A push to `main` that changes `.devcontainer/`, `rust-toolchain.toml` or the dev image action, for x86-64 and arm64; on demand | Builds the dev image into GitHub's Actions cache, which the jobs below read |
 | `codeql.yml` | Analyze | Every push to `main` that changes more than documents, and weekly | Code scanning of the Rust sources and the workflows, leaving out the test files that `.github/codeql/codeql-config.yml` lists |

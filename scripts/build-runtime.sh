@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
-# Builds the runtime archive for each supported target with the `runtime`
-# profile, then stages it where a compiler in <target>/debug or
+# Builds the runtime archive for each target the host builds for, with the
+# `runtime` profile: the Linux targets on a Linux host and macOS on a Mac
+# (ADR-0051, ADR-0055). Each is staged where a compiler in <target>/debug or
 # <target>/release finds it, <target>/lib/typy/<triple>/, as an installed
 # compiler finds it in <prefix>/lib/typy/<triple>/. The copy under
 # llvm-cov-target serves the compiler that `make coverage` builds there.
@@ -8,24 +9,37 @@ set -euo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
 
 target="${CARGO_TARGET_DIR:-target}"
-for triple in x86_64-unknown-linux-gnu x86_64-unknown-linux-musl aarch64-unknown-linux-gnu; do
+host="$(rustc -vV | sed -n 's/^host: //p')"
+
+# Copies the archive `built` to lib/typy`suffix`/`triple`/ in each staging
+# directory, with the tools of both systems.
+stage() {
+    local built="$1" suffix="$2" triple="$3"
+    for directory in "${target}" "${target}/llvm-cov-target"; do
+        mkdir -p "${directory}/lib/typy${suffix}/${triple}"
+        install -m 644 "${built}" "${directory}/lib/typy${suffix}/${triple}/libtypy_runtime.a"
+    done
+}
+
+if [[ "${host}" == *-apple-darwin ]]; then
+    triples=(aarch64-apple-darwin)
+else
+    triples=(x86_64-unknown-linux-gnu x86_64-unknown-linux-musl aarch64-unknown-linux-gnu)
+fi
+for triple in "${triples[@]}"; do
     cargo rustc -p typy-runtime --profile runtime --locked --crate-type staticlib \
         --target "${triple}"
-    for stage in "${target}" "${target}/llvm-cov-target"; do
-        install -D -m 644 "${target}/${triple}/runtime/libtypy_runtime.a" \
-            "${stage}/lib/typy/${triple}/libtypy_runtime.a"
-    done
+    stage "${target}/${triple}/runtime/libtypy_runtime.a" "" "${triple}"
 done
 
 # The runtime instrumented with AddressSanitizer, for the conformance suite's
-# sanitizer run (NFR-07). Rust's sanitizers need the pinned nightly toolchain;
-# programs never link this archive. It is built for the host, whose programs
-# the sanitizer run builds and runs.
-triple="$(rustc -vV | sed -n 's/^host: //p')"
-cargo +nightly-2026-11-05 rustc -p typy-runtime --profile runtime --locked \
-    --crate-type staticlib --target "${triple}" --target-dir "${target}/asan" \
-    -- -Zsanitizer=address
-for stage in "${target}" "${target}/llvm-cov-target"; do
-    install -D -m 644 "${target}/asan/${triple}/runtime/libtypy_runtime.a" \
-        "${stage}/lib/typy-asan/${triple}/libtypy_runtime.a"
-done
+# sanitizer run on Linux (NFR-07); macOS on Apple silicon has no leak
+# detection, which the run needs. Rust's sanitizers need the pinned nightly
+# toolchain; programs never link this archive. It is built for the host, whose
+# programs the sanitizer run builds and runs.
+if [[ "${host}" == *-linux-* ]]; then
+    cargo +nightly-2026-11-05 rustc -p typy-runtime --profile runtime --locked \
+        --crate-type staticlib --target "${host}" --target-dir "${target}/asan" \
+        -- -Zsanitizer=address
+    stage "${target}/asan/${host}/runtime/libtypy_runtime.a" "-asan" "${host}"
+fi

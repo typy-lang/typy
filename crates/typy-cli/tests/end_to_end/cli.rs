@@ -722,6 +722,7 @@ fn cli_08_emit_asm_for_aarch64_writes_aarch64_code() {
 
 /// The other architecture's target, its GNU triple and the emulator that runs its programs on
 /// this host.
+#[cfg(target_os = "linux")]
 const fn other_architecture() -> (&'static str, &'static str, &'static str) {
     if cfg!(target_arch = "aarch64") {
         (
@@ -739,6 +740,7 @@ const fn other_architecture() -> (&'static str, &'static str, &'static str) {
 }
 
 #[test]
+#[cfg(target_os = "linux")]
 fn cli_08_a_program_built_for_the_other_architecture_runs_under_its_emulator() {
     let workspace = Workspace::new(HELLO);
     let (triple, gnu, emulator) = other_architecture();
@@ -766,7 +768,8 @@ fn cli_08_a_program_built_for_the_other_architecture_runs_under_its_emulator() {
 #[test]
 fn cli_14_a_tool_typy_toml_names_for_a_target_that_is_missing_is_e0701_naming_both() {
     let workspace = Workspace::new(HELLO);
-    let (triple, _, _) = other_architecture();
+    let (triples, _) = host_triples();
+    let triple = triples[0];
     std::fs::write(
         workspace.root.join("typy.toml"),
         format!("[target.\"{triple}\"]\nlinker = \"typy-no-such-cc\"\n"),
@@ -785,6 +788,7 @@ fn cli_14_a_tool_typy_toml_names_for_a_target_that_is_missing_is_e0701_naming_bo
 }
 
 #[test]
+#[cfg(target_os = "linux")]
 fn cli_14_the_linker_typy_toml_names_for_a_target_links_its_programs() {
     let workspace = Workspace::new(HELLO);
     let (triple, gnu, emulator) = other_architecture();
