@@ -1,0 +1,125 @@
+# Builds LLVM from its signed sources for each host TyPy runs on and keeps
+# each build as an asset of the pre-release `llvm-VERSION` (ADR-0054). A
+# maintainer runs it by hand, once per LLVM version, then records each
+# archive's SHA-256 in `.devcontainer/llvm.lock` in a pull request. Only the
+# publish job may write to the repository, and it refuses to replace a
+# release that exists, since `llvm.lock` pins the bytes of its assets.
+name: LLVM
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: LLVM release to build, such as 23.1.6
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: llvm-${{ inputs.version }}
+
+jobs:
+  build:
+    name: Build for ${{ matrix.host }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - host: x86_64-unknown-linux-gnu
+            runner: ubuntu-24.04
+          - host: aarch64-unknown-linux-gnu
+            runner: ubuntu-24.04-arm
+          - host: aarch64-apple-darwin
+            runner: macos-15
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 300
+    env:
+      VERSION: ${{ inputs.version }}
+      HOST: ${{ matrix.host }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      # The attestation proves the archive is the one LLVM's own release
+      # workflow made from the tag `llvmorg-VERSION`.
+      - name: Download and verify the sources
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if [[ ! "${VERSION}" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "'${VERSION}' is not an LLVM release such as 23.1.6" >&2
+            exit 2
+          fi
+          archive="llvm-project-${VERSION}.src.tar.xz"
+          url="https://github.com/llvm/llvm-project/releases/download/llvmorg-${VERSION}"
+          curl -fsSL --retry 5 --retry-all-errors -O "${url}/${archive}"
+          curl -fsSL --retry 5 --retry-all-errors -O "${url}/${archive}.jsonl"
+          gh attestation verify "${archive}" --bundle "${archive}.jsonl" \
+            --repo llvm/llvm-project
+      # The Debian 13 base of the dev image, so the libraries need no newer
+      # glibc than the image has.
+      - name: Build in Debian 13
+        if: runner.os == 'Linux'
+        run: >-
+          docker run --rm --volume "${PWD}:/work" --workdir /work
+          --env VERSION --env HOST debian:trixie-slim
+          bash -c 'apt-get -o Acquire::Retries=5 update
+          && apt-get -o Acquire::Retries=5 install -y --no-install-recommends
+          cmake g++ ninja-build python3 xz-utils zstd
+          && scripts/build-llvm.sh "${VERSION}" "${HOST}" dist'
+      - name: Build on macOS
+        if: runner.os == 'macOS'
+        env:
+          HOMEBREW_NO_AUTO_UPDATE: "1"
+        run: |
+          command -v ninja > /dev/null || brew install ninja
+          command -v zstd > /dev/null || brew install zstd
+          scripts/build-llvm.sh "${VERSION}" "${HOST}" dist
+      - uses: actions/upload-artifact@v7
+        with:
+          name: llvm-${{ matrix.host }}
+          path: |
+            dist/*.tar.zst
+            dist/*.tar.zst.sha256
+          if-no-files-found: error
+          compression-level: 0
+
+  publish:
+    name: Publish
+    needs: build
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      VERSION: ${{ inputs.version }}
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: llvm-*
+          merge-multiple: true
+          path: dist
+      - name: Check the archives
+        working-directory: dist
+        run: sha256sum --check ./*.sha256
+      - name: Create the pre-release
+        working-directory: dist
+        run: |
+          {
+            echo "LLVM ${VERSION} built from the signed sources of the tag"
+            echo "\`llvmorg-${VERSION}\` by \`llvm.yml\` at ${GITHUB_SHA}, for"
+            echo "each host TyPy runs on (ADR-0054). TyPy's dev image and"
+            echo "macOS jobs download these archives; they are not a TyPy"
+            echo "release. LLVM is licensed under Apache-2.0 WITH"
+            echo "LLVM-exception; each archive holds its licence."
+            echo
+            echo '```text'
+            cat ./*.sha256
+            echo '```'
+          } > notes.md
+          gh release create "llvm-${VERSION}" --prerelease --latest=false \
+            --target "${GITHUB_SHA}" --title "LLVM ${VERSION} for TyPy" \
+            --notes-file notes.md ./*.tar.zst ./*.tar.zst.sha256

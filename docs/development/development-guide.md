@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy development guide |
-| Version | 0.21 |
+| Version | 0.22 |
 | Status | Draft |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-18 |
@@ -116,7 +116,7 @@ samples (DOC-04).
 | `docs/` | The user documentation, whose sections `docs/index.md` lists: `tutorial/`, `reference/`, `library/`, `using/`, `extending/` and `diagnostics/`; and the engineering documents, listed with their status in `docs/engineering.md` |
 | `docs/diagrams/` | PlantUML sources, the shared `style.puml`, and the rendered SVG of each |
 | `fuzz/` | The fuzz targets, a Cargo workspace of their own that builds with the pinned nightly |
-| `scripts/` | The checks and builds that `make` runs, the release scripts, and the generator of the Unicode tables |
+| `scripts/` | The checks and builds that `make` runs, the release scripts, the build of LLVM, and the generator of the Unicode tables |
 | `tests/conformance/` | The conformance programs, by requirement area |
 | `tests/golden/` | The golden programs and the expected text of each stage and diagnostic |
 | `dist/` | Release archives that `make dist` builds. Ignored by Git |
@@ -197,7 +197,7 @@ installed on the host.
 
 CI runs the same `make` targets as a working copy, in the same containers,
 so a change that passes `make check` locally passes CI. Every workflow holds
-read-only permissions; only the job that creates a release may write to the
+read-only permissions; only the jobs that create a release may write to the
 repository, and only the job that deploys the documentation site may write
 to GitHub Pages.
 
@@ -210,6 +210,7 @@ to GitHub Pages.
 | `image-cache.yml` | Dev image | A push to `main` that changes `.devcontainer/`, `rust-toolchain.toml` or the dev image action, for x86-64 and arm64; on demand | Builds the dev image into GitHub's Actions cache, which the jobs below read |
 | `codeql.yml` | Analyze | Every push to `main` that changes more than documents, and weekly | Code scanning of the Rust sources and the workflows, leaving out the test files that `.github/codeql/codeql-config.yml` lists |
 | `release.yml` | Check and build, Build for AArch64 hosts, Publish, then Documentation | A tag `vX.Y.Z` | Section 9 |
+| `llvm.yml` | Build for each host, then Publish | On demand, once per LLVM version | Section 10 |
 | `pages.yml` | Build the site, then Deploy | Called by `release.yml` once a release is created; a release published by hand; on demand, on a release tag | Builds the site with `scripts/build-docs.sh` on the runner after `astral-sh/setup-uv`, without the dev image, and deploys it to GitHub Pages at <https://typy-lang.org> (DOC-05) |
 
 A pull request whose every file is a document that no compiled test reads
@@ -299,3 +300,40 @@ programs.
 A release that breaks compatibility goes out as a release candidate first,
 with a version such as `1.0.0-rc.1`, which the workflow marks as a
 pre-release.
+
+## 10. Building a new LLVM
+
+TyPy links an LLVM it builds itself from LLVM's signed sources, one build
+for each host TyPy runs on (ADR-0054). A build takes one to two and a half
+hours, so it runs once per LLVM version, never in a pull request.
+
+1. A maintainer runs `llvm.yml` on `main` from the Actions tab, or with
+   `gh workflow run llvm.yml -f version=23.1.6`.
+2. Each build job downloads `llvm-project-VERSION.src.tar.xz` from LLVM's
+   release `llvmorg-VERSION` and checks its attestation with
+   `gh attestation verify`, which fails unless LLVM's own release workflow
+   made the archive. `scripts/build-llvm.sh` then builds it: on
+   `ubuntu-24.04` and `ubuntu-24.04-arm` inside `debian:trixie-slim`, the
+   Debian 13 base of the dev image, so the libraries need no newer glibc
+   than the image has; on `macos-15` for macOS 11.0, the oldest macOS on
+   Apple silicon.
+3. The build is `Release`, with static libraries, the `AArch64` and `X86`
+   back ends, no assertions, and no `zlib`, `zstd`, `libxml2`, `z3` or
+   `libffi`, so it depends on the host's C and C++ libraries alone. The
+   archive `llvm-VERSION-HOST.tar.zst` holds the libraries, the headers,
+   `llvm-config` and LLVM's licence.
+4. The publish job checks each archive against its SHA-256 and creates the
+   pre-release `llvm-VERSION` on the commit the workflow ran from, with
+   the three archives, their SHA-256 and release notes that list them. A
+   pre-release is never the repository's latest release. The job runs only
+   when every build passed, and refuses to replace a release that exists,
+   since the archives' bytes are pinned once they are published.
+
+To try the build on a machine of your own, put the source archive in an
+empty directory and run the script from there:
+
+```sh
+scripts/build-llvm.sh 23.1.6 x86_64-unknown-linux-gnu dist
+```
+
+It needs CMake, Ninja, Python 3, a C++ compiler, `xz` and `zstd`.

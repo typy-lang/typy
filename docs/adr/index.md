@@ -59,3 +59,8 @@ supersedes it.
 | [ADR-0051](0051-build-for-a-target-with-the-cross-toolchain-named-after-its-triple.md) | Build for a target with the cross toolchain named after its triple | Accepted | 2026-11-17 |
 | [ADR-0052](0052-pass-a-ctypes-structure-by-value-as-the-targets-c-convention-does.md) | Pass a ctypes structure by value as the target's C convention does | Accepted | 2026-11-17 |
 | [ADR-0053](0053-return-a-float-the-runtime-may-raise-beside-as-its-bits.md) | Return a float the runtime may raise beside as its bits | Accepted | 2026-11-17 |
+| [ADR-0054](0054-build-and-pin-llvm-for-every-host-from-its-sources.md) | Build and pin LLVM for every host from its sources | Accepted | 2026-11-18 |
+| [ADR-0055](0055-support-macos-on-apple-silicon-as-a-host-that-builds-for-itself.md) | Support macOS on Apple silicon as a host that builds for itself | Accepted | 2026-11-18 |
+| [ADR-0056](0056-link-for-mach-o-with-apples-linker-and-name-libraries-as-macos-does.md) | Link for Mach-O with Apple's linker and name libraries as macOS does | Accepted | 2026-11-18 |
+| [ADR-0057](0057-give-the-runtime-each-systems-c-constants-and-macos-its-own-error-texts.md) | Give the runtime each system's C constants and macOS its own error texts | Accepted | 2026-11-18 |
+| [ADR-0058](0058-pass-c-arguments-as-libffi-passes-them-on-every-target.md) | Pass C arguments as libffi passes them on every target | Accepted | 2026-11-18 |

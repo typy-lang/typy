@@ -3,10 +3,10 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy software requirements specification |
-| Version | 1.83 |
+| Version | 1.85 |
 | Status | Approved |
 | Owner | typy-lang contributors |
-| Last updated | 2026-11-17 |
+| Last updated | 2026-11-18 |
 
 ## 1. Introduction
 
@@ -91,13 +91,16 @@ supported standard library modules. Nothing is installed into CPython.
 | --- | --- |
 | 0.1 | Linux x86_64 with glibc or musl |
 | 0.6 | Adds Linux AArch64 with glibc |
-| 0.7 | Adds macOS AArch64 |
+| 0.7 | Adds macOS 11 or later on Apple silicon (AArch64), which builds programs for macOS |
 | 1.0 | Adds Windows x86_64 |
 
 Building needs a C linker driver for the target: `cc` for the host's own
 target, and for another target the cross toolchain a Linux distribution
-packages, such as Debian's `gcc-aarch64-linux-gnu` (A-01, ADR-0051).
-Running the oracle needs CPython 3.12 or later.
+packages, such as Debian's `gcc-aarch64-linux-gnu` (A-01, ADR-0051). On
+macOS, `cc` is the one of Xcode or its Command Line Tools. A Linux host does
+not build for macOS, since linking for it needs Apple's SDK, whose licence
+keeps it to Apple hardware (ADR-0055). Running the oracle needs CPython 3.12
+or later.
 
 ### 2.4 Constraints
 
@@ -105,7 +108,7 @@ Running the oracle needs CPython 3.12 or later.
 | --- | --- | --- |
 | C-01 | The compiler is written in Rust. | Decided by the project owner on 2026-11-05; meets NFR-04 and NFR-05 without a rewrite. |
 | C-02 | Python source is parsed with `ruff_python_parser`, pinned to one exact version and upgraded at most once per TyPy minor release, after the full conformance suite passes on the new version. | The grammar is Python's; the crate has no stability promise and is released about weekly (research 5.1). |
-| C-03 | LLVM is used through `inkwell`, with one LLVM major version per TyPy release. TyPy 0.1 uses LLVM 23, installed from apt.llvm.org. | Research 5.2 and 5.3; LLVM 23 is the latest major version, and Debian's LLVM 19 is four behind. |
+| C-03 | LLVM is used through `inkwell`, with one LLVM major version per TyPy release. TyPy uses LLVM 23: from apt.llvm.org up to 0.6, and from 0.7 a build of LLVM 23.1.6 that TyPy makes from its sources for each host and pins by its SHA-256 (ADR-0054). | Research 5.2 and 5.3; LLVM 23 is the latest major version, and Debian's LLVM 19 is four behind. A build of TyPy's own is the same bytes on every machine and in every CI run, which apt.llvm.org's dated snapshots were not (OI-28). |
 | C-04 | Runtime and dependencies carry licences compatible with Apache-2.0 and MIT. | Binaries are linked with the runtime. |
 | C-05 | The compiler makes no network access. | Builds are reproducible and work offline (NFR-06). |
 
@@ -143,13 +146,15 @@ Running the oracle needs CPython 3.12 or later.
 | CLI-05 | `typy build` shall offer the modes `debug` (default), `--release` and `--release-small`: LLVM's `O0` pipeline, its `O2` pipeline, and its `O2` pipeline with every function marked `minsize`, because LLVM 23 has no `Oz` pipeline. | M | 0.1 |
 | CLI-06 | The exit status of `typy` shall be 0 on success, 1 when the program has errors, 2 on wrong command usage, and 101 on an internal compiler error. | M | 0.1 |
 | CLI-07 | Project settings shall be read from `typy.toml`, and a command line flag shall override the same setting in the file. | S | 0.3 |
-| CLI-08 | `typy build --target TRIPLE` and `typy check --target TRIPLE` shall build and check for each supported target from each supported host, and an unsupported triple shall be a usage error that lists the supported ones. | S | 0.6 |
+| CLI-08 | `typy build --target TRIPLE` and `typy check --target TRIPLE` shall build and check for each target the host supports, each Linux target on a Linux host and `aarch64-apple-darwin` on a macOS host, and another triple shall be a usage error that lists the host's targets. | S | 0.6 |
 | CLI-09 | `typy build --lib static` shall produce a static library and `--lib shared` a shared library. | M | 0.5 |
 | CLI-10 | `typy explain CODE` shall print an explanation of the diagnostic with a wrong and a corrected example. | S | 0.3 |
 | CLI-11 | `typy` shall read no environment variable that changes the output, except `TYPY_HOME`. | M | 0.1 |
 | CLI-12 | The setting `python-floor` in `typy.toml` shall set the program's Python floor to one of `3.12`, `3.13`, `3.14` or `3.15`, and any other value shall be rejected. | S | 0.3 |
 | CLI-13 | A library build shall carry the release of the version that its module's `__version__`, or else `version` in `typy.toml`, gives in its file names, as Linux names libraries: `libNAME.so.X.Y` with the soname `libNAME.so.X`, and `libNAME.X.Y.a`, each with links of the names a linker finds. | S | 0.5 |
 | CLI-14 | The C linker driver, `ar` and `objcopy` that build for a target shall be the host's own tools for the host's target and the tools named after the target's GNU triple for another, such as `aarch64-linux-gnu-gcc`, unless `typy.toml` names others for that target. | S | 0.6 |
+| CLI-15 | `typy` shall run on macOS 11 or later on Apple silicon and build executables and libraries for `aarch64-apple-darwin` that run on macOS 11 or later. | M | 0.7 |
+| CLI-16 | A library built for macOS shall be named as macOS names libraries: `libNAME.X.dylib`, whose install name is that file name and whose compatibility and current versions are its release, with a link `libNAME.dylib`, and `libNAME.a`. | S | 0.7 |
 
 TyPy has no formatter of its own. TyPy source is Python, so a standard
 formatter applies; Ruff's formatter is the project's recommendation.
@@ -368,6 +373,7 @@ formatter applies; Ruff's formatter is the project's recommendation.
 | EXC-16 | An `OSError` shall take arguments of any type, more than five of them, and two or more through `super().__init__`, as CPython does. | C | 0.5 | |
 | EXC-17 | `args` of an exception shall hold the `args` of an exception of a related class, a type that nests without end, as CPython allows. | C | 1.0 | |
 | EXC-18 | `characters_written` of a `BlockingIOError`, and a number as the third argument of `OSError` or `BlockingIOError`, shall behave as CPython's do. | C | 1.0 | |
+| EXC-19 | The text and the class of an `OSError` the C library reports shall be those CPython gives on the program's operating system: on macOS, `strerror`'s text and macOS's error numbers. | M | 0.7 | |
 
 ### 3.13 Modules and imports (MOD)
 
@@ -414,6 +420,7 @@ formatter applies; Ruff's formatter is the project's recommendation.
 | LIB-19 | `open` with a binary mode shall accept a `buffering` that is not a literal, giving a `typing.BinaryIO`. | C | 1.0 |
 | LIB-20 | The abstract collections of `collections.abc` and `typing`, such as `Sequence`, `Mapping`, `MutableSequence` and `Collection`, shall be accepted as types, and a value of type `Iterable[T]` shall be testable against `Iterator`. | S | 1.0 |
 | LIB-21 | `math.prod` shall take items and a start other than numbers, multiplying them in turn as CPython does. | C | 1.0 |
+| LIB-22 | `sys.platform` shall be `"darwin"` in a program built for macOS and `"linux"` in one built for Linux. | M | 0.7 |
 
 ### 3.15 Memory management (MEM)
 
@@ -450,6 +457,7 @@ direct calls and links the library when the program is built.
 | FFI-10 | The ctypes names `c_char`, `c_wchar`, `c_wchar_p`, `create_string_buffer`, `cast` and `addressof`, pointers to and arrays of pointers and arrays, arrays whose length is not an integer literal, array slices, `byref` other than as a C function's argument, assigning a pointer's `contents`, and ctypes classes as values, in annotations, `isinstance` and `type` shall be accepted. | C | 1.0 |
 | FFI-11 | Methods and class attributes other than one `_fields_` list in a `Structure` subclass, `_fields_` assigned after the class statement, bit fields, a subclass of a `Structure` subclass, and `ctypes.Union` shall be accepted. | C | 1.0 |
 | FFI-12 | A `ctypes` structure passed to or returned from a C function by value shall follow the C calling convention of the target: System V on x86_64 Linux and AAPCS64 on AArch64 Linux. | M | 0.6 |
+| FFI-13 | A `ctypes` call shall pass each integer and `c_bool` argument as `libffi` passes it on the target, a 64-bit word widened by its type in a register and, on Apple's arm64, its own size on the stack, so a C function reads the values it reads under CPython. | M | 0.7 |
 
 ### 3.17 Diagnostics (DIA)
 
@@ -506,6 +514,7 @@ cache, unless a row says otherwise.
 | NFR-14 | The compiler shall use at most 1 GB of memory to build a 10,000-line project. | 1.0 | Benchmark with budget |
 | NFR-15 | A debug build and a release build of a program shall run alike. | 0.1 | Differential tests in CI |
 | NFR-16 | Every run test of the conformance suite shall give the same output and exit status when built for each supported target and run on it. | 0.6 | Conformance suite on an arm64 CI runner and under qemu-user |
+| NFR-17 | Every conformance test shall give on macOS the output and exit status CPython gives on macOS. | 0.7 | Conformance suite on a macOS CI runner |
 
 ## 5. Release plan
 
@@ -517,7 +526,7 @@ cache, unless a row says otherwise.
 | 0.4 | Dataclasses, inheritance, protocols, PEP 695 generics, narrowing, `Final`, `type` aliases | Binary files and the rest of `open` |
 | 0.5 | `match`, `:=`, dataclass `default_factory`, hashing and options, the rest of the class protocols (CLS-20 to CLS-26), C interoperability through `ctypes` | Stack allocation; libraries and exports described by their annotations (ADR-0032) |
 | 0.6 | | Linux AArch64 as host and target; cross-compilation between the Linux targets; the documentation site |
-| 0.7 | | macOS AArch64 as host and target |
+| 0.7 | | macOS AArch64 as host and target; LLVM built and pinned by TyPy for every host |
 | 1.0 | Closures, `lambda`, `nonlocal`, generators, `*args`, keyword-only parameters, `isinstance` with a class held in a variable, `issubclass`, `typing` names as values, `NamedTuple`, `Sequence` and the other abstract collections | Cycle collection, `weakref`; Windows; performance budgets |
 
 ## 6. Out of scope
@@ -562,7 +571,7 @@ resolved issues below.
 | --- | --- | --- |
 | OI-23 | Which ABI lets TyPy modules link dynamically: the layouts of objects, the exception state, the identity of type objects across shared libraries, and one runtime shared by every library (ADR-0016)? It is settled after 1.0, once those layouts are fixed. | 2026-11-11 |
 | OI-25 | Should the modules of the standard library TyPy provides ship prebuilt, one static library and interface per module and target, so a development build links them without compiling them? It depends on separate compilation (ADR-0016). | 2026-11-15 |
-| OI-28 | How is LLVM pinned so that a release built in CI is byte for byte the build a developer makes of the same commit (NFR-06)? The dev image installs LLVM 23 from apt.llvm.org, which publishes dated snapshot builds of 23.1.x and removes old ones, so a CI image built later gets a newer build than a local image, and the 0.5.0 archive rebuilt locally differs from the published one. | 2026-11-17 |
+| OI-29 | Should the macOS release archive be notarized, so a browser download runs without clearing the quarantine first? Notarizing needs a paid Apple Developer membership and a signing identity in CI. | 2026-11-18 |
 
 ## 8. Resolved issues
 
@@ -593,6 +602,7 @@ resolved issues below.
 | OI-24 | What is `sys.argv[0]`, when CPython gives the path of the script it runs and a TyPy program has no script? | The path of the executable as the operating system passes it to `main`, which is what a C program receives and what a shell user typed. The other items are the arguments, decoded as CPython decodes them. A conformance test does not print `sys.argv[0]`, because the oracle's differs (LIB-04, STD-03). | 2026-11-12 |
 | OI-26 | Do the AArch64 targets and cross-compilation (CLI-08) stay in 0.5? They need a cross toolchain and an emulator or arm64 runners for their tests. | They move to 0.6, so 0.5 holds the language, stack allocation, libraries and `ctypes`. | 2026-11-15 |
 | OI-27 | In which order should `list.sort` and `sorted` call `__lt__`? The order shows when the method prints or raises, and CPython 3.12, CPython 3.13 and 3.14, and CPython 3.15 each compare in another order. | The order of the newest oracle, CPython 3.15, as OI-14 decides for messages: the runtime's sort is a port of CPython 3.15.2's `listsort`, which compares the same items in the same order, and a comparison that raises leaves the list in the order CPython leaves it. A conformance test that prints from `__lt__` while sorting is invalid unless every oracle prints alike (CLS-22, ADR-0039). | 2026-11-16 |
+| OI-28 | How is LLVM pinned so that a release built in CI is byte for byte the build a developer makes of the same commit (NFR-06)? The dev image installs LLVM 23 from apt.llvm.org, which publishes dated snapshot builds of 23.1.x and removes old ones, so a CI image built later gets a newer build than a local image, and the 0.5.0 archive rebuilt locally differs from the published one. | TyPy builds LLVM 23.1.6 from its sources for each host in a workflow of its own, keeps each build as an asset of a toolchain release with its SHA-256 recorded in the repository, and the dev image and every CI job install that build (ADR-0054). | 2026-11-18 |
 
 ## Appendix A. Disposition of the specification pack
 
