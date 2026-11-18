@@ -2,6 +2,7 @@
 //! types, each argument converted to its C type, and the result converted back, as `ctypes`
 //! converts them; a structure passes by value (FFI-02, FFI-03, ADR-0047, ADR-0049).
 
+mod stack_argument;
 mod structure_call;
 
 use inkwell::AddressSpace;
@@ -14,7 +15,8 @@ use typy_tyir::{CType, TyirType, ValueId};
 use crate::class::runtime_symbol;
 use crate::error::CodegenError;
 use crate::function::FunctionEmitter;
-use crate::structure_abi::Registers;
+use crate::structure_abi::{Registers, passing};
+use stack_argument::{GeneralRegisters, stack_type};
 use structure_call::CallParts;
 
 /// Returns the LLVM type a C type passes as: a `bool` as a byte.
@@ -33,10 +35,10 @@ pub(crate) fn c_type(context: &Context, ty: CType) -> BasicTypeEnum<'_> {
     }
 }
 
-/// Returns the LLVM type an argument of C type `ty` passes as: an integer or a `bool` as a
-/// whole 64-bit word, widened by its own sign or by zeros, as `libffi` passes it for
-/// CPython's `ctypes`, so a function whose C type is wider than its declaration reads what
-/// CPython's would.
+/// Returns the LLVM type an argument of C type `ty` passes as in a register: an integer or a
+/// `bool` as a whole 64-bit word, widened by its own sign or by zeros, as `libffi` passes it
+/// for CPython's `ctypes`, so a function whose C type is wider than its declaration reads what
+/// CPython's would (ADR-0058).
 fn argument_type(context: &Context, ty: CType) -> BasicTypeEnum<'_> {
     if ty.integer().is_some() || ty == CType::Bool {
         return context.i64_type().into();
@@ -62,6 +64,9 @@ impl<'ctx> FunctionEmitter<'_, '_, 'ctx> {
         let context = self.shared.context;
         let mut call = CallParts::new();
         let mut registers = Registers::new(self.shared.target);
+        // On Apple's arm64 an integer on the stack takes its own size, as `libffi` puts it there.
+        let apple = self.shared.target.is_macos();
+        let mut general = GeneralRegisters::new();
         // A structure result is made before the call, which may write it in memory.
         let structure = match foreign.result {
             Some(CType::Structure(class)) => {
@@ -71,12 +76,26 @@ impl<'ctx> FunctionEmitter<'_, '_, 'ctx> {
         };
         for (value, parameter) in arguments.iter().zip(&foreign.parameters) {
             if let CType::Structure(class) = parameter {
+                let classes = &self.shared.tyir.cdata_classes;
+                general.take_structure(&passing(classes, *class, self.shared.target));
                 self.structure_argument(*value, *class, &mut call, &mut registers)?;
                 continue;
             }
             registers.take_scalar(*parameter);
             let converted = self.c_argument(*value, *parameter)?;
-            call.push(argument_type(context, *parameter), converted);
+            let in_register = general.take_scalar(*parameter);
+            match stack_type(context, *parameter) {
+                Some((narrow, extension)) if apple && !in_register => {
+                    let narrowed =
+                        self.builder
+                            .build_int_truncate(converted.into_int_value(), narrow, "")?;
+                    if let Some(extension) = extension {
+                        call.attributes.push((call.next(), extension));
+                    }
+                    call.push(narrow.into(), narrowed.into());
+                }
+                _ => call.push(argument_type(context, *parameter), converted),
+            }
         }
         let returned = match (&structure, foreign.result) {
             (Some(structure), _) => structure.return_type(context),

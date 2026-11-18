@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy detailed design |
-| Version | 2.29 |
+| Version | 2.30 |
 | Status | Approved |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-18 |
@@ -2520,9 +2520,13 @@ calls the function, which the text form shows as
 Code generation declares the function with the C types, an integer and a
 `bool` as a 64-bit word widened by its sign or by zeros, as `libffi`
 passes it for CPython, and calls it through its address, so a name the
-module already has with another type still verifies. An integer argument
-is `typy_rt_int_low_bits` of its word, wrapped to its width and widened
-again; a `float` narrows for `c_float`; `bytes` passes
+module already has with another type still verifies. On Apple's arm64,
+`GeneralRegisters` counts `x0` to `x7` as the arguments take them, and a
+structure that no longer fits takes the rest; an integer or `bool`
+argument past them passes at its C width, marked `signext` or `zeroext`
+below 32 bits, where `libffi` puts it on that stack (FFI-13, ADR-0058).
+An integer argument is `typy_rt_int_low_bits` of its word, wrapped to its
+width and widened again; a `float` narrows for `c_float`; `bytes` passes
 `typy_rt_bytes_data`, its own buffer, which a zero ends; and an `int` for
 `c_void_p` becomes an address. A result of 32 bits or fewer becomes an
 inline `int` word in place; `int64_t`, `uint64_t`, `char *` and `void *`

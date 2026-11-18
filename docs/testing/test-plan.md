@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy test plan |
-| Version | 0.93 |
+| Version | 0.94 |
 | Status | Draft |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-18 |
@@ -508,7 +508,7 @@ that the specification does not define.
 | FFI-10 | 1.0 | UT, IT | `crates/typy-check/tests/integration/ctypes.rs` for each E0201 of a `ctypes` use planned for 1.0; `tests/conformance/ffi/FFI-10_*.py` |
 | FFI-11 | 1.0 | UT, IT | `crates/typy-check/src/check/ctypes_declarations/tests.rs` and `crates/typy-check/tests/integration/ctypes.rs` for each E0201 of a structure form planned for 1.0; `tests/conformance/ffi/FFI-11_*.py` |
 | FFI-12 | 0.6 | UT, E2E | `crates/typy-codegen/src/structure_abi.rs` for each target's classification against clang 19's lowering of the same C structures; `crates/typy-cli/tests/end_to_end/structures.rs` run for each target, under `qemu-aarch64` for AArch64, against CPython on x86_64 |
-| FFI-13 | 0.7 | UT, E2E | `crates/typy-codegen/src/foreign.rs` for each argument's type and attributes in a register and on the stack on each target; `crates/typy-cli/tests/end_to_end/structures.rs` calling C functions with more narrow arguments than registers, on each architecture and on the `macos-15` job; the FFI-03 conformance test of integer types, whose C functions are wider than their declarations |
+| FFI-13 | 0.7 | UT, E2E | `crates/typy-codegen/src/foreign/stack_argument.rs` for the registers arguments take and each type's width and attribute on the stack; `crates/typy-codegen/tests/codegen.rs` for the arguments of one call on each target; `crates/typy-cli/tests/end_to_end/structures.rs` calling C functions with more narrow arguments than registers, on each architecture and on the `macos-15` job; the FFI-03 conformance test of integer types, whose C functions are wider than their declarations |
 | FFI-06 | 1.0 | IT | `tests/conformance/ffi/FFI-06_*.py` |
 | FFI-07 | 1.0 | IT | `tests/conformance/ffi/FFI-07_*.py` |
 | DIA-01 | 0.1 | UT, IT | `typy-diagnostics` unit tests; `tests/golden/diagnostics/DIA-01_*` |

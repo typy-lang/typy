@@ -35,7 +35,7 @@ impl<'ctx> CallParts<'ctx> {
     }
 
     /// Returns the position of the next parameter.
-    fn next(&self) -> u32 {
+    pub(super) fn next(&self) -> u32 {
         u32::try_from(self.types.len()).unwrap_or(u32::MAX)
     }
 

@@ -115,6 +115,48 @@ fn every_program_is_a_deterministic_mach_o_object_for_macos() {
     );
 }
 
+/// Returns the type of each argument of the call of `name` in `ir`, without its value.
+fn call_arguments(ir: &str, name: &str) -> Vec<String> {
+    let line = ir
+        .lines()
+        .find(|line| line.contains(&format!(" @{name}(")) && line.contains("call "))
+        .unwrap_or_else(|| panic!("no call of {name}\n{ir}"));
+    let start = line.find(&format!("@{name}(")).unwrap() + name.len() + 2;
+    let end = line.rfind(')').unwrap();
+    line[start..end]
+        .split(", ")
+        .map(|argument| {
+            let words: Vec<&str> = argument.split(' ').collect();
+            words[..words.len() - 1].join(" ")
+        })
+        .collect()
+}
+
+#[test]
+fn ffi_13_an_integer_on_apples_stack_takes_its_c_width_and_words_go_in_registers() {
+    let (project, module) = compile(
+        "import ctypes\n\nlib = ctypes.CDLL(\"libnarrow.so\")\nL = ctypes.c_long\n\
+         lib.f.argtypes = [L, L, L, L, L, L, L, ctypes.c_double, ctypes.c_byte, \
+         ctypes.c_ushort, ctypes.c_bool, ctypes.c_int, L]\nlib.f.restype = L\n\
+         print(lib.f(1, 2, 3, 4, 5, 6, 7, 0.5, -1, 2, True, 3, 4))\n",
+    );
+    let words = ["i64"; 7].map(str::to_owned);
+    for (triple, stack) in [
+        (
+            TargetTriple::Aarch64AppleDarwin,
+            ["i64", "i16 zeroext", "i1 zeroext", "i32", "i64"],
+        ),
+        (TargetTriple::Aarch64LinuxGnu, ["i64"; 5]),
+        (TargetTriple::X86_64LinuxGnu, ["i64"; 5]),
+    ] {
+        let ir = llvm_ir(&module, Target { triple }, Optimization::None, &project).unwrap();
+        let mut expected = words.to_vec();
+        expected.push("double".to_owned());
+        expected.extend(stack.map(str::to_owned));
+        assert_eq!(call_arguments(&ir, "f"), expected, "{triple}");
+    }
+}
+
 #[test]
 fn the_entry_is_the_only_external_function() {
     let (project, module) = compile(PROGRAMS[1]);
