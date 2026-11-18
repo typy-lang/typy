@@ -1,0 +1,32 @@
+# Fills GitHub's Actions cache with the layers of the dev image on main, for
+# each architecture, whenever .devcontainer/ or the Rust toolchain changes; on
+# demand it fills it again, such as after the cache dropped layers unused for
+# a week. Pull requests and release tags read main's cache, so their jobs load
+# the image in place of building it.
+name: Dev image cache
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".devcontainer/**"
+      - "rust-toolchain.toml"
+      - ".github/actions/dev-image/**"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  image:
+    name: Dev image on ${{ matrix.runner }}
+    strategy:
+      matrix:
+        runner: [ubuntu-24.04, ubuntu-24.04-arm]
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/dev-image

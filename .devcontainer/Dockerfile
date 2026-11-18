@@ -57,8 +57,16 @@ USER ${USERNAME}
 
 # cargo-binstall is built from crates.io source, which cargo verifies by
 # checksum. It then fetches prebuilt binaries for the other tools, which keeps
-# the image build to minutes instead of compiling each tool.
-RUN cargo install --locked cargo-binstall --version "${CARGO_BINSTALL_VERSION}" \
+# the image build to minutes instead of compiling each tool. It asks GitHub's
+# API where each binary is; without a token a shared CI runner soon reaches the
+# API's limit, and cargo-binstall then compiles every tool from source. CI
+# passes the workflow's token as the secret github_token, mounted for the step
+# alone and kept in no layer; a build without it works as before.
+RUN --mount=type=secret,id=github_token,mode=0444 \
+    if [ -f /run/secrets/github_token ]; then \
+        export GITHUB_TOKEN="$(cat /run/secrets/github_token)"; \
+    fi \
+    && cargo install --locked cargo-binstall --version "${CARGO_BINSTALL_VERSION}" \
     && cargo binstall --no-confirm --locked \
         "cargo-nextest@${CARGO_NEXTEST_VERSION}" \
         "cargo-llvm-cov@${CARGO_LLVM_COV_VERSION}" \
@@ -159,7 +167,11 @@ USER ${USERNAME}
 # layers above it unchanged.
 ARG NIGHTLY=nightly-2026-11-05
 ARG CARGO_FUZZ_VERSION=0.13.2
-RUN rustup toolchain install "${NIGHTLY}" --profile minimal \
+RUN --mount=type=secret,id=github_token,mode=0444 \
+    if [ -f /run/secrets/github_token ]; then \
+        export GITHUB_TOKEN="$(cat /run/secrets/github_token)"; \
+    fi \
+    && rustup toolchain install "${NIGHTLY}" --profile minimal \
         --component miri,rust-src,llvm-tools-preview \
     && cargo binstall --no-confirm --locked "cargo-fuzz@${CARGO_FUZZ_VERSION}" \
     && rm -rf "${CARGO_HOME}/registry" "${CARGO_HOME}/git" \
@@ -169,7 +181,11 @@ RUN rustup toolchain install "${NIGHTLY}" --profile minimal \
 # archive (make dist). A layer of its own leaves the cached layers above it
 # unchanged.
 ARG CARGO_ABOUT_VERSION=0.9.3
-RUN cargo binstall --no-confirm --locked "cargo-about@${CARGO_ABOUT_VERSION}"
+RUN --mount=type=secret,id=github_token,mode=0444 \
+    if [ -f /run/secrets/github_token ]; then \
+        export GITHUB_TOKEN="$(cat /run/secrets/github_token)"; \
+    fi \
+    && cargo binstall --no-confirm --locked "cargo-about@${CARGO_ABOUT_VERSION}"
 
 # The C toolchain and C library of the other architecture, and qemu-user to
 # run its programs, so either host builds and runs programs for the other
