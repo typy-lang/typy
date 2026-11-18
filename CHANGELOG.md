@@ -31,6 +31,11 @@ All notable changes to TyPy are recorded here. The format follows
   through its class, and a static method, is the function itself
   (FUN-05). Class methods, methods read through a protocol value, and a
   few overrides, are planned for 0.9 (FUN-09).
+- The `key` argument of `sorted`, `list.sort`, `min` and `max`, also of
+  `min` and `max` of several values: a function value of one item, whose
+  results order the items as CPython orders them. `sorted` and
+  `list.sort` call it once for each item and sort stably, and `min` and
+  `max` compare each key as it is computed (FUN-05).
 
 ### Changed
 

@@ -256,6 +256,19 @@ impl FunctionLowerer<'_> {
             TypedExprKind::BoundMethod { object, methods } => {
                 self.bound_method(object, methods, span)
             }
+            TypedExprKind::Keyed {
+                operation,
+                list,
+                key,
+                option,
+                option_first,
+            } => self.keyed(
+                *operation,
+                list,
+                key,
+                (option.as_deref(), *option_first),
+                span,
+            ),
             TypedExprKind::CallValue { callee, arguments } => {
                 self.call_value(callee, arguments, ty, span)
             }

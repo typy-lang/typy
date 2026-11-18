@@ -40,11 +40,11 @@ pub use sys::SysValue;
 pub use typed::{
     Argument, AssignTarget, Attribute, CDataExpr, CDataPlace, ClassId, Conversion, EachMember,
     ExceptionPart, FStringPart, FileAttribute, FormattedValue, FunctionId, FunctionSignature,
-    Generator, ImportBinding, InitCall, IsInstanceTest, LoopSource, MemberTest, OpenOptions,
-    OperatorCall, OperatorKind, PartOperation, PercentConversion, PercentField, PercentNumber,
-    PercentPart, PercentValue, PrintCall, RaiseCause, RuntimeKind, SignatureParameter, Symbol,
-    SymbolId, SymbolKind, TypedCase, TypedClass, TypedConstant, TypedExpr, TypedExprKind,
-    TypedFunction, TypedHandler, TypedModule, TypedPattern, TypedProgram, TypedStmt,
-    TypedTypeAlias, WithProtocol, dump,
+    Generator, ImportBinding, InitCall, IsInstanceTest, KeyedOperation, LoopSource, MemberTest,
+    OpenOptions, OperatorCall, OperatorKind, PartOperation, PercentConversion, PercentField,
+    PercentNumber, PercentPart, PercentValue, PrintCall, RaiseCause, RuntimeKind,
+    SignatureParameter, Symbol, SymbolId, SymbolKind, TypedCase, TypedClass, TypedConstant,
+    TypedExpr, TypedExprKind, TypedFunction, TypedHandler, TypedModule, TypedPattern, TypedProgram,
+    TypedStmt, TypedTypeAlias, WithProtocol, dump,
 };
 pub use types::{BinaryKind, Type, TypeObjectOf, View};

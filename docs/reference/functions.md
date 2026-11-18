@@ -11,8 +11,9 @@
 | A function of the program as a value of type `Callable[[A, ...], R]`: stored, passed, returned, called, compared and hashed | FUN-05, NFR-19 |
 | A method read through an instance as a bound method, and through its class as a function | FUN-05 |
 
-Nested functions and the `key` argument of `sorted`, `list.sort`, `min`
-and `max` are planned for 0.8 (FUN-04, FUN-05). Decorators, generators,
+A function value is the `key` of `sorted`, `list.sort`, `min` and `max`;
+see [Ordering by a key](../library/functions-and-modules.md#ordering-by-a-key).
+Nested functions are planned for 0.8 (FUN-04). Decorators, generators,
 built-in functions as values, and class methods and protocol methods as
 values are planned for 0.9 (FUN-06 to FUN-09).
 

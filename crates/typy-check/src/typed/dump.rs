@@ -540,6 +540,7 @@ impl Dump<'_> {
                 )
             }
             TypedExprKind::Builtin { builtin, .. } => format!("Builtin {builtin:?}"),
+            TypedExprKind::Keyed { operation, .. } => format!("Keyed {operation:?}"),
             TypedExprKind::IterableBuiltin { builtin, .. } => {
                 format!("IterableBuiltin {builtin:?}")
             }

@@ -248,6 +248,18 @@ pub enum TypedExprKind {
         iterable: Box<TypedExpr>,
         option: Option<Box<TypedExpr>>,
     },
+    /// `sorted`, `min` or `max` of a list with a `key`, or `list.sort` with one (FUN-05): the
+    /// list, then the key and the option, `reverse` or `default`, in the order the call writes
+    /// them, then the key of each item, once and in order; the items are ordered or compared by
+    /// their keys alone, as CPython orders them.
+    Keyed {
+        operation: KeyedOperation,
+        list: Box<TypedExpr>,
+        key: Box<TypedExpr>,
+        option: Option<Box<TypedExpr>>,
+        /// Whether the call writes the option before the key.
+        option_first: bool,
+    },
     /// A `tuple[T, ...]` made from a fixed tuple whose items are all of type `T`, or from a new
     /// list that `tuple(source)` built (DAT-14).
     TupleOf(Box<TypedExpr>),
@@ -538,6 +550,19 @@ pub struct IsInstanceTest {
     pub members: Vec<(bool, Vec<crate::types::TypeObjectOf>)>,
 }
 
+/// What a call with a `key` does with the items of its list (FUN-05).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum KeyedOperation {
+    /// `sorted`: a new list of the items, ordered by their keys.
+    Sorted,
+    /// `list.sort`: the list's own items ordered by their keys.
+    Sort,
+    /// `min`: the first item of the smallest key.
+    Min,
+    /// `max`: the first item of the largest key.
+    Max,
+}
+
 /// An operation on a variable that holds a union of objects, checked once for each member
 /// with the variable narrowed to it (TYP-14, ADR-0027).
 #[derive(Clone, Debug, PartialEq)]
@@ -622,6 +647,23 @@ impl TypedExpr {
             TypedExprKind::ListItem { list, index } => vec![list, index],
             TypedExprKind::CallValue { callee, arguments } => {
                 std::iter::once(callee.as_ref()).chain(arguments).collect()
+            }
+            TypedExprKind::Keyed {
+                list,
+                key,
+                option,
+                option_first,
+                ..
+            } => {
+                let (first, second) = if *option_first {
+                    (option.as_deref(), Some(key.as_ref()))
+                } else {
+                    (Some(key.as_ref()), option.as_deref())
+                };
+                std::iter::once(list.as_ref())
+                    .chain(first)
+                    .chain(second)
+                    .collect()
             }
             TypedExprKind::ListOf(source)
             | TypedExprKind::SetOf(source)

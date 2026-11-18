@@ -27,6 +27,7 @@ mod invoke;
 mod isinstance;
 mod iterable_builtin;
 mod iterator;
+mod keyed;
 mod last_use;
 mod lazy;
 mod list;

@@ -243,6 +243,39 @@ impl FunctionLowerer<'_> {
         self.builder.switch_to(exit);
     }
 
+    /// Calls `visit` with each item of the list `list`, of items of type `item`, as `for`
+    /// reads a list: a hidden slot holds the list for the loop, and its length is read again
+    /// at each step, so an item appended during the loop is visited.
+    pub(crate) fn each_list_item(
+        &mut self,
+        list: ValueId,
+        item: TyirType,
+        span: Span,
+        mut visit: impl FnMut(&mut Self, Lowered),
+    ) {
+        let sequence = self.hidden_slot("sequence", TyirType::LIST);
+        self.store(sequence, Self::borrowed(list, TyirType::LIST), span);
+        let position = self.hidden_slot("position", TyirType::Int);
+        let first = self.constant(Constant::Int("0".to_owned()), span);
+        self.store(position, Self::borrowed(first, TyirType::Int), span);
+        let iterator = Iterator::Sequence {
+            sequence,
+            position,
+            kind: Kind::List,
+            backwards: false,
+            item,
+        };
+        let header = self.builder.create_block();
+        let exit = self.builder.create_block();
+        self.jump_to(header);
+        self.builder.switch_to(header);
+        let value = self.next_value(&iterator, exit, span);
+        visit(self, value);
+        self.release(value, span);
+        self.jump_to(header);
+        self.builder.switch_to(exit);
+    }
+
     /// Starts `source`, calls `between`, then calls `visit` with each value, as `each_value`
     /// does, and returns what `between` gave. This is the order of a call that evaluates its
     /// arguments before it iterates one, as `dict(source, name=value)` does: the source's

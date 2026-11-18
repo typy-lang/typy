@@ -143,6 +143,24 @@ fn fun_02_a_function_that_calls_through_a_value_checks_the_stack_and_its_callee_
 }
 
 #[test]
+fn fun_02_a_function_that_orders_by_a_key_checks_the_stack() {
+    let module = lower(
+        "def size(text: str) -> int:\n    return len(text)\n\n\n\
+         def longest(words: list[str]) -> str:\n    return max(words, key=size)\n",
+    );
+    let longest = function(&module, "longest");
+    assert!(matches!(
+        longest.blocks[0].terminator,
+        Terminator::Invoke {
+            callee: typy_tyir::Callee::Runtime(typy_tyir::RuntimeFunction::CheckStack),
+            ..
+        }
+    ));
+    let text = print(&module);
+    assert!(text.contains("call rt.list_keep_extreme("), "{text}");
+}
+
+#[test]
 fn fun_05_a_bound_method_tests_each_overriding_class_after_its_bases() {
     let module = lower(
         "class A:\n    def m(self) -> int:\n        return 1\n\n\nclass B(A):\n    \

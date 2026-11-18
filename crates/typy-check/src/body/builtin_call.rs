@@ -97,6 +97,37 @@ impl BodyChecker<'_> {
         {
             return call;
         }
+        // `min(a, b, key=f)` and `max` compare the values by their keys, and `key=None` is no
+        // key (FUN-05).
+        let keywords = match keywords {
+            [keyword]
+                if matches!(builtin, Builtin::Min | Builtin::Max)
+                    && values.len() >= 2
+                    && keyword.name.as_ref().is_some_and(|name| name.name == "key") =>
+            {
+                if let Expr::Constant {
+                    value: typy_source::syntax::Constant::None,
+                    ..
+                } = keyword.value
+                {
+                    &[]
+                } else if values.iter().any(|value| value.ty.has_error()) {
+                    return Self::typed(
+                        TypedExprKind::Constant(TypedConstant::None),
+                        Type::Error,
+                        span,
+                    );
+                } else {
+                    return self.keyed_values(
+                        builtin == Builtin::Max,
+                        values,
+                        &keyword.value,
+                        span,
+                    );
+                }
+            }
+            other => other,
+        };
         if let Some(keyword) = keywords.first() {
             return self.error(
                 Diagnostic::new(

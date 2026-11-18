@@ -66,6 +66,10 @@ pub enum RuntimeFunction {
     ListRepeat,
     ListCompare,
     ListSort,
+    /// Sorts a list in place by a list of their keys (FUN-05).
+    ListSortKeyed,
+    /// Keeps the best key so far and its item for `min` or `max` with a key (FUN-05).
+    ListKeepExtreme,
     ListExtreme,
     ListSumInt,
     ListSumFloat,
@@ -457,7 +461,7 @@ const FLOAT_FLOAT: &[TyirType] = &[TyirType::Float, TyirType::Float];
 
 impl RuntimeFunction {
     /// Every runtime function.
-    pub const ALL: [Self; 358] = [
+    pub const ALL: [Self; 360] = [
         Self::IntFloorDivide,
         Self::IntModulo,
         Self::IntPower,
@@ -515,6 +519,8 @@ impl RuntimeFunction {
         Self::ListRepeat,
         Self::ListCompare,
         Self::ListSort,
+        Self::ListSortKeyed,
+        Self::ListKeepExtreme,
         Self::ListExtreme,
         Self::ListSumInt,
         Self::ListSumFloat,
@@ -956,6 +962,8 @@ impl RuntimeFunction {
             Self::ListRepeat => signature(&[LIST, Int], LIST, true),
             Self::ListCompare => signature(&[LIST, LIST, Int], Bool, false),
             Self::ListSort => signature(&[LIST, Int], Unit, false),
+            Self::ListSortKeyed => signature(&[LIST, LIST, Int], Unit, false),
+            Self::ListKeepExtreme => signature(&[LIST, Bits, LIST, Bits, Int], Unit, false),
             Self::ListSumInt | Self::MathProdInt => signature(&[LIST, Int], Int, false),
             Self::ListSumFloat => signature(&[LIST, Float], Float, false),
             Self::ListAny | Self::ListAll | Self::MathHasFloat => signature(&[LIST], Bool, false),
@@ -1281,6 +1289,8 @@ impl RuntimeFunction {
             Self::ListRepeat => "list_repeat",
             Self::ListCompare => "list_compare",
             Self::ListSort => "list_sort",
+            Self::ListSortKeyed => "list_sort_keyed",
+            Self::ListKeepExtreme => "list_keep_extreme",
             Self::ListExtreme => "list_extreme",
             Self::ListSumInt => "list_sum_int",
             Self::ListSumFloat => "list_sum_float",

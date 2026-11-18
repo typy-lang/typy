@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy detailed design |
-| Version | 2.39 |
+| Version | 2.40 |
 | Status | Approved |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-18 |
@@ -719,6 +719,17 @@ otherwise than its base, which only an adapter reaches, are planned for
 0.9 under FUN-09; a method with type parameters of its own or a
 keyword-only parameter is E0202, as a function is. An assignment to a
 method of an instance is E0414.
+
+`body/key_argument.rs` checks the `key` of `sorted`, `min` and `max`, also
+of `min` and `max` of several values, and of `list.sort`: a function value
+that fits `Callable[[T], K]` for the item type `T`, whose result type `K`
+orders with `<`, or `None`, which is no key. Any other value is E0404, and
+keys that do not order are E0407. The call is
+`TypedExprKind::Keyed { operation, list, key, option, option_first }`,
+whose `KeyedOperation` is `Sorted`, `Sort`, `Min` or `Max`; `min(a, b,
+key=f)` is the call over the list of its values, and `option_first`
+records whether the call writes `reverse` or `default` before the key, so
+they are evaluated in its order.
 
 `TypedProgram`
 
@@ -2426,6 +2437,7 @@ graph, symbol names and the string pool.
 | Optional values | `None` where `T \| None` is expected is the constant `NoneOf`, and a value of `T` is wrapped; wrapping and unwrapping hand the reference on with the value. `is None` and `is not None` on an optional value test `IsNone`, and on any other value are constants. `str`, `repr` and truth tests branch on `IsNone` and read the value only where it is not `None`, so a null object never reaches the runtime. An optional slot starts as `None`, and an optional parameter's default is `None` or its wrapped constant. `dict.get(key)` finds the key and wraps its value with a reference of its own, or gives `None` |
 | Builtins | Each builtin of 0.1 becomes runtime calls. `print` evaluates every argument in source order, then converts and writes each value. `min` and `max` keep the first value on a tie, as CPython does |
 | Stack | A function in a cycle of calls invokes the runtime's stack check on entry (FUN-02). Each function that calls through a function value counts as one, since every cycle through a value passes through such a call |
+| Keys | `Keyed` evaluates the list, then the key and the option in the call's order, and holds a reference to the key's function value for the call. `sorted` and `list.sort` copy the list, call the key through its value for each item as a `for` loop reads the copy, appending each key to a list of keys, then call `list_sort_keyed`; `list.sort` then clears its list and extends it with the copy. `min` and `max` call the key for each item of the list and pass it with the item to `list_keep_extreme`, which keeps the best key and its item in two lists of at most one item, and `list_extreme` of the list of the item gives the result or the default. A function with a `Keyed` call checks the stack on entry, as one that calls through a value does |
 | Bound methods | `BoundMethod` evaluates the object, starts from the descriptor of the first method and, for each later entry, tests `is_instance` of its class and selects its descriptor when the test holds, then calls `method_new` with the descriptor and the object |
 | Function values | A function read as a value is its `Constant::Function`, borrowed, since it is immortal. A call through a value evaluates the callee, then the arguments, keeps each for the call as a call by name does, so the call cannot free the object it runs by assigning where it was read, and invokes `Callee::Value`. A function value's slot starts as null, `type()` and `str` of one read its header, `==` calls `objects_equal`, and it is true |
 

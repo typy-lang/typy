@@ -68,7 +68,7 @@ impl FunctionLowerer<'_> {
 
     /// Returns the largest or smallest item of a list, with a reference of its own; with a
     /// default, an empty list gives the default instead of raising `ValueError`.
-    fn list_extreme(
+    pub(crate) fn list_extreme(
         &mut self,
         largest: bool,
         list: ValueId,
@@ -92,6 +92,7 @@ impl FunctionLowerer<'_> {
             TyirType::Bool,
             span,
         );
+        self.release(length, span);
         let use_default = self.builder.create_block();
         let search = self.builder.create_block();
         let join = self.builder.create_block();

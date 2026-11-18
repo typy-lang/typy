@@ -386,3 +386,73 @@ fn fun_05_a_method_without_one_callable_type_is_not_a_value() {
         )]
     );
 }
+
+#[test]
+fn fun_05_a_key_is_a_function_value_of_one_item_whose_results_order() {
+    let accepted = "class Box:\n    def __init__(self, size: int) -> None:\n        \
+                    self.size = size\n\n    def measure(self, other: int) -> int:\n        \
+                    return self.size + other\n\n\ndef size(text: str) -> int:\n    \
+                    return len(text)\n\n\nwords = [\"a\"]\nnumbers = [1, 2]\n\
+                    print(sorted(words, key=size), min(words, key=size, default=\"x\"))\n\
+                    print(max(numbers, key=Box(1).measure), max(1, 2, key=Box(2).measure))\n\
+                    words.sort(reverse=True, key=size)\nwords.sort(key=None)\n\
+                    print(min(1, 2, key=None), sorted(words, key=None))\n";
+    assert_eq!(app(accepted), Vec::<String>::new());
+    let cases = [
+        (
+            "print(sorted(words, key=3))",
+            "E0404",
+            "the `key` of `sorted` is called with each item, of type str, and this is an int",
+        ),
+        (
+            "print(min(words, key=of_int))",
+            "E0404",
+            "the `key` of `min` is called with each item, of type str, and this is a \
+             Callable[[int], int]",
+        ),
+        (
+            "words.sort(key=of_int)",
+            "E0404",
+            "the `key` of `sort` is called with each item, of type str, and this is a \
+             Callable[[int], int]",
+        ),
+        (
+            "print(max(words, key=boxed))",
+            "E0407",
+            "Box and Box cannot be compared",
+        ),
+        (
+            "words.sort(1, key=size)",
+            "E0404",
+            "`sort` takes no positional arguments",
+        ),
+        (
+            "words.sort(key=size, other=True)",
+            "E0404",
+            "`sort` has no parameter named `other`",
+        ),
+        (
+            "print(any(words, key=size))",
+            "E0404",
+            "`any` has no parameter named `key`",
+        ),
+        (
+            "print(min(1, 2.0, key=of_int))",
+            "E0404",
+            "the arguments of `min` must have one type, because CPython returns one of them \
+             unchanged; they are int and float",
+        ),
+    ];
+    let definitions = "class Box:\n    pass\n\n\ndef size(text: str) -> int:\n    \
+                       return len(text)\n\n\ndef boxed(text: str) -> Box:\n    return Box()\n\n\n\
+                       def of_int(value: int) -> int:\n    return value\n\n\nwords = [\"a\"]\n";
+    for (statement, code, message) in cases {
+        let found = messages(&format!("{definitions}{statement}\n"));
+        assert_eq!(found.len(), 1, "{statement}: {found:?}");
+        assert_eq!(
+            (found[0].0.as_str(), found[0].1.as_str()),
+            (code, message),
+            "{statement}"
+        );
+    }
+}
