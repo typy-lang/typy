@@ -317,7 +317,7 @@ standard library; a crate under a licence `about.toml` does not accept fails
 the build. The tarball is reproducible, so two builds of one commit have the
 same SHA-256; on a Mac, GNU tar's `gtar` writes it. The executable links
 LLVM statically and, on Linux, needs glibc 2.39 or later and `libstdc++`,
-and on macOS 11 or later only `libSystem` and `libc++`, which
+and on macOS 11 or later only `libSystem`, `libc++` and `libiconv`, which
 `scripts/check-executable-needs.sh` checks before the archive is packed,
 and a C toolchain to link programs. LLVM's licence comes from its archive.
 
