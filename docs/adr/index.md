@@ -63,4 +63,4 @@ supersedes it.
 | [ADR-0055](0055-support-macos-on-apple-silicon-as-a-host-that-builds-for-itself.md) | Support macOS on Apple silicon as a host that builds for itself | Accepted | 2026-11-18 |
 | [ADR-0056](0056-link-for-mach-o-with-apples-linker-and-name-libraries-as-macos-does.md) | Link for Mach-O with Apple's linker and name libraries as macOS does | Accepted | 2026-11-18 |
 | [ADR-0057](0057-give-the-runtime-each-systems-c-constants-and-macos-its-own-error-texts.md) | Give the runtime each system's C constants and macOS its own error texts | Accepted | 2026-11-18 |
-| [ADR-0058](0058-pass-c-scalars-at-their-c-width-with-each-targets-extension.md) | Pass C scalars at their C width with each target's extension | Accepted | 2026-11-18 |
+| [ADR-0058](0058-pass-c-arguments-as-libffi-passes-them-on-every-target.md) | Pass C arguments as libffi passes them on every target | Accepted | 2026-11-18 |

@@ -180,7 +180,7 @@ nav:
           - adr/0055-support-macos-on-apple-silicon-as-a-host-that-builds-for-itself.md
           - adr/0056-link-for-mach-o-with-apples-linker-and-name-libraries-as-macos-does.md
           - adr/0057-give-the-runtime-each-systems-c-constants-and-macos-its-own-error-texts.md
-          - adr/0058-pass-c-scalars-at-their-c-width-with-each-targets-extension.md
+          - adr/0058-pass-c-arguments-as-libffi-passes-them-on-every-target.md
       - Detailed design: design/detailed-design.md
       - Test plan: testing/test-plan.md
       - Benchmark report: testing/benchmark-report.md
