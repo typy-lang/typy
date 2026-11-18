@@ -1,9 +1,7 @@
 //! Tests of checking the parts of an exception a program reads through the public API
 //! (EXC-11, EXC-13, EXC-15, EXC-16): `args`, `code`, and the fields of an `OSError`.
 
-mod common;
-
-use common::app;
+use crate::common::app;
 
 #[test]
 fn a_part_compares_from_either_side_of_the_operator() {

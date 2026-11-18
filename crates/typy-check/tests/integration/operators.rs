@@ -1,9 +1,7 @@
 //! Tests of the operators each pair of operand types takes, and of the special methods that
 //! define unary operators, against what CPython runs.
 
-mod common;
-
-use common::app;
+use crate::common::app;
 
 /// Asserts that each program is refused with `code` first.
 fn refused_with(code: &str, cases: &[&str]) {

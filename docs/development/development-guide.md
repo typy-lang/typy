@@ -3,10 +3,10 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy development guide |
-| Version | 0.20 |
+| Version | 0.21 |
 | Status | Draft |
 | Owner | typy-lang contributors |
-| Last updated | 2026-11-17 |
+| Last updated | 2026-11-18 |
 
 ## 1. Purpose
 
@@ -103,7 +103,8 @@ on generated 10,000-line projects against the budgets of NFR-04, NFR-05 and
 NFR-14; CI runs it after the release archive. The user documentation, every
 page under `docs/` outside the engineering documents' directories, is
 Markdown that `make docs-lint` checks, and
-`crates/typy-conformance/tests/documentation.rs` judges its samples (DOC-04).
+`crates/typy-conformance/tests/integration/documentation.rs` judges its
+samples (DOC-04).
 
 ## 4. Repository layout
 
@@ -258,7 +259,7 @@ each release's branch stays on origin and an issue can be traced to it.
    renames the changelog's "Unreleased" section to `[X.Y.Z] - DATE`, and
    opens a new empty "Unreleased" section above it. For a new minor
    release it adds the release to `RELEASES` in
-   `crates/typy-conformance/tests/suite.rs`, so the suite requires an
+   `crates/typy-conformance/tests/integration/suite.rs`, so the suite requires an
    accepted and a rejected test of every requirement up to it. It also
    sets the version of the documentation, in `site_name` in `mkdocs.yml`
    and the title of `docs/index.md`, and adds `docs/whatsnew/X.Y.md`, the

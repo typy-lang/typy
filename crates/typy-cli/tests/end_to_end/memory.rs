@@ -1,9 +1,7 @@
 //! End-to-end tests of running out of memory: a built program prints `MemoryError` and
 //! aborts, which a conformance test cannot compare, since CPython raises it instead.
 
-mod common;
-
-use common::Program;
+use crate::common::Program;
 
 #[test]
 fn a_list_repeated_past_the_address_space_runs_out_of_memory() {

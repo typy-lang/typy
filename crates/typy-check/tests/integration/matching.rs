@@ -1,10 +1,8 @@
 //! Tests of checking `match` statements through the public API (CST-06): what a pattern
 //! narrows, which cases always match, and the one error each mistake gives.
 
-mod common;
-
+use crate::common::app;
 use camino::Utf8PathBuf;
-use common::app;
 use typy_check::TypeChecker;
 use typy_source::{Project, ProjectSettings};
 

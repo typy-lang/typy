@@ -1,11 +1,9 @@
 //! End-to-end tests of deeply nested programs (LEX-11, NFR-09): `typy` compiles what CPython
 //! compiles, however deep, and refuses what nests past the limits with an error, never a crash.
 
-mod common;
-
 use std::process::Command;
 
-use common::Program;
+use crate::common::Program;
 
 #[test]
 fn a_program_nested_as_deep_as_cpython_compiles_builds_and_runs() {

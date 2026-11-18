@@ -3,10 +3,10 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy detailed design |
-| Version | 2.26 |
+| Version | 2.27 |
 | Status | Approved |
 | Owner | typy-lang contributors |
-| Last updated | 2026-11-17 |
+| Last updated | 2026-11-18 |
 
 ## 1. Purpose and scope
 
@@ -2863,12 +2863,13 @@ it because the exponent is a variable.
 | `observation` | `Observation::of(command)` runs a program with no standard input, reads both pipes on their own threads, and keeps standard output, the exit status and the last line of standard error; a program that runs longer than 60 seconds is stopped, a limit set far above the run time of any conformance program so that an oracle slowed by a loaded machine is not taken for a hang |
 | `oracle` | Runs `python3.X -E -s -B -X utf8 -W ignore::SyntaxWarning FILE` for each oracle version from the floor up, each in an empty working directory of its own, so a test that writes files writes nothing into the test tree and meets no other run's files; the file's directory still leads the module path. It removes that directory's absolute path from the output |
 | `subject` | Builds an accepted test in debug and release mode into a temporary directory and runs each build in an empty working directory of its own, as the oracle runs, and with `Suite::with_sanitizers` also links its debug object file with `cc -fsanitize=address` and runs it with leak detection, where a report ends the run with status 86; checks a rejected test with `Pipeline::check`, which passes when exactly one diagnostic is reported, with that code at that line and column |
-| `verdict` | `Pass`, `Fail` with the reason, or `Invalid` when the oracles disagree, an oracle cannot run the file, or the header is not valid (STD-03) |
+| `verdict` | `Pass`, `Fail` with the reason, `Invalid` when the oracles disagree, an oracle cannot run the file, or the header is not valid (STD-03), or `Skipped` with the reason when a run built for another architecture than the oracle's meets a test marked `architecture-dependent` (NFR-16) |
 | `suite` | `Suite::run(root)` judges every `.py` file under `root`, as many at once as the machine has cores, and returns a `Report` with each verdict and, for each requirement ID, how many accepted and rejected tests name it |
 
-The suite runs as the tests `crates/typy-conformance/tests/suite.rs` and,
-with the sanitizers, `tests/sanitized.rs`, so
-`make test` and `make check` run it on every commit. That test fails on any
+The suite runs as the tests
+`crates/typy-conformance/tests/integration/suite.rs` and, with the
+sanitizers, `tests/integration/sanitized.rs`, so `make test` and
+`make check` run it on every commit. That test fails on any
 verdict but `Pass`, and on any requirement the test plan gives the suite for
 0.1 that lacks an accepted or a rejected test. A test is built and checked
 at its own floor, through `Pipeline::with_overrides`, as `python-floor` in

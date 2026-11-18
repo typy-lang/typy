@@ -3,10 +3,10 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy test plan |
-| Version | 0.89 |
+| Version | 0.90 |
 | Status | Draft |
 | Owner | typy-lang contributors |
-| Last updated | 2026-11-17 |
+| Last updated | 2026-11-18 |
 
 ## 1. Purpose
 
@@ -29,9 +29,9 @@ Each test sits at the lowest level that can prove its behaviour.
 | Level | What it proves | Where | Runs |
 | --- | --- | --- | --- |
 | Unit (UT) | One function or type in isolation: parsing a code, normalising a union, a large-integer operation | `#[cfg(test)]` modules in each crate | Every commit |
-| Golden | The text of one compiler stage for one input, through `--emit` (CLI-04) | `tests/golden/`, run by `crates/typy-driver/tests/golden.rs` | Every commit |
+| Golden | The text of one compiler stage for one input, through `--emit` (CLI-04) | `tests/golden/`, run by `crates/typy-driver/tests/integration/golden.rs` | Every commit |
 | Integration (IT) | The compiler, runtime and C toolchain together on one program, compared with CPython; the conformance suite | `tests/conformance/<area>/` through `typy-conformance`, which drives `typy-driver` in process | Every commit |
-| End-to-end (E2E) | The `typy` executable as a user runs it: arguments, exit status, files written, and the built program run as a subprocess | `crates/typy-cli/tests/cli.rs` | Every commit |
+| End-to-end (E2E) | The `typy` executable as a user runs it: arguments, exit status, files written, and the built program run as a subprocess | `crates/typy-cli/tests/end_to_end/cli.rs` | Every commit |
 | Fuzz | No input crashes the compiler (NFR-09) | `fuzz/` | 30 minutes before each release; 60 seconds on demand |
 | Benchmark | The numbered budgets of NFR-03 to NFR-05, NFR-13 and NFR-14, and how TyPy compares with other languages | `tests/bench/` | `make bench` in CI from 0.3 for NFR-04, NFR-05 and NFR-14; the run-time suite of NFR-03 before a release, from 1.0; `make bench-compare`, which writes the [benchmark report](benchmark-report.md), on demand from 0.5 |
 | Mutation | Tests fail when the code they cover is changed | `make mutants` over the lines a change adds or alters, each mutant against its own crate's tests, in a container limited to 6 GB with no swap, since a mutant can turn a bounded loop into one that allocates until memory runs out. `typy-build`, `typy-driver` and `typy-cli` are left out, since their tests need the runtime archives built beside the compiler; the end-to-end and conformance tests cover them. A whole crate is run with `make mutants-package` when its tests are reviewed | On demand, for a change whose tests deserve a closer look |
@@ -110,10 +110,11 @@ cannot show the rejection a requirement describes, its rejected test records
 what 0.1 does instead, such as a function used as a truth value, E0201
 until functions are values in 1.0.
 
-The test `crates/typy-conformance/tests/suite.rs` runs the suite on every
-commit and fails when a test does not pass or a 0.1 requirement of the
-matrix lacks either kind of test (NFR-10). The 0.1 corpus holds 45 accepted
-and 44 rejected tests and runs in about 20 seconds.
+The test `crates/typy-conformance/tests/integration/suite.rs` runs the
+suite on every commit and fails when a test does not pass or a 0.1
+requirement of the matrix lacks either kind of test (NFR-10). The 0.1
+corpus holds 45 accepted and 44 rejected tests and runs in about 20
+seconds.
 
 ### 3.4 End-to-end tests
 
@@ -137,7 +138,7 @@ Subprocess runs are included in coverage (NFR-11).
 
 ### 3.5 Memory and safety
 
-The test `crates/typy-conformance/tests/sanitized.rs` builds every accepted
+The test `crates/typy-conformance/tests/integration/sanitized.rs` builds every accepted
 conformance test once more: its object file is linked with the runtime built
 with AddressSanitizer (`-Zsanitizer=address`, pinned nightly) and with GCC's
 AddressSanitizer library, and run with leak detection on. The run must show
@@ -262,20 +263,20 @@ that the specification does not define.
 | STD-05 | 0.3 | IT | `tests/conformance/std/STD-05_*.py` |
 | STD-06 | 0.1 | IT | `tests/conformance/std/STD-06_*.py` |
 | STD-07 | 0.1 | IT | `tests/conformance/std/STD-07_*.py` |
-| CLI-01 | 0.1 | E2E | `crates/typy-cli/tests/cli.rs`, tests named for CLI-01 |
-| CLI-02 | 0.1 | E2E | `crates/typy-cli/tests/cli.rs`, tests named for CLI-02 |
-| CLI-03 | 0.1 | E2E | `crates/typy-cli/tests/cli.rs`, tests named for CLI-03 |
-| CLI-04 | 0.1 | E2E, golden | `crates/typy-cli/tests/cli.rs`, tests named for CLI-04; stage golden files in `tests/golden/` |
-| CLI-05 | 0.1 | E2E | `crates/typy-cli/tests/cli.rs`, tests named for CLI-05 |
-| CLI-06 | 0.1 | E2E | `crates/typy-cli/tests/cli.rs`, tests named for CLI-06 |
-| CLI-07 | 0.3 | E2E | `crates/typy-cli/tests/cli.rs`, tests named for CLI-07 |
-| CLI-08 | 0.6 | UT, E2E | `crates/typy-codegen/src/target.rs` for the supported triples and the host; `crates/typy-cli/tests/cli.rs` for `--target` on `build` and `check`, an unsupported triple and an AArch64 executable built on an x86_64 host and run under `qemu-aarch64` |
-| CLI-14 | 0.6 | UT, E2E | `crates/typy-build/src/toolchain.rs` for the tools of each target on each host; `crates/typy-build/src/linker.rs` and `library_link.rs` for the tools they run; `crates/typy-source/src/settings_file/target.rs` for the `typy.toml` table of a target; `crates/typy-build/src/toolchain.rs` for the triples it shares with the code generator; `crates/typy-cli/tests/cli.rs` for E0701 naming a missing cross tool |
-| CLI-09 | 0.5 | UT, E2E | `crates/typy-build/src/request.rs` and `library_kind.rs` for the output's name; `crates/typy-cli/tests/library.rs`, tests named for CLI-09: a static library in a C program, its only global symbols, a shared library from CPython through `ctypes`, two libraries in one program with a call from another thread, and a file name that is not a module name |
-| CLI-13 | 0.5 | UT, E2E | `crates/typy-source/src/version.rs` for the release of a version; `crates/typy-source/src/settings_file.rs` for `version`; `crates/typy-check/tests/exports.rs` for `__version__` and E0429; `crates/typy-build/src/library_layout.rs` for each layout; `crates/typy-cli/tests/library.rs`, tests named for CLI-13: a shared library's soname and links, a new release that moves them, a static library's link, `-o`, and two versions that differ |
-| CLI-10 | 0.3 | E2E | `crates/typy-cli/tests/cli.rs`, tests named for CLI-10 |
-| CLI-11 | 0.1 | E2E | `crates/typy-cli/tests/cli.rs`, tests named for CLI-11 |
-| CLI-12 | 0.3 | E2E | `crates/typy-cli/tests/cli.rs`, tests named for CLI-12 |
+| CLI-01 | 0.1 | E2E | `crates/typy-cli/tests/end_to_end/cli.rs`, tests named for CLI-01 |
+| CLI-02 | 0.1 | E2E | `crates/typy-cli/tests/end_to_end/cli.rs`, tests named for CLI-02 |
+| CLI-03 | 0.1 | E2E | `crates/typy-cli/tests/end_to_end/cli.rs`, tests named for CLI-03 |
+| CLI-04 | 0.1 | E2E, golden | `crates/typy-cli/tests/end_to_end/cli.rs`, tests named for CLI-04; stage golden files in `tests/golden/` |
+| CLI-05 | 0.1 | E2E | `crates/typy-cli/tests/end_to_end/cli.rs`, tests named for CLI-05 |
+| CLI-06 | 0.1 | E2E | `crates/typy-cli/tests/end_to_end/cli.rs`, tests named for CLI-06 |
+| CLI-07 | 0.3 | E2E | `crates/typy-cli/tests/end_to_end/cli.rs`, tests named for CLI-07 |
+| CLI-08 | 0.6 | UT, E2E | `crates/typy-codegen/src/target.rs` for the supported triples and the host; `crates/typy-cli/tests/end_to_end/cli.rs` for `--target` on `build` and `check`, an unsupported triple and an AArch64 executable built on an x86_64 host and run under `qemu-aarch64` |
+| CLI-14 | 0.6 | UT, E2E | `crates/typy-build/src/toolchain.rs` for the tools of each target on each host; `crates/typy-build/src/linker.rs` and `library_link.rs` for the tools they run; `crates/typy-source/src/settings_file/target.rs` for the `typy.toml` table of a target; `crates/typy-build/src/toolchain.rs` for the triples it shares with the code generator; `crates/typy-cli/tests/end_to_end/cli.rs` for E0701 naming a missing cross tool |
+| CLI-09 | 0.5 | UT, E2E | `crates/typy-build/src/request.rs` and `library_kind.rs` for the output's name; `crates/typy-cli/tests/end_to_end/library.rs`, tests named for CLI-09: a static library in a C program, its only global symbols, a shared library from CPython through `ctypes`, two libraries in one program with a call from another thread, and a file name that is not a module name |
+| CLI-13 | 0.5 | UT, E2E | `crates/typy-source/src/version.rs` for the release of a version; `crates/typy-source/src/settings_file.rs` for `version`; `crates/typy-check/tests/integration/exports.rs` for `__version__` and E0429; `crates/typy-build/src/library_layout.rs` for each layout; `crates/typy-cli/tests/end_to_end/library.rs`, tests named for CLI-13: a shared library's soname and links, a new release that moves them, a static library's link, `-o`, and two versions that differ |
+| CLI-10 | 0.3 | E2E | `crates/typy-cli/tests/end_to_end/cli.rs`, tests named for CLI-10 |
+| CLI-11 | 0.1 | E2E | `crates/typy-cli/tests/end_to_end/cli.rs`, tests named for CLI-11 |
+| CLI-12 | 0.3 | E2E | `crates/typy-cli/tests/end_to_end/cli.rs`, tests named for CLI-12 |
 | LEX-01 | 0.1 | IT | `tests/conformance/lex/LEX-01_*.py` |
 | LEX-02 | 0.1 | IT | `tests/conformance/lex/LEX-02_*.py` |
 | LEX-03 | 0.1 | IT | `tests/conformance/lex/LEX-03_*.py` |
@@ -286,7 +287,7 @@ that the specification does not define.
 | LEX-08 | 0.1 | IT | `tests/conformance/lex/LEX-08_*.py` |
 | LEX-09 | 0.1 | IT | `tests/conformance/lex/LEX-09_*.py` |
 | LEX-10 | 0.5 | IT | `tests/conformance/lex/LEX-10_*.py` |
-| LEX-11 | 0.3 | UT, IT, E2E | `crates/typy-source/src/parse/tests.rs` for each limit just inside and just past it; `crates/typy-tyir/src/verify/tests.rs` for a function of 100000 blocks; `crates/typy-cli/tests/nesting.rs` for a program as deep as CPython compiles and each refusal; `tests/conformance/lex/LEX-11_*.py` |
+| LEX-11 | 0.3 | UT, IT, E2E | `crates/typy-source/src/parse/tests.rs` for each limit just inside and just past it; `crates/typy-tyir/src/verify/tests.rs` for a function of 100000 blocks; `crates/typy-cli/tests/end_to_end/nesting.rs` for a program as deep as CPython compiles and each refusal; `tests/conformance/lex/LEX-11_*.py` |
 | TYP-01 | 0.1 | IT | `tests/conformance/typ/TYP-01_*.py` |
 | TYP-02 | 0.1 | IT | `tests/conformance/typ/TYP-02_*.py` |
 | TYP-03 | 0.1 | IT | `tests/conformance/typ/TYP-03_*.py` |
@@ -358,7 +359,7 @@ that the specification does not define.
 | CST-04 | 0.3 | IT | `tests/conformance/cst/CST-04_*.py` |
 | CST-05 | 0.3 | IT | `tests/conformance/cst/CST-05_*.py` |
 | CST-06 | 0.5 | IT | `tests/conformance/cst/CST-06_*.py` |
-| CST-07 | 0.5 | IT | `tests/conformance/cst/CST-07_*.py` for complete matches; `crates/typy-check/tests/matching.rs` for W0401 |
+| CST-07 | 0.5 | IT | `tests/conformance/cst/CST-07_*.py` for complete matches; `crates/typy-check/tests/integration/matching.rs` for W0401 |
 | CST-08 | 0.3 | IT | `tests/conformance/cst/CST-08_*.py` |
 | CST-09 | 0.3 | IT | `tests/conformance/cst/CST-09_*.py` |
 | CST-10 | 0.3 | IT | `tests/conformance/cst/CST-10_*.py` |
@@ -375,7 +376,7 @@ that the specification does not define.
 | CLS-03 | 0.3 | IT | `tests/conformance/cls/CLS-03_*.py` |
 | CLS-04 | 0.4 | IT | `tests/conformance/cls/CLS-04_*` |
 | CLS-05 | 0.4 | IT | `tests/conformance/cls/CLS-05_*.py` |
-| CLS-06 | 0.4 | IT | `tests/conformance/cls/CLS-06_*.py`; `crates/typy-check/tests/checker.rs`, tests named for methods called through their class |
+| CLS-06 | 0.4 | IT | `tests/conformance/cls/CLS-06_*.py`; `crates/typy-check/tests/integration/checker.rs`, tests named for methods called through their class |
 | CLS-07 | 0.4 | IT | `tests/conformance/cls/CLS-07_*.py` |
 | CLS-08 | 0.2 | IT | `tests/conformance/cls/CLS-08_*.py` |
 | CLS-09 | 0.4 | IT | `tests/conformance/cls/CLS-09_*.py` |
@@ -406,28 +407,28 @@ that the specification does not define.
 | CLS-36 | 1.0 | IT | `tests/conformance/cls/CLS-36_*.py` |
 | CLS-18 | 1.0 | IT | `tests/conformance/cls/CLS-18_*.py` |
 | CLS-19 | 1.0 | IT | `tests/conformance/cls/CLS-19_*.py` |
-| GEN-01 | 0.4 | IT | `tests/conformance/gen/GEN-01_*.py`; `crates/typy-check/tests/generics.rs` |
+| GEN-01 | 0.4 | IT | `tests/conformance/gen/GEN-01_*.py`; `crates/typy-check/tests/integration/generics.rs` |
 | GEN-02 | 0.4 | IT | `tests/conformance/gen/GEN-02_*.py` |
 | GEN-03 | 0.4 | IT | `tests/conformance/gen/GEN-03_*.py` |
 | GEN-04 | 0.4 | IT | `tests/conformance/gen/GEN-04_*.py` |
 | GEN-05 | 0.4 | IT | `tests/conformance/gen/GEN-05_*.py` |
 | GEN-06 | 1.0 | IT | `tests/conformance/gen/GEN-06_*.py` |
-| GEN-07 | 0.5 | IT | `tests/conformance/gen/GEN-07_*`; `crates/typy-check/tests/generics.rs` |
-| GEN-08 | 0.5 | IT | `tests/conformance/gen/GEN-08_*`; `crates/typy-check/tests/generics.rs` |
-| GEN-09 | 0.5 | IT | `tests/conformance/gen/GEN-09_*.py`; `crates/typy-check/tests/generics.rs` |
-| GEN-10 | 0.5 | IT | `tests/conformance/gen/GEN-10_*`; `crates/typy-check/tests/protocols.rs` |
-| GEN-11 | 1.0 | IT | `tests/conformance/gen/GEN-11_*.py`; `crates/typy-check/tests/generics.rs` |
-| GEN-12 | 1.0 | IT | `tests/conformance/gen/GEN-12_*.py`; `crates/typy-check/tests/generics.rs` |
-| GEN-13 | 1.0 | IT | `tests/conformance/gen/GEN-13_*.py`; `crates/typy-check/tests/protocols.rs` |
-| GEN-14 | 1.0 | IT | `tests/conformance/gen/GEN-14_*.py`; `crates/typy-check/tests/generics.rs` |
+| GEN-07 | 0.5 | IT | `tests/conformance/gen/GEN-07_*`; `crates/typy-check/tests/integration/generics.rs` |
+| GEN-08 | 0.5 | IT | `tests/conformance/gen/GEN-08_*`; `crates/typy-check/tests/integration/generics.rs` |
+| GEN-09 | 0.5 | IT | `tests/conformance/gen/GEN-09_*.py`; `crates/typy-check/tests/integration/generics.rs` |
+| GEN-10 | 0.5 | IT | `tests/conformance/gen/GEN-10_*`; `crates/typy-check/tests/integration/protocols.rs` |
+| GEN-11 | 1.0 | IT | `tests/conformance/gen/GEN-11_*.py`; `crates/typy-check/tests/integration/generics.rs` |
+| GEN-12 | 1.0 | IT | `tests/conformance/gen/GEN-12_*.py`; `crates/typy-check/tests/integration/generics.rs` |
+| GEN-13 | 1.0 | IT | `tests/conformance/gen/GEN-13_*.py`; `crates/typy-check/tests/integration/protocols.rs` |
+| GEN-14 | 1.0 | IT | `tests/conformance/gen/GEN-14_*.py`; `crates/typy-check/tests/integration/generics.rs` |
 | GEN-15 | 1.0 | IT | `tests/conformance/gen/GEN-15_*.py` |
-| GEN-16 | 1.0 | IT | `tests/conformance/gen/GEN-16_*.py`; `crates/typy-check/tests/generics.rs` |
-| GEN-17 | 1.0 | IT | `tests/conformance/gen/GEN-17_*.py`; `crates/typy-check/tests/protocols.rs` |
+| GEN-16 | 1.0 | IT | `tests/conformance/gen/GEN-16_*.py`; `crates/typy-check/tests/integration/generics.rs` |
+| GEN-17 | 1.0 | IT | `tests/conformance/gen/GEN-17_*.py`; `crates/typy-check/tests/integration/protocols.rs` |
 | EXC-01 | 0.3 | IT | `tests/conformance/exc/EXC-01_*.py` |
 | EXC-02 | 0.3 | IT | `tests/conformance/exc/EXC-02_*.py` |
 | EXC-03 | 0.3 | Golden | `tests/golden/llvm-ir/`, where each call that may raise is followed by one compare of the exception against null and a branch |
 | EXC-04 | 0.3 | IT | `tests/conformance/exc/EXC-04_*.py` |
-| EXC-05 | 0.5 | E2E | `crates/typy-cli/tests/library.rs`, tests named for EXC-05: an exception, an `int` result outside `int64_t` and a `SystemExit` that leave an export |
+| EXC-05 | 0.5 | E2E | `crates/typy-cli/tests/end_to_end/library.rs`, tests named for EXC-05: an exception, an `int` result outside `int64_t` and a `SystemExit` that leave an export |
 | EXC-06 | 0.3 | IT | `tests/conformance/exc/EXC-06_*.py` |
 | EXC-07 | 0.3 | IT | `tests/conformance/exc/EXC-07_*.py` |
 | EXC-08 | 0.3 | IT | `tests/conformance/exc/EXC-08_*.py` |
@@ -441,15 +442,15 @@ that the specification does not define.
 | EXC-16 | 0.5 | IT | `tests/conformance/exc/EXC-16_*.py` |
 | EXC-17 | 1.0 | IT | `tests/conformance/exc/EXC-17_*.py` |
 | EXC-18 | 1.0 | IT | `tests/conformance/exc/EXC-18_*.py` |
-| MOD-01 | 0.3 | IT, E2E | `tests/conformance/mod/MOD-01_*`; module paths in `crates/typy-cli/tests/cli.rs`, tests named for MOD-01 |
+| MOD-01 | 0.3 | IT, E2E | `tests/conformance/mod/MOD-01_*`; module paths in `crates/typy-cli/tests/end_to_end/cli.rs`, tests named for MOD-01 |
 | MOD-02 | 0.3 | IT | `tests/conformance/mod/MOD-02_*.py` |
 | MOD-03 | 0.3 | IT | `tests/conformance/mod/MOD-03_*.py` |
 | MOD-04 | 0.3 | IT | `tests/conformance/mod/MOD-04_*.py` |
 | MOD-05 | 0.3 | IT | `tests/conformance/mod/MOD-05_*.py` |
-| MOD-06 | 0.3 | IT | `crates/typy-check/tests/lazy_imports.rs`; `crates/typy-check/src/subset/tests.rs`, tests named for lazy imports; `tests/conformance/mod/MOD-06_*`, at floor 3.15 |
-| MOD-07 | 0.3 | IT | `crates/typy-check/tests/lazy_imports.rs` and `crates/typy-driver/tests/lazy_imports.rs`, whose expected output is CPython 3.15's: CPython 3.12 to 3.14 ignore `__lazy_modules__`, so a conformance test of it is invalid below floor 3.15 (ADR-0008) |
-| MOD-08 | 0.3 | IT | `crates/typy-driver/tests/lazy_imports.rs`; `tests/conformance/mod/MOD-08_*`, at floor 3.15 |
-| MOD-09 | 0.3 | IT | `crates/typy-check/tests/sys.rs` for each switch, as an attribute and in `from sys import`; `tests/conformance/mod/MOD-09_*.py` |
+| MOD-06 | 0.3 | IT | `crates/typy-check/tests/integration/lazy_imports.rs`; `crates/typy-check/src/subset/tests.rs`, tests named for lazy imports; `tests/conformance/mod/MOD-06_*`, at floor 3.15 |
+| MOD-07 | 0.3 | IT | `crates/typy-check/tests/integration/lazy_imports.rs` and `crates/typy-driver/tests/integration/lazy_imports.rs`, whose expected output is CPython 3.15's: CPython 3.12 to 3.14 ignore `__lazy_modules__`, so a conformance test of it is invalid below floor 3.15 (ADR-0008) |
+| MOD-08 | 0.3 | IT | `crates/typy-driver/tests/integration/lazy_imports.rs`; `tests/conformance/mod/MOD-08_*`, at floor 3.15 |
+| MOD-09 | 0.3 | IT | `crates/typy-check/tests/integration/sys.rs` for each switch, as an attribute and in `from sys import`; `tests/conformance/mod/MOD-09_*.py` |
 | MOD-10 | 0.3 | IT | `tests/conformance/mod/MOD-10_*.py` |
 | MOD-11 | 0.4 | IT | `tests/conformance/mod/MOD-11_*` |
 | MOD-12 | 0.5 | IT | `tests/conformance/mod/MOD-12_*` |
@@ -459,13 +460,13 @@ that the specification does not define.
 | LIB-01 | 0.1 | IT | `tests/conformance/lib/LIB-01_*.py` |
 | LIB-02 | 0.2 | IT | `tests/conformance/lib/LIB-02_*.py` |
 | LIB-03 | 0.2 | IT | `tests/conformance/lib/LIB-03_*.py` |
-| LIB-04 | 0.3 | UT, IT, E2E | `crates/typy-runtime/src/sys/tests.rs` for decoding the arguments and each exit status; `crates/typy-runtime/src/text_file/tests.rs` for chunked reading, newline translation, decode and encode errors, buffered writing, each `OSError` and files on disk; `crates/typy-check/src/open.rs` for each mode and encoding name; `crates/typy-check/tests/sys.rs` and `tests/open.rs` for each refusal; `crates/typy-cli/tests/sys.rs` for real arguments, piped standard input and the exit status, and `tests/files.rs` for what a program leaves on disk when it ends; `tests/conformance/lib/LIB-04_*.py` |
-| LIB-05 | 0.3 | UT, IT | `crates/typy-runtime/src/math/tests.rs` and `tests/more.rs`, tables of CPython 3.15's results bit for bit; `crates/typy-check/tests/math.rs` for each refusal and the floor of each name; `tests/conformance/lib/LIB-05_*.py` |
+| LIB-04 | 0.3 | UT, IT, E2E | `crates/typy-runtime/src/sys/tests.rs` for decoding the arguments and each exit status; `crates/typy-runtime/src/text_file/tests.rs` for chunked reading, newline translation, decode and encode errors, buffered writing, each `OSError` and files on disk; `crates/typy-check/src/open.rs` for each mode and encoding name; `crates/typy-check/tests/integration/sys.rs` and `tests/open.rs` for each refusal; `crates/typy-cli/tests/end_to_end/sys.rs` for real arguments, piped standard input and the exit status, and `tests/files.rs` for what a program leaves on disk when it ends; `tests/conformance/lib/LIB-04_*.py` |
+| LIB-05 | 0.3 | UT, IT | `crates/typy-runtime/src/math/tests.rs` and `tests/more.rs`, tables of CPython 3.15's results bit for bit; `crates/typy-check/tests/integration/math.rs` for each refusal and the floor of each name; `tests/conformance/lib/LIB-05_*.py` |
 | LIB-06 | 0.4 | IT | `tests/conformance/lib/LIB-06_*.py` |
 | LIB-07 | 1.0 | IT | `tests/conformance/lib/LIB-07_*.py` |
 | LIB-08 | 0.3 | IT | `tests/conformance/lib/LIB-08_*.py` |
 | LIB-09 | 0.1 | IT | `tests/conformance/lib/LIB-09_*.py` |
-| LIB-10 | 0.3 | UT, IT | `crates/typy-runtime/src/format/percent/tests.rs`, a table of CPython 3.12's results; `crates/typy-check/tests/percent.rs` for each refusal message; `tests/conformance/lib/LIB-10_*.py` |
+| LIB-10 | 0.3 | UT, IT | `crates/typy-runtime/src/format/percent/tests.rs`, a table of CPython 3.12's results; `crates/typy-check/tests/integration/percent.rs` for each refusal message; `tests/conformance/lib/LIB-10_*.py` |
 | LIB-11 | 0.4 | IT | `tests/conformance/lib/LIB-11_*.py` |
 | LIB-12 | 0.4 | IT | `tests/conformance/lib/LIB-12_*.py` |
 | LIB-15 | 0.5 | IT | `tests/conformance/lib/LIB-15_*.py` |
@@ -479,45 +480,45 @@ that the specification does not define.
 | LIB-14 | 0.4 | IT | `tests/conformance/lib/LIB-14_*.py` |
 | MEM-01 | 0.1 | UT, IT | `typy-runtime` unit tests; `tests/conformance/mem/MEM-01_*.py` under sanitizers |
 | MEM-02 | 0.2 | UT, IT | `typy-runtime` list unit tests; `tests/conformance/dat/DAT-07_*.py`, which name MEM-02, also under the sanitizers |
-| MEM-03 | 0.5 | UT, IT | `crates/typy-tyir/src/escape/tests.rs` for each way an instance escapes; `crates/typy-runtime/src/instance/tests.rs` for a frame block made, reused and released; `crates/typy-lower/tests/frames.rs` for the instances programs hold in frames; `crates/typy-codegen/tests/codegen.rs` for the block and the release before each return; `tests/conformance/mem/MEM-03_*.py` under sanitizers |
+| MEM-03 | 0.5 | UT, IT | `crates/typy-tyir/src/escape/tests.rs` for each way an instance escapes; `crates/typy-runtime/src/instance/tests.rs` for a frame block made, reused and released; `crates/typy-lower/tests/integration/frames.rs` for the instances programs hold in frames; `crates/typy-codegen/tests/codegen.rs` for the block and the release before each return; `tests/conformance/mem/MEM-03_*.py` under sanitizers |
 | MEM-04 | 0.2 | UT, IT | `typy-lower` lowering tests of the counting; `tests/conformance/mem/MEM-04_*.py` under sanitizers |
 | MEM-05 | 1.0 | UT, IT | `typy-runtime` unit tests; `tests/conformance/mem/MEM-05_*.py` under sanitizers |
 | MEM-06 | 1.0 | UT, IT | `typy-runtime` unit tests; `tests/conformance/mem/MEM-06_*.py` under sanitizers |
 | MEM-07 | 1.0 | UT, IT | `typy-runtime` unit tests; `tests/conformance/mem/MEM-07_*.py` under sanitizers |
-| MEM-08 | 0.5 | UT, IT, E2E | `crates/typy-source/src/settings_file/allocator/tests.rs` for each wrong `[allocator]` table; `crates/typy-codegen/tests/codegen.rs` for the hooks; `crates/typy-build/src/linker.rs` for the library's place among the arguments; `crates/typy-cli/tests/allocator.rs` for a program built with a counting allocator, one that has no memory, and a library the linker cannot find |
+| MEM-08 | 0.5 | UT, IT, E2E | `crates/typy-source/src/settings_file/allocator/tests.rs` for each wrong `[allocator]` table; `crates/typy-codegen/tests/codegen.rs` for the hooks; `crates/typy-build/src/linker.rs` for the library's place among the arguments; `crates/typy-cli/tests/end_to_end/allocator.rs` for a program built with a counting allocator, one that has no memory, and a library the linker cannot find |
 | MEM-10 | 1.0 | UT, IT | `crates/typy-tyir/src/escape/tests.rs`; `tests/conformance/mem/MEM-10_*.py` under sanitizers |
-| MEM-09 | 0.3 | UT, IT | `crates/typy-lower/tests/moves.rs` for each store that moves and each read that must not; `crates/typy-runtime/src/moved_tests.rs` for the counts of each moved store; `tests/conformance/mem/MEM-09_*.py` under sanitizers |
+| MEM-09 | 0.3 | UT, IT | `crates/typy-lower/tests/integration/moves.rs` for each store that moves and each read that must not; `crates/typy-runtime/src/moved_tests.rs` for the counts of each moved store; `tests/conformance/mem/MEM-09_*.py` under sanitizers |
 | FFI-01 | 0.5 | UT, IT | `crates/typy-check/src/check/ctypes_declarations/tests.rs` for each way of naming `ctypes` and loading a library; `tests/conformance/ffi/FFI-01_*.py` against CPython 3.12 to 3.15 |
 | FFI-02 | 0.5 | UT, IT | `crates/typy-check/src/check/ctypes_declarations/tests.rs` for each E0430 of a declaration; `tests/conformance/ffi/FFI-02_*.py` for calls declared in time, too early, without a `restype`, and with an argument of the wrong type |
-| FFI-03 | 0.5 | UT, IT | `crates/typy-check/src/ctypes.rs` and `ctypes/structure.rs` for the types, their classes, names, sizes, structure layouts and conversions; `crates/typy-check/src/check/ctypes_declarations/tests.rs` for `POINTER`, names bound to a type and structure classes of this module and of others; `crates/typy-check/tests/ctypes.rs` for each E0404, E0402, E0412 and E0401 of an object and each argument a pointer takes; `crates/typy-tyir/src/library.rs` and `crates/typy-lower/tests/foreign.rs` for the class table, pointer parameters and structures by value; `crates/typy-codegen/src/structure_abi.rs` for the register class of each eight bytes of a structure and the registers left; `crates/typy-runtime/src/foreign.rs` for the runtime's conversions and `ctypes.ArgumentError`; `crates/typy-runtime/src/cdata/tests.rs` for scalars, pointers that keep their target, null pointers, checked array indexes and the `bytes` an object keeps for its memory; `tests/conformance/ffi/FFI-03_*.py` for every scalar type's wrap-around, widening, rounding and null, and for objects passed by reference, pointers, arrays and structures, against CPython 3.12 to 3.15, also under the sanitizers; `crates/typy-cli/tests/structures.rs` for structures passed by value in each register class and in memory, against CPython through a C library the test builds |
-| FFI-04 | 0.5 | UT, E2E | `crates/typy-source/src/settings_file/libraries.rs` and `settings.rs` for `library-paths`, `[libraries]` and the linker's names; `crates/typy-cli/tests/library.rs`, tests named for FFI-04: a program that imports a TyPy library's binding, linked dynamically and statically, and a library the linker cannot find |
-| FFI-05 | 0.5 | UT, IT, E2E | `crates/typy-check/tests/exports.rs` for each name `__all__` lists and each E0429; `crates/typy-tyir/tests/library.rs` for the verifier and the text form; `crates/typy-codegen/tests/codegen.rs` and `src/header.rs` for the wrappers and the header; `crates/typy-runtime/src/int/fixed.rs` for the conversions; `crates/typy-cli/tests/library.rs`, tests named for FFI-05, also comparing the refused names with what the runtime archive calls |
-| FFI-08 | 0.5 | UT, E2E | `crates/typy-codegen/src/binding.rs` for the binding and the stub; `crates/typy-cli/tests/library.rs`, tests named for FFI-08 and FFI-04: CPython and a TyPy program call a library through its binding, and CPython 3.12 to 3.15 parse the binding and the stub |
+| FFI-03 | 0.5 | UT, IT | `crates/typy-check/src/ctypes.rs` and `ctypes/structure.rs` for the types, their classes, names, sizes, structure layouts and conversions; `crates/typy-check/src/check/ctypes_declarations/tests.rs` for `POINTER`, names bound to a type and structure classes of this module and of others; `crates/typy-check/tests/integration/ctypes.rs` for each E0404, E0402, E0412 and E0401 of an object and each argument a pointer takes; `crates/typy-tyir/src/library.rs` and `crates/typy-lower/tests/integration/foreign.rs` for the class table, pointer parameters and structures by value; `crates/typy-codegen/src/structure_abi.rs` for the register class of each eight bytes of a structure and the registers left; `crates/typy-runtime/src/foreign.rs` for the runtime's conversions and `ctypes.ArgumentError`; `crates/typy-runtime/src/cdata/tests.rs` for scalars, pointers that keep their target, null pointers, checked array indexes and the `bytes` an object keeps for its memory; `tests/conformance/ffi/FFI-03_*.py` for every scalar type's wrap-around, widening, rounding and null, and for objects passed by reference, pointers, arrays and structures, against CPython 3.12 to 3.15, also under the sanitizers; `crates/typy-cli/tests/end_to_end/structures.rs` for structures passed by value in each register class and in memory, against CPython through a C library the test builds |
+| FFI-04 | 0.5 | UT, E2E | `crates/typy-source/src/settings_file/libraries.rs` and `settings.rs` for `library-paths`, `[libraries]` and the linker's names; `crates/typy-cli/tests/end_to_end/library.rs`, tests named for FFI-04: a program that imports a TyPy library's binding, linked dynamically and statically, and a library the linker cannot find |
+| FFI-05 | 0.5 | UT, IT, E2E | `crates/typy-check/tests/integration/exports.rs` for each name `__all__` lists and each E0429; `crates/typy-tyir/tests/integration/library.rs` for the verifier and the text form; `crates/typy-codegen/tests/codegen.rs` and `src/header.rs` for the wrappers and the header; `crates/typy-runtime/src/int/fixed.rs` for the conversions; `crates/typy-cli/tests/end_to_end/library.rs`, tests named for FFI-05, also comparing the refused names with what the runtime archive calls |
+| FFI-08 | 0.5 | UT, E2E | `crates/typy-codegen/src/binding.rs` for the binding and the stub; `crates/typy-cli/tests/end_to_end/library.rs`, tests named for FFI-08 and FFI-04: CPython and a TyPy program call a library through its binding, and CPython 3.12 to 3.15 parse the binding and the stub |
 | FFI-09 | 1.0 | IT | `tests/conformance/ffi/FFI-09_*.py` |
-| FFI-10 | 1.0 | UT, IT | `crates/typy-check/tests/ctypes.rs` for each E0201 of a `ctypes` use planned for 1.0; `tests/conformance/ffi/FFI-10_*.py` |
-| FFI-11 | 1.0 | UT, IT | `crates/typy-check/src/check/ctypes_declarations/tests.rs` and `crates/typy-check/tests/ctypes.rs` for each E0201 of a structure form planned for 1.0; `tests/conformance/ffi/FFI-11_*.py` |
-| FFI-12 | 0.6 | UT, E2E | `crates/typy-codegen/src/structure_abi.rs` for each target's classification against clang 19's lowering of the same C structures; `crates/typy-cli/tests/structures.rs` run for each target, under `qemu-aarch64` for AArch64, against CPython on x86_64 |
+| FFI-10 | 1.0 | UT, IT | `crates/typy-check/tests/integration/ctypes.rs` for each E0201 of a `ctypes` use planned for 1.0; `tests/conformance/ffi/FFI-10_*.py` |
+| FFI-11 | 1.0 | UT, IT | `crates/typy-check/src/check/ctypes_declarations/tests.rs` and `crates/typy-check/tests/integration/ctypes.rs` for each E0201 of a structure form planned for 1.0; `tests/conformance/ffi/FFI-11_*.py` |
+| FFI-12 | 0.6 | UT, E2E | `crates/typy-codegen/src/structure_abi.rs` for each target's classification against clang 19's lowering of the same C structures; `crates/typy-cli/tests/end_to_end/structures.rs` run for each target, under `qemu-aarch64` for AArch64, against CPython on x86_64 |
 | FFI-06 | 1.0 | IT | `tests/conformance/ffi/FFI-06_*.py` |
 | FFI-07 | 1.0 | IT | `tests/conformance/ffi/FFI-07_*.py` |
 | DIA-01 | 0.1 | UT, IT | `typy-diagnostics` unit tests; `tests/golden/diagnostics/DIA-01_*` |
 | DIA-02 | 0.1 | UT, IT | `typy-diagnostics` unit tests; `tests/golden/diagnostics/DIA-02_*` |
 | DIA-03 | 0.1 | UT, IT | `typy-diagnostics` unit tests; `tests/golden/diagnostics/DIA-03_*` |
 | DIA-04 | 0.1 | UT, IT | `typy-diagnostics` unit tests; `tests/golden/diagnostics/DIA-04_*` |
-| DIA-05 | 0.3 | UT, E2E | `crates/typy-diagnostics/src/render_json.rs` unit and property tests; `crates/typy-cli/tests/cli.rs`, tests named for DIA-05 |
+| DIA-05 | 0.3 | UT, E2E | `crates/typy-diagnostics/src/render_json.rs` unit and property tests; `crates/typy-cli/tests/end_to_end/cli.rs`, tests named for DIA-05 |
 | DIA-06 | 0.1 | UT | `typy-diagnostics` unit tests of the code registry |
-| DIA-07 | 0.3 | E2E | `crates/typy-cli/tests/cli.rs`, tests named for DIA-07 |
+| DIA-07 | 0.3 | E2E | `crates/typy-cli/tests/end_to_end/cli.rs`, tests named for DIA-07 |
 | DIA-08 | 0.3 | UT | `crates/typy-source/src/parse/tests.rs` for W0101; `crates/typy-check/src/subset/tests.rs` for W0301 |
 | DOC-01 | 0.2 | Static | `make docs-lint`; review against the release |
 | DOC-02 | 0.2 | Static, IT | `make docs-lint`; every rule ID on the pages is checked to exist by `make traceability`; samples by DOC-04 |
-| DOC-03 | 0.2 | IT | `crates/typy-conformance/tests/documentation.rs` lists every active code of the registry and fails when `docs/diagnostics/troubleshooting.md` has no section for one |
-| DOC-04 | 0.2 | IT | `crates/typy-conformance/tests/documentation.rs` extracts every `python` sample from the user documentation, every page under `docs/` outside the engineering documents' directories, with the outcome its `typy-expect` comment states, and judges it as a conformance test: a rejected sample by its code and place, an accepted one by running it and comparing with CPython |
+| DOC-03 | 0.2 | IT | `crates/typy-conformance/tests/integration/documentation.rs` lists every active code of the registry and fails when `docs/diagnostics/troubleshooting.md` has no section for one |
+| DOC-04 | 0.2 | IT | `crates/typy-conformance/tests/integration/documentation.rs` extracts every `python` sample from the user documentation, every page under `docs/` outside the engineering documents' directories, with the outcome its `typy-expect` comment states, and judges it as a conformance test: a rejected sample by its code and place, an accepted one by running it and comparing with CPython |
 | DOC-05 | 0.6 | Static, IT | `make docs`, which `make check` runs: `scripts/build-docs.sh` builds the site with Zensical in strict mode, which fails on a link to a page or an anchor that does not exist; then `scripts/check-docs-nav.py` fails on a page under `docs/` that the `nav` of `mkdocs.yml` leaves out and on a `nav` entry with no page; `.github/workflows/pages.yml` publishes the build of each release |
-| NFR-01 | 0.1 | IT | `crates/typy-driver/tests/size.rs`: hello world, `--release-small`, linked statically with musl, run, and under 100 KB (75 KB in 0.1, 17 KB stripped) |
+| NFR-01 | 0.1 | IT | `crates/typy-driver/tests/integration/size.rs`: hello world, `--release-small`, linked statically with musl, run, and under 100 KB (75 KB in 0.1, 17 KB stripped) |
 | NFR-02 | 0.1 | Static | `make runtime-size`, `scripts/check-runtime-size.py`: a hello world built with `--release-small` and linked for each target with a link map; the runtime sections linked are under 48 KB, and under 32 KB less the large-integer sections (10.3 KB and 10.3 KB in 0.2, ADR-0009) |
 | NFR-03 | 1.0 | Benchmark | `tests/bench/` suite against its C versions, geometric mean within 1.5 times |
 | NFR-04 | 1.0 | Benchmark | `tests/bench/build_time.py`: debug build of a 10,000-line project, in one file and in 200 modules, under 2 s; checking 200 modules at most 6 times as long as 50 |
 | NFR-05 | 1.0 | Benchmark | `tests/bench/build_time.py`: release build of both 10,000-line projects under 20 s |
-| NFR-06 | 0.1 | E2E | `crates/typy-conformance/tests/determinism.rs`: every accepted conformance program built twice, in debug and in release mode, and the executables compared byte for byte |
+| NFR-06 | 0.1 | E2E | `crates/typy-conformance/tests/integration/determinism.rs`: every accepted conformance program built twice, in debug and in release mode, and the executables compared byte for byte |
 | NFR-07 | 0.1 | IT | `tests/sanitized.rs`: the conformance suite with the runtime under AddressSanitizer; `make miri`; `make fuzz` |
 | NFR-08 | 0.1 | IT | `tests/sanitized.rs`: the conformance suite under LeakSanitizer |
 | NFR-09 | 0.1 | Fuzz | `make fuzz`, target `stages` over parsing, checking and lowering; 30 minutes with zero crashes before a release |
@@ -527,7 +528,7 @@ that the specification does not define.
 | NFR-13 | 0.2 | UT | `typy-runtime` list test: a million `int` values appended one at a time; the list and its buffer take at most 8.5 MB |
 | NFR-14 | 1.0 | Benchmark | `tests/bench/build_time.py`: peak memory of each build within 1 GB |
 | NFR-15 | 0.1 | IT | Conformance suite: debug and release runs compared |
-| NFR-16 | 0.6 | IT | `crates/typy-conformance/tests/other_architecture.rs`: every accepted conformance test built for the other architecture, in debug and release mode, and run under its user-mode emulator, `qemu-aarch64` on an x86_64 host and `qemu-x86_64` on an arm64 host, each run compared with CPython's output, except a test marked `typy-output: architecture-dependent`, whose output CPython itself gives otherwise on each architecture; on the arm64 CI runner the suite's own test runs the AArch64 builds natively against CPython on AArch64, which checks those too |
+| NFR-16 | 0.6 | IT | `crates/typy-conformance/tests/integration/other_architecture.rs`: every accepted conformance test built for the other architecture, in debug and release mode, and run under its user-mode emulator, `qemu-aarch64` on an x86_64 host and `qemu-x86_64` on an arm64 host, each run compared with CPython's output, except a test marked `typy-output: architecture-dependent`, whose output CPython itself gives otherwise on each architecture; on the arm64 CI runner the suite's own test runs the AArch64 builds natively against CPython on AArch64, which checks those too |
 | C-01 | 0.1 | CI gate | Workspace builds with the pinned Rust toolchain only |
 | C-02 | 0.1 | CI gate | `scripts/check-pins.sh`: `ruff_python_parser` pinned with `=` in `Cargo.toml` |
 | C-03 | 0.1 | UT | `typy-codegen` test: the linked LLVM major version is 23 |

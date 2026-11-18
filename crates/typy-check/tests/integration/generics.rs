@@ -1,9 +1,7 @@
 //! Tests of checking generic functions through the public API (GEN-01 to GEN-03, GEN-07):
 //! how calls solve type parameters, and what is refused.
 
-mod common;
-
-use common::{app, codes};
+use crate::common::{app, codes};
 
 #[test]
 fn calls_solve_type_parameters_from_every_kind_of_argument() {

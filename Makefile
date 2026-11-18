@@ -51,7 +51,7 @@ test-int: build ## Run the integration tests: the conformance suite, its sanitiz
 	@$(EXEC) cargo nextest run -p typy-conformance -p typy-driver --locked
 
 test-e2e: runtime ## Run the end-to-end tests of the typy executable
-	@$(EXEC) cargo nextest run -p typy-cli --test cli --locked
+	@$(EXEC) cargo nextest run -p typy-cli --test end_to_end --locked
 
 test-all: test miri ## Run every test level that runs on each commit, and Miri
 coverage: build ## Run the tests with coverage; fail below 95 percent of lines (NFR-11)
@@ -87,7 +87,7 @@ dist: dev ## Build the release archive of the compiler in dist/, and run a progr
 	@$(EXEC) scripts/package-release.sh
 
 bless: dev ## Rewrite the golden files from the current compiler; review the diff before committing
-	@$(EXEC) env TYPY_BLESS=1 cargo test -p typy-driver --test golden --locked
+	@$(EXEC) env TYPY_BLESS=1 cargo test -p typy-driver --test integration --locked golden::
 
 miri: dev ## Run the runtime's unit tests under Miri with the pinned nightly toolchain (ADR-0006)
 	@$(EXEC) scripts/miri.sh
