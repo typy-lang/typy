@@ -44,7 +44,7 @@ lib.g(1.5, 2, [1], b'x', None)
 print(lib.h(False, 3, None, b'y'))
 ";
     let module = lower(source);
-    assert_eq!(module.foreign_libraries, ["libc.so.6"]);
+    assert_eq!(module.foreign_libraries, [Some("libc.so.6".to_owned())]);
     let names: Vec<&str> = module
         .foreign_functions
         .iter()

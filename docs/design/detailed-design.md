@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy detailed design |
-| Version | 2.34 |
+| Version | 2.35 |
 | Status | Approved |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-18 |
@@ -2009,8 +2009,10 @@ aliases, before checking (ADR-0047). It finds the names the module's
 imports give `ctypes` and its members, then reads its statements at
 module level: `NAME = ctypes.CDLL("library")` or
 `ctypes.cdll.LoadLibrary("library")` declares a `DeclaredLibrary`, kept
-by the span of its call, and `NAME.function.argtypes = [...]` and
-`NAME.function.restype = ...` declare a `DeclaredFunction`, whose
+by the span of its call, whose `name` is `None` for `CDLL(None)`, the C
+and maths libraries every program links (FFI-14, ADR-0059), and
+`NAME.function.argtypes = [...]` and `NAME.function.restype = ...`
+declare a `DeclaredFunction`, whose
 `declared` is the end of the later of the two. The assignments to
 `argtypes` and `restype` then leave the module. Each type is a `CData`
 (section 7.5): `CType::from_name` maps each scalar name of `ctypes` to a
@@ -2505,6 +2507,7 @@ code.
 ### 10.6 C calls
 
 `TyirModule::foreign_libraries` names the libraries a program declares,
+`None` for `CDLL(None)`, for which the driver adds nothing to the link,
 and `foreign_functions` holds each `TyirForeignFunction`: its symbol, its
 library and the `CType` of each parameter and of the result, from
 `Int8` to `UInt64`, `Float`, `Double`, `Bool`, `CharPointer`,
@@ -2876,6 +2879,7 @@ print(2 ** n)
 | `typy-expect` | `accepted`, or `rejected CODE at LINE:COLUMN` |
 | `typy-python` | Optional; the test's Python floor, `3.12` when absent |
 | `typy-output` | Optional; `architecture-dependent` for a test whose output CPython gives otherwise on each architecture, which a run built for another architecture than the oracle's skips and reports as skipped (NFR-16) |
+| `typy-system` | Optional; `linux` or `macos` for a test that names a library only that system has, which a run built for the other system skips and reports as skipped (NFR-17) |
 
 The file name starts with the first requirement ID, such as
 `EXP-03_float_division_by_zero_raises.py`. A test of several modules is a
@@ -2899,7 +2903,7 @@ it because the exponent is a variable.
 | `observation` | `Observation::of(command)` runs a program with no standard input, reads both pipes on their own threads, and keeps standard output, the exit status and the last line of standard error; a program that runs longer than 60 seconds is stopped, a limit set far above the run time of any conformance program so that an oracle slowed by a loaded machine is not taken for a hang |
 | `oracle` | Runs `python3.X -E -s -B -X utf8 -W ignore::SyntaxWarning FILE` for each oracle version from the floor up, each in an empty working directory of its own, so a test that writes files writes nothing into the test tree and meets no other run's files; the file's directory still leads the module path. It removes that directory's absolute path from the output |
 | `subject` | Builds an accepted test in debug and release mode into a temporary directory and runs each build in an empty working directory of its own, as the oracle runs, and with `Suite::with_sanitizers` also links its debug object file with `cc -fsanitize=address` and runs it with leak detection, where a report ends the run with status 86; checks a rejected test with `Pipeline::check`, which passes when exactly one diagnostic is reported, with that code at that line and column |
-| `verdict` | `Pass`, `Fail` with the reason, `Invalid` when the oracles disagree, an oracle cannot run the file, or the header is not valid (STD-03), or `Skipped` with the reason when a run built for another architecture than the oracle's meets a test marked `architecture-dependent` (NFR-16) |
+| `verdict` | `Pass`, `Fail` with the reason, `Invalid` when the oracles disagree, an oracle cannot run the file, or the header is not valid (STD-03), or `Skipped` with the reason when a run built for another architecture than the oracle's meets a test marked `architecture-dependent` (NFR-16), or a run for one system meets a test of the other (NFR-17) |
 | `suite` | `Suite::run(root)` judges every `.py` file under `root`, as many at once as the machine has cores, and returns a `Report` with each verdict and, for each requirement ID, how many accepted and rejected tests name it |
 
 The suite runs as the tests

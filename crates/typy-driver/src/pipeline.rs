@@ -359,7 +359,8 @@ fn linker(
         .filter_map(|allocator| allocator.library.as_ref())
         .map(|library| format!("-l{library}"))
         .collect();
-    for library in &module.foreign_libraries {
+    // `CDLL(None)` names the C and maths libraries, which every link has (FFI-14).
+    for library in module.foreign_libraries.iter().flatten() {
         let link = settings
             .libraries
             .get(library)

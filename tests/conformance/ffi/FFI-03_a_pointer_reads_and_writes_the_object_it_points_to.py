@@ -2,9 +2,11 @@
 # typy-expect: accepted
 import ctypes
 
-libc = ctypes.CDLL("libc.so.6")
-libc.__errno_location.argtypes = []
-libc.__errno_location.restype = ctypes.POINTER(ctypes.c_int)
+libc = ctypes.CDLL(None)
+libc.calloc.argtypes = [ctypes.c_size_t, ctypes.c_size_t]
+libc.calloc.restype = ctypes.POINTER(ctypes.c_int)
+libc.free.argtypes = [ctypes.POINTER(ctypes.c_int)]
+libc.free.restype = None
 
 value = ctypes.c_long(9)
 pointer = ctypes.pointer(value)
@@ -33,9 +35,9 @@ except ValueError as error:
     print("ValueError:", error)
 
 # A pointer that C gives reads memory C owns.
-errno = libc.__errno_location()
-errno.contents.value = 0
-print(bool(errno), errno[0])
-errno[0] = 34
-print(libc.__errno_location()[0])
-errno[0] = 0
+owned = libc.calloc(2, ctypes.sizeof(ctypes.c_int))
+print(bool(owned), owned[0], owned[1])
+owned.contents.value = 34
+owned[1] = -5
+print(owned[0], owned[1], owned.contents.value)
+libc.free(owned)

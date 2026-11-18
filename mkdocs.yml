@@ -181,6 +181,7 @@ nav:
           - adr/0056-link-for-mach-o-with-apples-linker-and-name-libraries-as-macos-does.md
           - adr/0057-give-the-runtime-each-systems-c-constants-and-macos-its-own-error-texts.md
           - adr/0058-pass-c-arguments-as-libffi-passes-them-on-every-target.md
+          - adr/0059-link-nothing-more-for-ctypes-cdll-of-none.md
       - Detailed design: design/detailed-design.md
       - Test plan: testing/test-plan.md
       - Benchmark report: testing/benchmark-report.md

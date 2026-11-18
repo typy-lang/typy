@@ -340,8 +340,10 @@ impl CtypesFunction {
 /// A library a module declares with `ctypes.CDLL` or `ctypes.cdll.LoadLibrary`.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ForeignLibrary {
-    /// The name the declaration gives, which the build links.
-    pub name: String,
+    /// The name the declaration gives, which the build links, or `None` for `CDLL(None)`:
+    /// the C library and the C maths library every program links, which need nothing more
+    /// (FFI-14).
+    pub name: Option<String>,
 }
 
 /// A C function a module declares through its `argtypes` and `restype`.

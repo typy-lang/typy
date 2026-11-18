@@ -2,7 +2,7 @@
 # typy-expect: accepted
 import ctypes
 
-libc = ctypes.CDLL("libc.so.6")
+libc = ctypes.CDLL(None)
 libc.llabs.argtypes = [ctypes.c_longlong]
 libc.llabs.restype = ctypes.c_longlong
 libc.labs.argtypes = [ctypes.c_int8]

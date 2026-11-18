@@ -137,9 +137,9 @@ fn raising_functions(
     found
 }
 
-/// Returns the names of the C libraries the program declares, which the build links
-/// (FFI-01).
-fn foreign_libraries(program: &TypedProgram) -> Vec<String> {
+/// Returns the name of each C library the program declares, which the build links, or `None`
+/// for the C library every program links (FFI-01, FFI-14).
+fn foreign_libraries(program: &TypedProgram) -> Vec<Option<String>> {
     program
         .foreign_libraries
         .iter()

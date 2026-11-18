@@ -179,3 +179,38 @@ fn an_architecture_dependent_test_is_skipped_only_when_built_for_another_archite
         "{emulated:?}"
     );
 }
+
+#[test]
+fn nfr_17_a_test_of_one_system_is_skipped_when_built_for_another() {
+    let (here, other) = if cfg!(target_os = "macos") {
+        ("macos", "linux")
+    } else {
+        ("linux", "macos")
+    };
+    let files = [
+        (
+            "EXP-02_here.py",
+            format!(
+                "# typy-test: EXP-02\n# typy-expect: accepted\n# typy-system: {here}\nprint(1)\n"
+            ),
+        ),
+        (
+            "EXP-02_there.py",
+            format!(
+                "# typy-test: EXP-02\n# typy-expect: accepted\n# typy-system: {other}\nprint(1)\n"
+            ),
+        ),
+    ];
+    let files: Vec<(&str, &str)> = files
+        .iter()
+        .map(|(name, text)| (*name, text.as_str()))
+        .collect();
+    let suite = Suite::new(target().join("debug/typy"));
+    let mut found = verdicts(&suite, &files);
+    found.sort_by(|left, right| left.0.cmp(&right.0));
+    assert_eq!(found[0].1, Verdict::Pass, "{found:?}");
+    assert!(
+        starts_with(&found[1].1, "skipped", "it runs on"),
+        "{found:?}"
+    );
+}

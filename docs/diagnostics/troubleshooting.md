@@ -1329,7 +1329,7 @@ This one is correct:
 ```python
 import ctypes
 
-libc = ctypes.CDLL("libc.so.6")
+libc = ctypes.CDLL(None)
 libc.abs.argtypes = [ctypes.c_int]
 libc.abs.restype = ctypes.c_int
 print(libc.abs(-3))

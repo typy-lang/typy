@@ -2,7 +2,7 @@
 # typy-expect: accepted
 import ctypes
 
-libm = ctypes.CDLL("libm.so.6")
+libm = ctypes.CDLL(None)
 libm.fabs.argtypes = [ctypes.c_double]
 libm.fabs.restype = ctypes.c_double
 try:

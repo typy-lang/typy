@@ -2,7 +2,7 @@
 # typy-expect: accepted
 import ctypes
 
-libc = ctypes.CDLL("libc.so.6")
+libc = ctypes.CDLL(None)
 
 
 class Div(ctypes.Structure):

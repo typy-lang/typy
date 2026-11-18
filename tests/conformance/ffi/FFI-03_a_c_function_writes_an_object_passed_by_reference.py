@@ -2,8 +2,8 @@
 # typy-expect: accepted
 import ctypes
 
-libm = ctypes.CDLL("libm.so.6")
-libc = ctypes.CDLL("libc.so.6")
+libm = ctypes.CDLL(None)
+libc = ctypes.CDLL(None)
 IntPointer = ctypes.POINTER(ctypes.c_int)
 libm.frexp.argtypes = [ctypes.c_double, IntPointer]
 libm.frexp.restype = ctypes.c_double

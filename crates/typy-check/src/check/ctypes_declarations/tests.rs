@@ -56,7 +56,7 @@ fn a_library_and_its_functions_are_read_and_their_declarations_leave_the_module(
     assert_eq!(left, 3);
     assert_eq!(found.libraries.len(), 1);
     assert_eq!(found.libraries[0].variable, "libm");
-    assert_eq!(found.libraries[0].name, "libm.so.6");
+    assert_eq!(found.libraries[0].name.as_deref(), Some("libm.so.6"));
     let cbrt = found.function("libm", "cbrt").unwrap();
     assert_eq!(
         cbrt.parameters.as_deref(),
@@ -82,12 +82,15 @@ fn every_way_of_naming_ctypes_and_loading_a_library_is_read() {
          two.abs.argtypes = [c_int]\n",
     );
     assert_eq!(messages, Vec::<String>::new());
-    let names: Vec<&str> = found
+    let names: Vec<Option<&str>> = found
         .libraries
         .iter()
-        .map(|library| library.name.as_str())
+        .map(|library| library.name.as_deref())
         .collect();
-    assert_eq!(names, ["libc.so.6", "libm.so.6", "libz.so.1"]);
+    assert_eq!(
+        names,
+        [Some("libc.so.6"), Some("libm.so.6"), Some("libz.so.1")]
+    );
     let strlen = found.function("one", "strlen").unwrap();
     assert_eq!(
         strlen.parameters.as_deref(),
@@ -101,6 +104,25 @@ fn every_way_of_naming_ctypes_and_loading_a_library_is_read() {
 }
 
 #[test]
+fn ffi_14_cdll_of_none_is_a_library_without_a_name() {
+    let (found, messages, _) = declarations(
+        "import ctypes\n\
+         own = ctypes.CDLL(None)\n\
+         also = ctypes.cdll.LoadLibrary(None)\n\
+         own.labs.argtypes = [ctypes.c_long]\n\
+         own.labs.restype = ctypes.c_long\n",
+    );
+    assert_eq!(messages, Vec::<String>::new());
+    let names: Vec<Option<&str>> = found
+        .libraries
+        .iter()
+        .map(|library| library.name.as_deref())
+        .collect();
+    assert_eq!(names, [None, None]);
+    assert!(found.function("own", "labs").is_some());
+}
+
+#[test]
 fn each_declaration_ctypes_would_not_run_alike_is_e0430() {
     for (source, message) in [
         (
@@ -110,6 +132,14 @@ fn each_declaration_ctypes_would_not_run_alike_is_e0430() {
         (
             "lib = ctypes.CDLL(\"a\", mode=1)\n",
             "a library is named by one string literal",
+        ),
+        (
+            "lib = ctypes.CDLL(None, mode=1)\n",
+            "a library is named by one string literal",
+        ),
+        (
+            "lib = ctypes.CDLL(None, None)\n",
+            "or by `None`, the C library every program links",
         ),
         (
             "lib = ctypes.CDLL(\"a\")\nlib.f.argtypes = [ctypes.c_char]\n",

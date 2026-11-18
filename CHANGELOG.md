@@ -6,6 +6,14 @@ All notable changes to TyPy are recorded here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- `ctypes.CDLL(None)` and `ctypes.cdll.LoadLibrary(None)` declare the C
+  library and the C maths library, which every program links, so a
+  program that calls only their functions, such as `abs`, `strlen` or
+  `cbrt`, builds and runs on every system, as under CPython (FFI-14,
+  ADR-0059).
+
 ### Changed
 
 - The compiler links LLVM 23.1.6 as TyPy builds it from LLVM's signed

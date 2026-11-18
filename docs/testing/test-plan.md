@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy test plan |
-| Version | 0.97 |
+| Version | 0.98 |
 | Status | Draft |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-18 |
@@ -516,6 +516,7 @@ that the specification does not define.
 | FFI-11 | 1.0 | UT, IT | `crates/typy-check/src/check/ctypes_declarations/tests.rs` and `crates/typy-check/tests/integration/ctypes.rs` for each E0201 of a structure form planned for 1.0; `tests/conformance/ffi/FFI-11_*.py` |
 | FFI-12 | 0.6 | UT, E2E | `crates/typy-codegen/src/structure_abi.rs` for each target's classification against clang 19's lowering of the same C structures; `crates/typy-cli/tests/end_to_end/structures.rs` run for each target, under `qemu-aarch64` for AArch64, against CPython on x86_64 |
 | FFI-13 | 0.7 | UT, E2E | `crates/typy-codegen/src/foreign/stack_argument.rs` for the registers arguments take and each type's width and attribute on the stack; `crates/typy-codegen/tests/codegen.rs` for the arguments of one call on each target; `crates/typy-cli/tests/end_to_end/structures.rs` calling C functions with more narrow arguments than registers, on each architecture and on the `macos-15` job; the FFI-03 conformance test of integer types, whose C functions are wider than their declarations |
+| FFI-14 | 0.7 | UT, IT | `crates/typy-check/src/check/ctypes_declarations/tests.rs` for a library without a name; `tests/conformance/ffi/FFI-14_*.py` on Linux and on the `macos-15` job, and the tests of FFI-02 and FFI-03, which call the C and maths libraries through `CDLL(None)` |
 | FFI-06 | 1.0 | IT | `tests/conformance/ffi/FFI-06_*.py` |
 | FFI-07 | 1.0 | IT | `tests/conformance/ffi/FFI-07_*.py` |
 | DIA-01 | 0.1 | UT, IT | `typy-diagnostics` unit tests; `tests/golden/diagnostics/DIA-01_*` |
@@ -547,7 +548,7 @@ that the specification does not define.
 | NFR-14 | 1.0 | Benchmark | `tests/bench/build_time.py`: peak memory of each build within 1 GB |
 | NFR-15 | 0.1 | IT | Conformance suite: debug and release runs compared |
 | NFR-16 | 0.6 | IT | `crates/typy-conformance/tests/integration/other_architecture.rs`: every accepted conformance test built for the other architecture, in debug and release mode, and run under its user-mode emulator, `qemu-aarch64` on an x86_64 host and `qemu-x86_64` on an arm64 host, each run compared with CPython's output, except a test marked `typy-output: architecture-dependent`, whose output CPython itself gives otherwise on each architecture; on the arm64 CI runner the suite's own test runs the AArch64 builds natively against CPython on AArch64, which checks those too |
-| NFR-17 | 0.7 | IT | The conformance suite on the `macos-15` CI job, each accepted test compared with CPython 3.12 to 3.15 for macOS from python-build-standalone |
+| NFR-17 | 0.7 | IT | The conformance suite on the `macos-15` CI job, each accepted test compared with CPython 3.12 to 3.15 for macOS from python-build-standalone; a test whose header says `# typy-system: linux` or `macos`, because it names a library only that system has, runs on that system alone, which `crates/typy-conformance/tests/integration/verdicts.rs` checks |
 | C-01 | 0.1 | CI gate | Workspace builds with the pinned Rust toolchain only |
 | C-02 | 0.1 | CI gate | `scripts/check-pins.sh`: `ruff_python_parser` pinned with `=` in `Cargo.toml` |
 | C-03 | 0.1 | UT | `typy-codegen` test: the linked LLVM major version is 23 |
