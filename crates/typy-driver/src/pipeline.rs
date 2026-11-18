@@ -173,6 +173,7 @@ impl Pipeline {
                         kind,
                         &library.name,
                         library.version.as_deref(),
+                        request.target().triple,
                     ),
                 };
                 let exports: Vec<String> = library
@@ -193,6 +194,7 @@ impl Pipeline {
                         LibraryKind::Shared,
                         &library.name,
                         library.version.as_deref(),
+                        request.target().triple,
                     )
                     .soname
                     .unwrap_or_default(),
@@ -345,10 +347,17 @@ fn linker(
     // debugger (CLI-05).
     let release = request.mode() != typy_build::BuildMode::Debug;
     let settings = project.settings();
+    let triple = request.target().triple;
+    let paths: Vec<Utf8PathBuf> = settings
+        .library_paths
+        .iter()
+        .map(|path| settings.root.join(path))
+        .collect();
     let mut libraries: Vec<String> = settings
         .allocator
         .iter()
-        .filter_map(|allocator| allocator.library.clone())
+        .filter_map(|allocator| allocator.library.as_ref())
+        .map(|library| format!("-l{library}"))
         .collect();
     for library in &module.foreign_libraries {
         let link = settings
@@ -356,14 +365,12 @@ fn linker(
             .get(library)
             .copied()
             .unwrap_or(typy_source::LibraryLink::Dynamic);
-        libraries.push(link.linker_name(library));
+        let statically = link == typy_source::LibraryLink::Static;
+        libraries.push(typy_build::library_argument(
+            triple, library, statically, &paths,
+        ));
     }
-    let paths = settings
-        .library_paths
-        .iter()
-        .map(|path| settings.root.join(path))
-        .collect();
-    let mut linker = Linker::new(request.target().triple, archive)
+    let mut linker = Linker::new(triple, archive)
         .with_strip_debug(release)
         .with_libraries(libraries)
         .with_library_paths(paths);

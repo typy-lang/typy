@@ -81,32 +81,14 @@ pub struct Allocator {
     pub library: Option<String>,
 }
 
-/// How a C library a `ctypes` declaration names is linked (FFI-04, ADR-0047).
+/// How a C library a `ctypes` declaration names is linked (FFI-04, ADR-0047); the build's
+/// `library_argument` gives the linker's argument for each target.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum LibraryLink {
-    /// The shared library, `-l:NAME`, which the system loads when the program starts.
+    /// The shared library, which the system loads when the program starts.
     Dynamic,
-    /// The archive of the same name up to `.so`, `-l:BASE.a`, linked into the program.
+    /// The archive of the same name up to `.so` or `.dylib`, linked into the program.
     Static,
-}
-
-impl LibraryLink {
-    /// Returns what follows `-l` to link `library`: `:libtools.so.3` dynamically, and
-    /// `:libtools.a`, the name up to `.so`, statically.
-    #[must_use]
-    pub fn linker_name(self, library: &str) -> String {
-        match self {
-            Self::Dynamic => format!(":{library}"),
-            Self::Static => {
-                let base = library.split(".so").next().unwrap_or(library);
-                if base.len() == library.len() {
-                    format!(":{library}")
-                } else {
-                    format!(":{base}.a")
-                }
-            }
-        }
-    }
 }
 
 /// The operating system a program is built for, which `sys.platform` names (LIB-22).
@@ -239,18 +221,6 @@ mod tests {
         for text in ["", "3.11", "3.16", "3", "3.12.0", " 3.12", "312"] {
             assert_eq!(PythonFloor::parse(text), None, "{text:?}");
         }
-    }
-
-    #[test]
-    fn a_library_links_by_its_file_name_or_its_archive() {
-        use super::LibraryLink;
-        assert_eq!(LibraryLink::Dynamic.linker_name("libm.so.6"), ":libm.so.6");
-        assert_eq!(
-            LibraryLink::Static.linker_name("libtools.so.3"),
-            ":libtools.a"
-        );
-        assert_eq!(LibraryLink::Static.linker_name("libz.so"), ":libz.a");
-        assert_eq!(LibraryLink::Static.linker_name("libpool.a"), ":libpool.a");
     }
 
     #[test]

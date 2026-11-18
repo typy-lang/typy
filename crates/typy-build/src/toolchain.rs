@@ -13,9 +13,10 @@ pub struct Toolchain {
     target: TargetTriple,
     /// The C compiler driver that links, such as `cc` or `aarch64-linux-gnu-gcc`.
     pub(crate) linker: String,
-    /// The archiver of static libraries, such as `ar`.
+    /// The archiver of static libraries, such as `ar`, or `libtool` on macOS.
     pub(crate) archiver: String,
-    /// The tool that edits an object's symbols, such as `objcopy`.
+    /// The tool that edits an object's symbols, such as `objcopy`; empty on macOS, whose
+    /// linker keeps only the exports itself (ADR-0056).
     pub(crate) object_copier: String,
     /// Whether programs link statically, as they do for musl.
     pub(crate) static_link: bool,
@@ -25,9 +26,13 @@ impl Toolchain {
     /// Returns the tools that build for `target` on a `host`: `cc`, `ar` and `objcopy` for the
     /// host's architecture, with `musl-gcc` as the linker for musl, and for another
     /// architecture the tools named after the target's GNU triple, as Linux distributions
-    /// package cross toolchains.
+    /// package cross toolchains. macOS, which only a macOS host builds for, links with `cc`
+    /// and archives with `libtool` (ADR-0055).
     #[must_use]
     pub fn of(target: TargetTriple, host: TargetTriple) -> Self {
+        if target.is_macos() {
+            return Self::named(target, ["cc", "libtool", ""], false);
+        }
         let static_link = target.is_musl();
         if target.architecture() == host.architecture() {
             let linker = if static_link && !host.is_musl() {
@@ -68,6 +73,11 @@ impl Toolchain {
             }
         }
         self
+    }
+
+    /// Returns the target the tools build for.
+    pub(crate) const fn target(&self) -> TargetTriple {
+        self.target
     }
 
     /// Runs one of the tools with `arguments`; a tool that is not installed is E0701, which
@@ -136,6 +146,12 @@ mod tests {
                     "x86_64-linux-musl-objcopy",
                 ],
                 true,
+            ),
+            (
+                TargetTriple::Aarch64AppleDarwin,
+                TargetTriple::Aarch64AppleDarwin,
+                ["cc", "libtool", ""],
+                false,
             ),
         ];
         for (target, host, [linker, archiver, object_copier], static_link) in cases {

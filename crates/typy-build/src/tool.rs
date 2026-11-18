@@ -23,7 +23,13 @@ pub(crate) fn run_tool(
     arguments: &[String],
     target: TargetTriple,
 ) -> Result<(), Diagnostics> {
-    let run = match Command::new(program).args(arguments).output() {
+    // Apple's linker and `libtool` then write no times into a debug map or an archive, so a
+    // build gives the same bytes each time (NFR-06); GNU tools ignore it.
+    let run = match Command::new(program)
+        .args(arguments)
+        .env("ZERO_AR_DATE", "1")
+        .output()
+    {
         Ok(run) => run,
         Err(error) if error.kind() == io::ErrorKind::NotFound => {
             return Err(Diagnostics::from(

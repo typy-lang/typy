@@ -4,10 +4,12 @@
 
 mod artifact;
 mod emit_stage;
+mod library_argument;
 mod library_kind;
 mod library_layout;
 mod library_link;
 mod linker;
+mod mach_o;
 mod mode;
 mod request;
 mod runtime_archive;
@@ -16,6 +18,7 @@ mod toolchain;
 
 pub use artifact::{Artifact, ArtifactKind};
 pub use emit_stage::EmitStage;
+pub use library_argument::library_argument;
 pub use library_kind::LibraryKind;
 pub use library_layout::LibraryLayout;
 pub use linker::Linker;

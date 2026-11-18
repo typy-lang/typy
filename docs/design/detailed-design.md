@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy detailed design |
-| Version | 2.31 |
+| Version | 2.32 |
 | Status | Approved |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-18 |
@@ -344,7 +344,7 @@ it enforces and its status. `typy explain` reads the same table.
 | `library` | `bool` | `false` | Set by `--lib` through `SettingOverrides::library`: the main file is a module named after its file, and the checker reads its exports from `__all__` (CLI-09, ADR-0044) |
 | `version` | `Option<String>` | `None` | `version` in `typy.toml`, a string whose release `version_release` finds; the version of a library whose module has no `__version__` (CLI-13) |
 | `library_paths` | `Vec<Utf8PathBuf>` | empty | `library-paths`: directories under `root`, checked as `module_paths` are, where the linker looks for C libraries first (FFI-04) |
-| `libraries` | `BTreeMap<String, LibraryLink>` | empty | `[libraries."NAME"]`, each a table of one `link`, `"static"` or `"dynamic"`, for a name of letters, digits and `_.+-` that does not start with `-`; `LibraryLink::linker_name` gives `:NAME` or `:BASE.a` (FFI-04) |
+| `libraries` | `BTreeMap<String, LibraryLink>` | empty | `[libraries."NAME"]`, each a table of one `link`, `"static"` or `"dynamic"`, for a name of letters, digits and `_.+-` that does not start with `-`; `typy_build::library_argument` gives the linker's argument for each target (FFI-04) |
 | `platform` | `Platform` | `Platform::host()` | `Linux` or `MacOs`, the operating system of the build's target, which `Pipeline` sets from the target and `sys.platform` names: `linux` or `darwin` (LIB-22) |
 | `allocator` | `Option<Allocator>` | `None` | The table `[allocator]`: the C functions `allocate`, `reallocate` and `free`, each an identifier of at most 255 characters outside the prefixes `typy_`, `__typy` and `_TY`, all three different, and an optional `library`, a name the linker takes as `-lname` that starts with a letter, a digit or `_` (MEM-08, ADR-0043) |
 
@@ -2634,21 +2634,39 @@ as a subprocess with an argument list and no shell:
 
 | Target | Program | Arguments |
 | --- | --- | --- |
-| `x86_64-unknown-linux-gnu` | `cc` | `-o TEMP OBJECT -Wl,--push-state,--no-as-needed -lm -Wl,--pop-state RUNTIME_ARCHIVE [-lLIBRARY] -lm -Wl,--gc-sections` |
+| `x86_64-unknown-linux-gnu` | `cc` | `-o TEMP OBJECT -Wl,--push-state,--no-as-needed -lm -Wl,--pop-state RUNTIME_ARCHIVE [LIBRARY] -lm -Wl,--gc-sections` |
 | `x86_64-unknown-linux-musl` | `musl-gcc` | `-static`, then the same |
+| `aarch64-apple-darwin` | `cc` | `-o WORK/NAME -arch arm64 -mmacosx-version-min=11.0 WORK/program.o -lm RUNTIME_ARCHIVE [LIBRARY] -Wl,-dead_strip`, then `-Wl,-S` for a release or `-Wl,-oso_prefix,WORK/` for a debug build (ADR-0056) |
 
-`Linker::with_libraries(libraries)` adds `-l` and each library after the
-runtime archive, and `with_library_paths(paths)` adds `-L` and each path
-before the object. The driver passes the allocator's library (MEM-08),
-and for each library a `ctypes` declaration names its
-`LibraryLink::linker_name`, `-l:NAME` or `-l:BASE.a` as `typy.toml` says,
-with the directories of `library-paths` (FFI-01, FFI-04).
-`LibraryLayout::beside(directory, kind, name, release)` names a library's
-files as ADR-0045 decides: `libNAME.so.X.Y` with the soname `libNAME.so.X`
-and links of that name and `libNAME.so`, or `libNAME.X.Y.a` with a link
-`libNAME.a`, and without a release `libNAME.so`, whose soname is its name,
-or `libNAME.a`. `LibraryLayout::at(path, kind)` is the layout of `-o
-PATH`: the file alone, a shared library's soname its file name.
+`Linker::with_libraries(libraries)` adds each argument that links a
+library after the runtime archive, and `with_library_paths(paths)` adds
+`-L` and each path before the object. The driver passes `-l` and the
+allocator's library (MEM-08), and for each library a `ctypes` declaration
+names `library_argument(target, library, statically, paths)`, as
+`typy.toml` says, with the directories of `library-paths` (FFI-01,
+FFI-04): for GNU ld `-l:NAME` or `-l:BASE.a`, and for Apple's linker
+`-lNAME` for `libNAME.dylib`, or the path of `BASE.a` in the first
+library path that holds it, since Apple's linker has no `-l:`.
+`LibraryLayout::beside(directory, kind, name, release, target)` names a
+library's files. For Linux, as ADR-0045 decides: `libNAME.so.X.Y` with the
+soname `libNAME.so.X` and links of that name and `libNAME.so`, or
+`libNAME.X.Y.a` with a link `libNAME.a`, and without a release
+`libNAME.so`, whose soname is its name, or `libNAME.a`. For macOS, as
+ADR-0056 decides: `libNAME.X.dylib`, its own install name, with the
+`versions` `X.0` and `X.Y` and a link `libNAME.dylib`, or `libNAME.dylib`
+without a release, and `libNAME.a`. `LibraryLayout::at(path, kind)` is the
+layout of `-o PATH`: the file alone, a shared library's soname its file
+name.
+
+On macOS, `mach_o` links each output under its own file name in a work
+directory beside it and renames it into place, because the linker signs a
+binary ad hoc under its file name and records the object's path in the
+debug map; nothing changes a binary after the linker signed it. A debug
+build of an executable then runs `dsymutil --oso-prepend-path=WORK`, which
+copies the debug information of the object, deleted with the work
+directory, into `NAME.dSYM` beside the executable. Every tool runs with
+`ZERO_AR_DATE=1`, so Apple's linker and `libtool` write no times
+(NFR-06).
 `Linker::link_library(object, layout, kind, exports)` builds the library in
 a temporary directory beside it, renames it into place when every step
 succeeded, then makes each link in the temporary directory and renames it
@@ -2658,6 +2676,8 @@ over the name it replaces (ADR-0044):
 | --- | --- |
 | `Static` | `cc -r -nostdlib -o library.o program.o RUNTIME_ARCHIVE`; `objcopy --keep-global-symbols=exports.txt library.o`, with `--strip-debug` for a release; `ar rcsD library.a library.o`, whose `D` writes no times or owners |
 | `Shared` | `cc -shared -o library.so -Wl,-soname,SONAME` with the arguments an executable's link has after its output, and `-Wl,--version-script=exports.map`, which makes the exports global and every other symbol local |
+| `Static`, macOS | `cc -arch arm64 -mmacosx-version-min=11.0 -r -nostdlib -Wl,-exported_symbols_list,exports.txt -o library.o program.o RUNTIME_ARCHIVE`, with `-Wl,-S` for a release, which leaves every symbol but the exports local; `libtool -static -D -o NAME library.o` |
+| `Shared`, macOS | `cc -dynamiclib -o NAME -Wl,-install_name,INSTALL_NAME`, `-Wl,-compatibility_version,X.0 -Wl,-current_version,X.Y` for a release, `-Wl,-exported_symbols_list,exports.txt`, and the arguments an executable's link has after its output; each export is listed with the underscore Mach-O gives a C symbol |
 
 `tool::run_tool` runs each program, with E0701 when it is missing and
 E0702 when it fails, as for an executable.
