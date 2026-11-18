@@ -1,5 +1,8 @@
 # typy-test: LIB-12
 # typy-expect: accepted
+# typy-output: architecture-dependent
+# CPython's gamma and lgamma round differently on AArch64, where its compiler fuses
+# their multiply-adds.
 import math
 
 print(math.gamma(0.5), math.gamma(5), math.gamma(-1.5), math.gamma(171.5), math.gamma(1e-300))

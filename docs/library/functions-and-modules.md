@@ -144,7 +144,7 @@ LIB-13):
 | `sys.maxsize`, `sys.maxunicode` | `2**63 - 1` and `1114111` |
 | `sys.byteorder`, `sys.platform` | `"little"` and `"linux"`, those of the platforms TyPy builds for |
 | `sys.getrecursionlimit()`, `sys.setrecursionlimit(n)` | Read and set the recursion limit, 1000 at first |
-| `sys.version`, `sys.hexversion`, `sys.version_info` | CPython 3.15.0, whose behaviour TyPy follows: `'3.15.0 (TyPy 0.5.0)'`, `0x030F00F0` and `(3, 15, 0, 'final', 0)` |
+| `sys.version`, `sys.hexversion`, `sys.version_info` | CPython 3.15.0, whose behaviour TyPy follows: `'3.15.0 (TyPy 0.6.0)'`, `0x030F00F0` and `(3, 15, 0, 'final', 0)` |
 
 An argument that is not valid UTF-8 keeps each stray byte as a
 surrogate, as CPython decodes it, so `b"a\xffb"` becomes `'a\udcffb'`,

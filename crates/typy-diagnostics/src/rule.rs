@@ -17,6 +17,8 @@ impl RuleId {
     pub const CLI_12: Self = Self("CLI-12");
     /// A library build shall carry the release of the version that its module's `__version__`, or else `version` in `typy.toml`, gives in its file names, as Linux names libraries: `libNAME.so.X.Y` with the soname `libNAME.so.X`, and `libNAME.X.Y.a`, each with links of the names a linker finds.
     pub const CLI_13: Self = Self("CLI-13");
+    /// The C linker driver, `ar` and `objcopy` that build for a target shall be the host's own tools for the host's target and the tools named after the target's GNU triple for another, such as `aarch64-linux-gnu-gcc`, unless `typy.toml` names others for that target.
+    pub const CLI_14: Self = Self("CLI-14");
     /// Classes with methods and an `__init__` shall be accepted, with each instance attribute assigned in `__init__` or declared in the class body.
     pub const CLS_01: Self = Self("CLS-01");
     /// Adding an attribute that the class does not declare shall be rejected.
@@ -385,6 +387,7 @@ impl RuleId {
         Self::CLI_09,
         Self::CLI_12,
         Self::CLI_13,
+        Self::CLI_14,
         Self::CLS_01,
         Self::CLS_02,
         Self::CLS_04,

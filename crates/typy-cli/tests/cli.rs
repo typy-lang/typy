@@ -635,3 +635,134 @@ fn cli_10_explain_prints_a_code_with_a_wrong_and_a_corrected_program() {
         assert_eq!((status(&wrong), stderr(&wrong).as_str()), (2, message));
     }
 }
+
+const TRIPLES: [&str; 3] = [
+    "x86_64-unknown-linux-gnu",
+    "x86_64-unknown-linux-musl",
+    "aarch64-unknown-linux-gnu",
+];
+
+#[test]
+fn cli_08_an_unsupported_target_is_a_usage_error_that_lists_the_supported_ones() {
+    let workspace = Workspace::new(HELLO);
+    for command in ["build", "check"] {
+        let output = workspace.typy(&[command, "app.py", "--target", "aarch64-apple-darwin"]);
+        assert_eq!(status(&output), 2, "{command}");
+        let message = stderr(&output);
+        for triple in TRIPLES {
+            assert!(message.contains(triple), "{command}: {message}");
+        }
+    }
+}
+
+#[test]
+fn cli_08_check_accepts_each_supported_target() {
+    let workspace = Workspace::new(HELLO);
+    for triple in TRIPLES {
+        let output = workspace.typy(&["check", "app.py", "--target", triple]);
+        assert_eq!(
+            (status(&output), stderr(&output).as_str()),
+            (0, ""),
+            "{triple}"
+        );
+    }
+}
+
+#[test]
+fn cli_08_emit_asm_for_aarch64_writes_aarch64_code() {
+    let workspace = Workspace::new(HELLO);
+    let output = workspace.typy(&[
+        "build",
+        "app.py",
+        "--emit=asm",
+        "--target",
+        "aarch64-unknown-linux-gnu",
+    ]);
+    assert_eq!(status(&output), 0, "{}", stderr(&output));
+    let assembly = stdout(&output);
+    assert!(assembly.contains("\tbl\t"), "{assembly}");
+    assert!(!assembly.contains("callq"), "{assembly}");
+}
+
+/// The other architecture's target, its GNU triple and the emulator that runs its programs on
+/// this host.
+const fn other_architecture() -> (&'static str, &'static str, &'static str) {
+    if cfg!(target_arch = "aarch64") {
+        (
+            "x86_64-unknown-linux-gnu",
+            "x86_64-linux-gnu",
+            "qemu-x86_64",
+        )
+    } else {
+        (
+            "aarch64-unknown-linux-gnu",
+            "aarch64-linux-gnu",
+            "qemu-aarch64",
+        )
+    }
+}
+
+#[test]
+fn cli_08_a_program_built_for_the_other_architecture_runs_under_its_emulator() {
+    let workspace = Workspace::new(HELLO);
+    let (triple, gnu, emulator) = other_architecture();
+    for mode in [&[][..], &["--release"]] {
+        let mut arguments = vec!["build", "app.py", "-o", "cross", "--target", triple];
+        arguments.extend_from_slice(mode);
+        let output = workspace.typy(&arguments);
+        assert_eq!(
+            (status(&output), stderr(&output).as_str()),
+            (0, ""),
+            "{arguments:?}"
+        );
+        let run = Command::new(emulator)
+            .args(["-L", &format!("/usr/{gnu}")])
+            .arg(workspace.root.join("cross"))
+            .output()
+            .unwrap();
+        assert_eq!(
+            (stdout(&run).as_str(), run.status.code()),
+            ("hello 3\n", Some(0))
+        );
+    }
+}
+
+#[test]
+fn cli_14_a_tool_typy_toml_names_for_a_target_that_is_missing_is_e0701_naming_both() {
+    let workspace = Workspace::new(HELLO);
+    let (triple, _, _) = other_architecture();
+    std::fs::write(
+        workspace.root.join("typy.toml"),
+        format!("[target.\"{triple}\"]\nlinker = \"typy-no-such-cc\"\n"),
+    )
+    .unwrap();
+    let output = workspace.typy(&["build", "app.py", "--target", triple]);
+    let message = stderr(&output);
+    assert_eq!(status(&output), 1, "{message}");
+    assert!(message.contains("error[E0701]"), "{message}");
+    assert!(message.contains("`typy-no-such-cc`"), "{message}");
+    assert!(
+        message.contains(&format!("[target.\"{triple}\"]")),
+        "{message}"
+    );
+    assert!(!workspace.root.join("app").exists());
+}
+
+#[test]
+fn cli_14_the_linker_typy_toml_names_for_a_target_links_its_programs() {
+    let workspace = Workspace::new(HELLO);
+    let (triple, gnu, emulator) = other_architecture();
+    std::fs::write(
+        workspace.root.join("typy.toml"),
+        format!("[target.\"{triple}\"]\nlinker = \"/usr/bin/{gnu}-gcc\"\n"),
+    )
+    .unwrap();
+    let output = workspace.typy(&["build", "app.py", "--target", triple]);
+    assert_eq!((status(&output), stderr(&output).as_str()), (0, ""));
+    let run = Command::new(emulator)
+        .args(["-L", &format!("/usr/{gnu}")])
+        .arg(workspace.root.join("app"))
+        .output()
+        .unwrap();
+    assert_eq!(stdout(&run), "hello 3\n");
+}

@@ -54,7 +54,7 @@ unsafe fn of_int(function: unsafe extern "C" fn(f64) -> f64, value: i64) -> Rais
         );
     }
     // SAFETY: the caller's guarantee.
-    let converted = unsafe { crate::float::typy_rt_int_to_float(value) };
+    let converted = unsafe { crate::float::int_to_float(value) };
     if converted.exception.is_null() {
         return ok(call(function, converted.value));
     }
@@ -98,37 +98,40 @@ fn split(magnitude: &[u64], bits: u64) -> (f64, f64) {
 
 /// Defines the runtime functions of one logarithm, for a `float` and for an `int`.
 macro_rules! logarithms {
-    ($($float:ident, $int:ident, $function:path, $name:literal;)*) => {
+    ($($float:ident = $float_inner:ident, $int:ident = $int_inner:ident, $function:path, $name:literal;)*) => {
         $(
             #[doc = concat!("`math.", $name, "(x)` of a `float`.")]
-            #[unsafe(no_mangle)]
-            pub extern "C" fn $float(x: f64) -> Raising<f64> {
+            pub(crate) fn $float_inner(x: f64) -> Raising<f64> {
                 of_float($function, x)
             }
+
+            crate::export_float!($float = $float_inner(x: f64));
 
             #[doc = concat!("`math.", $name, "(x)` of an `int` word.")]
             ///
             /// # Safety
             ///
             /// `value` is an `int` word whose large integer is live.
-            #[unsafe(no_mangle)]
-            pub unsafe extern "C" fn $int(value: i64) -> Raising<f64> {
+            pub(crate) unsafe fn $int_inner(value: i64) -> Raising<f64> {
                 // SAFETY: the caller's guarantee.
                 unsafe { of_int($function, value) }
             }
+
+            crate::export_float!(unsafe $int = $int_inner(value: i64));
         )*
     };
 }
 
 logarithms! {
-    typy_rt_math_log_float, typy_rt_math_log_int, c::log, "log";
-    typy_rt_math_log2_float, typy_rt_math_log2_int, c::log2, "log2";
-    typy_rt_math_log10_float, typy_rt_math_log10_int, c::log10, "log10";
+    typy_rt_math_log_float = math_log_float, typy_rt_math_log_int = math_log_int, c::log, "log";
+    typy_rt_math_log2_float = math_log2_float, typy_rt_math_log2_int = math_log2_int, c::log2, "log2";
+    typy_rt_math_log10_float = math_log10_float, typy_rt_math_log10_int = math_log10_int, c::log10, "log10";
 }
 
+crate::export_float!(typy_rt_math_log_divide = math_log_divide(numerator: f64, denominator: f64));
+
 /// Returns `math.log(x, base)` from the two natural logarithms: their quotient.
-#[unsafe(no_mangle)]
-pub extern "C" fn typy_rt_math_log_divide(numerator: f64, denominator: f64) -> Raising<f64> {
+pub(crate) fn math_log_divide(numerator: f64, denominator: f64) -> Raising<f64> {
     if denominator == 0.0 {
         return Raising::error(
             0.0,

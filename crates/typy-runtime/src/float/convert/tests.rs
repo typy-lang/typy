@@ -1,8 +1,6 @@
 //! Tests of exact conversion and comparison between `int` and `float`.
 
-use super::{
-    typy_rt_compare_int_float, typy_rt_float_to_int, typy_rt_int_to_float, typy_rt_int_true_divide,
-};
+use super::{int_to_float, int_true_divide, typy_rt_compare_int_float, typy_rt_float_to_int};
 use crate::Raising;
 use crate::int::natural::shift_left;
 use crate::int::value::Integer;
@@ -49,11 +47,11 @@ fn integers_convert_with_one_rounding() {
         -(1 << 120),
     ] {
         // SAFETY: the word is a live `int` word.
-        let result = unsafe { typy_rt_int_to_float(word(value)) };
+        let result = unsafe { int_to_float(word(value)) };
         assert_eq!(result.value, value as f64, "{value}");
     }
     // SAFETY: the word is a live `int` word.
-    let result = unsafe { typy_rt_int_to_float(power_of_two(1024)) };
+    let result = unsafe { int_to_float(power_of_two(1024)) };
     assert_eq!(message(&result), "int too large to convert to float");
 }
 
@@ -69,7 +67,7 @@ fn integer_division_rounds_once_and_keeps_the_sign() {
     ];
     for (left, right, expected) in cases {
         // SAFETY: the words are live `int` words.
-        let result = unsafe { typy_rt_int_true_divide(word(left), word(right)) };
+        let result = unsafe { int_true_divide(word(left), word(right)) };
         assert!(result.exception.is_null());
         assert_eq!(
             result.value.to_bits(),
@@ -80,17 +78,14 @@ fn integer_division_rounds_once_and_keeps_the_sign() {
     // SAFETY: the words are live `int` words.
     unsafe {
         assert_eq!(
-            message(&typy_rt_int_true_divide(word(1), word(0))),
+            message(&int_true_divide(word(1), word(0))),
             "division by zero"
         );
         assert_eq!(
-            message(&typy_rt_int_true_divide(power_of_two(1100), word(3))),
+            message(&int_true_divide(power_of_two(1100), word(3))),
             "integer division result too large for a float"
         );
-        assert_eq!(
-            typy_rt_int_true_divide(word(1), power_of_two(1200)).value,
-            0.0
-        );
+        assert_eq!(int_true_divide(word(1), power_of_two(1200)).value, 0.0);
     }
 }
 

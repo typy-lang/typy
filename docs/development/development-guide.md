@@ -203,9 +203,10 @@ to GitHub Pages.
 | --- | --- | --- | --- |
 | `ci.yml` | Quality gate and package | Every pull request | `make check`, then `make dist`; for a pull request of documents alone, the light run below |
 | `ci.yml` | Miri and fuzzing | On demand, before a release | `make miri`, then `FUZZ_SECONDS=1800 make fuzz`; the inputs that crashed are kept as an artifact |
+| `ci.yml` | AArch64 tests | Every pull request but one of documents alone, on an `ubuntu-24.04-arm` runner | `make test`: every unit, integration and conformance test natively, and the conformance suite built for x86-64 under `qemu-x86_64` (NFR-16), then `make dist`; built with line tables for debug information, since the runner has 14 GB of disk |
 | `ci.yml` | Dependency review | Every pull request | Fails on a new dependency with a known vulnerability |
 | `codeql.yml` | Analyze | Every push to `main`, and weekly | Code scanning of the Rust sources and the workflows, leaving out the test files that `.github/codeql/codeql-config.yml` lists |
-| `release.yml` | Check and build, Publish, then Documentation | A tag `vX.Y.Z` | Section 9 |
+| `release.yml` | Check and build, Build for AArch64 hosts, Publish, then Documentation | A tag `vX.Y.Z` | Section 9 |
 | `pages.yml` | Build the site, then Deploy | Called by `release.yml` once a release is created; a release published by hand; on demand, on a release tag | Builds the site with `scripts/build-docs.sh` on the runner after `astral-sh/setup-uv`, without the dev image, and deploys it to GitHub Pages at <https://typy-lang.org> (DOC-05) |
 
 A pull request whose every file is a document that no compiled test reads
@@ -251,18 +252,22 @@ each release's branch stays on origin and an issue can be traced to it.
 3. A tag `vX.Y.Z` on that commit starts `release.yml`.
 4. `scripts/check-release.sh` checks that the tag names the version and that
    the changelog has a dated section for it, whose text becomes the release
-   notes. The job then runs `make check` and `make dist`.
+   notes. The job then runs `make check` and `make dist` for x86-64 hosts,
+   while a job on an `ubuntu-24.04-arm` runner runs `make dist` for AArch64
+   hosts.
 5. A maintainer approves the `release` environment.
-6. The publish job creates the GitHub release with the archive and its
+6. The publish job creates the GitHub release with both archives and their
    SHA-256, using the workflow's short-lived token and no long-lived one.
-   It then downloads the archive back, checks its SHA-256, unpacks it and
-   runs a program with it.
+   It then downloads them back, checks each SHA-256, unpacks the x86-64
+   archive and runs a program with it; the AArch64 archive ran one on its
+   own runner when it was built.
 7. Publishing the release deploys its documentation: the documentation job
    calls `pages.yml`, which builds the site from the tag in strict mode and
    deploys it to <https://typy-lang.org> (DOC-05). A run of `pages.yml`
    started by hand on the tag deploys it again.
 
-`make dist` builds `dist/typy-X.Y.Z-x86_64-unknown-linux-gnu.tar.gz`: the
+`make dist` builds `dist/typy-X.Y.Z-HOST.tar.gz` for the host's triple,
+`x86_64-unknown-linux-gnu` or `aarch64-unknown-linux-gnu`: the
 `typy` executable in `bin/` and a runtime archive for each target in
 `lib/typy/<triple>/`, which is the layout of an installation prefix, with
 the licences, the third-party notices, README and changelog. Its

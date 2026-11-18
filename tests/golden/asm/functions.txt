@@ -501,8 +501,9 @@ __typy_main:
 	movl	$15, %edi
 	movl	$5, %esi
 	callq	typy_rt_int_true_divide@PLT
-	movq	%rax, 104(%rsp)
-	cmpq	$0, %rax
+	movq	%rdx, 104(%rsp)
+	movq	%rax, %xmm0
+	cmpq	$0, %rdx
 	movsd	%xmm0, 112(%rsp)
 	jne	.LBB3_29
 	jmp	.LBB3_19

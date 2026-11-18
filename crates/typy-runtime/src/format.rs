@@ -230,7 +230,7 @@ unsafe fn integer(
         b'b' | b'c' | b'd' | b'o' | b'x' | b'X' | b'n' => {}
         b'e' | b'E' | b'f' | b'F' | b'g' | b'G' | b'%' => {
             // SAFETY: the caller's guarantee.
-            let converted = unsafe { crate::float::typy_rt_int_to_float(value) };
+            let converted = unsafe { crate::float::int_to_float(value) };
             if !converted.exception.is_null() {
                 return Err(converted.exception);
             }

@@ -149,14 +149,15 @@ impl Drop for Doubles {
     }
 }
 
+crate::export_float!(unsafe typy_rt_math_fsum = math_fsum(values: *const ListObject));
+
 /// `math.fsum(values)`: the sum, rounded once, by Shewchuk's partial sums as CPython keeps
 /// them.
 ///
 /// # Safety
 ///
 /// `values` is a live list of `int`, `bool` or `float` items.
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn typy_rt_math_fsum(values: *const ListObject) -> Raising<f64> {
+pub(crate) unsafe fn math_fsum(values: *const ListObject) -> Raising<f64> {
     // SAFETY: the caller's guarantee.
     let list = unsafe { &*values };
     // Each item adds at most one partial.
@@ -251,16 +252,14 @@ fn exact_sum(partials: &[f64]) -> f64 {
     high
 }
 
+crate::export_float!(unsafe typy_rt_math_dist = math_dist(p: *const ListObject, q: *const ListObject));
+
 /// `math.dist(p, q)`: the Euclidean distance between two points of as many coordinates.
 ///
 /// # Safety
 ///
 /// Both are live lists of `int`, `bool` or `float` items.
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn typy_rt_math_dist(
-    p: *const ListObject,
-    q: *const ListObject,
-) -> Raising<f64> {
+pub(crate) unsafe fn math_dist(p: *const ListObject, q: *const ListObject) -> Raising<f64> {
     // SAFETY: the caller's guarantee.
     let (p, q) = unsafe { (&*p, &*q) };
     if p.length != q.length {
@@ -304,17 +303,15 @@ pub unsafe extern "C" fn typy_rt_math_prod_int(values: *const ListObject, start:
     product.into_word()
 }
 
+crate::export_float!(unsafe typy_rt_math_prod_float = math_prod_float(values: *const ListObject, start: f64));
+
 /// `math.prod(values, start=start)` of at least one item with a `float` among the items or
 /// the start, given as a `float`: each item multiplies the product as a `float`.
 ///
 /// # Safety
 ///
 /// `values` is a live list of `int`, `bool` or `float` items.
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn typy_rt_math_prod_float(
-    values: *const ListObject,
-    start: f64,
-) -> Raising<f64> {
+pub(crate) unsafe fn math_prod_float(values: *const ListObject, start: f64) -> Raising<f64> {
     // SAFETY: the caller's guarantee.
     let list = unsafe { &*values };
     let mut product = start;
@@ -329,6 +326,8 @@ pub unsafe extern "C" fn typy_rt_math_prod_float(
     ok(product)
 }
 
+crate::export_float!(unsafe typy_rt_math_prod_mixed = math_prod_mixed(values: *const ListObject, start: i64));
+
 /// `math.prod(values, start=start)` of an `int` start and items with a `float` among them:
 /// the exact product of the integers up to the first `float`, then each item multiplies the
 /// product as a `float`, as CPython's `math.prod` does.
@@ -337,11 +336,7 @@ pub unsafe extern "C" fn typy_rt_math_prod_float(
 ///
 /// `values` is a live list of `int`, `bool` or `float` items, or of a union of them, and
 /// `start` an `int` word.
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn typy_rt_math_prod_mixed(
-    values: *const ListObject,
-    start: i64,
-) -> Raising<f64> {
+pub(crate) unsafe fn math_prod_mixed(values: *const ListObject, start: i64) -> Raising<f64> {
     // SAFETY: the caller's guarantee.
     let (list, mut exact) = unsafe { (&*values, Some(integer(start))) };
     let mut product = 0.0_f64;
@@ -522,6 +517,8 @@ fn reals(p: &Number, q: &Number) -> Option<(f64, f64)> {
     }
 }
 
+crate::export_float!(unsafe typy_rt_math_sumprod_float = math_sumprod_float(p: *const ListObject, q: *const ListObject));
+
 /// `math.sumprod(p, q)` with a `float` among the items, as CPython's `math_sumprod_impl`
 /// computes it: pairs of exact `int`s summed in a machine integer while it does not
 /// overflow, then pairs with a `float` summed in triple length while the sum stays finite,
@@ -532,8 +529,7 @@ fn reals(p: &Number, q: &Number) -> Option<(f64, f64)> {
 /// # Safety
 ///
 /// Both are live lists of `int`, `bool` or `float` items, or of a union of them.
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn typy_rt_math_sumprod_float(
+pub(crate) unsafe fn math_sumprod_float(
     p: *const ListObject,
     q: *const ListObject,
 ) -> Raising<f64> {

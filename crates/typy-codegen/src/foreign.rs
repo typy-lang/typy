@@ -61,7 +61,7 @@ impl<'ctx> FunctionEmitter<'_, '_, 'ctx> {
             .clone();
         let context = self.shared.context;
         let mut call = CallParts::new();
-        let mut registers = Registers::new();
+        let mut registers = Registers::new(self.shared.target);
         // A structure result is made before the call, which may write it in memory.
         let structure = match foreign.result {
             Some(CType::Structure(class)) => {

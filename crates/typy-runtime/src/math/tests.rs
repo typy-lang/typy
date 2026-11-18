@@ -9,8 +9,8 @@ use super::integer::{
     typy_rt_math_lcm, typy_rt_math_perm,
 };
 use super::log::{
-    typy_rt_math_log_divide, typy_rt_math_log_float, typy_rt_math_log_int, typy_rt_math_log2_float,
-    typy_rt_math_log2_int, typy_rt_math_log10_float, typy_rt_math_log10_int,
+    math_log_divide, math_log_float, math_log_int, math_log2_float, math_log2_int,
+    math_log10_float, math_log10_int,
 };
 use super::real::*;
 use super::special::*;
@@ -2060,39 +2060,39 @@ fn check(found: Raising<f64>, expected: &Outcome, case: &str) {
 
 fn one(name: &str, x: f64) -> Raising<f64> {
     match name {
-        "acos" => typy_rt_math_acos(x),
-        "acosh" => typy_rt_math_acosh(x),
-        "asin" => typy_rt_math_asin(x),
-        "asinh" => typy_rt_math_asinh(x),
-        "atan" => typy_rt_math_atan(x),
-        "atanh" => typy_rt_math_atanh(x),
-        "cbrt" => typy_rt_math_cbrt(x),
-        "cos" => typy_rt_math_cos(x),
-        "cosh" => typy_rt_math_cosh(x),
-        "erf" => typy_rt_math_erf(x),
-        "erfc" => typy_rt_math_erfc(x),
-        "exp" => typy_rt_math_exp(x),
-        "exp2" => typy_rt_math_exp2(x),
-        "expm1" => typy_rt_math_expm1(x),
-        "log1p" => typy_rt_math_log1p(x),
-        "sin" => typy_rt_math_sin(x),
-        "sinh" => typy_rt_math_sinh(x),
-        "sqrt" => typy_rt_math_sqrt(x),
-        "tan" => typy_rt_math_tan(x),
-        "tanh" => typy_rt_math_tanh(x),
-        "log" => typy_rt_math_log_float(x),
-        "log2" => typy_rt_math_log2_float(x),
-        _ => typy_rt_math_log10_float(x),
+        "acos" => math_acos(x),
+        "acosh" => math_acosh(x),
+        "asin" => math_asin(x),
+        "asinh" => math_asinh(x),
+        "atan" => math_atan(x),
+        "atanh" => math_atanh(x),
+        "cbrt" => math_cbrt(x),
+        "cos" => math_cos(x),
+        "cosh" => math_cosh(x),
+        "erf" => math_erf(x),
+        "erfc" => math_erfc(x),
+        "exp" => math_exp(x),
+        "exp2" => math_exp2(x),
+        "expm1" => math_expm1(x),
+        "log1p" => math_log1p(x),
+        "sin" => math_sin(x),
+        "sinh" => math_sinh(x),
+        "sqrt" => math_sqrt(x),
+        "tan" => math_tan(x),
+        "tanh" => math_tanh(x),
+        "log" => math_log_float(x),
+        "log2" => math_log2_float(x),
+        _ => math_log10_float(x),
     }
 }
 
 fn two(name: &str, x: f64, y: f64) -> Raising<f64> {
     match name {
-        "atan2" => typy_rt_math_atan2(x, y),
-        "copysign" => typy_rt_math_copysign(x, y),
-        "fmod" => typy_rt_math_fmod(x, y),
-        "remainder" => typy_rt_math_remainder(x, y),
-        _ => typy_rt_math_pow(x, y),
+        "atan2" => math_atan2(x, y),
+        "copysign" => math_copysign(x, y),
+        "fmod" => math_fmod(x, y),
+        "remainder" => math_remainder(x, y),
+        _ => math_pow(x, y),
     }
 }
 
@@ -2149,6 +2149,10 @@ fn check_int(found: Raising<i64>, expected: &Result<&str, (&str, &str)>, case: &
 
 #[test]
 #[cfg_attr(miri, ignore = "Miri cannot call the C maths library")]
+#[cfg_attr(
+    not(target_arch = "x86_64"),
+    ignore = "the values are CPython's on x86-64; on AArch64 its C library and its fused multiply-adds give other last bits, which the conformance suite compares with CPython there (NFR-16)"
+)]
 fn every_function_of_one_float_gives_cpythons_result() {
     for (name, x, expected) in ONES.iter().chain(LOGS) {
         let x = f64::from_bits(*x);
@@ -2173,9 +2177,9 @@ fn the_logarithm_of_an_int_of_any_size_gives_cpythons_result() {
         // SAFETY: the word is live.
         let found = unsafe {
             match *name {
-                "log" => typy_rt_math_log_int(word),
-                "log2" => typy_rt_math_log2_int(word),
-                _ => typy_rt_math_log10_int(word),
+                "log" => math_log_int(word),
+                "log2" => math_log2_int(word),
+                _ => math_log10_int(word),
             }
         };
         // SAFETY: the word is no longer used.
@@ -2223,12 +2227,12 @@ fn every_integer_function_gives_cpythons_result() {
 #[test]
 fn the_logarithm_of_a_base_divides_by_its_logarithm() {
     check(
-        typy_rt_math_log_divide(3.0, 1.5),
+        math_log_divide(3.0, 1.5),
         &Ok(2.0_f64.to_bits()),
         "log(x, base)",
     );
     check(
-        typy_rt_math_log_divide(1.0, 0.0),
+        math_log_divide(1.0, 0.0),
         &Err(("ZeroDivisionError", "division by zero")),
         "log(x, 1)",
     );
@@ -2296,7 +2300,7 @@ fn ldexp_takes_an_int_of_any_size() {
     for (x, exponent, expected) in more::LDEXP {
         let word = int_word(exponent);
         // SAFETY: the word is live.
-        let found = unsafe { typy_rt_math_ldexp(f64::from_bits(*x), word) };
+        let found = unsafe { math_ldexp(f64::from_bits(*x), word) };
         // SAFETY: the word is no longer used.
         unsafe { crate::refcount::typy_rt_int_decrement(word) };
         let expected = expected.map_err(|(kind, message)| (kind, message));
@@ -2309,7 +2313,7 @@ fn nextafter_takes_an_int_of_any_size() {
     for (x, y, steps, expected) in more::NEXTAFTER {
         let word = int_word(steps);
         // SAFETY: the word is live.
-        let found = unsafe { typy_rt_math_nextafter(f64::from_bits(*x), f64::from_bits(*y), word) };
+        let found = unsafe { math_nextafter(f64::from_bits(*x), f64::from_bits(*y), word) };
         // SAFETY: the word is no longer used.
         unsafe { crate::refcount::typy_rt_int_decrement(word) };
         check(
@@ -2382,7 +2386,7 @@ fn tests_isclose_and_fma_give_cpythons_result() {
         check_flag(found, expected, &format!("isclose({a:#x}, {b:#x})"));
     }
     for (x, y, z, expected) in more::FMA {
-        let found = typy_rt_math_fma(f64::from_bits(*x), f64::from_bits(*y), f64::from_bits(*z));
+        let found = math_fma(f64::from_bits(*x), f64::from_bits(*y), f64::from_bits(*z));
         check(found, expected, &format!("fma({x:#x}, {y:#x}, {z:#x})"));
     }
 }

@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy test plan |
-| Version | 0.87 |
+| Version | 0.89 |
 | Status | Draft |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-17 |
@@ -183,8 +183,17 @@ the test stays, named for the behaviour it checks.
 | Documentation tools | Zensical 0.1.1 and its dependencies, pinned with their sha256 in `scripts/docs-requirements.txt`, in a CPython 3.14 environment at `/var/cache/typy/docs` in the dev container, and on the runner of the Pages workflow | Documentation gate, DOC-05 |
 
 Each release adds its platforms to the CI matrix as section 2.3 of the
-specification lists them: Linux x86_64 in 0.1, Linux and macOS AArch64 in
-0.6, Windows x86_64 in 1.0.
+specification lists them: Linux x86_64 in 0.1, Linux AArch64 in 0.6, macOS
+AArch64 in 0.7, Windows x86_64 in 1.0.
+
+From 0.6 the dev container also holds Debian's AArch64 cross toolchain
+(`gcc-aarch64-linux-gnu`, `libc6-dev-arm64-cross`), `qemu-user` and Rust's
+`aarch64-unknown-linux-gnu` target. A local run builds the conformance
+suite for AArch64 and runs each program under `qemu-aarch64`; CI runs the
+unit, integration and conformance tests natively on an `ubuntu-24.04-arm`
+runner, which is free for a public repository. The arm64 job builds the
+dev image for arm64 and leaves out the coverage build, which the runner's
+14 GB disk cannot hold beside the image.
 
 ## 5. Entry and exit criteria
 
@@ -260,7 +269,8 @@ that the specification does not define.
 | CLI-05 | 0.1 | E2E | `crates/typy-cli/tests/cli.rs`, tests named for CLI-05 |
 | CLI-06 | 0.1 | E2E | `crates/typy-cli/tests/cli.rs`, tests named for CLI-06 |
 | CLI-07 | 0.3 | E2E | `crates/typy-cli/tests/cli.rs`, tests named for CLI-07 |
-| CLI-08 | 0.6 | E2E | `crates/typy-cli/tests/cli.rs`, tests named for CLI-08 |
+| CLI-08 | 0.6 | UT, E2E | `crates/typy-codegen/src/target.rs` for the supported triples and the host; `crates/typy-cli/tests/cli.rs` for `--target` on `build` and `check`, an unsupported triple and an AArch64 executable built on an x86_64 host and run under `qemu-aarch64` |
+| CLI-14 | 0.6 | UT, E2E | `crates/typy-build/src/toolchain.rs` for the tools of each target on each host; `crates/typy-build/src/linker.rs` and `library_link.rs` for the tools they run; `crates/typy-source/src/settings_file/target.rs` for the `typy.toml` table of a target; `crates/typy-build/src/toolchain.rs` for the triples it shares with the code generator; `crates/typy-cli/tests/cli.rs` for E0701 naming a missing cross tool |
 | CLI-09 | 0.5 | UT, E2E | `crates/typy-build/src/request.rs` and `library_kind.rs` for the output's name; `crates/typy-cli/tests/library.rs`, tests named for CLI-09: a static library in a C program, its only global symbols, a shared library from CPython through `ctypes`, two libraries in one program with a call from another thread, and a file name that is not a module name |
 | CLI-13 | 0.5 | UT, E2E | `crates/typy-source/src/version.rs` for the release of a version; `crates/typy-source/src/settings_file.rs` for `version`; `crates/typy-check/tests/exports.rs` for `__version__` and E0429; `crates/typy-build/src/library_layout.rs` for each layout; `crates/typy-cli/tests/library.rs`, tests named for CLI-13: a shared library's soname and links, a new release that moves them, a static library's link, `-o`, and two versions that differ |
 | CLI-10 | 0.3 | E2E | `crates/typy-cli/tests/cli.rs`, tests named for CLI-10 |
@@ -486,6 +496,7 @@ that the specification does not define.
 | FFI-09 | 1.0 | IT | `tests/conformance/ffi/FFI-09_*.py` |
 | FFI-10 | 1.0 | UT, IT | `crates/typy-check/tests/ctypes.rs` for each E0201 of a `ctypes` use planned for 1.0; `tests/conformance/ffi/FFI-10_*.py` |
 | FFI-11 | 1.0 | UT, IT | `crates/typy-check/src/check/ctypes_declarations/tests.rs` and `crates/typy-check/tests/ctypes.rs` for each E0201 of a structure form planned for 1.0; `tests/conformance/ffi/FFI-11_*.py` |
+| FFI-12 | 0.6 | UT, E2E | `crates/typy-codegen/src/structure_abi.rs` for each target's classification against clang 19's lowering of the same C structures; `crates/typy-cli/tests/structures.rs` run for each target, under `qemu-aarch64` for AArch64, against CPython on x86_64 |
 | FFI-06 | 1.0 | IT | `tests/conformance/ffi/FFI-06_*.py` |
 | FFI-07 | 1.0 | IT | `tests/conformance/ffi/FFI-07_*.py` |
 | DIA-01 | 0.1 | UT, IT | `typy-diagnostics` unit tests; `tests/golden/diagnostics/DIA-01_*` |
@@ -516,6 +527,7 @@ that the specification does not define.
 | NFR-13 | 0.2 | UT | `typy-runtime` list test: a million `int` values appended one at a time; the list and its buffer take at most 8.5 MB |
 | NFR-14 | 1.0 | Benchmark | `tests/bench/build_time.py`: peak memory of each build within 1 GB |
 | NFR-15 | 0.1 | IT | Conformance suite: debug and release runs compared |
+| NFR-16 | 0.6 | IT | `crates/typy-conformance/tests/other_architecture.rs`: every accepted conformance test built for the other architecture, in debug and release mode, and run under its user-mode emulator, `qemu-aarch64` on an x86_64 host and `qemu-x86_64` on an arm64 host, each run compared with CPython's output, except a test marked `typy-output: architecture-dependent`, whose output CPython itself gives otherwise on each architecture; on the arm64 CI runner the suite's own test runs the AArch64 builds natively against CPython on AArch64, which checks those too |
 | C-01 | 0.1 | CI gate | Workspace builds with the pinned Rust toolchain only |
 | C-02 | 0.1 | CI gate | `scripts/check-pins.sh`: `ruff_python_parser` pinned with `=` in `Cargo.toml` |
 | C-03 | 0.1 | UT | `typy-codegen` test: the linked LLVM major version is 23 |

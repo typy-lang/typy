@@ -44,6 +44,9 @@ pub struct TestCase {
     pub expectation: Expectation,
     /// The oldest oracle version it runs under.
     pub floor: PythonFloor,
+    /// Whether its output depends on the machine's architecture, as CPython's own does, so it
+    /// is compared only with CPython on the architecture it runs on (NFR-16).
+    pub architecture_dependent: bool,
 }
 
 /// Returns whether a directory holds one test of several modules: its name starts with a
@@ -80,6 +83,7 @@ impl TestCase {
         let mut requirements = None;
         let mut expectation = None;
         let mut floor = PythonFloor::default();
+        let mut architecture_dependent = false;
         for line in text.lines().take_while(|line| line.starts_with('#')) {
             let Some((field, value)) = line
                 .strip_prefix("# ")
@@ -107,6 +111,12 @@ impl TestCase {
                     floor = PythonFloor::parse(value)
                         .ok_or_else(|| CaseError::Malformed("typy-python", value.to_owned()))?;
                 }
+                "typy-output" => {
+                    if value != "architecture-dependent" {
+                        return Err(CaseError::Malformed("typy-output", value.to_owned()));
+                    }
+                    architecture_dependent = true;
+                }
                 _ => {}
             }
         }
@@ -121,6 +131,7 @@ impl TestCase {
             requirements,
             expectation,
             floor,
+            architecture_dependent,
         })
     }
 }

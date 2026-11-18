@@ -45,61 +45,63 @@ pub(super) fn math_2(x: f64, y: f64, result: f64) -> Raising<f64> {
 const RANGE: &str = "expected a number in range from -1 up to 1, got %s";
 const FINITE: &str = "expected a finite input, got %s";
 
-/// Defines a runtime function of one `float` that applies a C function with `math_1`.
+/// Defines a function of one `float` that applies a C function with `math_1`, and its runtime
+/// export.
 macro_rules! real {
-    ($($(#[$doc:meta])* $name:ident: $function:path, $overflow:expr, $message:expr;)*) => {
+    ($($(#[$doc:meta])* $name:ident = $inner:ident: $function:path, $overflow:expr, $message:expr;)*) => {
         $(
             $(#[$doc])*
-            #[unsafe(no_mangle)]
-            pub extern "C" fn $name(x: f64) -> Raising<f64> {
+            pub(crate) fn $inner(x: f64) -> Raising<f64> {
                 math_1(x, $function, $overflow, $message)
             }
+
+            crate::export_float!($name = $inner(x: f64));
         )*
     };
 }
 
 real! {
     /// `math.acos(x)`.
-    typy_rt_math_acos: c::acos, false, Some(RANGE);
+    typy_rt_math_acos = math_acos: c::acos, false, Some(RANGE);
     /// `math.acosh(x)`.
-    typy_rt_math_acosh: c::acosh, false, Some("expected argument value not less than 1, got %s");
+    typy_rt_math_acosh = math_acosh: c::acosh, false, Some("expected argument value not less than 1, got %s");
     /// `math.asin(x)`.
-    typy_rt_math_asin: c::asin, false, Some(RANGE);
+    typy_rt_math_asin = math_asin: c::asin, false, Some(RANGE);
     /// `math.asinh(x)`.
-    typy_rt_math_asinh: c::asinh, false, None;
+    typy_rt_math_asinh = math_asinh: c::asinh, false, None;
     /// `math.atan(x)`.
-    typy_rt_math_atan: c::atan, false, None;
+    typy_rt_math_atan = math_atan: c::atan, false, None;
     /// `math.atanh(x)`.
-    typy_rt_math_atanh: c::atanh, false, Some("expected a number between -1 and 1, got %s");
+    typy_rt_math_atanh = math_atanh: c::atanh, false, Some("expected a number between -1 and 1, got %s");
     /// `math.cbrt(x)`.
-    typy_rt_math_cbrt: c::cbrt, false, None;
+    typy_rt_math_cbrt = math_cbrt: c::cbrt, false, None;
     /// `math.cos(x)`.
-    typy_rt_math_cos: c::cos, false, Some(FINITE);
+    typy_rt_math_cos = math_cos: c::cos, false, Some(FINITE);
     /// `math.cosh(x)`.
-    typy_rt_math_cosh: c::cosh, true, None;
+    typy_rt_math_cosh = math_cosh: c::cosh, true, None;
     /// `math.erf(x)`, which never fails: the C library reports only an underflow, which
     /// CPython ignores.
-    typy_rt_math_erf: c::erf, false, None;
+    typy_rt_math_erf = math_erf: c::erf, false, None;
     /// `math.erfc(x)`, which never fails, as `erf`.
-    typy_rt_math_erfc: c::erfc, false, None;
+    typy_rt_math_erfc = math_erfc: c::erfc, false, None;
     /// `math.exp(x)`.
-    typy_rt_math_exp: c::exp, true, None;
+    typy_rt_math_exp = math_exp: c::exp, true, None;
     /// `math.exp2(x)`.
-    typy_rt_math_exp2: c::exp2, true, None;
+    typy_rt_math_exp2 = math_exp2: c::exp2, true, None;
     /// `math.expm1(x)`.
-    typy_rt_math_expm1: c::expm1, true, None;
+    typy_rt_math_expm1 = math_expm1: c::expm1, true, None;
     /// `math.log1p(x)`.
-    typy_rt_math_log1p: c::log1p, false, Some("expected argument value > -1, got %s");
+    typy_rt_math_log1p = math_log1p: c::log1p, false, Some("expected argument value > -1, got %s");
     /// `math.sin(x)`.
-    typy_rt_math_sin: c::sin, false, Some(FINITE);
+    typy_rt_math_sin = math_sin: c::sin, false, Some(FINITE);
     /// `math.sinh(x)`.
-    typy_rt_math_sinh: c::sinh, true, None;
+    typy_rt_math_sinh = math_sinh: c::sinh, true, None;
     /// `math.sqrt(x)`.
-    typy_rt_math_sqrt: c::sqrt, false, Some("expected a nonnegative input, got %s");
+    typy_rt_math_sqrt = math_sqrt: c::sqrt, false, Some("expected a nonnegative input, got %s");
     /// `math.tan(x)`.
-    typy_rt_math_tan: c::tan, false, Some(FINITE);
+    typy_rt_math_tan = math_tan: c::tan, false, Some(FINITE);
     /// `math.tanh(x)`.
-    typy_rt_math_tanh: c::tanh, false, None;
+    typy_rt_math_tanh = math_tanh: c::tanh, false, None;
 }
 
 /// `math.fabs(x)`, which never fails.
@@ -120,15 +122,17 @@ pub extern "C" fn typy_rt_math_radians(x: f64) -> f64 {
     x * (core::f64::consts::PI / 180.0)
 }
 
+crate::export_float!(typy_rt_math_atan2 = math_atan2(y: f64, x: f64));
+
 /// `math.atan2(y, x)`.
-#[unsafe(no_mangle)]
-pub extern "C" fn typy_rt_math_atan2(y: f64, x: f64) -> Raising<f64> {
+pub(crate) fn math_atan2(y: f64, x: f64) -> Raising<f64> {
     math_2(y, x, call2(c::atan2, y, x))
 }
 
+crate::export_float!(typy_rt_math_copysign = math_copysign(x: f64, y: f64));
+
 /// `math.copysign(x, y)`.
-#[unsafe(no_mangle)]
-pub extern "C" fn typy_rt_math_copysign(x: f64, y: f64) -> Raising<f64> {
+pub(crate) fn math_copysign(x: f64, y: f64) -> Raising<f64> {
     math_2(x, y, call2(c::copysign, x, y))
 }
 

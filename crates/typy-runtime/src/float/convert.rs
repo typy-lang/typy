@@ -31,13 +31,14 @@ fn signed(negative: bool, magnitude: f64) -> f64 {
     if negative { -magnitude } else { magnitude }
 }
 
+crate::export_float!(unsafe typy_rt_int_to_float = int_to_float(value: i64));
+
 /// Returns `float(value)`, rounded to nearest with ties to even.
 ///
 /// # Safety
 ///
 /// `value` is an `int` word whose large integer is live.
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn typy_rt_int_to_float(value: i64) -> Raising<f64> {
+pub(crate) unsafe fn int_to_float(value: i64) -> Raising<f64> {
     if let Some(small) = exact_small(value) {
         return Raising::ok(exact(small));
     }
@@ -60,13 +61,14 @@ pub(crate) fn integer_to_float(integer: &Integer) -> Raising<f64> {
     }
 }
 
+crate::export_float!(unsafe typy_rt_int_true_divide = int_true_divide(left: i64, right: i64));
+
 /// Returns `left / right`, rounded once to the nearest double.
 ///
 /// # Safety
 ///
 /// Both arguments are `int` words whose large integers are live.
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn typy_rt_int_true_divide(left: i64, right: i64) -> Raising<f64> {
+pub(crate) unsafe fn int_true_divide(left: i64, right: i64) -> Raising<f64> {
     if Some(right) == inline(0) {
         return Raising::error(0.0, raise(ExceptionKind::ZeroDivisionError, ZERO_DIVISION));
     }

@@ -3,6 +3,9 @@
 
 mod allocator;
 mod libraries;
+mod target;
+
+pub use target::TARGET_TRIPLES;
 
 use camino::{Utf8Component, Utf8Path, Utf8PathBuf};
 use toml_edit::{Document, Item};
@@ -16,13 +19,14 @@ use crate::source_file::SourceFile;
 pub const SETTINGS_FILE: &str = "typy.toml";
 
 /// The keys `typy.toml` may hold.
-const KEYS: [&str; 6] = [
+const KEYS: [&str; 7] = [
     "python-floor",
     "module-paths",
     "allocator",
     "version",
     "library-paths",
     "libraries",
+    "target",
 ];
 
 /// The settings flags on the command line give, which win over `typy.toml` (CLI-07).
@@ -98,6 +102,9 @@ impl ProjectSettings {
                 }),
                 "libraries" => libraries::libraries(item).map(|libraries| {
                     self.libraries = libraries;
+                }),
+                "target" => target::targets(item).map(|targets| {
+                    self.targets = targets;
                 }),
                 _ => Err(Problem {
                     range: document

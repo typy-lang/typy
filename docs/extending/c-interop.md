@@ -256,8 +256,9 @@ print(segment.start.quotient, list(segment.ends), ctypes.sizeof(Segment))
 that is not a field, or a field given twice is E0404. A scalar field reads
 and assigns as `value` does. A structure, array or pointer field reads as
 an object over the field's memory, so a change through it changes the
-structure, and assigning one copies it. The calling convention is that of
-x86-64 Linux.
+structure, and assigning one copies it. A structure passed to or returned
+from a C function by value follows the target's C calling convention:
+System V on x86_64 Linux and AAPCS64 on AArch64 Linux (FFI-12).
 
 ## Linking a library
 

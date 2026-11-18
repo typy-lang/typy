@@ -6,6 +6,8 @@ All notable changes to TyPy are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-11-17
+
 ### Added
 
 - The documentation is published at <https://typy-lang.org>, built from
@@ -20,6 +22,24 @@ All notable changes to TyPy are recorded here. The format follows
   the quality gate (DOC-05, ADR-0050).
 - A What's new page for each release, starting with TyPy 0.5, and the
   changelog as a page of the site.
+- `typy build --target TRIPLE` builds for another target, and
+  `aarch64-unknown-linux-gnu`, 64-bit Arm Linux with glibc, is one. An
+  x86_64 host links with the cross toolchain named after the target's GNU
+  triple, such as `aarch64-linux-gnu-gcc`. `typy check` takes `--target`
+  too, and an unsupported triple is a usage error that lists the supported
+  ones. A table `[target."TRIPLE"]` in `typy.toml` names other tools for a
+  target: `linker`, `ar` and `objcopy` (CLI-08, CLI-14, ADR-0051).
+- A `ctypes` structure passed to or returned from a C function by value
+  follows AAPCS64 on AArch64: up to four `float`s or `double`s in
+  floating-point registers, other structures of up to 16 bytes in general
+  registers, and a larger one as the address of a copy (FFI-12, ADR-0052).
+- Each release has an archive for AArch64 Linux hosts,
+  `typy-X.Y.Z-aarch64-unknown-linux-gnu.tar.gz`, beside the one for x86_64
+  hosts, and each holds the runtime of every target, so either builds for
+  both (ADR-0051).
+- On AArch64, `math.gamma` and `math.lgamma` fuse the multiply-adds that
+  CPython's compiled code fuses there, so they give CPython's results,
+  which differ from those on x86-64 in the last bit.
 
 ### Changed
 
@@ -1149,7 +1169,8 @@ compiler needs glibc 2.39 or later and a C toolchain.
   non-ASCII text, checks that every requirement has a row in the test plan,
   and checks that every diagram is rendered from its source.
 
-[Unreleased]: https://github.com/typy-lang/typy/compare/v0.5.0...HEAD
+[Unreleased]: https://github.com/typy-lang/typy/compare/v0.6.0...HEAD
+[0.6.0]: https://github.com/typy-lang/typy/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/typy-lang/typy/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/typy-lang/typy/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/typy-lang/typy/compare/v0.2.0...v0.3.0

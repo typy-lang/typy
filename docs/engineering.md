@@ -13,7 +13,7 @@ TyPy and what each release accepts.
 | 3 | [Use case model](modeling/use-case-model.md) | Approved |
 | 4 | [Domain model](modeling/domain-model.md) | Approved |
 | 5 | [Software architecture](architecture/architecture.md) | Approved |
-| 6 | [Architecture decision records](adr/index.md) | 50 records: 46 Accepted, 1 Proposed, 3 Superseded |
+| 6 | [Architecture decision records](adr/index.md) | 53 records: 48 Accepted, 1 Proposed, 4 Superseded |
 | 7 | [Detailed design](design/detailed-design.md) | Approved |
 | 8 | [Test plan](testing/test-plan.md) | Draft |
 | 9 | [Development guide](development/development-guide.md) | Draft |

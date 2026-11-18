@@ -34,14 +34,14 @@ fn target_machine(
     optimization: Optimization,
 ) -> Result<TargetMachine, CodegenError> {
     LlvmTarget::initialize_x86(&InitializationConfig::default());
+    LlvmTarget::initialize_aarch64(&InitializationConfig::default());
     let triple = LlvmTriple::create(target.triple.llvm_triple());
     let llvm_target = LlvmTarget::from_triple(&triple)
         .map_err(|error| CodegenError(format!("target {}: {error}", target.triple)))?;
-    // The baseline CPU of the triple, so every machine of the target runs the output and the bytes do not depend on the build host.
     llvm_target
         .create_target_machine(
             &triple,
-            "x86-64",
+            target.triple.cpu(),
             "",
             optimization.level(),
             RelocMode::PIC,
@@ -104,6 +104,7 @@ pub(crate) fn generate(
         globals: &globals,
         raising: &raising,
         lookup,
+        target: target.triple,
     };
     for function in &module.functions {
         FunctionEmitter::emit(&mut shared, function)?;

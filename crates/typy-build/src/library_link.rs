@@ -12,7 +12,7 @@ use crate::artifact::{Artifact, ArtifactKind};
 use crate::library_kind::LibraryKind;
 use crate::library_layout::LibraryLayout;
 use crate::linker::Linker;
-use crate::tool::{cannot_write, output_directory, run_tool, utf8};
+use crate::tool::{cannot_write, output_directory, utf8};
 
 impl Linker {
     /// Links `object` into the library of `kind` that `layout` names, which exports
@@ -71,8 +71,8 @@ impl Linker {
         let combined = work.join("library.o");
         let kept = work.join("exports.txt");
         let archive = work.join("library.a");
-        run_tool(
-            &self.program,
+        self.tools.run(
+            &self.tools.linker,
             &[
                 "-r".to_owned(),
                 "-nostdlib".to_owned(),
@@ -92,11 +92,11 @@ impl Linker {
             keep.push("--strip-debug".to_owned());
         }
         keep.push(combined.to_string());
-        run_tool("objcopy", &keep)?;
+        self.tools.run(&self.tools.object_copier, &keep)?;
         // `D` writes zero for the times and owners, so a build gives the same bytes each time
         // (NFR-06).
-        run_tool(
-            "ar",
+        self.tools.run(
+            &self.tools.archiver,
             &["rcsD".to_owned(), archive.to_string(), combined.to_string()],
         )?;
         Ok(archive)
@@ -129,7 +129,7 @@ impl Linker {
         }
         arguments.extend(self.link_arguments(object));
         arguments.push(format!("-Wl,--version-script={script}"));
-        run_tool(&self.program, &arguments)?;
+        self.tools.run(&self.tools.linker, &arguments)?;
         Ok(library)
     }
 }

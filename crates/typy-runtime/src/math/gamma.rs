@@ -90,9 +90,10 @@ const INTEGRAL: [f64; 23] = [
     1_124_000_727_777_607_680_000.0,
 ];
 
+crate::export_float!(typy_rt_math_gamma = math_gamma(x: f64));
+
 /// `math.gamma(x)`.
-#[unsafe(no_mangle)]
-pub extern "C" fn typy_rt_math_gamma(x: f64) -> Raising<f64> {
+pub(crate) fn math_gamma(x: f64) -> Raising<f64> {
     if !x.is_finite() {
         // gamma(nan) is nan, gamma(inf) is inf, and gamma(-inf) is a domain error.
         return if x.is_nan() || x > 0.0 {
@@ -119,9 +120,10 @@ pub extern "C" fn typy_rt_math_gamma(x: f64) -> Raising<f64> {
     ok(result)
 }
 
+crate::export_float!(typy_rt_math_lgamma = math_lgamma(x: f64));
+
 /// `math.lgamma(x)`.
-#[unsafe(no_mangle)]
-pub extern "C" fn typy_rt_math_lgamma(x: f64) -> Raising<f64> {
+pub(crate) fn math_lgamma(x: f64) -> Raising<f64> {
     if !x.is_finite() {
         // lgamma(nan) is nan, and lgamma of either infinity is inf.
         return ok(if x.is_nan() { x } else { f64::INFINITY });
@@ -138,7 +140,11 @@ pub extern "C" fn typy_rt_math_lgamma(x: f64) -> Raising<f64> {
         return ok(-call(c::log, absx));
     }
     let mut result = call(c::log, lanczos_sum(absx)) - LANCZOS_G;
-    result += (absx - 0.5) * (call(c::log, absx + LANCZOS_G - 0.5) - 1.0);
+    result = multiply_add(
+        absx - 0.5,
+        call(c::log, absx + LANCZOS_G - 0.5) - 1.0,
+        result,
+    );
     if x < 0.0 {
         // The reflection formula gives the value for a negative number.
         result = LOG_PI - call(c::log, absolute(sin_pi(absx))) - call(c::log, absx) - result;
@@ -174,7 +180,7 @@ fn tgamma(x: f64) -> f64 {
     let z = z * LANCZOS_G / y;
     if x < 0.0 {
         let mut result = -PI / sin_pi(absx) / absx * call(c::exp, y) / lanczos_sum(absx);
-        result -= z * result;
+        result = multiply_add(-z, result, result);
         if absx < 140.0 {
             result / pow(y, absx - 0.5)
         } else {
@@ -183,7 +189,7 @@ fn tgamma(x: f64) -> f64 {
         }
     } else {
         let mut result = lanczos_sum(absx) / call(c::exp, y);
-        result += z * result;
+        result = multiply_add(z, result, result);
         if absx < 140.0 {
             result * pow(y, absx - 0.5)
         } else {
@@ -199,8 +205,8 @@ fn lanczos_sum(x: f64) -> f64 {
     let (mut numerator, mut denominator) = (0.0, 0.0);
     if x < 5.0 {
         for index in (0..NUMERATOR.len()).rev() {
-            numerator = numerator * x + NUMERATOR[index];
-            denominator = denominator * x + DENOMINATOR[index];
+            numerator = multiply_add(numerator, x, NUMERATOR[index]);
+            denominator = multiply_add(denominator, x, DENOMINATOR[index]);
         }
     } else {
         for index in 0..NUMERATOR.len() {
@@ -209,6 +215,19 @@ fn lanczos_sum(x: f64) -> f64 {
         }
     }
     numerator / denominator
+}
+
+/// Returns `x * y + z` as clang compiles that expression in CPython's `mathmodule.c`: one
+/// fused multiply-add on AArch64, which has the instruction, and the product rounded before
+/// the sum on x86-64, whose baseline CPU has none. CPython's results then differ in the last
+/// bit between the two, and TyPy gives each target's (NFR-16).
+fn multiply_add(x: f64, y: f64, z: f64) -> f64 {
+    if cfg!(target_arch = "aarch64") {
+        // SAFETY: `fma` has no preconditions.
+        unsafe { c::fma(x, y, z) }
+    } else {
+        x * y + z
+    }
 }
 
 /// Returns `sin(pi * x)` of a finite `x`, exact at the integers, as CPython's `m_sinpi`.

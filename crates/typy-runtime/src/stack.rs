@@ -19,10 +19,21 @@ static SIZE: ProgramCell<usize> = ProgramCell::new(0);
 #[inline]
 fn stack_pointer() -> usize {
     let pointer: usize;
-    // SAFETY: copying `rsp` into a register reads no memory and changes nothing else.
+    // SAFETY: copying the stack pointer into a register reads no memory and changes nothing
+    // else.
+    #[cfg(target_arch = "x86_64")]
     unsafe {
         core::arch::asm!(
             "mov {}, rsp",
+            out(reg) pointer,
+            options(nomem, nostack, preserves_flags)
+        );
+    }
+    // SAFETY: as above.
+    #[cfg(target_arch = "aarch64")]
+    unsafe {
+        core::arch::asm!(
+            "mov {}, sp",
             out(reg) pointer,
             options(nomem, nostack, preserves_flags)
         );

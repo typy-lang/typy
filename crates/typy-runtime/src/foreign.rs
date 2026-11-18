@@ -47,6 +47,8 @@ pub extern "C" fn typy_rt_int_from_address(address: *const u8) -> i64 {
     typy_rt_int_from_uint64(address.addr() as u64)
 }
 
+crate::export_float!(unsafe typy_rt_ctypes_float_argument = ctypes_float_argument(word: i64, position: i64));
+
 /// Returns an `int` word as a `double` for a `c_double` or `c_float` argument at `position`,
 /// an `int` word counting from 1, or raises `ctypes.ArgumentError` with CPython's text for
 /// one too large.
@@ -54,13 +56,9 @@ pub extern "C" fn typy_rt_int_from_address(address: *const u8) -> i64 {
 /// # Safety
 ///
 /// `word` is an `int` word whose large integer is live.
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn typy_rt_ctypes_float_argument(
-    word: i64,
-    position: i64,
-) -> crate::Raising<f64> {
+pub(crate) unsafe fn ctypes_float_argument(word: i64, position: i64) -> crate::Raising<f64> {
     // SAFETY: the caller's guarantee.
-    let converted = unsafe { crate::float::convert::typy_rt_int_to_float(word) };
+    let converted = unsafe { crate::float::convert::int_to_float(word) };
     if converted.exception.is_null() {
         return converted;
     }
@@ -147,8 +145,7 @@ mod tests {
         let fits = crate::int::value::Integer::from_i128(1 << 70).into_word();
         // SAFETY: the words are the test's own, dropped once.
         unsafe {
-            let converted =
-                super::typy_rt_ctypes_float_argument(fits, crate::word::inline(1).unwrap_or(0));
+            let converted = super::ctypes_float_argument(fits, crate::word::inline(1).unwrap_or(0));
             assert!(converted.exception.is_null());
             // 2 to the 70th is exact in a `double`; `powi` is not, under Miri.
             assert_eq!(
@@ -164,8 +161,7 @@ mod tests {
         let word = huge.into_word();
         // SAFETY: as above.
         unsafe {
-            let converted =
-                super::typy_rt_ctypes_float_argument(word, crate::word::inline(2).unwrap_or(0));
+            let converted = super::ctypes_float_argument(word, crate::word::inline(2).unwrap_or(0));
             assert!(!converted.exception.is_null());
             let shown = crate::exception::typy_rt_exception_str(converted.exception.cast()).value;
             let text: String = (0..crate::string::length(shown))

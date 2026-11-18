@@ -1,4 +1,4 @@
-# TyPy 0.5 documentation
+# TyPy 0.6 documentation
 
 TyPy is an independent implementation of Python that compiles a strict,
 typed subset of standard Python ahead of time to native executables and C
@@ -6,7 +6,7 @@ libraries.
 
 ## Documentation sections
 
-- [What's new in TyPy 0.5](whatsnew/0.5.md): what this release changes,
+- [What's new in TyPy 0.6](whatsnew/0.6.md): what this release changes,
   and the [changelog](whatsnew/changelog.md) of every release.
 - [Tutorial](tutorial/index.md): install TyPy, then check, build and run a
   first program.

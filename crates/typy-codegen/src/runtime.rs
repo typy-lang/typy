@@ -1,6 +1,7 @@
 //! Declarations of the runtime's functions, as generated code calls them.
 
 use inkwell::AddressSpace;
+use inkwell::attributes::{Attribute, AttributeLoc};
 use inkwell::context::Context;
 use inkwell::module::{Linkage, Module};
 use inkwell::values::FunctionValue;
@@ -81,7 +82,16 @@ pub(crate) fn runtime_function<'ctx>(
         signature.may_raise,
         true,
     );
-    declare(module, &format!("typy_rt_{}", function.name()), ty)
+    let declaration = declare(module, &format!("typy_rt_{}", function.name()), ty);
+    // Rust declares a `bool` parameter `zeroext i1`, so the caller widens it (ADR-0053).
+    let zero_extend =
+        context.create_enum_attribute(Attribute::get_named_enum_kind_id("zeroext"), 0);
+    for (index, parameter) in (0_u32..).zip(declaration.get_param_iter()) {
+        if parameter.get_type() == context.bool_type().into() {
+            declaration.add_attribute(AttributeLoc::Param(index), zero_extend);
+        }
+    }
+    declaration
 }
 
 /// Returns the declaration of a runtime function that generated code calls directly.
@@ -120,4 +130,55 @@ pub(crate) fn internal_function<'ctx>(
         _ => word.fn_type(&[word.into(), word.into()], false),
     };
     declare(module, function.name(), ty)
+}
+
+#[cfg(test)]
+mod tests {
+    use inkwell::attributes::{Attribute, AttributeLoc};
+    use inkwell::context::Context;
+    use inkwell::types::BasicTypeEnum;
+    use typy_tyir::RuntimeFunction;
+
+    use super::runtime_function;
+
+    #[test]
+    fn no_runtime_function_returns_a_float_beside_an_exception() {
+        let context = Context::create();
+        let module = context.create_module("runtime");
+        for function in RuntimeFunction::ALL {
+            let declaration = runtime_function(&context, &module, function);
+            let returned = declaration.get_type().get_return_type();
+            if let Some(BasicTypeEnum::StructType(pair)) = returned {
+                assert!(
+                    !pair
+                        .get_field_types()
+                        .iter()
+                        .any(|field| field.is_float_type()),
+                    "{} returns {pair}",
+                    function.name()
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn every_bool_parameter_of_the_runtime_is_zero_extended() {
+        let context = Context::create();
+        let module = context.create_module("runtime");
+        let kind = Attribute::get_named_enum_kind_id("zeroext");
+        for function in RuntimeFunction::ALL {
+            let declaration = runtime_function(&context, &module, function);
+            for (index, parameter) in (0_u32..).zip(declaration.get_param_iter()) {
+                if parameter.get_type() == context.bool_type().into() {
+                    assert!(
+                        declaration
+                            .get_enum_attribute(AttributeLoc::Param(index), kind)
+                            .is_some(),
+                        "{} parameter {index}",
+                        function.name()
+                    );
+                }
+            }
+        }
+    }
 }

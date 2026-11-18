@@ -1,6 +1,6 @@
 //! Tests of `round`, against results CPython 3.15 gives.
 
-use super::{typy_rt_float_round, typy_rt_float_round_digits, typy_rt_int_round_digits};
+use super::{float_round_digits, typy_rt_float_round, typy_rt_int_round_digits};
 use crate::int::value::Integer;
 use crate::word::{inline, inline_value};
 
@@ -57,7 +57,7 @@ fn floats_round_at_a_number_of_digits_as_cpython_rounds_them() {
     ];
     for (value, digits, expected) in cases {
         // SAFETY: the digits are an inline word.
-        let rounded = unsafe { typy_rt_float_round_digits(value, word(digits)) };
+        let rounded = unsafe { float_round_digits(value, word(digits)) };
         assert!(rounded.exception.is_null(), "{value} {digits}");
         assert_eq!(
             rounded.value.to_bits(),
@@ -69,17 +69,13 @@ fn floats_round_at_a_number_of_digits_as_cpython_rounds_them() {
     let tiny = Integer::from_i128(-(1 << 70)).into_word();
     // SAFETY: the digits are live words.
     unsafe {
-        assert_eq!(typy_rt_float_round_digits(0.1, huge).value, 0.1);
+        assert_eq!(float_round_digits(0.1, huge).value, 0.1);
         assert_eq!(
-            typy_rt_float_round_digits(-0.1, tiny).value.to_bits(),
+            float_round_digits(-0.1, tiny).value.to_bits(),
             (-0.0_f64).to_bits()
         );
-        assert!(typy_rt_float_round_digits(f64::NAN, word(1)).value.is_nan());
-        assert!(
-            !typy_rt_float_round_digits(f64::MAX, word(-308))
-                .exception
-                .is_null()
-        );
+        assert!(float_round_digits(f64::NAN, word(1)).value.is_nan());
+        assert!(!float_round_digits(f64::MAX, word(-308)).exception.is_null());
     }
 }
 

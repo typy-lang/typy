@@ -72,9 +72,12 @@ pub(crate) fn function_type<'ctx>(
         .map(Into::into)
         .collect();
     let pointer = context.ptr_type(AddressSpace::default());
-    // A `bool` crosses into the runtime as one byte, as C's `_Bool` does.
+    // A `bool` crosses into the runtime as one byte, as C's `_Bool` does, and a `float` the
+    // runtime may raise beside crosses as its bits, which every target returns in an integer
+    // register as the runtime's C structure is returned (ADR-0053).
     let result_type = match result {
         TyirType::Bool if boundary => Some(context.i8_type().into()),
+        TyirType::Float if boundary && raising => Some(context.i64_type().into()),
         other => value_type(context, tuples, other),
     };
     match (raising, result_type) {
@@ -153,6 +156,9 @@ mod tests {
             (TyirType::Unit, true, false, "ptr (i64)"),
             (TyirType::Int, true, false, "{ i64, ptr } (i64)"),
             (TyirType::Bool, false, true, "i8 (i64)"),
+            (TyirType::Float, false, true, "double (i64)"),
+            (TyirType::Float, true, false, "{ double, ptr } (i64)"),
+            (TyirType::Float, true, true, "{ i64, ptr } (i64)"),
         ];
         for (result, raising, boundary, expected) in cases {
             let ty = function_type(

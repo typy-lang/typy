@@ -159,10 +159,12 @@ fn number(cursor: &mut Cursor<'_>) -> Option<f64> {
 fn invalid(text: *const StrObject) -> Raising<f64> {
     let mut message = MessageBuffer::new();
     message.push_str("could not convert string to float: ");
-    // SAFETY: the caller of `typy_rt_float_from_str` passes a live string.
+    // SAFETY: the caller of `float_from_str` passes a live string.
     unsafe { message.push_repr(text) };
     Raising::error(0.0, message.raise(ExceptionKind::ValueError))
 }
+
+crate::export_float!(unsafe typy_rt_float_from_str = float_from_str(text: *const StrObject));
 
 /// Returns `float(text)`: surrounding whitespace, a sign, then `inf`, `infinity`, `nan` in any
 /// case, or a decimal number with single underscores between digits.
@@ -170,8 +172,7 @@ fn invalid(text: *const StrObject) -> Raising<f64> {
 /// # Safety
 ///
 /// `text` points to a live `str` object.
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn typy_rt_float_from_str(text: *const StrObject) -> Raising<f64> {
+pub(crate) unsafe fn float_from_str(text: *const StrObject) -> Raising<f64> {
     // SAFETY: the caller passes a live string.
     let points = unsafe { Points::of(text) };
     let mut start = 0;

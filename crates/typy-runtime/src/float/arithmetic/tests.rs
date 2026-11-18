@@ -1,9 +1,6 @@
 //! Tests of `float` arithmetic against results printed by CPython 3.12 to 3.15.
 
-use super::{
-    typy_rt_float_absolute, typy_rt_float_divide, typy_rt_float_floor_divide, typy_rt_float_modulo,
-    typy_rt_float_power,
-};
+use super::{float_divide, float_floor_divide, float_modulo, float_power, typy_rt_float_absolute};
 use crate::Raising;
 
 const INF: f64 = f64::INFINITY;
@@ -27,11 +24,7 @@ fn same(result: &Raising<f64>, expected: f64) -> bool {
 
 #[test]
 fn division_by_zero_raises_for_every_division() {
-    for operation in [
-        typy_rt_float_divide,
-        typy_rt_float_floor_divide,
-        typy_rt_float_modulo,
-    ] {
+    for operation in [float_divide, float_floor_divide, float_modulo] {
         for zero in [0.0, -0.0] {
             assert_eq!(message(&operation(1.0, zero)), "division by zero");
         }
@@ -53,15 +46,15 @@ fn floor_division_and_modulo_follow_the_sign_of_the_divisor() {
     ];
     for (left, right, quotient, remainder) in cases {
         assert!(
-            same(&typy_rt_float_floor_divide(left, right), quotient),
+            same(&float_floor_divide(left, right), quotient),
             "{left} // {right}"
         );
         assert!(
-            same(&typy_rt_float_modulo(left, right), remainder),
+            same(&float_modulo(left, right), remainder),
             "{left} % {right}"
         );
     }
-    assert!(same(&typy_rt_float_divide(7.0, 2.0), 3.5));
+    assert!(same(&float_divide(7.0, 2.0), 3.5));
 }
 
 #[test]
@@ -87,34 +80,41 @@ fn powers_follow_the_special_cases_of_cpython() {
     ];
     for (base, exponent, expected) in cases {
         assert!(
-            same(&typy_rt_float_power(base, exponent), expected),
+            same(&float_power(base, exponent), expected),
             "{base} ** {exponent}"
         );
     }
-    assert!(same(&typy_rt_float_power(-INF, 2.0), INF));
-    assert!(same(&typy_rt_float_power(-INF, -2.0), 0.0));
-    assert!(same(&typy_rt_float_power(-0.0, 2.0), 0.0));
+    assert!(same(&float_power(-INF, 2.0), INF));
+    assert!(same(&float_power(-INF, -2.0), 0.0));
+    assert!(same(&float_power(-0.0, 2.0), 0.0));
 }
 
 #[test]
 #[cfg_attr(miri, ignore = "Miri cannot call the C maths library's `pow`")]
 fn powers_out_of_range_raise() {
+    assert_eq!(message(&float_power(0.0, -1.0)), "zero to a negative power");
     assert_eq!(
-        message(&typy_rt_float_power(0.0, -1.0)),
-        "zero to a negative power"
-    );
-    assert_eq!(
-        message(&typy_rt_float_power(10.0, 400.0)),
+        message(&float_power(10.0, 400.0)),
         "(34, 'Numerical result out of range')"
     );
-    assert_eq!(
-        message(&typy_rt_float_power(-8.0, 0.5)),
-        "math domain error"
-    );
+    assert_eq!(message(&float_power(-8.0, 0.5)), "math domain error");
 }
 
 #[test]
 fn absolute_values_clear_the_sign() {
     assert_eq!(typy_rt_float_absolute(-0.0).to_bits(), 0.0_f64.to_bits());
     assert_eq!(typy_rt_float_absolute(-2.5), 2.5);
+}
+
+#[test]
+fn an_export_returns_the_float_as_its_bits_beside_a_null_exception() {
+    let result = super::typy_rt_float_divide(1.0, 4.0);
+    assert_eq!(result.bits, 0.25_f64.to_bits());
+    assert!(result.exception.is_null());
+}
+
+#[test]
+fn an_export_returns_the_exception_it_raises() {
+    let result = super::typy_rt_float_divide(1.0, 0.0);
+    assert!(!result.exception.is_null());
 }

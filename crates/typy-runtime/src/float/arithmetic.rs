@@ -17,9 +17,10 @@ fn zero_division() -> Raising<f64> {
     Raising::error(0.0, raise(ExceptionKind::ZeroDivisionError, ZERO_DIVISION))
 }
 
+crate::export_float!(typy_rt_float_divide = float_divide(left: f64, right: f64));
+
 /// Returns `left / right`.
-#[unsafe(no_mangle)]
-pub extern "C" fn typy_rt_float_divide(left: f64, right: f64) -> Raising<f64> {
+pub(crate) fn float_divide(left: f64, right: f64) -> Raising<f64> {
     if right == 0.0 {
         return zero_division();
     }
@@ -51,18 +52,20 @@ fn divide_and_modulo(left: f64, right: f64) -> (f64, f64) {
     (floor_quotient, modulo)
 }
 
+crate::export_float!(typy_rt_float_floor_divide = float_floor_divide(left: f64, right: f64));
+
 /// Returns `left // right`.
-#[unsafe(no_mangle)]
-pub extern "C" fn typy_rt_float_floor_divide(left: f64, right: f64) -> Raising<f64> {
+pub(crate) fn float_floor_divide(left: f64, right: f64) -> Raising<f64> {
     if right == 0.0 {
         return zero_division();
     }
     Raising::ok(divide_and_modulo(left, right).0)
 }
 
+crate::export_float!(typy_rt_float_modulo = float_modulo(left: f64, right: f64));
+
 /// Returns `left % right`, with the sign of `right`.
-#[unsafe(no_mangle)]
-pub extern "C" fn typy_rt_float_modulo(left: f64, right: f64) -> Raising<f64> {
+pub(crate) fn float_modulo(left: f64, right: f64) -> Raising<f64> {
     if right == 0.0 {
         return zero_division();
     }
@@ -73,9 +76,10 @@ fn is_odd_integer(value: f64) -> bool {
     fmod(absolute(value), 2.0) == 1.0
 }
 
+crate::export_float!(typy_rt_float_power = float_power(base: f64, exponent: f64));
+
 /// Returns `base ** exponent` with the special cases of CPython's `float_pow`.
-#[unsafe(no_mangle)]
-pub extern "C" fn typy_rt_float_power(base: f64, exponent: f64) -> Raising<f64> {
+pub(crate) fn float_power(base: f64, exponent: f64) -> Raising<f64> {
     if exponent == 0.0 {
         return Raising::ok(1.0);
     }

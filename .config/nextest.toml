@@ -1,0 +1,6 @@
+# Profiles of cargo-nextest. `make test` uses the default profile, which stops
+# at the first failure. The `ci` profile runs every test, so a run on a host
+# CI rarely reaches, such as the arm64 runner, reports every failure at once;
+# NEXTEST_PROFILE=ci selects it.
+[profile.ci]
+fail-fast = false

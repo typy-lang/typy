@@ -5,11 +5,10 @@
     reason = "each table lists the cases of one function"
 )]
 
-use super::super::gamma::{typy_rt_math_gamma, typy_rt_math_lgamma};
+use super::super::gamma::{math_gamma, math_lgamma};
 use super::super::sums::{
-    typy_rt_math_dist, typy_rt_math_fsum, typy_rt_math_has_float, typy_rt_math_prod_float,
-    typy_rt_math_prod_int, typy_rt_math_prod_mixed, typy_rt_math_sumprod_float,
-    typy_rt_math_sumprod_int,
+    math_dist, math_fsum, math_prod_float, math_prod_mixed, math_sumprod_float,
+    typy_rt_math_has_float, typy_rt_math_prod_int, typy_rt_math_sumprod_int,
 };
 use super::{check, check_int, int_word};
 use crate::Raising;
@@ -85,33 +84,34 @@ const LGAMMA: [(u64, u64); 8] = [
 
 #[test]
 #[cfg_attr(miri, ignore = "Miri cannot call the C maths library")]
+#[cfg_attr(
+    not(target_arch = "x86_64"),
+    ignore = "the values are CPython's on x86-64; on AArch64 its C library and its fused multiply-adds give other last bits, which the conformance suite compares with CPython there (NFR-16)"
+)]
 fn gamma_and_lgamma_give_cpythons_results() {
     for (x, expected) in GAMMA {
         let x = f64::from_bits(x);
-        check(typy_rt_math_gamma(x), &Ok(expected), &format!("gamma({x})"));
+        check(math_gamma(x), &Ok(expected), &format!("gamma({x})"));
     }
     for (x, expected) in LGAMMA {
         let x = f64::from_bits(x);
-        check(
-            typy_rt_math_lgamma(x),
-            &Ok(expected),
-            &format!("lgamma({x})"),
-        );
+        check(math_lgamma(x), &Ok(expected), &format!("lgamma({x})"));
     }
+}
+
+#[test]
+#[cfg_attr(miri, ignore = "Miri cannot call the C maths library")]
+fn gamma_and_lgamma_of_infinities_nan_and_one_give_cpythons_results() {
     for (x, expected) in [(f64::INFINITY, f64::INFINITY), (f64::NAN, f64::NAN)] {
-        check(typy_rt_math_gamma(x), &Ok(expected.to_bits()), "gamma");
-        check(typy_rt_math_lgamma(x), &Ok(expected.to_bits()), "lgamma");
+        check(math_gamma(x), &Ok(expected.to_bits()), "gamma");
+        check(math_lgamma(x), &Ok(expected.to_bits()), "lgamma");
     }
     check(
-        typy_rt_math_lgamma(f64::NEG_INFINITY),
+        math_lgamma(f64::NEG_INFINITY),
         &Ok(f64::INFINITY.to_bits()),
         "lgamma",
     );
-    check(
-        typy_rt_math_lgamma(1.0),
-        &Ok(0.0_f64.to_bits()),
-        "lgamma(1)",
-    );
+    check(math_lgamma(1.0), &Ok(0.0_f64.to_bits()), "lgamma(1)");
 }
 
 #[test]
@@ -127,7 +127,7 @@ fn gamma_and_lgamma_refuse_poles_and_overflow() {
         ),
     ] {
         check(
-            typy_rt_math_gamma(x),
+            math_gamma(x),
             &Err(("ValueError", message)),
             &format!("gamma({x})"),
         );
@@ -137,16 +137,16 @@ fn gamma_and_lgamma_refuse_poles_and_overflow() {
         (-3.0, "expected a noninteger or positive integer, got -3.0"),
     ] {
         check(
-            typy_rt_math_lgamma(x),
+            math_lgamma(x),
             &Err(("ValueError", message)),
             &format!("lgamma({x})"),
         );
     }
     let overflow = Err(("OverflowError", "math range error"));
-    check(typy_rt_math_gamma(200.0), &overflow, "gamma(200)");
-    check(typy_rt_math_gamma(171.7), &overflow, "gamma(171.7)");
-    check(typy_rt_math_gamma(250.5), &overflow, "gamma(250.5)");
-    check(typy_rt_math_lgamma(1e308), &overflow, "lgamma(1e308)");
+    check(math_gamma(200.0), &overflow, "gamma(200)");
+    check(math_gamma(171.7), &overflow, "gamma(171.7)");
+    check(math_gamma(250.5), &overflow, "gamma(250.5)");
+    check(math_lgamma(1e308), &overflow, "lgamma(1e308)");
 }
 
 const FSUM: [(&[u64], u64); 11] = [
@@ -227,7 +227,7 @@ fn fsum_rounds_the_exact_sum_once() {
         let list = floats(values);
         // SAFETY: the list is live.
         check(
-            unsafe { typy_rt_math_fsum(list) },
+            unsafe { math_fsum(list) },
             &Ok(expected),
             &format!("fsum{values:x?}"),
         );
@@ -236,7 +236,7 @@ fn fsum_rounds_the_exact_sum_once() {
     let list = ints(&["1", "2", "3"]);
     // SAFETY: the list is live.
     check(
-        unsafe { typy_rt_math_fsum(list) },
+        unsafe { math_fsum(list) },
         &Ok(6.0_f64.to_bits()),
         "fsum of ints",
     );
@@ -244,7 +244,7 @@ fn fsum_rounds_the_exact_sum_once() {
     let list = bools(&[true, false, true]);
     // SAFETY: the list is live.
     check(
-        unsafe { typy_rt_math_fsum(list) },
+        unsafe { math_fsum(list) },
         &Ok(2.0_f64.to_bits()),
         "fsum of bools",
     );
@@ -271,7 +271,7 @@ fn fsum_reports_overflow_and_infinities_as_cpython_does() {
         let list = floats(&bits);
         // SAFETY: the list is live.
         check(
-            unsafe { typy_rt_math_fsum(list) },
+            unsafe { math_fsum(list) },
             &expected,
             &format!("fsum{values:?}"),
         );
@@ -279,7 +279,7 @@ fn fsum_reports_overflow_and_infinities_as_cpython_does() {
     }
     let list = ints(&[&"9".repeat(400)]);
     // SAFETY: the list is live.
-    let found = unsafe { typy_rt_math_fsum(list) };
+    let found = unsafe { math_fsum(list) };
     check(
         found,
         &Err(("OverflowError", "int too large to convert to float")),
@@ -296,15 +296,11 @@ fn dist_measures_the_distance_of_points_of_as_many_coordinates() {
         floats(&[3.0_f64.to_bits(), 4.0_f64.to_bits()]),
     );
     // SAFETY: both lists are live.
-    check(
-        unsafe { typy_rt_math_dist(p, q) },
-        &Ok(5.0_f64.to_bits()),
-        "dist",
-    );
+    check(unsafe { math_dist(p, q) }, &Ok(5.0_f64.to_bits()), "dist");
     let short = floats(&[1.0_f64.to_bits()]);
     // SAFETY: both lists are live.
     check(
-        unsafe { typy_rt_math_dist(p, short) },
+        unsafe { math_dist(p, short) },
         &Err((
             "ValueError",
             "both points must have the same number of dimensions",
@@ -314,7 +310,7 @@ fn dist_measures_the_distance_of_points_of_as_many_coordinates() {
     let huge = ints(&["0", &"9".repeat(400)]);
     // SAFETY: both lists are live.
     check(
-        unsafe { typy_rt_math_dist(p, huge) },
+        unsafe { math_dist(p, huge) },
         &Err(("OverflowError", "int too large to convert to float")),
         "dist of a huge int",
     );
@@ -343,7 +339,7 @@ fn prod_multiplies_ints_exactly_and_floats_in_order() {
     let list = floats(&[1.5_f64.to_bits(), 2.0_f64.to_bits()]);
     // SAFETY: the list is live.
     check(
-        unsafe { typy_rt_math_prod_float(list, 3.0) },
+        unsafe { math_prod_float(list, 3.0) },
         &Ok(9.0_f64.to_bits()),
         "prod",
     );
@@ -351,7 +347,7 @@ fn prod_multiplies_ints_exactly_and_floats_in_order() {
     let list = ints(&["2", &"9".repeat(400)]);
     // SAFETY: the list is live.
     check(
-        unsafe { typy_rt_math_prod_float(list, 1.0) },
+        unsafe { math_prod_float(list, 1.0) },
         &Err(("OverflowError", "int too large to convert to float")),
         "prod of a huge int",
     );
@@ -422,7 +418,7 @@ fn sumprod_of_floats_keeps_the_rounding_errors_of_its_products() {
         let (left, right) = (floats(p), floats(q));
         // SAFETY: both lists are live.
         check(
-            unsafe { typy_rt_math_sumprod_float(left, right) },
+            unsafe { math_sumprod_float(left, right) },
             &Ok(expected),
             &format!("sumprod({p:x?}, {q:x?})"),
         );
@@ -432,20 +428,20 @@ fn sumprod_of_floats_keeps_the_rounding_errors_of_its_products() {
     let (p, q) = (floats(&[1.0_f64.to_bits()]), ints(&[&"9".repeat(400)]));
     // SAFETY: both lists are live.
     check(
-        unsafe { typy_rt_math_sumprod_float(p, q) },
+        unsafe { math_sumprod_float(p, q) },
         &Err(("OverflowError", "int too large to convert to float")),
         "sumprod of a huge int",
     );
     // SAFETY: both lists are live.
     check(
-        unsafe { typy_rt_math_sumprod_float(q, p) },
+        unsafe { math_sumprod_float(q, p) },
         &Err(("OverflowError", "int too large to convert to float")),
         "sumprod of a huge int first",
     );
     let short = floats(&[]);
     // SAFETY: both lists are live.
     check(
-        unsafe { typy_rt_math_sumprod_float(p, short) },
+        unsafe { math_sumprod_float(p, short) },
         &Err(("ValueError", "Inputs are not the same length")),
         "sumprod of different lengths",
     );
@@ -474,14 +470,14 @@ fn prod_of_an_int_start_and_floats_converts_the_exact_product_once() {
     let start = int_word(&(3_i128 * ((1 << 60) + 1)).to_string());
     // SAFETY: the list is live and the start is an `int` word.
     check(
-        unsafe { typy_rt_math_prod_mixed(list, start) },
+        unsafe { math_prod_mixed(list, start) },
         &Ok(1_729_382_256_910_270_465.5_f64.to_bits()),
         "prod of a large start and floats",
     );
     let huge = int_word(&"9".repeat(400));
     // SAFETY: as above.
     check(
-        unsafe { typy_rt_math_prod_mixed(list, huge) },
+        unsafe { math_prod_mixed(list, huge) },
         &Err(("OverflowError", "int too large to convert to float")),
         "prod of a huge start and a float",
     );
@@ -504,17 +500,17 @@ fn sumprod_adds_exact_int_pairs_before_a_float_joins_the_total() {
     let (x, y) = (floats(&[1.5_f64.to_bits()]), bools(&[true]));
     // SAFETY: the lists are live.
     unsafe {
-        let whole = typy_rt_math_sumprod_float(p, q);
+        let whole = math_sumprod_float(p, q);
         assert!(whole.exception.is_null());
         assert_eq!(whole.value, 36_893_488_147_419_103_232.0);
-        let mixed = typy_rt_math_sumprod_float(x, y);
+        let mixed = math_sumprod_float(x, y);
         assert!(mixed.exception.is_null());
         assert_eq!(mixed.value, 1.5);
     }
     let (small, other) = (ints(&["2", "3"]), ints(&["4", "5"]));
     // SAFETY: the lists are live.
     check(
-        unsafe { typy_rt_math_sumprod_float(small, other) },
+        unsafe { math_sumprod_float(small, other) },
         &Ok(23.0_f64.to_bits()),
         "sumprod of small ints",
     );

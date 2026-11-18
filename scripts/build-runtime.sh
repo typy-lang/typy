@@ -8,7 +8,7 @@ set -euo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
 
 target="${CARGO_TARGET_DIR:-target}"
-for triple in x86_64-unknown-linux-gnu x86_64-unknown-linux-musl; do
+for triple in x86_64-unknown-linux-gnu x86_64-unknown-linux-musl aarch64-unknown-linux-gnu; do
     cargo rustc -p typy-runtime --profile runtime --locked --crate-type staticlib \
         --target "${triple}"
     for stage in "${target}" "${target}/llvm-cov-target"; do
@@ -19,8 +19,9 @@ done
 
 # The runtime instrumented with AddressSanitizer, for the conformance suite's
 # sanitizer run (NFR-07). Rust's sanitizers need the pinned nightly toolchain;
-# programs never link this archive.
-triple=x86_64-unknown-linux-gnu
+# programs never link this archive. It is built for the host, whose programs
+# the sanitizer run builds and runs.
+triple="$(rustc -vV | sed -n 's/^host: //p')"
 cargo +nightly-2026-11-05 rustc -p typy-runtime --profile runtime --locked \
     --crate-type staticlib --target "${triple}" --target-dir "${target}/asan" \
     -- -Zsanitizer=address

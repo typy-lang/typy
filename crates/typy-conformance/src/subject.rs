@@ -4,6 +4,7 @@ use std::process::Command;
 
 use camino::{Utf8Path, Utf8PathBuf};
 use typy_build::{BuildMode, BuildRequest, EmitStage, RuntimeArchive};
+use typy_codegen::{Target, TargetTriple};
 use typy_diagnostics::{Diagnostic, DiagnosticCode, SourceLookup};
 use typy_driver::{Emission, Failure, Outcome, Pipeline};
 
@@ -33,12 +34,27 @@ fn place(diagnostic: &Diagnostic, sources: &dyn SourceLookup) -> Option<(u32, u3
     Some((position.line, position.column))
 }
 
-/// Builds the program in debug and in release mode, runs each build, and compares it with what
-/// the oracles showed (STD-02).
+/// Returns the command that runs `executable`, built for `target`: the executable itself on a
+/// host of the target's architecture, and otherwise the architecture's user-mode emulator
+/// with the target's C library, as Debian's cross packages install it (NFR-16).
+fn running(executable: &Utf8Path, target: TargetTriple) -> Command {
+    if target.architecture() == Target::host().triple.architecture() {
+        return Command::new(executable);
+    }
+    let mut command = Command::new(format!("qemu-{}", target.architecture()));
+    command
+        .args(["-L", &format!("/usr/{}", target.gnu_triple())])
+        .arg(executable);
+    command
+}
+
+/// Builds the program for `target` in debug and in release mode, runs each build, and compares
+/// it with what the oracles showed (STD-02, NFR-16).
 pub(crate) fn judge_accepted(
     pipeline: &Pipeline,
     case: &TestCase,
     expected: &Observation,
+    target: TargetTriple,
 ) -> Verdict {
     let Ok(directory) = tempfile::tempdir() else {
         return Verdict::Invalid("cannot make a temporary directory".to_owned());
@@ -50,6 +66,7 @@ pub(crate) fn judge_accepted(
         let request = match BuildRequest::new(case.path.clone()) {
             Ok(request) => request
                 .with_mode(mode)
+                .with_target(Target { triple: target })
                 .with_output(directory_path.join(mode.name())),
             Err(error) => return Verdict::Invalid(error.to_string()),
         };
@@ -65,11 +82,11 @@ pub(crate) fn judge_accepted(
         let Ok(working) = tempfile::tempdir() else {
             return Verdict::Invalid("cannot make a working directory".to_owned());
         };
-        let observed = match Observation::of(Command::new(&executable).current_dir(working.path()))
-        {
-            Ok(observed) => observed,
-            Err(reason) => return Verdict::Fail(format!("the {} build {reason}", mode.name())),
-        };
+        let observed =
+            match Observation::of(running(&executable, target).current_dir(working.path())) {
+                Ok(observed) => observed,
+                Err(reason) => return Verdict::Fail(format!("the {} build {reason}", mode.name())),
+            };
         if observed != *expected {
             return Verdict::Fail(format!(
                 "the {} build shows {observed}; CPython shows {expected}",

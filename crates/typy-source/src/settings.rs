@@ -136,6 +136,20 @@ pub struct ProjectSettings {
     /// How each C library a `ctypes` declaration names is linked, by its name; one not
     /// named is linked dynamically (FFI-04).
     pub libraries: std::collections::BTreeMap<String, LibraryLink>,
+    /// The C tools `typy.toml` names for a target, by its triple, in place of those TyPy
+    /// would run (CLI-14).
+    pub targets: std::collections::BTreeMap<String, TargetTools>,
+}
+
+/// The C tools `typy.toml` names for one target; each absent one is TyPy's choice (CLI-14).
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct TargetTools {
+    /// The C compiler driver that links, `linker`.
+    pub linker: Option<String>,
+    /// The archiver of static libraries, `ar`.
+    pub archiver: Option<String>,
+    /// The tool that edits an object's symbols, `objcopy`.
+    pub object_copier: Option<String>,
 }
 
 impl ProjectSettings {
@@ -152,6 +166,7 @@ impl ProjectSettings {
             version: None,
             library_paths: Vec::new(),
             libraries: std::collections::BTreeMap::new(),
+            targets: std::collections::BTreeMap::new(),
         }
     }
 }

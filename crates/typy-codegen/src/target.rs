@@ -2,18 +2,25 @@
 
 use std::fmt;
 
-/// A supported target triple. 0.1 supports Linux on x86-64, with glibc or musl.
+/// A supported target triple: Linux on x86-64 with glibc or musl from 0.1, and Linux on AArch64
+/// with glibc from 0.6 (ADR-0051).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum TargetTriple {
     /// `x86_64-unknown-linux-gnu`.
     X86_64LinuxGnu,
     /// `x86_64-unknown-linux-musl`, for static executables.
     X86_64LinuxMusl,
+    /// `aarch64-unknown-linux-gnu`.
+    Aarch64LinuxGnu,
 }
 
 impl TargetTriple {
     /// Every supported triple.
-    pub const ALL: [Self; 2] = [Self::X86_64LinuxGnu, Self::X86_64LinuxMusl];
+    pub const ALL: [Self; 3] = [
+        Self::X86_64LinuxGnu,
+        Self::X86_64LinuxMusl,
+        Self::Aarch64LinuxGnu,
+    ];
 
     /// Returns the triple as written, such as `x86_64-unknown-linux-gnu`.
     #[must_use]
@@ -21,6 +28,7 @@ impl TargetTriple {
         match self {
             Self::X86_64LinuxGnu => "x86_64-unknown-linux-gnu",
             Self::X86_64LinuxMusl => "x86_64-unknown-linux-musl",
+            Self::Aarch64LinuxGnu => "aarch64-unknown-linux-gnu",
         }
     }
 
@@ -36,6 +44,43 @@ impl TargetTriple {
         match self {
             Self::X86_64LinuxGnu => "x86_64-unknown-linux-gnu",
             Self::X86_64LinuxMusl => "x86_64-unknown-linux-musl",
+            Self::Aarch64LinuxGnu => "aarch64-unknown-linux-gnu",
+        }
+    }
+
+    /// Returns the architecture, as the triple names it.
+    #[must_use]
+    pub const fn architecture(self) -> &'static str {
+        match self {
+            Self::X86_64LinuxGnu | Self::X86_64LinuxMusl => "x86_64",
+            Self::Aarch64LinuxGnu => "aarch64",
+        }
+    }
+
+    /// Returns the triple GNU tools are named after, such as `aarch64-linux-gnu` in
+    /// `aarch64-linux-gnu-gcc`.
+    #[must_use]
+    pub const fn gnu_triple(self) -> &'static str {
+        match self {
+            Self::X86_64LinuxGnu => "x86_64-linux-gnu",
+            Self::X86_64LinuxMusl => "x86_64-linux-musl",
+            Self::Aarch64LinuxGnu => "aarch64-linux-gnu",
+        }
+    }
+
+    /// Returns whether the triple's C library is musl, whose programs TyPy links statically.
+    #[must_use]
+    pub const fn is_musl(self) -> bool {
+        matches!(self, Self::X86_64LinuxMusl)
+    }
+
+    /// Returns the baseline CPU of the triple's architecture, so every machine of the target runs
+    /// the output and the bytes do not depend on the machine that builds them (NFR-06).
+    #[must_use]
+    pub(crate) const fn cpu(self) -> &'static str {
+        match self {
+            Self::X86_64LinuxGnu | Self::X86_64LinuxMusl => "x86-64",
+            Self::Aarch64LinuxGnu => "generic",
         }
     }
 }
@@ -57,7 +102,9 @@ impl Target {
     /// Returns the target `typy` itself runs on, which builds use unless `--target` is given.
     #[must_use]
     pub fn host() -> Self {
-        let triple = if cfg!(target_env = "musl") {
+        let triple = if cfg!(target_arch = "aarch64") {
+            TargetTriple::Aarch64LinuxGnu
+        } else if cfg!(target_env = "musl") {
             TargetTriple::X86_64LinuxMusl
         } else {
             TargetTriple::X86_64LinuxGnu
@@ -82,7 +129,8 @@ mod tests {
     fn unsupported_triples_are_refused() {
         for text in [
             "",
-            "aarch64-unknown-linux-gnu",
+            "aarch64-unknown-linux-musl",
+            "aarch64-apple-darwin",
             "x86_64-pc-windows-msvc",
             "x86_64",
         ] {
