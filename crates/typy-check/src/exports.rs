@@ -19,8 +19,10 @@ pub struct Export {
 
 /// The C library functions the runtime calls, and `main`. A library that defined one of
 /// them would call its own export in its place, so none is an export's name; a test of the
-/// command line compares the list with what the runtime archive leaves undefined.
-pub const RUNTIME_C_FUNCTIONS: [&str; 55] = [
+/// command line compares the list with what the runtime archive leaves undefined on each
+/// host. On AArch64, Rust's `compiler_builtins` in the archive calls `getauxval` to learn
+/// which atomic instructions the processor has.
+pub const RUNTIME_C_FUNCTIONS: [&str; 56] = [
     "abort",
     "acos",
     "acosh",
@@ -48,6 +50,7 @@ pub const RUNTIME_C_FUNCTIONS: [&str; 55] = [
     "frexp",
     "fstat",
     "ftruncate",
+    "getauxval",
     "getrlimit",
     "isatty",
     "ldexp",

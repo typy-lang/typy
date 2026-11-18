@@ -2,6 +2,7 @@
 //! TyPy fails, a test that cannot judge TyPy, and the files the suite skips.
 
 use camino::{Utf8Path, Utf8PathBuf};
+use typy_codegen::{Target, TargetTriple};
 use typy_conformance::{Suite, Verdict};
 
 fn target() -> Utf8PathBuf {
@@ -32,6 +33,7 @@ fn starts_with(verdict: &Verdict, kind: &str, text: &str) -> bool {
     match verdict {
         Verdict::Fail(reason) => kind == "fail" && reason.starts_with(text),
         Verdict::Invalid(reason) => kind == "invalid" && reason.starts_with(text),
+        Verdict::Skipped(reason) => kind == "skipped" && reason.starts_with(text),
         Verdict::Pass => kind == "pass",
     }
 }
@@ -136,5 +138,44 @@ fn verdicts_read_as_their_kind_and_reason() {
     assert_eq!(
         Verdict::Invalid("why".to_owned()).to_string(),
         "INVALID: why"
+    );
+}
+
+#[test]
+fn an_architecture_dependent_test_is_skipped_only_when_built_for_another_architecture() {
+    let other = if Target::host().triple.architecture() == "aarch64" {
+        TargetTriple::X86_64LinuxGnu
+    } else {
+        TargetTriple::Aarch64LinuxGnu
+    };
+    let dependent = "# typy-test: EXP-02\n# typy-expect: accepted\n\
+                     # typy-output: architecture-dependent\nprint(1)\n";
+    let files = [
+        ("EXP-02_dependent.py", dependent),
+        (
+            "EXP-02_unknown_output.py",
+            "# typy-test: EXP-02\n# typy-expect: accepted\n# typy-output: fast\nprint(1)\n",
+        ),
+    ];
+    let suite = Suite::new(target().join("debug/typy"));
+    let native = verdicts(&suite, &files[..1]);
+    assert_eq!(native[0].1, Verdict::Pass, "{native:?}");
+    let mut emulated = verdicts(&suite.with_target(other), &files);
+    emulated.sort_by(|left, right| left.0.cmp(&right.0));
+    assert!(
+        starts_with(
+            &emulated[0].1,
+            "skipped",
+            "its output depends on the architecture"
+        ),
+        "{emulated:?}"
+    );
+    assert!(
+        starts_with(
+            &emulated[1].1,
+            "invalid",
+            "`# typy-output: fast` does not parse"
+        ),
+        "{emulated:?}"
     );
 }

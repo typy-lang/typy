@@ -2149,6 +2149,10 @@ fn check_int(found: Raising<i64>, expected: &Result<&str, (&str, &str)>, case: &
 
 #[test]
 #[cfg_attr(miri, ignore = "Miri cannot call the C maths library")]
+#[cfg_attr(
+    not(target_arch = "x86_64"),
+    ignore = "the values are CPython's on x86-64; on AArch64 its C library and its fused multiply-adds give other last bits, which the conformance suite compares with CPython there (NFR-16)"
+)]
 fn every_function_of_one_float_gives_cpythons_result() {
     for (name, x, expected) in ONES.iter().chain(LOGS) {
         let x = f64::from_bits(*x);

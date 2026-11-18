@@ -84,6 +84,10 @@ const LGAMMA: [(u64, u64); 8] = [
 
 #[test]
 #[cfg_attr(miri, ignore = "Miri cannot call the C maths library")]
+#[cfg_attr(
+    not(target_arch = "x86_64"),
+    ignore = "the values are CPython's on x86-64; on AArch64 its C library and its fused multiply-adds give other last bits, which the conformance suite compares with CPython there (NFR-16)"
+)]
 fn gamma_and_lgamma_give_cpythons_results() {
     for (x, expected) in GAMMA {
         let x = f64::from_bits(x);
@@ -93,6 +97,11 @@ fn gamma_and_lgamma_give_cpythons_results() {
         let x = f64::from_bits(x);
         check(math_lgamma(x), &Ok(expected), &format!("lgamma({x})"));
     }
+}
+
+#[test]
+#[cfg_attr(miri, ignore = "Miri cannot call the C maths library")]
+fn gamma_and_lgamma_of_infinities_nan_and_one_give_cpythons_results() {
     for (x, expected) in [(f64::INFINITY, f64::INFINITY), (f64::NAN, f64::NAN)] {
         check(math_gamma(x), &Ok(expected.to_bits()), "gamma");
         check(math_lgamma(x), &Ok(expected.to_bits()), "lgamma");

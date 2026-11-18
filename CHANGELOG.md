@@ -37,6 +37,9 @@ All notable changes to TyPy are recorded here. The format follows
   `typy-X.Y.Z-aarch64-unknown-linux-gnu.tar.gz`, beside the one for x86_64
   hosts, and each holds the runtime of every target, so either builds for
   both (ADR-0051).
+- On AArch64, `math.gamma` and `math.lgamma` fuse the multiply-adds that
+  CPython's compiled code fuses there, so they give CPython's results,
+  which differ from those on x86-64 in the last bit.
 
 ### Changed
 

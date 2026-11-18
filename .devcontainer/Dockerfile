@@ -92,7 +92,7 @@ RUN case "$(dpkg --print-architecture)" in \
         *) echo "unsupported architecture" >&2; exit 1 ;; \
     esac \
     && file="node-v${NODE_VERSION}-linux-${arch}.tar.xz" \
-    && curl -fsSL -o "/tmp/${file}" "https://nodejs.org/dist/v${NODE_VERSION}/${file}" \
+    && curl -fsSL --retry 5 --retry-all-errors -o "/tmp/${file}" "https://nodejs.org/dist/v${NODE_VERSION}/${file}" \
     && echo "${sum}  /tmp/${file}" | sha256sum --check --strict \
     && tar -xJf "/tmp/${file}" -C /usr/local --strip-components=1 \
         --exclude='*/README.md' --exclude='*/CHANGELOG.md' --exclude='*/LICENSE' \
@@ -106,9 +106,9 @@ RUN case "$(dpkg --print-architecture)" in \
 # fingerprint. musl-tools provides the static Linux target.
 ARG LLVM_MAJOR=23
 ARG LLVM_KEY_FINGERPRINT=6084F3CF814B57C1CF12EFD515CF4D18AF4F7421
-RUN apt-get update \
+RUN apt-get -o Acquire::Retries=5 update \
     && apt-get install -y --no-install-recommends gnupg \
-    && curl -fsSL -o /tmp/llvm.asc https://apt.llvm.org/llvm-snapshot.gpg.key \
+    && curl -fsSL --retry 5 --retry-all-errors -o /tmp/llvm.asc https://apt.llvm.org/llvm-snapshot.gpg.key \
     && fingerprint="$(gpg --show-keys --with-colons /tmp/llvm.asc \
         | awk -F: '/^fpr:/ { print $10; exit }')" \
     && test "${fingerprint}" = "${LLVM_KEY_FINGERPRINT}" \
@@ -116,8 +116,8 @@ RUN apt-get update \
     && gpg --dearmor -o /etc/apt/keyrings/apt.llvm.org.gpg /tmp/llvm.asc \
     && echo "deb [signed-by=/etc/apt/keyrings/apt.llvm.org.gpg] https://apt.llvm.org/trixie/ llvm-toolchain-trixie-${LLVM_MAJOR} main" \
         > /etc/apt/sources.list.d/apt.llvm.org.list \
-    && apt-get update \
-    && apt-get install -y --no-install-recommends \
+    && apt-get -o Acquire::Retries=5 update \
+    && apt-get -o Acquire::Retries=5 install -y --no-install-recommends \
         "llvm-${LLVM_MAJOR}-dev" \
         "libpolly-${LLVM_MAJOR}-dev" \
         libffi-dev \
@@ -143,7 +143,7 @@ RUN case "$(dpkg --print-architecture)" in \
         *) echo "unsupported architecture" >&2; exit 1 ;; \
     esac \
     && file="uv-${arch}-unknown-linux-gnu.tar.gz" \
-    && curl -fsSL -o "/tmp/${file}" \
+    && curl -fsSL --retry 5 --retry-all-errors -o "/tmp/${file}" \
         "https://github.com/astral-sh/uv/releases/download/${UV_VERSION}/${file}" \
     && echo "${sum}  /tmp/${file}" | sha256sum --check --strict \
     && tar -xzf "/tmp/${file}" -C /usr/local/bin --strip-components=1 \

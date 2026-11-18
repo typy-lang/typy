@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy test plan |
-| Version | 0.88 |
+| Version | 0.89 |
 | Status | Draft |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-17 |
@@ -527,7 +527,7 @@ that the specification does not define.
 | NFR-13 | 0.2 | UT | `typy-runtime` list test: a million `int` values appended one at a time; the list and its buffer take at most 8.5 MB |
 | NFR-14 | 1.0 | Benchmark | `tests/bench/build_time.py`: peak memory of each build within 1 GB |
 | NFR-15 | 0.1 | IT | Conformance suite: debug and release runs compared |
-| NFR-16 | 0.6 | IT | `crates/typy-conformance/tests/other_architecture.rs`: every accepted conformance test built for the other architecture, in debug and release mode, and run under its user-mode emulator, `qemu-aarch64` on an x86_64 host and `qemu-x86_64` on an arm64 host, each run compared with CPython's output; on the arm64 CI runner the suite's own test runs the AArch64 builds natively |
+| NFR-16 | 0.6 | IT | `crates/typy-conformance/tests/other_architecture.rs`: every accepted conformance test built for the other architecture, in debug and release mode, and run under its user-mode emulator, `qemu-aarch64` on an x86_64 host and `qemu-x86_64` on an arm64 host, each run compared with CPython's output, except a test marked `typy-output: architecture-dependent`, whose output CPython itself gives otherwise on each architecture; on the arm64 CI runner the suite's own test runs the AArch64 builds natively against CPython on AArch64, which checks those too |
 | C-01 | 0.1 | CI gate | Workspace builds with the pinned Rust toolchain only |
 | C-02 | 0.1 | CI gate | `scripts/check-pins.sh`: `ruff_python_parser` pinned with `=` in `Cargo.toml` |
 | C-03 | 0.1 | UT | `typy-codegen` test: the linked LLVM major version is 23 |

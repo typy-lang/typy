@@ -40,7 +40,7 @@ impl Report {
     pub fn problems(&self) -> Vec<&(Utf8PathBuf, Verdict)> {
         self.results
             .iter()
-            .filter(|(_, verdict)| *verdict != Verdict::Pass)
+            .filter(|(_, verdict)| !matches!(verdict, Verdict::Pass | Verdict::Skipped(_)))
             .collect()
     }
 }
@@ -149,6 +149,16 @@ impl Suite {
         match case.expectation {
             Expectation::Rejected { code, line, column } => {
                 judge_rejected(&pipeline, case, code, line, column)
+            }
+            Expectation::Accepted
+                if case.architecture_dependent
+                    && self.target.architecture() != Target::host().triple.architecture() =>
+            {
+                Verdict::Skipped(format!(
+                    "its output depends on the architecture, and the oracle runs on {}, not {}",
+                    Target::host().triple.architecture(),
+                    self.target.architecture()
+                ))
             }
             Expectation::Accepted => {
                 let runs = run_oracles(&case.path, case.floor);
