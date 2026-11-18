@@ -113,10 +113,6 @@ fn later_features_name_their_release_and_rule() {
             "`*args` and `**kwargs` parameters are planned for TyPy 0.9 (EXP-17)",
         ),
         (
-            "def f(a: int, /) -> None:\n    pass\n",
-            "positional-only and keyword-only parameters are planned for TyPy 0.8 (FUN-03)",
-        ),
-        (
             "def f(a: int = g()) -> None:\n    pass\n",
             "default values other than constants are planned for TyPy 1.0 (EXP-16)",
         ),

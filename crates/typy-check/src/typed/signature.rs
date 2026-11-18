@@ -1,5 +1,7 @@
 //! The parameters and return type of a function.
 
+use typy_source::syntax::ParameterKind;
+
 use super::constant::TypedConstant;
 use crate::types::Type;
 
@@ -15,6 +17,9 @@ pub struct SignatureParameter {
     /// The module-level function whose call gives the argument each time a call leaves it
     /// out: the `default_factory` of a dataclass field (CLS-15).
     pub default_call: Option<String>,
+    /// How a call passes it: by position or keyword, by position only before `/`, or by
+    /// keyword only after `*` (FUN-03).
+    pub kind: ParameterKind,
 }
 
 /// The parameters and return type of a function.

@@ -322,6 +322,7 @@ pub(super) fn definition<'tree>(
             ty,
             default,
             default_call,
+            kind: parameter.kind,
         });
         parameter_names.push((parameter.name.name.clone(), parameter.name.span));
     }

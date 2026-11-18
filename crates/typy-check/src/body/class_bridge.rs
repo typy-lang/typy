@@ -47,6 +47,7 @@ impl Program {
             ty: instance.clone(),
             default: None,
             default_call: None,
+            kind: typy_source::syntax::ParameterKind::Normal,
         }];
         parameters.extend(copied.parameters.iter().skip(1).cloned());
         let symbols: Vec<_> = parameters

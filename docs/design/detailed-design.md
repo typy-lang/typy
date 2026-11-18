@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy detailed design |
-| Version | 2.36 |
+| Version | 2.37 |
 | Status | Approved |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-18 |
@@ -659,11 +659,17 @@ two types are equal when their structure is. `Dict`, `Set`, `Bytes` and
 
 | Field | Type | Default | Rule |
 | --- | --- | --- | --- |
-| `parameters` | `Vec<Parameter>` | empty | Each with `name`, `ty` and `default: Option<Constant>` |
+| `parameters` | `Vec<SignatureParameter>` | empty | Each with `name`, `ty`, `default: Option<TypedConstant>`, `default_call` and `kind`, the parser's `ParameterKind`: `Normal`, `PositionalOnly` before `/` or `KeywordOnly` after `*` |
 | `returns` | `Type` | none | `NoneType` for `-> None` |
 
 A default value is a constant in 0.1, which makes "evaluated once, when the
-function is defined" (EXP-16) hold trivially.
+function is defined" (EXP-16) hold trivially. `BodyChecker::bind_to` binds
+each call's arguments to parameter positions, so TyIR and code generation
+see positions alone: a positional argument fills the parameter of its index
+among those that are not keyword-only, which Python puts last, and a
+keyword fills the parameter it names unless that is positional-only. A
+positional argument past the others, or a keyword for a positional-only
+parameter, is E0404 under FUN-03, where CPython raises `TypeError`.
 
 `TypedProgram`
 

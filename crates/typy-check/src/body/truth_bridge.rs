@@ -60,6 +60,7 @@ impl Program {
                 ty: instance,
                 default: None,
                 default_call: None,
+                kind: typy_source::syntax::ParameterKind::Normal,
             }],
             returns: Type::Bool,
         };

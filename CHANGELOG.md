@@ -6,6 +6,14 @@ All notable changes to TyPy are recorded here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- Positional-only parameters, before `/`, and keyword-only parameters,
+  after `*`, in functions and methods. A call binds its arguments as
+  CPython does, and a keyword for a positional-only parameter, or a
+  positional argument past the others, is E0404 where CPython raises
+  `TypeError` (FUN-03).
+
 ### Changed
 
 - An instance and a tuple store their attributes and items by decreasing

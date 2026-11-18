@@ -43,15 +43,9 @@ impl Walker {
                 self.type_parameters(type_parameters);
                 for parameter in parameters {
                     match parameter.kind {
-                        ParameterKind::Normal => {}
-                        ParameterKind::PositionalOnly | ParameterKind::KeywordOnly => self.report(
-                            parameter.span,
-                            planned(
-                                "positional-only and keyword-only parameters",
-                                "0.8",
-                                RuleId::FUN_03,
-                            ),
-                        ),
+                        ParameterKind::Normal
+                        | ParameterKind::PositionalOnly
+                        | ParameterKind::KeywordOnly => {}
                         ParameterKind::VarPositional | ParameterKind::VarKeyword => self.report(
                             parameter.span,
                             planned("`*args` and `**kwargs` parameters", "0.9", RuleId::EXP_17),
