@@ -106,6 +106,7 @@ jobs:
         if: steps.changes.outputs.light != 'true'
         env:
           CARGO_PROFILE_DEV_DEBUG: line-tables-only
+          NEXTEST_PROFILE: ci
         run: make test
       # The archive for AArch64 hosts, which builds and runs a program itself,
       # so a release finds no new fault in it.

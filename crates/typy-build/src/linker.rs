@@ -228,7 +228,7 @@ mod tests {
     #[test]
     fn a_missing_toolchain_program_is_named() {
         let (_guard, root) = directory();
-        let mut linker = Linker::new(TargetTriple::X86_64LinuxGnu, archive(&root));
+        let mut linker = Linker::new(Target::host().triple, archive(&root));
         linker.tools.linker = "typy-no-such-linker".to_owned();
         let diagnostics = linker.link(&object(), &root.join("app")).unwrap_err();
         let diagnostic = diagnostics.iter().next().unwrap();
@@ -239,7 +239,8 @@ mod tests {
     #[test]
     fn a_failed_link_leaves_no_file_behind() {
         let (_guard, root) = directory();
-        let linker = Linker::new(TargetTriple::X86_64LinuxGnu, archive(&root));
+        // The host's own target links with `cc`.
+        let linker = Linker::new(Target::host().triple, archive(&root));
         let output = root.join("app");
         let diagnostics = linker.link(&object(), &output).unwrap_err();
         let diagnostic = diagnostics.iter().next().unwrap();
@@ -260,7 +261,7 @@ mod tests {
     #[test]
     fn an_output_in_a_missing_directory_is_refused() {
         let (_guard, root) = directory();
-        let linker = Linker::new(TargetTriple::X86_64LinuxGnu, archive(&root));
+        let linker = Linker::new(Target::host().triple, archive(&root));
         let diagnostics = linker
             .link(&object(), &root.join("absent/app"))
             .unwrap_err();
