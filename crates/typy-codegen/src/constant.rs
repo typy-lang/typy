@@ -37,6 +37,9 @@ impl<'ctx> FunctionEmitter<'_, '_, 'ctx> {
             Constant::TypeObject(typy_tyir::TypeObjectRef::Class(index)) => {
                 Some(crate::class::type_object(self.shared, *index)?.into())
             }
+            Constant::Function(id) => {
+                Some(crate::function_object::function_object(self.shared, *id)?.into())
+            }
             Constant::TypeAlias(index) => {
                 let alias = &self.shared.tyir.type_aliases[*index as usize];
                 Some(

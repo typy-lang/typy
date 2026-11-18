@@ -404,7 +404,7 @@ fn rejected_programs_give_their_codes() {
         ),
         ("def f() -> None:\n    pass\nf = 1\n", &["E0202"]),
         ("x = 1\ndef f() -> str:\n    return x\n", &["E0405"]),
-        ("def f() -> int:\n    return 1\ng = f\n", &["E0201"]),
+        ("def f() -> int:\n    return 1\ng: int = f\n", &["E0402"]),
         ("x = 1\nx()\n", &["E0401"]),
         ("print(min(1, 2.0))\n", &["E0404"]),
         ("print(min((1, 'a')))\n", &["E0411"]),
@@ -2019,7 +2019,7 @@ fn classes_give_their_codes() {
         ),
         (
             "class P:\n    def __init__(self) -> None:\n        self.x = 1\nP().x()\n",
-            &["E0414"],
+            &["E0401"],
         ),
         ("x = 1\nprint(x.real)\n", &["E0412"]),
         ("x = 1\nx.y = 2\n", &["E0412"]),
@@ -2097,7 +2097,7 @@ fn classes_give_their_codes() {
             "class A:\n    def __init__(self, c: bool) -> None:\n        if c:\n            return\n        self.x = 1\n",
             &["E0309"],
         ),
-        ("class A:\n    pass\nprint(A())\nA()()\n", &["E0201"]),
+        ("class A:\n    pass\nprint(A())\nA()()\n", &["E0401"]),
         ("x = A()\nclass A:\n    pass\n", &["E0306"]),
         (
             "def f() -> None:\n    A()\nf()\nclass A:\n    pass\n",

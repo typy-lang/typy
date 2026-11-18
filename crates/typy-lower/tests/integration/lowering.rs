@@ -119,6 +119,30 @@ fn recursive_functions_check_the_stack_on_entry() {
 }
 
 #[test]
+fn fun_02_a_function_that_calls_through_a_value_checks_the_stack_and_its_callee_does_not() {
+    let module = lower(
+        "from typing import Callable\n\n\ndef double(n: int) -> int:\n    return n * 2\n\n\n\
+         def apply(f: Callable[[int], int], n: int) -> int:\n    return f(n)\n\n\n\
+         x = apply(double, 3)\n",
+    );
+    // A cycle through a value runs a call through a value, so its caller checks the stack.
+    let checks = |name: &str| {
+        matches!(
+            function(&module, name).blocks[0].terminator,
+            Terminator::Invoke {
+                callee: typy_tyir::Callee::Runtime(typy_tyir::RuntimeFunction::CheckStack),
+                ..
+            }
+        )
+    };
+    assert!(checks("apply"));
+    assert!(!checks("double"));
+    let text = print(&module);
+    assert!(text.contains("invoke value("), "{text}");
+    assert!(text.contains("const function fn"), "{text}");
+}
+
+#[test]
 fn error_paths_release_the_slots_and_return_the_exception() {
     let module = lower("def f(s: str, n: int) -> str:\n    t = s + \"!\"\n    return t[n]\n");
     let f = function(&module, "f");

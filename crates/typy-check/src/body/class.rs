@@ -221,23 +221,8 @@ impl BodyChecker<'_> {
                 span,
             );
         }
-        let info = &self.program.classes[class.0 as usize];
         let Some(ty) = self.program.attribute_ty(class, index) else {
-            let message = format!(
-                "the type of `{}.{}` is not known here, because `{}.__init__` gives it and is \
-                 checked later",
-                info.name, attribute.name, info.name
-            );
-            let help = format!(
-                "declare it in the class body, such as `{}: int`",
-                attribute.name
-            );
-            return self.error(
-                Diagnostic::new(DiagnosticCode::error(310), attribute.span, message)
-                    .with_rule(RuleId::CLS_01)
-                    .with_help(help),
-                span,
-            );
+            return self.type_not_known_yet(class, attribute, span);
         };
         Self::typed(
             TypedExprKind::Attribute {
@@ -245,6 +230,32 @@ impl BodyChecker<'_> {
                 index,
             },
             ty,
+            span,
+        )
+    }
+
+    /// Returns E0310 for an attribute whose type the `__init__` that assigns it gives, which
+    /// is checked after this code.
+    pub(super) fn type_not_known_yet(
+        &mut self,
+        class: ClassId,
+        attribute: &Identifier,
+        span: Span,
+    ) -> TypedExpr {
+        let info = &self.program.classes[class.0 as usize];
+        let message = format!(
+            "the type of `{}.{}` is not known here, because `{}.__init__` gives it and is \
+             checked later",
+            info.name, attribute.name, info.name
+        );
+        let help = format!(
+            "declare it in the class body, such as `{}: int`",
+            attribute.name
+        );
+        self.error(
+            Diagnostic::new(DiagnosticCode::error(310), attribute.span, message)
+                .with_rule(RuleId::CLS_01)
+                .with_help(help),
             span,
         )
     }
@@ -601,15 +612,17 @@ impl BodyChecker<'_> {
         }
         let info = &self.program.classes[class.0 as usize];
         let Some(method) = found else {
-            let message = if info.attribute(&name.name).is_some() {
-                format!(
-                    "`{}.{}` is an attribute, and calling the value it holds is planned for \
-                     TyPy 0.8 (FUN-05)",
-                    info.name, name.name
-                )
-            } else {
-                format!("`{}` has no method `{}`", info.name, name.name)
-            };
+            if let Some(index) = info.attribute(&name.name) {
+                return self.attribute_call(
+                    receiver,
+                    (class, index),
+                    name,
+                    arguments,
+                    keywords,
+                    span,
+                );
+            }
+            let message = format!("`{}` has no method `{}`", info.name, name.name);
             for argument in arguments {
                 self.expression(argument);
             }

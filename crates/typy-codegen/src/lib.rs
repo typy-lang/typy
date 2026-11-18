@@ -16,6 +16,7 @@ mod error;
 mod foreign;
 mod frame;
 mod function;
+mod function_object;
 mod header;
 mod heap;
 mod layout;

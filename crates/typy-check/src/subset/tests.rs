@@ -133,10 +133,6 @@ fn later_features_name_their_release_and_rule() {
             "`nonlocal` statements are planned for TyPy 0.8 (SMT-09)",
         ),
         (
-            "x[0]()\n",
-            "calls of values that are not names are planned for TyPy 0.8 (FUN-05)",
-        ),
-        (
             "async def f() -> None:\n    pass\n",
             "`async` and `await` are planned for a release after TyPy 1.0",
         ),
@@ -322,8 +318,9 @@ fn a_generic_class_is_named_with_its_type_arguments_in_annotations_and_calls() {
     let source =
         "class Box[T]:\n    pass\nx: Box[int] = Box[int]()\ny: Box[tuple[int, str]] = Box()\n";
     assert_eq!(diagnostics(source), Vec::new());
+    // The call is the checker's to refuse, as a call of any other value is.
     let other = diagnostics("x: frozenset[int] = 1\nprint(frozenset[int]())\n");
-    assert_eq!(other.len(), 2, "{other:?}");
+    assert_eq!(other.len(), 1, "{other:?}");
 }
 
 #[test]

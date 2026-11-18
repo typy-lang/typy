@@ -933,3 +933,93 @@ fn a_function_of_many_blocks_verifies_in_linear_time() {
     assert_eq!(verify(&module(builder.finish())), Ok(()));
     assert!(started.elapsed() < std::time::Duration::from_secs(10));
 }
+
+/// `def apply(f: Callable[[int], int], x: int) -> int: return f(x)`, and its own function
+/// object, which it reads as a constant.
+fn apply() -> TyirFunction {
+    let mut builder =
+        FunctionBuilder::new(FunctionId(0), "_TY8__main__5apply", "apply", TyirType::Int);
+    builder.set_may_raise(true);
+    builder.set_qualified_name("apply");
+    let function = builder.add_parameter(TyirType::FUNCTION);
+    let argument = builder.add_parameter(TyirType::Int);
+    let normal = builder.create_block();
+    let result = builder.add_block_parameter(normal, TyirType::Int);
+    let error = builder.create_block();
+    let exception = builder.add_block_parameter(error, TyirType::EXCEPTION);
+    builder.push_value(
+        Operation::Constant(Constant::Function(FunctionId(0))),
+        TyirType::FUNCTION,
+        span(),
+    );
+    builder.terminate(Terminator::Invoke {
+        callee: Callee::Value,
+        arguments: vec![function, argument],
+        normal,
+        error,
+        span: span(),
+    });
+    builder.switch_to(error);
+    builder.terminate(Terminator::ReturnError(exception));
+    builder.switch_to(normal);
+    builder.terminate(Terminator::Return(result));
+    builder.finish()
+}
+
+#[test]
+fn fun_05_a_call_through_a_function_value_verifies_and_prints() {
+    let module = module(apply());
+    assert_eq!(verify(&module), Ok(()));
+    let text = print(&module);
+    assert!(text.contains("= const function fn0"), "{text}");
+    assert!(
+        text.contains("invoke value(v0, v1) to b1 unwind b2"),
+        "{text}"
+    );
+    assert_eq!(module.functions[0].qualified_name, "apply");
+}
+
+#[test]
+fn fun_05_a_call_through_a_value_needs_its_function_object_and_its_blocks() {
+    let broken = |change: fn(&mut Terminator)| {
+        let mut module = module(apply());
+        change(&mut module.functions[0].blocks[0].terminator);
+        message(&module)
+    };
+    let without_object = broken(|terminator| {
+        if let Terminator::Invoke { arguments, .. } = terminator {
+            arguments.clear();
+        }
+    });
+    assert!(
+        without_object.contains("has no function object"),
+        "{without_object}"
+    );
+    let not_a_function = broken(|terminator| {
+        if let Terminator::Invoke { arguments, .. } = terminator {
+            arguments.reverse();
+        }
+    });
+    assert!(
+        not_a_function.contains("the function object of a call"),
+        "{not_a_function}"
+    );
+    let no_result = broken(|terminator| {
+        if let Terminator::Invoke { normal, .. } = terminator {
+            *normal = BlockId(0);
+        }
+    });
+    assert!(
+        no_result.contains("must take the result of a call through a value"),
+        "{no_result}"
+    );
+    let no_exception = broken(|terminator| {
+        if let Terminator::Invoke { error, .. } = terminator {
+            *error = BlockId(1);
+        }
+    });
+    assert!(
+        no_exception.contains("must take the exception of a call through a value"),
+        "{no_exception}"
+    );
+}

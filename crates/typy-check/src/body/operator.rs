@@ -354,6 +354,7 @@ fn has_identity(ty: &Type) -> bool {
                 | Type::BinaryFile(_)
                 | Type::DescriptorFile(_)
                 | Type::CData(_)
+                | Type::Callable { .. }
                 | Type::TypeObject(_)
         ),
     }

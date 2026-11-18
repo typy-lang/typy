@@ -105,6 +105,7 @@ impl Type {
                 | Self::Exception(_)
                 | Self::Iterator(_)
                 | Self::Iterable(_)
+                | Self::Callable { .. }
                 | Self::AnyModule
                 | Self::Traceback
                 | Self::TextFile

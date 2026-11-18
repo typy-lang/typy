@@ -91,6 +91,7 @@ fn callee(module: &TyirModule, callee: Callee) -> String {
             .get(id.0 as usize)
             .map_or_else(|| format!("fn{}", id.0), |function| function.symbol.clone()),
         Callee::Method { class, slot } => format!("class#{class}.method#{slot}"),
+        Callee::Value => "value".to_owned(),
     }
 }
 

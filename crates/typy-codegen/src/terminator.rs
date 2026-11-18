@@ -1,7 +1,7 @@
 //! Emits block terminators, including `invoke` with its traceback entry (ADR-0004).
 
 use inkwell::basic_block::BasicBlock;
-use inkwell::values::{BasicValue, BasicValueEnum, ValueKind};
+use inkwell::values::{BasicValue, BasicValueEnum, CallSiteValue, ValueKind};
 use typy_tyir::{Callee, Terminator, TyirType, ValueId};
 
 use crate::error::CodegenError;
@@ -83,33 +83,7 @@ impl<'ctx> FunctionEmitter<'_, '_, 'ctx> {
         _current: BasicBlock<'ctx>,
     ) -> Result<(), CodegenError> {
         let context = self.shared.context;
-        let (function, result_type) = match callee {
-            Callee::Runtime(function) => (
-                Some(runtime_function(context, self.shared.module, function)),
-                function.signature().result,
-            ),
-            Callee::Function(id) => (
-                Some(self.shared.functions[id.0 as usize]),
-                self.shared.tyir.function(id).return_type,
-            ),
-            Callee::Method { class, slot } => {
-                let entry = self.shared.tyir.classes[class as usize].methods[slot as usize];
-                (None, self.shared.tyir.function(entry).return_type)
-            }
-        };
-        let call = match (function, callee) {
-            (Some(function), _) => {
-                let arguments = self.arguments(arguments)?;
-                self.builder.build_call(function, &arguments, "")?
-            }
-            (None, Callee::Method { class, slot }) => {
-                let (pointer, ty) = self.method(class, slot, arguments[0])?;
-                let arguments = self.arguments(arguments)?;
-                self.builder
-                    .build_indirect_call(ty, pointer, &arguments, "")?
-            }
-            (None, _) => unreachable!("only a method is called through its table"),
-        };
+        let (call, result_type) = self.call_of(callee, arguments, normal)?;
         let returned = match call.try_as_basic_value() {
             ValueKind::Basic(value) => value,
             ValueKind::Instruction(_) => {
@@ -182,6 +156,65 @@ impl<'ctx> FunctionEmitter<'_, '_, 'ctx> {
             phi.add_incoming(&[(&exception, traceback)]);
         }
         Ok(())
+    }
+
+    /// Emits the call of `callee` with `arguments`, and returns it with the type of its result:
+    /// a direct call of a runtime or program function, or an indirect call of a method
+    /// table's entry or of a function value's code, whose result `normal` takes.
+    fn call_of(
+        &mut self,
+        callee: Callee,
+        arguments: &[ValueId],
+        normal: typy_tyir::BlockId,
+    ) -> Result<(CallSiteValue<'ctx>, TyirType), CodegenError> {
+        Ok(match callee {
+            Callee::Runtime(function) => {
+                let runtime = runtime_function(self.shared.context, self.shared.module, function);
+                let arguments = self.arguments(arguments)?;
+                (
+                    self.builder.build_call(runtime, &arguments, "")?,
+                    function.signature().result,
+                )
+            }
+            Callee::Function(id) => {
+                let arguments = self.arguments(arguments)?;
+                (
+                    self.builder.build_call(
+                        self.shared.functions[id.0 as usize],
+                        &arguments,
+                        "",
+                    )?,
+                    self.shared.tyir.function(id).return_type,
+                )
+            }
+            Callee::Method { class, slot } => {
+                let entry = self.shared.tyir.classes[class as usize].methods[slot as usize];
+                let (pointer, ty) = self.method(class, slot, arguments[0])?;
+                let arguments = self.arguments(arguments)?;
+                (
+                    self.builder
+                        .build_indirect_call(ty, pointer, &arguments, "")?,
+                    self.shared.tyir.function(entry).return_type,
+                )
+            }
+            Callee::Value => {
+                let result = self
+                    .function
+                    .block(normal)
+                    .parameters
+                    .first()
+                    .ok_or_else(|| {
+                        CodegenError("a call through a value gives its result".to_owned())
+                    })?;
+                let result_type = self.function.value(*result).ty;
+                let (code, ty) = self.value_code(arguments, result_type)?;
+                let arguments = self.arguments(arguments)?;
+                (
+                    self.builder.build_indirect_call(ty, code, &arguments, "")?,
+                    result_type,
+                )
+            }
+        })
     }
 
     /// Returns normally or with an exception, in the function's convention: a raising function returns the exception beside its result.

@@ -252,6 +252,10 @@ impl FunctionLowerer<'_> {
             TypedExprKind::TypeOf(value) => self.type_of(value, span),
             TypedExprKind::FString(parts) => self.fstring(parts, span),
             TypedExprKind::TypeObject(of) => self.type_object(of, span),
+            TypedExprKind::FunctionValue(function) => self.function_value(*function, span),
+            TypedExprKind::CallValue { callee, arguments } => {
+                self.call_value(callee, arguments, ty, span)
+            }
             // A type alias object is immortal, so it is borrowed (SMT-12).
             TypedExprKind::TypeAliasObject(index) => {
                 let value = self.constant(Constant::TypeAlias(*index), span);
@@ -416,7 +420,9 @@ impl FunctionLowerer<'_> {
             TyirType::Object(id) if id.class_index().is_some() => {
                 return self.instance_truth(lowered, id, span);
             }
-            TyirType::Object(typy_tyir::TypeId::TYPE | typy_tyir::TypeId::SLICE) => {
+            TyirType::Object(
+                typy_tyir::TypeId::TYPE | typy_tyir::TypeId::SLICE | typy_tyir::TypeId::FUNCTION,
+            ) => {
                 return self.constant(Constant::Bool(true), span);
             }
             // The object's type tests it, as CPython's truth test does (TYP-14); a `ctypes`

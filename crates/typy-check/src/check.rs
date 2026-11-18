@@ -1,6 +1,7 @@
 //! Checks a project and builds its typed program (detailed design section 7.2).
 
 mod annotation;
+mod callable_annotation;
 mod class;
 pub(crate) mod ctypes_declarations;
 mod dataclass;

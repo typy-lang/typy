@@ -110,6 +110,15 @@ pub enum TypedExprKind {
         /// (ADR-0021).
         dispatch: bool,
     },
+    /// A function of the program read as a value: its function object, of a `Callable`
+    /// type (FUN-05, ADR-0060).
+    FunctionValue(FunctionId),
+    /// A call through a function value: `callee` is evaluated, then the arguments, one for
+    /// each parameter of its `Callable` type, in order (FUN-05).
+    CallValue {
+        callee: Box<TypedExpr>,
+        arguments: Vec<TypedExpr>,
+    },
     /// A new instance of a class, made by calling the class: the instance is made, then
     /// `__init__` runs on it with the arguments (CLS-01).
     New {
@@ -575,6 +584,7 @@ impl TypedExpr {
             | TypedExprKind::ModuleName
             | TypedExprKind::TypeObject(_)
             | TypedExprKind::TypeAliasObject(_)
+            | TypedExprKind::FunctionValue(_)
             | TypedExprKind::ClassVariable(_)
             | TypedExprKind::NotImplemented
             | TypedExprKind::ForeignLibrary(_)
@@ -602,6 +612,9 @@ impl TypedExpr {
                 arguments: items, ..
             } => items.iter().collect(),
             TypedExprKind::ListItem { list, index } => vec![list, index],
+            TypedExprKind::CallValue { callee, arguments } => {
+                std::iter::once(callee.as_ref()).chain(arguments).collect()
+            }
             TypedExprKind::ListOf(source)
             | TypedExprKind::SetOf(source)
             | TypedExprKind::DictOf(source) => source.expressions(),

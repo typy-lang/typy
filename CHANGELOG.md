@@ -13,8 +13,24 @@ All notable changes to TyPy are recorded here. The format follows
   CPython does, and a keyword for a positional-only parameter, or a
   positional argument past the others, is E0404 where CPython raises
   `TypeError` (FUN-03).
+- Functions as values. A function of the program read without a call is a
+  value of type `Callable[[A, ...], R]`, from `typing` or
+  `collections.abc`, which a variable, a list or dict item, an attribute
+  or an argument holds, and which is called with one argument for each
+  parameter, by position. Function values compare and hash by identity,
+  are true, and write `<function name at 0x...>`, as in CPython. A function
+  fits a `Callable` only when nothing is converted through the call, so a
+  function of any `Shape` fits a `Callable[[Circle], None]`, and a function
+  of a `float` does not fit a `Callable[[int], float]` (FUN-05, NFR-19,
+  ADR-0060). `Callable[..., R]` is E0408, and a generic function or one
+  with a keyword-only parameter used as a value is E0202.
 
 ### Changed
+
+- Calling a value that is not a function, such as an `int`, is E0401, as
+  CPython raises `TypeError`, where TyPy 0.7 gave E0201.
+- `typing.NamedTuple` and the abstract collections of `typing`, such as
+  `Sequence`, are given as planned for 0.9, where TyPy 0.7 named 1.0.
 
 - An instance and a tuple store their attributes and items by decreasing
   alignment, so a `bool` beside `int`s no longer takes 8 bytes: a class of

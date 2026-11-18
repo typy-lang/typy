@@ -50,6 +50,7 @@ mod exception;
 mod float;
 mod foreign;
 mod format;
+mod function;
 mod hash;
 mod header;
 mod instance;

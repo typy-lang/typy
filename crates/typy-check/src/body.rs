@@ -19,6 +19,7 @@ mod dict;
 mod dict_call;
 mod each_member;
 mod foreign_call;
+mod function_value;
 mod generic_call;
 mod generic_copy;
 mod override_adapter;

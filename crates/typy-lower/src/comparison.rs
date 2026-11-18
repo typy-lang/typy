@@ -327,12 +327,7 @@ impl FunctionLowerer<'_> {
         }
         let kind = match (left.ty, right.ty) {
             (TyirType::Tuple(_), _) => return self.compare_tuples(operator, left, right, span),
-            // A protocol value is an object of any class that satisfies the protocol, compared
-            // through the `equal` slot of the class that decides (ADR-0041).
-            // A `ctypes` object is equal only to itself (FFI-03).
-            (TyirType::UNION | TyirType::CDATA, _) | (_, TyirType::UNION | TyirType::CDATA)
-                if matches!(comparison, Comparison::Equal | Comparison::NotEqual) =>
-            {
+            (left_type, right_type) if equal_by_type(left_type, right_type, comparison) => {
                 return self.objects_equality(comparison == Comparison::Equal, left, right, span);
             }
             // An instance of a class without `__eq__` is equal only to itself (CLS-07).
@@ -491,6 +486,17 @@ fn mirrored(comparison: Comparison) -> Comparison {
         Comparison::GreaterEqual => Comparison::LessEqual,
         same => same,
     }
+}
+
+/// Returns true for `==` and `!=` with an operand whose object's type decides: a protocol
+/// value, an object of any class that satisfies the protocol, through the `equal` slot of the
+/// class (ADR-0041); a `ctypes` object, equal only to itself (FFI-03); and a function object
+/// (FUN-05).
+fn equal_by_type(left: TyirType, right: TyirType, comparison: Comparison) -> bool {
+    let by_type =
+        |ty: TyirType| matches!(ty, TyirType::UNION | TyirType::CDATA | TyirType::FUNCTION);
+    matches!(comparison, Comparison::Equal | Comparison::NotEqual)
+        && (by_type(left) || by_type(right))
 }
 
 #[cfg(test)]

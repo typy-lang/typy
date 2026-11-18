@@ -21,6 +21,7 @@ mod expression;
 mod foreign_call;
 mod fstring;
 mod function;
+mod function_value;
 mod import;
 mod invoke;
 mod isinstance;

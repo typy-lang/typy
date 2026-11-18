@@ -83,6 +83,7 @@ impl FunctionLowerer<'_> {
                 | Type::BinaryFile(_)
                 | Type::DescriptorFile(_)
                 | Type::Traceback
+                | Type::Callable { .. }
                 | Type::Union(_),
                 _,
             ) => {
@@ -92,7 +93,7 @@ impl FunctionLowerer<'_> {
             }
             (_, Some(of)) => self.type_object(&of, span),
             (Type::Optional(inner), None)
-                if matches!(inner.as_ref(), Type::Union(_))
+                if matches!(inner.as_ref(), Type::Union(_) | Type::Callable { .. })
                     || matches!(inner.as_ref(), Type::Instance(class) if self.program.has_subclass(class.id)) =>
             {
                 self.optional_branch(

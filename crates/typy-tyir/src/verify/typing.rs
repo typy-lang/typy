@@ -139,11 +139,45 @@ impl Checker<'_> {
         Ok(())
     }
 
+    /// Checks a call through a function value: its first argument is the function object,
+    /// the normal block takes the one result, and the error block the exception (FUN-05).
+    fn value_call(
+        &self,
+        arguments: &[ValueId],
+        normal: BlockId,
+        error: BlockId,
+    ) -> Result<(), VerifyError> {
+        let Some(function) = arguments.first() else {
+            return Err(self.error("a call through a value has no function object".to_owned()));
+        };
+        self.expect(
+            *function,
+            TyirType::FUNCTION,
+            "the function object of a call",
+        )?;
+        if self.block_parameters(normal)?.len() != 1 {
+            return Err(self.error(format!(
+                "b{} must take the result of a call through a value",
+                normal.0
+            )));
+        }
+        if self.block_parameters(error)? != [TyirType::EXCEPTION] {
+            return Err(self.error(format!(
+                "b{} must take the exception of a call through a value",
+                error.0
+            )));
+        }
+        Ok(())
+    }
+
     fn callee_signature(
         &self,
         callee: Callee,
     ) -> Result<(Vec<TyirType>, TyirType, bool, String), VerifyError> {
         match callee {
+            Callee::Value => {
+                Err(self.error("a call through a value has no fixed signature".to_owned()))
+            }
             Callee::Runtime(function) => {
                 let signature = function.signature();
                 Ok((
@@ -563,6 +597,9 @@ impl Checker<'_> {
                 error,
                 ..
             } => {
+                if *callee == Callee::Value {
+                    return self.value_call(arguments, *normal, *error);
+                }
                 let (parameters, result, may_raise, name) = self.callee_signature(*callee)?;
                 if !may_raise {
                     return Err(self.error(format!(

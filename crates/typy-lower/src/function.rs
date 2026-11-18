@@ -167,6 +167,7 @@ impl<'context> FunctionLowerer<'context> {
             function.name.clone(),
             return_type,
         );
+        builder.set_qualified_name(function.qualified_name.clone());
         let mut slots = BTreeMap::new();
         let mut parameters = Vec::new();
         let mut assigned = crate::borrow::assigned_symbols(&function.body);

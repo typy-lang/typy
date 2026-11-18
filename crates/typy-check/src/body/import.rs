@@ -362,8 +362,8 @@ fn not_a_package(module: &ModuleName, span: Span) -> Diagnostic {
 }
 
 /// Returns the error for a name of `typing`, `collections.abc` or `types` that TyPy does not
-/// give: `Any` and `cast` are refused (TYP-10), `Callable`, `NamedTuple` and the abstract
-/// collections are planned for 1.0, and any other name is not given (LIB-17).
+/// give: `Any` and `cast` are refused (TYP-10), `NamedTuple` and the abstract collections
+/// are planned for 0.9, and any other name is not given (LIB-17).
 fn not_given(module: &ModuleName, alias: &Alias) -> Diagnostic {
     let name = &alias.name.name;
     if module.as_str() == "types" {
@@ -400,7 +400,6 @@ fn not_given(module: &ModuleName, alias: &Alias) -> Diagnostic {
     }
     // The names a later release gives, with the requirement that plans each.
     let planned = match name.as_str() {
-        "Callable" => Some(RuleId::FUN_05),
         "NamedTuple" => Some(RuleId::CLS_27),
         "Sequence" | "MutableSequence" | "Mapping" | "MutableMapping" | "Collection"
         | "Container" | "Sized" | "Set" | "MutableSet" | "Reversible" | "KeysView"
@@ -411,7 +410,7 @@ fn not_given(module: &ModuleName, alias: &Alias) -> Diagnostic {
         return Diagnostic::new(
             DiagnosticCode::error(201),
             alias.name.span,
-            format!("`{module}.{name}` is planned for TyPy 1.0 ({rule})"),
+            format!("`{module}.{name}` is planned for TyPy 0.9 ({rule})"),
         )
         .with_rule(rule);
     }
@@ -726,21 +725,16 @@ impl BodyChecker<'_> {
         if let Some(planned) = self.program.rebound_elsewhere(module, name, span) {
             return self.error(planned, span);
         }
-        let (code, rule, message) = if let Named::Function(_) = found {
-            (
-                201,
-                RuleId::FUN_08,
-                format!("using `{module}.{name}` as a value is planned for TyPy 0.9 (FUN-08)"),
-            )
-        } else {
-            (
-                425,
-                RuleId::SMT_07,
+        if let Named::Function(function) = found {
+            return self.function_value(function, name, span);
+        }
+        self.error(
+            Diagnostic::new(
+                DiagnosticCode::error(425),
+                span,
                 format!("module `{module}` has no name `{name}`"),
             )
-        };
-        self.error(
-            Diagnostic::new(DiagnosticCode::error(code), span, message).with_rule(rule),
+            .with_rule(RuleId::SMT_07),
             span,
         )
     }

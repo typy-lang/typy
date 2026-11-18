@@ -416,41 +416,44 @@ impl BodyChecker<'_> {
                 Expr::Attribute {
                     value, attribute, ..
                 } => self.method_call(value, attribute, arguments, keywords, span),
-                // The subset check lets only a generic class given its arguments through.
-                Expr::Subscript { .. } => {
+                // A generic class given its type arguments, such as `Box[int](1)`.
+                Expr::Subscript { value, .. }
+                    if matches!(value.as_ref(), Expr::Name { id, .. }
+                        if self.program.class_ids.contains_key(id)) =>
+                {
                     self.applied_class_call(function, arguments, keywords, span)
                 }
-                // A class `POINTER(T)` or `T * length` called where it is made (FFI-03).
-                Expr::Call { .. } | Expr::BinOp { .. } => {
+                // A class `POINTER(T)` or `T * length` called where it is made (FFI-03), or a
+                // function value (FUN-05).
+                _ => {
                     let class = self.expression_or_class(function);
                     match class.ty {
                         Type::CDataClass(class) => {
                             self.cdata_new(&class, arguments, keywords, span)
                         }
-                        Type::Error => class,
-                        // Any other value called is a callable value, planned for 1.0.
+                        Type::Error => {
+                            for argument in arguments {
+                                self.expression(argument);
+                            }
+                            TypedExpr { span, ..class }
+                        }
+                        Type::Callable { .. } => self.call_value(class, arguments, keywords, span),
                         _ => {
                             for argument in arguments {
                                 self.expression(argument);
                             }
                             self.error(
                                 Diagnostic::new(
-                                    DiagnosticCode::error(201),
+                                    DiagnosticCode::error(401),
                                     function.span(),
-                                    "calls of values that are not names are planned for TyPy \
-                                     0.8 (FUN-05)",
+                                    format!("{} cannot be called", class.ty.with_article()),
                                 )
-                                .with_rule(RuleId::FUN_05),
+                                .with_rule(RuleId::EXP_02),
                                 span,
                             )
                         }
                     }
                 }
-                _ => Self::typed(
-                    TypedExprKind::Constant(TypedConstant::None),
-                    Type::Error,
-                    span,
-                ),
             },
             Expr::List { elements, .. } => self.list_display(elements, None, span),
             Expr::Slice { .. } => self.misplaced_slice(span),

@@ -427,7 +427,7 @@ const fn signature(
 /// file objects.
 fn holds_items(ty: TyirType) -> bool {
     use crate::types::{OptionalBase, TypeId};
-    const OWN: [TypeId; 12] = [
+    const OWN: [TypeId; 13] = [
         TypeId::STR,
         TypeId::BYTES,
         TypeId::EXCEPTION,
@@ -440,6 +440,7 @@ fn holds_items(ty: TyirType) -> bool {
         TypeId::VERSION_INFO,
         TypeId::NOT_IMPLEMENTED,
         TypeId::CDATA,
+        TypeId::FUNCTION,
     ];
     match ty {
         TyirType::Bits | TyirType::Tuple(_) | TyirType::Optional(OptionalBase::Tuple(_)) => true,

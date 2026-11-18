@@ -67,6 +67,15 @@ pub enum Type {
     /// A file `open` gives for a file descriptor, whose `name` is that `int`: a text file, or
     /// a binary one of this class (LIB-14).
     DescriptorFile(Option<BinaryKind>),
+    /// `Callable[[A, ...], R]`: a function of the program, a nested function, a `lambda` or
+    /// a method, held as a function object, called with an argument of each parameter type
+    /// and returning `R` (FUN-05, ADR-0060).
+    Callable {
+        /// The parameter types, each passed by position.
+        parameters: Vec<Type>,
+        /// The result type, `None` for a function that returns nothing.
+        returns: Box<Type>,
+    },
     /// `range` held as a value: a sequence of `int` (DAT-17).
     Range,
     /// A `slice`, of bounds that are each an `int` or `None` (CLS-23).
@@ -193,7 +202,9 @@ impl TypeObjectOf {
             Type::Slice => Self::Slice,
             // An exception's class may derive from its static class, so it is read from the
             // exception when the program runs.
+            // A `Callable` holds a function or a bound method, which differ in their class.
             Type::Exception(_)
+            | Type::Callable { .. }
             | Type::Iterator(_)
             | Type::Iterable(_)
             | Type::AnyModule
@@ -387,6 +398,7 @@ impl Type {
             }
             (Self::Optional(_), _) => self.matches(target) || self.is_upcast_to(target),
             (_, Self::Optional(inner)) => self.is_assignable_to(inner),
+            (Self::Callable { .. }, Self::Callable { .. }) => self.fits_callable(target),
             (_, Self::Iterable(item)) => self.iterable_item().is_some_and(|own| own.matches(item)),
             _ => self.matches(target),
         }
@@ -399,6 +411,10 @@ impl Type {
         match (self, target) {
             (Self::Instance(class), Self::Instance(base)) => class.derives_from(base),
             (Self::Optional(inner), Self::Optional(base)) => inner.is_upcast_to(base),
+            // A function value is held where a `Callable` it fits is, as the same object.
+            (Self::Callable { .. }, Self::Callable { .. }) => {
+                !self.matches(target) && self.fits_callable(target)
+            }
             (Self::Parameter(_), _) => *self != *target && self.is_assignable_to(target),
             // A union with `None` is an optional of the other members, so a union target
             // never holds `None`.
@@ -469,6 +485,10 @@ impl Type {
                 key.has_error() || value.has_error()
             }
             Self::Optional(inner) => inner.has_error(),
+            Self::Callable {
+                parameters,
+                returns,
+            } => parameters.iter().any(Self::has_error) || returns.has_error(),
             _ => false,
         }
     }
@@ -478,10 +498,12 @@ impl Type {
     #[must_use]
     pub fn can_test_equality(&self, other: &Self) -> bool {
         match (self, other) {
-            // Two type objects are equal when they are one object (CLS-12).
-            (Self::Error, _) | (_, Self::Error) | (Self::TypeObject(_), Self::TypeObject(_)) => {
-                true
-            }
+            // Two type objects are equal when they are one object (CLS-12), and so are two
+            // functions, so any two function values compare (FUN-05).
+            (Self::Error, _)
+            | (_, Self::Error)
+            | (Self::TypeObject(_), Self::TypeObject(_))
+            | (Self::Callable { .. }, Self::Callable { .. }) => true,
             // The runtime compares items by the list's own item kind, so two lists compare when
             // their items have one type.
             (Self::List(left), Self::List(right))
@@ -585,6 +607,7 @@ impl Type {
                 | Self::Slice
                 | Self::CData(_)
                 | Self::CDataClass(_)
+                | Self::Callable { .. }
                 | Self::TypeObject(_),
                 _,
             )
@@ -609,6 +632,7 @@ impl Type {
                 | Self::Slice
                 | Self::CData(_)
                 | Self::CDataClass(_)
+                | Self::Callable { .. }
                 | Self::TypeObject(_),
             ) => false,
             _ => self == other || (self.is_numeric() && other.is_numeric()),
@@ -837,6 +861,17 @@ impl fmt::Display for Type {
             Self::Traceback => formatter.write_str("TracebackType"),
             Self::Range => formatter.write_str("range"),
             Self::Slice => formatter.write_str("slice"),
+            Self::Callable {
+                parameters,
+                returns,
+            } => {
+                let parameters: Vec<String> = parameters.iter().map(ToString::to_string).collect();
+                write!(
+                    formatter,
+                    "Callable[[{}], {returns}]",
+                    parameters.join(", ")
+                )
+            }
             Self::Module(name) => write!(formatter, "module `{name}`"),
             Self::ForeignLibrary(_) => formatter.write_str("CDLL"),
             Self::CData(data) => formatter.write_str(&data.class_name()),

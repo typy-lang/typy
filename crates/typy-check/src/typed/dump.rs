@@ -441,6 +441,11 @@ impl Dump<'_> {
             }
             TypedExprKind::Submodule(module) => format!("Submodule {module}"),
             TypedExprKind::TypeAliasObject(index) => format!("TypeAliasObject {index}"),
+            TypedExprKind::FunctionValue(function) => format!(
+                "FunctionValue {}",
+                self.program.function(*function).qualified_name
+            ),
+            TypedExprKind::CallValue { .. } => "CallValue".to_owned(),
             TypedExprKind::VersionRead { .. } => "VersionRead".to_owned(),
             TypedExprKind::TypeAliasPart { module, .. } => if *module {
                 "TypeAliasModule"

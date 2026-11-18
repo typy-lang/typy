@@ -24,6 +24,7 @@ value.
 | `A \| B`, such as `int \| str`, narrowed by `isinstance` | TYP-14, TYP-07 |
 | `Iterator[T]` and `Iterable[T]` from `typing` or `collections.abc` | TYP-15 |
 | `TracebackType` and `ModuleType` from `types` | CST-10, MOD-10 |
+| `Callable[[A, ...], R]` from `typing` or `collections.abc`, the type of a function value; see [Functions as values](functions.md#functions-as-values) | FUN-05, NFR-19 |
 
 ## Iterators and iterables
 
@@ -92,9 +93,9 @@ As in CPython, a bare `Optional` and a subscripted name such as
 CPython 3.12 and 3.13 raise `TypeError` where 3.14 and 3.15 answer
 `False`. The names held in a variable, passed or printed are planned for
 0.9 (TYP-18), and so are `Sequence`, `Mapping` and the other abstract
-collections (LIB-20) and `NamedTuple` (CLS-27); `Callable` comes in 0.8,
-with function values (FUN-05). `typing.Any` and `typing.cast` are refused,
-since every value in TyPy has one type (TYP-10).
+collections (LIB-20) and `NamedTuple` (CLS-27). `typing.Any` and
+`typing.cast` are refused, since every value in TyPy has one type
+(TYP-10).
 
 ## Unions
 

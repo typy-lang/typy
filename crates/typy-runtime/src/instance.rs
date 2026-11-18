@@ -183,6 +183,15 @@ unsafe fn default_text(instance: *const InstanceObject) -> *mut StrObject {
 /// empty, for the object at `object`.
 pub(crate) fn object_text(object: *mut ObjectHeader, module: &str, name: &str) -> *mut StrObject {
     let mut digits = [0_u8; 16];
+    let hex = address_digits(object, &mut digits);
+    let dot = if module.is_empty() { "" } else { "." };
+    let parts = ["<", module, dot, name, " object at 0x", hex, ">"];
+    crate::string::from_parts(&parts)
+}
+
+/// Returns the address of `object` in lower-case hexadecimal, as CPython's `repr` writes an
+/// address after `0x`, written into `digits`.
+pub(crate) fn address_digits(object: *const ObjectHeader, digits: &mut [u8; 16]) -> &str {
     let mut address = object.expose_provenance();
     let mut start = digits.len();
     loop {
@@ -194,10 +203,7 @@ pub(crate) fn object_text(object: *mut ObjectHeader, module: &str, name: &str) -
         }
     }
     // SAFETY: the digits are ASCII.
-    let hex = unsafe { core::str::from_utf8_unchecked(&digits[start..]) };
-    let dot = if module.is_empty() { "" } else { "." };
-    let parts = ["<", module, dot, name, " object at 0x", hex, ">"];
-    crate::string::from_parts(&parts)
+    unsafe { core::str::from_utf8_unchecked(&digits[start..]) }
 }
 
 /// Returns the hash of an object that is equal only to itself, from its address, as CPython's

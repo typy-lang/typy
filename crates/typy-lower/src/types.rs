@@ -18,6 +18,7 @@ pub(crate) fn tyir_type(ty: &Type, tuples: &mut TupleTypes) -> TyirType {
             TyirType::Unit
         }
         Type::CData(_) => TyirType::CDATA,
+        Type::Callable { .. } => TyirType::FUNCTION,
         // A `tuple[T, ...]` is a list object with the tuple type ID, so every list function
         // of the runtime reads it (DAT-14).
         Type::List(_) | Type::TupleOf(_) => TyirType::LIST,

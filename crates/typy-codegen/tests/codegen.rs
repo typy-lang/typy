@@ -231,6 +231,88 @@ fn nfr_18_an_instance_takes_its_prefix_and_its_attributes_rounded_to_eight_bytes
     assert_eq!(16 + size, 56);
 }
 
+/// A function that cannot raise and one that may, each called through a value.
+const FUNCTION_VALUES: &str = "\
+from typing import Callable
+
+
+def double(value: int) -> int:
+    return value * 2
+
+
+def fail(value: int) -> int:
+    raise ValueError(\"no\")
+
+
+def apply(function: Callable[[int], int], value: int) -> int:
+    return function(value)
+
+
+print(apply(double, 2), apply(fail, 3))
+";
+
+#[test]
+fn fun_05_a_function_value_is_an_immortal_object_of_its_descriptor() {
+    let (project, module) = compile(FUNCTION_VALUES);
+    let ir = llvm_ir(&module, Target::host(), Optimization::None, &project).unwrap();
+    // The header is immortal and of the function type ID, then the descriptor: the name, the
+    // qualified name, the code and no captures. Only the object's address is its identity.
+    assert!(
+        ir.contains(
+            "@typy.function.0 = private constant { i32, i32, ptr } \
+             { i32 -1, i32 24, ptr @typy.function.descriptor.0 }"
+        ),
+        "{ir}"
+    );
+    assert!(
+        ir.contains(
+            "@typy.function.descriptor.0 = private unnamed_addr constant \
+             { ptr, ptr, ptr, ptr } { ptr @typy.str.1, ptr @typy.str.1, \
+             ptr @typy.thunk._TY8__main__6double, ptr null }"
+        ),
+        "{ir}"
+    );
+    assert!(
+        ir.contains("call { i64, ptr } @_TY8__main__5apply(ptr @typy.function.1, i64 7)"),
+        "{ir}"
+    );
+}
+
+#[test]
+fn fun_05_a_thunk_gives_every_function_the_raising_form_a_call_through_a_value_takes() {
+    let (project, module) = compile(FUNCTION_VALUES);
+    let ir = llvm_ir(&module, Target::host(), Optimization::None, &project).unwrap();
+    let thunk = |name: &str| -> String {
+        let start = ir.find(&format!("@typy.thunk.{name}(")).unwrap();
+        ir[start..].split("\n}").next().unwrap().to_owned()
+    };
+    // A function that cannot raise has its result paired with no exception.
+    let double = thunk("_TY8__main__6double");
+    assert!(
+        double.contains("call i64 @_TY8__main__6double(i64 %1)"),
+        "{double}"
+    );
+    assert!(
+        double.contains("insertvalue { i64, ptr } %3, ptr null, 1"),
+        "{double}"
+    );
+    // One that may raise already returns the pair, so its thunk only calls it.
+    let fail = thunk("_TY8__main__4fail");
+    assert!(
+        fail.contains("tail call { i64, ptr } @_TY8__main__4fail(i64 %1)"),
+        "{fail}"
+    );
+    // The call through the value reads the code from the descriptor and passes the object.
+    let start = ir.find("@_TY8__main__5apply(ptr %0, i64 %1)").unwrap();
+    let apply = ir[start..].split("\n}").next().unwrap();
+    assert!(
+        apply
+            .lines()
+            .any(|line| line.contains("= call { i64, ptr } %") && line.contains("(ptr %")),
+        "{apply}"
+    );
+}
+
 #[test]
 fn the_entry_is_the_only_external_function() {
     let (project, module) = compile(PROGRAMS[1]);

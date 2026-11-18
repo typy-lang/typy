@@ -454,3 +454,31 @@ fn the_text_form_shows_an_instance_held_in_the_frame() {
     assert_eq!(crate::verify(&module), Ok(()));
     assert!(crate::print(&module).contains("v1 = new class#0 in frame"));
 }
+
+#[test]
+fn mem_03_an_instance_passed_through_a_function_value_comes_from_the_heap() {
+    // The value's code is known only when the program runs, so even a value of a function
+    // that keeps nothing lets the instance escape.
+    let through_value = |builder: &mut FunctionBuilder, point: ValueId| {
+        let function = builder.push_value(
+            Operation::Constant(Constant::Function(FunctionId(1))),
+            TyirType::FUNCTION,
+            span(),
+        );
+        let normal = builder.create_block();
+        builder.add_block_parameter(normal, TyirType::Unit);
+        let error = builder.create_block();
+        let exception = builder.add_block_parameter(error, TyirType::EXCEPTION);
+        builder.terminate(Terminator::Invoke {
+            callee: Callee::Value,
+            arguments: vec![function, point],
+            normal,
+            error,
+            span: span(),
+        });
+        builder.switch_to(error);
+        builder.terminate(Terminator::ReturnError(exception));
+        builder.switch_to(normal);
+    };
+    assert!(!point_used(through_value, vec![keeps_nothing(1)]));
+}

@@ -7,7 +7,13 @@ use typy_check::{
     TypedProgram, TypedStmt,
 };
 
-/// Returns the functions that can call themselves, directly or through others.
+/// Stands among a function's callees for a call through a function value, whose code is known
+/// only when the program runs (FUN-05).
+const THROUGH_VALUE: FunctionId = FunctionId(u32::MAX);
+
+/// Returns the functions that can call themselves, directly or through others. A cycle that
+/// passes through a function value has a call through a value in it, so each function that
+/// calls through one checks the stack, and a cycle of values raises `RecursionError` too.
 pub(crate) fn recursive_functions(program: &TypedProgram) -> BTreeSet<FunctionId> {
     let overrides = overrides(program);
     let calls: BTreeMap<FunctionId, BTreeSet<FunctionId>> = program
@@ -29,6 +35,9 @@ pub(crate) fn recursive_functions(program: &TypedProgram) -> BTreeSet<FunctionId
         .keys()
         .copied()
         .filter(|start| {
+            if calls[start].contains(&THROUGH_VALUE) {
+                return true;
+            }
             let mut seen = BTreeSet::new();
             let mut pending: Vec<FunctionId> = calls[start].iter().copied().collect();
             while let Some(next) = pending.pop() {
@@ -272,6 +281,13 @@ fn expression(expression_value: &TypedExpr, callees: &mut BTreeSet<FunctionId>) 
             expression(left, callees);
             expression(right, callees);
         }
+        TypedExprKind::CallValue { callee, arguments } => {
+            callees.insert(THROUGH_VALUE);
+            expression(callee, callees);
+            for argument in arguments {
+                expression(argument, callees);
+            }
+        }
         TypedExprKind::IsInstance(test) => expression(&test.value, callees),
         TypedExprKind::EachMember(each) => {
             expression(&each.value, callees);
@@ -495,6 +511,7 @@ fn expression(expression_value: &TypedExpr, callees: &mut BTreeSet<FunctionId>) 
         | TypedExprKind::NotImplemented
         | TypedExprKind::ClassVariable(_)
         | TypedExprKind::TypeAliasObject(_)
+        | TypedExprKind::FunctionValue(_)
         | TypedExprKind::ForeignLibrary(_)
         | TypedExprKind::SysValue(_) => {}
         TypedExprKind::AsIterable(inner) | TypedExprKind::Named { value: inner, .. } => {

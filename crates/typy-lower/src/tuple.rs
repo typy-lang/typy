@@ -360,7 +360,7 @@ impl FunctionLowerer<'_> {
                 self.constant(Constant::PlaceholderDict, span)
             }
             TyirType::Object(typy_tyir::TypeId::BYTES) => self.bytes_constant(&[], span),
-            // An instance, exception, iterator, range or view slot starts as null, which
+            // An instance, exception, iterator, range, view or function slot starts as null, which
             // counting passes over. Nothing is allocated, so a `return` lowered before a later
             // loop adds its hidden slot has nothing of that slot to release.
             TyirType::Object(id)
@@ -378,6 +378,7 @@ impl FunctionLowerer<'_> {
                     || id == typy_tyir::TypeId::ITERABLE
                     || id == typy_tyir::TypeId::TEXT_FILE
                     || id == typy_tyir::TypeId::CDATA
+                    || id == typy_tyir::TypeId::FUNCTION
                     || id == typy_tyir::TypeId::UNION =>
             {
                 self.constant(Constant::NoInstance(id), span)

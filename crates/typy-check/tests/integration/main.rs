@@ -9,6 +9,7 @@ mod edge_cases;
 mod exception_parts;
 mod exports;
 mod final_names;
+mod function_values;
 mod generics;
 mod lazy_imports;
 mod matching;

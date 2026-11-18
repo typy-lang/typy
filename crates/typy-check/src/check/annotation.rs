@@ -84,6 +84,8 @@ pub(crate) enum AnnotationName {
     /// `typing.List`, `Dict`, `Set`, `Tuple` and `Type`, the built-in type of the same name
     /// in lower case (LIB-17).
     Builtin(&'static str),
+    /// `Callable` of `typing` or `collections.abc`, the type of a function value (FUN-05).
+    Callable,
 }
 
 /// The modules that give names for annotations only in 0.3.
@@ -95,6 +97,7 @@ pub(crate) fn annotation_name(module: &str, name: &str) -> Option<AnnotationName
     match (module, name) {
         ("typing" | "collections.abc", "Iterator") => Some(AnnotationName::Iterator),
         ("typing" | "collections.abc", "Iterable") => Some(AnnotationName::Iterable),
+        ("typing" | "collections.abc", "Callable") => Some(AnnotationName::Callable),
         ("types", "TracebackType") => Some(AnnotationName::TracebackType),
         ("types", "ModuleType") => Some(AnnotationName::ModuleType),
         ("typing", "ClassVar") => Some(AnnotationName::ClassVar),
@@ -165,6 +168,11 @@ fn standard_annotation(
             } else {
                 Type::Iterable(item)
             }
+        }
+        Expr::Subscript { value, index, span }
+            if standard_name(value, scope) == Some(AnnotationName::Callable) =>
+        {
+            super::callable_annotation::callable_annotation(index, *span, scope, diagnostics)
         }
         // `List[int]` is `list[int]`, read as the built-in type is (LIB-17).
         Expr::Subscript { value, index, span }
@@ -264,6 +272,10 @@ fn bare_standard(
                 Diagnostic::new(DiagnosticCode::error(408), annotation.span(), written)
                     .with_rule(RuleId::LIB_17),
             );
+            Type::Error
+        }
+        AnnotationName::Callable => {
+            diagnostics.push(super::callable_annotation::callable_form(annotation.span()));
             Type::Error
         }
         AnnotationName::TracebackType => Type::Traceback,

@@ -124,30 +124,30 @@ impl BodyChecker<'_> {
         self.unknown_name(id, span)
     }
 
-    /// Returns a scalar class of `ctypes` read as a value (FFI-03), or the error for any
-    /// other function read as one: one of the program's, which is planned for 0.8 (FUN-05),
-    /// or a built-in one, planned for 0.9 (FUN-08).
+    /// Returns a scalar class of `ctypes` read as a value (FFI-03), the function object of a
+    /// function of the program (FUN-05), or the error for a built-in function read as one,
+    /// which is planned for 0.9 (FUN-08).
     fn function_as_value(&mut self, id: &str, span: Span) -> Option<TypedExpr> {
         if let Some(super::builtin_module::ModuleFunction::CtypesType(ty)) =
             self.program.module_functions.get(id)
         {
             return Some(Self::cdata_class(crate::ctypes::CData::Scalar(*ty), span));
         }
-        let (release, rule) = if self.program.function_ids.contains_key(id) {
-            ("0.8", RuleId::FUN_05)
-        } else if self.program.module_functions.contains_key(id) || Builtin::named(id).is_some() {
-            ("0.9", RuleId::FUN_08)
-        } else {
+        if let Some(function) = self.program.function_ids.get(id).copied() {
+            let value = self.function_value(function, id, span);
+            return Some(self.through_lazy(id, value));
+        }
+        if !self.program.module_functions.contains_key(id) && Builtin::named(id).is_none() {
             return None;
-        };
+        }
         Some(
             self.error(
                 Diagnostic::new(
                     DiagnosticCode::error(201),
                     span,
-                    format!("using `{id}` as a value is planned for TyPy {release} ({rule})"),
+                    format!("using `{id}` as a value is planned for TyPy 0.9 (FUN-08)"),
                 )
-                .with_rule(rule),
+                .with_rule(RuleId::FUN_08),
                 span,
             ),
         )

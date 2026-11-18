@@ -23,6 +23,7 @@ pub(crate) struct Statics<'ctx> {
     type_objects: BTreeMap<u32, PointerValue<'ctx>>,
     modules: BTreeMap<u32, PointerValue<'ctx>>,
     type_aliases: BTreeMap<u32, PointerValue<'ctx>>,
+    function_objects: BTreeMap<u32, PointerValue<'ctx>>,
 }
 
 impl<'ctx> Statics<'ctx> {
@@ -38,7 +39,18 @@ impl<'ctx> Statics<'ctx> {
             type_objects: BTreeMap::new(),
             modules: BTreeMap::new(),
             type_aliases: BTreeMap::new(),
+            function_objects: BTreeMap::new(),
         }
+    }
+
+    /// Returns the function object of function `id`, if it was emitted already (FUN-05).
+    pub(crate) fn function_object(&self, id: u32) -> Option<PointerValue<'ctx>> {
+        self.function_objects.get(&id).copied()
+    }
+
+    /// Records the function object of function `id`.
+    pub(crate) fn add_function_object(&mut self, id: u32, pointer: PointerValue<'ctx>) {
+        self.function_objects.insert(id, pointer);
     }
 
     /// Returns the descriptor of tuple type `id`, if it was emitted already.

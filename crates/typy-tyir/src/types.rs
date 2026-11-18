@@ -50,6 +50,9 @@ impl TypeId {
     pub const SLICE: Self = Self(22);
     /// A `ctypes` object: a scalar, a pointer or an array over a C buffer (FFI-03, ADR-0048).
     pub const CDATA: Self = Self(23);
+    /// A function object: a function of the program as a value, with its captures (FUN-05,
+    /// ADR-0060).
+    pub const FUNCTION: Self = Self(24);
     /// The first ID of the program's classes; class `n` of the module is this plus `n`.
     const FIRST_CLASS: u32 = 1 << 16;
 
@@ -148,6 +151,8 @@ impl TyirType {
     pub const SLICE: Self = Self::Object(TypeId::SLICE);
     /// A `ctypes` object (FFI-03).
     pub const CDATA: Self = Self::Object(TypeId::CDATA);
+    /// A function object (FUN-05).
+    pub const FUNCTION: Self = Self::Object(TypeId::FUNCTION);
 }
 
 impl fmt::Display for TyirType {
@@ -176,6 +181,7 @@ impl fmt::Display for TyirType {
             Self::Object(TypeId::NOT_IMPLEMENTED) => formatter.write_str("not_implemented"),
             Self::Object(TypeId::SLICE) => formatter.write_str("slice"),
             Self::Object(TypeId::CDATA) => formatter.write_str("cdata"),
+            Self::Object(TypeId::FUNCTION) => formatter.write_str("function"),
             Self::Bits => formatter.write_str("bits"),
             Self::Object(id) if id.class_index().is_some() => {
                 write!(formatter, "class#{}", id.class_index().unwrap_or(0))

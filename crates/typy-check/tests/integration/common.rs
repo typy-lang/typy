@@ -7,6 +7,16 @@ use typy_source::{Project, ProjectSettings};
 /// Returns the code of each diagnostic of the program `files`, whose first file is `app.py`,
 /// or nothing when it is accepted.
 pub(crate) fn codes(files: &[(&str, &str)]) -> Vec<String> {
+    found(files).into_iter().map(|(code, _, _)| code).collect()
+}
+
+/// Returns the code, the message and the rule of each diagnostic of the one-module program
+/// `source`, in the order the checker gives them, or nothing when it is accepted.
+pub(crate) fn messages(source: &str) -> Vec<(String, String, String)> {
+    found(&[("app.py", source)])
+}
+
+fn found(files: &[(&str, &str)]) -> Vec<(String, String, String)> {
     use std::sync::atomic::{AtomicU32, Ordering};
     static NEXT: AtomicU32 = AtomicU32::new(0);
     let base = Utf8PathBuf::from_path_buf(std::env::temp_dir()).unwrap();
@@ -24,7 +34,17 @@ pub(crate) fn codes(files: &[(&str, &str)]) -> Vec<String> {
         Ok(_) => Vec::new(),
         Err(diagnostics) => diagnostics
             .iter()
-            .map(|diagnostic| diagnostic.code().to_string())
+            .map(|diagnostic| {
+                let rule = diagnostic
+                    .rule()
+                    .map(|rule| rule.to_string())
+                    .unwrap_or_default();
+                (
+                    diagnostic.code().to_string(),
+                    diagnostic.message().to_owned(),
+                    rule,
+                )
+            })
             .collect(),
     };
     let _ = std::fs::remove_dir_all(&root);

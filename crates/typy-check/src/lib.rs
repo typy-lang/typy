@@ -3,6 +3,7 @@
 
 mod body;
 mod builtin;
+mod callable_type;
 mod check;
 mod class_type;
 mod codec;

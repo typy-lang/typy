@@ -40,31 +40,8 @@ impl BodyChecker<'_> {
         keywords: &[Keyword],
         span: Span,
     ) -> TypedExpr {
-        if let Some(symbol) = self.locals.get(name) {
-            let ty = self.types.get(symbol).cloned().unwrap_or(Type::Error);
-            if let Some(made) = self.call_class_value(&ty, arguments, keywords, span) {
-                return made;
-            }
-            // A variable whose type is an error was reported where the error arose.
-            if ty.has_error() {
-                for argument in arguments {
-                    self.expression(argument);
-                }
-                return Self::typed(
-                    TypedExprKind::Constant(TypedConstant::None),
-                    Type::Error,
-                    span,
-                );
-            }
-            return self.error(
-                Diagnostic::new(
-                    DiagnosticCode::error(401),
-                    name_span,
-                    format!("`{name}` is {} and cannot be called", ty.with_article()),
-                )
-                .with_rule(RuleId::EXP_02),
-                span,
-            );
+        if let Some(symbol) = self.locals.get(name).copied() {
+            return self.call_local(symbol, (name, name_span), arguments, keywords, span);
         }
         if let Some(call) = self.rebound_call(name, arguments, keywords, span) {
             return call;
@@ -115,6 +92,9 @@ impl BodyChecker<'_> {
             if let Some(made) = self.call_class_value(&read.ty, arguments, keywords, span) {
                 return made;
             }
+            if let Type::Callable { .. } = read.ty {
+                return self.call_value(read, arguments, keywords, span);
+            }
             for argument in arguments {
                 self.expression(argument);
             }
@@ -139,6 +119,52 @@ impl BodyChecker<'_> {
             self.expression(argument);
         }
         TypedExpr { span, ..result }
+    }
+
+    /// Returns the call of the local variable `symbol`, named `name`: of the class it holds,
+    /// or through the function value it holds, which a test may have narrowed it to from an
+    /// optional value; E0401 for any other value.
+    fn call_local(
+        &mut self,
+        symbol: crate::typed::SymbolId,
+        (name, name_span): (&str, Span),
+        arguments: &[Expr],
+        keywords: &[Keyword],
+        span: Span,
+    ) -> TypedExpr {
+        let ty = self.types.get(&symbol).cloned().unwrap_or(Type::Error);
+        if let Some(made) = self.call_class_value(&ty, arguments, keywords, span) {
+            return made;
+        }
+        if matches!(
+            ty,
+            Type::Callable { .. } | Type::Optional(_) | Type::Union(_)
+        ) {
+            let callee = self.name(name, name_span);
+            if let Type::Callable { .. } = callee.ty {
+                return self.call_value(callee, arguments, keywords, span);
+            }
+        }
+        // A variable whose type is an error was reported where the error arose.
+        if ty.has_error() {
+            for argument in arguments {
+                self.expression(argument);
+            }
+            return Self::typed(
+                TypedExprKind::Constant(TypedConstant::None),
+                Type::Error,
+                span,
+            );
+        }
+        self.error(
+            Diagnostic::new(
+                DiagnosticCode::error(401),
+                name_span,
+                format!("`{name}` is {} and cannot be called", ty.with_article()),
+            )
+            .with_rule(RuleId::EXP_02),
+            span,
+        )
     }
 
     pub(super) fn call_function(

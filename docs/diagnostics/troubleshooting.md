@@ -670,7 +670,10 @@ print(int("10") < 9)
 ## E0408: annotation without its item types
 
 A `tuple`, `list`, `set` or `dict` annotation names no item types (TYP-06).
-Write them, such as `list[int]` or `dict[str, float]`.
+Write them, such as `list[int]` or `dict[str, float]`. A `Callable`
+annotation lists its parameter types, then names its result, such as
+`Callable[[int, str], bool]`; `Callable[..., R]` takes any arguments, which
+a call through the value could not check (FUN-05).
 
 This program gives E0408:
 
