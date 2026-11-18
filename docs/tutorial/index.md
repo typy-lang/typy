@@ -6,33 +6,45 @@ runs a first program.
 ## What you need
 
 TyPy runs on x86_64 and 64-bit Arm (AArch64) Linux with glibc 2.39 or
-later, such as Ubuntu 24.04 or Debian 13. It links programs with the
-system C toolchain, so `cc` must be installed:
+later, such as Ubuntu 24.04 or Debian 13, and on macOS 11 or later on
+Apple silicon. It links programs with the system C toolchain, so `cc` must
+be installed:
 
 ```sh
 sudo apt install build-essential
+```
+
+On a Mac, Xcode's Command Line Tools provide it:
+
+```sh
+xcode-select --install
 ```
 
 ## Install from a release archive
 
 Download the archive for your machine and its `.sha256` file from the
 [release page](https://github.com/typy-lang/typy/releases):
-`typy-0.6.0-x86_64-unknown-linux-gnu.tar.gz` on x86_64 or
-`typy-0.6.0-aarch64-unknown-linux-gnu.tar.gz` on AArch64, as `uname -m`
-names the machine. Check the archive and unpack it:
+`typy-0.7.0-x86_64-unknown-linux-gnu.tar.gz` on x86_64 or
+`typy-0.7.0-aarch64-unknown-linux-gnu.tar.gz` on AArch64 Linux, as
+`uname -m` names the machine. Check the archive and unpack it:
 
 ```sh
-archive="typy-0.6.0-$(uname -m)-unknown-linux-gnu"
+archive="typy-0.7.0-$(uname -m)-unknown-linux-gnu"
 sha256sum --check "$archive.tar.gz.sha256"
 tar -xzf "$archive.tar.gz"
 export PATH="$PWD/$archive/bin:$PATH"
 typy --version
 ```
 
+On a Mac the archive is `typy-0.7.0-aarch64-apple-darwin.tar.gz`, which
+[Using TyPy on macOS](../using/macos.md) installs, clearing the quarantine
+a browser download carries.
+
 The archive holds the `typy` command in `bin/` and the runtime library of
-every target in `lib/typy/`, so either archive builds for x86_64 and
-AArch64; see [Building for another target][cross]. Keep the two together:
-`typy` finds the runtime beside itself.
+each target it builds for in `lib/typy/`: either Linux archive builds for
+x86_64 and AArch64 Linux, and the Mac archive for macOS; see
+[Building for another target][cross]. Keep the two together: `typy` finds
+the runtime beside itself.
 
 [cross]: ../using/command-line.md#building-for-another-target
 
