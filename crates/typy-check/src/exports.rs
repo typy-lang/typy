@@ -23,8 +23,9 @@ pub struct Export {
 /// host. On AArch64, Rust's `compiler_builtins` in the archive calls `getauxval` to learn
 /// which atomic instructions the processor has; on macOS the runtime reads `errno` through
 /// `__error`, an error's text from `strerror`, and the calling thread's stack from the
-/// `pthread` functions (ADR-0057).
-pub const RUNTIME_C_FUNCTIONS: [&str; 61] = [
+/// `pthread` functions (ADR-0057), and Rust's `core` there calls `bzero`, `memcmp` and
+/// `sysctlbyname`.
+pub const RUNTIME_C_FUNCTIONS: [&str; 64] = [
     "__error",
     "abort",
     "acos",
@@ -35,6 +36,7 @@ pub const RUNTIME_C_FUNCTIONS: [&str; 61] = [
     "atan2",
     "atanh",
     "bcmp",
+    "bzero",
     "cbrt",
     "ceil",
     "close",
@@ -64,6 +66,7 @@ pub const RUNTIME_C_FUNCTIONS: [&str; 61] = [
     "lseek",
     "main",
     "malloc",
+    "memcmp",
     "memcpy",
     "memmove",
     "memset",
@@ -82,6 +85,7 @@ pub const RUNTIME_C_FUNCTIONS: [&str; 61] = [
     "sqrt",
     "strerror",
     "strlen",
+    "sysctlbyname",
     "tan",
     "tanh",
     "trunc",

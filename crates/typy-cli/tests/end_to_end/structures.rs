@@ -178,6 +178,10 @@ const EXPECTED: &str = "12 6.0\n\
 24000643659\n\
 ";
 
+/// The CPython that loads the libraries: the newest oracle, which the dev image and the macOS
+/// job install by its version, as no system's own `python3` is (ADR-0008).
+const PYTHON: &str = "python3.15";
+
 /// How this system builds and finds a shared C library: its file, the C compiler's flags that
 /// make it, and the variable the dynamic loader searches.
 struct SharedLibrary {
@@ -243,7 +247,7 @@ fn build(root: &Utf8Path, cc: &str, arguments: &[&str]) {
 fn ffi_03_structures_pass_by_value_as_cpython_passes_them() {
     let (_directory, root) = project();
     build(&root, "cc", &[]);
-    let oracle = Command::new("python3")
+    let oracle = Command::new(PYTHON)
         .args(["-I", "app.py"])
         .current_dir(&root)
         .env(SHARED.search, root.join("lib"))

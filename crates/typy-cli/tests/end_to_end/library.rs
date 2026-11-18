@@ -85,6 +85,10 @@ number 7 calls 2 module tools
 depth 5000
 ";
 
+/// The CPython that loads the libraries: the newest oracle, which the dev image and the macOS
+/// job install by its version, as no system's own `python3` is (ADR-0008).
+const PYTHON: &str = "python3.15";
+
 /// The variable the dynamic loader searches for a library a program names without a path.
 const LIBRARY_PATH: &str = if cfg!(target_os = "macos") {
     "DYLD_LIBRARY_PATH"
@@ -297,7 +301,7 @@ print('python ends')
     };
     let names = symbols(&project.root, listing, &library);
     assert_eq!(names.len(), 7, "{names:?}");
-    let run = Command::new("python3")
+    let run = Command::new(PYTHON)
         .args(["-I", "-u", "use_tools.py", &format!("./{library}")])
         .current_dir(&project.root)
         .output()
@@ -644,7 +648,7 @@ print(tools.__all__)
         stub.contains("def describe(number: int) -> None: ..."),
         "{stub}"
     );
-    let run = Command::new("python3")
+    let run = Command::new(PYTHON)
         .args(["-I", "-u", "use_tools.py"])
         .current_dir(&project.root)
         .env(LIBRARY_PATH, &project.root)
@@ -702,7 +706,7 @@ print('program', tools.add(40, 2), tools.scale(1.5, 2.0), tools.positive(-4))
     project.build(&["build", "--lib", "shared", "lib/tools.py"]);
     project.build(&["build", "--lib", "static", "lib/tools.py"]);
     let expected = "tools loaded as tools\nprogram 42 3.0 False\n";
-    let oracle = Command::new("python3")
+    let oracle = Command::new(PYTHON)
         .args(["-u", "app.py"])
         .current_dir(&project.root)
         .env("PYTHONPATH", "lib")
