@@ -8,6 +8,11 @@ All notable changes to TyPy are recorded here. The format follows
 
 ### Changed
 
+- The compiler links LLVM 23.1.6 as TyPy builds it from LLVM's signed
+  sources, the same bytes in every build of one commit, so a release
+  rebuilt from its tag matches the published archive (ADR-0054). It no
+  longer needs `libffi`, `zlib` or `zstd`: glibc 2.39 or later and
+  `libstdc++` are all `typy` needs, which the release build checks.
 - `--target aarch64-apple-darwin` on a Linux host is a usage error that
   says the triple is built on macOS only, and lists the Linux targets
   (CLI-08).

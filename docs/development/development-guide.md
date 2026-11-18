@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy development guide |
-| Version | 0.22 |
+| Version | 0.23 |
 | Status | Draft |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-18 |
@@ -38,7 +38,8 @@ make check
 
 `make hooks` points Git at `.githooks`, so every commit runs the quality
 gate. `make dev` builds the dev image the first time, which downloads Rust,
-the cargo tools and Node, and starts the `dev` service. `make check` runs
+TyPy's build of LLVM, the cargo tools and Node, and starts the `dev`
+service. `make check` runs
 the gate once to show the set-up works.
 
 To work in VS Code, open the folder and run "Dev Containers: Reopen in
@@ -294,8 +295,9 @@ cargo-about lists with `about.toml` and `about.hbs`, of LLVM and of Rust's
 standard library; a crate under a licence `about.toml` does not accept fails
 the build. The tarball is reproducible, so two builds of one commit have the
 same SHA-256. The executable links LLVM statically and needs glibc 2.39 or
-later, `libffi`, `zlib`, `zstd` and `libstdc++`, and a C toolchain to link
-programs.
+later and `libstdc++`, which `scripts/check-executable-needs.sh` checks
+before the archive is packed, and a C toolchain to link programs. LLVM's
+licence comes from its archive.
 
 A release that breaks compatibility goes out as a release candidate first,
 with a version such as `1.0.0-rc.1`, which the workflow marks as a
@@ -328,6 +330,12 @@ hours, so it runs once per LLVM version, never in a pull request.
    pre-release is never the repository's latest release. The job runs only
    when every build passed, and refuses to replace a release that exists,
    since the archives' bytes are pinned once they are published.
+5. A pull request writes the new version, the release's download address
+   and each host's SHA-256 from the release notes into
+   `.devcontainer/llvm.lock`. The Dockerfile downloads the archive of its
+   architecture, checks it against the lock and unpacks it into
+   `/opt/llvm`, which `LLVM_SYS_231_PREFIX` names, so every dev image built
+   from that commit, a developer's or CI's, links the same LLVM.
 
 To try the build on a machine of your own, put the source archive in an
 empty directory and run the script from there:

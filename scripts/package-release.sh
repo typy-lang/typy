@@ -20,6 +20,7 @@ scripts/build-runtime.sh
 cargo build -p typy-cli --release --locked
 rm -rf "${stage}" "dist/${name}.tar.gz"
 install -D -m 755 "${target}/release/typy" "${stage}/bin/typy"
+scripts/check-executable-needs.sh "${stage}/bin/typy"
 for triple in x86_64-unknown-linux-gnu x86_64-unknown-linux-musl aarch64-unknown-linux-gnu; do
     install -D -m 644 "${target}/lib/typy/${triple}/libtypy_runtime.a" \
         "${stage}/lib/typy/${triple}/libtypy_runtime.a"
@@ -38,8 +39,7 @@ install -d "${licenses}"
 cargo fetch --locked
 cargo about generate --frozen -c about.toml -m crates/typy-cli/Cargo.toml about.hbs \
     -o "${licenses}/crates.html"
-llvm_major="$("${LLVM_SYS_231_PREFIX}/bin/llvm-config" --version | cut -d. -f1)"
-install -m 644 "/usr/share/doc/llvm-${llvm_major}-dev/copyright" "${licenses}/llvm.txt"
+install -m 644 "${LLVM_SYS_231_PREFIX}/LICENSE.TXT" "${licenses}/llvm.txt"
 install -m 644 "$(rustc --print sysroot)/share/doc/rust/COPYRIGHT-library.html" \
     "${licenses}/rust-library.html"
 

@@ -109,35 +109,28 @@ RUN case "$(dpkg --print-architecture)" in \
         "markdownlint-cli2@${MARKDOWNLINT_CLI2_VERSION}" \
     && npm cache clean --force
 
-# LLVM 23 for typy-codegen (ADR-0005) comes from apt.llvm.org, because Debian
-# ships only LLVM 19. The signing key is accepted only with the expected
-# fingerprint. musl-tools provides the static Linux target.
-ARG LLVM_MAJOR=23
-ARG LLVM_KEY_FINGERPRINT=6084F3CF814B57C1CF12EFD515CF4D18AF4F7421
+# LLVM for typy-codegen (ADR-0005) is TyPy's own build of LLVM's signed
+# sources, the archive of this architecture that llvm.lock pins by its
+# SHA-256, so every image and every release links the same bytes (ADR-0054).
+# musl-tools provides the static Linux target.
+COPY .devcontainer/llvm.lock /tmp/llvm.lock
 RUN apt-get -o Acquire::Retries=5 update \
-    && apt-get install -y --no-install-recommends gnupg \
-    && curl -fsSL --retry 5 --retry-all-errors -o /tmp/llvm.asc https://apt.llvm.org/llvm-snapshot.gpg.key \
-    && fingerprint="$(gpg --show-keys --with-colons /tmp/llvm.asc \
-        | awk -F: '/^fpr:/ { print $10; exit }')" \
-    && test "${fingerprint}" = "${LLVM_KEY_FINGERPRINT}" \
-    && mkdir -p /etc/apt/keyrings \
-    && gpg --dearmor -o /etc/apt/keyrings/apt.llvm.org.gpg /tmp/llvm.asc \
-    && echo "deb [signed-by=/etc/apt/keyrings/apt.llvm.org.gpg] https://apt.llvm.org/trixie/ llvm-toolchain-trixie-${LLVM_MAJOR} main" \
-        > /etc/apt/sources.list.d/apt.llvm.org.list \
-    && apt-get -o Acquire::Retries=5 update \
-    && apt-get -o Acquire::Retries=5 install -y --no-install-recommends \
-        "llvm-${LLVM_MAJOR}-dev" \
-        "libpolly-${LLVM_MAJOR}-dev" \
-        libffi-dev \
-        libxml2-dev \
-        libzstd-dev \
-        musl-tools \
-        zlib1g-dev \
-    && apt-get purge -y gnupg \
-    && apt-get autoremove -y \
-    && rm -rf /var/lib/apt/lists/* /tmp/llvm.asc
+    && apt-get -o Acquire::Retries=5 install -y --no-install-recommends musl-tools zstd \
+    && rm -rf /var/lib/apt/lists/* \
+    && version="$(awk '$1 == "version" { print $2 }' /tmp/llvm.lock)" \
+    && release="$(awk '$1 == "release" { print $2 }' /tmp/llvm.lock)" \
+    && host="$(uname -m)-unknown-linux-gnu" \
+    && sum="$(awk -v host="${host}" '$1 == host { print $2 }' /tmp/llvm.lock)" \
+    && test -n "${version}" -a -n "${release}" -a -n "${sum}" \
+    && file="llvm-${version}-${host}.tar.zst" \
+    && curl -fsSL --retry 5 --retry-all-errors -o "/tmp/${file}" "${release}/${file}" \
+    && echo "${sum}  /tmp/${file}" | sha256sum --check --strict \
+    && tar --zstd -xf "/tmp/${file}" -C /opt \
+    && mv "/opt/llvm-${version}-${host}" /opt/llvm \
+    && /opt/llvm/bin/llvm-config --version \
+    && rm "/tmp/${file}" /tmp/llvm.lock
 
-ENV LLVM_SYS_231_PREFIX=/usr/lib/llvm-${LLVM_MAJOR}
+ENV LLVM_SYS_231_PREFIX=/opt/llvm
 
 # The CPython oracles (ADR-0008) are exact builds installed with uv, so the
 # conformance suite can run every version from inside this container.
