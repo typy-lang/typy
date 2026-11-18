@@ -4,6 +4,7 @@
 
 mod binary;
 mod disk;
+#[cfg(target_os = "linux")]
 mod errno_text;
 mod newline;
 mod os_error;

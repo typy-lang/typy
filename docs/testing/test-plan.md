@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy test plan |
-| Version | 0.94 |
+| Version | 0.95 |
 | Status | Draft |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-18 |
@@ -102,10 +102,17 @@ A test file is named after its first requirement and its behaviour, such as
 directory named so, whose `main.py` holds the header and whose other files
 are its modules, such as `mod/MOD-02_packages_and_relative_imports/`.
 
-Two requirements have no rejected file: LEX-01, because a source that is
-not UTF-8 would break the repository's ASCII rule, and LEX-09, because a
-source over 16 MiB is too large to commit. Unit tests in `typy-source` build
-those inputs when they run and check E0102 and E0101. Where a 0.1 program
+Thirteen requirements have no rejected file, which `NO_REJECTED_FILE` in
+`suite.rs` lists. LEX-01 has none because a source that is not UTF-8 would
+break the repository's ASCII rule, and LEX-09 because a source over 16 MiB
+is too large to commit; unit tests in `typy-source` build those inputs when
+they run and check E0102 and E0101. The others have no rule a program can
+break: memory management (MEM-01, MEM-02, MEM-03, MEM-04, MEM-09), a
+surrogate escape (LEX-10), the order of evaluation and of module
+initialisation (EXP-01, MOD-03), the report of an uncaught exception
+(STD-05) and the class and text of an error the C library reports (EXC-19)
+describe what an accepted program does, and the warning of CST-07 accepts
+the program it warns about. Where a 0.1 program
 cannot show the rejection a requirement describes, its rejected test records
 what 0.1 does instead, such as a function used as a truth value, E0201
 until functions are values in 1.0.

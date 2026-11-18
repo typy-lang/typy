@@ -319,10 +319,62 @@ fn a_surrogate_is_refused_before_anything_is_written() {
     );
 }
 
+/// The error numbers, classes and texts that differ between systems: glibc's texts on Linux.
+#[cfg(target_os = "linux")]
+const SYSTEM_ERRORS: [(i32, &str, &str); 4] = [
+    (
+        36,
+        "OSError",
+        "[Errno 36] File name too long: 'missing.txt'",
+    ),
+    (
+        110,
+        "TimeoutError",
+        "[Errno 110] Connection timed out: 'missing.txt'",
+    ),
+    (41, "OSError", "[Errno 41] Unknown error 41: 'missing.txt'"),
+    (
+        500,
+        "OSError",
+        "[Errno 500] Unknown error 500: 'missing.txt'",
+    ),
+];
+
+/// The error numbers, classes and texts that differ between systems: `strerror`'s on macOS.
+#[cfg(target_os = "macos")]
+const SYSTEM_ERRORS: [(i32, &str, &str); 4] = [
+    (
+        63,
+        "OSError",
+        "[Errno 63] File name too long: 'missing.txt'",
+    ),
+    (
+        36,
+        "BlockingIOError",
+        "[Errno 36] Operation now in progress: 'missing.txt'",
+    ),
+    (
+        60,
+        "TimeoutError",
+        "[Errno 60] Operation timed out: 'missing.txt'",
+    ),
+    (
+        500,
+        "OSError",
+        "[Errno 500] Unknown error: 500: 'missing.txt'",
+    ),
+];
+
+/// The error numbers each `OSError` subclass but those of the common numbers takes.
+#[cfg(target_os = "linux")]
+const SUBCLASS_ERRORS: [i32; 9] = [11, 103, 104, 108, 110, 111, 114, 115, 3];
+#[cfg(target_os = "macos")]
+const SUBCLASS_ERRORS: [i32; 10] = [35, 36, 37, 53, 54, 58, 60, 61, 107, 3];
+
 #[test]
 fn an_error_number_gives_cpythons_class_text_and_arguments() {
     let path = from_str("missing.txt");
-    let cases = [
+    let common = [
         (
             2,
             "FileNotFoundError",
@@ -358,25 +410,19 @@ fn an_error_number_gives_cpythons_class_text_and_arguments() {
             "BrokenPipeError",
             "[Errno 32] Broken pipe: 'missing.txt'",
         ),
-        (
-            36,
-            "OSError",
-            "[Errno 36] File name too long: 'missing.txt'",
-        ),
-        (41, "OSError", "[Errno 41] Unknown error 41: 'missing.txt'"),
-        (
-            500,
-            "OSError",
-            "[Errno 500] Unknown error 500: 'missing.txt'",
-        ),
     ];
+    let cases = common.into_iter().chain(SYSTEM_ERRORS);
     for (errno, class, text) in cases {
         // SAFETY: the path is live.
         let error = unsafe { super::os_error::os_error(errno, path) };
         assert_eq!(error_text(error), (class.to_owned(), text.to_owned()));
     }
-    for errno in [3, 4, 10, 11, 103, 104, 110, 111, 114, 115, 108] {
+    for errno in SUBCLASS_ERRORS.into_iter().chain([4, 10]) {
         let class = super::os_error::class_of(errno);
+        assert!(
+            !core::ptr::eq(class, &raw const crate::exception::classes::OS_ERROR),
+            "{errno}"
+        );
         assert!(
             crate::exception::classes::derives_from(class, &crate::exception::classes::OS_ERROR),
             "{errno}"

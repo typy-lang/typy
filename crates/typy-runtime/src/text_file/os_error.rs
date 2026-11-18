@@ -2,6 +2,7 @@
 //! as a program builds them with two to five arguments, with their attributes `errno`,
 //! `strerror`, `filename` and `filename2` (EXC-14).
 
+#[cfg(target_os = "linux")]
 use super::errno_text::ERRNO_TEXTS;
 use crate::Raising;
 use crate::exception::ExceptionObject;
@@ -53,29 +54,48 @@ static DESCRIPTOR_FIELDS: [Field; 3] = [
     Field::plain(ItemKind::Int, 16),
 ];
 
-/// Returns the class CPython gives an error number: the subclass of `OSError` its
-/// `errno` table names, or `OSError` itself.
+/// Returns the class CPython gives an error number on the system the program runs on: the
+/// subclass of `OSError` its `errno` table names, or `OSError` itself (EXC-19). The numbers
+/// below 35 are the same on every system.
 pub(crate) fn class_of(errno: i32) -> &'static TypeObject {
+    use crate::libc::{
+        EAGAIN, EALREADY, ECONNABORTED, ECONNREFUSED, ECONNRESET, EINPROGRESS, ENOTCAPABLE,
+        ESHUTDOWN, ETIMEDOUT,
+    };
     match errno {
         1 | 13 => &PERMISSION_ERROR,
         2 => &FILE_NOT_FOUND_ERROR,
         3 => &PROCESS_LOOKUP_ERROR,
         4 => &INTERRUPTED_ERROR,
         10 => &CHILD_PROCESS_ERROR,
-        11 | 114 | 115 => &BLOCKING_IO_ERROR,
+        EAGAIN | EALREADY | EINPROGRESS => &BLOCKING_IO_ERROR,
         17 => &FILE_EXISTS_ERROR,
         20 => &NOT_A_DIRECTORY_ERROR,
         21 => &IS_A_DIRECTORY_ERROR,
-        32 | 108 => &BROKEN_PIPE_ERROR,
-        103 => &CONNECTION_ABORTED_ERROR,
-        104 => &CONNECTION_RESET_ERROR,
-        110 => &TIMEOUT_ERROR,
-        111 => &CONNECTION_REFUSED_ERROR,
+        32 | ESHUTDOWN => &BROKEN_PIPE_ERROR,
+        ECONNABORTED => &CONNECTION_ABORTED_ERROR,
+        ECONNRESET => &CONNECTION_RESET_ERROR,
+        ETIMEDOUT => &TIMEOUT_ERROR,
+        ECONNREFUSED => &CONNECTION_REFUSED_ERROR,
+        _ if ENOTCAPABLE == Some(errno) => &PERMISSION_ERROR,
         _ => &OS_ERROR,
     }
 }
 
-/// Returns glibc's text of an error number, `Unknown error 200` for one it does not name.
+/// Returns the text the system's `strerror` gives an error number, as CPython shows it on
+/// macOS (EXC-19, ADR-0057).
+#[cfg(target_os = "macos")]
+pub(crate) fn text_of(errno: i32) -> *mut StrObject {
+    let mut text = core::ptr::null_mut();
+    crate::libc::error_text(errno, |bytes| {
+        text = crate::string::from_str(core::str::from_utf8(bytes).unwrap_or("Unknown error"));
+    });
+    text
+}
+
+/// Returns glibc's text of an error number, `Unknown error 200` for one it does not name, as
+/// CPython shows it on Linux whichever C library the program links (ADR-0019).
+#[cfg(target_os = "linux")]
 pub(crate) fn text_of(errno: i32) -> *mut StrObject {
     let known = usize::try_from(errno)
         .ok()
