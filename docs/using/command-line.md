@@ -11,7 +11,7 @@ The `typy` command checks, builds and runs a program from its main file.
 | `typy run FILE [-- ARGS]` | Builds the program and runs it with `ARGS` | CLI-02 |
 | `typy explain CODE` | Prints what a diagnostic code means, a program that gives it and the corrected program | CLI-10 |
 | `typy build --lib KIND FILE` | Writes a `static` or `shared` C library of the functions the module's `__all__` lists, and its C header; see [C interoperability](../extending/c-interop.md) | CLI-09 |
-| `typy build --target TRIPLE FILE` | Builds for another target, `x86_64-unknown-linux-gnu`, `x86_64-unknown-linux-musl` or `aarch64-unknown-linux-gnu`, with that target's C toolchain; `typy check` takes `--target` too | CLI-08, CLI-14 |
+| `typy build --target TRIPLE FILE` | Builds for another target the host builds for, with that target's C toolchain: on Linux `x86_64-unknown-linux-gnu`, `x86_64-unknown-linux-musl` or `aarch64-unknown-linux-gnu`, and on macOS `aarch64-apple-darwin`; `typy check` takes `--target` too | CLI-08, CLI-14 |
 | `typy build --emit=STAGE FILE` | Writes one stage as text: `ast`, `typed-ast`, `tyir`, `tyir-mem`, `llvm-ir` or `asm`, or `obj` | CLI-04 |
 | `--release`, `--release-small` | Optimise for speed or for size, without debug information; the default is a debug build, which keeps it | CLI-05 |
 | `--deny-warnings` | Fails with status 1 when there are warnings | DIA-07 |
@@ -27,8 +27,11 @@ which comes with imports in 0.3.
 ## Building for another target
 
 `typy build` builds for the machine it runs on unless `--target` names
-another target. On an x86_64 Linux machine, this builds `app` for 64-bit
-Arm Linux:
+another target. A Linux machine builds for every Linux target, and a Mac
+for macOS alone, since linking for macOS needs Apple's tools, which run
+only on a Mac; see [Using TyPy on macOS](macos.md). Another triple is a
+usage error that lists the host's targets. On an x86_64 Linux machine,
+this builds `app` for 64-bit Arm Linux:
 
 ```console
 typy build app.py --target aarch64-unknown-linux-gnu

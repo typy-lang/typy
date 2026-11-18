@@ -109,6 +109,7 @@ nav:
       - Memory: reference/memory.md
   - Setup and usage:
       - Command line: using/command-line.md
+      - Using TyPy on macOS: using/macos.md
   - Extending and embedding:
       - C interoperability: extending/c-interop.md
   - Diagnostics:
