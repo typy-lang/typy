@@ -63,6 +63,7 @@ mod library;
 mod list;
 mod math;
 mod message;
+mod method;
 mod module;
 #[cfg(test)]
 mod moved_tests;

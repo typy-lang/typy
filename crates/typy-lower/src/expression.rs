@@ -253,6 +253,9 @@ impl FunctionLowerer<'_> {
             TypedExprKind::FString(parts) => self.fstring(parts, span),
             TypedExprKind::TypeObject(of) => self.type_object(of, span),
             TypedExprKind::FunctionValue(function) => self.function_value(*function, span),
+            TypedExprKind::BoundMethod { object, methods } => {
+                self.bound_method(object, methods, span)
+            }
             TypedExprKind::CallValue { callee, arguments } => {
                 self.call_value(callee, arguments, ty, span)
             }

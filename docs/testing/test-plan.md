@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy test plan |
-| Version | 0.99 |
+| Version | 1.00 |
 | Status | Draft |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-18 |
@@ -387,6 +387,7 @@ that the specification does not define.
 | FUN-06 | 0.9 | IT | `tests/conformance/fun/FUN-06_*.py` |
 | FUN-07 | 0.9 | IT | `tests/conformance/fun/FUN-07_*.py` |
 | FUN-08 | 0.9 | IT | `tests/conformance/fun/FUN-08_*.py` |
+| FUN-09 | 0.9 | IT | `tests/conformance/fun/FUN-09_*.py` |
 | CLS-01 | 0.2 | IT | `tests/conformance/cls/CLS-01_*.py` |
 | CLS-02 | 0.2 | IT | `tests/conformance/cls/CLS-02_*.py` |
 | CLS-03 | 0.3 | IT | `tests/conformance/cls/CLS-03_*.py` |

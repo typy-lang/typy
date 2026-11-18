@@ -262,3 +262,127 @@ fn lib_17_the_typing_names_a_later_release_gives_are_planned_for_it() {
         );
     }
 }
+
+/// A class whose method a subclass overrides, and a static method, for the method cases.
+const METHODS: &str = "\
+class Shape:
+    def area(self, scale: float) -> float:
+        return scale
+
+    @staticmethod
+    def unit() -> int:
+        return 1
+
+
+class Square(Shape):
+    def area(self, scale: float) -> float:
+        return 4.0 * scale
+
+
+";
+
+#[test]
+fn fun_05_a_method_read_through_an_instance_or_its_class_is_a_value() {
+    for statement in [
+        "f: Callable[[float], float] = Shape().area",
+        "f: Callable[[float], float] = Square().area",
+        "f: Callable[[Shape, float], float] = Shape.area",
+        "f: Callable[[], int] = Shape.unit",
+        "f: Callable[[], int] = Square().unit",
+        "shapes = [Square(), Shape()]\nfs = [each.area for each in shapes]",
+    ] {
+        let source = format!("from typing import Callable\n\n\n{METHODS}{statement}\n");
+        assert_eq!(app(&source), Vec::<String>::new(), "{statement}");
+    }
+}
+
+#[test]
+fn fun_05_a_bound_method_takes_the_parameters_after_self() {
+    let source = format!(
+        "from typing import Callable\n\n\n{METHODS}f: Callable[[Shape, float], float] = \
+         Shape().area\n"
+    );
+    let found = messages(&source);
+    assert_eq!(found.len(), 1, "{found:?}");
+    assert_eq!(
+        found[0].1,
+        "`f` was declared as Callable[[Shape, float], float] and is assigned a \
+         Callable[[float], float]"
+    );
+}
+
+#[test]
+fn fun_09_the_methods_without_one_bound_value_yet_are_planned() {
+    let cases = [
+        (
+            "class C:\n    @classmethod\n    def make(cls) -> int:\n        return 1\nf = C.make\n",
+            "`make` is a class method, and using one as a value is planned for TyPy 0.9 (FUN-09)",
+        ),
+        (
+            "class B:\n    @staticmethod\n    def s() -> int:\n        return 1\n\
+             class D(B):\n    @staticmethod\n    def s() -> int:\n        return 2\nf = B().s\n",
+            "`s` is a static method a subclass defines again, and using one as a value is \
+             planned for TyPy 0.9 (FUN-09)",
+        ),
+        (
+            "class B:\n    def v(self) -> int | None:\n        return None\n\
+             class D(B):\n    def v(self) -> int:\n        return 1\nf = B().v\n",
+            "`v` is a method a subclass overrides with other parameters or a result held \
+             otherwise, and using one as a value is planned for TyPy 0.9 (FUN-09)",
+        ),
+        (
+            "class B:\n    def v(self) -> int:\n        return 0\n\
+             class D(B):\n    @staticmethod\n    def v() -> int:\n        return 1\nf = B().v\n",
+            "`v` is a method a subclass overrides with other parameters or a result held \
+             otherwise, and using one as a value is planned for TyPy 0.9 (FUN-09)",
+        ),
+        (
+            "from typing import Protocol\nclass P(Protocol):\n    def n(self) -> int: ...\n\
+             def f(p: P) -> None:\n    g = p.n\n",
+            "`n` is a method of the protocol `P`, and using a protocol value's method as a \
+             value is planned for TyPy 0.9 (FUN-09)",
+        ),
+    ];
+    for (source, message) in cases {
+        let found = messages(source);
+        assert_eq!(
+            found,
+            [("E0201".to_owned(), message.to_owned(), "FUN-09".to_owned())],
+            "{source}"
+        );
+    }
+}
+
+#[test]
+fn fun_05_a_method_without_one_callable_type_is_not_a_value() {
+    let cases = [
+        (
+            "class B:\n    def pick[T](self, items: list[T]) -> T:\n        return items[0]\n\
+             f = B().pick\n",
+            "the method `B.pick` has type parameters of its own, so it is a copy for each set \
+             of types and has no one value",
+        ),
+        (
+            "class B:\n    def put(self, *, item: int) -> None:\n        pass\nf = B.put\n",
+            "`B.put` takes `item` by keyword only, and a `Callable` passes every argument by \
+             position, so `B.put` has no `Callable` type",
+        ),
+    ];
+    for (source, message) in cases {
+        let found = messages(source);
+        assert_eq!(found.len(), 1, "{source}: {found:?}");
+        assert_eq!(
+            (found[0].0.as_str(), found[0].1.as_str()),
+            ("E0202", message)
+        );
+    }
+    let assigned = messages(&format!("{METHODS}Square().area = Shape().area\n"));
+    assert_eq!(
+        assigned,
+        [(
+            "E0414".to_owned(),
+            "`Square.area` is a method, which an assignment does not replace".to_owned(),
+            "CLS-02".to_owned()
+        )]
+    );
+}

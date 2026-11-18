@@ -54,6 +54,9 @@ pub enum Constant {
     /// The immortal function object of a function that captures nothing (FUN-05,
     /// ADR-0060).
     Function(crate::function::FunctionId),
+    /// The address of the descriptor of a method used as a bound method, whose code takes
+    /// the bound method and reads the instance from it (FUN-05).
+    MethodDescriptor(crate::function::FunctionId),
 }
 
 impl Constant {
@@ -76,7 +79,9 @@ impl Constant {
             Self::Module(_) => TyirType::MODULE,
             Self::TypeAlias(_) => TyirType::TYPE_ALIAS,
             Self::Function(_) => TyirType::FUNCTION,
-            Self::TupleDescriptor(_) | Self::CDataClass(_) => TyirType::Bits,
+            Self::TupleDescriptor(_) | Self::CDataClass(_) | Self::MethodDescriptor(_) => {
+                TyirType::Bits
+            }
         }
     }
 }
@@ -102,6 +107,7 @@ impl fmt::Display for Constant {
             Self::TupleDescriptor(TupleTypeId(id)) => write!(formatter, "descriptor tuple#{id}"),
             Self::CDataClass(id) => write!(formatter, "cdata_class#{id}"),
             Self::Function(id) => write!(formatter, "function fn{}", id.0),
+            Self::MethodDescriptor(id) => write!(formatter, "method_descriptor fn{}", id.0),
         }
     }
 }

@@ -113,6 +113,14 @@ pub enum TypedExprKind {
     /// A function of the program read as a value: its function object, of a `Callable`
     /// type (FUN-05, ADR-0060).
     FunctionValue(FunctionId),
+    /// A method read through an instance: a new bound method of `object` and the method of
+    /// its class (FUN-05, ADR-0060). `methods` holds the method of the instance's static class
+    /// first, then each override among its subclasses, after the classes it derives from; the
+    /// last whose class the object is an instance of is bound.
+    BoundMethod {
+        object: Box<TypedExpr>,
+        methods: Vec<(super::class::ClassId, FunctionId)>,
+    },
     /// A call through a function value: `callee` is evaluated, then the arguments, one for
     /// each parameter of its `Callable` type, in order (FUN-05).
     CallValue {
@@ -655,6 +663,7 @@ impl TypedExpr {
             | TypedExprKind::Unwrap(inner)
             | TypedExprKind::AsIterable(inner)
             | TypedExprKind::Lazy { value: inner, .. }
+            | TypedExprKind::BoundMethod { object: inner, .. }
             | TypedExprKind::Named { value: inner, .. } => vec![inner],
             TypedExprKind::PercentFormat { values, .. } => vec![values],
             TypedExprKind::MathCall { arguments, .. } => arguments.iter().collect(),

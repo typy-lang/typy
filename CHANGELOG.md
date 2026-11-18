@@ -24,6 +24,13 @@ All notable changes to TyPy are recorded here. The format follows
   of a `float` does not fit a `Callable[[int], float]` (FUN-05, NFR-19,
   ADR-0060). `Callable[..., R]` is E0408, and a generic function or one
   with a keyword-only parameter used as a value is E0202.
+- Methods as values. A method read through an instance is a bound method
+  of the method of the object's own class, which holds the instance; two
+  bound methods of one instance and one method are equal, and `repr`
+  writes `<bound method Class.name of ...>`, as in CPython. A method read
+  through its class, and a static method, is the function itself
+  (FUN-05). Class methods, methods read through a protocol value, and a
+  few overrides, are planned for 0.9 (FUN-09).
 
 ### Changed
 

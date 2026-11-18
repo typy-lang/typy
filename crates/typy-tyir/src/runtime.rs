@@ -178,6 +178,9 @@ pub enum RuntimeFunction {
     TypeName,
     TypeAliasName,
     TypeAliasModule,
+    /// A new bound method of the descriptor and the instance, which it holds a reference to
+    /// (FUN-05).
+    MethodNew,
     ExceptionNew,
     ExceptionPartText,
     ExceptionArgsLength,
@@ -454,7 +457,7 @@ const FLOAT_FLOAT: &[TyirType] = &[TyirType::Float, TyirType::Float];
 
 impl RuntimeFunction {
     /// Every runtime function.
-    pub const ALL: [Self; 357] = [
+    pub const ALL: [Self; 358] = [
         Self::IntFloorDivide,
         Self::IntModulo,
         Self::IntPower,
@@ -624,6 +627,7 @@ impl RuntimeFunction {
         Self::TypeName,
         Self::TypeAliasName,
         Self::TypeAliasModule,
+        Self::MethodNew,
         Self::ExceptionNew,
         Self::ExceptionPartText,
         Self::ExceptionArgsLength,
@@ -1038,6 +1042,7 @@ impl RuntimeFunction {
             Self::TypeAliasName | Self::TypeAliasModule => {
                 signature(&[TyirType::TYPE_ALIAS], STR, false)
             }
+            Self::MethodNew => signature(&[Bits, Bits], TyirType::FUNCTION, false),
             Self::ExceptionNew | Self::OsErrorNew => {
                 signature(&[TYPE, Bits, Bits], EXCEPTION, false)
             }
@@ -1388,6 +1393,7 @@ impl RuntimeFunction {
             Self::TypeName => "type_name",
             Self::TypeAliasName => "type_alias_name",
             Self::TypeAliasModule => "type_alias_module",
+            Self::MethodNew => "method_new",
             Self::ExceptionNew => "exception_new",
             Self::ExceptionPartText => "exception_part_text",
             Self::ExceptionArgsLength => "exception_args_length",

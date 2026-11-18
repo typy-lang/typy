@@ -109,29 +109,24 @@ impl BodyChecker<'_> {
     }
 
     /// Returns the position of an attribute of a class, after reporting a name the class
-    /// does not have, or names as a method.
+    /// does not have, or names as a method, which an assignment does not replace, since TyPy
+    /// does not change a class's attributes when the program runs (STD-04).
     fn attribute_index(&mut self, class: ClassId, attribute: &Identifier) -> Option<usize> {
         let info = &self.program.classes[class.0 as usize];
         if let Some(index) = info.attribute(&attribute.name) {
             return Some(index);
         }
-        let (message, rule) = if self.program.method(class, &attribute.name).is_some() {
-            (
-                format!(
-                    "using the method `{}.{}` as a value is planned for TyPy 0.8 (FUN-05)",
-                    info.name, attribute.name
-                ),
-                RuleId::FUN_05,
+        let message = if self.has_method(class, &attribute.name) {
+            format!(
+                "`{}.{}` is a method, which an assignment does not replace",
+                info.name, attribute.name
             )
         } else {
-            (
-                format!("`{}` has no attribute `{}`", info.name, attribute.name),
-                RuleId::CLS_02,
-            )
+            format!("`{}` has no attribute `{}`", info.name, attribute.name)
         };
-        let code = if rule == RuleId::FUN_05 { 201 } else { 414 };
         self.diagnostics.push(
-            Diagnostic::new(DiagnosticCode::error(code), attribute.span, message).with_rule(rule),
+            Diagnostic::new(DiagnosticCode::error(414), attribute.span, message)
+                .with_rule(RuleId::CLS_02),
         );
         None
     }
@@ -159,6 +154,12 @@ impl BodyChecker<'_> {
             && let Some(read) = self.class_value_read(class, attribute, span)
         {
             return read;
+        }
+        if let Type::TypeObject(Some(of)) = &object.ty
+            && let Some(class) = Self::program_class(of)
+            && self.has_method(class, &attribute.name)
+        {
+            return self.class_method_value(object, class, attribute, span);
         }
         if let Type::TypeObject(_) = object.ty {
             return self.type_object_attribute(object, attribute, span);
@@ -200,6 +201,9 @@ impl BodyChecker<'_> {
             }
             if let Some(read) = self.class_value_read(class, attribute, span) {
                 return read;
+            }
+            if self.has_method(class, &attribute.name) {
+                return self.instance_method_value(object, class, attribute, span);
             }
         }
         let Some(index) = self.attribute_index(class, attribute) else {

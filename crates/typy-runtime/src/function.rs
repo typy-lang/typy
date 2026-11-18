@@ -13,10 +13,10 @@ use crate::type_object::{OBJECT, TypeObject};
 #[repr(C)]
 #[derive(Debug)]
 pub(crate) struct FunctionDescriptor {
-    name: *const StrObject,
-    qualified_name: *const StrObject,
-    code: *const core::ffi::c_void,
-    captures: *const core::ffi::c_void,
+    pub(crate) name: *const StrObject,
+    pub(crate) qualified_name: *const StrObject,
+    pub(crate) code: *const core::ffi::c_void,
+    pub(crate) captures: *const core::ffi::c_void,
 }
 
 /// A function object: the header, then its descriptor, where an instance keeps its class.
@@ -56,7 +56,7 @@ unsafe extern "C" fn function_repr(object: *mut ObjectHeader) -> Raising<*mut St
 }
 
 /// Appends the characters of `text`, which is ASCII.
-fn push_ascii(builder: &mut StrBuilder, text: &str) {
+pub(crate) fn push_ascii(builder: &mut StrBuilder, text: &str) {
     for byte in text.bytes() {
         builder.push(u32::from(byte));
     }

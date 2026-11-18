@@ -49,6 +49,7 @@ mod matching;
 mod math_call;
 mod math_iterable;
 mod method_call;
+mod method_value;
 mod module_context;
 mod name;
 mod named;

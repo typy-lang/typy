@@ -2014,8 +2014,8 @@ fn classes_give_their_codes() {
         ("class P:\n    pass\np = P()\np.z = 1\n", &["E0414"]),
         ("class P:\n    pass\nP().move()\n", &["E0414"]),
         (
-            "class P:\n    def m(self) -> None:\n        pass\nf = P().m\n",
-            &["E0201"],
+            "class P:\n    def m(self) -> None:\n        pass\nP().m = 1\n",
+            &["E0414"],
         ),
         (
             "class P:\n    def __init__(self) -> None:\n        self.x = 1\nP().x()\n",

@@ -313,6 +313,67 @@ fn fun_05_a_thunk_gives_every_function_the_raising_form_a_call_through_a_value_t
     );
 }
 
+/// A method a subclass overrides, read through an instance of the base class.
+const BOUND_METHODS: &str = "\
+from typing import Callable
+
+
+class Counter:
+    def __init__(self) -> None:
+        self.count = 0
+
+    def add(self, step: int) -> int:
+        self.count += step
+        return self.count
+
+
+class Double(Counter):
+    def add(self, step: int) -> int:
+        self.count += 2 * step
+        return self.count
+
+
+def run(counter: Counter) -> Callable[[int], int]:
+    return counter.add
+
+
+print(run(Double())(1))
+";
+
+#[test]
+fn fun_05_a_bound_method_chooses_its_classs_descriptor_and_its_thunk_reads_the_instance() {
+    let (project, module) = compile(BOUND_METHODS);
+    let ir = llvm_ir(&module, Target::host(), Optimization::None, &project).unwrap();
+    // One descriptor for each method, both named `add`, of their own qualified names.
+    for (method, symbol) in [
+        ("Counter", "_TY8__main__11Counter.add"),
+        ("Double", "_TY8__main__10Double.add"),
+    ] {
+        assert!(
+            ir.lines()
+                .any(|line| line.starts_with("@typy.method.descriptor.")
+                    && line.ends_with(&format!("ptr @typy.method_thunk.{symbol}, ptr null }}"))),
+            "{method}: {ir}"
+        );
+        let start = ir
+            .find(&format!("@typy.method_thunk.{symbol}(ptr %0, i64 %1) {{"))
+            .unwrap();
+        let thunk = ir[start..].split("\n}").next().unwrap();
+        // The instance is the bound method's fourth field, passed first.
+        assert!(
+            thunk.contains(
+                "getelementptr inbounds nuw { i32, i32, ptr, ptr }, ptr %0, i32 0, i32 3"
+            ),
+            "{thunk}"
+        );
+        assert!(
+            thunk.contains(&format!("call i64 @{symbol}(ptr %3, i64 %1)")),
+            "{thunk}"
+        );
+    }
+    assert!(ir.contains("call ptr @typy_rt_method_new(i64 %"), "{ir}");
+}
+
 #[test]
 fn the_entry_is_the_only_external_function() {
     let (project, module) = compile(PROGRAMS[1]);

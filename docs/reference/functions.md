@@ -9,11 +9,12 @@
 | Positional, keyword and default arguments, defaults evaluated once | EXP-16 |
 | Positional-only parameters before `/` and keyword-only parameters after `*`, bound as CPython binds them; a keyword for a positional-only parameter, or a positional argument past the others, is E0404 | FUN-03 |
 | A function of the program as a value of type `Callable[[A, ...], R]`: stored, passed, returned, called, compared and hashed | FUN-05, NFR-19 |
+| A method read through an instance as a bound method, and through its class as a function | FUN-05 |
 
-Nested functions, methods as values and the `key` argument of `sorted`,
-`list.sort`, `min` and `max` are planned for 0.8 (FUN-04, FUN-05), and
-decorators, generators and built-in functions as values for 0.9 (FUN-06
-to FUN-08).
+Nested functions and the `key` argument of `sorted`, `list.sort`, `min`
+and `max` are planned for 0.8 (FUN-04, FUN-05). Decorators, generators,
+built-in functions as values, and class methods and protocol methods as
+values are planned for 0.9 (FUN-06 to FUN-09).
 
 ## Functions as values
 
@@ -78,6 +79,51 @@ converter: Callable[[int], float] = scale
 A call through a value checks the stack, as a recursive function does, so
 recursion through function values ends with `RecursionError` too (FUN-02).
 
+## Methods as values
+
+A method read through an instance, without a call, is a bound method: a
+new object at each read that holds the instance, of type
+`Callable[[A, ...], R]` of the parameters after `self`. As in CPython it
+binds the method of the object's own class, so a subclass's override
+runs, two bound methods of one instance and one method are `==` and hash
+alike while `is` tells them apart, and `repr` writes
+`<bound method Class.name of ...>`, the instance written as its class
+writes it. A method read through its class is the function itself, with
+the instance as its first parameter, and a static method is the function
+it is:
+
+<!-- typy-expect: accepted -->
+```python
+from typing import Callable
+
+
+class Counter:
+    def __init__(self) -> None:
+        self.count = 0
+
+    def add(self, step: int) -> int:
+        self.count += step
+        return self.count
+
+
+class Double(Counter):
+    def add(self, step: int) -> int:
+        self.count += 2 * step
+        return self.count
+
+
+def run(step: Callable[[int], int]) -> int:
+    return step(1) + step(1)
+
+
+counter: Counter = Double()
+print(run(counter.add), counter.count, counter.add == counter.add)
+print(Counter.add(counter, 10), type(counter.add))
+```
+
+A bound method holds a reference to its instance, so the instance lives
+as long as the bound method does.
+
 These forms are refused:
 
 | Form | Diagnostic |
@@ -86,6 +132,9 @@ These forms are refused:
 | A keyword argument through a function value, such as `f(value=1)`, since a `Callable` names no parameters | E0404 |
 | A generic function as a value, which has one copy for each set of types | E0202 |
 | A function with a keyword-only parameter as a value, since a `Callable` passes every argument by position | E0202 |
+| A method with type parameters of its own, or with a keyword-only parameter, as a value | E0202 |
+| An assignment to a method of an instance, such as `box.close = other`, since TyPy does not replace a class's attributes when the program runs | E0414 |
+| A class method as a value; a static method read through an instance whose subclasses define it again; a method read through a protocol value; a method read through an instance whose subclass overrides it with parameters or a result held otherwise, planned for 0.9 | E0201 (FUN-09) |
 | A call of a value that is not a function, such as an `int` | E0401 |
 
 ## Example

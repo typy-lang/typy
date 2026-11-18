@@ -20,6 +20,8 @@ use crate::statics::Statics;
 const OBJECT_DESCRIPTOR: u32 = 2;
 /// The field of the descriptor that holds the address of the code.
 const DESCRIPTOR_CODE: u32 = 2;
+/// The field of a bound method that holds its instance, after the descriptor.
+const BOUND_INSTANCE: u32 = 3;
 
 /// Returns the layout of a function object without captures: the header, then the address of
 /// its descriptor.
@@ -29,6 +31,21 @@ fn object_type(context: &Context) -> StructType<'_> {
         &[
             context.i32_type().into(),
             context.i32_type().into(),
+            pointer.into(),
+        ],
+        false,
+    )
+}
+
+/// Returns the layout of a bound method: a function object whose one capture is the
+/// instance, under the type ID of a method.
+fn bound_type(context: &Context) -> StructType<'_> {
+    let pointer = context.ptr_type(AddressSpace::default());
+    context.struct_type(
+        &[
+            context.i32_type().into(),
+            context.i32_type().into(),
+            pointer.into(),
             pointer.into(),
         ],
         false,
@@ -53,28 +70,8 @@ pub(crate) fn function_object<'ctx>(
         return Ok(object);
     }
     let context = shared.context;
-    let function = shared
-        .tyir
-        .functions
-        .get(id.0 as usize)
-        .ok_or_else(|| CodegenError(format!("fn{} does not exist", id.0)))?;
-    let code = thunk(shared, id)?;
-    let name = shared.statics.string(shared.module, &function.name);
-    let qualified_name = shared
-        .statics
-        .string(shared.module, &function.qualified_name);
-    let null = context.ptr_type(AddressSpace::default()).const_null();
-    let descriptor = descriptor_type(context).const_named_struct(&[
-        name.into(),
-        qualified_name.into(),
-        code.as_global_value().as_pointer_value().into(),
-        null.into(),
-    ]);
-    let descriptor = Statics::global(
-        shared.module,
-        descriptor.into(),
-        &format!("typy.function.descriptor.{}", id.0),
-    );
+    let code = thunk(shared, id, false)?;
+    let descriptor = descriptor(shared, id, code, "function")?;
     let object = object_type(context).const_named_struct(&[
         context
             .i32_type()
@@ -99,12 +96,61 @@ pub(crate) fn function_object<'ctx>(
     Ok(object)
 }
 
-/// Emits the code a call through the function object of `id` runs: it takes the object, then
+/// Returns the descriptor of the method `id` as a bound method, emitting it with its thunk the
+/// first time it is used.
+pub(crate) fn method_descriptor<'ctx>(
+    shared: &mut Shared<'_, 'ctx>,
+    id: FunctionId,
+) -> Result<PointerValue<'ctx>, CodegenError> {
+    if let Some(descriptor) = shared.statics.method_descriptor(id.0) {
+        return Ok(descriptor);
+    }
+    let code = thunk(shared, id, true)?;
+    let descriptor = descriptor(shared, id, code, "method")?;
+    shared.statics.add_method_descriptor(id.0, descriptor);
+    Ok(descriptor)
+}
+
+/// Emits the descriptor of function `id` whose code is `code`, as the private constant
+/// `typy.KIND.descriptor.N`.
+fn descriptor<'ctx>(
+    shared: &mut Shared<'_, 'ctx>,
+    id: FunctionId,
+    code: inkwell::values::FunctionValue<'ctx>,
+    kind: &str,
+) -> Result<PointerValue<'ctx>, CodegenError> {
+    let context = shared.context;
+    let function = shared
+        .tyir
+        .functions
+        .get(id.0 as usize)
+        .ok_or_else(|| CodegenError(format!("fn{} does not exist", id.0)))?;
+    let name = shared.statics.string(shared.module, &function.name);
+    let qualified_name = shared
+        .statics
+        .string(shared.module, &function.qualified_name);
+    let null = context.ptr_type(AddressSpace::default()).const_null();
+    let descriptor = descriptor_type(context).const_named_struct(&[
+        name.into(),
+        qualified_name.into(),
+        code.as_global_value().as_pointer_value().into(),
+        null.into(),
+    ]);
+    Ok(Statics::global(
+        shared.module,
+        descriptor.into(),
+        &format!("typy.{kind}.descriptor.{}", id.0),
+    ))
+}
+
+/// Emits the code a call through a function object of `id` runs: it takes the object, then
 /// the function's arguments, calls the function directly, and returns its result beside an
-/// exception, null when the function cannot raise.
+/// exception, null when the function cannot raise. For a bound method the object is the
+/// bound method, and the instance it holds is the function's first argument.
 fn thunk<'ctx>(
     shared: &Shared<'_, 'ctx>,
     id: FunctionId,
+    bound: bool,
 ) -> Result<inkwell::values::FunctionValue<'ctx>, CodegenError> {
     let context = shared.context;
     let function = &shared.tyir.functions[id.0 as usize];
@@ -113,6 +159,7 @@ fn thunk<'ctx>(
             function
                 .parameters
                 .iter()
+                .skip(usize::from(bound))
                 .map(|value| function.value(*value).ty),
         )
         .collect();
@@ -125,15 +172,25 @@ fn thunk<'ctx>(
         true,
         false,
     );
+    let kind = if bound { "method_thunk" } else { "thunk" };
     let thunk = shared.module.add_function(
-        &format!("typy.thunk.{}", function.symbol),
+        &format!("typy.{kind}.{}", function.symbol),
         ty,
         Some(Linkage::Internal),
     );
     let builder = context.create_builder();
     builder.position_at_end(context.append_basic_block(thunk, "entry"));
-    let arguments: Vec<BasicMetadataValueEnum<'ctx>> =
+    let mut arguments: Vec<BasicMetadataValueEnum<'ctx>> =
         thunk.get_param_iter().skip(1).map(Into::into).collect();
+    if bound {
+        let object = thunk
+            .get_first_param()
+            .ok_or_else(|| CodegenError("a thunk takes its object".to_owned()))?
+            .into_pointer_value();
+        let field = builder.build_struct_gep(bound_type(context), object, BOUND_INSTANCE, "")?;
+        let instance = builder.build_load(context.ptr_type(AddressSpace::default()), field, "")?;
+        arguments.insert(0, instance.into());
+    }
     let call = builder.build_call(shared.functions[id.0 as usize], &arguments, "")?;
     let returned = match call.try_as_basic_value() {
         ValueKind::Basic(value) => Some(value),

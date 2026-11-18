@@ -37,9 +37,10 @@ impl<'ctx> FunctionEmitter<'_, '_, 'ctx> {
             Constant::TypeObject(typy_tyir::TypeObjectRef::Class(index)) => {
                 Some(crate::class::type_object(self.shared, *index)?.into())
             }
-            Constant::Function(id) => {
-                Some(crate::function_object::function_object(self.shared, *id)?.into())
-            }
+            Constant::Function(_)
+            | Constant::MethodDescriptor(_)
+            | Constant::TupleDescriptor(_)
+            | Constant::CDataClass(_) => Some(self.emitted(constant)?),
             Constant::TypeAlias(index) => {
                 let alias = &self.shared.tyir.type_aliases[*index as usize];
                 Some(
@@ -102,16 +103,30 @@ impl<'ctx> FunctionEmitter<'_, '_, 'ctx> {
                 });
                 Some(global.as_pointer_value().into())
             }
-            // A descriptor and a class are addresses the runtime takes as a word.
+        })
+    }
+
+    /// Returns a constant that is a static emitted the first time it is used: a function
+    /// object, or a descriptor or a class, an address the runtime takes as a word.
+    fn emitted(&mut self, constant: &Constant) -> Result<BasicValueEnum<'ctx>, CodegenError> {
+        match constant {
+            Constant::Function(id) => {
+                Ok(crate::function_object::function_object(self.shared, *id)?.into())
+            }
+            Constant::MethodDescriptor(id) => {
+                let descriptor = crate::function_object::method_descriptor(self.shared, *id)?;
+                self.address_word(descriptor)
+            }
             Constant::TupleDescriptor(id) => {
                 let descriptor = crate::descriptor::tuple_descriptor(self.shared, *id)?;
-                Some(self.address_word(descriptor)?)
+                self.address_word(descriptor)
             }
             Constant::CDataClass(index) => {
                 let class = crate::cdata::cdata_class(self.shared, *index)?;
-                Some(self.address_word(class)?)
+                self.address_word(class)
             }
-        })
+            other => Err(CodegenError(format!("{other} is not an emitted static"))),
+        }
     }
 
     /// Returns the address of a static as a word.

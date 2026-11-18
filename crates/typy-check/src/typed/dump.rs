@@ -446,6 +446,13 @@ impl Dump<'_> {
                 self.program.function(*function).qualified_name
             ),
             TypedExprKind::CallValue { .. } => "CallValue".to_owned(),
+            TypedExprKind::BoundMethod { methods, .. } => {
+                let names: Vec<&str> = methods
+                    .iter()
+                    .map(|(_, method)| self.program.function(*method).qualified_name.as_str())
+                    .collect();
+                format!("BoundMethod {}", names.join(" "))
+            }
             TypedExprKind::VersionRead { .. } => "VersionRead".to_owned(),
             TypedExprKind::TypeAliasPart { module, .. } => if *module {
                 "TypeAliasModule"

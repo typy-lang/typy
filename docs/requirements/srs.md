@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy software requirements specification |
-| Version | 1.88 |
+| Version | 1.89 |
 | Status | Approved |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-18 |
@@ -284,10 +284,11 @@ formatter applies; Ruff's formatter is the project's recommendation.
 | FUN-02 | Recursion shall be accepted. Exhausting the stack shall end the program with `RecursionError` on standard error and exit status 1. | M | 0.1 | 8.7 |
 | FUN-03 | Keyword-only and positional-only parameters shall be accepted. | S | 0.8 | 8.7 |
 | FUN-04 | Nested functions and closures shall be accepted, capturing variables as Python does. | M | 0.8 | 4.2 |
-| FUN-05 | A function, nested function, `lambda` or method the program defines shall be a value of type `Callable[[A, ...], R]`, stored, passed, returned, called and compared as CPython's are, and the `key` argument of `sorted`, `list.sort`, `min` and `max` shall take one. | M | 0.8 | 3.2.8 |
+| FUN-05 | A function, nested function, `lambda` or method the program defines shall be a value of type `Callable[[A, ...], R]`, stored, passed, returned, called and compared as CPython's are, and the `key` argument of `sorted`, `list.sort`, `min` and `max` shall take one; the methods of FUN-09 are excepted. | M | 0.8 | 3.2.8 |
 | FUN-06 | User-defined decorators whose types can be checked shall be accepted. | C | 0.9 | 8.7 |
 | FUN-07 | Generator functions shall return `Iterator[T]` or `Generator[T, None, None]`. | M | 0.9 | 8.7 |
 | FUN-08 | A built-in function or a method of a built-in type shall be a value where a `Callable` is expected, such as `sorted(words, key=len)`. | S | 0.9 | 3.2.8 |
+| FUN-09 | A class method read as a value, a static method read through an instance whose subclasses define it again, a method read through a protocol value, and a method read through an instance whose subclass overrides it with parameters or a result held otherwise, shall be values as CPython's are. | S | 0.9 | 3.2.8 |
 
 ### 3.10 Classes (CLS)
 
@@ -533,7 +534,7 @@ cache, unless a row says otherwise.
 | 0.6 | | Linux AArch64 as host and target; cross-compilation between the Linux targets; the documentation site |
 | 0.7 | | macOS AArch64 as host and target; LLVM built and pinned by TyPy for every host |
 | 0.8 | Functions as values: nested functions and closures, `lambda`, `nonlocal`, keyword-only and positional-only parameters, the `key` argument of `sorted`, `list.sort`, `min` and `max` | Attributes, tuple items, captures and cells stored by decreasing alignment |
-| 0.9 | Generators and generator expressions, `*args` and `**kwargs`, decorators, built-in functions as values, `NamedTuple`, `isinstance` with a class held in a variable, `issubclass`, `typing` names as values, `Sequence` and the other abstract collections | |
+| 0.9 | Generators and generator expressions, `*args` and `**kwargs`, decorators, built-in functions, class methods and protocol methods as values, `NamedTuple`, `isinstance` with a class held in a variable, `issubclass`, `typing` names as values, `Sequence` and the other abstract collections | |
 | 1.0 | The remaining requirements of section 3 marked 1.0 | Cycle collection, `weakref`; Windows; performance budgets |
 
 ## 6. Out of scope

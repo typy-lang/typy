@@ -47,6 +47,9 @@ pub const CDATA_TYPE_ID: u32 = 23;
 /// The type ID of a function object: a function of the program as a value (FUN-05,
 /// ADR-0060).
 pub const FUNCTION_TYPE_ID: u32 = 24;
+/// The type ID of a bound method: a function object whose one capture is the instance it
+/// was read through (FUN-05, ADR-0060).
+pub const METHOD_TYPE_ID: u32 = 25;
 
 /// The first 8 bytes of every heap object.
 #[repr(C)]

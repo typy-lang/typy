@@ -495,7 +495,8 @@ fn expression(expression_value: &TypedExpr, callees: &mut BTreeSet<FunctionId>) 
         TypedExprKind::Attribute { object, .. }
         | TypedExprKind::TypeOf(object)
         | TypedExprKind::TypeName(object)
-        | TypedExprKind::TypeAliasPart { alias: object, .. } => expression(object, callees),
+        | TypedExprKind::TypeAliasPart { alias: object, .. }
+        | TypedExprKind::BoundMethod { object, .. } => expression(object, callees),
         TypedExprKind::VersionRead { value, result } => {
             expression(value, callees);
             expression(result, callees);

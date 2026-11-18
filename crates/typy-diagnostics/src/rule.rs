@@ -211,6 +211,9 @@ impl RuleId {
     pub const FUN_06: Self = Self("FUN-06");
     /// A built-in function or a method of a built-in type shall be a value where a `Callable` is expected.
     pub const FUN_08: Self = Self("FUN-08");
+    /// A class method, a static method a subclass defines again, a protocol value's method and
+    /// an override held otherwise than its base shall be values when read through an instance.
+    pub const FUN_09: Self = Self("FUN-09");
     /// Generic functions and classes shall be written with PEP 695 type parameter lists; `TypeVar` and `Generic` shall be rejected.
     pub const GEN_01: Self = Self("GEN-01");
     /// Type parameters with a bound or with constraints shall be accepted and checked.
@@ -486,6 +489,7 @@ impl RuleId {
         Self::FUN_05,
         Self::FUN_06,
         Self::FUN_08,
+        Self::FUN_09,
         Self::GEN_01,
         Self::GEN_02,
         Self::GEN_03,

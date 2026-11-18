@@ -24,6 +24,7 @@ pub(crate) struct Statics<'ctx> {
     modules: BTreeMap<u32, PointerValue<'ctx>>,
     type_aliases: BTreeMap<u32, PointerValue<'ctx>>,
     function_objects: BTreeMap<u32, PointerValue<'ctx>>,
+    method_descriptors: BTreeMap<u32, PointerValue<'ctx>>,
 }
 
 impl<'ctx> Statics<'ctx> {
@@ -40,7 +41,18 @@ impl<'ctx> Statics<'ctx> {
             modules: BTreeMap::new(),
             type_aliases: BTreeMap::new(),
             function_objects: BTreeMap::new(),
+            method_descriptors: BTreeMap::new(),
         }
+    }
+
+    /// Returns the bound method descriptor of method `id`, if it was emitted already.
+    pub(crate) fn method_descriptor(&self, id: u32) -> Option<PointerValue<'ctx>> {
+        self.method_descriptors.get(&id).copied()
+    }
+
+    /// Records the bound method descriptor of method `id`.
+    pub(crate) fn add_method_descriptor(&mut self, id: u32, pointer: PointerValue<'ctx>) {
+        self.method_descriptors.insert(id, pointer);
     }
 
     /// Returns the function object of function `id`, if it was emitted already (FUN-05).

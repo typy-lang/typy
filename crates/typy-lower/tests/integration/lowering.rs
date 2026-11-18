@@ -143,6 +143,35 @@ fn fun_02_a_function_that_calls_through_a_value_checks_the_stack_and_its_callee_
 }
 
 #[test]
+fn fun_05_a_bound_method_tests_each_overriding_class_after_its_bases() {
+    let module = lower(
+        "class A:\n    def m(self) -> int:\n        return 1\n\n\nclass B(A):\n    \
+         def m(self) -> int:\n        return 2\n\n\nclass C(B):\n    def m(self) -> int:\n        \
+         return 3\n\n\ndef get(a: A) -> int:\n    f = a.m\n    return f()\n",
+    );
+    let text = print(&module);
+    let get = &text[text.find("# get").unwrap()..];
+    // The descriptor of `A.m`, then a test and a descriptor for `B`, then for `C`, so the
+    // last test that holds is of the object's own class.
+    let order: Vec<usize> = [
+        "const method_descriptor fn1",
+        "const type class#1",
+        "const method_descriptor fn2",
+        "const type class#2",
+        "const method_descriptor fn3",
+        "call rt.method_new(",
+    ]
+    .iter()
+    .map(|line| {
+        get.find(line)
+            .unwrap_or_else(|| panic!("{line} missing from {get}"))
+    })
+    .collect();
+    assert!(order.is_sorted(), "{get}");
+    assert_eq!(get.matches("rt.is_instance").count(), 2, "{get}");
+}
+
+#[test]
 fn error_paths_release_the_slots_and_return_the_exception() {
     let module = lower("def f(s: str, n: int) -> str:\n    t = s + \"!\"\n    return t[n]\n");
     let f = function(&module, "f");

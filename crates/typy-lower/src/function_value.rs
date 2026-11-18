@@ -1,8 +1,8 @@
 //! Lowers function values and the calls through them (FUN-05, ADR-0060).
 
-use typy_check::{FunctionId, TypedExpr};
+use typy_check::{ClassId, FunctionId, MemberTest, TypeObjectOf, TypedExpr};
 use typy_diagnostics::Span;
-use typy_tyir::{Callee, Constant, TyirType};
+use typy_tyir::{Callee, Constant, RuntimeFunction, TyirType};
 
 use crate::function::FunctionLowerer;
 use crate::ownership::Lowered;
@@ -13,6 +13,37 @@ impl FunctionLowerer<'_> {
     pub(crate) fn function_value(&mut self, function: FunctionId, span: Span) -> Lowered {
         let value = self.constant(Constant::Function(typy_tyir::FunctionId(function.0)), span);
         Self::borrowed(value, TyirType::FUNCTION)
+    }
+
+    /// Returns a new bound method of the instance `object` gives, of the method of its
+    /// class among `methods`: the first, of its static class, unless the object is an
+    /// instance of a class of a later entry, each after the classes it derives from, so the
+    /// last test that holds names the object's own class's method.
+    pub(crate) fn bound_method(
+        &mut self,
+        object: &TypedExpr,
+        methods: &[(ClassId, FunctionId)],
+        span: Span,
+    ) -> Lowered {
+        let instance = self.expression(object);
+        let descriptor = |this: &mut Self, method: FunctionId| {
+            this.constant(
+                Constant::MethodDescriptor(typy_tyir::FunctionId(method.0)),
+                span,
+            )
+        };
+        let mut chosen = descriptor(self, methods[0].1);
+        for (class, method) in &methods[1..] {
+            let name = self.program.class(*class).name.clone();
+            let test = MemberTest::Class(TypeObjectOf::Instance(*class, name));
+            let found = self.member_found(instance, &test, span);
+            let own = descriptor(self, *method);
+            chosen = self.select(found, own, chosen, TyirType::Bits);
+        }
+        let bits = self.bits(Self::borrowed(instance.value, instance.ty), span);
+        let made = self.call_runtime(RuntimeFunction::MethodNew, vec![chosen, bits], span);
+        self.release(instance, span);
+        made
     }
 
     /// Calls the code of the function object `callee` gives with `arguments`, and returns
