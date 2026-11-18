@@ -178,6 +178,28 @@ const EXPECTED: &str = "12 6.0\n\
 24000643659\n\
 ";
 
+/// How this system builds and finds a shared C library: its file, the C compiler's flags that
+/// make it, and the variable the dynamic loader searches.
+struct SharedLibrary {
+    file: &'static str,
+    flags: &'static [&'static str],
+    search: &'static str,
+}
+
+#[cfg(target_os = "macos")]
+const SHARED: SharedLibrary = SharedLibrary {
+    file: "libshapes.dylib",
+    flags: &["-dynamiclib", "-Wl,-install_name,libshapes.dylib"],
+    search: "DYLD_LIBRARY_PATH",
+};
+
+#[cfg(not(target_os = "macos"))]
+const SHARED: SharedLibrary = SharedLibrary {
+    file: "libshapes.so",
+    flags: &["-shared", "-fPIC"],
+    search: "LD_LIBRARY_PATH",
+};
+
 fn text(bytes: &[u8]) -> String {
     String::from_utf8_lossy(bytes).into_owned()
 }
@@ -188,7 +210,11 @@ fn project() -> (tempfile::TempDir, Utf8PathBuf) {
     let root = Utf8PathBuf::from_path_buf(directory.path().to_owned()).unwrap();
     std::fs::create_dir(root.join("lib")).unwrap();
     std::fs::write(root.join("shapes.c"), SHAPES).unwrap();
-    std::fs::write(root.join("app.py"), PROGRAM).unwrap();
+    std::fs::write(
+        root.join("app.py"),
+        PROGRAM.replace("libshapes.so", SHARED.file),
+    )
+    .unwrap();
     std::fs::write(root.join("typy.toml"), "library-paths = [\"lib\"]\n").unwrap();
     (directory, root)
 }
@@ -197,14 +223,8 @@ fn project() -> (tempfile::TempDir, Utf8PathBuf) {
 /// `arguments`.
 fn build(root: &Utf8Path, cc: &str, arguments: &[&str]) {
     let compiled = Command::new(cc)
-        .args([
-            "-shared",
-            "-fPIC",
-            "-O1",
-            "-o",
-            "lib/libshapes.so",
-            "shapes.c",
-        ])
+        .args(SHARED.flags)
+        .args(["-O1", "-o", &format!("lib/{}", SHARED.file), "shapes.c"])
         .current_dir(root)
         .output()
         .unwrap();
@@ -226,12 +246,12 @@ fn ffi_03_structures_pass_by_value_as_cpython_passes_them() {
     let oracle = Command::new("python3")
         .args(["-I", "app.py"])
         .current_dir(&root)
-        .env("LD_LIBRARY_PATH", root.join("lib"))
+        .env(SHARED.search, root.join("lib"))
         .output()
         .unwrap();
     assert_eq!(text(&oracle.stdout), EXPECTED, "{}", text(&oracle.stderr));
     let run = Command::new(root.join("app"))
-        .env("LD_LIBRARY_PATH", root.join("lib"))
+        .env(SHARED.search, root.join("lib"))
         .output()
         .unwrap();
     assert_eq!(text(&run.stdout), EXPECTED, "{}", text(&run.stderr));
@@ -257,7 +277,7 @@ fn ffi_12_structures_pass_by_value_on_the_other_architecture() {
     build(&root, &format!("{gnu}-gcc"), &["--target", triple]);
     let run = Command::new(emulator)
         .args(["-L", &format!("/usr/{gnu}")])
-        .args(["-E", &format!("LD_LIBRARY_PATH={}", root.join("lib"))])
+        .args(["-E", &format!("{}={}", SHARED.search, root.join("lib"))])
         .arg(root.join("app"))
         .output()
         .unwrap();

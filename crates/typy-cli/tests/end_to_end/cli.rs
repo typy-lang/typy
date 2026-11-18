@@ -145,7 +145,7 @@ fn cli_04_emit_writes_one_stage_to_standard_output_or_a_file() {
     assert!(
         std::fs::read(workspace.root.join("app.o"))
             .unwrap()
-            .starts_with(b"\x7fELF")
+            .starts_with(OBJECT_MAGIC)
     );
     assert!(
         !workspace.root.join("app").exists(),
@@ -636,6 +636,13 @@ fn cli_10_explain_prints_a_code_with_a_wrong_and_a_corrected_program() {
     }
 }
 
+/// The first bytes of an object file of the host: Mach-O on macOS, ELF on Linux.
+const OBJECT_MAGIC: &[u8] = if cfg!(target_os = "macos") {
+    b"\xcf\xfa\xed\xfe"
+} else {
+    b"\x7fELF"
+};
+
 /// The triples this host builds for, and one that only another system's host builds for.
 const fn host_triples() -> (&'static [&'static str], &'static str) {
     if cfg!(target_os = "macos") {
@@ -707,13 +714,12 @@ fn cli_08_check_accepts_each_supported_target() {
 #[test]
 fn cli_08_emit_asm_for_aarch64_writes_aarch64_code() {
     let workspace = Workspace::new(HELLO);
-    let output = workspace.typy(&[
-        "build",
-        "app.py",
-        "--emit=asm",
-        "--target",
-        "aarch64-unknown-linux-gnu",
-    ]);
+    let (triples, _) = host_triples();
+    let aarch64 = triples
+        .iter()
+        .find(|triple| triple.starts_with("aarch64-"))
+        .unwrap();
+    let output = workspace.typy(&["build", "app.py", "--emit=asm", "--target", aarch64]);
     assert_eq!(status(&output), 0, "{}", stderr(&output));
     let assembly = stdout(&output);
     assert!(assembly.contains("\tbl\t"), "{assembly}");

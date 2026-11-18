@@ -107,7 +107,11 @@ fn each_stage_writes_its_own_form() {
     assert!(
         emit(&main, EmitStage::Obj)
             .as_bytes()
-            .starts_with(b"\x7fELF")
+            .starts_with(if cfg!(target_os = "macos") {
+                b"\xcf\xfa\xed\xfe"
+            } else {
+                b"\x7fELF"
+            })
     );
 }
 

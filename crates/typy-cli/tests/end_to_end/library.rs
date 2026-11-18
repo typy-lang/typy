@@ -1,6 +1,7 @@
 //! End-to-end tests of C libraries built with `typy build --lib`: the library is built as a
 //! developer builds it, then linked into a C program, or loaded by CPython through `ctypes`,
-//! and run (CLI-09, CLI-13, FFI-05, FFI-08, EXC-05, ADR-0044, ADR-0045, ADR-0046).
+//! and run, with the names and tools of the host's system (CLI-09, CLI-13, CLI-16, FFI-05,
+//! FFI-08, EXC-05, ADR-0044, ADR-0045, ADR-0046, ADR-0056).
 
 use std::process::{Command, Output};
 
@@ -84,6 +85,67 @@ number 7 calls 2 module tools
 depth 5000
 ";
 
+/// The variable the dynamic loader searches for a library a program names without a path.
+const LIBRARY_PATH: &str = if cfg!(target_os = "macos") {
+    "DYLD_LIBRARY_PATH"
+} else {
+    "LD_LIBRARY_PATH"
+};
+
+/// Returns the name a program loads the shared library `name` of release `major` by:
+/// `libNAME.so.X` on Linux and `libNAME.X.dylib` on macOS, or without a release `libNAME.so`
+/// and `libNAME.dylib`.
+fn loaded_name(name: &str, major: Option<&str>) -> String {
+    match (cfg!(target_os = "macos"), major) {
+        (true, Some(major)) => format!("lib{name}.{major}.dylib"),
+        (true, None) => format!("lib{name}.dylib"),
+        (false, Some(major)) => format!("lib{name}.so.{major}"),
+        (false, None) => format!("lib{name}.so"),
+    }
+}
+
+/// Returns a symbol by the name C gives it, without the underscore Mach-O adds.
+fn c_name(symbol: &str) -> &str {
+    if cfg!(target_os = "macos") {
+        symbol.strip_prefix('_').unwrap_or(symbol)
+    } else {
+        symbol
+    }
+}
+
+/// Returns the `llvm-nm` of the Rust toolchain, which reads both object formats and the LLVM
+/// bitcode Rust's own objects carry, as the system's `nm` on macOS does not.
+fn llvm_nm() -> Utf8PathBuf {
+    let rustc = |argument: &str| {
+        let output = Command::new("rustc").arg(argument).output().unwrap();
+        text(&output.stdout)
+    };
+    let host = rustc("-vV")
+        .lines()
+        .find_map(|line| line.strip_prefix("host: ").map(str::to_owned))
+        .unwrap();
+    Utf8PathBuf::from(rustc("--print=sysroot").trim())
+        .join("lib/rustlib")
+        .join(host)
+        .join("bin/llvm-nm")
+}
+
+/// Returns the C name of each symbol `llvm-nm` lists in `file` with `arguments`.
+fn symbols(directory: &Utf8Path, arguments: &[&str], file: &str) -> Vec<String> {
+    let listed = Command::new(llvm_nm())
+        .args(arguments)
+        .arg(file)
+        .current_dir(directory)
+        .output()
+        .unwrap();
+    assert!(listed.status.success(), "{}", text(&listed.stderr));
+    text(&listed.stdout)
+        .lines()
+        .filter_map(|line| line.split_whitespace().nth(2))
+        .map(|name| c_name(name).to_owned())
+        .collect()
+}
+
 struct Project {
     _directory: tempfile::TempDir,
     root: Utf8PathBuf,
@@ -130,7 +192,7 @@ impl Project {
         Command::new(self.root.join(program))
             .args(arguments)
             .current_dir(&self.root)
-            .env("LD_LIBRARY_PATH", &self.root)
+            .env(LIBRARY_PATH, &self.root)
             .output()
             .unwrap()
     }
@@ -171,15 +233,7 @@ fn cli_09_a_static_library_exports_only_its_functions() {
         "out.a",
         "--release",
     ]);
-    let listed = Command::new("nm")
-        .args(["--defined-only", "--extern-only", "out.a"])
-        .current_dir(&project.root)
-        .output()
-        .unwrap();
-    let mut names: Vec<String> = text(&listed.stdout)
-        .lines()
-        .filter_map(|line| line.split_whitespace().nth(2).map(str::to_owned))
-        .collect();
+    let mut names = symbols(&project.root, &["--defined-only", "--extern-only"], "out.a");
     names.sort();
     assert_eq!(
         names,
@@ -234,18 +288,17 @@ print('python ends')
 ";
     let project = Project::new(&[("tools.py", TOOLS), ("use_tools.py", script)]);
     project.build(&["build", "--lib", "shared", "tools.py"]);
-    let exported = Command::new("nm")
-        .args(["-D", "--defined-only", "libtools.so"])
-        .current_dir(&project.root)
-        .output()
-        .unwrap();
-    let names: Vec<String> = text(&exported.stdout)
-        .lines()
-        .filter_map(|line| line.split_whitespace().nth(2).map(str::to_owned))
-        .collect();
+    let library = loaded_name("tools", None);
+    // A Linux library exports through its dynamic symbols; a macOS one keeps the rest local.
+    let listing: &[&str] = if cfg!(target_os = "macos") {
+        &["--defined-only", "--extern-only"]
+    } else {
+        &["-D", "--defined-only"]
+    };
+    let names = symbols(&project.root, listing, &library);
     assert_eq!(names.len(), 7, "{names:?}");
     let run = Command::new("python3")
-        .args(["-I", "-u", "use_tools.py", "./libtools.so"])
+        .args(["-I", "-u", "use_tools.py", &format!("./{library}")])
         .current_dir(&project.root)
         .output()
         .unwrap();
@@ -273,8 +326,13 @@ static void *work(void *argument) {
 }
 
 int main(void) {
+    /* As large a stack as a main thread's, so the depth fits on every system: macOS gives a
+       new thread 512 KiB, Linux the limit of the main thread's. */
+    pthread_attr_t attributes;
+    pthread_attr_init(&attributes);
+    pthread_attr_setstacksize(&attributes, 8 * 1024 * 1024);
     pthread_t thread;
-    pthread_create(&thread, NULL, work, NULL);
+    pthread_create(&thread, &attributes, work, NULL);
     pthread_join(thread, NULL);
     printf("twice %lld add %lld\n", (long long)twice(21), (long long)add(1, 1));
     return 0;
@@ -350,22 +408,16 @@ fn ffi_05_the_refused_names_cover_every_c_function_the_runtime_calls() {
         .join("lib/typy")
         .join(typy_codegen::Target::host().triple.as_str())
         .join("libtypy_runtime.a");
-    let listed = Command::new("nm")
+    let listed = Command::new(llvm_nm())
         .args(["--undefined-only", archive.as_str()])
         .output()
         .unwrap();
     assert!(listed.status.success(), "{}", text(&listed.stderr));
-    let defined = Command::new("nm")
-        .args(["--defined-only", archive.as_str()])
-        .output()
-        .unwrap();
-    let defined: Vec<String> = text(&defined.stdout)
-        .lines()
-        .filter_map(|line| line.split_whitespace().nth(2).map(str::to_owned))
-        .collect();
+    let defined = symbols(Utf8Path::new("."), &["--defined-only"], archive.as_str());
     let missing: Vec<String> = text(&listed.stdout)
         .lines()
-        .filter_map(|line| line.split_whitespace().last().map(str::to_owned))
+        .filter_map(|line| line.split_whitespace().last())
+        .map(|name| c_name(name).to_owned())
         .filter(|name| !name.ends_with(':') && !name.starts_with('_'))
         .filter(|name| !name.starts_with("typy_rt_heap_") && !defined.contains(name))
         .filter(|name| !typy_check::RUNTIME_C_FUNCTIONS.contains(&name.as_str()))
@@ -381,6 +433,7 @@ fn link_target(project: &Project, name: &str) -> Option<String> {
 }
 
 /// Returns the soname the shared library `name` records.
+#[cfg(target_os = "linux")]
 fn soname(project: &Project, name: &str) -> String {
     let dynamic = Command::new("readelf")
         .args(["-d", name])
@@ -396,6 +449,7 @@ fn soname(project: &Project, name: &str) -> String {
 }
 
 #[test]
+#[cfg(target_os = "linux")]
 fn cli_13_a_versioned_shared_library_is_named_as_linux_names_libraries() {
     let versioned = format!("{TOOLS}__version__ = '5.0rc1'\n");
     let project = Project::new(&[("tools.py", &versioned), ("host.c", HOST)]);
@@ -434,6 +488,7 @@ fn cli_13_a_versioned_shared_library_is_named_as_linux_names_libraries() {
 }
 
 #[test]
+#[cfg(target_os = "linux")]
 fn cli_13_a_versioned_static_library_has_the_link_a_linker_finds() {
     let project = Project::new(&[("tools.py", TOOLS), ("host.c", HOST)]);
     std::fs::write(project.root.join("typy.toml"), "version = \"2.4\"\n").unwrap();
@@ -448,6 +503,7 @@ fn cli_13_a_versioned_static_library_has_the_link_a_linker_finds() {
 }
 
 #[test]
+#[cfg(target_os = "linux")]
 fn cli_13_an_output_path_names_the_library_alone() {
     let versioned = format!("{TOOLS}__version__ = '1.2'\n");
     let project = Project::new(&[("tools.py", &versioned)]);
@@ -456,6 +512,92 @@ fn cli_13_an_output_path_names_the_library_alone() {
     assert_eq!(soname(&project, "custom.so"), "custom.so");
     assert!(!project.root.join("libtools.so").exists());
     assert!(!project.root.join("libtools.so.1").exists());
+}
+
+/// Returns what `otool` prints for `arguments`, which must succeed.
+#[cfg(target_os = "macos")]
+fn otool(project: &Project, arguments: &[&str]) -> String {
+    let run = Command::new("otool")
+        .args(arguments)
+        .current_dir(&project.root)
+        .output()
+        .unwrap();
+    assert!(run.status.success(), "{}", text(&run.stderr));
+    text(&run.stdout)
+}
+
+/// Returns the install name the shared library `name` records.
+#[cfg(target_os = "macos")]
+fn install_name(project: &Project, name: &str) -> String {
+    otool(project, &["-D", name])
+        .lines()
+        .nth(1)
+        .unwrap_or_default()
+        .to_owned()
+}
+
+#[test]
+#[cfg(target_os = "macos")]
+fn cli_16_a_versioned_shared_library_is_named_as_macos_names_libraries() {
+    let versioned = format!("{TOOLS}__version__ = '5.0rc1'\n");
+    let project = Project::new(&[("tools.py", &versioned), ("host.c", HOST)]);
+    project.build(&["build", "--lib", "shared", "tools.py"]);
+    assert!(project.root.join("libtools.5.dylib").is_file());
+    assert_eq!(link_target(&project, "libtools.5.dylib"), None);
+    assert_eq!(
+        link_target(&project, "libtools.dylib").as_deref(),
+        Some("libtools.5.dylib")
+    );
+    assert_eq!(
+        install_name(&project, "libtools.5.dylib"),
+        "libtools.5.dylib"
+    );
+    project.tool("cc", &["-o", "host", "host.c", "-L.", "-ltools"]);
+    let loads = otool(&project, &["-L", "host"]);
+    assert!(
+        loads.contains("libtools.5.dylib (compatibility version 5.0.0, current version 5.0.0)"),
+        "{loads}"
+    );
+    let run = project.run("host", &[]);
+    assert_eq!(run.status.code(), Some(0), "{}", text(&run.stderr));
+    assert_eq!(text(&run.stdout), format!("{HOST_OUTPUT}host ends\n"));
+    // A new release replaces the library of its major version, which the program still loads.
+    std::fs::write(
+        project.root.join("tools.py"),
+        format!("{TOOLS}__version__ = '5.1'\n"),
+    )
+    .unwrap();
+    project.build(&["build", "--lib", "shared", "tools.py"]);
+    let versions = otool(&project, &["-L", "libtools.5.dylib"]);
+    assert!(
+        versions.contains("(compatibility version 5.0.0, current version 5.1.0)"),
+        "{versions}"
+    );
+    assert_eq!(project.run("host", &[]).status.code(), Some(0));
+}
+
+#[test]
+#[cfg(target_os = "macos")]
+fn cli_16_a_versioned_static_library_for_macos_is_libname_a() {
+    let project = Project::new(&[("tools.py", TOOLS), ("host.c", HOST)]);
+    std::fs::write(project.root.join("typy.toml"), "version = \"2.4\"\n").unwrap();
+    project.build(&["build", "--lib", "static", "tools.py"]);
+    assert!(project.root.join("libtools.a").is_file());
+    assert_eq!(link_target(&project, "libtools.a"), None);
+    assert!(!project.root.join("libtools.2.4.a").exists());
+    project.tool("cc", &["-o", "host", "host.c", "-L.", "-ltools"]);
+    assert_eq!(project.run("host", &[]).status.code(), Some(0));
+}
+
+#[test]
+#[cfg(target_os = "macos")]
+fn cli_16_an_output_path_is_the_install_name_of_the_library_alone() {
+    let versioned = format!("{TOOLS}__version__ = '1.2'\n");
+    let project = Project::new(&[("tools.py", &versioned)]);
+    project.build(&["build", "--lib", "shared", "tools.py", "-o", "custom.dylib"]);
+    assert_eq!(install_name(&project, "custom.dylib"), "custom.dylib");
+    assert!(!project.root.join("libtools.dylib").exists());
+    assert!(!project.root.join("libtools.1.dylib").exists());
 }
 
 #[test]
@@ -490,7 +632,10 @@ print(tools.__all__)
     project.build(&["build", "--lib", "shared", "tools.py"]);
     let binding = std::fs::read_to_string(project.root.join("tools_binding.py")).unwrap();
     assert!(
-        binding.contains("_library = ctypes.CDLL(\"libtools.so.3\")"),
+        binding.contains(&format!(
+            "_library = ctypes.CDLL(\"{}\")",
+            loaded_name("tools", Some("3"))
+        )),
         "{binding}"
     );
     assert!(binding.contains("def add(a: int, b: int) -> int:\n    return _library.add(a, b)\n"));
@@ -502,7 +647,7 @@ print(tools.__all__)
     let run = Command::new("python3")
         .args(["-I", "-u", "use_tools.py"])
         .current_dir(&project.root)
-        .env("LD_LIBRARY_PATH", &project.root)
+        .env(LIBRARY_PATH, &project.root)
         .output()
         .unwrap();
     assert_eq!(run.status.code(), Some(0), "{}", text(&run.stderr));
@@ -519,7 +664,7 @@ fn ffi_08_the_binding_and_its_stub_are_python_every_oracle_compiles() {
     project.build(&["build", "--lib", "static", "tools.py"]);
     let binding = std::fs::read_to_string(project.root.join("tools_binding.py")).unwrap();
     assert!(
-        binding.contains("ctypes.CDLL(\"libtools.so\")"),
+        binding.contains(&format!("ctypes.CDLL(\"{}\")", loaded_name("tools", None))),
         "{binding}"
     );
     for python in ["python3.12", "python3.13", "python3.14", "python3.15"] {
@@ -561,7 +706,7 @@ print('program', tools.add(40, 2), tools.scale(1.5, 2.0), tools.positive(-4))
         .args(["-u", "app.py"])
         .current_dir(&project.root)
         .env("PYTHONPATH", "lib")
-        .env("LD_LIBRARY_PATH", project.root.join("lib"))
+        .env(LIBRARY_PATH, project.root.join("lib"))
         .output()
         .unwrap();
     assert_eq!(text(&oracle.stdout), expected, "{}", text(&oracle.stderr));
@@ -569,18 +714,27 @@ print('program', tools.add(40, 2), tools.scale(1.5, 2.0), tools.positive(-4))
     std::fs::write(project.root.join("typy.toml"), settings).unwrap();
     project.build(&["build", "app.py", "-o", "dynamic"]);
     let dynamic = Command::new(project.root.join("dynamic"))
-        .env("LD_LIBRARY_PATH", project.root.join("lib"))
+        .env(LIBRARY_PATH, project.root.join("lib"))
         .output()
         .unwrap();
     assert_eq!(text(&dynamic.stdout), expected, "{}", text(&dynamic.stderr));
     std::fs::write(
         project.root.join("typy.toml"),
-        format!("{settings}\n[libraries.\"libtools.so.2\"]\nlink = \"static\"\n"),
+        format!(
+            "{settings}\n[libraries.\"{}\"]\nlink = \"static\"\n",
+            loaded_name("tools", Some("2"))
+        ),
     )
     .unwrap();
     project.build(&["build", "app.py", "-o", "static"]);
-    let linked = Command::new("readelf")
-        .args(["-d", "static"])
+    // The libraries the executable loads: `readelf -d` on Linux, `otool -L` on macOS.
+    let (lister, listing) = if cfg!(target_os = "macos") {
+        ("otool", "-L")
+    } else {
+        ("readelf", "-d")
+    };
+    let linked = Command::new(lister)
+        .args([listing, "static"])
         .current_dir(&project.root)
         .output()
         .unwrap();
