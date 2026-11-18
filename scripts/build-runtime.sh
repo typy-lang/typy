@@ -21,12 +21,7 @@ stage() {
     done
 }
 
-if [[ "${host}" == *-apple-darwin ]]; then
-    triples=(aarch64-apple-darwin)
-else
-    triples=(x86_64-unknown-linux-gnu x86_64-unknown-linux-musl aarch64-unknown-linux-gnu)
-fi
-for triple in "${triples[@]}"; do
+for triple in $(scripts/host-targets.sh); do
     cargo rustc -p typy-runtime --profile runtime --locked --crate-type staticlib \
         --target "${triple}"
     stage "${target}/${triple}/runtime/libtypy_runtime.a" "" "${triple}"
