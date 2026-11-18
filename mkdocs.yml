@@ -184,6 +184,9 @@ nav:
           - adr/0057-give-the-runtime-each-systems-c-constants-and-macos-its-own-error-texts.md
           - adr/0058-pass-c-arguments-as-libffi-passes-them-on-every-target.md
           - adr/0059-link-nothing-more-for-ctypes-cdll-of-none.md
+          - adr/0060-make-a-function-value-an-object-of-its-code-and-its-captures.md
+          - adr/0061-capture-by-value-unless-the-variable-is-assigned-after-the-capture.md
+          - adr/0062-store-attributes-and-tuple-items-in-decreasing-order-of-alignment.md
       - Detailed design: design/detailed-design.md
       - Test plan: testing/test-plan.md
       - Benchmark report: testing/benchmark-report.md

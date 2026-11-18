@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy software requirements specification |
-| Version | 1.87 |
+| Version | 1.88 |
 | Status | Approved |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-18 |
@@ -196,7 +196,7 @@ formatter applies; Ruff's formatter is the project's recommendation.
 | TYP-15 | The annotations `Iterator[T]` and `Iterable[T]`, imported from `collections.abc` or `typing`, shall be accepted for iterators and for the built-in iterables of items of type `T` (ADR-0014, ADR-0015). | S | 0.3 | |
 | TYP-16 | One value assigned to several targets, as in `a = b[0] = value`, shall be converted to each target's type, such as the union an item holds. | S | 0.5 | 7.2 |
 | TYP-17 | The names `Iterable` and `Iterator` of `typing` and `collections.abc`, and `List`, `Dict`, `Set`, `Tuple`, `Type`, `Optional[...]` and `Union[...]` of `typing`, shall be accepted as the classes of `isinstance` and of a class pattern, with CPython's answers. | S | 0.5 | |
-| TYP-18 | The names of `typing` and `collections.abc` shall be values of their own: stored, passed, compared and written as CPython writes them; so shall a type alias that a function or a class defines, an alias given its type arguments, and an alias's `__value__` and `__type_params__`. | C | 1.0 | |
+| TYP-18 | The names of `typing` and `collections.abc` shall be values of their own: stored, passed, compared and written as CPython writes them; so shall a type alias that a function or a class defines, an alias given its type arguments, and an alias's `__value__` and `__type_params__`. | C | 0.9 | |
 | TYP-19 | An operation on a union whose members the runtime cannot tell apart by class or kind, such as two iterators, two file kinds or an iterable, shall be accepted. | C | 1.0 | |
 
 ### 3.5 Built-in types and values (DAT)
@@ -238,10 +238,10 @@ formatter applies; Ruff's formatter is the project's recommendation.
 | EXP-11 | Conditional expressions `x if c else y` shall be accepted when both branches have the same type. | M | 0.1 | 6.13 |
 | EXP-12 | List, dict and set comprehensions shall be accepted, each with its own scope. | M | 0.2 | 6.2.4 |
 | EXP-13 | Assignment expressions `:=` shall be accepted. | M | 0.5 | 6.12 |
-| EXP-14 | `lambda` expressions shall be accepted where the expected type is a `Callable`. | M | 1.0 | 6.14 |
-| EXP-15 | Generator expressions shall be accepted. | M | 1.0 | 6.2.8 |
+| EXP-14 | `lambda` expressions shall be accepted where the expected type is a `Callable`. | M | 0.8 | 6.14 |
+| EXP-15 | Generator expressions shall be accepted. | M | 0.9 | 6.2.8 |
 | EXP-16 | Calls with positional, keyword and default arguments shall be accepted, and default values shall be evaluated once, when the function is defined. | M | 0.1 | 6.3.4 |
-| EXP-17 | `*args` and `**kwargs` with annotated element types shall be accepted. | S | 1.0 | 8.7 |
+| EXP-17 | `*args` and `**kwargs` with annotated element types shall be accepted. | S | 0.9 | 8.7 |
 
 ### 3.7 Simple statements (SMT)
 
@@ -255,9 +255,9 @@ formatter applies; Ruff's formatter is the project's recommendation.
 | SMT-06 | `raise` shall be accepted with an exception instance or class, with and without `from`. | M | 0.3 | 7.8 |
 | SMT-07 | `import` and `from ... import` shall be accepted for TyPy modules and for the supported standard library (LIB). | M | 0.3 | 7.11 |
 | SMT-08 | `global` shall be accepted for module-level variables. | M | 0.3 | 7.12 |
-| SMT-09 | `nonlocal` shall be accepted in nested functions. | M | 1.0 | 7.13 |
+| SMT-09 | `nonlocal` shall be accepted in nested functions. | M | 0.8 | 7.13 |
 | SMT-10 | The `type` statement shall define a type alias, with or without type parameters. | M | 0.4 | 7.14 |
-| SMT-11 | `yield` shall be accepted in generator functions. | M | 1.0 | 7.7 |
+| SMT-11 | `yield` shall be accepted in generator functions. | M | 0.9 | 7.7 |
 | SMT-12 | A type alias shall be usable from another module, readable as a value as CPython's `TypeAliasType`, definable inside a function, a class or a block, and given type parameters with a bound or constraints. | S | 0.5 | 7.14 |
 
 ### 3.8 Compound statements (CST)
@@ -282,11 +282,12 @@ formatter applies; Ruff's formatter is the project's recommendation.
 | --- | --- | --- | --- | --- |
 | FUN-01 | Module-level function definitions shall be accepted. | M | 0.1 | 8.7 |
 | FUN-02 | Recursion shall be accepted. Exhausting the stack shall end the program with `RecursionError` on standard error and exit status 1. | M | 0.1 | 8.7 |
-| FUN-03 | Keyword-only and positional-only parameters shall be accepted. | S | 1.0 | 8.7 |
-| FUN-04 | Nested functions and closures shall be accepted, capturing variables as Python does. | M | 1.0 | 4.2 |
-| FUN-05 | Functions shall be values of type `Callable[[A, ...], R]`. | M | 1.0 | 3.2.8 |
-| FUN-06 | User-defined decorators whose types can be checked shall be accepted. | C | 1.0 | 8.7 |
-| FUN-07 | Generator functions shall return `Iterator[T]` or `Generator[T, None, None]`. | M | 1.0 | 8.7 |
+| FUN-03 | Keyword-only and positional-only parameters shall be accepted. | S | 0.8 | 8.7 |
+| FUN-04 | Nested functions and closures shall be accepted, capturing variables as Python does. | M | 0.8 | 4.2 |
+| FUN-05 | A function, nested function, `lambda` or method the program defines shall be a value of type `Callable[[A, ...], R]`, stored, passed, returned, called and compared as CPython's are, and the `key` argument of `sorted`, `list.sort`, `min` and `max` shall take one. | M | 0.8 | 3.2.8 |
+| FUN-06 | User-defined decorators whose types can be checked shall be accepted. | C | 0.9 | 8.7 |
+| FUN-07 | Generator functions shall return `Iterator[T]` or `Generator[T, None, None]`. | M | 0.9 | 8.7 |
+| FUN-08 | A built-in function or a method of a built-in type shall be a value where a `Callable` is expected, such as `sorted(words, key=len)`. | S | 0.9 | 3.2.8 |
 
 ### 3.10 Classes (CLS)
 
@@ -308,8 +309,8 @@ formatter applies; Ruff's formatter is the project's recommendation.
 | CLS-15 | `field(default_factory=f)` in a dataclass shall call `f`, a class or a function that takes no arguments, for each instance whose `__init__` is given no value for the field. | S | 0.5 | |
 | CLS-16 | A dataclass that is frozen with `eq=True`, or given `unsafe_hash=True`, shall hash as the tuple of its fields, and one with `eq=True` that is neither shall be unhashable, as CPython's `dataclasses` writes `__hash__`. | S | 0.5 | |
 | CLS-17 | `@dataclass` shall accept the options `init`, `repr`, `unsafe_hash` and `slots`. | S | 0.5 | |
-| CLS-18 | `isinstance` and a class pattern shall accept a class held in a variable or computed. | S | 1.0 | |
-| CLS-19 | `issubclass` shall be accepted with a class or a tuple of classes. | S | 1.0 | |
+| CLS-18 | `isinstance` and a class pattern shall accept a class held in a variable or computed. | S | 0.9 | |
+| CLS-19 | `issubclass` shall be accepted with a class or a tuple of classes. | S | 0.9 | |
 | CLS-20 | An augmented assignment to an instance shall call the class's in-place method, such as `__iadd__`, and the binary method when the class has none, as CPython does. | S | 0.5 | |
 | CLS-21 | An operator or comparison method that returns `NotImplemented` shall give way to the reflected method, and then to CPython's default or its `TypeError`. | S | 0.5 | |
 | CLS-22 | Comparison and hash methods that may raise, a chain such as `a < b < c` of instances, and an operator whose method and reflected method return different types shall be accepted. | S | 0.5 | |
@@ -317,7 +318,7 @@ formatter applies; Ruff's formatter is the project's recommendation.
 | CLS-24 | The truth of an instance shall come from the `__bool__` or `__len__` of its own class, also where its static type is a base or a union that tests truth otherwise, and in `any` and `all`. | S | 0.5 | |
 | CLS-25 | A class method shall be callable through an instance and through a subclass defined in another module, a class variable shall be assignable through a subclass, and a static method shall be callable through any expression that gives its class or an instance. | S | 0.5 | |
 | CLS-26 | `super(Class, instance)` shall be accepted with any class of the instance's chain of bases. | S | 0.5 | |
-| CLS-27 | A class derived from `typing.NamedTuple` shall be accepted, its fields read by name and by position. | S | 1.0 | |
+| CLS-27 | A class derived from `typing.NamedTuple` shall be accepted, its fields read by name and by position. | S | 0.9 | |
 | CLS-28 | `@dataclass` shall accept the options `kw_only` and `weakref_slot` and options given other than as `True` or `False`, `field` its options `init`, `repr`, `hash`, `compare`, `kw_only` and `metadata`, and a generic dataclass a field with a `default_factory`. | C | 1.0 | |
 | CLS-29 | `super(Class, instance)` shall be accepted with an instance other than the method's own, and outside a method. | C | 1.0 | |
 | CLS-30 | A class method of a generic class shall be callable through an instance. | C | 1.0 | |
@@ -418,7 +419,7 @@ formatter applies; Ruff's formatter is the project's recommendation.
 | LIB-17 | The names `Optional`, `Union`, `List`, `Dict`, `Set`, `Tuple` and `Type` of `typing` shall be accepted in annotations as the types they spell; `Callable` follows function values (FUN-05). | S | 0.5 |
 | LIB-18 | `open` shall accept a callable `opener`, which opens the file and returns its descriptor. | C | 1.0 |
 | LIB-19 | `open` with a binary mode shall accept a `buffering` that is not a literal, giving a `typing.BinaryIO`. | C | 1.0 |
-| LIB-20 | The abstract collections of `collections.abc` and `typing`, such as `Sequence`, `Mapping`, `MutableSequence` and `Collection`, shall be accepted as types, and a value of type `Iterable[T]` shall be testable against `Iterator`. | S | 1.0 |
+| LIB-20 | The abstract collections of `collections.abc` and `typing`, such as `Sequence`, `Mapping`, `MutableSequence` and `Collection`, shall be accepted as types, and a value of type `Iterable[T]` shall be testable against `Iterator`. | S | 0.9 |
 | LIB-21 | `math.prod` shall take items and a start other than numbers, multiplying them in turn as CPython does. | C | 1.0 |
 | LIB-22 | `sys.platform` shall be `"darwin"` in a program built for macOS and `"linux"` in one built for Linux. | M | 0.7 |
 
@@ -436,6 +437,7 @@ formatter applies; Ruff's formatter is the project's recommendation.
 | MEM-08 | The allocator shall be replaceable per project through three C functions, allocate, reallocate and free, that `typy.toml` names. | S | 0.5 |
 | MEM-09 | The last use of a variable in an assignment, or as an item a collection stores, shall move its value instead of counting it. | S | 0.3 |
 | MEM-10 | A list, dict, set, string or exception object that the compiler proves does not outlive its function shall be allocated without a heap call. | C | 1.0 |
+| MEM-11 | The attributes of an instance and the items of a tuple, a closure's captures and a cell's value shall be stored in decreasing order of alignment, while the program reads, writes, compares, hashes and writes out each in its declared order. | M | 0.8 |
 
 ### 3.16 C interoperability (FFI)
 
@@ -516,6 +518,8 @@ cache, unless a row says otherwise.
 | NFR-15 | A debug build and a release build of a program shall run alike. | 0.1 | Differential tests in CI |
 | NFR-16 | Every run test of the conformance suite shall give the same output and exit status when built for each supported target and run on it. | 0.6 | Conformance suite on an arm64 CI runner and under qemu-user |
 | NFR-17 | Every conformance test shall give on macOS the output and exit status CPython gives on macOS. | 0.7 | Conformance suite on a macOS CI runner |
+| NFR-18 | An instance of a class shall take at most its 16-byte prefix and the sizes of its attributes, each tuple attribute at its own size, rounded up to a multiple of 8 bytes. | 0.8 | Layout test of each descriptor's size and offsets against LLVM's |
+| NFR-19 | A value of type `Callable[[A, ...], R]` shall hold only a function that takes arguments of the types `A, ...` and returns an `R`, so a call through it passes and returns the values its code expects. | 0.8 | Checker tests that reject each assignment, argument and return that would break it; the sanitizer run of every conformance test |
 
 ## 5. Release plan
 
@@ -528,7 +532,9 @@ cache, unless a row says otherwise.
 | 0.5 | `match`, `:=`, dataclass `default_factory`, hashing and options, the rest of the class protocols (CLS-20 to CLS-26), C interoperability through `ctypes` | Stack allocation; libraries and exports described by their annotations (ADR-0032) |
 | 0.6 | | Linux AArch64 as host and target; cross-compilation between the Linux targets; the documentation site |
 | 0.7 | | macOS AArch64 as host and target; LLVM built and pinned by TyPy for every host |
-| 1.0 | Closures, `lambda`, `nonlocal`, generators, `*args`, keyword-only parameters, `isinstance` with a class held in a variable, `issubclass`, `typing` names as values, `NamedTuple`, `Sequence` and the other abstract collections | Cycle collection, `weakref`; Windows; performance budgets |
+| 0.8 | Functions as values: nested functions and closures, `lambda`, `nonlocal`, keyword-only and positional-only parameters, the `key` argument of `sorted`, `list.sort`, `min` and `max` | Attributes, tuple items, captures and cells stored by decreasing alignment |
+| 0.9 | Generators and generator expressions, `*args` and `**kwargs`, decorators, built-in functions as values, `NamedTuple`, `isinstance` with a class held in a variable, `issubclass`, `typing` names as values, `Sequence` and the other abstract collections | |
+| 1.0 | The remaining requirements of section 3 marked 1.0 | Cycle collection, `weakref`; Windows; performance budgets |
 
 ## 6. Out of scope
 
