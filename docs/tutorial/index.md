@@ -5,9 +5,9 @@ runs a first program.
 
 ## What you need
 
-TyPy runs on x86_64 Linux with glibc 2.39 or later, such as Ubuntu 24.04 or
-Debian 13. It links programs with the system C toolchain, so `cc` must be
-installed:
+TyPy runs on x86_64 and 64-bit Arm (AArch64) Linux with glibc 2.39 or
+later, such as Ubuntu 24.04 or Debian 13. It links programs with the
+system C toolchain, so `cc` must be installed:
 
 ```sh
 sudo apt install build-essential
@@ -15,20 +15,26 @@ sudo apt install build-essential
 
 ## Install from a release archive
 
-Download `typy-0.5.0-x86_64-unknown-linux-gnu.tar.gz` and its `.sha256`
-file from the [release page](https://github.com/typy-lang/typy/releases),
-check the archive and unpack it:
+Download the archive for your machine and its `.sha256` file from the
+[release page](https://github.com/typy-lang/typy/releases):
+`typy-0.6.0-x86_64-unknown-linux-gnu.tar.gz` on x86_64 or
+`typy-0.6.0-aarch64-unknown-linux-gnu.tar.gz` on AArch64, as `uname -m`
+names the machine. Check the archive and unpack it:
 
 ```sh
-sha256sum --check typy-0.5.0-x86_64-unknown-linux-gnu.tar.gz.sha256
-tar -xzf typy-0.5.0-x86_64-unknown-linux-gnu.tar.gz
-export PATH="$PWD/typy-0.5.0-x86_64-unknown-linux-gnu/bin:$PATH"
+archive="typy-0.6.0-$(uname -m)-unknown-linux-gnu"
+sha256sum --check "$archive.tar.gz.sha256"
+tar -xzf "$archive.tar.gz"
+export PATH="$PWD/$archive/bin:$PATH"
 typy --version
 ```
 
-The archive holds the `typy` command in `bin/` and the runtime library
-for glibc and musl targets in `lib/typy/`. Keep the two together: `typy`
-finds the runtime beside itself.
+The archive holds the `typy` command in `bin/` and the runtime library of
+every target in `lib/typy/`, so either archive builds for x86_64 and
+AArch64; see [Building for another target][cross]. Keep the two together:
+`typy` finds the runtime beside itself.
+
+[cross]: ../using/command-line.md#building-for-another-target
 
 ## A first program
 

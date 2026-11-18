@@ -6,6 +6,8 @@ All notable changes to TyPy are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-11-17
+
 ### Added
 
 - The documentation is published at <https://typy-lang.org>, built from
@@ -31,6 +33,10 @@ All notable changes to TyPy are recorded here. The format follows
   follows AAPCS64 on AArch64: up to four `float`s or `double`s in
   floating-point registers, other structures of up to 16 bytes in general
   registers, and a larger one as the address of a copy (FFI-12, ADR-0052).
+- Each release has an archive for AArch64 Linux hosts,
+  `typy-X.Y.Z-aarch64-unknown-linux-gnu.tar.gz`, beside the one for x86_64
+  hosts, and each holds the runtime of every target, so either builds for
+  both (ADR-0051).
 
 ### Changed
 
@@ -1160,7 +1166,8 @@ compiler needs glibc 2.39 or later and a C toolchain.
   non-ASCII text, checks that every requirement has a row in the test plan,
   and checks that every diagram is rendered from its source.
 
-[Unreleased]: https://github.com/typy-lang/typy/compare/v0.5.0...HEAD
+[Unreleased]: https://github.com/typy-lang/typy/compare/v0.6.0...HEAD
+[0.6.0]: https://github.com/typy-lang/typy/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/typy-lang/typy/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/typy-lang/typy/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/typy-lang/typy/compare/v0.2.0...v0.3.0

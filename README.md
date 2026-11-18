@@ -30,7 +30,9 @@ These are the goals of TyPy 1.0, as the
 
 ## Status
 
-TyPy 0.5.0 checks, builds and runs programs made of modules, functions,
+TyPy 0.6.0 runs on x86_64 and 64-bit Arm (AArch64) Linux and builds
+programs for either, with `typy build --target`. It checks, builds and
+runs programs made of modules, functions,
 classes with inheritance, dataclasses and statements over `int`, `float`,
 `str`, `bytes`, `bool`, `None`, lists, tuples, dicts, sets, optional values
 and unions, with comprehensions, assignment expressions, f-strings, `%`
@@ -50,14 +52,16 @@ release accepts.
 
 ## Quick start
 
-TyPy runs on x86_64 Linux with glibc 2.39 or later, such as Ubuntu 24.04
-or Debian 13, and needs a C toolchain (`cc`). Download the archive from the
-[0.5.0 release](https://github.com/typy-lang/typy/releases/tag/v0.5.0),
+TyPy runs on x86_64 and AArch64 Linux with glibc 2.39 or later, such as
+Ubuntu 24.04 or Debian 13, and needs a C toolchain (`cc`). Download the
+archive for your machine, `x86_64` or `aarch64`, which `uname -m` prints,
+from the
+[0.6.0 release](https://github.com/typy-lang/typy/releases/tag/v0.6.0),
 unpack it, and run a program:
 
 ```sh
-tar -xzf typy-0.5.0-x86_64-unknown-linux-gnu.tar.gz
-export PATH="$PWD/typy-0.5.0-x86_64-unknown-linux-gnu/bin:$PATH"
+tar -xzf "typy-0.6.0-$(uname -m)-unknown-linux-gnu.tar.gz"
+export PATH="$PWD/typy-0.6.0-$(uname -m)-unknown-linux-gnu/bin:$PATH"
 printf 'print("hello", 1 + 2)\n' > hello.py
 typy run hello.py
 ```
