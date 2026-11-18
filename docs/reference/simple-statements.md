@@ -56,7 +56,7 @@ that a function declares `global`, since any call may assign it. Copy
 the value to a local variable and test that.
 
 `import` is described in [Modules](modules.md), and `nonlocal` comes in
-1.0 (SMT-09).
+0.8 (SMT-09).
 
 ## Example
 

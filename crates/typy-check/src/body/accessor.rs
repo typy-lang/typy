@@ -532,7 +532,7 @@ impl BodyChecker<'_> {
                 name.span,
                 format!(
                     "`{class_name}.{}` is a property, and calling the value it gives is planned \
-                     for TyPy 1.0 (FUN-05)",
+                     for TyPy 0.8 (FUN-05)",
                     name.name
                 ),
             )

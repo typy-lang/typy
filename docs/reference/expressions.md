@@ -41,8 +41,8 @@ def lookup(table: dict[str, int], key: str) -> int:
 print(lookup({"a": 1}, "a"), lookup({"a": 1}, "b"))
 ```
 
-`lambda`, generator expressions and `*args` come in 1.0 (EXP-14, EXP-15,
-EXP-17).
+`lambda` comes in 0.8 (EXP-14), and generator expressions and `*args` in
+0.9 (EXP-15, EXP-17).
 
 ## Example
 

@@ -125,27 +125,32 @@ impl BodyChecker<'_> {
     }
 
     /// Returns a scalar class of `ctypes` read as a value (FFI-03), or the error for any
-    /// other function read as one, which is planned for 1.0 (FUN-05).
+    /// other function read as one: one of the program's, which is planned for 0.8 (FUN-05),
+    /// or a built-in one, planned for 0.9 (FUN-08).
     fn function_as_value(&mut self, id: &str, span: Span) -> Option<TypedExpr> {
         if let Some(super::builtin_module::ModuleFunction::CtypesType(ty)) =
             self.program.module_functions.get(id)
         {
             return Some(Self::cdata_class(crate::ctypes::CData::Scalar(*ty), span));
         }
-        let function = self.program.function_ids.contains_key(id)
-            || self.program.module_functions.contains_key(id)
-            || Builtin::named(id).is_some();
-        function.then(|| {
+        let (release, rule) = if self.program.function_ids.contains_key(id) {
+            ("0.8", RuleId::FUN_05)
+        } else if self.program.module_functions.contains_key(id) || Builtin::named(id).is_some() {
+            ("0.9", RuleId::FUN_08)
+        } else {
+            return None;
+        };
+        Some(
             self.error(
                 Diagnostic::new(
                     DiagnosticCode::error(201),
                     span,
-                    format!("using `{id}` as a value is planned for TyPy 1.0 (FUN-05)"),
+                    format!("using `{id}` as a value is planned for TyPy {release} ({rule})"),
                 )
-                .with_rule(RuleId::FUN_05),
+                .with_rule(rule),
                 span,
-            )
-        })
+            ),
+        )
     }
 
     /// Reads a module variable from a function: its value as it is now, which may be unbound
@@ -266,7 +271,7 @@ impl BodyChecker<'_> {
                     Diagnostic::new(
                         DiagnosticCode::error(201),
                         span,
-                        format!("using `{id}` as a value is planned for TyPy 1.0 (TYP-18)"),
+                        format!("using `{id}` as a value is planned for TyPy 0.9 (TYP-18)"),
                     )
                     .with_rule(RuleId::TYP_18)
                     .with_help("TyPy reads it in annotations, `isinstance` and class patterns"),

@@ -258,7 +258,7 @@ impl BodyChecker<'_> {
                         Diagnostic::new(
                             DiagnosticCode::error(201),
                             keyword.span,
-                            "the `key` argument of `sort` is planned for TyPy 1.0, with function values (FUN-05)",
+                            "the `key` argument of `sort` is planned for TyPy 0.8, with function values (FUN-05)",
                         )
                         .with_rule(RuleId::FUN_05),
                         span,

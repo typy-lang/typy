@@ -91,10 +91,10 @@ As in CPython, a bare `Optional` and a subscripted name such as
 `List[int]` in `isinstance` are E0401, and a bare `Union` is E0202, since
 CPython 3.12 and 3.13 raise `TypeError` where 3.14 and 3.15 answer
 `False`. The names held in a variable, passed or printed are planned for
-1.0 (TYP-18), and so are `Sequence`, `Mapping` and the other abstract
-collections (LIB-20), `NamedTuple` (CLS-27) and `Callable`, with function
-values (FUN-05). `typing.Any` and `typing.cast` are refused, since every
-value in TyPy has one type (TYP-10).
+0.9 (TYP-18), and so are `Sequence`, `Mapping` and the other abstract
+collections (LIB-20) and `NamedTuple` (CLS-27); `Callable` comes in 0.8,
+with function values (FUN-05). `typing.Any` and `typing.cast` are refused,
+since every value in TyPy has one type (TYP-10).
 
 ## Unions
 

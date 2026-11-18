@@ -21,7 +21,7 @@ impl Walker {
             } => {
                 match place {
                     Place::Function => {
-                        self.report(*span, planned("nested functions", "1.0", RuleId::FUN_04));
+                        self.report(*span, planned("nested functions", "0.8", RuleId::FUN_04));
                     }
                     Place::ModuleBlock => self.report(
                         *span,
@@ -37,7 +37,7 @@ impl Walker {
                 if !method_decorator && let Some(decorator) = decorators.first() {
                     self.report(
                         decorator.span(),
-                        planned("decorators", "1.0", RuleId::FUN_06),
+                        planned("decorators", "0.9", RuleId::FUN_06),
                     );
                 }
                 self.type_parameters(type_parameters);
@@ -48,13 +48,13 @@ impl Walker {
                             parameter.span,
                             planned(
                                 "positional-only and keyword-only parameters",
-                                "1.0",
+                                "0.8",
                                 RuleId::FUN_03,
                             ),
                         ),
                         ParameterKind::VarPositional | ParameterKind::VarKeyword => self.report(
                             parameter.span,
-                            planned("`*args` and `**kwargs` parameters", "1.0", RuleId::EXP_17),
+                            planned("`*args` and `**kwargs` parameters", "0.9", RuleId::EXP_17),
                         ),
                     }
                     if let Some(annotation) = &parameter.annotation {

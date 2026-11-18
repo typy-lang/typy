@@ -32,7 +32,7 @@ impl Walker {
         if let Some(decorator) = class.decorators.first() {
             self.report(
                 decorator.span(),
-                planned("class decorators", "1.0", RuleId::FUN_06),
+                planned("class decorators", "0.9", RuleId::FUN_06),
             );
         }
         if !class.type_parameters.is_empty() {

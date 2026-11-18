@@ -264,7 +264,7 @@ impl Walker {
                     } => self.expression(function),
                     other => self.report(
                         other.span(),
-                        planned("calls of values that are not names", "1.0", RuleId::FUN_05),
+                        planned("calls of values that are not names", "0.8", RuleId::FUN_05),
                     ),
                 }
                 for argument in arguments {
@@ -290,7 +290,7 @@ impl Walker {
                     if keyword.name.is_none() {
                         self.report(
                             keyword.span,
-                            planned("unpacking with `**`", "1.0", RuleId::EXP_17),
+                            planned("unpacking with `**`", "0.9", RuleId::EXP_17),
                         );
                     }
                     self.expression(&keyword.value);
@@ -365,7 +365,7 @@ impl Walker {
                         Some(key) => self.expression(key),
                         None => self.report(
                             value.span(),
-                            planned("unpacking with `**`", "1.0", RuleId::EXP_17),
+                            planned("unpacking with `**`", "0.9", RuleId::EXP_17),
                         ),
                     }
                     self.expression(value);

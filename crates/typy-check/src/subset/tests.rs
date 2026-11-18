@@ -70,15 +70,15 @@ fn later_features_name_their_release_and_rule() {
     let cases = [
         (
             "@d\nclass C:\n    pass\n",
-            "class decorators are planned for TyPy 1.0 (FUN-06)",
+            "class decorators are planned for TyPy 0.9 (FUN-06)",
         ),
         (
             "@decorated\nclass C[T]:\n    pass\n",
-            "class decorators are planned for TyPy 1.0 (FUN-06)",
+            "class decorators are planned for TyPy 0.9 (FUN-06)",
         ),
         (
             "x = {**y}\n",
-            "unpacking with `**` are planned for TyPy 1.0 (EXP-17)",
+            "unpacking with `**` are planned for TyPy 0.9 (EXP-17)",
         ),
         (
             "x = [i async for i in y]\n",
@@ -86,7 +86,7 @@ fn later_features_name_their_release_and_rule() {
         ),
         (
             "x = (i for i in range(3))\n",
-            "generator expressions are planned for TyPy 1.0 (EXP-15)",
+            "generator expressions are planned for TyPy 0.9 (EXP-15)",
         ),
         (
             "def f[*Ts](x: int) -> int:\n    return x\n",
@@ -94,27 +94,27 @@ fn later_features_name_their_release_and_rule() {
         ),
         (
             "f = lambda: 1\n",
-            "`lambda` expressions are planned for TyPy 1.0 (EXP-14)",
+            "`lambda` expressions are planned for TyPy 0.8 (EXP-14)",
         ),
         (
             "x = (i for i in range(3))\n",
-            "generator expressions are planned for TyPy 1.0 (EXP-15)",
+            "generator expressions are planned for TyPy 0.9 (EXP-15)",
         ),
         (
             "def f() -> None:\n    def g() -> None:\n        pass\n",
-            "nested functions are planned for TyPy 1.0 (FUN-04)",
+            "nested functions are planned for TyPy 0.8 (FUN-04)",
         ),
         (
             "@d\ndef f() -> None:\n    pass\n",
-            "decorators are planned for TyPy 1.0 (FUN-06)",
+            "decorators are planned for TyPy 0.9 (FUN-06)",
         ),
         (
             "def f(*a: int) -> None:\n    pass\n",
-            "`*args` and `**kwargs` parameters are planned for TyPy 1.0 (EXP-17)",
+            "`*args` and `**kwargs` parameters are planned for TyPy 0.9 (EXP-17)",
         ),
         (
             "def f(a: int, /) -> None:\n    pass\n",
-            "positional-only and keyword-only parameters are planned for TyPy 1.0 (FUN-03)",
+            "positional-only and keyword-only parameters are planned for TyPy 0.8 (FUN-03)",
         ),
         (
             "def f(a: int = g()) -> None:\n    pass\n",
@@ -122,23 +122,23 @@ fn later_features_name_their_release_and_rule() {
         ),
         (
             "print(*x)\n",
-            "unpacking with `*` are planned for TyPy 1.0 (EXP-17)",
+            "unpacking with `*` are planned for TyPy 0.9 (EXP-17)",
         ),
         (
             "print(**x)\n",
-            "unpacking with `**` are planned for TyPy 1.0 (EXP-17)",
+            "unpacking with `**` are planned for TyPy 0.9 (EXP-17)",
         ),
         (
             "def f() -> None:\n    yield 1\n",
-            "generators are planned for TyPy 1.0 (SMT-11)",
+            "generators are planned for TyPy 0.9 (SMT-11)",
         ),
         (
             "def f() -> None:\n    nonlocal x\n",
-            "`nonlocal` statements are planned for TyPy 1.0 (SMT-09)",
+            "`nonlocal` statements are planned for TyPy 0.8 (SMT-09)",
         ),
         (
             "x[0]()\n",
-            "calls of values that are not names are planned for TyPy 1.0 (FUN-05)",
+            "calls of values that are not names are planned for TyPy 0.8 (FUN-05)",
         ),
         (
             "async def f() -> None:\n    pass\n",

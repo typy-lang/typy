@@ -374,7 +374,7 @@ impl BodyChecker<'_> {
                             DiagnosticCode::error(201),
                             span,
                             "a type alias given its type arguments as a value is planned for \
-                             TyPy 1.0 (TYP-18)",
+                             TyPy 0.9 (TYP-18)",
                         )
                         .with_rule(RuleId::TYP_18),
                         span,
@@ -438,7 +438,7 @@ impl BodyChecker<'_> {
                                     DiagnosticCode::error(201),
                                     function.span(),
                                     "calls of values that are not names are planned for TyPy \
-                                     1.0 (FUN-05)",
+                                     0.8 (FUN-05)",
                                 )
                                 .with_rule(RuleId::FUN_05),
                                 span,

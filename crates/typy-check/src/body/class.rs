@@ -118,7 +118,7 @@ impl BodyChecker<'_> {
         let (message, rule) = if self.program.method(class, &attribute.name).is_some() {
             (
                 format!(
-                    "using the method `{}.{}` as a value is planned for TyPy 1.0 (FUN-05)",
+                    "using the method `{}.{}` as a value is planned for TyPy 0.8 (FUN-05)",
                     info.name, attribute.name
                 ),
                 RuleId::FUN_05,
@@ -604,7 +604,7 @@ impl BodyChecker<'_> {
             let message = if info.attribute(&name.name).is_some() {
                 format!(
                     "`{}.{}` is an attribute, and calling the value it holds is planned for \
-                     TyPy 1.0 (FUN-05)",
+                     TyPy 0.8 (FUN-05)",
                     info.name, name.name
                 )
             } else {

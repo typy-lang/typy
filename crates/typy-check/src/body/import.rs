@@ -729,8 +729,8 @@ impl BodyChecker<'_> {
         let (code, rule, message) = if let Named::Function(_) = found {
             (
                 201,
-                RuleId::FUN_05,
-                format!("using `{module}.{name}` as a value is planned for TyPy 1.0 (FUN-05)"),
+                RuleId::FUN_08,
+                format!("using `{module}.{name}` as a value is planned for TyPy 0.9 (FUN-08)"),
             )
         } else {
             (
@@ -745,9 +745,8 @@ impl BodyChecker<'_> {
         )
     }
 
-    /// Reads `module.name` of a built-in module: a value as it is; a function is not a value
-    /// until 1.0.
-    /// Reads `module.name` of a built-in module; a refusal points at the name.
+    /// Reads `module.name` of a built-in module: a value as it is, while a function is a value
+    /// only from 0.9 (FUN-08); a refusal points at the name.
     pub(super) fn builtin_attribute(
         &mut self,
         module: &str,
@@ -764,9 +763,9 @@ impl BodyChecker<'_> {
                 Diagnostic::new(
                     DiagnosticCode::error(201),
                     attribute.span,
-                    format!("using `{module}.{name}` as a value is planned for TyPy 1.0 (FUN-05)"),
+                    format!("using `{module}.{name}` as a value is planned for TyPy 0.9 (FUN-08)"),
                 )
-                .with_rule(RuleId::FUN_05),
+                .with_rule(RuleId::FUN_08),
                 span,
             ),
             Err(diagnostic) => self.error(*diagnostic, span),

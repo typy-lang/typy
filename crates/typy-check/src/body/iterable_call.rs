@@ -55,7 +55,7 @@ fn option_name(builtin: Builtin) -> Option<&'static str> {
 impl BodyChecker<'_> {
     /// Checks a call of a builtin that takes one iterable, and the optional value it allows:
     /// `reverse` for `sorted`, `start` for `sum`, also by position, and `default` for `min` and
-    /// `max`. A `key` needs a function value, planned for 1.0 (FUN-05).
+    /// `max`. A `key` needs a function value, planned for 0.8 (FUN-05).
     pub(super) fn call_over_iterable(
         &mut self,
         builtin: Builtin,
@@ -154,7 +154,7 @@ impl BodyChecker<'_> {
                     DiagnosticCode::error(201),
                     name_span,
                     format!(
-                        "the `key` argument of `{}` is planned for TyPy 1.0, with function values (FUN-05)",
+                        "the `key` argument of `{}` is planned for TyPy 0.8, with function values (FUN-05)",
                         builtin.name()
                     ),
                 )

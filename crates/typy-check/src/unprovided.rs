@@ -23,12 +23,12 @@ pub(crate) fn unprovided(name: &str) -> Option<Unprovided> {
         Unprovided::Planned { release, rule }
     }
     match name {
-        "issubclass" => Some(planned("1.0", RuleId::CLS_19)),
+        "issubclass" => Some(planned("0.9", RuleId::CLS_19)),
         // As decorators and as `super().name` they are taken before a name is read; as values
         // they need functions as values.
         "super" => Some(planned("1.0", RuleId::CLS_36)),
         "property" | "staticmethod" | "classmethod" | "callable" | "map" | "filter" => {
-            Some(planned("1.0", RuleId::FUN_05))
+            Some(planned("0.9", RuleId::FUN_08))
         }
         _ if CPYTHON_3_12_BUILTINS.contains(&name) => Some(Unprovided::Excluded),
         _ => None,
@@ -196,10 +196,10 @@ mod tests {
     #[test]
     fn later_builtins_name_their_release_and_rule() {
         let cases = [
-            ("issubclass", "1.0", RuleId::CLS_19),
+            ("issubclass", "0.9", RuleId::CLS_19),
             ("super", "1.0", RuleId::CLS_36),
-            ("property", "1.0", RuleId::FUN_05),
-            ("map", "1.0", RuleId::FUN_05),
+            ("property", "0.9", RuleId::FUN_08),
+            ("map", "0.9", RuleId::FUN_08),
         ];
         for (name, release, rule) in cases {
             assert_eq!(

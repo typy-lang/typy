@@ -33,11 +33,11 @@ pub(super) fn feature(kind: NodeKind) -> Feature {
         NodeKind::NamedExpr => Feature::Excluded {
             what: "assignment expressions to anything but a name",
         },
-        NodeKind::Nonlocal => planned("`nonlocal` statements", "1.0", RuleId::SMT_09),
-        NodeKind::Lambda => planned("`lambda` expressions", "1.0", RuleId::EXP_14),
-        NodeKind::GeneratorExp => planned("generator expressions", "1.0", RuleId::EXP_15),
-        NodeKind::Yield | NodeKind::YieldFrom => planned("generators", "1.0", RuleId::SMT_11),
-        NodeKind::Starred => planned("unpacking with `*`", "1.0", RuleId::EXP_17),
+        NodeKind::Nonlocal => planned("`nonlocal` statements", "0.8", RuleId::SMT_09),
+        NodeKind::Lambda => planned("`lambda` expressions", "0.8", RuleId::EXP_14),
+        NodeKind::GeneratorExp => planned("generator expressions", "0.9", RuleId::EXP_15),
+        NodeKind::Yield | NodeKind::YieldFrom => planned("generators", "0.9", RuleId::SMT_11),
+        NodeKind::Starred => planned("unpacking with `*`", "0.9", RuleId::EXP_17),
         NodeKind::AsyncFunctionDef | NodeKind::AsyncFor | NodeKind::AsyncWith | NodeKind::Await => {
             Feature::AfterOne {
                 what: "`async` and `await`",

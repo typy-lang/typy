@@ -104,7 +104,7 @@ A function the module gained after the program's Python floor is E0425
 at that floor: `math.fma` needs `python-floor = "3.13"`, and `fmax`,
 `fmin`, `signbit`, `isnormal` and `issubnormal` need `"3.15"`.
 A function of `math` is not a value yet: `f = math.sqrt` is planned for
-1.0 (FUN-05).
+0.9 (FUN-08).
 
 `fsum`, `dist`, `prod` and `sumprod` take iterables of `int`, `bool` or
 `float` items, and `gamma` and `lgamma` a real number, each with
