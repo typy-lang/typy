@@ -1,9 +1,7 @@
 //! Tests of checking unions of objects through the public API (TYP-14, TYP-07): what a union
 //! accepts, how `isinstance` narrows it, and what is refused.
 
-mod common;
-
-use common::app;
+use crate::common::app;
 
 const SHAPES: &str = concat!(
     "class Shape:\n",

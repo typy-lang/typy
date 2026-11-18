@@ -1,9 +1,7 @@
 //! Tests of checking `Final` through the public API (TYP-08): where it declares a name, and
 //! every assignment it refuses.
 
-mod common;
-
-use common::{app, codes};
+use crate::common::{app, codes};
 
 #[test]
 fn final_declares_variables_class_variables_and_attributes() {

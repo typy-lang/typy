@@ -1,9 +1,7 @@
 //! End-to-end tests of text files (LIB-04, ADR-0019): what a built program leaves on disk
 //! once it has ended, which a conformance test cannot look at.
 
-mod common;
-
-use common::Program;
+use crate::common::Program;
 
 fn contents(program: &Program, name: &str) -> String {
     std::fs::read_to_string(program.root().join(name)).unwrap()

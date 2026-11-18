@@ -1,9 +1,7 @@
 //! Tests of checking `type` statements through the public API (SMT-10, SMT-12): where an
 //! alias stands for its value, and the aliases TyPy refuses.
 
-mod common;
-
-use common::{app, codes};
+use crate::common::{app, codes};
 
 #[test]
 fn an_alias_stands_for_its_value_in_every_annotation() {

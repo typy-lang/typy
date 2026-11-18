@@ -1,9 +1,7 @@
 //! Tests of checking protocols through the public API (GEN-04, GEN-05, GEN-10): which
 //! classes satisfy a protocol, and where a protocol may be named.
 
-mod common;
-
-use common::app;
+use crate::common::app;
 
 /// A protocol and two classes that satisfy it, each test's program starts with.
 const SHAPES: &str = concat!(

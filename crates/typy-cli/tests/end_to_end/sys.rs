@@ -2,9 +2,7 @@
 //! real arguments, piped standard input and its exit status, which the conformance suite's
 //! oracle runs cannot vary.
 
-mod common;
-
-use common::Program;
+use crate::common::Program;
 
 fn text(bytes: &[u8]) -> String {
     String::from_utf8_lossy(bytes).into_owned()

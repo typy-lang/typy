@@ -2,8 +2,6 @@
 //! public API: the program it gives, and the diagnostics of each use TyPy does not compile
 //! (FFI-01 to FFI-03, FFI-09, FFI-10, ADR-0047, ADR-0048).
 
-mod common;
-
 use camino::Utf8PathBuf;
 use typy_check::{CData, CType, TypeChecker};
 use typy_source::{Project, ProjectSettings};
@@ -50,7 +48,7 @@ fn tempfile_root() -> std::path::PathBuf {
 #[test]
 fn a_declared_function_is_a_typed_c_call() {
     assert_eq!(
-        common::app(&format!("{DECLARED}print(libc.abs(-3), libc.puts(b'x'))\n")),
+        crate::common::app(&format!("{DECLARED}print(libc.abs(-3), libc.puts(b'x'))\n")),
         Vec::<String>::new()
     );
     let root = Utf8PathBuf::from_path_buf(tempfile_root()).unwrap();

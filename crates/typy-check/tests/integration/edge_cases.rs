@@ -1,9 +1,7 @@
 //! Tests of programs at the edges of what the checker reads: rarely written forms that it
 //! accepts, and the codes it gives what it refuses.
 
-mod common;
-
-use common::app;
+use crate::common::app;
 
 #[test]
 fn rarely_written_forms_are_accepted() {

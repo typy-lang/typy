@@ -1,9 +1,7 @@
 //! Tests of classes: the attributes `__init__` declares, the methods a body defines, and calls
 //! through `super()`, each against what CPython runs or refuses.
 
-mod common;
-
-use common::app;
+use crate::common::app;
 
 /// Asserts that each program is accepted.
 fn accepted(cases: &[&str]) {
