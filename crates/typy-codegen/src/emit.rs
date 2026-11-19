@@ -186,7 +186,7 @@ fn declare_functions<'ctx>(
                 *raising,
                 false,
             );
-            let linkage = if function.id == module.entry {
+            let linkage = if function.id == module.entry || function.id == module.finish {
                 Linkage::External
             } else {
                 Linkage::Internal

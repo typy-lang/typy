@@ -30,7 +30,8 @@ All notable changes to TyPy are recorded here. The format follows
   raised meanwhile is written to standard error after `Exception ignored
   in:`, and the program goes on (FUN-11, ADR-0069). A generator in a
   variable of a function that an exception leaves closes when the
-  exception goes, as CPython's traceback keeps it (ADR-0070).
+  exception goes, as CPython's traceback keeps it (ADR-0070), and one in a
+  module variable closes when the program ends (ADR-0071).
 - A `yield` inside an `except` clause or a `finally` block. The exception
   a suspended generator handles stays with it, so an exception its caller
   raises meanwhile has the caller's own context, as in CPython (ADR-0068).

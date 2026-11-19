@@ -486,6 +486,14 @@ traceback7:                                       ; preds = %b19
   br label %b22
 }
 
+define void @__typy_finish() {
+b0:
+  br label %b1
+
+b1:                                               ; preds = %b0
+  ret void
+}
+
 declare void @typy_rt_int_increment(i64)
 
 declare i8 @typy_rt_int_compare(i64, i64, i64)

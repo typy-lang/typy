@@ -61,6 +61,9 @@ pub struct TyirModule {
     pub classes: Vec<TyirClass>,
     /// The module body of `__main__`.
     pub entry: FunctionId,
+    /// The function the runtime's `main` calls when the program ends, which releases the
+    /// module variables of a program with generators (ADR-0071).
+    pub finish: FunctionId,
     /// The C functions the runtime allocates with (MEM-08).
     pub allocator: TyirAllocator,
     /// What the module exports when it is built as a C library, or `None` for an executable

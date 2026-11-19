@@ -37,6 +37,7 @@ fn module(export: TyirExport) -> TyirModule {
         tuple_types: TupleTypes::default(),
         classes: Vec::new(),
         entry: FunctionId(0),
+        finish: FunctionId(0),
         allocator: TyirAllocator::default(),
         foreign_libraries: Vec::new(),
         foreign_functions: Vec::new(),

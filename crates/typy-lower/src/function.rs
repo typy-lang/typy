@@ -9,7 +9,7 @@ use typy_tyir::{
     TupleTypes, TyirFunction, TyirType, ValueId,
 };
 
-use crate::mangle::{ENTRY_SYMBOL, symbol};
+use crate::mangle::{ENTRY_SYMBOL, FINISH_NAME, FINISH_SYMBOL, symbol};
 use crate::strings::StringPool;
 use crate::types::tyir_type;
 
@@ -168,6 +168,25 @@ impl<'context> FunctionLowerer<'context> {
         module_globals: &'context crate::module_variable::ModuleGlobals,
         recursive: bool,
     ) -> TyirFunction {
+        Self::lower_with(
+            program,
+            (function, resume),
+            calls,
+            tables,
+            (module_globals, recursive),
+            |_| {},
+        )
+    }
+
+    /// Lowers `function` as `lower` does, with `end` adding code where its body ends.
+    pub(crate) fn lower_with(
+        program: &'context TypedProgram,
+        (function, resume): (&TypedFunction, Option<FunctionId>),
+        calls: &crate::methods::Calls<'context>,
+        tables: Tables<'context>,
+        (module_globals, recursive): (&'context crate::module_variable::ModuleGlobals, bool),
+        end: impl FnOnce(&mut Self),
+    ) -> TyirFunction {
         let Tables {
             strings,
             tuple_types,
@@ -239,6 +258,7 @@ impl<'context> FunctionLowerer<'context> {
         };
         lowerer.statements(&function.body);
         lowerer.finish_lazy_import(function.span);
+        end(&mut lowerer);
         if !lowerer.builder.is_terminated() {
             // The end of a generator's body ends its last step (FUN-07).
             if function.signature.returns == typy_check::Type::NoneType
@@ -563,6 +583,8 @@ fn function_builder(
 pub(crate) fn function_symbol(program: &TypedProgram, function: &TypedFunction) -> String {
     if function.id == program.entry {
         ENTRY_SYMBOL.to_owned()
+    } else if function.name == FINISH_NAME {
+        FINISH_SYMBOL.to_owned()
     } else if function.name == "<lambda>" {
         // The lambdas of one function share a `__qualname__`, so each symbol adds the
         // lambda's number.

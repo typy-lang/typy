@@ -258,3 +258,11 @@ b48(v135: exception):
   v138 = load s2
   return_error v135
 }
+
+fn __typy_finish() -> unit {  # <finish>
+b0():
+  jump b1()
+b1():
+  v0 = const unit
+  return v0
+}

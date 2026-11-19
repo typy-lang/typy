@@ -73,6 +73,7 @@ fn module(mut functions: Vec<TyirFunction>) -> TyirModule {
         tuple_types,
         classes: vec![class("Point", fields), error, shape, square],
         entry: FunctionId(0),
+        finish: FunctionId(0),
         allocator: crate::module::TyirAllocator::default(),
         foreign_libraries: Vec::new(),
         foreign_functions: Vec::new(),

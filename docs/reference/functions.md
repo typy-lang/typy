@@ -243,7 +243,11 @@ the order CPython closes them, and one never started runs nothing. A
 generator in a variable of a function that an exception leaves lives as
 long as the exception, as CPython's traceback keeps the function's
 variables: it closes when the `except` clause that handles the exception
-ends, or after the report of one nothing catches (ADR-0070). An
+ends, or after the report of one nothing catches (ADR-0070). A generator
+still suspended in a module variable when the program ends closes then,
+after everything else the program printed: those of the main module
+first, in the order its code binds them, then those of the modules it
+imports (ADR-0071). An
 exception raised while a freed generator closes cannot reach your code:
 it is written to standard error after `Exception ignored in: <generator
 object NAME at 0x...>`, and the program goes on (FUN-11, ADR-0069).

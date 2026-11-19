@@ -76,3 +76,4 @@ supersedes it.
 | [ADR-0068](0068-give-the-caller-back-its-handled-exception-when-a-generator-step-stops.md) | Give the caller back its handled exception when a generator step stops | Accepted | 2026-11-19 |
 | [ADR-0069](0069-close-freed-generators-from-a-queue-after-the-call-that-dropped-them.md) | Close freed generators from a queue after the call that dropped them | Accepted | 2026-11-19 |
 | [ADR-0070](0070-keep-the-variables-of-each-function-an-exception-leaves-with-it.md) | Keep the variables of each function an exception leaves with it | Accepted | 2026-11-19 |
+| [ADR-0071](0071-release-the-module-variables-when-a-program-with-generators-ends.md) | Release the module variables when a program with generators ends | Accepted | 2026-11-19 |

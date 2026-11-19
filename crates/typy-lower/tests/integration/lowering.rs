@@ -942,3 +942,36 @@ fn fun_11_an_exception_keeps_the_variables_of_a_function_it_leaves_when_there_ar
         "{with_generators}"
     );
 }
+
+/// Returns the text of the function `__typy_finish` of `module`.
+fn finish_text(module: &TyirModule) -> String {
+    let text = print(module);
+    text.split("fn __typy_finish")
+        .nth(1)
+        .unwrap_or_default()
+        .split("\nfn ")
+        .next()
+        .unwrap_or_default()
+        .to_owned()
+}
+
+#[test]
+fn fun_11_the_end_of_a_program_with_generators_releases_its_module_variables() {
+    let variables = "names = [\"a\"]\ncount = len(names)\n";
+    let plain = lower(variables);
+    let finish = function(&plain, "<finish>");
+    assert_eq!(finish.symbol, "__typy_finish");
+    assert_eq!(plain.finish, finish.id);
+    assert!(!finish.may_raise);
+    assert!(
+        !finish_text(&plain).contains("dec "),
+        "{}",
+        finish_text(&plain)
+    );
+    let with_generators = lower(&format!(
+        "from collections.abc import Iterator\n\n\ndef count_up() -> Iterator[int]:\n    \
+         yield 1\n\n\n{variables}"
+    ));
+    let body = finish_text(&with_generators);
+    assert!(body.contains("dec "), "{body}");
+}

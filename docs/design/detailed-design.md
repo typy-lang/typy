@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy detailed design |
-| Version | 2.50 |
+| Version | 2.51 |
 | Status | Approved |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-19 |
@@ -2744,7 +2744,7 @@ comparisons, calls and counting, terminators, and emission.
 | A function that cannot raise | Returns its result directly |
 | `invoke` | When the exception is not null, generated code calls `typy_rt_traceback_add(exception, function, file, line)` with C strings, then takes the error path |
 | Dropped generators | In a program with a generator function, after every `decrement`, every call of a runtime function that takes an object other than a `str`, `bytes` or a type, and the release of the frame blocks, generated code loads `typy_rt_generator_dropped` and calls `typy_rt_generator_close_dropped()` when it is not null, so a generator a release dropped closes before the next operation (FUN-11, ADR-0069) |
-| Entry | The runtime's `main` calls `__typy_main`, the body of `__main__` |
+| Entry | The runtime's `main` calls `__typy_main`, the body of `__main__`, and at the end `__typy_finish`, `TyirModule::finish`, both with external linkage. In a program with a generator function `__typy_finish` unbinds and releases every module variable, `__main__`'s first in the order its code binds them, then each other module's, the last to run first, so a generator one holds closes at exit, as CPython clears its modules (FUN-11, ADR-0071) |
 | Runtime functions | `typy_rt_` and the name from TyIR's `RuntimeFunction`, plus `increment`, `decrement`, `int_increment`, `int_decrement`, `int_add`, `int_subtract`, `int_multiply`, `int_and`, `int_or`, `int_xor`, `int_negate`, `int_invert`, `int_compare`, `traceback_add`, `exception_raise`, `exception_enter`, `exception_leave` and `exception_matches`, with the C calling convention. TyIR's `ExceptionNew`, `ExceptionSetCause`, `ExceptionThrow`, `ExceptionHandled`, `ExceptionClass` and `ExceptionText` are `exception_new(class, descriptor, arguments)`, `exception_set_cause(exception, cause)`, `exception_throw(exception)`, `exception_handled()`, `exception_class(exception)` and `exception_text(exception, repr)`; each borrows its arguments |
 
 In 0.1 every `int` operation calls the runtime. Inline fast paths for
@@ -3082,7 +3082,7 @@ installed `typy` finds `<prefix>/lib/typy/` and a `typy` in
 
 | Module | Behaviour |
 | --- | --- |
-| `entry` | `main` keeps its arguments for `sys.argv`, records the stack limit, calls `__typy_main`, reports an uncaught exception, releases it and closes the generators it kept, through the hook making a generator installs, flushes standard output and returns the exit status `sys::exit_status` gives |
+| `entry` | `main` keeps its arguments for `sys.argv`, records the stack limit, calls `__typy_main`, reports an uncaught exception, releases it and closes the generators it kept, through the hook making a generator installs, calls `__typy_finish`, closes the open files, flushes standard output and returns the exit status `sys::exit_status` gives |
 | `cdata` | `typy_rt_cdata_new(class)` makes an object, every byte zero; the getters and setters read and write a scalar of each C type, wrapping an `int` to its width; `typy_rt_cdata_pointer(class, target)` points to an object and keeps it; `typy_rt_cdata_from_address` makes a pointer of a C result; `typy_rt_cdata_contents` and `typy_rt_cdata_item` give an object over the target or an item, `ValueError: NULL pointer access` for a null pointer and `IndexError: invalid index` outside an array, which counts from its end when negative; `typy_rt_cdata_argument` gives the address a C function takes; `typy_rt_cdata_field` gives an object over a structure's field, `typy_rt_cdata_copy` copies an object's bytes into another of its class and keeps the source, and `typy_rt_cdata_set_pointer` writes a pointer field or item. The type object's slots give CPython's truth and `repr` (FFI-03, ADR-0048) |
 | `foreign` | `typy_rt_int_low_bits(word)` gives the low 64 bits of an `int` word in two's complement, and 0 for the word 0; `typy_rt_int_from_uint64`, `typy_rt_int_from_address` and `typy_rt_bytes_from_c_string` make a C result a TyPy value, null giving `None`; `typy_rt_ctypes_float_argument(word, position)` converts an `int` for a `c_double`, raising `ctypes.ArgumentError`, a class whose module is `ctypes`, with CPython's text for one too large (FFI-03, ADR-0047) |
 | `library` | `typy_rt_library_load(module)` records the stack limit, keeps `['']` for `sys.argv`, runs the module bodies and flushes standard output; `_unload` flushes it and closes the files; `_enter` records the stack limit for the calling thread, `_leave` flushes standard output; `_raised(exception)` exits with a `SystemExit`'s status, or reports any other exception as uncaught and aborts (ADR-0044). `stack::record_limit` reads `getrlimit` once and measures from the current stack pointer |

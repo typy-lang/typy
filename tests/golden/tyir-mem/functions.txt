@@ -356,3 +356,11 @@ b22(v72: exception):
   dec v75
   return_error v72
 }
+
+fn __typy_finish() -> unit {  # <finish>
+b0():
+  jump b1()
+b1():
+  v0 = const unit
+  return v0
+}

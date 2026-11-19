@@ -7,6 +7,9 @@ mod program {
     unsafe extern "C" {
         /// The body of `__main__`, which generated code defines.
         fn __typy_main() -> *mut ExceptionObject;
+        /// The end of the program, which generated code defines: it releases the module
+        /// variables of a program with generators, so those they hold close (ADR-0071).
+        fn __typy_finish();
     }
 
     /// Runs the program; the exit status is 0, or the one an exception nothing caught gives:
@@ -19,7 +22,10 @@ mod program {
         let exception = unsafe { __typy_main() };
         crate::io::flush_stdout();
         if exception.is_null() {
+            // SAFETY: `__typy_finish` is the generated end, which takes and returns nothing.
+            unsafe { __typy_finish() };
             crate::text_file::close_all();
+            crate::io::flush_stdout();
             0
         } else {
             // SAFETY: a non-null result is a live exception that the program no longer holds;
@@ -34,6 +40,7 @@ mod program {
                 // The variables the exception kept go with it, so generators among them
                 // close now, after the report, as CPython closes them (FUN-11, ADR-0070).
                 crate::generator::close_dropped_at_exit();
+                __typy_finish();
                 crate::text_file::close_all();
                 crate::io::flush_stdout();
                 status
