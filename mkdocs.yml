@@ -188,6 +188,10 @@ nav:
           - adr/0060-make-a-function-value-an-object-of-its-code-and-its-captures.md
           - adr/0061-capture-by-value-unless-the-variable-is-assigned-after-the-capture.md
           - adr/0062-store-attributes-and-tuple-items-in-decreasing-order-of-alignment.md
+          - adr/0063-compile-a-generator-as-a-resumable-function-with-its-frame-in-its-object.md
+          - adr/0064-close-a-generator-freed-while-suspended-at-its-yield.md
+          - adr/0065-give-each-iterable-type-iteration-entries-the-runtime-calls.md
+          - adr/0066-hold-an-abstract-collection-as-the-union-of-its-built-in-types.md
       - Detailed design: design/detailed-design.md
       - Test plan: testing/test-plan.md
       - Benchmark report: testing/benchmark-report.md

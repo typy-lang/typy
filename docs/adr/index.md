@@ -68,3 +68,7 @@ supersedes it.
 | [ADR-0060](0060-make-a-function-value-an-object-of-its-code-and-its-captures.md) | Make a function value an object of its code and its captures | Accepted | 2026-11-18 |
 | [ADR-0061](0061-capture-by-value-unless-the-variable-is-assigned-after-the-capture.md) | Capture by value unless the variable is assigned after the capture | Accepted | 2026-11-18 |
 | [ADR-0062](0062-store-attributes-and-tuple-items-in-decreasing-order-of-alignment.md) | Store attributes and tuple items in decreasing order of alignment | Accepted | 2026-11-18 |
+| [ADR-0063](0063-compile-a-generator-as-a-resumable-function-with-its-frame-in-its-object.md) | Compile a generator as a resumable function with its frame in its object | Accepted | 2026-11-19 |
+| [ADR-0064](0064-close-a-generator-freed-while-suspended-at-its-yield.md) | Close a generator freed while suspended at its yield | Accepted | 2026-11-19 |
+| [ADR-0065](0065-give-each-iterable-type-iteration-entries-the-runtime-calls.md) | Give each iterable type iteration entries the runtime calls | Accepted | 2026-11-19 |
+| [ADR-0066](0066-hold-an-abstract-collection-as-the-union-of-its-built-in-types.md) | Hold an abstract collection as the union of its built-in types | Accepted | 2026-11-19 |

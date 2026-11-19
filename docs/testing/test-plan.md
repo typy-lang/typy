@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy test plan |
-| Version | 1.03 |
+| Version | 1.04 |
 | Status | Draft |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-19 |
@@ -320,8 +320,10 @@ that the specification does not define.
 | TYP-15 | 0.3 | IT | `tests/conformance/typ/TYP-15_*.py` |
 | TYP-16 | 0.5 | IT | `tests/conformance/typ/TYP-16_*.py` |
 | TYP-17 | 0.5 | IT | `tests/conformance/typ/TYP-17_*.py` |
-| TYP-18 | 0.9 | IT | `tests/conformance/typ/TYP-18_*.py` |
+| TYP-18 | 0.10 | IT | `tests/conformance/typ/TYP-18_*.py` |
 | TYP-19 | 1.0 | IT | `tests/conformance/typ/TYP-19_*.py` |
+| TYP-20 | 0.9 | UT, IT | `typy-check` tests of the classes that fit `Iterator[T]` and `Iterable[T]`, and of those that do not; `tests/conformance/typ/TYP-20_*.py`, one function given each kind of iterator, also in the sanitizer run |
+| TYP-21 | 0.9 | IT | `tests/conformance/typ/TYP-21_*.py` |
 | DAT-01 | 0.1 | IT | `tests/conformance/dat/DAT-01_*.py` |
 | DAT-02 | 0.1 | IT | `tests/conformance/dat/DAT-02_*.py` |
 | DAT-03 | 0.1 | IT | `tests/conformance/dat/DAT-03_*.py` |
@@ -353,9 +355,9 @@ that the specification does not define.
 | EXP-12 | 0.2 | IT | `tests/conformance/exp/EXP-12_*.py` |
 | EXP-13 | 0.5 | IT | `tests/conformance/exp/EXP-13_*.py` |
 | EXP-14 | 0.8 | UT, IT | `typy-check` tests of what a `lambda` captures, a comprehension's variable and the variable it is assigned to included, of each context that gives its types and of the refusals; `tests/conformance/exp/EXP-14_*.py`, late binding in a loop and in a comprehension run twice included, also in the sanitizer run |
-| EXP-15 | 0.9 | IT | `tests/conformance/exp/EXP-15_*.py` |
+| EXP-15 | 0.9 | IT | `tests/conformance/exp/EXP-15_*.py`, the first iterable evaluated at once and the rest lazily, also in the sanitizer run |
 | EXP-16 | 0.1 | IT | `tests/conformance/exp/EXP-16_*.py` |
-| EXP-17 | 0.9 | IT | `tests/conformance/exp/EXP-17_*.py` |
+| EXP-17 | 0.9 | UT, IT | `typy-check` tests of the element types of `*args` and `**kwargs` and of each unpacking; `tests/conformance/exp/EXP-17_*.py` |
 | SMT-01 | 0.1 | IT | `tests/conformance/smt/SMT-01_*.py` |
 | SMT-02 | 0.2 | IT | `tests/conformance/smt/SMT-02_*.py` |
 | SMT-03 | 0.1 | IT | `tests/conformance/smt/SMT-03_*.py` |
@@ -366,7 +368,7 @@ that the specification does not define.
 | SMT-08 | 0.3 | IT | `tests/conformance/smt/SMT-08_*.py` |
 | SMT-09 | 0.8 | UT, IT | `typy-check` tests of CPython's rules for `nonlocal`, of the cell it shares, through a function between included, and of the narrowing a call may undo; `tests/conformance/smt/SMT-09_*.py`, also in the sanitizer run |
 | SMT-10 | 0.4 | IT | `tests/conformance/smt/SMT-10_*.py` |
-| SMT-11 | 0.9 | IT | `tests/conformance/smt/SMT-11_*.py` |
+| SMT-11 | 0.9 | UT, IT | `typy-check` tests of each statement form of `yield`, and of the forms planned for 1.0; `typy-tyir` verifier tests that no value lives across a yield; `tests/conformance/smt/SMT-11_*.py`, also in the sanitizer run |
 | SMT-12 | 0.5 | IT | `tests/conformance/smt/SMT-12_*.py` |
 | CST-01 | 0.1 | IT | `tests/conformance/cst/CST-01_*.py` |
 | CST-02 | 0.1 | IT | `tests/conformance/cst/CST-02_*.py` |
@@ -384,11 +386,13 @@ that the specification does not define.
 | FUN-03 | 0.8 | UT, IT | `typy-check` tests of binding arguments to keyword-only and positional-only parameters; `tests/conformance/fun/FUN-03_*.py` |
 | FUN-04 | 0.8 | UT, IT | `typy-check` and `typy-lower` tests of each variable's capture, by value or in a cell, of recursion and of mutual recursion; `tests/conformance/fun/FUN-04_*.py`, also in the sanitizer run, which shows each closure, cell and shared environment freed (NFR-07, NFR-08) |
 | FUN-05 | 0.8 | UT, IT | `typy-codegen` tests of a function object, its descriptor and a call through a value; `tests/conformance/fun/FUN-05_*.py` for identity, equality, hashing and `repr`, bound methods and `key`, also in the sanitizer run |
-| FUN-06 | 0.9 | IT | `tests/conformance/fun/FUN-06_*.py` |
-| FUN-07 | 0.9 | IT | `tests/conformance/fun/FUN-07_*.py` |
-| FUN-08 | 0.9 | IT | `tests/conformance/fun/FUN-08_*.py` |
-| FUN-09 | 0.9 | IT | `tests/conformance/fun/FUN-09_*.py` |
-| FUN-10 | 0.9 | IT | `tests/conformance/fun/FUN-10_*.py` |
+| FUN-06 | 0.10 | IT | `tests/conformance/fun/FUN-06_*.py` |
+| FUN-07 | 0.9 | UT, IT | `typy-check` tests that a generator of each annotation yields and returns its types, and that `send`, `throw` and `close` are only for `Generator`; `tests/conformance/fun/FUN-07_*.py`, CPython's errors of a running, finished or just started generator included, also in the sanitizer run |
+| FUN-08 | 0.10 | IT | `tests/conformance/fun/FUN-08_*.py` |
+| FUN-09 | 0.10 | IT | `tests/conformance/fun/FUN-09_*.py` |
+| FUN-10 | 0.10 | IT | `tests/conformance/fun/FUN-10_*.py` |
+| FUN-11 | 0.9 | UT, IT | Runtime tests of closing in each state, and of a generator a container operation drops; `tests/conformance/fun/FUN-11_*.py`, with `break`, `del`, `close()` and a generator that yields again, also in the sanitizer run |
+| FUN-12 | 1.0 | IT | `tests/conformance/fun/FUN-12_*.py` |
 | CLS-01 | 0.2 | IT | `tests/conformance/cls/CLS-01_*.py` |
 | CLS-02 | 0.2 | IT | `tests/conformance/cls/CLS-02_*.py` |
 | CLS-03 | 0.3 | IT | `tests/conformance/cls/CLS-03_*.py` |
@@ -413,7 +417,7 @@ that the specification does not define.
 | CLS-24 | 0.5 | IT | `tests/conformance/cls/CLS-24_*.py` |
 | CLS-25 | 0.5 | IT | `tests/conformance/cls/CLS-25_*.py` |
 | CLS-26 | 0.5 | IT | `tests/conformance/cls/CLS-26_*.py` |
-| CLS-27 | 0.9 | IT | `tests/conformance/cls/CLS-27_*.py` |
+| CLS-27 | 0.10 | IT | `tests/conformance/cls/CLS-27_*.py` |
 | CLS-28 | 1.0 | IT | `tests/conformance/cls/CLS-28_*.py` |
 | CLS-29 | 1.0 | IT | `tests/conformance/cls/CLS-29_*.py` |
 | CLS-30 | 1.0 | IT | `tests/conformance/cls/CLS-30_*.py` |
@@ -423,8 +427,9 @@ that the specification does not define.
 | CLS-34 | 1.0 | IT | `tests/conformance/cls/CLS-34_*.py` |
 | CLS-35 | 1.0 | IT | `tests/conformance/cls/CLS-35_*.py` |
 | CLS-36 | 1.0 | IT | `tests/conformance/cls/CLS-36_*.py` |
-| CLS-18 | 0.9 | IT | `tests/conformance/cls/CLS-18_*.py` |
-| CLS-19 | 0.9 | IT | `tests/conformance/cls/CLS-19_*.py` |
+| CLS-37 | 1.0 | IT | `tests/conformance/cls/CLS-37_*.py` |
+| CLS-18 | 0.10 | IT | `tests/conformance/cls/CLS-18_*.py` |
+| CLS-19 | 0.10 | IT | `tests/conformance/cls/CLS-19_*.py` |
 | GEN-01 | 0.4 | IT | `tests/conformance/gen/GEN-01_*.py`; `crates/typy-check/tests/integration/generics.rs` |
 | GEN-02 | 0.4 | IT | `tests/conformance/gen/GEN-02_*.py` |
 | GEN-03 | 0.4 | IT | `tests/conformance/gen/GEN-03_*.py` |
@@ -493,7 +498,7 @@ that the specification does not define.
 | LIB-17 | 0.5 | IT | `tests/conformance/lib/LIB-17_*.py` |
 | LIB-18 | 1.0 | IT | `tests/conformance/lib/LIB-18_*.py` |
 | LIB-19 | 1.0 | IT | `tests/conformance/lib/LIB-19_*.py` |
-| LIB-20 | 0.9 | IT | `tests/conformance/lib/LIB-20_*.py` |
+| LIB-20 | 0.9 | UT, IT | `typy-check` tests of each abstract collection's members and operations; `tests/conformance/lib/LIB-20_*.py` |
 | LIB-21 | 1.0 | IT | `tests/conformance/lib/LIB-21_*.py` |
 | LIB-22 | 0.7 | UT, IT | `crates/typy-source/src/settings.rs` for `sys.platform` of each operating system; `crates/typy-driver/tests/integration/pipeline.rs` for the platform each target gives; `tests/conformance/lib/LIB-22_*.py` on Linux and on the `macos-15` job |
 | LIB-13 | 0.4 | IT | `tests/conformance/lib/LIB-13_*.py` |
@@ -555,6 +560,7 @@ that the specification does not define.
 | NFR-17 | 0.7 | IT | The conformance suite on the `macos-15` CI job, each accepted test compared with CPython 3.12 to 3.15 for macOS from python-build-standalone; a test whose header says `# typy-system: linux` or `macos`, because it names a library only that system has, runs on that system alone, which `crates/typy-conformance/tests/integration/verdicts.rs` checks |
 | NFR-18 | 0.8 | UT | `typy-codegen` layout test of instances that mix every kind of attribute |
 | NFR-19 | 0.8 | UT, IT | `typy-check` tests that reject a function, a `lambda` or a method where its parameter or result types do not fit the expected `Callable`; the sanitizer run of every conformance test of FUN-04, FUN-05, SMT-09 and EXP-14 |
+| NFR-20 | 0.9 | UT | `typy-codegen` test of a generator object's layout; a runtime test that counts the allocations of a loop over a generator |
 | C-01 | 0.1 | CI gate | Workspace builds with the pinned Rust toolchain only |
 | C-02 | 0.1 | CI gate | `scripts/check-pins.sh`: `ruff_python_parser` pinned with `=` in `Cargo.toml` |
 | C-03 | 0.1 | UT | `typy-codegen` test: the linked LLVM major version is 23 |
