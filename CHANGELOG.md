@@ -6,6 +6,8 @@ All notable changes to TyPy are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-11-19
+
 ### Added
 
 - Positional-only parameters, before `/`, and keyword-only parameters,
@@ -83,7 +85,6 @@ All notable changes to TyPy are recorded here. The format follows
   CPython raises `TypeError`, where TyPy 0.7 gave E0201.
 - `typing.NamedTuple` and the abstract collections of `typing`, such as
   `Sequence`, are given as planned for 0.9, where TyPy 0.7 named 1.0.
-
 - An instance and a tuple store their attributes and items by decreasing
   alignment, so a `bool` beside `int`s no longer takes 8 bytes: a class of
   two `int`s, a `float`, an object and two `bool`s takes 56 bytes, not 64,
@@ -1295,7 +1296,8 @@ compiler needs glibc 2.39 or later and a C toolchain.
   non-ASCII text, checks that every requirement has a row in the test plan,
   and checks that every diagram is rendered from its source.
 
-[Unreleased]: https://github.com/typy-lang/typy/compare/v0.7.0...HEAD
+[Unreleased]: https://github.com/typy-lang/typy/compare/v0.8.0...HEAD
+[0.8.0]: https://github.com/typy-lang/typy/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/typy-lang/typy/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/typy-lang/typy/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/typy-lang/typy/compare/v0.4.0...v0.5.0
