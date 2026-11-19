@@ -12,6 +12,7 @@
 | A method read through an instance as a bound method, and through its class as a function | FUN-05 |
 | A function defined inside a function, which reads the variables of the functions around it | FUN-04 |
 | A generator function, whose `yield` statements give its items one step at a time | SMT-11, FUN-07 |
+| `send`, `throw` and `close` of a `Generator[Y, S, R]`, and `received = yield value` | SMT-11, FUN-07 |
 
 A function value is the `key` of `sorted`, `list.sort`, `min` and `max`;
 see [Ordering by a key](../library/functions-and-modules.md#ordering-by-a-key).
@@ -164,9 +165,54 @@ raises `ValueError`, and a `StopIteration` that escapes the body becomes
 `RuntimeError`, as CPython has it. A generator function annotated any
 other way is E0405, and a `yield` outside a function is E0103.
 
-A `yield` is a statement in TyPy. One inside a larger expression, such as
-`print((yield value))`, and a generator `lambda` are planned for 1.0
-(FUN-12).
+### Sending values to a generator
+
+A generator annotated `Generator[Y, S, R]` has the methods of CPython's
+generators. `send(value)` resumes it with a value of type `S`, which an
+assignment of its `yield` receives, and returns the next item;
+`throw(exception)` raises the exception at the `yield` it stopped at;
+`close()` raises `GeneratorExit` there, so its `finally` blocks run. An
+`Iterator[Y]` or an `Iterable[Y]` has none of them, so a generator
+function you drive with `send` is annotated `Generator`:
+
+<!-- typy-expect: accepted -->
+```python
+from collections.abc import Generator
+
+
+def running_total() -> Generator[int, int, None]:
+    total = 0
+    while True:
+        received = yield total
+        if received is not None:
+            total += received
+
+
+totals = running_total()
+print(next(totals))
+print(totals.send(5), totals.send(10))
+totals.close()
+```
+
+`next()` and a `for` loop resume a generator with `None`, and so does
+`send(None)`, so the `yield` of `received = yield total` gives
+`int | None`, and the program tests for `None` before it adds. Type
+checkers give it the type `int`; TyPy gives the type that holds every
+value CPython can give it (ADR-0067). A variable declared `int` that the
+`yield` is assigned to is E0402. `send` takes an `S` only, as type
+checkers have it, so a generator of `Generator[int, int, None]` starts
+with `next()`; `send(None)` to it is E0404. A value other than `None`
+sent before the first step raises `TypeError`, and `send` or `throw`
+after the body ends raises `StopIteration`, as in CPython.
+
+A generator suspended inside an `except` clause keeps the exception it
+handles: its caller does not see it, and the generator handles it again
+when it resumes, as CPython does (ADR-0068).
+
+A `yield` is a statement in TyPy: `yield value`, `yield`, and
+`target = yield value`, also with an annotation. One inside a larger
+expression, such as `print((yield value))`, and a generator `lambda` are
+planned for 1.0 (FUN-12).
 
 ## Functions as values
 

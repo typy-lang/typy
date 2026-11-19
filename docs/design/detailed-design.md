@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy detailed design |
-| Version | 2.47 |
+| Version | 2.48 |
 | Status | Approved |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-19 |
@@ -804,9 +804,22 @@ reaching it, and `TypedFunction::generator` keeps the types for the
 lowering. `Generator[Y, S, R]` is assignable to `Iterator[Y]` and
 `Iterable[Y]`, the same object, and `sequence` and `next` take a
 generator as its `Iterator[Y]` through `Upcast`, so loops, `iter()`,
-`next()` and every builtin of an iterable read it as an iterator. The
-subset walker accepts a `yield` as a statement, `yield value` or `target
-= yield value`, and the same of `yield from`; one inside a larger
+`next()` and every builtin of an iterable read it as an iterator.
+`target = yield value`, also annotated, is `TypedStmt::Yield { value,
+received }`: `received` is the assignment, checked with
+`BodyChecker::received` holding `TypedExprKind::Received`, of type `S |
+None` (ADR-0067), which the checker's `Expr::Yield` arm gives as the
+assignment's value; the assignment's checks report a target that does
+not fit, E0402 with a help about `None` for a variable. `send`, `throw`
+and `close` are `Method::GeneratorSend`, `GeneratorThrow` and
+`GeneratorClose`, of `Type::Generator` alone: `send` takes an `S`,
+converted to it, and E0404 for `None` names `next(generator)` in its
+help; `throw` takes what `raise` takes, a class called with no
+arguments; `send` and `throw` give `Y`. The same names on an
+`Iterator[Y]` are E0412 under FUN-07, with a help that names
+`Generator[Y, S, R]`. The subset walker accepts a `yield` as a
+statement, `yield value` or `target = yield value`, and the same of
+`yield from`; one inside a larger
 expression or a `lambda` is E0201, planned for 1.0 (FUN-12), and one
 outside a function or inside a comprehension is CPython's `SyntaxError`,
 E0103.
@@ -2382,7 +2395,22 @@ and ends the step in `Terminator::Yield { generator, resume }`. Since the
 blocks after the yields are successors of the entry alone, the
 definitions check rejects a value of one step used in another, so only
 slots outlive a yield. Every resume function may raise, and no instance
-is placed in its frame (MEM-03).
+is placed in its frame (MEM-03). The block after a `yield` inside an
+`except` clause first makes the clause's exception the one being handled
+again with `ExceptionEnter` (ADR-0068); then `GeneratorThrown` takes what
+`throw` or `close` gave the step, which `ExceptionThrow` raises there
+when it is not `None`; then the assignment of `received` runs, whose
+`Received` is `None` unless `GeneratorReceived` says `send` gave a
+value, read with `GeneratorSent` as an `S` and wrapped as `S | None`. In
+a resume function a clause keeps its exception in a hidden slot, a
+`finally` block run for a pending exception keeps that one in a hidden
+slot and goes on with it when the block ends, and
+`Cleanup::Handling::previous` is `None`: leaving the clause restores the
+exception of the clause around it, or `GeneratorCaller`, the one the
+step's caller handles. `send` passes the bits of its value and whether
+it is `None` to `RuntimeFunction::GeneratorSend`, `throw` hands its
+exception over to `GeneratorThrow`, and both then read the item the step
+yielded as `next()` does; `close` calls `GeneratorClose`.
 `Constant::MethodDescriptor(id)` is the address of method `id`'s bound
 method descriptor as bits, and `RuntimeFunction::MethodNew` makes a bound
 method of a descriptor and an instance, which escapes into it.
@@ -3040,7 +3068,7 @@ installed `typy` finds `<prefix>/lib/typy/` and a `typy` in
 | `ViewObject` | Header, `kind: u32`, padding, `dict: *mut DictObject` | A view of a dict under the type ID 9: 0 shows the keys, 1 the values, 2 the items. It holds a reference to its dict, so the dict lives as long as the view |
 | `CDataClass` | `name: *const u8`, `name_length: u64`, `kind: u32`, `ctype: u32`, `size: u64`, `item: *const CDataClass`, `length: u64` | A `ctypes` class the compiler emits once: `kind` 0 for a scalar of C type `ctype`, numbered as `CType`, 1 for a pointer, 2 for an array of `length` items of `item`, and 3 for a structure, whose name holds its module (ADR-0048, ADR-0049) |
 | `FunctionObject` | Header, `descriptor: *const FunctionDescriptor`, then a nested function's captures | A function object under the type ID 24, which the compiler emits immortal for a function of a module, and which each `def` of a nested function makes; its type `function` hashes by identity and writes `<function QUALNAME at 0x...>` (FUN-04, FUN-05) |
-| `GeneratorObject` | Header, `descriptor: *const GeneratorDescriptor`, `state: u32`, `point: u32`, `current: u64`, `sent: u64`, `thrown: *mut ExceptionObject`, `result: u64`, `held: *mut u8`, then the frame | A generator under the type ID 27 (ADR-0063). `typy_rt_generator_new` makes one not started with its frame zero. A step, which `typy_rt_iterator_advance` takes for a generator after checking the stack, releases the current item, marks it running and calls the descriptor's `step`, the resume code; the code marks it suspended at a `yield`, and a step that ends any other way finishes it. `typy_rt_generator_hold` makes a yielded item its current one, an inline item copied into `held`. Freeing it releases its current item, the arguments its frame still holds, and the rest of its frame unless its body ended. Running again inside its own step is `ValueError: generator already executing`, and a `StopIteration` its body raises becomes `RuntimeError: generator raised StopIteration` raised from it |
+| `GeneratorObject` | Header, `descriptor: *const GeneratorDescriptor`, `state: u32`, `point: u32`, `current: u64`, `sent: u64`, `thrown: *mut ExceptionObject`, `result: u64`, `held: *mut u8`, `received: u64`, `caller: *mut ExceptionObject`, then the frame | A generator under the type ID 27 (ADR-0063). `typy_rt_generator_new` makes one not started with its frame zero. A step, which `typy_rt_iterator_advance`, `typy_rt_generator_send`, `typy_rt_generator_throw` and `typy_rt_generator_close` take after checking the stack, releases the current item, marks it running, notes the exception being handled in `caller`, calls the descriptor's `step`, the resume code, and makes `caller` the one being handled again (ADR-0068); the code marks it suspended at a `yield`, and a step that ends any other way finishes it. `send` sets `received` and `sent`, and refuses a value other than `None` before the start with `TypeError`; `throw` hands its exception to `thrown`, and raises it at once, finishing the generator, before the start or after the end; `close` gives `GeneratorExit` to `thrown`, returns null when the body ends or raises it, and `RuntimeError: generator ignored GeneratorExit` when the body yields again. `send` and `throw` raise `StopIteration` when the body ends. `typy_rt_generator_hold` makes a yielded item its current one, an inline item copied into `held`. Freeing it releases its current item, the arguments its frame still holds, and the rest of its frame unless its body ended. Running again inside its own step is `ValueError: generator already executing`, and a `StopIteration` its body raises becomes `RuntimeError: generator raised StopIteration` raised from it |
 | `GeneratorDescriptor` | `name`, `qualified_name`, `step`, `frame: *const TupleType`, `arguments: u64`, `item_kind: u64`, `item_tuple: *const TupleType` | What the compiler emits once for each generator function, `typy.generator.descriptor.N`: its resume code, the layout of its frame, how many of the frame's fields are arguments, and how its items are held |
 | `CellObject` | Header, `layout: *const TupleType`, then the value and its flag | A cell under the type ID 26, which a function makes for each of its variables a nested function shares; it owns a reference to its value (FUN-04) |
 | `MethodObject` | Header, `descriptor: *const FunctionDescriptor`, `instance: *mut ObjectHeader` | A bound method under the type ID 25, made at each read of a method through an instance; it owns a reference to the instance (FUN-05) |

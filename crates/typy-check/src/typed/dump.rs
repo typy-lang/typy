@@ -182,9 +182,16 @@ impl Dump<'_> {
                 self.line(depth, "Expr", *span);
                 self.expression(depth + 1, value);
             }
-            TypedStmt::Yield { value, span } => {
+            TypedStmt::Yield {
+                value,
+                received,
+                span,
+            } => {
                 self.line(depth, "Yield", *span);
                 self.expression(depth + 1, value);
+                if let Some(received) = received {
+                    self.statement(depth + 1, received);
+                }
             }
             TypedStmt::Return { value, span } => {
                 self.line(depth, "Return", *span);
@@ -468,6 +475,7 @@ impl Dump<'_> {
             TypedExprKind::CallValue { .. } => "CallValue".to_owned(),
             TypedExprKind::Capture(index) => format!("Capture {index}"),
             TypedExprKind::RunningFunction => "RunningFunction".to_owned(),
+            TypedExprKind::Received => "Received".to_owned(),
             TypedExprKind::CellRead(symbol) => {
                 format!("CellRead {}", self.program.symbol(*symbol).name)
             }

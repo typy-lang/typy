@@ -339,9 +339,10 @@ impl FunctionLowerer<'_> {
     /// Lowers the body of an `except` clause that matched `exception`, which the clause now
     /// owns: it becomes the exception being handled, and the clause's variable holds it.
     fn handler(&mut self, clause: &TypedHandler, exception: ValueId, after: BlockId, span: Span) {
-        let previous = self
+        let entered = self
             .call_runtime(RuntimeFunction::ExceptionEnter, vec![exception], span)
             .value;
+        let previous = self.generator.is_none().then_some(entered);
         let handled = match clause.name {
             // A clause's variable a nested function captures lives in a cell (FUN-04).
             Some(symbol) if self.cells.contains_key(&symbol) => {
@@ -363,6 +364,7 @@ impl FunctionLowerer<'_> {
                 self.store(slot, owned, span);
                 Handled::Slot(slot)
             }
+            None if self.generator.is_some() => self.kept_exception(exception, span),
             None => Handled::Value(exception),
         };
         self.cleanups.push(Cleanup::Handling {
@@ -386,8 +388,10 @@ impl FunctionLowerer<'_> {
                 Cleanup::Handling {
                     previous,
                     exception,
-                } => self.leave_clause(previous, exception, span),
-                Cleanup::Finally(block) => self.run_finally(index, &block, None, span),
+                } => self.leave_clause(index, previous, exception, span),
+                Cleanup::Finally(block) => {
+                    self.run_finally(index, &block, None, span);
+                }
                 Cleanup::With {
                     manager, protocol, ..
                 } => {
@@ -407,6 +411,7 @@ impl FunctionLowerer<'_> {
     /// enclosing `try` body take the exception or the slots are released and it returns to
     /// the caller.
     pub(crate) fn propagate(&mut self, exception: ValueId, span: Span) {
+        let mut exception = exception;
         self.release_live_temporaries(span);
         // The path released them, so code it runs on the way out must not release them again.
         let released = std::mem::take(&mut self.temporaries);
@@ -422,9 +427,11 @@ impl FunctionLowerer<'_> {
                 Cleanup::Handling {
                     previous,
                     exception: handled,
-                } => self.leave_clause(previous, handled, span),
+                } => self.leave_clause(index, previous, handled, span),
                 Cleanup::Finally(block) => {
-                    self.run_finally(index, &block, Some(exception), span);
+                    if let Some(pending) = self.run_finally(index, &block, Some(exception), span) {
+                        exception = pending;
+                    }
                 }
                 Cleanup::With {
                     manager,
@@ -450,38 +457,168 @@ impl FunctionLowerer<'_> {
 
     /// Runs a copy of the `finally` block of cleanup `index`, with only the cleanups outside
     /// it open. On an error path, the pending exception is the one being handled while the
-    /// block runs, as in CPython, and an exception the block raises releases it.
+    /// block runs, as in CPython, and an exception the block raises releases it. Returns the
+    /// pending exception the path goes on with when the block ends, which a resume function
+    /// keeps in its frame while the block runs, since the block may `yield`.
     fn run_finally(
         &mut self,
         index: usize,
         block: &[TypedStmt],
         pending: Option<ValueId>,
         span: Span,
-    ) {
+    ) -> Option<ValueId> {
         let inner = self.cleanups.split_off(index);
-        let previous = pending.map(|exception| {
-            let previous = self
+        let handling = pending.map(|exception| {
+            let entered = self
                 .call_runtime(RuntimeFunction::ExceptionEnter, vec![exception], span)
                 .value;
+            let (previous, handled) = if self.generator.is_some() {
+                (None, self.kept_exception(exception, span))
+            } else {
+                (Some(entered), Handled::Value(exception))
+            };
             self.cleanups.push(Cleanup::Handling {
                 previous,
-                exception: Handled::Value(exception),
+                exception: handled,
             });
-            previous
+            (previous, handled)
         });
         self.statements(block);
-        if let Some(previous) = previous {
+        let mut going_on = None;
+        if let Some((previous, handled)) = handling {
             self.cleanups.pop();
             if !self.builder.is_terminated() {
+                let previous = self.previous_handled(self.cleanups.len(), previous, span);
                 self.call_runtime(RuntimeFunction::ExceptionLeave, vec![previous], span);
+                going_on = Some(self.take_handled(handled, span));
             }
         }
         self.cleanups.extend(inner);
+        going_on
     }
 
-    /// Leaves an `except` clause: restores the exception handled before it and drops the
-    /// clause's exception, setting its variable to null.
-    fn leave_clause(&mut self, previous: ValueId, exception: Handled, span: Span) {
+    /// Keeps `exception`, which the function owns, in a hidden slot of its own, where it
+    /// lives across a `yield` of a resume function.
+    fn kept_exception(&mut self, exception: ValueId, span: Span) -> Handled {
+        let slot = self.hidden_slot("handled", TyirType::EXCEPTION);
+        self.builder.push(
+            Operation::Store {
+                slot,
+                value: exception,
+            },
+            span,
+        );
+        Handled::Slot(slot)
+    }
+
+    /// Returns the exception a clause keeps, with its reference, leaving a hidden slot that
+    /// kept it null.
+    fn take_handled(&mut self, handled: Handled, span: Span) -> ValueId {
+        match handled {
+            Handled::Slot(slot) => {
+                let held =
+                    self.builder
+                        .push_value(Operation::Load(slot), TyirType::EXCEPTION, span);
+                let none = self.constant(Constant::NoInstance(TypeId::EXCEPTION), span);
+                self.builder
+                    .push(Operation::Store { slot, value: none }, span);
+                held
+            }
+            Handled::Value(value) => value,
+            Handled::Cell(_) => unreachable!("a pending exception is never in a cell"),
+        }
+    }
+
+    /// Returns the exception a clause keeps, borrowed.
+    fn handled_exception(&mut self, handled: Handled, span: Span) -> ValueId {
+        match handled {
+            Handled::Slot(slot) => {
+                self.builder
+                    .push_value(Operation::Load(slot), TyirType::EXCEPTION, span)
+            }
+            Handled::Cell(symbol) => {
+                let (cell, layout) = self.cell_of(symbol, span);
+                let ty = self
+                    .tuple_types
+                    .items(layout)
+                    .map_or(TyirType::EXCEPTION, |items| items[0]);
+                let value = self.cell_value(cell, layout, ty, span);
+                if ty == TyirType::EXCEPTION {
+                    return value.value;
+                }
+                let bits = self.bits(value, span);
+                self.builder.push_value(
+                    Operation::FromBits {
+                        bits,
+                        ty: TyirType::EXCEPTION,
+                    },
+                    TyirType::EXCEPTION,
+                    span,
+                )
+            }
+            Handled::Value(value) => value,
+        }
+    }
+
+    /// Returns, as bits, the exception handled before the clause of cleanup `index`: the one
+    /// it kept, or in a resume function the exception of the clause around it, or the one
+    /// the step's caller handles.
+    fn previous_handled(&mut self, index: usize, previous: Option<ValueId>, span: Span) -> ValueId {
+        if let Some(previous) = previous {
+            return previous;
+        }
+        let around = self.cleanups[..index]
+            .iter()
+            .rev()
+            .find_map(|cleanup| match cleanup {
+                Cleanup::Handling { exception, .. } => Some(*exception),
+                _ => None,
+            });
+        if let Some(around) = around {
+            let exception = self.handled_exception(around, span);
+            return self.bits(Self::borrowed(exception, TyirType::EXCEPTION), span);
+        }
+        let Some(generator) = self
+            .generator
+            .as_ref()
+            .map(crate::generator::Resumable::generator)
+        else {
+            unreachable!("only a resume function leaves a clause without what it kept")
+        };
+        self.builder.push_value(
+            Operation::GeneratorCaller { generator },
+            TyirType::Bits,
+            span,
+        )
+    }
+
+    /// Makes the exception of the innermost open clause the one being handled again, as a
+    /// step that resumes inside it does (FUN-07).
+    pub(crate) fn handle_again(&mut self, span: Span) {
+        let innermost = self
+            .cleanups
+            .iter()
+            .rev()
+            .find_map(|cleanup| match cleanup {
+                Cleanup::Handling { exception, .. } => Some(*exception),
+                _ => None,
+            });
+        if let Some(handled) = innermost {
+            let exception = self.handled_exception(handled, span);
+            self.call_runtime(RuntimeFunction::ExceptionEnter, vec![exception], span);
+        }
+    }
+
+    /// Leaves an `except` clause, that of cleanup `index`: restores the exception handled
+    /// before it and drops the clause's exception, setting its variable to null.
+    fn leave_clause(
+        &mut self,
+        index: usize,
+        previous: Option<ValueId>,
+        exception: Handled,
+        span: Span,
+    ) {
+        let previous = self.previous_handled(index, previous, span);
         self.call_runtime(RuntimeFunction::ExceptionLeave, vec![previous], span);
         match exception {
             Handled::Value(value) => {
@@ -721,8 +858,9 @@ impl FunctionLowerer<'_> {
         let previous = self
             .call_runtime(RuntimeFunction::ExceptionEnter, vec![exception], span)
             .value;
+        // `__exit__` runs no `yield`, so the value lives across none.
         self.cleanups.push(Cleanup::Handling {
-            previous,
+            previous: Some(previous),
             exception: Handled::Value(exception),
         });
         let result = self.call_exit(manager, protocol, Some(exception), span);

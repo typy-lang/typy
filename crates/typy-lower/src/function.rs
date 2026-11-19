@@ -41,8 +41,10 @@ pub(crate) enum Cleanup {
     /// An `except` clause: leaving it restores the exception handled before and drops this
     /// one, as CPython deletes the clause's name.
     Handling {
-        /// The exception handled before, as bits.
-        previous: ValueId,
+        /// The exception handled before, as bits. In a resume function, where no value
+        /// lives across a `yield`, it is `None`: the exception of the clause around this one
+        /// is the one handled before, or the one the step's caller handles (FUN-07).
+        previous: Option<ValueId>,
         /// Where the clause keeps the exception.
         exception: Handled,
     },

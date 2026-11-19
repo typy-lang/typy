@@ -89,11 +89,61 @@ impl BodyChecker<'_> {
                 .with_rule(RuleId::FUN_07),
             );
         }
-        TypedStmt::Yield { value, span }
+        TypedStmt::Yield {
+            value,
+            received: None,
+            span,
+        }
     }
 
-    /// Returns E0201 for the forms of a generator that a later step of 0.9 compiles: a
-    /// `yield` whose value is assigned, `yield from`, and a `return` with a value.
+    /// Checks `target = yield value`, also with an annotation: the `yield`, then the
+    /// assignment of what the next step receives, `S | None` of a `Generator[Y, S, R]`, since
+    /// `next` and a `for` loop resume it with `None` (SMT-11, ADR-0067). An assignment the
+    /// checks refuse is left out.
+    pub(super) fn yield_assignment(
+        &mut self,
+        statement: &Stmt,
+        yielded: &Expr,
+        span: Span,
+    ) -> TypedStmt {
+        let Expr::Yield { value, .. } = yielded else {
+            unreachable!("the statement assigns a `yield`")
+        };
+        let TypedStmt::Yield { value, .. } = self.yield_statement(value.as_deref(), span) else {
+            unreachable!("a `yield` checks as one")
+        };
+        let sends = self
+            .generator
+            .as_ref()
+            .map_or(Type::Error, |types| types.sends.clone());
+        self.received = Some(Self::typed(
+            TypedExprKind::Received,
+            Type::optional(sends),
+            yielded.span(),
+        ));
+        let received = self.statement(statement).map(Box::new);
+        self.received = None;
+        TypedStmt::Yield {
+            value,
+            received,
+            span,
+        }
+    }
+
+    /// Returns what the `yield` of the assignment being checked receives (SMT-11).
+    pub(super) fn received_value(&mut self, span: Span) -> TypedExpr {
+        self.received.take().unwrap_or_else(|| {
+            // The subset check refuses a `yield` anywhere else (FUN-12).
+            Self::typed(
+                TypedExprKind::Constant(TypedConstant::None),
+                Type::Error,
+                span,
+            )
+        })
+    }
+
+    /// Returns E0201 for the forms of a generator that a later step of 0.9 compiles:
+    /// `yield from` and a `return` with a value.
     pub(super) fn generator_form_planned(&mut self, what: &str, span: Span) -> TypedExpr {
         let diagnostic = Diagnostic::new(
             DiagnosticCode::error(201),

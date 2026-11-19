@@ -24,6 +24,7 @@ mod fstring;
 mod function;
 mod function_value;
 mod generator;
+mod generator_method;
 mod import;
 mod invoke;
 mod isinstance;

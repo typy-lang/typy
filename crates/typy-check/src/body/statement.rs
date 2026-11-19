@@ -62,31 +62,33 @@ impl BodyChecker<'_> {
                 value: Expr::Yield { value, .. },
                 span,
             } => self.yield_statement(value.as_deref(), *span),
-            // A `yield` whose value is assigned, and `yield from`, come with `send` (SMT-11).
+            Stmt::Assign {
+                value: value @ Expr::Yield { .. },
+                span,
+                ..
+            }
+            | Stmt::AnnAssign {
+                value: Some(value @ Expr::Yield { .. }),
+                span,
+                ..
+            } if self.received.is_none() => self.yield_assignment(statement, value, *span),
             Stmt::Expr {
                 value: value @ Expr::YieldFrom { .. },
                 span,
             }
             | Stmt::Assign {
-                value: value @ (Expr::Yield { .. } | Expr::YieldFrom { .. }),
+                value: value @ Expr::YieldFrom { .. },
                 span,
                 ..
             }
             | Stmt::AnnAssign {
-                value: Some(value @ (Expr::Yield { .. } | Expr::YieldFrom { .. })),
+                value: Some(value @ Expr::YieldFrom { .. }),
                 span,
                 ..
-            } => {
-                let what = if let Expr::Yield { .. } = value {
-                    "the value of a `yield`"
-                } else {
-                    "`yield from`"
-                };
-                TypedStmt::Expr {
-                    value: self.generator_form_planned(what, value.span()),
-                    span: *span,
-                }
-            }
+            } => TypedStmt::Expr {
+                value: self.generator_form_planned("`yield from`", value.span()),
+                span: *span,
+            },
             Stmt::Assign {
                 targets,
                 value,

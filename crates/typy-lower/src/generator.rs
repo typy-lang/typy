@@ -3,15 +3,16 @@
 //! its frame, and its resume function, which takes the generator, keeps its slots in the
 //! frame, and starts each step at the block after the `yield` it stopped at.
 
-use typy_check::{TypedExpr, TypedFunction, TypedProgram};
+use typy_check::{TypedExpr, TypedFunction, TypedProgram, TypedStmt};
 use typy_diagnostics::Span;
 use typy_tyir::{
-    BlockId, FunctionBuilder, FunctionId, GeneratorFrame, Operation, Terminator, TupleTypeId,
-    TupleTypes, TyirFunction, TyirType, ValueId,
+    BlockId, Constant, FunctionBuilder, FunctionId, GeneratorFrame, Operation, RuntimeFunction,
+    Terminator, TupleTypeId, TupleTypes, TyirFunction, TyirType, ValueId,
 };
 
 use crate::function::FunctionLowerer;
 use crate::mangle::symbol;
+use crate::ownership::Lowered;
 use crate::types::tyir_type;
 
 /// What the lowering of a resume function keeps: its generator, its ID, the block of its
@@ -26,6 +27,8 @@ pub(crate) struct Resumable {
     arguments: Vec<TyirType>,
     closure: bool,
     yields: TyirType,
+    /// The type `send` passes, `S` of `Generator[Y, S, R]`.
+    sends: TyirType,
 }
 
 /// Where the first step of a resume function finds its parameters: its generator, its ID,
@@ -60,6 +63,11 @@ impl Arguments {
 }
 
 impl Resumable {
+    /// Returns the generator the resume function steps.
+    pub(crate) fn generator(&self) -> ValueId {
+        self.generator
+    }
+
     /// Returns where the first step finds the parameters.
     pub(crate) fn arguments(&self) -> Arguments {
         Arguments {
@@ -111,9 +119,16 @@ pub(crate) fn resume_builder(
             .iter()
             .map(|parameter| tyir_type(&program.symbol(*parameter).ty, tuple_types)),
     );
-    let yields = function.generator.as_ref().map_or(TyirType::Unit, |types| {
-        tyir_type(&types.yields, tuple_types)
-    });
+    let (yields, sends) =
+        function
+            .generator
+            .as_ref()
+            .map_or((TyirType::Unit, TyirType::Unit), |types| {
+                (
+                    tyir_type(&types.yields, tuple_types),
+                    tyir_type(&types.sends, tuple_types),
+                )
+            });
     let resumable = Resumable {
         generator,
         function: resume,
@@ -122,6 +137,7 @@ pub(crate) fn resume_builder(
         arguments,
         closure: closure.is_some(),
         yields,
+        sends,
     };
     (builder, Some(resumable), closure)
 }
@@ -202,8 +218,15 @@ pub(crate) fn maker(
 
 impl FunctionLowerer<'_> {
     /// Lowers `yield value`: the generator takes over a reference to the value as its current
-    /// item, notes where the next step continues, and ends the step there.
-    pub(crate) fn yield_value(&mut self, value: &TypedExpr, span: Span) {
+    /// item, notes where the next step continues, and ends the step there. The next step
+    /// raises what `throw` or `close` gave it, or goes on with `received`, the assignment of
+    /// what `send` gave, of `target = yield value`.
+    pub(crate) fn yield_value(
+        &mut self,
+        value: &TypedExpr,
+        received: Option<&TypedStmt>,
+        span: Span,
+    ) {
         let lowered = self.expression(value);
         let owned = self.take_reference(lowered, span);
         let item = self
@@ -220,6 +243,86 @@ impl FunctionLowerer<'_> {
         self.builder
             .terminate(Terminator::Yield { generator, resume });
         self.builder.switch_to(resume);
+        self.handle_again(span);
+        self.raise_thrown(generator, span);
+        if let Some(received) = received {
+            self.statements(std::slice::from_ref(received));
+        }
+    }
+
+    /// Raises the exception `throw` or `close` gave the step at the `yield` it resumes after,
+    /// when one did (FUN-07, FUN-11).
+    fn raise_thrown(&mut self, generator: ValueId, span: Span) {
+        let optional = TyirType::Optional(typy_tyir::OptionalBase::Object(
+            typy_tyir::TypeId::EXCEPTION,
+        ));
+        let thrown =
+            self.builder
+                .push_value(Operation::GeneratorThrown { generator }, optional, span);
+        let none = self
+            .builder
+            .push_value(Operation::IsNone(thrown), TyirType::Bool, span);
+        let raise = self.builder.create_block();
+        let resumed = self.builder.create_block();
+        self.builder.terminate(Terminator::Branch {
+            condition: none,
+            then: resumed,
+            otherwise: raise,
+        });
+        self.builder.switch_to(raise);
+        let exception =
+            self.builder
+                .push_value(Operation::Unwrap(thrown), TyirType::EXCEPTION, span);
+        let exception = self.produced(exception, TyirType::EXCEPTION);
+        self.call_runtime(RuntimeFunction::ExceptionThrow, vec![exception.value], span);
+        // The error path released the exception with the other temporaries.
+        self.untrack(exception.value);
+        self.builder.terminate(Terminator::Unreachable);
+        self.builder.switch_to(resumed);
+    }
+
+    /// Lowers what the generator received at the `yield` its step resumed after, a value of
+    /// `ty`, `S | None`: the value `send` gave, with a reference of its own, or `None` when
+    /// `next` resumed it (SMT-11).
+    pub(crate) fn received(&mut self, ty: TyirType, span: Span) -> Lowered {
+        let Some(resumable) = self.generator.as_ref() else {
+            unreachable!("the checker gives `yield` to generator functions alone")
+        };
+        let (generator, sends) = (resumable.generator, resumable.sends);
+        if ty == TyirType::Unit {
+            let none = self.constant(Constant::Unit, span);
+            return Self::borrowed(none, ty);
+        }
+        let given = self.builder.push_value(
+            Operation::GeneratorReceived { generator },
+            TyirType::Bool,
+            span,
+        );
+        let sent = self.builder.create_block();
+        let missing = self.builder.create_block();
+        let join = self.builder.create_block();
+        let result = self.builder.add_block_parameter(join, ty);
+        self.builder.terminate(Terminator::Branch {
+            condition: given,
+            then: sent,
+            otherwise: missing,
+        });
+        self.builder.switch_to(sent);
+        let bits =
+            self.builder
+                .push_value(Operation::GeneratorSent { generator }, TyirType::Bits, span);
+        let value = self
+            .builder
+            .push_value(Operation::FromBits { bits, ty: sends }, sends, span);
+        self.jump_with(join, Self::borrowed(value, sends), ty, span);
+        self.builder.switch_to(missing);
+        let none = self.none_of(ty, span);
+        self.builder.terminate(Terminator::Jump {
+            target: join,
+            arguments: vec![none],
+        });
+        self.builder.switch_to(join);
+        self.produced(result, ty)
     }
 
     /// Ends a resume function: its entry starts each step in the block of the first step or

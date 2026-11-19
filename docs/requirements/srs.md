@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy software requirements specification |
-| Version | 1.91 |
+| Version | 1.92 |
 | Status | Approved |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-19 |
@@ -259,7 +259,7 @@ formatter applies; Ruff's formatter is the project's recommendation.
 | SMT-08 | `global` shall be accepted for module-level variables. | M | 0.3 | 7.12 |
 | SMT-09 | `nonlocal` shall be accepted in nested functions. | M | 0.8 | 7.13 |
 | SMT-10 | The `type` statement shall define a type alias, with or without type parameters. | M | 0.4 | 7.14 |
-| SMT-11 | `yield` and `yield from` shall be accepted in generator functions as statements: `yield value`, `yield from iterable`, and an assignment of either, such as `received = yield value` (ADR-0063). | M | 0.9 | 7.7 |
+| SMT-11 | `yield` and `yield from` shall be accepted in generator functions as statements: `yield value`, `yield from iterable`, and an assignment of either, such as `received = yield value`, whose `yield` shall give `S \| None` of a `Generator[Y, S, R]` (ADR-0063, ADR-0067). | M | 0.9 | 7.7 |
 | SMT-12 | A type alias shall be usable from another module, readable as a value as CPython's `TypeAliasType`, definable inside a function, a class or a block, and given type parameters with a bound or constraints. | S | 0.5 | 7.14 |
 
 ### 3.8 Compound statements (CST)
@@ -288,7 +288,7 @@ formatter applies; Ruff's formatter is the project's recommendation.
 | FUN-04 | Nested functions and closures shall be accepted, capturing variables as Python does. | M | 0.8 | 4.2 |
 | FUN-05 | A function, nested function, `lambda` or method the program defines shall be a value of type `Callable[[A, ...], R]`, stored, passed, returned, called and compared as CPython's are, and the `key` argument of `sorted`, `list.sort`, `min` and `max` shall take one; the methods of FUN-09 are excepted. | M | 0.8 | 3.2.8 |
 | FUN-06 | User-defined decorators whose types can be checked shall be accepted. | C | 0.10 | 8.7 |
-| FUN-07 | A generator function shall be annotated to return `Generator[Y, S, R]`, `Iterator[Y]` or `Iterable[Y]` of `typing` or `collections.abc`, and a call of it shall give a generator object of that type; only `Generator` shall offer `send`, `throw` and `close`, and a result of type `R`, as `typing` reads them (ADR-0063). | M | 0.9 | 8.7 |
+| FUN-07 | A generator function shall be annotated to return `Generator[Y, S, R]`, `Iterator[Y]` or `Iterable[Y]` of `typing` or `collections.abc`, and a call of it shall give a generator object of that type; only `Generator` shall offer `send`, `throw` and `close`, and a result of type `R`, as `typing` reads them; a generator suspended inside an `except` clause shall keep the exception it handles from its caller, as CPython does (ADR-0063, ADR-0068). | M | 0.9 | 8.7 |
 | FUN-08 | A built-in function or a method of a built-in type shall be a value where a `Callable` is expected, such as `sorted(words, key=len)`. | S | 0.10 | 3.2.8 |
 | FUN-09 | A class method read as a value, a static method read through an instance whose subclasses define it again, a method read through a protocol value, and a method read through an instance whose subclass overrides it with parameters or a result held otherwise, shall be values as CPython's are. | S | 0.10 | 3.2.8 |
 | FUN-10 | A nested function inside a generic function, and a nested function with type parameters of its own, shall be accepted, with a copy for each set of types. | C | 0.10 | 8.10 |

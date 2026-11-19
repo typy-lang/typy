@@ -62,7 +62,6 @@ const CPYTHON_3_12_BUILTINS: &[&str] = &[
     "FileNotFoundError",
     "FloatingPointError",
     "FutureWarning",
-    "GeneratorExit",
     "IOError",
     "ImportError",
     "ImportWarning",

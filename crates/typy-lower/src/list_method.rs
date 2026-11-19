@@ -46,6 +46,8 @@ impl FunctionLowerer<'_> {
             self.dict_method(receiver.value, method, &values, result, span)
         } else if receiver.ty == TyirType::SET {
             self.set_method(receiver.value, method, &values, result, span)
+        } else if receiver.ty == TyirType::GENERATOR {
+            self.generator_method(receiver.value, method, &values, result, span)
         } else if receiver.ty == TyirType::TEXT_FILE {
             self.text_method(receiver.value, binary, method, &given, span)
         } else if receiver.ty == TyirType::SLICE {

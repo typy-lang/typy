@@ -17,14 +17,23 @@ use crate::statics::Statics;
 const STATE: u32 = 2;
 /// The field that holds the `yield` its body stopped at, numbered from one.
 const POINT: u32 = 3;
+/// The field that holds the bits of what `send` gave the running step.
+const SENT: u32 = 5;
+/// The field that holds what `throw` or `close` gave the running step.
+const THROWN: u32 = 6;
+/// The field that says whether `send` gave the running step a value.
+const RECEIVED: u32 = 9;
+/// The field that holds the exception the caller of the running step was handling.
+const CALLER: u32 = 10;
 /// The field that holds its frame.
-const FRAME: u32 = 9;
+const FRAME: u32 = 11;
 /// The state of a generator stopped at a `yield`.
 const SUSPENDED: u64 = 1;
 
 /// Returns the layout of a generator object whose frame is `frame`: the header, the address
 /// of its descriptor, its state and the yield it stopped at, its current item, what `send`
-/// and `throw` pass, what its body returned, the room for an item held inline, then the
+/// and `throw` pass, what its body returned, the room for an item held inline, whether
+/// `send` gave the step a value, the exception the step's caller was handling, then the
 /// frame, as the runtime lays it out.
 fn object_type<'ctx>(
     context: &'ctx inkwell::context::Context,
@@ -40,6 +49,8 @@ fn object_type<'ctx>(
             half.into(),
             half.into(),
             word.into(),
+            word.into(),
+            pointer.into(),
             word.into(),
             pointer.into(),
             word.into(),
@@ -256,6 +267,77 @@ impl<'ctx> FunctionEmitter<'_, '_, 'ctx> {
         self.builder
             .build_call(hold, &[object.into(), item.into()], "")?;
         Ok(())
+    }
+
+    /// Returns the exception `throw` or `close` gave the running step, taking it out of the
+    /// generator, or null.
+    pub(crate) fn generator_thrown(
+        &mut self,
+        generator: ValueId,
+    ) -> Result<BasicValueEnum<'ctx>, CodegenError> {
+        let pointer = self.shared.context.ptr_type(AddressSpace::default());
+        let address = self.generator_field(generator, THROWN)?;
+        let thrown = self.builder.build_load(pointer, address, "thrown")?;
+        self.builder.build_store(address, pointer.const_null())?;
+        Ok(thrown)
+    }
+
+    /// Returns whether `send` gave the running step a value.
+    pub(crate) fn generator_received(
+        &mut self,
+        generator: ValueId,
+    ) -> Result<BasicValueEnum<'ctx>, CodegenError> {
+        let word = self.shared.context.i64_type();
+        let address = self.generator_field(generator, RECEIVED)?;
+        let received = self
+            .builder
+            .build_load(word, address, "received")?
+            .into_int_value();
+        let given = self.builder.build_int_compare(
+            inkwell::IntPredicate::NE,
+            received,
+            word.const_zero(),
+            "",
+        )?;
+        Ok(given.into())
+    }
+
+    /// Returns the bits of the value `send` gave the running step.
+    pub(crate) fn generator_sent(
+        &mut self,
+        generator: ValueId,
+    ) -> Result<BasicValueEnum<'ctx>, CodegenError> {
+        let word = self.shared.context.i64_type();
+        let address = self.generator_field(generator, SENT)?;
+        Ok(self.builder.build_load(word, address, "sent")?)
+    }
+
+    /// Returns the exception the caller of the running step was handling, as bits.
+    pub(crate) fn generator_caller(
+        &mut self,
+        generator: ValueId,
+    ) -> Result<BasicValueEnum<'ctx>, CodegenError> {
+        let pointer = self.shared.context.ptr_type(AddressSpace::default());
+        let address = self.generator_field(generator, CALLER)?;
+        let caller = self
+            .builder
+            .build_load(pointer, address, "caller")?
+            .into_pointer_value();
+        let word = self.shared.context.i64_type();
+        Ok(self.builder.build_ptr_to_int(caller, word, "")?.into())
+    }
+
+    /// Returns the address of field `field` of the running generator `generator`.
+    fn generator_field(
+        &mut self,
+        generator: ValueId,
+        field: u32,
+    ) -> Result<PointerValue<'ctx>, CodegenError> {
+        let object = self.value(generator)?.into_pointer_value();
+        let (_, object_type) = self.generator_types(self.function.id)?;
+        Ok(self
+            .builder
+            .build_struct_gep(object_type, object, field, "")?)
     }
 
     /// Returns the address of each slot of the running resume function: a field of the

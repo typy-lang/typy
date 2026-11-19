@@ -358,6 +358,28 @@ pub enum Operation {
         /// The running resume function.
         function: crate::function::FunctionId,
     },
+    /// The exception `throw` or `close` gives the step that runs, raised at the `yield` it
+    /// resumes, with its reference, or `None`; the generator keeps none after.
+    GeneratorThrown {
+        /// The generator object.
+        generator: ValueId,
+    },
+    /// Whether `send` gave the step that runs a value, a `bool`.
+    GeneratorReceived {
+        /// The generator object.
+        generator: ValueId,
+    },
+    /// The bits of the value `send` gave the step that runs, borrowed for the step.
+    GeneratorSent {
+        /// The generator object.
+        generator: ValueId,
+    },
+    /// The exception the caller of the step that runs was handling, as bits: null or
+    /// borrowed, the one the outermost `except` clause of the body restores when it ends.
+    GeneratorCaller {
+        /// The generator object.
+        generator: ValueId,
+    },
     /// Stores what a `yield` gives as the generator's current item, which takes over its
     /// reference until the next step.
     SetGeneratorItem {

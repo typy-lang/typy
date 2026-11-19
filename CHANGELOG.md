@@ -17,6 +17,15 @@ All notable changes to TyPy are recorded here. The format follows
   steps, and `next()` of a running generator and a `StopIteration` its
   body raises give CPython's `ValueError` and `RuntimeError` (SMT-11,
   FUN-07, ADR-0063).
+- `send`, `throw` and `close` of a `Generator[Y, S, R]`, and
+  `received = yield value`, whose `yield` gives `S | None`, since
+  `next()` and `for` resume a generator with `None` (ADR-0067). A value
+  sent before the first step, a step after the end, and a generator that
+  yields after `close()` raise CPython's `TypeError`, `StopIteration` and
+  `RuntimeError` (SMT-11, FUN-07, FUN-11).
+- A `yield` inside an `except` clause or a `finally` block. The exception
+  a suspended generator handles stays with it, so an exception its caller
+  raises meanwhile has the caller's own context, as in CPython (ADR-0068).
 
 ### Changed
 

@@ -163,6 +163,10 @@ impl Aliases {
             | Operation::NewGenerator { .. }
             | Operation::GeneratorArgument { .. }
             | Operation::GeneratorClosure { .. }
+            | Operation::GeneratorThrown { .. }
+            | Operation::GeneratorReceived { .. }
+            | Operation::GeneratorSent { .. }
+            | Operation::GeneratorCaller { .. }
             | Operation::NewCell { .. }
             | Operation::CellGet { .. }
             | Operation::CellBound { .. }

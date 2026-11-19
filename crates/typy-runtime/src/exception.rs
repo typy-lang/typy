@@ -375,6 +375,11 @@ pub unsafe extern "C" fn typy_rt_exception_enter(
     handled::replace(exception)
 }
 
+/// Returns the exception being handled, borrowed, or null.
+pub(crate) fn handled_exception() -> *mut ExceptionObject {
+    handled::get()
+}
+
 /// Ends an `except` clause, restoring the exception handled before it.
 ///
 /// # Safety

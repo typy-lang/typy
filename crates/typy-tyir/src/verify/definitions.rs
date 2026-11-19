@@ -131,7 +131,11 @@ pub(super) fn operands(operation: &Operation) -> Vec<ValueId> {
         }
         | Operation::GeneratorClosure {
             generator: value, ..
-        } => vec![*value],
+        }
+        | Operation::GeneratorThrown { generator: value }
+        | Operation::GeneratorReceived { generator: value }
+        | Operation::GeneratorSent { generator: value }
+        | Operation::GeneratorCaller { generator: value } => vec![*value],
         Operation::SetGeneratorArgument {
             generator, value, ..
         } => vec![*generator, *value],

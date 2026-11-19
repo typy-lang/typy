@@ -192,6 +192,8 @@ nav:
           - adr/0064-close-a-generator-freed-while-suspended-at-its-yield.md
           - adr/0065-give-each-iterable-type-iteration-entries-the-runtime-calls.md
           - adr/0066-hold-an-abstract-collection-as-the-union-of-its-built-in-types.md
+          - adr/0067-type-what-a-yield-receives-as-the-send-type-or-none.md
+          - adr/0068-give-the-caller-back-its-handled-exception-when-a-generator-step-stops.md
       - Detailed design: design/detailed-design.md
       - Test plan: testing/test-plan.md
       - Benchmark report: testing/benchmark-report.md

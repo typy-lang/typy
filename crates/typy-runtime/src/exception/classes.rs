@@ -33,6 +33,10 @@ pub(crate) static EXCEPTION: TypeObject = class("Exception", &BASE_EXCEPTION);
 /// `sys.exit`: the program ends, with the status its argument gives (LIB-04).
 #[unsafe(export_name = "typy_rt_exception_SystemExit")]
 pub(crate) static SYSTEM_EXIT: TypeObject = class("SystemExit", &BASE_EXCEPTION);
+/// What `close()` raises at a generator's `yield`, outside `Exception` so that `except
+/// Exception` lets it through (FUN-11).
+#[unsafe(export_name = "typy_rt_exception_GeneratorExit")]
+pub(crate) static GENERATOR_EXIT: TypeObject = class("GeneratorExit", &BASE_EXCEPTION);
 /// `input` at the end of standard input.
 #[unsafe(export_name = "typy_rt_exception_EOFError")]
 pub(crate) static EOF_ERROR: TypeObject = class("EOFError", &EXCEPTION);
@@ -164,10 +168,11 @@ pub(crate) static ARGUMENT_ERROR: TypeObject = TypeObject {
 
 /// Every built-in exception class.
 #[cfg(test)]
-pub(crate) const EVERY_CLASS: [&TypeObject; 41] = [
+pub(crate) const EVERY_CLASS: [&TypeObject; 42] = [
     &BASE_EXCEPTION,
     &EXCEPTION,
     &SYSTEM_EXIT,
+    &GENERATOR_EXIT,
     &EOF_ERROR,
     &OS_ERROR,
     &BLOCKING_IO_ERROR,

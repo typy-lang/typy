@@ -62,6 +62,14 @@ impl Analysis<'_> {
         live
     }
 
+    /// Returns what is live before a statement that evaluates `value` and drops it.
+    fn evaluated(&mut self, value: &TypedExpr, after: Live) -> Live {
+        let mut reads = Vec::new();
+        expression_reads(value, &mut reads);
+        self.stored_items(value, &reads, &after);
+        self.with_reads(after, &reads)
+    }
+
     #[allow(clippy::too_many_lines, reason = "one arm per statement kind")]
     fn statement(&mut self, statement: &TypedStmt, after: &Live) -> Live {
         let mut after: Live = after.union(&self.escape).copied().collect();
@@ -93,11 +101,16 @@ impl Analysis<'_> {
                 self.stored_items(value, &reads, &after);
                 self.with_reads(after, &reads)
             }
-            TypedStmt::Expr { value, .. } | TypedStmt::Yield { value, .. } => {
-                let mut reads = Vec::new();
-                expression_reads(value, &mut reads);
-                self.stored_items(value, &reads, &after);
-                self.with_reads(after, &reads)
+            TypedStmt::Expr { value, .. } => self.evaluated(value, after),
+            TypedStmt::Yield {
+                value, received, ..
+            } => {
+                // The assignment of what the next step received runs after the `yield`.
+                let after = match received {
+                    Some(received) => self.statement(received, &after),
+                    None => after,
+                };
+                self.evaluated(value, after)
             }
             TypedStmt::Return { value, .. } => {
                 let mut reads = Vec::new();

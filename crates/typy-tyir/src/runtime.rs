@@ -210,6 +210,13 @@ pub enum RuntimeFunction {
     IterableIterator,
     IteratorAdvance,
     IteratorItem,
+    /// `generator.send(value)`: steps the generator with the value's bits and whether it is
+    /// `None`, then gives whether it yielded (SMT-11, ADR-0063).
+    GeneratorSend,
+    /// `generator.throw(exception)`: raises the exception at the generator's `yield`.
+    GeneratorThrow,
+    /// `generator.close()`: raises `GeneratorExit` at the generator's `yield` (FUN-11).
+    GeneratorClose,
     ObjectType,
     ObjectRepr,
     ObjectStr,
@@ -464,7 +471,7 @@ const FLOAT_FLOAT: &[TyirType] = &[TyirType::Float, TyirType::Float];
 
 impl RuntimeFunction {
     /// Every runtime function.
-    pub const ALL: [Self; 361] = [
+    pub const ALL: [Self; 364] = [
         Self::IntFloorDivide,
         Self::IntModulo,
         Self::IntPower,
@@ -659,6 +666,9 @@ impl RuntimeFunction {
         Self::IteratorNew,
         Self::IterableIterator,
         Self::IteratorAdvance,
+        Self::GeneratorSend,
+        Self::GeneratorThrow,
+        Self::GeneratorClose,
         Self::IteratorItem,
         Self::ObjectType,
         Self::ObjectRepr,
@@ -1082,6 +1092,9 @@ impl RuntimeFunction {
             Self::IteratorNew => signature(&[Bits, Int, Bits], ITERATOR, false),
             Self::IterableIterator => signature(&[TyirType::ITERABLE, Bits], ITERATOR, false),
             Self::IteratorAdvance => signature(&[ITERATOR, Int], Bool, true),
+            Self::GeneratorSend => signature(&[TyirType::GENERATOR, Bits, Bool], Bool, true),
+            Self::GeneratorThrow => signature(&[TyirType::GENERATOR, EXCEPTION], Bool, true),
+            Self::GeneratorClose => signature(&[TyirType::GENERATOR], Unit, true),
             Self::IteratorItem => signature(&[ITERATOR], Bits, false),
             Self::ObjectType => signature(&[Bits], TYPE, false),
             Self::ObjectRepr | Self::ObjectStr => signature(&[Bits], STR, true),
@@ -1432,6 +1445,9 @@ impl RuntimeFunction {
             Self::IteratorNew => "iterator_new",
             Self::IterableIterator => "iterable_iterator",
             Self::IteratorAdvance => "iterator_advance",
+            Self::GeneratorSend => "generator_send",
+            Self::GeneratorThrow => "generator_throw",
+            Self::GeneratorClose => "generator_close",
             Self::IteratorItem => "iterator_item",
             Self::ObjectType => "object_type",
             Self::ObjectRepr => "object_repr",

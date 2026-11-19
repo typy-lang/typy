@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy test plan |
-| Version | 1.04 |
+| Version | 1.05 |
 | Status | Draft |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-19 |
@@ -368,7 +368,7 @@ that the specification does not define.
 | SMT-08 | 0.3 | IT | `tests/conformance/smt/SMT-08_*.py` |
 | SMT-09 | 0.8 | UT, IT | `typy-check` tests of CPython's rules for `nonlocal`, of the cell it shares, through a function between included, and of the narrowing a call may undo; `tests/conformance/smt/SMT-09_*.py`, also in the sanitizer run |
 | SMT-10 | 0.4 | IT | `tests/conformance/smt/SMT-10_*.py` |
-| SMT-11 | 0.9 | UT, IT | `typy-check` tests of each statement form of `yield`, and of the forms planned for 1.0; `typy-tyir` verifier tests that no value lives across a yield; `tests/conformance/smt/SMT-11_*.py`, also in the sanitizer run |
+| SMT-11 | 0.9 | UT, IT | `typy-check` tests of each statement form of `yield`, of the `S \| None` an assigned `yield` receives, and of the forms planned for 1.0; `typy-tyir` verifier tests that no value lives across a yield; `tests/conformance/smt/SMT-11_*.py`, also in the sanitizer run |
 | SMT-12 | 0.5 | IT | `tests/conformance/smt/SMT-12_*.py` |
 | CST-01 | 0.1 | IT | `tests/conformance/cst/CST-01_*.py` |
 | CST-02 | 0.1 | IT | `tests/conformance/cst/CST-02_*.py` |
@@ -387,7 +387,7 @@ that the specification does not define.
 | FUN-04 | 0.8 | UT, IT | `typy-check` and `typy-lower` tests of each variable's capture, by value or in a cell, of recursion and of mutual recursion; `tests/conformance/fun/FUN-04_*.py`, also in the sanitizer run, which shows each closure, cell and shared environment freed (NFR-07, NFR-08) |
 | FUN-05 | 0.8 | UT, IT | `typy-codegen` tests of a function object, its descriptor and a call through a value; `tests/conformance/fun/FUN-05_*.py` for identity, equality, hashing and `repr`, bound methods and `key`, also in the sanitizer run |
 | FUN-06 | 0.10 | IT | `tests/conformance/fun/FUN-06_*.py` |
-| FUN-07 | 0.9 | UT, IT | `typy-check` tests that a generator of each annotation yields and returns its types, and that `send`, `throw` and `close` are only for `Generator`; `tests/conformance/fun/FUN-07_*.py`, CPython's errors of a running, finished or just started generator included, also in the sanitizer run |
+| FUN-07 | 0.9 | UT, IT | `typy-check` tests that a generator of each annotation yields and returns its types, and that `send`, `throw` and `close` are only for `Generator`; runtime tests of `send`, `throw` and `close` in each state and of the exception a step hands back to its caller; `tests/conformance/fun/FUN-07_*.py`, CPython's errors of a running, finished or just started generator and the context of an exception raised while one is suspended inside an `except` clause included, also in the sanitizer run |
 | FUN-08 | 0.10 | IT | `tests/conformance/fun/FUN-08_*.py` |
 | FUN-09 | 0.10 | IT | `tests/conformance/fun/FUN-09_*.py` |
 | FUN-10 | 0.10 | IT | `tests/conformance/fun/FUN-10_*.py` |

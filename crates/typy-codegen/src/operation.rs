@@ -179,6 +179,12 @@ impl<'ctx> FunctionEmitter<'_, '_, 'ctx> {
                 self.set_generator_item(*generator, *item)?;
                 None
             }
+            Operation::GeneratorThrown { generator } => Some(self.generator_thrown(*generator)?),
+            Operation::GeneratorReceived { generator } => {
+                Some(self.generator_received(*generator)?)
+            }
+            Operation::GeneratorSent { generator } => Some(self.generator_sent(*generator)?),
+            Operation::GeneratorCaller { generator } => Some(self.generator_caller(*generator)?),
             Operation::Capture {
                 closure,
                 captures,

@@ -292,9 +292,11 @@ pub enum TypedStmt {
         span: Span,
     },
     /// `yield value`: the generator gives `value` and stops until its next step (SMT-11,
-    /// ADR-0063).
+    /// ADR-0063). In `target = yield value`, the next step starts with the assignment of what
+    /// it received, a `Received` expression.
     Yield {
         value: TypedExpr,
+        received: Option<Box<TypedStmt>>,
         span: Span,
     },
     /// `with manager as target: body`: `__enter__` gives what the target binds, and `__exit__`

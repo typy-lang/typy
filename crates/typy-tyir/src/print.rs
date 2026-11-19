@@ -331,6 +331,12 @@ fn operation(module: &TyirModule, operation: &Operation) -> String {
             generator,
             function,
         } => format!("generator_closure v{}, fn{}", generator.0, function.0),
+        Operation::GeneratorThrown { generator } => format!("generator_thrown v{}", generator.0),
+        Operation::GeneratorReceived { generator } => {
+            format!("generator_received v{}", generator.0)
+        }
+        Operation::GeneratorSent { generator } => format!("generator_sent v{}", generator.0),
+        Operation::GeneratorCaller { generator } => format!("generator_caller v{}", generator.0),
         Operation::SetGeneratorItem { generator, item } => {
             format!("set_generator_item v{}, v{}", generator.0, item.0)
         }

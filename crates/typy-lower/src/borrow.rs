@@ -109,6 +109,10 @@ pub(crate) fn assigned_symbols(body: &[TypedStmt]) -> BTreeSet<SymbolId> {
                     statements(orelse, found);
                     statements(finalbody, found);
                 }
+                TypedStmt::Yield {
+                    received: Some(received),
+                    ..
+                } => statements(std::slice::from_ref(received.as_ref()), found),
                 TypedStmt::Expr { .. }
                 | TypedStmt::Yield { .. }
                 | TypedStmt::Delete { .. }

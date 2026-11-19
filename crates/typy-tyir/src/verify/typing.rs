@@ -469,6 +469,20 @@ impl Checker<'_> {
                 }
                 Some(TyirType::FUNCTION)
             }
+            Operation::GeneratorThrown { generator } => {
+                self.expect(*generator, TyirType::GENERATOR, "the generator")?;
+                Some(TyirType::Optional(crate::types::OptionalBase::Object(
+                    TypeId::EXCEPTION,
+                )))
+            }
+            Operation::GeneratorReceived { generator } => {
+                self.expect(*generator, TyirType::GENERATOR, "the generator")?;
+                Some(TyirType::Bool)
+            }
+            Operation::GeneratorSent { generator } | Operation::GeneratorCaller { generator } => {
+                self.expect(*generator, TyirType::GENERATOR, "the generator")?;
+                Some(TyirType::Bits)
+            }
             Operation::SetGeneratorItem { generator, item } => {
                 self.expect(*generator, TyirType::GENERATOR, "the generator")?;
                 self.expect(*item, TyirType::Bits, "the item")?;

@@ -72,3 +72,5 @@ supersedes it.
 | [ADR-0064](0064-close-a-generator-freed-while-suspended-at-its-yield.md) | Close a generator freed while suspended at its yield | Accepted | 2026-11-19 |
 | [ADR-0065](0065-give-each-iterable-type-iteration-entries-the-runtime-calls.md) | Give each iterable type iteration entries the runtime calls | Accepted | 2026-11-19 |
 | [ADR-0066](0066-hold-an-abstract-collection-as-the-union-of-its-built-in-types.md) | Hold an abstract collection as the union of its built-in types | Accepted | 2026-11-19 |
+| [ADR-0067](0067-type-what-a-yield-receives-as-the-send-type-or-none.md) | Type what a `yield` receives as the send type or `None` | Accepted | 2026-11-19 |
+| [ADR-0068](0068-give-the-caller-back-its-handled-exception-when-a-generator-step-stops.md) | Give the caller back its handled exception when a generator step stops | Accepted | 2026-11-19 |

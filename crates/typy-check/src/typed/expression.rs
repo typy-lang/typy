@@ -451,6 +451,9 @@ pub enum TypedExprKind {
     /// which no path receives: the item of a union's tuple member that is too short for the
     /// position (DAT-08, ADR-0034).
     Raise(Box<TypedExpr>),
+    /// What a generator received at the `yield` its step resumed after: the value `send`
+    /// gave, or `None` when `next`, a `for` loop or `send(None)` resumed it (SMT-11).
+    Received,
 }
 
 /// `print(values, sep=sep, end=end, file=file, flush=flush)`; each keyword is present only
@@ -664,6 +667,7 @@ impl TypedExpr {
             | TypedExprKind::CapturedCellObject(_)
             | TypedExprKind::ClassVariable(_)
             | TypedExprKind::NotImplemented
+            | TypedExprKind::Received
             | TypedExprKind::ForeignLibrary(_)
             | TypedExprKind::SysValue(_) => Vec::new(),
             TypedExprKind::Binary { left, right, .. }

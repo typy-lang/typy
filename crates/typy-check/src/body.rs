@@ -151,6 +151,8 @@ pub(crate) struct BodyChecker<'program> {
     /// The types of the generator function whose body this is, or `None` for any other body
     /// (FUN-07, ADR-0063).
     generator: Option<crate::typed::GeneratorTypes>,
+    /// What the `yield` of `target = yield value` gives the assignment being checked (SMT-11).
+    received: Option<TypedExpr>,
     /// The variables of the functions around it that a nested function declares `nonlocal`,
     /// each its own variable whose cell is the captured one (SMT-09).
     nonlocal_names: BTreeMap<String, SymbolId>,
@@ -208,6 +210,7 @@ impl<'program> BodyChecker<'program> {
             global_names: BTreeSet::new(),
             nonlocal_names: BTreeMap::new(),
             generator: None,
+            received: None,
             local_aliases: BTreeSet::new(),
             class_allowed: false,
             qualified_name: String::new(),

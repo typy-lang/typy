@@ -96,8 +96,17 @@ fn statements(body: &[TypedStmt], callees: &mut BTreeSet<FunctionId>) {
                 assign_target(target, callees);
                 expression(value, callees);
             }
-            TypedStmt::Expr { value, .. } | TypedStmt::Yield { value, .. } => {
+            TypedStmt::Expr { value, .. }
+            | TypedStmt::Return {
+                value: Some(value), ..
+            } => expression(value, callees),
+            TypedStmt::Yield {
+                value, received, ..
+            } => {
                 expression(value, callees);
+                if let Some(received) = received {
+                    statements(std::slice::from_ref(received.as_ref()), callees);
+                }
             }
             TypedStmt::FunctionDef { captures, .. } => {
                 for capture in captures {
@@ -116,9 +125,6 @@ fn statements(body: &[TypedStmt], callees: &mut BTreeSet<FunctionId>) {
                 statements(body, callees);
                 statements(orelse, callees);
             }
-            TypedStmt::Return {
-                value: Some(value), ..
-            } => expression(value, callees),
             TypedStmt::With {
                 manager,
                 protocol,
@@ -543,6 +549,7 @@ fn expression(expression_value: &TypedExpr, callees: &mut BTreeSet<FunctionId>) 
         | TypedExprKind::FunctionValue(_)
         | TypedExprKind::Capture(_)
         | TypedExprKind::RunningFunction
+        | TypedExprKind::Received
         | TypedExprKind::CellRead(_)
         | TypedExprKind::CellObject(_)
         | TypedExprKind::CapturedCell(_)

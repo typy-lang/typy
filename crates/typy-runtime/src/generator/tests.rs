@@ -1,8 +1,12 @@
 use super::{
     FINISHED, GeneratorDescriptor, GeneratorObject, NEW, PREFIX, SUSPENDED, advance, current,
-    generator_repr, typy_rt_generator_new,
+    generator_repr, typy_rt_generator_close, typy_rt_generator_new, typy_rt_generator_send,
+    typy_rt_generator_throw,
 };
-use crate::exception::{ExceptionKind, ExceptionObject};
+use crate::exception::{
+    ExceptionKind, ExceptionObject, handled_exception, raise, raise_bare, typy_rt_exception_enter,
+    typy_rt_exception_leave,
+};
 use crate::list::ItemKind;
 use crate::string::{StrObject, from_str};
 use crate::tuple::{Field, TupleType};
@@ -200,6 +204,278 @@ fn smt_11_a_generator_writes_its_qualified_name_and_address() {
             crate::refcount::typy_rt_decrement(each.cast());
         }
         crate::refcount::typy_rt_decrement(generator.cast());
+    }
+    release_names(&found);
+}
+
+/// A body that yields 0, then each value `send` gives, and ends when `next()` resumes it.
+unsafe extern "C" fn echoing(generator: *mut GeneratorObject) -> *mut ExceptionObject {
+    // SAFETY: the runtime passes the live generator whose step is running.
+    let object = unsafe { &mut *generator };
+    let item = match (object.point, object.received) {
+        (0, _) => word(0),
+        (_, 1) => object.sent,
+        _ => return core::ptr::null_mut(),
+    };
+    object.current = item;
+    object.point = 1;
+    object.state = SUSPENDED;
+    core::ptr::null_mut()
+}
+
+/// A body that yields 1, then, at its `yield`, raises what `throw` or `close` gave it, or,
+/// for a `KeyError`, drops it and yields 2, or, for `GeneratorExit`, raises `ValueError`
+/// when its argument says so.
+unsafe extern "C" fn catching(generator: *mut GeneratorObject) -> *mut ExceptionObject {
+    // SAFETY: the runtime passes the live generator whose step is running.
+    let object = unsafe { &mut *generator };
+    if object.point == 0 {
+        object.current = word(1);
+        object.point = 1;
+        object.state = SUSPENDED;
+        return core::ptr::null_mut();
+    }
+    let thrown = core::mem::replace(&mut object.thrown, core::ptr::null_mut());
+    if thrown.is_null() {
+        return core::ptr::null_mut();
+    }
+    // SAFETY: the generator handed over the exception it held.
+    let kind = unsafe { (*thrown).kind() };
+    let frame = core::ptr::with_exposed_provenance::<u64>(generator.expose_provenance() + PREFIX);
+    // SAFETY: the frame's first field is the argument the test stored.
+    let replace = unsafe { *frame } != 0;
+    match kind {
+        ExceptionKind::KeyError => {
+            // SAFETY: the body owns the exception it drops.
+            unsafe { crate::refcount::typy_rt_decrement(thrown.cast()) };
+            object.current = word(2);
+            object.state = SUSPENDED;
+            core::ptr::null_mut()
+        }
+        ExceptionKind::GeneratorExit if replace => {
+            // SAFETY: the body owns the exception it replaces.
+            unsafe { crate::refcount::typy_rt_decrement(thrown.cast()) };
+            raise(ExceptionKind::ValueError, "replaced")
+        }
+        _ => thrown,
+    }
+}
+
+/// A body that calls `send`, `throw` or `close`, as its point says, of its own generator.
+unsafe extern "C" fn stepping_itself(generator: *mut GeneratorObject) -> *mut ExceptionObject {
+    // SAFETY: the generator is live, and its step is running.
+    unsafe {
+        match (*generator).point {
+            0 => typy_rt_generator_send(generator, 0, true).exception,
+            1 => typy_rt_generator_throw(generator, raise_bare(ExceptionKind::KeyError)).exception,
+            _ => typy_rt_generator_close(generator),
+        }
+    }
+}
+
+/// A body that handles an exception of its own while it yields, as a `yield` inside an
+/// `except` clause does, and yields the exception its caller was handling as an item.
+unsafe extern "C" fn handling(generator: *mut GeneratorObject) -> *mut ExceptionObject {
+    // SAFETY: the runtime passes the live generator whose step is running.
+    let object = unsafe { &mut *generator };
+    let own = raise_bare(ExceptionKind::IndexError);
+    // SAFETY: the body keeps the exception alive while it is handled, then drops it.
+    unsafe {
+        typy_rt_exception_enter(own);
+        object.current = object.caller.expose_provenance() as u64;
+        object.state = SUSPENDED;
+        crate::refcount::typy_rt_decrement(own.cast());
+    }
+    core::ptr::null_mut()
+}
+
+/// Returns a generator of `found`, with its argument set to `argument`.
+///
+/// # Safety
+///
+/// `found` lives as long as the generator.
+unsafe fn generator_of(found: &GeneratorDescriptor, argument: u64) -> *mut GeneratorObject {
+    // SAFETY: the caller's guarantee.
+    unsafe {
+        let generator = typy_rt_generator_new(found);
+        let frame =
+            core::ptr::with_exposed_provenance_mut::<u64>(generator.expose_provenance() + PREFIX);
+        *frame = argument;
+        generator
+    }
+}
+
+/// The frame of the bodies whose argument is a flag, not an object.
+const FLAG_FIELDS: [Field; 2] = [
+    Field::plain(ItemKind::Int, 0),
+    Field::plain(ItemKind::Int, 8),
+];
+
+/// Releases a raised exception after checking its kind and message.
+///
+/// # Safety
+///
+/// `raised` is a live exception the test owns.
+unsafe fn expect_raised(raised: *mut ExceptionObject, kind: ExceptionKind, message: Option<&str>) {
+    assert!(!raised.is_null(), "expected {kind:?}");
+    // SAFETY: the caller's guarantee.
+    unsafe {
+        assert_eq!((*raised).kind(), kind);
+        if let Some(message) = message {
+            assert_eq!(text((*raised).message), message);
+        }
+        crate::refcount::typy_rt_decrement(raised.cast());
+    }
+}
+
+#[test]
+fn fun_07_send_gives_its_value_to_the_step_and_returns_the_next_item() {
+    let fields = FLAG_FIELDS;
+    let layout = frame_layout(&fields);
+    let found = descriptor(echoing, &layout);
+    // SAFETY: the descriptor and its layout live for the whole test.
+    unsafe {
+        let generator = generator_of(&found, 0);
+        let refused = typy_rt_generator_send(generator, word(5), false);
+        expect_raised(
+            refused.exception,
+            ExceptionKind::TypeError,
+            Some("can't send non-None value to a just-started generator"),
+        );
+        assert_eq!((*generator).state, NEW);
+        let started = typy_rt_generator_send(generator, 0, true);
+        assert!(started.exception.is_null() && started.value);
+        assert_eq!(current(generator), word(0));
+        let echoed = typy_rt_generator_send(generator, word(5), false);
+        assert!(echoed.exception.is_null());
+        assert_eq!(current(generator), word(5));
+        // `next()` resumes it with nothing received, so its body ends.
+        let ended = advance(generator, word(1).cast_signed());
+        expect_raised(ended.exception, ExceptionKind::StopIteration, None);
+        let finished = typy_rt_generator_send(generator, word(6), false);
+        expect_raised(finished.exception, ExceptionKind::StopIteration, None);
+        crate::refcount::typy_rt_decrement(generator.cast());
+    }
+    release_names(&found);
+}
+
+#[test]
+fn fun_07_throw_raises_at_the_yield_and_finishes_a_generator_not_started() {
+    let fields = FLAG_FIELDS;
+    let layout = frame_layout(&fields);
+    let found = descriptor(catching, &layout);
+    // SAFETY: the descriptor and its layout live for the whole test.
+    unsafe {
+        let unstarted = generator_of(&found, 0);
+        let thrown = raise_bare(ExceptionKind::ValueError);
+        let raised = typy_rt_generator_throw(unstarted, thrown);
+        assert_eq!(raised.exception, thrown);
+        assert_eq!((*unstarted).state, FINISHED);
+        expect_raised(raised.exception, ExceptionKind::ValueError, None);
+        crate::refcount::typy_rt_decrement(unstarted.cast());
+        let generator = generator_of(&found, 0);
+        assert!(advance(generator, word(1).cast_signed()).value);
+        // The body drops a `KeyError` and yields again.
+        let caught = typy_rt_generator_throw(generator, raise_bare(ExceptionKind::KeyError));
+        assert!(caught.exception.is_null() && caught.value);
+        assert_eq!(current(generator), word(2));
+        let escaped = typy_rt_generator_throw(generator, raise_bare(ExceptionKind::IndexError));
+        expect_raised(escaped.exception, ExceptionKind::IndexError, None);
+        assert_eq!((*generator).state, FINISHED);
+        let again = typy_rt_generator_throw(generator, raise_bare(ExceptionKind::KeyError));
+        expect_raised(again.exception, ExceptionKind::KeyError, None);
+        crate::refcount::typy_rt_decrement(generator.cast());
+    }
+    release_names(&found);
+}
+
+#[test]
+fn fun_11_close_raises_generator_exit_and_refuses_a_body_that_yields_again() {
+    let fields = FLAG_FIELDS;
+    let layout = frame_layout(&fields);
+    let found = descriptor(catching, &layout);
+    // SAFETY: the descriptor and its layout live for the whole test.
+    unsafe {
+        let unstarted = generator_of(&found, 0);
+        assert!(typy_rt_generator_close(unstarted).is_null());
+        assert_eq!((*unstarted).state, FINISHED);
+        assert!(typy_rt_generator_close(unstarted).is_null());
+        crate::refcount::typy_rt_decrement(unstarted.cast());
+        // A body that raises the `GeneratorExit` it was given closes quietly.
+        let quiet = generator_of(&found, 0);
+        assert!(advance(quiet, word(1).cast_signed()).value);
+        assert!(typy_rt_generator_close(quiet).is_null());
+        assert_eq!((*quiet).state, FINISHED);
+        crate::refcount::typy_rt_decrement(quiet.cast());
+        // A body that raises another exception passes it on.
+        let replacing = generator_of(&found, 1);
+        assert!(advance(replacing, word(1).cast_signed()).value);
+        expect_raised(
+            typy_rt_generator_close(replacing),
+            ExceptionKind::ValueError,
+            Some("replaced"),
+        );
+        crate::refcount::typy_rt_decrement(replacing.cast());
+    }
+    release_names(&found);
+    let fields = FLAG_FIELDS;
+    let layout = frame_layout(&fields);
+    let found = descriptor(two_items, &layout);
+    // SAFETY: the descriptor and its layout live for the rest of the test.
+    unsafe {
+        // `two_items` ignores what it is given and yields again.
+        let stubborn = generator_of(&found, 0);
+        assert!(advance(stubborn, word(1).cast_signed()).value);
+        expect_raised(
+            typy_rt_generator_close(stubborn),
+            ExceptionKind::RuntimeError,
+            Some("generator ignored GeneratorExit"),
+        );
+        crate::refcount::typy_rt_decrement(stubborn.cast());
+    }
+    release_names(&found);
+}
+
+#[test]
+fn fun_07_a_running_generator_refuses_send_throw_and_close() {
+    let fields = FLAG_FIELDS;
+    let layout = frame_layout(&fields);
+    let found = descriptor(stepping_itself, &layout);
+    for point in 0..3 {
+        // SAFETY: the descriptor and its layout live for the whole loop.
+        unsafe {
+            let generator = generator_of(&found, 0);
+            (*generator).point = point;
+            let raised = advance(generator, word(1).cast_signed()).exception;
+            expect_raised(
+                raised,
+                ExceptionKind::ValueError,
+                Some("generator already executing"),
+            );
+            crate::refcount::typy_rt_decrement(generator.cast());
+        }
+    }
+    release_names(&found);
+}
+
+#[test]
+fn fun_07_a_step_hands_back_the_exception_its_caller_was_handling() {
+    let fields = FLAG_FIELDS;
+    let layout = frame_layout(&fields);
+    let found = descriptor(handling, &layout);
+    let caller = raise_bare(ExceptionKind::KeyError);
+    // SAFETY: the descriptor, its layout and the caller's exception live for the whole test.
+    unsafe {
+        let previous = typy_rt_exception_enter(caller);
+        let generator = generator_of(&found, 0);
+        assert!(advance(generator, word(1).cast_signed()).value);
+        // The body saw the caller's exception, and the caller handles it again.
+        assert_eq!(current(generator), caller.expose_provenance() as u64);
+        assert_eq!(handled_exception(), caller);
+        (*generator).current = 0;
+        crate::refcount::typy_rt_decrement(generator.cast());
+        typy_rt_exception_leave(previous);
+        crate::refcount::typy_rt_decrement(caller.cast());
     }
     release_names(&found);
 }

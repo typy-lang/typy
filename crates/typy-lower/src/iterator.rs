@@ -168,7 +168,7 @@ impl FunctionLowerer<'_> {
 
     /// Jumps to `join` with `value` as a value of type `ty`, which takes over its reference;
     /// a value of an optional type's base is wrapped first.
-    fn jump_with(&mut self, join: BlockId, value: Lowered, ty: TyirType, span: Span) {
+    pub(crate) fn jump_with(&mut self, join: BlockId, value: Lowered, ty: TyirType, span: Span) {
         let owned = self.take_reference(value, span);
         let passed = if value.ty == ty {
             owned

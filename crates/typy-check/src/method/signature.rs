@@ -37,6 +37,9 @@ pub enum ParameterType {
     Pairs(Type, Type),
     /// The name of a codec, a string literal the checker resolves.
     Codec,
+    /// An exception, or an exception class, which is called with no arguments, as the
+    /// argument of `generator.throw`.
+    Exception,
     /// The name of an error handler, a string literal the checker resolves; one for decoding
     /// when `decoding` is set.
     Handler {
@@ -100,12 +103,32 @@ fn bounds() -> [Parameter; 2] {
 }
 
 impl Method {
+    /// Returns the signature of a method of a generator that yields `yields` and is sent
+    /// `sends`: `send` takes an `S` and `throw` an exception, and both give the next item.
+    fn generator_signature(self, yields: &Type, sends: &Type) -> MethodSignature {
+        let (parameters, result) = match self {
+            Self::GeneratorSend => (
+                vec![positional("value", sends.clone(), true)],
+                yields.clone(),
+            ),
+            Self::GeneratorThrow => (
+                vec![positional_as("value", ParameterType::Exception, true)],
+                yields.clone(),
+            ),
+            _ => (Vec::new(), Type::NoneType),
+        };
+        MethodSignature { parameters, result }
+    }
+
     /// Returns the signature of the method on a receiver of type `receiver`, which is the type
     /// `of` found the method on.
     #[must_use]
     pub fn signature(self, receiver: &Type) -> MethodSignature {
         if let Type::Dict(key, value) = receiver {
             return self.dict_signature(receiver, key, value);
+        }
+        if let Type::Generator { yields, sends, .. } = receiver {
+            return self.generator_signature(yields, sends);
         }
         let item = match receiver {
             Type::Set(item) => item.as_ref().clone(),

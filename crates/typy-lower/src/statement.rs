@@ -80,7 +80,11 @@ impl FunctionLowerer<'_> {
                 let lowered = self.expression(value);
                 self.release(lowered, *span);
             }
-            TypedStmt::Yield { value, span } => self.yield_value(value, *span),
+            TypedStmt::Yield {
+                value,
+                received,
+                span,
+            } => self.yield_value(value, received.as_deref(), *span),
             TypedStmt::Return { value, span } => {
                 // A returned variable hands its slot's reference to the caller (MEM-04), unless
                 // an `except` clause is open, whose cleanup may release the variable's value.
