@@ -326,7 +326,7 @@ impl BodyChecker<'_> {
             if info.method(&attribute.name).is_some() {
                 let message = format!(
                     "`{}` is a method of the protocol `{}`, and using a protocol value's method \
-                     as a value is planned for TyPy 0.9 (FUN-09)",
+                     as a value is planned for TyPy 0.10 (FUN-09)",
                     attribute.name, info.name
                 );
                 return self.error(

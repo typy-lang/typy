@@ -70,15 +70,15 @@ fn later_features_name_their_release_and_rule() {
     let cases = [
         (
             "@d\nclass C:\n    pass\n",
-            "class decorators are planned for TyPy 0.9 (FUN-06)",
+            "class decorators are planned for TyPy 0.10 (FUN-06)",
         ),
         (
             "@decorated\nclass C[T]:\n    pass\n",
-            "class decorators are planned for TyPy 0.9 (FUN-06)",
+            "class decorators are planned for TyPy 0.10 (FUN-06)",
         ),
         (
             "x = {**y}\n",
-            "unpacking with `**` are planned for TyPy 0.9 (EXP-17)",
+            "dictionary unpackings with `**` are planned for TyPy 0.9 (EXP-17)",
         ),
         (
             "x = [i async for i in y]\n",
@@ -98,7 +98,7 @@ fn later_features_name_their_release_and_rule() {
         ),
         (
             "@d\ndef f() -> None:\n    pass\n",
-            "decorators are planned for TyPy 0.9 (FUN-06)",
+            "decorators are planned for TyPy 0.10 (FUN-06)",
         ),
         (
             "def f(*a: int) -> None:\n    pass\n",
@@ -110,11 +110,11 @@ fn later_features_name_their_release_and_rule() {
         ),
         (
             "print(*x)\n",
-            "unpacking with `*` are planned for TyPy 0.9 (EXP-17)",
+            "iterable unpackings with `*` are planned for TyPy 0.9 (EXP-17)",
         ),
         (
             "print(**x)\n",
-            "unpacking with `**` are planned for TyPy 0.9 (EXP-17)",
+            "dictionary unpackings with `**` are planned for TyPy 0.9 (EXP-17)",
         ),
         (
             "def f() -> None:\n    yield 1\n",

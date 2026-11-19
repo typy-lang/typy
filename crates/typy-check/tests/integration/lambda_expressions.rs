@@ -77,7 +77,7 @@ fn exp_14_a_lambda_without_the_types_it_needs_is_refused() {
             "from typing import Callable\n\n\ndef g[T](value: T) -> Callable[[], T]:\n    \
              return lambda: value\n",
             "E0201",
-            "a `lambda` inside a generic function is planned for TyPy 0.9 (FUN-10)",
+            "a `lambda` inside a generic function is planned for TyPy 0.10 (FUN-10)",
         ),
         (
             "def f() -> int:\n    g = lambda: x\n    x = 1\n    return g()\n",

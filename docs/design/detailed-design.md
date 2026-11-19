@@ -716,7 +716,7 @@ method no subclass defines again is its function after the object is
 evaluated. A class method, a static method a subclass defines again, a
 method read through a protocol value, and an override a subclass holds
 otherwise than its base, which only an adapter reaches, are planned for
-0.9 under FUN-09; a method with type parameters of its own or a
+0.10 under FUN-09; a method with type parameters of its own or a
 keyword-only parameter is E0202, as a function is. An assignment to a
 method of an instance is E0414.
 
@@ -787,7 +787,7 @@ cell variables, also an `except` clause's, whose symbol is the clause's
 own. A cell's type is the variable's once the body around the `def` is
 checked, since an assignment after the `def` may give it. A nested
 function with type parameters, or in a generic function, is planned for
-0.9 (FUN-10). A call of a local variable before an assignment gives it a
+0.10 (FUN-10). A call of a local variable before an assignment gives it a
 type is read first, so it is E0306.
 
 `body/lambda.rs` checks a `lambda` (EXP-14) as a nested function of one

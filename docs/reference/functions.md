@@ -14,9 +14,10 @@
 
 A function value is the `key` of `sorted`, `list.sort`, `min` and `max`;
 see [Ordering by a key](../library/functions-and-modules.md#ordering-by-a-key).
-Decorators, generators, built-in functions as values, class methods and
-protocol methods as values, and nested functions of generic functions are
-planned for 0.9 (FUN-06 to FUN-10).
+Generators are planned for 0.9 (SMT-11, FUN-07). Decorators, built-in
+functions as values, class methods and protocol methods as values, and
+nested functions of generic functions are planned for 0.10 (FUN-06,
+FUN-08 to FUN-10).
 
 ## Nested functions
 
@@ -242,7 +243,7 @@ These forms are refused:
 | A function with a keyword-only parameter as a value, since a `Callable` passes every argument by position | E0202 |
 | A method with type parameters of its own, or with a keyword-only parameter, as a value | E0202 |
 | An assignment to a method of an instance, such as `box.close = other`, since TyPy does not replace a class's attributes when the program runs | E0414 |
-| A class method as a value; a static method read through an instance whose subclasses define it again; a method read through a protocol value; a method read through an instance whose subclass overrides it with parameters or a result held otherwise, planned for 0.9 | E0201 (FUN-09) |
+| A class method as a value; a static method read through an instance whose subclasses define it again; a method read through a protocol value; a method read through an instance whose subclass overrides it with parameters or a result held otherwise, planned for 0.10 | E0201 (FUN-09) |
 | A call of a value that is not a function, such as an `int` | E0401 |
 
 ## Example

@@ -740,7 +740,7 @@ impl BodyChecker<'_> {
     }
 
     /// Reads `module.name` of a built-in module: a value as it is, while a function is a value
-    /// only from 0.9 (FUN-08); a refusal points at the name.
+    /// only from 0.10 (FUN-08); a refusal points at the name.
     pub(super) fn builtin_attribute(
         &mut self,
         module: &str,
@@ -757,7 +757,7 @@ impl BodyChecker<'_> {
                 Diagnostic::new(
                     DiagnosticCode::error(201),
                     attribute.span,
-                    format!("using `{module}.{name}` as a value is planned for TyPy 0.9 (FUN-08)"),
+                    format!("using `{module}.{name}` as a value is planned for TyPy 0.10 (FUN-08)"),
                 )
                 .with_rule(RuleId::FUN_08),
                 span,

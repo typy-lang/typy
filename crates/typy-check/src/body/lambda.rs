@@ -125,7 +125,7 @@ impl BodyChecker<'_> {
             let diagnostic = Diagnostic::new(
                 DiagnosticCode::error(201),
                 span,
-                "a `lambda` inside a generic function is planned for TyPy 0.9 (FUN-10)",
+                "a `lambda` inside a generic function is planned for TyPy 0.10 (FUN-10)",
             )
             .with_rule(RuleId::FUN_10);
             return Some(self.error(diagnostic, span));

@@ -35,7 +35,7 @@ pub(super) fn feature(kind: NodeKind) -> Feature {
         },
         NodeKind::GeneratorExp => planned("generator expressions", "0.9", RuleId::EXP_15),
         NodeKind::Yield | NodeKind::YieldFrom => planned("generators", "0.9", RuleId::SMT_11),
-        NodeKind::Starred => planned("unpacking with `*`", "0.9", RuleId::EXP_17),
+        NodeKind::Starred => planned("iterable unpackings with `*`", "0.9", RuleId::EXP_17),
         NodeKind::AsyncFunctionDef | NodeKind::AsyncFor | NodeKind::AsyncWith | NodeKind::Await => {
             Feature::AfterOne {
                 what: "`async` and `await`",

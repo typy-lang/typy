@@ -315,7 +315,7 @@ impl Walker {
                     if keyword.name.is_none() {
                         self.report(
                             keyword.span,
-                            planned("unpacking with `**`", "0.9", RuleId::EXP_17),
+                            planned("dictionary unpackings with `**`", "0.9", RuleId::EXP_17),
                         );
                     }
                     self.expression(&keyword.value);
@@ -393,7 +393,7 @@ impl Walker {
                         Some(key) => self.expression(key),
                         None => self.report(
                             value.span(),
-                            planned("unpacking with `**`", "0.9", RuleId::EXP_17),
+                            planned("dictionary unpackings with `**`", "0.9", RuleId::EXP_17),
                         ),
                     }
                     self.expression(value);

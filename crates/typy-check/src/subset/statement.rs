@@ -80,7 +80,7 @@ impl Walker {
                 if !method_decorator && let Some(decorator) = decorators.first() {
                     self.report(
                         decorator.span(),
-                        planned("decorators", "0.9", RuleId::FUN_06),
+                        planned("decorators", "0.10", RuleId::FUN_06),
                     );
                 }
                 self.type_parameters(type_parameters);

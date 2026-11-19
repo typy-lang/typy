@@ -6,6 +6,14 @@ All notable changes to TyPy are recorded here. The format follows
 
 ## [Unreleased]
 
+### Changed
+
+- Decorators, built-in functions, class methods and protocol methods as
+  values, nested functions inside generic functions, `NamedTuple`,
+  `isinstance` with a class held in a variable, `issubclass`, and
+  `typing` names as values are given as planned for 0.10, where TyPy 0.8
+  named 0.9.
+
 ## [0.8.0] - 2026-11-19
 
 ### Added

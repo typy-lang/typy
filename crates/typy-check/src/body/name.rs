@@ -143,7 +143,7 @@ impl BodyChecker<'_> {
 
     /// Returns a scalar class of `ctypes` read as a value (FFI-03), the function object of a
     /// function of the program (FUN-05), or the error for a built-in function read as one,
-    /// which is planned for 0.9 (FUN-08).
+    /// which is planned for 0.10 (FUN-08).
     fn function_as_value(&mut self, id: &str, span: Span) -> Option<TypedExpr> {
         if let Some(super::builtin_module::ModuleFunction::CtypesType(ty)) =
             self.program.module_functions.get(id)
@@ -162,7 +162,7 @@ impl BodyChecker<'_> {
                 Diagnostic::new(
                     DiagnosticCode::error(201),
                     span,
-                    format!("using `{id}` as a value is planned for TyPy 0.9 (FUN-08)"),
+                    format!("using `{id}` as a value is planned for TyPy 0.10 (FUN-08)"),
                 )
                 .with_rule(RuleId::FUN_08),
                 span,
@@ -297,7 +297,7 @@ impl BodyChecker<'_> {
                     Diagnostic::new(
                         DiagnosticCode::error(201),
                         span,
-                        format!("using `{id}` as a value is planned for TyPy 0.9 (TYP-18)"),
+                        format!("using `{id}` as a value is planned for TyPy 0.10 (TYP-18)"),
                     )
                     .with_rule(RuleId::TYP_18)
                     .with_help("TyPy reads it in annotations, `isinstance` and class patterns"),

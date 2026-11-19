@@ -96,7 +96,7 @@ impl BodyChecker<'_> {
     }
 
     /// Returns the error for a method that is no value of one `Callable` type: a class
-    /// method, which binds the class it is read through, planned for 0.9 (FUN-09), and a
+    /// method, which binds the class it is read through, planned for 0.10 (FUN-09), and a
     /// method with type parameters of its own or a keyword-only parameter, E0202, as for a
     /// function.
     fn refused_method_value(
@@ -143,14 +143,14 @@ impl BodyChecker<'_> {
         )
     }
 
-    /// Returns E0201 for a method of a kind whose value is planned for 0.9 (FUN-09).
+    /// Returns E0201 for a method of a kind whose value is planned for 0.10 (FUN-09).
     fn planned_method_value(&mut self, name: &Identifier, what: &str, span: Span) -> TypedExpr {
         self.error(
             Diagnostic::new(
                 DiagnosticCode::error(201),
                 name.span,
                 format!(
-                    "`{}` is {what}, and using one as a value is planned for TyPy 0.9 (FUN-09)",
+                    "`{}` is {what}, and using one as a value is planned for TyPy 0.10 (FUN-09)",
                     name.name
                 ),
             )

@@ -505,7 +505,7 @@ fn messages_use_the_right_article_and_python_names() {
     );
     assert_eq!(
         messages("print(len)\n"),
-        ["using `len` as a value is planned for TyPy 0.9 (FUN-08)"]
+        ["using `len` as a value is planned for TyPy 0.10 (FUN-08)"]
     );
     assert_eq!(
         messages("print(undefined)\n"),
