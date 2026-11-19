@@ -1,12 +1,57 @@
 //! Checks statements against the feature table.
 
 use typy_diagnostics::{Diagnostic, DiagnosticCode, RuleId};
-use typy_source::syntax::{Expr, ParameterKind, Stmt, TypeParameter, TypeParameterKind};
+use typy_source::syntax::{Expr, Parameter, ParameterKind, Stmt, TypeParameter, TypeParameterKind};
 
 use super::feature::{Feature, feature, planned};
 use super::{Place, Walker};
 
 impl Walker {
+    /// Checks the parameters of a function or a `lambda`: no `*args` or `**kwargs`, and
+    /// constant defaults.
+    pub(super) fn parameters(&mut self, parameters: &[Parameter]) {
+        for parameter in parameters {
+            match parameter.kind {
+                ParameterKind::Normal
+                | ParameterKind::PositionalOnly
+                | ParameterKind::KeywordOnly => {}
+                ParameterKind::VarPositional | ParameterKind::VarKeyword => self.report(
+                    parameter.span,
+                    planned("`*args` and `**kwargs` parameters", "0.9", RuleId::EXP_17),
+                ),
+            }
+            if let Some(annotation) = &parameter.annotation {
+                self.annotation(annotation);
+            }
+            match &parameter.default {
+                None | Some(Expr::Constant { .. }) => {}
+                Some(default) if crate::check::factory_call(default).is_some() => {}
+                Some(default) => self.report(
+                    default.span(),
+                    planned("default values other than constants", "1.0", RuleId::EXP_16),
+                ),
+            }
+        }
+    }
+
+    /// Checks a `lambda`: its parameters as a function's, and its body in a scope of its own,
+    /// as CPython reads it.
+    pub(super) fn lambda(&mut self, parameters: &[Parameter], body: &Expr) {
+        self.parameters(parameters);
+        let names = parameters
+            .iter()
+            .map(|parameter| parameter.name.name.as_str());
+        let nested = self.scope.is_some();
+        let outer_scope = self
+            .scope
+            .replace(super::global_scope::GlobalScope::of_parameters(
+                names, nested,
+            ));
+        let outer_loops = std::mem::take(&mut self.loop_depth);
+        self.expression(body);
+        self.scope = outer_scope;
+        self.loop_depth = outer_loops;
+    }
     #[allow(clippy::too_many_lines, reason = "one arm per statement kind")]
     pub(super) fn statement(&mut self, statement: &Stmt, place: Place) {
         match statement {
@@ -20,16 +65,14 @@ impl Walker {
                 ..
             } => {
                 match place {
-                    Place::Function => {
-                        self.report(*span, planned("nested functions", "1.0", RuleId::FUN_04));
-                    }
+                    // A nested function is checked with the body around it (FUN-04).
+                    Place::Function | Place::ModuleTop | Place::Class => {}
                     Place::ModuleBlock => self.report(
                         *span,
                         Feature::Excluded {
                             what: "functions defined inside `if`, `for` or `while` blocks",
                         },
                     ),
-                    Place::ModuleTop | Place::Class => {}
                 }
                 // A method may carry one of the decorators of CLS-06; the checker reads which.
                 let method_decorator = place == Place::Class
@@ -37,38 +80,11 @@ impl Walker {
                 if !method_decorator && let Some(decorator) = decorators.first() {
                     self.report(
                         decorator.span(),
-                        planned("decorators", "1.0", RuleId::FUN_06),
+                        planned("decorators", "0.9", RuleId::FUN_06),
                     );
                 }
                 self.type_parameters(type_parameters);
-                for parameter in parameters {
-                    match parameter.kind {
-                        ParameterKind::Normal => {}
-                        ParameterKind::PositionalOnly | ParameterKind::KeywordOnly => self.report(
-                            parameter.span,
-                            planned(
-                                "positional-only and keyword-only parameters",
-                                "1.0",
-                                RuleId::FUN_03,
-                            ),
-                        ),
-                        ParameterKind::VarPositional | ParameterKind::VarKeyword => self.report(
-                            parameter.span,
-                            planned("`*args` and `**kwargs` parameters", "1.0", RuleId::EXP_17),
-                        ),
-                    }
-                    if let Some(annotation) = &parameter.annotation {
-                        self.annotation(annotation);
-                    }
-                    match &parameter.default {
-                        None | Some(Expr::Constant { .. }) => {}
-                        Some(default) if crate::check::factory_call(default).is_some() => {}
-                        Some(default) => self.report(
-                            default.span(),
-                            planned("default values other than constants", "1.0", RuleId::EXP_16),
-                        ),
-                    }
-                }
+                self.parameters(parameters);
                 if let Some(returns) = returns {
                     self.annotation(returns);
                 }
@@ -76,9 +92,12 @@ impl Walker {
                 let names = parameters
                     .iter()
                     .map(|parameter| parameter.name.name.as_str());
-                let outer_scope = self
-                    .scope
-                    .replace(super::global_scope::GlobalScope::of_parameters(names));
+                let nested = self.scope.is_some();
+                let outer_scope =
+                    self.scope
+                        .replace(super::global_scope::GlobalScope::of_parameters(
+                            names, nested,
+                        ));
                 self.statements(body, Place::Function);
                 self.scope = outer_scope;
                 self.loop_depth = outer_loops;
@@ -254,6 +273,7 @@ impl Walker {
                 self.syntax_error(*span, "`continue` outside a loop");
             }
             Stmt::Global { names, .. } => self.global_statement(names),
+            Stmt::Nonlocal { names, span } => self.nonlocal_statement(names, *span),
             // An alias anywhere is expanded before types are known; its parameters' bounds
             // and constraints are read as CPython reads them, which checks no argument
             // against them (SMT-12).

@@ -65,3 +65,6 @@ supersedes it.
 | [ADR-0057](0057-give-the-runtime-each-systems-c-constants-and-macos-its-own-error-texts.md) | Give the runtime each system's C constants and macOS its own error texts | Accepted | 2026-11-18 |
 | [ADR-0058](0058-pass-c-arguments-as-libffi-passes-them-on-every-target.md) | Pass C arguments as libffi passes them on every target | Accepted | 2026-11-18 |
 | [ADR-0059](0059-link-nothing-more-for-ctypes-cdll-of-none.md) | Link nothing more for `ctypes.CDLL(None)` | Accepted | 2026-11-18 |
+| [ADR-0060](0060-make-a-function-value-an-object-of-its-code-and-its-captures.md) | Make a function value an object of its code and its captures | Accepted | 2026-11-18 |
+| [ADR-0061](0061-capture-by-value-unless-the-variable-is-assigned-after-the-capture.md) | Capture by value unless the variable is assigned after the capture | Accepted | 2026-11-18 |
+| [ADR-0062](0062-store-attributes-and-tuple-items-in-decreasing-order-of-alignment.md) | Store attributes and tuple items in decreasing order of alignment | Accepted | 2026-11-18 |

@@ -137,7 +137,7 @@ fn each_call_ctypes_would_refuse_is_an_error_where_it_is_compiled() {
         ),
         (
             "x = ctypes.POINTER\n",
-            "E0201 using `ctypes.POINTER` as a value is planned for TyPy 1.0 (FUN-05)",
+            "E0201 using `ctypes.POINTER` as a value is planned for TyPy 0.9 (FUN-08)",
         ),
         (
             "def load() -> None:\n    other = ctypes.CDLL(\"libm.so.6\")\n",
@@ -339,10 +339,7 @@ fn each_use_of_a_ctypes_object_ctypes_would_refuse_is_an_error_where_it_is_compi
              flag.value = values\n",
             "E0304 the value of `c_bool` is assigned an Iterable[int], whose truth cannot be tested",
         ),
-        (
-            "x = (1 * 2)(3)\n",
-            "E0201 calls of values that are not names are planned for TyPy 1.0 (FUN-05)",
-        ),
+        ("x = (1 * 2)(3)\n", "E0401 an int cannot be called"),
     ] {
         let found = refused(source);
         assert!(

@@ -27,6 +27,11 @@ impl BodyChecker<'_> {
         if let Some(class) = self.program.foreign.structure_named(id) {
             return Self::cdata_class(class, span);
         }
+        // A nested function reads its own name and its captures from its function object
+        // (FUN-04).
+        if let Some(read) = self.closure_read(id, span) {
+            return read;
+        }
         if self.in_function()
             && !self.global_names.contains(id)
             && !self.locals.contains_key(id)
@@ -70,13 +75,11 @@ impl BodyChecker<'_> {
                 self.reported_incomplete = true;
                 self.incomplete_instance(initializing, span, false);
             }
+            if let Some(refused) = self.refused_nested_value(symbol, id, span) {
+                return refused;
+            }
             let ty = self.types.get(&symbol).cloned().unwrap_or(Type::Error);
-            let kind = if self.program.symbols[symbol.0 as usize].kind == SymbolKind::ModuleVariable
-            {
-                TypedExprKind::ModuleVariable(symbol)
-            } else {
-                TypedExprKind::Local(symbol)
-            };
+            let kind = self.read_kind(id, symbol);
             let read = Self::typed(kind, ty.clone(), span);
             let not_none = self
                 .assigned
@@ -91,9 +94,10 @@ impl BodyChecker<'_> {
                 return Self::narrowed_read(read, narrowed, span);
             }
             // A test before this point showed the optional variable is not `None` (TYP-13);
-            // a call may assign a variable a function declares `global`, so it is not narrowed.
+            // a call may assign a variable a function declares `global` or `nonlocal`, so it
+            // is not narrowed.
             if let Type::Optional(inner) = ty
-                && !self.program.assigned_in_functions.contains(id)
+                && !self.changed_by_calls(id)
                 && self
                     .assigned
                     .as_ref()
@@ -124,28 +128,46 @@ impl BodyChecker<'_> {
         self.unknown_name(id, span)
     }
 
-    /// Returns a scalar class of `ctypes` read as a value (FFI-03), or the error for any
-    /// other function read as one, which is planned for 1.0 (FUN-05).
+    /// Returns how the variable `symbol`, named `id`, is read: as a module variable, through
+    /// the cell a nested function shares it in (FUN-04), or from its slot.
+    fn read_kind(&mut self, id: &str, symbol: SymbolId) -> TypedExprKind {
+        if self.program.symbols[symbol.0 as usize].kind == SymbolKind::ModuleVariable {
+            return TypedExprKind::ModuleVariable(symbol);
+        }
+        if self.cell_symbol(id) == Some(symbol) {
+            self.used_cells.insert(symbol);
+            return TypedExprKind::CellRead(symbol);
+        }
+        TypedExprKind::Local(symbol)
+    }
+
+    /// Returns a scalar class of `ctypes` read as a value (FFI-03), the function object of a
+    /// function of the program (FUN-05), or the error for a built-in function read as one,
+    /// which is planned for 0.9 (FUN-08).
     fn function_as_value(&mut self, id: &str, span: Span) -> Option<TypedExpr> {
         if let Some(super::builtin_module::ModuleFunction::CtypesType(ty)) =
             self.program.module_functions.get(id)
         {
             return Some(Self::cdata_class(crate::ctypes::CData::Scalar(*ty), span));
         }
-        let function = self.program.function_ids.contains_key(id)
-            || self.program.module_functions.contains_key(id)
-            || Builtin::named(id).is_some();
-        function.then(|| {
+        if let Some(function) = self.program.function_ids.get(id).copied() {
+            let value = self.function_value(function, id, span);
+            return Some(self.through_lazy(id, value));
+        }
+        if !self.program.module_functions.contains_key(id) && Builtin::named(id).is_none() {
+            return None;
+        }
+        Some(
             self.error(
                 Diagnostic::new(
                     DiagnosticCode::error(201),
                     span,
-                    format!("using `{id}` as a value is planned for TyPy 1.0 (FUN-05)"),
+                    format!("using `{id}` as a value is planned for TyPy 0.9 (FUN-08)"),
                 )
-                .with_rule(RuleId::FUN_05),
+                .with_rule(RuleId::FUN_08),
                 span,
-            )
-        })
+            ),
+        )
     }
 
     /// Reads a module variable from a function: its value as it is now, which may be unbound
@@ -204,6 +226,15 @@ impl BodyChecker<'_> {
     /// Returns the narrowest type `isinstance` tests showed the variable holds here, if any;
     /// a variable a function declares `global` may be assigned by a call, so it is not
     /// narrowed (TYP-07).
+    /// Returns true when a call may assign the variable `id`: a module variable a function
+    /// declares `global` (SMT-08), or a variable a nested function assigns through
+    /// `nonlocal` (SMT-09), so no test or assignment narrows it.
+    pub(super) fn changed_by_calls(&self, id: &str) -> bool {
+        self.program.assigned_in_functions.contains(id)
+            || self.closure_scope.rebound.contains(id)
+            || self.nonlocal_names.contains_key(id)
+    }
+
     pub(super) fn narrowed_type(&self, symbol: crate::typed::SymbolId, id: &str) -> Option<Type> {
         if let Some((_, member)) = self
             .splitting
@@ -213,7 +244,7 @@ impl BodyChecker<'_> {
         {
             return Some(member.clone());
         }
-        if self.program.assigned_in_functions.contains(id) {
+        if self.changed_by_calls(id) {
             return None;
         }
         let facts = self.assigned.as_ref()?;
@@ -266,7 +297,7 @@ impl BodyChecker<'_> {
                     Diagnostic::new(
                         DiagnosticCode::error(201),
                         span,
-                        format!("using `{id}` as a value is planned for TyPy 1.0 (TYP-18)"),
+                        format!("using `{id}` as a value is planned for TyPy 0.9 (TYP-18)"),
                     )
                     .with_rule(RuleId::TYP_18)
                     .with_help("TyPy reads it in annotations, `isinstance` and class patterns"),

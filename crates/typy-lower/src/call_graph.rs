@@ -7,7 +7,13 @@ use typy_check::{
     TypedProgram, TypedStmt,
 };
 
-/// Returns the functions that can call themselves, directly or through others.
+/// Stands among a function's callees for a call through a function value, whose code is known
+/// only when the program runs (FUN-05).
+const THROUGH_VALUE: FunctionId = FunctionId(u32::MAX);
+
+/// Returns the functions that can call themselves, directly or through others. A cycle that
+/// passes through a function value has a call through a value in it, so each function that
+/// calls through one checks the stack, and a cycle of values raises `RecursionError` too.
 pub(crate) fn recursive_functions(program: &TypedProgram) -> BTreeSet<FunctionId> {
     let overrides = overrides(program);
     let calls: BTreeMap<FunctionId, BTreeSet<FunctionId>> = program
@@ -29,6 +35,9 @@ pub(crate) fn recursive_functions(program: &TypedProgram) -> BTreeSet<FunctionId
         .keys()
         .copied()
         .filter(|start| {
+            if calls[start].contains(&THROUGH_VALUE) {
+                return true;
+            }
             let mut seen = BTreeSet::new();
             let mut pending: Vec<FunctionId> = calls[start].iter().copied().collect();
             while let Some(next) = pending.pop() {
@@ -89,6 +98,11 @@ fn statements(body: &[TypedStmt], callees: &mut BTreeSet<FunctionId>) {
             }
             TypedStmt::Expr { value, .. } => {
                 expression(value, callees);
+            }
+            TypedStmt::FunctionDef { captures, .. } => {
+                for capture in captures {
+                    expression(capture, callees);
+                }
             }
             TypedStmt::ForEach {
                 target,
@@ -271,6 +285,36 @@ fn expression(expression_value: &TypedExpr, callees: &mut BTreeSet<FunctionId>) 
         TypedExprKind::Binary { left, right, .. } => {
             expression(left, callees);
             expression(right, callees);
+        }
+        TypedExprKind::Lambda { captures, .. } => {
+            for capture in captures {
+                expression(capture, callees);
+            }
+        }
+        TypedExprKind::CallNested {
+            function,
+            closure,
+            arguments,
+        } => {
+            callees.insert(*function);
+            expression(closure, callees);
+            for argument in arguments {
+                expression(&argument.value, callees);
+            }
+        }
+        TypedExprKind::CallValue { callee, arguments } => {
+            callees.insert(THROUGH_VALUE);
+            expression(callee, callees);
+            for argument in arguments {
+                expression(argument, callees);
+            }
+        }
+        // The key of each item is called through its function value.
+        TypedExprKind::Keyed { .. } => {
+            callees.insert(THROUGH_VALUE);
+            for part in expression_value.operands() {
+                expression(part, callees);
+            }
         }
         TypedExprKind::IsInstance(test) => expression(&test.value, callees),
         TypedExprKind::EachMember(each) => {
@@ -479,7 +523,8 @@ fn expression(expression_value: &TypedExpr, callees: &mut BTreeSet<FunctionId>) 
         TypedExprKind::Attribute { object, .. }
         | TypedExprKind::TypeOf(object)
         | TypedExprKind::TypeName(object)
-        | TypedExprKind::TypeAliasPart { alias: object, .. } => expression(object, callees),
+        | TypedExprKind::TypeAliasPart { alias: object, .. }
+        | TypedExprKind::BoundMethod { object, .. } => expression(object, callees),
         TypedExprKind::VersionRead { value, result } => {
             expression(value, callees);
             expression(result, callees);
@@ -495,9 +540,18 @@ fn expression(expression_value: &TypedExpr, callees: &mut BTreeSet<FunctionId>) 
         | TypedExprKind::NotImplemented
         | TypedExprKind::ClassVariable(_)
         | TypedExprKind::TypeAliasObject(_)
+        | TypedExprKind::FunctionValue(_)
+        | TypedExprKind::Capture(_)
+        | TypedExprKind::RunningFunction
+        | TypedExprKind::CellRead(_)
+        | TypedExprKind::CellObject(_)
+        | TypedExprKind::CapturedCell(_)
+        | TypedExprKind::CapturedCellObject(_)
         | TypedExprKind::ForeignLibrary(_)
         | TypedExprKind::SysValue(_) => {}
-        TypedExprKind::AsIterable(inner) | TypedExprKind::Named { value: inner, .. } => {
+        TypedExprKind::AsIterable(inner)
+        | TypedExprKind::Named { value: inner, .. }
+        | TypedExprKind::CaptureOf { closure: inner, .. } => {
             expression(inner, callees);
         }
         TypedExprKind::PercentFormat { values, .. } => expression(values, callees),

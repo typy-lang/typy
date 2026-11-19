@@ -5,6 +5,7 @@ use std::fmt;
 use crate::constant::Constant;
 use crate::runtime::RuntimeFunction;
 use crate::slot::SlotId;
+use crate::types::TupleTypeId;
 use crate::value::ValueId;
 
 /// An arithmetic or bitwise operation on two `int` values that cannot raise.
@@ -293,6 +294,71 @@ pub enum Operation {
         index: u32,
         /// The value.
         value: ValueId,
+    },
+    /// A new function object of the nested function `function`, with one reference and every
+    /// capture zero, laid out as the tuple type `captures` (FUN-04, ADR-0061).
+    NewClosure {
+        /// The nested function.
+        function: crate::function::FunctionId,
+        /// The tuple type of its captures.
+        captures: TupleTypeId,
+    },
+    /// The capture at a position of a nested function's object, borrowed from it.
+    Capture {
+        /// The function object.
+        closure: ValueId,
+        /// The tuple type of its captures.
+        captures: TupleTypeId,
+        /// The capture's position.
+        index: u32,
+    },
+    /// Stores a value in a capture of a new function object, which takes over its reference.
+    SetCapture {
+        /// The function object.
+        closure: ValueId,
+        /// The tuple type of its captures.
+        captures: TupleTypeId,
+        /// The capture's position.
+        index: u32,
+        /// The value.
+        value: ValueId,
+    },
+    /// A new cell with no value, laid out as `layout`, a tuple of the value and whether it is
+    /// assigned (FUN-04, ADR-0061).
+    NewCell {
+        /// The tuple type of the value and its flag.
+        layout: TupleTypeId,
+    },
+    /// The value of a cell, borrowed from it; zero when it has none.
+    CellGet {
+        /// The cell.
+        cell: ValueId,
+        /// Its layout.
+        layout: TupleTypeId,
+    },
+    /// Whether a cell holds a value.
+    CellBound {
+        /// The cell.
+        cell: ValueId,
+        /// Its layout.
+        layout: TupleTypeId,
+    },
+    /// Stores a value in a cell, which takes over its reference; the value the cell held is
+    /// not released.
+    CellSet {
+        /// The cell.
+        cell: ValueId,
+        /// Its layout.
+        layout: TupleTypeId,
+        /// The value.
+        value: ValueId,
+    },
+    /// Leaves a cell with no value; the value it held is not released.
+    CellClear {
+        /// The cell.
+        cell: ValueId,
+        /// Its layout.
+        layout: TupleTypeId,
     },
     /// Whether two objects, or optional objects, are the same object (EXP-08).
     Identical {

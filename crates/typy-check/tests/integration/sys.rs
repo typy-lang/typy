@@ -119,7 +119,7 @@ fn names_of_sys_typy_does_not_have_give_their_codes() {
         (
             "import sys\nf = sys.exit\n",
             "E0201",
-            "using `sys.exit` as a value is planned for TyPy 1.0 (FUN-05)",
+            "using `sys.exit` as a value is planned for TyPy 0.9 (FUN-08)",
         ),
     ] {
         assert_eq!(

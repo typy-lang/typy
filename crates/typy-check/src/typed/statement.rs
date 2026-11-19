@@ -384,6 +384,14 @@ pub enum TypedStmt {
         targets: Vec<SymbolId>,
         span: Span,
     },
+    /// A nested `def`: a new function object of `function`, holding the value of each of
+    /// `captures`, evaluated in order, is stored in the variable `target` (FUN-04, ADR-0061).
+    FunctionDef {
+        function: FunctionId,
+        target: SymbolId,
+        captures: Vec<TypedExpr>,
+        span: Span,
+    },
     Pass {
         span: Span,
     },

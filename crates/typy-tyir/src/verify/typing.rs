@@ -139,11 +139,45 @@ impl Checker<'_> {
         Ok(())
     }
 
+    /// Checks a call through a function value: its first argument is the function object,
+    /// the normal block takes the one result, and the error block the exception (FUN-05).
+    fn value_call(
+        &self,
+        arguments: &[ValueId],
+        normal: BlockId,
+        error: BlockId,
+    ) -> Result<(), VerifyError> {
+        let Some(function) = arguments.first() else {
+            return Err(self.error("a call through a value has no function object".to_owned()));
+        };
+        self.expect(
+            *function,
+            TyirType::FUNCTION,
+            "the function object of a call",
+        )?;
+        if self.block_parameters(normal)?.len() != 1 {
+            return Err(self.error(format!(
+                "b{} must take the result of a call through a value",
+                normal.0
+            )));
+        }
+        if self.block_parameters(error)? != [TyirType::EXCEPTION] {
+            return Err(self.error(format!(
+                "b{} must take the exception of a call through a value",
+                error.0
+            )));
+        }
+        Ok(())
+    }
+
     fn callee_signature(
         &self,
         callee: Callee,
     ) -> Result<(Vec<TyirType>, TyirType, bool, String), VerifyError> {
         match callee {
+            Callee::Value => {
+                Err(self.error("a call through a value has no fixed signature".to_owned()))
+            }
             Callee::Runtime(function) => {
                 let signature = function.signature();
                 Ok((
@@ -374,6 +408,60 @@ impl Checker<'_> {
                 class,
                 index,
             } => Some(self.field(*object, *class, *index)?),
+            Operation::NewCell { layout } => {
+                self.cell_value(*layout)?;
+                Some(TyirType::CELL)
+            }
+            Operation::CellGet { cell, layout } => {
+                self.expect(*cell, TyirType::CELL, "the cell")?;
+                Some(self.cell_value(*layout)?)
+            }
+            Operation::CellBound { cell, layout } => {
+                self.expect(*cell, TyirType::CELL, "the cell")?;
+                self.cell_value(*layout)?;
+                Some(TyirType::Bool)
+            }
+            Operation::CellSet {
+                cell,
+                layout,
+                value,
+            } => {
+                self.expect(*cell, TyirType::CELL, "the cell")?;
+                let ty = self.cell_value(*layout)?;
+                self.expect(*value, ty, "the cell's value")?;
+                None
+            }
+            Operation::CellClear { cell, layout } => {
+                self.expect(*cell, TyirType::CELL, "the cell")?;
+                self.cell_value(*layout)?;
+                None
+            }
+            Operation::NewClosure { function, captures } => {
+                if self.module.functions.get(function.0 as usize).is_none() {
+                    return Err(self.error(format!("fn{} does not exist", function.0)));
+                }
+                self.capture_type(*captures, 0, true)?;
+                Some(TyirType::FUNCTION)
+            }
+            Operation::Capture {
+                closure,
+                captures,
+                index,
+            } => {
+                self.expect(*closure, TyirType::FUNCTION, "the function object")?;
+                Some(self.capture_type(*captures, *index, false)?)
+            }
+            Operation::SetCapture {
+                closure,
+                captures,
+                index,
+                value,
+            } => {
+                self.expect(*closure, TyirType::FUNCTION, "the function object")?;
+                let ty = self.capture_type(*captures, *index, false)?;
+                self.expect(*value, ty, "the captured value")?;
+                None
+            }
             Operation::SetField {
                 object,
                 class,
@@ -501,6 +589,40 @@ impl Checker<'_> {
     }
 
     /// An item is read from a tuple that has it.
+    /// Returns the type of the value of a cell laid out as `layout`, a tuple of the value and
+    /// a `bool`.
+    fn cell_value(&self, layout: TupleTypeId) -> Result<TyirType, VerifyError> {
+        match self.module.tuple_types.items(layout) {
+            Some([value, TyirType::Bool]) => Ok(*value),
+            _ => Err(self.error(format!(
+                "tuple#{} is not the layout of a cell, a value and a bool",
+                layout.0
+            ))),
+        }
+    }
+
+    /// Returns the type of capture `index` of the tuple type `captures`, or with `any`, of
+    /// the first, when the tuple type exists.
+    fn capture_type(
+        &self,
+        captures: TupleTypeId,
+        index: u32,
+        any: bool,
+    ) -> Result<TyirType, VerifyError> {
+        let items = self
+            .module
+            .tuple_types
+            .items(captures)
+            .ok_or_else(|| self.error(format!("tuple#{} does not exist", captures.0)))?;
+        if any {
+            return Ok(items.first().copied().unwrap_or(TyirType::Unit));
+        }
+        items
+            .get(index as usize)
+            .copied()
+            .ok_or_else(|| self.error(format!("tuple#{} has no capture {index}", captures.0)))
+    }
+
     fn tuple_item(&self, tuple: ValueId, index: u32) -> Result<TyirType, VerifyError> {
         let TyirType::Tuple(id) = self.ty(tuple)? else {
             return Err(self.error(format!("v{} is not a tuple", tuple.0)));
@@ -563,6 +685,9 @@ impl Checker<'_> {
                 error,
                 ..
             } => {
+                if *callee == Callee::Value {
+                    return self.value_call(arguments, *normal, *error);
+                }
                 let (parameters, result, may_raise, name) = self.callee_signature(*callee)?;
                 if !may_raise {
                     return Err(self.error(format!(

@@ -6,6 +6,7 @@
 | --- | --- |
 | `print` with `sep` and `end`, `len`, `range`, `abs`, `min`, `max`, `int`, `float`, `str`, `bool`, `repr`, `ord` and `chr` | LIB-01 |
 | `list`, `dict`, `set`, `tuple`, `sorted`, `reversed`, `enumerate`, `zip`, `sum`, `any`, `all`, `round` and `type` | LIB-02, CLS-12 |
+| The `key` argument of `sorted`, `list.sort`, `min` and `max`, a function value of one item | FUN-05 |
 | The methods of `str`, `bytes`, `list`, `tuple`, `dict` and `set`, with CPython's results | LIB-03, DAT-15 |
 | `format % values`, printf-style formatting of a string literal | LIB-10 |
 | The `math` module: its constants and its functions of numbers | LIB-05 |
@@ -37,6 +38,41 @@ print("-".join(words), list(zip(words, lengths))[:2])
 print(round(2.675, 2), abs(-7), "Title Case".swapcase(), b"abc".hex())
 print("  x ".strip(), "a,b".split(","))
 ```
+
+## Ordering by a key
+
+The `key` of `sorted`, `list.sort`, `min` and `max` is a function value
+that takes one item, a function or a method of the program, such as a
+bound method. Its results are the keys, which must order with `<`, and
+the items are ordered or compared by their keys alone, as in CPython:
+
+<!-- typy-expect: accepted -->
+```python
+def size(word: str) -> int:
+    return len(word)
+
+
+def score(pair: tuple[str, int]) -> int:
+    return pair[1]
+
+
+words = ["pear", "fig", "banana", "kiwi"]
+pairs = [("b", 2), ("a", 2), ("c", 1)]
+print(sorted(words, key=size), sorted(words, key=size, reverse=True))
+print(min(words, key=size), max(pairs, key=score), max("b", "aa", key=size))
+pairs.sort(key=score)
+print(pairs, min(words[:0], key=size, default="none"))
+```
+
+`sorted` and `list.sort` call the key once for each item, in order, then
+sort stably, so items of equal keys keep their order, also with
+`reverse=True`. `min` and `max` compare each key with the best so far as
+soon as it is computed, and give the first item of the smallest or the
+largest key. `key=None` is no key. `list.sort` orders a copy of the items
+and writes them back, so a key that raises leaves the list as it was, as
+in CPython; CPython leaves undefined what a key sees of the list while it
+is sorted, and in TyPy it sees the items unsorted. A built-in function as
+a key, such as `key=len`, is planned for 0.9 (FUN-08).
 
 ## Formatting with `%`
 
@@ -104,7 +140,7 @@ A function the module gained after the program's Python floor is E0425
 at that floor: `math.fma` needs `python-floor = "3.13"`, and `fmax`,
 `fmin`, `signbit`, `isnormal` and `issubnormal` need `"3.15"`.
 A function of `math` is not a value yet: `f = math.sqrt` is planned for
-1.0 (FUN-05).
+0.9 (FUN-08).
 
 `fsum`, `dist`, `prod` and `sumprod` take iterables of `int`, `bool` or
 `float` items, and `gamma` and `lgamma` a real number, each with
@@ -144,7 +180,7 @@ LIB-13):
 | `sys.maxsize`, `sys.maxunicode` | `2**63 - 1` and `1114111` |
 | `sys.byteorder`, `sys.platform` | `"little"` on every target; `"linux"` in a program built for Linux and `"darwin"` in one built for macOS |
 | `sys.getrecursionlimit()`, `sys.setrecursionlimit(n)` | Read and set the recursion limit, 1000 at first |
-| `sys.version`, `sys.hexversion`, `sys.version_info` | CPython 3.15.0, whose behaviour TyPy follows: `'3.15.0 (TyPy 0.7.0)'`, `0x030F00F0` and `(3, 15, 0, 'final', 0)` |
+| `sys.version`, `sys.hexversion`, `sys.version_info` | CPython 3.15.0, whose behaviour TyPy follows: `'3.15.0 (TyPy 0.8.0)'`, `0x030F00F0` and `(3, 15, 0, 'final', 0)` |
 
 An argument that is not valid UTF-8 keeps each stray byte as a
 surrogate, as CPython decodes it, so `b"a\xffb"` becomes `'a\udcffb'`,

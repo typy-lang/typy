@@ -198,7 +198,7 @@ impl Stmt {
                 name.span = span;
                 value.relocate(span);
             }
-            Self::Global { names, span: at } => {
+            Self::Global { names, span: at } | Self::Nonlocal { names, span: at } => {
                 *at = span;
                 for name in names {
                     name.span = span;
@@ -283,6 +283,17 @@ impl Expr {
                 *at = span;
                 target.span = span;
                 value.relocate(span);
+            }
+            Self::Lambda {
+                parameters,
+                body,
+                span: at,
+            } => {
+                *at = span;
+                for parameter in parameters {
+                    parameter.relocate(span);
+                }
+                body.relocate(span);
             }
             Self::Compare {
                 left,

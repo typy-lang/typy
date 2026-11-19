@@ -91,6 +91,7 @@ fn callee(module: &TyirModule, callee: Callee) -> String {
             .get(id.0 as usize)
             .map_or_else(|| format!("fn{}", id.0), |function| function.symbol.clone()),
         Callee::Method { class, slot } => format!("class#{class}.method#{slot}"),
+        Callee::Value => "value".to_owned(),
     }
 }
 
@@ -276,6 +277,36 @@ fn operation(module: &TyirModule, operation: &Operation) -> String {
         Operation::IsNone(value) => format!("is_none v{}", value.0),
         Operation::FromBits { bits, ty } => format!("from_bits v{}, {ty}", bits.0),
         Operation::NewInstance { class } => format!("new class#{class}"),
+        Operation::NewCell { layout } => format!("new_cell tuple#{}", layout.0),
+        Operation::CellGet { cell, layout } => format!("cell_get v{}, tuple#{}", cell.0, layout.0),
+        Operation::CellBound { cell, layout } => {
+            format!("cell_bound v{}, tuple#{}", cell.0, layout.0)
+        }
+        Operation::CellSet {
+            cell,
+            layout,
+            value,
+        } => format!("cell_set v{}, tuple#{}, v{}", cell.0, layout.0, value.0),
+        Operation::CellClear { cell, layout } => {
+            format!("cell_clear v{}, tuple#{}", cell.0, layout.0)
+        }
+        Operation::NewClosure { function, captures } => {
+            format!("new_closure fn{}, tuple#{}", function.0, captures.0)
+        }
+        Operation::Capture {
+            closure,
+            captures,
+            index,
+        } => format!("capture v{}, tuple#{}, {index}", closure.0, captures.0),
+        Operation::SetCapture {
+            closure,
+            captures,
+            index,
+            value,
+        } => format!(
+            "set_capture v{}, tuple#{}, {index}, v{}",
+            closure.0, captures.0, value.0
+        ),
         Operation::Field {
             object,
             class,

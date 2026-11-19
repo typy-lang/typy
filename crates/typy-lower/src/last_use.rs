@@ -275,6 +275,17 @@ impl Analysis<'_> {
                 after
             }
             TypedStmt::LazyImport { .. } | TypedStmt::Pass { .. } => after,
+            // A capture copies its variable, which stays in its slot.
+            TypedStmt::FunctionDef {
+                captures, target, ..
+            } => {
+                let mut reads = Vec::new();
+                for capture in captures {
+                    expression_reads(capture, &mut reads);
+                }
+                after.remove(target);
+                self.with_reads(after, &reads)
+            }
         }
     }
 

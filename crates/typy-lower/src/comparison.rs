@@ -25,10 +25,13 @@ impl FunctionLowerer<'_> {
     ) -> Lowered {
         let join = self.builder.create_block();
         let result = self.builder.add_block_parameter(join, TyirType::Bool);
-        let mut left = self.expression(first);
+        let mut left =
+            self.operand_before(first, &comparators[..1].iter().collect::<Vec<_>>(), span);
         let mut left_type = &first.ty;
         for (position, (operator, comparator)) in operators.iter().zip(comparators).enumerate() {
-            let right = self.expression(comparator);
+            // A comparator is the left operand of the next comparison too.
+            let next: Vec<&TypedExpr> = comparators.get(position + 1).into_iter().collect();
+            let right = self.operand_before(comparator, &next, span);
             let outcome = self
                 .compare_views(*operator, (left, left_type), (right, &comparator.ty), span)
                 .unwrap_or_else(|| self.compare(*operator, left, right, span));
@@ -327,12 +330,7 @@ impl FunctionLowerer<'_> {
         }
         let kind = match (left.ty, right.ty) {
             (TyirType::Tuple(_), _) => return self.compare_tuples(operator, left, right, span),
-            // A protocol value is an object of any class that satisfies the protocol, compared
-            // through the `equal` slot of the class that decides (ADR-0041).
-            // A `ctypes` object is equal only to itself (FFI-03).
-            (TyirType::UNION | TyirType::CDATA, _) | (_, TyirType::UNION | TyirType::CDATA)
-                if matches!(comparison, Comparison::Equal | Comparison::NotEqual) =>
-            {
+            (left_type, right_type) if equal_by_type(left_type, right_type, comparison) => {
                 return self.objects_equality(comparison == Comparison::Equal, left, right, span);
             }
             // An instance of a class without `__eq__` is equal only to itself (CLS-07).
@@ -491,6 +489,17 @@ fn mirrored(comparison: Comparison) -> Comparison {
         Comparison::GreaterEqual => Comparison::LessEqual,
         same => same,
     }
+}
+
+/// Returns true for `==` and `!=` with an operand whose object's type decides: a protocol
+/// value, an object of any class that satisfies the protocol, through the `equal` slot of the
+/// class (ADR-0041); a `ctypes` object, equal only to itself (FFI-03); and a function object
+/// (FUN-05).
+fn equal_by_type(left: TyirType, right: TyirType, comparison: Comparison) -> bool {
+    let by_type =
+        |ty: TyirType| matches!(ty, TyirType::UNION | TyirType::CDATA | TyirType::FUNCTION);
+    matches!(comparison, Comparison::Equal | Comparison::NotEqual)
+        && (by_type(left) || by_type(right))
 }
 
 #[cfg(test)]

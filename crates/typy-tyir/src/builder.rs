@@ -22,6 +22,7 @@ pub struct FunctionBuilder {
     id: FunctionId,
     symbol: String,
     name: String,
+    qualified_name: Option<String>,
     return_type: TyirType,
     may_raise: bool,
     parameters: Vec<ValueId>,
@@ -44,6 +45,7 @@ impl FunctionBuilder {
             id,
             symbol: symbol.into(),
             name: name.into(),
+            qualified_name: None,
             return_type,
             may_raise: false,
             parameters: Vec::new(),
@@ -181,6 +183,11 @@ impl FunctionBuilder {
         self.may_raise = may_raise;
     }
 
+    /// Sets the function's `__qualname__`, which is its name until set.
+    pub fn set_qualified_name(&mut self, qualified_name: impl Into<String>) {
+        self.qualified_name = Some(qualified_name.into());
+    }
+
     /// Returns the finished function; a block left without a terminator ends in `unreachable`.
     #[must_use]
     pub fn finish(self) -> TyirFunction {
@@ -198,6 +205,7 @@ impl FunctionBuilder {
         TyirFunction {
             id: self.id,
             symbol: self.symbol,
+            qualified_name: self.qualified_name.unwrap_or_else(|| self.name.clone()),
             name: self.name,
             parameters: self.parameters,
             return_type: self.return_type,

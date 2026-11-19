@@ -1,12 +1,13 @@
 //! Checks the builtins that take one iterable: `sorted`, `sum`, `any`, `all`, and `min` and
-//! `max` of one argument (LIB-02).
+//! `max` of one argument (LIB-02), with the `key` of `sorted`, `min` and `max` (FUN-05).
 
 use typy_diagnostics::{Diagnostic, DiagnosticCode, RuleId, Span};
 use typy_source::syntax::{Expr, Keyword};
 
 use super::BodyChecker;
+use super::key_argument::Key;
 use crate::builtin::Builtin;
-use crate::typed::{TypedConstant, TypedExpr, TypedExprKind};
+use crate::typed::{KeyedOperation, TypedConstant, TypedExpr, TypedExprKind};
 use crate::types::Type;
 
 /// The value given for an optional parameter.
@@ -55,7 +56,7 @@ fn option_name(builtin: Builtin) -> Option<&'static str> {
 impl BodyChecker<'_> {
     /// Checks a call of a builtin that takes one iterable, and the optional value it allows:
     /// `reverse` for `sorted`, `start` for `sum`, also by position, and `default` for `min` and
-    /// `max`. A `key` needs a function value, planned for 1.0 (FUN-05).
+    /// `max`, and the `key` of `sorted`, `min` and `max` (FUN-05).
     pub(super) fn call_over_iterable(
         &mut self,
         builtin: Builtin,
@@ -92,9 +93,23 @@ impl BodyChecker<'_> {
                 span,
             );
         }
+        // The key is checked on its own; every other keyword is the option's or refused.
+        let key_position = matches!(builtin, Builtin::Sorted | Builtin::Min | Builtin::Max)
+            .then(|| Self::keyword_position(keywords, "key"))
+            .flatten();
+        let others: Vec<Keyword> = keywords
+            .iter()
+            .enumerate()
+            .filter(|(position, _)| Some(*position) != key_position)
+            .map(|(_, keyword)| keyword.clone())
+            .collect();
+        let option_first = option_name(builtin)
+            .and_then(|name| Self::keyword_position(keywords, name))
+            .zip(key_position)
+            .is_some_and(|(option, key)| option < key);
         let iterable = self.iterable_argument(&arguments[0], builtin);
         let item = iterable.ty.sequence_item().cloned().unwrap_or(Type::Error);
-        let option = self.option_argument(builtin, arguments.get(1), keywords, span);
+        let option = self.option_argument(builtin, arguments.get(1), &others, span);
         if let Given::Refused = option {
             return Self::invalid(span);
         }
@@ -114,6 +129,21 @@ impl BodyChecker<'_> {
         });
         if item.has_error() {
             return Self::invalid(span);
+        }
+        let key = key_position
+            .map(|position| self.key_argument(&keywords[position].value, builtin.name(), &item));
+        match key {
+            Some(Key::Refused) => return Self::invalid(span),
+            Some(Key::Function(key)) => {
+                let (operation, result) = match builtin {
+                    Builtin::Sorted => (KeyedOperation::Sorted, Type::List(Box::new(item))),
+                    Builtin::Min => (KeyedOperation::Min, item),
+                    _ => (KeyedOperation::Max, item),
+                };
+                let option = (option.map(|option| *option), option_first);
+                return Self::keyed(operation, iterable, key, option, result, span);
+            }
+            Some(Key::Absent) | None => {}
         }
         let Some(result) = self.iterable_result(builtin, &iterable, &item, option.is_some(), span)
         else {
@@ -149,17 +179,7 @@ impl BodyChecker<'_> {
                 option = Some(&keyword.value);
                 continue;
             }
-            let diagnostic = if name == "key" && builtin != Builtin::Sum {
-                Diagnostic::new(
-                    DiagnosticCode::error(201),
-                    name_span,
-                    format!(
-                        "the `key` argument of `{}` is planned for TyPy 1.0, with function values (FUN-05)",
-                        builtin.name()
-                    ),
-                )
-                .with_rule(RuleId::FUN_05)
-            } else if option_name(builtin) == Some(name) {
+            let diagnostic = if option_name(builtin) == Some(name) {
                 Diagnostic::new(
                     DiagnosticCode::error(404),
                     name_span,

@@ -404,7 +404,7 @@ fn rejected_programs_give_their_codes() {
         ),
         ("def f() -> None:\n    pass\nf = 1\n", &["E0202"]),
         ("x = 1\ndef f() -> str:\n    return x\n", &["E0405"]),
-        ("def f() -> int:\n    return 1\ng = f\n", &["E0201"]),
+        ("def f() -> int:\n    return 1\ng: int = f\n", &["E0402"]),
         ("x = 1\nx()\n", &["E0401"]),
         ("print(min(1, 2.0))\n", &["E0404"]),
         ("print(min((1, 'a')))\n", &["E0411"]),
@@ -505,7 +505,7 @@ fn messages_use_the_right_article_and_python_names() {
     );
     assert_eq!(
         messages("print(len)\n"),
-        ["using `len` as a value is planned for TyPy 1.0 (FUN-05)"]
+        ["using `len` as a value is planned for TyPy 0.9 (FUN-08)"]
     );
     assert_eq!(
         messages("print(undefined)\n"),
@@ -2014,12 +2014,12 @@ fn classes_give_their_codes() {
         ("class P:\n    pass\np = P()\np.z = 1\n", &["E0414"]),
         ("class P:\n    pass\nP().move()\n", &["E0414"]),
         (
-            "class P:\n    def m(self) -> None:\n        pass\nf = P().m\n",
-            &["E0201"],
+            "class P:\n    def m(self) -> None:\n        pass\nP().m = 1\n",
+            &["E0414"],
         ),
         (
             "class P:\n    def __init__(self) -> None:\n        self.x = 1\nP().x()\n",
-            &["E0414"],
+            &["E0401"],
         ),
         ("x = 1\nprint(x.real)\n", &["E0412"]),
         ("x = 1\nx.y = 2\n", &["E0412"]),
@@ -2097,7 +2097,7 @@ fn classes_give_their_codes() {
             "class A:\n    def __init__(self, c: bool) -> None:\n        if c:\n            return\n        self.x = 1\n",
             &["E0309"],
         ),
-        ("class A:\n    pass\nprint(A())\nA()()\n", &["E0201"]),
+        ("class A:\n    pass\nprint(A())\nA()()\n", &["E0401"]),
         ("x = A()\nclass A:\n    pass\n", &["E0306"]),
         (
             "def f() -> None:\n    A()\nf()\nclass A:\n    pass\n",
@@ -2470,7 +2470,7 @@ fn static_methods_and_properties_are_checked() {
         ),
         (
             "class A:\n    @property\n    def x(self) -> int:\n        return 1\na = A()\nprint(a.x())\n",
-            &["E0201"],
+            &["E0401"],
         ),
         (
             "class A:\n    @property\n    def x(self) -> int:\n        return 1\n    @x.setter\n    def x(self, v: int) -> None:\n        pass\na = A()\na.x = 'no'\n",

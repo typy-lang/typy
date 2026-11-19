@@ -69,6 +69,13 @@ impl BodyChecker<'_> {
                         self.bind_local(target);
                     }
                 }
+                // A nested `def` binds its name in the function (FUN-04).
+                Stmt::FunctionDef { name, .. } if self.in_function() => {
+                    self.bind_local(&Expr::Name {
+                        id: name.name.clone(),
+                        span: name.span,
+                    });
+                }
                 Stmt::AugAssign { target, .. } => self.bind_local(target),
                 Stmt::AnnAssign {
                     target,
@@ -174,22 +181,49 @@ impl BodyChecker<'_> {
         }
     }
 
+    /// Makes each name a nested function declares `nonlocal` a variable of its own, of the
+    /// type of the variable it names, whose cell is the one the function captures (SMT-09).
+    /// A name no function around it binds is E0103, CPython's `SyntaxError`; a function not
+    /// nested in another had it reported with the other rules for `nonlocal`.
+    pub(super) fn declare_nonlocals(&mut self, body: &[Stmt]) {
+        for name in crate::check::declared_nonlocals(body) {
+            if self.nonlocal_names.contains_key(&name.name) {
+                continue;
+            }
+            let Some(closure) = &self.closure else {
+                continue;
+            };
+            let Some((position, ty)) = closure.captured_cell(&name.name) else {
+                self.diagnostics.push(
+                    Diagnostic::new(
+                        DiagnosticCode::error(103),
+                        name.span,
+                        format!("no binding for nonlocal '{}' found", name.name),
+                    )
+                    .with_rule(RuleId::STD_01),
+                );
+                continue;
+            };
+            let symbol =
+                self.program
+                    .add_symbol(&name.name, SymbolKind::Local, ty.clone(), name.span);
+            self.locals.insert(name.name.clone(), symbol);
+            self.local_order.push(symbol);
+            self.declared.insert(symbol, ty.clone());
+            self.types.insert(symbol, ty);
+            self.assigned
+                .get_or_insert_with(std::collections::BTreeSet::new)
+                .insert(super::flow::Fact::Assigned(symbol));
+            self.nonlocal_names.insert(name.name.clone(), symbol);
+            self.program.nonlocals.insert(symbol, position);
+        }
+    }
+
     /// Returns the type an annotation in a body names. CPython never evaluates the annotation
     /// of a variable in a function, and evaluates one in the module body after every class it
     /// can reach is defined (TYP-12), so it may name any class.
     pub(super) fn annotation(&mut self, annotation: &Expr) -> Type {
-        let scope = AnnotationScope {
-            classes: &self.program.class_ids,
-            instances: &self.program.instances,
-            modules: &self.program.module_classes,
-            module_aliases: &self.program.module_aliases,
-            imported_aliases: &self.program.imported_aliases,
-            parameters: &self.program.type_arguments,
-            copies: &self.program.class_copies,
-            names: &self.program.annotation_names,
-            standard: &self.program.annotation_modules,
-            bound: u32::MAX,
-        };
+        let scope = annotation_scope(self.program);
         let ty = annotation_type(annotation, &scope, self.diagnostics);
         // An annotation may name a copy of a generic class, which the program then holds.
         self.program.make_class_copies();
@@ -640,7 +674,9 @@ impl BodyChecker<'_> {
             return None;
         };
         let symbol = *self.locals.get(id)?;
-        if self.final_reassigned(symbol, id, *span) {
+        if self.final_reassigned(symbol, id, *span)
+            || self.assigns_nested_function(symbol, id, *span)
+        {
             return None;
         }
         match self.types.get(&symbol).cloned() {
@@ -772,5 +808,21 @@ impl BodyChecker<'_> {
             span,
         );
         Self::converted(probe, Some(declared)).ty != *ty
+    }
+}
+
+/// Returns the classes, modules and type parameters an annotation in a body may name.
+pub(super) fn annotation_scope(program: &super::Program) -> AnnotationScope<'_> {
+    AnnotationScope {
+        classes: &program.class_ids,
+        instances: &program.instances,
+        modules: &program.module_classes,
+        module_aliases: &program.module_aliases,
+        imported_aliases: &program.imported_aliases,
+        parameters: &program.type_arguments,
+        copies: &program.class_copies,
+        names: &program.annotation_names,
+        standard: &program.annotation_modules,
+        bound: u32::MAX,
     }
 }

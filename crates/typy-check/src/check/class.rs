@@ -1238,6 +1238,7 @@ fn check_override(
                     ty: Type::Error,
                     default: None,
                     default_call: None,
+                    kind: typy_source::syntax::ParameterKind::Normal,
                 },
             );
         }

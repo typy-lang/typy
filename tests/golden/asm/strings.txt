@@ -186,8 +186,9 @@ __typy_main:
 	movq	%rax, typy.global.2(%rip)
 	callq	typy_rt_decrement@PLT
 	movb	$1, typy.global.3(%rip)
-	movq	typy.global.2(%rip), %rax
-	movq	%rax, 408(%rsp)
+	movq	typy.global.2(%rip), %rdi
+	movq	%rdi, 408(%rsp)
+	callq	typy_rt_increment@PLT
 	movq	typy.global.2(%rip), %rdi
 	callq	typy_rt_str_repr@PLT
 	movq	%rax, 400(%rsp)
@@ -206,9 +207,11 @@ __typy_main:
 	jne	.LBB0_53
 	jmp	.LBB0_19
 .LBB0_18:
-	movq	400(%rsp), %rdi
+	movq	408(%rsp), %rdi
 	movq	376(%rsp), %rax
 	movq	%rax, 384(%rsp)
+	callq	typy_rt_decrement@PLT
+	movq	400(%rsp), %rdi
 	callq	typy_rt_decrement@PLT
 	movq	416(%rsp), %rdi
 	callq	typy_rt_int_decrement@PLT
@@ -231,9 +234,11 @@ __typy_main:
 	jne	.LBB0_54
 	jmp	.LBB0_21
 .LBB0_20:
-	movq	400(%rsp), %rdi
+	movq	408(%rsp), %rdi
 	movq	352(%rsp), %rax
 	movq	%rax, 360(%rsp)
+	callq	typy_rt_decrement@PLT
+	movq	400(%rsp), %rdi
 	callq	typy_rt_decrement@PLT
 	movq	416(%rsp), %rdi
 	callq	typy_rt_int_decrement@PLT
@@ -256,9 +261,11 @@ __typy_main:
 	jne	.LBB0_55
 	jmp	.LBB0_23
 .LBB0_22:
-	movq	400(%rsp), %rdi
+	movq	408(%rsp), %rdi
 	movq	328(%rsp), %rax
 	movq	%rax, 336(%rsp)
+	callq	typy_rt_decrement@PLT
+	movq	400(%rsp), %rdi
 	callq	typy_rt_decrement@PLT
 	movq	416(%rsp), %rdi
 	callq	typy_rt_int_decrement@PLT
@@ -282,9 +289,11 @@ __typy_main:
 	jne	.LBB0_56
 	jmp	.LBB0_25
 .LBB0_24:
-	movq	400(%rsp), %rdi
+	movq	408(%rsp), %rdi
 	movq	296(%rsp), %rax
 	movq	%rax, 304(%rsp)
+	callq	typy_rt_decrement@PLT
+	movq	400(%rsp), %rdi
 	callq	typy_rt_decrement@PLT
 	movq	416(%rsp), %rdi
 	callq	typy_rt_int_decrement@PLT
@@ -308,9 +317,11 @@ __typy_main:
 	jne	.LBB0_57
 	jmp	.LBB0_27
 .LBB0_26:
-	movq	400(%rsp), %rdi
+	movq	408(%rsp), %rdi
 	movq	264(%rsp), %rax
 	movq	%rax, 272(%rsp)
+	callq	typy_rt_decrement@PLT
+	movq	400(%rsp), %rdi
 	callq	typy_rt_decrement@PLT
 	movq	416(%rsp), %rdi
 	callq	typy_rt_int_decrement@PLT
@@ -335,9 +346,11 @@ __typy_main:
 	jne	.LBB0_58
 	jmp	.LBB0_29
 .LBB0_28:
-	movq	400(%rsp), %rdi
+	movq	408(%rsp), %rdi
 	movq	240(%rsp), %rax
 	movq	%rax, 248(%rsp)
+	callq	typy_rt_decrement@PLT
+	movq	400(%rsp), %rdi
 	callq	typy_rt_decrement@PLT
 	movq	416(%rsp), %rdi
 	callq	typy_rt_int_decrement@PLT
@@ -359,6 +372,8 @@ __typy_main:
 	callq	typy_rt_int_decrement@PLT
 	movq	400(%rsp), %rdi
 	callq	typy_rt_decrement@PLT
+	movq	408(%rsp), %rdi
+	callq	typy_rt_decrement@PLT
 	movq	typy.global.4(%rip), %rax
 	movq	%rax, 208(%rsp)
 	movl	$3, %edi
@@ -373,9 +388,11 @@ __typy_main:
 	jne	.LBB0_59
 	jmp	.LBB0_33
 .LBB0_30:
-	movq	400(%rsp), %rdi
+	movq	408(%rsp), %rdi
 	movq	192(%rsp), %rax
 	movq	%rax, 200(%rsp)
+	callq	typy_rt_decrement@PLT
+	movq	400(%rsp), %rdi
 	callq	typy_rt_decrement@PLT
 	movq	416(%rsp), %rdi
 	callq	typy_rt_int_decrement@PLT

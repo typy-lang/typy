@@ -36,16 +36,16 @@ pub(crate) struct Definition<'tree> {
 }
 
 /// The parts of a `def` statement a definition is built from.
-pub(super) struct FunctionParts<'tree> {
-    pub(super) name: &'tree Identifier,
+pub(crate) struct FunctionParts<'tree> {
+    pub(crate) name: &'tree Identifier,
     /// The decorators, of which a method may have one of CLS-06.
-    pub(super) decorators: &'tree [Expr],
-    pub(super) parameters: &'tree [Parameter],
+    pub(crate) decorators: &'tree [Expr],
+    pub(crate) parameters: &'tree [Parameter],
     /// The type parameters of a generic function (GEN-01).
-    pub(super) type_parameters: &'tree [typy_source::syntax::TypeParameter],
-    pub(super) returns: Option<&'tree Expr>,
-    pub(super) body: &'tree [Stmt],
-    pub(super) span: Span,
+    pub(crate) type_parameters: &'tree [typy_source::syntax::TypeParameter],
+    pub(crate) returns: Option<&'tree Expr>,
+    pub(crate) body: &'tree [Stmt],
+    pub(crate) span: Span,
 }
 
 /// What a decorator makes of a method (CLS-06).
@@ -79,7 +79,7 @@ impl<'tree> FunctionParts<'tree> {
     }
 
     /// Returns the parts of a `def` statement, or `None` for any other statement.
-    pub(super) fn of(statement: &'tree Stmt) -> Option<Self> {
+    pub(crate) fn of(statement: &'tree Stmt) -> Option<Self> {
         let Stmt::FunctionDef {
             name,
             parameters,
@@ -274,6 +274,16 @@ fn instance_parameter(
 
 /// Returns the definition of a function, or of a method of `owner`, whose first parameter is
 /// the instance and needs no annotation.
+/// Returns the definition of a function that is no method, such as a nested function, its
+/// annotations read in `scope` (FUN-04).
+pub(crate) fn function_definition<'tree>(
+    parts: &FunctionParts<'tree>,
+    scope: &AnnotationScope<'_>,
+    diagnostics: &mut Diagnostics,
+) -> Definition<'tree> {
+    definition(parts, None, scope, diagnostics)
+}
+
 pub(super) fn definition<'tree>(
     parts: &FunctionParts<'tree>,
     owner: Option<&Owner>,
@@ -322,6 +332,7 @@ pub(super) fn definition<'tree>(
             ty,
             default,
             default_call,
+            kind: parameter.kind,
         });
         parameter_names.push((parameter.name.name.clone(), parameter.name.span));
     }

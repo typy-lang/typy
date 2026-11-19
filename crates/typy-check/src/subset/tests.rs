@@ -70,15 +70,15 @@ fn later_features_name_their_release_and_rule() {
     let cases = [
         (
             "@d\nclass C:\n    pass\n",
-            "class decorators are planned for TyPy 1.0 (FUN-06)",
+            "class decorators are planned for TyPy 0.9 (FUN-06)",
         ),
         (
             "@decorated\nclass C[T]:\n    pass\n",
-            "class decorators are planned for TyPy 1.0 (FUN-06)",
+            "class decorators are planned for TyPy 0.9 (FUN-06)",
         ),
         (
             "x = {**y}\n",
-            "unpacking with `**` are planned for TyPy 1.0 (EXP-17)",
+            "unpacking with `**` are planned for TyPy 0.9 (EXP-17)",
         ),
         (
             "x = [i async for i in y]\n",
@@ -86,35 +86,23 @@ fn later_features_name_their_release_and_rule() {
         ),
         (
             "x = (i for i in range(3))\n",
-            "generator expressions are planned for TyPy 1.0 (EXP-15)",
+            "generator expressions are planned for TyPy 0.9 (EXP-15)",
         ),
         (
             "def f[*Ts](x: int) -> int:\n    return x\n",
             "`*Ts` and `**P` type parameters are planned for TyPy 1.0 (GEN-06)",
         ),
         (
-            "f = lambda: 1\n",
-            "`lambda` expressions are planned for TyPy 1.0 (EXP-14)",
-        ),
-        (
             "x = (i for i in range(3))\n",
-            "generator expressions are planned for TyPy 1.0 (EXP-15)",
-        ),
-        (
-            "def f() -> None:\n    def g() -> None:\n        pass\n",
-            "nested functions are planned for TyPy 1.0 (FUN-04)",
+            "generator expressions are planned for TyPy 0.9 (EXP-15)",
         ),
         (
             "@d\ndef f() -> None:\n    pass\n",
-            "decorators are planned for TyPy 1.0 (FUN-06)",
+            "decorators are planned for TyPy 0.9 (FUN-06)",
         ),
         (
             "def f(*a: int) -> None:\n    pass\n",
-            "`*args` and `**kwargs` parameters are planned for TyPy 1.0 (EXP-17)",
-        ),
-        (
-            "def f(a: int, /) -> None:\n    pass\n",
-            "positional-only and keyword-only parameters are planned for TyPy 1.0 (FUN-03)",
+            "`*args` and `**kwargs` parameters are planned for TyPy 0.9 (EXP-17)",
         ),
         (
             "def f(a: int = g()) -> None:\n    pass\n",
@@ -122,23 +110,15 @@ fn later_features_name_their_release_and_rule() {
         ),
         (
             "print(*x)\n",
-            "unpacking with `*` are planned for TyPy 1.0 (EXP-17)",
+            "unpacking with `*` are planned for TyPy 0.9 (EXP-17)",
         ),
         (
             "print(**x)\n",
-            "unpacking with `**` are planned for TyPy 1.0 (EXP-17)",
+            "unpacking with `**` are planned for TyPy 0.9 (EXP-17)",
         ),
         (
             "def f() -> None:\n    yield 1\n",
-            "generators are planned for TyPy 1.0 (SMT-11)",
-        ),
-        (
-            "def f() -> None:\n    nonlocal x\n",
-            "`nonlocal` statements are planned for TyPy 1.0 (SMT-09)",
-        ),
-        (
-            "x[0]()\n",
-            "calls of values that are not names are planned for TyPy 1.0 (FUN-05)",
+            "generators are planned for TyPy 0.9 (SMT-11)",
         ),
         (
             "async def f() -> None:\n    pass\n",
@@ -270,6 +250,76 @@ fn return_break_and_continue_out_of_place_are_syntax_errors() {
 }
 
 #[test]
+fn nonlocal_where_cpython_rejects_it_is_a_syntax_error() {
+    let cases = [
+        (
+            "nonlocal x\n",
+            Some("nonlocal declaration not allowed at module level"),
+        ),
+        (
+            "def f() -> None:\n    nonlocal x\n",
+            Some("no binding for nonlocal 'x' found"),
+        ),
+        (
+            "class C:\n    def m(self) -> None:\n        nonlocal x\n",
+            Some("no binding for nonlocal 'x' found"),
+        ),
+        (
+            "def f(x: int) -> None:\n    def g(x: int) -> None:\n        nonlocal x\n",
+            Some("name 'x' is parameter and nonlocal"),
+        ),
+        (
+            "def f() -> None:\n    x = 1\n    def g() -> None:\n        print(x)\n        \
+             nonlocal x\n",
+            Some("name 'x' is used prior to nonlocal declaration"),
+        ),
+        (
+            "def f() -> None:\n    x = 1\n    def g() -> None:\n        x = 2\n        \
+             nonlocal x\n",
+            Some("name 'x' is assigned to before nonlocal declaration"),
+        ),
+        (
+            "def f() -> None:\n    x = 1\n    def g() -> None:\n        x: int = 2\n        \
+             nonlocal x\n",
+            Some("annotated name 'x' can't be nonlocal"),
+        ),
+        (
+            "def f() -> None:\n    x = 1\n    def g() -> None:\n        nonlocal x\n        \
+             x: int = 2\n",
+            Some("annotated name 'x' can't be nonlocal"),
+        ),
+        (
+            "def f() -> None:\n    x = 1\n    def g() -> None:\n        global x\n        \
+             nonlocal x\n",
+            Some("name 'x' is nonlocal and global"),
+        ),
+        (
+            "def f() -> None:\n    x = 1\n    def g() -> None:\n        nonlocal x\n        \
+             global x\n",
+            Some("name 'x' is nonlocal and global"),
+        ),
+        (
+            "def f() -> None:\n    x = 1\n    def g() -> None:\n        nonlocal x\n        \
+             x = 2\n",
+            None,
+        ),
+    ];
+    for (source, expected) in cases {
+        let found: Vec<(String, String)> = diagnostics(source)
+            .into_iter()
+            .filter(|(code, _)| code == "E0103")
+            .collect();
+        match expected {
+            Some(message) => assert!(
+                found.iter().any(|(_, found)| found == message),
+                "{source:?} gave {found:?}"
+            ),
+            None => assert!(found.is_empty(), "{source:?} gave {found:?}"),
+        }
+    }
+}
+
+#[test]
 fn global_after_a_use_an_assignment_or_an_annotation_is_a_syntax_error() {
     let cases = [
         (
@@ -326,8 +376,9 @@ fn a_generic_class_is_named_with_its_type_arguments_in_annotations_and_calls() {
     let source =
         "class Box[T]:\n    pass\nx: Box[int] = Box[int]()\ny: Box[tuple[int, str]] = Box()\n";
     assert_eq!(diagnostics(source), Vec::new());
+    // The call is the checker's to refuse, as a call of any other value is.
     let other = diagnostics("x: frozenset[int] = 1\nprint(frozenset[int]())\n");
-    assert_eq!(other.len(), 2, "{other:?}");
+    assert_eq!(other.len(), 1, "{other:?}");
 }
 
 #[test]

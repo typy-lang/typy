@@ -20,13 +20,19 @@ impl FunctionLowerer<'_> {
         span: Span,
     ) -> Lowered {
         let binary = receiver.ty.binary_kind().is_some();
-        let receiver = self.expression(receiver);
-        // Every value in source order, and each parameter's value, which is the last given for
-        // a parameter that takes many.
+        // The receiver, then every value in source order, each kept while a later one may
+        // free it, and each parameter's value, which is the last given for a parameter that
+        // takes many.
+        let operands: Vec<&TypedExpr> = std::iter::once(receiver)
+            .chain(arguments.iter().map(|argument| &argument.value))
+            .collect();
+        let mut lowered = self.operands_in_order(&operands, span).into_iter();
+        let receiver = lowered
+            .next()
+            .unwrap_or_else(|| unreachable!("a method has a receiver"));
         let mut values: Vec<Lowered> = Vec::with_capacity(arguments.len());
         let mut given: Vec<Option<Lowered>> = Vec::new();
-        for argument in arguments {
-            let value = self.expression(&argument.value);
+        for (argument, value) in arguments.iter().zip(lowered) {
             values.push(value);
             if given.len() <= argument.parameter {
                 given.resize(argument.parameter + 1, None);

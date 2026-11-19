@@ -1,6 +1,7 @@
 //! Checks a project and builds its typed program (detailed design section 7.2).
 
 mod annotation;
+mod callable_annotation;
 mod class;
 pub(crate) mod ctypes_declarations;
 mod dataclass;
@@ -49,7 +50,7 @@ pub(crate) struct ImportedNames {
 }
 pub(crate) use annotation::{AliasTable, ClassVarAnnotation, ExportedAlias, final_type};
 pub(crate) use class::{ClassInfo, class_value_variable, class_values};
-pub(crate) use definition::{Definition, factory_call};
+pub(crate) use definition::{Definition, FunctionParts, factory_call, function_definition};
 
 use crate::body::{BodyChecker, Program};
 use crate::exception_arguments::Creations;
@@ -59,8 +60,8 @@ use crate::types::Type;
 use class::{BaseScope, KnownClasses, class_types, collect_classes, collect_members};
 use definition::{FunctionScope, collect_functions};
 use definition_order::check_calls_follow_definitions;
-pub(crate) use module_scope::declared_globals;
 use module_scope::{check_module_names, module_variables};
+pub(crate) use module_scope::{declared_globals, declared_nonlocals};
 
 impl ImportedNames {
     /// Returns the names the module's imports give its annotations.

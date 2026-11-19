@@ -66,6 +66,10 @@ pub enum RuntimeFunction {
     ListRepeat,
     ListCompare,
     ListSort,
+    /// Sorts a list in place by a list of their keys (FUN-05).
+    ListSortKeyed,
+    /// Keeps the best key so far and its item for `min` or `max` with a key (FUN-05).
+    ListKeepExtreme,
     ListExtreme,
     ListSumInt,
     ListSumFloat,
@@ -178,6 +182,12 @@ pub enum RuntimeFunction {
     TypeName,
     TypeAliasName,
     TypeAliasModule,
+    /// A new bound method of the descriptor and the instance, which it holds a reference to
+    /// (FUN-05).
+    MethodNew,
+    /// Raises `NameError` for a captured variable, named by the `str`, that has no value yet
+    /// (FUN-04).
+    FreeVariableUnbound,
     ExceptionNew,
     ExceptionPartText,
     ExceptionArgsLength,
@@ -427,7 +437,7 @@ const fn signature(
 /// file objects.
 fn holds_items(ty: TyirType) -> bool {
     use crate::types::{OptionalBase, TypeId};
-    const OWN: [TypeId; 12] = [
+    const OWN: [TypeId; 13] = [
         TypeId::STR,
         TypeId::BYTES,
         TypeId::EXCEPTION,
@@ -440,6 +450,7 @@ fn holds_items(ty: TyirType) -> bool {
         TypeId::VERSION_INFO,
         TypeId::NOT_IMPLEMENTED,
         TypeId::CDATA,
+        TypeId::FUNCTION,
     ];
     match ty {
         TyirType::Bits | TyirType::Tuple(_) | TyirType::Optional(OptionalBase::Tuple(_)) => true,
@@ -453,7 +464,7 @@ const FLOAT_FLOAT: &[TyirType] = &[TyirType::Float, TyirType::Float];
 
 impl RuntimeFunction {
     /// Every runtime function.
-    pub const ALL: [Self; 357] = [
+    pub const ALL: [Self; 361] = [
         Self::IntFloorDivide,
         Self::IntModulo,
         Self::IntPower,
@@ -511,6 +522,8 @@ impl RuntimeFunction {
         Self::ListRepeat,
         Self::ListCompare,
         Self::ListSort,
+        Self::ListSortKeyed,
+        Self::ListKeepExtreme,
         Self::ListExtreme,
         Self::ListSumInt,
         Self::ListSumFloat,
@@ -623,6 +636,8 @@ impl RuntimeFunction {
         Self::TypeName,
         Self::TypeAliasName,
         Self::TypeAliasModule,
+        Self::MethodNew,
+        Self::FreeVariableUnbound,
         Self::ExceptionNew,
         Self::ExceptionPartText,
         Self::ExceptionArgsLength,
@@ -923,7 +938,9 @@ impl RuntimeFunction {
             Self::ObjectsEqual => signature(&[Bits, Bits], Bool, false),
             Self::CtypesFloatArgument => signature(&[Int, Int], Float, true),
             Self::RangeCheckStep | Self::SysSetRecursionLimit => signature(&[Int], Unit, true),
-            Self::NameError | Self::WriteStdoutChecked => signature(&[STR], Unit, true),
+            Self::NameError | Self::WriteStdoutChecked | Self::FreeVariableUnbound => {
+                signature(&[STR], Unit, true)
+            }
             Self::ModuleAttributeError | Self::ModuleImportError => {
                 signature(&[TyirType::MODULE, STR, Int], Unit, true)
             }
@@ -951,6 +968,8 @@ impl RuntimeFunction {
             Self::ListRepeat => signature(&[LIST, Int], LIST, true),
             Self::ListCompare => signature(&[LIST, LIST, Int], Bool, false),
             Self::ListSort => signature(&[LIST, Int], Unit, false),
+            Self::ListSortKeyed => signature(&[LIST, LIST, Int], Unit, false),
+            Self::ListKeepExtreme => signature(&[LIST, Bits, LIST, Bits, Int], Unit, false),
             Self::ListSumInt | Self::MathProdInt => signature(&[LIST, Int], Int, false),
             Self::ListSumFloat => signature(&[LIST, Float], Float, false),
             Self::ListAny | Self::ListAll | Self::MathHasFloat => signature(&[LIST], Bool, false),
@@ -1037,6 +1056,7 @@ impl RuntimeFunction {
             Self::TypeAliasName | Self::TypeAliasModule => {
                 signature(&[TyirType::TYPE_ALIAS], STR, false)
             }
+            Self::MethodNew => signature(&[Bits, Bits], TyirType::FUNCTION, false),
             Self::ExceptionNew | Self::OsErrorNew => {
                 signature(&[TYPE, Bits, Bits], EXCEPTION, false)
             }
@@ -1275,6 +1295,8 @@ impl RuntimeFunction {
             Self::ListRepeat => "list_repeat",
             Self::ListCompare => "list_compare",
             Self::ListSort => "list_sort",
+            Self::ListSortKeyed => "list_sort_keyed",
+            Self::ListKeepExtreme => "list_keep_extreme",
             Self::ListExtreme => "list_extreme",
             Self::ListSumInt => "list_sum_int",
             Self::ListSumFloat => "list_sum_float",
@@ -1387,6 +1409,8 @@ impl RuntimeFunction {
             Self::TypeName => "type_name",
             Self::TypeAliasName => "type_alias_name",
             Self::TypeAliasModule => "type_alias_module",
+            Self::MethodNew => "method_new",
+            Self::FreeVariableUnbound => "free_variable_unbound",
             Self::ExceptionNew => "exception_new",
             Self::ExceptionPartText => "exception_part_text",
             Self::ExceptionArgsLength => "exception_args_length",

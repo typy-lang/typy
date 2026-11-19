@@ -48,7 +48,12 @@ impl FunctionLowerer<'_> {
         span: Span,
     ) -> Lowered {
         let (id, _) = self.item_types(ty);
-        let lowered: Vec<Lowered> = items.iter().map(|item| self.expression(item)).collect();
+        let later: Vec<&TypedExpr> = items.iter().collect();
+        let lowered: Vec<Lowered> = items
+            .iter()
+            .enumerate()
+            .map(|(position, item)| self.operand_before(item, &later[position + 1..], span))
+            .collect();
         let values: Vec<ValueId> = lowered
             .into_iter()
             .map(|item| self.take_reference(item, span))
@@ -360,7 +365,7 @@ impl FunctionLowerer<'_> {
                 self.constant(Constant::PlaceholderDict, span)
             }
             TyirType::Object(typy_tyir::TypeId::BYTES) => self.bytes_constant(&[], span),
-            // An instance, exception, iterator, range or view slot starts as null, which
+            // An instance, exception, iterator, range, view or function slot starts as null, which
             // counting passes over. Nothing is allocated, so a `return` lowered before a later
             // loop adds its hidden slot has nothing of that slot to release.
             TyirType::Object(id)
@@ -378,6 +383,8 @@ impl FunctionLowerer<'_> {
                     || id == typy_tyir::TypeId::ITERABLE
                     || id == typy_tyir::TypeId::TEXT_FILE
                     || id == typy_tyir::TypeId::CDATA
+                    || id == typy_tyir::TypeId::FUNCTION
+                    || id == typy_tyir::TypeId::CELL
                     || id == typy_tyir::TypeId::UNION =>
             {
                 self.constant(Constant::NoInstance(id), span)

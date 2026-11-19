@@ -205,10 +205,18 @@ impl RuleId {
     pub const FUN_03: Self = Self("FUN-03");
     /// Nested functions and closures shall be accepted, capturing variables as Python does.
     pub const FUN_04: Self = Self("FUN-04");
-    /// Functions shall be values of type `Callable[[A, ...], R]`.
+    /// A function, nested function, `lambda` or method the program defines shall be a value of type `Callable[[A, ...], R]`.
     pub const FUN_05: Self = Self("FUN-05");
     /// User-defined decorators whose types can be checked shall be accepted.
     pub const FUN_06: Self = Self("FUN-06");
+    /// A built-in function or a method of a built-in type shall be a value where a `Callable` is expected.
+    pub const FUN_08: Self = Self("FUN-08");
+    /// A class method, a static method a subclass defines again, a protocol value's method and
+    /// an override held otherwise than its base shall be values when read through an instance.
+    pub const FUN_09: Self = Self("FUN-09");
+    /// A nested function inside a generic function, and one with type parameters of its own,
+    /// shall be accepted.
+    pub const FUN_10: Self = Self("FUN-10");
     /// Generic functions and classes shall be written with PEP 695 type parameter lists; `TypeVar` and `Generic` shall be rejected.
     pub const GEN_01: Self = Self("GEN-01");
     /// Type parameters with a bound or with constraints shall be accepted and checked.
@@ -483,6 +491,9 @@ impl RuleId {
         Self::FUN_04,
         Self::FUN_05,
         Self::FUN_06,
+        Self::FUN_08,
+        Self::FUN_09,
+        Self::FUN_10,
         Self::GEN_01,
         Self::GEN_02,
         Self::GEN_03,

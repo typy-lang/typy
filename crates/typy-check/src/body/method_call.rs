@@ -70,6 +70,63 @@ impl BodyChecker<'_> {
     }
 
     /// Checks `receiver.name(arguments)`, a method of a built-in type (LIB-03).
+    /// Returns the position of the `key` of `list.sort`, unless it is `None`, which is no
+    /// key (FUN-05).
+    fn sort_key(method: Method, keywords: &[Keyword]) -> Option<usize> {
+        let position = Self::keyword_position(keywords, "key")?;
+        let none = matches!(
+            keywords[position].value,
+            Expr::Constant {
+                value: typy_source::syntax::Constant::None,
+                ..
+            }
+        );
+        (method == Method::ListSort && !none).then_some(position)
+    }
+
+    /// Returns the error for `setdefault` without a default, which stores `None`, when the
+    /// dict's value type is not optional (DAT-09).
+    fn setdefault_without_default(
+        &mut self,
+        method: Method,
+        receiver: &TypedExpr,
+        arguments: &[Expr],
+        keywords: &[Keyword],
+        span: Span,
+    ) -> Option<TypedExpr> {
+        let Type::Dict(_, value) = &receiver.ty else {
+            return None;
+        };
+        if method != Method::DictSetdefault
+            || arguments.len() != 1
+            || !keywords.is_empty()
+            || matches!(value.as_ref(), Type::Optional(_))
+        {
+            return None;
+        }
+        let value = value.as_ref().clone();
+        for argument in arguments {
+            self.expression(argument);
+        }
+        Some(
+            self.error(
+                Diagnostic::new(
+                    DiagnosticCode::error(404),
+                    span,
+                    format!(
+                        "`setdefault` without a default stores None, which a value of type {value} \
+                     cannot be"
+                    ),
+                )
+                .with_rule(RuleId::DAT_09)
+                .with_help(
+                    "give a default of the value type, such as `counts.setdefault(word, 0)`",
+                ),
+                span,
+            ),
+        )
+    }
+
     pub(super) fn method_call(
         &mut self,
         receiver: &Expr,
@@ -105,32 +162,18 @@ impl BodyChecker<'_> {
         let Some(method) = Method::of(&receiver.ty, &name.name) else {
             return self.unknown_method(&receiver.ty, name, span);
         };
+        if let Some(position) = Self::sort_key(method, keywords) {
+            return self.keyed_sort(receiver, arguments, keywords, position, span);
+        }
         // A program that may close a text file may close `sys.stdout`, so its `print` checks
         // that standard output is open (LIB-14).
         if method == Method::TextClose && receiver.ty == Type::TextFile {
             self.program.closes_text_files = true;
         }
-        // `setdefault` without a default stores `None`, which only an optional value type holds.
-        if method == Method::DictSetdefault
-            && arguments.len() == 1
-            && keywords.is_empty()
-            && let Type::Dict(_, value) = &receiver.ty
-            && !matches!(value.as_ref(), Type::Optional(_))
+        if let Some(refused) =
+            self.setdefault_without_default(method, &receiver, arguments, keywords, span)
         {
-            let value = value.as_ref().clone();
-            for argument in arguments {
-                self.expression(argument);
-            }
-            return self.error(
-                Diagnostic::new(
-                    DiagnosticCode::error(404),
-                    span,
-                    format!("`setdefault` without a default stores None, which a value of type {value} cannot be"),
-                )
-                .with_rule(RuleId::DAT_09)
-                .with_help("give a default of the value type, such as `counts.setdefault(word, 0)`"),
-                span,
-            );
+            return refused;
         }
         let signature = method.signature(&receiver.ty);
         let Some(bound) = self.bind(method, &signature, arguments, keywords, span) else {
@@ -253,18 +296,8 @@ impl BodyChecker<'_> {
                     continue;
                 }
                 (Some(name), Some(_)) => format!("`{name}` is given twice"),
-                (Some("key"), None) if method == Method::ListSort => {
-                    self.error(
-                        Diagnostic::new(
-                            DiagnosticCode::error(201),
-                            keyword.span,
-                            "the `key` argument of `sort` is planned for TyPy 1.0, with function values (FUN-05)",
-                        )
-                        .with_rule(RuleId::FUN_05),
-                        span,
-                    );
-                    return None;
-                }
+                // `key=None` is no key; `keyed_sort` takes any other (FUN-05).
+                (Some("key"), None) if method == Method::ListSort => continue,
                 (Some(name), None) if parameters.iter().any(|parameter| parameter.name == name) => {
                     format!("`{name}` of `{}` is given by position only", method.name())
                 }

@@ -81,7 +81,7 @@ pub(crate) fn tuple_descriptor<'ctx>(
             }
             _ => pointer.const_null(),
         };
-        let offset = tuple_field(&items, index)
+        let offset = tuple_field(&shared.tyir.tuple_types, &items, index)
             .and_then(|field| data.offset_of_element(&struct_type, field))
             .unwrap_or(0);
         fields.push(

@@ -51,6 +51,12 @@ pub enum Constant {
     /// The address of the `ctypes` class at this index of `TyirModule::cdata_classes`, which
     /// the runtime reads to make and read its objects (FFI-03).
     CDataClass(u32),
+    /// The immortal function object of a function that captures nothing (FUN-05,
+    /// ADR-0060).
+    Function(crate::function::FunctionId),
+    /// The address of the descriptor of a method used as a bound method, whose code takes
+    /// the bound method and reads the instance from it (FUN-05).
+    MethodDescriptor(crate::function::FunctionId),
 }
 
 impl Constant {
@@ -72,7 +78,10 @@ impl Constant {
             Self::TypeObject(_) => TyirType::TYPE,
             Self::Module(_) => TyirType::MODULE,
             Self::TypeAlias(_) => TyirType::TYPE_ALIAS,
-            Self::TupleDescriptor(_) | Self::CDataClass(_) => TyirType::Bits,
+            Self::Function(_) => TyirType::FUNCTION,
+            Self::TupleDescriptor(_) | Self::CDataClass(_) | Self::MethodDescriptor(_) => {
+                TyirType::Bits
+            }
         }
     }
 }
@@ -97,6 +106,8 @@ impl fmt::Display for Constant {
             Self::TypeAlias(index) => write!(formatter, "type_alias a{index}"),
             Self::TupleDescriptor(TupleTypeId(id)) => write!(formatter, "descriptor tuple#{id}"),
             Self::CDataClass(id) => write!(formatter, "cdata_class#{id}"),
+            Self::Function(id) => write!(formatter, "function fn{}", id.0),
+            Self::MethodDescriptor(id) => write!(formatter, "method_descriptor fn{}", id.0),
         }
     }
 }

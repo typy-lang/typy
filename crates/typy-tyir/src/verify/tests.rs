@@ -933,3 +933,260 @@ fn a_function_of_many_blocks_verifies_in_linear_time() {
     assert_eq!(verify(&module(builder.finish())), Ok(()));
     assert!(started.elapsed() < std::time::Duration::from_secs(10));
 }
+
+/// `def apply(f: Callable[[int], int], x: int) -> int: return f(x)`, and its own function
+/// object, which it reads as a constant.
+fn apply() -> TyirFunction {
+    let mut builder =
+        FunctionBuilder::new(FunctionId(0), "_TY8__main__5apply", "apply", TyirType::Int);
+    builder.set_may_raise(true);
+    builder.set_qualified_name("apply");
+    let function = builder.add_parameter(TyirType::FUNCTION);
+    let argument = builder.add_parameter(TyirType::Int);
+    let normal = builder.create_block();
+    let result = builder.add_block_parameter(normal, TyirType::Int);
+    let error = builder.create_block();
+    let exception = builder.add_block_parameter(error, TyirType::EXCEPTION);
+    builder.push_value(
+        Operation::Constant(Constant::Function(FunctionId(0))),
+        TyirType::FUNCTION,
+        span(),
+    );
+    builder.terminate(Terminator::Invoke {
+        callee: Callee::Value,
+        arguments: vec![function, argument],
+        normal,
+        error,
+        span: span(),
+    });
+    builder.switch_to(error);
+    builder.terminate(Terminator::ReturnError(exception));
+    builder.switch_to(normal);
+    builder.terminate(Terminator::Return(result));
+    builder.finish()
+}
+
+#[test]
+fn fun_05_a_call_through_a_function_value_verifies_and_prints() {
+    let module = module(apply());
+    assert_eq!(verify(&module), Ok(()));
+    let text = print(&module);
+    assert!(text.contains("= const function fn0"), "{text}");
+    assert!(
+        text.contains("invoke value(v0, v1) to b1 unwind b2"),
+        "{text}"
+    );
+    assert_eq!(module.functions[0].qualified_name, "apply");
+}
+
+#[test]
+fn fun_05_a_call_through_a_value_needs_its_function_object_and_its_blocks() {
+    let broken = |change: fn(&mut Terminator)| {
+        let mut module = module(apply());
+        change(&mut module.functions[0].blocks[0].terminator);
+        message(&module)
+    };
+    let without_object = broken(|terminator| {
+        if let Terminator::Invoke { arguments, .. } = terminator {
+            arguments.clear();
+        }
+    });
+    assert!(
+        without_object.contains("has no function object"),
+        "{without_object}"
+    );
+    let not_a_function = broken(|terminator| {
+        if let Terminator::Invoke { arguments, .. } = terminator {
+            arguments.reverse();
+        }
+    });
+    assert!(
+        not_a_function.contains("the function object of a call"),
+        "{not_a_function}"
+    );
+    let no_result = broken(|terminator| {
+        if let Terminator::Invoke { normal, .. } = terminator {
+            *normal = BlockId(0);
+        }
+    });
+    assert!(
+        no_result.contains("must take the result of a call through a value"),
+        "{no_result}"
+    );
+    let no_exception = broken(|terminator| {
+        if let Terminator::Invoke { error, .. } = terminator {
+            *error = BlockId(1);
+        }
+    });
+    assert!(
+        no_exception.contains("must take the exception of a call through a value"),
+        "{no_exception}"
+    );
+}
+
+/// `outer` makes a function object of `inner` that captures the `int` it is given, and
+/// `inner` reads that capture back.
+fn closure_module() -> TyirModule {
+    let mut tuple_types = crate::TupleTypes::default();
+    let captures = tuple_types.intern_id(vec![TyirType::Int]);
+    let mut outer = FunctionBuilder::new(FunctionId(0), "outer", "outer", TyirType::FUNCTION);
+    let value = outer.add_parameter(TyirType::Int);
+    let closure = outer.push_value(
+        Operation::NewClosure {
+            function: FunctionId(1),
+            captures,
+        },
+        TyirType::FUNCTION,
+        span(),
+    );
+    outer.push(
+        Operation::SetCapture {
+            closure,
+            captures,
+            index: 0,
+            value,
+        },
+        span(),
+    );
+    outer.terminate(Terminator::Return(closure));
+    let mut inner = FunctionBuilder::new(FunctionId(1), "inner", "inner", TyirType::Int);
+    let object = inner.add_parameter(TyirType::FUNCTION);
+    let read = inner.push_value(
+        Operation::Capture {
+            closure: object,
+            captures,
+            index: 0,
+        },
+        TyirType::Int,
+        span(),
+    );
+    inner.terminate(Terminator::Return(read));
+    let mut module = module(outer.finish());
+    module.functions.push(inner.finish());
+    module.tuple_types = tuple_types;
+    module
+}
+
+#[test]
+fn fun_04_a_closure_made_and_read_verifies_and_prints() {
+    let module = closure_module();
+    assert_eq!(verify(&module), Ok(()));
+    let text = print(&module);
+    for line in [
+        "= new_closure fn1, tuple#0",
+        "set_capture v1, tuple#0, 0, v0",
+        "= capture v0, tuple#0, 0",
+    ] {
+        assert!(text.contains(line), "{line} missing from {text}");
+    }
+}
+
+#[test]
+fn fun_04_a_capture_of_another_position_type_or_object_fails() {
+    let mut wrong_index = closure_module();
+    if let Operation::Capture { index, .. } =
+        &mut wrong_index.functions[1].blocks[0].instructions[0].operation
+    {
+        *index = 1;
+    }
+    assert!(message(&wrong_index).contains("has no capture 1"));
+    let mut wrong_function = closure_module();
+    if let Operation::NewClosure { function, .. } =
+        &mut wrong_function.functions[0].blocks[0].instructions[0].operation
+    {
+        *function = FunctionId(9);
+    }
+    assert!(message(&wrong_function).contains("fn9 does not exist"));
+    let mut wrong_tuple = closure_module();
+    if let Operation::NewClosure { captures, .. } =
+        &mut wrong_tuple.functions[0].blocks[0].instructions[0].operation
+    {
+        *captures = crate::types::TupleTypeId(7);
+    }
+    assert!(message(&wrong_tuple).contains("tuple#7 does not exist"));
+    let mut wrong_value = closure_module();
+    if let Operation::SetCapture { value, .. } =
+        &mut wrong_value.functions[0].blocks[0].instructions[1].operation
+    {
+        *value = ValueId(1);
+    }
+    assert!(message(&wrong_value).contains("the captured value"));
+    let mut not_a_function = closure_module();
+    if let Operation::SetCapture { closure, .. } =
+        &mut not_a_function.functions[0].blocks[0].instructions[1].operation
+    {
+        *closure = ValueId(0);
+    }
+    assert!(message(&not_a_function).contains("the function object"));
+}
+
+/// A function that makes a cell of an `int`, stores its parameter in it, reads it back,
+/// tests it and clears it.
+fn cell_module() -> TyirModule {
+    let mut tuple_types = crate::TupleTypes::default();
+    let layout = tuple_types.intern_id(vec![TyirType::Int, TyirType::Bool]);
+    let mut function = FunctionBuilder::new(FunctionId(0), "cells", "cells", TyirType::Int);
+    let value = function.add_parameter(TyirType::Int);
+    let cell = function.push_value(Operation::NewCell { layout }, TyirType::CELL, span());
+    function.push(
+        Operation::CellSet {
+            cell,
+            layout,
+            value,
+        },
+        span(),
+    );
+    function.push_value(
+        Operation::CellBound { cell, layout },
+        TyirType::Bool,
+        span(),
+    );
+    let read = function.push_value(Operation::CellGet { cell, layout }, TyirType::Int, span());
+    function.push(Operation::CellClear { cell, layout }, span());
+    function.terminate(Terminator::Return(read));
+    let mut module = module(function.finish());
+    module.tuple_types = tuple_types;
+    module
+}
+
+#[test]
+fn fun_04_cell_operations_verify_and_print() {
+    let module = cell_module();
+    assert_eq!(verify(&module), Ok(()));
+    let text = print(&module);
+    for line in [
+        "= new_cell tuple#0",
+        "cell_set v1, tuple#0, v0",
+        "= cell_bound v1, tuple#0",
+        "= cell_get v1, tuple#0",
+        "cell_clear v1, tuple#0",
+    ] {
+        assert!(text.contains(line), "{line} missing from {text}");
+    }
+}
+
+#[test]
+fn fun_04_a_cell_of_another_layout_or_value_fails() {
+    let mut wrong_layout = cell_module();
+    wrong_layout.tuple_types.intern_id(vec![TyirType::Int]);
+    if let Operation::NewCell { layout } =
+        &mut wrong_layout.functions[0].blocks[0].instructions[0].operation
+    {
+        *layout = crate::types::TupleTypeId(1);
+    }
+    assert!(message(&wrong_layout).contains("is not the layout of a cell"));
+    let mut wrong_value = cell_module();
+    if let Operation::CellSet { value, .. } =
+        &mut wrong_value.functions[0].blocks[0].instructions[1].operation
+    {
+        *value = ValueId(1);
+    }
+    assert!(message(&wrong_value).contains("the cell's value"));
+    let mut not_a_cell = cell_module();
+    if let Operation::CellGet { cell, .. } =
+        &mut not_a_cell.functions[0].blocks[0].instructions[3].operation
+    {
+        *cell = ValueId(0);
+    }
+    assert!(message(&not_a_cell).contains("the cell"));
+}

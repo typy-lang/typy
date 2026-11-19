@@ -136,6 +136,20 @@ impl FunctionLowerer<'_> {
     /// Reads a variable: a local from its slot, or a module variable from its global, which a
     /// function first tests for being bound. The value is borrowed.
     pub(crate) fn read_name(&mut self, symbol: SymbolId, span: Span) -> Lowered {
+        // A variable a nested function shares lives in a cell, which its slot holds (FUN-04).
+        if let Some(layout) = self.cells.get(&symbol).copied() {
+            let ty = self
+                .tuple_types
+                .items(layout)
+                .map_or(TyirType::Unit, |items| items[0]);
+            let (cell, _) = self.cell_of(symbol, span);
+            // A variable declared `nonlocal` may have no value yet (SMT-09).
+            if self.program.nonlocals.contains_key(&symbol) {
+                let name = self.program.symbol(symbol).name.clone();
+                return self.bound_cell_value(cell, layout, (&name, ty), span);
+            }
+            return self.cell_value(cell, layout, ty, span);
+        }
         let Some(global) = self.module_globals.of.get(&symbol).copied() else {
             let slot = self.slots[&symbol];
             if self.moves.contains(&(symbol, span)) {
@@ -256,6 +270,10 @@ impl FunctionLowerer<'_> {
     /// Stores into a variable, which takes over the value's reference: a local's slot, or a
     /// module variable's global, which is bound from then on. The value replaced is released.
     pub(crate) fn assign_name(&mut self, symbol: SymbolId, lowered: Lowered, span: Span) {
+        if self.cells.contains_key(&symbol) {
+            self.assign_cell(symbol, lowered, span);
+            return;
+        }
         let Some(global) = self.module_globals.of.get(&symbol).copied() else {
             let slot = self.slots[&symbol];
             let lowered = self.held_as(lowered, self.builder.slot_type(slot), span);

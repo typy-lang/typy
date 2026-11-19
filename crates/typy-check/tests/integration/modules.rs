@@ -130,13 +130,13 @@ fn imports_that_cannot_resolve_give_their_codes() {
     let cases: &[(&str, &[&str])] = &[
         ("from shapes import missing\n", &["E0425"]),
         ("import shapes\nprint(shapes.missing)\n", &["E0425"]),
-        ("import shapes\nprint(shapes.area)\n", &["E0201"]),
+        ("import shapes\nhandler: int = shapes.area\n", &["E0402"]),
         (
             "import shapes\nx: shapes.Missing = shapes.Point(1)\n",
             &["E0425"],
         ),
         ("import shapes\nshapes.NAME = 1\n", &["E0402"]),
-        ("import shapes\nshapes.area = 1\n", &["E0201"]),
+        ("import shapes\nshapes.area = 1\n", &["E0402"]),
         ("import shapes\nshapes.NAME()\n", &["E0401"]),
         ("import shapes\nshapes.missing()\n", &["E0425"]),
         ("import shapes\nshapes.NAME += 1\n", &["E0401"]),

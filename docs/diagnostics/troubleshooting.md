@@ -94,36 +94,33 @@ python-floor = "3.15"
 ## E0201: feature planned for a later TyPy release
 
 The program uses valid Python that a later TyPy release accepts, such as
-a `lambda` expression or class decorators. The message names the release
-and the rule. Write the code without the feature, for example with a
-function defined by `def`, or wait for that release.
+a generator expression or class decorators. The message names the
+release and the rule. Write the code without the feature, for example
+with a list comprehension, or wait for that release.
 
 This program gives E0201:
 
 <!-- typy-expect: rejected E0201 at 1:11 -->
 ```python
-largest = lambda a, b: a if a > b else b
-print(largest(2, 3))
+print(sum(n * n for n in range(4)))
 ```
 
 This one is correct:
 
 <!-- typy-expect: accepted -->
 ```python
-def largest(a: int, b: int) -> int:
-    return a if a > b else b
-
-
-print(largest(2, 3))
+print(sum([n * n for n in range(4)]))
 ```
 
 ## E0202: feature TyPy cannot compile with CPython's meaning
 
 The program uses valid Python that TyPy refuses because it cannot give it
-CPython's meaning (STD-04), such as `global`, a class defined inside a
-function, or a builtin TyPy does not provide. Restructure the code: pass
-values as arguments and return them, and define classes and functions at
-the top of the module.
+CPython's meaning (STD-04), such as a class defined inside a function, a
+builtin TyPy does not provide, a variable that is both a nested function
+and assigned, or an `except ... as name` clause whose name another
+function shares, which the clause would delete. Restructure the code:
+pass values as arguments and return them, define classes at the top of
+the module, and give the exception a variable of its own.
 
 This program gives E0202:
 
@@ -142,7 +139,11 @@ print(1 + 2)
 ## E0203: parameter without a type annotation
 
 Every parameter except `self` needs an annotation (TYP-01). Write the
-type, such as `def area(width: float) -> float:`.
+type, such as `def area(width: float) -> float:`. A `lambda` parameter
+takes its type from the `Callable` its context expects, such as
+`double: Callable[[int], int] = lambda n: n * 2`, so a `lambda` with a
+parameter where none is expected, or with more parameters than the
+expected `Callable` passes, gives E0203 too (EXP-14).
 
 This program gives E0203:
 
@@ -670,7 +671,10 @@ print(int("10") < 9)
 ## E0408: annotation without its item types
 
 A `tuple`, `list`, `set` or `dict` annotation names no item types (TYP-06).
-Write them, such as `list[int]` or `dict[str, float]`.
+Write them, such as `list[int]` or `dict[str, float]`. A `Callable`
+annotation lists its parameter types, then names its result, such as
+`Callable[[int, str], bool]`; `Callable[..., R]` takes any arguments, which
+a call through the value could not check (FUN-05).
 
 This program gives E0408:
 

@@ -20,7 +20,7 @@ impl BodyChecker<'_> {
                     span,
                     format!(
                         "reading the type alias `{id}`, which a function or a class defines, as \
-                         a value is planned for TyPy 1.0 (TYP-18)"
+                         a value is planned for TyPy 0.9 (TYP-18)"
                     ),
                 )
                 .with_rule(RuleId::TYP_18)
@@ -60,7 +60,7 @@ impl BodyChecker<'_> {
                         DiagnosticCode::error(201),
                         attribute.span,
                         format!(
-                            "`{}` of a type alias is planned for TyPy 1.0 (TYP-18)",
+                            "`{}` of a type alias is planned for TyPy 0.9 (TYP-18)",
                             attribute.name
                         ),
                     )

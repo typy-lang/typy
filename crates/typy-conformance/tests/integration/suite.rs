@@ -10,14 +10,14 @@ use typy_conformance::{Report, Suite};
 /// breaks the repository's ASCII rule, and a file over 16 MiB is too large to commit, so unit
 /// tests in `typy-source` cover LEX-01 and LEX-09. Memory management asks nothing of a
 /// program, so MEM-01, MEM-02, MEM-03, MEM-04 and MEM-09 have no rule a program can break;
-/// nor have a surrogate escape (LEX-10), the order expressions evaluate in (EXP-01), the order
+/// nor have recursion (FUN-02), a surrogate escape (LEX-10), the order expressions evaluate in (EXP-01), the order
 /// modules initialise in (MOD-03), the report of an exception nothing caught (STD-05) and the
 /// class and text of an error the C library reports (EXC-19), which describe what an accepted
 /// program does, nor a warning of a `match` that leaves members unmatched (CST-07), which
 /// accepts the program.
-const NO_REJECTED_FILE: [&str; 13] = [
-    "LEX-01", "LEX-09", "LEX-10", "EXP-01", "CST-07", "MEM-01", "MEM-02", "MEM-03", "MEM-04",
-    "MEM-09", "MOD-03", "STD-05", "EXC-19",
+const NO_REJECTED_FILE: [&str; 14] = [
+    "LEX-01", "LEX-09", "LEX-10", "EXP-01", "FUN-02", "CST-07", "MEM-01", "MEM-02", "MEM-03",
+    "MEM-04", "MEM-09", "MOD-03", "STD-05", "EXC-19",
 ];
 
 fn workspace() -> Utf8PathBuf {
@@ -34,7 +34,7 @@ fn run() -> Report {
 
 /// The releases whose requirements the suite must cover: every one up to the version being
 /// built.
-const RELEASES: [&str; 7] = ["0.1", "0.2", "0.3", "0.4", "0.5", "0.6", "0.7"];
+const RELEASES: [&str; 8] = ["0.1", "0.2", "0.3", "0.4", "0.5", "0.6", "0.7", "0.8"];
 
 /// Returns the requirements the test plan's matrix gives to the conformance suite for the
 /// releases up to this one.

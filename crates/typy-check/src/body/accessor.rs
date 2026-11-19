@@ -7,7 +7,7 @@ use typy_source::syntax::{Expr, Identifier, Keyword};
 
 use super::BodyChecker;
 use crate::typed::{
-    Argument, AssignTarget, ClassId, FunctionId, TypedExpr, TypedExprKind, TypedStmt,
+    Argument, AssignTarget, ClassId, FunctionId, TypedConstant, TypedExpr, TypedExprKind, TypedStmt,
 };
 use crate::types::Type;
 
@@ -514,30 +514,41 @@ impl BodyChecker<'_> {
         self.types.get(symbol)?.class_id()
     }
 
-    /// Reports `instance.name(arguments)` for a property, whose value CPython would call.
-    pub(super) fn uncallable_property(
+    /// Checks `instance.name(arguments)` for a property: a call through the value its getter
+    /// gives, as CPython calls it (FUN-05). A value that is no function is E0401, as CPython
+    /// raises `TypeError`.
+    pub(super) fn property_call(
         &mut self,
-        class: ClassId,
+        receiver: TypedExpr,
+        (class, getter): (ClassId, FunctionId),
         name: &Identifier,
-        arguments: &[Expr],
+        (arguments, keywords): (&[Expr], &[Keyword]),
         span: Span,
     ) -> TypedExpr {
+        let value = self.property_read(receiver, getter, name.span);
+        if value.ty.callable_parts().is_some() {
+            return self.call_value(value, arguments, keywords, span);
+        }
         for argument in arguments {
             self.expression(argument);
         }
-        let class_name = self.program.classes[class.0 as usize].name.clone();
+        if value.ty.has_error() {
+            return Self::typed(
+                TypedExprKind::Constant(TypedConstant::None),
+                Type::Error,
+                span,
+            );
+        }
+        let class_name = &self.program.classes[class.0 as usize].name;
+        let message = format!(
+            "`{class_name}.{}` is a property of {}, which cannot be called",
+            name.name,
+            value.ty.with_article()
+        );
         self.error(
-            Diagnostic::new(
-                DiagnosticCode::error(201),
-                name.span,
-                format!(
-                    "`{class_name}.{}` is a property, and calling the value it gives is planned \
-                     for TyPy 1.0 (FUN-05)",
-                    name.name
-                ),
-            )
-            .with_rule(RuleId::FUN_05)
-            .with_help(format!("read it as `{}` without parentheses", name.name)),
+            Diagnostic::new(DiagnosticCode::error(401), name.span, message)
+                .with_rule(RuleId::EXP_02)
+                .with_help(format!("read it as `{}` without parentheses", name.name)),
             span,
         )
     }

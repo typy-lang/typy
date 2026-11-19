@@ -83,31 +83,59 @@ impl Walker {
 
     /// Annotations name `int`, `float`, `bool`, `str`, `None`, `tuple[...]`, `list[...]`,
     /// `set[...]` or `dict[...]`; the checker reports any other name.
+    /// Checks the item types of `tuple[...]`, `list[T]`, `set[T]`, `dict[K, V]` or `type[T]`;
+    /// `tuple[int, ...]` is checked, and reported, by the checker.
+    fn builtin_annotation(&mut self, index: &Expr) {
+        match index {
+            Expr::Tuple { elements, .. } => {
+                for element in elements {
+                    if !matches!(
+                        element,
+                        Expr::Constant {
+                            value: Constant::Ellipsis,
+                            ..
+                        }
+                    ) {
+                        self.annotation(element);
+                    }
+                }
+            }
+            Expr::Constant {
+                value: Constant::Ellipsis,
+                ..
+            } => {}
+            single => self.annotation(single),
+        }
+    }
+
+    /// Checks the types of `Callable[[A, ...], R]`: those of the list, then the result. The
+    /// checker reports `...` for the list, and any other form (FUN-05).
+    fn callable_annotation(&mut self, index: &Expr) {
+        let items = match index {
+            Expr::Tuple { elements, .. } => elements.iter().collect(),
+            single => vec![single],
+        };
+        for item in items {
+            match item {
+                Expr::List { elements, .. } => {
+                    for element in elements {
+                        self.annotation(element);
+                    }
+                }
+                Expr::Constant {
+                    value: Constant::Ellipsis,
+                    ..
+                } => {}
+                other => self.annotation(other),
+            }
+        }
+    }
+
     pub(super) fn annotation(&mut self, annotation: &Expr) {
         match annotation {
             Expr::Subscript { value, index, .. } if matches!(value.as_ref(), Expr::Name { id, .. } if matches!(id.as_str(), "tuple" | "list" | "set" | "dict" | "type")) =>
             {
-                match index.as_ref() {
-                    // `tuple[int, ...]` is checked, and reported, by the checker.
-                    Expr::Tuple { elements, .. } => {
-                        for element in elements {
-                            if !matches!(
-                                element,
-                                Expr::Constant {
-                                    value: Constant::Ellipsis,
-                                    ..
-                                }
-                            ) {
-                                self.annotation(element);
-                            }
-                        }
-                    }
-                    Expr::Constant {
-                        value: Constant::Ellipsis,
-                        ..
-                    } => {}
-                    single => self.annotation(single),
-                }
+                self.builtin_annotation(index);
             }
             // `Iterator[T]` and `Iterable[T]`, by name or through `typing` or
             // `collections.abc`, `ClassVar[T]` and `Final[T]`; the checker resolves where the
@@ -145,6 +173,10 @@ impl Walker {
                         self.annotation(item);
                     }
                 }
+            }
+            // `Callable[[A, ...], R]`, by name or through `typing` or `collections.abc`.
+            Expr::Subscript { value, index, .. } if names_callable(value) => {
+                self.callable_annotation(index);
             }
             // A generic class or type alias of the module, given its type arguments (GEN-01),
             // or a name of another module, which the checker reads (SMT-12).
@@ -256,16 +288,9 @@ impl Walker {
                         self.annotation(index);
                     }
                     // A `ctypes` class made where it is called, such as `POINTER(T)()` or
-                    // `(T * 3)(1, 2, 3)`: the checker decides whether it is a class.
-                    Expr::Call { .. }
-                    | Expr::BinOp {
-                        operator: typy_source::syntax::BinaryOperator::Mult,
-                        ..
-                    } => self.expression(function),
-                    other => self.report(
-                        other.span(),
-                        planned("calls of values that are not names", "1.0", RuleId::FUN_05),
-                    ),
+                    // `(T * 3)(1, 2, 3)`, or a function value (FUN-05): the checker decides
+                    // which it is.
+                    other => self.expression(other),
                 }
                 for argument in arguments {
                     self.expression(argument);
@@ -290,7 +315,7 @@ impl Walker {
                     if keyword.name.is_none() {
                         self.report(
                             keyword.span,
-                            planned("unpacking with `**`", "1.0", RuleId::EXP_17),
+                            planned("unpacking with `**`", "0.9", RuleId::EXP_17),
                         );
                     }
                     self.expression(&keyword.value);
@@ -359,13 +384,16 @@ impl Walker {
                 value,
                 span,
             } => self.named(target, value, *span),
+            Expr::Lambda {
+                parameters, body, ..
+            } => self.lambda(parameters, body),
             Expr::Dict { keys, values, .. } => {
                 for (key, value) in keys.iter().zip(values) {
                     match key {
                         Some(key) => self.expression(key),
                         None => self.report(
                             value.span(),
-                            planned("unpacking with `**`", "1.0", RuleId::EXP_17),
+                            planned("unpacking with `**`", "0.9", RuleId::EXP_17),
                         ),
                     }
                     self.expression(value);
@@ -390,4 +418,15 @@ fn collect_names(target: &Expr, names: &mut Vec<String>) {
         }
         _ => {}
     }
+}
+
+/// Returns true when `value` names `Callable`, by name or through `typing` or
+/// `collections.abc`, which the checker resolves (FUN-05).
+fn names_callable(value: &Expr) -> bool {
+    matches!(
+        value,
+        Expr::Name { id, .. }
+            | Expr::Attribute { attribute: typy_source::syntax::Identifier { name: id, .. }, .. }
+            if id == "Callable"
+    )
 }

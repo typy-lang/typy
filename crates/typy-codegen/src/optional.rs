@@ -50,6 +50,21 @@ impl<'ctx> FunctionEmitter<'_, '_, 'ctx> {
         })
     }
 
+    /// Returns the fields of an optional tuple's pair that hold its presence flag and its
+    /// tuple, which are stored by alignment like any tuple's items (ADR-0062).
+    fn pair_fields(&self, pair: typy_tyir::TupleTypeId) -> Result<(u32, u32), CodegenError> {
+        let tuples = &self.shared.tyir.tuple_types;
+        let items = tuples
+            .items(pair)
+            .ok_or_else(|| CodegenError(format!("tuple#{} is not a type of the module", pair.0)))?;
+        let field = |index| {
+            crate::abi::tuple_field(tuples, items, index).ok_or_else(|| {
+                CodegenError(format!("item {index} of an optional pair has a field"))
+            })
+        };
+        Ok((field(0)?, field(1)?))
+    }
+
     /// Returns an optional value of type `ty` that holds `value`: the value itself, a `bool`
     /// widened to a byte, or a tuple with its presence flag set.
     pub(crate) fn wrap(
@@ -74,12 +89,13 @@ impl<'ctx> FunctionEmitter<'_, '_, 'ctx> {
                 )
                 .ok_or_else(|| CodegenError("a pair has a type".to_owned()))?
                 .into_struct_type();
+                let (flag, held) = self.pair_fields(pair)?;
                 let present = self.shared.context.bool_type().const_int(1, false);
                 let flagged =
                     self.builder
-                        .build_insert_value(pair_type.get_undef(), present, 0, "")?;
+                        .build_insert_value(pair_type.get_undef(), present, flag, "")?;
                 self.builder
-                    .build_insert_value(flagged, lowered, 1, "")?
+                    .build_insert_value(flagged, lowered, held, "")?
                     .into_struct_value()
                     .into()
             }
@@ -100,9 +116,10 @@ impl<'ctx> FunctionEmitter<'_, '_, 'ctx> {
                     "",
                 )?
                 .into(),
-            OptionalBase::Tuple(_) => {
+            OptionalBase::Tuple(pair) => {
+                let (_, held) = self.pair_fields(pair)?;
                 self.builder
-                    .build_extract_value(lowered.into_struct_value(), 1, "")?
+                    .build_extract_value(lowered.into_struct_value(), held, "")?
             }
             OptionalBase::Int | OptionalBase::Float | OptionalBase::Object(_) => lowered,
         })
@@ -140,10 +157,11 @@ impl<'ctx> FunctionEmitter<'_, '_, 'ctx> {
                 .builder
                 .build_is_null(lowered.into_pointer_value(), "")?
                 .into(),
-            OptionalBase::Tuple(_) => {
+            OptionalBase::Tuple(pair) => {
+                let (flag, _) = self.pair_fields(pair)?;
                 let present = self
                     .builder
-                    .build_extract_value(lowered.into_struct_value(), 0, "")?
+                    .build_extract_value(lowered.into_struct_value(), flag, "")?
                     .into_int_value();
                 self.builder.build_not(present, "")?.into()
             }

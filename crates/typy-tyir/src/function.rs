@@ -18,6 +18,9 @@ pub struct TyirFunction {
     pub symbol: String,
     /// The name tracebacks show, such as `fib` or `<module>`.
     pub name: String,
+    /// The name that tells it from the other functions of its module, Python's
+    /// `__qualname__`, which a function object's `repr` writes (FUN-05).
+    pub qualified_name: String,
     /// The parameters: the entry block's parameters.
     pub parameters: Vec<ValueId>,
     /// The return type.

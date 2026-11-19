@@ -6,7 +6,7 @@ use typy_diagnostics::Span;
 
 use super::expression::{Comprehension, Expr, FStringPart};
 use super::pattern::Pattern;
-use super::statement::{Stmt, TypeParameter, TypeParameterKind};
+use super::statement::{Parameter, Stmt, TypeParameter, TypeParameterKind};
 use super::tree::SyntaxTree;
 use crate::source_file::SourceFile;
 
@@ -139,17 +139,7 @@ impl Dump<'_> {
                     self.expression(depth + 2, decorator);
                 }
                 self.type_parameters(depth + 1, type_parameters);
-                for parameter in parameters {
-                    let label = format!("Parameter {} {:?}", parameter.name.name, parameter.kind);
-                    self.line(depth + 1, &label, Some(parameter.span));
-                    if let Some(annotation) = &parameter.annotation {
-                        self.expression(depth + 2, annotation);
-                    }
-                    if let Some(default) = &parameter.default {
-                        self.line(depth + 2, "default", None);
-                        self.expression(depth + 3, default);
-                    }
-                }
+                self.parameters(depth + 1, parameters);
                 if let Some(returns) = returns {
                     self.line(depth + 1, "returns", None);
                     self.expression(depth + 2, returns);
@@ -343,6 +333,10 @@ impl Dump<'_> {
                 let names: Vec<&str> = names.iter().map(|name| name.name.as_str()).collect();
                 self.line(depth, &format!("Global {}", names.join(", ")), span);
             }
+            Stmt::Nonlocal { names, .. } => {
+                let names: Vec<&str> = names.iter().map(|name| name.name.as_str()).collect();
+                self.line(depth, &format!("Nonlocal {}", names.join(", ")), span);
+            }
             Stmt::TypeAlias {
                 name,
                 type_parameters,
@@ -361,6 +355,20 @@ impl Dump<'_> {
     }
 
     /// Writes each type parameter: its kind and name, then its bound and its default.
+    fn parameters(&mut self, depth: usize, parameters: &[Parameter]) {
+        for parameter in parameters {
+            let label = format!("Parameter {} {:?}", parameter.name.name, parameter.kind);
+            self.line(depth, &label, Some(parameter.span));
+            if let Some(annotation) = &parameter.annotation {
+                self.expression(depth + 1, annotation);
+            }
+            if let Some(default) = &parameter.default {
+                self.line(depth + 1, "default", None);
+                self.expression(depth + 2, default);
+            }
+        }
+    }
+
     fn type_parameters(&mut self, depth: usize, parameters: &[TypeParameter]) {
         for parameter in parameters {
             let prefix = match parameter.kind {
@@ -525,6 +533,13 @@ impl Dump<'_> {
             Expr::Named { target, value, .. } => {
                 self.line(depth, &format!("Named {}", target.name), span);
                 self.expression(depth + 1, value);
+            }
+            Expr::Lambda {
+                parameters, body, ..
+            } => {
+                self.line(depth, "Lambda", span);
+                self.parameters(depth + 1, parameters);
+                self.expression(depth + 1, body);
             }
             Expr::IfExp {
                 test, body, orelse, ..

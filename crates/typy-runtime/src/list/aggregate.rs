@@ -1,5 +1,5 @@
 //! Functions over every item of a list: sorting, `min`, `max`, `sum`, `any` and `all`
-//! (LIB-02, LIB-03).
+//! (LIB-02, LIB-03), and sorting and `min` and `max` by keys (FUN-05).
 
 use super::ListObject;
 use crate::Raising;
@@ -59,7 +59,7 @@ pub unsafe extern "C" fn typy_rt_list_sort(list: *mut ListObject, reverse: i64) 
 unsafe fn sort_tuples(list: *mut ListObject) {
     // SAFETY: the caller passes a live list; every position stays below its length.
     unsafe {
-        let (length, words) = ((*list).length, (*list).words());
+        let length = (*list).length;
         let item_type = (*list).item_type();
         let order = allocate(array_size(length, core::mem::size_of::<usize>(), 0)).cast::<usize>();
         let positions = core::slice::from_raw_parts_mut(order, length);
@@ -69,17 +69,130 @@ unsafe fn sort_tuples(list: *mut ListObject) {
         sorted(positions, &|left: usize, right: usize| {
             checked(item_type.order((*list).item(left), (*list).item(right), LESS))
         });
-        let sorted = allocate(array_size(length, 8 * words, 0)).cast::<u64>();
+        permute(list, positions);
+        free(order.cast());
+    }
+}
+
+/// Sorts `list` in place by `keys`, which holds the key of the item at each position (`sorted`
+/// and `list.sort` with a `key`, FUN-05). The positions are ordered stably by their keys
+/// alone, comparing only with `<`, as CPython orders the keys and moves each item with its
+/// key, then the items are moved into that order. With `reverse`, an `int` word that is not
+/// 0, the positions are reversed before and after, as CPython reverses the keys and items.
+///
+/// # Safety
+///
+/// `list` and `keys` point to live lists of one length, which nothing changes while the list
+/// is sorted.
+#[unsafe(no_mangle)]
+#[allow(
+    clippy::cast_ptr_alignment,
+    reason = "malloc returns memory aligned for every type"
+)]
+pub unsafe extern "C" fn typy_rt_list_sort_keyed(
+    list: *mut ListObject,
+    keys: *const ListObject,
+    reverse: i64,
+) {
+    // SAFETY: the caller passes two live lists; every position stays below their length.
+    unsafe {
+        let length = (*list).length;
+        if (*keys).length != length {
+            crate::libc::abort_with(b"typy runtime: a list and its keys differ in length\n");
+        }
+        if length < 2 {
+            return;
+        }
+        let key_type = (*keys).item_type();
+        let order = allocate(array_size(length, core::mem::size_of::<usize>(), 0)).cast::<usize>();
+        let positions = core::slice::from_raw_parts_mut(order, length);
+        for (index, position) in positions.iter_mut().enumerate() {
+            *position = index;
+        }
+        let reverse = inline_value(reverse) != 0;
+        if reverse {
+            positions.reverse();
+        }
+        sorted(positions, &|left: usize, right: usize| {
+            checked(key_type.order((*keys).item(left), (*keys).item(right), LESS))
+        });
+        if reverse {
+            positions.reverse();
+        }
+        permute(list, positions);
+        free(order.cast());
+    }
+}
+
+/// Moves the items of `list` into the order `positions` gives, the position of the item each
+/// slot takes, through one buffer.
+///
+/// # Safety
+///
+/// `list` points to a live list, and `positions` is a permutation of its positions.
+#[allow(
+    clippy::cast_ptr_alignment,
+    reason = "malloc returns memory aligned for every type"
+)]
+unsafe fn permute(list: *mut ListObject, positions: &[usize]) {
+    // SAFETY: the caller's guarantee: every position lies inside the list.
+    unsafe {
+        let words = (*list).words();
+        let buffer = allocate(array_size(positions.len(), 8 * words, 0)).cast::<u64>();
         for (index, position) in positions.iter().enumerate() {
             core::ptr::copy_nonoverlapping(
                 (*list).slot(*position),
-                sorted.add(index * words),
+                buffer.add(index * words),
                 words,
             );
         }
-        core::ptr::copy_nonoverlapping(sorted, (*list).items, length * words);
-        free(sorted.cast());
-        free(order.cast());
+        core::ptr::copy_nonoverlapping(buffer, (*list).items, positions.len() * words);
+        free(buffer.cast());
+    }
+}
+
+/// Keeps the best key so far and its item for `min` or `max` with a `key` (FUN-05): `key`
+/// and `item` take the places of those `best_key` and `best` hold when they hold none, or
+/// when `key` is less than the kept key, or with `largest`, an `int` word that is not 0,
+/// greater, so the first of equal keys stays, as in CPython. Each list holds at most one
+/// item, with a reference of its own.
+///
+/// # Safety
+///
+/// `best_key` and `best` point to live lists of the key's and the item's types, of at most
+/// one item each, of one length, and `key` and `item` are live items of those types.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn typy_rt_list_keep_extreme(
+    best_key: *mut ListObject,
+    key: u64,
+    best: *mut ListObject,
+    item: u64,
+    largest: i64,
+) {
+    let comparison = if inline_value(largest) != 0 {
+        GREATER
+    } else {
+        LESS
+    };
+    // SAFETY: the caller passes live lists of at most one item, and live items of their types.
+    unsafe {
+        if (*best_key).length == 0 {
+            for (list, value) in [(best_key, key), (best, item)] {
+                super::reserve_one(list);
+                super::push_retained(list, value);
+            }
+            return;
+        }
+        let key_type = (*best_key).item_type();
+        if !key_type.order(key, (*best_key).item(0), comparison) {
+            return;
+        }
+        for (list, value) in [(best_key, key), (best, item)] {
+            let item_type = (*list).item_type();
+            item_type.retain(value);
+            item_type.release((*list).item(0));
+            item_type.store((*list).slot(0), value);
+        }
     }
 }
 

@@ -236,6 +236,9 @@ impl BodyChecker<'_> {
     /// deletes it when the clause ends, so a variable of that name outside is unassigned after.
     fn handler(&mut self, handler: &ExceptHandler) -> TypedHandler {
         let classes = self.handler_classes(handler.class.as_ref());
+        if let Some(name) = &handler.name {
+            self.deletes_shared_variable(&name.name, name.span);
+        }
         let bound = handler.name.as_ref().map(|name| {
             // The name holds one of the classes, as type checkers read it (TYP-14).
             let ty = Type::union(classes.iter().cloned().map(Type::Exception).collect());
@@ -273,6 +276,33 @@ impl BodyChecker<'_> {
             body,
             span: handler.span,
         }
+    }
+
+    /// Reports E0202 when the name of an `except` clause, which CPython deletes when the clause
+    /// ends, is a variable that another function reads or assigns: one declared `global` or
+    /// `nonlocal`, or one of this function outside the clause that a nested function shares.
+    /// TyPy gives the clause a variable of its own, which no other function would see.
+    fn deletes_shared_variable(&mut self, name: &str, span: Span) {
+        let shared = if self.global_names.contains(name) {
+            "is declared `global`"
+        } else if self.nonlocal_names.contains_key(name) {
+            "is declared `nonlocal`"
+        } else if self.cell_symbol(name).is_some() {
+            "is shared with a nested function"
+        } else {
+            return;
+        };
+        self.diagnostics.push(
+            Diagnostic::new(
+                DiagnosticCode::error(202),
+                span,
+                format!(
+                    "`{name}` {shared}, and `except ... as {name}` deletes it when the clause ends"
+                ),
+            )
+            .with_rule(RuleId::STD_04)
+            .with_help("name the exception with a variable of its own"),
+        );
     }
 
     /// Returns the classes an `except` clause names: one, a tuple of them, or `BaseException`

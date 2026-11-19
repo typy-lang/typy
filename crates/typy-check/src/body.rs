@@ -10,15 +10,18 @@ mod class_bridge;
 mod class_copy;
 mod class_value;
 mod class_variable_chain;
+mod closure_scope;
 mod comparison_bridge;
 mod comparison_chain;
 mod comprehension;
+mod conditional;
 mod container_method;
 mod delete;
 mod dict;
 mod dict_call;
 mod each_member;
 mod foreign_call;
+mod function_value;
 mod generic_call;
 mod generic_copy;
 mod override_adapter;
@@ -40,6 +43,8 @@ mod in_place;
 mod isinstance;
 mod iterable_call;
 mod iterator;
+mod key_argument;
+mod lambda;
 mod list;
 mod list_call;
 mod locals;
@@ -48,9 +53,11 @@ mod matching;
 mod math_call;
 mod math_iterable;
 mod method_call;
+mod method_value;
 mod module_context;
 mod name;
 mod named;
+mod nested_function;
 mod open_call;
 mod open_options;
 mod operator;
@@ -140,12 +147,31 @@ pub(crate) struct BodyChecker<'program> {
     finally_loops: Vec<usize>,
     /// The module variables the function declares `global`, which it assigns (SMT-08).
     global_names: BTreeSet<String>,
+    /// The variables of the functions around it that a nested function declares `nonlocal`,
+    /// each its own variable whose cell is the captured one (SMT-09).
+    nonlocal_names: BTreeMap<String, SymbolId>,
     /// The type aliases the body's `type` statements define, which annotations read
     /// (SMT-12).
     local_aliases: BTreeSet<String>,
     /// Whether the next expression checked may be a `ctypes` class, as the value of an
     /// assignment to a name is; checking it clears this (FFI-03).
     class_allowed: bool,
+    /// The function's `__qualname__`, which a nested function's extends (FUN-04).
+    qualified_name: String,
+    /// What the body's nested functions capture of its variables, from its source (FUN-04).
+    closure_scope: closure_scope::ClosureScope,
+    /// What the body reads of the functions around it, when it is a nested function's.
+    closure: Option<nested_function::Closure>,
+    /// The nested functions the body defines, whose bodies are checked after it.
+    pending: Vec<nested_function::Pending>,
+    /// The variables a nested `def` binds, with their functions, which a call by name runs
+    /// directly.
+    nested_functions: BTreeMap<SymbolId, FunctionId>,
+    /// Whether a name is read to call the nested function it holds, which a value it is not.
+    reading_function: bool,
+    /// The variables read or captured through their cells, among them an `except` clause's,
+    /// whose name leaves the body's names when the clause ends.
+    used_cells: BTreeSet<SymbolId>,
 }
 
 impl<'program> BodyChecker<'program> {
@@ -176,8 +202,16 @@ impl<'program> BodyChecker<'program> {
             handling: 0,
             finally_loops: Vec::new(),
             global_names: BTreeSet::new(),
+            nonlocal_names: BTreeMap::new(),
             local_aliases: BTreeSet::new(),
             class_allowed: false,
+            qualified_name: String::new(),
+            closure_scope: closure_scope::ClosureScope::default(),
+            closure: None,
+            pending: Vec::new(),
+            nested_functions: BTreeMap::new(),
+            reading_function: false,
+            used_cells: BTreeSet::new(),
         }
     }
 
@@ -186,6 +220,18 @@ impl<'program> BodyChecker<'program> {
         program: &mut Program,
         function: FunctionId,
         definition: &Definition<'_>,
+        diagnostics: &mut Diagnostics,
+    ) {
+        Self::check_body_of(program, function, definition, None, diagnostics);
+    }
+
+    /// Checks the body of `function`, a nested function's when `closure` says what it
+    /// captures, then the bodies of the functions nested in it (FUN-04).
+    fn check_body_of(
+        program: &mut Program,
+        function: FunctionId,
+        definition: &Definition<'_>,
+        closure: Option<nested_function::Closure>,
         diagnostics: &mut Diagnostics,
     ) {
         let returns = definition.signature.returns.clone();
@@ -241,6 +287,7 @@ impl<'program> BodyChecker<'program> {
             .class
             .is_some_and(|class| checker.program.is_protocol(class));
         let checked_body: &[Stmt] = if protocol { &[] } else { definition.body };
+        checker.enter_closure(definition, checked_body, closure);
         checker.declare_globals(checked_body);
         let saved = checker.import_names_of(checked_body);
         let statements: Vec<&Stmt> = checked_body.iter().collect();
@@ -267,6 +314,9 @@ impl<'program> BodyChecker<'program> {
             );
         }
         let named_targets = std::mem::take(&mut checker.named_targets);
+        checker.settle_closures();
+        let pending = std::mem::take(&mut checker.pending);
+        let cells = checker.cell_variables();
         let locals = checker.finish_locals();
         // A generic function is checked, never run: its copies run in its place, so it keeps
         // no body (ADR-0023). A protocol's method only says what a class that satisfies the
@@ -286,6 +336,48 @@ impl<'program> BodyChecker<'program> {
             generic,
             named_targets,
         });
+        if !cells.is_empty() {
+            program.cells.insert(function, cells);
+        }
+        Self::check_nested(program, pending, diagnostics);
+    }
+
+    /// Returns the variables of the body that live in a cell: those its nested functions
+    /// capture so, and those it read or captured through one, such as an `except` clause's.
+    fn cell_variables(&mut self) -> BTreeSet<SymbolId> {
+        let mut cells: BTreeSet<SymbolId> = self
+            .closure_scope
+            .cells
+            .iter()
+            .filter_map(|name| self.cell_symbol(name))
+            .collect();
+        cells.extend(std::mem::take(&mut self.used_cells));
+        cells.extend(self.nonlocal_names.values().copied());
+        cells
+    }
+
+    /// Notes the function's `__qualname__`, what its nested functions capture, and, for a
+    /// nested function, what it captures itself (FUN-04) and the variables it declares
+    /// `nonlocal` (SMT-09).
+    fn enter_closure(
+        &mut self,
+        definition: &Definition<'_>,
+        body: &[Stmt],
+        closure: Option<nested_function::Closure>,
+    ) {
+        self.qualified_name.clone_from(&definition.qualified_name);
+        let enclosing = closure
+            .as_ref()
+            .map(nested_function::Closure::names)
+            .unwrap_or_default();
+        let names: Vec<&str> = definition
+            .parameters
+            .iter()
+            .map(|(name, _)| name.as_str())
+            .collect();
+        self.closure_scope = closure_scope::ClosureScope::of(&names, body, &enclosing);
+        self.closure = closure;
+        self.declare_nonlocals(body);
     }
 
     /// Checks the module body and stores it in the program as its entry function.
@@ -295,14 +387,19 @@ impl<'program> BodyChecker<'program> {
         diagnostics: &mut Diagnostics,
     ) -> FunctionId {
         let mut checker = BodyChecker::new(program, diagnostics, None);
+        checker.closure_scope = closure_scope::ClosureScope::of_module(statements);
         checker.collect_locals(statements);
         let first = statements.first().map(|statement| statement.span());
         let mut body = first.map_or_else(Vec::new, |span| checker.program.rebound_starts(span));
         body.extend(checker.statements(statements));
         let named_targets = std::mem::take(&mut checker.named_targets);
+        let cells = checker.cell_variables();
         let locals = checker.finish_locals();
         // A lazy import adds the function that runs it, so the body's ID comes after those.
         let entry = FunctionId(id(program.functions.len()));
+        if !cells.is_empty() {
+            program.cells.insert(entry, cells);
+        }
         let span = statements.first().map_or_else(
             || Span::empty(typy_diagnostics::FileId(0), typy_diagnostics::TextOffset(0)),
             |first| first.span(),

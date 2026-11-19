@@ -237,10 +237,19 @@ impl FunctionLowerer<'_> {
     /// `print(values, sep=sep, end=end, file=file, flush=flush)`: every argument is evaluated
     /// in source order first, then each value is converted and written.
     pub(crate) fn print(&mut self, print: &PrintCall, span: Span) -> Lowered {
-        let lowered: Vec<Lowered> = print
+        // The keywords are evaluated after the values, so each value is kept while one of them
+        // may free it.
+        let later: Vec<&TypedExpr> = print
             .values
             .iter()
-            .map(|value| self.expression(value))
+            .chain(
+                [&print.sep, &print.end, &print.file, &print.flush]
+                    .into_iter()
+                    .flatten(),
+            )
+            .collect();
+        let lowered: Vec<Lowered> = (0..print.values.len())
+            .map(|position| self.operand_before(later[position], &later[position + 1..], span))
             .collect();
         let mut keywords: Vec<(&str, &TypedExpr)> = [
             ("sep", print.sep.as_ref()),

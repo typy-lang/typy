@@ -399,6 +399,22 @@ impl Dump<'_> {
                     *span,
                 );
             }
+            TypedStmt::FunctionDef {
+                function,
+                target,
+                captures,
+                span,
+            } => {
+                let line = format!(
+                    "FunctionDef {} as {}",
+                    self.program.function(*function).qualified_name,
+                    self.program.symbol(*target).name
+                );
+                self.line(depth, &line, *span);
+                for capture in captures {
+                    self.expression(depth + 1, capture);
+                }
+            }
             TypedStmt::Pass { span } => self.line(depth, "Pass", *span),
             TypedStmt::Break { span } => self.line(depth, "Break", *span),
             TypedStmt::Continue { span } => self.line(depth, "Continue", *span),
@@ -441,6 +457,43 @@ impl Dump<'_> {
             }
             TypedExprKind::Submodule(module) => format!("Submodule {module}"),
             TypedExprKind::TypeAliasObject(index) => format!("TypeAliasObject {index}"),
+            TypedExprKind::FunctionValue(function) => format!(
+                "FunctionValue {}",
+                self.program.function(*function).qualified_name
+            ),
+            TypedExprKind::CallValue { .. } => "CallValue".to_owned(),
+            TypedExprKind::Capture(index) => format!("Capture {index}"),
+            TypedExprKind::RunningFunction => "RunningFunction".to_owned(),
+            TypedExprKind::CellRead(symbol) => {
+                format!("CellRead {}", self.program.symbol(*symbol).name)
+            }
+            TypedExprKind::CellObject(symbol) => {
+                format!("CellObject {}", self.program.symbol(*symbol).name)
+            }
+            TypedExprKind::CapturedCell(index) => format!("CapturedCell {index}"),
+            TypedExprKind::CapturedCellObject(index) => format!("CapturedCellObject {index}"),
+            TypedExprKind::Lambda { function, .. } => {
+                format!("Lambda {}", self.program.function(*function).qualified_name)
+            }
+            TypedExprKind::CaptureOf {
+                function, index, ..
+            } => format!(
+                "CaptureOf {} {index}",
+                self.program.function(*function).qualified_name
+            ),
+            TypedExprKind::CallNested { function, .. } => {
+                format!(
+                    "CallNested {}",
+                    self.program.function(*function).qualified_name
+                )
+            }
+            TypedExprKind::BoundMethod { methods, .. } => {
+                let names: Vec<&str> = methods
+                    .iter()
+                    .map(|(_, method)| self.program.function(*method).qualified_name.as_str())
+                    .collect();
+                format!("BoundMethod {}", names.join(" "))
+            }
             TypedExprKind::VersionRead { .. } => "VersionRead".to_owned(),
             TypedExprKind::TypeAliasPart { module, .. } => if *module {
                 "TypeAliasModule"
@@ -528,6 +581,7 @@ impl Dump<'_> {
                 )
             }
             TypedExprKind::Builtin { builtin, .. } => format!("Builtin {builtin:?}"),
+            TypedExprKind::Keyed { operation, .. } => format!("Keyed {operation:?}"),
             TypedExprKind::IterableBuiltin { builtin, .. } => {
                 format!("IterableBuiltin {builtin:?}")
             }

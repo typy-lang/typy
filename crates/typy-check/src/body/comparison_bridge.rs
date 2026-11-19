@@ -120,6 +120,7 @@ impl Program {
                     ty: ty.clone(),
                     default: None,
                     default_call: None,
+                    kind: typy_source::syntax::ParameterKind::Normal,
                 })
                 .collect(),
             returns: Type::Bool,

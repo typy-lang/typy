@@ -2,7 +2,7 @@
 # the Markdown under docs/ (DOC-05, ADR-0050). Every setting here is one that
 # Material for MkDocs 9.8 also reads, so either tool builds the site from
 # this file. scripts/build-docs.sh builds it in strict mode into site/.
-site_name: TyPy 0.7 documentation
+site_name: TyPy 0.8 documentation
 site_url: https://typy-lang.org/
 site_description: >-
   TyPy compiles a strict, typed subset of standard Python ahead of time to
@@ -85,6 +85,7 @@ nav:
   - Home: index.md
   - What's new:
       - whatsnew/index.md
+      - What's new in TyPy 0.8: whatsnew/0.8.md
       - What's new in TyPy 0.7: whatsnew/0.7.md
       - What's new in TyPy 0.6: whatsnew/0.6.md
       - What's new in TyPy 0.5: whatsnew/0.5.md
@@ -184,6 +185,9 @@ nav:
           - adr/0057-give-the-runtime-each-systems-c-constants-and-macos-its-own-error-texts.md
           - adr/0058-pass-c-arguments-as-libffi-passes-them-on-every-target.md
           - adr/0059-link-nothing-more-for-ctypes-cdll-of-none.md
+          - adr/0060-make-a-function-value-an-object-of-its-code-and-its-captures.md
+          - adr/0061-capture-by-value-unless-the-variable-is-assigned-after-the-capture.md
+          - adr/0062-store-attributes-and-tuple-items-in-decreasing-order-of-alignment.md
       - Detailed design: design/detailed-design.md
       - Test plan: testing/test-plan.md
       - Benchmark report: testing/benchmark-report.md

@@ -14,6 +14,11 @@ pub enum Callee {
     Function(FunctionId),
     /// A runtime function.
     Runtime(RuntimeFunction),
+    /// The code of the function object that is the first argument, which takes that object,
+    /// then the other arguments, and returns its result beside an exception (FUN-05,
+    /// ADR-0060). The other arguments and the parameter of the normal block are its
+    /// parameters and result.
+    Value,
     /// The method at `slot` of the method table of the class of the first argument, an
     /// instance of class `class` or of a class derived from it, whose table starts as
     /// `class`'s does (ADR-0021). Its parameters and result are those of `class`'s entry.

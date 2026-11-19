@@ -66,6 +66,8 @@ pub(crate) enum Cleanup {
 pub(crate) enum Handled {
     /// In the variable its `as` names.
     Slot(SlotId),
+    /// In the cell of the variable its `as` names, which a nested function captures.
+    Cell(SymbolId),
     /// As a value the clause owns, when it names no variable.
     Value(ValueId),
 }
@@ -112,6 +114,11 @@ pub(crate) struct FunctionLowerer<'context> {
     entry: bool,
     /// The function being lowered.
     pub(crate) function_id: typy_check::FunctionId,
+    /// For a nested function, its function object, its first parameter, and the tuple type
+    /// of its captures (FUN-04).
+    pub(crate) closure: Option<(ValueId, typy_tyir::TupleTypeId)>,
+    /// The variables that live in a cell, which their slots hold, with the cell's layout.
+    pub(crate) cells: BTreeMap<SymbolId, typy_tyir::TupleTypeId>,
     recursive: bool,
     body_start: BlockId,
     span: Span,
@@ -157,6 +164,13 @@ impl<'context> FunctionLowerer<'context> {
         let entry = function.id == program.entry;
         let symbol_name = if entry {
             ENTRY_SYMBOL.to_owned()
+        } else if function.name == "<lambda>" {
+            // The lambdas of one function share a `__qualname__`, so each symbol adds the
+            // lambda's number.
+            symbol(
+                &function.module,
+                &format!("{}.{}", function.qualified_name, function.id.0),
+            )
         } else {
             symbol(&function.module, &function.qualified_name)
         };
@@ -167,32 +181,22 @@ impl<'context> FunctionLowerer<'context> {
             function.name.clone(),
             return_type,
         );
-        let mut slots = BTreeMap::new();
-        let mut parameters = Vec::new();
-        let mut assigned = crate::borrow::assigned_symbols(&function.body);
-        assigned.extend(function.named_targets.iter().copied());
-        let mut borrowed = BTreeSet::new();
-        for symbol_id in &function.parameters {
-            let symbol = program.symbol(*symbol_id);
-            let ty = tyir_type(&symbol.ty, tuple_types);
-            let value = builder.add_parameter(ty);
-            let slot = builder.add_slot(symbol.name.clone(), ty);
-            slots.insert(*symbol_id, slot);
-            parameters.push((value, slot));
-            if !assigned.contains(symbol_id) {
-                borrowed.insert(slot);
-            }
-        }
-        for symbol_id in &function.locals {
-            let symbol = program.symbol(*symbol_id);
-            // A module variable lives in a global, not in a slot.
-            if module_globals.of.contains_key(symbol_id) {
-                continue;
-            }
-            let slot = builder.add_slot(symbol.name.clone(), tyir_type(&symbol.ty, tuple_types));
-            slots.insert(*symbol_id, slot);
-        }
-        let candidates = move_candidates(program, function, (&slots, &borrowed), tuple_types);
+        builder.set_qualified_name(function.qualified_name.clone());
+        let closure = closure_parameter(program, function, &mut builder, tuple_types);
+        let cell_variables = cell_layouts(program, function, tuple_types);
+        let Slots {
+            of: slots,
+            parameters,
+            borrowed,
+        } = variable_slots(
+            (program, function),
+            &mut builder,
+            (tuple_types, module_globals),
+            &cell_variables,
+        );
+        let mut candidates = move_candidates(program, function, (&slots, &borrowed), tuple_types);
+        // A cell is read through, never moved out of its slot.
+        candidates.retain(|symbol| !cell_variables.contains_key(symbol));
         let moves = crate::last_use::last_uses(&function.body, &candidates);
         let body_start = builder.create_block();
         builder.switch_to(body_start);
@@ -218,6 +222,8 @@ impl<'context> FunctionLowerer<'context> {
             module: function.module.clone(),
             entry,
             function_id: function.id,
+            closure,
+            cells: cell_variables,
             recursive,
             body_start,
             span: function.span,
@@ -272,7 +278,56 @@ impl<'context> FunctionLowerer<'context> {
         let span = self.span;
         self.builder.switch_to(BlockId(0));
         let parameter_slots: Vec<(ValueId, SlotId)> = self.parameters.clone();
+        // Each cell is made first; a parameter's holds the parameter's value, with a
+        // reference of its own. A variable declared `nonlocal` holds the cell its function
+        // object captures, with a reference of its own (SMT-09).
+        let cells: Vec<(SymbolId, SlotId, typy_tyir::TupleTypeId)> = self
+            .cells
+            .iter()
+            .map(|(symbol, layout)| (*symbol, self.slots[symbol], *layout))
+            .collect();
+        for (symbol, slot, layout) in &cells {
+            let cell = if let Some(position) = self.program.nonlocals.get(symbol).copied() {
+                let captured = self.capture(position, TyirType::CELL, span);
+                self.builder
+                    .push(Operation::Increment(captured.value), span);
+                captured.value
+            } else {
+                self.builder.push_value(
+                    Operation::NewCell { layout: *layout },
+                    TyirType::CELL,
+                    span,
+                )
+            };
+            self.builder.push(
+                Operation::Store {
+                    slot: *slot,
+                    value: cell,
+                },
+                span,
+            );
+            if let Some((value, _)) = parameter_slots.iter().find(|(_, each)| each == slot) {
+                let ty = self
+                    .tuple_types
+                    .items(*layout)
+                    .map_or(TyirType::Unit, |items| items[0]);
+                if self.counted(ty) {
+                    self.builder.push(Operation::Increment(*value), span);
+                }
+                self.builder.push(
+                    Operation::CellSet {
+                        cell,
+                        layout: *layout,
+                        value: *value,
+                    },
+                    span,
+                );
+            }
+        }
         for (value, slot) in &parameter_slots {
+            if cells.iter().any(|(_, each, _)| each == slot) {
+                continue;
+            }
             if self.counted(self.builder.slot_type(*slot)) && !self.borrowed.contains(slot) {
                 self.builder.push(Operation::Increment(*value), span);
             }
@@ -290,6 +345,7 @@ impl<'context> FunctionLowerer<'context> {
             if parameter_slots
                 .iter()
                 .any(|(_, parameter)| *parameter == slot)
+                || cells.iter().any(|(_, each, _)| *each == slot)
             {
                 continue;
             }
@@ -335,6 +391,116 @@ fn move_candidates(
         }
     }
     candidates
+}
+
+/// Adds a nested function's first parameter, its function object, which holds its captures,
+/// and returns it with the tuple type of the captures (FUN-04).
+fn closure_parameter(
+    program: &TypedProgram,
+    function: &TypedFunction,
+    builder: &mut FunctionBuilder,
+    tuple_types: &mut typy_tyir::TupleTypes,
+) -> Option<(ValueId, typy_tyir::TupleTypeId)> {
+    let captures = program.closures.get(&function.id)?;
+    let value = builder.add_parameter(TyirType::FUNCTION);
+    Some((value, captures_layout(captures, tuple_types)))
+}
+
+/// Returns the tuple type of a nested function's captures: each value it copies, and each
+/// cell it shares as an object.
+pub(crate) fn captures_layout(
+    captures: &[typy_check::CapturedVariable],
+    tuple_types: &mut typy_tyir::TupleTypes,
+) -> typy_tyir::TupleTypeId {
+    let items = captures
+        .iter()
+        .map(|captured| {
+            if captured.cell {
+                TyirType::CELL
+            } else {
+                tyir_type(&captured.ty, tuple_types)
+            }
+        })
+        .collect();
+    tuple_types.intern_id(items)
+}
+
+/// The slot of each variable of a function, its parameters' values with their slots, and the
+/// slots of the parameters that keep their caller's reference.
+struct Slots {
+    of: BTreeMap<SymbolId, SlotId>,
+    parameters: Vec<(ValueId, SlotId)>,
+    borrowed: BTreeSet<SlotId>,
+}
+
+/// Adds a parameter and a slot for each parameter of `function`, and a slot for each of its
+/// local variables, but a module variable, which lives in a global. A variable that lives in
+/// a cell has a slot of the cell, which the prologue fills (FUN-04); a parameter the function
+/// never assigns otherwise keeps its caller's reference (MEM-04).
+fn variable_slots(
+    (program, function): (&TypedProgram, &TypedFunction),
+    builder: &mut FunctionBuilder,
+    (tuple_types, module_globals): (
+        &mut typy_tyir::TupleTypes,
+        &crate::module_variable::ModuleGlobals,
+    ),
+    cells: &BTreeMap<SymbolId, typy_tyir::TupleTypeId>,
+) -> Slots {
+    let mut assigned = crate::borrow::assigned_symbols(&function.body);
+    assigned.extend(function.named_targets.iter().copied());
+    let mut made = Slots {
+        of: BTreeMap::new(),
+        parameters: Vec::new(),
+        borrowed: BTreeSet::new(),
+    };
+    for symbol_id in &function.parameters {
+        let symbol = program.symbol(*symbol_id);
+        let ty = tyir_type(&symbol.ty, tuple_types);
+        let value = builder.add_parameter(ty);
+        let in_cell = cells.contains_key(symbol_id);
+        let slot = builder.add_slot(
+            symbol.name.clone(),
+            if in_cell { TyirType::CELL } else { ty },
+        );
+        made.of.insert(*symbol_id, slot);
+        made.parameters.push((value, slot));
+        if !assigned.contains(symbol_id) && !in_cell {
+            made.borrowed.insert(slot);
+        }
+    }
+    for symbol_id in &function.locals {
+        if module_globals.of.contains_key(symbol_id) {
+            continue;
+        }
+        let symbol = program.symbol(*symbol_id);
+        let ty = if cells.contains_key(symbol_id) {
+            TyirType::CELL
+        } else {
+            tyir_type(&symbol.ty, tuple_types)
+        };
+        made.of
+            .insert(*symbol_id, builder.add_slot(symbol.name.clone(), ty));
+    }
+    made
+}
+
+/// Returns the variables of `function` that live in a cell, each with its cell's layout: its
+/// value, then whether it is assigned (FUN-04).
+fn cell_layouts(
+    program: &TypedProgram,
+    function: &TypedFunction,
+    tuple_types: &mut typy_tyir::TupleTypes,
+) -> BTreeMap<SymbolId, typy_tyir::TupleTypeId> {
+    program
+        .cells
+        .get(&function.id)
+        .into_iter()
+        .flatten()
+        .map(|symbol| {
+            let ty = tyir_type(&program.symbol(*symbol).ty, tuple_types);
+            (*symbol, tuple_types.intern_id(vec![ty, TyirType::Bool]))
+        })
+        .collect()
 }
 
 /// Returns the stand-in for a generic function, whose copies are called in its place: it

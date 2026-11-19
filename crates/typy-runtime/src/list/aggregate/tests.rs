@@ -1,8 +1,8 @@
 //! Tests of sorting, `min`, `max`, `sum`, `any` and `all` over lists.
 
 use super::{
-    typy_rt_list_all, typy_rt_list_any, typy_rt_list_extreme, typy_rt_list_sort,
-    typy_rt_list_sum_float, typy_rt_list_sum_int,
+    typy_rt_list_all, typy_rt_list_any, typy_rt_list_extreme, typy_rt_list_keep_extreme,
+    typy_rt_list_sort, typy_rt_list_sort_keyed, typy_rt_list_sum_float, typy_rt_list_sum_int,
 };
 use crate::int::value::Integer;
 use crate::list::operations::typy_rt_list_append;
@@ -250,5 +250,79 @@ fn any_and_all_test_the_truth_of_each_kind_of_item() {
             assert_eq!(typy_rt_list_any(list), any, "case {index}");
             assert_eq!(typy_rt_list_all(list), all, "case {index}");
         }
+    }
+}
+
+#[test]
+fn fun_05_a_keyed_sort_orders_by_the_keys_alone_and_stays_stable_in_reverse() {
+    // Items 10 to 15 with the keys 2, 1, 2, 0, 1, 0: equal keys keep their order both ways.
+    let (list, keys) = (ints(&[10, 11, 12, 13, 14, 15]), ints(&[2, 1, 2, 0, 1, 0]));
+    // SAFETY: both lists are live and of one length.
+    unsafe { typy_rt_list_sort_keyed(list, keys, word(0)) };
+    assert_eq!(int_values(list), [13, 15, 11, 14, 10, 12]);
+    // The keys are read where they were, so they sort a fresh copy of the items.
+    let list = ints(&[10, 11, 12, 13, 14, 15]);
+    // SAFETY: as above.
+    unsafe { typy_rt_list_sort_keyed(list, keys, word(1)) };
+    assert_eq!(int_values(list), [10, 12, 11, 14, 13, 15]);
+    let (one, its_key) = (ints(&[7]), ints(&[3]));
+    // SAFETY: as above.
+    unsafe { typy_rt_list_sort_keyed(one, its_key, word(0)) };
+    assert_eq!(int_values(one), [7]);
+}
+
+#[test]
+fn fun_05_a_keyed_sort_moves_tuple_items_with_their_keys() {
+    use crate::tuple::{Field, TupleType};
+    let fields = [
+        Field::plain(ItemKind::Int, 0),
+        Field::plain(ItemKind::Int, 8),
+    ];
+    let pair = TupleType {
+        size: 16,
+        length: 2,
+        fields: fields.as_ptr(),
+    };
+    let list = new_list(
+        crate::list::ItemType::of(ItemKind::Tuple as u32, &raw const pair),
+        0,
+    );
+    let pairs: [[i64; 2]; 3] = [[1, 30], [2, 10], [3, 20]].map(|pair| pair.map(word));
+    for pair in &pairs {
+        // SAFETY: the list is live, and the pair is two inline words.
+        unsafe { typy_rt_list_append(list, pair.as_ptr().expose_provenance() as u64) };
+    }
+    let keys = ints(&[30, 10, 20]);
+    // SAFETY: both lists are live and of one length.
+    unsafe { typy_rt_list_sort_keyed(list, keys, word(0)) };
+    let firsts: Vec<i64> = (0..3)
+        .map(|index| {
+            // SAFETY: each position is inside the list, whose items are two words each.
+            let first = unsafe { *(*list).slot(index).cast::<i64>() };
+            inline_value(first)
+        })
+        .collect();
+    assert_eq!(firsts, [2, 3, 1]);
+}
+
+#[test]
+fn fun_05_the_kept_extreme_is_the_first_item_of_the_best_key() {
+    for (largest, expected) in [(0, 20), (1, 10)] {
+        let (best_key, best) = (ints(&[]), ints(&[]));
+        // Items 10, 20, 30 with the keys 5, 1, 1 for `max`; 5, 1, 1 for `min` too.
+        for (key, item) in [(5, 10), (1, 20), (1, 30)] {
+            // SAFETY: the lists are live and hold at most one item.
+            unsafe {
+                typy_rt_list_keep_extreme(
+                    best_key,
+                    word(key).cast_unsigned(),
+                    best,
+                    word(item).cast_unsigned(),
+                    word(largest),
+                );
+            }
+        }
+        assert_eq!(int_values(best), [expected]);
+        assert_eq!(int_values(best_key).len(), 1);
     }
 }

@@ -241,7 +241,12 @@ impl FunctionLowerer<'_> {
         file: &typy_check::Type,
         span: Span,
     ) -> Lowered {
-        let path = self.expression(path);
+        let later: Vec<&TypedExpr> = [&options.mode, &options.buffering, &options.newline]
+            .into_iter()
+            .flatten()
+            .map(Box::as_ref)
+            .collect();
+        let path = self.operand_before(path, &later, span);
         let mode_value = options.mode.as_deref().map(|value| self.expression(value));
         let buffering = options
             .buffering

@@ -6,6 +6,92 @@ All notable changes to TyPy are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-11-19
+
+### Added
+
+- Positional-only parameters, before `/`, and keyword-only parameters,
+  after `*`, in functions and methods. A call binds its arguments as
+  CPython does, and a keyword for a positional-only parameter, or a
+  positional argument past the others, is E0404 where CPython raises
+  `TypeError` (FUN-03).
+- Functions as values. A function of the program read without a call is a
+  value of type `Callable[[A, ...], R]`, from `typing` or
+  `collections.abc`, which a variable, a list or dict item, an attribute
+  or an argument holds, and which is called with one argument for each
+  parameter, by position. Function values compare and hash by identity,
+  are true, and write `<function name at 0x...>`, as in CPython. A function
+  fits a `Callable` only when nothing is converted through the call, so a
+  function of any `Shape` fits a `Callable[[Circle], None]`, and a function
+  of a `float` does not fit a `Callable[[int], float]` (FUN-05, NFR-19,
+  ADR-0060). `Callable[..., R]` is E0408, and a generic function or one
+  with a keyword-only parameter used as a value is E0202.
+- Methods as values. A method read through an instance is a bound method
+  of the method of the object's own class, which holds the instance; two
+  bound methods of one instance and one method are equal, and `repr`
+  writes `<bound method Class.name of ...>`, as in CPython. A method read
+  through its class, and a static method, is the function itself, and
+  `item.name(...)` for a property calls the value its getter gives
+  (FUN-05). Class methods, methods read through a protocol value, and a
+  few overrides, are planned for 0.9 (FUN-09).
+- Nested functions. A `def` inside a function makes a new function object
+  each time it runs, which holds a copy of each variable of the functions
+  around it that its body reads, when one assignment before the `def`
+  gives that variable its value. Any other captured variable, such as a
+  loop variable or one assigned after the `def`, lives in a cell the
+  functions share, so functions made in a loop read its last value, and
+  one read before it is assigned raises `NameError`, as in CPython. A
+  nested function calls itself and the other nested functions of its
+  function by name. Nested functions that call one another, defined one
+  after another, hold the same captures and never each other, so they are
+  freed with their last reference (FUN-04, ADR-0061).
+- `lambda` expressions where a `Callable` is expected: an annotated
+  variable, a parameter, a result, an item of a typed list or dict, a
+  branch of a conditional, and the `key` of `sorted`, `list.sort`, `min`
+  and `max`. The parameters take the expected types, and the result the
+  expected type or the body's. A `lambda` captures as a nested function
+  does, so those made in a loop or a comprehension read the last value of
+  its variable, as in CPython (EXP-14).
+- `nonlocal` in a nested function, which assigns the variable of the
+  function around it that every function sharing it sees, with CPython's
+  rules for where it may stand. No test narrows such a variable, since any
+  call may assign it (SMT-09).
+- The `key` argument of `sorted`, `list.sort`, `min` and `max`, also of
+  `min` and `max` of several values: a function value of one item, whose
+  results order the items as CPython orders them. `sorted` and
+  `list.sort` call it once for each item and sort stably, and `min` and
+  `max` compare each key as it is computed (FUN-05).
+
+### Fixed
+
+- An operand read from an object, a container or a module variable stays
+  alive while an operand evaluated after it runs, so `current.text +
+  replace()`, where `replace` binds `current` again, adds the old text,
+  as CPython does, where TyPy 0.7 read freed memory. The same holds for
+  comparisons, displays, indexes and slices, the receiver and the
+  arguments of a method, the arguments of a builtin and of `print`, and
+  the target of an item assignment or of `del` (NFR-07).
+- A call of a local variable before its first assignment, such as `x()`
+  before `x = ...`, is E0306, where TyPy 0.7 accepted the program and then
+  failed while compiling it.
+- `except ... as name` where a function declares `name` `global` is
+  E0202. CPython deletes the module variable when the clause ends, and
+  TyPy 0.7 left it as it was. Name the exception with a variable of its
+  own.
+
+### Changed
+
+- Calling a value that is not a function, such as an `int`, is E0401, as
+  CPython raises `TypeError`, where TyPy 0.7 gave E0201.
+- `typing.NamedTuple` and the abstract collections of `typing`, such as
+  `Sequence`, are given as planned for 0.9, where TyPy 0.7 named 1.0.
+- An instance and a tuple store their attributes and items by decreasing
+  alignment, so a `bool` beside `int`s no longer takes 8 bytes: a class of
+  two `int`s, a `float`, an object and two `bool`s takes 56 bytes, not 64,
+  and fits a 64-byte allocation (MEM-11, NFR-18, ADR-0062). A program sees
+  its declared order everywhere, in `repr`, comparisons, hashing, `match`
+  and dataclass fields.
+
 ## [0.7.0] - 2026-11-18
 
 ### Added
@@ -1210,7 +1296,8 @@ compiler needs glibc 2.39 or later and a C toolchain.
   non-ASCII text, checks that every requirement has a row in the test plan,
   and checks that every diagram is rendered from its source.
 
-[Unreleased]: https://github.com/typy-lang/typy/compare/v0.7.0...HEAD
+[Unreleased]: https://github.com/typy-lang/typy/compare/v0.8.0...HEAD
+[0.8.0]: https://github.com/typy-lang/typy/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/typy-lang/typy/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/typy-lang/typy/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/typy-lang/typy/compare/v0.4.0...v0.5.0

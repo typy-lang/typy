@@ -23,6 +23,9 @@ pub(crate) struct Statics<'ctx> {
     type_objects: BTreeMap<u32, PointerValue<'ctx>>,
     modules: BTreeMap<u32, PointerValue<'ctx>>,
     type_aliases: BTreeMap<u32, PointerValue<'ctx>>,
+    function_objects: BTreeMap<u32, PointerValue<'ctx>>,
+    method_descriptors: BTreeMap<u32, PointerValue<'ctx>>,
+    closure_descriptors: BTreeMap<u32, PointerValue<'ctx>>,
 }
 
 impl<'ctx> Statics<'ctx> {
@@ -38,7 +41,40 @@ impl<'ctx> Statics<'ctx> {
             type_objects: BTreeMap::new(),
             modules: BTreeMap::new(),
             type_aliases: BTreeMap::new(),
+            function_objects: BTreeMap::new(),
+            method_descriptors: BTreeMap::new(),
+            closure_descriptors: BTreeMap::new(),
         }
+    }
+
+    /// Returns the descriptor of nested function `id`, if it was emitted already (FUN-04).
+    pub(crate) fn closure_descriptor(&self, id: u32) -> Option<PointerValue<'ctx>> {
+        self.closure_descriptors.get(&id).copied()
+    }
+
+    /// Records the descriptor of nested function `id`.
+    pub(crate) fn add_closure_descriptor(&mut self, id: u32, pointer: PointerValue<'ctx>) {
+        self.closure_descriptors.insert(id, pointer);
+    }
+
+    /// Returns the bound method descriptor of method `id`, if it was emitted already.
+    pub(crate) fn method_descriptor(&self, id: u32) -> Option<PointerValue<'ctx>> {
+        self.method_descriptors.get(&id).copied()
+    }
+
+    /// Records the bound method descriptor of method `id`.
+    pub(crate) fn add_method_descriptor(&mut self, id: u32, pointer: PointerValue<'ctx>) {
+        self.method_descriptors.insert(id, pointer);
+    }
+
+    /// Returns the function object of function `id`, if it was emitted already (FUN-05).
+    pub(crate) fn function_object(&self, id: u32) -> Option<PointerValue<'ctx>> {
+        self.function_objects.get(&id).copied()
+    }
+
+    /// Records the function object of function `id`.
+    pub(crate) fn add_function_object(&mut self, id: u32, pointer: PointerValue<'ctx>) {
+        self.function_objects.insert(id, pointer);
     }
 
     /// Returns the descriptor of tuple type `id`, if it was emitted already.

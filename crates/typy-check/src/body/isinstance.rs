@@ -92,7 +92,7 @@ impl BodyChecker<'_> {
                     DiagnosticCode::error(201),
                     span,
                     "testing whether an `Iterable` value is an `Iterator` is planned for TyPy \
-                     1.0 (LIB-20)",
+                     0.9 (LIB-20)",
                 )
                 .with_rule(RuleId::LIB_20),
                 span,
@@ -223,7 +223,7 @@ impl BodyChecker<'_> {
                     DiagnosticCode::error(201),
                     each.span(),
                     "`isinstance` with a class held in a variable or computed is \
-                     planned for TyPy 1.0 (CLS-18)",
+                     planned for TyPy 0.9 (CLS-18)",
                 )
                 .with_rule(RuleId::CLS_18)
                 .with_help("name the class, or a tuple of classes, in the call"),

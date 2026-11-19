@@ -222,6 +222,12 @@ pub enum Stmt {
         names: Vec<Identifier>,
         span: Span,
     },
+    /// `nonlocal name, ...`: the names are variables of the functions around this nested
+    /// function, which it may assign (SMT-09).
+    Nonlocal {
+        names: Vec<Identifier>,
+        span: Span,
+    },
     /// `raise`, `raise exception` or `raise exception from cause`.
     Raise {
         exception: Option<Expr>,
@@ -286,6 +292,7 @@ impl Stmt {
             | Self::Delete { span, .. }
             | Self::Try { span, .. }
             | Self::Global { span, .. }
+            | Self::Nonlocal { span, .. }
             | Self::TypeAlias { span, .. }
             | Self::Pass { span }
             | Self::Break { span }

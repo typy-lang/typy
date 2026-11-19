@@ -454,3 +454,77 @@ fn the_text_form_shows_an_instance_held_in_the_frame() {
     assert_eq!(crate::verify(&module), Ok(()));
     assert!(crate::print(&module).contains("v1 = new class#0 in frame"));
 }
+
+#[test]
+fn mem_03_an_instance_passed_through_a_function_value_comes_from_the_heap() {
+    // The value's code is known only when the program runs, so even a value of a function
+    // that keeps nothing lets the instance escape.
+    let through_value = |builder: &mut FunctionBuilder, point: ValueId| {
+        let function = builder.push_value(
+            Operation::Constant(Constant::Function(FunctionId(1))),
+            TyirType::FUNCTION,
+            span(),
+        );
+        let normal = builder.create_block();
+        builder.add_block_parameter(normal, TyirType::Unit);
+        let error = builder.create_block();
+        let exception = builder.add_block_parameter(error, TyirType::EXCEPTION);
+        builder.terminate(Terminator::Invoke {
+            callee: Callee::Value,
+            arguments: vec![function, point],
+            normal,
+            error,
+            span: span(),
+        });
+        builder.switch_to(error);
+        builder.terminate(Terminator::ReturnError(exception));
+        builder.switch_to(normal);
+    };
+    assert!(!point_used(through_value, vec![keeps_nothing(1)]));
+}
+
+#[test]
+fn mem_03_an_instance_a_closure_captures_comes_from_the_heap() {
+    // A closure may outlive the function that made it (ADR-0061).
+    let captured = |builder: &mut FunctionBuilder, point: ValueId| {
+        let mut types = TupleTypes::default();
+        let captures = types.intern_id(vec![POINT]);
+        let closure = builder.push_value(
+            Operation::NewClosure {
+                function: FunctionId(1),
+                captures,
+            },
+            TyirType::FUNCTION,
+            span(),
+        );
+        builder.push(
+            Operation::SetCapture {
+                closure,
+                captures,
+                index: 0,
+                value: point,
+            },
+            span(),
+        );
+    };
+    assert!(!point_used(captured, vec![keeps_nothing(1)]));
+}
+
+#[test]
+fn mem_03_an_instance_a_cell_holds_comes_from_the_heap() {
+    // A cell outlives its function when a nested function captures it (ADR-0061).
+    let in_cell = |builder: &mut FunctionBuilder, point: ValueId| {
+        let mut types = TupleTypes::default();
+        let layout = types.intern_id(vec![POINT, TyirType::Bool]);
+        let cell = builder.push_value(Operation::NewCell { layout }, TyirType::CELL, span());
+        builder.push(
+            Operation::CellSet {
+                cell,
+                layout,
+                value: point,
+            },
+            span(),
+        );
+    };
+    assert!(!point_used(in_cell, Vec::new()));
+}

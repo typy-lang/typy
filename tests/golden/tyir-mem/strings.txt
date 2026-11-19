@@ -155,6 +155,7 @@ b16(v47: str):
   v53 = const bool true
   store_global g3, v53
   v54 = load_global g2
+  inc v54
   v55 = load_global g2
   v56 = call rt.str_repr(v55)
   v57 = load_global g2
@@ -165,6 +166,7 @@ b16(v47: str):
 b17(v61: unit):
   invoke rt.write_stdout_checked(v60) to b19 unwind b20
 b18(v62: exception):
+  dec v54
   dec v56
   dec v58
   v63 = load s0
@@ -177,6 +179,7 @@ b18(v62: exception):
 b19(v66: unit):
   invoke rt.write_stdout_checked(v56) to b21 unwind b22
 b20(v67: exception):
+  dec v54
   dec v56
   dec v58
   v68 = load s0
@@ -189,6 +192,7 @@ b20(v67: exception):
 b21(v71: unit):
   invoke rt.write_stdout_checked(v60) to b23 unwind b24
 b22(v72: exception):
+  dec v54
   dec v56
   dec v58
   v73 = load s0
@@ -201,6 +205,7 @@ b22(v72: exception):
 b23(v76: unit):
   invoke rt.int_to_str(v58) to b25 unwind b26
 b24(v77: exception):
+  dec v54
   dec v56
   dec v58
   v78 = load s0
@@ -213,6 +218,7 @@ b24(v77: exception):
 b25(v81: str):
   invoke rt.write_stdout_checked(v81) to b27 unwind b28
 b26(v82: exception):
+  dec v54
   dec v56
   dec v58
   v83 = load s0
@@ -226,6 +232,7 @@ b27(v86: unit):
   dec v81
   invoke rt.write_stdout_checked(v59) to b29 unwind b30
 b28(v87: exception):
+  dec v54
   dec v56
   dec v58
   dec v81
@@ -239,12 +246,14 @@ b28(v87: exception):
 b29(v91: unit):
   dec v58
   dec v56
+  dec v54
   v96 = const unit
   v99 = load_global g4
   v100 = const int 1
   v101 = int.neg v100
   invoke rt.str_index(v99, v101) to b33 unwind b34
 b30(v92: exception):
+  dec v54
   dec v56
   dec v58
   v93 = load s0

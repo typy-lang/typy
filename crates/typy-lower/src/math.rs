@@ -19,10 +19,8 @@ impl FunctionLowerer<'_> {
         result: &Type,
         span: Span,
     ) -> Lowered {
-        let values: Vec<Lowered> = arguments
-            .iter()
-            .map(|argument| self.expression(argument))
-            .collect();
+        let operands: Vec<&TypedExpr> = arguments.iter().collect();
+        let values: Vec<Lowered> = self.operands_in_order(&operands, span);
         let lowered = match function.shape() {
             MathShape::Real(_) => {
                 let reals: Vec<ValueId> =

@@ -106,7 +106,12 @@ impl Aliases {
                     self.join_values(result, *value);
                 }
             }
-            Operation::StoreGlobal { value, .. } | Operation::SetField { value, .. } => {
+            // A capture is an escape: the function object may outlive the function that
+            // made it (MEM-03, ADR-0061).
+            Operation::StoreGlobal { value, .. }
+            | Operation::SetField { value, .. }
+            | Operation::SetCapture { value, .. }
+            | Operation::CellSet { value, .. } => {
                 escaping.push(*value);
             }
             // C may keep what it is given; no instance converts to a C type, so this is a
@@ -150,6 +155,12 @@ impl Aliases {
             | Operation::IsNone(_)
             | Operation::NewInstance { .. }
             | Operation::Field { .. }
+            | Operation::NewClosure { .. }
+            | Operation::Capture { .. }
+            | Operation::NewCell { .. }
+            | Operation::CellGet { .. }
+            | Operation::CellBound { .. }
+            | Operation::CellClear { .. }
             | Operation::Identical { .. }
             | Operation::Increment(_)
             | Operation::Decrement(_) => {}
@@ -176,6 +187,9 @@ impl Aliases {
             } => match callee {
                 Callee::Function(callee) => call(program, &[*callee], arguments, escaping),
                 Callee::Runtime(runtime) => runtime_call(*runtime, arguments, escaping),
+                // The code a function value runs is known only when the program runs, so each
+                // argument may be kept by it (MEM-03).
+                Callee::Value => escaping.extend(arguments),
                 Callee::Method { class, slot } => call(
                     program,
                     &program.table_functions(*class, *slot),

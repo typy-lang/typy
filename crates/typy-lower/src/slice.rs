@@ -20,7 +20,7 @@ impl FunctionLowerer<'_> {
         index: &TypedExpr,
         span: Span,
     ) -> Lowered {
-        let text = self.expression(value);
+        let text = self.operand_before(value, &[index], span);
         let position = self.expression(index);
         let function = match text.ty {
             TyirType::BYTES => RuntimeFunction::BytesGet,
@@ -62,7 +62,8 @@ impl FunctionLowerer<'_> {
         extra: Vec<typy_tyir::ValueId>,
         span: Span,
     ) -> Lowered {
-        let sliced = self.expression(value);
+        let later: Vec<&TypedExpr> = bounds.iter().flatten().copied().collect();
+        let sliced = self.operand_before(value, &later, span);
         let mut mask = 0;
         let mut lowered = Vec::with_capacity(3);
         for (bound, bit) in bounds.into_iter().zip(MASK_BITS) {
@@ -107,7 +108,7 @@ impl FunctionLowerer<'_> {
         }
         match &target.kind {
             TypedExprKind::ListItem { list, index } => {
-                let list = self.expression(list);
+                let list = self.operand_before(list, &[index], span);
                 let index = self.expression(index);
                 self.call_runtime(
                     RuntimeFunction::ListDelete,
@@ -133,7 +134,7 @@ impl FunctionLowerer<'_> {
                 );
             }
             TypedExprKind::DictItem { dict, key } => {
-                let dict = self.expression(dict);
+                let dict = self.operand_before(dict, &[key], span);
                 let key = self.expression(key);
                 let bits = self.bits(key, span);
                 let value =

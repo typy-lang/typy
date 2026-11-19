@@ -1,5 +1,5 @@
-//! CPython's compile-time rules for `global` in a function, which the parser accepts and
-//! CPython's compiler rejects as a `SyntaxError` (SMT-08, STD-01).
+//! CPython's compile-time rules for `global` and `nonlocal` in a function, which the parser
+//! accepts and CPython's compiler rejects as a `SyntaxError` (SMT-08, SMT-09, STD-01).
 
 use std::collections::BTreeSet;
 
@@ -8,8 +8,8 @@ use typy_source::syntax::Identifier;
 
 use super::Walker;
 
-/// The names a function's body has used, assigned, annotated or declared global so far, in
-/// the order of its source.
+/// The names a function's body has used, assigned, annotated or declared global or nonlocal
+/// so far, in the order of its source, and whether a function encloses it.
 #[derive(Default)]
 pub(super) struct GlobalScope {
     parameters: BTreeSet<String>,
@@ -17,13 +17,20 @@ pub(super) struct GlobalScope {
     assigned: BTreeSet<String>,
     annotated: BTreeSet<String>,
     globals: BTreeSet<String>,
+    nonlocals: BTreeSet<String>,
+    nested: bool,
 }
 
 impl GlobalScope {
-    /// Returns the scope of a function with these parameters.
-    pub(super) fn of_parameters<'name>(names: impl Iterator<Item = &'name str>) -> Self {
+    /// Returns the scope of a function with these parameters, `nested` in another function
+    /// or not.
+    pub(super) fn of_parameters<'name>(
+        names: impl Iterator<Item = &'name str>,
+        nested: bool,
+    ) -> Self {
         Self {
             parameters: names.map(str::to_owned).collect(),
+            nested,
             ..Self::default()
         }
     }
@@ -52,6 +59,8 @@ impl Walker {
         scope.annotated.insert(id.to_owned());
         if scope.globals.contains(id) {
             self.syntax_error(span, &format!("annotated name '{id}' can't be global"));
+        } else if scope.nonlocals.contains(id) {
+            self.syntax_error(span, &format!("annotated name '{id}' can't be nonlocal"));
         }
     }
 
@@ -65,6 +74,8 @@ impl Walker {
             let id = name.name.as_str();
             let message = if scope.parameters.contains(id) {
                 Some(format!("name '{id}' is parameter and global"))
+            } else if scope.nonlocals.contains(id) {
+                Some(format!("name '{id}' is nonlocal and global"))
             } else if scope.annotated.contains(id) {
                 Some(format!("annotated name '{id}' can't be global"))
             } else if scope.assigned.contains(id) {
@@ -77,6 +88,44 @@ impl Walker {
                 None
             };
             scope.globals.insert(id.to_owned());
+            if let Some(message) = message {
+                errors.push((name.span, message));
+            }
+        }
+        for (span, message) in errors {
+            self.syntax_error(span, &message);
+        }
+    }
+
+    /// Checks `nonlocal names` against where it stands and what came before it, as CPython
+    /// does; whether a function around it binds each name is checked with the function's
+    /// variables.
+    pub(super) fn nonlocal_statement(&mut self, names: &[Identifier], span: Span) {
+        let Some(scope) = &mut self.scope else {
+            self.syntax_error(span, "nonlocal declaration not allowed at module level");
+            return;
+        };
+        let mut errors = Vec::new();
+        for name in names {
+            let id = name.name.as_str();
+            let message = if scope.parameters.contains(id) {
+                Some(format!("name '{id}' is parameter and nonlocal"))
+            } else if scope.globals.contains(id) {
+                Some(format!("name '{id}' is nonlocal and global"))
+            } else if scope.annotated.contains(id) {
+                Some(format!("annotated name '{id}' can't be nonlocal"))
+            } else if scope.assigned.contains(id) {
+                Some(format!(
+                    "name '{id}' is assigned to before nonlocal declaration"
+                ))
+            } else if scope.used.contains(id) {
+                Some(format!("name '{id}' is used prior to nonlocal declaration"))
+            } else if !scope.nested {
+                Some(format!("no binding for nonlocal '{id}' found"))
+            } else {
+                None
+            };
+            scope.nonlocals.insert(id.to_owned());
             if let Some(message) = message {
                 errors.push((name.span, message));
             }

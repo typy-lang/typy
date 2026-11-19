@@ -2,7 +2,7 @@
 //! types.
 
 use typy_diagnostics::{Diagnostic, DiagnosticCode, RuleId, Span};
-use typy_source::syntax::{Expr, Keyword};
+use typy_source::syntax::{Expr, Keyword, ParameterKind};
 
 use super::BodyChecker;
 use crate::builtin::Builtin;
@@ -40,27 +40,29 @@ impl BodyChecker<'_> {
         keywords: &[Keyword],
         span: Span,
     ) -> TypedExpr {
-        if let Some(symbol) = self.locals.get(name) {
-            let ty = self.types.get(symbol).cloned().unwrap_or(Type::Error);
-            if let Some(made) = self.call_class_value(&ty, arguments, keywords, span) {
-                return made;
+        // A nested function in reach is called directly by its name (FUN-04).
+        if let Some(call) = self.nested_call(name, name_span, arguments, keywords, span) {
+            return call;
+        }
+        if let Some(symbol) = self.locals.get(name).copied() {
+            return self.call_local(symbol, (name, name_span), arguments, keywords, span);
+        }
+        // A captured variable that holds a function value is called through it.
+        if let Some(callee) = self.closure_read(name, name_span) {
+            if let Type::Callable { .. } = callee.ty {
+                return self.call_value(callee, arguments, keywords, span);
             }
-            // A variable whose type is an error was reported where the error arose.
-            if ty.has_error() {
-                for argument in arguments {
-                    self.expression(argument);
-                }
-                return Self::typed(
-                    TypedExprKind::Constant(TypedConstant::None),
-                    Type::Error,
-                    span,
-                );
+            for argument in arguments {
+                self.expression(argument);
             }
             return self.error(
                 Diagnostic::new(
                     DiagnosticCode::error(401),
                     name_span,
-                    format!("`{name}` is {} and cannot be called", ty.with_article()),
+                    format!(
+                        "`{name}` is {} and cannot be called",
+                        callee.ty.with_article()
+                    ),
                 )
                 .with_rule(RuleId::EXP_02),
                 span,
@@ -115,6 +117,9 @@ impl BodyChecker<'_> {
             if let Some(made) = self.call_class_value(&read.ty, arguments, keywords, span) {
                 return made;
             }
+            if let Type::Callable { .. } = read.ty {
+                return self.call_value(read, arguments, keywords, span);
+            }
             for argument in arguments {
                 self.expression(argument);
             }
@@ -139,6 +144,60 @@ impl BodyChecker<'_> {
             self.expression(argument);
         }
         TypedExpr { span, ..result }
+    }
+
+    /// Returns the call of the local variable `symbol`, named `name`: of the class it holds,
+    /// or through the function value it holds, which a test may have narrowed it to from an
+    /// optional value; E0401 for any other value.
+    fn call_local(
+        &mut self,
+        symbol: crate::typed::SymbolId,
+        (name, name_span): (&str, Span),
+        arguments: &[Expr],
+        keywords: &[Keyword],
+        span: Span,
+    ) -> TypedExpr {
+        // A variable called before an assignment gives it a type is read before it is
+        // assigned, which the read reports (TYP-12).
+        let Some(ty) = self.types.get(&symbol).cloned() else {
+            let read = self.name(name, name_span);
+            for argument in arguments {
+                self.expression(argument);
+            }
+            return TypedExpr { span, ..read };
+        };
+        if let Some(made) = self.call_class_value(&ty, arguments, keywords, span) {
+            return made;
+        }
+        if matches!(
+            ty,
+            Type::Callable { .. } | Type::Optional(_) | Type::Union(_)
+        ) {
+            let callee = self.name(name, name_span);
+            if let Type::Callable { .. } = callee.ty {
+                return self.call_value(callee, arguments, keywords, span);
+            }
+        }
+        // A variable whose type is an error was reported where the error arose.
+        if ty.has_error() {
+            for argument in arguments {
+                self.expression(argument);
+            }
+            return Self::typed(
+                TypedExprKind::Constant(TypedConstant::None),
+                Type::Error,
+                span,
+            );
+        }
+        self.error(
+            Diagnostic::new(
+                DiagnosticCode::error(401),
+                name_span,
+                format!("`{name}` is {} and cannot be called", ty.with_article()),
+            )
+            .with_rule(RuleId::EXP_02),
+            span,
+        )
     }
 
     pub(super) fn call_function(
@@ -220,7 +279,10 @@ impl BodyChecker<'_> {
         self.bind_to(&signature, skip, name, arguments, keywords, span)
     }
 
-    /// Binds the arguments of a call to the parameters of `signature` after the first `skip`.
+    /// Binds the arguments of a call to the parameters of `signature` after the first `skip`:
+    /// each positional argument to the next parameter that is not keyword-only, and each
+    /// keyword argument to the parameter it names that is not positional-only, as CPython
+    /// binds them (FUN-03).
     pub(super) fn bind_to(
         &mut self,
         signature: &crate::typed::FunctionSignature,
@@ -231,24 +293,21 @@ impl BodyChecker<'_> {
         span: Span,
     ) -> Result<Vec<Argument>, TypedExpr> {
         let parameters = &signature.parameters[skip.min(signature.parameters.len())..];
+        // Keyword-only parameters come last, so a positional argument fills the parameter of
+        // its own index among the others.
+        let positional = parameters
+            .iter()
+            .filter(|parameter| parameter.kind != ParameterKind::KeywordOnly)
+            .count();
         let mut bound: Vec<Argument> = Vec::new();
         let mut filled = vec![false; parameters.len()];
         for (index, argument) in arguments.iter().enumerate() {
-            let expected = parameters.get(index).map(|parameter| &parameter.ty);
-            let value = self.expression_expecting(argument, expected);
-            let Some(parameter) = parameters.get(index) else {
-                return Err(self.error(
-                    Diagnostic::new(
-                        DiagnosticCode::error(404),
-                        value.span,
-                        format!(
-                            "`{name}` takes {} arguments, and more are given",
-                            parameters.len()
-                        ),
-                    )
-                    .with_rule(RuleId::TYP_01),
-                    span,
-                ));
+            let parameter = parameters.get(index).filter(|_| index < positional);
+            let value =
+                self.expression_expecting(argument, parameter.map(|parameter| &parameter.ty));
+            let Some(parameter) = parameter else {
+                let keyword_only = positional < parameters.len();
+                return Err(self.too_many_positional(name, positional, keyword_only, &value, span));
             };
             self.expect(
                 &value,
@@ -283,6 +342,17 @@ impl BodyChecker<'_> {
                     span,
                 ));
             };
+            if parameters[index].kind == ParameterKind::PositionalOnly {
+                let message = format!(
+                    "`{name}` takes `{}` by position only, not by keyword",
+                    keyword_name.name
+                );
+                return Err(self.error(
+                    Diagnostic::new(DiagnosticCode::error(404), keyword_name.span, message)
+                        .with_rule(RuleId::FUN_03),
+                    span,
+                ));
+            }
             if filled[index] {
                 return Err(self.error(
                     Diagnostic::new(
@@ -305,7 +375,22 @@ impl BodyChecker<'_> {
                 value,
             });
         }
-        for (index, (parameter, is_filled)) in parameters.iter().zip(&filled).enumerate() {
+        self.bind_defaults(parameters, &filled, skip, name, span, &mut bound)?;
+        Ok(bound)
+    }
+
+    /// Adds to `bound` the argument of each parameter no argument filled whose default a
+    /// call gives each time, and reports a parameter that has no default.
+    fn bind_defaults(
+        &mut self,
+        parameters: &[crate::typed::SignatureParameter],
+        filled: &[bool],
+        skip: usize,
+        name: &str,
+        span: Span,
+        bound: &mut Vec<Argument>,
+    ) -> Result<(), TypedExpr> {
+        for (index, (parameter, is_filled)) in parameters.iter().zip(filled).enumerate() {
             if !is_filled && let Some(factory) = &parameter.default_call {
                 let value = self.default_call(factory, &parameter.ty, span);
                 bound.push(Argument {
@@ -326,6 +411,38 @@ impl BodyChecker<'_> {
                 ));
             }
         }
-        Ok(bound)
+        Ok(())
+    }
+
+    /// Returns the error of a positional argument, `value`, past the `positional` parameters
+    /// of `name` that take one: those of a function whose other parameters are keyword-only
+    /// (FUN-03), or all of them.
+    fn too_many_positional(
+        &mut self,
+        name: &str,
+        positional: usize,
+        keyword_only: bool,
+        value: &TypedExpr,
+        span: Span,
+    ) -> TypedExpr {
+        let plural = if positional == 1 { "" } else { "s" };
+        let (message, rule) = if keyword_only {
+            (
+                format!(
+                    "`{name}` takes {positional} positional argument{plural}, and more are \
+                     given; the rest are keyword-only"
+                ),
+                RuleId::FUN_03,
+            )
+        } else {
+            (
+                format!("`{name}` takes {positional} argument{plural}, and more are given"),
+                RuleId::TYP_01,
+            )
+        };
+        self.error(
+            Diagnostic::new(DiagnosticCode::error(404), value.span, message).with_rule(rule),
+            span,
+        )
     }
 }

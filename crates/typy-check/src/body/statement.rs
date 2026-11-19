@@ -395,13 +395,16 @@ impl BodyChecker<'_> {
             Stmt::Import { span, .. } | Stmt::ImportFrom { span, .. } => {
                 return self.import_statement(statement, *span);
             }
+            Stmt::FunctionDef { .. } if self.in_function() => return self.nested_def(statement),
             // `global` changes where names resolve, which `declare_globals` did.
             // The aliases are expanded in the annotations, and a program reads none as a value.
+            // A module's functions are checked on their own.
             Stmt::AnnAssign { value: None, .. }
             | Stmt::Global { .. }
+            | Stmt::Nonlocal { .. }
             | Stmt::TypeAlias { .. }
-            | Stmt::FunctionDef { .. }
             | Stmt::ClassDef { .. }
+            | Stmt::FunctionDef { .. }
             | Stmt::Other { .. } => return None,
         })
     }
@@ -616,7 +619,10 @@ impl BodyChecker<'_> {
         self.check_instance_complete(span);
         self.check_stays_in_finally("return", span);
         let expected = self.returns.clone().unwrap_or(Type::NoneType);
-        let value = value.map(|value| self.expression_expecting(value, Some(&expected)));
+        // A result of no known type, such as that of a `lambda` whose context gives none,
+        // takes the value as it is (EXP-14).
+        let known = (expected != Type::Error).then_some(&expected);
+        let value = value.map(|value| self.expression_expecting(value, known));
         let actual = value
             .as_ref()
             .map_or(Type::NoneType, |value| value.ty.clone());

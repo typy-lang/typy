@@ -119,6 +119,163 @@ fn recursive_functions_check_the_stack_on_entry() {
 }
 
 #[test]
+fn fun_02_a_function_that_calls_through_a_value_checks_the_stack_and_its_callee_does_not() {
+    let module = lower(
+        "from typing import Callable\n\n\ndef double(n: int) -> int:\n    return n * 2\n\n\n\
+         def apply(f: Callable[[int], int], n: int) -> int:\n    return f(n)\n\n\n\
+         x = apply(double, 3)\n",
+    );
+    // A cycle through a value runs a call through a value, so its caller checks the stack.
+    let checks = |name: &str| {
+        matches!(
+            function(&module, name).blocks[0].terminator,
+            Terminator::Invoke {
+                callee: typy_tyir::Callee::Runtime(typy_tyir::RuntimeFunction::CheckStack),
+                ..
+            }
+        )
+    };
+    assert!(checks("apply"));
+    assert!(!checks("double"));
+    let text = print(&module);
+    assert!(text.contains("invoke value("), "{text}");
+    assert!(text.contains("const function fn"), "{text}");
+}
+
+#[test]
+fn fun_02_a_function_that_orders_by_a_key_checks_the_stack() {
+    let module = lower(
+        "def size(text: str) -> int:\n    return len(text)\n\n\n\
+         def longest(words: list[str]) -> str:\n    return max(words, key=size)\n",
+    );
+    let longest = function(&module, "longest");
+    assert!(matches!(
+        longest.blocks[0].terminator,
+        Terminator::Invoke {
+            callee: typy_tyir::Callee::Runtime(typy_tyir::RuntimeFunction::CheckStack),
+            ..
+        }
+    ));
+    let text = print(&module);
+    assert!(text.contains("call rt.list_keep_extreme("), "{text}");
+}
+
+#[test]
+fn fun_04_a_def_makes_a_closure_of_its_captures_which_its_code_reads_from_its_object() {
+    let module = lower(
+        "def outer(step: int, label: str) -> int:\n    def add(value: int) -> int:\n        \
+         return value + step + len(label)\n    return add(1)\n",
+    );
+    let text = print(&module);
+    let outer = &text[text.find("# outer").unwrap()..];
+    let outer = &outer[..outer.find("\n}").unwrap()];
+    for line in [
+        "new_closure fn",
+        "set_capture v",
+        "call _TY8__main__18outer.<locals>.add(",
+    ] {
+        assert!(outer.contains(line), "{line} missing from {outer}");
+    }
+    let add = function(&module, "add");
+    // The function object comes first, then the parameter.
+    assert_eq!(
+        add.value(add.parameters[0]).ty,
+        typy_tyir::TyirType::FUNCTION
+    );
+    assert_eq!(add.parameters.len(), 2);
+    assert_eq!(add.qualified_name, "outer.<locals>.add");
+    let reads = add
+        .blocks
+        .iter()
+        .flat_map(|block| &block.instructions)
+        .filter(|instruction| matches!(instruction.operation, Operation::Capture { .. }))
+        .count();
+    assert_eq!(reads, 2);
+}
+
+#[test]
+fn fun_04_a_variable_assigned_after_the_def_lives_in_a_cell_the_closure_reads() {
+    let module = lower(
+        "def outer() -> int:\n    total = 1\n    def read() -> int:\n        return total\n    \
+         total = 2\n    return read()\n",
+    );
+    let text = print(&module);
+    let outer = &text[text.find("# outer").unwrap()..];
+    let outer = &outer[..outer.find("\n}").unwrap()];
+    for line in [
+        "slot s0 total: cell",
+        "new_cell tuple#",
+        "cell_set v",
+        "cell_get v",
+    ] {
+        assert!(outer.contains(line), "{line} missing from {outer}");
+    }
+    let read = &text[text.find("# read").unwrap()..];
+    let read = &read[..read.find("\n}").unwrap()];
+    for line in [
+        "capture v0, tuple#",
+        "cell_bound v",
+        "rt.free_variable_unbound(",
+        "cell_get v",
+    ] {
+        assert!(read.contains(line), "{line} missing from {read}");
+    }
+}
+
+#[test]
+fn fun_05_a_bound_method_tests_each_overriding_class_after_its_bases() {
+    let module = lower(
+        "class A:\n    def m(self) -> int:\n        return 1\n\n\nclass B(A):\n    \
+         def m(self) -> int:\n        return 2\n\n\nclass C(B):\n    def m(self) -> int:\n        \
+         return 3\n\n\ndef get(a: A) -> int:\n    f = a.m\n    return f()\n",
+    );
+    let text = print(&module);
+    let get = &text[text.find("# get").unwrap()..];
+    // The descriptor of `A.m`, then a test and a descriptor for `B`, then for `C`, so the
+    // last test that holds is of the object's own class.
+    let order: Vec<usize> = [
+        "const method_descriptor fn1",
+        "const type class#1",
+        "const method_descriptor fn2",
+        "const type class#2",
+        "const method_descriptor fn3",
+        "call rt.method_new(",
+    ]
+    .iter()
+    .map(|line| {
+        get.find(line)
+            .unwrap_or_else(|| panic!("{line} missing from {get}"))
+    })
+    .collect();
+    assert!(order.is_sorted(), "{get}");
+    assert_eq!(get.matches("rt.is_instance").count(), 2, "{get}");
+}
+
+#[test]
+fn nfr_07_an_operand_a_later_call_may_free_holds_a_reference_and_a_quiet_one_does_not() {
+    let source = |right: &str| {
+        format!(
+            "class Box:\n    def __init__(self) -> None:\n        self.text = \"t\"\n\n\n\
+             box = Box()\n\n\ndef other() -> str:\n    return \"o\"\n\n\n\
+             def joined() -> str:\n    return box.text + {right}\n"
+        )
+    };
+    let counted = |right: &str| {
+        let module = lower(&source(right));
+        let joined = function(&module, "joined");
+        joined
+            .blocks
+            .iter()
+            .flat_map(|block| &block.instructions)
+            .filter(|instruction| matches!(instruction.operation, Operation::Increment(_)))
+            .count()
+    };
+    // `other()` may bind `box` again and free its text, which the addition still reads.
+    assert_eq!(counted("other()"), 1);
+    assert_eq!(counted("box.text"), 0);
+}
+
+#[test]
 fn error_paths_release_the_slots_and_return_the_exception() {
     let module = lower("def f(s: str, n: int) -> str:\n    t = s + \"!\"\n    return t[n]\n");
     let f = function(&module, "f");

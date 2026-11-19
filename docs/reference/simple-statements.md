@@ -10,6 +10,7 @@
 | `raise` and `assert`, described in [Exceptions](../library/exceptions.md) | SMT-04, SMT-06 |
 | `del` of list items, list slices and dict keys | SMT-05 |
 | `global` in a function, for the module's variables | SMT-08 |
+| `nonlocal` in a nested function, for the variables of the functions around it | SMT-09 |
 | `type` at module level, described in [Types](types.md#type-aliases) | SMT-10 |
 
 `del` removes what each target names, in order: `del xs[i]` with
@@ -55,8 +56,50 @@ A test such as `if label is not None:` does not narrow a module variable
 that a function declares `global`, since any call may assign it. Copy
 the value to a local variable and test that.
 
-`import` is described in [Modules](modules.md), and `nonlocal` comes in
-1.0 (SMT-09).
+A nested function that declares a name `nonlocal` reads and assigns the
+variable of that name of the nearest function around it that binds it, an
+annotation alone such as `count: int` included. The variable lives in a
+cell the functions share, so each sees every assignment, as in CPython:
+
+<!-- typy-expect: accepted -->
+```python
+from typing import Callable
+
+
+def make_counter() -> Callable[[], int]:
+    count = 0
+
+    def increment() -> int:
+        nonlocal count
+        count += 1
+        return count
+    return increment
+
+
+counter = make_counter()
+counter()
+print(counter(), counter())
+```
+
+An assignment keeps the variable's type, E0402 otherwise. CPython's rules
+for `nonlocal` hold, E0103: it is not allowed at module level, a function
+around it binds the name, and it comes before any use of the name in the
+function and names no parameter. A nested function that reads the
+variable before the function around it assigns one raises `NameError`.
+The function around it reads the variable only after it assigns it
+itself, E0306 otherwise (TYP-12), and a nested function's name cannot be
+assigned through `nonlocal`, E0202, since only its `def` binds it.
+
+A test such as `if value is not None:` does not narrow a variable that a
+nested function assigns through `nonlocal`, since any call may assign it.
+Copy the value to a local variable and test that, as for `global`.
+
+An `except ... as name` clause deletes `name` when it ends, so `name`
+cannot be a variable declared `global` or `nonlocal`, or one that a
+nested function shares, E0202: TyPy gives the clause a variable of its
+own, which the other functions would not see.
+
+`import` is described in [Modules](modules.md).
 
 ## Example
 

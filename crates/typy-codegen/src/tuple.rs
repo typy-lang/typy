@@ -33,7 +33,7 @@ impl<'ctx> FunctionEmitter<'_, '_, 'ctx> {
         .into_struct_type();
         let mut tuple = struct_type.get_undef();
         for (index, item) in items.iter().enumerate() {
-            let Some(field) = tuple_field(&types, index) else {
+            let Some(field) = tuple_field(&self.shared.tyir.tuple_types, &types, index) else {
                 continue;
             };
             let value = self.value(*item)?;
@@ -55,7 +55,7 @@ impl<'ctx> FunctionEmitter<'_, '_, 'ctx> {
             return Err(CodegenError(format!("v{} is not a tuple", tuple.0)));
         };
         let types = self.tuple_items(id)?.to_vec();
-        let Some(field) = tuple_field(&types, index as usize) else {
+        let Some(field) = tuple_field(&self.shared.tyir.tuple_types, &types, index as usize) else {
             return Ok(None);
         };
         let value = self.value(tuple)?.into_struct_value();
@@ -75,7 +75,10 @@ impl<'ctx> FunctionEmitter<'_, '_, 'ctx> {
             .iter()
             .enumerate()
             .filter(|(_, item)| self.shared.tyir.tuple_types.is_counted(**item))
-            .filter_map(|(index, item)| tuple_field(&types, index).map(|field| (field, *item)))
+            .filter_map(|(index, item)| {
+                tuple_field(&self.shared.tyir.tuple_types, &types, index)
+                    .map(|field| (field, *item))
+            })
             .collect();
         for (field, item) in counted {
             let value = self

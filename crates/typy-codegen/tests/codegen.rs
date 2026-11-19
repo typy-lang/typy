@@ -162,6 +162,295 @@ fn ffi_13_an_integer_on_apples_stack_takes_its_c_width_and_words_go_in_registers
     }
 }
 
+/// A class whose attributes mix every alignment, declared in an order that pads.
+const MIXED_CLASS: &str = "\
+class Node:
+    def __init__(self, key: int, red: bool, weight: float, seen: bool, size: int, \
+parent: \"Node | None\") -> None:
+        self.key = key
+        self.red = red
+        self.weight = weight
+        self.seen = seen
+        self.size = size
+        self.parent = parent
+
+
+n = Node(1, True, 0.5, False, 3, None)
+print(n.key, n.red, n.weight, n.seen, n.size, n.parent is None)
+";
+
+#[test]
+fn mem_11_an_instance_stores_its_attributes_by_alignment_and_its_descriptor_keeps_their_order() {
+    let (project, module) = compile(MIXED_CLASS);
+    for target in [
+        Target::host(),
+        Target {
+            triple: TargetTriple::Aarch64AppleDarwin,
+        },
+    ] {
+        let ir = llvm_ir(&module, target, Optimization::None, &project).unwrap();
+        assert!(
+            ir.contains("{ i64, ptr, { i64, double, i64, ptr, i1, i1 } }"),
+            "{ir}"
+        );
+        // In the declared order, each with its offset from the ordering rule: `key` 0,
+        // `red` 32, `weight` 8, `seen` 33, `size` 16 and `parent` 24, of kinds int, bool,
+        // float, bool, int and optional object.
+        let fields = "[{ i32, i32, ptr } zeroinitializer, \
+            { i32, i32, ptr } { i32 2, i32 32, ptr null }, \
+            { i32, i32, ptr } { i32 1, i32 8, ptr null }, \
+            { i32, i32, ptr } { i32 2, i32 33, ptr null }, \
+            { i32, i32, ptr } { i32 0, i32 16, ptr null }, \
+            { i32, i32, ptr } { i32 9, i32 24, ptr null }]";
+        assert!(ir.contains(fields), "{ir}");
+        assert!(
+            ir.contains("{ i64 40, i64 6, ptr @typy.tuple0.fields }"),
+            "{ir}"
+        );
+    }
+}
+
+#[test]
+fn nfr_18_an_instance_takes_its_prefix_and_its_attributes_rounded_to_eight_bytes() {
+    let (project, module) = compile(MIXED_CLASS);
+    let ir = llvm_ir(&module, Target::host(), Optimization::None, &project).unwrap();
+    // Eight bytes each for two `int`s, a `float` and an object, one each for two `bool`s.
+    let attributes: u64 = 4 * 8 + 2;
+    let bound = attributes.next_multiple_of(8);
+    let size: u64 = ir
+        .lines()
+        .find_map(|line| {
+            line.strip_prefix(
+                "@typy.tuple0 = private unnamed_addr constant { i64, i64, ptr } { i64 ",
+            )
+        })
+        .and_then(|rest| rest.split(',').next())
+        .and_then(|size| size.parse().ok())
+        .unwrap();
+    assert!(size <= bound, "{size} > {bound}");
+    assert_eq!(16 + size, 56);
+}
+
+/// A function that cannot raise and one that may, each called through a value.
+const FUNCTION_VALUES: &str = "\
+from typing import Callable
+
+
+def double(value: int) -> int:
+    return value * 2
+
+
+def fail(value: int) -> int:
+    raise ValueError(\"no\")
+
+
+def apply(function: Callable[[int], int], value: int) -> int:
+    return function(value)
+
+
+print(apply(double, 2), apply(fail, 3))
+";
+
+#[test]
+fn fun_05_a_function_value_is_an_immortal_object_of_its_descriptor() {
+    let (project, module) = compile(FUNCTION_VALUES);
+    let ir = llvm_ir(&module, Target::host(), Optimization::None, &project).unwrap();
+    // The header is immortal and of the function type ID, then the descriptor: the name, the
+    // qualified name, the code and no captures. Only the object's address is its identity.
+    assert!(
+        ir.contains(
+            "@typy.function.0 = private constant { i32, i32, ptr } \
+             { i32 -1, i32 24, ptr @typy.function.descriptor.0 }"
+        ),
+        "{ir}"
+    );
+    assert!(
+        ir.contains(
+            "@typy.function.descriptor.0 = private unnamed_addr constant \
+             { ptr, ptr, ptr, ptr } { ptr @typy.str.1, ptr @typy.str.1, \
+             ptr @typy.thunk._TY8__main__6double, ptr null }"
+        ),
+        "{ir}"
+    );
+    assert!(
+        ir.contains("call { i64, ptr } @_TY8__main__5apply(ptr @typy.function.1, i64 7)"),
+        "{ir}"
+    );
+}
+
+#[test]
+fn fun_05_a_thunk_gives_every_function_the_raising_form_a_call_through_a_value_takes() {
+    let (project, module) = compile(FUNCTION_VALUES);
+    let ir = llvm_ir(&module, Target::host(), Optimization::None, &project).unwrap();
+    let thunk = |name: &str| -> String {
+        let start = ir.find(&format!("@typy.thunk.{name}(")).unwrap();
+        ir[start..].split("\n}").next().unwrap().to_owned()
+    };
+    // A function that cannot raise has its result paired with no exception.
+    let double = thunk("_TY8__main__6double");
+    assert!(
+        double.contains("call i64 @_TY8__main__6double(i64 %1)"),
+        "{double}"
+    );
+    assert!(
+        double.contains("insertvalue { i64, ptr } %3, ptr null, 1"),
+        "{double}"
+    );
+    // One that may raise already returns the pair, so its thunk only calls it.
+    let fail = thunk("_TY8__main__4fail");
+    assert!(
+        fail.contains("tail call { i64, ptr } @_TY8__main__4fail(i64 %1)"),
+        "{fail}"
+    );
+    // The call through the value reads the code from the descriptor and passes the object.
+    let start = ir.find("@_TY8__main__5apply(ptr %0, i64 %1)").unwrap();
+    let apply = ir[start..].split("\n}").next().unwrap();
+    assert!(
+        apply
+            .lines()
+            .any(|line| line.contains("= call { i64, ptr } %") && line.contains("(ptr %")),
+        "{apply}"
+    );
+}
+
+/// A method a subclass overrides, read through an instance of the base class.
+const BOUND_METHODS: &str = "\
+from typing import Callable
+
+
+class Counter:
+    def __init__(self) -> None:
+        self.count = 0
+
+    def add(self, step: int) -> int:
+        self.count += step
+        return self.count
+
+
+class Double(Counter):
+    def add(self, step: int) -> int:
+        self.count += 2 * step
+        return self.count
+
+
+def run(counter: Counter) -> Callable[[int], int]:
+    return counter.add
+
+
+print(run(Double())(1))
+";
+
+#[test]
+fn fun_05_a_bound_method_chooses_its_classs_descriptor_and_its_thunk_reads_the_instance() {
+    let (project, module) = compile(BOUND_METHODS);
+    let ir = llvm_ir(&module, Target::host(), Optimization::None, &project).unwrap();
+    // One descriptor for each method, both named `add`, of their own qualified names.
+    for (method, symbol) in [
+        ("Counter", "_TY8__main__11Counter.add"),
+        ("Double", "_TY8__main__10Double.add"),
+    ] {
+        assert!(
+            ir.lines()
+                .any(|line| line.starts_with("@typy.method.descriptor.")
+                    && line.ends_with(&format!("ptr @typy.method_thunk.{symbol}, ptr null }}"))),
+            "{method}: {ir}"
+        );
+        let start = ir
+            .find(&format!("@typy.method_thunk.{symbol}(ptr %0, i64 %1) {{"))
+            .unwrap();
+        let thunk = ir[start..].split("\n}").next().unwrap();
+        // The instance is the bound method's fourth field, passed first.
+        assert!(
+            thunk.contains(
+                "getelementptr inbounds nuw { i32, i32, ptr, ptr }, ptr %0, i32 0, i32 3"
+            ),
+            "{thunk}"
+        );
+        assert!(
+            thunk.contains(&format!("call i64 @{symbol}(ptr %3, i64 %1)")),
+            "{thunk}"
+        );
+    }
+    assert!(ir.contains("call ptr @typy_rt_method_new(i64 %"), "{ir}");
+}
+
+/// A nested function that captures an `int` and a `str`.
+const CLOSURE: &str = "\
+from typing import Callable
+
+
+def make_adder(step: int, label: str) -> Callable[[int], int]:
+    def add(value: int) -> int:
+        print(label)
+        return value + step
+    return add
+
+
+print(make_adder(1, \"x\")(2))
+";
+
+#[test]
+fn fun_04_a_closure_comes_from_the_runtime_with_its_descriptor_and_the_layout_of_its_captures() {
+    let (project, module) = compile(CLOSURE);
+    let ir = llvm_ir(&module, Target::host(), Optimization::None, &project).unwrap();
+    let symbol = "\"_TY8__main__23make_adder.<locals>.add\"";
+    // The captures, `label` then `step`, are laid out by the descriptor the runtime releases
+    // them through: an object at 0, an `int` at 8.
+    assert!(
+        ir.contains(
+            "[{ i32, i32, ptr } { i32 3, i32 0, ptr null }, { i32, i32, ptr } { i32 0, i32 8, ptr null }]"
+        ),
+        "{ir}"
+    );
+    let descriptor = ir
+        .lines()
+        .find(|line| line.starts_with("@typy.closure.descriptor."))
+        .unwrap();
+    assert!(
+        descriptor.ends_with(
+            "ptr @\"typy.closure_thunk._TY8__main__23make_adder.<locals>.add\", ptr @typy.tuple0 }"
+        ),
+        "{descriptor}"
+    );
+    assert!(
+        ir.contains("call ptr @typy_rt_closure_new(ptr @typy.closure.descriptor."),
+        "{ir}"
+    );
+    // The thunk passes the object on, which the nested function reads its captures from.
+    let start = ir
+        .find("@\"typy.closure_thunk._TY8__main__23make_adder.<locals>.add\"(ptr %0, i64 %1) {")
+        .unwrap();
+    let thunk = ir[start..].split("\n}").next().unwrap();
+    assert!(
+        thunk.contains(&format!("call i64 @{symbol}(ptr %0, i64 %1)")),
+        "{thunk}"
+    );
+}
+
+#[test]
+fn fun_04_a_cell_comes_from_the_runtime_with_the_layout_of_its_value_and_flag() {
+    let (project, module) = compile(
+        "def outer() -> int:\n    total = 1\n    def read() -> int:\n        return total\n    \
+         total = 2\n    return read()\n\n\nprint(outer())\n",
+    );
+    let ir = llvm_ir(&module, Target::host(), Optimization::None, &project).unwrap();
+    // The layout of an `int` and its flag: the word at 0, the flag a `bool` at 8.
+    assert!(
+        ir.contains(
+            "[{ i32, i32, ptr } zeroinitializer, { i32, i32, ptr } { i32 2, i32 8, ptr null }]"
+        ),
+        "{ir}"
+    );
+    assert!(
+        ir.contains("call ptr @typy_rt_cell_new(ptr @typy.tuple"),
+        "{ir}"
+    );
+    assert!(
+        ir.contains("call ptr @typy_rt_free_variable_unbound(ptr @typy.str."),
+        "{ir}"
+    );
+}
+
 #[test]
 fn the_entry_is_the_only_external_function() {
     let (project, module) = compile(PROGRAMS[1]);

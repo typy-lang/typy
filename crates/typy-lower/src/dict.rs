@@ -56,7 +56,7 @@ impl FunctionLowerer<'_> {
         let (key_type, value_type) = self.dict_types(ty);
         let dict = self.new_dict(key_type, value_type, keys.len(), span);
         for (key, value) in keys.iter().zip(values) {
-            let key = self.expression(key);
+            let key = self.operand_before(key, &[value], span);
             let value = self.expression(value);
             self.set_entry(dict.value, key, value, span);
             self.release(value, span);
@@ -147,7 +147,7 @@ impl FunctionLowerer<'_> {
         value: Lowered,
         span: Span,
     ) {
-        let dict = self.expression(dict);
+        let dict = self.operand_before(dict, &[key], span);
         let key = self.expression(key);
         self.set_entry(dict.value, key, value, span);
         self.release(value, span);
@@ -165,8 +165,13 @@ impl FunctionLowerer<'_> {
         span: Span,
     ) {
         let (_, value_type) = self.dict_types(&dict.ty);
-        let dict = self.expression(dict);
-        let key = self.expression(key);
+        // `compute` evaluates the value, which may free the dict or the key, so both are kept.
+        let dict_expression = dict;
+        let dict = self.expression(dict_expression);
+        let dict = self.kept_for_call(dict_expression, dict, span);
+        let key_expression = key;
+        let key = self.expression(key_expression);
+        let key = self.kept_for_call(key_expression, key, span);
         let key_bits = self.bits(key, span);
         let bits = self.call_runtime(RuntimeFunction::DictGet, vec![dict.value, key_bits], span);
         let current = self.value_of_bits(bits.value, value_type, span);

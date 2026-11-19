@@ -110,6 +110,61 @@ pub enum TypedExprKind {
         /// (ADR-0021).
         dispatch: bool,
     },
+    /// A function of the program read as a value: its function object, of a `Callable`
+    /// type (FUN-05, ADR-0060).
+    FunctionValue(FunctionId),
+    /// The capture at this position of the nested function that is running: a copy of a
+    /// variable of a function around it, made when its `def` ran (FUN-04, ADR-0061).
+    Capture(u32),
+    /// The function object of the nested function that is running, which its own name reads
+    /// inside it (FUN-04).
+    RunningFunction,
+    /// The value of a variable of this function that lives in a cell, which a nested function
+    /// shares (FUN-04, ADR-0061).
+    CellRead(SymbolId),
+    /// The cell of a variable of this function, which a nested `def` captures.
+    CellObject(SymbolId),
+    /// The value of the captured cell at this position of the running nested function; reading
+    /// one no value was assigned to yet raises `NameError`, as CPython does.
+    CapturedCell(u32),
+    /// The captured cell at this position, which a `def` nested in the running function
+    /// captures in turn.
+    CapturedCellObject(u32),
+    /// A `lambda`: a new function object of `function`, which holds the value of each of
+    /// `captures`, in order (EXP-14, ADR-0060).
+    Lambda {
+        function: FunctionId,
+        captures: Vec<TypedExpr>,
+    },
+    /// The capture at `index` of `closure`, the function object of the nested function
+    /// `function`: what a later function of a group copies from the first, so every function
+    /// of the group holds the same captures (FUN-04, ADR-0061).
+    CaptureOf {
+        function: FunctionId,
+        closure: Box<TypedExpr>,
+        index: u32,
+    },
+    /// A call by name of a nested function: its code, given `closure`, its function object,
+    /// first, then the arguments, as a call of a function by name binds them (FUN-04).
+    CallNested {
+        function: FunctionId,
+        closure: Box<TypedExpr>,
+        arguments: Vec<Argument>,
+    },
+    /// A method read through an instance: a new bound method of `object` and the method of
+    /// its class (FUN-05, ADR-0060). `methods` holds the method of the instance's static class
+    /// first, then each override among its subclasses, after the classes it derives from; the
+    /// last whose class the object is an instance of is bound.
+    BoundMethod {
+        object: Box<TypedExpr>,
+        methods: Vec<(super::class::ClassId, FunctionId)>,
+    },
+    /// A call through a function value: `callee` is evaluated, then the arguments, one for
+    /// each parameter of its `Callable` type, in order (FUN-05).
+    CallValue {
+        callee: Box<TypedExpr>,
+        arguments: Vec<TypedExpr>,
+    },
     /// A new instance of a class, made by calling the class: the instance is made, then
     /// `__init__` runs on it with the arguments (CLS-01).
     New {
@@ -230,6 +285,18 @@ pub enum TypedExprKind {
         builtin: Builtin,
         iterable: Box<TypedExpr>,
         option: Option<Box<TypedExpr>>,
+    },
+    /// `sorted`, `min` or `max` of a list with a `key`, or `list.sort` with one (FUN-05): the
+    /// list, then the key and the option, `reverse` or `default`, in the order the call writes
+    /// them, then the key of each item, once and in order; the items are ordered or compared by
+    /// their keys alone, as CPython orders them.
+    Keyed {
+        operation: KeyedOperation,
+        list: Box<TypedExpr>,
+        key: Box<TypedExpr>,
+        option: Option<Box<TypedExpr>>,
+        /// Whether the call writes the option before the key.
+        option_first: bool,
     },
     /// A `tuple[T, ...]` made from a fixed tuple whose items are all of type `T`, or from a new
     /// list that `tuple(source)` built (DAT-14).
@@ -521,6 +588,19 @@ pub struct IsInstanceTest {
     pub members: Vec<(bool, Vec<crate::types::TypeObjectOf>)>,
 }
 
+/// What a call with a `key` does with the items of its list (FUN-05).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum KeyedOperation {
+    /// `sorted`: a new list of the items, ordered by their keys.
+    Sorted,
+    /// `list.sort`: the list's own items ordered by their keys.
+    Sort,
+    /// `min`: the first item of the smallest key.
+    Min,
+    /// `max`: the first item of the largest key.
+    Max,
+}
+
 /// An operation on a variable that holds a union of objects, checked once for each member
 /// with the variable narrowed to it (TYP-14, ADR-0027).
 #[derive(Clone, Debug, PartialEq)]
@@ -575,6 +655,13 @@ impl TypedExpr {
             | TypedExprKind::ModuleName
             | TypedExprKind::TypeObject(_)
             | TypedExprKind::TypeAliasObject(_)
+            | TypedExprKind::FunctionValue(_)
+            | TypedExprKind::Capture(_)
+            | TypedExprKind::RunningFunction
+            | TypedExprKind::CellRead(_)
+            | TypedExprKind::CellObject(_)
+            | TypedExprKind::CapturedCell(_)
+            | TypedExprKind::CapturedCellObject(_)
             | TypedExprKind::ClassVariable(_)
             | TypedExprKind::NotImplemented
             | TypedExprKind::ForeignLibrary(_)
@@ -602,6 +689,33 @@ impl TypedExpr {
                 arguments: items, ..
             } => items.iter().collect(),
             TypedExprKind::ListItem { list, index } => vec![list, index],
+            TypedExprKind::CallValue { callee, arguments } => {
+                std::iter::once(callee.as_ref()).chain(arguments).collect()
+            }
+            TypedExprKind::CaptureOf { closure, .. } => vec![closure],
+            TypedExprKind::Lambda { captures, .. } => captures.iter().collect(),
+            TypedExprKind::CallNested {
+                closure, arguments, ..
+            } => std::iter::once(closure.as_ref())
+                .chain(arguments.iter().map(|argument| &argument.value))
+                .collect(),
+            TypedExprKind::Keyed {
+                list,
+                key,
+                option,
+                option_first,
+                ..
+            } => {
+                let (first, second) = if *option_first {
+                    (option.as_deref(), Some(key.as_ref()))
+                } else {
+                    (Some(key.as_ref()), option.as_deref())
+                };
+                std::iter::once(list.as_ref())
+                    .chain(first)
+                    .chain(second)
+                    .collect()
+            }
             TypedExprKind::ListOf(source)
             | TypedExprKind::SetOf(source)
             | TypedExprKind::DictOf(source) => source.expressions(),
@@ -642,6 +756,7 @@ impl TypedExpr {
             | TypedExprKind::Unwrap(inner)
             | TypedExprKind::AsIterable(inner)
             | TypedExprKind::Lazy { value: inner, .. }
+            | TypedExprKind::BoundMethod { object: inner, .. }
             | TypedExprKind::Named { value: inner, .. } => vec![inner],
             TypedExprKind::PercentFormat { values, .. } => vec![values],
             TypedExprKind::MathCall { arguments, .. } => arguments.iter().collect(),

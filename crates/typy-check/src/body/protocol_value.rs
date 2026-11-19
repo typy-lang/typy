@@ -120,6 +120,7 @@ impl Program {
                         ty: instance,
                         default: None,
                         default_call: None,
+                        kind: typy_source::syntax::ParameterKind::Normal,
                     }],
                     returns,
                 }
@@ -322,6 +323,18 @@ impl BodyChecker<'_> {
             .dispatcher(protocol, &attribute.name)
             .filter(|_| info.attribute(&attribute.name).is_some());
         let Some(getter) = getter else {
+            if info.method(&attribute.name).is_some() {
+                let message = format!(
+                    "`{}` is a method of the protocol `{}`, and using a protocol value's method \
+                     as a value is planned for TyPy 0.9 (FUN-09)",
+                    attribute.name, info.name
+                );
+                return self.error(
+                    Diagnostic::new(DiagnosticCode::error(201), attribute.span, message)
+                        .with_rule(RuleId::FUN_09),
+                    span,
+                );
+            }
             let message = format!("`{}` has no attribute `{}`", info.name, attribute.name);
             return self.error(
                 Diagnostic::new(DiagnosticCode::error(414), attribute.span, message)
