@@ -145,7 +145,73 @@ pub(crate) fn outlives_call(expression: &TypedExpr) -> bool {
     }
 }
 
+/// Returns true when evaluating `expression` runs no code of the program and frees nothing:
+/// a variable, a constant, or a field, an item of a list or a tuple, or an operation of the
+/// built-in types, of such operands. Anything else may run a method, which may free what an
+/// operand evaluated before it borrows (MEM-04, NFR-07).
+pub(crate) fn is_quiet(expression: &TypedExpr) -> bool {
+    match &expression.kind {
+        TypedExprKind::Local(_)
+        | TypedExprKind::ModuleVariable(_)
+        | TypedExprKind::Constant(_)
+        | TypedExprKind::ModuleName
+        | TypedExprKind::TypeObject(_)
+        | TypedExprKind::TypeAliasObject(_)
+        | TypedExprKind::FunctionValue(_)
+        | TypedExprKind::RunningFunction
+        | TypedExprKind::Capture(_)
+        | TypedExprKind::NotImplemented => true,
+        TypedExprKind::Attribute {
+            object: operand, ..
+        }
+        | TypedExprKind::TupleItem { tuple: operand, .. }
+        | TypedExprKind::Wrap(operand)
+        | TypedExprKind::Unwrap(operand)
+        | TypedExprKind::Upcast(operand)
+        | TypedExprKind::Downcast(operand)
+        | TypedExprKind::AsIterable(operand)
+        | TypedExprKind::Unary { operand, .. } => is_quiet(operand),
+        TypedExprKind::ListItem {
+            list: left,
+            index: right,
+        }
+        | TypedExprKind::Binary { left, right, .. } => is_quiet(left) && is_quiet(right),
+        _ => false,
+    }
+}
+
 impl crate::function::FunctionLowerer<'_> {
+    /// Lowers `operand`, which other operands follow: when one of `later` may run code, a
+    /// borrowed value that code could free, read from an object, a container or a module
+    /// variable, gets a reference of its own, which the operation releases with its other
+    /// operands (MEM-04, NFR-07).
+    pub(crate) fn operand_before(
+        &mut self,
+        operand: &TypedExpr,
+        later: &[&TypedExpr],
+        span: typy_diagnostics::Span,
+    ) -> crate::ownership::Lowered {
+        let lowered = self.expression(operand);
+        if later.iter().all(|each| is_quiet(each)) {
+            return lowered;
+        }
+        self.kept_for_call(operand, lowered, span)
+    }
+
+    /// Lowers `operands` in order, each that a later one may free kept with a reference of its
+    /// own, as `operand_before` keeps one.
+    pub(crate) fn operands_in_order(
+        &mut self,
+        operands: &[&TypedExpr],
+        span: typy_diagnostics::Span,
+    ) -> Vec<crate::ownership::Lowered> {
+        (0..operands.len())
+            .map(|position| {
+                self.operand_before(operands[position], &operands[position + 1..], span)
+            })
+            .collect()
+    }
+
     /// Returns an argument the caller keeps alive for the call: a borrowed value read from a
     /// container gets a reference of the caller's own, released after the call.
     pub(crate) fn kept_for_call(

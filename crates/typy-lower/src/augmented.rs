@@ -98,8 +98,10 @@ impl FunctionLowerer<'_> {
         result: &Type,
         span: Span,
     ) {
-        let list = self.expression(list);
-        let index = self.expression(index);
+        // The value is evaluated after the list and the index, so each is kept while it may
+        // free them.
+        let list = self.operand_before(list, &[index, value], span);
+        let index = self.operand_before(index, &[value], span);
         let item = self.lowered_type(result);
         let bits = self.call_runtime(
             RuntimeFunction::ListGet,

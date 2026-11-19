@@ -100,7 +100,7 @@ impl FunctionLowerer<'_> {
                 generators,
             } => self.comprehension(element, value.as_deref(), generators, &expression.ty, span),
             TypedExprKind::DictItem { dict, key } => {
-                let dict = self.expression(dict);
+                let dict = self.operand_before(dict, &[key], span);
                 let key = self.expression(key);
                 self.dict_item(dict, key, ty, span)
             }
@@ -116,7 +116,7 @@ impl FunctionLowerer<'_> {
                 self.tuple_of(inner, item, span)
             }
             TypedExprKind::ListItem { list, index } => {
-                let list = self.expression(list);
+                let list = self.operand_before(list, &[index], span);
                 let index = self.expression(index);
                 self.list_item(list, index, ty, span)
             }
@@ -203,7 +203,7 @@ impl FunctionLowerer<'_> {
                 operator,
                 right,
             } => {
-                let left = self.expression(left);
+                let left = self.operand_before(left, &[right], span);
                 let right = self.expression(right);
                 self.binary(*operator, left, right, &expression.ty, span)
             }
@@ -374,10 +374,8 @@ impl FunctionLowerer<'_> {
                     .iter()
                     .map(|argument| argument.ty.clone())
                     .collect();
-                let values: Vec<Lowered> = arguments
-                    .iter()
-                    .map(|argument| self.expression(argument))
-                    .collect();
+                let operands: Vec<&TypedExpr> = arguments.iter().collect();
+                let values = self.operands_in_order(&operands, span);
                 self.builtin(*builtin, values, &types, ty, span)
             }
             TypedExprKind::Index { value, index } => self.str_index(value, index, span),

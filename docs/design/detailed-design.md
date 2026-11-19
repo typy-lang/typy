@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy detailed design |
-| Version | 2.41 |
+| Version | 2.42 |
 | Status | Approved |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-18 |
@@ -2482,9 +2482,19 @@ caller keeps every argument alive for the call: a variable or a constant
 already is, because no callee can assign a caller's variable, and any other
 borrowed argument, such as an item read from a list or an attribute, gets
 a reference of the caller's own, released after the call, since the callee
-could free it by changing the container. A `return` of a variable hands its
-slot's reference to the caller and skips that slot when the others are
-released.
+could free it by changing the container. The same holds for every operand
+that another operand evaluated after it may free: `borrow::is_quiet` says
+whether an expression runs no code of the program, a variable, a
+constant, a field or an item of a list read from such operands, or an
+operation of the built-in types on them, and `operand_before` gives an
+operand that is followed by one that is not quiet a reference of its own,
+in an operator, a comparison, a display, an index or a slice, a method's
+receiver and arguments, the arguments of a builtin and of `print`, the
+target of an item assignment, an augmented assignment and `del` (NFR-07).
+In `current.text + replace()`, where `replace` binds the module variable
+`current` again, the text is kept until the addition is done. A `return`
+of a variable hands its slot's reference to the caller and skips that slot
+when the others are released.
 
 A variable's last use moves its value when it is the value of an
 assignment or an item a display, `append`, `insert` or `add` stores

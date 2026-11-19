@@ -131,7 +131,7 @@ impl FunctionLowerer<'_> {
         value: Lowered,
         span: Span,
     ) {
-        let list = self.expression(list);
+        let list = self.operand_before(list, &[index], span);
         let index = self.expression(index);
         let bits = self.bits(value, span);
         self.store_call(

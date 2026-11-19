@@ -21,7 +21,7 @@ impl FunctionLowerer<'_> {
         result: TyirType,
         span: Span,
     ) -> Lowered {
-        let list = self.expression(iterable);
+        let list = self.operand_before(iterable, &option.into_iter().collect::<Vec<_>>(), span);
         let option = option.map(|option| self.expression(option));
         let lowered = match builtin {
             Builtin::Sorted => {

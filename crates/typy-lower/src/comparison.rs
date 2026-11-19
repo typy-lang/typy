@@ -25,10 +25,13 @@ impl FunctionLowerer<'_> {
     ) -> Lowered {
         let join = self.builder.create_block();
         let result = self.builder.add_block_parameter(join, TyirType::Bool);
-        let mut left = self.expression(first);
+        let mut left =
+            self.operand_before(first, &comparators[..1].iter().collect::<Vec<_>>(), span);
         let mut left_type = &first.ty;
         for (position, (operator, comparator)) in operators.iter().zip(comparators).enumerate() {
-            let right = self.expression(comparator);
+            // A comparator is the left operand of the next comparison too.
+            let next: Vec<&TypedExpr> = comparators.get(position + 1).into_iter().collect();
+            let right = self.operand_before(comparator, &next, span);
             let outcome = self
                 .compare_views(*operator, (left, left_type), (right, &comparator.ty), span)
                 .unwrap_or_else(|| self.compare(*operator, left, right, span));

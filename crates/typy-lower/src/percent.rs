@@ -186,7 +186,7 @@ impl FunctionLowerer<'_> {
         values: &typy_check::TypedExpr,
         span: Span,
     ) -> Lowered {
-        let format = self.expression(format);
+        let format = self.operand_before(format, &[values], span);
         let (layout, tuple, form) = match &values.ty {
             typy_check::Type::Tuple(items) => {
                 let id = self.tuple_type_id(items);

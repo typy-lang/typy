@@ -178,6 +178,7 @@ b16:                                              ; preds = %b15, %b14
   call void @typy_rt_decrement(ptr %46)
   store i1 true, ptr @typy.global.3, align 1
   %47 = load ptr, ptr @typy.global.2, align 8
+  call void @typy_rt_increment(ptr %47)
   %48 = load ptr, ptr @typy.global.2, align 8
   %49 = call ptr @typy_rt_str_repr(ptr %48)
   %50 = load ptr, ptr @typy.global.2, align 8
@@ -193,6 +194,7 @@ b17:                                              ; preds = %b16
 
 b18:                                              ; preds = %traceback3
   %v62 = phi ptr [ %52, %traceback3 ]
+  call void @typy_rt_decrement(ptr %47)
   call void @typy_rt_decrement(ptr %49)
   call void @typy_rt_int_decrement(i64 %51)
   %56 = load i64, ptr %s0, align 8
@@ -210,6 +212,7 @@ b19:                                              ; preds = %b17
 
 b20:                                              ; preds = %traceback4
   %v67 = phi ptr [ %54, %traceback4 ]
+  call void @typy_rt_decrement(ptr %47)
   call void @typy_rt_decrement(ptr %49)
   call void @typy_rt_int_decrement(i64 %51)
   %61 = load i64, ptr %s0, align 8
@@ -227,6 +230,7 @@ b21:                                              ; preds = %b19
 
 b22:                                              ; preds = %traceback5
   %v72 = phi ptr [ %59, %traceback5 ]
+  call void @typy_rt_decrement(ptr %47)
   call void @typy_rt_decrement(ptr %49)
   call void @typy_rt_int_decrement(i64 %51)
   %66 = load i64, ptr %s0, align 8
@@ -246,6 +250,7 @@ b23:                                              ; preds = %b21
 
 b24:                                              ; preds = %traceback6
   %v77 = phi ptr [ %64, %traceback6 ]
+  call void @typy_rt_decrement(ptr %47)
   call void @typy_rt_decrement(ptr %49)
   call void @typy_rt_int_decrement(i64 %51)
   %73 = load i64, ptr %s0, align 8
@@ -264,6 +269,7 @@ b25:                                              ; preds = %b23
 
 b26:                                              ; preds = %traceback7
   %v82 = phi ptr [ %71, %traceback7 ]
+  call void @typy_rt_decrement(ptr %47)
   call void @typy_rt_decrement(ptr %49)
   call void @typy_rt_int_decrement(i64 %51)
   %78 = load i64, ptr %s0, align 8
@@ -282,6 +288,7 @@ b27:                                              ; preds = %b25
 
 b28:                                              ; preds = %traceback8
   %v87 = phi ptr [ %76, %traceback8 ]
+  call void @typy_rt_decrement(ptr %47)
   call void @typy_rt_decrement(ptr %49)
   call void @typy_rt_int_decrement(i64 %51)
   call void @typy_rt_decrement(ptr %v81)
@@ -296,6 +303,7 @@ b28:                                              ; preds = %traceback8
 b29:                                              ; preds = %b27
   call void @typy_rt_int_decrement(i64 %51)
   call void @typy_rt_decrement(ptr %49)
+  call void @typy_rt_decrement(ptr %47)
   %86 = load ptr, ptr @typy.global.4, align 8
   %87 = call i64 @typy_rt_int_negate(i64 3)
   %88 = call { ptr, ptr } @typy_rt_str_index(ptr %86, i64 %87)
@@ -306,6 +314,7 @@ b29:                                              ; preds = %b27
 
 b30:                                              ; preds = %traceback9
   %v92 = phi ptr [ %81, %traceback9 ]
+  call void @typy_rt_decrement(ptr %47)
   call void @typy_rt_decrement(ptr %49)
   call void @typy_rt_int_decrement(i64 %51)
   %92 = load i64, ptr %s0, align 8

@@ -45,6 +45,13 @@ All notable changes to TyPy are recorded here. The format follows
 
 ### Fixed
 
+- An operand read from an object, a container or a module variable stays
+  alive while an operand evaluated after it runs, so `current.text +
+  replace()`, where `replace` binds `current` again, adds the old text,
+  as CPython does, where TyPy 0.7 read freed memory. The same holds for
+  comparisons, displays, indexes and slices, the receiver and the
+  arguments of a method, the arguments of a builtin and of `print`, and
+  the target of an item assignment or of `del` (NFR-07).
 - A call of a local variable before its first assignment, such as `x()`
   before `x = ...`, is E0306, where TyPy 0.7 accepted the program and then
   failed while compiling it.

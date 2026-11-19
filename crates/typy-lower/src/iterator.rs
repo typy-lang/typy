@@ -89,7 +89,7 @@ impl FunctionLowerer<'_> {
         ty: TyirType,
         span: Span,
     ) -> Lowered {
-        let lowered = self.expression(iterator);
+        let lowered = self.operand_before(iterator, &default.into_iter().collect::<Vec<_>>(), span);
         let item = match (&iterator.ty, method) {
             (_, Some(next)) => self.lowered_type(&self.program.function(next).signature.returns),
             (Type::Iterator(item), None) => self.lowered_type(item),

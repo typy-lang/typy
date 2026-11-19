@@ -223,6 +223,30 @@ fn fun_05_a_bound_method_tests_each_overriding_class_after_its_bases() {
 }
 
 #[test]
+fn nfr_07_an_operand_a_later_call_may_free_holds_a_reference_and_a_quiet_one_does_not() {
+    let source = |right: &str| {
+        format!(
+            "class Box:\n    def __init__(self) -> None:\n        self.text = \"t\"\n\n\n\
+             box = Box()\n\n\ndef other() -> str:\n    return \"o\"\n\n\n\
+             def joined() -> str:\n    return box.text + {right}\n"
+        )
+    };
+    let counted = |right: &str| {
+        let module = lower(&source(right));
+        let joined = function(&module, "joined");
+        joined
+            .blocks
+            .iter()
+            .flat_map(|block| &block.instructions)
+            .filter(|instruction| matches!(instruction.operation, Operation::Increment(_)))
+            .count()
+    };
+    // `other()` may bind `box` again and free its text, which the addition still reads.
+    assert_eq!(counted("other()"), 1);
+    assert_eq!(counted("box.text"), 0);
+}
+
+#[test]
 fn error_paths_release_the_slots_and_return_the_exception() {
     let module = lower("def f(s: str, n: int) -> str:\n    t = s + \"!\"\n    return t[n]\n");
     let f = function(&module, "f");

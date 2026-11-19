@@ -20,7 +20,8 @@ impl FunctionLowerer<'_> {
         (option, option_first): (Option<&TypedExpr>, bool),
         span: Span,
     ) -> Lowered {
-        let items = self.expression(list);
+        let later: Vec<&TypedExpr> = std::iter::once(key).chain(option).collect();
+        let items = self.operand_before(list, &later, span);
         let (option_value, function) = if option_first {
             let option = option.map(|option| self.expression(option));
             (option, self.expression(key))

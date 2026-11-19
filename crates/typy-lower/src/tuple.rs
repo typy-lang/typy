@@ -48,7 +48,12 @@ impl FunctionLowerer<'_> {
         span: Span,
     ) -> Lowered {
         let (id, _) = self.item_types(ty);
-        let lowered: Vec<Lowered> = items.iter().map(|item| self.expression(item)).collect();
+        let later: Vec<&TypedExpr> = items.iter().collect();
+        let lowered: Vec<Lowered> = items
+            .iter()
+            .enumerate()
+            .map(|(position, item)| self.operand_before(item, &later[position + 1..], span))
+            .collect();
         let values: Vec<ValueId> = lowered
             .into_iter()
             .map(|item| self.take_reference(item, span))
