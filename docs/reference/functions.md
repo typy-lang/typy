@@ -239,7 +239,11 @@ print("after the loop")
 
 This prints `1`, `cleaned up`, then `after the loop`. A generator in a
 list, a dict, a tuple or an attribute closes when the container goes, in
-the order CPython closes them, and one never started runs nothing. An
+the order CPython closes them, and one never started runs nothing. A
+generator in a variable of a function that an exception leaves lives as
+long as the exception, as CPython's traceback keeps the function's
+variables: it closes when the `except` clause that handles the exception
+ends, or after the report of one nothing catches (ADR-0070). An
 exception raised while a freed generator closes cannot reach your code:
 it is written to standard error after `Exception ignored in: <generator
 object NAME at 0x...>`, and the program goes on (FUN-11, ADR-0069).

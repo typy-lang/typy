@@ -537,7 +537,8 @@ fn fun_11_a_generator_freed_while_suspended_waits_then_closes_in_the_order_freed
         // Freeing runs no code of the body: the generators wait in the queue, and the one
         // never started was freed at once.
         assert!(CLOSED.with(|closed| closed.borrow().is_empty()));
-        typy_rt_generator_close_dropped();
+        // Making a generator installed the closing the end of the program runs.
+        super::close_dropped_at_exit();
         assert_eq!(
             CLOSED.with(|closed| closed.borrow().clone()),
             [word(3), word(1), word(2)]

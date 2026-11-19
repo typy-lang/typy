@@ -449,7 +449,7 @@ impl FunctionLowerer<'_> {
                 return;
             }
         }
-        self.release_slots(span);
+        self.leave_frame(exception, span);
         self.builder.terminate(Terminator::ReturnError(exception));
         // A `try` whose body cannot raise still has the path that re-raises what no clause
         // matches, so returning an exception makes the function one that raises.

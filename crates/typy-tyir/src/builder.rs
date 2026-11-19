@@ -98,6 +98,12 @@ impl FunctionBuilder {
         self.slots[slot.0 as usize].ty
     }
 
+    /// Returns the type of a value.
+    #[must_use]
+    pub fn value_type(&self, value: ValueId) -> TyirType {
+        self.values[value.0 as usize].ty
+    }
+
     /// Returns the number of slots added so far.
     #[must_use]
     pub fn slot_count(&self) -> usize {

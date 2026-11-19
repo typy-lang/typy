@@ -93,6 +93,8 @@ pub(crate) struct FunctionLowerer<'context> {
     pub(crate) methods: &'context crate::methods::MethodTables,
     /// Whether runtime calls are followed by the test of a slot's exception.
     pub(crate) slot_tests: crate::invoke::SlotTests,
+    /// What an error path that leaves the function does with its variables (ADR-0070).
+    pub(crate) unwinding: crate::ownership::Unwinding,
     pub(crate) strings: &'context mut StringPool,
     pub(crate) tuple_types: &'context mut TupleTypes,
     /// The `ctypes` classes of the module (FFI-03).
@@ -206,6 +208,11 @@ impl<'context> FunctionLowerer<'context> {
             may_raise: calls.may_raise,
             methods: calls.methods,
             slot_tests: crate::invoke::SlotTests::of(calls.raising_slots),
+            unwinding: if calls.keeps_frames {
+                crate::ownership::Unwinding::Keeps
+            } else {
+                crate::ownership::Unwinding::Releases
+            },
             strings,
             tuple_types,
             cdata_classes,

@@ -926,3 +926,19 @@ fn a_bool_recursion_limit_is_set_as_an_int() {
         assert!(text.contains(line), "{line:?} missing from\n{text}");
     }
 }
+
+#[test]
+fn fun_11_an_exception_keeps_the_variables_of_a_function_it_leaves_when_there_are_generators() {
+    let body = "def fail(items: list[int]) -> None:\n    held = [len(items)]\n    \
+                raise ValueError(str(held))\n\n\nfail([1])\n";
+    let plain = text(body);
+    assert!(!plain.contains("rt.exception_keep"), "{plain}");
+    let with_generators = text(&format!(
+        "from collections.abc import Iterator\n\n\ndef count() -> Iterator[int]:\n    \
+         yield 1\n\n\n{body}"
+    ));
+    assert!(
+        with_generators.contains("call rt.exception_keep"),
+        "{with_generators}"
+    );
+}

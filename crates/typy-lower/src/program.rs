@@ -49,6 +49,7 @@ pub fn lower(program: &TypedProgram) -> Result<TyirModule, Diagnostics> {
             may_raise: &may_raise,
             methods: &methods,
             raising_slots,
+            keeps_frames: !generators.is_empty(),
         };
         let functions = lower_functions(
             program,

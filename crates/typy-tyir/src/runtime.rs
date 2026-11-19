@@ -205,6 +205,9 @@ pub enum RuntimeFunction {
     ExceptionMatches,
     ExceptionEnter,
     ExceptionLeave,
+    /// Keeps an object with an exception's traceback, which takes over the reference: a
+    /// variable of a function the exception leaves (FUN-11, ADR-0070).
+    ExceptionKeep,
     ExceptionSetArguments,
     IteratorNew,
     IterableIterator,
@@ -471,7 +474,7 @@ const FLOAT_FLOAT: &[TyirType] = &[TyirType::Float, TyirType::Float];
 
 impl RuntimeFunction {
     /// Every runtime function.
-    pub const ALL: [Self; 364] = [
+    pub const ALL: [Self; 365] = [
         Self::IntFloorDivide,
         Self::IntModulo,
         Self::IntPower,
@@ -662,6 +665,7 @@ impl RuntimeFunction {
         Self::ExceptionMatches,
         Self::ExceptionEnter,
         Self::ExceptionLeave,
+        Self::ExceptionKeep,
         Self::ExceptionSetArguments,
         Self::IteratorNew,
         Self::IterableIterator,
@@ -1076,7 +1080,9 @@ impl RuntimeFunction {
             Self::ExceptionPartTruth => signature(&[EXCEPTION, Int], Bool, false),
             Self::ExceptionPartEqual => signature(&[EXCEPTION, Int, Bits, Bits], Bool, false),
             Self::ExceptionArgumentsMatch => signature(&[EXCEPTION, Bits, Int], Bool, false),
-            Self::ExceptionSetCause => signature(&[EXCEPTION, Bits], Unit, false),
+            Self::ExceptionSetCause | Self::ExceptionKeep => {
+                signature(&[EXCEPTION, Bits], Unit, false)
+            }
             Self::ExceptionThrow => signature(&[EXCEPTION], Unit, true),
             Self::ExceptionHandled => signature(&[], EXCEPTION, false),
             Self::ExceptionClass => signature(&[EXCEPTION], TYPE, false),
@@ -1441,6 +1447,7 @@ impl RuntimeFunction {
             Self::ExceptionMatches => "exception_matches",
             Self::ExceptionEnter => "exception_enter",
             Self::ExceptionLeave => "exception_leave",
+            Self::ExceptionKeep => "exception_keep",
             Self::ExceptionSetArguments => "exception_set_arguments",
             Self::IteratorNew => "iterator_new",
             Self::IterableIterator => "iterable_iterator",

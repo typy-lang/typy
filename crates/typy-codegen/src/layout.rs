@@ -11,7 +11,7 @@ pub const EXCEPTION_TYPE_ID: u32 = 2;
 
 /// The bytes of an exception's fixed part, which a class's attributes follow; the runtime's
 /// `exception::PREFIX`, which its tests pin to this number.
-pub(crate) const EXCEPTION_PREFIX: u32 = 80;
+pub(crate) const EXCEPTION_PREFIX: u32 = 96;
 /// The type ID of large integers.
 pub const BIG_INT_TYPE_ID: u32 = 3;
 /// The type ID of a type object, such as a class's (ADR-0012).

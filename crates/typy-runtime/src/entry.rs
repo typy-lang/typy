@@ -31,6 +31,9 @@ mod program {
                     report_uncaught(exception);
                 }
                 crate::refcount::typy_rt_decrement(exception.cast());
+                // The variables the exception kept go with it, so generators among them
+                // close now, after the report, as CPython closes them (FUN-11, ADR-0070).
+                crate::generator::close_dropped_at_exit();
                 crate::text_file::close_all();
                 crate::io::flush_stdout();
                 status

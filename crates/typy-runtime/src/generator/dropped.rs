@@ -77,6 +77,11 @@ pub(super) unsafe fn push(generator: *mut GeneratorObject) {
     }
 }
 
+/// Returns true when the queue is empty.
+pub(super) fn is_empty() -> bool {
+    first().is_null()
+}
+
 /// Takes every generator out of the queue, leaving it empty, and returns the first, which
 /// links to the others in order through `dropped`; null when the queue is empty.
 pub(super) fn take() -> *mut GeneratorObject {

@@ -93,6 +93,7 @@ pub(crate) const PREFIX: usize = core::mem::size_of::<GeneratorObject>();
 pub unsafe extern "C" fn typy_rt_generator_new(
     descriptor: *const GeneratorDescriptor,
 ) -> *mut GeneratorObject {
+    CLOSE_DROPPED.with(|close| *close = Some(typy_rt_generator_close_dropped));
     // SAFETY: the caller's guarantee.
     let size = unsafe { (*(*descriptor).frame).size };
     let length = PREFIX + usize::try_from(size).unwrap_or(0);
@@ -495,7 +496,31 @@ pub unsafe extern "C" fn typy_rt_generator_close_dropped() {
                 (*generator).state = ABANDONED;
             }
             crate::refcount::typy_rt_decrement(generator.cast());
+            // The exception its closing raised, and the generator itself, may have held
+            // generators of their own, which close before the next one of this queue.
+            if !dropped::is_empty() {
+                typy_rt_generator_close_dropped();
+            }
         }
+    }
+}
+
+/// The closing of dropped generators, which making a generator installs, so the end of the
+/// program closes those its last releases drop without linking generators into a program
+/// that makes none (NFR-01).
+static CLOSE_DROPPED: crate::cell::ProgramCell<Option<unsafe extern "C" fn()>> =
+    crate::cell::ProgramCell::new(None);
+
+/// Closes the generators the program's last releases dropped, such as those an uncaught
+/// exception kept, when the program made any (FUN-11).
+pub(crate) fn close_dropped_at_exit() {
+    // The read is volatile, so the optimizer cannot call the one value it sees stored
+    // directly, which would link it into every program.
+    // SAFETY: the reference points to the cell's value, which is initialised.
+    let close = CLOSE_DROPPED.with(|close| unsafe { core::ptr::read_volatile(close) });
+    if let Some(close) = close {
+        // SAFETY: every generator in the queue is a suspended one nothing refers to.
+        unsafe { close() };
     }
 }
 

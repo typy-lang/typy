@@ -43,6 +43,7 @@ impl FunctionLowerer<'_> {
         let value = self.builder.add_block_parameter(normal, result);
         let error = self.builder.create_block();
         let exception = self.builder.add_block_parameter(error, TyirType::EXCEPTION);
+        let kept = self.kept_arguments(callee, &arguments);
         self.builder.terminate(Terminator::Invoke {
             callee,
             arguments,
@@ -51,10 +52,41 @@ impl FunctionLowerer<'_> {
             span,
         });
         self.builder.switch_to(error);
-        self.propagate(exception, span);
+        if kept.is_empty() {
+            self.propagate(exception, span);
+        } else {
+            // The arguments the function owns were the callee's variables, which CPython's
+            // traceback keeps, so they go with the exception on this path (ADR-0070).
+            for argument in &kept {
+                self.keep_with(exception, *argument, span);
+            }
+            let owned = self.temporaries.clone();
+            self.temporaries.retain(|each| !kept.contains(each));
+            self.propagate(exception, span);
+            self.temporaries = owned;
+        }
         self.builder.switch_to(normal);
         self.raises = true;
         value
+    }
+
+    /// Returns the arguments of a call of the program's code that the function owns and that
+    /// may reach a generator, which the call's error path keeps with the exception, in a
+    /// program with generators (ADR-0070).
+    fn kept_arguments(&self, callee: Callee, arguments: &[ValueId]) -> Vec<ValueId> {
+        if self.unwinding == crate::ownership::Unwinding::Releases
+            || matches!(callee, Callee::Runtime(_))
+        {
+            return Vec::new();
+        }
+        arguments
+            .iter()
+            .copied()
+            .filter(|argument| {
+                self.temporaries.contains(argument)
+                    && crate::ownership::kept_by_traceback(self.builder.value_type(*argument))
+            })
+            .collect()
     }
 
     /// Calls a runtime function, with `invoke` when it may raise, and returns its result as an owned value.
