@@ -384,6 +384,7 @@ impl FunctionLowerer<'_> {
                     || id == typy_tyir::TypeId::TEXT_FILE
                     || id == typy_tyir::TypeId::CDATA
                     || id == typy_tyir::TypeId::FUNCTION
+                    || id == typy_tyir::TypeId::CELL
                     || id == typy_tyir::TypeId::UNION =>
             {
                 self.constant(Constant::NoInstance(id), span)

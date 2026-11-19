@@ -53,6 +53,10 @@ impl TypeId {
     /// A function object: a function of the program as a value, with its captures (FUN-05,
     /// ADR-0060).
     pub const FUNCTION: Self = Self(24);
+    /// A cell: the value of a variable a nested function captures, which the functions that
+    /// capture it share (FUN-04, ADR-0061). Type ID 25 is a bound method's, which shares the
+    /// `FUNCTION` type of TyIR.
+    pub const CELL: Self = Self(26);
     /// The first ID of the program's classes; class `n` of the module is this plus `n`.
     const FIRST_CLASS: u32 = 1 << 16;
 
@@ -153,6 +157,8 @@ impl TyirType {
     pub const CDATA: Self = Self::Object(TypeId::CDATA);
     /// A function object (FUN-05).
     pub const FUNCTION: Self = Self::Object(TypeId::FUNCTION);
+    /// A cell (FUN-04).
+    pub const CELL: Self = Self::Object(TypeId::CELL);
 }
 
 impl fmt::Display for TyirType {
@@ -182,6 +188,7 @@ impl fmt::Display for TyirType {
             Self::Object(TypeId::SLICE) => formatter.write_str("slice"),
             Self::Object(TypeId::CDATA) => formatter.write_str("cdata"),
             Self::Object(TypeId::FUNCTION) => formatter.write_str("function"),
+            Self::Object(TypeId::CELL) => formatter.write_str("cell"),
             Self::Bits => formatter.write_str("bits"),
             Self::Object(id) if id.class_index().is_some() => {
                 write!(formatter, "class#{}", id.class_index().unwrap_or(0))

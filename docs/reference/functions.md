@@ -56,12 +56,42 @@ function directly. Its signature follows the rules of a module's
 functions, keyword-only parameters included, which a call by name passes;
 such a function has no `Callable` type, so reading it as a value is E0202.
 
-A variable that a loop binds, that is assigned again or after the `def`,
-lives in a cell that the function and its nested functions share; it is
-planned for later in 0.8 (FUN-04), with `nonlocal` (SMT-09). Binding the
-name of a nested function again, also with a second `def`, is E0202, and
-a call of it before its `def` runs is E0306, where CPython raises
-`UnboundLocalError`.
+A variable that a loop binds, or that is assigned again or after the
+`def`, lives in a cell that the function and its nested functions share,
+so a nested function reads its value when it runs, as in CPython. The
+functions made in the loop below all read the last value of `i`, and
+`read` sees `total` assigned after its `def`:
+
+<!-- typy-expect: accepted -->
+```python
+from typing import Callable
+
+
+def made_in_a_loop() -> list[int]:
+    functions: list[Callable[[], int]] = []
+    for i in range(3):
+        def get() -> int:
+            return i
+        functions.append(get)
+    return [each() for each in functions]
+
+
+def assigned_later() -> int:
+    def read() -> int:
+        return total * 2
+    total = 21
+    return read()
+
+
+print(made_in_a_loop(), assigned_later())
+```
+
+A nested function that reads a variable before the function around it
+assigns one raises `NameError`, with CPython's message. Assigning a
+captured variable inside the nested function, with `nonlocal`, is
+planned for 0.8 (SMT-09). Binding the name of a nested function again,
+also with a second `def`, is E0202, and a call of it before its `def`
+runs is E0306, where CPython raises `UnboundLocalError`.
 
 ## Functions as values
 

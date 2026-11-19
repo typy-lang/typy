@@ -50,6 +50,8 @@ pub const FUNCTION_TYPE_ID: u32 = 24;
 /// The type ID of a bound method: a function object whose one capture is the instance it
 /// was read through (FUN-05, ADR-0060).
 pub const METHOD_TYPE_ID: u32 = 25;
+/// The type ID of a cell, a variable a nested function shares (FUN-04, ADR-0061).
+pub const CELL_TYPE_ID: u32 = 26;
 
 /// The first 8 bytes of every heap object.
 #[repr(C)]

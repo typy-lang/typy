@@ -41,6 +41,34 @@ fn fun_04_the_typed_tree_shows_the_def_its_captures_and_the_direct_calls() {
 }
 
 #[test]
+fn fun_04_a_variable_that_may_change_after_the_def_is_shared_through_its_cell() {
+    let dump = crate::common::dump(
+        "def outer() -> int:\n    total = 1\n    def read() -> int:\n        def deeper() -> int:\n            \
+         return total\n        return total + deeper()\n    total = 2\n    return read() + total\n",
+    );
+    for line in [
+        "FunctionDef outer.<locals>.read as read",
+        "CellObject total : int",
+        "CellRead total : int",
+        "CapturedCell 0 : int",
+        "CapturedCellObject 0 : int",
+    ] {
+        assert!(dump.contains(line), "{line} missing from\n{dump}");
+    }
+    for source in [
+        "def f() -> list[int]:\n    out: list[int] = []\n    for i in range(3):\n        def g() -> int:\n            \
+         return i\n        out.append(g())\n    return out\n",
+        "def f() -> str:\n    try:\n        raise ValueError(\"x\")\n    except ValueError as e:\n        \
+         def g() -> str:\n            return str(e)\n        return g()\n",
+        "def f(step: int) -> int:\n    def g() -> int:\n        return step\n    step += 1\n    return g()\n",
+        "def f() -> int:\n    def a() -> int:\n        return b()\n    def b() -> int:\n        return 1\n    \
+         return a()\n",
+    ] {
+        assert_eq!(app(source), Vec::<String>::new(), "{source}");
+    }
+}
+
+#[test]
 fn fun_04_a_nested_function_without_one_binding_or_one_type_is_refused() {
     let cases = [
         (
@@ -70,12 +98,6 @@ fn fun_04_a_nested_function_without_one_binding_or_one_type_is_refused() {
             "E0201",
             "a nested function with type parameters, or inside a generic function, is planned \
              for TyPy 0.9 (FUN-10)",
-        ),
-        (
-            "def f() -> None:\n    def g() -> int:\n        return x\n    x = 3\n",
-            "E0201",
-            "`g` captures `x`, which a loop binds or which is assigned again or after the \
-             `def`, and capturing such a variable is planned for later in TyPy 0.8 (FUN-04)",
         ),
         (
             "def f() -> None:\n    count = 1\n    def g() -> None:\n        count()\n",

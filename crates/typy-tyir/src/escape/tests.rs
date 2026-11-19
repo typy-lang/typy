@@ -509,3 +509,22 @@ fn mem_03_an_instance_a_closure_captures_comes_from_the_heap() {
     };
     assert!(!point_used(captured, vec![keeps_nothing(1)]));
 }
+
+#[test]
+fn mem_03_an_instance_a_cell_holds_comes_from_the_heap() {
+    // A cell outlives its function when a nested function captures it (ADR-0061).
+    let in_cell = |builder: &mut FunctionBuilder, point: ValueId| {
+        let mut types = TupleTypes::default();
+        let layout = types.intern_id(vec![POINT, TyirType::Bool]);
+        let cell = builder.push_value(Operation::NewCell { layout }, TyirType::CELL, span());
+        builder.push(
+            Operation::CellSet {
+                cell,
+                layout,
+                value: point,
+            },
+            span(),
+        );
+    };
+    assert!(!point_used(in_cell, Vec::new()));
+}

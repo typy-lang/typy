@@ -137,7 +137,10 @@ pub(crate) fn outlives_call(expression: &TypedExpr) -> bool {
         | TypedExprKind::FunctionValue(_)
         // The running function and its captures, which never change, live while it runs.
         | TypedExprKind::RunningFunction
-        | TypedExprKind::Capture(_) => true,
+        | TypedExprKind::Capture(_)
+        // A cell lives as long as its slot or the function object that captures it.
+        | TypedExprKind::CellObject(_)
+        | TypedExprKind::CapturedCellObject(_) => true,
         TypedExprKind::Wrap(inner)
         | TypedExprKind::Unwrap(inner)
         | TypedExprKind::AsIterable(inner) => outlives_call(inner),
@@ -160,6 +163,10 @@ pub(crate) fn is_quiet(expression: &TypedExpr) -> bool {
         | TypedExprKind::FunctionValue(_)
         | TypedExprKind::RunningFunction
         | TypedExprKind::Capture(_)
+        | TypedExprKind::CellRead(_)
+        | TypedExprKind::CellObject(_)
+        | TypedExprKind::CapturedCell(_)
+        | TypedExprKind::CapturedCellObject(_)
         | TypedExprKind::NotImplemented => true,
         TypedExprKind::Attribute {
             object: operand, ..

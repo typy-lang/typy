@@ -7,6 +7,7 @@ mod borrow;
 mod builtin;
 mod call_graph;
 mod cdata;
+mod cell;
 mod class;
 mod comparison;
 mod comprehension;

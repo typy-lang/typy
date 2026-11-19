@@ -56,9 +56,22 @@ pub struct TypedProgram {
     pub library_version: Option<String>,
     /// The warnings of checking the program, such as W0301 (DIA-08).
     pub warnings: typy_diagnostics::Diagnostics,
-    /// The types of the captures of each nested function, in order, whose code takes its
-    /// function object first (FUN-04, ADR-0061).
-    pub closures: std::collections::BTreeMap<FunctionId, Vec<crate::types::Type>>,
+    /// The captures of each nested function, in order, whose code takes its function object
+    /// first (FUN-04, ADR-0061).
+    pub closures: std::collections::BTreeMap<FunctionId, Vec<CapturedVariable>>,
+    /// The variables of each function that live in a cell, which its nested functions share.
+    pub cells: std::collections::BTreeMap<FunctionId, std::collections::BTreeSet<SymbolId>>,
+}
+
+/// One capture of a nested function: a copy of a variable's value, or the cell it lives in.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct CapturedVariable {
+    /// The variable's name, which `NameError` names when its cell has no value.
+    pub name: String,
+    /// The type of the variable's value.
+    pub ty: crate::types::Type,
+    /// Whether the capture is the variable's cell.
+    pub cell: bool,
 }
 
 /// A module of the program after checking.

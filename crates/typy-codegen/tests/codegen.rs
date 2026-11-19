@@ -428,6 +428,30 @@ fn fun_04_a_closure_comes_from_the_runtime_with_its_descriptor_and_the_layout_of
 }
 
 #[test]
+fn fun_04_a_cell_comes_from_the_runtime_with_the_layout_of_its_value_and_flag() {
+    let (project, module) = compile(
+        "def outer() -> int:\n    total = 1\n    def read() -> int:\n        return total\n    \
+         total = 2\n    return read()\n\n\nprint(outer())\n",
+    );
+    let ir = llvm_ir(&module, Target::host(), Optimization::None, &project).unwrap();
+    // The layout of an `int` and its flag: the word at 0, the flag a `bool` at 8.
+    assert!(
+        ir.contains(
+            "[{ i32, i32, ptr } zeroinitializer, { i32, i32, ptr } { i32 2, i32 8, ptr null }]"
+        ),
+        "{ir}"
+    );
+    assert!(
+        ir.contains("call ptr @typy_rt_cell_new(ptr @typy.tuple"),
+        "{ir}"
+    );
+    assert!(
+        ir.contains("call ptr @typy_rt_free_variable_unbound(ptr @typy.str."),
+        "{ir}"
+    );
+}
+
+#[test]
 fn the_entry_is_the_only_external_function() {
     let (project, module) = compile(PROGRAMS[1]);
     let ir = llvm_ir(&module, Target::host(), Optimization::None, &project).unwrap();

@@ -25,13 +25,13 @@ impl FunctionLowerer<'_> {
         captures: &[TypedExpr],
         span: Span,
     ) {
-        let types = self
+        let variables = self
             .program
             .closures
             .get(&function)
             .cloned()
             .unwrap_or_default();
-        let tuple = self.tuple_type_id(&types);
+        let tuple = crate::function::captures_layout(&variables, self.tuple_types);
         let closure = self.builder.push_value(
             Operation::NewClosure {
                 function: typy_tyir::FunctionId(function.0),
@@ -54,8 +54,7 @@ impl FunctionLowerer<'_> {
                 span,
             );
         }
-        let slot = self.slots[&target];
-        self.store(slot, closure, span);
+        self.assign_name(target, closure, span);
     }
 
     /// Returns the capture at `index` of the running nested function, of type `ty`, borrowed

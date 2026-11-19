@@ -138,6 +138,21 @@ impl<'ctx> FunctionEmitter<'_, '_, 'ctx> {
             }
             Operation::IsNone(value) => Some(self.is_none(*value)?),
             Operation::NewInstance { class } => Some(self.new_instance(*class)?),
+            Operation::NewCell { layout } => Some(self.new_cell(*layout)?),
+            Operation::CellGet { cell, layout } => self.cell_get(*cell, *layout)?,
+            Operation::CellBound { cell, layout } => Some(self.cell_bound(*cell, *layout)?),
+            Operation::CellSet {
+                cell,
+                layout,
+                value,
+            } => {
+                self.cell_set(*cell, *layout, Some(*value))?;
+                None
+            }
+            Operation::CellClear { cell, layout } => {
+                self.cell_set(*cell, *layout, None)?;
+                None
+            }
             Operation::NewClosure { function, captures } => {
                 Some(self.new_closure(*function, *captures)?)
             }

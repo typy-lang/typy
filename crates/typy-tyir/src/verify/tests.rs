@@ -1119,3 +1119,74 @@ fn fun_04_a_capture_of_another_position_type_or_object_fails() {
     }
     assert!(message(&not_a_function).contains("the function object"));
 }
+
+/// A function that makes a cell of an `int`, stores its parameter in it, reads it back,
+/// tests it and clears it.
+fn cell_module() -> TyirModule {
+    let mut tuple_types = crate::TupleTypes::default();
+    let layout = tuple_types.intern_id(vec![TyirType::Int, TyirType::Bool]);
+    let mut function = FunctionBuilder::new(FunctionId(0), "cells", "cells", TyirType::Int);
+    let value = function.add_parameter(TyirType::Int);
+    let cell = function.push_value(Operation::NewCell { layout }, TyirType::CELL, span());
+    function.push(
+        Operation::CellSet {
+            cell,
+            layout,
+            value,
+        },
+        span(),
+    );
+    function.push_value(
+        Operation::CellBound { cell, layout },
+        TyirType::Bool,
+        span(),
+    );
+    let read = function.push_value(Operation::CellGet { cell, layout }, TyirType::Int, span());
+    function.push(Operation::CellClear { cell, layout }, span());
+    function.terminate(Terminator::Return(read));
+    let mut module = module(function.finish());
+    module.tuple_types = tuple_types;
+    module
+}
+
+#[test]
+fn fun_04_cell_operations_verify_and_print() {
+    let module = cell_module();
+    assert_eq!(verify(&module), Ok(()));
+    let text = print(&module);
+    for line in [
+        "= new_cell tuple#0",
+        "cell_set v1, tuple#0, v0",
+        "= cell_bound v1, tuple#0",
+        "= cell_get v1, tuple#0",
+        "cell_clear v1, tuple#0",
+    ] {
+        assert!(text.contains(line), "{line} missing from {text}");
+    }
+}
+
+#[test]
+fn fun_04_a_cell_of_another_layout_or_value_fails() {
+    let mut wrong_layout = cell_module();
+    wrong_layout.tuple_types.intern_id(vec![TyirType::Int]);
+    if let Operation::NewCell { layout } =
+        &mut wrong_layout.functions[0].blocks[0].instructions[0].operation
+    {
+        *layout = crate::types::TupleTypeId(1);
+    }
+    assert!(message(&wrong_layout).contains("is not the layout of a cell"));
+    let mut wrong_value = cell_module();
+    if let Operation::CellSet { value, .. } =
+        &mut wrong_value.functions[0].blocks[0].instructions[1].operation
+    {
+        *value = ValueId(1);
+    }
+    assert!(message(&wrong_value).contains("the cell's value"));
+    let mut not_a_cell = cell_module();
+    if let Operation::CellGet { cell, .. } =
+        &mut not_a_cell.functions[0].blocks[0].instructions[3].operation
+    {
+        *cell = ValueId(0);
+    }
+    assert!(message(&not_a_cell).contains("the cell"));
+}

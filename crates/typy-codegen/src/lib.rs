@@ -7,6 +7,7 @@ mod binding;
 mod bits;
 mod call;
 mod cdata;
+mod cell;
 mod class;
 mod comparison;
 mod constant;

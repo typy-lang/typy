@@ -119,6 +119,17 @@ pub enum TypedExprKind {
     /// The function object of the nested function that is running, which its own name reads
     /// inside it (FUN-04).
     RunningFunction,
+    /// The value of a variable of this function that lives in a cell, which a nested function
+    /// shares (FUN-04, ADR-0061).
+    CellRead(SymbolId),
+    /// The cell of a variable of this function, which a nested `def` captures.
+    CellObject(SymbolId),
+    /// The value of the captured cell at this position of the running nested function; reading
+    /// one no value was assigned to yet raises `NameError`, as CPython does.
+    CapturedCell(u32),
+    /// The captured cell at this position, which a `def` nested in the running function
+    /// captures in turn.
+    CapturedCellObject(u32),
     /// A call by name of a nested function: its code, given `closure`, its function object,
     /// first, then the arguments, as a call of a function by name binds them (FUN-04).
     CallNested {
@@ -633,6 +644,10 @@ impl TypedExpr {
             | TypedExprKind::FunctionValue(_)
             | TypedExprKind::Capture(_)
             | TypedExprKind::RunningFunction
+            | TypedExprKind::CellRead(_)
+            | TypedExprKind::CellObject(_)
+            | TypedExprKind::CapturedCell(_)
+            | TypedExprKind::CapturedCellObject(_)
             | TypedExprKind::ClassVariable(_)
             | TypedExprKind::NotImplemented
             | TypedExprKind::ForeignLibrary(_)

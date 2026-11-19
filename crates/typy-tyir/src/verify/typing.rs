@@ -408,6 +408,34 @@ impl Checker<'_> {
                 class,
                 index,
             } => Some(self.field(*object, *class, *index)?),
+            Operation::NewCell { layout } => {
+                self.cell_value(*layout)?;
+                Some(TyirType::CELL)
+            }
+            Operation::CellGet { cell, layout } => {
+                self.expect(*cell, TyirType::CELL, "the cell")?;
+                Some(self.cell_value(*layout)?)
+            }
+            Operation::CellBound { cell, layout } => {
+                self.expect(*cell, TyirType::CELL, "the cell")?;
+                self.cell_value(*layout)?;
+                Some(TyirType::Bool)
+            }
+            Operation::CellSet {
+                cell,
+                layout,
+                value,
+            } => {
+                self.expect(*cell, TyirType::CELL, "the cell")?;
+                let ty = self.cell_value(*layout)?;
+                self.expect(*value, ty, "the cell's value")?;
+                None
+            }
+            Operation::CellClear { cell, layout } => {
+                self.expect(*cell, TyirType::CELL, "the cell")?;
+                self.cell_value(*layout)?;
+                None
+            }
             Operation::NewClosure { function, captures } => {
                 if self.module.functions.get(function.0 as usize).is_none() {
                     return Err(self.error(format!("fn{} does not exist", function.0)));
@@ -561,6 +589,18 @@ impl Checker<'_> {
     }
 
     /// An item is read from a tuple that has it.
+    /// Returns the type of the value of a cell laid out as `layout`, a tuple of the value and
+    /// a `bool`.
+    fn cell_value(&self, layout: TupleTypeId) -> Result<TyirType, VerifyError> {
+        match self.module.tuple_types.items(layout) {
+            Some([value, TyirType::Bool]) => Ok(*value),
+            _ => Err(self.error(format!(
+                "tuple#{} is not the layout of a cell, a value and a bool",
+                layout.0
+            ))),
+        }
+    }
+
     /// Returns the type of capture `index` of the tuple type `captures`, or with `any`, of
     /// the first, when the tuple type exists.
     fn capture_type(

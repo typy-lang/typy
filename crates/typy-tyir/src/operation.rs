@@ -323,6 +323,43 @@ pub enum Operation {
         /// The value.
         value: ValueId,
     },
+    /// A new cell with no value, laid out as `layout`, a tuple of the value and whether it is
+    /// assigned (FUN-04, ADR-0061).
+    NewCell {
+        /// The tuple type of the value and its flag.
+        layout: TupleTypeId,
+    },
+    /// The value of a cell, borrowed from it; zero when it has none.
+    CellGet {
+        /// The cell.
+        cell: ValueId,
+        /// Its layout.
+        layout: TupleTypeId,
+    },
+    /// Whether a cell holds a value.
+    CellBound {
+        /// The cell.
+        cell: ValueId,
+        /// Its layout.
+        layout: TupleTypeId,
+    },
+    /// Stores a value in a cell, which takes over its reference; the value the cell held is
+    /// not released.
+    CellSet {
+        /// The cell.
+        cell: ValueId,
+        /// Its layout.
+        layout: TupleTypeId,
+        /// The value.
+        value: ValueId,
+    },
+    /// Leaves a cell with no value; the value it held is not released.
+    CellClear {
+        /// The cell.
+        cell: ValueId,
+        /// Its layout.
+        layout: TupleTypeId,
+    },
     /// Whether two objects, or optional objects, are the same object (EXP-08).
     Identical {
         /// One object.

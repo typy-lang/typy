@@ -102,7 +102,8 @@ pub(super) fn operands(operation: &Operation) -> Vec<ValueId> {
         | Operation::Load(_)
         | Operation::LoadGlobal(_)
         | Operation::NewInstance { .. }
-        | Operation::NewClosure { .. } => Vec::new(),
+        | Operation::NewClosure { .. }
+        | Operation::NewCell { .. } => Vec::new(),
         Operation::Store { value, .. }
         | Operation::StoreGlobal { value, .. }
         | Operation::IntUnary { operand: value, .. }
@@ -120,7 +121,11 @@ pub(super) fn operands(operation: &Operation) -> Vec<ValueId> {
         | Operation::IsNone(value)
         | Operation::FromBits { bits: value, .. }
         | Operation::Field { object: value, .. }
-        | Operation::Capture { closure: value, .. } => vec![*value],
+        | Operation::Capture { closure: value, .. }
+        | Operation::CellGet { cell: value, .. }
+        | Operation::CellBound { cell: value, .. }
+        | Operation::CellClear { cell: value, .. } => vec![*value],
+        Operation::CellSet { cell, value, .. } => vec![*cell, *value],
         Operation::SetField { object, value, .. }
         | Operation::SetCapture {
             closure: object,

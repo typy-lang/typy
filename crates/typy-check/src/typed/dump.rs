@@ -464,6 +464,14 @@ impl Dump<'_> {
             TypedExprKind::CallValue { .. } => "CallValue".to_owned(),
             TypedExprKind::Capture(index) => format!("Capture {index}"),
             TypedExprKind::RunningFunction => "RunningFunction".to_owned(),
+            TypedExprKind::CellRead(symbol) => {
+                format!("CellRead {}", self.program.symbol(*symbol).name)
+            }
+            TypedExprKind::CellObject(symbol) => {
+                format!("CellObject {}", self.program.symbol(*symbol).name)
+            }
+            TypedExprKind::CapturedCell(index) => format!("CapturedCell {index}"),
+            TypedExprKind::CapturedCellObject(index) => format!("CapturedCellObject {index}"),
             TypedExprKind::CallNested { function, .. } => {
                 format!(
                     "CallNested {}",

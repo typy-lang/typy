@@ -10,7 +10,9 @@ use typy_source::syntax::{Expr, Keyword, ParameterKind, Stmt};
 
 use super::BodyChecker;
 use crate::check::{Definition, FunctionParts, function_definition};
-use crate::typed::{FunctionId, FunctionSignature, SymbolId, TypedExpr, TypedExprKind, TypedStmt};
+use crate::typed::{
+    CapturedVariable, FunctionId, FunctionSignature, SymbolId, TypedExpr, TypedExprKind, TypedStmt,
+};
 use crate::types::Type;
 
 /// What the names of a nested function's body read of the functions around it.
@@ -30,12 +32,14 @@ impl Closure {
     }
 }
 
-/// One captured variable: its position among the captures, its type, and the nested
-/// function it holds when a `def` alone binds it, which a call by name runs directly.
+/// One captured variable: its position among the captures, its type, whether the capture
+/// is the cell it lives in, and the nested function it holds when a `def` alone binds it,
+/// which a call by name runs directly.
 #[derive(Clone, Debug)]
 struct Captured {
     position: u32,
     ty: Type,
+    cell: bool,
     function: Option<FunctionId>,
 }
 
@@ -81,9 +85,7 @@ impl BodyChecker<'_> {
             self.diagnostics.push(also_assigned(name, parts.name.span));
             return None;
         }
-        let Some(names) = self.captured_names(name, parts.span) else {
-            return self.refused_def(symbol);
-        };
+        let names = self.captured_names(parts.span);
         let mut found = self.definition_of(&parts);
         found.qualified_name = format!("{}.<locals>.{name}", self.qualified_name);
         let function = self.program.next_function();
@@ -134,38 +136,18 @@ impl BodyChecker<'_> {
         found
     }
 
-    /// Returns the variables the nested `def` at `span`, named `name`, captures, after
-    /// reporting one that lives in a cell, which is planned for later in 0.8 (FUN-04).
-    fn captured_names(&mut self, name: &str, span: Span) -> Option<BTreeSet<String>> {
-        let captured = self
-            .closure_scope
+    /// Returns the variables the nested `def` at `span` captures.
+    fn captured_names(&self, span: Span) -> BTreeSet<String> {
+        self.closure_scope
             .captures
             .get(&span)
             .cloned()
-            .unwrap_or_default();
-        if let Some(cell) = captured
-            .iter()
-            .find(|each| self.closure_scope.cells.contains(*each))
-        {
-            self.diagnostics.push(
-                Diagnostic::new(
-                    DiagnosticCode::error(201),
-                    span,
-                    format!(
-                        "`{name}` captures `{cell}`, which a loop binds or which is assigned \
-                         again or after the `def`, and capturing such a variable is planned \
-                         for later in TyPy 0.8 (FUN-04)"
-                    ),
-                )
-                .with_rule(RuleId::FUN_04),
-            );
-            return None;
-        }
-        Some(captured)
+            .unwrap_or_default()
     }
 
     /// Returns the closure of the nested function `function`, named `name`, with the reads
-    /// of the variables it captures, `captured`, in order, which the `def` copies.
+    /// of the variables it captures, `captured`, in order: the value it copies, or the cell a
+    /// variable lives in, which it shares.
     fn capture_values(
         &mut self,
         name: &str,
@@ -180,18 +162,49 @@ impl BodyChecker<'_> {
         let mut values = Vec::new();
         // The function's own name reads the running object inside it, so it is no capture.
         for (position, each) in captured.iter().filter(|each| *each != name).enumerate() {
-            let read = self.name(each, span);
+            let (read, cell) = match self.cell_of(each, span) {
+                Some(cell) => (cell, true),
+                None => (self.name(each, span), false),
+            };
             closure.captures.insert(
                 each.clone(),
                 Captured {
                     position: u32::try_from(position).unwrap_or(u32::MAX),
                     ty: read.ty.clone(),
-                    function: self.function_held(each),
+                    cell,
+                    function: if cell { None } else { self.function_held(each) },
                 },
             );
             values.push(read);
         }
         (closure, values)
+    }
+
+    /// Returns the cell the variable `name` lives in, of the type of its value, when it is
+    /// a variable of this function that lives in one, or a captured cell.
+    fn cell_of(&mut self, name: &str, span: Span) -> Option<TypedExpr> {
+        if let Some(symbol) = self.cell_symbol(name) {
+            self.used_cells.insert(symbol);
+            let ty = self.types.get(&symbol).cloned().unwrap_or(Type::Error);
+            return Some(Self::typed(TypedExprKind::CellObject(symbol), ty, span));
+        }
+        let captured = self.closure.as_ref()?.captures.get(name)?;
+        captured.cell.then(|| {
+            Self::typed(
+                TypedExprKind::CapturedCellObject(captured.position),
+                captured.ty.clone(),
+                span,
+            )
+        })
+    }
+
+    /// Returns the variable of this function named `name` when it lives in a cell, which its
+    /// nested functions share (ADR-0061).
+    pub(super) fn cell_symbol(&self, name: &str) -> Option<SymbolId> {
+        if !self.closure_scope.cells.contains(name) || self.global_names.contains(name) {
+            return None;
+        }
+        self.locals.get(name).copied()
     }
 
     /// Returns the nested function the variable `name` holds when a `def` alone binds it.
@@ -220,11 +233,12 @@ impl BodyChecker<'_> {
             return Some(Self::typed(TypedExprKind::RunningFunction, ty, span));
         }
         let captured = closure.captures.get(name)?;
-        Some(Self::typed(
-            TypedExprKind::Capture(captured.position),
-            captured.ty.clone(),
-            span,
-        ))
+        let kind = if captured.cell {
+            TypedExprKind::CapturedCell(captured.position)
+        } else {
+            TypedExprKind::Capture(captured.position)
+        };
+        Some(Self::typed(kind, captured.ty.clone(), span))
     }
 
     /// Returns the call of `name` when it names a nested function in reach: one a `def` of
@@ -312,6 +326,23 @@ impl BodyChecker<'_> {
         true
     }
 
+    /// Gives each cell the nested functions of this body capture the type of its variable,
+    /// which an assignment after a `def` may give it, once the whole body is checked.
+    pub(super) fn settle_cell_types(&mut self) {
+        let mut pending = std::mem::take(&mut self.pending);
+        for nested in &mut pending {
+            for (name, captured) in &mut nested.closure.captures {
+                if captured.cell
+                    && let Some(symbol) = self.cell_symbol(name)
+                    && let Some(ty) = self.types.get(&symbol)
+                {
+                    captured.ty = ty.clone();
+                }
+            }
+        }
+        self.pending = pending;
+    }
+
     /// Checks the body of each nested function this body defined, in order, with what it
     /// captures, and stores the types of its captures.
     pub(super) fn check_nested(
@@ -323,16 +354,23 @@ impl BodyChecker<'_> {
             let Stmt::FunctionDef { body, .. } = &nested.statement else {
                 continue;
             };
-            let mut types: Vec<(u32, Type)> = nested
+            let mut captures: Vec<(u32, CapturedVariable)> = nested
                 .closure
                 .captures
-                .values()
-                .map(|captured| (captured.position, captured.ty.clone()))
+                .iter()
+                .map(|(name, captured)| {
+                    let variable = CapturedVariable {
+                        name: name.clone(),
+                        ty: captured.ty.clone(),
+                        cell: captured.cell,
+                    };
+                    (captured.position, variable)
+                })
                 .collect();
-            types.sort_by_key(|(position, _)| *position);
+            captures.sort_by_key(|(position, _)| *position);
             program.closures.insert(
                 nested.function,
-                types.into_iter().map(|(_, ty)| ty).collect(),
+                captures.into_iter().map(|(_, captured)| captured).collect(),
             );
             let definition = Definition {
                 name: nested.definition.name,

@@ -194,6 +194,35 @@ fn fun_04_a_def_makes_a_closure_of_its_captures_which_its_code_reads_from_its_ob
 }
 
 #[test]
+fn fun_04_a_variable_assigned_after_the_def_lives_in_a_cell_the_closure_reads() {
+    let module = lower(
+        "def outer() -> int:\n    total = 1\n    def read() -> int:\n        return total\n    \
+         total = 2\n    return read()\n",
+    );
+    let text = print(&module);
+    let outer = &text[text.find("# outer").unwrap()..];
+    let outer = &outer[..outer.find("\n}").unwrap()];
+    for line in [
+        "slot s0 total: cell",
+        "new_cell tuple#",
+        "cell_set v",
+        "cell_get v",
+    ] {
+        assert!(outer.contains(line), "{line} missing from {outer}");
+    }
+    let read = &text[text.find("# read").unwrap()..];
+    let read = &read[..read.find("\n}").unwrap()];
+    for line in [
+        "capture v0, tuple#",
+        "cell_bound v",
+        "rt.free_variable_unbound(",
+        "cell_get v",
+    ] {
+        assert!(read.contains(line), "{line} missing from {read}");
+    }
+}
+
+#[test]
 fn fun_05_a_bound_method_tests_each_overriding_class_after_its_bases() {
     let module = lower(
         "class A:\n    def m(self) -> int:\n        return 1\n\n\nclass B(A):\n    \

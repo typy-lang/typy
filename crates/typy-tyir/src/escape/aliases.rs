@@ -110,7 +110,8 @@ impl Aliases {
             // made it (MEM-03, ADR-0061).
             Operation::StoreGlobal { value, .. }
             | Operation::SetField { value, .. }
-            | Operation::SetCapture { value, .. } => {
+            | Operation::SetCapture { value, .. }
+            | Operation::CellSet { value, .. } => {
                 escaping.push(*value);
             }
             // C may keep what it is given; no instance converts to a C type, so this is a
@@ -156,6 +157,10 @@ impl Aliases {
             | Operation::Field { .. }
             | Operation::NewClosure { .. }
             | Operation::Capture { .. }
+            | Operation::NewCell { .. }
+            | Operation::CellGet { .. }
+            | Operation::CellBound { .. }
+            | Operation::CellClear { .. }
             | Operation::Identical { .. }
             | Operation::Increment(_)
             | Operation::Decrement(_) => {}

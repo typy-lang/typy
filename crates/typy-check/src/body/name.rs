@@ -79,12 +79,7 @@ impl BodyChecker<'_> {
                 return refused;
             }
             let ty = self.types.get(&symbol).cloned().unwrap_or(Type::Error);
-            let kind = if self.program.symbols[symbol.0 as usize].kind == SymbolKind::ModuleVariable
-            {
-                TypedExprKind::ModuleVariable(symbol)
-            } else {
-                TypedExprKind::Local(symbol)
-            };
+            let kind = self.read_kind(id, symbol);
             let read = Self::typed(kind, ty.clone(), span);
             let not_none = self
                 .assigned
@@ -130,6 +125,19 @@ impl BodyChecker<'_> {
             return refused;
         }
         self.unknown_name(id, span)
+    }
+
+    /// Returns how the variable `symbol`, named `id`, is read: as a module variable, through
+    /// the cell a nested function shares it in (FUN-04), or from its slot.
+    fn read_kind(&mut self, id: &str, symbol: SymbolId) -> TypedExprKind {
+        if self.program.symbols[symbol.0 as usize].kind == SymbolKind::ModuleVariable {
+            return TypedExprKind::ModuleVariable(symbol);
+        }
+        if self.cell_symbol(id) == Some(symbol) {
+            self.used_cells.insert(symbol);
+            return TypedExprKind::CellRead(symbol);
+        }
+        TypedExprKind::Local(symbol)
     }
 
     /// Returns a scalar class of `ctypes` read as a value (FFI-03), the function object of a

@@ -185,6 +185,9 @@ pub enum RuntimeFunction {
     /// A new bound method of the descriptor and the instance, which it holds a reference to
     /// (FUN-05).
     MethodNew,
+    /// Raises `NameError` for a captured variable, named by the `str`, that has no value yet
+    /// (FUN-04).
+    FreeVariableUnbound,
     ExceptionNew,
     ExceptionPartText,
     ExceptionArgsLength,
@@ -461,7 +464,7 @@ const FLOAT_FLOAT: &[TyirType] = &[TyirType::Float, TyirType::Float];
 
 impl RuntimeFunction {
     /// Every runtime function.
-    pub const ALL: [Self; 360] = [
+    pub const ALL: [Self; 361] = [
         Self::IntFloorDivide,
         Self::IntModulo,
         Self::IntPower,
@@ -634,6 +637,7 @@ impl RuntimeFunction {
         Self::TypeAliasName,
         Self::TypeAliasModule,
         Self::MethodNew,
+        Self::FreeVariableUnbound,
         Self::ExceptionNew,
         Self::ExceptionPartText,
         Self::ExceptionArgsLength,
@@ -934,7 +938,9 @@ impl RuntimeFunction {
             Self::ObjectsEqual => signature(&[Bits, Bits], Bool, false),
             Self::CtypesFloatArgument => signature(&[Int, Int], Float, true),
             Self::RangeCheckStep | Self::SysSetRecursionLimit => signature(&[Int], Unit, true),
-            Self::NameError | Self::WriteStdoutChecked => signature(&[STR], Unit, true),
+            Self::NameError | Self::WriteStdoutChecked | Self::FreeVariableUnbound => {
+                signature(&[STR], Unit, true)
+            }
             Self::ModuleAttributeError | Self::ModuleImportError => {
                 signature(&[TyirType::MODULE, STR, Int], Unit, true)
             }
@@ -1404,6 +1410,7 @@ impl RuntimeFunction {
             Self::TypeAliasName => "type_alias_name",
             Self::TypeAliasModule => "type_alias_module",
             Self::MethodNew => "method_new",
+            Self::FreeVariableUnbound => "free_variable_unbound",
             Self::ExceptionNew => "exception_new",
             Self::ExceptionPartText => "exception_part_text",
             Self::ExceptionArgsLength => "exception_args_length",

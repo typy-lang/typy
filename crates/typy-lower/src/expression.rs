@@ -255,6 +255,13 @@ impl FunctionLowerer<'_> {
             TypedExprKind::FunctionValue(function) => self.function_value(*function, span),
             TypedExprKind::Capture(index) => self.capture(*index, ty, span),
             TypedExprKind::RunningFunction => self.running_function(),
+            TypedExprKind::CellRead(symbol) => self.read_name(*symbol, span),
+            TypedExprKind::CellObject(symbol) => self.cell_of(*symbol, span).0,
+            TypedExprKind::CapturedCell(index) => {
+                let name = self.captured_name(*index);
+                self.captured_cell(*index, &name, ty, span)
+            }
+            TypedExprKind::CapturedCellObject(index) => self.capture(*index, TyirType::CELL, span),
             TypedExprKind::CallNested {
                 function,
                 closure,

@@ -343,6 +343,16 @@ impl FunctionLowerer<'_> {
             .call_runtime(RuntimeFunction::ExceptionEnter, vec![exception], span)
             .value;
         let handled = match clause.name {
+            // A clause's variable a nested function captures lives in a cell (FUN-04).
+            Some(symbol) if self.cells.contains_key(&symbol) => {
+                let owned = Lowered {
+                    value: exception,
+                    ty: TyirType::EXCEPTION,
+                    owned: true,
+                };
+                self.assign_cell(symbol, owned, span);
+                Handled::Cell(symbol)
+            }
             Some(symbol) => {
                 let slot = self.slots[&symbol];
                 let owned = Lowered {
@@ -477,6 +487,7 @@ impl FunctionLowerer<'_> {
             Handled::Value(value) => {
                 self.builder.push(Operation::Decrement(value), span);
             }
+            Handled::Cell(symbol) => self.clear_cell(symbol, span),
             Handled::Slot(slot) => {
                 let held =
                     self.builder

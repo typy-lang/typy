@@ -538,6 +538,10 @@ fn expression(expression_value: &TypedExpr, callees: &mut BTreeSet<FunctionId>) 
         | TypedExprKind::FunctionValue(_)
         | TypedExprKind::Capture(_)
         | TypedExprKind::RunningFunction
+        | TypedExprKind::CellRead(_)
+        | TypedExprKind::CellObject(_)
+        | TypedExprKind::CapturedCell(_)
+        | TypedExprKind::CapturedCellObject(_)
         | TypedExprKind::ForeignLibrary(_)
         | TypedExprKind::SysValue(_) => {}
         TypedExprKind::AsIterable(inner) | TypedExprKind::Named { value: inner, .. } => {

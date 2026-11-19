@@ -84,7 +84,10 @@ impl FunctionLowerer<'_> {
                 // A returned variable hands its slot's reference to the caller (MEM-04), unless
                 // an `except` clause is open, whose cleanup may release the variable's value.
                 let moved = match value.as_ref().map(|value| &value.kind) {
-                    Some(typy_check::TypedExprKind::Local(symbol)) if self.cleanups.is_empty() => {
+                    // A variable in a cell is read through it, never moved (FUN-04).
+                    Some(typy_check::TypedExprKind::Local(symbol))
+                        if self.cleanups.is_empty() && !self.cells.contains_key(symbol) =>
+                    {
                         let slot = self.slots[symbol];
                         (!self.borrowed.contains(&slot)).then_some(slot)
                     }

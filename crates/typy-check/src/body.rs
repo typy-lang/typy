@@ -164,6 +164,9 @@ pub(crate) struct BodyChecker<'program> {
     nested_functions: BTreeMap<SymbolId, FunctionId>,
     /// Whether a name is read to call the nested function it holds, which a value it is not.
     reading_function: bool,
+    /// The variables read or captured through their cells, among them an `except` clause's,
+    /// whose name leaves the body's names when the clause ends.
+    used_cells: BTreeSet<SymbolId>,
 }
 
 impl<'program> BodyChecker<'program> {
@@ -202,6 +205,7 @@ impl<'program> BodyChecker<'program> {
             pending: Vec::new(),
             nested_functions: BTreeMap::new(),
             reading_function: false,
+            used_cells: BTreeSet::new(),
         }
     }
 
@@ -304,7 +308,9 @@ impl<'program> BodyChecker<'program> {
             );
         }
         let named_targets = std::mem::take(&mut checker.named_targets);
+        checker.settle_cell_types();
         let pending = std::mem::take(&mut checker.pending);
+        let cells = checker.cell_variables();
         let locals = checker.finish_locals();
         // A generic function is checked, never run: its copies run in its place, so it keeps
         // no body (ADR-0023). A protocol's method only says what a class that satisfies the
@@ -324,7 +330,23 @@ impl<'program> BodyChecker<'program> {
             generic,
             named_targets,
         });
+        if !cells.is_empty() {
+            program.cells.insert(function, cells);
+        }
         Self::check_nested(program, pending, diagnostics);
+    }
+
+    /// Returns the variables of the body that live in a cell: those its nested functions
+    /// capture so, and those it read or captured through one, such as an `except` clause's.
+    fn cell_variables(&mut self) -> BTreeSet<SymbolId> {
+        let mut cells: BTreeSet<SymbolId> = self
+            .closure_scope
+            .cells
+            .iter()
+            .filter_map(|name| self.cell_symbol(name))
+            .collect();
+        cells.extend(std::mem::take(&mut self.used_cells));
+        cells
     }
 
     /// Notes the function's `__qualname__`, what its nested functions capture, and, for a
