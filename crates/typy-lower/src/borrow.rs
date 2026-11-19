@@ -172,6 +172,9 @@ pub(crate) fn is_quiet(expression: &TypedExpr) -> bool {
             object: operand, ..
         }
         | TypedExprKind::TupleItem { tuple: operand, .. }
+        | TypedExprKind::CaptureOf {
+            closure: operand, ..
+        }
         | TypedExprKind::Wrap(operand)
         | TypedExprKind::Unwrap(operand)
         | TypedExprKind::Upcast(operand)

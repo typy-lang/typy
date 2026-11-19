@@ -308,7 +308,7 @@ impl<'program> BodyChecker<'program> {
             );
         }
         let named_targets = std::mem::take(&mut checker.named_targets);
-        checker.settle_cell_types();
+        checker.settle_closures();
         let pending = std::mem::take(&mut checker.pending);
         let cells = checker.cell_variables();
         let locals = checker.finish_locals();

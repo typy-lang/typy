@@ -3,10 +3,10 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy detailed design |
-| Version | 2.43 |
+| Version | 2.44 |
 | Status | Approved |
 | Owner | typy-lang contributors |
-| Last updated | 2026-11-18 |
+| Last updated | 2026-11-19 |
 
 ## 1. Purpose and scope
 
@@ -727,7 +727,22 @@ names a nested function reads, directly or through the functions nested in
 it, that the function binds or captures itself, less the nested function's
 own name, which reads the running object. A captured variable is copied
 when one binding gives its value, outside every loop and before each `def`
-that captures it; any other lives in a cell. `body/nested_function.rs`
+that captures it; any other lives in a cell.
+
+Nested functions of one statement list that reach one another through the
+names they read, each bound only by its `def`, form a group, which
+`ClosureScope::groups` names for each of its `def`s, when three things
+hold: each names the others only to call them by name, never as a value
+or from a function nested in it; only `def`s run from the group's first
+`def` to its last; and no other nested function defined before the last
+reads one of them. Then no function of the group runs before each of its
+`def`s has run, since nothing between them can raise, leave the block or
+reach one of them. Each function of the group captures what any of them
+captures, less the group's names, in one order, so a call by name among
+them passes the running function object and no function object holds
+another (ADR-0061). Without a group, two functions that call each other
+hold each other, one through a cell, which is a cycle that only cycle
+collection frees (MEM-06). `body/nested_function.rs`
 checks a `def` in a function: its signature in the annotations around it,
 its `__qualname__` `outer.<locals>.name`, a new function and signature,
 and the variable of its name, of the `Callable` type of its signature,
@@ -739,7 +754,14 @@ it, with its `Closure`: inside it a captured name reads
 `TypedExprKind::Capture(position)`, its own name
 `TypedExprKind::RunningFunction`, and a call by name of a nested function
 in reach is `TypedExprKind::CallNested { function, closure, arguments }`,
-bound as a call of a function by name is. `TypedProgram::closures` holds
+bound as a call of a function by name is. A call by name of another
+function of the group is `CallNested` with `RunningFunction` as its
+closure. The later `def`s of a group copy their captures from the first
+one's function object, `TypedExprKind::CaptureOf { function, closure,
+index }`, so each holds the same values with the types they had where the
+first `def` ran, also a type narrowed before it. A call of a function of
+the group whose `def` was refused reports nothing more (DIA-04).
+`TypedProgram::closures` holds
 each nested function's captures, `CapturedVariable { name, ty, cell }`.
 A variable that lives in a cell is read as `TypedExprKind::CellRead(symbol)`
 and captured as `CellObject(symbol)`; inside a nested function a captured
@@ -2483,7 +2505,7 @@ graph, symbol names and the string pool.
 | Builtins | Each builtin of 0.1 becomes runtime calls. `print` evaluates every argument in source order, then converts and writes each value. `min` and `max` keep the first value on a tie, as CPython does |
 | Stack | A function in a cycle of calls invokes the runtime's stack check on entry (FUN-02). Each function that calls through a function value counts as one, since every cycle through a value passes through such a call |
 | Cells | A variable that lives in a cell has a slot of `CELL`; the prologue makes each cell, and stores a parameter's value in its cell with a reference of its own. A read gets the value from the cell, and an assignment stores the new value with `CellSet` and releases the old one, zero when there was none; such a variable is never moved. An `except` clause's variable in a cell is cleared when the clause ends. A captured cell read in a nested function tests `CellBound` and calls `free_variable_unbound`, which raises `NameError`, when it holds no value |
-| Nested functions | A `def` emits `NewClosure` and a `SetCapture` with a reference of its own for each capture, in order, then stores the object in its variable. `Capture` and `RunningFunction` read the running function's object, its first parameter, borrowed, since its caller holds it for the call. `CallNested` calls the code directly with the object first |
+| Nested functions | A `def` emits `NewClosure` and a `SetCapture` with a reference of its own for each capture, in order, then stores the object in its variable. `Capture` and `RunningFunction` read the running function's object, its first parameter, borrowed, since its caller holds it for the call. `CallNested` calls the code directly with the object first. `CaptureOf` reads a capture of another function object with `Capture` and takes a reference of its own before the object is released |
 | Keys | `Keyed` evaluates the list, then the key and the option in the call's order, and holds a reference to the key's function value for the call. `sorted` and `list.sort` copy the list, call the key through its value for each item as a `for` loop reads the copy, appending each key to a list of keys, then call `list_sort_keyed`; `list.sort` then clears its list and extends it with the copy. `min` and `max` call the key for each item of the list and pass it with the item to `list_keep_extreme`, which keeps the best key and its item in two lists of at most one item, and `list_extreme` of the list of the item gives the result or the default. A function with a `Keyed` call checks the stack on entry, as one that calls through a value does |
 | Bound methods | `BoundMethod` evaluates the object, starts from the descriptor of the first method and, for each later entry, tests `is_instance` of its class and selects its descriptor when the test holds, then calls `method_new` with the descriptor and the object |
 | Function values | A function read as a value is its `Constant::Function`, borrowed, since it is immortal. A call through a value evaluates the callee, then the arguments, keeps each for the call as a call by name does, so the call cannot free the object it runs by assigning where it was read, and invokes `Callee::Value`. A function value's slot starts as null, `type()` and `str` of one read its header, `==` calls `objects_equal`, and it is true |

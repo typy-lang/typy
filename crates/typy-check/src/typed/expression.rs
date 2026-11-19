@@ -130,6 +130,14 @@ pub enum TypedExprKind {
     /// The captured cell at this position, which a `def` nested in the running function
     /// captures in turn.
     CapturedCellObject(u32),
+    /// The capture at `index` of `closure`, the function object of the nested function
+    /// `function`: what a later function of a group copies from the first, so every function
+    /// of the group holds the same captures (FUN-04, ADR-0061).
+    CaptureOf {
+        function: FunctionId,
+        closure: Box<TypedExpr>,
+        index: u32,
+    },
     /// A call by name of a nested function: its code, given `closure`, its function object,
     /// first, then the arguments, as a call of a function by name binds them (FUN-04).
     CallNested {
@@ -678,6 +686,7 @@ impl TypedExpr {
             TypedExprKind::CallValue { callee, arguments } => {
                 std::iter::once(callee.as_ref()).chain(arguments).collect()
             }
+            TypedExprKind::CaptureOf { closure, .. } => vec![closure],
             TypedExprKind::CallNested {
                 closure, arguments, ..
             } => std::iter::once(closure.as_ref())

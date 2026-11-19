@@ -262,6 +262,11 @@ impl FunctionLowerer<'_> {
                 self.captured_cell(*index, &name, ty, span)
             }
             TypedExprKind::CapturedCellObject(index) => self.capture(*index, TyirType::CELL, span),
+            TypedExprKind::CaptureOf {
+                function,
+                closure,
+                index,
+            } => self.capture_of(*function, closure, *index, span),
             TypedExprKind::CallNested {
                 function,
                 closure,

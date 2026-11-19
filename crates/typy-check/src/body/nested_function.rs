@@ -11,7 +11,8 @@ use typy_source::syntax::{Expr, Keyword, ParameterKind, Stmt};
 use super::BodyChecker;
 use crate::check::{Definition, FunctionParts, function_definition};
 use crate::typed::{
-    CapturedVariable, FunctionId, FunctionSignature, SymbolId, TypedExpr, TypedExprKind, TypedStmt,
+    CapturedVariable, FunctionId, FunctionSignature, SymbolId, TypedConstant, TypedExpr,
+    TypedExprKind, TypedStmt,
 };
 use crate::types::Type;
 
@@ -23,6 +24,12 @@ pub(super) struct Closure {
     own: Option<(String, FunctionId)>,
     /// Each captured variable, by name.
     captures: BTreeMap<String, Captured>,
+    /// The names of the functions of the function's group, empty for one in none: nested
+    /// functions that call one another by name, each holding what any of them captures.
+    group: BTreeSet<String>,
+    /// The other functions of the group, by name, once the body that defines them is
+    /// checked: a call by name runs one with the running function object (ADR-0061).
+    siblings: BTreeMap<String, FunctionId>,
 }
 
 impl Closure {
@@ -86,6 +93,12 @@ impl BodyChecker<'_> {
             return None;
         }
         let names = self.captured_names(parts.span);
+        let group = self
+            .closure_scope
+            .groups
+            .get(&parts.span)
+            .cloned()
+            .unwrap_or_default();
         let mut found = self.definition_of(&parts);
         found.qualified_name = format!("{}.<locals>.{name}", self.qualified_name);
         let function = self.program.next_function();
@@ -93,7 +106,12 @@ impl BodyChecker<'_> {
         self.program.functions.push(None);
         self.nested_functions.insert(symbol, function);
         self.types.insert(symbol, callable_of(&found.signature));
-        let (closure, captures) = self.capture_values(name, function, &names, parts.span);
+        let (mut closure, captures) = match self.group_captures(name, function, &group, parts.span)
+        {
+            Some(found) => found,
+            None => self.capture_values(name, function, &names, parts.span),
+        };
+        closure.group = group;
         if let Some(facts) = &mut self.assigned {
             facts.insert(super::flow::Fact::Assigned(symbol));
         }
@@ -157,7 +175,7 @@ impl BodyChecker<'_> {
     ) -> (Closure, Vec<TypedExpr>) {
         let mut closure = Closure {
             own: Some((name.to_owned(), function)),
-            captures: BTreeMap::new(),
+            ..Closure::default()
         };
         let mut values = Vec::new();
         // The function's own name reads the running object inside it, so it is no capture.
@@ -178,6 +196,46 @@ impl BodyChecker<'_> {
             values.push(read);
         }
         (closure, values)
+    }
+
+    /// Returns, for a function of `group` after its first, a closure like the first's and
+    /// the reads of its captures from the first's function object, which hold the same
+    /// values with the types they had where the first `def` ran; `None` for any other.
+    fn group_captures(
+        &mut self,
+        name: &str,
+        function: FunctionId,
+        group: &BTreeSet<String>,
+        span: Span,
+    ) -> Option<(Closure, Vec<TypedExpr>)> {
+        if group.is_empty() {
+            return None;
+        }
+        let first = &self
+            .pending
+            .iter()
+            .find(|pending| pending.closure.group == *group)?
+            .closure;
+        let mut closure = first.clone();
+        let (first_name, first_function) = closure.own.replace((name.to_owned(), function))?;
+        let object = self.local_function(&first_name, span);
+        let mut captures: Vec<&Captured> = closure.captures.values().collect();
+        captures.sort_by_key(|captured| captured.position);
+        let values = captures
+            .into_iter()
+            .map(|captured| {
+                Self::typed(
+                    TypedExprKind::CaptureOf {
+                        function: first_function,
+                        closure: Box::new(object.clone()),
+                        index: captured.position,
+                    },
+                    captured.ty.clone(),
+                    span,
+                )
+            })
+            .collect();
+        Some((closure, values))
     }
 
     /// Returns the cell the variable `name` lives in, of the type of its value, when it is
@@ -212,11 +270,23 @@ impl BodyChecker<'_> {
         if let Some(symbol) = self.locals.get(name) {
             return self.nested_functions.get(symbol).copied();
         }
+        if self.global_names.contains(name) {
+            return None;
+        }
         let closure = self.closure.as_ref()?;
         match &closure.own {
             Some((own, function)) if own == name => Some(*function),
-            _ => closure.captures.get(name)?.function,
+            _ => match closure.siblings.get(name) {
+                Some(sibling) => Some(*sibling),
+                None => closure.captures.get(name)?.function,
+            },
         }
+    }
+
+    /// Returns the running function object, of the running function's `Callable` type.
+    fn running_object(&self, function: FunctionId, span: Span) -> TypedExpr {
+        let ty = callable_of(&self.program.signatures[function.0 as usize]);
+        Self::typed(TypedExprKind::RunningFunction, ty, span)
     }
 
     /// Returns the read of `name` in a nested function's body when it names the function
@@ -229,8 +299,7 @@ impl BodyChecker<'_> {
         if let Some((own, function)) = &closure.own
             && own == name
         {
-            let ty = callable_of(&self.program.signatures[function.0 as usize]);
-            return Some(Self::typed(TypedExprKind::RunningFunction, ty, span));
+            return Some(self.running_object(*function, span));
         }
         let captured = closure.captures.get(name)?;
         let kind = if captured.cell {
@@ -252,9 +321,30 @@ impl BodyChecker<'_> {
         keywords: &[Keyword],
         span: Span,
     ) -> Option<TypedExpr> {
+        if self.refused_sibling(name) {
+            for argument in arguments
+                .iter()
+                .chain(keywords.iter().map(|keyword| &keyword.value))
+            {
+                self.expression(argument);
+            }
+            return Some(Self::typed(
+                TypedExprKind::Constant(TypedConstant::None),
+                Type::Error,
+                span,
+            ));
+        }
         let function = self.function_held(name)?;
+        let sibling = self.closure.as_ref().and_then(|closure| {
+            let (_, own) = closure.own.as_ref()?;
+            closure.siblings.contains_key(name).then_some(*own)
+        });
         let closure = if self.locals.contains_key(name) {
             self.local_function(name, name_span)
+        } else if let Some(own) = sibling {
+            // Each function of a group holds the captures of the whole group, in one order,
+            // so the running object serves the other's code.
+            self.running_object(own, name_span)
         } else {
             self.closure_read(name, name_span)?
         };
@@ -272,6 +362,19 @@ impl BodyChecker<'_> {
                 Err(error) => error,
             },
         )
+    }
+
+    /// Returns true when `name` names a function of the running function's group whose
+    /// `def` was refused, so a call of it reports nothing more: one cause gives one error
+    /// (DIA-04).
+    fn refused_sibling(&self, name: &str) -> bool {
+        !self.locals.contains_key(name)
+            && !self.global_names.contains(name)
+            && self.closure.as_ref().is_some_and(|closure| {
+                closure.group.contains(name)
+                    && !closure.siblings.contains_key(name)
+                    && closure.own.as_ref().is_none_or(|(own, _)| own != name)
+            })
     }
 
     /// Returns the read of the variable `symbol`, named `name`, that holds a nested function,
@@ -327,10 +430,22 @@ impl BodyChecker<'_> {
     }
 
     /// Gives each cell the nested functions of this body capture the type of its variable,
-    /// which an assignment after a `def` may give it, once the whole body is checked.
-    pub(super) fn settle_cell_types(&mut self) {
+    /// which an assignment after a `def` may give it, and each function of a group the
+    /// functions of the others, once the whole body is checked.
+    pub(super) fn settle_closures(&mut self) {
         let mut pending = std::mem::take(&mut self.pending);
         for nested in &mut pending {
+            let own = nested.closure.own.as_ref().map(|(own, _)| own.clone());
+            nested.closure.siblings = nested
+                .closure
+                .group
+                .iter()
+                .filter(|name| Some(*name) != own.as_ref())
+                .filter_map(|name| {
+                    let symbol = self.locals.get(name)?;
+                    Some((name.clone(), *self.nested_functions.get(symbol)?))
+                })
+                .collect();
             for (name, captured) in &mut nested.closure.captures {
                 if captured.cell
                     && let Some(symbol) = self.cell_symbol(name)

@@ -115,3 +115,38 @@ fn fun_04_a_nested_function_without_one_binding_or_one_type_is_refused() {
         );
     }
 }
+
+#[test]
+fn fun_04_functions_that_call_one_another_by_name_share_the_first_ones_captures() {
+    let dump = crate::common::dump(
+        "def outer(limit: int | None) -> bool:\n    assert limit is not None\n    \
+         def even(k: int) -> bool:\n        return k == 0 or odd(k - 1)\n    \
+         def odd(k: int) -> bool:\n        return k < limit and even(k - 1)\n    \
+         return even(4)\n",
+    );
+    for line in [
+        "FunctionDef outer.<locals>.even as even",
+        "FunctionDef outer.<locals>.odd as odd",
+        // The later function copies the first one's capture, of its narrowed type.
+        "CaptureOf outer.<locals>.even 0 : int",
+        "CallNested outer.<locals>.odd : bool",
+        "CallNested outer.<locals>.even : bool",
+        "RunningFunction : Callable[[int], bool]",
+    ] {
+        assert!(dump.contains(line), "{line} missing from\n{dump}");
+    }
+    assert!(
+        !dump.contains("CellObject"),
+        "no function lives in a cell\n{dump}"
+    );
+}
+
+#[test]
+fn fun_04_a_refused_function_of_a_group_gives_one_error() {
+    let found = messages(
+        "def f(n: int) -> int:\n    def a(k: int) -> int:\n        return 0 if k == 0 else b(k - 1)\n    \
+         def b[T](k: T) -> T:\n        return a(k)\n    return a(n)\n",
+    );
+    let codes: Vec<&str> = found.iter().map(|(code, _, _)| code.as_str()).collect();
+    assert_eq!(codes, ["E0201"], "{found:?}");
+}

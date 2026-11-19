@@ -3,6 +3,8 @@
 //! cell variables. A variable is copied when the nested function is made when one binding
 //! gives its value, outside every loop and before each nested function that captures it;
 //! any other captured variable lives in a cell, which every function that captures it shares.
+//! Nested functions that call one another by name form a group, each of which holds what any
+//! of them captures, so none holds another and they form no reference cycle.
 
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -18,17 +20,17 @@ pub(crate) struct ClosureScope {
     pub(crate) captures: BTreeMap<Span, BTreeSet<String>>,
     /// The function's own variables that live in a cell.
     pub(crate) cells: BTreeSet<String>,
+    /// For each nested `def` of a group, by the span of its statement, the names of the
+    /// group's functions, which a call by name inside it runs with the running function
+    /// object, since each holds the captures of the whole group.
+    pub(crate) groups: BTreeMap<Span, BTreeSet<String>>,
 }
 
 impl ClosureScope {
     /// Returns the scope of the function of `parameters` and `body`, nested in functions whose
     /// variables `enclosing` names.
     pub(crate) fn of(parameters: &[&str], body: &[Stmt], enclosing: &BTreeSet<String>) -> Self {
-        let mut names = Names::default();
-        for parameter in parameters {
-            names.bind(parameter, 0, false);
-        }
-        names.statements(body, false);
+        let names = Names::of(parameters, body);
         let own = names.bound_names();
         let available: BTreeSet<String> = own
             .iter()
@@ -36,34 +38,55 @@ impl ClosureScope {
             .chain(names.free().intersection(enclosing).cloned())
             .collect();
         let mut scope = Self::default();
-        for (span, name, free) in &names.nested {
-            // A nested function's own name reads the running function object, since only its
-            // `def` binds it, so it is no capture.
-            let captured: BTreeSet<String> = free
-                .intersection(&available)
-                .filter(|each| *each != name)
+        for group in names.groups(body) {
+            let members: BTreeSet<String> =
+                group.iter().map(|nested| nested.name.clone()).collect();
+            // A call by name among the group passes the running function object, so each
+            // holds, in one order, what any of them captures, and none holds another.
+            let captured: BTreeSet<String> = group
+                .iter()
+                .flat_map(|nested| nested.free.intersection(&available))
+                .filter(|name| !members.contains(*name))
                 .cloned()
                 .collect();
+            for nested in group {
+                scope.captures.insert(nested.span, captured.clone());
+                scope.groups.insert(nested.span, members.clone());
+            }
+        }
+        for nested in &names.nested {
+            // A nested function's own name reads the running function object, since only its
+            // `def` binds it, so it is no capture.
+            let captured = scope
+                .captures
+                .entry(nested.span)
+                .or_insert_with(|| {
+                    nested
+                        .free
+                        .intersection(&available)
+                        .filter(|each| **each != nested.name)
+                        .cloned()
+                        .collect()
+                })
+                .clone();
             for name in captured.intersection(&own) {
-                if !names.copied(name, span.start().0) {
+                if !names.copied(name, nested.span.start().0) {
                     scope.cells.insert(name.clone());
                 }
             }
-            scope.captures.insert(*span, captured);
         }
         scope
     }
 }
 
-/// Returns the names the function of `parameters` and `body` reads, directly or through its
-/// nested functions, that it does not bind: its free variables, and the module's names.
-fn free_names(parameters: &[&str], body: &[Stmt]) -> BTreeSet<String> {
-    let mut names = Names::default();
-    for parameter in parameters {
-        names.bind(parameter, 0, false);
-    }
-    names.statements(body, false);
-    names.free()
+/// One nested `def` of a function: where it is, its name, the names it reads of the
+/// functions around it, and those of them it reads other than by calling them by name, or
+/// through the functions nested in it.
+struct NestedDef {
+    span: Span,
+    name: String,
+    free: BTreeSet<String>,
+    values: BTreeSet<String>,
 }
 
 /// One binding of a variable: where it is, and whether a loop runs it again.
@@ -79,11 +102,23 @@ struct Names {
     bindings: BTreeMap<String, Vec<Binding>>,
     globals: BTreeSet<String>,
     reads: BTreeSet<String>,
-    /// Each nested `def`, by its span, with its name and its free variables.
-    nested: Vec<(Span, String, BTreeSet<String>)>,
+    /// The names read other than by calling them by name.
+    values: BTreeSet<String>,
+    /// Each nested `def`, in source order.
+    nested: Vec<NestedDef>,
 }
 
 impl Names {
+    /// Returns the names the function of `parameters` and `body` binds and reads.
+    fn of(parameters: &[&str], body: &[Stmt]) -> Self {
+        let mut names = Self::default();
+        for parameter in parameters {
+            names.bind(parameter, 0, false);
+        }
+        names.statements(body, false);
+        names
+    }
+
     fn bind(&mut self, name: &str, offset: u32, in_loop: bool) {
         self.bindings
             .entry(name.to_owned())
@@ -99,16 +134,118 @@ impl Names {
             .collect()
     }
 
-    /// Returns the names read, here or in a nested function, that this function does not
-    /// bind.
+    /// Returns the names read, here or in a nested function, that this function neither
+    /// binds nor declares `global`.
     fn free(&self) -> BTreeSet<String> {
+        self.unbound(&self.reads)
+    }
+
+    /// Returns the free names read here other than by calling them by name, or read in a
+    /// nested function.
+    fn value_free(&self) -> BTreeSet<String> {
+        self.unbound(&self.values)
+    }
+
+    /// Returns the names of `read`, and those the nested functions read, that this function
+    /// neither binds nor declares `global`.
+    fn unbound(&self, read: &BTreeSet<String>) -> BTreeSet<String> {
         let own = self.bound_names();
-        self.reads
-            .iter()
-            .chain(self.nested.iter().flat_map(|(_, _, free)| free))
-            .filter(|name| !own.contains(*name))
+        read.iter()
+            .chain(self.nested.iter().flat_map(|nested| &nested.free))
+            .filter(|name| !own.contains(*name) && !self.globals.contains(*name))
             .cloned()
             .collect()
+    }
+
+    /// Returns true when only one binding, not a `global` one, binds `name`.
+    fn bound_once(&self, name: &str) -> bool {
+        !self.globals.contains(name) && self.bindings.get(name).is_some_and(|all| all.len() == 1)
+    }
+
+    /// Returns the groups of nested functions of `body` that call one another by name.
+    fn groups(&self, body: &[Stmt]) -> Vec<Vec<&NestedDef>> {
+        let mut lists = Vec::new();
+        statement_lists(body, &mut lists);
+        lists
+            .into_iter()
+            .flat_map(|list| self.groups_in(list))
+            .collect()
+    }
+
+    /// Returns the groups among the `def`s of one statement list: the functions, each bound
+    /// only by its `def`, that reach one another through the names they read.
+    fn groups_in(&self, statements: &[Stmt]) -> Vec<Vec<&NestedDef>> {
+        let candidates: Vec<(usize, &NestedDef)> = statements
+            .iter()
+            .enumerate()
+            .filter_map(|(index, statement)| {
+                let Stmt::FunctionDef { span, .. } = statement else {
+                    return None;
+                };
+                let nested = self.nested.iter().find(|nested| nested.span == *span)?;
+                self.bound_once(&nested.name).then_some((index, nested))
+            })
+            .collect();
+        let mut groups: Vec<Vec<(usize, &NestedDef)>> = Vec::new();
+        for (index, nested) in &candidates {
+            if groups
+                .iter()
+                .flatten()
+                .any(|(_, member)| member.span == nested.span)
+            {
+                continue;
+            }
+            let reached = reach(nested, &candidates);
+            let mut group = vec![(*index, *nested)];
+            group.extend(candidates.iter().filter(|(_, other)| {
+                other.span != nested.span
+                    && reached.contains(&other.name)
+                    && reach(other, &candidates).contains(&nested.name)
+            }));
+            if group.len() > 1 {
+                groups.push(group);
+            }
+        }
+        groups
+            .into_iter()
+            .filter(|group| self.shares_environment(statements, group))
+            .map(|group| group.into_iter().map(|(_, nested)| nested).collect())
+            .collect()
+    }
+
+    /// Returns true when the functions of `group`, at their positions in `statements`, may share
+    /// their captures: each names the others only to call them, only `def`s run between the
+    /// first `def` of the group and the last, and no other nested function defined before the
+    /// last reads one of them, so none of them runs before each `def` of the group has run.
+    fn shares_environment(&self, statements: &[Stmt], group: &[(usize, &NestedDef)]) -> bool {
+        let members: BTreeSet<&str> = group
+            .iter()
+            .map(|(_, nested)| nested.name.as_str())
+            .collect();
+        let named =
+            |names: &BTreeSet<String>| names.iter().any(|name| members.contains(name.as_str()));
+        let first = group
+            .iter()
+            .map(|(index, _)| *index)
+            .min()
+            .unwrap_or_default();
+        let last = group
+            .iter()
+            .map(|(index, _)| *index)
+            .max()
+            .unwrap_or_default();
+        let end = statements
+            .get(last)
+            .map_or(0, |statement| statement.span().start().0);
+        !group.iter().any(|(_, nested)| named(&nested.values))
+            && statements[first..=last]
+                .iter()
+                .all(|statement| matches!(statement, Stmt::FunctionDef { .. }))
+            && !self.nested.iter().any(|nested| {
+                !members.contains(nested.name.as_str())
+                    && nested.span.start().0 < end
+                    && named(&nested.free)
+            })
     }
 
     /// Returns true when one binding, outside every loop and before `offset`, the position of
@@ -151,8 +288,13 @@ impl Names {
                     .iter()
                     .map(|parameter| parameter.name.name.as_str())
                     .collect();
-                self.nested
-                    .push((*span, name.name.clone(), free_names(&names, body)));
+                let inner = Self::of(&names, body);
+                self.nested.push(NestedDef {
+                    span: *span,
+                    name: name.name.clone(),
+                    free: inner.free(),
+                    values: inner.value_free(),
+                });
                 self.bind(&name.name, span.start().0, in_loop);
             }
             Stmt::ClassDef {
@@ -332,6 +474,7 @@ impl Names {
         match expression {
             Expr::Name { id, .. } => {
                 self.reads.insert(id.clone());
+                self.values.insert(id.clone());
             }
             Expr::BoolOp { values, .. } => self.expressions(values, in_loop),
             Expr::BinOp { left, right, .. } => self.expressions([&**left, &**right], in_loop),
@@ -355,7 +498,12 @@ impl Names {
                 keywords,
                 ..
             } => {
-                self.expression(function, in_loop);
+                // A call by name reads the name only to call it.
+                if let Expr::Name { id, .. } = &**function {
+                    self.reads.insert(id.clone());
+                } else {
+                    self.expression(function, in_loop);
+                }
                 self.expressions(arguments, in_loop);
                 self.expressions(keywords.iter().map(|keyword| &keyword.value), in_loop);
             }
@@ -440,7 +588,61 @@ impl Names {
         }
         self.reads
             .extend(inner.reads.into_iter().filter(|name| !own.contains(name)));
+        self.values
+            .extend(inner.values.into_iter().filter(|name| !own.contains(name)));
         self.nested.extend(inner.nested);
+    }
+}
+
+/// Returns the names that `nested` reaches among `candidates`: those it reads, and those
+/// they reach in turn.
+fn reach(nested: &NestedDef, candidates: &[(usize, &NestedDef)]) -> BTreeSet<String> {
+    let mut reached = BTreeSet::new();
+    let mut next = vec![nested];
+    while let Some(current) = next.pop() {
+        for (_, other) in candidates {
+            if current.free.contains(&other.name) && reached.insert(other.name.clone()) {
+                next.push(other);
+            }
+        }
+    }
+    reached
+}
+
+/// Adds `body` and each statement list in it, outside nested functions and classes, to
+/// `lists`.
+fn statement_lists<'tree>(body: &'tree [Stmt], lists: &mut Vec<&'tree [Stmt]>) {
+    lists.push(body);
+    for statement in body {
+        match statement {
+            Stmt::For { body, orelse, .. }
+            | Stmt::While { body, orelse, .. }
+            | Stmt::If { body, orelse, .. } => {
+                statement_lists(body, lists);
+                statement_lists(orelse, lists);
+            }
+            Stmt::Try {
+                body,
+                handlers,
+                orelse,
+                finalbody,
+                ..
+            } => {
+                statement_lists(body, lists);
+                for handler in handlers {
+                    statement_lists(&handler.body, lists);
+                }
+                statement_lists(orelse, lists);
+                statement_lists(finalbody, lists);
+            }
+            Stmt::With { body, .. } => statement_lists(body, lists),
+            Stmt::Match { cases, .. } => {
+                for case in cases {
+                    statement_lists(&case.body, lists);
+                }
+            }
+            _ => {}
+        }
     }
 }
 
@@ -487,6 +689,94 @@ mod tests {
             .map(|names| names.iter().cloned().collect())
             .collect();
         (captures, found.cells.into_iter().collect())
+    }
+
+    /// Returns, for the one function `source` defines, the group of each of its nested
+    /// functions in source order, empty for one in none.
+    fn groups(source: &str) -> Vec<Vec<String>> {
+        let file = SourceFile::from_text(FileId(0), "app.py".into(), source);
+        let tree = parse(&file, PythonFloor::V3_12).expect("the source parses");
+        let Some(Stmt::FunctionDef { body, .. }) = tree.body.first() else {
+            panic!("the source defines a function first");
+        };
+        let found = ClosureScope::of(&[], body, &BTreeSet::new());
+        found
+            .captures
+            .keys()
+            .map(|span| {
+                found
+                    .groups
+                    .get(span)
+                    .map(|names| names.iter().cloned().collect())
+                    .unwrap_or_default()
+            })
+            .collect()
+    }
+
+    const EVEN_ODD: &str = "def f(n: int) -> bool:\n    limit = n\n    \
+                            def even(k: int) -> bool:\n        return k == 0 or odd(k - 1)\n    \
+                            def odd(k: int) -> bool:\n        return k < limit and even(k - 1)\n    \
+                            return even(n)\n";
+
+    #[test]
+    fn fun_04_functions_that_call_one_another_by_name_share_their_captures() {
+        let both = vec!["even".to_owned(), "odd".to_owned()];
+        assert_eq!(groups(EVEN_ODD), [both.clone(), both]);
+        // Each holds what either captures, and neither holds the other.
+        let (captures, cells) = scope(EVEN_ODD);
+        assert_eq!(
+            captures,
+            [vec!["limit".to_owned()], vec!["limit".to_owned()]]
+        );
+        assert_eq!(cells, Vec::<String>::new());
+    }
+
+    #[test]
+    fn fun_04_a_cycle_of_three_with_another_def_between_is_one_group() {
+        let found = groups(
+            "def f() -> None:\n    def a() -> int:\n        return b()\n    \
+             def other() -> int:\n        return 1\n    def b() -> int:\n        return c()\n    \
+             def c() -> int:\n        return a()\n",
+        );
+        let all = vec!["a".to_owned(), "b".to_owned(), "c".to_owned()];
+        assert_eq!(found, [all.clone(), Vec::new(), all.clone(), all]);
+    }
+
+    #[test]
+    fn fun_04_functions_that_may_run_before_the_group_is_made_form_no_group() {
+        for source in [
+            // A function of the group read as a value.
+            "def f() -> None:\n    def a() -> int:\n        return b()\n    \
+             def b() -> int:\n        print(a)\n        return a()\n",
+            // A function of the group read by a function nested in another.
+            "def f() -> None:\n    def a() -> int:\n        return b()\n    \
+             def b() -> int:\n        def inner() -> int:\n            return a()\n        \
+             return inner()\n",
+            // A statement between the `def`s, which may leave the block.
+            "def f() -> None:\n    def a() -> int:\n        return b()\n    print(1)\n    \
+             def b() -> int:\n        return a()\n",
+            // Another function, defined before the group is complete, that reads one of it.
+            "def f() -> None:\n    def early() -> int:\n        return a()\n    \
+             def a() -> int:\n        return b()\n    def b() -> int:\n        return a()\n",
+            // A function bound again.
+            "def f() -> None:\n    def a() -> int:\n        return b()\n    \
+             def b() -> int:\n        return a()\n    b = a\n",
+            // A function declared global in another.
+            "def f() -> None:\n    def a() -> int:\n        global b\n        return b()\n    \
+             def b() -> int:\n        return a()\n",
+        ] {
+            assert!(groups(source).iter().all(Vec::is_empty), "{source}");
+        }
+    }
+
+    #[test]
+    fn fun_04_a_variable_assigned_after_the_group_lives_in_a_cell_both_hold() {
+        let (captures, cells) = scope(
+            "def f() -> None:\n    def a() -> int:\n        return b()\n    \
+             def b() -> int:\n        return a() + late\n    late = 1\n",
+        );
+        assert_eq!(captures, [vec!["late".to_owned()], vec!["late".to_owned()]]);
+        assert_eq!(cells, ["late"]);
     }
 
     #[test]
@@ -550,6 +840,16 @@ mod tests {
              def deeper() -> int:\n            return a\n",
         );
         assert_eq!(captures, [vec!["a".to_owned()]]);
+        assert_eq!(cells, Vec::<String>::new());
+    }
+
+    #[test]
+    fn fun_04_a_name_a_nested_function_declares_global_is_no_capture() {
+        let (captures, cells) = scope(
+            "def f() -> None:\n    g = 1\n    def inner() -> int:\n        global g\n        \
+             return g\n    g = 2\n",
+        );
+        assert_eq!(captures, [Vec::<String>::new()]);
         assert_eq!(cells, Vec::<String>::new());
     }
 

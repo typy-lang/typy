@@ -75,6 +75,42 @@ impl FunctionLowerer<'_> {
         Self::borrowed(value, ty)
     }
 
+    /// Returns the capture at `index` of the function object `closure` of the nested function
+    /// `function`, with a reference of its own, since the object may be released first.
+    pub(crate) fn capture_of(
+        &mut self,
+        function: FunctionId,
+        closure: &TypedExpr,
+        index: u32,
+        span: Span,
+    ) -> Lowered {
+        let variables = self
+            .program
+            .closures
+            .get(&function)
+            .cloned()
+            .unwrap_or_default();
+        let captures = crate::function::captures_layout(&variables, self.tuple_types);
+        let ty = self
+            .tuple_types
+            .items(captures)
+            .and_then(|items| items.get(index as usize).copied())
+            .unwrap_or(TyirType::Unit);
+        let object = self.expression(closure);
+        let value = self.builder.push_value(
+            Operation::Capture {
+                closure: object.value,
+                captures,
+                index,
+            },
+            ty,
+            span,
+        );
+        let owned = self.take_reference(Self::borrowed(value, ty), span);
+        self.release(object, span);
+        self.produced(owned, ty)
+    }
+
     /// Returns the running nested function's function object, borrowed from its caller.
     pub(crate) fn running_function(&self) -> Lowered {
         let (closure, _) = self

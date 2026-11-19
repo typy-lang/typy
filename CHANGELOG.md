@@ -38,8 +38,10 @@ All notable changes to TyPy are recorded here. The format follows
   loop variable or one assigned after the `def`, lives in a cell the
   functions share, so functions made in a loop read its last value, and
   one read before it is assigned raises `NameError`, as in CPython. A
-  nested function calls itself by name, and calls a nested function
-  defined before it in the same function (FUN-04, ADR-0061).
+  nested function calls itself and the other nested functions of its
+  function by name. Nested functions that call one another, defined one
+  after another, hold the same captures and never each other, so they are
+  freed with their last reference (FUN-04, ADR-0061).
 - The `key` argument of `sorted`, `list.sort`, `min` and `max`, also of
   `min` and `max` of several values: a function value of one item, whose
   results order the items as CPython orders them. `sorted` and

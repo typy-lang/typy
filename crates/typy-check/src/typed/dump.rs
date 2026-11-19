@@ -472,6 +472,12 @@ impl Dump<'_> {
             }
             TypedExprKind::CapturedCell(index) => format!("CapturedCell {index}"),
             TypedExprKind::CapturedCellObject(index) => format!("CapturedCellObject {index}"),
+            TypedExprKind::CaptureOf {
+                function, index, ..
+            } => format!(
+                "CaptureOf {} {index}",
+                self.program.function(*function).qualified_name
+            ),
             TypedExprKind::CallNested { function, .. } => {
                 format!(
                     "CallNested {}",

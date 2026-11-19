@@ -544,7 +544,9 @@ fn expression(expression_value: &TypedExpr, callees: &mut BTreeSet<FunctionId>) 
         | TypedExprKind::CapturedCellObject(_)
         | TypedExprKind::ForeignLibrary(_)
         | TypedExprKind::SysValue(_) => {}
-        TypedExprKind::AsIterable(inner) | TypedExprKind::Named { value: inner, .. } => {
+        TypedExprKind::AsIterable(inner)
+        | TypedExprKind::Named { value: inner, .. }
+        | TypedExprKind::CaptureOf { closure: inner, .. } => {
             expression(inner, callees);
         }
         TypedExprKind::PercentFormat { values, .. } => expression(values, callees),

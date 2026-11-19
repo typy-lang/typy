@@ -51,8 +51,8 @@ before the `def`, is copied into the function object when the `def` runs,
 so reading it costs what reading a local costs. The function object holds
 a reference to each value it copies, which lives as long as the function
 does. A nested function's own name reads the running function, so it may
-call itself, and it calls a nested function defined before it in the same
-function directly. Its signature follows the rules of a module's
+call itself, and it calls the other nested functions of the function
+around it by name. Its signature follows the rules of a module's
 functions, keyword-only parameters included, which a call by name passes;
 such a function has no `Callable` type, so reading it as a value is E0202.
 
@@ -85,6 +85,31 @@ def assigned_later() -> int:
 
 print(made_in_a_loop(), assigned_later())
 ```
+
+Nested functions that call one another by name, defined one after
+another and each bound only by its `def`, such as `even` and `odd` below,
+hold the same captures: each holds every variable any of them reads, and a
+call between them passes the running function along. No function object
+holds another, so each is freed with its last reference:
+
+<!-- typy-expect: accepted -->
+```python
+def parity(n: int) -> str:
+    def even(k: int) -> bool:
+        return True if k == 0 else odd(k - 1)
+
+    def odd(k: int) -> bool:
+        return False if k == 0 else even(k - 1)
+    return "even" if even(n) else "odd"
+
+
+print(parity(7), parity(10))
+```
+
+Two such functions with another statement between their `def`s, or one
+that reads the other as a value rather than calling it, run as in CPython
+but hold each other. That reference cycle is never freed until cycle
+collection, which is planned for 1.0 (MEM-06).
 
 A nested function that reads a variable before the function around it
 assigns one raises `NameError`, with CPython's message. Assigning a
