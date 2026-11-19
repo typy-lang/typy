@@ -230,7 +230,10 @@ fn constructs_beyond_the_release_keep_their_kind_and_span() {
     let source = "\
 async def a():
     pass
-nonlocal g
+try:
+    pass
+except* E:
+    pass
 ";
     let kinds: Vec<NodeKind> = body(source)
         .iter()
@@ -239,7 +242,7 @@ nonlocal g
             other => panic!("converted in detail: {other:?}"),
         })
         .collect();
-    assert_eq!(kinds, [NodeKind::AsyncFunctionDef, NodeKind::Nonlocal,]);
+    assert_eq!(kinds, [NodeKind::AsyncFunctionDef, NodeKind::TryStar]);
 }
 
 #[test]
@@ -480,7 +483,6 @@ async def a():
         pass
     await w
 def g():
-    nonlocal n
     yield 1
     yield from h
 try:
@@ -521,7 +523,7 @@ f(*args)
             other => format!("{other:?}"),
         })
         .collect();
-    assert_eq!(kinds, ["Nonlocal", "Yield", "YieldFrom"]);
+    assert_eq!(kinds, ["Yield", "YieldFrom"]);
 }
 
 #[test]
@@ -1064,4 +1066,23 @@ fn dump_writes_a_match_with_its_guards_and_capture_patterns() {
     ] {
         assert!(dumped.contains(line), "{line} in\n{dumped}");
     }
+}
+
+#[test]
+fn nonlocal_keeps_its_names_and_their_spans() {
+    let source = "def f():\n    def g():\n        nonlocal a, b\n";
+    let Stmt::FunctionDef { body: outer, .. } = &body(source)[0] else {
+        panic!("not a function");
+    };
+    let Stmt::FunctionDef { body: inner, .. } = &outer[0] else {
+        panic!("not a nested function");
+    };
+    let Stmt::Nonlocal { names, .. } = &inner[0] else {
+        panic!("not a nonlocal statement: {:?}", inner[0]);
+    };
+    let found: Vec<(&str, u32)> = names
+        .iter()
+        .map(|name| (name.name.as_str(), name.span.start().0))
+        .collect();
+    assert_eq!(found, [("a", 39), ("b", 42)]);
 }

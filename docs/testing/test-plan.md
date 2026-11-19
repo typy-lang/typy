@@ -3,10 +3,10 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy test plan |
-| Version | 1.01 |
+| Version | 1.02 |
 | Status | Draft |
 | Owner | typy-lang contributors |
-| Last updated | 2026-11-18 |
+| Last updated | 2026-11-19 |
 
 ## 1. Purpose
 
@@ -364,7 +364,7 @@ that the specification does not define.
 | SMT-06 | 0.3 | IT | `tests/conformance/smt/SMT-06_*.py` |
 | SMT-07 | 0.3 | IT | `tests/conformance/smt/SMT-07_*.py` |
 | SMT-08 | 0.3 | IT | `tests/conformance/smt/SMT-08_*.py` |
-| SMT-09 | 0.8 | IT | `tests/conformance/smt/SMT-09_*.py`, also in the sanitizer run |
+| SMT-09 | 0.8 | UT, IT | `typy-check` tests of CPython's rules for `nonlocal`, of the cell it shares, through a function between included, and of the narrowing a call may undo; `tests/conformance/smt/SMT-09_*.py`, also in the sanitizer run |
 | SMT-10 | 0.4 | IT | `tests/conformance/smt/SMT-10_*.py` |
 | SMT-11 | 0.9 | IT | `tests/conformance/smt/SMT-11_*.py` |
 | SMT-12 | 0.5 | IT | `tests/conformance/smt/SMT-12_*.py` |

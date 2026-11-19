@@ -112,9 +112,11 @@ but hold each other. That reference cycle is never freed until cycle
 collection, which is planned for 1.0 (MEM-06).
 
 A nested function that reads a variable before the function around it
-assigns one raises `NameError`, with CPython's message. Assigning a
-captured variable inside the nested function, with `nonlocal`, is
-planned for 0.8 (SMT-09). Binding the name of a nested function again,
+assigns one raises `NameError`, with CPython's message. A nested function
+assigns a variable of the function around it after declaring it
+`nonlocal`, described in
+[Simple statements](simple-statements.md). Binding the name of a nested
+function again,
 also with a second `def`, is E0202, and a call of it before its `def`
 runs is E0306, where CPython raises `UnboundLocalError`.
 

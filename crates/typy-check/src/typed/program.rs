@@ -61,6 +61,9 @@ pub struct TypedProgram {
     pub closures: std::collections::BTreeMap<FunctionId, Vec<CapturedVariable>>,
     /// The variables of each function that live in a cell, which its nested functions share.
     pub cells: std::collections::BTreeMap<FunctionId, std::collections::BTreeSet<SymbolId>>,
+    /// The variables nested functions declare `nonlocal`, each a cell variable whose cell is
+    /// the capture at this position of its function object, not a new one (SMT-09).
+    pub nonlocals: std::collections::BTreeMap<SymbolId, u32>,
 }
 
 /// One capture of a nested function: a copy of a variable's value, or the cell it lives in.

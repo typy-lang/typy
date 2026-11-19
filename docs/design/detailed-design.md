@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy detailed design |
-| Version | 2.44 |
+| Version | 2.45 |
 | Status | Approved |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-19 |
@@ -742,7 +742,12 @@ captures, less the group's names, in one order, so a call by name among
 them passes the running function object and no function object holds
 another (ADR-0061). Without a group, two functions that call each other
 hold each other, one through a cell, which is a cycle that only cycle
-collection frees (MEM-06). `body/nested_function.rs`
+collection frees (MEM-06). A name a nested function declares `nonlocal`
+is one of its free variables, and its function's own variable that a
+nested function, or one nested deeper, assigns so is in
+`ClosureScope::rebound` and lives in a cell; an annotation alone binds a
+name without giving it a value. Such a variable is in no group, and a
+nested `def` of that name is E0202. `body/nested_function.rs`
 checks a `def` in a function: its signature in the annotations around it,
 its `__qualname__` `outer.<locals>.name`, a new function and signature,
 and the variable of its name, of the `Callable` type of its signature,
@@ -761,6 +766,17 @@ one's function object, `TypedExprKind::CaptureOf { function, closure,
 index }`, so each holds the same values with the types they had where the
 first `def` ran, also a type narrowed before it. A call of a function of
 the group whose `def` was refused reports nothing more (DIA-04).
+`BodyChecker::declare_nonlocals` makes each name a nested function
+declares `nonlocal` a variable of its own, of the type of the captured
+cell, assigned from the start, whose cell is that capture:
+`TypedProgram::nonlocals` maps its symbol to the position. A name no
+function around it binds is E0103. `BodyChecker::changed_by_calls` holds
+for a variable a function declares `global`, one of `rebound`, and a
+`nonlocal` one: no test or assignment narrows it and no operation splits
+on its members, since any call may assign it. An `except` clause whose
+name is declared `global` or `nonlocal`, or is a variable outside the
+clause that a nested function shares, is E0202, since the clause's
+variable is its own and CPython deletes the shared one.
 `TypedProgram::closures` holds
 each nested function's captures, `CapturedVariable { name, ty, cell }`.
 A variable that lives in a cell is read as `TypedExprKind::CellRead(symbol)`
@@ -2000,7 +2016,10 @@ and E0206 otherwise (LIB-08). For each module it runs:
    body it is read with definite assignment, and narrowed unless some
    function declares it `global`. The subset walker reports CPython's
    `SyntaxError`s for `global`: a name used or assigned before it, a
-   parameter, or an annotated name, E0103.
+   parameter, or an annotated name, E0103. It reports those for
+   `nonlocal` too, with `GlobalScope::nested` for a function that no
+   function encloses, which has no binding to name; the module level is
+   E0103 as well.
    A lazy import at module level becomes `TypedStmt::LazyImport`. Each
    name it binds gets a function, `Program::add_lazy_import`, whose body
    is the eager `TypedStmt::Import` of that name alone, so assigning one
@@ -2504,7 +2523,7 @@ graph, symbol names and the string pool.
 | Optional values | `None` where `T \| None` is expected is the constant `NoneOf`, and a value of `T` is wrapped; wrapping and unwrapping hand the reference on with the value. `is None` and `is not None` on an optional value test `IsNone`, and on any other value are constants. `str`, `repr` and truth tests branch on `IsNone` and read the value only where it is not `None`, so a null object never reaches the runtime. An optional slot starts as `None`, and an optional parameter's default is `None` or its wrapped constant. `dict.get(key)` finds the key and wraps its value with a reference of its own, or gives `None` |
 | Builtins | Each builtin of 0.1 becomes runtime calls. `print` evaluates every argument in source order, then converts and writes each value. `min` and `max` keep the first value on a tie, as CPython does |
 | Stack | A function in a cycle of calls invokes the runtime's stack check on entry (FUN-02). Each function that calls through a function value counts as one, since every cycle through a value passes through such a call |
-| Cells | A variable that lives in a cell has a slot of `CELL`; the prologue makes each cell, and stores a parameter's value in its cell with a reference of its own. A read gets the value from the cell, and an assignment stores the new value with `CellSet` and releases the old one, zero when there was none; such a variable is never moved. An `except` clause's variable in a cell is cleared when the clause ends. A captured cell read in a nested function tests `CellBound` and calls `free_variable_unbound`, which raises `NameError`, when it holds no value |
+| Cells | A variable that lives in a cell has a slot of `CELL`; the prologue makes each cell, and stores a parameter's value in its cell with a reference of its own. A read gets the value from the cell, and an assignment stores the new value with `CellSet` and releases the old one, zero when there was none; such a variable is never moved. An `except` clause's variable in a cell is cleared when the clause ends. A captured cell read in a nested function tests `CellBound` and calls `free_variable_unbound`, which raises `NameError`, when it holds no value. The slot of a `nonlocal` variable takes the captured cell, with a reference of its own, in place of a new one, and its reads test `CellBound` the same way |
 | Nested functions | A `def` emits `NewClosure` and a `SetCapture` with a reference of its own for each capture, in order, then stores the object in its variable. `Capture` and `RunningFunction` read the running function's object, its first parameter, borrowed, since its caller holds it for the call. `CallNested` calls the code directly with the object first. `CaptureOf` reads a capture of another function object with `Capture` and takes a reference of its own before the object is released |
 | Keys | `Keyed` evaluates the list, then the key and the option in the call's order, and holds a reference to the key's function value for the call. `sorted` and `list.sort` copy the list, call the key through its value for each item as a `for` loop reads the copy, appending each key to a list of keys, then call `list_sort_keyed`; `list.sort` then clears its list and extends it with the copy. `min` and `max` call the key for each item of the list and pass it with the item to `list_keep_extreme`, which keeps the best key and its item in two lists of at most one item, and `list_extreme` of the list of the item gives the result or the default. A function with a `Keyed` call checks the stack on entry, as one that calls through a value does |
 | Bound methods | `BoundMethod` evaluates the object, starts from the descriptor of the first method and, for each later entry, tests `is_instance` of its class and selects its descriptor when the test holds, then calls `method_new` with the descriptor and the object |

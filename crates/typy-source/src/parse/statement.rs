@@ -230,7 +230,14 @@ impl Converter<'_> {
                     .collect(),
                 span,
             },
-            ast::Stmt::Nonlocal(node) => self.other_statement(NodeKind::Nonlocal, node.range),
+            ast::Stmt::Nonlocal(node) => Stmt::Nonlocal {
+                names: node
+                    .names
+                    .iter()
+                    .map(|name| self.identifier(name))
+                    .collect(),
+                span,
+            },
             ast::Stmt::Expr(node) => Stmt::Expr {
                 value: self.expression(&node.value),
                 span,

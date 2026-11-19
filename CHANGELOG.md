@@ -42,6 +42,10 @@ All notable changes to TyPy are recorded here. The format follows
   function by name. Nested functions that call one another, defined one
   after another, hold the same captures and never each other, so they are
   freed with their last reference (FUN-04, ADR-0061).
+- `nonlocal` in a nested function, which assigns the variable of the
+  function around it that every function sharing it sees, with CPython's
+  rules for where it may stand. No test narrows such a variable, since any
+  call may assign it (SMT-09).
 - The `key` argument of `sorted`, `list.sort`, `min` and `max`, also of
   `min` and `max` of several values: a function value of one item, whose
   results order the items as CPython orders them. `sorted` and
@@ -60,6 +64,10 @@ All notable changes to TyPy are recorded here. The format follows
 - A call of a local variable before its first assignment, such as `x()`
   before `x = ...`, is E0306, where TyPy 0.7 accepted the program and then
   failed while compiling it.
+- `except ... as name` where a function declares `name` `global` is
+  E0202. CPython deletes the module variable when the clause ends, and
+  TyPy 0.7 left it as it was. Name the exception with a variable of its
+  own.
 
 ### Changed
 

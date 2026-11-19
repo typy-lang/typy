@@ -17,7 +17,6 @@ pub enum NodeKind {
     IpyEscapeCommand,
     Lambda,
     NamedExpr,
-    Nonlocal,
     Starred,
     TemplateStr,
     TryStar,

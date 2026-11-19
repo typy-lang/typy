@@ -4,7 +4,8 @@
 //! gives its value, outside every loop and before each nested function that captures it;
 //! any other captured variable lives in a cell, which every function that captures it shares.
 //! Nested functions that call one another by name form a group, each of which holds what any
-//! of them captures, so none holds another and they form no reference cycle.
+//! of them captures, so none holds another and they form no reference cycle. A variable that
+//! a nested function names `nonlocal` lives in a cell (SMT-09).
 
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -24,6 +25,9 @@ pub(crate) struct ClosureScope {
     /// group's functions, which a call by name inside it runs with the running function
     /// object, since each holds the captures of the whole group.
     pub(crate) groups: BTreeMap<Span, BTreeSet<String>>,
+    /// The function's own variables that a nested function assigns through `nonlocal`, which
+    /// any call may change, so no test narrows them.
+    pub(crate) rebound: BTreeSet<String>,
 }
 
 impl ClosureScope {
@@ -55,6 +59,10 @@ impl ClosureScope {
             }
         }
         for nested in &names.nested {
+            for name in nested.assigned.intersection(&own) {
+                scope.rebound.insert(name.clone());
+                scope.cells.insert(name.clone());
+            }
             // A nested function's own name reads the running function object, since only its
             // `def` binds it, so it is no capture.
             let captured = scope
@@ -80,20 +88,24 @@ impl ClosureScope {
 }
 
 /// One nested `def` of a function: where it is, its name, the names it reads of the
-/// functions around it, and those of them it reads other than by calling them by name, or
-/// through the functions nested in it.
+/// functions around it, those of them it reads other than by calling them by name, or
+/// through the functions nested in it, and those it or a function nested in it assigns
+/// through `nonlocal`.
 struct NestedDef {
     span: Span,
     name: String,
     free: BTreeSet<String>,
     values: BTreeSet<String>,
+    assigned: BTreeSet<String>,
 }
 
-/// One binding of a variable: where it is, and whether a loop runs it again.
+/// One binding of a variable: where it is, whether a loop runs it again, and whether it
+/// gives a value, which an annotation alone, such as `x: int`, does not.
 #[derive(Clone, Copy, Debug)]
 struct Binding {
     offset: u32,
     in_loop: bool,
+    gives_value: bool,
 }
 
 /// The names one function binds and reads, and the free variables of its nested functions.
@@ -101,6 +113,7 @@ struct Binding {
 struct Names {
     bindings: BTreeMap<String, Vec<Binding>>,
     globals: BTreeSet<String>,
+    nonlocals: BTreeSet<String>,
     reads: BTreeSet<String>,
     /// The names read other than by calling them by name.
     values: BTreeSet<String>,
@@ -123,13 +136,43 @@ impl Names {
         self.bindings
             .entry(name.to_owned())
             .or_default()
-            .push(Binding { offset, in_loop });
+            .push(Binding {
+                offset,
+                in_loop,
+                gives_value: true,
+            });
     }
 
+    /// Notes an annotation alone, which makes `name` the function's variable, as CPython's
+    /// symbol table reads it, and gives it no value.
+    fn declare(&mut self, name: &str, offset: u32) {
+        self.bindings
+            .entry(name.to_owned())
+            .or_default()
+            .push(Binding {
+                offset,
+                in_loop: false,
+                gives_value: false,
+            });
+    }
+
+    /// Returns the names this function binds, less those it declares `global` or `nonlocal`.
     fn bound_names(&self) -> BTreeSet<String> {
         self.bindings
             .keys()
-            .filter(|name| !self.globals.contains(*name))
+            .filter(|name| !self.globals.contains(*name) && !self.nonlocals.contains(*name))
+            .cloned()
+            .collect()
+    }
+
+    /// Returns the names this function, or a function nested in it, assigns through
+    /// `nonlocal` among those of the functions around it.
+    fn assigned_free(&self) -> BTreeSet<String> {
+        let own = self.bound_names();
+        self.nonlocals
+            .iter()
+            .chain(self.nested.iter().flat_map(|nested| &nested.assigned))
+            .filter(|name| !own.contains(*name) && !self.globals.contains(*name))
             .cloned()
             .collect()
     }
@@ -146,20 +189,27 @@ impl Names {
         self.unbound(&self.values)
     }
 
-    /// Returns the names of `read`, and those the nested functions read, that this function
-    /// neither binds nor declares `global`.
+    /// Returns the names of `read`, those this function declares `nonlocal` and those the
+    /// nested functions read, that this function neither binds nor declares `global`.
     fn unbound(&self, read: &BTreeSet<String>) -> BTreeSet<String> {
         let own = self.bound_names();
         read.iter()
+            .chain(&self.nonlocals)
             .chain(self.nested.iter().flat_map(|nested| &nested.free))
             .filter(|name| !own.contains(*name) && !self.globals.contains(*name))
             .cloned()
             .collect()
     }
 
-    /// Returns true when only one binding, not a `global` one, binds `name`.
+    /// Returns true when only one binding binds `name`, which no function declares `global`
+    /// or assigns through `nonlocal`.
     fn bound_once(&self, name: &str) -> bool {
-        !self.globals.contains(name) && self.bindings.get(name).is_some_and(|all| all.len() == 1)
+        !self.globals.contains(name)
+            && !self
+                .nested
+                .iter()
+                .any(|nested| nested.assigned.contains(name))
+            && self.bindings.get(name).is_some_and(|all| all.len() == 1)
     }
 
     /// Returns the groups of nested functions of `body` that call one another by name.
@@ -251,9 +301,15 @@ impl Names {
     /// Returns true when one binding, outside every loop and before `offset`, the position of
     /// a nested function that captures `name`, gives its value.
     fn copied(&self, name: &str, offset: u32) -> bool {
+        let mut valued = self
+            .bindings
+            .get(name)
+            .into_iter()
+            .flatten()
+            .filter(|binding| binding.gives_value);
         matches!(
-            self.bindings.get(name).map(Vec::as_slice),
-            Some([binding]) if !binding.in_loop && binding.offset < offset
+            (valued.next(), valued.next()),
+            (Some(binding), None) if !binding.in_loop && binding.offset < offset
         )
     }
 
@@ -294,6 +350,7 @@ impl Names {
                     name: name.name.clone(),
                     free: inner.free(),
                     values: inner.value_free(),
+                    assigned: inner.assigned_free(),
                 });
                 self.bind(&name.name, span.start().0, in_loop);
             }
@@ -326,6 +383,8 @@ impl Names {
                 if let Some(value) = value {
                     self.expression(value, in_loop);
                     self.target(target, in_loop);
+                } else if let Expr::Name { id, span } = target {
+                    self.declare(id, span.start().0);
                 }
             }
             Stmt::For {
@@ -412,6 +471,10 @@ impl Names {
             }
             Stmt::Global { names, .. } => {
                 self.globals
+                    .extend(names.iter().map(|name| name.name.clone()));
+            }
+            Stmt::Nonlocal { names, .. } => {
+                self.nonlocals
                     .extend(names.iter().map(|name| name.name.clone()));
             }
             Stmt::Raise {
@@ -841,6 +904,83 @@ mod tests {
         );
         assert_eq!(captures, [vec!["a".to_owned()]]);
         assert_eq!(cells, Vec::<String>::new());
+    }
+
+    /// Returns, for the one function `source` defines, its cell variables and the variables
+    /// its nested functions assign through `nonlocal`.
+    fn rebound(source: &str) -> (Vec<String>, Vec<String>) {
+        let file = SourceFile::from_text(FileId(0), "app.py".into(), source);
+        let tree = parse(&file, PythonFloor::V3_12).expect("the source parses");
+        let Some(Stmt::FunctionDef { body, .. }) = tree.body.first() else {
+            panic!("the source defines a function first");
+        };
+        let found = ClosureScope::of(&[], body, &BTreeSet::new());
+        (
+            found.cells.into_iter().collect(),
+            found.rebound.into_iter().collect(),
+        )
+    }
+
+    #[test]
+    fn smt_09_a_variable_a_nested_function_assigns_through_nonlocal_lives_in_a_cell() {
+        for source in [
+            // Bound once before the `def`, which would copy it, and assigned in the function.
+            "def f() -> None:\n    count = 0\n    def bump() -> None:\n        nonlocal count\n        \
+             count += 1\n",
+            // Assigned by a function nested two deep, through one that never names it.
+            "def f() -> None:\n    count = 0\n    def middle() -> None:\n        \
+             def inner() -> None:\n            nonlocal count\n            count = 2\n        \
+             inner()\n",
+            // Declared by an annotation alone, which binds it as CPython's symbol table does.
+            "def f() -> None:\n    count: int\n    def bump() -> None:\n        nonlocal count\n        \
+             count = 1\n",
+        ] {
+            let (cells, rebound) = rebound(source);
+            assert_eq!(cells, ["count"], "{source}");
+            assert_eq!(rebound, ["count"], "{source}");
+        }
+    }
+
+    #[test]
+    fn smt_09_a_variable_named_nonlocal_passes_through_the_function_in_between() {
+        let file = SourceFile::from_text(
+            FileId(0),
+            "app.py".into(),
+            "def middle() -> None:\n    def inner() -> None:\n        nonlocal far\n        far = 1\n",
+        );
+        let tree = parse(&file, PythonFloor::V3_12).expect("the source parses");
+        let Some(Stmt::FunctionDef { body, .. }) = tree.body.first() else {
+            panic!("the source defines a function");
+        };
+        let enclosing: BTreeSet<String> = ["far".to_owned()].into();
+        let found = ClosureScope::of(&[], body, &enclosing);
+        let captures: Vec<Vec<String>> = found
+            .captures
+            .values()
+            .map(|names| names.iter().cloned().collect())
+            .collect();
+        assert_eq!(captures, [vec!["far".to_owned()]]);
+        // `far` is the enclosing function's, so this function neither keeps nor rebinds it.
+        assert!(found.cells.is_empty() && found.rebound.is_empty());
+    }
+
+    #[test]
+    fn smt_09_an_annotation_alone_gives_no_value_so_one_assignment_is_still_copied() {
+        let (captures, cells) = scope(
+            "def f() -> None:\n    total: int\n    total = 1\n    def g() -> int:\n        \
+             return total\n",
+        );
+        assert_eq!(captures, [vec!["total".to_owned()]]);
+        assert_eq!(cells, Vec::<String>::new());
+    }
+
+    #[test]
+    fn smt_09_a_function_another_assigns_through_nonlocal_is_in_no_group() {
+        let found = groups(
+            "def f() -> None:\n    def a() -> int:\n        return b()\n    \
+             def b() -> int:\n        nonlocal a\n        return a()\n",
+        );
+        assert!(found.iter().all(Vec::is_empty), "{found:?}");
     }
 
     #[test]

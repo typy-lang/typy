@@ -68,9 +68,12 @@ impl Walker {
                 let names = parameters
                     .iter()
                     .map(|parameter| parameter.name.name.as_str());
-                let outer_scope = self
-                    .scope
-                    .replace(super::global_scope::GlobalScope::of_parameters(names));
+                let nested = self.scope.is_some();
+                let outer_scope =
+                    self.scope
+                        .replace(super::global_scope::GlobalScope::of_parameters(
+                            names, nested,
+                        ));
                 self.statements(body, Place::Function);
                 self.scope = outer_scope;
                 self.loop_depth = outer_loops;
@@ -246,6 +249,7 @@ impl Walker {
                 self.syntax_error(*span, "`continue` outside a loop");
             }
             Stmt::Global { names, .. } => self.global_statement(names),
+            Stmt::Nonlocal { names, span } => self.nonlocal_statement(names, *span),
             // An alias anywhere is expanded before types are known; its parameters' bounds
             // and constraints are read as CPython reads them, which checks no argument
             // against them (SMT-12).

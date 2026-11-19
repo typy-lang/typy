@@ -60,8 +60,8 @@ use crate::types::Type;
 use class::{BaseScope, KnownClasses, class_types, collect_classes, collect_members};
 use definition::{FunctionScope, collect_functions};
 use definition_order::check_calls_follow_definitions;
-pub(crate) use module_scope::declared_globals;
 use module_scope::{check_module_names, module_variables};
+pub(crate) use module_scope::{declared_globals, declared_nonlocals};
 
 impl ImportedNames {
     /// Returns the names the module's imports give its annotations.

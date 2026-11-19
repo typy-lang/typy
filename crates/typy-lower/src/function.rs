@@ -272,18 +272,26 @@ impl<'context> FunctionLowerer<'context> {
         self.builder.switch_to(BlockId(0));
         let parameter_slots: Vec<(ValueId, SlotId)> = self.parameters.clone();
         // Each cell is made first; a parameter's holds the parameter's value, with a
-        // reference of its own.
-        let cells: Vec<(SlotId, typy_tyir::TupleTypeId)> = self
+        // reference of its own. A variable declared `nonlocal` holds the cell its function
+        // object captures, with a reference of its own (SMT-09).
+        let cells: Vec<(SymbolId, SlotId, typy_tyir::TupleTypeId)> = self
             .cells
             .iter()
-            .map(|(symbol, layout)| (self.slots[symbol], *layout))
+            .map(|(symbol, layout)| (*symbol, self.slots[symbol], *layout))
             .collect();
-        for (slot, layout) in &cells {
-            let cell = self.builder.push_value(
-                Operation::NewCell { layout: *layout },
-                TyirType::CELL,
-                span,
-            );
+        for (symbol, slot, layout) in &cells {
+            let cell = if let Some(position) = self.program.nonlocals.get(symbol).copied() {
+                let captured = self.capture(position, TyirType::CELL, span);
+                self.builder
+                    .push(Operation::Increment(captured.value), span);
+                captured.value
+            } else {
+                self.builder.push_value(
+                    Operation::NewCell { layout: *layout },
+                    TyirType::CELL,
+                    span,
+                )
+            };
             self.builder.push(
                 Operation::Store {
                     slot: *slot,
@@ -310,7 +318,7 @@ impl<'context> FunctionLowerer<'context> {
             }
         }
         for (value, slot) in &parameter_slots {
-            if cells.iter().any(|(each, _)| each == slot) {
+            if cells.iter().any(|(_, each, _)| each == slot) {
                 continue;
             }
             if self.counted(self.builder.slot_type(*slot)) && !self.borrowed.contains(slot) {
@@ -330,7 +338,7 @@ impl<'context> FunctionLowerer<'context> {
             if parameter_slots
                 .iter()
                 .any(|(_, parameter)| *parameter == slot)
-                || cells.iter().any(|(each, _)| *each == slot)
+                || cells.iter().any(|(_, each, _)| *each == slot)
             {
                 continue;
             }

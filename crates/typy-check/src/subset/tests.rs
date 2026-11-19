@@ -125,10 +125,6 @@ fn later_features_name_their_release_and_rule() {
             "generators are planned for TyPy 0.9 (SMT-11)",
         ),
         (
-            "def f() -> None:\n    nonlocal x\n",
-            "`nonlocal` statements are planned for TyPy 0.8 (SMT-09)",
-        ),
-        (
             "async def f() -> None:\n    pass\n",
             "`async` and `await` are planned for a release after TyPy 1.0",
         ),
@@ -254,6 +250,76 @@ fn return_break_and_continue_out_of_place_are_syntax_errors() {
                 .any(|(code, message)| code == "E0103" && message == expected),
             "{source:?} gave {found:?}"
         );
+    }
+}
+
+#[test]
+fn nonlocal_where_cpython_rejects_it_is_a_syntax_error() {
+    let cases = [
+        (
+            "nonlocal x\n",
+            Some("nonlocal declaration not allowed at module level"),
+        ),
+        (
+            "def f() -> None:\n    nonlocal x\n",
+            Some("no binding for nonlocal 'x' found"),
+        ),
+        (
+            "class C:\n    def m(self) -> None:\n        nonlocal x\n",
+            Some("no binding for nonlocal 'x' found"),
+        ),
+        (
+            "def f(x: int) -> None:\n    def g(x: int) -> None:\n        nonlocal x\n",
+            Some("name 'x' is parameter and nonlocal"),
+        ),
+        (
+            "def f() -> None:\n    x = 1\n    def g() -> None:\n        print(x)\n        \
+             nonlocal x\n",
+            Some("name 'x' is used prior to nonlocal declaration"),
+        ),
+        (
+            "def f() -> None:\n    x = 1\n    def g() -> None:\n        x = 2\n        \
+             nonlocal x\n",
+            Some("name 'x' is assigned to before nonlocal declaration"),
+        ),
+        (
+            "def f() -> None:\n    x = 1\n    def g() -> None:\n        x: int = 2\n        \
+             nonlocal x\n",
+            Some("annotated name 'x' can't be nonlocal"),
+        ),
+        (
+            "def f() -> None:\n    x = 1\n    def g() -> None:\n        nonlocal x\n        \
+             x: int = 2\n",
+            Some("annotated name 'x' can't be nonlocal"),
+        ),
+        (
+            "def f() -> None:\n    x = 1\n    def g() -> None:\n        global x\n        \
+             nonlocal x\n",
+            Some("name 'x' is nonlocal and global"),
+        ),
+        (
+            "def f() -> None:\n    x = 1\n    def g() -> None:\n        nonlocal x\n        \
+             global x\n",
+            Some("name 'x' is nonlocal and global"),
+        ),
+        (
+            "def f() -> None:\n    x = 1\n    def g() -> None:\n        nonlocal x\n        \
+             x = 2\n",
+            None,
+        ),
+    ];
+    for (source, expected) in cases {
+        let found: Vec<(String, String)> = diagnostics(source)
+            .into_iter()
+            .filter(|(code, _)| code == "E0103")
+            .collect();
+        match expected {
+            Some(message) => assert!(
+                found.iter().any(|(_, found)| found == message),
+                "{source:?} gave {found:?}"
+            ),
+            None => assert!(found.is_empty(), "{source:?} gave {found:?}"),
+        }
     }
 }
 

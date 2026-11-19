@@ -145,6 +145,9 @@ pub(crate) struct BodyChecker<'program> {
     finally_loops: Vec<usize>,
     /// The module variables the function declares `global`, which it assigns (SMT-08).
     global_names: BTreeSet<String>,
+    /// The variables of the functions around it that a nested function declares `nonlocal`,
+    /// each its own variable whose cell is the captured one (SMT-09).
+    nonlocal_names: BTreeMap<String, SymbolId>,
     /// The type aliases the body's `type` statements define, which annotations read
     /// (SMT-12).
     local_aliases: BTreeSet<String>,
@@ -197,6 +200,7 @@ impl<'program> BodyChecker<'program> {
             handling: 0,
             finally_loops: Vec::new(),
             global_names: BTreeSet::new(),
+            nonlocal_names: BTreeMap::new(),
             local_aliases: BTreeSet::new(),
             class_allowed: false,
             qualified_name: String::new(),
@@ -346,11 +350,13 @@ impl<'program> BodyChecker<'program> {
             .filter_map(|name| self.cell_symbol(name))
             .collect();
         cells.extend(std::mem::take(&mut self.used_cells));
+        cells.extend(self.nonlocal_names.values().copied());
         cells
     }
 
     /// Notes the function's `__qualname__`, what its nested functions capture, and, for a
-    /// nested function, what it captures itself (FUN-04).
+    /// nested function, what it captures itself (FUN-04) and the variables it declares
+    /// `nonlocal` (SMT-09).
     fn enter_closure(
         &mut self,
         definition: &Definition<'_>,
@@ -369,6 +375,7 @@ impl<'program> BodyChecker<'program> {
             .collect();
         self.closure_scope = closure_scope::ClosureScope::of(&names, body, &enclosing);
         self.closure = closure;
+        self.declare_nonlocals(body);
     }
 
     /// Checks the module body and stores it in the program as its entry function.

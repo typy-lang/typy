@@ -98,8 +98,7 @@ impl FunctionLowerer<'_> {
     }
 
     /// Returns the value of the captured cell at `index` of the running nested function, of
-    /// type `ty`, borrowed; a cell with no value yet raises `NameError` with the variable's
-    /// `name`, as CPython does.
+    /// type `ty`, borrowed, which raises `NameError` when it holds no value.
     pub(crate) fn captured_cell(
         &mut self,
         index: u32,
@@ -109,6 +108,18 @@ impl FunctionLowerer<'_> {
     ) -> Lowered {
         let cell = self.capture(index, TyirType::CELL, span);
         let layout = self.cell_layout(ty);
+        self.bound_cell_value(cell, layout, (name, ty), span)
+    }
+
+    /// Returns the value of type `ty` the cell `cell` holds, borrowed; a cell with no value
+    /// raises `NameError` with the variable's `name`, as CPython does for a free variable.
+    pub(crate) fn bound_cell_value(
+        &mut self,
+        cell: Lowered,
+        layout: TupleTypeId,
+        (name, ty): (&str, TyirType),
+        span: Span,
+    ) -> Lowered {
         let bound = self.builder.push_value(
             Operation::CellBound {
                 cell: cell.value,

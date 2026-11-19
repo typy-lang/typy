@@ -94,9 +94,10 @@ impl BodyChecker<'_> {
                 return Self::narrowed_read(read, narrowed, span);
             }
             // A test before this point showed the optional variable is not `None` (TYP-13);
-            // a call may assign a variable a function declares `global`, so it is not narrowed.
+            // a call may assign a variable a function declares `global` or `nonlocal`, so it
+            // is not narrowed.
             if let Type::Optional(inner) = ty
-                && !self.program.assigned_in_functions.contains(id)
+                && !self.changed_by_calls(id)
                 && self
                     .assigned
                     .as_ref()
@@ -225,6 +226,15 @@ impl BodyChecker<'_> {
     /// Returns the narrowest type `isinstance` tests showed the variable holds here, if any;
     /// a variable a function declares `global` may be assigned by a call, so it is not
     /// narrowed (TYP-07).
+    /// Returns true when a call may assign the variable `id`: a module variable a function
+    /// declares `global` (SMT-08), or a variable a nested function assigns through
+    /// `nonlocal` (SMT-09), so no test or assignment narrows it.
+    pub(super) fn changed_by_calls(&self, id: &str) -> bool {
+        self.program.assigned_in_functions.contains(id)
+            || self.closure_scope.rebound.contains(id)
+            || self.nonlocal_names.contains_key(id)
+    }
+
     pub(super) fn narrowed_type(&self, symbol: crate::typed::SymbolId, id: &str) -> Option<Type> {
         if let Some((_, member)) = self
             .splitting
@@ -234,7 +244,7 @@ impl BodyChecker<'_> {
         {
             return Some(member.clone());
         }
-        if self.program.assigned_in_functions.contains(id) {
+        if self.changed_by_calls(id) {
             return None;
         }
         let facts = self.assigned.as_ref()?;

@@ -143,6 +143,11 @@ impl FunctionLowerer<'_> {
                 .items(layout)
                 .map_or(TyirType::Unit, |items| items[0]);
             let (cell, _) = self.cell_of(symbol, span);
+            // A variable declared `nonlocal` may have no value yet (SMT-09).
+            if self.program.nonlocals.contains_key(&symbol) {
+                let name = self.program.symbol(symbol).name.clone();
+                return self.bound_cell_value(cell, layout, (&name, ty), span);
+            }
             return self.cell_value(cell, layout, ty, span);
         }
         let Some(global) = self.module_globals.of.get(&symbol).copied() else {

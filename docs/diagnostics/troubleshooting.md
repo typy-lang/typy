@@ -120,10 +120,12 @@ print(largest(2, 3))
 ## E0202: feature TyPy cannot compile with CPython's meaning
 
 The program uses valid Python that TyPy refuses because it cannot give it
-CPython's meaning (STD-04), such as `global`, a class defined inside a
-function, or a builtin TyPy does not provide. Restructure the code: pass
-values as arguments and return them, and define classes and functions at
-the top of the module.
+CPython's meaning (STD-04), such as a class defined inside a function, a
+builtin TyPy does not provide, a variable that is both a nested function
+and assigned, or an `except ... as name` clause whose name another
+function shares, which the clause would delete. Restructure the code:
+pass values as arguments and return them, define classes at the top of
+the module, and give the exception a variable of its own.
 
 This program gives E0202:
 

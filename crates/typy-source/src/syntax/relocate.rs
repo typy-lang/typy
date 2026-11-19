@@ -198,7 +198,7 @@ impl Stmt {
                 name.span = span;
                 value.relocate(span);
             }
-            Self::Global { names, span: at } => {
+            Self::Global { names, span: at } | Self::Nonlocal { names, span: at } => {
                 *at = span;
                 for name in names {
                     name.span = span;

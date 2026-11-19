@@ -343,6 +343,10 @@ impl Dump<'_> {
                 let names: Vec<&str> = names.iter().map(|name| name.name.as_str()).collect();
                 self.line(depth, &format!("Global {}", names.join(", ")), span);
             }
+            Stmt::Nonlocal { names, .. } => {
+                let names: Vec<&str> = names.iter().map(|name| name.name.as_str()).collect();
+                self.line(depth, &format!("Nonlocal {}", names.join(", ")), span);
+            }
             Stmt::TypeAlias {
                 name,
                 type_parameters,

@@ -76,27 +76,49 @@ pub(super) fn module_variables(statements: &[Stmt], names: &mut BTreeMap<String,
 
 /// Returns the names a function's body declares `global`, at any depth of its blocks (SMT-08).
 pub(crate) fn declared_globals(statements: &[Stmt]) -> Vec<&Identifier> {
+    declared(statements, &|statement| match statement {
+        Stmt::Global { names, .. } => Some(names),
+        _ => None,
+    })
+}
+
+/// Returns the names a function's body declares `nonlocal`, at any depth of its blocks
+/// (SMT-09).
+pub(crate) fn declared_nonlocals(statements: &[Stmt]) -> Vec<&Identifier> {
+    declared(statements, &|statement| match statement {
+        Stmt::Nonlocal { names, .. } => Some(names),
+        _ => None,
+    })
+}
+
+/// Returns the names the declarations `pick` finds declare, at any depth of the blocks of
+/// `statements`, outside nested functions and classes.
+fn declared<'tree>(
+    statements: &'tree [Stmt],
+    pick: &dyn Fn(&'tree Stmt) -> Option<&'tree Vec<Identifier>>,
+) -> Vec<&'tree Identifier> {
     let mut names = Vec::new();
     for statement in statements {
+        if let Some(declared) = pick(statement) {
+            names.extend(declared);
+            continue;
+        }
         match statement {
-            Stmt::Global {
-                names: declared, ..
-            } => names.extend(declared),
             Stmt::For { body, orelse, .. }
             | Stmt::While { body, orelse, .. }
             | Stmt::If { body, orelse, .. } => {
-                names.extend(declared_globals(body));
-                names.extend(declared_globals(orelse));
+                names.extend(declared(body, pick));
+                names.extend(declared(orelse, pick));
             }
-            Stmt::With { body, .. } => names.extend(declared_globals(body)),
+            Stmt::With { body, .. } => names.extend(declared(body, pick)),
             Stmt::Match { cases, .. } => {
                 for case in cases {
-                    names.extend(declared_globals(&case.body));
+                    names.extend(declared(&case.body, pick));
                 }
             }
             Stmt::Try { .. } => {
                 for block in statement.try_blocks() {
-                    names.extend(declared_globals(block));
+                    names.extend(declared(block, pick));
                 }
             }
             _ => {}

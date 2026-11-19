@@ -281,14 +281,14 @@ impl BodyChecker<'_> {
 
     /// Returns the variable `id` with the members of the union it holds here, when it holds
     /// one whose members share no class, and no operation is already split on it. A variable
-    /// a function declares `global` is not narrowed, so it is not split either.
+    /// a call may assign is not narrowed, so it is not split either.
     fn union_variable(&self, id: &str) -> Option<(Split, Vec<Type>)> {
         let symbol = *self.locals.get(id)?;
         let split = self
             .splitting
             .iter()
             .any(|(each, _)| *each == Split::variable(symbol));
-        if split || self.program.assigned_in_functions.contains(id) {
+        if split || self.changed_by_calls(id) {
             return None;
         }
         let ty = self

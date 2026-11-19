@@ -24,6 +24,8 @@ pub(crate) struct Program {
     pub(super) closures: BTreeMap<FunctionId, Vec<crate::typed::CapturedVariable>>,
     /// The variables of each function that live in a cell (FUN-04).
     pub(super) cells: BTreeMap<FunctionId, BTreeSet<crate::typed::SymbolId>>,
+    /// The variables nested functions declare `nonlocal`, with their captured cells (SMT-09).
+    pub(super) nonlocals: BTreeMap<crate::typed::SymbolId, u32>,
     pub(super) module_variables: BTreeSet<String>,
     /// The symbol of each module variable, made before any body is checked (SMT-08).
     pub(super) module_symbols: BTreeMap<String, SymbolId>,
@@ -172,6 +174,7 @@ impl Program {
             signatures: Vec::new(),
             closures: BTreeMap::new(),
             cells: BTreeMap::new(),
+            nonlocals: BTreeMap::new(),
             module_variables: BTreeSet::new(),
             module_symbols: BTreeMap::new(),
             assigned_in_functions: BTreeSet::new(),
@@ -830,6 +833,7 @@ impl Program {
             warnings: typy_diagnostics::Diagnostics::new(),
             closures: self.closures,
             cells: self.cells,
+            nonlocals: self.nonlocals,
         }
     }
 }

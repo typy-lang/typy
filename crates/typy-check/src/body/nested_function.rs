@@ -37,6 +37,12 @@ impl Closure {
     pub(super) fn names(&self) -> BTreeSet<String> {
         self.captures.keys().cloned().collect()
     }
+
+    /// Returns the position and the value type of the captured cell of the variable `name`.
+    pub(super) fn captured_cell(&self, name: &str) -> Option<(u32, Type)> {
+        let captured = self.captures.get(name).filter(|captured| captured.cell)?;
+        Some((captured.position, captured.ty.clone()))
+    }
 }
 
 /// One captured variable: its position among the captures, its type, whether the capture
@@ -91,6 +97,10 @@ impl BodyChecker<'_> {
         if self.types.contains_key(&symbol) {
             self.diagnostics.push(also_assigned(name, parts.name.span));
             return None;
+        }
+        // Only its `def` binds a nested function's name, so a call by name runs its code.
+        if self.closure_scope.rebound.contains(name) {
+            self.diagnostics.push(also_assigned(name, parts.name.span));
         }
         let names = self.captured_names(parts.span);
         let group = self
@@ -259,6 +269,9 @@ impl BodyChecker<'_> {
     /// Returns the variable of this function named `name` when it lives in a cell, which its
     /// nested functions share (ADR-0061).
     pub(super) fn cell_symbol(&self, name: &str) -> Option<SymbolId> {
+        if let Some(symbol) = self.nonlocal_names.get(name) {
+            return Some(*symbol);
+        }
         if !self.closure_scope.cells.contains(name) || self.global_names.contains(name) {
             return None;
         }

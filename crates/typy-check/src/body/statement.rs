@@ -401,6 +401,7 @@ impl BodyChecker<'_> {
             // A module's functions are checked on their own.
             Stmt::AnnAssign { value: None, .. }
             | Stmt::Global { .. }
+            | Stmt::Nonlocal { .. }
             | Stmt::TypeAlias { .. }
             | Stmt::ClassDef { .. }
             | Stmt::FunctionDef { .. }
