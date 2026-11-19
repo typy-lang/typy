@@ -712,3 +712,234 @@ fn smt_11_an_iterator_that_is_no_generator_takes_next_alone() {
     }
     release_names(&found);
 }
+
+/// A body that yields once, then, when it is closed or sent a value, drops what it was
+/// thrown and returns its argument as its result.
+unsafe extern "C" fn quitting(generator: *mut GeneratorObject) -> *mut ExceptionObject {
+    // SAFETY: the runtime passes the live generator whose step is running.
+    let object = unsafe { &mut *generator };
+    if object.point == 0 {
+        object.current = word(1);
+        object.point = 1;
+        object.state = SUSPENDED;
+        return core::ptr::null_mut();
+    }
+    let thrown = core::mem::replace(&mut object.thrown, core::ptr::null_mut());
+    let frame = core::ptr::with_exposed_provenance::<u64>(generator.expose_provenance() + PREFIX);
+    // SAFETY: the body owns what it was thrown, and its frame holds its argument.
+    unsafe {
+        if !thrown.is_null() {
+            crate::refcount::typy_rt_decrement(thrown.cast());
+        }
+        typy_rt_generator_set_result(generator, *frame);
+    }
+    core::ptr::null_mut()
+}
+
+/// A body that raises `StopIteration` while it handles a `KeyError`.
+unsafe extern "C" fn stopping_while_handling(_: *mut GeneratorObject) -> *mut ExceptionObject {
+    let handled = raise_bare(ExceptionKind::KeyError);
+    // SAFETY: the body keeps the exception alive while it is handled.
+    unsafe {
+        typy_rt_exception_enter(handled);
+        let stop = raise_bare(ExceptionKind::StopIteration);
+        crate::refcount::typy_rt_decrement(handled.cast());
+        stop
+    }
+}
+
+/// A body that yields, then, when it is closed, releases the object its frame holds, a
+/// generator of its own, and ends.
+unsafe extern "C" fn holding(generator: *mut GeneratorObject) -> *mut ExceptionObject {
+    // SAFETY: the runtime passes the live generator whose step is running.
+    let object = unsafe { &mut *generator };
+    if object.point == 0 {
+        object.current = word(1);
+        object.point = 1;
+        object.state = SUSPENDED;
+        return core::ptr::null_mut();
+    }
+    let frame =
+        core::ptr::with_exposed_provenance_mut::<u64>(generator.expose_provenance() + PREFIX);
+    // SAFETY: the frame's first field holds the generator the test stored.
+    unsafe {
+        let held = core::mem::replace(&mut *frame, 0);
+        crate::refcount::typy_rt_decrement(core::ptr::with_exposed_provenance_mut::<
+            crate::header::ObjectHeader,
+        >(usize::try_from(held).unwrap_or(0)));
+    }
+    core::mem::replace(&mut object.thrown, core::ptr::null_mut())
+}
+
+#[test]
+fn fun_07_send_and_close_meet_a_body_that_returns() {
+    let fields = FLAG_FIELDS;
+    let layout = frame_layout(&fields);
+    let result_fields = RESULT_FIELDS;
+    let result = TupleType {
+        size: 8,
+        length: 1,
+        fields: result_fields.as_ptr(),
+    };
+    let found = GeneratorDescriptor {
+        result: &raw const result,
+        ..descriptor(quitting, &layout)
+    };
+    // SAFETY: the descriptor and its layouts live for the whole test.
+    unsafe {
+        let sent = generator_of(&found, word(3));
+        assert!(advance(sent, word(1).cast_signed()).value);
+        let stopped = typy_rt_generator_send(sent, word(1), false);
+        expect_raised(stopped.exception, ExceptionKind::StopIteration, None);
+        crate::refcount::typy_rt_decrement(sent.cast());
+        let closed = generator_of(&found, word(4));
+        assert!(advance(closed, word(1).cast_signed()).value);
+        assert!(typy_rt_generator_close(closed).is_null());
+        assert_eq!((*closed).state, FINISHED);
+        // A finished generator closes at once.
+        assert!(typy_rt_generator_close(closed).is_null());
+        crate::refcount::typy_rt_decrement(closed.cast());
+    }
+    release_names(&found);
+}
+
+#[test]
+fn fun_07_a_result_of_none_is_not_kept_and_one_never_returned_is_missing() {
+    let fields = FLAG_FIELDS;
+    let layout = frame_layout(&fields);
+    let optional_fields = [Field::plain(ItemKind::OptionalInt, 0)];
+    let optional = TupleType {
+        size: 8,
+        length: 1,
+        fields: optional_fields.as_ptr(),
+    };
+    let none_result = descriptor(two_items, &layout);
+    let optional_result = GeneratorDescriptor {
+        result: &raw const optional,
+        ..descriptor(two_items, &layout)
+    };
+    // SAFETY: the descriptors and layouts live for the whole test.
+    unsafe {
+        for found in [&none_result, &optional_result] {
+            let generator = generator_of(found, 0);
+            typy_rt_generator_set_result(generator, 0);
+            assert!(!typy_rt_generator_has_result(generator.cast()));
+            expect_raised(
+                typy_rt_generator_result(generator.cast()).exception,
+                ExceptionKind::TypeError,
+                Some("the generator of 'yield from' had ended without returning its value"),
+            );
+            crate::refcount::typy_rt_decrement(generator.cast());
+        }
+    }
+    release_names(&none_result);
+    release_names(&optional_result);
+}
+
+#[test]
+fn smt_11_an_item_held_inline_is_copied_into_the_generator() {
+    let fields = FLAG_FIELDS;
+    let layout = frame_layout(&fields);
+    let pair_fields = FLAG_FIELDS;
+    let pair = frame_layout(&pair_fields);
+    let found = GeneratorDescriptor {
+        item_kind: ItemKind::Tuple as u64,
+        item_tuple: &raw const pair,
+        ..descriptor(two_items, &layout)
+    };
+    // SAFETY: the descriptor and its layouts live for the whole test.
+    unsafe {
+        let generator = generator_of(&found, 0);
+        for value in [word(5), word(6)] {
+            let item = [value, word(7)];
+            super::typy_rt_generator_hold(generator, item.as_ptr().expose_provenance() as u64);
+            let held = core::ptr::with_exposed_provenance::<u64>(
+                usize::try_from(current(generator)).unwrap_or(0),
+            );
+            assert_eq!(*held, value);
+        }
+        (*generator).current = 0;
+        crate::refcount::typy_rt_decrement(generator.cast());
+    }
+    release_names(&found);
+    let plain_found = descriptor(two_items, &layout);
+    // SAFETY: the descriptor and its layout live for the rest of the test.
+    unsafe {
+        // The plain kinds keep the item itself.
+        let plain = generator_of(&plain_found, 0);
+        super::typy_rt_generator_hold(plain, word(8));
+        assert_eq!(current(plain), word(8));
+        (*plain).current = 0;
+        crate::refcount::typy_rt_decrement(plain.cast());
+    }
+    release_names(&plain_found);
+}
+
+#[test]
+fn smt_11_a_stop_iteration_raised_while_handling_keeps_its_cause_only() {
+    let fields = FLAG_FIELDS;
+    let layout = frame_layout(&fields);
+    let found = descriptor(stopping_while_handling, &layout);
+    // SAFETY: the descriptor and its layout live for the whole test.
+    unsafe {
+        let generator = generator_of(&found, 0);
+        let raised = advance(generator, word(1).cast_signed()).exception;
+        assert_eq!((*raised).kind(), ExceptionKind::RuntimeError);
+        assert!((*raised).context.is_null());
+        assert_eq!((*(*raised).cause).kind(), ExceptionKind::StopIteration);
+        crate::refcount::typy_rt_decrement(raised.cast());
+        crate::refcount::typy_rt_decrement(generator.cast());
+    }
+    release_names(&found);
+}
+
+#[test]
+fn fun_11_a_generator_a_closing_drops_closes_before_the_next_one() {
+    let flag_fields = FLAG_FIELDS;
+    let flag_layout = frame_layout(&flag_fields);
+    let inner_found = descriptor(recording, &flag_layout);
+    let fields = FIELDS;
+    let layout = frame_layout(&fields);
+    let outer_found = descriptor(holding, &layout);
+    // SAFETY: the descriptors and layouts live for the whole test.
+    unsafe {
+        let inner = generator_of(&inner_found, word(42));
+        assert!(advance(inner, word(1).cast_signed()).value);
+        let outer = generator_of(&outer_found, inner.expose_provenance() as u64);
+        assert!(advance(outer, word(1).cast_signed()).value);
+        let before = CLOSED.with(|closed| closed.borrow().len());
+        crate::refcount::typy_rt_decrement(outer.cast());
+        typy_rt_generator_close_dropped();
+        assert_eq!(
+            CLOSED.with(|closed| closed.borrow()[before..].to_vec()),
+            [word(42)]
+        );
+    }
+    release_names(&inner_found);
+    release_names(&outer_found);
+}
+
+#[test]
+fn smt_11_yield_from_reports_what_closing_raised_and_ends_at_a_finished_generator() {
+    let fields = FLAG_FIELDS;
+    let layout = frame_layout(&fields);
+    let found = descriptor(catching, &layout);
+    // SAFETY: the descriptor and its layout live for the whole test.
+    unsafe {
+        let delegator = generator_of(&found, 0);
+        let replacing = generator_of(&found, 1);
+        assert!(typy_rt_generator_delegate(delegator, replacing.cast(), true).value);
+        (*delegator).thrown = raise_bare(ExceptionKind::GeneratorExit);
+        let raised = typy_rt_generator_delegate(delegator, replacing.cast(), false);
+        expect_raised(
+            raised.exception,
+            ExceptionKind::ValueError,
+            Some("replaced"),
+        );
+        let ended = typy_rt_generator_delegate(delegator, replacing.cast(), true);
+        assert!(ended.exception.is_null() && !ended.value);
+        crate::refcount::typy_rt_decrement(replacing.cast());
+        crate::refcount::typy_rt_decrement(delegator.cast());
+    }
+    release_names(&found);
+}

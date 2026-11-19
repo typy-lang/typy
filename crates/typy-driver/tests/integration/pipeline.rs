@@ -7,7 +7,7 @@ use typy_diagnostics::SourceLookup;
 use typy_driver::{Emission, Failure, Outcome, Pipeline, Sources};
 
 /// A directory holding `app.py` with `source`.
-fn program(source: &str) -> (tempfile::TempDir, Utf8PathBuf) {
+pub(crate) fn program(source: &str) -> (tempfile::TempDir, Utf8PathBuf) {
     let directory = tempfile::tempdir().unwrap();
     let root = Utf8PathBuf::from_path_buf(directory.path().to_owned()).unwrap();
     std::fs::write(root.join("app.py"), source).unwrap();
@@ -32,7 +32,7 @@ fn codes(failure: &Failure) -> Vec<String> {
         .collect()
 }
 
-fn emit(main: &Utf8Path, stage: EmitStage) -> Emission {
+pub(crate) fn emit(main: &Utf8Path, stage: EmitStage) -> Emission {
     let request = BuildRequest::new(main).unwrap().with_emit(stage);
     match pipeline().run(&request).map(|success| success.outcome) {
         Ok(Outcome::Emitted(emission)) => emission,
@@ -40,7 +40,7 @@ fn emit(main: &Utf8Path, stage: EmitStage) -> Emission {
     }
 }
 
-fn text(emission: Emission) -> String {
+pub(crate) fn text(emission: Emission) -> String {
     match emission {
         Emission::Text(text) => text,
         Emission::Bytes(_) => panic!("bytes"),

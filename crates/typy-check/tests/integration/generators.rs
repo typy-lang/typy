@@ -249,6 +249,8 @@ fn exp_15_a_generator_expression_is_a_nested_generator_of_its_first_iterator() {
          [1])\nprint(list(values))\n",
         "def scaled(factor: int) -> list[int]:\n    return list(value * factor for value in \
          range(3) if value)\n",
+        "from collections.abc import Generator\n\nmade: Generator[int | None, None, None] = \
+         (value for value in range(2))\nprint(list(made))\n",
     ] {
         assert_eq!(app(source), Vec::<String>::new(), "{source}");
     }
@@ -287,6 +289,11 @@ fn exp_15_a_generator_expression_refuses_what_it_cannot_compile() {
             "def f() -> None:\n    values = ((yield v) for v in range(3))\n    print(values)\n",
             "E0103",
             "'yield' inside generator expression",
+        ),
+        (
+            "items: list[int] = (v for v in range(3))\n",
+            "E0402",
+            "`items` was declared as list[int] and is assigned a Generator[int, None, None]",
         ),
     ];
     for (source, code, message) in cases {
