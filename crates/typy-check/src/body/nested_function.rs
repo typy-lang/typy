@@ -77,7 +77,7 @@ struct Captured {
 /// A nested `def` whose body is checked after the body around it.
 pub(super) struct Pending {
     function: FunctionId,
-    statement: Stmt,
+    body: Vec<Stmt>,
     definition: OwnedDefinition,
     closure: Closure,
 }
@@ -145,7 +145,7 @@ impl BodyChecker<'_> {
         }
         self.pending.push(Pending {
             function,
-            statement: statement.clone(),
+            body: parts.body.to_vec(),
             definition: OwnedDefinition {
                 name: found.name,
                 qualified_name: found.qualified_name,
@@ -290,7 +290,7 @@ impl BodyChecker<'_> {
         if let Some(symbol) = self.nonlocal_names.get(name) {
             return Some(*symbol);
         }
-        if !self.closure_scope.cells.contains(name) || self.global_names.contains(name) {
+        if !self.closure_scope.cells.contains(name) {
             return None;
         }
         self.locals
@@ -309,9 +309,6 @@ impl BodyChecker<'_> {
     fn function_held(&self, name: &str) -> Option<FunctionId> {
         if let Some(symbol) = self.locals.get(name) {
             return self.nested_functions.get(symbol).copied();
-        }
-        if self.global_names.contains(name) {
-            return None;
         }
         let closure = self.closure.as_ref()?;
         match &closure.own {
@@ -332,7 +329,8 @@ impl BodyChecker<'_> {
     /// Returns the read of `name` in a nested function's body when it names the function
     /// itself or a variable it captures.
     pub(super) fn closure_read(&self, name: &str, span: Span) -> Option<TypedExpr> {
-        if self.locals.contains_key(name) || self.global_names.contains(name) {
+        // A name the function declares `global` is among its variables, as the module's.
+        if self.locals.contains_key(name) {
             return None;
         }
         let closure = self.closure.as_ref()?;
@@ -409,7 +407,6 @@ impl BodyChecker<'_> {
     /// (DIA-04).
     fn refused_sibling(&self, name: &str) -> bool {
         !self.locals.contains_key(name)
-            && !self.global_names.contains(name)
             && self.closure.as_ref().is_some_and(|closure| {
                 closure.group.contains(name)
                     && !closure.siblings.contains_key(name)
@@ -506,9 +503,6 @@ impl BodyChecker<'_> {
         diagnostics: &mut typy_diagnostics::Diagnostics,
     ) {
         for nested in pending {
-            let Stmt::FunctionDef { body, .. } = &nested.statement else {
-                continue;
-            };
             program
                 .closures
                 .insert(nested.function, nested.closure.variables());
@@ -522,7 +516,7 @@ impl BodyChecker<'_> {
                 signature: nested.definition.signature,
                 type_parameters: Vec::new(),
                 parameters: nested.definition.parameters,
-                body,
+                body: &nested.body,
                 span: nested.definition.span,
             };
             Self::check_body_of(

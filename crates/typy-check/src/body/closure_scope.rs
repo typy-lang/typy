@@ -1099,6 +1099,53 @@ mod tests {
     }
 
     #[test]
+    fn smt_09_nonlocal_under_a_function_that_declares_the_name_global_rebinds_nothing_here() {
+        let (cells, rebound) = rebound(
+            "def f() -> None:\n    x = 1\n    def g() -> None:\n        global x\n        \
+             def h() -> None:\n            nonlocal x\n            x = 2\n",
+        );
+        assert_eq!(
+            (cells, rebound),
+            (Vec::<String>::new(), Vec::<String>::new())
+        );
+    }
+
+    #[test]
+    fn fun_04_a_function_declared_global_or_read_by_a_later_def_keeps_its_group_rules() {
+        // A name declared `global` is the module's, so its `def`s form no group.
+        let global = groups(
+            "def f() -> None:\n    global a\n    def a() -> int:\n        return b()\n    \
+             def b() -> int:\n        return a()\n",
+        );
+        assert!(global.iter().all(Vec::is_empty), "{global:?}");
+        // A `def` after the group that reads one of it runs once the group is complete.
+        let later = groups(
+            "def f() -> None:\n    def a() -> int:\n        return b()\n    \
+             def b() -> int:\n        return a()\n    def last() -> int:\n        return a()\n",
+        );
+        let both = vec!["a".to_owned(), "b".to_owned()];
+        assert_eq!(later, [both.clone(), both, Vec::new()]);
+    }
+
+    #[test]
+    fn fun_04_an_annotated_attribute_binds_no_variable() {
+        let (captures, cells) = scope(
+            "def f(box: Box) -> None:\n    box.size: int\n    def g() -> Box:\n        return box\n",
+        );
+        assert_eq!(captures, [vec!["box".to_owned()]]);
+        assert_eq!(cells, Vec::<String>::new());
+    }
+
+    #[test]
+    fn fun_04_an_assignment_expression_in_a_comprehension_in_a_loop_binds_in_the_loop() {
+        let (_, cells) = scope(
+            "def f() -> None:\n    for _ in range(2):\n        xs = [y := 1 for _ in range(2)]\n    \
+             def g() -> int:\n        return y\n",
+        );
+        assert_eq!(cells, ["y"]);
+    }
+
+    #[test]
     fn fun_04_a_name_a_nested_function_declares_global_is_no_capture() {
         let (captures, cells) = scope(
             "def f() -> None:\n    g = 1\n    def inner() -> int:\n        global g\n        \

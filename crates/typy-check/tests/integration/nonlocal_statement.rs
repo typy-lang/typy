@@ -13,6 +13,13 @@ fn smt_09_a_nested_function_assigns_a_variable_of_a_function_around_it() {
         "def f() -> list[int]:\n    out: list[int] = []\n    for i in range(3):\n        \
          def bump() -> None:\n            nonlocal i\n            i = i * 10\n        bump()\n        \
          out.append(i)\n    return out\n",
+        "def f() -> int:\n    x = 1\n    def g() -> None:\n        nonlocal x, x\n        \
+         nonlocal x\n        x = 2\n    g()\n    return x\n",
+        "def f() -> int:\n    error = 0\n    try:\n        return error\n    \
+         except ValueError as error:\n        return 1\n",
+        "from typing import Callable\n\ni = 0\n\n\ndef f() -> list[int]:\n    global i\n    \
+         made: list[Callable[[], int]] = [lambda: i for i in range(3)]\n    \
+         return [each() for each in made]\n",
         "def f(label: str) -> str:\n    def rename() -> None:\n        nonlocal label\n        \
          for label in [\"a\", \"b\"]:\n            pass\n    rename()\n    return label\n",
     ] {

@@ -63,6 +63,8 @@ fn fun_04_a_variable_that_may_change_after_the_def_is_shared_through_its_cell() 
         "def f(step: int) -> int:\n    def g() -> int:\n        return step\n    step += 1\n    return g()\n",
         "def f() -> int:\n    def a() -> int:\n        return b()\n    def b() -> int:\n        return 1\n    \
          return a()\n",
+        // A `def` no path reaches is checked as any other.
+        "def f() -> int:\n    return 1\n    def g() -> int:\n        return 2\n",
     ] {
         assert_eq!(app(source), Vec::<String>::new(), "{source}");
     }
@@ -98,6 +100,29 @@ fn fun_04_a_nested_function_without_one_binding_or_one_type_is_refused() {
             "E0201",
             "a nested function with type parameters, or inside a generic function, is planned \
              for TyPy 0.9 (FUN-10)",
+        ),
+        (
+            "def f() -> None:\n    g = 1\n    def g() -> int:\n        return 1\n",
+            "E0202",
+            "`g` is a function and is also assigned as a variable",
+        ),
+        (
+            "def f() -> int:\n    return 1\n    def g[T](value: T) -> T:\n        return value\n",
+            "E0201",
+            "a nested function with type parameters, or inside a generic function, is planned \
+             for TyPy 0.9 (FUN-10)",
+        ),
+        (
+            "from typing import Callable\n\n\ndef f(g: Callable[[int, int], int]) -> int:\n    \
+             return g(1)\n",
+            "E0404",
+            "a value of type Callable[[int, int], int] takes 2 arguments, and 1 is given",
+        ),
+        (
+            "def two(a: str, b: str) -> int:\n    return 0\n\n\nprint(sorted([\"a\"], key=two))\n",
+            "E0404",
+            "the `key` of `sorted` is called with each item, of type str, and this is a \
+             Callable[[str, str], int]",
         ),
         (
             "def f() -> None:\n    count = 1\n    def g() -> None:\n        count()\n",
