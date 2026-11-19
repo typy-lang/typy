@@ -11,6 +11,7 @@ mod exports;
 mod final_names;
 mod function_values;
 mod generics;
+mod lambda_expressions;
 mod lazy_imports;
 mod matching;
 mod math;

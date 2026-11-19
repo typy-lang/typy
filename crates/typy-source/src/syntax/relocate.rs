@@ -284,6 +284,17 @@ impl Expr {
                 target.span = span;
                 value.relocate(span);
             }
+            Self::Lambda {
+                parameters,
+                body,
+                span: at,
+            } => {
+                *at = span;
+                for parameter in parameters {
+                    parameter.relocate(span);
+                }
+                body.relocate(span);
+            }
             Self::Compare {
                 left,
                 comparators,

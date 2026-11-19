@@ -1,12 +1,57 @@
 //! Checks statements against the feature table.
 
 use typy_diagnostics::{Diagnostic, DiagnosticCode, RuleId};
-use typy_source::syntax::{Expr, ParameterKind, Stmt, TypeParameter, TypeParameterKind};
+use typy_source::syntax::{Expr, Parameter, ParameterKind, Stmt, TypeParameter, TypeParameterKind};
 
 use super::feature::{Feature, feature, planned};
 use super::{Place, Walker};
 
 impl Walker {
+    /// Checks the parameters of a function or a `lambda`: no `*args` or `**kwargs`, and
+    /// constant defaults.
+    pub(super) fn parameters(&mut self, parameters: &[Parameter]) {
+        for parameter in parameters {
+            match parameter.kind {
+                ParameterKind::Normal
+                | ParameterKind::PositionalOnly
+                | ParameterKind::KeywordOnly => {}
+                ParameterKind::VarPositional | ParameterKind::VarKeyword => self.report(
+                    parameter.span,
+                    planned("`*args` and `**kwargs` parameters", "0.9", RuleId::EXP_17),
+                ),
+            }
+            if let Some(annotation) = &parameter.annotation {
+                self.annotation(annotation);
+            }
+            match &parameter.default {
+                None | Some(Expr::Constant { .. }) => {}
+                Some(default) if crate::check::factory_call(default).is_some() => {}
+                Some(default) => self.report(
+                    default.span(),
+                    planned("default values other than constants", "1.0", RuleId::EXP_16),
+                ),
+            }
+        }
+    }
+
+    /// Checks a `lambda`: its parameters as a function's, and its body in a scope of its own,
+    /// as CPython reads it.
+    pub(super) fn lambda(&mut self, parameters: &[Parameter], body: &Expr) {
+        self.parameters(parameters);
+        let names = parameters
+            .iter()
+            .map(|parameter| parameter.name.name.as_str());
+        let nested = self.scope.is_some();
+        let outer_scope = self
+            .scope
+            .replace(super::global_scope::GlobalScope::of_parameters(
+                names, nested,
+            ));
+        let outer_loops = std::mem::take(&mut self.loop_depth);
+        self.expression(body);
+        self.scope = outer_scope;
+        self.loop_depth = outer_loops;
+    }
     #[allow(clippy::too_many_lines, reason = "one arm per statement kind")]
     pub(super) fn statement(&mut self, statement: &Stmt, place: Place) {
         match statement {
@@ -39,28 +84,7 @@ impl Walker {
                     );
                 }
                 self.type_parameters(type_parameters);
-                for parameter in parameters {
-                    match parameter.kind {
-                        ParameterKind::Normal
-                        | ParameterKind::PositionalOnly
-                        | ParameterKind::KeywordOnly => {}
-                        ParameterKind::VarPositional | ParameterKind::VarKeyword => self.report(
-                            parameter.span,
-                            planned("`*args` and `**kwargs` parameters", "0.9", RuleId::EXP_17),
-                        ),
-                    }
-                    if let Some(annotation) = &parameter.annotation {
-                        self.annotation(annotation);
-                    }
-                    match &parameter.default {
-                        None | Some(Expr::Constant { .. }) => {}
-                        Some(default) if crate::check::factory_call(default).is_some() => {}
-                        Some(default) => self.report(
-                            default.span(),
-                            planned("default values other than constants", "1.0", RuleId::EXP_16),
-                        ),
-                    }
-                }
+                self.parameters(parameters);
                 if let Some(returns) = returns {
                     self.annotation(returns);
                 }

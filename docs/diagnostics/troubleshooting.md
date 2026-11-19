@@ -94,27 +94,22 @@ python-floor = "3.15"
 ## E0201: feature planned for a later TyPy release
 
 The program uses valid Python that a later TyPy release accepts, such as
-a `lambda` expression or class decorators. The message names the release
-and the rule. Write the code without the feature, for example with a
-function defined by `def`, or wait for that release.
+a generator expression or class decorators. The message names the
+release and the rule. Write the code without the feature, for example
+with a list comprehension, or wait for that release.
 
 This program gives E0201:
 
 <!-- typy-expect: rejected E0201 at 1:11 -->
 ```python
-largest = lambda a, b: a if a > b else b
-print(largest(2, 3))
+print(sum(n * n for n in range(4)))
 ```
 
 This one is correct:
 
 <!-- typy-expect: accepted -->
 ```python
-def largest(a: int, b: int) -> int:
-    return a if a > b else b
-
-
-print(largest(2, 3))
+print(sum([n * n for n in range(4)]))
 ```
 
 ## E0202: feature TyPy cannot compile with CPython's meaning
@@ -144,7 +139,11 @@ print(1 + 2)
 ## E0203: parameter without a type annotation
 
 Every parameter except `self` needs an annotation (TYP-01). Write the
-type, such as `def area(width: float) -> float:`.
+type, such as `def area(width: float) -> float:`. A `lambda` parameter
+takes its type from the `Callable` its context expects, such as
+`double: Callable[[int], int] = lambda n: n * 2`, so a `lambda` with a
+parameter where none is expected, or with more parameters than the
+expected `Callable` passes, gives E0203 too (EXP-14).
 
 This program gives E0203:
 

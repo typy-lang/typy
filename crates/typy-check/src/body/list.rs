@@ -44,7 +44,40 @@ impl BodyChecker<'_> {
             _ => None,
         };
         let target = member.as_ref().or(target);
-        let value = match expression {
+        let value = match (expression, target) {
+            // A `lambda` takes its parameter and result types from the `Callable` expected.
+            (
+                Expr::Lambda { .. },
+                Some(Type::Callable {
+                    parameters,
+                    returns,
+                }),
+            ) => self.lambda(
+                expression,
+                super::lambda::Expected {
+                    parameters: Some(parameters),
+                    returns: Some(returns),
+                },
+            ),
+            // Each branch of a conditional gets the `Callable` expected, as a `lambda` needs.
+            (
+                Expr::IfExp {
+                    test,
+                    body,
+                    orelse,
+                    span,
+                },
+                Some(callable @ Type::Callable { .. }),
+            ) => self.conditional((test, body, orelse), Some(callable), *span),
+            _ => self.expression_for(expression, target),
+        };
+        Self::converted(value, expected)
+    }
+
+    /// Returns `expression` checked for the type `target` its context gives a display or a
+    /// collection call.
+    fn expression_for(&mut self, expression: &Expr, target: Option<&Type>) -> TypedExpr {
+        match expression {
             Expr::List { elements, span } => self.list_display(elements, target, *span),
             Expr::Set { elements, span } => self.set_display(elements, target, *span),
             Expr::Dict { keys, values, span } => self.dict_display(keys, values, target, *span),
@@ -100,8 +133,7 @@ impl BodyChecker<'_> {
                 self.call_dict(arguments, keywords, target, *span)
             }
             other => self.expression(other),
-        };
-        Self::converted(value, expected)
+        }
     }
 
     /// Returns `value` as a `tuple[T, ...]` when that is the expected type and `value` is a

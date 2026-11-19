@@ -156,6 +156,10 @@ compare functions by identity, a function value is true, and `repr` writes
 `<function double at 0x...>` with the object's address. A function value
 has no order, so `<` between two is E0407.
 
+A `lambda` is a function value too, made where a `Callable` is expected,
+such as `apply(lambda x: x + 1, 3)`; its `repr` names it `<lambda>`. It
+is described in [Expressions](expressions.md).
+
 A function fits a `Callable` only when a call through the value converts
 nothing (NFR-19). Each argument the `Callable` passes must be a value of
 the function's parameter type as it is held, and the function's result a

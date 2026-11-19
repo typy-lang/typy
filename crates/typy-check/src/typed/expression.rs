@@ -130,6 +130,12 @@ pub enum TypedExprKind {
     /// The captured cell at this position, which a `def` nested in the running function
     /// captures in turn.
     CapturedCellObject(u32),
+    /// A `lambda`: a new function object of `function`, which holds the value of each of
+    /// `captures`, in order (EXP-14, ADR-0060).
+    Lambda {
+        function: FunctionId,
+        captures: Vec<TypedExpr>,
+    },
     /// The capture at `index` of `closure`, the function object of the nested function
     /// `function`: what a later function of a group copies from the first, so every function
     /// of the group holds the same captures (FUN-04, ADR-0061).
@@ -687,6 +693,7 @@ impl TypedExpr {
                 std::iter::once(callee.as_ref()).chain(arguments).collect()
             }
             TypedExprKind::CaptureOf { closure, .. } => vec![closure],
+            TypedExprKind::Lambda { captures, .. } => captures.iter().collect(),
             TypedExprKind::CallNested {
                 closure, arguments, ..
             } => std::iter::once(closure.as_ref())

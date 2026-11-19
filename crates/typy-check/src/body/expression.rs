@@ -232,62 +232,10 @@ impl BodyChecker<'_> {
                 )
             }
             Expr::Named { target, value, .. } => self.named(target, value, span),
+            Expr::Lambda { .. } => self.lambda(expression, super::lambda::Expected::default()),
             Expr::IfExp {
                 test, body, orelse, ..
-            } => {
-                let test = self.truth_test(test);
-                let (holds, fails) = test_facts(&test);
-                let outer = self.assigned.clone();
-                self.add_facts(holds);
-                let body = self.expression(body);
-                self.assigned.clone_from(&outer);
-                self.add_facts(fails);
-                let orelse = self.expression(orelse);
-                self.assigned = outer;
-                // A branch of `None` and one of `T` give `T | None`, as Python's typing joins
-                // them (TYP-06).
-                let joined = match (&body.ty, &orelse.ty) {
-                    (Type::NoneType, other) | (other, Type::NoneType)
-                        if !matches!(other, Type::NoneType) =>
-                    {
-                        Some(Type::optional(other.clone()))
-                    }
-                    (Type::Optional(_), _) => Some(body.ty.clone()),
-                    (_, Type::Optional(_)) => Some(orelse.ty.clone()),
-                    _ => None,
-                };
-                let (body, orelse) = match &joined {
-                    Some(joined) => (
-                        Self::converted(body, Some(joined)),
-                        Self::converted(orelse, Some(joined)),
-                    ),
-                    None => (body, orelse),
-                };
-                if !orelse.ty.is_assignable_to(&body.ty) {
-                    return self.error(
-                        Diagnostic::new(
-                            DiagnosticCode::error(305),
-                            orelse.span,
-                            format!(
-                                "both branches must have one type; they are {} and {}",
-                                body.ty, orelse.ty
-                            ),
-                        )
-                        .with_rule(RuleId::EXP_11),
-                        span,
-                    );
-                }
-                let ty = body.ty.clone();
-                Self::typed(
-                    TypedExprKind::IfExp {
-                        test: Box::new(test),
-                        body: Box::new(body),
-                        orelse: Box::new(orelse),
-                    },
-                    ty,
-                    span,
-                )
-            }
+            } => self.conditional((test, body, orelse), None, span),
             Expr::Set { elements, .. } => self.set_display(elements, None, span),
             Expr::Dict { keys, values, .. } => self.dict_display(keys, values, None, span),
             Expr::ListComp { .. } | Expr::SetComp { .. } | Expr::DictComp { .. } => {

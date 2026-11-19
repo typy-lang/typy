@@ -93,10 +93,6 @@ fn later_features_name_their_release_and_rule() {
             "`*Ts` and `**P` type parameters are planned for TyPy 1.0 (GEN-06)",
         ),
         (
-            "f = lambda: 1\n",
-            "`lambda` expressions are planned for TyPy 0.8 (EXP-14)",
-        ),
-        (
             "x = (i for i in range(3))\n",
             "generator expressions are planned for TyPy 0.9 (EXP-15)",
         ),

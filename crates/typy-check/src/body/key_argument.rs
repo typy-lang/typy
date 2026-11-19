@@ -30,7 +30,14 @@ impl BodyChecker<'_> {
         {
             return Key::Absent;
         }
-        let value = self.expression(key);
+        // A `lambda` takes the item, and gives the type of its body.
+        let value = self.lambda(
+            key,
+            super::lambda::Expected {
+                parameters: Some(std::slice::from_ref(item)),
+                returns: None,
+            },
+        );
         if value.ty.has_error() {
             return Key::Refused;
         }

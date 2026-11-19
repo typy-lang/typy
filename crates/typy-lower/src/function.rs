@@ -164,6 +164,13 @@ impl<'context> FunctionLowerer<'context> {
         let entry = function.id == program.entry;
         let symbol_name = if entry {
             ENTRY_SYMBOL.to_owned()
+        } else if function.name == "<lambda>" {
+            // The lambdas of one function share a `__qualname__`, so each symbol adds the
+            // lambda's number.
+            symbol(
+                &function.module,
+                &format!("{}.{}", function.qualified_name, function.id.0),
+            )
         } else {
             symbol(&function.module, &function.qualified_name)
         };

@@ -270,7 +270,15 @@ impl Converter<'_> {
                 },
                 _ => self.other(NodeKind::NamedExpr, node.range),
             },
-            ast::Expr::Lambda(node) => self.other(NodeKind::Lambda, node.range),
+            ast::Expr::Lambda(node) => Expr::Lambda {
+                parameters: node
+                    .parameters
+                    .as_deref()
+                    .map(|parameters| self.parameters(parameters))
+                    .unwrap_or_default(),
+                body: self.boxed(&node.body),
+                span,
+            },
             ast::Expr::Dict(node) => Expr::Dict {
                 keys: node
                     .items

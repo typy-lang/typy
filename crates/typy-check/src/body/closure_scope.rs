@@ -10,7 +10,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use typy_diagnostics::Span;
-use typy_source::syntax::{Comprehension, ExceptHandler, Expr, FStringPart, Stmt};
+use typy_source::syntax::{Comprehension, ExceptHandler, Expr, FStringPart, Parameter, Stmt};
 
 /// What a function's nested functions capture of its own variables, and of those it captures
 /// itself.
@@ -87,6 +87,34 @@ impl ClosureScope {
     }
 }
 
+impl ClosureScope {
+    /// Returns the scope of a module's body, whose own variables are globals that every
+    /// function reads as they are: only a comprehension's variable that a `lambda` in it
+    /// reads is captured, in a cell.
+    pub(crate) fn of_module(statements: &[&Stmt]) -> Self {
+        let mut names = Names::default();
+        for statement in statements {
+            names.statement(statement, false);
+        }
+        let cells = names.comprehension_cells;
+        let captures = names
+            .nested
+            .iter()
+            .map(|nested| {
+                (
+                    nested.span,
+                    nested.free.intersection(&cells).cloned().collect(),
+                )
+            })
+            .collect();
+        Self {
+            captures,
+            cells,
+            ..Self::default()
+        }
+    }
+}
+
 /// One nested `def` of a function: where it is, its name, the names it reads of the
 /// functions around it, those of them it reads other than by calling them by name, or
 /// through the functions nested in it, and those it or a function nested in it assigns
@@ -117,8 +145,11 @@ struct Names {
     reads: BTreeSet<String>,
     /// The names read other than by calling them by name.
     values: BTreeSet<String>,
-    /// Each nested `def`, in source order.
+    /// Each nested `def` and `lambda`, in source order.
     nested: Vec<NestedDef>,
+    /// The variables of comprehensions that a `lambda` inside them reads, which live in a
+    /// cell each run of the comprehension makes anew, as CPython 3.12 to 3.15 keep them.
+    comprehension_cells: BTreeSet<String>,
 }
 
 impl Names {
@@ -156,11 +187,13 @@ impl Names {
             });
     }
 
-    /// Returns the names this function binds, less those it declares `global` or `nonlocal`.
+    /// Returns the names this function binds, less those it declares `global` or `nonlocal`,
+    /// with the variables of its comprehensions that a `lambda` captures.
     fn bound_names(&self) -> BTreeSet<String> {
         self.bindings
             .keys()
             .filter(|name| !self.globals.contains(*name) && !self.nonlocals.contains(*name))
+            .chain(&self.comprehension_cells)
             .cloned()
             .collect()
     }
@@ -370,19 +403,19 @@ impl Names {
             Stmt::Assign { targets, value, .. } => {
                 self.expression(value, in_loop);
                 for target in targets {
-                    self.target(target, in_loop);
+                    self.assigned_from(target, value, in_loop);
                 }
             }
             Stmt::AugAssign { target, value, .. } => {
                 self.expression(value, in_loop);
                 // `x += 1` reads `x`, then binds it again.
                 self.expression(target, in_loop);
-                self.target(target, in_loop);
+                self.assigned_from(target, value, in_loop);
             }
             Stmt::AnnAssign { target, value, .. } => {
                 if let Some(value) = value {
                     self.expression(value, in_loop);
-                    self.target(target, in_loop);
+                    self.assigned_from(target, value, in_loop);
                 } else if let Expr::Name { id, span } = target {
                     self.declare(id, span.start().0);
                 }
@@ -507,11 +540,21 @@ impl Names {
     /// Notes the names an assignment target binds, and reads the parts of an item or an
     /// attribute it assigns.
     fn target(&mut self, target: &Expr, in_loop: bool) {
+        self.target_after(target, in_loop, None);
+    }
+
+    /// Notes the names a target binds once `value` is evaluated, so a `lambda` in the value
+    /// comes before the binding and reads the variable it assigns through a cell.
+    fn assigned_from(&mut self, target: &Expr, value: &Expr, in_loop: bool) {
+        self.target_after(target, in_loop, Some(value.span().end().0));
+    }
+
+    fn target_after(&mut self, target: &Expr, in_loop: bool, after: Option<u32>) {
         match target {
-            Expr::Name { id, span } => self.bind(id, span.start().0, in_loop),
+            Expr::Name { id, span } => self.bind(id, after.unwrap_or(span.start().0), in_loop),
             Expr::Tuple { elements, .. } | Expr::List { elements, .. } => {
                 for element in elements {
-                    self.target(element, in_loop);
+                    self.target_after(element, in_loop, after);
                 }
             }
             Expr::Subscript { value, index, .. } => {
@@ -547,8 +590,13 @@ impl Names {
             } => self.expressions([&**test, &**body, &**orelse], in_loop),
             Expr::Named { target, value, .. } => {
                 self.expression(value, in_loop);
-                self.bind(&target.name, target.span.start().0, in_loop);
+                self.bind(&target.name, value.span().end().0, in_loop);
             }
+            Expr::Lambda {
+                parameters,
+                body,
+                span,
+            } => self.lambda(parameters, body, *span, in_loop),
             Expr::Compare {
                 left, comparators, ..
             } => {
@@ -617,6 +665,29 @@ impl Names {
         }
     }
 
+    /// Notes a `lambda` as a nested function of its parameters and its body; its defaults are
+    /// read where it runs.
+    fn lambda(&mut self, parameters: &[Parameter], body: &Expr, span: Span, in_loop: bool) {
+        for default in parameters
+            .iter()
+            .filter_map(|parameter| parameter.default.as_ref())
+        {
+            self.expression(default, in_loop);
+        }
+        let mut inner = Self::default();
+        for parameter in parameters {
+            inner.bind(&parameter.name.name, 0, false);
+        }
+        inner.expression(body, false);
+        self.nested.push(NestedDef {
+            span,
+            name: "<lambda>".to_owned(),
+            free: inner.free(),
+            values: inner.value_free(),
+            assigned: inner.assigned_free(),
+        });
+    }
+
     fn fstring_part(&mut self, part: &FStringPart, in_loop: bool) {
         if let FStringPart::Field(field) = part {
             self.expression(&field.value, in_loop);
@@ -653,6 +724,15 @@ impl Names {
             .extend(inner.reads.into_iter().filter(|name| !own.contains(name)));
         self.values
             .extend(inner.values.into_iter().filter(|name| !own.contains(name)));
+        // A `lambda` that reads the comprehension's variable shares it through a cell.
+        self.comprehension_cells.extend(
+            inner
+                .nested
+                .iter()
+                .flat_map(|nested| nested.free.intersection(&own))
+                .cloned(),
+        );
+        self.comprehension_cells.extend(inner.comprehension_cells);
         self.nested.extend(inner.nested);
     }
 }
@@ -981,6 +1061,41 @@ mod tests {
              def b() -> int:\n        nonlocal a\n        return a()\n",
         );
         assert!(found.iter().all(Vec::is_empty), "{found:?}");
+    }
+
+    #[test]
+    fn exp_14_a_lambda_captures_as_a_nested_function_does() {
+        // A variable bound once before the `lambda` is copied; a loop variable is shared.
+        let (captures, cells) = scope(
+            "def f(step: int) -> None:\n    add = lambda x: x + step\n    for i in range(3):\n        \
+             show = lambda: i\n",
+        );
+        assert_eq!(captures, [vec!["step".to_owned()], vec!["i".to_owned()]]);
+        assert_eq!(cells, ["i"]);
+    }
+
+    #[test]
+    fn exp_14_a_lambda_in_the_value_of_its_own_assignment_shares_the_variable() {
+        let (captures, cells) =
+            scope("def f() -> None:\n    fact = lambda n: 1 if n == 0 else n * fact(n - 1)\n");
+        assert_eq!(captures, [vec!["fact".to_owned()]]);
+        assert_eq!(cells, ["fact"]);
+    }
+
+    #[test]
+    fn exp_14_a_comprehension_variable_a_lambda_reads_lives_in_a_cell() {
+        let (captures, cells) =
+            scope("def f() -> None:\n    made = [lambda: i * k for i in range(3)]\n    k = 2\n");
+        assert_eq!(captures, [vec!["i".to_owned(), "k".to_owned()]]);
+        assert_eq!(cells, ["i", "k"]);
+    }
+
+    #[test]
+    fn exp_14_names_a_lambda_binds_are_its_own() {
+        let (captures, cells) =
+            scope("def f(x: int) -> None:\n    g = lambda y: (z := y + x) + z\n");
+        assert_eq!(captures, [vec!["x".to_owned()]]);
+        assert_eq!(cells, Vec::<String>::new());
     }
 
     #[test]

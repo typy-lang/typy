@@ -146,6 +146,8 @@ pub(super) fn visit_expression(expression: &Expr, visit: &mut dyn FnMut(&Expr)) 
             visit_expression(operand, visit);
         }
         Expr::Named { value, .. } => visit_expression(value, visit),
+        // A `lambda`'s body is a scope of its own; its defaults are evaluated where it runs.
+        Expr::Lambda { parameters, .. } => visit_defaults(parameters, visit),
         Expr::IfExp {
             test, body, orelse, ..
         } => {
@@ -209,5 +211,15 @@ fn visit_generators(generators: &[Comprehension], visit: &mut dyn FnMut(&Expr)) 
         for condition in &generator.ifs {
             visit_expression(condition, visit);
         }
+    }
+}
+
+/// Visits the default values of `parameters`.
+fn visit_defaults(parameters: &[typy_source::syntax::Parameter], visit: &mut dyn FnMut(&Expr)) {
+    for default in parameters
+        .iter()
+        .filter_map(|parameter| parameter.default.as_ref())
+    {
+        visit_expression(default, visit);
     }
 }

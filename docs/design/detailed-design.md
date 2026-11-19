@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy detailed design |
-| Version | 2.45 |
+| Version | 2.46 |
 | Status | Approved |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-19 |
@@ -789,6 +789,30 @@ checked, since an assignment after the `def` may give it. A nested
 function with type parameters, or in a generic function, is planned for
 0.9 (FUN-10). A call of a local variable before an assignment gives it a
 type is read first, so it is E0306.
+
+`body/lambda.rs` checks a `lambda` (EXP-14) as a nested function of one
+`return` statement, `<lambda>`, whose `__qualname__` is
+`outer.<locals>.<lambda>`, or `<lambda>` at module level. `Expected`
+holds what the context gives: the parameter types by position and the
+result type. `expression_expecting` gives the `Callable` it expects, also
+through either branch of a conditional (`body/conditional.rs`), and
+`key_argument` the item type alone. A parameter without a type, where
+nothing or a `Callable` of fewer parameters is expected, is E0203; one
+taken by keyword only is E0202. The body is checked where the `lambda`
+stands, with `check_body_of`, so a capture of a variable assigned no type
+yet is E0306, and a `lambda` in a generic function is E0201 (FUN-10).
+Where no result type is expected, the body's type becomes the result:
+the signature holds `Type::Error` while the body is checked, which a
+`return` takes as no expected type, and `settle_lambda_result` gives the
+signature the type of the returned value. The value is
+`TypedExprKind::Lambda { function, captures }`. `ClosureScope` notes each
+`lambda` as it notes a nested `def`, by its span; a name an assignment
+binds counts where the value is evaluated, so a `lambda` in the value
+captures the variable it is assigned to through a cell; and a
+comprehension's variable that a `lambda` in it reads is a cell variable
+of the function. At module level, `ClosureScope::of_module` captures only
+such a comprehension variable, since a module variable is a global that
+every function reads as it is.
 
 `body/key_argument.rs` checks the `key` of `sorted`, `min` and `max`, also
 of `min` and `max` of several values, and of `list.sort`: a function value
@@ -2524,7 +2548,7 @@ graph, symbol names and the string pool.
 | Builtins | Each builtin of 0.1 becomes runtime calls. `print` evaluates every argument in source order, then converts and writes each value. `min` and `max` keep the first value on a tie, as CPython does |
 | Stack | A function in a cycle of calls invokes the runtime's stack check on entry (FUN-02). Each function that calls through a function value counts as one, since every cycle through a value passes through such a call |
 | Cells | A variable that lives in a cell has a slot of `CELL`; the prologue makes each cell, and stores a parameter's value in its cell with a reference of its own. A read gets the value from the cell, and an assignment stores the new value with `CellSet` and releases the old one, zero when there was none; such a variable is never moved. An `except` clause's variable in a cell is cleared when the clause ends. A captured cell read in a nested function tests `CellBound` and calls `free_variable_unbound`, which raises `NameError`, when it holds no value. The slot of a `nonlocal` variable takes the captured cell, with a reference of its own, in place of a new one, and its reads test `CellBound` the same way |
-| Nested functions | A `def` emits `NewClosure` and a `SetCapture` with a reference of its own for each capture, in order, then stores the object in its variable. `Capture` and `RunningFunction` read the running function's object, its first parameter, borrowed, since its caller holds it for the call. `CallNested` calls the code directly with the object first. `CaptureOf` reads a capture of another function object with `Capture` and takes a reference of its own before the object is released |
+| Nested functions | A `def` emits `NewClosure` and a `SetCapture` with a reference of its own for each capture, in order, then stores the object in its variable. `Capture` and `RunningFunction` read the running function's object, its first parameter, borrowed, since its caller holds it for the call. `CallNested` calls the code directly with the object first. `CaptureOf` reads a capture of another function object with `Capture` and takes a reference of its own before the object is released. A `lambda` makes its object as a `def` does and gives it as a value; its symbol adds the function's number to its `__qualname__`, since the lambdas of one function share it. A comprehension makes a new cell for each of its variables a `lambda` captures each time it runs, and releases the cell of the run before, as CPython 3.12 to 3.15 do for an inlined comprehension |
 | Keys | `Keyed` evaluates the list, then the key and the option in the call's order, and holds a reference to the key's function value for the call. `sorted` and `list.sort` copy the list, call the key through its value for each item as a `for` loop reads the copy, appending each key to a list of keys, then call `list_sort_keyed`; `list.sort` then clears its list and extends it with the copy. `min` and `max` call the key for each item of the list and pass it with the item to `list_keep_extreme`, which keeps the best key and its item in two lists of at most one item, and `list_extreme` of the list of the item gives the result or the default. A function with a `Keyed` call checks the stack on entry, as one that calls through a value does |
 | Bound methods | `BoundMethod` evaluates the object, starts from the descriptor of the first method and, for each later entry, tests `is_instance` of its class and selects its descriptor when the test holds, then calls `method_new` with the descriptor and the object |
 | Function values | A function read as a value is its `Constant::Function`, borrowed, since it is immortal. A call through a value evaluates the callee, then the arguments, keeps each for the call as a call by name does, so the call cannot free the object it runs by assigning where it was read, and invokes `Callee::Value`. A function value's slot starts as null, `type()` and `str` of one read its header, `==` calls `objects_equal`, and it is true |

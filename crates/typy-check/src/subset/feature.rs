@@ -33,7 +33,6 @@ pub(super) fn feature(kind: NodeKind) -> Feature {
         NodeKind::NamedExpr => Feature::Excluded {
             what: "assignment expressions to anything but a name",
         },
-        NodeKind::Lambda => planned("`lambda` expressions", "0.8", RuleId::EXP_14),
         NodeKind::GeneratorExp => planned("generator expressions", "0.9", RuleId::EXP_15),
         NodeKind::Yield | NodeKind::YieldFrom => planned("generators", "0.9", RuleId::SMT_11),
         NodeKind::Starred => planned("unpacking with `*`", "0.9", RuleId::EXP_17),

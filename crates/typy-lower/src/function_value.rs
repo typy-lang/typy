@@ -15,9 +15,8 @@ impl FunctionLowerer<'_> {
         Self::borrowed(value, TyirType::FUNCTION)
     }
 
-    /// Lowers a nested `def`: a new function object of `function`, which takes over a
-    /// reference to the value of each capture, in order, stored in the variable `target`
-    /// (FUN-04, ADR-0061).
+    /// Lowers a nested `def`: a new function object of `function`, stored in the variable
+    /// `target` (FUN-04, ADR-0061).
     pub(crate) fn nested_def(
         &mut self,
         function: FunctionId,
@@ -25,6 +24,18 @@ impl FunctionLowerer<'_> {
         captures: &[TypedExpr],
         span: Span,
     ) {
+        let closure = self.new_closure(function, captures, span);
+        self.assign_name(target, closure, span);
+    }
+
+    /// Returns a new function object of the nested function or `lambda` `function`, which
+    /// takes over a reference to the value of each capture, in order (FUN-04, EXP-14).
+    pub(crate) fn new_closure(
+        &mut self,
+        function: FunctionId,
+        captures: &[TypedExpr],
+        span: Span,
+    ) -> Lowered {
         let variables = self
             .program
             .closures
@@ -54,7 +65,7 @@ impl FunctionLowerer<'_> {
                 span,
             );
         }
-        self.assign_name(target, closure, span);
+        closure
     }
 
     /// Returns the capture at `index` of the running nested function, of type `ty`, borrowed

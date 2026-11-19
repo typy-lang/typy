@@ -38,6 +38,24 @@ impl Closure {
         self.captures.keys().cloned().collect()
     }
 
+    /// Returns the captured variables, in the order the function object holds them.
+    pub(super) fn variables(&self) -> Vec<CapturedVariable> {
+        let mut captures: Vec<(u32, CapturedVariable)> = self
+            .captures
+            .iter()
+            .map(|(name, captured)| {
+                let variable = CapturedVariable {
+                    name: name.clone(),
+                    ty: captured.ty.clone(),
+                    cell: captured.cell,
+                };
+                (captured.position, variable)
+            })
+            .collect();
+        captures.sort_by_key(|(position, _)| *position);
+        captures.into_iter().map(|(_, captured)| captured).collect()
+    }
+
     /// Returns the position and the value type of the captured cell of the variable `name`.
     pub(super) fn captured_cell(&self, name: &str) -> Option<(u32, Type)> {
         let captured = self.captures.get(name).filter(|captured| captured.cell)?;
@@ -165,7 +183,7 @@ impl BodyChecker<'_> {
     }
 
     /// Returns the variables the nested `def` at `span` captures.
-    fn captured_names(&self, span: Span) -> BTreeSet<String> {
+    pub(super) fn captured_names(&self, span: Span) -> BTreeSet<String> {
         self.closure_scope
             .captures
             .get(&span)
@@ -176,7 +194,7 @@ impl BodyChecker<'_> {
     /// Returns the closure of the nested function `function`, named `name`, with the reads
     /// of the variables it captures, `captured`, in order: the value it copies, or the cell a
     /// variable lives in, which it shares.
-    fn capture_values(
+    pub(super) fn capture_values(
         &mut self,
         name: &str,
         function: FunctionId,
@@ -275,7 +293,16 @@ impl BodyChecker<'_> {
         if !self.closure_scope.cells.contains(name) || self.global_names.contains(name) {
             return None;
         }
-        self.locals.get(name).copied()
+        self.locals
+            .get(name)
+            .copied()
+            .filter(|symbol| !self.is_module_variable(*symbol))
+    }
+
+    /// Returns true when `symbol` is a module variable, which a function reads as it is and
+    /// never captures.
+    pub(super) fn is_module_variable(&self, symbol: SymbolId) -> bool {
+        self.program.symbols[symbol.0 as usize].kind == crate::typed::SymbolKind::ModuleVariable
     }
 
     /// Returns the nested function the variable `name` holds when a `def` alone binds it.
@@ -482,24 +509,9 @@ impl BodyChecker<'_> {
             let Stmt::FunctionDef { body, .. } = &nested.statement else {
                 continue;
             };
-            let mut captures: Vec<(u32, CapturedVariable)> = nested
-                .closure
-                .captures
-                .iter()
-                .map(|(name, captured)| {
-                    let variable = CapturedVariable {
-                        name: name.clone(),
-                        ty: captured.ty.clone(),
-                        cell: captured.cell,
-                    };
-                    (captured.position, variable)
-                })
-                .collect();
-            captures.sort_by_key(|(position, _)| *position);
-            program.closures.insert(
-                nested.function,
-                captures.into_iter().map(|(_, captured)| captured).collect(),
-            );
+            program
+                .closures
+                .insert(nested.function, nested.closure.variables());
             let definition = Definition {
                 name: nested.definition.name,
                 qualified_name: nested.definition.qualified_name,

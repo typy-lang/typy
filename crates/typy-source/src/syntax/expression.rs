@@ -4,6 +4,7 @@ use typy_diagnostics::Span;
 
 use super::node_kind::NodeKind;
 use super::operator::{BinaryOperator, BoolOperator, CompareOperator, UnaryOperator};
+use super::statement::Parameter;
 use super::tree::Identifier;
 
 /// A literal value.
@@ -93,6 +94,13 @@ pub enum Expr {
     Named {
         target: Identifier,
         value: Box<Expr>,
+        span: Span,
+    },
+    /// `lambda parameters: body`, a function of one expression (EXP-14). Its parameters
+    /// have no annotations.
+    Lambda {
+        parameters: Vec<Parameter>,
+        body: Box<Expr>,
         span: Span,
     },
     Compare {
@@ -198,6 +206,7 @@ impl Expr {
             | Self::UnaryOp { span, .. }
             | Self::IfExp { span, .. }
             | Self::Named { span, .. }
+            | Self::Lambda { span, .. }
             | Self::Compare { span, .. }
             | Self::Call { span, .. }
             | Self::Constant { span, .. }

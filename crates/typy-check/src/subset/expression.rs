@@ -384,6 +384,9 @@ impl Walker {
                 value,
                 span,
             } => self.named(target, value, *span),
+            Expr::Lambda {
+                parameters, body, ..
+            } => self.lambda(parameters, body),
             Expr::Dict { keys, values, .. } => {
                 for (key, value) in keys.iter().zip(values) {
                     match key {

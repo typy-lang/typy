@@ -14,6 +14,7 @@ mod closure_scope;
 mod comparison_bridge;
 mod comparison_chain;
 mod comprehension;
+mod conditional;
 mod container_method;
 mod delete;
 mod dict;
@@ -43,6 +44,7 @@ mod isinstance;
 mod iterable_call;
 mod iterator;
 mod key_argument;
+mod lambda;
 mod list;
 mod list_call;
 mod locals;
@@ -385,14 +387,19 @@ impl<'program> BodyChecker<'program> {
         diagnostics: &mut Diagnostics,
     ) -> FunctionId {
         let mut checker = BodyChecker::new(program, diagnostics, None);
+        checker.closure_scope = closure_scope::ClosureScope::of_module(statements);
         checker.collect_locals(statements);
         let first = statements.first().map(|statement| statement.span());
         let mut body = first.map_or_else(Vec::new, |span| checker.program.rebound_starts(span));
         body.extend(checker.statements(statements));
         let named_targets = std::mem::take(&mut checker.named_targets);
+        let cells = checker.cell_variables();
         let locals = checker.finish_locals();
         // A lazy import adds the function that runs it, so the body's ID comes after those.
         let entry = FunctionId(id(program.functions.len()));
+        if !cells.is_empty() {
+            program.cells.insert(entry, cells);
+        }
         let span = statements.first().map_or_else(
             || Span::empty(typy_diagnostics::FileId(0), typy_diagnostics::TextOffset(0)),
             |first| first.span(),

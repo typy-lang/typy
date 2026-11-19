@@ -619,7 +619,10 @@ impl BodyChecker<'_> {
         self.check_instance_complete(span);
         self.check_stays_in_finally("return", span);
         let expected = self.returns.clone().unwrap_or(Type::NoneType);
-        let value = value.map(|value| self.expression_expecting(value, Some(&expected)));
+        // A result of no known type, such as that of a `lambda` whose context gives none,
+        // takes the value as it is (EXP-14).
+        let known = (expected != Type::Error).then_some(&expected);
+        let value = value.map(|value| self.expression_expecting(value, known));
         let actual = value
             .as_ref()
             .map_or(Type::NoneType, |value| value.ty.clone());

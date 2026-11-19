@@ -286,6 +286,11 @@ fn expression(expression_value: &TypedExpr, callees: &mut BTreeSet<FunctionId>) 
             expression(left, callees);
             expression(right, callees);
         }
+        TypedExprKind::Lambda { captures, .. } => {
+            for capture in captures {
+                expression(capture, callees);
+            }
+        }
         TypedExprKind::CallNested {
             function,
             closure,

@@ -42,6 +42,13 @@ All notable changes to TyPy are recorded here. The format follows
   function by name. Nested functions that call one another, defined one
   after another, hold the same captures and never each other, so they are
   freed with their last reference (FUN-04, ADR-0061).
+- `lambda` expressions where a `Callable` is expected: an annotated
+  variable, a parameter, a result, an item of a typed list or dict, a
+  branch of a conditional, and the `key` of `sorted`, `list.sort`, `min`
+  and `max`. The parameters take the expected types, and the result the
+  expected type or the body's. A `lambda` captures as a nested function
+  does, so those made in a loop or a comprehension read the last value of
+  its variable, as in CPython (EXP-14).
 - `nonlocal` in a nested function, which assigns the variable of the
   function around it that every function sharing it sees, with CPython's
   rules for where it may stand. No test narrows such a variable, since any

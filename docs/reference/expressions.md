@@ -20,6 +20,7 @@ order.
 | `x if c else y` with branches of one type | EXP-11 |
 | List, set and dict comprehensions, each with its own scope | EXP-12 |
 | Assignment expressions `name := value`, as CPython scopes them | EXP-13 |
+| `lambda` where a `Callable` is expected | EXP-14 |
 | Positional, keyword and default arguments | EXP-16 |
 
 An assignment expression `name := value` assigns the variable and gives
@@ -41,8 +42,44 @@ def lookup(table: dict[str, int], key: str) -> int:
 print(lookup({"a": 1}, "a"), lookup({"a": 1}, "b"))
 ```
 
-`lambda` comes in 0.8 (EXP-14), and generator expressions and `*args` in
-0.9 (EXP-15, EXP-17).
+A `lambda` is a function of one expression, made each time the
+expression runs, as in CPython. Its parameters have no annotations, so
+they take their types, by position, from the `Callable` its context
+expects: an annotated variable, a parameter, a function's result, an
+item of a typed list or dict, either branch of a conditional, or the
+`key` of `sorted`, `list.sort`, `min` and `max`, which passes each item.
+Its result takes the expected type, or the type of its body where no
+context gives one. A `lambda` reads the variables around it as a nested
+function does, so the ones made in a loop or a comprehension read the
+last value of its variable:
+
+<!-- typy-expect: accepted -->
+```python
+from typing import Callable
+
+
+def adder(step: int) -> Callable[[int], int]:
+    return lambda value: value + step
+
+
+double: Callable[[int], int] = lambda x: x * 2
+made = [lambda: i for i in range(3)]
+words = ["pear", "fig", "banana"]
+print(adder(10)(5), double(21), [each() for each in made])
+print(sorted(words, key=lambda word: (len(word), word)))
+```
+
+A `lambda` with a parameter where no `Callable` is expected, or with more
+parameters than the expected `Callable` passes, is E0203; define the
+function with `def`. A parameter taken by keyword only is E0202, since a
+`Callable` passes every argument by position. A `lambda` that reads a
+variable assigned no type yet where it stands is E0306, since its body is
+checked there. A `lambda` inside a generic function is planned for 0.9
+(FUN-10). A `lambda` stored in a variable that it calls, such as a
+recursive one inside a function, holds itself through the variable's
+cell: a reference cycle that cycle collection frees in 1.0 (MEM-06).
+
+Generator expressions and `*args` come in 0.9 (EXP-15, EXP-17).
 
 ## Example
 

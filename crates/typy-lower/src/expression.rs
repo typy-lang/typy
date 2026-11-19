@@ -267,6 +267,9 @@ impl FunctionLowerer<'_> {
                 closure,
                 index,
             } => self.capture_of(*function, closure, *index, span),
+            TypedExprKind::Lambda { function, captures } => {
+                self.new_closure(*function, captures, span)
+            }
             TypedExprKind::CallNested {
                 function,
                 closure,
