@@ -534,6 +534,16 @@ impl Dump<'_> {
                 self.line(depth, &format!("Named {}", target.name), span);
                 self.expression(depth + 1, value);
             }
+            Expr::Yield { value, .. } => {
+                self.line(depth, "Yield", span);
+                if let Some(value) = value {
+                    self.expression(depth + 1, value);
+                }
+            }
+            Expr::YieldFrom { value, .. } => {
+                self.line(depth, "YieldFrom", span);
+                self.expression(depth + 1, value);
+            }
             Expr::Lambda {
                 parameters, body, ..
             } => {

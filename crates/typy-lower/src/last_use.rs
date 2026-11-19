@@ -93,7 +93,7 @@ impl Analysis<'_> {
                 self.stored_items(value, &reads, &after);
                 self.with_reads(after, &reads)
             }
-            TypedStmt::Expr { value, .. } => {
+            TypedStmt::Expr { value, .. } | TypedStmt::Yield { value, .. } => {
                 let mut reads = Vec::new();
                 expression_reads(value, &mut reads);
                 self.stored_items(value, &reads, &after);

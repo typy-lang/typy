@@ -18,6 +18,7 @@ mod foreign;
 mod frame;
 mod function;
 mod function_object;
+mod generator;
 mod header;
 mod heap;
 mod layout;

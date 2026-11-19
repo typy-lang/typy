@@ -23,6 +23,8 @@ pub(crate) fn check(tree: &SyntaxTree) -> Diagnostics {
         scope: None,
         comprehension_names: Vec::new(),
         comprehension_sources: 0,
+        comprehension_kinds: Vec::new(),
+        lambda_depth: 0,
         generic_classes: tree
             .body
             .iter()
@@ -107,6 +109,11 @@ struct Walker {
     /// How many comprehension sources enclose the expression being walked, where CPython
     /// refuses an assignment expression.
     comprehension_sources: usize,
+    /// What each enclosing comprehension is, innermost last, which CPython's message of a
+    /// `yield` inside one names.
+    comprehension_kinds: Vec<&'static str>,
+    /// How many `lambda` expressions enclose the expression being walked.
+    lambda_depth: usize,
 }
 
 impl Walker {

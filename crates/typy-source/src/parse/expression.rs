@@ -315,8 +315,14 @@ impl Converter<'_> {
             },
             ast::Expr::Generator(node) => self.other(NodeKind::GeneratorExp, node.range),
             ast::Expr::Await(node) => self.other(NodeKind::Await, node.range),
-            ast::Expr::Yield(node) => self.other(NodeKind::Yield, node.range),
-            ast::Expr::YieldFrom(node) => self.other(NodeKind::YieldFrom, node.range),
+            ast::Expr::Yield(node) => Expr::Yield {
+                value: node.value.as_deref().map(|value| self.boxed(value)),
+                span,
+            },
+            ast::Expr::YieldFrom(node) => Expr::YieldFrom {
+                value: self.boxed(&node.value),
+                span,
+            },
             ast::Expr::FString(node) => Expr::FString {
                 parts: node
                     .value

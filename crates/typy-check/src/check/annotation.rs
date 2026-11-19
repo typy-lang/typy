@@ -63,6 +63,8 @@ pub(crate) static NO_PARAMETERS: BTreeMap<String, Type> = BTreeMap::new();
 pub(crate) enum AnnotationName {
     Iterator,
     Iterable,
+    /// `Generator[Y, S, R]`, the type of a generator object (FUN-07).
+    Generator,
     TracebackType,
     ModuleType,
     /// `typing.ClassVar`, which declares a class variable in a class body (CLS-11).
@@ -97,6 +99,7 @@ pub(crate) fn annotation_name(module: &str, name: &str) -> Option<AnnotationName
     match (module, name) {
         ("typing" | "collections.abc", "Iterator") => Some(AnnotationName::Iterator),
         ("typing" | "collections.abc", "Iterable") => Some(AnnotationName::Iterable),
+        ("typing" | "collections.abc", "Generator") => Some(AnnotationName::Generator),
         ("typing" | "collections.abc", "Callable") => Some(AnnotationName::Callable),
         ("types", "TracebackType") => Some(AnnotationName::TracebackType),
         ("types", "ModuleType") => Some(AnnotationName::ModuleType),
@@ -173,6 +176,11 @@ fn standard_annotation(
             if standard_name(value, scope) == Some(AnnotationName::Callable) =>
         {
             super::callable_annotation::callable_annotation(index, *span, scope, diagnostics)
+        }
+        Expr::Subscript { value, index, .. }
+            if standard_name(value, scope) == Some(AnnotationName::Generator) =>
+        {
+            generator_annotation(index, scope, diagnostics)
         }
         // `List[int]` is `list[int]`, read as the built-in type is (LIB-17).
         Expr::Subscript { value, index, span }
@@ -291,7 +299,44 @@ fn bare_standard(
             );
             Type::Error
         }
+        AnnotationName::Generator => {
+            diagnostics.push(generator_form(annotation.span()));
+            Type::Error
+        }
     }
+}
+
+/// Returns the type `Generator[Y, S, R]` names: what it yields, what it is sent and what it
+/// returns, each given, as CPython 3.12 needs them (FUN-07).
+fn generator_annotation(
+    index: &Expr,
+    scope: &AnnotationScope<'_>,
+    diagnostics: &mut Diagnostics,
+) -> Type {
+    let Expr::Tuple { elements, span } = index else {
+        diagnostics.push(generator_form(index.span()));
+        return Type::Error;
+    };
+    let [yields, sends, returns] = elements.as_slice() else {
+        diagnostics.push(generator_form(*span));
+        return Type::Error;
+    };
+    Type::Generator {
+        yields: Box::new(annotation_type(yields, scope, diagnostics)),
+        sends: Box::new(annotation_type(sends, scope, diagnostics)),
+        returns: Box::new(annotation_type(returns, scope, diagnostics)),
+    }
+}
+
+/// Returns E0408 for a `Generator` annotation without its three types.
+fn generator_form(span: typy_diagnostics::Span) -> Diagnostic {
+    Diagnostic::new(
+        DiagnosticCode::error(408),
+        span,
+        "a `Generator` annotation names what it yields, what it is sent and what it returns, \
+         such as `Generator[int, None, None]`",
+    )
+    .with_rule(RuleId::FUN_07)
 }
 
 /// Returns the type `Optional[T]`, which is `T | None`, or `Union[A, B, ...]`, which is

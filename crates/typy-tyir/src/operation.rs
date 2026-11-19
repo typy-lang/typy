@@ -323,6 +323,49 @@ pub enum Operation {
         /// The value.
         value: ValueId,
     },
+    /// A new generator object of the resume function `function`, with one reference, not
+    /// started, every field of its frame zero (SMT-11, ADR-0063).
+    NewGenerator {
+        /// The resume function.
+        function: crate::function::FunctionId,
+    },
+    /// Stores an argument in a new generator's frame, which takes over its reference.
+    SetGeneratorArgument {
+        /// The generator object.
+        generator: ValueId,
+        /// Its resume function, whose frame layout places the argument.
+        function: crate::function::FunctionId,
+        /// The argument's position, the closure of a nested function first.
+        index: u32,
+        /// The value.
+        value: ValueId,
+    },
+    /// Takes an argument out of the frame of the running generator, with its reference,
+    /// leaving zero, at the first step.
+    GeneratorArgument {
+        /// The generator object.
+        generator: ValueId,
+        /// The running resume function.
+        function: crate::function::FunctionId,
+        /// The argument's position.
+        index: u32,
+    },
+    /// The function object of the running nested generator function, borrowed from its
+    /// frame, which keeps it for every step.
+    GeneratorClosure {
+        /// The generator object.
+        generator: ValueId,
+        /// The running resume function.
+        function: crate::function::FunctionId,
+    },
+    /// Stores what a `yield` gives as the generator's current item, which takes over its
+    /// reference until the next step.
+    SetGeneratorItem {
+        /// The generator object.
+        generator: ValueId,
+        /// The item, as the eight bytes a list stores.
+        item: ValueId,
+    },
     /// A new cell with no value, laid out as `layout`, a tuple of the value and whether it is
     /// assigned (FUN-04, ADR-0061).
     NewCell {

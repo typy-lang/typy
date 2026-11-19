@@ -51,6 +51,7 @@ mod float;
 mod foreign;
 mod format;
 mod function;
+mod generator;
 mod hash;
 mod header;
 mod instance;

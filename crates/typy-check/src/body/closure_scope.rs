@@ -597,6 +597,11 @@ impl Names {
                 body,
                 span,
             } => self.lambda(parameters, body, *span, in_loop),
+            Expr::Yield { value, .. } => {
+                if let Some(value) = value {
+                    self.expression(value, in_loop);
+                }
+            }
             Expr::Compare {
                 left, comparators, ..
             } => {
@@ -651,7 +656,9 @@ impl Names {
                 generators,
                 ..
             } => self.comprehension(&[&**key, &**value], generators, in_loop),
-            Expr::Attribute { value, .. } => self.expression(value, in_loop),
+            Expr::Attribute { value, .. } | Expr::YieldFrom { value, .. } => {
+                self.expression(value, in_loop);
+            }
             Expr::Slice {
                 lower, upper, step, ..
             } => self.expressions(

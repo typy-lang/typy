@@ -96,7 +96,7 @@ fn statements(body: &[TypedStmt], callees: &mut BTreeSet<FunctionId>) {
                 assign_target(target, callees);
                 expression(value, callees);
             }
-            TypedStmt::Expr { value, .. } => {
+            TypedStmt::Expr { value, .. } | TypedStmt::Yield { value, .. } => {
                 expression(value, callees);
             }
             TypedStmt::FunctionDef { captures, .. } => {

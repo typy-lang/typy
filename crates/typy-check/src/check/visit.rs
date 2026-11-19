@@ -145,7 +145,12 @@ pub(super) fn visit_expression(expression: &Expr, visit: &mut dyn FnMut(&Expr)) 
         Expr::UnaryOp { operand, .. } | Expr::Attribute { value: operand, .. } => {
             visit_expression(operand, visit);
         }
-        Expr::Named { value, .. } => visit_expression(value, visit),
+        Expr::Named { value, .. } | Expr::YieldFrom { value, .. } => visit_expression(value, visit),
+        Expr::Yield { value, .. } => {
+            if let Some(value) = value {
+                visit_expression(value, visit);
+            }
+        }
         // A `lambda`'s body is a scope of its own; its defaults are evaluated where it runs.
         Expr::Lambda { parameters, .. } => visit_defaults(parameters, visit),
         Expr::IfExp {

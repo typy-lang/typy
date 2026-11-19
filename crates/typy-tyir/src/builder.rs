@@ -30,6 +30,7 @@ pub struct FunctionBuilder {
     values: Vec<ValueInfo>,
     slots: Vec<Slot>,
     current: BlockId,
+    generator: Option<crate::function::GeneratorFrame>,
 }
 
 impl FunctionBuilder {
@@ -57,6 +58,7 @@ impl FunctionBuilder {
             values: Vec::new(),
             slots: Vec::new(),
             current: BlockId(0),
+            generator: None,
         }
     }
 
@@ -188,6 +190,18 @@ impl FunctionBuilder {
         self.qualified_name = Some(qualified_name.into());
     }
 
+    /// Makes the function a generator's resume function, whose frame lives in its object
+    /// (ADR-0063).
+    pub fn set_generator(&mut self, frame: crate::function::GeneratorFrame) {
+        self.generator = Some(frame);
+    }
+
+    /// Returns the types of the slots made so far, in order.
+    #[must_use]
+    pub fn slot_types(&self) -> Vec<TyirType> {
+        self.slots.iter().map(|slot| slot.ty).collect()
+    }
+
     /// Returns the finished function; a block left without a terminator ends in `unreachable`.
     #[must_use]
     pub fn finish(self) -> TyirFunction {
@@ -213,6 +227,7 @@ impl FunctionBuilder {
             blocks,
             values: self.values,
             slots: self.slots,
+            generator: self.generator,
         }
     }
 }

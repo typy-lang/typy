@@ -128,6 +128,14 @@ impl<'shared, 'module, 'ctx> FunctionEmitter<'shared, 'module, 'ctx> {
             }
         }
         self.builder.position_at_end(self.blocks[0]);
+        // A generator keeps its slots in its object, which outlives each step (ADR-0063).
+        if self.function.generator.is_some() {
+            let generator = self.value(*self.function.parameters.first().ok_or_else(|| {
+                CodegenError("a resume function takes its generator".to_owned())
+            })?)?;
+            self.slots = self.generator_slots(generator.into_pointer_value())?;
+            return self.prepare_frames();
+        }
         for (index, slot) in self.function.slots.iter().enumerate() {
             let pointer = match value_type(context, &self.shared.tyir.tuple_types, slot.ty) {
                 Some(ty) => Some(self.builder.build_alloca(ty, &format!("s{index}"))?),

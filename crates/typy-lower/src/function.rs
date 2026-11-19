@@ -121,6 +121,11 @@ pub(crate) struct FunctionLowerer<'context> {
     pub(crate) cells: BTreeMap<SymbolId, typy_tyir::TupleTypeId>,
     recursive: bool,
     body_start: BlockId,
+    /// The block the prologue fills: the entry, or a resume function's first step.
+    prologue_block: BlockId,
+    /// For a generator's resume function, its generator and the blocks after its yields
+    /// (ADR-0063).
+    pub(crate) generator: Option<crate::generator::Resumable>,
     span: Span,
 }
 
@@ -144,10 +149,12 @@ impl<'context> FunctionLowerer<'context> {
         self.tuple_types.intern_id(items)
     }
 
-    /// Lowers `function`. `may_raise` says, for each function of the program, whether calls to it are invokes.
+    /// Lowers `function`, or for a generator function with `resume`, its resume function
+    /// under that ID. `may_raise` says, for each function of the program, whether calls to it
+    /// are invokes.
     pub(crate) fn lower(
         program: &'context TypedProgram,
-        function: &TypedFunction,
+        (function, resume): (&TypedFunction, Option<FunctionId>),
         calls: &crate::methods::Calls<'context>,
         tables: Tables<'context>,
         module_globals: &'context crate::module_variable::ModuleGlobals,
@@ -162,28 +169,15 @@ impl<'context> FunctionLowerer<'context> {
             return generic_stub(function);
         }
         let entry = function.id == program.entry;
-        let symbol_name = if entry {
-            ENTRY_SYMBOL.to_owned()
-        } else if function.name == "<lambda>" {
-            // The lambdas of one function share a `__qualname__`, so each symbol adds the
-            // lambda's number.
-            symbol(
-                &function.module,
-                &format!("{}.{}", function.qualified_name, function.id.0),
-            )
-        } else {
-            symbol(&function.module, &function.qualified_name)
-        };
-        let return_type = tyir_type(&function.signature.returns, tuple_types);
-        let mut builder = FunctionBuilder::new(
-            FunctionId(function.id.0),
-            symbol_name,
-            function.name.clone(),
-            return_type,
-        );
-        builder.set_qualified_name(function.qualified_name.clone());
-        let closure = closure_parameter(program, function, &mut builder, tuple_types);
+        let (mut builder, generator, closure) =
+            function_builder(program, (function, resume), tuple_types);
+        let prologue_block = generator
+            .as_ref()
+            .map_or(BlockId(0), |resumable| resumable.start);
         let cell_variables = cell_layouts(program, function, tuple_types);
+        let arguments = generator
+            .as_ref()
+            .map(|resumable: &crate::generator::Resumable| resumable.arguments());
         let Slots {
             of: slots,
             parameters,
@@ -192,7 +186,7 @@ impl<'context> FunctionLowerer<'context> {
             (program, function),
             &mut builder,
             (tuple_types, module_globals),
-            &cell_variables,
+            (&cell_variables, arguments),
         );
         let mut candidates = move_candidates(program, function, (&slots, &borrowed), tuple_types);
         // A cell is read through, never moved out of its slot.
@@ -226,12 +220,17 @@ impl<'context> FunctionLowerer<'context> {
             cells: cell_variables,
             recursive,
             body_start,
+            prologue_block,
+            generator,
             span: function.span,
         };
         lowerer.statements(&function.body);
         lowerer.finish_lazy_import(function.span);
         if !lowerer.builder.is_terminated() {
-            if function.signature.returns == typy_check::Type::NoneType {
+            // The end of a generator's body ends its last step (FUN-07).
+            if function.signature.returns == typy_check::Type::NoneType
+                || lowerer.generator.is_some()
+            {
                 let unit = lowerer.constant(Constant::Unit, function.span);
                 lowerer.release_slots(function.span);
                 lowerer.builder.terminate(Terminator::Return(unit));
@@ -242,6 +241,9 @@ impl<'context> FunctionLowerer<'context> {
             }
         }
         lowerer.prologue();
+        if lowerer.generator.is_some() {
+            return lowerer.finish_resume();
+        }
         // A method that shares a table entry with one that raises is called as one that may
         // raise, so it returns as one (ADR-0021).
         let shared = calls
@@ -276,7 +278,9 @@ impl<'context> FunctionLowerer<'context> {
     /// Fills the entry block: every slot gets a value before the body runs, so every error path can release every slot.
     fn prologue(&mut self) {
         let span = self.span;
-        self.builder.switch_to(BlockId(0));
+        self.builder.switch_to(self.prologue_block);
+        // A generator's arguments come out of its frame with their references (ADR-0063).
+        let owned = self.generator.is_some();
         let parameter_slots: Vec<(ValueId, SlotId)> = self.parameters.clone();
         // Each cell is made first; a parameter's holds the parameter's value, with a
         // reference of its own. A variable declared `nonlocal` holds the cell its function
@@ -311,7 +315,7 @@ impl<'context> FunctionLowerer<'context> {
                     .tuple_types
                     .items(*layout)
                     .map_or(TyirType::Unit, |items| items[0]);
-                if self.counted(ty) {
+                if self.counted(ty) && !owned {
                     self.builder.push(Operation::Increment(*value), span);
                 }
                 self.builder.push(
@@ -328,7 +332,10 @@ impl<'context> FunctionLowerer<'context> {
             if cells.iter().any(|(_, each, _)| each == slot) {
                 continue;
             }
-            if self.counted(self.builder.slot_type(*slot)) && !self.borrowed.contains(slot) {
+            if self.counted(self.builder.slot_type(*slot))
+                && !self.borrowed.contains(slot)
+                && !owned
+            {
                 self.builder.push(Operation::Increment(*value), span);
             }
             self.builder.push(
@@ -444,7 +451,10 @@ fn variable_slots(
         &mut typy_tyir::TupleTypes,
         &crate::module_variable::ModuleGlobals,
     ),
-    cells: &BTreeMap<SymbolId, typy_tyir::TupleTypeId>,
+    (cells, arguments): (
+        &BTreeMap<SymbolId, typy_tyir::TupleTypeId>,
+        Option<crate::generator::Arguments>,
+    ),
 ) -> Slots {
     let mut assigned = crate::borrow::assigned_symbols(&function.body);
     assigned.extend(function.named_targets.iter().copied());
@@ -453,10 +463,13 @@ fn variable_slots(
         parameters: Vec::new(),
         borrowed: BTreeSet::new(),
     };
-    for symbol_id in &function.parameters {
+    for (position, symbol_id) in function.parameters.iter().enumerate() {
         let symbol = program.symbol(*symbol_id);
         let ty = tyir_type(&symbol.ty, tuple_types);
-        let value = builder.add_parameter(ty);
+        let value = match arguments {
+            Some(arguments) => arguments.take(builder, position, ty, function.span),
+            None => builder.add_parameter(ty),
+        };
         let in_cell = cells.contains_key(symbol_id);
         let slot = builder.add_slot(
             symbol.name.clone(),
@@ -464,7 +477,8 @@ fn variable_slots(
         );
         made.of.insert(*symbol_id, slot);
         made.parameters.push((value, slot));
-        if !assigned.contains(symbol_id) && !in_cell {
+        // A generator owns its arguments, which outlive the call that made it.
+        if !assigned.contains(symbol_id) && !in_cell && arguments.is_none() {
             made.borrowed.insert(slot);
         }
     }
@@ -501,6 +515,51 @@ fn cell_layouts(
             (*symbol, tuple_types.intern_id(vec![ty, TyirType::Bool]))
         })
         .collect()
+}
+
+/// Returns the builder of `function`, or of its resume function `resume`, with the lowering's
+/// state of a resume function and the closure of a nested function with the layout of its
+/// captures.
+fn function_builder(
+    program: &TypedProgram,
+    (function, resume): (&TypedFunction, Option<FunctionId>),
+    tuple_types: &mut TupleTypes,
+) -> (
+    FunctionBuilder,
+    Option<crate::generator::Resumable>,
+    Option<(ValueId, typy_tyir::TupleTypeId)>,
+) {
+    let (mut builder, generator, closure) = if let Some(resume) = resume {
+        crate::generator::resume_builder(program, function, resume, tuple_types)
+    } else {
+        let return_type = tyir_type(&function.signature.returns, tuple_types);
+        let mut builder = FunctionBuilder::new(
+            FunctionId(function.id.0),
+            function_symbol(program, function),
+            function.name.clone(),
+            return_type,
+        );
+        let closure = closure_parameter(program, function, &mut builder, tuple_types);
+        (builder, None, closure)
+    };
+    builder.set_qualified_name(function.qualified_name.clone());
+    (builder, generator, closure)
+}
+
+/// Returns the symbol `function` is emitted under.
+pub(crate) fn function_symbol(program: &TypedProgram, function: &TypedFunction) -> String {
+    if function.id == program.entry {
+        ENTRY_SYMBOL.to_owned()
+    } else if function.name == "<lambda>" {
+        // The lambdas of one function share a `__qualname__`, so each symbol adds the
+        // lambda's number.
+        symbol(
+            &function.module,
+            &format!("{}.{}", function.qualified_name, function.id.0),
+        )
+    } else {
+        symbol(&function.module, &function.qualified_name)
+    }
 }
 
 /// Returns the stand-in for a generic function, whose copies are called in its place: it

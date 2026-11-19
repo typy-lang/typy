@@ -198,6 +198,21 @@ pub(crate) unsafe fn retain(tuple: *const TupleType, address: u64) {
     }
 }
 
+/// Drops a reference to every object the first `count` items of the tuple at `address`
+/// hold, in their declared order.
+///
+/// # Safety
+///
+/// As for `release`.
+pub(crate) unsafe fn release_first(tuple: *const TupleType, address: u64, count: usize) {
+    // SAFETY: the caller's guarantee covers each field.
+    unsafe {
+        for field in (*tuple).fields().iter().take(count) {
+            field.item_type().release(field.value(address));
+        }
+    }
+}
+
 /// Drops a reference to every object the tuple at `address` holds.
 ///
 /// # Safety

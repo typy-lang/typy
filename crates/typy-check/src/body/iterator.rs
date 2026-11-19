@@ -53,7 +53,7 @@ impl BodyChecker<'_> {
             _ => return self.wrong_arity(Builtin::Next, "1 or 2", arguments, span),
         };
         self.no_keywords(Builtin::Next, keywords);
-        let mut iterator = self.expression(iterator);
+        let mut iterator = Self::as_iterator(self.expression(iterator));
         // A file is its own iterator, as in CPython: each step reads its next line.
         if let Some(line) = iterator.ty.file_line() {
             let span = iterator.span;

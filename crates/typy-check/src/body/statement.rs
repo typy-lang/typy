@@ -58,6 +58,35 @@ impl BodyChecker<'_> {
     #[allow(clippy::too_many_lines, reason = "one arm per statement kind")]
     pub(super) fn statement(&mut self, statement: &Stmt) -> Option<TypedStmt> {
         Some(match statement {
+            Stmt::Expr {
+                value: Expr::Yield { value, .. },
+                span,
+            } => self.yield_statement(value.as_deref(), *span),
+            // A `yield` whose value is assigned, and `yield from`, come with `send` (SMT-11).
+            Stmt::Expr {
+                value: value @ Expr::YieldFrom { .. },
+                span,
+            }
+            | Stmt::Assign {
+                value: value @ (Expr::Yield { .. } | Expr::YieldFrom { .. }),
+                span,
+                ..
+            }
+            | Stmt::AnnAssign {
+                value: Some(value @ (Expr::Yield { .. } | Expr::YieldFrom { .. })),
+                span,
+                ..
+            } => {
+                let what = if let Expr::Yield { .. } = value {
+                    "the value of a `yield`"
+                } else {
+                    "`yield from`"
+                };
+                TypedStmt::Expr {
+                    value: self.generator_form_planned(what, value.span()),
+                    span: *span,
+                }
+            }
             Stmt::Assign {
                 targets,
                 value,
@@ -618,6 +647,18 @@ impl BodyChecker<'_> {
     pub(super) fn return_statement(&mut self, value: Option<&Expr>, span: Span) -> TypedStmt {
         self.check_instance_complete(span);
         self.check_stays_in_finally("return", span);
+        if self.generator.is_some() {
+            if let Some(value) = value {
+                let refused =
+                    self.generator_form_planned("a generator's return value", value.span());
+                return TypedStmt::Expr {
+                    value: refused,
+                    span,
+                };
+            }
+            self.assigned = None;
+            return TypedStmt::Return { value: None, span };
+        }
         let expected = self.returns.clone().unwrap_or(Type::NoneType);
         // A result of no known type, such as that of a `lambda` whose context gives none,
         // takes the value as it is (EXP-14).

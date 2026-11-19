@@ -284,6 +284,16 @@ impl Expr {
                 target.span = span;
                 value.relocate(span);
             }
+            Self::Yield { value, span: at } => {
+                *at = span;
+                if let Some(value) = value {
+                    value.relocate(span);
+                }
+            }
+            Self::YieldFrom { value, span: at } => {
+                *at = span;
+                value.relocate(span);
+            }
             Self::Lambda {
                 parameters,
                 body,

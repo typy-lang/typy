@@ -182,6 +182,10 @@ impl Dump<'_> {
                 self.line(depth, "Expr", *span);
                 self.expression(depth + 1, value);
             }
+            TypedStmt::Yield { value, span } => {
+                self.line(depth, "Yield", *span);
+                self.expression(depth + 1, value);
+            }
             TypedStmt::Return { value, span } => {
                 self.line(depth, "Return", *span);
                 if let Some(value) = value {

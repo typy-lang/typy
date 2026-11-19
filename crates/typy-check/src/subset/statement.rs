@@ -7,6 +7,16 @@ use super::feature::{Feature, feature, planned};
 use super::{Place, Walker};
 
 impl Walker {
+    /// Checks the value of an expression statement or an assignment, where a `yield` is a
+    /// statement of its own (SMT-11).
+    fn value(&mut self, value: &Expr) {
+        if let Expr::Yield { .. } | Expr::YieldFrom { .. } = value {
+            self.yield_statement(value);
+        } else {
+            self.expression(value);
+        }
+    }
+
     /// Checks the parameters of a function or a `lambda`: no `*args` or `**kwargs`, and
     /// constant defaults.
     pub(super) fn parameters(&mut self, parameters: &[Parameter]) {
@@ -48,7 +58,9 @@ impl Walker {
                 names, nested,
             ));
         let outer_loops = std::mem::take(&mut self.loop_depth);
+        self.lambda_depth += 1;
         self.expression(body);
+        self.lambda_depth -= 1;
         self.scope = outer_scope;
         self.loop_depth = outer_loops;
     }
@@ -176,7 +188,7 @@ impl Walker {
                 for target in targets {
                     self.name_target(target);
                 }
-                self.expression(value);
+                self.value(value);
             }
             Stmt::AugAssign { target, value, .. } => {
                 self.name_target(target);
@@ -194,7 +206,7 @@ impl Walker {
                 self.name_target(target);
                 self.annotation(annotation);
                 if let Some(value) = value {
-                    self.expression(value);
+                    self.value(value);
                 }
             }
             Stmt::For {
@@ -265,7 +277,7 @@ impl Walker {
                     },
                 ..
             } => {}
-            Stmt::Expr { value, .. } => self.expression(value),
+            Stmt::Expr { value, .. } => self.value(value),
             Stmt::Break { span } if self.loop_depth == 0 => {
                 self.syntax_error(*span, "`break` outside a loop");
             }

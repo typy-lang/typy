@@ -16,7 +16,10 @@ use crate::function::Shared;
 use crate::statics::Statics;
 
 /// The kind codes of the runtime's `ItemKind`, one for each item type a tuple field can have.
-fn kind_code(item: TyirType, tuples: &typy_tyir::TupleTypes) -> Result<u64, CodegenError> {
+pub(crate) fn kind_code(
+    item: TyirType,
+    tuples: &typy_tyir::TupleTypes,
+) -> Result<u64, CodegenError> {
     Ok(match item {
         // A union is a tuple of its tag and its slots, read by the tag (ADR-0027).
         TyirType::Tuple(id) if tuples.is_union(id) => 11,

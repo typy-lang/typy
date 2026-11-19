@@ -263,8 +263,18 @@ impl BodyChecker<'_> {
 
     /// Checks a sequence a loop reads. A fixed tuple whose items have one type is read as a
     /// `tuple[T, ...]` (DAT-14).
+    /// Returns `value` as an iterator of what it yields when it is a generator, which loops,
+    /// `iter()` and `next()` step through the iterator protocol, the same object (ADR-0065).
+    pub(super) fn as_iterator(value: TypedExpr) -> TypedExpr {
+        let Type::Generator { yields, .. } = &value.ty else {
+            return value;
+        };
+        let iterator = Type::Iterator(yields.clone());
+        Self::converted(value, Some(&iterator))
+    }
+
     pub(super) fn sequence(&mut self, expression: &Expr) -> TypedExpr {
-        let value = Self::version_tuple(self.expression(expression));
+        let value = Self::as_iterator(Self::version_tuple(self.expression(expression)));
         let Type::Tuple(items) = &value.ty else {
             return value;
         };

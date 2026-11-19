@@ -152,6 +152,22 @@ fn print_block(
         Terminator::Jump { target, arguments } => {
             format!("jump b{}({})", target.0, names(arguments))
         }
+        Terminator::Resume {
+            generator,
+            start,
+            points,
+        } => {
+            let points: Vec<String> = points.iter().map(|point| format!("b{}", point.0)).collect();
+            format!(
+                "resume v{}, b{}, [{}]",
+                generator.0,
+                start.0,
+                points.join(", ")
+            )
+        }
+        Terminator::Yield { generator, resume } => {
+            format!("yield v{}, b{}", generator.0, resume.0)
+        }
         Terminator::Branch {
             condition,
             then,
@@ -292,6 +308,31 @@ fn operation(module: &TyirModule, operation: &Operation) -> String {
         }
         Operation::NewClosure { function, captures } => {
             format!("new_closure fn{}, tuple#{}", function.0, captures.0)
+        }
+        Operation::NewGenerator { function } => format!("new_generator fn{}", function.0),
+        Operation::SetGeneratorArgument {
+            generator,
+            function,
+            index,
+            value,
+        } => format!(
+            "set_generator_argument v{}, fn{}, {index}, v{}",
+            generator.0, function.0, value.0
+        ),
+        Operation::GeneratorArgument {
+            generator,
+            function,
+            index,
+        } => format!(
+            "generator_argument v{}, fn{}, {index}",
+            generator.0, function.0
+        ),
+        Operation::GeneratorClosure {
+            generator,
+            function,
+        } => format!("generator_closure v{}, fn{}", generator.0, function.0),
+        Operation::SetGeneratorItem { generator, item } => {
+            format!("set_generator_item v{}, v{}", generator.0, item.0)
         }
         Operation::Capture {
             closure,

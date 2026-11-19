@@ -10,6 +10,7 @@ mod exception_parts;
 mod exports;
 mod final_names;
 mod function_values;
+mod generators;
 mod generics;
 mod lambda_expressions;
 mod lazy_imports;

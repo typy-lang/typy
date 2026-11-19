@@ -22,7 +22,14 @@ pub fn lower(program: &TypedProgram) -> Result<TyirModule, Diagnostics> {
     let recursive = recursive_functions(program);
     let methods = MethodTables::new(program);
     let families = methods.families();
-    let mut may_raise = vec![false; program.functions.len()];
+    // Each generator function's resume function comes after the program's functions
+    // (ADR-0063).
+    let generators: Vec<&typy_check::TypedFunction> = program
+        .functions
+        .iter()
+        .filter(|function| function.generator.is_some() && !function.generic)
+        .collect();
+    let mut may_raise = vec![false; program.functions.len() + generators.len()];
     let slot_methods: Vec<FunctionId> = program
         .classes
         .iter()
@@ -38,28 +45,22 @@ pub fn lower(program: &TypedProgram) -> Result<TyirModule, Diagnostics> {
         let mut tuple_types = TupleTypes::default();
         let mut cdata_classes = crate::cdata::CDataClasses::default();
         let module_globals = ModuleGlobals::new(program, &mut tuple_types);
-        let functions: Vec<_> = program
-            .functions
-            .iter()
-            .map(|function| {
-                FunctionLowerer::lower(
-                    program,
-                    function,
-                    &Calls {
-                        may_raise: &may_raise,
-                        methods: &methods,
-                        raising_slots,
-                    },
-                    crate::function::Tables {
-                        strings: &mut strings,
-                        tuple_types: &mut tuple_types,
-                        cdata_classes: &mut cdata_classes,
-                    },
-                    &module_globals,
-                    recursive.contains(&function.id),
-                )
-            })
-            .collect();
+        let calls = Calls {
+            may_raise: &may_raise,
+            methods: &methods,
+            raising_slots,
+        };
+        let functions = lower_functions(
+            program,
+            &generators,
+            &calls,
+            crate::function::Tables {
+                strings: &mut strings,
+                tuple_types: &mut tuple_types,
+                cdata_classes: &mut cdata_classes,
+            },
+            (&module_globals, &recursive),
+        );
         let found = raising_functions(&functions, &families);
         if found != may_raise {
             may_raise = found;
@@ -114,6 +115,70 @@ pub fn lower(program: &TypedProgram) -> Result<TyirModule, Diagnostics> {
             }
         };
     }
+}
+
+/// Returns the lowered functions of the program, in order, then the resume function of each
+/// generator function of `generators`, in order, whose own lowering makes its generator
+/// (ADR-0063).
+fn lower_functions(
+    program: &TypedProgram,
+    generators: &[&typy_check::TypedFunction],
+    calls: &Calls<'_>,
+    tables: crate::function::Tables<'_>,
+    (module_globals, recursive): (
+        &ModuleGlobals,
+        &std::collections::BTreeSet<typy_check::FunctionId>,
+    ),
+) -> Vec<typy_tyir::TyirFunction> {
+    let crate::function::Tables {
+        strings,
+        tuple_types,
+        cdata_classes,
+    } = tables;
+    let resume_of = |position: usize| {
+        FunctionId(u32::try_from(program.functions.len() + position).unwrap_or(u32::MAX))
+    };
+    let mut functions: Vec<_> = program
+        .functions
+        .iter()
+        .map(|function| {
+            if let Some(position) = generators.iter().position(|each| each.id == function.id) {
+                return crate::generator::maker(
+                    program,
+                    function,
+                    resume_of(position),
+                    tuple_types,
+                );
+            }
+            FunctionLowerer::lower(
+                program,
+                (function, None),
+                calls,
+                crate::function::Tables {
+                    strings,
+                    tuple_types,
+                    cdata_classes,
+                },
+                module_globals,
+                recursive.contains(&function.id),
+            )
+        })
+        .collect();
+    for (position, function) in generators.iter().enumerate() {
+        functions.push(FunctionLowerer::lower(
+            program,
+            (function, Some(resume_of(position))),
+            calls,
+            crate::function::Tables {
+                strings,
+                tuple_types,
+                cdata_classes,
+            },
+            module_globals,
+            true,
+        ));
+    }
+    functions
 }
 
 /// Returns whether each function may raise: one whose lowered code does, and each method of

@@ -143,6 +143,7 @@ impl Program {
             span,
             generic: false,
             named_targets: Vec::new(),
+            generator: None,
         }));
         self.classes[class.0 as usize]
             .methods

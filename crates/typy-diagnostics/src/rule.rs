@@ -209,6 +209,9 @@ impl RuleId {
     pub const FUN_05: Self = Self("FUN-05");
     /// User-defined decorators whose types can be checked shall be accepted.
     pub const FUN_06: Self = Self("FUN-06");
+    /// A generator function shall be annotated to return `Generator[Y, S, R]`, `Iterator[Y]`
+    /// or `Iterable[Y]`, and its call shall give a generator object of that type.
+    pub const FUN_07: Self = Self("FUN-07");
     /// A built-in function or a method of a built-in type shall be a value where a `Callable` is expected.
     pub const FUN_08: Self = Self("FUN-08");
     /// A class method, a static method a subclass defines again, a protocol value's method and
@@ -217,6 +220,8 @@ impl RuleId {
     /// A nested function inside a generic function, and one with type parameters of its own,
     /// shall be accepted.
     pub const FUN_10: Self = Self("FUN-10");
+    /// A `yield` or `yield from` inside a larger expression shall be accepted.
+    pub const FUN_12: Self = Self("FUN-12");
     /// Generic functions and classes shall be written with PEP 695 type parameter lists; `TypeVar` and `Generic` shall be rejected.
     pub const GEN_01: Self = Self("GEN-01");
     /// Type parameters with a bound or with constraints shall be accepted and checked.
@@ -491,9 +496,11 @@ impl RuleId {
         Self::FUN_04,
         Self::FUN_05,
         Self::FUN_06,
+        Self::FUN_07,
         Self::FUN_08,
         Self::FUN_09,
         Self::FUN_10,
+        Self::FUN_12,
         Self::GEN_01,
         Self::GEN_02,
         Self::GEN_03,

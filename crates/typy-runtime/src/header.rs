@@ -52,6 +52,9 @@ pub const FUNCTION_TYPE_ID: u32 = 24;
 pub const METHOD_TYPE_ID: u32 = 25;
 /// The type ID of a cell, a variable a nested function shares (FUN-04, ADR-0061).
 pub const CELL_TYPE_ID: u32 = 26;
+/// The type ID of a generator object, the state of a generator function's body between
+/// steps (SMT-11, ADR-0063).
+pub const GENERATOR_TYPE_ID: u32 = 27;
 
 /// The first 8 bytes of every heap object.
 #[repr(C)]

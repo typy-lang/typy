@@ -291,6 +291,12 @@ pub enum TypedStmt {
         value: Option<TypedExpr>,
         span: Span,
     },
+    /// `yield value`: the generator gives `value` and stops until its next step (SMT-11,
+    /// ADR-0063).
+    Yield {
+        value: TypedExpr,
+        span: Span,
+    },
     /// `with manager as target: body`: `__enter__` gives what the target binds, and `__exit__`
     /// runs on every way out of the body; when it may return a true value, it may suppress an
     /// exception (CST-05). Several items nest.

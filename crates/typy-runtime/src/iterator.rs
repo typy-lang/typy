@@ -265,7 +265,8 @@ pub unsafe extern "C" fn typy_rt_iterable_iterator(
     // SAFETY: the caller's guarantee; the header says what the object is.
     unsafe {
         let (object, kind, pair) = match (*source).type_id {
-            ITERATOR_TYPE_ID => {
+            // An iterator, and a generator, is its own iterator.
+            ITERATOR_TYPE_ID | crate::header::GENERATOR_TYPE_ID => {
                 typy_rt_increment(source);
                 return source.cast();
             }
@@ -303,6 +304,12 @@ pub unsafe extern "C" fn typy_rt_iterator_advance(
     iterator: *mut IteratorObject,
     stop: i64,
 ) -> Raising<bool> {
+    // A generator steps through its own code (ADR-0065).
+    // SAFETY: every iterator starts with its header.
+    if unsafe { (*iterator.cast::<ObjectHeader>()).type_id } == crate::header::GENERATOR_TYPE_ID {
+        // SAFETY: the header says the object is a generator.
+        return unsafe { crate::generator::advance(iterator.cast(), stop) };
+    }
     // SAFETY: the caller's guarantee; the iterator owns a reference to its source.
     let stepped = unsafe { step(&mut *iterator) };
     match stepped {
@@ -333,8 +340,13 @@ pub unsafe extern "C" fn typy_rt_iterator_advance(
 /// `iterator` points to a live iterator whose last step found an item.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn typy_rt_iterator_item(iterator: *const IteratorObject) -> u64 {
-    // SAFETY: the caller's guarantee.
-    unsafe { (*iterator).current }
+    // SAFETY: the caller's guarantee; every iterator starts with its header.
+    unsafe {
+        if (*iterator.cast::<ObjectHeader>()).type_id == crate::header::GENERATOR_TYPE_ID {
+            return crate::generator::current(iterator.cast());
+        }
+        (*iterator).current
+    }
 }
 
 /// Steps the iterator, and returns whether it found an item, or the exception its source's

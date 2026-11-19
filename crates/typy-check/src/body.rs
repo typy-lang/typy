@@ -22,6 +22,7 @@ mod dict_call;
 mod each_member;
 mod foreign_call;
 mod function_value;
+mod generator;
 mod generic_call;
 mod generic_copy;
 mod override_adapter;
@@ -147,6 +148,9 @@ pub(crate) struct BodyChecker<'program> {
     finally_loops: Vec<usize>,
     /// The module variables the function declares `global`, which it assigns (SMT-08).
     global_names: BTreeSet<String>,
+    /// The types of the generator function whose body this is, or `None` for any other body
+    /// (FUN-07, ADR-0063).
+    generator: Option<crate::typed::GeneratorTypes>,
     /// The variables of the functions around it that a nested function declares `nonlocal`,
     /// each its own variable whose cell is the captured one (SMT-09).
     nonlocal_names: BTreeMap<String, SymbolId>,
@@ -203,6 +207,7 @@ impl<'program> BodyChecker<'program> {
             finally_loops: Vec::new(),
             global_names: BTreeSet::new(),
             nonlocal_names: BTreeMap::new(),
+            generator: None,
             local_aliases: BTreeSet::new(),
             class_allowed: false,
             qualified_name: String::new(),
@@ -295,24 +300,10 @@ impl<'program> BodyChecker<'program> {
         let body = checker.statements(&statements);
         checker.restore_names(saved);
         checker.check_instance_complete(definition.span);
-        if checker.assigned.is_some()
-            && !protocol
-            && returns != Type::NoneType
-            && returns != Type::Error
-        {
-            checker.diagnostics.push(
-                Diagnostic::new(
-                    DiagnosticCode::error(405),
-                    definition.span,
-                    format!(
-                        "`{}` can reach its end without returning {}",
-                        definition.name,
-                        returns.with_article()
-                    ),
-                )
-                .with_rule(RuleId::TYP_01),
-            );
+        if !protocol {
+            checker.check_end(definition, &returns);
         }
+        let generator = checker.generator.take();
         let named_targets = std::mem::take(&mut checker.named_targets);
         checker.settle_closures();
         let pending = std::mem::take(&mut checker.pending);
@@ -335,11 +326,36 @@ impl<'program> BodyChecker<'program> {
             span: definition.span,
             generic,
             named_targets,
+            generator,
         });
         if !cells.is_empty() {
             program.cells.insert(function, cells);
         }
         Self::check_nested(program, pending, diagnostics);
+    }
+
+    /// Reports a function that can reach its end without returning the value its annotation
+    /// names; a generator's end returns `None` (FUN-07).
+    fn check_end(&mut self, definition: &Definition<'_>, returns: &Type) {
+        if self.assigned.is_none()
+            || self.generator.is_some()
+            || *returns == Type::NoneType
+            || *returns == Type::Error
+        {
+            return;
+        }
+        self.diagnostics.push(
+            Diagnostic::new(
+                DiagnosticCode::error(405),
+                definition.span,
+                format!(
+                    "`{}` can reach its end without returning {}",
+                    definition.name,
+                    returns.with_article()
+                ),
+            )
+            .with_rule(RuleId::TYP_01),
+        );
     }
 
     /// Returns the variables of the body that live in a cell: those its nested functions
@@ -358,7 +374,7 @@ impl<'program> BodyChecker<'program> {
 
     /// Notes the function's `__qualname__`, what its nested functions capture, and, for a
     /// nested function, what it captures itself (FUN-04) and the variables it declares
-    /// `nonlocal` (SMT-09).
+    /// `nonlocal` (SMT-09); and whether it is a generator function, with its types (FUN-07).
     fn enter_closure(
         &mut self,
         definition: &Definition<'_>,
@@ -378,6 +394,7 @@ impl<'program> BodyChecker<'program> {
         self.closure_scope = closure_scope::ClosureScope::of(&names, body, &enclosing);
         self.closure = closure;
         self.declare_nonlocals(body);
+        self.generator = self.generator_types(definition, body);
     }
 
     /// Checks the module body and stores it in the program as its entry function.
@@ -424,6 +441,7 @@ impl<'program> BodyChecker<'program> {
             span,
             generic: false,
             named_targets,
+            generator: None,
         }));
         entry
     }

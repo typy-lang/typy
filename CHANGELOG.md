@@ -6,6 +6,18 @@ All notable changes to TyPy are recorded here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- Generator functions: a function whose body has a `yield` statement makes
+  a generator when it is called, annotated `Iterator[T]`, `Iterable[T]` or
+  `Generator[T, S, R]` of `collections.abc` or `typing`. Each step, a turn
+  of `for` or a call of `next()`, runs the body to its next `yield`, and
+  `list()`, `sum()` and every builtin that takes an iterable take a
+  generator. The generator's variables live in one allocation between
+  steps, and `next()` of a running generator and a `StopIteration` its
+  body raises give CPython's `ValueError` and `RuntimeError` (SMT-11,
+  FUN-07, ADR-0063).
+
 ### Changed
 
 - Decorators, built-in functions, class methods and protocol methods as

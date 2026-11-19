@@ -96,6 +96,16 @@ pub enum Expr {
         value: Box<Expr>,
         span: Span,
     },
+    /// `yield` or `yield value`, which suspends a generator (SMT-11).
+    Yield {
+        value: Option<Box<Expr>>,
+        span: Span,
+    },
+    /// `yield from iterable`, which yields each item of the iterable (SMT-11).
+    YieldFrom {
+        value: Box<Expr>,
+        span: Span,
+    },
     /// `lambda parameters: body`, a function of one expression (EXP-14). Its parameters
     /// have no annotations.
     Lambda {
@@ -207,6 +217,8 @@ impl Expr {
             | Self::IfExp { span, .. }
             | Self::Named { span, .. }
             | Self::Lambda { span, .. }
+            | Self::Yield { span, .. }
+            | Self::YieldFrom { span, .. }
             | Self::Compare { span, .. }
             | Self::Call { span, .. }
             | Self::Constant { span, .. }

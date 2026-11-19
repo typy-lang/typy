@@ -117,6 +117,8 @@ unsafe fn destroy(object: *mut ObjectHeader, type_id: u32) {
         crate::header::CELL_TYPE_ID => unsafe { crate::variable_cell::destroy(object.cast()) },
         // SAFETY: the type ID says the object is a bound method.
         crate::header::METHOD_TYPE_ID => unsafe { crate::method::destroy(object.cast()) },
+        // SAFETY: the type ID says the object is a generator.
+        crate::header::GENERATOR_TYPE_ID => unsafe { crate::generator::destroy(object.cast()) },
         _ => crate::libc::abort_with(b"typy runtime: an object has an unknown type\n"),
     }
 }

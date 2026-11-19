@@ -11,13 +11,13 @@
 | A function of the program as a value of type `Callable[[A, ...], R]`: stored, passed, returned, called, compared and hashed | FUN-05, NFR-19 |
 | A method read through an instance as a bound method, and through its class as a function | FUN-05 |
 | A function defined inside a function, which reads the variables of the functions around it | FUN-04 |
+| A generator function, whose `yield` statements give its items one step at a time | SMT-11, FUN-07 |
 
 A function value is the `key` of `sorted`, `list.sort`, `min` and `max`;
 see [Ordering by a key](../library/functions-and-modules.md#ordering-by-a-key).
-Generators are planned for 0.9 (SMT-11, FUN-07). Decorators, built-in
-functions as values, class methods and protocol methods as values, and
-nested functions of generic functions are planned for 0.10 (FUN-06,
-FUN-08 to FUN-10).
+Decorators, built-in functions as values, class methods and protocol
+methods as values, and nested functions of generic functions are planned
+for 0.10 (FUN-06, FUN-08 to FUN-10).
 
 ## Nested functions
 
@@ -120,6 +120,53 @@ assigns a variable of the function around it after declaring it
 function again,
 also with a second `def`, is E0202, and a call of it before its `def`
 runs is E0306, where CPython raises `UnboundLocalError`.
+
+## Generators
+
+A function whose body has a `yield` is a generator function. A call of it
+runs none of its body: it gives a generator object, and each step, a turn
+of a `for` loop or a call of `next()`, runs the body from where it last
+stopped to its next `yield`, whose value is the step's item. The
+annotation names the type each `yield` gives, as `typing` reads it:
+`Iterator[T]`, `Iterable[T]` or `Generator[T, S, R]`, from
+`collections.abc` or `typing`. A generator is a value of that type, which
+`for`, `next()`, `list()`, `sum()`, `sorted()` and every function that
+takes an iterable accept:
+
+<!-- typy-expect: accepted -->
+```python
+from collections.abc import Iterator
+
+
+def countdown(start: int) -> Iterator[int]:
+    while start > 0:
+        yield start
+        start -= 1
+
+
+def walk(depth: int) -> Iterator[str]:
+    yield "level " + str(depth)
+    if depth > 0:
+        for line in walk(depth - 1):
+            yield "  " + line
+
+
+print(list(countdown(3)), sum(countdown(4)))
+for line in walk(2):
+    print(line)
+```
+
+The generator's variables live in the generator object between steps,
+one allocation whatever the body does, and its `repr` is `<generator
+object NAME at 0x...>`, as in CPython. `next()` of a finished generator
+raises `StopIteration`; `next()` of a generator from inside its own step
+raises `ValueError`, and a `StopIteration` that escapes the body becomes
+`RuntimeError`, as CPython has it. A generator function annotated any
+other way is E0405, and a `yield` outside a function is E0103.
+
+A `yield` is a statement in TyPy. One inside a larger expression, such as
+`print((yield value))`, and a generator `lambda` are planned for 1.0
+(FUN-12).
 
 ## Functions as values
 

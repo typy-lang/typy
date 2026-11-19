@@ -110,6 +110,7 @@ pub(crate) fn assigned_symbols(body: &[TypedStmt]) -> BTreeSet<SymbolId> {
                     statements(finalbody, found);
                 }
                 TypedStmt::Expr { .. }
+                | TypedStmt::Yield { .. }
                 | TypedStmt::Delete { .. }
                 | TypedStmt::Assert { .. }
                 | TypedStmt::Return { .. }

@@ -512,18 +512,20 @@ f(*args)
     let Stmt::FunctionDef { body: inner, .. } = &statements[1] else {
         panic!("not a function");
     };
-    let kinds: Vec<String> = inner
-        .iter()
-        .map(|statement| match statement {
-            Stmt::Other { kind, .. }
-            | Stmt::Expr {
-                value: Expr::Other { kind, .. },
+    // `yield` and `yield from` are converted in detail (SMT-11).
+    assert!(matches!(
+        inner.as_slice(),
+        [
+            Stmt::Expr {
+                value: Expr::Yield { value: Some(_), .. },
                 ..
-            } => kind.to_string(),
-            other => format!("{other:?}"),
-        })
-        .collect();
-    assert_eq!(kinds, ["Yield", "YieldFrom"]);
+            },
+            Stmt::Expr {
+                value: Expr::YieldFrom { .. },
+                ..
+            },
+        ]
+    ));
 }
 
 #[test]

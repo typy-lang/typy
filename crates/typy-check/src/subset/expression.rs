@@ -1,6 +1,6 @@
 //! Checks expressions and annotations against the feature table.
 
-use typy_diagnostics::{Diagnostic, DiagnosticCode, RuleId};
+use typy_diagnostics::{Diagnostic, DiagnosticCode, RuleId, Span};
 use typy_source::syntax::{BinaryOperator, Comprehension, Constant, Expr, NodeKind};
 
 use super::Walker;
@@ -23,7 +23,8 @@ impl Walker {
     /// makes; an `async for` clause is refused as `async` is. The names its targets bind are
     /// in scope for what it makes and for its conditions, and a source is walked as one,
     /// where CPython refuses an assignment expression (EXP-13).
-    fn comprehension(&mut self, made: &[&Expr], generators: &[Comprehension]) {
+    fn comprehension(&mut self, made: &[&Expr], generators: &[Comprehension], kind: &'static str) {
+        self.comprehension_kinds.push(kind);
         let mut names = Vec::new();
         for generator in generators {
             collect_names(&generator.target, &mut names);
@@ -47,6 +48,55 @@ impl Walker {
             self.expression(expression);
         }
         self.comprehension_names.pop();
+        self.comprehension_kinds.pop();
+    }
+
+    /// Checks a `yield` that is a statement, as SMT-11 accepts it: `yield value`, `yield from
+    /// iterable`, or an assignment of either. Outside a function it is CPython's
+    /// `SyntaxError`, E0103.
+    pub(super) fn yield_statement(&mut self, expression: &Expr) {
+        if self.scope.is_none() {
+            self.syntax_error(expression.span(), "'yield' outside function");
+        }
+        self.yield_value(expression);
+    }
+
+    /// Checks a `yield` inside a larger expression: outside a function, or in a
+    /// comprehension, CPython's `SyntaxError`; in a `lambda` or anywhere else in a function,
+    /// planned for 1.0 (FUN-12).
+    fn nested_yield(&mut self, expression: &Expr, span: Span) {
+        if self.scope.is_none() {
+            self.syntax_error(span, "'yield' outside function");
+        } else if let Some(kind) = self.comprehension_kinds.last() {
+            let message = format!("'yield' inside {kind}");
+            self.syntax_error(span, &message);
+        } else if self.lambda_depth > 0 {
+            self.report(
+                span,
+                planned("generator `lambda` expressions", "1.0", RuleId::FUN_12),
+            );
+        } else {
+            self.report(
+                span,
+                planned(
+                    "`yield` and `yield from` inside a larger expression",
+                    "1.0",
+                    RuleId::FUN_12,
+                ),
+            );
+        }
+        self.yield_value(expression);
+    }
+
+    /// Walks the value a `yield` or a `yield from` gives.
+    fn yield_value(&mut self, expression: &Expr) {
+        match expression {
+            Expr::Yield {
+                value: Some(value), ..
+            }
+            | Expr::YieldFrom { value, .. } => self.expression(value),
+            _ => {}
+        }
     }
 
     /// Checks `target := value` with CPython's rules: the target may not be `__debug__` nor
@@ -367,18 +417,21 @@ impl Walker {
                 element,
                 generators,
                 ..
-            }
-            | Expr::SetComp {
+            } => self.comprehension(&[element], generators, "list comprehension"),
+            Expr::SetComp {
                 element,
                 generators,
                 ..
-            } => self.comprehension(&[element], generators),
+            } => self.comprehension(&[element], generators, "set comprehension"),
             Expr::DictComp {
                 key,
                 value,
                 generators,
                 ..
-            } => self.comprehension(&[key, value], generators),
+            } => self.comprehension(&[key, value], generators, "dict comprehension"),
+            Expr::Yield { span, .. } | Expr::YieldFrom { span, .. } => {
+                self.nested_yield(expression, *span);
+            }
             Expr::Named {
                 target,
                 value,

@@ -156,6 +156,29 @@ impl<'ctx> FunctionEmitter<'_, '_, 'ctx> {
             Operation::NewClosure { function, captures } => {
                 Some(self.new_closure(*function, *captures)?)
             }
+            Operation::NewGenerator { function } => Some(self.new_generator(*function)?),
+            Operation::SetGeneratorArgument {
+                generator,
+                function,
+                index,
+                value,
+            } => {
+                self.set_generator_argument(*generator, *function, *index, *value)?;
+                None
+            }
+            Operation::GeneratorArgument {
+                generator,
+                function,
+                index,
+            } => self.generator_argument(*generator, *function, *index)?,
+            Operation::GeneratorClosure {
+                generator,
+                function,
+            } => Some(self.generator_closure(*generator, *function)?),
+            Operation::SetGeneratorItem { generator, item } => {
+                self.set_generator_item(*generator, *item)?;
+                None
+            }
             Operation::Capture {
                 closure,
                 captures,

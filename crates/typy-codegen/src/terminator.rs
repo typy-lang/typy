@@ -51,6 +51,12 @@ impl<'ctx> FunctionEmitter<'_, '_, 'ctx> {
                 self.invoke(*callee, arguments, *normal, *error, *span, current)?;
             }
             Terminator::Return(value) => self.return_value(Some(*value), None)?,
+            Terminator::Resume {
+                generator,
+                start,
+                points,
+            } => self.resume(*generator, *start, points)?,
+            Terminator::Yield { generator, resume } => self.suspend(*generator, *resume)?,
             Terminator::ReturnError(exception) => self.return_value(None, Some(*exception))?,
             Terminator::Unreachable => {
                 self.builder.build_unreachable()?;

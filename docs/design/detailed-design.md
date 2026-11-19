@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy detailed design |
-| Version | 2.46 |
+| Version | 2.47 |
 | Status | Approved |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-19 |
@@ -789,6 +789,27 @@ checked, since an assignment after the `def` may give it. A nested
 function with type parameters, or in a generic function, is planned for
 0.10 (FUN-10). A call of a local variable before an assignment gives it a
 type is read first, so it is E0306.
+
+`body/generator.rs` checks generator functions (SMT-11, FUN-07, ADR-0063).
+A function whose body has a `yield` or a `yield from`, outside the
+functions and classes it defines, is a generator function, and
+`BodyChecker::generator` holds its `GeneratorTypes { yields, sends,
+returns }` from its annotation: `Type::Generator { yields, sends, returns
+}` of `Generator[Y, S, R]`, which names all three, or `Iterator[Y]` and
+`Iterable[Y]`, whose `S` and `R` are `None`; any other annotation is
+E0405. `yield value` and a bare `yield`, which gives `None`, are
+`TypedStmt::Yield { value }`, the value converted to `Y`, E0405 when it
+does not fit. A generator's end returns, so it is never E0405 for
+reaching it, and `TypedFunction::generator` keeps the types for the
+lowering. `Generator[Y, S, R]` is assignable to `Iterator[Y]` and
+`Iterable[Y]`, the same object, and `sequence` and `next` take a
+generator as its `Iterator[Y]` through `Upcast`, so loops, `iter()`,
+`next()` and every builtin of an iterable read it as an iterator. The
+subset walker accepts a `yield` as a statement, `yield value` or `target
+= yield value`, and the same of `yield from`; one inside a larger
+expression or a `lambda` is E0201, planned for 1.0 (FUN-12), and one
+outside a function or inside a comprehension is CPython's `SyntaxError`,
+E0103.
 
 `body/lambda.rs` checks a `lambda` (EXP-14) as a nested function of one
 `return` statement, `<lambda>`, whose `__qualname__` is
@@ -2343,6 +2364,25 @@ the flag, `CellSet` stores a value, taking over its reference, and
 replaces. Escape analysis lets every stored capture and every value stored
 in a cell escape, since either may outlive the function that made it
 (MEM-03).
+A generator is `TyirType::GENERATOR`, type ID 27, which `Upcast` holds as
+an `ITERATOR` (ADR-0063). A generator function lowers to two functions:
+its own, which `NewGenerator { function }` makes the generator of the
+resume function `function` in, `SetGeneratorArgument` stores each
+argument in, the closure first, taking over its reference, and which
+returns the generator as its annotation's type; and the resume function,
+appended after the program's functions, which takes the generator and
+whose `TyirFunction::generator` is its `GeneratorFrame { arguments,
+closure, yields, frame }`, `frame` the tuple of the arguments then every
+slot. Its entry reads the closure with `GeneratorClosure` and ends in
+`Terminator::Resume { generator, start, points }`, which continues in
+`start` for the first step, where the prologue takes each argument with
+`GeneratorArgument`, or in the block after the `yield` the generator
+stopped at. `yield value` stores the value's bits with `SetGeneratorItem`
+and ends the step in `Terminator::Yield { generator, resume }`. Since the
+blocks after the yields are successors of the entry alone, the
+definitions check rejects a value of one step used in another, so only
+slots outlive a yield. Every resume function may raise, and no instance
+is placed in its frame (MEM-03).
 `Constant::MethodDescriptor(id)` is the address of method `id`'s bound
 method descriptor as bits, and `RuntimeFunction::MethodNew` makes a bound
 method of a descriptor and an instance, which escapes into it.
@@ -3000,6 +3040,8 @@ installed `typy` finds `<prefix>/lib/typy/` and a `typy` in
 | `ViewObject` | Header, `kind: u32`, padding, `dict: *mut DictObject` | A view of a dict under the type ID 9: 0 shows the keys, 1 the values, 2 the items. It holds a reference to its dict, so the dict lives as long as the view |
 | `CDataClass` | `name: *const u8`, `name_length: u64`, `kind: u32`, `ctype: u32`, `size: u64`, `item: *const CDataClass`, `length: u64` | A `ctypes` class the compiler emits once: `kind` 0 for a scalar of C type `ctype`, numbered as `CType`, 1 for a pointer, 2 for an array of `length` items of `item`, and 3 for a structure, whose name holds its module (ADR-0048, ADR-0049) |
 | `FunctionObject` | Header, `descriptor: *const FunctionDescriptor`, then a nested function's captures | A function object under the type ID 24, which the compiler emits immortal for a function of a module, and which each `def` of a nested function makes; its type `function` hashes by identity and writes `<function QUALNAME at 0x...>` (FUN-04, FUN-05) |
+| `GeneratorObject` | Header, `descriptor: *const GeneratorDescriptor`, `state: u32`, `point: u32`, `current: u64`, `sent: u64`, `thrown: *mut ExceptionObject`, `result: u64`, `held: *mut u8`, then the frame | A generator under the type ID 27 (ADR-0063). `typy_rt_generator_new` makes one not started with its frame zero. A step, which `typy_rt_iterator_advance` takes for a generator after checking the stack, releases the current item, marks it running and calls the descriptor's `step`, the resume code; the code marks it suspended at a `yield`, and a step that ends any other way finishes it. `typy_rt_generator_hold` makes a yielded item its current one, an inline item copied into `held`. Freeing it releases its current item, the arguments its frame still holds, and the rest of its frame unless its body ended. Running again inside its own step is `ValueError: generator already executing`, and a `StopIteration` its body raises becomes `RuntimeError: generator raised StopIteration` raised from it |
+| `GeneratorDescriptor` | `name`, `qualified_name`, `step`, `frame: *const TupleType`, `arguments: u64`, `item_kind: u64`, `item_tuple: *const TupleType` | What the compiler emits once for each generator function, `typy.generator.descriptor.N`: its resume code, the layout of its frame, how many of the frame's fields are arguments, and how its items are held |
 | `CellObject` | Header, `layout: *const TupleType`, then the value and its flag | A cell under the type ID 26, which a function makes for each of its variables a nested function shares; it owns a reference to its value (FUN-04) |
 | `MethodObject` | Header, `descriptor: *const FunctionDescriptor`, `instance: *mut ObjectHeader` | A bound method under the type ID 25, made at each read of a method through an instance; it owns a reference to the instance (FUN-05) |
 | `FunctionDescriptor` | `name: *const StrObject`, `qualified_name: *const StrObject`, `code: *const c_void`, `captures: *const TupleType` | What the compiler emits once for each function used as a value; `captures` lays out a nested function's captures, and is null for a function of a module |

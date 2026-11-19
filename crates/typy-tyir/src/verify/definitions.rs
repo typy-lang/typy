@@ -103,6 +103,7 @@ pub(super) fn operands(operation: &Operation) -> Vec<ValueId> {
         | Operation::LoadGlobal(_)
         | Operation::NewInstance { .. }
         | Operation::NewClosure { .. }
+        | Operation::NewGenerator { .. }
         | Operation::NewCell { .. } => Vec::new(),
         Operation::Store { value, .. }
         | Operation::StoreGlobal { value, .. }
@@ -124,7 +125,17 @@ pub(super) fn operands(operation: &Operation) -> Vec<ValueId> {
         | Operation::Capture { closure: value, .. }
         | Operation::CellGet { cell: value, .. }
         | Operation::CellBound { cell: value, .. }
-        | Operation::CellClear { cell: value, .. } => vec![*value],
+        | Operation::CellClear { cell: value, .. }
+        | Operation::GeneratorArgument {
+            generator: value, ..
+        }
+        | Operation::GeneratorClosure {
+            generator: value, ..
+        } => vec![*value],
+        Operation::SetGeneratorArgument {
+            generator, value, ..
+        } => vec![*generator, *value],
+        Operation::SetGeneratorItem { generator, item } => vec![*generator, *item],
         Operation::CellSet { cell, value, .. } => vec![*cell, *value],
         Operation::SetField { object, value, .. }
         | Operation::SetCapture {

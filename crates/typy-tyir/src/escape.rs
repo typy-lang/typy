@@ -143,10 +143,18 @@ pub(crate) fn may_be_in_frame(module: &TyirModule, class: u32) -> bool {
 pub fn place_instances(module: &mut TyirModule) {
     let mut program = Program::new(module);
     program.find_escaping_parameters();
+    // A generator's machine frame is gone between its steps, so it places no instance there
+    // (ADR-0063).
     let placed: Vec<Vec<ValueId>> = module
         .functions
         .iter()
-        .map(|function| program.frame_instances(function))
+        .map(|function| {
+            if function.generator.is_some() {
+                Vec::new()
+            } else {
+                program.frame_instances(function)
+            }
+        })
         .collect();
     for (function, values) in module.functions.iter_mut().zip(placed) {
         for value in values {

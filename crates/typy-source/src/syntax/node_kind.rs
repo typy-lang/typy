@@ -19,8 +19,6 @@ pub enum NodeKind {
     Starred,
     TemplateStr,
     TryStar,
-    Yield,
-    YieldFrom,
 }
 
 impl fmt::Display for NodeKind {
