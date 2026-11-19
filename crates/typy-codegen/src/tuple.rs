@@ -63,7 +63,8 @@ impl<'ctx> FunctionEmitter<'_, '_, 'ctx> {
     }
 
     /// Adds or drops a reference to each counted item of a tuple, nested tuples included. A
-    /// counted item always has a field, because only an item of type `None` has none.
+    /// counted item always has a field, because only an item of type `None` has none. The
+    /// last item is dropped first, as CPython frees a tuple's items (FUN-11).
     pub(crate) fn count_tuple(
         &mut self,
         id: TupleTypeId,
@@ -71,7 +72,7 @@ impl<'ctx> FunctionEmitter<'_, '_, 'ctx> {
         increment: bool,
     ) -> Result<(), CodegenError> {
         let types = self.tuple_items(id)?.to_vec();
-        let counted: Vec<(u32, TyirType)> = types
+        let mut counted: Vec<(u32, TyirType)> = types
             .iter()
             .enumerate()
             .filter(|(_, item)| self.shared.tyir.tuple_types.is_counted(**item))
@@ -80,6 +81,9 @@ impl<'ctx> FunctionEmitter<'_, '_, 'ctx> {
                     .map(|field| (field, *item))
             })
             .collect();
+        if !increment {
+            counted.reverse();
+        }
         for (field, item) in counted {
             let value = self
                 .builder

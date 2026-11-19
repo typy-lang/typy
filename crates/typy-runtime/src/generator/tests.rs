@@ -1,7 +1,7 @@
 use super::{
     FINISHED, GeneratorDescriptor, GeneratorObject, NEW, PREFIX, SUSPENDED, advance, current,
-    generator_repr, typy_rt_generator_close, typy_rt_generator_new, typy_rt_generator_send,
-    typy_rt_generator_throw,
+    generator_repr, typy_rt_generator_close, typy_rt_generator_close_dropped,
+    typy_rt_generator_new, typy_rt_generator_send, typy_rt_generator_throw,
 };
 use crate::exception::{
     ExceptionKind, ExceptionObject, handled_exception, raise, raise_bare, typy_rt_exception_enter,
@@ -431,6 +431,10 @@ fn fun_11_close_raises_generator_exit_and_refuses_a_body_that_yields_again() {
             ExceptionKind::RuntimeError,
             Some("generator ignored GeneratorExit"),
         );
+        // It is still suspended, so freeing it would close it again; the test frees it as
+        // one that closing left suspended.
+        assert_eq!((*stubborn).state, SUSPENDED);
+        (*stubborn).state = super::ABANDONED;
         crate::refcount::typy_rt_decrement(stubborn.cast());
     }
     release_names(&found);
@@ -473,9 +477,78 @@ fn fun_07_a_step_hands_back_the_exception_its_caller_was_handling() {
         assert_eq!(current(generator), caller.expose_provenance() as u64);
         assert_eq!(handled_exception(), caller);
         (*generator).current = 0;
+        // The body holds nothing more, so the test frees it as one that ended.
+        (*generator).state = FINISHED;
         crate::refcount::typy_rt_decrement(generator.cast());
         typy_rt_exception_leave(previous);
         crate::refcount::typy_rt_decrement(caller.cast());
+    }
+    release_names(&found);
+}
+
+std::thread_local! {
+    /// The flags of the generators `recording` closed, in order.
+    static CLOSED: core::cell::RefCell<Vec<u64>> = const { core::cell::RefCell::new(Vec::new()) };
+}
+
+/// A body that yields, then, when it is closed, records its argument, an `int` word, and
+/// ends; one whose argument is the word of 0 yields again instead, as a body that ignores
+/// `GeneratorExit` does.
+unsafe extern "C" fn recording(generator: *mut GeneratorObject) -> *mut ExceptionObject {
+    // SAFETY: the runtime passes the live generator whose step is running.
+    let object = unsafe { &mut *generator };
+    let frame = core::ptr::with_exposed_provenance::<u64>(generator.expose_provenance() + PREFIX);
+    // SAFETY: the frame's first field is the argument the test stored.
+    let argument = unsafe { *frame };
+    if object.point == 0 || argument == word(0) {
+        object.current = word(1);
+        object.point = 1;
+        object.state = SUSPENDED;
+        let thrown = core::mem::replace(&mut object.thrown, core::ptr::null_mut());
+        if !thrown.is_null() {
+            // SAFETY: the body owns the exception it ignores.
+            unsafe { crate::refcount::typy_rt_decrement(thrown.cast()) };
+        }
+        return core::ptr::null_mut();
+    }
+    CLOSED.with(|closed| closed.borrow_mut().push(argument));
+    // The body ends by raising the `GeneratorExit` it was given.
+    core::mem::replace(&mut object.thrown, core::ptr::null_mut())
+}
+
+#[test]
+fn fun_11_a_generator_freed_while_suspended_waits_then_closes_in_the_order_freed() {
+    let fields = FLAG_FIELDS;
+    let layout = frame_layout(&fields);
+    let found = descriptor(recording, &layout);
+    // SAFETY: the descriptor and its layout live for the whole test.
+    unsafe {
+        let unstarted = generator_of(&found, word(7));
+        crate::refcount::typy_rt_decrement(unstarted.cast());
+        let generators: Vec<*mut GeneratorObject> = [3, 1, 2]
+            .map(|argument| generator_of(&found, word(argument)))
+            .to_vec();
+        for each in &generators {
+            assert!(advance(*each, word(1).cast_signed()).value);
+        }
+        for each in generators {
+            crate::refcount::typy_rt_decrement(each.cast());
+        }
+        // Freeing runs no code of the body: the generators wait in the queue, and the one
+        // never started was freed at once.
+        assert!(CLOSED.with(|closed| closed.borrow().is_empty()));
+        typy_rt_generator_close_dropped();
+        assert_eq!(
+            CLOSED.with(|closed| closed.borrow().clone()),
+            [word(3), word(1), word(2)]
+        );
+        // One that yields again is reported and freed without closing it again.
+        let stubborn = generator_of(&found, word(0));
+        assert!(advance(stubborn, word(1).cast_signed()).value);
+        crate::refcount::typy_rt_decrement(stubborn.cast());
+        typy_rt_generator_close_dropped();
+        assert!(super::dropped::take().is_null());
+        assert_eq!(CLOSED.with(|closed| closed.borrow().len()), 3);
     }
     release_names(&found);
 }

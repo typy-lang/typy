@@ -213,7 +213,8 @@ pub(crate) unsafe fn release_first(tuple: *const TupleType, address: u64, count:
     }
 }
 
-/// Drops a reference to every object the tuple at `address` holds.
+/// Drops a reference to every object the tuple at `address` holds, the last item first, as
+/// CPython frees a tuple's items (FUN-11).
 ///
 /// # Safety
 ///
@@ -221,7 +222,7 @@ pub(crate) unsafe fn release_first(tuple: *const TupleType, address: u64, count:
 pub(crate) unsafe fn release(tuple: *const TupleType, address: u64) {
     // SAFETY: the caller's guarantee covers each field.
     unsafe {
-        for field in (*tuple).fields() {
+        for field in (*tuple).fields().iter().rev() {
             field.item_type().release(field.value(address));
         }
     }

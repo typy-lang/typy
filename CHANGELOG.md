@@ -23,6 +23,12 @@ All notable changes to TyPy are recorded here. The format follows
   sent before the first step, a step after the end, and a generator that
   yields after `close()` raise CPython's `TypeError`, `StopIteration` and
   `RuntimeError` (SMT-11, FUN-07, FUN-11).
+- A generator freed while it is suspended is closed, as CPython closes
+  it: `break` out of a loop over it, the end of a function that holds it
+  and a container that drops it run its `finally` blocks and the
+  `__exit__` of its `with` statements, in CPython's order. An exception
+  raised meanwhile is written to standard error after `Exception ignored
+  in:`, and the program goes on (FUN-11, ADR-0069).
 - A `yield` inside an `except` clause or a `finally` block. The exception
   a suspended generator handles stays with it, so an exception its caller
   raises meanwhile has the caller's own context, as in CPython (ADR-0068).

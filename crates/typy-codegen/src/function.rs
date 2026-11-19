@@ -29,6 +29,9 @@ pub(crate) struct Shared<'module, 'ctx> {
     pub(crate) lookup: &'module dyn SourceLookup,
     /// The target, whose C calling convention a structure passed by value follows (FFI-12).
     pub(crate) target: crate::target::TargetTriple,
+    /// Whether the program has generator functions, whose generators a release may drop
+    /// while suspended, so code closes them after each call that may release (FUN-11).
+    pub(crate) closes_generators: bool,
 }
 
 /// Emits the body of one function.

@@ -84,6 +84,9 @@ impl<'ctx> FunctionEmitter<'_, '_, 'ctx> {
         };
         let callee = internal_function(self.shared.context, self.shared.module, function);
         self.builder.build_call(callee, &[value.into()], "")?;
+        if function == Internal::Decrement {
+            self.close_dropped()?;
+        }
         Ok(())
     }
 }

@@ -13,6 +13,7 @@
 | A function defined inside a function, which reads the variables of the functions around it | FUN-04 |
 | A generator function, whose `yield` statements give its items one step at a time | SMT-11, FUN-07 |
 | `send`, `throw` and `close` of a `Generator[Y, S, R]`, and `received = yield value` | SMT-11, FUN-07 |
+| A generator freed while suspended closes, running its `finally` blocks | FUN-11 |
 
 A function value is the `key` of `sorted`, `list.sort`, `min` and `max`;
 see [Ordering by a key](../library/functions-and-modules.md#ordering-by-a-key).
@@ -208,6 +209,40 @@ after the body ends raises `StopIteration`, as in CPython.
 A generator suspended inside an `except` clause keeps the exception it
 handles: its caller does not see it, and the generator handles it again
 when it resumes, as CPython does (ADR-0068).
+
+### Closing a generator
+
+A generator you stop using before it ends still runs its `finally`
+blocks and the `__exit__` of its `with` statements. When its last
+reference goes while it is suspended, TyPy closes it, as CPython does:
+`GeneratorExit` is raised at its `yield`. A loop that leaves a generator
+early closes it before the statement after the loop:
+
+<!-- typy-expect: accepted -->
+```python
+from collections.abc import Iterator
+
+
+def numbers() -> Iterator[int]:
+    try:
+        yield 1
+        yield 2
+    finally:
+        print("cleaned up")
+
+
+for number in numbers():
+    print(number)
+    break
+print("after the loop")
+```
+
+This prints `1`, `cleaned up`, then `after the loop`. A generator in a
+list, a dict, a tuple or an attribute closes when the container goes, in
+the order CPython closes them, and one never started runs nothing. An
+exception raised while a freed generator closes cannot reach your code:
+it is written to standard error after `Exception ignored in: <generator
+object NAME at 0x...>`, and the program goes on (FUN-11, ADR-0069).
 
 A `yield` is a statement in TyPy: `yield value`, `yield`, and
 `target = yield value`, also with an annotation. One inside a larger

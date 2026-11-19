@@ -392,6 +392,7 @@ impl FunctionLowerer<'_> {
                 Cleanup::Finally(block) => {
                     self.run_finally(index, &block, None, span);
                 }
+                Cleanup::Iterator(slots) => self.release_hidden(&slots, span),
                 Cleanup::With {
                     manager, protocol, ..
                 } => {
@@ -433,6 +434,7 @@ impl FunctionLowerer<'_> {
                         exception = pending;
                     }
                 }
+                Cleanup::Iterator(slots) => self.release_hidden(&slots, span),
                 Cleanup::With {
                     manager,
                     protocol,

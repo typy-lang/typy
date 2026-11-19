@@ -163,6 +163,17 @@ impl FunctionLowerer<'_> {
         }
     }
 
+    /// Releases the values the hidden slots `slots` hold, leaving each its zero value, which
+    /// releasing again passes over.
+    pub(crate) fn release_hidden(&mut self, slots: &[SlotId], span: Span) {
+        for slot in slots {
+            if self.counted(self.builder.slot_type(*slot)) {
+                let held = self.take_slot(*slot, span);
+                self.release(held, span);
+            }
+        }
+    }
+
     /// Adds a hidden slot for a value the lowering itself keeps, such as a loop counter.
     pub(crate) fn hidden_slot(&mut self, name: &str, ty: TyirType) -> SlotId {
         self.builder.add_slot(format!("${name}"), ty)

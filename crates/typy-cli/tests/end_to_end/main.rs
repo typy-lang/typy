@@ -5,6 +5,7 @@ mod allocator;
 mod cli;
 mod common;
 mod files;
+mod generators;
 mod library;
 mod memory;
 mod nesting;

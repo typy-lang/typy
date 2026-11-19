@@ -50,6 +50,10 @@ pub(crate) enum Cleanup {
     },
     /// A `try` with a `finally` block: every way out of the `try` runs a copy of the block.
     Finally(std::rc::Rc<[typy_check::TypedStmt]>),
+    /// The body of a loop: an exception or a `return` that leaves it releases what the
+    /// loop's iterator holds, these hidden slots, as CPython drops a loop's iterator, so a
+    /// generator it reads closes then (FUN-11).
+    Iterator(Vec<SlotId>),
     /// The body of a `with`: every way out calls the manager's `__exit__` (CST-05).
     With {
         /// The slot that holds the context manager.

@@ -276,6 +276,9 @@ impl<'ctx> FunctionEmitter<'_, '_, 'ctx> {
         let callee = runtime_function(self.shared.context, self.shared.module, function);
         let arguments = self.arguments(arguments)?;
         let call = self.builder.build_call(callee, &arguments, "")?;
+        if drops_objects(function) {
+            self.close_dropped()?;
+        }
         Ok(match call.try_as_basic_value() {
             inkwell::values::ValueKind::Basic(value)
                 if function.signature().result == TyirType::Bool =>
@@ -286,4 +289,22 @@ impl<'ctx> FunctionEmitter<'_, '_, 'ctx> {
             inkwell::values::ValueKind::Instruction(_) => None,
         })
     }
+}
+
+/// Returns true when a call of the runtime function `function` may release an object that
+/// holds a generator: it takes an object other than a `str`, `bytes` or a type, or the bits
+/// of one, so the code after it closes the generators it dropped (FUN-11).
+pub(crate) fn drops_objects(function: RuntimeFunction) -> bool {
+    function
+        .signature()
+        .parameters
+        .iter()
+        .any(|parameter| match parameter {
+            TyirType::Int | TyirType::Float | TyirType::Bool | TyirType::Unit => false,
+            TyirType::Object(id) => !matches!(
+                *id,
+                typy_tyir::TypeId::STR | typy_tyir::TypeId::BYTES | typy_tyir::TypeId::TYPE
+            ),
+            _ => true,
+        })
 }

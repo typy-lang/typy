@@ -26,7 +26,7 @@ pub use kind::ExceptionKind;
         reason = "only `main` reports uncaught exceptions, and tests have no `main`"
     )
 )]
-pub(crate) use report::report_uncaught;
+pub(crate) use report::{report_ignored, report_uncaught};
 pub(crate) use text::{ExitCode, exit_code, typy_rt_exception_str};
 use traceback::Traceback;
 

@@ -25,16 +25,18 @@ const THROWN: u32 = 6;
 const RECEIVED: u32 = 9;
 /// The field that holds the exception the caller of the running step was handling.
 const CALLER: u32 = 10;
-/// The field that holds its frame.
-const FRAME: u32 = 11;
+/// The field that holds its frame, after the link of the queue of dropped generators.
+const FRAME: u32 = 12;
+/// The runtime's queue of generators freed while suspended, null when it is empty.
+const DROPPED: &str = "typy_rt_generator_dropped";
 /// The state of a generator stopped at a `yield`.
 const SUSPENDED: u64 = 1;
 
 /// Returns the layout of a generator object whose frame is `frame`: the header, the address
 /// of its descriptor, its state and the yield it stopped at, its current item, what `send`
 /// and `throw` pass, what its body returned, the room for an item held inline, whether
-/// `send` gave the step a value, the exception the step's caller was handling, then the
-/// frame, as the runtime lays it out.
+/// `send` gave the step a value, the exception the step's caller was handling, the link of
+/// the queue of dropped generators, then the frame, as the runtime lays it out.
 fn object_type<'ctx>(
     context: &'ctx inkwell::context::Context,
     frame: StructType<'ctx>,
@@ -54,6 +56,7 @@ fn object_type<'ctx>(
             word.into(),
             pointer.into(),
             word.into(),
+            pointer.into(),
             pointer.into(),
             frame.into(),
         ],
@@ -325,6 +328,41 @@ impl<'ctx> FunctionEmitter<'_, '_, 'ctx> {
             .into_pointer_value();
         let word = self.shared.context.i64_type();
         Ok(self.builder.build_ptr_to_int(caller, word, "")?.into())
+    }
+
+    /// Closes the generators a release freed while suspended, when there are any: the
+    /// runtime queues them, so no release runs code of the program, and the code after the
+    /// call that dropped them closes them (FUN-11, ADR-0064).
+    pub(crate) fn close_dropped(&mut self) -> Result<(), CodegenError> {
+        if !self.shared.closes_generators {
+            return Ok(());
+        }
+        let context = self.shared.context;
+        let pointer = context.ptr_type(AddressSpace::default());
+        let queue = self
+            .shared
+            .module
+            .get_global(DROPPED)
+            .unwrap_or_else(|| self.shared.module.add_global(pointer, None, DROPPED));
+        let first = self
+            .builder
+            .build_load(pointer, queue.as_pointer_value(), "dropped")?
+            .into_pointer_value();
+        let waiting = self.builder.build_is_not_null(first, "")?;
+        let close = context.append_basic_block(self.llvm_function, "close_dropped");
+        let after = context.append_basic_block(self.llvm_function, "");
+        self.builder
+            .build_conditional_branch(waiting, close, after)?;
+        self.builder.position_at_end(close);
+        let callee = crate::runtime::internal_function(
+            context,
+            self.shared.module,
+            crate::runtime::Internal::GeneratorCloseDropped,
+        );
+        self.builder.build_call(callee, &[], "")?;
+        self.builder.build_unconditional_branch(after)?;
+        self.builder.position_at_end(after);
+        Ok(())
     }
 
     /// Returns the address of field `field` of the running generator `generator`.

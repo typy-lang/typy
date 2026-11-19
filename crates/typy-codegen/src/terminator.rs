@@ -177,10 +177,11 @@ impl<'ctx> FunctionEmitter<'_, '_, 'ctx> {
             Callee::Runtime(function) => {
                 let runtime = runtime_function(self.shared.context, self.shared.module, function);
                 let arguments = self.arguments(arguments)?;
-                (
-                    self.builder.build_call(runtime, &arguments, "")?,
-                    function.signature().result,
-                )
+                let call = self.builder.build_call(runtime, &arguments, "")?;
+                if crate::operation::drops_objects(function) {
+                    self.close_dropped()?;
+                }
+                (call, function.signature().result)
             }
             Callee::Function(id) => {
                 let arguments = self.arguments(arguments)?;

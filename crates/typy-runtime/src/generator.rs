@@ -5,6 +5,7 @@
 //! the body to its next `yield` or its end. Its `repr` is `<generator object QUALNAME at
 //! 0x...>`, and it hashes and compares by identity, as CPython's generators do.
 
+mod dropped;
 #[cfg(test)]
 mod tests;
 
@@ -62,6 +63,8 @@ pub(crate) struct GeneratorObject {
     /// The exception the caller of the step that runs was handling, borrowed, or null: the
     /// outermost `except` clause of the body restores it when it ends.
     caller: *mut ExceptionObject,
+    /// The next generator in the queue of those freed while suspended, or null.
+    dropped: *mut GeneratorObject,
 }
 
 /// The state of a generator whose body has not started.
@@ -72,6 +75,9 @@ const SUSPENDED: u32 = 1;
 const RUNNING: u32 = 2;
 /// The state of a generator whose body returned or raised.
 const FINISHED: u32 = 3;
+/// The state of a generator freed while suspended that yielded again when it was closed: it
+/// is freed without closing it again, its frame released as a suspended one's.
+const ABANDONED: u32 = 4;
 
 /// The bytes before a generator's frame.
 pub(crate) const PREFIX: usize = core::mem::size_of::<GeneratorObject>();
@@ -110,6 +116,7 @@ pub unsafe extern "C" fn typy_rt_generator_new(
             held: core::ptr::null_mut(),
             received: 0,
             caller: core::ptr::null_mut(),
+            dropped: core::ptr::null_mut(),
         });
     }
     generator
@@ -419,7 +426,8 @@ unsafe fn release_current(generator: &mut GeneratorObject) {
 
 /// Frees a generator whose last reference is gone, after releasing its current item, the
 /// arguments its frame still holds, and, unless its body ended and released them, the
-/// variables of its body.
+/// variables of its body. A suspended one waits in the queue of dropped generators instead,
+/// to be closed first (FUN-11).
 ///
 /// # Safety
 ///
@@ -427,6 +435,10 @@ unsafe fn release_current(generator: &mut GeneratorObject) {
 pub(crate) unsafe fn destroy(generator: *mut GeneratorObject) {
     // SAFETY: the caller's guarantee; the descriptor lays out the frame after the prefix.
     unsafe {
+        if (*generator).state == SUSPENDED {
+            dropped::push(generator);
+            return;
+        }
         let object = &mut *generator;
         release_current(object);
         let descriptor = &*object.descriptor;
@@ -446,6 +458,45 @@ pub(crate) unsafe fn destroy(generator: *mut GeneratorObject) {
         }
     }
     crate::allocator::free(generator.cast());
+}
+
+/// Closes each generator freed while suspended, in the order they were freed, then frees it
+/// (FUN-11, ADR-0064). Compiled code calls this when the queue is not empty, after the call
+/// that dropped them. The queue is taken whole first, so one generator closes completely,
+/// with any its own closing drops, before the next, as CPython frees them one at a time. An
+/// exception closing one raises, or a body that yields again, is written to standard error
+/// as CPython writes it, and the program goes on.
+///
+/// # Safety
+///
+/// Every generator in the queue is a suspended one whose last reference is gone.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn typy_rt_generator_close_dropped() {
+    let mut next = dropped::take();
+    while !next.is_null() {
+        let generator = next;
+        // SAFETY: nothing else refers to the generator, so the reference closing holds is
+        // its only one; its link is read before it is freed.
+        unsafe {
+            next = (*generator).dropped;
+            (*generator).header.reference_count = 1;
+            let raised = typy_rt_generator_close(generator);
+            if !raised.is_null() {
+                let repr = generator_repr(generator.cast());
+                if repr.exception.is_null() {
+                    crate::exception::report_ignored(repr.value, raised);
+                    crate::refcount::typy_rt_decrement(repr.value.cast());
+                } else {
+                    crate::refcount::typy_rt_decrement(repr.exception.cast());
+                }
+                crate::refcount::typy_rt_decrement(raised.cast());
+            }
+            if (*generator).state == SUSPENDED {
+                (*generator).state = ABANDONED;
+            }
+            crate::refcount::typy_rt_decrement(generator.cast());
+        }
+    }
 }
 
 /// The type `generator`.

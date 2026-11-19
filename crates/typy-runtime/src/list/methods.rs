@@ -248,7 +248,8 @@ pub unsafe extern "C" fn typy_rt_list_clear(list: *mut ListObject) {
         let length = (*list).length;
         (*list).length = 0;
         let item_type = (*list).item_type();
-        for index in 0..length {
+        // The last item goes first, as CPython's `list.clear` releases them (FUN-11).
+        for index in (0..length).rev() {
             item_type.release((*list).item(index));
         }
     }

@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy test plan |
-| Version | 1.05 |
+| Version | 1.06 |
 | Status | Draft |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-19 |
@@ -391,7 +391,7 @@ that the specification does not define.
 | FUN-08 | 0.10 | IT | `tests/conformance/fun/FUN-08_*.py` |
 | FUN-09 | 0.10 | IT | `tests/conformance/fun/FUN-09_*.py` |
 | FUN-10 | 0.10 | IT | `tests/conformance/fun/FUN-10_*.py` |
-| FUN-11 | 0.9 | UT, IT | Runtime tests of closing in each state, and of a generator a container operation drops; `tests/conformance/fun/FUN-11_*.py`, with `break`, `del`, `close()` and a generator that yields again, also in the sanitizer run |
+| FUN-11 | 0.9 | UT, IT, E2E | Runtime tests of closing in each state, of the queue of freed generators and of one that yields again; `tests/conformance/fun/FUN-11_*.py`, with `break`, a temporary, a container, an instance, `with`, nested generators, `close()` and a generator that yields again, in CPython's order, also in the sanitizer run; `crates/typy-cli/tests/end_to_end/generators.rs` for what standard error shows of an exception while one closes |
 | FUN-12 | 1.0 | IT | `tests/conformance/fun/FUN-12_*.py` |
 | CLS-01 | 0.2 | IT | `tests/conformance/cls/CLS-01_*.py` |
 | CLS-02 | 0.2 | IT | `tests/conformance/cls/CLS-02_*.py` |
