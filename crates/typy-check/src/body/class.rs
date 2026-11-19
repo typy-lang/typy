@@ -585,8 +585,14 @@ impl BodyChecker<'_> {
             }
             return Self::invalid_call(span);
         }
-        if found.is_some() && self.property_getter(class, &name.name).is_some() {
-            return self.uncallable_property(class, name, arguments, span);
+        if let Some(getter) = found.and(self.property_getter(class, &name.name)) {
+            return self.property_call(
+                receiver,
+                (class, getter),
+                name,
+                (arguments, keywords),
+                span,
+            );
         }
         if let Some(method) = found.filter(|_| self.is_static_method(class, &name.name)) {
             let call = self.static_call(method, class, name, arguments, keywords, span);

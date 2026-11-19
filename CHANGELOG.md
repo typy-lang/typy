@@ -28,7 +28,8 @@ All notable changes to TyPy are recorded here. The format follows
   of the method of the object's own class, which holds the instance; two
   bound methods of one instance and one method are equal, and `repr`
   writes `<bound method Class.name of ...>`, as in CPython. A method read
-  through its class, and a static method, is the function itself
+  through its class, and a static method, is the function itself, and
+  `item.name(...)` for a property calls the value its getter gives
   (FUN-05). Class methods, methods read through a protocol value, and a
   few overrides, are planned for 0.9 (FUN-09).
 - Nested functions. A `def` inside a function makes a new function object

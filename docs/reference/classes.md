@@ -336,7 +336,9 @@ as `make().name = value` or `item.name += 1`, the value evaluated
 first, as in CPython. A subclass may redefine a static method, or a
 method as a static one, and a call through an instance runs the one of
 the object's class, as in CPython; a call through a class runs that
-class's (CLS-06).
+class's (CLS-06). `item.name(arguments)` for a property calls the value
+its getter gives, a function value, as CPython does; a value of another
+type is E0401 (FUN-05).
 
 ## Class methods
 

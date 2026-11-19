@@ -2470,7 +2470,7 @@ fn static_methods_and_properties_are_checked() {
         ),
         (
             "class A:\n    @property\n    def x(self) -> int:\n        return 1\na = A()\nprint(a.x())\n",
-            &["E0201"],
+            &["E0401"],
         ),
         (
             "class A:\n    @property\n    def x(self) -> int:\n        return 1\n    @x.setter\n    def x(self, v: int) -> None:\n        pass\na = A()\na.x = 'no'\n",
