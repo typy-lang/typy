@@ -241,6 +241,11 @@ impl BodyChecker<'_> {
             Expr::ListComp { .. } | Expr::SetComp { .. } | Expr::DictComp { .. } => {
                 self.comprehension(expression, None)
             }
+            Expr::GeneratorExp {
+                element,
+                generators,
+                ..
+            } => self.generator_expression(element, generators, None, span),
             Expr::Tuple { elements, .. } => {
                 let elements: Vec<TypedExpr> = elements
                     .iter()

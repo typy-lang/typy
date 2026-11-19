@@ -423,6 +423,11 @@ impl Walker {
                 generators,
                 ..
             } => self.comprehension(&[element], generators, "set comprehension"),
+            Expr::GeneratorExp {
+                element,
+                generators,
+                ..
+            } => self.comprehension(&[element], generators, "generator expression"),
             Expr::DictComp {
                 key,
                 value,

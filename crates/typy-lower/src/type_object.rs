@@ -73,6 +73,7 @@ impl FunctionLowerer<'_> {
             // These objects carry their type in their header.
             (
                 Type::Iterator(_)
+                | Type::Generator { .. }
                 | Type::Iterable(_)
                 | Type::Module(_)
                 | Type::TypeAlias

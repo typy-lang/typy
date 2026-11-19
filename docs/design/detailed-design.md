@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy detailed design |
-| Version | 2.52 |
+| Version | 2.53 |
 | Status | Approved |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-19 |
@@ -445,7 +445,8 @@ nodes of the features it adds, as 0.2 does for `Expr::Set`, a set
 display, `Expr::Dict`, a dict display whose `keys` hold `None` for a `**`
 item, as CPython's `ast.Dict` does, and `Expr::ListComp`, `SetComp` and
 `DictComp`, whose clauses are `Comprehension` values as CPython's
-`ast.comprehension`.
+`ast.comprehension`; 0.9 converts `Expr::GeneratorExp` with the same
+parts (EXP-15).
 `elif` chains become nested `If` nodes, as
 in CPython's `ast`. An integer literal keeps its value as decimal digits,
 so literals of any size survive conversion (DAT-01).
@@ -856,6 +857,20 @@ comprehension's variable that a `lambda` in it reads is a cell variable
 of the function. At module level, `ClosureScope::of_module` captures only
 such a comprehension variable, since a module variable is a global that
 every function reads as it is.
+
+`body/generator_expression.rs` checks a generator expression (EXP-15) as
+a nested generator function, `<genexpr>`, of one parameter, `.0`, the
+iterator `iterator_of` makes of the first iterable where the expression
+stands; its body, which `check_body_of` checks, is a `for` over `.0`, a
+`for` over each later iterable and an `if` for each condition, around
+`yield element`. `ClosureScope` notes it as it notes a `lambda`, reading
+the first iterable outside and binding `.0` inside. The item type is the
+one an expected `Iterable`, `Iterator` or `Generator` gives, or else the
+element's, which `settle_yields` gives the signature and the generator
+types once the body is checked. The value is `TypedExprKind::CallValue`
+of the `Lambda` with the iterator, of type `Generator[Y, None, None]`. An
+assignment expression inside one is E0201, planned for 1.0 (EXP-18), and
+one inside a generic function E0201 (FUN-10).
 
 `body/key_argument.rs` checks the `key` of `sorted`, `min` and `max`, also
 of `min` and `max` of several values, and of `list.sort`: a function value

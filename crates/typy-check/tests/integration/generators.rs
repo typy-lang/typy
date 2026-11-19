@@ -239,3 +239,63 @@ fn smt_11_yield_from_delegates_and_gives_what_the_generator_returns() {
         assert!(found.contains(line), "{line} missing from\n{found}");
     }
 }
+
+#[test]
+fn exp_15_a_generator_expression_is_a_nested_generator_of_its_first_iterator() {
+    for source in [
+        "print(sum(value * value for value in range(3)))\n",
+        "words = [\"a\"]\nprint(\",\".join(word.upper() for word in words))\n",
+        "from collections.abc import Iterator\n\nvalues: Iterator[int | None] = (value for value in \
+         [1])\nprint(list(values))\n",
+        "def scaled(factor: int) -> list[int]:\n    return list(value * factor for value in \
+         range(3) if value)\n",
+    ] {
+        assert_eq!(app(source), Vec::<String>::new(), "{source}");
+    }
+    let found = dump("doubled = (value * 2 for value in [1, 2])\n");
+    for line in [
+        "CallValue : Generator[int, None, None]",
+        "Iter : Iterator[int]",
+        "<genexpr>",
+    ] {
+        assert!(found.contains(line), "{line} missing from\n{found}");
+    }
+}
+
+#[test]
+fn exp_15_a_generator_expression_refuses_what_it_cannot_compile() {
+    let cases = [
+        (
+            "values = (v for v in 5)\n",
+            "E0411",
+            "an int cannot be iterated over",
+        ),
+        (
+            "def f() -> None:\n    total = 0\n    values = (total := total + v for v in \
+             range(3))\n    print(list(values))\n",
+            "E0201",
+            "an assignment expression inside a generator expression is planned for TyPy 1.0 \
+             (EXP-18)",
+        ),
+        (
+            "def first[T](items: list[T]) -> T:\n    found = list(item for item in items)\n    \
+             return found[0]\n",
+            "E0201",
+            "a generator expression inside a generic function is planned for TyPy 0.10 (FUN-10)",
+        ),
+        (
+            "def f() -> None:\n    values = ((yield v) for v in range(3))\n    print(values)\n",
+            "E0103",
+            "'yield' inside generator expression",
+        ),
+    ];
+    for (source, code, message) in cases {
+        let found = messages(source);
+        assert!(
+            found
+                .iter()
+                .any(|(each, text, _)| each == code && text == message),
+            "{source}: {found:?}"
+        );
+    }
+}

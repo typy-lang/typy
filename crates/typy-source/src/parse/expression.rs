@@ -313,7 +313,11 @@ impl Converter<'_> {
                 generators: self.generators(&node.generators),
                 span: self.span(node.range),
             },
-            ast::Expr::Generator(node) => self.other(NodeKind::GeneratorExp, node.range),
+            ast::Expr::Generator(node) => Expr::GeneratorExp {
+                element: Box::new(self.expression(&node.elt)),
+                generators: self.generators(&node.generators),
+                span: self.span(node.range),
+            },
             ast::Expr::Await(node) => self.other(NodeKind::Await, node.range),
             ast::Expr::Yield(node) => Expr::Yield {
                 value: node.value.as_deref().map(|value| self.boxed(value)),

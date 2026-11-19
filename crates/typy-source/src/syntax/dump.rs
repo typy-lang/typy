@@ -498,15 +498,20 @@ impl Dump<'_> {
                 generators,
                 ..
             }
+            | Expr::GeneratorExp {
+                element,
+                generators,
+                ..
+            }
             | Expr::SetComp {
                 element,
                 generators,
                 ..
             } => {
-                let label = if matches!(expression, Expr::ListComp { .. }) {
-                    "ListComp"
-                } else {
-                    "SetComp"
+                let label = match expression {
+                    Expr::ListComp { .. } => "ListComp",
+                    Expr::GeneratorExp { .. } => "GeneratorExp",
+                    _ => "SetComp",
                 };
                 self.comprehension(depth, label, &[element], generators, span);
             }

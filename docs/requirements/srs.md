@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy software requirements specification |
-| Version | 1.96 |
+| Version | 1.97 |
 | Status | Approved |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-19 |
@@ -244,6 +244,7 @@ formatter applies; Ruff's formatter is the project's recommendation.
 | EXP-15 | Generator expressions shall be accepted, evaluating the first iterable where the expression runs and the rest as the generator runs, as CPython does. | M | 0.9 | 6.2.8 |
 | EXP-16 | Calls with positional, keyword and default arguments shall be accepted, and default values shall be evaluated once, when the function is defined. | M | 0.1 | 6.3.4 |
 | EXP-17 | `*args` and `**kwargs` parameters with annotated element types shall be accepted, and so shall unpacking with `*` and `**` in calls, in list, tuple, set and dict displays, and in assignment targets. | S | 0.9 | 8.7 |
+| EXP-18 | An assignment expression inside a generator expression shall bind the variable of the function around it, as CPython binds it. | C | 1.0 | 6.12 |
 
 ### 3.7 Simple statements (SMT)
 

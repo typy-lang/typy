@@ -85,16 +85,8 @@ fn later_features_name_their_release_and_rule() {
             "`async` and `await` are planned for a release after TyPy 1.0",
         ),
         (
-            "x = (i for i in range(3))\n",
-            "generator expressions are planned for TyPy 0.9 (EXP-15)",
-        ),
-        (
             "def f[*Ts](x: int) -> int:\n    return x\n",
             "`*Ts` and `**P` type parameters are planned for TyPy 1.0 (GEN-06)",
-        ),
-        (
-            "x = (i for i in range(3))\n",
-            "generator expressions are planned for TyPy 0.9 (EXP-15)",
         ),
         (
             "@d\ndef f() -> None:\n    pass\n",

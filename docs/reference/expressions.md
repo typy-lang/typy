@@ -21,6 +21,7 @@ order.
 | List, set and dict comprehensions, each with its own scope | EXP-12 |
 | Assignment expressions `name := value`, as CPython scopes them | EXP-13 |
 | `lambda` where a `Callable` is expected | EXP-14 |
+| Generator expressions, whose first iterable runs where they run and the rest lazily | EXP-15 |
 | Positional, keyword and default arguments | EXP-16 |
 
 An assignment expression `name := value` assigns the variable and gives
@@ -79,7 +80,34 @@ checked there. A `lambda` inside a generic function is planned for 0.9
 recursive one inside a function, holds itself through the variable's
 cell: a reference cycle that cycle collection frees in 1.0 (MEM-06).
 
-Generator expressions and `*args` come in 0.9 (EXP-15, EXP-17).
+## Generator expressions
+
+A generator expression, `(element for target in source if condition)`,
+makes a generator of type `Generator[Y, None, None]`, which every
+function that takes an iterable accepts. As in CPython, the first
+iterable runs where the expression runs, and the conditions, the element
+and any later iterable run as the generator runs, one item at a time:
+
+<!-- typy-expect: accepted -->
+```python
+def numbers() -> list[int]:
+    print("the first iterable runs now")
+    return [1, 2, 3, 4]
+
+
+evens = (value * 10 for value in numbers() if value % 2 == 0)
+print("made")
+print(sum(evens), max(len(word) for word in ["a", "abc"]))
+print(",".join(str(value) for value in range(3)))
+```
+
+The item type is that of the element, or the item type of the iterable
+or iterator the context expects, such as `Iterator[int | None]`. A
+generator expression reads the variables around it as a nested function
+does, so one assigned after it is read with its later value. An
+assignment expression inside one is planned for 1.0 (EXP-18), and one
+inside a generic function for 0.10 (FUN-10). `*args` comes in 0.9
+(EXP-17).
 
 ## Example
 

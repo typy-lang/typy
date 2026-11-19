@@ -23,6 +23,11 @@ All notable changes to TyPy are recorded here. The format follows
   sent before the first step, a step after the end, and a generator that
   yields after `close()` raise CPython's `TypeError`, `StopIteration` and
   `RuntimeError` (SMT-11, FUN-07, FUN-11).
+- Generator expressions, `(element for target in source if condition)`:
+  a `Generator[Y, None, None]` whose first iterable runs where the
+  expression runs and the rest as it runs, reading the variables around it
+  as a nested function does (EXP-15). An assignment expression inside one
+  is planned for 1.0 (EXP-18).
 - `yield from` any iterable, passing on `send`, `throw` and `close()` to a
   generator it delegates to, and `return value` in a generator annotated
   `Generator[Y, S, R]`: `StopIteration(value)` ends it, and `result =
@@ -39,6 +44,12 @@ All notable changes to TyPy are recorded here. The format follows
 - A `yield` inside an `except` clause or a `finally` block. The exception
   a suspended generator handles stays with it, so an exception its caller
   raises meanwhile has the caller's own context, as in CPython (ADR-0068).
+
+### Fixed
+
+- `bool()` of an iterator, and an iterator as the condition of `if` or
+  `while`, no longer stop the compiler with an internal error; an
+  iterator is true, as in CPython.
 
 ### Changed
 

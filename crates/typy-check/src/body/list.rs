@@ -18,6 +18,16 @@ impl BodyChecker<'_> {
         expression: &Expr,
         expected: Option<&Type>,
     ) -> TypedExpr {
+        // A generator expression yields the item type an iterable expected here has (EXP-15).
+        if let Expr::GeneratorExp {
+            element,
+            generators,
+            span,
+        } = expression
+        {
+            let made = self.generator_expression(element, generators, expected, *span);
+            return Self::converted(made, expected);
+        }
         // A display or a collection call where `T | None` is expected is built as a `T`,
         // then held as an optional, as any other value is.
         // An empty display where an iterable is expected is a list, or a set, of its items.

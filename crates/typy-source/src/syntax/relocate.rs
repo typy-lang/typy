@@ -357,6 +357,11 @@ impl Expr {
                 generators,
                 span: at,
             }
+            | Self::GeneratorExp {
+                element,
+                generators,
+                span: at,
+            }
             | Self::SetComp {
                 element,
                 generators,

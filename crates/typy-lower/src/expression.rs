@@ -471,18 +471,22 @@ impl FunctionLowerer<'_> {
             }
             // An instance's class decides its truth with `__bool__`, or with `__len__` when it
             // has no `__bool__`; without either, the instance is true (CLS-07), and so is a type
-            // object.
+            // object, and so are an iterator and a generator, which have no length.
             TyirType::Object(id) if id.class_index().is_some() => {
                 return self.instance_truth(lowered, id, span);
             }
             TyirType::Object(
-                typy_tyir::TypeId::TYPE | typy_tyir::TypeId::SLICE | typy_tyir::TypeId::FUNCTION,
+                typy_tyir::TypeId::TYPE
+                | typy_tyir::TypeId::SLICE
+                | typy_tyir::TypeId::FUNCTION
+                | typy_tyir::TypeId::ITERATOR
+                | typy_tyir::TypeId::GENERATOR,
             ) => {
                 return self.constant(Constant::Bool(true), span);
             }
             // The object's type tests it, as CPython's truth test does (TYP-14); a `ctypes`
-            // object's class decides (FFI-03).
-            TyirType::UNION | TyirType::CDATA => {
+            // object's class decides (FFI-03), and an iterable is any of its collections.
+            TyirType::UNION | TyirType::CDATA | TyirType::ITERABLE => {
                 let object = self.bits(Self::borrowed(lowered.value, lowered.ty), span);
                 return self
                     .call_runtime(RuntimeFunction::ObjectIsTrue, vec![object], span)

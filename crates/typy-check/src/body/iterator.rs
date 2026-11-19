@@ -22,6 +22,12 @@ impl BodyChecker<'_> {
             return self.wrong_arity(Builtin::Iter, "1", arguments, span);
         };
         self.no_keywords(Builtin::Iter, keywords);
+        self.iterator_of(source, span)
+    }
+
+    /// Returns the iterator `iter(source)` gives, or the error type after reporting a source
+    /// it cannot go over.
+    pub(super) fn iterator_of(&mut self, source: &Expr, span: Span) -> TypedExpr {
         let source = self.sequence(source);
         match &source.ty {
             Type::Iterator(_) | Type::Error => return source,

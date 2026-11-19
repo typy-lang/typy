@@ -24,7 +24,7 @@ mod protocol;
 pub(crate) mod subclass_variables;
 pub(crate) mod type_alias;
 mod visit;
-pub(crate) use visit::visit_statement;
+pub(crate) use visit::{visit_expression, visit_statement};
 
 use std::collections::{BTreeMap, BTreeSet};
 

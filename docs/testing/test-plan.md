@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy test plan |
-| Version | 1.09 |
+| Version | 1.10 |
 | Status | Draft |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-19 |
@@ -358,6 +358,7 @@ that the specification does not define.
 | EXP-15 | 0.9 | IT | `tests/conformance/exp/EXP-15_*.py`, the first iterable evaluated at once and the rest lazily, also in the sanitizer run |
 | EXP-16 | 0.1 | IT | `tests/conformance/exp/EXP-16_*.py` |
 | EXP-17 | 0.9 | UT, IT | `typy-check` tests of the element types of `*args` and `**kwargs` and of each unpacking; `tests/conformance/exp/EXP-17_*.py` |
+| EXP-18 | 1.0 | IT | `tests/conformance/exp/EXP-18_*.py` |
 | SMT-01 | 0.1 | IT | `tests/conformance/smt/SMT-01_*.py` |
 | SMT-02 | 0.2 | IT | `tests/conformance/smt/SMT-02_*.py` |
 | SMT-03 | 0.1 | IT | `tests/conformance/smt/SMT-03_*.py` |

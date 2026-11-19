@@ -94,22 +94,26 @@ python-floor = "3.15"
 ## E0201: feature planned for a later TyPy release
 
 The program uses valid Python that a later TyPy release accepts, such as
-a generator expression or class decorators. The message names the
-release and the rule. Write the code without the feature, for example
-with a list comprehension, or wait for that release.
+class decorators or an assignment expression inside a generator
+expression. The message names the release and the rule. Write the code
+without the feature, for example with a statement before the
+expression, or wait for that release.
 
 This program gives E0201:
 
-<!-- typy-expect: rejected E0201 at 1:11 -->
+<!-- typy-expect: rejected E0201 at 2:12 -->
 ```python
-print(sum(n * n for n in range(4)))
+values = [1, 2, 3]
+print(list(last := n for n in values))
 ```
 
 This one is correct:
 
 <!-- typy-expect: accepted -->
 ```python
-print(sum([n * n for n in range(4)]))
+values = [1, 2, 3]
+last = values[-1]
+print(list(n for n in values), last)
 ```
 
 ## E0202: feature TyPy cannot compile with CPython's meaning

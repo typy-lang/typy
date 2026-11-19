@@ -171,6 +171,12 @@ pub enum Expr {
         generators: Vec<Comprehension>,
         span: Span,
     },
+    /// `(element for ...)`, a generator expression (EXP-15).
+    GeneratorExp {
+        element: Box<Expr>,
+        generators: Vec<Comprehension>,
+        span: Span,
+    },
     /// `{element for ...}`.
     SetComp {
         element: Box<Expr>,
@@ -231,6 +237,7 @@ impl Expr {
             | Self::Set { span, .. }
             | Self::Dict { span, .. }
             | Self::ListComp { span, .. }
+            | Self::GeneratorExp { span, .. }
             | Self::SetComp { span, .. }
             | Self::DictComp { span, .. }
             | Self::Attribute { span, .. }

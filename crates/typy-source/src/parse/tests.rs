@@ -291,10 +291,7 @@ match v:
 
 #[test]
 fn expressions_beyond_the_release_keep_their_kind() {
-    let cases = [
-        ("(x for x in y)\n", NodeKind::GeneratorExp),
-        ("await x\n", NodeKind::Await),
-    ];
+    let cases = [("await x\n", NodeKind::Await)];
     for (source, expected) in cases {
         assert!(
             matches!(only_expression(source), Expr::Other { kind, .. } if kind == expected),
@@ -1103,4 +1100,20 @@ fn lambda_keeps_its_parameters_and_its_body() {
         .collect();
     assert_eq!(names, [("a", false), ("b", true)]);
     assert!(matches!(*body, Expr::BinOp { .. }));
+}
+
+#[test]
+fn a_generator_expression_keeps_its_element_and_clauses() {
+    let Expr::GeneratorExp {
+        element,
+        generators,
+        ..
+    } = only_expression("(x * 2 for x in y if x for z in x)\n")
+    else {
+        panic!("not a generator expression");
+    };
+    assert!(matches!(*element, Expr::BinOp { .. }));
+    assert_eq!(generators.len(), 2);
+    assert_eq!(generators[0].ifs.len(), 1);
+    assert_eq!(generators[1].ifs.len(), 0);
 }
