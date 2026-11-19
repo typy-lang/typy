@@ -86,6 +86,7 @@ mod union;
 mod union_loop;
 mod version_info;
 mod view_operator;
+mod yield_from;
 
 pub(crate) use builtin_module::ModuleFunction;
 pub(crate) use class_copy::{ClassCopies, GenericClass};
@@ -338,13 +339,13 @@ impl<'program> BodyChecker<'program> {
     }
 
     /// Reports a function that can reach its end without returning the value its annotation
-    /// names; a generator's end returns `None` (FUN-07).
+    /// names; for a generator, the `R` of `Generator[Y, S, R]` (FUN-07).
     fn check_end(&mut self, definition: &Definition<'_>, returns: &Type) {
-        if self.assigned.is_none()
-            || self.generator.is_some()
-            || *returns == Type::NoneType
-            || *returns == Type::Error
-        {
+        let returns = match &self.generator {
+            Some(types) => types.returns.clone(),
+            None => returns.clone(),
+        };
+        if self.assigned.is_none() || returns == Type::NoneType || returns == Type::Error {
             return;
         }
         self.diagnostics.push(

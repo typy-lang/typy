@@ -73,10 +73,10 @@ impl BodyChecker<'_> {
                 ..
             } if self.received.is_none() => self.yield_assignment(statement, value, *span),
             Stmt::Expr {
-                value: value @ Expr::YieldFrom { .. },
+                value: Expr::YieldFrom { value, .. },
                 span,
-            }
-            | Stmt::Assign {
+            } => self.yield_from_statement(value, None, *span),
+            Stmt::Assign {
                 value: value @ Expr::YieldFrom { .. },
                 span,
                 ..
@@ -85,10 +85,7 @@ impl BodyChecker<'_> {
                 value: Some(value @ Expr::YieldFrom { .. }),
                 span,
                 ..
-            } => TypedStmt::Expr {
-                value: self.generator_form_planned("`yield from`", value.span()),
-                span: *span,
-            },
+            } if self.received.is_none() => self.yield_from_assignment(statement, value, *span),
             Stmt::Assign {
                 targets,
                 value,
@@ -649,19 +646,11 @@ impl BodyChecker<'_> {
     pub(super) fn return_statement(&mut self, value: Option<&Expr>, span: Span) -> TypedStmt {
         self.check_instance_complete(span);
         self.check_stays_in_finally("return", span);
-        if self.generator.is_some() {
-            if let Some(value) = value {
-                let refused =
-                    self.generator_form_planned("a generator's return value", value.span());
-                return TypedStmt::Expr {
-                    value: refused,
-                    span,
-                };
-            }
-            self.assigned = None;
-            return TypedStmt::Return { value: None, span };
-        }
-        let expected = self.returns.clone().unwrap_or(Type::NoneType);
+        // A generator's `return value` gives the `R` of `Generator[Y, S, R]` (FUN-07).
+        let generator = self.generator.as_ref().map(|types| types.returns.clone());
+        let expected = generator
+            .clone()
+            .unwrap_or_else(|| self.returns.clone().unwrap_or(Type::NoneType));
         // A result of no known type, such as that of a `lambda` whose context gives none,
         // takes the value as it is (EXP-14).
         let known = (expected != Type::Error).then_some(&expected);
@@ -674,17 +663,30 @@ impl BodyChecker<'_> {
                 DiagnosticCode::error(405),
                 value.as_ref().map_or(span, |value| value.span),
                 format!(
-                    "this returns {}, but the function returns {expected}",
-                    actual.with_article()
+                    "this returns {}, but the {} returns {expected}",
+                    actual.with_article(),
+                    if generator.is_some() {
+                        "generator"
+                    } else {
+                        "function"
+                    }
                 ),
             )
             .with_rule(if expected == Type::Float && actual == Type::Int {
                 RuleId::TYP_09
+            } else if generator.is_some() {
+                RuleId::FUN_07
             } else {
                 RuleId::TYP_01
             });
             if let Some(help) = self.protocol_help(&actual, &expected) {
                 diagnostic = diagnostic.with_help(help);
+            }
+            if generator == Some(Type::NoneType) {
+                diagnostic = diagnostic.with_help(
+                    "a generator returns a value when it is annotated `-> Generator[Y, S, R]`, \
+                     whose `R` the value has",
+                );
             }
             if actual == Type::NotImplemented {
                 diagnostic = diagnostic.with_help(
@@ -704,6 +706,11 @@ impl BodyChecker<'_> {
             self.diagnostics.push(diagnostic);
         }
         self.assigned = None;
+        // A generator keeps the value as its result, held as the type it returns.
+        let value = match generator {
+            Some(returns) => value.map(|value| Self::converted(value, Some(&returns))),
+            None => value,
+        };
         TypedStmt::Return { value, span }
     }
 }

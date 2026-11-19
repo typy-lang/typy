@@ -1,3 +1,7 @@
+use super::delegate::typy_rt_generator_delegate;
+use super::result::{
+    typy_rt_generator_has_result, typy_rt_generator_result, typy_rt_generator_set_result,
+};
 use super::{
     FINISHED, GeneratorDescriptor, GeneratorObject, NEW, PREFIX, SUSPENDED, advance, current,
     generator_repr, typy_rt_generator_close, typy_rt_generator_close_dropped,
@@ -66,6 +70,7 @@ fn descriptor(
         arguments: 1,
         item_kind: ItemKind::Int as u64,
         item_tuple: core::ptr::null(),
+        result: core::ptr::null(),
     }
 }
 
@@ -550,6 +555,160 @@ fn fun_11_a_generator_freed_while_suspended_waits_then_closes_in_the_order_freed
         typy_rt_generator_close_dropped();
         assert!(super::dropped::take().is_null());
         assert_eq!(CLOSED.with(|closed| closed.borrow().len()), 3);
+    }
+    release_names(&found);
+}
+
+/// The layout of a one-item tuple of an `int`, the result of the bodies below.
+const RESULT_FIELDS: [Field; 1] = [Field::plain(ItemKind::Int, 0)];
+
+/// A body that yields once, then returns the `int` its argument is, keeping it as its
+/// result as compiled `return value` does.
+unsafe extern "C" fn returning(generator: *mut GeneratorObject) -> *mut ExceptionObject {
+    // SAFETY: the runtime passes the live generator whose step is running.
+    let object = unsafe { &mut *generator };
+    if object.point == 0 {
+        object.current = word(1);
+        object.point = 1;
+        object.state = SUSPENDED;
+        return core::ptr::null_mut();
+    }
+    let thrown = core::mem::replace(&mut object.thrown, core::ptr::null_mut());
+    if !thrown.is_null() {
+        return thrown;
+    }
+    let frame = core::ptr::with_exposed_provenance::<u64>(generator.expose_provenance() + PREFIX);
+    // SAFETY: the frame's first field is the argument the test stored, and the body runs.
+    unsafe { typy_rt_generator_set_result(generator, *frame) };
+    core::ptr::null_mut()
+}
+
+/// Returns the descriptor of `returning`, whose result is laid out as `result`.
+fn returning_descriptor(frame: &TupleType, result: &TupleType) -> GeneratorDescriptor {
+    GeneratorDescriptor {
+        result,
+        ..descriptor(returning, frame)
+    }
+}
+
+#[test]
+fn fun_07_a_returned_value_is_the_argument_of_stop_iteration_or_the_value_of_yield_from() {
+    let fields = FLAG_FIELDS;
+    let layout = frame_layout(&fields);
+    let result_fields = RESULT_FIELDS;
+    let result = TupleType {
+        size: 8,
+        length: 1,
+        fields: result_fields.as_ptr(),
+    };
+    let found = returning_descriptor(&layout, &result);
+    // SAFETY: the descriptors and layouts live for the whole test.
+    unsafe {
+        let stopped = generator_of(&found, word(7));
+        assert!(advance(stopped, word(1).cast_signed()).value);
+        let raised = advance(stopped, word(1).cast_signed()).exception;
+        assert_eq!((*raised).kind(), ExceptionKind::StopIteration);
+        let message = crate::exception::typy_rt_exception_str(raised.cast()).value;
+        assert_eq!(text(message), "7");
+        crate::refcount::typy_rt_decrement(message.cast());
+        crate::refcount::typy_rt_decrement(raised.cast());
+        assert!(!typy_rt_generator_has_result(stopped.cast()));
+        crate::refcount::typy_rt_decrement(stopped.cast());
+        // A delegation keeps the result for `yield from` to read.
+        let delegator = generator_of(&found, word(0));
+        let delegated = generator_of(&found, word(9));
+        assert!(typy_rt_generator_delegate(delegator, delegated.cast(), true).value);
+        let ended = typy_rt_generator_delegate(delegator, delegated.cast(), false);
+        assert!(ended.exception.is_null() && !ended.value);
+        assert!(typy_rt_generator_has_result(delegated.cast()));
+        assert_eq!(typy_rt_generator_result(delegated.cast()).value, word(9));
+        crate::refcount::typy_rt_decrement(delegated.cast());
+        crate::refcount::typy_rt_decrement(delegator.cast());
+    }
+    release_names(&found);
+}
+
+#[test]
+fn smt_11_yield_from_passes_on_what_resumes_the_generator() {
+    let fields = FLAG_FIELDS;
+    let layout = frame_layout(&fields);
+    let found = descriptor(echoing, &layout);
+    let catching_found = descriptor(catching, &layout);
+    // SAFETY: the descriptors and layouts live for the whole test.
+    unsafe {
+        let delegator = generator_of(&found, 0);
+        let echo = generator_of(&found, 0);
+        assert!(typy_rt_generator_delegate(delegator, echo.cast(), true).value);
+        // A value `send` gave the delegator is sent on.
+        (*delegator).received = super::VALUE;
+        (*delegator).sent = word(4);
+        assert!(typy_rt_generator_delegate(delegator, echo.cast(), false).value);
+        assert_eq!(current(echo), word(4));
+        // `next()` ends `echoing`.
+        (*delegator).received = 0;
+        assert!(!typy_rt_generator_delegate(delegator, echo.cast(), false).value);
+        crate::refcount::typy_rt_decrement(echo.cast());
+        // `GeneratorExit` closes the generator delegated to, then leaves.
+        let caught = generator_of(&catching_found, 0);
+        assert!(typy_rt_generator_delegate(delegator, caught.cast(), true).value);
+        (*delegator).thrown = raise_bare(ExceptionKind::GeneratorExit);
+        let left = typy_rt_generator_delegate(delegator, caught.cast(), false);
+        expect_raised(left.exception, ExceptionKind::GeneratorExit, None);
+        assert_eq!((*caught).state, FINISHED);
+        crate::refcount::typy_rt_decrement(caught.cast());
+        // Any other exception is thrown in.
+        let thrown_into = generator_of(&catching_found, 0);
+        assert!(typy_rt_generator_delegate(delegator, thrown_into.cast(), true).value);
+        (*delegator).thrown = raise_bare(ExceptionKind::KeyError);
+        assert!(typy_rt_generator_delegate(delegator, thrown_into.cast(), false).value);
+        assert_eq!(current(thrown_into), word(2));
+        (*thrown_into).state = FINISHED;
+        crate::refcount::typy_rt_decrement(thrown_into.cast());
+        crate::refcount::typy_rt_decrement(delegator.cast());
+    }
+    release_names(&found);
+    release_names(&catching_found);
+}
+
+#[test]
+fn smt_11_an_iterator_that_is_no_generator_takes_next_alone() {
+    let fields = FLAG_FIELDS;
+    let layout = frame_layout(&fields);
+    let found = descriptor(echoing, &layout);
+    // SAFETY: the descriptor and its layout live for the whole test.
+    unsafe {
+        let delegator = generator_of(&found, 0);
+        let list = crate::list::typy_rt_list_new(
+            word(ItemKind::Int as i64).cast_signed(),
+            word(1).cast_signed(),
+            0,
+        );
+        crate::list::typy_rt_list_append(list, word(5));
+        let iterator = crate::iterator::typy_rt_iterable_iterator(list.cast(), core::ptr::null());
+        assert!(typy_rt_generator_delegate(delegator, iterator.cast(), true).value);
+        (*delegator).received = super::VALUE;
+        (*delegator).sent = word(1);
+        let refused = typy_rt_generator_delegate(delegator, iterator.cast(), false);
+        expect_raised(
+            refused.exception,
+            ExceptionKind::AttributeError,
+            Some("'list_iterator' object has no attribute 'send'"),
+        );
+        (*delegator).thrown = raise_bare(ExceptionKind::KeyError);
+        let thrown = typy_rt_generator_delegate(delegator, iterator.cast(), false);
+        expect_raised(thrown.exception, ExceptionKind::KeyError, None);
+        expect_raised(
+            typy_rt_generator_result(iterator.cast()).exception,
+            ExceptionKind::TypeError,
+            None,
+        );
+        for each in [
+            iterator.cast::<crate::header::ObjectHeader>(),
+            list.cast(),
+            delegator.cast(),
+        ] {
+            crate::refcount::typy_rt_decrement(each);
+        }
     }
     release_names(&found);
 }

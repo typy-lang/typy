@@ -454,6 +454,10 @@ pub enum TypedExprKind {
     /// What a generator received at the `yield` its step resumed after: the value `send`
     /// gave, or `None` when `next`, a `for` loop or `send(None)` resumed it (SMT-11).
     Received,
+    /// The item the iterator a `yield from` delegates to yielded last (SMT-11).
+    DelegatedItem,
+    /// What the generator a `yield from` delegated to returned, or `None` (FUN-07).
+    DelegatedResult,
 }
 
 /// `print(values, sep=sep, end=end, file=file, flush=flush)`; each keyword is present only
@@ -668,6 +672,8 @@ impl TypedExpr {
             | TypedExprKind::ClassVariable(_)
             | TypedExprKind::NotImplemented
             | TypedExprKind::Received
+            | TypedExprKind::DelegatedItem
+            | TypedExprKind::DelegatedResult
             | TypedExprKind::ForeignLibrary(_)
             | TypedExprKind::SysValue(_) => Vec::new(),
             TypedExprKind::Binary { left, right, .. }

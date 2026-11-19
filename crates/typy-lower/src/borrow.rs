@@ -112,9 +112,14 @@ pub(crate) fn assigned_symbols(body: &[TypedStmt]) -> BTreeSet<SymbolId> {
                 TypedStmt::Yield {
                     received: Some(received),
                     ..
+                }
+                | TypedStmt::YieldFrom {
+                    received: Some(received),
+                    ..
                 } => statements(std::slice::from_ref(received.as_ref()), found),
                 TypedStmt::Expr { .. }
                 | TypedStmt::Yield { .. }
+                | TypedStmt::YieldFrom { .. }
                 | TypedStmt::Delete { .. }
                 | TypedStmt::Assert { .. }
                 | TypedStmt::Return { .. }

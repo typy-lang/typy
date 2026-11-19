@@ -299,6 +299,16 @@ pub enum TypedStmt {
         received: Option<Box<TypedStmt>>,
         span: Span,
     },
+    /// `yield from source` (SMT-11, PEP 380): the generator yields each item `source`
+    /// yields, as `item`, a `DelegatedItem` held as the generator's item type, passes on
+    /// what resumes it, and then, in `target = yield from source`, runs `received`, the
+    /// assignment of what `source` returned, a `DelegatedResult`.
+    YieldFrom {
+        source: TypedExpr,
+        item: TypedExpr,
+        received: Option<Box<TypedStmt>>,
+        span: Span,
+    },
     /// `with manager as target: body`: `__enter__` gives what the target binds, and `__exit__`
     /// runs on every way out of the body; when it may return a true value, it may suppress an
     /// exception (CST-05). Several items nest.

@@ -23,6 +23,10 @@ All notable changes to TyPy are recorded here. The format follows
   sent before the first step, a step after the end, and a generator that
   yields after `close()` raise CPython's `TypeError`, `StopIteration` and
   `RuntimeError` (SMT-11, FUN-07, FUN-11).
+- `yield from` any iterable, passing on `send`, `throw` and `close()` to a
+  generator it delegates to, and `return value` in a generator annotated
+  `Generator[Y, S, R]`: `StopIteration(value)` ends it, and `result =
+  yield from source` gets the value (SMT-11, FUN-07, ADR-0072).
 - A generator freed while it is suspended is closed, as CPython closes
   it: `break` out of a loop over it, the end of a function that holds it
   and a container that drops it run its `finally` blocks and the

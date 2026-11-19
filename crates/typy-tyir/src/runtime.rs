@@ -220,6 +220,16 @@ pub enum RuntimeFunction {
     GeneratorThrow,
     /// `generator.close()`: raises `GeneratorExit` at the generator's `yield` (FUN-11).
     GeneratorClose,
+    /// `return value` of a generator's body: keeps the value's bits, owned, as its result.
+    GeneratorSetResult,
+    /// Whether an iterator is a generator that holds its body's return value.
+    GeneratorHasResult,
+    /// The bits of the return value an iterator's generator holds, borrowed; `TypeError`
+    /// when it holds none.
+    GeneratorResult,
+    /// One step of `yield from`: resumes the iterator as the generator was resumed, and
+    /// gives whether it yielded (SMT-11).
+    GeneratorDelegate,
     ObjectType,
     ObjectRepr,
     ObjectStr,
@@ -474,7 +484,7 @@ const FLOAT_FLOAT: &[TyirType] = &[TyirType::Float, TyirType::Float];
 
 impl RuntimeFunction {
     /// Every runtime function.
-    pub const ALL: [Self; 365] = [
+    pub const ALL: [Self; 369] = [
         Self::IntFloorDivide,
         Self::IntModulo,
         Self::IntPower,
@@ -673,6 +683,10 @@ impl RuntimeFunction {
         Self::GeneratorSend,
         Self::GeneratorThrow,
         Self::GeneratorClose,
+        Self::GeneratorSetResult,
+        Self::GeneratorHasResult,
+        Self::GeneratorResult,
+        Self::GeneratorDelegate,
         Self::IteratorItem,
         Self::ObjectType,
         Self::ObjectRepr,
@@ -1101,6 +1115,12 @@ impl RuntimeFunction {
             Self::GeneratorSend => signature(&[TyirType::GENERATOR, Bits, Bool], Bool, true),
             Self::GeneratorThrow => signature(&[TyirType::GENERATOR, EXCEPTION], Bool, true),
             Self::GeneratorClose => signature(&[TyirType::GENERATOR], Unit, true),
+            Self::GeneratorSetResult => signature(&[TyirType::GENERATOR, Bits], Unit, false),
+            Self::GeneratorHasResult => signature(&[ITERATOR], Bool, false),
+            Self::GeneratorResult => signature(&[ITERATOR], Bits, true),
+            Self::GeneratorDelegate => {
+                signature(&[TyirType::GENERATOR, ITERATOR, Bool], Bool, true)
+            }
             Self::IteratorItem => signature(&[ITERATOR], Bits, false),
             Self::ObjectType => signature(&[Bits], TYPE, false),
             Self::ObjectRepr | Self::ObjectStr => signature(&[Bits], STR, true),
@@ -1455,6 +1475,10 @@ impl RuntimeFunction {
             Self::GeneratorSend => "generator_send",
             Self::GeneratorThrow => "generator_throw",
             Self::GeneratorClose => "generator_close",
+            Self::GeneratorSetResult => "generator_set_result",
+            Self::GeneratorHasResult => "generator_has_result",
+            Self::GeneratorResult => "generator_result",
+            Self::GeneratorDelegate => "generator_delegate",
             Self::IteratorItem => "iterator_item",
             Self::ObjectType => "object_type",
             Self::ObjectRepr => "object_repr",

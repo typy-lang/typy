@@ -161,10 +161,40 @@ fn fun_07_a_generator_s_methods_and_what_its_yield_receives_are_checked() {
             "TYP-03",
         ),
         (
-            "def h() -> Generator[int, int, None]:\n    x = yield from g()\n",
-            "E0201",
-            "`yield from` is planned for TyPy 0.9 (SMT-11)",
-            "SMT-11",
+            "def h() -> Iterator[int]:\n    yield from 5\n",
+            "E0411",
+            "an int cannot be iterated over",
+            "CST-03",
+        ),
+        (
+            "def h() -> Iterator[int]:\n    yield from [\"a\"]\n",
+            "E0405",
+            "this yields a str, but the generator yields int",
+            "FUN-07",
+        ),
+        (
+            "def h() -> Generator[int, str, None]:\n    yield from g()\n",
+            "E0405",
+            "the generator is sent a str, and the one it delegates to receives an int",
+            "FUN-07",
+        ),
+        (
+            "def h() -> Generator[int, None, str]:\n    yield 1\n    return 5\n",
+            "E0405",
+            "this returns an int, but the generator returns str",
+            "FUN-07",
+        ),
+        (
+            "def h() -> Generator[int, None, str]:\n    yield 1\n",
+            "E0405",
+            "`h` can reach its end without returning a str",
+            "TYP-01",
+        ),
+        (
+            "def h() -> Iterator[int]:\n    yield 1\n    return 5\n",
+            "E0405",
+            "this returns an int, but the generator returns None",
+            "FUN-07",
         ),
     ];
     for (code_line, code, message, rule) in cases {
@@ -176,5 +206,36 @@ fn fun_07_a_generator_s_methods_and_what_its_yield_receives_are_checked() {
                 .any(|(each, text, of)| each == code && text == message && of == rule),
             "{source}: {found:?}"
         );
+    }
+}
+
+#[test]
+fn smt_11_yield_from_delegates_and_gives_what_the_generator_returns() {
+    for source in [
+        "from collections.abc import Generator, Iterator\n\n\ndef inner() -> Generator[int, \
+         None, str]:\n    yield 1\n    return \"done\"\n\n\ndef outer() -> Generator[int | \
+         None, None, int]:\n    result: str = yield from inner()\n    yield from [2, 3]\n    \
+         yield from range(4)\n    yield from \"ab\".encode()\n    return len(result)\n",
+        "from collections.abc import Iterator\n\n\ndef letters() -> Iterator[str]:\n    \
+         yield from \"abc\"\n    nothing = yield from {\"k\": 1}\n    print(nothing)\n",
+        "from collections.abc import Generator\n\n\ndef inner() -> Generator[int, int | None, \
+         None]:\n    yield 1\n\n\ndef outer() -> Generator[int, int, None]:\n    yield from \
+         inner()\n",
+    ] {
+        assert_eq!(app(source), Vec::<String>::new(), "{source}");
+    }
+    let found = dump(
+        "from collections.abc import Generator\n\n\ndef inner() -> Generator[int, None, str]:\n    \
+         yield 1\n    return \"done\"\n\n\ndef outer() -> Generator[int, None, None]:\n    \
+         result = yield from inner()\n    print(result)\n",
+    );
+    for line in [
+        "YieldFrom",
+        "DelegatedItem : int",
+        "Assign result: str",
+        "DelegatedResult : str",
+        "Return",
+    ] {
+        assert!(found.contains(line), "{line} missing from\n{found}");
     }
 }

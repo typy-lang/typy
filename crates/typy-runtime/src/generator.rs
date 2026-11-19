@@ -5,7 +5,9 @@
 //! the body to its next `yield` or its end. Its `repr` is `<generator object QUALNAME at
 //! 0x...>`, and it hashes and compares by identity, as CPython's generators do.
 
+mod delegate;
 mod dropped;
+mod result;
 #[cfg(test)]
 mod tests;
 
@@ -34,6 +36,9 @@ pub(crate) struct GeneratorDescriptor {
     /// The `ItemKind` code of the items, and the descriptor of a tuple item, or null.
     pub(crate) item_kind: u64,
     pub(crate) item_tuple: *const TupleType,
+    /// The layout of a one-item tuple of the body's return value, or null when the function
+    /// returns `None` (FUN-07).
+    pub(crate) result: *const TupleType,
 }
 
 /// A generator object: the header, its descriptor, its state, its current item and what a
@@ -53,12 +58,14 @@ pub(crate) struct GeneratorObject {
     sent: u64,
     /// What `throw` raises at the `yield` the next step resumes, owned; null for none.
     thrown: *mut ExceptionObject,
-    /// What the body returned, owned until the step that ends reads it.
-    result: u64,
+    /// What the body returned, owned, a one-item tuple laid out as the descriptor's `result`
+    /// says; null when it returned `None` or has not returned.
+    result: *mut u8,
     /// Room for an item held inline, a tuple, an optional tuple or a union, whose address is
     /// the current item; null until a `yield` gives one.
     held: *mut u8,
-    /// 1 when `send` gave the step that runs a value, which `sent` holds; 0 for `next()`.
+    /// `VALUE` when `send` gave the step that runs a value, which `sent` holds, `NONE_VALUE`
+    /// when that value is `None`, and 0 for `next()`.
     received: u64,
     /// The exception the caller of the step that runs was handling, borrowed, or null: the
     /// outermost `except` clause of the body restores it when it ends.
@@ -78,6 +85,11 @@ const FINISHED: u32 = 3;
 /// The state of a generator freed while suspended that yielded again when it was closed: it
 /// is freed without closing it again, its frame released as a suspended one's.
 const ABANDONED: u32 = 4;
+
+/// What `received` holds when `send` gave a value other than `None`.
+const VALUE: u64 = 1;
+/// What `received` holds when `send` gave `None`, which a `yield from` passes on as `next()`.
+const NONE_VALUE: u64 = 2;
 
 /// The bytes before a generator's frame.
 pub(crate) const PREFIX: usize = core::mem::size_of::<GeneratorObject>();
@@ -113,7 +125,7 @@ pub unsafe extern "C" fn typy_rt_generator_new(
             current: 0,
             sent: 0,
             thrown: core::ptr::null_mut(),
-            result: 0,
+            result: core::ptr::null_mut(),
             held: core::ptr::null_mut(),
             received: 0,
             caller: core::ptr::null_mut(),
@@ -124,13 +136,71 @@ pub unsafe extern "C" fn typy_rt_generator_new(
 }
 
 /// How a step of a generator ended.
+#[derive(Clone, Copy)]
 enum Step {
     /// At a `yield`, whose item is the current one.
     Yielded,
-    /// At the end of the body, or a `return`.
+    /// At the end of the body, or a `return`, whose value the generator holds.
     Returned,
+    /// Not at all: the generator had finished before.
+    Finished,
     /// With this exception, owned; a `StopIteration` already replaced (PEP 479).
     Raised(*mut ExceptionObject),
+}
+
+/// What resumes a generator.
+enum Resumption {
+    /// `next()`.
+    Next,
+    /// `send(value)` of these bits, borrowed for the step; `none` when the value is `None`.
+    Send { sent: u64, none: bool },
+    /// `throw(exception)` of this exception, owned.
+    Throw(*mut ExceptionObject),
+}
+
+/// Resumes `generator` as `how` says and runs its next step, as CPython's `gen_send_ex`
+/// does: a running generator raises `ValueError`, a finished one runs nothing and an
+/// exception thrown at it leaves at once, and one not started refuses a value other than
+/// `None` with `TypeError` and finishes when an exception is thrown at it.
+///
+/// # Safety
+///
+/// `generator` points to a live generator, and `how` holds what its kind says.
+unsafe fn resume(generator: *mut GeneratorObject, how: Resumption) -> Step {
+    // SAFETY: the caller's guarantee.
+    let object = unsafe { &mut *generator };
+    match (object.state, how) {
+        (RUNNING, how) => {
+            if let Resumption::Throw(exception) = how {
+                // SAFETY: the caller gave up its reference.
+                unsafe { crate::refcount::typy_rt_decrement(exception.cast()) };
+            }
+            return Step::Raised(running());
+        }
+        (FINISHED, Resumption::Throw(exception)) => return Step::Raised(exception),
+        (FINISHED, _) => return Step::Finished,
+        (NEW, Resumption::Send { none: false, .. }) => {
+            return Step::Raised(raise(
+                ExceptionKind::TypeError,
+                "can't send non-None value to a just-started generator",
+            ));
+        }
+        (NEW, Resumption::Throw(exception)) => {
+            object.state = FINISHED;
+            return Step::Raised(exception);
+        }
+        (NEW, _) | (_, Resumption::Next) => object.received = 0,
+        (_, Resumption::Send { sent, none }) => {
+            object.received = if none { NONE_VALUE } else { VALUE };
+            object.sent = sent;
+        }
+        (_, Resumption::Throw(exception)) => {
+            object.received = 0;
+            object.thrown = exception;
+        }
+    }
+    // SAFETY: the generator is new or suspended.
+    unsafe { step(generator) }
 }
 
 /// Runs one step of `generator`, which is not running and not finished. A generator whose
@@ -184,17 +254,20 @@ fn running() -> *mut ExceptionObject {
 /// `generator` points to a live generator object.
 pub(crate) unsafe fn advance(generator: *mut GeneratorObject, stop: i64) -> Raising<bool> {
     // SAFETY: the caller's guarantee.
-    let object = unsafe { &mut *generator };
-    match object.state {
-        RUNNING => return Raising::error(false, running()),
-        FINISHED => return exhausted(stop),
-        _ => {}
-    }
-    object.received = 0;
-    // SAFETY: the generator is new or suspended.
-    match unsafe { step(generator) } {
+    match unsafe { resume(generator, Resumption::Next) } {
         Step::Yielded => Raising::ok(true),
-        Step::Returned => exhausted(stop),
+        // `next()` raises `StopIteration` with the value the body returned, and a loop drops
+        // the value, as CPython's do.
+        Step::Returned if crate::word::inline_value(stop) == 1 => {
+            // SAFETY: the generator holds what its body returned.
+            Raising::error(false, unsafe { result::stop_with_result(generator) })
+        }
+        Step::Returned => {
+            // SAFETY: the generator holds what its body returned.
+            unsafe { result::release_result(generator) };
+            Raising::ok(false)
+        }
+        Step::Finished => exhausted(stop),
         Step::Raised(exception) => Raising::error(false, exception),
     }
 }
@@ -214,29 +287,23 @@ pub unsafe extern "C" fn typy_rt_generator_send(
     none: bool,
 ) -> Raising<bool> {
     // SAFETY: the caller's guarantee.
-    let object = unsafe { &mut *generator };
-    match object.state {
-        RUNNING => return Raising::error(false, running()),
-        FINISHED => return stopped(),
-        NEW if !none => {
-            return Raising::error(
-                false,
-                raise(
-                    ExceptionKind::TypeError,
-                    "can't send non-None value to a just-started generator",
-                ),
-            );
-        }
-        NEW => object.received = 0,
-        _ => {
-            object.received = 1;
-            object.sent = sent;
-        }
-    }
-    // SAFETY: the generator is new or suspended.
-    match unsafe { step(generator) } {
+    let step = unsafe { resume(generator, Resumption::Send { sent, none }) };
+    // SAFETY: the generator holds what its body returned.
+    unsafe { answer(generator, step) }
+}
+
+/// Returns the answer of `send` or `throw` to how the step went: true when it yielded, and
+/// `StopIteration` with the body's return value when it ended.
+///
+/// # Safety
+///
+/// `generator` points to the live generator that took the step.
+unsafe fn answer(generator: *mut GeneratorObject, step: Step) -> Raising<bool> {
+    match step {
         Step::Yielded => Raising::ok(true),
-        Step::Returned => stopped(),
+        // SAFETY: the caller's guarantee.
+        Step::Returned => Raising::error(false, unsafe { result::stop_with_result(generator) }),
+        Step::Finished => stopped(),
         Step::Raised(exception) => Raising::error(false, exception),
     }
 }
@@ -255,27 +322,9 @@ pub unsafe extern "C" fn typy_rt_generator_throw(
     exception: *mut ExceptionObject,
 ) -> Raising<bool> {
     // SAFETY: the caller's guarantee.
-    let object = unsafe { &mut *generator };
-    match object.state {
-        RUNNING => {
-            // SAFETY: the caller gave up its reference.
-            unsafe { crate::refcount::typy_rt_decrement(exception.cast()) };
-            return Raising::error(false, running());
-        }
-        NEW | FINISHED => {
-            object.state = FINISHED;
-            return Raising::error(false, exception);
-        }
-        _ => {}
-    }
-    object.received = 0;
-    object.thrown = exception;
-    // SAFETY: the generator is suspended.
-    match unsafe { step(generator) } {
-        Step::Yielded => Raising::ok(true),
-        Step::Returned => stopped(),
-        Step::Raised(raised) => Raising::error(false, raised),
-    }
+    let step = unsafe { resume(generator, Resumption::Throw(exception)) };
+    // SAFETY: the generator holds what its body returned.
+    unsafe { answer(generator, step) }
 }
 
 /// `generator.close()`: raises `GeneratorExit` at the `yield` a suspended generator is at.
@@ -290,25 +339,27 @@ pub unsafe extern "C" fn typy_rt_generator_throw(
 pub unsafe extern "C" fn typy_rt_generator_close(
     generator: *mut GeneratorObject,
 ) -> *mut ExceptionObject {
+    // A generator not started runs nothing, so it needs no `GeneratorExit`.
     // SAFETY: the caller's guarantee.
-    let object = unsafe { &mut *generator };
-    match object.state {
-        RUNNING => return running(),
-        NEW | FINISHED => {
-            object.state = FINISHED;
+    unsafe {
+        if (*generator).state == NEW {
+            (*generator).state = FINISHED;
             return core::ptr::null_mut();
         }
-        _ => {}
     }
-    object.received = 0;
-    object.thrown = raise_bare(ExceptionKind::GeneratorExit);
-    // SAFETY: the generator is suspended.
-    match unsafe { step(generator) } {
+    let exit = raise_bare(ExceptionKind::GeneratorExit);
+    // SAFETY: the caller's guarantee.
+    match unsafe { resume(generator, Resumption::Throw(exit)) } {
         Step::Yielded => raise(
             ExceptionKind::RuntimeError,
             "generator ignored GeneratorExit",
         ),
-        Step::Returned => core::ptr::null_mut(),
+        Step::Returned => {
+            // SAFETY: the generator holds what its body returned.
+            unsafe { result::release_result(generator) };
+            core::ptr::null_mut()
+        }
+        Step::Finished => core::ptr::null_mut(),
         Step::Raised(raised) => {
             // SAFETY: the step gave up the exception it raised.
             let class = unsafe { (*raised).class() };
@@ -457,6 +508,7 @@ pub(crate) unsafe fn destroy(generator: *mut GeneratorObject) {
         if !object.held.is_null() {
             crate::allocator::free(object.held);
         }
+        result::release_result(generator);
     }
     crate::allocator::free(generator.cast());
 }

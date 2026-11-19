@@ -141,18 +141,6 @@ impl BodyChecker<'_> {
             )
         })
     }
-
-    /// Returns E0201 for the forms of a generator that a later step of 0.9 compiles:
-    /// `yield from` and a `return` with a value.
-    pub(super) fn generator_form_planned(&mut self, what: &str, span: Span) -> TypedExpr {
-        let diagnostic = Diagnostic::new(
-            DiagnosticCode::error(201),
-            span,
-            format!("{what} is planned for TyPy 0.9 (SMT-11)"),
-        )
-        .with_rule(RuleId::SMT_11);
-        self.error(diagnostic, span)
-    }
 }
 
 /// Returns true when the statement has a `yield` or a `yield from` of its function: in it or

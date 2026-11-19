@@ -104,6 +104,10 @@ fn descriptor<'ctx>(
         }
         _ => pointer.const_null(),
     };
+    let result = match frame.result {
+        Some(tuple) => crate::descriptor::tuple_descriptor(shared, tuple)?,
+        None => pointer.const_null(),
+    };
     let word = context.i64_type();
     let code = shared.functions[id.0 as usize];
     let descriptor_type = context.struct_type(
@@ -114,6 +118,7 @@ fn descriptor<'ctx>(
             pointer.into(),
             word.into(),
             word.into(),
+            pointer.into(),
             pointer.into(),
         ],
         false,
@@ -127,6 +132,7 @@ fn descriptor<'ctx>(
         word.const_int(arguments, false).into(),
         word.const_int(kind, false).into(),
         item_tuple.into(),
+        result.into(),
     ]);
     let descriptor = Statics::global(
         shared.module,

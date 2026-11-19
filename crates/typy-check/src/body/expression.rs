@@ -409,11 +409,10 @@ impl BodyChecker<'_> {
                 value, attribute, ..
             } => self.attribute(value, attribute, span),
             Expr::FString { parts, .. } => self.fstring(parts, span),
-            Expr::Yield { .. } => self.received_value(span),
-            // The subset check refuses every other expression, a `yield from` that is not a
-            // statement among them (FUN-12), and a quoted expression is only read as an
-            // annotation.
-            Expr::Quoted { .. } | Expr::Other { .. } | Expr::YieldFrom { .. } => Self::typed(
+            Expr::Yield { .. } | Expr::YieldFrom { .. } => self.received_value(span),
+            // The subset check refuses every other expression, and a quoted expression is
+            // only read as an annotation.
+            Expr::Quoted { .. } | Expr::Other { .. } => Self::typed(
                 TypedExprKind::Constant(TypedConstant::None),
                 Type::Error,
                 span,

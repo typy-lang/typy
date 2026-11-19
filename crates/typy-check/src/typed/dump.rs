@@ -193,6 +193,19 @@ impl Dump<'_> {
                     self.statement(depth + 1, received);
                 }
             }
+            TypedStmt::YieldFrom {
+                source,
+                item,
+                received,
+                span,
+            } => {
+                self.line(depth, "YieldFrom", *span);
+                self.expression(depth + 1, source);
+                self.expression(depth + 1, item);
+                if let Some(received) = received {
+                    self.statement(depth + 1, received);
+                }
+            }
             TypedStmt::Return { value, span } => {
                 self.line(depth, "Return", *span);
                 if let Some(value) = value {
@@ -476,6 +489,8 @@ impl Dump<'_> {
             TypedExprKind::Capture(index) => format!("Capture {index}"),
             TypedExprKind::RunningFunction => "RunningFunction".to_owned(),
             TypedExprKind::Received => "Received".to_owned(),
+            TypedExprKind::DelegatedItem => "DelegatedItem".to_owned(),
+            TypedExprKind::DelegatedResult => "DelegatedResult".to_owned(),
             TypedExprKind::CellRead(symbol) => {
                 format!("CellRead {}", self.program.symbol(*symbol).name)
             }

@@ -51,6 +51,8 @@ pub struct GeneratorFrame {
     pub yields: TyirType,
     /// The layout of the frame: the arguments, then the slots.
     pub frame: crate::types::TupleTypeId,
+    /// The one-item tuple of what the body returns, or `None` when it returns `None`.
+    pub result: Option<crate::types::TupleTypeId>,
 }
 
 impl TyirFunction {

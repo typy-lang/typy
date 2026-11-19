@@ -256,6 +256,8 @@ impl FunctionLowerer<'_> {
             TypedExprKind::Capture(index) => self.capture(*index, ty, span),
             TypedExprKind::RunningFunction => self.running_function(),
             TypedExprKind::Received => self.received(ty, span),
+            TypedExprKind::DelegatedItem => self.delegated_item(ty, span),
+            TypedExprKind::DelegatedResult => self.delegated_result(ty, span),
             TypedExprKind::CellRead(symbol) => self.read_name(*symbol, span),
             TypedExprKind::CellObject(symbol) => self.cell_of(*symbol, span).0,
             TypedExprKind::CapturedCell(index) => {

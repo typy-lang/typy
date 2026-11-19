@@ -112,6 +112,21 @@ impl Analysis<'_> {
                 };
                 self.evaluated(value, after)
             }
+            TypedStmt::YieldFrom {
+                source,
+                item,
+                received,
+                ..
+            } => {
+                // The items are read while the delegation runs, and the assignment of what
+                // it returned after it.
+                let after = match received {
+                    Some(received) => self.statement(received, &after),
+                    None => after,
+                };
+                let after = self.evaluated(item, after);
+                self.evaluated(source, after)
+            }
             TypedStmt::Return { value, .. } => {
                 let mut reads = Vec::new();
                 let escape = self.escape.clone();

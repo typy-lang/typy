@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy software requirements specification |
-| Version | 1.95 |
+| Version | 1.96 |
 | Status | Approved |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-19 |
@@ -259,7 +259,7 @@ formatter applies; Ruff's formatter is the project's recommendation.
 | SMT-08 | `global` shall be accepted for module-level variables. | M | 0.3 | 7.12 |
 | SMT-09 | `nonlocal` shall be accepted in nested functions. | M | 0.8 | 7.13 |
 | SMT-10 | The `type` statement shall define a type alias, with or without type parameters. | M | 0.4 | 7.14 |
-| SMT-11 | `yield` and `yield from` shall be accepted in generator functions as statements: `yield value`, `yield from iterable`, and an assignment of either, such as `received = yield value`, whose `yield` shall give `S \| None` of a `Generator[Y, S, R]` (ADR-0063, ADR-0067). | M | 0.9 | 7.7 |
+| SMT-11 | `yield` and `yield from` shall be accepted in generator functions as statements: `yield value`, `yield from iterable`, and an assignment of either, such as `received = yield value`, whose `yield` shall give `S \| None` of a `Generator[Y, S, R]` (ADR-0063, ADR-0067, ADR-0072). | M | 0.9 | 7.7 |
 | SMT-12 | A type alias shall be usable from another module, readable as a value as CPython's `TypeAliasType`, definable inside a function, a class or a block, and given type parameters with a bound or constraints. | S | 0.5 | 7.14 |
 
 ### 3.8 Compound statements (CST)

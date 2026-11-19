@@ -1238,6 +1238,7 @@ fn resume_function(crossing: bool) -> TyirFunction {
         closure: false,
         yields: TyirType::Int,
         frame: crate::types::TupleTypeId(0),
+        result: None,
     });
     builder.finish()
 }
@@ -1348,6 +1349,7 @@ fn resume_reads(wrong: bool) -> TyirModule {
         closure: false,
         yields: TyirType::Int,
         frame: crate::types::TupleTypeId(0),
+        result: None,
     });
     let mut module = module(builder.finish());
     module.tuple_types.intern_id(Vec::new());

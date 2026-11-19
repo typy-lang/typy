@@ -29,6 +29,10 @@ pub(crate) struct Resumable {
     yields: TyirType,
     /// The type `send` passes, `S` of `Generator[Y, S, R]`.
     sends: TyirType,
+    /// The type the body returns, `R` of `Generator[Y, S, R]`.
+    returns: TyirType,
+    /// The hidden slot of the iterator the `yield from` being lowered delegates to.
+    delegate: Option<typy_tyir::SlotId>,
 }
 
 /// Where the first step of a resume function finds its parameters: its generator, its ID,
@@ -119,16 +123,16 @@ pub(crate) fn resume_builder(
             .iter()
             .map(|parameter| tyir_type(&program.symbol(*parameter).ty, tuple_types)),
     );
-    let (yields, sends) =
-        function
-            .generator
-            .as_ref()
-            .map_or((TyirType::Unit, TyirType::Unit), |types| {
-                (
-                    tyir_type(&types.yields, tuple_types),
-                    tyir_type(&types.sends, tuple_types),
-                )
-            });
+    let (yields, sends, returns) = function.generator.as_ref().map_or(
+        (TyirType::Unit, TyirType::Unit, TyirType::Unit),
+        |types| {
+            (
+                tyir_type(&types.yields, tuple_types),
+                tyir_type(&types.sends, tuple_types),
+                tyir_type(&types.returns, tuple_types),
+            )
+        },
+    );
     let resumable = Resumable {
         generator,
         function: resume,
@@ -138,6 +142,8 @@ pub(crate) fn resume_builder(
         closure: closure.is_some(),
         yields,
         sends,
+        returns,
+        delegate: None,
     };
     (builder, Some(resumable), closure)
 }
@@ -250,6 +256,195 @@ impl FunctionLowerer<'_> {
         }
     }
 
+    /// Lowers `return value` of a generator's body: the generator keeps the value as its
+    /// result, which `StopIteration` and `yield from` give (FUN-07), then the step returns.
+    pub(crate) fn generator_return(&mut self, value: &TypedExpr, span: Span) {
+        let generator = self.running_generator();
+        let lowered = self.expression(value);
+        let owned = self.take_reference(lowered, span);
+        let bits = self
+            .builder
+            .push_value(Operation::ToBits(owned), TyirType::Bits, span);
+        self.call_runtime(
+            RuntimeFunction::GeneratorSetResult,
+            vec![generator, bits],
+            span,
+        );
+        self.run_cleanups(0, span);
+        if self.builder.is_terminated() {
+            return;
+        }
+        self.release_slots_but(None, span);
+        let unit = self.constant(Constant::Unit, span);
+        self.builder.terminate(Terminator::Return(unit));
+    }
+
+    /// Returns the generator the resume function being lowered steps.
+    fn running_generator(&self) -> ValueId {
+        let Some(resumable) = self.generator.as_ref() else {
+            unreachable!("the checker gives `yield` and its forms to generator functions alone")
+        };
+        resumable.generator
+    }
+
+    /// Lowers `yield from source` (SMT-11, PEP 380): the iterator of `source` waits in a
+    /// hidden slot, and each step of the delegation resumes it as the generator was resumed;
+    /// while it yields, the generator yields `item`, what it yielded, and when it ends,
+    /// `received` assigns what it returned. The iterator goes then, and on any way out.
+    pub(crate) fn yield_from(
+        &mut self,
+        source: &TypedExpr,
+        item: &TypedExpr,
+        received: Option<&TypedStmt>,
+        span: Span,
+    ) {
+        let generator = self.running_generator();
+        let lowered = self.expression(source);
+        let iterator = match &source.ty {
+            typy_check::Type::Iterable(each) => {
+                let made = self.iterable_iterator(lowered, each, span);
+                self.release(lowered, span);
+                made
+            }
+            _ => lowered,
+        };
+        let slot = self.hidden_slot("delegate", TyirType::ITERATOR);
+        self.store(slot, iterator, span);
+        let held = vec![slot];
+        self.cleanups
+            .push(crate::function::Cleanup::Iterator(held.clone()));
+        let previous = self
+            .generator
+            .as_mut()
+            .and_then(|resumable| resumable.delegate.replace(slot));
+        let yielded = self.builder.create_block();
+        let finished = self.builder.create_block();
+        self.delegate_step(generator, slot, (true, yielded, finished), span);
+        self.builder.switch_to(yielded);
+        let value = self.expression(item);
+        let owned = self.take_reference(value, span);
+        let bits = self
+            .builder
+            .push_value(Operation::ToBits(owned), TyirType::Bits, span);
+        let resume = self.builder.create_block();
+        if let Some(resumable) = self.generator.as_mut() {
+            resumable.points.push(resume);
+        }
+        self.builder.push(
+            Operation::SetGeneratorItem {
+                generator,
+                item: bits,
+            },
+            span,
+        );
+        self.builder
+            .terminate(Terminator::Yield { generator, resume });
+        self.builder.switch_to(resume);
+        self.handle_again(span);
+        self.delegate_step(generator, slot, (false, yielded, finished), span);
+        self.cleanups.pop();
+        self.builder.switch_to(finished);
+        if let Some(received) = received {
+            self.statements(std::slice::from_ref(received));
+        }
+        self.release_hidden(&held, span);
+        if let Some(resumable) = self.generator.as_mut() {
+            resumable.delegate = previous;
+        }
+    }
+
+    /// Takes one step of the delegation of the iterator in `slot`, the first when `first`, and
+    /// goes on in `yielded` when it yielded and in `finished` when it ended.
+    fn delegate_step(
+        &mut self,
+        generator: ValueId,
+        slot: typy_tyir::SlotId,
+        (first, yielded, finished): (bool, BlockId, BlockId),
+        span: Span,
+    ) {
+        let iterator = self.load(slot, span);
+        let first = self.constant(Constant::Bool(first), span);
+        let outcome = self.call_runtime(
+            RuntimeFunction::GeneratorDelegate,
+            vec![generator, iterator.value, first],
+            span,
+        );
+        self.builder.terminate(Terminator::Branch {
+            condition: outcome.value,
+            then: yielded,
+            otherwise: finished,
+        });
+    }
+
+    /// Returns the iterator the `yield from` being lowered delegates to, borrowed.
+    fn delegated_iterator(&mut self, span: Span) -> ValueId {
+        let Some(slot) = self
+            .generator
+            .as_ref()
+            .and_then(|resumable| resumable.delegate)
+        else {
+            unreachable!("the checker gives delegated values to a `yield from` alone")
+        };
+        self.load(slot, span).value
+    }
+
+    /// Lowers the item the delegated iterator yielded last, of type `ty`, with a reference
+    /// of its own.
+    pub(crate) fn delegated_item(&mut self, ty: TyirType, span: Span) -> Lowered {
+        let iterator = self.delegated_iterator(span);
+        self.current_item(iterator, ty, span)
+    }
+
+    /// Lowers what the delegated generator returned, of type `ty`, with a reference of its
+    /// own: `None` when it returned none and `ty` holds `None`.
+    pub(crate) fn delegated_result(&mut self, ty: TyirType, span: Span) -> Lowered {
+        if ty == TyirType::Unit {
+            let none = self.constant(Constant::Unit, span);
+            return Self::borrowed(none, ty);
+        }
+        let iterator = self.delegated_iterator(span);
+        let TyirType::Optional(_) = ty else {
+            return self.result_value(iterator, ty, span);
+        };
+        let present = self.call_runtime(RuntimeFunction::GeneratorHasResult, vec![iterator], span);
+        let held = self.builder.create_block();
+        let missing = self.builder.create_block();
+        let join = self.builder.create_block();
+        let result = self.builder.add_block_parameter(join, ty);
+        self.builder.terminate(Terminator::Branch {
+            condition: present.value,
+            then: held,
+            otherwise: missing,
+        });
+        self.builder.switch_to(held);
+        let value = self.result_value(iterator, ty, span);
+        self.jump_with(join, value, ty, span);
+        self.builder.switch_to(missing);
+        let none = self.none_of(ty, span);
+        self.builder.terminate(Terminator::Jump {
+            target: join,
+            arguments: vec![none],
+        });
+        self.builder.switch_to(join);
+        self.produced(result, ty)
+    }
+
+    /// Returns the value the generator `iterator` returned, of type `ty`, with a reference of
+    /// its own; the runtime raises `TypeError` when it holds none.
+    fn result_value(&mut self, iterator: ValueId, ty: TyirType, span: Span) -> Lowered {
+        let bits = self.call_runtime(RuntimeFunction::GeneratorResult, vec![iterator], span);
+        let value = self.builder.push_value(
+            Operation::FromBits {
+                bits: bits.value,
+                ty,
+            },
+            ty,
+            span,
+        );
+        let owned = self.take_reference(Self::borrowed(value, ty), span);
+        self.produced(owned, ty)
+    }
+
     /// Raises the exception `throw` or `close` gave the step at the `yield` it resumes after,
     /// when one did (FUN-07, FUN-11).
     fn raise_thrown(&mut self, generator: ValueId, span: Span) {
@@ -340,11 +535,14 @@ impl FunctionLowerer<'_> {
         let mut items = resumable.arguments.clone();
         items.extend(self.builder.slot_types());
         let frame = self.tuple_types.intern_id(items);
+        let result = (resumable.returns != TyirType::Unit)
+            .then(|| self.tuple_types.intern_id(vec![resumable.returns]));
         self.builder.set_generator(GeneratorFrame {
             arguments: resumable.arguments,
             closure: resumable.closure,
             yields: resumable.yields,
             frame,
+            result,
         });
         // The runtime calls every resume function alike, so each returns as one that raises.
         self.builder.set_may_raise(true);

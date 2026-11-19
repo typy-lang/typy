@@ -13,6 +13,7 @@
 | A function defined inside a function, which reads the variables of the functions around it | FUN-04 |
 | A generator function, whose `yield` statements give its items one step at a time | SMT-11, FUN-07 |
 | `send`, `throw` and `close` of a `Generator[Y, S, R]`, and `received = yield value` | SMT-11, FUN-07 |
+| `yield from` any iterable, and `return value` of a `Generator[Y, S, R]` | SMT-11, FUN-07 |
 | A generator freed while suspended closes, running its `finally` blocks | FUN-11 |
 
 A function value is the `key` of `sorted`, `list.sort`, `min` and `max`;
@@ -209,6 +210,52 @@ after the body ends raises `StopIteration`, as in CPython.
 A generator suspended inside an `except` clause keeps the exception it
 handles: its caller does not see it, and the generator handles it again
 when it resumes, as CPython does (ADR-0068).
+
+### Delegating with `yield from`
+
+`yield from source` yields every item of `source`, any iterable, and
+passes on to a generator source what resumes your generator: a value
+`send` gives, an exception `throw` gives, and `close()`. A generator
+annotated `Generator[Y, S, R]` returns a value of type `R` with
+`return value`; `next()` then raises `StopIteration(value)`, and
+`result = yield from source` gets the value:
+
+<!-- typy-expect: accepted -->
+```python
+from collections.abc import Generator
+
+
+def averaged() -> Generator[None, float, float]:
+    total = 0.0
+    count = 0
+    while count < 3:
+        value = yield
+        if value is not None:
+            total += value
+            count += 1
+    return total / count
+
+
+def report() -> Generator[None, float, None]:
+    average = yield from averaged()
+    print("average", average)
+
+
+reader = report()
+next(reader)
+for value in [1.0, 2.0, 6.0]:
+    try:
+        reader.send(value)
+    except StopIteration:
+        print("done")
+```
+
+The source's items must fit the `Y` your generator yields, and a
+generator source must receive what yours is sent: the same `S`, or one of
+them `S | None` of the other. A generator that returns nothing gives
+`None`, and so does `yield from` over any other iterable. A value sent on
+to an iterator that is not a generator raises `AttributeError`, as in
+CPython 3.12 (ADR-0072).
 
 ### Closing a generator
 
