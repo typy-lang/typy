@@ -114,3 +114,24 @@ fn typ_17_a_class_pattern_of_a_typing_name_is_refused() {
         );
     }
 }
+
+#[test]
+fn typ_21_an_isinstance_test_that_cpython_refuses_is_refused() {
+    let cases = [
+        (
+            "print(isinstance(1))\n",
+            "`isinstance` takes a value and a class or a tuple of classes",
+        ),
+        (
+            "from typing import Optional\n\nprint(isinstance(1, Optional[int, str]))\n",
+            "`Optional` takes one type, as CPython requires",
+        ),
+    ];
+    for (source, message) in cases {
+        let found = messages(source);
+        assert!(
+            found.iter().any(|(_, text, _)| text == message),
+            "{source}: {found:?}"
+        );
+    }
+}

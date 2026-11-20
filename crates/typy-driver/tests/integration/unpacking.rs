@@ -56,3 +56,28 @@ fn exp_17_a_call_that_unpacks_checks_and_binds_its_arguments_when_it_runs() {
     let ir = text(emit(&main, EmitStage::LlvmIr));
     assert!(ir.contains("typy_rt_call_check"), "{ir}");
 }
+
+#[test]
+fn typ_21_a_generator_in_a_union_and_an_unpacked_call_lower_and_verify() {
+    let source = "from collections.abc import Generator, Iterable, Iterator\n\n\n\
+                  def sink(*args: int, **kwargs: int) -> str:\n    return f\"{args} {kwargs}\"\n\n\n\
+                  def numbers() -> Generator[int, None, None]:\n    yield 1\n\n\n\
+                  def take(value: Iterable[int] | int) -> str:\n    \
+                  if isinstance(value, Generator):\n        return \"generator\"\n    \
+                  return \"other\"\n\n\n\
+                  def step(value: Iterator[int] | None) -> int:\n    \
+                  return -1 if value is None else next(value)\n\n\n\
+                  values = [1, 2]\n\
+                  print(sink(*values), take(numbers()), take(4), step(numbers()))\n";
+    let (_guard, main) = program(source);
+    let tyir = text(emit(&main, EmitStage::Tyir));
+    for call in [
+        "rt.call_check",
+        "rt.object_has_type_id",
+        "rt.iterator_stepper",
+    ] {
+        assert!(tyir.contains(call), "{call} missing from\n{tyir}");
+    }
+    let ir = text(emit(&main, EmitStage::LlvmIr));
+    assert!(ir.contains("typy_rt_iterator_stepper"), "{ir}");
+}

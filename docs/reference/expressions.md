@@ -76,7 +76,7 @@ parameters than the expected `Callable` passes, is E0203; define the
 function with `def`. A parameter taken by keyword only is E0202, since a
 `Callable` passes every argument by position. A `lambda` that reads a
 variable assigned no type yet where it stands is E0306, since its body is
-checked there. A `lambda` inside a generic function is planned for 0.9
+checked there. A `lambda` inside a generic function is planned for 0.10
 (FUN-10). A `lambda` stored in a variable that it calls, such as a
 recursive one inside a function, holds itself through the variable's
 cell: a reference cycle that cycle collection frees in 1.0 (MEM-06).

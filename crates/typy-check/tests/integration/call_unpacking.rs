@@ -188,3 +188,11 @@ fn exp_17_an_argument_that_cannot_be_unpacked_is_refused() {
         assert_ne!(messages(program).len(), 0, "{program}");
     }
 }
+
+#[test]
+fn exp_17_a_generic_call_solves_what_it_can_from_unpacked_arguments() {
+    let program = "def named[T](**options: T) -> list[T]:\n    return list(options.values())\n\n\n\
+                   def first[T](*items: T) -> T:\n    return items[0]\n\n\n\
+                   print(named(**[1]))\nprint(first(*[1], unknown=1))\n";
+    assert_ne!(messages(program).len(), 0, "{program}");
+}
