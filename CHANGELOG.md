@@ -37,8 +37,7 @@ All notable changes to TyPy are recorded here. The format follows
 - `Generator` of `typing` or `collections.abc` as the class of
   `isinstance`, and of `collections.abc` in a class pattern, and a value
   held as an `Iterable[T]` tested against `Iterator`, answered by the
-  object it holds; a true test reads it as an `Iterator[T]` (TYP-21,
-  LIB-20).
+  object it holds; a true test reads it as an `Iterator[T]` (TYP-21).
 - A class whose `__next__` returns `T` and whose `__iter__` returns the
   instance is an `Iterator[T]`, and a class whose `__iter__` returns an
   iterator is an `Iterable[T]`, as `typing` reads the protocols: its
@@ -92,11 +91,12 @@ All notable changes to TyPy are recorded here. The format follows
   `Dict`, `Set`, `Tuple`, `Type`, `Optional` or `Union` of `typing` is
   E0401, since CPython raises `TypeError` for it; name the class of
   `collections.abc` or the built-in type instead.
-- Decorators, built-in functions, class methods and protocol methods as
-  values, nested functions inside generic functions, `NamedTuple`,
-  `isinstance` with a class held in a variable, `issubclass`, and
-  `typing` names as values are given as planned for 0.10, where TyPy 0.8
-  named 0.9.
+- `Sequence`, `Mapping` and the other abstract collections of
+  `collections.abc`, decorators, built-in functions, class methods and
+  protocol methods as values, nested functions inside generic functions,
+  `NamedTuple`, `isinstance` with a class held in a variable,
+  `issubclass`, and `typing` names as values are given as planned for
+  0.10, where TyPy 0.8 named 0.9.
 
 ## [0.8.0] - 2026-11-19
 

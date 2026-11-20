@@ -2048,10 +2048,8 @@ listed, may be one when a listed class derives from it, and is not
 otherwise. `isinstance_test` replaces the abstract class in the checks it
 leaves for the program's run with the listed classes, so lowering never
 meets it. A bare `Optional`, `ClassVar` or `Final`, and a subscripted
-generic, are E0401, as CPython raises `TypeError`; a bare `Union` is
-E0202, since the oracle versions differ; and an `Iterable[T]` value tested
-against `Iterator` is E0201, planned for 1.0 (LIB-20), since a built-in
-iterator it may hold has no class of the program.
+generic, are E0401, as CPython raises `TypeError`; and a bare `Union` is
+E0202, since the oracle versions differ.
 
 A class may define `__enter__`, taking only the instance, and `__exit__`,
 taking the instance and three parameters that may be left without

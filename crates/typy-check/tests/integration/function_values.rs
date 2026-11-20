@@ -256,7 +256,7 @@ fn lib_17_the_typing_names_a_later_release_gives_are_planned_for_it() {
             found,
             [(
                 "E0201".to_owned(),
-                format!("`typing.{name}` is planned for TyPy 0.9 ({rule})"),
+                format!("`typing.{name}` is planned for TyPy 0.10 ({rule})"),
                 rule.to_owned()
             )]
         );

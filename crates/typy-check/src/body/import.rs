@@ -410,7 +410,7 @@ fn not_given(module: &ModuleName, alias: &Alias) -> Diagnostic {
         return Diagnostic::new(
             DiagnosticCode::error(201),
             alias.name.span,
-            format!("`{module}.{name}` is planned for TyPy 0.9 ({rule})"),
+            format!("`{module}.{name}` is planned for TyPy 0.10 ({rule})"),
         )
         .with_rule(rule);
     }

@@ -1,4 +1,4 @@
-# typy-test: TYP-21, LIB-20
+# typy-test: TYP-21
 # typy-expect: accepted
 import typing
 from collections.abc import Generator, Iterable, Iterator

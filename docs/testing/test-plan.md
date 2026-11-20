@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy test plan |
-| Version | 1.13 |
+| Version | 1.14 |
 | Status | Draft |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-20 |
@@ -323,7 +323,7 @@ that the specification does not define.
 | TYP-18 | 0.10 | IT | `tests/conformance/typ/TYP-18_*.py` |
 | TYP-19 | 1.0 | IT | `tests/conformance/typ/TYP-19_*.py` |
 | TYP-20 | 0.9 | UT, IT | `typy-check` tests of the classes that fit `Iterator[T]` and `Iterable[T]`, and of those that do not; `tests/conformance/typ/TYP-20_*.py`, one function given each kind of iterator, also in the sanitizer run |
-| TYP-21 | 0.9 | IT | `tests/conformance/typ/TYP-21_*.py` |
+| TYP-21 | 0.9 | UT, IT | `typy-check` tests of `Generator` in `isinstance` and a class pattern, and of an `Iterable[T]` read as an `Iterator[T]` after a test; `tests/conformance/typ/TYP-21_*.py` |
 | DAT-01 | 0.1 | IT | `tests/conformance/dat/DAT-01_*.py` |
 | DAT-02 | 0.1 | IT | `tests/conformance/dat/DAT-02_*.py` |
 | DAT-03 | 0.1 | IT | `tests/conformance/dat/DAT-03_*.py` |
@@ -501,7 +501,7 @@ that the specification does not define.
 | LIB-17 | 0.5 | IT | `tests/conformance/lib/LIB-17_*.py` |
 | LIB-18 | 1.0 | IT | `tests/conformance/lib/LIB-18_*.py` |
 | LIB-19 | 1.0 | IT | `tests/conformance/lib/LIB-19_*.py` |
-| LIB-20 | 0.9 | UT, IT | `typy-check` tests of each abstract collection's members and operations; `tests/conformance/lib/LIB-20_*.py` |
+| LIB-20 | 0.10 | UT, IT | `typy-check` tests of each abstract collection's members and operations; `tests/conformance/lib/LIB-20_*.py` |
 | LIB-21 | 1.0 | IT | `tests/conformance/lib/LIB-21_*.py` |
 | LIB-22 | 0.7 | UT, IT | `crates/typy-source/src/settings.rs` for `sys.platform` of each operating system; `crates/typy-driver/tests/integration/pipeline.rs` for the platform each target gives; `tests/conformance/lib/LIB-22_*.py` on Linux and on the `macos-15` job |
 | LIB-13 | 0.4 | IT | `tests/conformance/lib/LIB-13_*.py` |
