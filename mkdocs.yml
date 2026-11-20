@@ -200,6 +200,8 @@ nav:
           - adr/0071-release-the-module-variables-when-a-program-with-generators-ends.md
           - adr/0072-delegate-yield-from-one-step-at-a-time-through-the-runtime.md
           - adr/0073-bind-the-arguments-of-a-call-with-unpacking-when-the-program-runs.md
+          - adr/0074-define-a-stable-abi-for-typy-modules-at-1-0.md
+          - adr/0075-read-the-stack-of-each-thread-a-library-runs-on-from-the-thread.md
       - Detailed design: design/detailed-design.md
       - Test plan: testing/test-plan.md
       - Benchmark report: testing/benchmark-report.md

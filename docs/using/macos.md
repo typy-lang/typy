@@ -50,7 +50,8 @@ before you unpack the archive:
 xattr -d com.apple.quarantine "$archive.tar.gz"
 ```
 
-An archive that `curl` downloads carries no such mark.
+An archive that `curl` or `gh release download` downloads carries no such
+mark.
 
 ## Building programs
 

@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy software requirements specification |
-| Version | 1.100 |
+| Version | 1.101 |
 | Status | Approved |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-20 |
@@ -155,6 +155,7 @@ or later.
 | CLI-14 | The C linker driver, `ar` and `objcopy` that build for a target shall be the host's own tools for the host's target and the tools named after the target's GNU triple for another, such as `aarch64-linux-gnu-gcc`, unless `typy.toml` names others for that target. | S | 0.6 |
 | CLI-15 | `typy` shall run on macOS 11 or later on Apple silicon and build executables and libraries for `aarch64-apple-darwin` that run on macOS 11 or later. | M | 0.7 |
 | CLI-16 | A library built for macOS shall be named as macOS names libraries: `libNAME.X.dylib`, whose install name is that file name and whose compatibility and current versions are its release, with a link `libNAME.dylib`, and `libNAME.a`. | S | 0.7 |
+| CLI-17 | A development build shall compile each module of the standard library TyPy provides once for each release, target and mode, keep it in the user's cache directory, and link it from there in later builds (ADR-0016). | C | 1.0 |
 
 TyPy has no formatter of its own. TyPy source is Python, so a standard
 formatter applies; Ruff's formatter is the project's recommendation.
@@ -404,6 +405,7 @@ formatter applies; Ruff's formatter is the project's recommendation.
 | MOD-12 | A function or a class shall be bindable by more than one import of a module, eager or lazy, and by an import inside a block, a call running the one the import that ran last bound, and raising `NameError` when none has run. | C | 0.5 | |
 | MOD-14 | A name that imports bind to more than one function or class shall be usable as a value, in an annotation and from another module. | C | 1.0 | |
 | MOD-15 | An `__init__` shall be able to import a module that imports its own module at module level. | C | 1.0 | |
+| MOD-16 | From 1.0, TyPy modules shall link to each other as shared libraries against one shared runtime, through a stable ABI of object layouts, exception state and type identity that every 1.x release keeps (ADR-0074). | S | 1.0 | |
 | MOD-13 | A module shall be importable inside a function of a module that it imports at module level. | S | 0.5 | |
 
 ### 3.14 Built-in functions and standard library (LIB)
@@ -471,6 +473,7 @@ direct calls and links the library when the program is built.
 | FFI-12 | A `ctypes` structure passed to or returned from a C function by value shall follow the C calling convention of the target: System V on x86_64 Linux and AAPCS64 on AArch64 Linux. | M | 0.6 |
 | FFI-13 | A `ctypes` call shall pass each integer and `c_bool` argument as `libffi` passes it on the target, a 64-bit word widened by its type in a register and, on Apple's arm64, its own size on the stack, so a C function reads the values it reads under CPython. | M | 0.7 |
 | FFI-14 | A module-level `ctypes.CDLL(None)` or `ctypes.cdll.LoadLibrary(None)` shall declare the C library and the C maths library that every program links, whose functions it calls on every target, with no other library linked. | M | 0.7 |
+| FFI-15 | A TyPy library shall raise `RecursionError`, never overflow its stack, on any thread its host calls it from, also one created with a stack smaller than `RLIMIT_STACK` (ADR-0075). | S | 0.10 |
 
 ### 3.17 Diagnostics (DIA)
 
@@ -584,14 +587,7 @@ TyPy rejects them (STD-04):
 ## 7. Open issues
 
 A new question gets the next unused issue number, after the last of the
-resolved issues below.
-
-| ID | Question | Raised |
-| --- | --- | --- |
-| OI-23 | Which ABI lets TyPy modules link dynamically: the layouts of objects, the exception state, the identity of type objects across shared libraries, and one runtime shared by every library (ADR-0016)? It is settled after 1.0, once those layouts are fixed. | 2026-11-11 |
-| OI-25 | Should the modules of the standard library TyPy provides ship prebuilt, one static library and interface per module and target, so a development build links them without compiling them? It depends on separate compilation (ADR-0016). | 2026-11-15 |
-| OI-29 | Should the macOS release archive be notarized, so a browser download runs without clearing the quarantine first? Notarizing needs a paid Apple Developer membership and a signing identity in CI. | 2026-11-18 |
-| OI-30 | How should a TyPy library on Linux find the stack of a thread its C host created with a stack smaller than `RLIMIT_STACK`? The stack check measures from the limit, so such a thread can overflow before `RecursionError`; `pthread_getattr_np` gives the thread's own stack but reads `/proc/self/maps` for the main thread on every export call. | 2026-11-18 |
+resolved issues below. No question is open.
 
 ## 8. Resolved issues
 
@@ -619,10 +615,14 @@ resolved issues below.
 | OI-20 | What does the text of a module object show, when CPython's `<module 'm' from '/abs/path/m.py'>` names the absolute path of the file, which would make the build depend on its directory (NFR-06)? | The path from the project root, `<module 'a.b' from 'a/b.py'>`. It is the one known difference from CPython's text, named in the user documentation (MOD-10, ADR-0015). | 2026-11-11 |
 | OI-21 | Which imports form the cycle MOD-05 rejects, when an import inside a function runs only once the function is called? | The imports at module level. An import inside a function adds no edge and may find a module still initialising, as in CPython, whose names not yet bound raise CPython's `NameError`, `AttributeError` or `ImportError` (ADR-0015). | 2026-11-11 |
 | OI-22 | How is a module checked whose function imports a module that imports it at module level, when each module is checked after the modules it imports? | Such an import is E0426, planned for 0.4: TyPy checks the modules in the order their imports give, an import inside a function counting when it closes no cycle, so the importing function's module comes first and cannot see the other's names yet (ADR-0015). | 2026-11-11 |
+| OI-23 | Which ABI lets TyPy modules link dynamically: the layouts of objects, the exception state, the identity of type objects across shared libraries, and one runtime shared by every library (ADR-0016)? It is settled after 1.0, once those layouts are fixed. | From 1.0 TyPy defines a stable ABI: object layouts, the exception state and the identity of type objects are fixed for every 1.x release, and one shared runtime serves every TyPy module in a process (ADR-0074, MOD-16). | 2026-11-20 |
 | OI-24 | What is `sys.argv[0]`, when CPython gives the path of the script it runs and a TyPy program has no script? | The path of the executable as the operating system passes it to `main`, which is what a C program receives and what a shell user typed. The other items are the arguments, decoded as CPython decodes them. A conformance test does not print `sys.argv[0]`, because the oracle's differs (LIB-04, STD-03). | 2026-11-12 |
+| OI-25 | Should the modules of the standard library TyPy provides ship prebuilt, one static library and interface per module and target, so a development build links them without compiling them? It depends on separate compilation (ADR-0016). | No archive of prebuilt modules: a development build compiles each module of the standard library the first time a project needs it and keeps it in the user's cache directory for each release, target and mode (ADR-0016, CLI-17). | 2026-11-20 |
 | OI-26 | Do the AArch64 targets and cross-compilation (CLI-08) stay in 0.5? They need a cross toolchain and an emulator or arm64 runners for their tests. | They move to 0.6, so 0.5 holds the language, stack allocation, libraries and `ctypes`. | 2026-11-15 |
 | OI-27 | In which order should `list.sort` and `sorted` call `__lt__`? The order shows when the method prints or raises, and CPython 3.12, CPython 3.13 and 3.14, and CPython 3.15 each compare in another order. | The order of the newest oracle, CPython 3.15, as OI-14 decides for messages: the runtime's sort is a port of CPython 3.15.2's `listsort`, which compares the same items in the same order, and a comparison that raises leaves the list in the order CPython leaves it. A conformance test that prints from `__lt__` while sorting is invalid unless every oracle prints alike (CLS-22, ADR-0039). | 2026-11-16 |
 | OI-28 | How is LLVM pinned so that a release built in CI is byte for byte the build a developer makes of the same commit (NFR-06)? The dev image installs LLVM 23 from apt.llvm.org, which publishes dated snapshot builds of 23.1.x and removes old ones, so a CI image built later gets a newer build than a local image, and the 0.5.0 archive rebuilt locally differs from the published one. | TyPy builds LLVM 23.1.6 from its sources for each host in a workflow of its own, keeps each build as an asset of a toolchain release with its SHA-256 recorded in the repository, and the dev image and every CI job install that build (ADR-0054). | 2026-11-18 |
+| OI-29 | Should the macOS release archive be notarized, so a browser download runs without clearing the quarantine first? Notarizing needs a paid Apple Developer membership and a signing identity in CI. | No. The archive stays unsigned and not notarized, so CI holds no Apple signing key; the macOS page shows how to clear the quarantine, and a download with `curl` or `gh` carries none (ADR-0055). | 2026-11-20 |
+| OI-30 | How should a TyPy library on Linux find the stack of a thread its C host created with a stack smaller than `RLIMIT_STACK`? The stack check measures from the limit, so such a thread can overflow before `RecursionError`; `pthread_getattr_np` gives the thread's own stack but reads `/proc/self/maps` for the main thread on every export call. | The first export call on a thread other than the main one reads the thread's stack with `pthread_getattr_np` and keeps it for the thread; the main thread keeps `getrlimit`, so `/proc/self/maps` is never read (ADR-0075, FFI-15). | 2026-11-20 |
 
 ## Appendix A. Disposition of the specification pack
 

@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy test plan |
-| Version | 1.14 |
+| Version | 1.15 |
 | Status | Draft |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-20 |
@@ -287,6 +287,7 @@ that the specification does not define.
 | CLI-14 | 0.6 | UT, E2E | `crates/typy-build/src/toolchain.rs` for the tools of each target on each host; `crates/typy-build/src/linker.rs` and `library_link.rs` for the tools they run; `crates/typy-source/src/settings_file/target.rs` for the `typy.toml` table of a target; `crates/typy-build/src/toolchain.rs` for the triples it shares with the code generator; `crates/typy-cli/tests/end_to_end/cli.rs` for E0701 naming a missing cross tool |
 | CLI-15 | 0.7 | UT, E2E | `crates/typy-codegen/src/target.rs` for `aarch64-apple-darwin`, its LLVM triple and CPU; `crates/typy-codegen/tests/codegen.rs` for a deterministic Mach-O object of every test program; the `macos-15` CI job runs every unit, integration and end-to-end test natively on macOS, and builds and runs a program from the macOS release archive |
 | CLI-16 | 0.7 | UT, E2E | `crates/typy-build/src/library_layout.rs` for the macOS names, install name and versions; `crates/typy-build/src/mach_o.rs` for the arguments of Apple's linker and the exports list; `crates/typy-cli/tests/end_to_end/library.rs` on the `macos-15` job, linking a C host with each library |
+| CLI-17 | 1.0 | IT | a `typy-driver` test that builds two programs that import `math`, in two projects, and finds that the second build compiles no module of the standard library |
 | CLI-09 | 0.5 | UT, E2E | `crates/typy-build/src/request.rs` and `library_kind.rs` for the output's name; `crates/typy-cli/tests/end_to_end/library.rs`, tests named for CLI-09: a static library in a C program, its only global symbols, a shared library from CPython through `ctypes`, two libraries in one program with a call from another thread, and a file name that is not a module name |
 | CLI-13 | 0.5 | UT, E2E | `crates/typy-source/src/version.rs` for the release of a version; `crates/typy-source/src/settings_file.rs` for `version`; `crates/typy-check/tests/integration/exports.rs` for `__version__` and E0429; `crates/typy-build/src/library_layout.rs` for each layout; `crates/typy-cli/tests/end_to_end/library.rs`, tests named for CLI-13: a shared library's soname and links, a new release that moves them, a static library's link, `-o`, and two versions that differ |
 | CLI-10 | 0.3 | E2E | `crates/typy-cli/tests/end_to_end/cli.rs`, tests named for CLI-10 |
@@ -484,6 +485,7 @@ that the specification does not define.
 | MOD-13 | 0.5 | IT | `tests/conformance/mod/MOD-13_*` |
 | MOD-14 | 1.0 | IT | `tests/conformance/mod/MOD-14_*` |
 | MOD-15 | 1.0 | IT | `tests/conformance/mod/MOD-15_*` |
+| MOD-16 | 1.0 | E2E | an end-to-end test that builds a TyPy module as a shared library and a program that links it and the shared runtime, and one that links a library the previous 1.x release built |
 | LIB-01 | 0.1 | IT | `tests/conformance/lib/LIB-01_*.py` |
 | LIB-02 | 0.2 | IT | `tests/conformance/lib/LIB-02_*.py` |
 | LIB-03 | 0.2 | IT | `tests/conformance/lib/LIB-03_*.py` |
@@ -529,6 +531,7 @@ that the specification does not define.
 | FFI-12 | 0.6 | UT, E2E | `crates/typy-codegen/src/structure_abi.rs` for each target's classification against clang 19's lowering of the same C structures; `crates/typy-cli/tests/end_to_end/structures.rs` run for each target, under `qemu-aarch64` for AArch64, against CPython on x86_64 |
 | FFI-13 | 0.7 | UT, E2E | `crates/typy-codegen/src/foreign/stack_argument.rs` for the registers arguments take and each type's width and attribute on the stack; `crates/typy-codegen/tests/codegen.rs` for the arguments of one call on each target; `crates/typy-cli/tests/end_to_end/structures.rs` calling C functions with more narrow arguments than registers, on each architecture and on the `macos-15` job; the FFI-03 conformance test of integer types, whose C functions are wider than their declarations |
 | FFI-14 | 0.7 | UT, IT | `crates/typy-check/src/check/ctypes_declarations/tests.rs` for a library without a name; `tests/conformance/ffi/FFI-14_*.py` on Linux and on the `macos-15` job, and the tests of FFI-02 and FFI-03, which call the C and maths libraries through `CDLL(None)` |
+| FFI-15 | 0.10 | UT, E2E | a runtime test that records the stack limit on a thread made with a 256 KiB stack; an end-to-end test of a C host that calls a recursive export on such a thread and gets `RecursionError` |
 | FFI-06 | 1.0 | IT | `tests/conformance/ffi/FFI-06_*.py` |
 | FFI-07 | 1.0 | IT | `tests/conformance/ffi/FFI-07_*.py` |
 | DIA-01 | 0.1 | UT, IT | `typy-diagnostics` unit tests; `tests/golden/diagnostics/DIA-01_*` |

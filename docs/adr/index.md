@@ -79,3 +79,5 @@ supersedes it.
 | [ADR-0071](0071-release-the-module-variables-when-a-program-with-generators-ends.md) | Release the module variables when a program with generators ends | Accepted | 2026-11-19 |
 | [ADR-0072](0072-delegate-yield-from-one-step-at-a-time-through-the-runtime.md) | Delegate `yield from` one step at a time through the runtime | Accepted | 2026-11-19 |
 | [ADR-0073](0073-bind-the-arguments-of-a-call-with-unpacking-when-the-program-runs.md) | Bind the arguments of a call with unpacking when the program runs | Accepted | 2026-11-20 |
+| [ADR-0074](0074-define-a-stable-abi-for-typy-modules-at-1-0.md) | Define a stable ABI for TyPy modules at 1.0 | Accepted | 2026-11-20 |
+| [ADR-0075](0075-read-the-stack-of-each-thread-a-library-runs-on-from-the-thread.md) | Read the stack of each thread a library runs on from the thread | Accepted | 2026-11-20 |
