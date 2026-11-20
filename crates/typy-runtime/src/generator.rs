@@ -222,8 +222,13 @@ unsafe fn step(generator: *mut GeneratorObject) -> Step {
     unsafe { release_current(object) };
     object.state = RUNNING;
     object.caller = crate::exception::handled_exception();
+    let resume = object.descriptor;
+    // The resume code writes the generator through its own pointer, so no reference to it is
+    // held across the call; a new one is taken after it.
     // SAFETY: the descriptor's code is the resume code of this generator's function.
-    let raised = unsafe { ((*object.descriptor).step)(generator) };
+    let raised = unsafe { ((*resume).step)(generator) };
+    // SAFETY: the step has returned, so nothing else uses the generator now.
+    let object = unsafe { &mut *generator };
     // A step that stops inside an `except` clause of the body leaves the exception it handles
     // with the generator, which handles it again when it resumes (FUN-07).
     // SAFETY: the caller's exception outlives its call of the step.
