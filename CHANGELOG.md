@@ -6,6 +6,13 @@ All notable changes to TyPy are recorded here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- An f-string `{value:c}` of `-2**63`, the smallest C `long`, raises
+  CPython's `OverflowError: %c arg not in range(0x110000)`, not "Python
+  int too large to convert to C long", since the value fits a C `long`
+  (LEX-07).
+
 ## [0.9.0] - 2026-11-20
 
 ### Added
